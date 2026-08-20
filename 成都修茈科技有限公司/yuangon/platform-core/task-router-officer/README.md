@@ -27,17 +27,17 @@
 ## 典型任务
 
 1. task `{intent:dba, files_hint:[migrations/...]}` → 命中 `dbops-engineer.scope_globs` → 派发。
-2. task `{intent:bugfix, files_hint:[market/src/views/AdminDutyEmployeesView.vue]}` → 命中 `workbench-ux-stylist`（已扩展覆盖 Admin*View.vue） → 派发。
+2. task `{intent:bugfix, files_hint:[market/src/views/AdminDutyEmployeesView.vue]}` → 命中 `workbench-ux-stylist`（已扩展覆盖 Admin\*View.vue） → 派发。
 3. task `{intent:onboarding, files_hint:[mianshi/foo.xcemp]}` → 命中 `employee-pack-quality-interviewer` + `employee-interview-assistant` → 仲裁规则 1+3 选 `employee-interview-assistant` 先做信息访谈。
 
 ## KPI
 
-| 指标 | 目标 |
-|------|------|
-| 命中率（非 unknown 任务有员工承接） | ≥ 95% |
-| 多命中仲裁正确率（admin 抽查） | ≥ 90% |
-| 派发延迟 | < 10s |
-| 误派发率（接收员工拒收 / 命中 forbidden） | 0 |
+| 指标                                      | 目标  |
+| ----------------------------------------- | ----- |
+| 命中率（非 unknown 任务有员工承接）       | ≥ 95% |
+| 多命中仲裁正确率（admin 抽查）            | ≥ 90% |
+| 派发延迟                                  | < 10s |
+| 误派发率（接收员工拒收 / 命中 forbidden） | 0     |
 
 ## 禁区
 

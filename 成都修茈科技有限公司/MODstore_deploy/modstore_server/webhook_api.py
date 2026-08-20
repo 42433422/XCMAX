@@ -1,3 +1,4 @@
+# mypy: disable-error-code="call-overload"
 """Administrative business webhook operations."""
 
 from __future__ import annotations

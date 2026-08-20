@@ -1,6 +1,8 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
 
 
@@ -27,7 +29,9 @@ def ticket_lifecycle_stage(status: str | None = None, decision_status: str | Non
     return 1
 
 
-def _summarize_incident_team_rows(team_rows: list[_facade().Dict[str, _facade().Any]]) -> str:
+def _summarize_incident_team_rows(
+    team_rows: list[_facade().Dict[str, _facade().Any]],
+) -> str:
     """把 incident team / 员工执行行压缩成用户可读的一句进度。"""
     bits: list[str] = []
     role_cn = {"scout": "排查", "fix": "修复", "verify": "验证"}
@@ -200,7 +204,8 @@ def ticket_lifecycle_payload(
 ) -> _facade().Dict[str, _facade().Any]:
     stage = _facade().ticket_lifecycle_stage(status, decision_status)
     label = next(
-        (name for (num, name) in _facade().TICKET_LIFECYCLE_STEPS if num == stage), "已收到"
+        (name for (num, name) in _facade().TICKET_LIFECYCLE_STEPS if num == stage),
+        "已收到",
     )
     return {
         "lifecycle_stage": stage,
@@ -216,7 +221,9 @@ def ticket_lifecycle_payload(
     }
 
 
-def ticket_payload(row: _facade().CustomerServiceTicket) -> _facade().Dict[str, _facade().Any]:
+def ticket_payload(
+    row: _facade().CustomerServiceTicket,
+) -> _facade().Dict[str, _facade().Any]:
     life = _facade().ticket_lifecycle_payload(row.status, row.decision_status)
     evidence = _facade().json_loads(row.evidence_json, {})
     if not isinstance(evidence, dict):
@@ -249,7 +256,9 @@ def ticket_payload(row: _facade().CustomerServiceTicket) -> _facade().Dict[str, 
     }
 
 
-def decision_payload(row: _facade().CustomerServiceDecision) -> _facade().Dict[str, _facade().Any]:
+def decision_payload(
+    row: _facade().CustomerServiceDecision,
+) -> _facade().Dict[str, _facade().Any]:
     return {
         "id": row.id,
         "ticket_id": row.ticket_id,

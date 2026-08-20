@@ -11,9 +11,7 @@ def feedback_stats(memory: UserMemory | None) -> dict[str, Any]:
         return {"total": 0, "confirmed": 0, "negated": 0, "corrected": 0}
 
     feedback_counts: dict[str, int] = defaultdict(int)
-    intent_error_rates: dict[str, dict[str, int]] = defaultdict(
-        lambda: {"total": 0, "errors": 0}
-    )
+    intent_error_rates: dict[str, dict[str, int]] = defaultdict(lambda: {"total": 0, "errors": 0})
     for record in memory.feedback_history:
         feedback_type = record.get("user_feedback", "unknown")
         feedback_counts[feedback_type] += 1

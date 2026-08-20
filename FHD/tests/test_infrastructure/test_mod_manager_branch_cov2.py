@@ -1,3 +1,4 @@
+# mypy: disable-error-code="list-item"
 """测试 app.infrastructure.mods.mod_manager 的分支覆盖。
 
 覆盖目标：

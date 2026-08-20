@@ -123,12 +123,16 @@ export const approvalApi = {
       const data = await api.get(
         ap('/api/approval/requests'),
         { approver_id: userId, page: 1, page_size: 200 },
-        { headers: { 'X-User-ID': userId.toString() } }
+        { headers: { 'X-User-ID': userId.toString() } },
       )
       return withRequestList(data as Record<string, unknown>)
     } catch (error) {
       console.error('获取待审批列表失败:', error)
-      return { success: false, message: '获取待审批列表失败', data: { requests: [] as ApprovalRequest[] } }
+      return {
+        success: false,
+        message: '获取待审批列表失败',
+        data: { requests: [] as ApprovalRequest[] },
+      }
     }
   },
 
@@ -140,12 +144,16 @@ export const approvalApi = {
       const data = await api.get(
         ap('/api/approval/requests'),
         { applicant_id: userId, page: 1, page_size: 500 },
-        { headers: { 'X-User-ID': userId.toString() } }
+        { headers: { 'X-User-ID': userId.toString() } },
       )
       return withRequestList(data as Record<string, unknown>)
     } catch (error) {
       console.error('获取我的请求失败:', error)
-      return { success: false, message: '获取我的请求失败', data: { requests: [] as ApprovalRequest[] } }
+      return {
+        success: false,
+        message: '获取我的请求失败',
+        data: { requests: [] as ApprovalRequest[] },
+      }
     }
   },
 
@@ -171,11 +179,11 @@ export const approvalApi = {
         ap(`/api/approval/requests/${requestId}/approve`),
         {
           approver_id: approverId,
-          opinion: opinion
+          opinion: opinion,
         },
         {
-          headers: { 'X-User-ID': approverId.toString() }
-        }
+          headers: { 'X-User-ID': approverId.toString() },
+        },
       )
       return data
     } catch (error) {
@@ -193,11 +201,11 @@ export const approvalApi = {
         ap(`/api/approval/requests/${requestId}/reject`),
         {
           approver_id: approverId,
-          reason: reason
+          reason: reason,
         },
         {
-          headers: { 'X-User-ID': approverId.toString() }
-        }
+          headers: { 'X-User-ID': approverId.toString() },
+        },
       )
       return data
     } catch (error) {
@@ -209,24 +217,27 @@ export const approvalApi = {
   /**
    * 创建审批流程
    */
-  async createFlow(flowData: {
-    flow_name: string
-    flow_key: string
-    business_type: string
-    description?: string
-    is_active: boolean
-  }, nodes: Array<{
-    node_name: string
-    node_type: string
-    node_order: number
-    approver_type: string
-    approver_ids: number[]
-    is_active: boolean
-  }>) {
+  async createFlow(
+    flowData: {
+      flow_name: string
+      flow_key: string
+      business_type: string
+      description?: string
+      is_active: boolean
+    },
+    nodes: Array<{
+      node_name: string
+      node_type: string
+      node_order: number
+      approver_type: string
+      approver_ids: number[]
+      is_active: boolean
+    }>,
+  ) {
     try {
       const data = await api.post(ap('/api/approval/flows'), {
         flow: flowData,
-        nodes: nodes
+        nodes: nodes,
       })
       return data
     } catch (error) {
@@ -262,7 +273,7 @@ export const approvalApi = {
     try {
       const userId = localStorage.getItem('user_id') || '4'
       const result = await api.post(ap('/api/approval/requests'), data, {
-        headers: { 'X-User-ID': userId }
+        headers: { 'X-User-ID': userId },
       })
       return result
     } catch (error) {
@@ -280,8 +291,8 @@ export const approvalApi = {
         ap(`/api/approval/requests/${requestId}/withdraw`),
         {},
         {
-          headers: { 'X-User-ID': userId.toString() }
-        }
+          headers: { 'X-User-ID': userId.toString() },
+        },
       )
       return data
     } catch (error) {
@@ -299,10 +310,14 @@ export const approvalApi = {
         ap(`/api/approval/requests/${requestId}`),
         {},
         {
-          headers: { 'X-User-ID': userId.toString() }
-        }
+          headers: { 'X-User-ID': userId.toString() },
+        },
       )
-      return data as { success: boolean; message?: string; data?: { deleted: number; request_id: number } }
+      return data as {
+        success: boolean
+        message?: string
+        data?: { deleted: number; request_id: number }
+      }
     } catch (error) {
       console.error('删除审批记录失败:', error)
       return { success: false, message: '删除审批记录失败' }
@@ -350,7 +365,7 @@ export const approvalApi = {
       statuses?: string[]
       beforeDays?: number
       dryRun?: boolean
-    } = {}
+    } = {},
   ) {
     try {
       const data = await api.post(
@@ -359,11 +374,11 @@ export const approvalApi = {
           statuses: options.statuses,
           before_days: options.beforeDays ?? 0,
           dry_run: options.dryRun ?? false,
-          scope: 'self'
+          scope: 'self',
         },
         {
-          headers: { 'X-User-ID': userId.toString() }
-        }
+          headers: { 'X-User-ID': userId.toString() },
+        },
       )
       return data as {
         success: boolean
@@ -380,5 +395,5 @@ export const approvalApi = {
       console.error('清理审批记录失败:', error)
       return { success: false, message: '清理审批记录失败' }
     }
-  }
+  },
 }

@@ -112,7 +112,7 @@ def ranked_capabilities() -> list[dict[str, Any]]:
             signals.append(signal)
     for signal in signals:
         evidence = list((state.get("signal_evidence") or {}).get(signal) or [])
-        focus = next(
+        focus: dict[str, Any] = next(
             (
                 item
                 for item in workflow.get("focused_components") or []

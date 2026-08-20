@@ -1,43 +1,10 @@
-import type {
-  WorkflowEmployeeRegistryEntry,
-  WorkflowEmployeeRegistryV1,
-  WorkflowEmployeeRegistryKind,
-} from '@/types/workflow-employee'
+import type { WorkflowEmployeeRegistryEntry, WorkflowEmployeeRegistryV1 } from '@/types/workflow-employee'
 import {
   buildModWorkflowPanelMeta,
   isNonWorkflowDeskEmployeeId,
   filterWorkflowRegistrySourceMods,
   type ModWithWorkflowEmployees,
 } from '@/utils/modWorkflowEmployees'
-
-function isRecord(x: unknown): x is Record<string, unknown> {
-  return typeof x === 'object' && x !== null
-}
-
-function isValidV1(data: unknown): data is WorkflowEmployeeRegistryV1 {
-  if (!isRecord(data)) return false
-  if (data.schemaVersion !== 1) return false
-  if (!Array.isArray(data.employees)) return false
-  return data.employees.every(
-    (e: unknown) =>
-      isRecord(e) &&
-      typeof e.id === 'string' &&
-      typeof e.label === 'string' &&
-      typeof e.kind === 'string' &&
-      typeof e.order === 'number',
-  )
-}
-
-function normalizeRegistry(d: WorkflowEmployeeRegistryV1): WorkflowEmployeeRegistryV1 {
-  return {
-    ...d,
-    employees: d.employees.map((e) => ({
-      ...e,
-      kind: (e.kind as WorkflowEmployeeRegistryKind) || 'mod_extension',
-      source: e.source || 'json',
-    })),
-  }
-}
 
 let cachedRegistry: Promise<WorkflowEmployeeRegistryV1> | null = null
 
@@ -61,11 +28,7 @@ export function mergeModManifestEntries(
   registry: WorkflowEmployeeRegistryV1,
   mods: ModWithWorkflowEmployees[],
 ): WorkflowEmployeeRegistryEntry[] {
-  const baseMap = new Map(
-    registry.employees
-      .filter((e) => !isNonWorkflowDeskEmployeeId(e.id))
-      .map((e) => [e.id, e]),
-  )
+  const baseMap = new Map(registry.employees.filter((e) => !isNonWorkflowDeskEmployeeId(e.id)).map((e) => [e.id, e]))
   const modMeta = buildModWorkflowPanelMeta(filterWorkflowRegistrySourceMods(mods))
 
   for (const m of filterWorkflowRegistrySourceMods(mods)) {

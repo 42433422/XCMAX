@@ -1,8 +1,17 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
+)
 
 from .models_base import Base
 
@@ -15,11 +24,11 @@ class ChatConversation(Base):
     title = Column(String(256), default="")
     provider = Column(String(64), default="", index=True)
     model = Column(String(256), default="")
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
     updated_at = Column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
 
@@ -37,7 +46,7 @@ class ChatMessage(Base):
     model = Column(String(256), default="")
     usage_json = Column(Text, default="{}")
     charge_amount = Column(Numeric(12, 2), default=0)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
 
 class LlmCallLog(Base):
@@ -59,4 +68,4 @@ class LlmCallLog(Base):
     hold_no = Column(String(64), default="")
     upstream_status = Column(Integer, nullable=True)
     error = Column(Text, default="")
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))

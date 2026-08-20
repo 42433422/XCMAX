@@ -72,7 +72,17 @@ def is_ambiguous_employee_brief(routing_brief: str) -> bool:
         signals += 1
     if any(
         k in bl
-        for k in ("提取", "读取", "生成", "写入", "审核", "转换", "extract", "read", "generate")
+        for k in (
+            "提取",
+            "读取",
+            "生成",
+            "写入",
+            "审核",
+            "转换",
+            "extract",
+            "read",
+            "generate",
+        )
     ):
         signals += 1
     if _inline_runtime_kind(rb):
@@ -202,7 +212,10 @@ def validate_runtime_pipeline_consistency(
         return True, ""
     if pipeline_label == "word_full_extract" and rk == "word_full_extract":
         return True, ""
-    return False, f"runtime_kind={rk} 与 pipeline_label={pipeline_label} 不一致（期望 {expected}）"
+    return (
+        False,
+        f"runtime_kind={rk} 与 pipeline_label={pipeline_label} 不一致（期望 {expected}）",
+    )
 
 
 def classify_employee_pipeline(
@@ -211,7 +224,7 @@ def classify_employee_pipeline(
     employee_files: Optional[list] = None,
     needs_llm_reasoning: bool = False,
     contract_doc_with_docx: bool = False,
-) -> Tuple[str, bool, bool, bool]:
+) -> Tuple[str, bool, bool, bool, bool]:
     """
     返回 (pipeline_label, use_word_extract, use_txt, use_pdf, use_asset).
     pipeline_label: word_full_extract | txt_* | pdf_* | asset | llm_scaffold

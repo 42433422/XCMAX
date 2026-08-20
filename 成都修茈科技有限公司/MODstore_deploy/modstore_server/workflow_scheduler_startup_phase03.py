@@ -1,7 +1,10 @@
-# ruff: noqa
 """Scheduler startup registration phase."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -97,7 +100,7 @@ def _register_scheduler_phase_03():
                 )
         except ValueError:
             _facade().logger.exception("time rail observability sync env parse failed")
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.exception("time rail observability sync failed")
 
     _facade()._scheduler.add_job(
@@ -119,7 +122,7 @@ def _register_scheduler_phase_03():
                 poll_inbox_once()
 
             _facade()._run_tracked_scheduler_job("inbox_approval_poll", _run)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.exception("inbox poll job failed")
 
     try:
@@ -147,7 +150,7 @@ def _register_scheduler_phase_03():
                     )
 
             _facade()._run_tracked_scheduler_job("email_intake_poll", _run)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.exception("email intake poll job failed")
 
     try:
@@ -195,7 +198,7 @@ def _register_scheduler_phase_03():
                 )
 
             _facade()._run_tracked_scheduler_job("employee_autonomy_dispatch_loop", _run)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.exception("employee autonomy dispatch loop failed")
 
     try:
@@ -215,7 +218,9 @@ def _register_scheduler_phase_03():
         try:
 
             def _run() -> None:
-                from modstore_server.llm_runtime_autopilot import run_llm_route_autopilot
+                from modstore_server.llm_runtime_autopilot import (
+                    run_llm_route_autopilot,
+                )
 
                 out = run_llm_route_autopilot(triggered_by="scheduler")
                 _facade().logger.info(
@@ -227,7 +232,7 @@ def _register_scheduler_phase_03():
                 )
 
             _facade()._run_tracked_scheduler_job("llm_route_autopilot", _run)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.exception("llm route autopilot failed")
 
     try:
@@ -250,14 +255,16 @@ def _register_scheduler_phase_03():
             )
         else:
             _facade().logger.info("llm route autopilot disabled")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         _facade().logger.exception("register llm route autopilot failed")
 
     def _employee_evolution_scan_loop() -> None:
         try:
 
             def _run() -> None:
-                from modstore_server.employee_autonomy_service import run_employee_evolution_scan
+                from modstore_server.employee_autonomy_service import (
+                    run_employee_evolution_scan,
+                )
 
                 try:
                     lookback = int(
@@ -293,7 +300,7 @@ def _register_scheduler_phase_03():
                 )
 
             _facade()._run_tracked_scheduler_job("employee_evolution_scan_loop", _run)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.exception("employee evolution scan loop failed")
 
     try:
@@ -327,7 +334,7 @@ def _register_scheduler_phase_03():
                     )
 
             _facade()._run_tracked_scheduler_job("employee_health_scan_loop", _run)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.exception("employee health scan loop failed")
 
     try:
@@ -345,7 +352,9 @@ def _register_scheduler_phase_03():
         try:
 
             def _run() -> None:
-                from modstore_server.boss_daily_im_report import send_boss_daily_im_report
+                from modstore_server.boss_daily_im_report import (
+                    send_boss_daily_im_report,
+                )
 
                 out = send_boss_daily_im_report()
                 _facade().logger.info(
@@ -356,7 +365,7 @@ def _register_scheduler_phase_03():
                 )
 
             _facade()._run_tracked_scheduler_job("boss_daily_im_report", _run)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.exception("boss daily im report job failed")
 
     try:
@@ -373,9 +382,9 @@ def _register_scheduler_phase_03():
                 max_instances=1,
                 **_facade()._startup_recovery_kwargs("boss_daily_im_report", delay_seconds=60),
             )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         _facade().logger.exception("register boss daily im report cron failed")
     try:
         _facade()._register_employee_cron_jobs()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         _facade().logger.exception("register employee cron jobs failed")

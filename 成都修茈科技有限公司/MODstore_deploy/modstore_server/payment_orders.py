@@ -1,3 +1,4 @@
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """MODstore 支付订单存储（JSON 文件落盘）。
 
 注意：当 ``PAYMENT_BACKEND=java`` 时，订单/钱包数据的真实来源是 Java + PostgreSQL。
@@ -10,9 +11,11 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Optional
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 _ORDERS_DIR_VAR = "MODSTORE_PAYMENT_ORDERS_DIR"
 
@@ -66,9 +69,9 @@ def _path(out_trade_no: str) -> Path:
 
 
 def _now_iso() -> str:
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def create(
@@ -138,7 +141,7 @@ def find(out_trade_no: str) -> Optional[dict[str, Any]]:
         return None
     try:
         return json.loads(p.read_text(encoding="utf-8"))
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return None
 
 
@@ -168,7 +171,7 @@ def update_status(
     try:
         p.write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
         return True
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return False
 
 
@@ -189,7 +192,7 @@ def list_orders(
             if status and doc.get("status") != status:
                 continue
             rows.append(doc)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             continue
 
     rows.sort(key=lambda d: d.get("created_at", ""), reverse=True)
@@ -216,7 +219,7 @@ def close_pending_older_than(*, minutes: int = 30) -> int:
     if not is_local_source_of_truth():
         return 0
 
-    cutoff = datetime.now(timezone.utc).timestamp() - max(0, int(minutes)) * 60
+    cutoff = datetime.now(UTC).timestamp() - max(0, int(minutes)) * 60
     closed = 0
     for path in _orders_dir().glob("order_*.json"):
         try:

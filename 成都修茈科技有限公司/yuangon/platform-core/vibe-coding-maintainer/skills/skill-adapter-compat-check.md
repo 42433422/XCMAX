@@ -2,12 +2,12 @@
 
 ## 元信息
 
-| 字段 | 值 |
-|------|----|
-| skill_id | `skill-adapter-compat-check` |
-| 所属员工 | `vibe-coding-maintainer` |
-| 业务域 | vibe-coding 与 MODstore vibe_adapter 接口兼容性维护 |
-| 版本 | 1.0.0 |
+| 字段     | 值                                                  |
+| -------- | --------------------------------------------------- |
+| skill_id | `skill-adapter-compat-check`                        |
+| 所属员工 | `vibe-coding-maintainer`                            |
+| 业务域   | vibe-coding 与 MODstore vibe_adapter 接口兼容性维护 |
+| 版本     | 1.0.0                                               |
 
 ---
 
@@ -27,6 +27,7 @@
 ```
 
 **输出 schema**：
+
 ```json
 {
   "status": "ok | error",
@@ -45,6 +46,7 @@
 ```
 
 **工具绑定**：
+
 - `python -c "import ast; ..."` — 提取 facade.py 方法签名
 - `grep` — 扫描 vibe_adapter.py / eskill_runtime.py / workflow_engine.py 调用点
 - `python -m pytest tests/test_vibe_adapter.py` — 适配器测试（如有）
@@ -53,20 +55,22 @@
 
 ## 2. 动态触发条件
 
-| 触发类型 | 具体规则 | 阈值 |
-|----------|----------|------|
-| 结果不达标 | `breaking_changes` 非空 | 即触发 |
-| 代码变更 | `facade.py` 的 VibeCoder 类方法签名变更 | 即触发 |
+| 触发类型   | 具体规则                                | 阈值   |
+| ---------- | --------------------------------------- | ------ |
+| 结果不达标 | `breaking_changes` 非空                 | 即触发 |
+| 代码变更   | `facade.py` 的 VibeCoder 类方法签名变更 | 即触发 |
 
 ---
 
 ## 3. 动态自适应阶段
 
 **预算限制**：
+
 - 最大 token：4000
 - 最大步数：5
 
 **允许改动的模块白名单**：
+
 - `vibe-coding/src/vibe_coding/facade.py`（仅允许添加默认参数值，不删除已有参数）
 - `vibe-coding/tests/test_facade.py`
 
@@ -79,6 +83,7 @@
 ## 4. 固化
 
 **验收标准**：
+
 - `breaking_changes` 为空
 - `facade.py` 所有公开方法保持向后兼容
 - `vibe_adapter.py` 所有调用点正常工作
@@ -88,9 +93,9 @@
 
 ## 5. 评估指标
 
-| 指标 | 目标值 |
-|------|--------|
-| 接口向后兼容率 | 100% |
-| breaking_changes 检出率 | 100% |
-| 静态路径成功率 | ≥ 95% |
-| 平均延迟 | < 10s（静态扫描） |
+| 指标                    | 目标值            |
+| ----------------------- | ----------------- |
+| 接口向后兼容率          | 100%              |
+| breaking_changes 检出率 | 100%              |
+| 静态路径成功率          | ≥ 95%             |
+| 平均延迟                | < 10s（静态扫描） |

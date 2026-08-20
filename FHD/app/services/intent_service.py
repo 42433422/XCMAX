@@ -291,8 +291,6 @@ def recognize_intents(message: str) -> dict[str, Any]:
         }
 
 
-
-
 def get_tool_key_with_negation_check(message: str) -> str | None:
     """对外接口：在考虑否定后，返回应触发的 tool_key"""
     r = recognize_intents(message)

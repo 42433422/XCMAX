@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """Auth helpers extracted for FastAPI deps."""
 
 from __future__ import annotations

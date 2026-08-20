@@ -39,9 +39,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   const ADMIN_DIGEST_UNLOCK_KEY = 'modstore_admin_digest_unlock_expires'
   const adminDigestUnlockExpires = ref<string>(
-    (typeof sessionStorage !== 'undefined'
-      ? sessionStorage.getItem(ADMIN_DIGEST_UNLOCK_KEY)
-      : '') || '',
+    (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(ADMIN_DIGEST_UNLOCK_KEY) : '') || '',
   )
   const adminUiUnlocked = computed(() => {
     const exp = adminDigestUnlockExpires.value
@@ -134,21 +132,12 @@ export const useAuthStore = defineStore('auth', () => {
       return null
     }
     const now = Date.now()
-    if (
-      !force &&
-      token === lastValidatedToken.value &&
-      user.value &&
-      now - lastMeFetchedAt.value < ME_STALE_MS
-    ) {
+    if (!force && token === lastValidatedToken.value && user.value && now - lastMeFetchedAt.value < ME_STALE_MS) {
       return user.value
     }
     try {
       const raw = await api.me()
-      if (
-        raw &&
-        typeof raw === 'object' &&
-        ((raw as { ok?: boolean }).ok === false || (raw as { success?: boolean }).success === false)
-      ) {
+      if (raw && typeof raw === 'object' && ((raw as { ok?: boolean }).ok === false || (raw as { success?: boolean }).success === false)) {
         clearAuthTokens()
         resetSession()
         return null
@@ -164,9 +153,7 @@ export const useAuthStore = defineStore('auth', () => {
         id: Number(me.id),
         username: String(me.username || me.email || ''),
         level_profile:
-          me.level_profile && typeof me.level_profile === 'object'
-            ? (me.level_profile as CurrentUser['level_profile'])
-            : undefined,
+          me.level_profile && typeof me.level_profile === 'object' ? (me.level_profile as CurrentUser['level_profile']) : undefined,
       }
       lastValidatedToken.value = token
       lastMeFetchedAt.value = Date.now()

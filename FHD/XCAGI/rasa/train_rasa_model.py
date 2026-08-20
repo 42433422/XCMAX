@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 RASA NLU 模型训练脚本
 
@@ -8,10 +7,25 @@ RASA NLU 模型训练脚本
 训练完成后，模型会保存在 rasa/models/ 目录下
 """
 
-import os
-import sys
-import subprocess
 import logging
+import os
+import subprocess
+import sys
+
+RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    OSError,
+    ValueError,
+    TypeError,
+    KeyError,
+    AttributeError,
+    RuntimeError,
+    ImportError,
+    LookupError,
+    ConnectionError,
+    TimeoutError,
+    ArithmeticError,
+    UnicodeError,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -25,6 +39,7 @@ def check_rasa_installed():
     """检查 RASA 是否已安装"""
     try:
         import rasa
+
         logger.info(f"RASA 版本: {rasa.__version__}")
         return True
     except ImportError:
@@ -43,10 +58,17 @@ def train_nlu_model(config_path: str, nlu_data: str, output: str, force: bool = 
         force: 是否强制重新训练
     """
     cmd = [
-        sys.executable, "-m", "rasa", "train", "nlu",
-        "--config", config_path,
-        "--nlu", nlu_data,
-        "--output", output
+        sys.executable,
+        "-m",
+        "rasa",
+        "train",
+        "nlu",
+        "--config",
+        config_path,
+        "--nlu",
+        nlu_data,
+        "--output",
+        output,
     ]
 
     if force:
@@ -64,7 +86,7 @@ def train_nlu_model(config_path: str, nlu_data: str, output: str, force: bool = 
             logger.error(result.stderr)
             return False
         return True
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         logger.error(f"训练过程出错: {e}")
         return False
 
@@ -84,28 +106,19 @@ def test_nlu_model(model_path: str):
         "打印标签",
     ]
 
-    cmd = [
-        sys.executable, "-m", "rasa", "parse",
-        "--model", model_path,
-        "--text"
-    ]
+    cmd = [sys.executable, "-m", "rasa", "parse", "--model", model_path, "--text"]
 
     logger.info("\n测试 NLU 模型:")
 
     for msg in test_messages:
         logger.info(f"\n输入: {msg}")
         try:
-            result = subprocess.run(
-                cmd + [msg],
-                cwd=PROJECT_DIR,
-                capture_output=True,
-                text=True
-            )
+            result = subprocess.run(cmd + [msg], cwd=PROJECT_DIR, capture_output=True, text=True)
             if result.returncode == 0:
                 logger.info(f"输出: {result.stdout}")
             else:
                 logger.error(f"错误: {result.stderr}")
-        except Exception as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error(f"测试失败: {e}")
 
 
@@ -143,7 +156,9 @@ def main():
         logger.info(f"   rasa_nlu_service = RasaNLUService(model_path='{MODELS_DIR}/<model_name>')")
         logger.info("2. 服务器模式:")
         logger.info("   rasa run --enable-api --models models/")
-        logger.info("   然后调用: RasaNLUService(rasa_url='http://localhost:5005', use_server=True)")
+        logger.info(
+            "   然后调用: RasaNLUService(rasa_url='http://localhost:5005', use_server=True)"
+        )
 
 
 if __name__ == "__main__":

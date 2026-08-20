@@ -1,3 +1,5 @@
+# mypy: disable-error-code="assignment"
+# isort: skip_file
 # ruff: noqa: E402, F401
 """工作台 AI 编排：内存会话 + 磁盘持久化（多 worker 可读）+ 异步执行 + GET 轮询。"""
 
@@ -76,7 +78,10 @@ from modstore_server.workbench_delivery_bridge import (  # noqa: F401
     get_workbench_session_snapshot,
     start_workbench_session_for_user,
 )
-from modstore_server.workbench_research import build_research_context, fetch_web_search_context_pack
+from modstore_server.workbench_research import (
+    build_research_context,
+    fetch_web_search_context_pack,
+)
 from modstore_server.workbench_script_runner import run_script_agent_job, run_script_job
 from modstore_server.workflow_engine import run_workflow_sandbox
 from modstore_server.workflow_nl_graph import apply_nl_workflow_graph
@@ -156,7 +161,9 @@ from modstore_server.workbench_api_part03 import (
 
 from modstore_server.workbench_api_pipeline_script import _run_workbench_script_pipeline
 from modstore_server.workbench_api_pipeline_mod import _run_workbench_mod_pipeline
-from modstore_server.workbench_api_pipeline_employee import _run_workbench_employee_pipeline
+from modstore_server.workbench_api_pipeline_employee import (
+    _run_workbench_employee_pipeline,
+)
 from modstore_server.workbench_api_pipeline_canvas import _run_workbench_canvas_pipeline
 
 
@@ -201,6 +208,9 @@ async def _run_pipeline(sid: str, user_id: int, payload: Dict[str, Any]) -> None
             prov=prov,
             mdl=mdl,
         )
+        spec_warnings: List[str] = []
+        _brief_domain_hints: List[str] = []
+        _structured_requirement: Dict[str, Any] = {}
         if _spec_result is not None:
             spec_warnings = _spec_result.get("spec_warnings", [])
             _brief_domain_hints = _spec_result.get("brief_domain_hints", [])
@@ -210,11 +220,6 @@ async def _run_pipeline(sid: str, user_id: int, payload: Dict[str, Any]) -> None
                     str(_spec_result.get("routing_brief") or _routing_brief).strip()
                     or _routing_brief
                 )
-        else:
-            spec_warnings: List[str] = []
-            _brief_domain_hints: List[str] = []
-            _structured_requirement: Dict[str, Any] = {}
-
         spec_msg = "用户校验通过"
         if spec_warnings:
             spec_msg += "；" + "；".join(spec_warnings[:3])
@@ -240,7 +245,16 @@ async def _run_pipeline(sid: str, user_id: int, payload: Dict[str, Any]) -> None
 
         if intent == "mod":
             await _run_workbench_mod_pipeline(
-                sid, payload, intent, brief, prov, mdl, replace, generate_frontend, db, user
+                sid,
+                payload,
+                intent,
+                brief,
+                prov,
+                mdl,
+                replace,
+                generate_frontend,
+                db,
+                user,
             )
             return
 
@@ -278,7 +292,6 @@ from modstore_server.workbench_api_part04 import (
     workbench_edge_tts as workbench_edge_tts,
     workbench_edge_tts_stream as workbench_edge_tts_stream,
 )
-
 
 # ── AI Employee Draft Pipeline (SSE) ─────────────────────────────────────────
 

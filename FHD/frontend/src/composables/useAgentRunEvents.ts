@@ -6,9 +6,7 @@ import { normalizeTaskDisplayText } from '@/utils/chatTaskLabels'
 import { hasAgentRunExecutionEvidence, hasConfirmedAgentRunExecution } from '@/utils/agentRunExecution'
 import { groupAgentRunsIntoTasks } from '@/utils/agentTaskWorkspaceModel'
 
-type UpsertTask = (
-  item: Partial<TaskItem> & { id: string; title: string; source: TaskItem['source']; type: string },
-) => void
+type UpsertTask = (item: Partial<TaskItem> & { id: string; title: string; source: TaskItem['source']; type: string }) => void
 
 export interface UseAgentRunEventSyncOptions {
   upsertTask: UpsertTask
@@ -31,9 +29,7 @@ function isTrivialReadOnlyQueryRun(events: AgentRunEvent[]): boolean {
   const data = asRecord(toolStarted[0].data)
   const action = asString(data.action).trim().toLowerCase()
   if (!READONLY_QUERY_ACTIONS.has(action)) return false
-  const blocked = events.some((event) =>
-    ['tool.failed', 'step.blocked', 'step.waiting_user', 'planner.blocked'].includes(event.event_type),
-  )
+  const blocked = events.some((event) => ['tool.failed', 'step.blocked', 'step.waiting_user', 'planner.blocked'].includes(event.event_type))
   return !blocked
 }
 
@@ -43,15 +39,7 @@ export function extractAgentRunId(payload: unknown): string {
   const rootAgentRun = asRecord(root.agent_run)
   const dataAgentRun = asRecord(data.agent_run)
   const run = asRecord(root.run || data.run)
-  const candidates = [
-    root.run_id,
-    root.agent_run_id,
-    data.run_id,
-    data.agent_run_id,
-    rootAgentRun.run_id,
-    dataAgentRun.run_id,
-    run.run_id,
-  ]
+  const candidates = [root.run_id, root.agent_run_id, data.run_id, data.agent_run_id, rootAgentRun.run_id, dataAgentRun.run_id, run.run_id]
   for (const raw of candidates) {
     const runId = asString(raw).trim()
     if (runId) return runId
@@ -113,13 +101,12 @@ export function buildAgentRunTaskUpdate(params: {
   if (isTrivialReadOnlyQueryRun(events)) return null
   const last = events[events.length - 1]
   const status = statusFromEvents(events)
-  const unconfirmedCompletion = status === 'failed'
-    && events.some((event) => event.event_type === 'run.completed')
-    && !hasConfirmedAgentRunExecution(events)
-  const stage = unconfirmedCompletion ? '未确认执行结果' : (last ? eventLabel(last) : '等待执行状态')
-  const errorEvent = [...events].reverse().find((event) =>
-    ['run.failed', 'tool.failed', 'planner.blocked', 'step.blocked'].includes(event.event_type),
-  )
+  const unconfirmedCompletion =
+    status === 'failed' && events.some((event) => event.event_type === 'run.completed') && !hasConfirmedAgentRunExecution(events)
+  const stage = unconfirmedCompletion ? '未确认执行结果' : last ? eventLabel(last) : '等待执行状态'
+  const errorEvent = [...events]
+    .reverse()
+    .find((event) => ['run.failed', 'tool.failed', 'planner.blocked', 'step.blocked'].includes(event.event_type))
   const userTitle = asString(params.userText).trim().slice(0, 30)
   return {
     id: `agent_${params.runId}`,
@@ -130,9 +117,7 @@ export function buildAgentRunTaskUpdate(params: {
     progress: progressFromEvents(events),
     stage,
     summary: status === 'success' ? '智能任务执行完成' : stage,
-    error: errorEvent
-      ? eventLabel(errorEvent)
-      : (status === 'failed' ? '未收到可确认的工具执行结果' : ''),
+    error: errorEvent ? eventLabel(errorEvent) : status === 'failed' ? '未收到可确认的工具执行结果' : '',
     messageRef: params.messageRef,
     payload: {
       agentRunId: params.runId,
@@ -177,10 +162,7 @@ export function useAgentRunEventSync(options: UseAgentRunEventSyncOptions) {
     if (!normalizedRunId) return
     const afterEventId = lastEventByRunId.get(normalizedRunId)
     try {
-      const response = await agentRunsApi.listEvents(
-        normalizedRunId,
-        afterEventId ? { after_event_id: afterEventId } : {},
-      )
+      const response = await agentRunsApi.listEvents(normalizedRunId, afterEventId ? { after_event_id: afterEventId } : {})
       const incoming = Array.isArray(response?.data) ? response.data : []
       if (!incoming.length) return
       const events = mergeEvents(normalizedRunId, incoming)

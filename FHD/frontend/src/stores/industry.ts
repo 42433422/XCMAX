@@ -7,12 +7,12 @@ import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import { asRecord, asArray, asString } from '@/utils/typeGuards'
 
 interface Industry {
-  id: number | string;
-  name: string;
-  code: string;
-  description?: string;
-  config?: unknown;
-  [key: string]: unknown;
+  id: number | string
+  name: string
+  code: string
+  description?: string
+  config?: unknown
+  [key: string]: unknown
 }
 
 export const useIndustryStore = defineStore('industry', () => {
@@ -55,9 +55,7 @@ export const useIndustryStore = defineStore('industry', () => {
       const modsStore = useModsStore()
       const activeId = String(modsStore.activeModId || '').trim()
       const list = Array.isArray(modsStore.mods) ? modsStore.mods : []
-      const exact = activeId
-        ? list.find((m: unknown) => String(asRecord(m).id || '').trim() === activeId)
-        : null
+      const exact = activeId ? list.find((m: unknown) => String(asRecord(m).id || '').trim() === activeId) : null
       const candidate = exact || list[0] || null
       const ind = candidate ? asRecord(asRecord(candidate).industry) : {}
       return Object.keys(ind).length ? ind : null
@@ -176,7 +174,7 @@ export const useIndustryStore = defineStore('industry', () => {
   }
 
   function getIndustryById(id: number | string): Industry | null {
-    return industries.value.find(ind => ind.id === id) || null
+    return industries.value.find((ind) => ind.id === id) || null
   }
 
   return {
@@ -197,7 +195,7 @@ export const useIndustryStore = defineStore('industry', () => {
     loadCurrentIndustry,
     loadFromServer,
     initialize,
-    getIndustryById
+    getIndustryById,
   }
 })
 

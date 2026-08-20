@@ -71,10 +71,7 @@ async function refresh() {
   loading.value = true
   errMsg.value = ''
   try {
-    const [list, catalog] = await Promise.all([
-      api.developerListWebhooks(),
-      api.developerWebhookEventCatalog(),
-    ])
+    const [list, catalog] = await Promise.all([api.developerListWebhooks(), api.developerWebhookEventCatalog()])
     subs.value = Array.isArray(list) ? (list as Subscription[]) : []
     eventCatalog.value = Array.isArray(catalog) ? (catalog as EventDef[]) : []
   } catch (e: unknown) {
@@ -265,9 +262,7 @@ function statusChipClass(s: string): string {
     <p v-if="errMsg" class="dw__err">{{ errMsg }}</p>
 
     <div v-if="loading" class="dw__placeholder">加载中…</div>
-    <div v-else-if="!subs.length" class="dw__placeholder">
-      还没有订阅。新建一个，把 MODstore 的事件投递到你的 HTTP 端点。
-    </div>
+    <div v-else-if="!subs.length" class="dw__placeholder">还没有订阅。新建一个，把 MODstore 的事件投递到你的 HTTP 端点。</div>
 
     <ul v-else class="dw__list">
       <li v-for="s in subs" :key="s.id" class="dw__item" :class="{ 'dw__item--off': !s.is_active }">
@@ -278,7 +273,9 @@ function statusChipClass(s: string): string {
             <span v-if="s.last_delivery_status">· 最近 {{ s.last_delivery_status }}</span>
           </span>
         </header>
-        <p class="dw__item-url"><code>{{ s.target_url }}</code></p>
+        <p class="dw__item-url">
+          <code>{{ s.target_url }}</code>
+        </p>
         <div class="dw__item-events">
           <span v-for="e in s.enabled_events" :key="e" class="dw__event-pill">{{ e }}</span>
         </div>
@@ -296,8 +293,8 @@ function statusChipClass(s: string): string {
               s.secret_storage === 'fernet'
                 ? '已设密钥（Fernet 加密）'
                 : s.secret_storage === 'plaintext'
-                ? '⚠ 密钥明文存储'
-                : '无 HMAC 密钥'
+                  ? '⚠ 密钥明文存储'
+                  : '无 HMAC 密钥'
             }}
           </span>
           <span class="dw__spacer" />
@@ -341,11 +338,7 @@ function statusChipClass(s: string): string {
               <span>订阅事件</span>
               <div class="dw-event-grid">
                 <label class="dw-event-card" :class="{ 'dw-event-card--on': dialog.selectedEvents.has('*') }">
-                  <input
-                    type="checkbox"
-                    :checked="dialog.selectedEvents.has('*')"
-                    @change="toggleEvent('*')"
-                  />
+                  <input type="checkbox" :checked="dialog.selectedEvents.has('*')" @change="toggleEvent('*')" />
                   <span class="dw-event-card__name">* (全部事件)</span>
                   <span class="dw-event-card__desc">订阅当前与未来所有事件类型</span>
                 </label>
@@ -361,7 +354,9 @@ function statusChipClass(s: string): string {
                     :checked="dialog.selectedEvents.has(e.name)"
                     @change="toggleEvent(e.name)"
                   />
-                  <span class="dw-event-card__name">{{ e.name }} <small>v{{ e.version }}</small></span>
+                  <span class="dw-event-card__name"
+                    >{{ e.name }} <small>v{{ e.version }}</small></span
+                  >
                   <span class="dw-event-card__desc">{{ e.description }}</span>
                 </label>
               </div>
@@ -407,16 +402,13 @@ function statusChipClass(s: string): string {
             </header>
             <p class="dw-deliveries__type">
               <code>{{ d.event_type }}</code>
-              · 尝试 {{ d.attempts }}
-              · {{ d.duration_ms.toFixed(0) }}ms
+              · 尝试 {{ d.attempts }} · {{ d.duration_ms.toFixed(0) }}ms
               <span v-if="d.status_code"> · HTTP {{ d.status_code }}</span>
             </p>
             <p v-if="d.error_message" class="dw-deliveries__err">{{ d.error_message }}</p>
             <div class="dw-deliveries__actions">
               <button class="dw__btn" type="button" @click="previewDelivery = d">查看 Payload</button>
-              <button v-if="d.status !== 'success'" class="dw__btn" type="button" @click="retryDelivery(d)">
-                重试
-              </button>
+              <button v-if="d.status !== 'success'" class="dw__btn" type="button" @click="retryDelivery(d)">重试</button>
             </div>
           </li>
         </ul>
@@ -1065,7 +1057,9 @@ function statusChipClass(s: string): string {
 
 .dw-fade-enter-active,
 .dw-fade-leave-active {
-  transition: opacity 0.18s ease, transform 0.18s ease;
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
 }
 
 .dw-fade-enter-from,

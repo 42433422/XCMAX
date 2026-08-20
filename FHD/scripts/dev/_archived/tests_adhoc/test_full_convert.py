@@ -1,6 +1,9 @@
+# mypy: disable-error-code="import-not-found"
 """测试完整转换流程"""
 
 import sys
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 sys.path.insert(0, r"e:\FHD\backend\shell")
 
@@ -27,7 +30,7 @@ try:
     )
     print("\n✓ 转换成功！")
     print(f"结果：{result}")
-except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"\n✗ 转换失败：{e}")
     import traceback
 

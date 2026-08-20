@@ -8,6 +8,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from app.utils.operational_errors import BOUNDARY_ERRORS
+
 
 def test_mobile_server_desktop_codex_relay_http_round_trip(monkeypatch, tmp_path):
     from app.fastapi_routes import mobile_api  # noqa: F401
@@ -23,7 +25,7 @@ def test_mobile_server_desktop_codex_relay_http_round_trip(monkeypatch, tmp_path
         try:
             yield db
             db.commit()
-        except Exception:
+        except BOUNDARY_ERRORS:
             db.rollback()
             raise
         finally:

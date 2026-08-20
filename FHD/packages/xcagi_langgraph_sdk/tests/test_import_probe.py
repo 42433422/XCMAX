@@ -10,14 +10,15 @@
   - 断言每个导入模块的源码文件位于 FHD/packages 下的 vendored 包内（而非 PyPI 上游）；
   - 断言 langgraph-sdk 不从 registry 拉取 LangGraph 核心（本包源码不含 langgraph 核心导入）。
 """
+
 from __future__ import annotations
 
 import inspect
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-PKG = HERE.parent            # packages/xcagi_langgraph_sdk
-PACKAGES_ROOT = PKG.parent   # FHD/packages/
+PKG = HERE.parent  # packages/xcagi_langgraph_sdk
+PACKAGES_ROOT = PKG.parent  # FHD/packages/
 
 
 def _assert_vendored(module: object) -> None:

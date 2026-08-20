@@ -13,6 +13,7 @@ from langgraph_sdk._sync.stream import SyncThreadStream
 from langgraph_sdk.client import LangGraphClient, SyncLangGraphClient
 from langgraph_sdk.stream.decoders import DataDecoder
 
+from langgraph._internal._exception_policy import BOUNDARY_ERRORS, TERMINATION_ERRORS
 from langgraph.types import Command
 
 logger = logging.getLogger(__name__)
@@ -152,7 +153,7 @@ class _RemoteGraphRunStream:
         self._sdk.__enter__()
         try:
             result = self._sdk.run.start(**self._start_kwargs)
-        except BaseException:
+        except TERMINATION_ERRORS:
             self._sdk.__exit__(*sys.exc_info())
             raise
         self._run_id = result["run_id"]
@@ -225,11 +226,11 @@ class _RemoteGraphRunStream:
         if self._run_id is not None:
             try:
                 self._client.runs.cancel(self._sdk.thread_id, self._run_id, wait=False)
-            except Exception:
+            except BOUNDARY_ERRORS:
                 logger.debug("abort: runs.cancel failed", exc_info=True)
         try:
             self._sdk.close()
-        except Exception:
+        except BOUNDARY_ERRORS:
             logger.debug("abort: sdk.close failed", exc_info=True)
 
     def __iter__(self) -> Iterator[Any]:
@@ -270,7 +271,7 @@ class _AsyncRemoteGraphRunStream:
         await self._sdk.__aenter__()
         try:
             result = await self._sdk.run.start(**self._start_kwargs)
-        except BaseException:
+        except TERMINATION_ERRORS:
             await self._sdk.__aexit__(*sys.exc_info())
             raise
         self._run_id = result["run_id"]
@@ -355,11 +356,11 @@ class _AsyncRemoteGraphRunStream:
                 await self._client.runs.cancel(
                     self._sdk.thread_id, self._run_id, wait=False
                 )
-            except Exception:
+            except BOUNDARY_ERRORS:
                 logger.debug("abort: runs.cancel failed", exc_info=True)
         try:
             await self._sdk.close()
-        except Exception:
+        except BOUNDARY_ERRORS:
             logger.debug("abort: sdk.close failed", exc_info=True)
 
     def __aiter__(self) -> AsyncIterator[Any]:

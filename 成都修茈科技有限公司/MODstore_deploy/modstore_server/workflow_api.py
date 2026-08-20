@@ -1,3 +1,4 @@
+# isort: skip_file
 # ruff: noqa: E402, F401
 """工作流API模块，提供工作流的CRUD操作和执行监控功能。"""
 
@@ -45,7 +46,6 @@ from modstore_server.workflow_api_part01 import (
     _guess_employee_id_from_empty_workflow as _guess_employee_id_from_empty_workflow,
     _repair_empty_employee_workflow_graph as _repair_empty_employee_workflow_graph,
 )
-
 
 workflow_hooks_router = APIRouter(prefix="/api/workflow-hooks", tags=["workflow-hooks"])
 

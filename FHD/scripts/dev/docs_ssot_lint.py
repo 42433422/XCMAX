@@ -9,6 +9,7 @@
   python scripts/dev/docs_ssot_lint.py            # 仅打印告警，退出码 0
   python scripts/dev/docs_ssot_lint.py --strict   # 告警即退出码 1（CI 门禁）
 """
+
 import argparse
 import re
 import sys
@@ -195,7 +196,9 @@ def is_real_claim(line: str) -> bool:
     return bool(CLAIM_PATTERN.search(stripped))
 
 
-def scan_claims(scan_dirs: list[Path], retired_files: Optional[set] = None) -> list[tuple[Path, int, str]]:
+def scan_claims(
+    scan_dirs: list[Path], retired_files: Optional[set] = None
+) -> list[tuple[Path, int, str]]:
     """扫描所有 md 文件，返回 [(文件绝对路径, 行号, 匹配行文本)]。
 
     跳过 SSOT_INDEX.md 本身（它是登记表，不是 SSOT 声明）。
@@ -290,8 +293,7 @@ def main() -> int:
             continue
 
         has_claim = any(
-            CLAIM_PATTERN.search(line) and is_real_claim(line)
-            for line in content.splitlines()
+            CLAIM_PATTERN.search(line) and is_real_claim(line) for line in content.splitlines()
         )
         if not has_claim:
             print(f"[WARN] registered SSOT file missing claim: {reg_path}")

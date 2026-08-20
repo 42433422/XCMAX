@@ -21,7 +21,7 @@ from starlette.requests import Request as StarletteRequest
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -217,7 +217,7 @@ class ModContextMiddleware:
                         mod_context.mod_id,
                         exc,
                     )
-                except Exception as exc:  # noqa: BLE001
+                except BOUNDARY_ERRORS as exc:
                     # 过期/伪造 session + Active-Mod 头时，权益恢复或按需 load 可能触发 DB 异常；不得拖垮宿主 API。
                     logger.warning(
                         "Mod context bootstrap failed for %s: %s",

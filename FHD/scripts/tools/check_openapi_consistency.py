@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="attr-defined"
 """
 OpenAPI 文档与实际路由的一致性验证
 ====================================
@@ -158,9 +159,7 @@ def collect_runtime_routes(app) -> list[RuntimeRoute]:
             endpoint = r.endpoint
             ep_mod = getattr(endpoint, "__module__", "") or ""
             ep_qname = (
-                getattr(endpoint, "__qualname__", "")
-                or getattr(endpoint, "__name__", "")
-                or ""
+                getattr(endpoint, "__qualname__", "") or getattr(endpoint, "__name__", "") or ""
             )
             fq = f"{ep_mod}.{ep_qname}" if ep_mod and ep_qname else (ep_qname or ep_mod)
             out.append(
@@ -527,11 +526,7 @@ def _new_warnings_against_baseline(
     baseline_path: Path,
 ) -> list[Finding]:
     known = _load_warning_baseline(baseline_path)
-    return [
-        f
-        for f in findings
-        if f.level == "warn" and _warning_key(f) not in known
-    ]
+    return [f for f in findings if f.level == "warn" and _warning_key(f) not in known]
 
 
 def render_markdown_report(
@@ -599,8 +594,12 @@ def _build_app():
     os.environ["XCAGI_DESKTOP_FAST_START"] = "0"
 
     from app.fastapi_app import create_fastapi_app
+    from app.fastapi_app.mod_startup import wait_for_background_mod_load
 
-    return create_fastapi_app(enable_docs=True, enable_cors=False)
+    app = create_fastapi_app(enable_docs=True, enable_cors=False)
+    if not wait_for_background_mod_load(app):
+        raise RuntimeError("Mod routes did not finish loading before OpenAPI generation")
+    return app
 
 
 def main(argv: list[str] | None = None) -> int:

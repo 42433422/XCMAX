@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="no-any-return"
 """创建分支 + commit + push + 开 PR。"""
+
 from __future__ import annotations
 
 import argparse
@@ -27,11 +29,14 @@ def create_branch_commit_pr(
         raise RuntimeError("GITHUB_REPO env var not set")
 
     pack_name = proposal.get("employee_pack", {}).get("name", "unnamed")
-    target_dir = Path("成都修茈科技有限公司/MODstore_deploy/catalog_data/files") / f"{pack_name}@1.0.0"
+    target_dir = (
+        Path("成都修茈科技有限公司/MODstore_deploy/catalog_data/files") / f"{pack_name}@1.0.0"
+    )
     target_dir.mkdir(parents=True, exist_ok=True)
 
     # 复制文件
     import shutil
+
     for f in files_dir.iterdir():
         if f.is_file():
             shutil.copy2(f, target_dir / f.name)
@@ -39,19 +44,36 @@ def create_branch_commit_pr(
     # git 操作
     _run(["git", "checkout", "-b", branch_name])
     _run(["git", "add", str(target_dir)])
-    _run(["git", "commit", "-m", f"feat(employee_pack): add {pack_name}\n\nProposal-ID: {proposal.get('proposal_id')}"])
+    _run(
+        [
+            "git",
+            "commit",
+            "-m",
+            f"feat(employee_pack): add {pack_name}\n\nProposal-ID: {proposal.get('proposal_id')}",
+        ]
+    )
     _run(["git", "push", "origin", branch_name])
 
     # 开 PR
-    pr_url = _run([
-        "gh", "pr", "create",
-        "--repo", repo,
-        "--head", branch_name,
-        "--base", "main",
-        "--title", f"[ai-implement] {pack_name}",
-        "--body", f"Auto-implemented employee pack from proposal {proposal.get('proposal_id')}",
-        "--label", "ai-implemented",
-    ])
+    pr_url = _run(
+        [
+            "gh",
+            "pr",
+            "create",
+            "--repo",
+            repo,
+            "--head",
+            branch_name,
+            "--base",
+            "main",
+            "--title",
+            f"[ai-implement] {pack_name}",
+            "--body",
+            f"Auto-implemented employee pack from proposal {proposal.get('proposal_id')}",
+            "--label",
+            "ai-implemented",
+        ]
+    )
     if pr_url.returncode != 0:
         raise RuntimeError(f"gh pr create failed: {pr_url.stderr}")
     return pr_url.stdout.strip()

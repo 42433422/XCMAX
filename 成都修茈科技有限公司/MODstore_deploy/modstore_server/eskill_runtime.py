@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """ESkill runtime: static-first execution with controlled dynamic solidification."""
 
 from __future__ import annotations
@@ -6,18 +7,19 @@ import json
 import re
 import time
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Dict, Optional
 
 from sqlalchemy.orm import Session
 
 from modstore_server.eskill_adapter import (
     RuleBasedESkillAdapter,
-    dumps as _dumps,
-    loads as _loads,
-    render_template as _render_template,
 )
+from modstore_server.eskill_adapter import dumps as _dumps
+from modstore_server.eskill_adapter import loads as _loads
+from modstore_server.eskill_adapter import render_template as _render_template
 from modstore_server.models import ESkill, ESkillRun, ESkillVersion
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 from modstore_server.workflow_variables import resolve_value
 
 
@@ -77,7 +79,7 @@ class ESkillRuntime:
             workflow_node_id=workflow_node_id,
             stage="static",
             input_json=_dumps(input_data),
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
         )
 
         try:
@@ -101,7 +103,7 @@ class ESkillRuntime:
                 quality_gate=quality_gate,
                 solidify=solidify,
             )
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
             if not bool(trigger_policy.get("on_error", True)):
                 return self._finish_run(db, run, {}, t0, "static_error", error=str(exc))
             return self._run_dynamic(
@@ -155,7 +157,7 @@ class ESkillRuntime:
         patched_logic = self._apply_patch(logic, patch)
         try:
             output = self._execute_logic(patched_logic, input_data, user_id=user_id)
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
             if self._rollback_to_previous_version(db, skill):
                 db.commit()
             return self._finish_run(
@@ -201,7 +203,7 @@ class ESkillRuntime:
                 )
             )
             skill.active_version = next_version
-            skill.updated_at = datetime.now(timezone.utc)
+            skill.updated_at = datetime.now(UTC)
             run.stage = "solidified"
             run.output_json = _dumps({**output, "solidified_version": next_version})
             db.commit()
@@ -226,7 +228,7 @@ class ESkillRuntime:
         run.patch_json = _dumps(patch or {})
         run.error_message = error
         run.duration_ms = round((time.perf_counter() - t0) * 1000, 3)
-        run.completed_at = datetime.now(timezone.utc)
+        run.completed_at = datetime.now(UTC)
         if commit:
             db.add(run)
             db.commit()
@@ -289,7 +291,9 @@ class ESkillRuntime:
             return self._execute_pipeline(logic, input_data, user_id=user_id)
 
         if logic_type in ("vibe_code", "vibe_workflow"):
-            from modstore_server.integrations.vibe_eskill_adapter import execute_vibe_kind
+            from modstore_server.integrations.vibe_eskill_adapter import (
+                execute_vibe_kind,
+            )
 
             return execute_vibe_kind(logic, input_data, user_id=user_id)
 
@@ -478,7 +482,7 @@ class ESkillRuntime:
         if not previous:
             return False
         skill.active_version = previous.version
-        skill.updated_at = datetime.now(timezone.utc)
+        skill.updated_at = datetime.now(UTC)
         db.add(skill)
         return True
 

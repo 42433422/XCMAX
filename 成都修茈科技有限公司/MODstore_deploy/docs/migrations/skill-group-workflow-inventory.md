@@ -4,28 +4,28 @@
 
 ## 语义
 
-| 概念 | 说明 |
-|------|------|
-| 画布 Skill 组 | 对外 intent：`skill`（原 `workflow`，仍兼容解析） |
-| 容器行 | `workflows` 表；可选列 `kind='skill_group'`（新建画布） |
-| 脚本工作流 | `script_workflows`，与画布分流；`execution_mode=script` |
+| 概念          | 说明                                                    |
+| ------------- | ------------------------------------------------------- |
+| 画布 Skill 组 | 对外 intent：`skill`（原 `workflow`，仍兼容解析）       |
+| 容器行        | `workflows` 表；可选列 `kind='skill_group'`（新建画布） |
+| 脚本工作流    | `script_workflows`，与画布分流；`execution_mode=script` |
 
 ## API：intent / 字段
 
-| 位置 | 旧值 | 新值（规范） | 兼容 |
-|------|------|--------------|------|
-| `POST /api/workbench/sessions` body.intent | `workflow` | `skill` | 服务端将 `workflow` 规范为 `skill` |
-| `WorkbenchResearchBody.intent` | `workflow` | `skill`（默认） | 同上 |
-| 会话 artifact | `workflow_id` | 增加 `skill_group_id`（同 id） | 旧键保留 |
-| | `workflow_name` | 增加 `skill_group_name` | 旧键保留 |
+| 位置                                       | 旧值            | 新值（规范）                   | 兼容                               |
+| ------------------------------------------ | --------------- | ------------------------------ | ---------------------------------- |
+| `POST /api/workbench/sessions` body.intent | `workflow`      | `skill`                        | 服务端将 `workflow` 规范为 `skill` |
+| `WorkbenchResearchBody.intent`             | `workflow`      | `skill`（默认）                | 同上                               |
+| 会话 artifact                              | `workflow_id`   | 增加 `skill_group_id`（同 id） | 旧键保留                           |
+|                                            | `workflow_name` | 增加 `skill_group_name`        | 旧键保留                           |
 
 ## 前端
 
-| 位置 | 说明 |
-|------|------|
-| `WorkbenchHomeView` | `composerIntent` 默认 `skill`；`workflow` 仅缓存兼容 |
-| `UnifiedWorkbenchView` | URL `focus=skill` 映射画布面板；`focus=workflow` 仍可用 |
-| 路由 `workbench-workflow` | 重定向 `focus=skill` |
+| 位置                      | 说明                                                    |
+| ------------------------- | ------------------------------------------------------- |
+| `WorkbenchHomeView`       | `composerIntent` 默认 `skill`；`workflow` 仅缓存兼容    |
+| `UnifiedWorkbenchView`    | URL `focus=skill` 映射画布面板；`focus=workflow` 仍可用 |
+| 路由 `workbench-workflow` | 重定向 `focus=skill`                                    |
 
 ## DB 外键（指向 `workflows.id`）
 

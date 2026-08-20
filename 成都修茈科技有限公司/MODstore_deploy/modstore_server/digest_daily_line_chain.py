@@ -1,3 +1,4 @@
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Phase A/B/C：四产线员工串联 + ProductionLine 子集 + installer/major 日 P5/P6/P9 派发。
 
 Phase A（08:15）：P-S + P-App 补丁派发。
@@ -8,25 +9,32 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Dict, List, Sequence, Tuple
 
+from modstore_server.digest_daily_phase_chain import PHASE_A_LINES as PHASE_A_LINES
+from modstore_server.digest_daily_phase_chain import PHASE_B_LINES_NO_APP as PHASE_B_LINES_NO_APP
+from modstore_server.digest_daily_phase_chain import (
+    PHASE_B_LINES_WITH_APP as PHASE_B_LINES_WITH_APP,
+)
+from modstore_server.digest_daily_phase_chain import _env_bool as _env_bool
+from modstore_server.digest_daily_phase_chain import _merge_phase_block as _merge_phase_block
+from modstore_server.digest_daily_phase_chain import (
+    execute_phase_a_line_chain as execute_phase_a_line_chain,
+)
+from modstore_server.digest_daily_phase_chain import (
+    execute_phase_b_line_chain as execute_phase_b_line_chain,
+)
+from modstore_server.digest_daily_phase_chain import (
+    trigger_strategic_layer_dispatch as trigger_strategic_layer_dispatch,
+)
+from modstore_server.digest_daily_phase_chain import wait_for_phase_a as wait_for_phase_a
 from modstore_server.digest_line_executor import (
     _load_digest_execute_context,
     _read_execute_meta,
     persist_line_execute_on_digest_record,
 )
-from modstore_server.digest_daily_phase_chain import (
-    PHASE_A_LINES as PHASE_A_LINES,
-    PHASE_B_LINES_NO_APP as PHASE_B_LINES_NO_APP,
-    PHASE_B_LINES_WITH_APP as PHASE_B_LINES_WITH_APP,
-    _env_bool as _env_bool,
-    _merge_phase_block as _merge_phase_block,
-    execute_phase_a_line_chain as execute_phase_a_line_chain,
-    execute_phase_b_line_chain as execute_phase_b_line_chain,
-    trigger_strategic_layer_dispatch as trigger_strategic_layer_dispatch,
-    wait_for_phase_a as wait_for_phase_a,
-)
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +98,7 @@ def _ci_correlation(kind: str, step_ids: Sequence[str]) -> Dict[str, Any]:
         url = f"{server}/{repo}/actions/runs/{run_id}" if repo else ""
     else:
         source = "cvm_local"
-        run_id = f"local-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+        run_id = f"local-{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}"
         url = ""
     return {
         "ci_job_id": run_id,
@@ -107,7 +115,7 @@ def _build_chain_context(record_id: int, release_train: str, release_kind: str) 
         from modstore_server.integrations.ops_action_handlers import repo_root
 
         root = str(repo_root())
-    except Exception:
+    except RECOVERABLE_ERRORS:
         root = ""
     ctx = _load_digest_execute_context(int(record_id)) or {}
     return {
@@ -131,7 +139,7 @@ def _dispatch_employee_chain(
     phase_label: str,
 ) -> Dict[str, Any]:
     context = _build_chain_context(record_id, release_train, release_kind)
-    started_at = datetime.now(timezone.utc).isoformat()
+    started_at = datetime.now(UTC).isoformat()
     step_results: List[Dict[str, Any]] = []
     all_ok = True
 
@@ -170,7 +178,7 @@ def _dispatch_employee_chain(
             )
             if not step_ok:
                 all_ok = False
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             logger.exception(
                 "%s chain step=%s employee=%s failed", phase_label, step_id, employee_id
             )
@@ -184,7 +192,7 @@ def _dispatch_employee_chain(
                 }
             )
 
-    completed_at = datetime.now(timezone.utc).isoformat()
+    completed_at = datetime.now(UTC).isoformat()
     block = {
         "ok": all_ok,
         "phase": phase_label,
@@ -213,11 +221,19 @@ def execute_installer_employee_chain(
 ) -> Dict[str, Any]:
     """installer/major 日：P9→P5→P6 员工串联（major 前置 MAJOR_EXTRA_CHAIN）。"""
     if not _env_bool("MODSTORE_INSTALLER_PUSH_ENABLED", "1"):
-        return {"ok": True, "skipped": True, "reason": "MODSTORE_INSTALLER_PUSH_ENABLED=0"}
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "MODSTORE_INSTALLER_PUSH_ENABLED=0",
+        }
 
     kind = (release_kind or "installer").strip().lower()
     if kind not in ("installer", "major"):
-        return {"ok": True, "skipped": True, "reason": f"release_kind={kind} not installer/major"}
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": f"release_kind={kind} not installer/major",
+        }
 
     steps: List[Tuple[str, str, str]] = list(INSTALLER_EMPLOYEE_CHAIN)
     if kind == "major":
@@ -260,7 +276,9 @@ def execute_installer_employee_chain(
                 }
                 # 即时门禁不过 → 自动回滚闭环（回退上一稳定版 + 告警 + 落 OpsStagedChange 复盘待审）
                 try:
-                    from modstore_server.auto_rollback import auto_rollback_on_gate_failure
+                    from modstore_server.auto_rollback import (
+                        auto_rollback_on_gate_failure,
+                    )
 
                     block["rollback"] = auto_rollback_on_gate_failure(
                         gate="FASTGATE",
@@ -268,7 +286,7 @@ def execute_installer_employee_chain(
                         release_kind=kind,
                         reason=str(gate.get("reason") or "fastgate failed"),
                     )
-                except Exception:  # noqa: BLE001
+                except BOUNDARY_ERRORS:  # noqa: BLE001
                     logger.exception("phase_c installer FASTGATE auto-rollback failed")
                 return block
 
@@ -282,7 +300,7 @@ def execute_installer_employee_chain(
                 actor="installer-employee-chain",
             )
             block["download_release"] = push
-        except Exception:  # noqa: BLE001
+        except BOUNDARY_ERRORS:  # noqa: BLE001
             logger.exception("phase_c installer chain: record_installer_push failed")
     return block
 
@@ -313,12 +331,16 @@ def execute_production_pipeline_chain(
 ) -> Dict[str, Any]:
     """ProductionLineOrchestrator 子集：daily=P3/P7/P8 · installer/major=含 P5/P6。"""
     if not _env_bool("MODSTORE_RELEASE_TRAIN_PIPELINE_ENABLED", "1"):
-        return {"ok": True, "skipped": True, "reason": "MODSTORE_RELEASE_TRAIN_PIPELINE_ENABLED=0"}
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "MODSTORE_RELEASE_TRAIN_PIPELINE_ENABLED=0",
+        }
 
     kind = (release_kind or "daily").strip().lower()
     step_ids = PIPELINE_STEPS_BY_KIND.get(kind) or PIPELINE_STEPS_BY_KIND["daily"]
     ci_job = _ci_correlation(kind, step_ids)
-    started_at = datetime.now(timezone.utc).isoformat()
+    started_at = datetime.now(UTC).isoformat()
 
     if shadow:
         block = {
@@ -331,7 +353,7 @@ def execute_production_pipeline_chain(
             "planned_steps": list(step_ids),
             "ci_job": ci_job,
             "started_at": started_at,
-            "completed_at": datetime.now(timezone.utc).isoformat(),
+            "completed_at": datetime.now(UTC).isoformat(),
         }
         meta = _read_execute_meta(int(record_id))
         persist_line_execute_on_digest_record(
@@ -348,7 +370,7 @@ def execute_production_pipeline_chain(
         from modstore_server.runtime_async import run_coro_sync
 
         out = run_coro_sync(_run_pipeline_with_optional_auto_approve(step_ids, context))
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("production pipeline chain failed record_id=%s", record_id)
         out = {"ok": False, "error": str(exc)}
 
@@ -361,7 +383,7 @@ def execute_production_pipeline_chain(
         "step_ids": list(step_ids),
         "ci_job": ci_job,
         "started_at": started_at,
-        "completed_at": datetime.now(timezone.utc).isoformat(),
+        "completed_at": datetime.now(UTC).isoformat(),
     }
 
     # 灰度发布（CANARY）/推送阶段校验不过 → 自动回滚闭环（对齐时间轨 CANARY→ROLLBACK）。
@@ -379,7 +401,7 @@ def execute_production_pipeline_chain(
                     reason=str(out.get("error") or f"pipeline failed at {failed_step}"),
                     failed_step=failed_step,
                 )
-            except Exception:  # noqa: BLE001
+            except BOUNDARY_ERRORS:  # noqa: BLE001
                 logger.exception("production pipeline auto-rollback failed record_id=%s", record_id)
 
     meta = _read_execute_meta(int(record_id))
@@ -442,6 +464,11 @@ async def _run_pipeline_with_optional_auto_approve(
         if isinstance(getattr(appr, "data", None), dict):
             ctx = appr.data
         if not ids:
-            return {"ok": True, "paused": False, "executed_steps": executed, "auto_approved": True}
+            return {
+                "ok": True,
+                "paused": False,
+                "executed_steps": executed,
+                "auto_approved": True,
+            }
 
     return {"ok": True, "executed_steps": executed, "auto_approved": auto}

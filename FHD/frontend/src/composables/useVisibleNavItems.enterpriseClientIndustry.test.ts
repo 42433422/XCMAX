@@ -18,8 +18,7 @@ vi.mock('@/constants/genericModPack', () => ({
   keepHostNavKeyVisibleWhenModSidebarFacetSuppressed: () => false,
   normalizeModSidebarNavKey: (key: string) => String(key || '').replace(/^mod-mod-/, 'mod-'),
   shouldHideAttendanceModSidebarMenu: () => false,
-  shouldSuppressClientErpModMenuId: (menuId: string) =>
-    String(menuId || '').startsWith('mod-erp-'),
+  shouldSuppressClientErpModMenuId: (menuId: string) => String(menuId || '').startsWith('mod-erp-'),
   isHostBridgeModId: (modId: string) => String(modId || '').startsWith('xcagi-'),
   MOD_MENU_ID_TO_HOST_NAV_KEY: {
     'mod-erp-products': 'products',

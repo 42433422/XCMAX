@@ -133,16 +133,14 @@ describe('tts speak branches', () => {
   it('speakText online mode primes csrf cookie before posting when missing', async () => {
     setEngineMode('online')
     mockReadCsrfTokenFromCookie.mockReturnValueOnce('').mockReturnValue('csrf-token')
-    mockApiFetch
-      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ success: true }) })
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => ({
-          success: true,
-          data: { audioBase64: 'data:audio/mp3;base64,AAAA' },
-        }),
-      })
+    mockApiFetch.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ success: true }) }).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        success: true,
+        data: { audioBase64: 'data:audio/mp3;base64,AAAA' },
+      }),
+    })
 
     class MockAudio {
       onended: (() => void) | null = null

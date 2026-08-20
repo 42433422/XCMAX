@@ -1,3 +1,4 @@
+# mypy: disable-error-code="import-not-found"
 """测试 build_normalized_frame 函数"""
 
 import sys
@@ -24,4 +25,4 @@ print(f"规范化后列：{list(norm_df.columns)}")
 print("\n前 5 行:")
 print(norm_df.head())
 
-print(f'\n非空行数：{len(norm_df[norm_df["上班打卡"].notna() | norm_df["下班打卡"].notna()])}')
+print(f"\n非空行数：{len(norm_df[norm_df['上班打卡'].notna() | norm_df['下班打卡'].notna()])}")

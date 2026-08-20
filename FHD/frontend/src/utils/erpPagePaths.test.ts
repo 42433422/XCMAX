@@ -11,11 +11,7 @@ describe('erpPagePaths', () => {
     vi.stubGlobal('localStorage', { getItem: () => '1' })
     expect(resolveErpPagePath('/products')).toBe('/mod/xcagi-erp-domain-bridge/products')
     expect(resolveErpPagePath('/print')).toBe('/mod/xcagi-erp-domain-bridge/print')
-    expect(resolveErpPageRedirectForRouteName('customers')).toBe(
-      '/mod/xcagi-erp-domain-bridge/customers',
-    )
-    expect(resolveErpPageRedirectForRouteName('materials-list')).toBe(
-      '/mod/xcagi-erp-domain-bridge/materials',
-    )
+    expect(resolveErpPageRedirectForRouteName('customers')).toBe('/mod/xcagi-erp-domain-bridge/customers')
+    expect(resolveErpPageRedirectForRouteName('materials-list')).toBe('/mod/xcagi-erp-domain-bridge/materials')
   })
 })

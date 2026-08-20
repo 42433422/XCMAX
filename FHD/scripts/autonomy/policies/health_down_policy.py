@@ -14,6 +14,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from ..rca_rules import diagnose_root_cause
 from ..types import Action, ActionType, Diagnosis, Plan, Policy, RiskLevel, Signal
 
@@ -26,7 +28,7 @@ class HealthDownPolicy:
 
     id = "health-down"
     matches = ["health_down"]
-    gate = "auto"
+    gate: Literal["auto", "approve", "manual"] = "auto"
 
     def plan(self, signals: list[Signal]) -> Plan:
         diagnosis: Diagnosis = diagnose_root_cause(signals)

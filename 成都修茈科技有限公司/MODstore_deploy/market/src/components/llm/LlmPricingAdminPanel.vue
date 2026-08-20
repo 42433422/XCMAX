@@ -27,9 +27,7 @@
         <button type="button" class="btn btn-primary-solid" :disabled="syncBusy" @click="syncOfficial(false)">
           {{ syncBusy ? '同步中…' : '从官网同步' }}
         </button>
-        <button type="button" class="btn btn-ghost" :disabled="syncBusy" @click="syncOfficial(true)">
-          同步并应用倍率
-        </button>
+        <button type="button" class="btn btn-ghost" :disabled="syncBusy" @click="syncOfficial(true)">同步并应用倍率</button>
         <button type="button" class="btn btn-primary-solid" :disabled="applyBusy" @click="applyMarkup">
           {{ applyBusy ? '应用中…' : '按倍率写入平台售价' }}
         </button>
@@ -85,9 +83,7 @@
         <button type="button" class="btn btn-primary-solid" :disabled="batchBusy" @click="runBatch('unpriced_only')">
           {{ batchBusy ? '处理中…' : '应用到未定价模型' }}
         </button>
-        <button type="button" class="btn btn-ghost" :disabled="batchBusy" @click="runBatch('all_catalog')">
-          覆盖本厂商全部目录模型
-        </button>
+        <button type="button" class="btn btn-ghost" :disabled="batchBusy" @click="runBatch('all_catalog')">覆盖本厂商全部目录模型</button>
       </div>
     </section>
 
@@ -137,12 +133,7 @@
                 <input v-model="row._edit.enabled" type="checkbox" />
               </td>
               <td>
-                <button
-                  type="button"
-                  class="btn btn-ghost btn--compact"
-                  :disabled="rowSaving === row.model"
-                  @click="saveRow(row)"
-                >
+                <button type="button" class="btn btn-ghost btn--compact" :disabled="rowSaving === row.model" @click="saveRow(row)">
                   {{ rowSaving === row.model ? '…' : '保存' }}
                 </button>
               </td>
@@ -324,10 +315,8 @@ async function loadPrices() {
         provider: String(it.provider || props.provider),
         model: String(it.model || ''),
         label: String(it.label || ''),
-        official_input_price_per_1k:
-          it.official_input_price_per_1k != null ? Number(it.official_input_price_per_1k) : null,
-        official_output_price_per_1k:
-          it.official_output_price_per_1k != null ? Number(it.official_output_price_per_1k) : null,
+        official_input_price_per_1k: it.official_input_price_per_1k != null ? Number(it.official_input_price_per_1k) : null,
+        official_output_price_per_1k: it.official_output_price_per_1k != null ? Number(it.official_output_price_per_1k) : null,
         official_source: String(it.official_source || ''),
         input_price_per_1k: Number(it.input_price_per_1k) || 0,
         output_price_per_1k: Number(it.output_price_per_1k) || 0,

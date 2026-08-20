@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """里程碑 L+：Mod 侧仓储适配器（显式类型 + 透明委托，可整体替换 inner）。"""
 
 from __future__ import annotations

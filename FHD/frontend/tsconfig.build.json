@@ -4,10 +4,5 @@
     "strict": true,
     "skipLibCheck": true
   },
-  "exclude": [
-    "src/constants/*.minimal.ts",
-    "src/views/temp2.vue",
-    "src/views/ChatViewOptimized.vue",
-    "src/**/*.test.ts"
-  ]
+  "exclude": ["src/constants/*.minimal.ts", "src/views/temp2.vue", "src/views/ChatViewOptimized.vue", "src/**/*.test.ts"]
 }

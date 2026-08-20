@@ -1,10 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import {
-  AUTONOMY_L4_READINESS,
-  overlayDeployGap,
-  type AutonomyMaturityGap,
-} from './autonomyL4Readiness'
+import { AUTONOMY_L4_READINESS, overlayDeployGap, type AutonomyMaturityGap } from './autonomyL4Readiness'
 
 const AUTO_DEPLOY_GAP_IDS = AUTONOMY_L4_READINESS.gaps.map((g) => g.id)
 const AUTO_DEPLOY_GAP = AUTONOMY_L4_READINESS.gaps.find((g) => g.id === 'p0-auto-deploy')!

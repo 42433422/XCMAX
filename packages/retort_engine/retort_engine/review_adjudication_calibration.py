@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.pr_review import review_diff
 
@@ -45,7 +45,7 @@ def build_review_adjudication_calibration(
     )
     pre_pass_rate = round(len(pre_passed) / len(cases), 3) if cases else 0.0
     post_pass_rate = round(len(passed) / len(cases), 3) if cases else 0.0
-    summary = {
+    summary: dict[str, Any] = {
         "no_human_operating_model": True,
         "human_review_required": False,
         "human_review_not_applicable": True,
@@ -145,7 +145,12 @@ def _evaluate_case(case: dict[str, Any]) -> dict[str, Any]:
             ),
         },
         "review_summary": _compact_review_summary(
-            review.get("summary") if isinstance(review.get("summary"), dict) else {}
+            cast(
+                dict[str, Any],
+                review.get("summary")
+                if isinstance(review.get("summary"), dict)
+                else {},
+            )
         ),
     }
 

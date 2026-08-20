@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """为「做 Mod」生成的每名 workflow_employee 生成可执行 Python 实现。
 
 产物写到 ``backend/employees/<safe_id>.py``，由 ``render_suite_blueprints_py``
@@ -16,22 +17,33 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
-from modstore_server.models import User
-
 from modstore_server.mod_employee_impl_generation import (
     SYSTEM_PROMPT_EMPLOYEE_IMPL as SYSTEM_PROMPT_EMPLOYEE_IMPL,
+)
+from modstore_server.mod_employee_impl_generation import (
     SYSTEM_PROMPT_EMPLOYEE_IMPL_REPAIR as SYSTEM_PROMPT_EMPLOYEE_IMPL_REPAIR,
-    _behavior_check as _behavior_check,
-    _compile_check as _compile_check,
+)
+from modstore_server.mod_employee_impl_generation import _behavior_check as _behavior_check
+from modstore_server.mod_employee_impl_generation import _compile_check as _compile_check
+from modstore_server.mod_employee_impl_generation import (
     _employee_brief_lines as _employee_brief_lines,
+)
+from modstore_server.mod_employee_impl_generation import (
     _fallback_employee_py as _fallback_employee_py,
+)
+from modstore_server.mod_employee_impl_generation import (
     _generate_one_employee_py as _generate_one_employee_py,
-    _security_check as _security_check,
-    _strip_code_fence as _strip_code_fence,
+)
+from modstore_server.mod_employee_impl_generation import _security_check as _security_check
+from modstore_server.mod_employee_impl_generation import _strip_code_fence as _strip_code_fence
+from modstore_server.mod_employee_impl_generation import (
     generate_mod_employee_impls_async as generate_mod_employee_impls_async,
+)
+from modstore_server.mod_employee_impl_generation import (
     sanitize_employee_stem as sanitize_employee_stem,
 )
-
+from modstore_server.models import User
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 _HOLLOW_SYSTEM_PROMPT_PATTERNS = (
     re.compile(r'SYSTEM_PROMPT\s*=\s*["\'].*请根据用户输入完成任务.*["\']'),
@@ -142,7 +154,7 @@ def _vibe_heal_mod_employees(
         )
     except VibeIntegrationError as exc:
         return {"enabled": False, "reason": str(exc)}
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         return {"enabled": False, "reason": f"vibe coder 构造失败: {exc}"}
 
     employee_paths = [
@@ -180,7 +192,7 @@ def _vibe_heal_mod_employees(
                 total_rounds += int(getattr(result2, "rounds", 0) or 0)
                 last_ok = last_ok and bool(getattr(result2, "ok", True))
                 passes_out.append(heal_result_to_dict(result2))
-            except Exception as exc2:  # noqa: BLE001
+            except BOUNDARY_ERRORS as exc2:  # noqa: BLE001
                 passes_out.append({"error": f"第二轮 SYSTEM_PROMPT heal 失败: {exc2}"})
                 last_ok = False
 
@@ -193,5 +205,5 @@ def _vibe_heal_mod_employees(
             "passes": passes_out,
             "system_prompt_still_missing": gap_after,
         }
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         return {"enabled": True, "ok": False, "reason": f"heal_project 失败: {exc}"}

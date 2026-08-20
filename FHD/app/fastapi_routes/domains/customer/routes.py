@@ -54,6 +54,7 @@ __all__ = [
 router = APIRouter(tags=["xcagi-compat"])
 logger = logging.getLogger(__name__)
 
+
 def _execute_customers_route_action(action: str, params: dict[str, Any]) -> dict[str, Any]:
     if action == "create":
         name = str(

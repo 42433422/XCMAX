@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="no-any-return"
 """文档数字宣称校验（P2-3：文档与实测一致）。
 
 背景：本仓库多处文档（docs/**、workspace 规则、CHANGELOG）手工维护覆盖率/指标数字，
@@ -140,11 +141,44 @@ def check_snapshot_self_consistency(ssot: dict[str, float]) -> list[str]:
 
 # 历史 / 目标 / 阶段上下文提示词：命中则把行内数字视作非"当前 floor"宣称，豁免
 HISTORICAL_HINTS = (
-    "历史", "退役", "retired", "已退役", "曾", "旧", "误报", "撤回", "过渡",
-    "目标", "target", "roadmap", "Phase", "阶段", "M1", "M2", "M3", "M4",
-    "~", "约", "待", "计划", "means", "已诞生", "收录", "封顶", "卡", "上限",
+    "历史",
+    "退役",
+    "retired",
+    "已退役",
+    "曾",
+    "旧",
+    "误报",
+    "撤回",
+    "过渡",
+    "目标",
+    "target",
+    "roadmap",
+    "Phase",
+    "阶段",
+    "M1",
+    "M2",
+    "M3",
+    "M4",
+    "~",
+    "约",
+    "待",
+    "计划",
+    "means",
+    "已诞生",
+    "收录",
+    "封顶",
+    "卡",
+    "上限",
     # 历史快照 / 进展 / 非代码覆盖率指标 / 方向性目标
-    "已拉升", "WIP", "全景图", "提升至", "聚焦", "定版", "里程碑", "快照", "存档",
+    "已拉升",
+    "WIP",
+    "全景图",
+    "提升至",
+    "聚焦",
+    "定版",
+    "里程碑",
+    "快照",
+    "存档",
 )
 
 # 日期标记：行内或所在章节头带 YYYY-MM-DD 视为历史快照（WIP / changelog / 阶段盘点）
@@ -208,7 +242,9 @@ def scan_docs(docs: list[Path], ssot: dict[str, float]) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("docs", nargs="*", type=Path, help="要扫描的文档；缺省用内置清单")
     args = parser.parse_args(argv)
 

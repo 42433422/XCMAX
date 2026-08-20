@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """Transactional event outbox backed by the application database.
 
 The legacy file outbox in :mod:`modstore_server.eventing.outbox` is kept as an
@@ -30,7 +31,7 @@ import threading
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Callable, Iterator
 
 from sqlalchemy.exc import IntegrityError
@@ -44,6 +45,7 @@ from modstore_server.eventing.contracts import (
 from modstore_server.eventing.events import DomainEvent, new_event
 from modstore_server.eventing.global_bus import neuro_bus
 from modstore_server.models import OutboxDeadLetter, OutboxEvent, get_session_factory
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +95,7 @@ def _stable_event_id(event_name: str, aggregate_id: str) -> str:
         return f"{event_name}:{aggregate}"
     import hashlib
 
-    digest = hashlib.sha256(f"{event_name}:{time.time_ns()}".encode("utf-8")).hexdigest()[:16]
+    digest = hashlib.sha256(f"{event_name}:{time.time_ns()}".encode()).hexdigest()[:16]
     return f"{event_name}:{digest}"
 
 
@@ -179,7 +181,7 @@ def _session_scope() -> Iterator[Session]:
     try:
         yield session
         session.commit()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         session.rollback()
         raise
     finally:
@@ -206,7 +208,7 @@ def mark_dispatched(record_id: int) -> None:
             return
         row.status = "dispatched"
         row.last_error = ""
-        row.dispatched_at = datetime.now(timezone.utc)
+        row.dispatched_at = datetime.now(UTC)
 
 
 def mark_failed(record_id: int, error: str, *, terminal: bool) -> None:
@@ -266,11 +268,11 @@ def drain(
         if publish_to_neuro_bus:
             try:
                 neuro_bus.publish(record.to_domain_event())
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 logger.exception("neuro_bus publish failed event_id=%s", record.event_id)
         try:
             result = dispatcher(record.to_envelope())
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             logger.exception("outbox dispatcher raised event_id=%s", record.event_id)
             mark_failed(
                 record.id,
@@ -332,7 +334,7 @@ class OutboxDispatcherWorker:
         while not self._stop.is_set():
             try:
                 drain(limit=self.batch_size)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 logger.exception("outbox worker drain loop failed")
             self._stop.wait(self.interval_seconds)
 

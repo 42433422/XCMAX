@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi.responses import JSONResponse
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+logger = logging.getLogger(__name__)
 
 
 def performance_tasks_status_payload(task_id: str | None = None):
@@ -55,7 +59,9 @@ def performance_tasks_status_payload(task_id: str | None = None):
                 "stats": optimizer.async_task_manager.stats,
             },
         }
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
+        logger.exception("performance stats query failed")
         return JSONResponse(
-            {"success": False, "message": str(exc), "data": None}, status_code=500
+            {"success": False, "message": "性能监控服务暂时不可用，请稍后重试", "data": None},
+            status_code=500,
         )

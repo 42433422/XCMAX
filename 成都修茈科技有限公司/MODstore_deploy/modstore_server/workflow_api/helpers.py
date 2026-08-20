@@ -1,8 +1,9 @@
+# mypy: disable-error-code="arg-type, assignment"
 from __future__ import annotations
 
 import json
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Dict
 
 from sqlalchemy.orm import Session
@@ -20,7 +21,10 @@ from modstore_server.workflow_sandbox_state import (
 
 def _guess_employee_id_from_empty_workflow(workflow: Workflow) -> str:
     text = f"{workflow.name or ''}\n{workflow.description or ''}"
-    for pat in (r"employee_id[=:：]\s*([a-z0-9._-]+)", r"pack_id[=:：]\s*([a-z0-9._-]+)"):
+    for pat in (
+        r"employee_id[=:：]\s*([a-z0-9._-]+)",
+        r"pack_id[=:：]\s*([a-z0-9._-]+)",
+    ):
         m = re.search(pat, text, flags=re.I)
         if m:
             return m.group(1).strip()
@@ -183,7 +187,7 @@ def _restore_workflow_from_snapshot(
     desc = snapshot.get("description")
     if isinstance(desc, str):
         workflow.description = desc
-    workflow.updated_at = datetime.now(timezone.utc)
+    workflow.updated_at = datetime.now(UTC)
 
 
 def _parse_positive_int(v: Any) -> int:

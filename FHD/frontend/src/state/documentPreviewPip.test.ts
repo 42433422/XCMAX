@@ -54,10 +54,7 @@ describe('documentPreviewPip', () => {
 
   it('owns blob URLs, hydrates an Excel preview, and releases the URL on close', async () => {
     mocks.read.mockReturnValue({ SheetNames: ['Sheet1'], Sheets: { Sheet1: {} } })
-    mocks.sheetToJson.mockReturnValue([
-      ['客户', null, 3],
-      ['第二行'],
-    ])
+    mocks.sheetToJson.mockReturnValue([['客户', null, 3], ['第二行']])
     const blob = {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(8)),
@@ -74,10 +71,7 @@ describe('documentPreviewPip', () => {
       kind: 'excel',
       url: 'blob:document-preview',
     })
-    expect(documentPreviewPip.previewRows).toEqual([
-      ['客户', '', '3'],
-      ['第二行'],
-    ])
+    expect(documentPreviewPip.previewRows).toEqual([['客户', '', '3'], ['第二行']])
 
     minimizeDocumentPreview()
     expect(documentPreviewPip.minimized).toBe(true)

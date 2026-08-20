@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="no-any-return"
 """Validate that coverage status files agree with the configured SSOT floors."""
 
 from __future__ import annotations
@@ -54,8 +55,18 @@ def main() -> int:
     quality_gate = summary.get("quality_gate", {})
     frontend_floors = baseline.get("frontend_floors", {})
 
-    _expect_equal(errors, "summary.ratchet_floors.backend_line", summary_floors.get("backend_line"), int(line_floor))
-    _expect_equal(errors, "summary.quality_gate.backend_line_floor", quality_gate.get("backend_line_floor"), int(line_floor))
+    _expect_equal(
+        errors,
+        "summary.ratchet_floors.backend_line",
+        summary_floors.get("backend_line"),
+        int(line_floor),
+    )
+    _expect_equal(
+        errors,
+        "summary.quality_gate.backend_line_floor",
+        quality_gate.get("backend_line_floor"),
+        int(line_floor),
+    )
     _expect_equal(
         errors,
         "summary.ratchet_floors.backend_branch",
@@ -91,8 +102,15 @@ def main() -> int:
         or wip_branch < float(baseline.get("backend_branch_floor", 0) or 0)
     )
     expected_status = "failed" if wip_red else "passed"
-    _expect_equal(errors, "summary.quality_gate.status", quality_gate.get("status"), expected_status)
-    _expect_equal(errors, "summary.quality_gate.wip_backend_line_delta", quality_gate.get("wip_backend_line_delta"), round(wip_line - line_floor, 2))
+    _expect_equal(
+        errors, "summary.quality_gate.status", quality_gate.get("status"), expected_status
+    )
+    _expect_equal(
+        errors,
+        "summary.quality_gate.wip_backend_line_delta",
+        quality_gate.get("wip_backend_line_delta"),
+        round(wip_line - line_floor, 2),
+    )
     _expect_equal(
         errors,
         "summary.quality_gate.wip_backend_branch_delta",

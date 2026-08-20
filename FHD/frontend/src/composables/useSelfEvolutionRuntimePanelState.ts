@@ -16,10 +16,7 @@ export type SelfEvolutionSurface = 'employee-space' | 'duty-roster'
  */
 export function useSelfEvolutionRuntimePanelState(surface: SelfEvolutionSurface, compact: boolean) {
   const router = useRouter()
-  const {
-    raw, loading, error, refresh,
-    asRecord, asArray, asString, asNumber, firstText,
-  } = useLoopRuntimePanel(() => compact ? 40 : 80)
+  const { raw, loading, error, refresh, asRecord, asArray, asString, asNumber, firstText } = useLoopRuntimePanel(() => (compact ? 40 : 80))
   const paraCopied = ref(false)
   const governanceReviewBusy = ref(false)
   const governanceReviewError = ref('')
@@ -41,9 +38,9 @@ export function useSelfEvolutionRuntimePanelState(surface: SelfEvolutionSurface,
     governanceReviewError.value = ''
     governanceReviewResult.value = null
     try {
-      governanceReviewResult.value = await xcmaxMarketProxy.selfMaintenanceGovernanceReview({
+      governanceReviewResult.value = (await xcmaxMarketProxy.selfMaintenanceGovernanceReview({
         note: `self-evolution panel reviewed governance audit on ${surface}`,
-      }) as AnyRecord
+      })) as AnyRecord
       await refresh()
     } catch (err: unknown) {
       const e = err as { message?: unknown; detail?: unknown }
@@ -71,16 +68,22 @@ export function useSelfEvolutionRuntimePanelState(surface: SelfEvolutionSurface,
   const runtimeContract = computed<AnyRecord>(() => asRecord(asRecord(raw.value).contract))
   const runtimeContractValidation = computed<AnyRecord>(() => asRecord(asRecord(raw.value).contract_validation))
   const runtimeContractRequiredFields = computed(() =>
-    asArray(runtimeContract.value.required_top_level).map((item) => asString(item)).filter(Boolean),
+    asArray(runtimeContract.value.required_top_level)
+      .map((item) => asString(item))
+      .filter(Boolean),
   )
   const runtimeContractMissingFields = computed(() => {
-    const backendMissing = asArray(runtimeContractValidation.value.missing_fields).map((item) => asString(item)).filter(Boolean)
+    const backendMissing = asArray(runtimeContractValidation.value.missing_fields)
+      .map((item) => asString(item))
+      .filter(Boolean)
     if (backendMissing.length || runtimeContractValidation.value.ok === false) return backendMissing
     const payload = asRecord(raw.value)
     return runtimeContractRequiredFields.value.filter((field) => !(field in payload))
   })
   const runtimeContractMissingNested = computed(() =>
-    asArray(runtimeContractValidation.value.missing_nested).map((item) => asString(item)).filter(Boolean),
+    asArray(runtimeContractValidation.value.missing_nested)
+      .map((item) => asString(item))
+      .filter(Boolean),
   )
   const runtimeSurfaceKey = computed(() => {
     if (surface === 'duty-roster') return 'duty_roster_graph'
@@ -92,25 +95,21 @@ export function useSelfEvolutionRuntimePanelState(surface: SelfEvolutionSurface,
   )
   const runtimeSurfaceReadinessOk = computed(() => runtimeSurfaceReadiness.value.ok === true)
   const runtimeSurfaceMissing = computed(() =>
-    asArray(runtimeSurfaceReadiness.value.missing).map((item) => asString(item)).filter(Boolean),
+    asArray(runtimeSurfaceReadiness.value.missing)
+      .map((item) => asString(item))
+      .filter(Boolean),
   )
   const runtimeAllSurfaceIncidents = computed(() =>
     asArray(runtimeContractValidation.value.surface_incidents)
       .map((item) => asRecord(item))
       .filter((item) => firstText(item.surface, item.action)),
   )
-  const runtimeSurfaceIncidentSummary = computed<AnyRecord>(() =>
-    asRecord(runtimeContractValidation.value.surface_incident_summary),
-  )
+  const runtimeSurfaceIncidentSummary = computed<AnyRecord>(() => asRecord(runtimeContractValidation.value.surface_incident_summary))
   const runtimeContractStatus = computed<AnyRecord>(() => {
     const topLevel = asRecord(raw.value?.contract_status)
-    return Object.keys(topLevel).length
-      ? topLevel
-      : asRecord(runtimeContractValidation.value.contract_status)
+    return Object.keys(topLevel).length ? topLevel : asRecord(runtimeContractValidation.value.contract_status)
   })
-  const runtimeContractPrimaryRoute = computed<AnyRecord>(() =>
-    asRecord(runtimeContractStatus.value.primary_route),
-  )
+  const runtimeContractPrimaryRoute = computed<AnyRecord>(() => asRecord(runtimeContractStatus.value.primary_route))
   const runtimeContractRouteEmployeeId = computed(() =>
     firstText(runtimeContractPrimaryRoute.value.employee_id, asArray(runtimeContractPrimaryRoute.value.target_employee_ids)[0]),
   )
@@ -138,16 +137,21 @@ export function useSelfEvolutionRuntimePanelState(surface: SelfEvolutionSurface,
   )
   const runtimeSurfaceIncident = computed<AnyRecord>(() => runtimeSurfaceIncidents.value[0] || {})
   const runtimeContractSurfaces = computed(() =>
-    asArray(runtimeContract.value.surfaces).map((item) => asString(item)).filter(Boolean),
+    asArray(runtimeContract.value.surfaces)
+      .map((item) => asString(item))
+      .filter(Boolean),
   )
   const runtimeContractGateDependencies = computed(() =>
-    asArray(runtimeContract.value.gate_dependencies).map((item) => asString(item)).filter(Boolean),
+    asArray(runtimeContract.value.gate_dependencies)
+      .map((item) => asString(item))
+      .filter(Boolean),
   )
-  const runtimeContractOk = computed(() =>
-    runtimeSchemaVersion.value === 'self_maintenance_runtime.v1'
-    && runtimeContractRequiredFields.value.length > 0
-    && runtimeContractMissingFields.value.length === 0
-    && runtimeSurfaceReadinessOk.value
+  const runtimeContractOk = computed(
+    () =>
+      runtimeSchemaVersion.value === 'self_maintenance_runtime.v1' &&
+      runtimeContractRequiredFields.value.length > 0 &&
+      runtimeContractMissingFields.value.length === 0 &&
+      runtimeSurfaceReadinessOk.value,
   )
   const kbSummary = computed<AnyRecord>(() => asRecord(raw.value?.kb_summary))
   const evolutionMetrics = computed<AnyRecord>(() => asRecord(raw.value?.evolution_metrics_summary))
@@ -166,34 +170,37 @@ export function useSelfEvolutionRuntimePanelState(surface: SelfEvolutionSurface,
   const dutyRosterBridge = computed<AnyRecord>(() => asRecord(uiBridge.value.duty_roster_graph))
   const uiBridgeGovernanceAction = computed<AnyRecord>(() => asRecord(uiBridge.value.governance_action))
   const uiBridgeAllowedSurfaces = computed(() =>
-    asArray(uiBridgeGovernanceAction.value.allowed_surfaces).map((item) => asString(item)).filter(Boolean),
+    asArray(uiBridgeGovernanceAction.value.allowed_surfaces)
+      .map((item) => asString(item))
+      .filter(Boolean),
   )
-  const currentGovernanceSurface = computed(() =>
-    surface === 'duty-roster' ? 'duty_roster_graph' : 'employee_space',
-  )
-  const canReviewGovernanceAudit = computed(() =>
-    !governanceReviewBusy.value
-    && uiBridgeGovernanceAction.value.requires_admin === true
-    && surface === 'duty-roster'
-    && currentGovernanceSurface.value === 'duty_roster_graph'
-    && uiBridgeAllowedSurfaces.value.includes('duty_roster_graph')
-    && (
-      governanceAuditSummary.value.health === 'bad'
-      || uiBridge.value.state === 'governance_degraded'
-      || uiBridgeGovernanceAction.value.id === 'inspect_governance_audit'
-    ),
+  const currentGovernanceSurface = computed(() => (surface === 'duty-roster' ? 'duty_roster_graph' : 'employee_space'))
+  const canReviewGovernanceAudit = computed(
+    () =>
+      !governanceReviewBusy.value &&
+      uiBridgeGovernanceAction.value.requires_admin === true &&
+      surface === 'duty-roster' &&
+      currentGovernanceSurface.value === 'duty_roster_graph' &&
+      uiBridgeAllowedSurfaces.value.includes('duty_roster_graph') &&
+      (governanceAuditSummary.value.health === 'bad' ||
+        uiBridge.value.state === 'governance_degraded' ||
+        uiBridgeGovernanceAction.value.id === 'inspect_governance_audit'),
   )
   const uiBridgeTargets = computed(() =>
-    asArray(uiBridge.value.target_employee_ids).map((id) => asString(id)).filter(Boolean),
+    asArray(uiBridge.value.target_employee_ids)
+      .map((id) => asString(id))
+      .filter(Boolean),
   )
   const uiBridgeBlockedIds = computed(() =>
-    asArray(uiBridge.value.blocked_employee_ids).map((id) => asString(id)).filter(Boolean),
+    asArray(uiBridge.value.blocked_employee_ids)
+      .map((id) => asString(id))
+      .filter(Boolean),
   )
-  const uiBridgePrimaryEmployeeId = computed(() =>
-    firstText(uiBridge.value.primary_employee_id, uiBridgeTargets.value[0]),
-  )
+  const uiBridgePrimaryEmployeeId = computed(() => firstText(uiBridge.value.primary_employee_id, uiBridgeTargets.value[0]))
   const uiBridgeActions = computed(() =>
-    asArray(uiBridge.value.next_actions).map((action) => asString(action)).filter(Boolean),
+    asArray(uiBridge.value.next_actions)
+      .map((action) => asString(action))
+      .filter(Boolean),
   )
   const uiBridgePath = computed(() =>
     asArray(uiBridge.value.handoff_path)
@@ -205,7 +212,9 @@ export function useSelfEvolutionRuntimePanelState(surface: SelfEvolutionSurface,
     Boolean(firstText(uiBridge.value.state, uiBridge.value.title, employeeSpaceBridge.value.title, dutyRosterBridge.value.title)),
   )
   const governanceAuditLastTargets = computed(() =>
-    asArray(governanceAuditLast.value.target_employee_ids).map((id) => asString(id)).filter(Boolean),
+    asArray(governanceAuditLast.value.target_employee_ids)
+      .map((id) => asString(id))
+      .filter(Boolean),
   )
   const governanceAuditLastSummary = computed(() => {
     const summary = asRecord(governanceAuditLast.value.onboard_summary)
@@ -257,32 +266,48 @@ export function useSelfEvolutionRuntimePanelState(surface: SelfEvolutionSurface,
       review_max_severity: firstText(asRecord(decision.value.review).max_severity),
     }
   })
-  const openRunIds = computed(() => asArray(evidence.value.open_run_ids).map((x) => asString(x)).filter(Boolean))
+  const openRunIds = computed(() =>
+    asArray(evidence.value.open_run_ids)
+      .map((x) => asString(x))
+      .filter(Boolean),
+  )
   const openItems = computed(() => asArray(memory.value.open_items))
   const recentRuns = computed(() => asArray(memory.value.recent_runs))
 
-  const structuredParticipants = computed<EmployeeMention[]>(() =>
-    asArray(raw.value?.participants)
-      .map((item) => {
-        const row = asRecord(item)
-        const id = firstText(row.employee_id, row.id)
-        if (!id) return null
-        const role = firstText(row.role_label, row.role)
-        const stage = asArray(row.stage_labels).map((x) => asString(x)).filter(Boolean).join(' / ')
-          || asArray(row.stages).map((x) => asString(x)).filter(Boolean).join(' / ')
-          || '循环'
-        return {
-          id,
-          stage: role ? `${role} · ${stage}` : stage,
-          source: asArray(row.sources).map((x) => asString(x)).filter(Boolean).join(' / ') || '参与员工',
-          rosterLabel: firstText(row.roster_label, row.roster_status),
-          rosterStatus: firstText(row.roster_status),
-          dutyRegisteredLabel: firstText(row.duty_registered_label),
-          dutyRegistered: row.duty_registered,
-          department: firstText(row.department_label, row.department_key),
-        }
-      })
-      .filter(Boolean) as EmployeeMention[],
+  const structuredParticipants = computed<EmployeeMention[]>(
+    () =>
+      asArray(raw.value?.participants)
+        .map((item) => {
+          const row = asRecord(item)
+          const id = firstText(row.employee_id, row.id)
+          if (!id) return null
+          const role = firstText(row.role_label, row.role)
+          const stage =
+            asArray(row.stage_labels)
+              .map((x) => asString(x))
+              .filter(Boolean)
+              .join(' / ') ||
+            asArray(row.stages)
+              .map((x) => asString(x))
+              .filter(Boolean)
+              .join(' / ') ||
+            '循环'
+          return {
+            id,
+            stage: role ? `${role} · ${stage}` : stage,
+            source:
+              asArray(row.sources)
+                .map((x) => asString(x))
+                .filter(Boolean)
+                .join(' / ') || '参与员工',
+            rosterLabel: firstText(row.roster_label, row.roster_status),
+            rosterStatus: firstText(row.roster_status),
+            dutyRegisteredLabel: firstText(row.duty_registered_label),
+            dutyRegistered: row.duty_registered,
+            department: firstText(row.department_label, row.department_key),
+          }
+        })
+        .filter(Boolean) as EmployeeMention[],
   )
 
   const teamLanes = computed<EmployeeMention[]>(() => {
@@ -296,20 +321,10 @@ export function useSelfEvolutionRuntimePanelState(surface: SelfEvolutionSurface,
   })
 
   const paraTaskId = computed(() =>
-    firstText(
-      lastRun.value.para_task_id,
-      asRecord(lastRun.value.result).para_task_id,
-      asRecord(decision.value.final).para_task_id,
-    ),
+    firstText(lastRun.value.para_task_id, asRecord(lastRun.value.result).para_task_id, asRecord(decision.value.final).para_task_id),
   )
 
-  const branchName = computed(() =>
-    firstText(
-      lastRun.value.branch,
-      lastRun.value.target_branch,
-      asRecord(decision.value.final).branch,
-    ),
-  )
+  const branchName = computed(() => firstText(lastRun.value.branch, lastRun.value.target_branch, asRecord(decision.value.final).branch))
 
   const actionLabel = computed(() =>
     firstText(decision.value.action, lastRun.value.action, lastRun.value.status, latestSkip.value.reason, '等待决策'),
@@ -325,38 +340,98 @@ export function useSelfEvolutionRuntimePanelState(surface: SelfEvolutionSurface,
     }
     return null
   })
-  const l4Gaps = computed(() =>
-    overlayDeployGap(AUTONOMY_L4_READINESS.gaps, autoDispatchDeploy.value),
-  )
+  const l4Gaps = computed(() => overlayDeployGap(AUTONOMY_L4_READINESS.gaps, autoDispatchDeploy.value))
   const l4P0Count = computed(() => l4Gaps.value.filter((g) => g.severity === 'P0' && g.status !== 'ok').length)
   const l4BlockedCount = computed(() => l4Gaps.value.filter((g) => g.status === 'blocked').length)
 
   return reactive({
-    raw, loading, error, refresh,
-    asRecord, asArray, asString, asNumber, firstText,
-    evidence, memory, policy, gate, cron,
-    activeGates, activeGateItems,
-    runtimeSchemaVersion, runtimeContract, runtimeContractValidation,
-    runtimeContractRequiredFields, runtimeContractMissingFields, runtimeContractMissingNested,
-    runtimeSurfaceKey, runtimeSurfaceReadiness, runtimeSurfaceReadinessOk, runtimeSurfaceMissing,
-    runtimeAllSurfaceIncidents, runtimeSurfaceIncidentSummary, runtimeContractStatus,
-    runtimeContractPrimaryRoute, runtimeContractRouteEmployeeId,
-    runtimeContractDutyRosterLocation, runtimeContractEmployeeSpaceLocation,
-    runtimeSurfaceIncidents, runtimeSurfaceIncident, runtimeContractSurfaces,
-    runtimeContractGateDependencies, runtimeContractOk,
-    kbSummary, evolutionMetrics, rosterAlignment, currentGovernanceGate,
-    uiBridge, governanceAudit, governanceAuditSummary, governanceAuditLast, governanceAuditRecent,
-    employeeSpaceBridge, dutyRosterBridge, uiBridgeGovernanceAction, uiBridgeAllowedSurfaces,
-    currentGovernanceSurface, canReviewGovernanceAudit,
-    uiBridgeTargets, uiBridgeBlockedIds, uiBridgePrimaryEmployeeId, uiBridgeActions, uiBridgePath,
-    uiBridgeVisible, uiBridgeDutyRosterLocation, uiBridgeEmployeeSpaceLocation,
-    governanceAuditLastTargets, governanceAuditLastSummary,
-    latestComplete, latestSkip, lastRun, decision, mergeDecision,
-    openRunIds, openItems, recentRuns, structuredParticipants, teamLanes,
-    paraTaskId, branchName, actionLabel,
-    l4Closure, autoDispatchDeploy, l4Gaps, l4P0Count, l4BlockedCount,
-    paraCopied, governanceReviewBusy, governanceReviewError, governanceReviewResult,
-    copyParaTaskId, reviewGovernanceAudit,
+    raw,
+    loading,
+    error,
+    refresh,
+    asRecord,
+    asArray,
+    asString,
+    asNumber,
+    firstText,
+    evidence,
+    memory,
+    policy,
+    gate,
+    cron,
+    activeGates,
+    activeGateItems,
+    runtimeSchemaVersion,
+    runtimeContract,
+    runtimeContractValidation,
+    runtimeContractRequiredFields,
+    runtimeContractMissingFields,
+    runtimeContractMissingNested,
+    runtimeSurfaceKey,
+    runtimeSurfaceReadiness,
+    runtimeSurfaceReadinessOk,
+    runtimeSurfaceMissing,
+    runtimeAllSurfaceIncidents,
+    runtimeSurfaceIncidentSummary,
+    runtimeContractStatus,
+    runtimeContractPrimaryRoute,
+    runtimeContractRouteEmployeeId,
+    runtimeContractDutyRosterLocation,
+    runtimeContractEmployeeSpaceLocation,
+    runtimeSurfaceIncidents,
+    runtimeSurfaceIncident,
+    runtimeContractSurfaces,
+    runtimeContractGateDependencies,
+    runtimeContractOk,
+    kbSummary,
+    evolutionMetrics,
+    rosterAlignment,
+    currentGovernanceGate,
+    uiBridge,
+    governanceAudit,
+    governanceAuditSummary,
+    governanceAuditLast,
+    governanceAuditRecent,
+    employeeSpaceBridge,
+    dutyRosterBridge,
+    uiBridgeGovernanceAction,
+    uiBridgeAllowedSurfaces,
+    currentGovernanceSurface,
+    canReviewGovernanceAudit,
+    uiBridgeTargets,
+    uiBridgeBlockedIds,
+    uiBridgePrimaryEmployeeId,
+    uiBridgeActions,
+    uiBridgePath,
+    uiBridgeVisible,
+    uiBridgeDutyRosterLocation,
+    uiBridgeEmployeeSpaceLocation,
+    governanceAuditLastTargets,
+    governanceAuditLastSummary,
+    latestComplete,
+    latestSkip,
+    lastRun,
+    decision,
+    mergeDecision,
+    openRunIds,
+    openItems,
+    recentRuns,
+    structuredParticipants,
+    teamLanes,
+    paraTaskId,
+    branchName,
+    actionLabel,
+    l4Closure,
+    autoDispatchDeploy,
+    l4Gaps,
+    l4P0Count,
+    l4BlockedCount,
+    paraCopied,
+    governanceReviewBusy,
+    governanceReviewError,
+    governanceReviewResult,
+    copyParaTaskId,
+    reviewGovernanceAudit,
   })
 }
 

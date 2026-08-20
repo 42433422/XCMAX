@@ -49,7 +49,11 @@
           </div>
           <div class="notes">
             <p>注：以上价格均为实价，无折扣！</p>
-            <p>注：160KG桶需退回，如未退回一个按80元计算 应退桶({{ previewData.return_buckets_expected }})个，实退桶({{ previewData.return_buckets_actual }})个.</p>
+            <p>
+              注：160KG桶需退回，如未退回一个按80元计算 应退桶({{ previewData.return_buckets_expected }})个，实退桶({{
+                previewData.return_buckets_actual
+              }})个.
+            </p>
           </div>
         </div>
 
@@ -76,9 +80,7 @@
         <p class="muted sales-contract-preview-footer-link">
           <a href="#" @click.prevent="goSalesContractTemplateLibrary">去模板库（销售合同 Word / Excel）</a>
         </p>
-        <button type="button" class="btn btn-primary" @click="handlePrint">
-          <i class="fa fa-print" aria-hidden="true"></i> 打印
-        </button>
+        <button type="button" class="btn btn-primary" @click="handlePrint"><i class="fa fa-print" aria-hidden="true"></i> 打印</button>
         <button type="button" class="btn btn-secondary" @click="close">关闭</button>
       </div>
     </div>
@@ -94,12 +96,12 @@ export default {
   props: {
     show: {
       type: Boolean,
-      default: false
+      default: false,
     },
     contractData: {
       type: Object,
-      default: null
-    }
+      default: null,
+    },
   },
   emits: ['close'],
   data() {
@@ -115,14 +117,14 @@ export default {
             unit: '桶',
             quantity: '10 KG',
             unit_price: '39.2',
-            amount: '392'
-          }
+            amount: '392',
+          },
         ],
         total_quantity: 10,
         total_amount: 392,
         return_buckets_expected: 1,
-        return_buckets_actual: 0
-      }
+        return_buckets_actual: 0,
+      },
     }
   },
   watch: {
@@ -132,8 +134,8 @@ export default {
           this.previewData = { ...this.previewData, ...newData }
         }
       },
-      immediate: true
-    }
+      immediate: true,
+    },
   },
   methods: {
     close() {
@@ -150,7 +152,7 @@ export default {
     async handlePrint() {
       try {
         const result = await salesContractApi.print({
-          filename: this.contractData?.filename || ''
+          filename: this.contractData?.filename || '',
         })
         if (result?.success) {
           await appAlert('打印任务已发送')
@@ -160,8 +162,8 @@ export default {
       } catch (err) {
         await appAlert('打印失败：' + err.message)
       }
-    }
-  }
+    },
+  },
 }
 </script>
 

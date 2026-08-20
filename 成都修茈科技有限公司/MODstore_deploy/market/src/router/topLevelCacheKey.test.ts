@@ -3,9 +3,7 @@ import { resolveTopLevelRouterCacheKey } from './topLevelCacheKey'
 
 describe('resolveTopLevelRouterCacheKey', () => {
   it('returns the WorkbenchView bucket for the landing route (redirects to /workbench/home)', () => {
-    expect(
-      resolveTopLevelRouterCacheKey({ path: '/', name: 'home', fullPath: '/' }),
-    ).toBe('cache-workbench-view')
+    expect(resolveTopLevelRouterCacheKey({ path: '/', name: 'home', fullPath: '/' })).toBe('cache-workbench-view')
   })
 
   it('returns the WorkbenchView bucket for /workbench/* child routes', () => {
@@ -84,14 +82,10 @@ describe('resolveTopLevelRouterCacheKey', () => {
 
   it('handles symbol route names without throwing', () => {
     const sym = Symbol('not-found')
-    expect(
-      resolveTopLevelRouterCacheKey({ path: '/random', name: sym, fullPath: '/random' }),
-    ).toBe('/random')
+    expect(resolveTopLevelRouterCacheKey({ path: '/random', name: sym, fullPath: '/random' })).toBe('/random')
   })
 
   it('handles missing path/name/fullPath gracefully', () => {
-    expect(
-      resolveTopLevelRouterCacheKey({ path: undefined, name: undefined, fullPath: undefined }),
-    ).toBe('/')
+    expect(resolveTopLevelRouterCacheKey({ path: undefined, name: undefined, fullPath: undefined })).toBe('/')
   })
 })

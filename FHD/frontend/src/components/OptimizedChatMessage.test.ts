@@ -212,7 +212,10 @@ describe('OptimizedChatMessage', () => {
 
   it('shows trace panel when nodeResults are present', async () => {
     const wrapper = mountComponent({
-      message: { ...baseMessage, nodeResults: [{ node_id: 'n1', tool_id: 't1', action: 'run', success: true }] },
+      message: {
+        ...baseMessage,
+        nodeResults: [{ node_id: 'n1', tool_id: 't1', action: 'run', success: true }],
+      },
     })
     const vm = wrapper.vm as any
     vm.measureResult = { height: 60, width: 400 }

@@ -6,10 +6,15 @@
     <button type="button" class="msg-act__btn" title="复制原文" aria-label="复制" @click="onCopy">
       {{ copied ? '已复制' : '复制' }}
     </button>
-    <button v-if="role === 'user'" type="button" class="msg-act__btn" title="编辑后重发" @click="$emit('edit')">
-      编辑
-    </button>
-    <button v-if="role === 'assistant' && canRegenerate" type="button" class="msg-act__btn" title="重新生成" aria-label="重新生成" @click="$emit('regenerate')">
+    <button v-if="role === 'user'" type="button" class="msg-act__btn" title="编辑后重发" @click="$emit('edit')">编辑</button>
+    <button
+      v-if="role === 'assistant' && canRegenerate"
+      type="button"
+      class="msg-act__btn"
+      title="重新生成"
+      aria-label="重新生成"
+      @click="$emit('regenerate')"
+    >
       重新生成
     </button>
     <button
@@ -19,7 +24,9 @@
       :class="{ 'msg-act__btn--up': feedback === 'up' }"
       title="赞"
       @click="$emit('feedback', feedback === 'up' ? null : 'up')"
-    >👍</button>
+    >
+      👍
+    </button>
     <button
       v-if="role === 'assistant'"
       type="button"
@@ -27,7 +34,9 @@
       :class="{ 'msg-act__btn--down': feedback === 'down' }"
       title="踩"
       @click="$emit('feedback', feedback === 'down' ? null : 'down')"
-    >👎</button>
+    >
+      👎
+    </button>
   </div>
 </template>
 
@@ -97,9 +106,7 @@ async function onCopy() {
   min-height: 1.52rem;
   padding: 0.12rem 0.56rem;
   border-radius: 999px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.018)),
-    rgba(15, 23, 42, 0.2);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.018)), rgba(15, 23, 42, 0.2);
   border: 1px solid rgba(148, 163, 184, 0.12);
   color: rgba(203, 213, 225, 0.68);
   font-size: 0.66rem;
@@ -115,26 +122,20 @@ async function onCopy() {
 }
 
 .msg-act__btn:hover {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.03)),
-    rgba(99, 102, 241, 0.16);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.03)), rgba(99, 102, 241, 0.16);
   color: #fff;
   border-color: rgba(165, 180, 252, 0.3);
   transform: translateY(-1px);
 }
 
 .msg-act__btn--up {
-  background:
-    linear-gradient(180deg, rgba(94, 234, 212, 0.16), rgba(45, 212, 191, 0.07)),
-    rgba(15, 23, 42, 0.22);
+  background: linear-gradient(180deg, rgba(94, 234, 212, 0.16), rgba(45, 212, 191, 0.07)), rgba(15, 23, 42, 0.22);
   color: #5eead4;
   border-color: rgba(45, 212, 191, 0.32);
 }
 
 .msg-act__btn--down {
-  background:
-    linear-gradient(180deg, rgba(248, 113, 113, 0.14), rgba(248, 113, 113, 0.06)),
-    rgba(15, 23, 42, 0.22);
+  background: linear-gradient(180deg, rgba(248, 113, 113, 0.14), rgba(248, 113, 113, 0.06)), rgba(15, 23, 42, 0.22);
   color: #fca5a5;
   border-color: rgba(248, 113, 113, 0.28);
 }

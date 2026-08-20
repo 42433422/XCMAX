@@ -47,13 +47,13 @@ curl -X POST https://<host>/api/developer/webhooks \
 
 ### HTTP 头
 
-| Header | 含义 |
-| --- | --- |
-| `X-Modstore-Webhook-Id` | 事件 id（幂等键） |
-| `X-Modstore-Webhook-Event` | 事件名 |
-| `X-Modstore-Webhook-Timestamp` | unix 秒时间戳 |
-| `X-Modstore-Webhook-Subscription` | 你的订阅 id |
-| `X-Modstore-Webhook-Signature` | `sha256=<hex>` HMAC 签名 |
+| Header                            | 含义                     |
+| --------------------------------- | ------------------------ |
+| `X-Modstore-Webhook-Id`           | 事件 id（幂等键）        |
+| `X-Modstore-Webhook-Event`        | 事件名                   |
+| `X-Modstore-Webhook-Timestamp`    | unix 秒时间戳            |
+| `X-Modstore-Webhook-Subscription` | 你的订阅 id              |
+| `X-Modstore-Webhook-Signature`    | `sha256=<hex>` HMAC 签名 |
 
 ### 签名校验
 

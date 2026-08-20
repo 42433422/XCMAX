@@ -5,7 +5,6 @@ import os
 import subprocess
 from pathlib import Path
 
-
 SCRIPT = Path(__file__).with_name("clean_agent_workspace.py")
 SPEC = importlib.util.spec_from_file_location("clean_agent_workspace", SCRIPT)
 assert SPEC and SPEC.loader

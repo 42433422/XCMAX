@@ -9,7 +9,7 @@ export type LoopRuntimeConsoleDeps = {
 }
 
 export function loopRecord(v: unknown): Record<string, unknown> {
-  return v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {}
+  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {}
 }
 
 export function loopArray(v: unknown): unknown[] {
@@ -33,9 +33,27 @@ export function loopNumber(value: unknown): number | null {
   return Number.isFinite(n) ? n : null
 }
 
-const DUTY_ROSTER_VIEW_TOKENS = new Set(['department', 'dept', '六部门', 'hub', 'center', '中心', '中心图', 'legacy-area', 'area', '物理', '物理分区', 'client', 'workshop', '车间', '客户端车间'])
+const DUTY_ROSTER_VIEW_TOKENS = new Set([
+  'department',
+  'dept',
+  '六部门',
+  'hub',
+  'center',
+  '中心',
+  '中心图',
+  'legacy-area',
+  'area',
+  '物理',
+  '物理分区',
+  'client',
+  'workshop',
+  '车间',
+  '客户端车间',
+])
 
 export function normalizeDutyRosterView(raw: unknown): string {
-  const token = String(Array.isArray(raw) ? raw[0] : raw || '').trim().toLowerCase()
+  const token = String(Array.isArray(raw) ? raw[0] : raw || '')
+    .trim()
+    .toLowerCase()
   return DUTY_ROSTER_VIEW_TOKENS.has(token) ? token : 'department'
 }

@@ -35,7 +35,11 @@ def test_cognition_real_all_hands_injects_task_into_user_message() -> None:
     config = {
         "agent": {
             "system_prompt": "日常任务请输出 JSON。",
-            "model": {"provider": "openai", "model_name": "gpt-4o-mini", "max_tokens": 512},
+            "model": {
+                "provider": "openai",
+                "model_name": "gpt-4o-mini",
+                "max_tokens": 512,
+            },
         },
         "knowledge": {"enabled": False},
     }

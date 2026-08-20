@@ -1,11 +1,12 @@
+# mypy: disable-error-code="assignment"
 """配额检查与消耗工具。"""
 
 from __future__ import annotations
 
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Optional, Union
+from typing import Optional, cast
 
 from fastapi import HTTPException
 
@@ -15,7 +16,7 @@ from modstore_server.models import Quota, Transaction, Wallet
 
 
 def _month_reset() -> datetime:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return now + timedelta(days=30)
 
 
@@ -23,7 +24,7 @@ def _as_utc_aware(dt: Optional[datetime]) -> Optional[datetime]:
     if dt is None:
         return None
     if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
+        return dt.replace(tzinfo=UTC)
     return dt
 
 
@@ -34,12 +35,12 @@ def get_quota(session, user_id: int, quota_type: str) -> Optional[Quota]:
         .first()
     )
     reset_at = _as_utc_aware(row.reset_at) if row else None
-    if row and reset_at and reset_at <= datetime.now(timezone.utc):
+    if row and reset_at and reset_at <= datetime.now(UTC):
         row.used = 0
         row.reset_at = _month_reset()
         session.add(row)
         session.commit()
-    return row
+    return cast(Optional[Quota], row)
 
 
 def require_quota(session, user_id: int, quota_type: str, amount: int = 1) -> Quota:
@@ -78,7 +79,7 @@ def consume_llm_credit(
     user_id: int,
     amount: int = 1,
     *,
-    charge: Union[Decimal, float, int, str, None] = None,
+    charge: Decimal | float | int | str | None = None,
 ) -> str:
     """按 token 计算的 ¥ 金额从钱包扣费（计次配额已退役，统一钱包计费）。
 
@@ -94,10 +95,11 @@ def consume_llm_credit(
     wallet = session.query(Wallet).filter(Wallet.user_id == user_id).with_for_update().first()
     if not wallet or _money(wallet.balance) < amount_yuan:
         raise HTTPException(
-            402, f"余额不足，需要 ¥{amount_yuan}，当前 ¥{wallet.balance if wallet else 0}"
+            402,
+            f"余额不足，需要 ¥{amount_yuan}，当前 ¥{wallet.balance if wallet else 0}",
         )
     wallet.balance = float(_money(wallet.balance) - amount_yuan)
-    wallet.updated_at = datetime.now(timezone.utc)
+    wallet.updated_at = datetime.now(UTC)
     session.add(wallet)
     session.add(
         Transaction(

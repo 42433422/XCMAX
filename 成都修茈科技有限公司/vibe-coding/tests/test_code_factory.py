@@ -6,9 +6,9 @@ import json
 
 import pytest
 
-from vibe_coding.runtime import CodeSkillRuntime, JsonCodeSkillStore
 from vibe_coding import MockLLM
 from vibe_coding.code_factory import NLCodeSkillFactory, VibeCodingError
+from vibe_coding.runtime import CodeSkillRuntime, JsonCodeSkillStore
 
 
 def _spec(skill_id: str, fn: str = "demo") -> str:
@@ -39,7 +39,7 @@ def _good_code(fn: str = "demo") -> str:
         {
             "source_code": (
                 f"def {fn}(value):\n"
-                "    \"\"\"Echo string input as {'out': value}.\"\"\"\n"
+                '    """Echo string input as {\'out\': value}."""\n'
                 "    if not isinstance(value, str):\n"
                 "        return {'out': '', 'error': 'not_str'}\n"
                 "    return {'out': value}\n"
@@ -54,7 +54,7 @@ def _bad_code(fn: str = "demo") -> str:
         {
             "source_code": (
                 f"def {fn}(value):\n"
-                "    \"\"\"Broken implementation used to exercise repair.\"\"\"\n"
+                '    """Broken implementation used to exercise repair."""\n'
                 "    return {'out': value['nope']}\n"
             )
         }
@@ -136,10 +136,7 @@ def test_validation_rejects_forbidden_import(tmp_path):
     spec = json.loads(_spec("s5"))
     bad_code = {
         "source_code": (
-            "import os\n"
-            "def demo(value):\n"
-            "    \"\"\"Return value through the out key.\"\"\"\n"
-            "    return {'out': value}\n"
+            'import os\ndef demo(value):\n    """Return value through the out key."""\n    return {\'out\': value}\n'
         )
     }
     # spec, bad import, repair good
@@ -308,7 +305,9 @@ def test_runtime_self_heals_after_persisted(tmp_path):
         "quality_gate": {"required_keys": ["name"]},
         "domain_keywords": [],
     }
-    code = {"source_code": "def extract(user):\n    \"\"\"Extract name from a user dict.\"\"\"\n    return {'name': user['name']}\n"}
+    code = {
+        "source_code": 'def extract(user):\n    """Extract name from a user dict."""\n    return {\'name\': user[\'name\']}\n'
+    }
     llm = MockLLM([json.dumps(spec), json.dumps(code)])
     factory = NLCodeSkillFactory(llm, store)
     skill = factory.generate("extract name from user")

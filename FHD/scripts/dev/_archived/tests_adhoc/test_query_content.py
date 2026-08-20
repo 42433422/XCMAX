@@ -1,5 +1,8 @@
+# mypy: disable-error-code="import-not-found"
 import os
 import sys
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 sys.path.insert(0, r"E:\FHD\XCAGI")
 from app.utils.path_io.path_utils import get_resource_path
@@ -44,7 +47,7 @@ for table in tables:
                 break
         if len(all_messages) >= 50:
             break
-    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
         continue
 
 conn.close()

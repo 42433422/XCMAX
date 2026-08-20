@@ -1,11 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
-import {
-  useWorkflowAiEmployeesStore,
-  WORKFLOW_AI_EMPLOYEES_STORAGE_KEY,
-  workflowAiEmployeesStorageKey,
-  defaultWorkflowBuiltinEnabled,
-} from './workflowAiEmployees'
+import { useWorkflowAiEmployeesStore, workflowAiEmployeesStorageKey, defaultWorkflowBuiltinEnabled } from './workflowAiEmployees'
 import { setTenantStorageScopeCache } from '@/utils/tenantStorageScope'
 
 describe('workflowAiEmployees store', () => {
@@ -55,9 +50,7 @@ describe('workflowAiEmployees store', () => {
 
   it('stripModWorkflowEmployeeKeys keeps only registry keys', async () => {
     const store = useWorkflowAiEmployeesStore()
-    await store.loadRegistry([
-      { id: 'm', workflow_employees: [{ id: 'label_print', label: 'L' }] },
-    ])
+    await store.loadRegistry([{ id: 'm', workflow_employees: [{ id: 'label_print', label: 'L' }] }])
     store.setAll({
       ...store.enabled,
       extra: true,
@@ -72,9 +65,7 @@ describe('workflowAiEmployees store', () => {
 
   it('pruneOrphanWorkflowEmployeeToggles removes keys not in manifest', () => {
     const store = useWorkflowAiEmployeesStore()
-    store.hydrateFromMods([
-      { id: 'm', workflow_employees: [{ id: 'still_here', label: 'S' }] },
-    ])
+    store.hydrateFromMods([{ id: 'm', workflow_employees: [{ id: 'still_here', label: 'S' }] }])
     store.setAll({
       ...store.enabled,
       orphan: true,
@@ -82,9 +73,7 @@ describe('workflowAiEmployees store', () => {
       label_print: true,
     })
     vi.mocked(window.dispatchEvent).mockClear()
-    store.pruneOrphanWorkflowEmployeeToggles([
-      { id: 'm', workflow_employees: [{ id: 'still_here', label: 'S' }] },
-    ])
+    store.pruneOrphanWorkflowEmployeeToggles([{ id: 'm', workflow_employees: [{ id: 'still_here', label: 'S' }] }])
     expect(store.enabled.orphan).toBeUndefined()
     expect(store.enabled.still_here).toBe(true)
     expect(store.enabled.label_print).toBeUndefined()
@@ -96,18 +85,16 @@ describe('workflowAiEmployees store', () => {
     vi.mocked(window.dispatchEvent).mockClear()
     store.toggle('label_print')
     expect(store.enabled.label_print).toBe(true)
-    const evt = vi.mocked(window.dispatchEvent).mock.calls.find(
-      (c) => (c[0] as CustomEvent).type === 'xcagi:workflow-ai-employees-changed',
-    )?.[0] as CustomEvent
+    const evt = vi
+      .mocked(window.dispatchEvent)
+      .mock.calls.find((c) => (c[0] as CustomEvent).type === 'xcagi:workflow-ai-employees-changed')?.[0] as CustomEvent
     expect(evt).toBeDefined()
     expect(evt.detail.enabled.label_print).toBe(true)
   })
 
   it('enableAllOn sets every known key to true', () => {
     const store = useWorkflowAiEmployeesStore()
-    store.hydrateFromMods([
-      { id: 'm', workflow_employees: [{ id: 'dyn', label: 'D' }] },
-    ])
+    store.hydrateFromMods([{ id: 'm', workflow_employees: [{ id: 'dyn', label: 'D' }] }])
     store.enableAllOn()
     for (const k of Object.keys(store.enabled)) {
       expect(store.enabled[k]).toBe(true)
@@ -116,23 +103,14 @@ describe('workflowAiEmployees store', () => {
 
   it('reloadFromLocalStorage picks up external storage writes', () => {
     const store = useWorkflowAiEmployeesStore()
-    localStorage.setItem(
-      workflowAiEmployeesStorageKey('tenant:1'),
-      JSON.stringify({ label_print: true }),
-    )
+    localStorage.setItem(workflowAiEmployeesStorageKey('tenant:1'), JSON.stringify({ label_print: true }))
     store.reloadFromLocalStorage()
     expect(store.enabled.label_print).toBe(true)
   })
 
   it('reloadForTenantScope isolates toggles per tenant', () => {
-    localStorage.setItem(
-      workflowAiEmployeesStorageKey('tenant:1'),
-      JSON.stringify({ label_print: true }),
-    )
-    localStorage.setItem(
-      workflowAiEmployeesStorageKey('tenant:2'),
-      JSON.stringify({ label_print: false, shipment_mgmt: true }),
-    )
+    localStorage.setItem(workflowAiEmployeesStorageKey('tenant:1'), JSON.stringify({ label_print: true }))
+    localStorage.setItem(workflowAiEmployeesStorageKey('tenant:2'), JSON.stringify({ label_print: false, shipment_mgmt: true }))
     const store = useWorkflowAiEmployeesStore()
     store.reloadForTenantScope('tenant:1')
     expect(store.enabled.label_print).toBe(true)

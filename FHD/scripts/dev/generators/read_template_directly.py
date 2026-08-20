@@ -6,6 +6,8 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 # 由于可能存在文件锁定，先复制文件再读取
 src = Path(r"e:\FHD\424\考勤 -2026-3 月份考勤统计表.xlsx")
 dst = Path(r"e:\FHD\424\temp_copy.xlsx")
@@ -34,7 +36,7 @@ try:
     for i, ws_name in enumerate(wb.sheetnames):
         ws = wb[ws_name]
         merged_count = len(list(ws.merged_cells.ranges)) if ws.merged_cells.ranges else 0
-        print(f"\n[{i+1}] {ws_name}")
+        print(f"\n[{i + 1}] {ws_name}")
         print(f"  最大行：{ws.max_row}, 最大列：{ws.max_column}")
         print(f"  合并单元格：{merged_count} 个")
         if merged_count > 0:
@@ -52,7 +54,7 @@ try:
 
     wb.close()
 
-except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"错误：{e}")
     import traceback
 

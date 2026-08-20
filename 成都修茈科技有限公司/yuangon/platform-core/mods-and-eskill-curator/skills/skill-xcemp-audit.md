@@ -2,18 +2,19 @@
 
 ## 元信息
 
-| 字段 | 值 |
-|------|----|
-| skill_id | `skill-xcemp-audit` |
-| 所属员工 | `mods-and-eskill-curator` |
-| 业务域 | market_files/ 中 .xcemp 包的审核、版本一致性检查与废弃清理 |
-| 版本 | 1.0.0 |
+| 字段     | 值                                                         |
+| -------- | ---------------------------------------------------------- |
+| skill_id | `skill-xcemp-audit`                                        |
+| 所属员工 | `mods-and-eskill-curator`                                  |
+| 业务域   | market_files/ 中 .xcemp 包的审核、版本一致性检查与废弃清理 |
+| 版本     | 1.0.0                                                      |
 
 ## 1. 静态阶段
 
 **触发条件**：`market_files/` 目录中存在 `.xcemp` 包文件。
 
 **执行逻辑**：
+
 ```
 扫描 market_files/ 目录 → 读取 REGISTRY.json
 → 对每个 .xcemp 包执行：
@@ -28,6 +29,7 @@
 ```
 
 **输出 schema**：
+
 ```json
 {
   "status": "completed | partial | failed",
@@ -43,6 +45,7 @@
 ```
 
 **工具绑定**：
+
 - 文件扫描（`market_files/*.xcemp`）
 - JSON 读写（`REGISTRY.json`）
 - 正则扫描（secret 泄露检测）
@@ -50,10 +53,10 @@
 
 ## 2. 动态触发条件
 
-| 触发类型 | 规则 |
-|----------|------|
+| 触发类型   | 规则                                        |
+| ---------- | ------------------------------------------- |
 | 结果不达标 | `issues` 非空；存在孤儿包；存在 secret 泄露 |
-| 场景特殊 | REGISTRY.json 不存在或格式损坏 |
+| 场景特殊   | REGISTRY.json 不存在或格式损坏              |
 
 ## 3. 动态阶段
 
@@ -64,12 +67,14 @@
 ## 4. 固化
 
 **验收标准**：
+
 - 所有包均有 REGISTRY.json 记录
 - 无孤儿包
 - 废弃包已标记 `.deprecated`
 - `review_status` 全部为 `approved` 或 `deprecated`
 
 **固化后动作**：
+
 1. 更新 REGISTRY.json 中所有包的 `review_status` 和 `last_reviewed_at`
 2. 废弃包文件名追加 `.deprecated` 后缀
 3. 通知 `employee-pack-curator` 更新注册表

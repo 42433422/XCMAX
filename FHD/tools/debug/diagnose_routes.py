@@ -1,4 +1,5 @@
 """列出 FastAPI 应用注册的路由（调试用）。从仓库根加入 sys.path。"""
+
 from __future__ import annotations
 
 import sys

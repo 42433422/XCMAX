@@ -16,6 +16,7 @@ ensure_sessions_account_meta_columns 的运行时补列等价。
 """
 
 from __future__ import annotations
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 from typing import Sequence
 
@@ -33,7 +34,7 @@ depends_on: str | Sequence[str] | None = None
 def _column_exists(conn, table: str, column: str) -> bool:
     try:
         cols = {c["name"] for c in inspect(conn).get_columns(table)}
-    except Exception:
+    except BOUNDARY_ERRORS:
         return False
     return column in cols
 
@@ -57,7 +58,7 @@ def upgrade() -> None:
             "UPDATE users SET account_tier = 'normal' "
             "WHERE tier = 'enterprise' AND account_tier IS NULL"
         )
-    except Exception:
+    except BOUNDARY_ERRORS:
         pass
 
 

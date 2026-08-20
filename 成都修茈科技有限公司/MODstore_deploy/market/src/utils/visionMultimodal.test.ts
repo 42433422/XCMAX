@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  modelSupportsVisionInput,
-  flattenTextForLlmContext,
-  buildUserMultimodalContent,
-  isImageFileForVision,
-} from './visionMultimodal'
+import { modelSupportsVisionInput, flattenTextForLlmContext, buildUserMultimodalContent, isImageFileForVision } from './visionMultimodal'
 
 describe('modelSupportsVisionInput', () => {
   it('returns false for empty model', () => {
@@ -26,20 +21,24 @@ describe('modelSupportsVisionInput', () => {
 
   it('returns true when catalog has vlm category', () => {
     const catalog = {
-      providers: [{
-        provider: 'openai',
-        models_detailed: [{ id: 'custom-vlm', category: 'vlm' }],
-      }],
+      providers: [
+        {
+          provider: 'openai',
+          models_detailed: [{ id: 'custom-vlm', category: 'vlm' }],
+        },
+      ],
     }
     expect(modelSupportsVisionInput('openai', 'custom-vlm', catalog)).toBe(true)
   })
 
   it('returns false when catalog has non-vlm category', () => {
     const catalog = {
-      providers: [{
-        provider: 'openai',
-        models_detailed: [{ id: 'gpt-3.5', category: 'llm' }],
-      }],
+      providers: [
+        {
+          provider: 'openai',
+          models_detailed: [{ id: 'gpt-3.5', category: 'llm' }],
+        },
+      ],
     }
     expect(modelSupportsVisionInput('openai', 'gpt-3.5', catalog)).toBe(false)
   })
@@ -73,7 +72,10 @@ describe('flattenTextForLlmContext', () => {
   })
 
   it('filters out empty text parts', () => {
-    const parts = [{ type: 'text' as const, text: '' }, { type: 'text' as const, text: 'content' }]
+    const parts = [
+      { type: 'text' as const, text: '' },
+      { type: 'text' as const, text: 'content' },
+    ]
     expect(flattenTextForLlmContext('main', parts)).toBe('main\ncontent')
   })
 })

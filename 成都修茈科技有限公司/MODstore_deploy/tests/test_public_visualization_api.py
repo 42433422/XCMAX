@@ -44,7 +44,10 @@ def _configure_sources(monkeypatch, tmp_path):
                 "version_lock": "1.0.0.0",
                 "release_ready": True,
                 "release_history": [
-                    {"version": "1.0.0.0", "platforms": ["Windows", "macOS", "Android"]},
+                    {
+                        "version": "1.0.0.0",
+                        "platforms": ["Windows", "macOS", "Android"],
+                    },
                     {"version": "10.0.0"},
                 ],
             }
@@ -90,9 +93,7 @@ def _configure_sources(monkeypatch, tmp_path):
 
     token_engine = create_engine(f"sqlite:///{tmp_path / 'tokens.db'}")
     with token_engine.begin() as connection:
-        connection.execute(
-            text(
-                """
+        connection.execute(text("""
                 CREATE TABLE llm_call_logs (
                     status TEXT NOT NULL,
                     model TEXT NOT NULL,
@@ -103,38 +104,24 @@ def _configure_sources(monkeypatch, tmp_path):
                     estimated BOOLEAN NOT NULL,
                     created_at DATETIME NOT NULL
                 )
-                """
-            )
-        )
-        connection.execute(
-            text(
-                """
+                """))
+        connection.execute(text("""
                 CREATE TABLE employee_execution_metrics (
                     llm_tokens INTEGER NOT NULL,
                     created_at DATETIME NOT NULL
                 )
-                """
-            )
-        )
-        connection.execute(
-            text(
-                """
+                """))
+        connection.execute(text("""
                 INSERT INTO llm_call_logs VALUES
                     ('success', 'alpha-pro', 'provider-a', 100, 50, 150, 0, '2026-07-10 04:00:00'),
                     ('success', 'beta', 'provider-b', 20, 10, 30, 1, '2026-07-19 12:00:00'),
                     ('failed', 'alpha-pro', 'provider-a', 0, 0, 0, 0, '2026-07-19 13:00:00')
-                """
-            )
-        )
-        connection.execute(
-            text(
-                """
+                """))
+        connection.execute(text("""
                 INSERT INTO employee_execution_metrics VALUES
                     (220, '2026-07-12 06:00:00'),
                     (0, '2026-07-19 14:00:00')
-                """
-            )
-        )
+                """))
     monkeypatch.setattr(public_visualization_api, "_token_engine", lambda: token_engine)
     public_visualization_api.clear_public_visualization_cache()
     return token_engine
@@ -195,18 +182,14 @@ def test_public_endpoint_needs_no_auth_and_sets_cache_headers(client, monkeypatc
 def test_token_metrics_include_every_historic_chat_model(monkeypatch, tmp_path):
     token_engine = _configure_sources(monkeypatch, tmp_path)
     with token_engine.begin() as connection:
-        connection.execute(
-            text(
-                """
+        connection.execute(text("""
                 INSERT INTO llm_call_logs VALUES
                     ('success', 'gamma', 'provider-c', 1, 0, 1, 0, '2026-07-19 12:01:00'),
                     ('success', 'delta', 'provider-d', 1, 0, 1, 0, '2026-07-19 12:02:00'),
                     ('success', 'epsilon', 'provider-e', 1, 0, 1, 0, '2026-07-19 12:03:00'),
                     ('success', 'zeta', 'provider-f', 1, 0, 1, 0, '2026-07-19 12:04:00'),
                     ('success', 'eta', 'provider-g', 1, 0, 1, 0, '2026-07-19 12:05:00')
-                """
-            )
-        )
+                """))
     public_visualization_api.clear_public_visualization_cache()
 
     models = public_visualization_api.get_public_visualization_data()["ai"]["chat_models"]

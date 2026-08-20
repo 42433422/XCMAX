@@ -13,6 +13,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter
 
+from app.mod_sdk.errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
+
 logger = logging.getLogger(__name__)
 
 MOD_ID = "xcagi-core-workflow-employees"
@@ -44,7 +46,7 @@ def _load_employee_module(mod_id: str, stem: str):
         return None
     try:
         return import_mod_backend_py(mod_path, mod_id, f"employees/{stem}")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("load employee module failed mod=%s stem=%s", mod_id, stem)
         return None
 
@@ -79,11 +81,14 @@ async def _build_ctx(mod_id: str, employee_id: str) -> Dict[str, Any]:
 
         async def _call_llm(messages, *, max_tokens=1024, temperature=0.2, response_format=None):
             return await mod_employee_complete(
-                messages, max_tokens=max_tokens, temperature=temperature, response_format=response_format
+                messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                response_format=response_format,
             )
 
         ctx["call_llm"] = _call_llm
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("mod_employee_complete unavailable: %s", exc)
 
     try:
@@ -93,16 +98,26 @@ async def _build_ctx(mod_id: str, employee_id: str) -> Dict[str, Any]:
             try:
                 async with _httpx.AsyncClient(timeout=float(timeout)) as client:
                     r = await client.get(url, headers=headers or {})
-                    return {"ok": r.status_code < 400, "status": r.status_code, "text": r.text, "error": ""}
-            except Exception as e:  # noqa: BLE001
+                    return {
+                        "ok": r.status_code < 400,
+                        "status": r.status_code,
+                        "text": r.text,
+                        "error": "",
+                    }
+            except RECOVERABLE_ERRORS as e:  # noqa: BLE001
                 return {"ok": False, "status": 0, "text": "", "error": str(e)[:500]}
 
         async def _http_post(url, *, json_body=None, data=None, headers=None, timeout=30):
             try:
                 async with _httpx.AsyncClient(timeout=float(timeout)) as client:
                     r = await client.post(url, json=json_body, data=data, headers=headers or {})
-                    return {"ok": r.status_code < 400, "status": r.status_code, "text": r.text, "error": ""}
-            except Exception as e:  # noqa: BLE001
+                    return {
+                        "ok": r.status_code < 400,
+                        "status": r.status_code,
+                        "text": r.text,
+                        "error": "",
+                    }
+            except RECOVERABLE_ERRORS as e:  # noqa: BLE001
                 return {"ok": False, "status": 0, "text": "", "error": str(e)[:500]}
 
         ctx["http_get"] = _http_get
@@ -123,12 +138,12 @@ async def _dispatch_run(mod_id: str, emp_id: str, stem: str, payload: Optional[D
         )
     ctx = await _build_ctx(mod_id, emp_id)
     try:
-        run_fn = getattr(module, "run")
+        run_fn = module.run
         out = run_fn(payload or {}, ctx)
         if asyncio.iscoroutine(out):
             out = await out
         return {"success": True, "data": out}
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.exception("employee run failed emp=%s", emp_id)
         return _unified_err(f"employee run failed: {exc!s}"[:300], employee_id=emp_id)
 
@@ -151,13 +166,17 @@ def register_fastapi_routes(app, mod_id: str) -> None:
     async def list_employees():
         return {
             "success": True,
-            "data": [{"id": e[0], "label": e[2], "api_base_path": f"employees/{e[0]}"} for e in EMPLOYEES],
+            "data": [
+                {"id": e[0], "label": e[2], "api_base_path": f"employees/{e[0]}"} for e in EMPLOYEES
+            ],
         }
 
     for emp_id, stem, label in EMPLOYEES:
 
         @router.post(f"/employees/{emp_id}/run")
-        async def emp_run(payload: Dict[str, Any] | None = None, _eid: str = emp_id, _stem: str = stem):
+        async def emp_run(
+            payload: Dict[str, Any] | None = None, _eid: str = emp_id, _stem: str = stem
+        ):
             return await _dispatch_run(mod_id, _eid, _stem, payload)
 
         @router.get(f"/employees/{emp_id}/status")
@@ -166,7 +185,11 @@ def register_fastapi_routes(app, mod_id: str) -> None:
             return out
 
     app.include_router(router)
-    logger.info("xcagi-core-workflow-employees routes registered mod_id=%s employees=%d", mod_id, len(EMPLOYEES))
+    logger.info(
+        "xcagi-core-workflow-employees routes registered mod_id=%s employees=%d",
+        mod_id,
+        len(EMPLOYEES),
+    )
 
 
 def mod_init():

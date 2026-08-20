@@ -10,15 +10,15 @@
 
 ## 元数据
 
-| 项 | 值 |
-| --- | --- |
-| 日期 | 2026-05-04 |
-| MODstore_deploy Git（短） | `70fd951` |
-| FHD Git（短） | `aa9a961` |
-| k6 | `grafana/k6:0.54.0`（容器内执行） |
-| Mock | `perf/local_mock_server.py --port 18000 --latency-ms 5` |
-| 客户端 → 服务地址 | `http://host.docker.internal:18000`（Docker 容器内）/ `http://127.0.0.1:18000`（probe.py） |
-| 主机 | Windows 10 + Docker Desktop |
+| 项                        | 值                                                                                         |
+| ------------------------- | ------------------------------------------------------------------------------------------ |
+| 日期                      | 2026-05-04                                                                                 |
+| MODstore_deploy Git（短） | `70fd951`                                                                                  |
+| FHD Git（短）             | `aa9a961`                                                                                  |
+| k6                        | `grafana/k6:0.54.0`（容器内执行）                                                          |
+| Mock                      | `perf/local_mock_server.py --port 18000 --latency-ms 5`                                    |
+| 客户端 → 服务地址         | `http://host.docker.internal:18000`（Docker 容器内）/ `http://127.0.0.1:18000`（probe.py） |
+| 主机                      | Windows 10 + Docker Desktop                                                                |
 
 ## 1. probe.py（FHD 提供，纯 stdlib）
 
@@ -32,13 +32,13 @@ python ../FHD/scripts/loadtest/probe.py \
 
 结果（见 [`probe-health.txt`](probe-health.txt)）：
 
-| 指标 | 值 |
-| --- | --- |
-| `total` | 1000 |
-| `workers` | 50 |
-| `wall_s` | 1.713 |
-| `rps` | 583.8 |
-| `status_codes` | `{200: 1000}` |
+| 指标                         | 值                       |
+| ---------------------------- | ------------------------ |
+| `total`                      | 1000                     |
+| `workers`                    | 50                       |
+| `wall_s`                     | 1.713                    |
+| `rps`                        | 583.8                    |
+| `status_codes`               | `{200: 1000}`            |
 | `latency_ms p50 / p95 / p99` | 15.76 / 524.74 / 1027.46 |
 
 > p95/p99 偏大主要是 Python `urllib` + 50 线程在 GIL 下抖动 + mock 自身 5 ms 延迟，不是被测系统问题。`probe.py` 适合做基线 QPS 与可达性快检，不适合代替 k6 的容量评估。
@@ -56,15 +56,15 @@ docker run --rm \
 
 结果（见 [`k6-fhd-smoke.txt`](k6-fhd-smoke.txt)）：
 
-| 指标 | 值 |
-| --- | --- |
-| `http_reqs` | 150 |
-| `http_req_failed` | 0%（0/150） |
-| `checks` | 100%（150/150） |
-| `iterations` | 75 |
-| `vus` | 5（恒定 30s） |
-| `http_req_duration` p95 / max | 13.73 ms / 21.55 ms |
-| 阈值 | `p(99)<500ms`、`failed<5%` — **均通过** |
+| 指标                          | 值                                      |
+| ----------------------------- | --------------------------------------- |
+| `http_reqs`                   | 150                                     |
+| `http_req_failed`             | 0%（0/150）                             |
+| `checks`                      | 100%（150/150）                         |
+| `iterations`                  | 75                                      |
+| `vus`                         | 5（恒定 30s）                           |
+| `http_req_duration` p95 / max | 13.73 ms / 21.55 ms                     |
+| 阈值                          | `p(99)<500ms`、`failed<5%` — **均通过** |
 
 这是与 [`docs/perf-benchmark-public.md` 第 2.2 节](../../../docs/perf-benchmark-public.md) 同一脚本下，**第一次** 在本仓库内得到全绿的 k6 摘要。
 
@@ -84,24 +84,24 @@ docker run --rm \
 
 结果（见 [`k6-fhd-load.txt`](k6-fhd-load.txt)、[`k6-fhd-load-summary.json`](k6-fhd-load-summary.json)）：
 
-| 指标 | 值 |
-| --- | --- |
-| `http_reqs` | 2982 |
-| `http_req_failed` | 3.28%（98/2982，全部为 `dial: i/o timeout`） |
-| `checks` | 96.71%（2884/2982） |
-| `iterations` | 994 |
-| `vus_max` | 50 |
-| `http_req_duration` p95 / max（成功） | 8.66 ms / 22.18 ms |
-| 阈值 | `p(99)<1000ms` 通过；`error_rate<0.1` 通过 |
+| 指标                                  | 值                                           |
+| ------------------------------------- | -------------------------------------------- |
+| `http_reqs`                           | 2982                                         |
+| `http_req_failed`                     | 3.28%（98/2982，全部为 `dial: i/o timeout`） |
+| `checks`                              | 96.71%（2884/2982）                          |
+| `iterations`                          | 994                                          |
+| `vus_max`                             | 50                                           |
+| `http_req_duration` p95 / max（成功） | 8.66 ms / 22.18 ms                           |
+| 阈值                                  | `p(99)<1000ms` 通过；`error_rate<0.1` 通过   |
 
 98 个失败全部是高峰期 mock 拒绝新连接造成的客户端 `i/o timeout`。**这是 mock 服务的限制**，不是被测系统的容量结论；用真实 FastAPI/uvicorn 上游重跑同一脚本不会出现这种形态的失败。
 
 ## 4. 与对外宣称数字的对账
 
-| 对外说法 | 仓库内可验证基线 | 处理 |
-| --- | --- | --- |
-| 「2000 QPS」 | 无任何脚本本仓内跑出过 ≥ 2000 持续 RPS 的结果 | 简历 / 对外 PPT 必须改为「目标」，并附「待预发同栈复测」字样；详情见 [`docs/perf-benchmark-public.md`](../../../docs/perf-benchmark-public.md) 口径声明节 |
-| 「0.6 s 加载」 | mock 上 GET p95 ≈ 14 ms（5 VU），不能等同于真实页面加载 | 同上；真实「加载 0.6 s」需要前端页面级别（FCP/LCP）测量，需 Lighthouse / `web-vitals` 在目标环境复测 |
+| 对外说法       | 仓库内可验证基线                                        | 处理                                                                                                                                                      |
+| -------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 「2000 QPS」   | 无任何脚本本仓内跑出过 ≥ 2000 持续 RPS 的结果           | 简历 / 对外 PPT 必须改为「目标」，并附「待预发同栈复测」字样；详情见 [`docs/perf-benchmark-public.md`](../../../docs/perf-benchmark-public.md) 口径声明节 |
+| 「0.6 s 加载」 | mock 上 GET p95 ≈ 14 ms（5 VU），不能等同于真实页面加载 | 同上；真实「加载 0.6 s」需要前端页面级别（FCP/LCP）测量，需 Lighthouse / `web-vitals` 在目标环境复测                                                      |
 
 ## 5. 下一步
 

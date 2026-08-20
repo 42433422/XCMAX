@@ -24,17 +24,20 @@ defineProps<{
         v-for="lane in lanes"
         :key="`${lane.id}-${lane.stage}`"
         class="selp-team-chip"
-        :class="{ 'selp-team-chip--outside': lane.rosterStatus === 'out_of_roster' || lane.dutyRegistered === false }"
+        :class="{
+          'selp-team-chip--outside': lane.rosterStatus === 'out_of_roster' || lane.dutyRegistered === false,
+        }"
         role="listitem"
       >
         <strong>{{ lane.id }}</strong>
         <small>{{ lane.stage }} · {{ lane.source }}</small>
-        <small v-if="lane.rosterLabel || lane.dutyRegisteredLabel || lane.department">{{ lane.rosterLabel || '排班未知' }}<template v-if="lane.dutyRegisteredLabel"> · {{ lane.dutyRegisteredLabel }}</template><template v-if="lane.department"> · {{ lane.department }}</template></small>
+        <small v-if="lane.rosterLabel || lane.dutyRegisteredLabel || lane.department"
+          >{{ lane.rosterLabel || '排班未知' }}<template v-if="lane.dutyRegisteredLabel"> · {{ lane.dutyRegisteredLabel }}</template
+          ><template v-if="lane.department"> · {{ lane.department }}</template></small
+        >
       </span>
     </div>
-    <p v-else class="selp-team-empty">
-      当前状态数据尚未暴露员工 ID；后端记录一旦写入 employee_id / actor / assignee 会自动显示。
-    </p>
+    <p v-else class="selp-team-empty">当前状态数据尚未暴露员工 ID；后端记录一旦写入 employee_id / actor / assignee 会自动显示。</p>
   </div>
 </template>
 

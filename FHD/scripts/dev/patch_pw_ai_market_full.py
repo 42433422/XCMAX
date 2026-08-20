@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """P-W AI 市场全量补全：高级筛选 + 钱包/已购/订单 + 全部 catalog 详情。"""
+
 from __future__ import annotations
 
 import sys
@@ -13,16 +14,16 @@ TARGET = Path(
 
 MARKER = "_PW_AI_MARKET_EXTRA_PAGES"
 
-EXTRA_CONST = '''
+EXTRA_CONST = """
 _PW_AI_MARKET_EXTRA_PAGES: Tuple[Tuple[str, str, str], ...] = (
     ("AI市场-高级筛选", "/market/ai-store", "ai_store_tab:all|filters_open"),
     ("钱包", "/market/wallet", ""),
     ("已购商品", "/market/wallet/purchased", ""),
     ("订单列表", "/market/orders", ""),
 )
-'''
+"""
 
-BUILD_INSERT = '''
+BUILD_INSERT = """
     for name, path, prepare in _PW_AI_MARKET_EXTRA_PAGES:
         out.append(
             SurfaceTarget(
@@ -50,7 +51,7 @@ BUILD_INSERT = '''
             )
         )
 
-'''
+"""
 
 DOC_OLD = '    """全量：P-W 营销静态 + AI 市场 Tab；不逐 catalog 商品详情截图。"""'
 DOC_NEW = '    """全量：P-W 营销静态 + AI 市场 Tab/筛选/钱包/订单 + 全部 catalog 详情。"""'
@@ -61,27 +62,27 @@ DEFAULT_NEW = '    """P-W / P-S / P-App 巡检目标（营销 + AI 市场全链�
 SKIP_OLD = '    if (os.environ.get("MODSTORE_SURFACE_AUDIT_SKIP_CATALOG", "1") or "").strip().lower() not in ("0", "false", "no", "off"):'
 SKIP_NEW = '    if (os.environ.get("MODSTORE_SURFACE_AUDIT_SKIP_CATALOG", "0") or "").strip().lower() not in ("0", "false", "no", "off"):'
 
-PREPARE_OLD = '''async def _apply_page_prepare(page: Any, prepare: str, timeout_ms: int) -> None:
-    if prepare == "admin_digest":'''
+PREPARE_OLD = """async def _apply_page_prepare(page: Any, prepare: str, timeout_ms: int) -> None:
+    if prepare == "admin_digest":"""
 
-PREPARE_NEW = '''async def _apply_page_prepare(page: Any, prepare: str, timeout_ms: int) -> None:
+PREPARE_NEW = """async def _apply_page_prepare(page: Any, prepare: str, timeout_ms: int) -> None:
     for step in [s.strip() for s in str(prepare or "").split("|") if s.strip()]:
         await _apply_page_prepare_step(page, step, timeout_ms)
 
 
 async def _apply_page_prepare_step(page: Any, prepare: str, timeout_ms: int) -> None:
-    if prepare == "admin_digest":'''
+    if prepare == "admin_digest":"""
 
-FILTERS_BRANCH = '''    if prepare.startswith("ai_store_tab:"):
+FILTERS_BRANCH = """    if prepare.startswith("ai_store_tab:"):
         tab_id = prepare.split(":", 1)[1]
         label = _AI_STORE_TAB_LABELS.get(tab_id, "")
         if not label:
             return
         btn = page.locator("button.store-nav__item").filter(has_text=label)
         await btn.first.click(timeout=min(timeout_ms, 20_000))
-        await page.wait_for_timeout(1200)'''
+        await page.wait_for_timeout(1200)"""
 
-FILTERS_NEW = '''    if prepare.startswith("ai_store_tab:"):
+FILTERS_NEW = """    if prepare.startswith("ai_store_tab:"):
         tab_id = prepare.split(":", 1)[1]
         label = _AI_STORE_TAB_LABELS.get(tab_id, "")
         if not label:
@@ -98,7 +99,7 @@ FILTERS_NEW = '''    if prepare.startswith("ai_store_tab:"):
             await page.wait_for_timeout(600)
         except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
             pass
-        return'''
+        return"""
 
 
 def main() -> None:

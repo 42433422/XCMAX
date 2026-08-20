@@ -77,7 +77,9 @@ const createName = ref('')
 function flash(msg, ok = true) {
   message.value = msg
   messageOk.value = ok
-  setTimeout(() => { message.value = '' }, 5000)
+  setTimeout(() => {
+    message.value = ''
+  }, 5000)
 }
 
 function getBlurb(m) {
@@ -183,7 +185,7 @@ onMounted(load)
 
 .page-desc {
   font-size: 0.9rem;
-  color: rgba(255,255,255,0.4);
+  color: rgba(255, 255, 255, 0.4);
   margin: 0 0 1.25rem;
 }
 
@@ -205,19 +207,19 @@ onMounted(load)
 }
 
 .flash-ok {
-  background: rgba(74,222,128,0.1);
+  background: rgba(74, 222, 128, 0.1);
   color: #4ade80;
 }
 
 .flash-err {
-  background: rgba(255,80,80,0.1);
+  background: rgba(255, 80, 80, 0.1);
   color: #ff6b6b;
 }
 
 .loading {
   text-align: center;
   padding: 3rem;
-  color: rgba(255,255,255,0.3);
+  color: rgba(255, 255, 255, 0.3);
 }
 
 .mods-grid {
@@ -228,14 +230,14 @@ onMounted(load)
 
 .mod-card {
   background: #111111;
-  border: 0.5px solid rgba(255,255,255,0.1);
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
   padding: 1.25rem;
   transition: all 0.2s;
 }
 
 .mod-card:hover {
-  border-color: rgba(255,255,255,0.2);
+  border-color: rgba(255, 255, 255, 0.2);
   transform: translateY(-2px);
 }
 
@@ -254,7 +256,7 @@ onMounted(load)
 
 .mod-card-blurb {
   font-size: 0.8125rem;
-  color: rgba(255,255,255,0.5);
+  color: rgba(255, 255, 255, 0.5);
   line-height: 1.5;
   margin: 0 0 0.625rem;
   display: -webkit-box;
@@ -265,7 +267,7 @@ onMounted(load)
 
 .mod-card-id {
   font-size: 0.75rem;
-  color: rgba(255,255,255,0.3);
+  color: rgba(255, 255, 255, 0.3);
   font-family: monospace;
   margin-bottom: 0.5rem;
 }
@@ -282,7 +284,7 @@ onMounted(load)
 .empty-state {
   text-align: center;
   padding: 4rem 1rem;
-  color: rgba(255,255,255,0.3);
+  color: rgba(255, 255, 255, 0.3);
 }
 
 .empty-state p {
@@ -292,15 +294,15 @@ onMounted(load)
 
 .empty-hint {
   font-size: 0.85rem;
-  color: rgba(255,255,255,0.2);
+  color: rgba(255, 255, 255, 0.2);
 }
 
 .btn {
   padding: 0.5rem 1rem;
-  border: 0.5px solid rgba(255,255,255,0.15);
+  border: 0.5px solid rgba(255, 255, 255, 0.15);
   border-radius: 6px;
   background: transparent;
-  color: rgba(255,255,255,0.7);
+  color: rgba(255, 255, 255, 0.7);
   font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
@@ -308,7 +310,7 @@ onMounted(load)
 }
 
 .btn:hover {
-  background: rgba(255,255,255,0.06);
+  background: rgba(255, 255, 255, 0.06);
   color: #ffffff;
 }
 
@@ -337,24 +339,24 @@ onMounted(load)
 }
 
 .badge-ok {
-  background: rgba(74,222,128,0.1);
+  background: rgba(74, 222, 128, 0.1);
   color: #4ade80;
 }
 
 .badge-warn {
-  background: rgba(251,191,36,0.1);
+  background: rgba(251, 191, 36, 0.1);
   color: #fbbf24;
 }
 
 .badge-primary {
-  background: rgba(255,255,255,0.06);
-  color: rgba(255,255,255,0.5);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.6);
+  background: rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
@@ -367,7 +369,7 @@ onMounted(load)
   width: 100%;
   max-width: 420px;
   background: #111111;
-  border: 0.5px solid rgba(255,255,255,0.1);
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
   border-radius: 16px;
   padding: 1.5rem;
 }
@@ -386,23 +388,23 @@ onMounted(load)
 .label {
   display: block;
   font-size: 0.8rem;
-  color: rgba(255,255,255,0.5);
+  color: rgba(255, 255, 255, 0.5);
   margin-bottom: 0.4rem;
 }
 
 .input {
   width: 100%;
   padding: 0.6rem 0.75rem;
-  border: 0.5px solid rgba(255,255,255,0.15);
+  border: 0.5px solid rgba(255, 255, 255, 0.15);
   border-radius: 6px;
-  background: rgba(255,255,255,0.03);
+  background: rgba(255, 255, 255, 0.03);
   color: #ffffff;
   font-size: 0.9rem;
   outline: none;
 }
 
 .input:focus {
-  border-color: rgba(255,255,255,0.3);
+  border-color: rgba(255, 255, 255, 0.3);
 }
 
 .modal-actions {

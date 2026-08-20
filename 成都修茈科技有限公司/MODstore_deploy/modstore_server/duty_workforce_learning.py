@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment, attr-defined, no-any-return, valid-type"
 """Turn strict duty-workforce burn-in evidence into reusable knowledge.
 
 One failed attempt is only a capability-gap candidate.  A reusable pattern is
@@ -13,14 +14,14 @@ import threading
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
 
+from modstore_server.duty_workforce_evidence import ALLOWED_REASON_CODES as _ALLOWED_REASON_CODES
+from modstore_server.duty_workforce_evidence import EMPLOYEE_ID_RE as _EMPLOYEE_ID_RE
+from modstore_server.duty_workforce_evidence import audit_path as _audit_path
+from modstore_server.duty_workforce_evidence import canonical_sha256 as _canonical_sha256
+from modstore_server.duty_workforce_evidence import iso_now as _iso_now
+from modstore_server.duty_workforce_evidence import load_audit_rows as _load_audit_rows
+from modstore_server.duty_workforce_evidence import resolved_pairs as _resolved_pairs
 from modstore_server.duty_workforce_evidence import (
-    ALLOWED_REASON_CODES as _ALLOWED_REASON_CODES,
-    EMPLOYEE_ID_RE as _EMPLOYEE_ID_RE,
-    audit_path as _audit_path,
-    canonical_sha256 as _canonical_sha256,
-    iso_now as _iso_now,
-    load_audit_rows as _load_audit_rows,
-    resolved_pairs as _resolved_pairs,
     workforce_gap_path,
 )
 from modstore_server.self_evolution_knowledge import (

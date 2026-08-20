@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/model-payment", tags=["model-payment"])
 
+
 def _integration_flags() -> dict[str, Any]:
     """支付宝：APPID + 应用私钥 + 支付宝公钥 + 已安装 SDK 时为已开通。"""
     return {
@@ -93,14 +94,14 @@ def checkout(
         channel = str(body.get("channel") or "alipay").strip().lower()
         plan_id = str(body.get("plan_id") or "").strip()
         uid = int(body.get("market_user_id") or 0)
-        proxied_err = None
+        proxy_failed = False
         if plan_id:
             from app.infrastructure.payment.modstore_payment_proxy import proxy_checkout
 
             proxied = proxy_checkout(plan_id=plan_id, channel=channel, market_user_id=uid)
             if proxied.get("success"):
                 return JSONResponse({"success": True, "data": proxied.get("data")})
-            proxied_err = proxied.get("error")
+            proxy_failed = True
         return JSONResponse(
             {
                 "success": False,
@@ -108,7 +109,7 @@ def checkout(
                 "data": {
                     "use_checkout": "/api/market/payment/checkout",
                     "use_plans": "/api/market/payment/plans",
-                    "proxy_error": proxied_err,
+                    "proxy_error": "market_checkout_unavailable" if proxy_failed else None,
                 },
             },
             status_code=409,

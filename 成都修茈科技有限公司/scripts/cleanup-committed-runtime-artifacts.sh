@@ -20,10 +20,12 @@ PATTERNS=(
   'MODstore_deploy/modstore_server/data/event_outbox\.jsonl$'
   'MODstore_deploy/modstore_server/data/event_outbox_.*\.jsonl$'
   'MODstore_deploy/modstore_server/data/payment_orders/'
+  'MODstore_deploy/modstore_server/payment_orders/.*\.json$'
   'MODstore_deploy/modstore_server/data/chroma/'
 )
 
-cd "$(git rev-parse --show-toplevel)"
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+cd "${script_dir}/.."
 
 echo "[info] scanning git index for runtime artifacts..."
 victims=()

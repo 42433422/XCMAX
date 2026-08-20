@@ -34,30 +34,40 @@
       type="file"
       accept=".xlsx,.xlsm,image/jpeg,image/png,image/webp,image/gif,.pdf,application/pdf"
       multiple
-      style="display:none"
+      style="display: none"
       @change="onFileChange"
-    >
+    />
     <label
       data-tutorial-id="star-auto-refresh-toggle"
       :title="$t('chat.starAutoRefreshTitle')"
-      style="margin-left:auto;display:flex;align-items:center;gap:6px;font-size:var(--app-font-size-caption);color:var(--app-text-muted);cursor:pointer;user-select:none;"
+      style="
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: var(--app-font-size-caption);
+        color: var(--app-text-muted);
+        cursor: pointer;
+        user-select: none;
+      "
     >
-      <input
-        type="checkbox"
-        :checked="autoRefreshStarredWechat"
-        @change="onAutoRefreshChange"
-      >
+      <input type="checkbox" :checked="autoRefreshStarredWechat" @change="onAutoRefreshChange" />
       {{ $t('chat.starAutoRefresh') }}
     </label>
     <label
       :title="$t('chat.ttsTitle')"
-      style="margin-left:12px;display:flex;align-items:center;gap:6px;font-size:var(--app-font-size-caption);color:var(--app-text-muted);cursor:pointer;user-select:none;"
+      style="
+        margin-left: 12px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: var(--app-font-size-caption);
+        color: var(--app-text-muted);
+        cursor: pointer;
+        user-select: none;
+      "
     >
-      <input
-        type="checkbox"
-        :checked="ttsEnabled"
-        @change="$emit('toggle-tts', !ttsEnabled)"
-      >
+      <input type="checkbox" :checked="ttsEnabled" @change="$emit('toggle-tts', !ttsEnabled)" />
       <i class="fa fa-volume-up" aria-hidden="true"></i> {{ $t('chat.ttsToggle') }}
     </label>
   </div>
@@ -90,14 +100,18 @@ const emit = defineEmits<{
 
 const fileInputRef = ref<HTMLInputElement | null>(null)
 
-watch(fileInputRef, (el) => {
-  if (props.excelAnalyzeInputRef) {
-    // Parent-owned ref bridge for Excel upload input
-    // eslint-disable-next-line vue/no-mutating-props -- intentional ref forwarding
-    props.excelAnalyzeInputRef.value = el
-  }
-  emit('register-excel-input', el)
-}, { immediate: true })
+watch(
+  fileInputRef,
+  (el) => {
+    if (props.excelAnalyzeInputRef) {
+      // Parent-owned ref bridge for Excel upload input
+      // eslint-disable-next-line vue/no-mutating-props -- intentional ref forwarding
+      props.excelAnalyzeInputRef.value = el
+    }
+    emit('register-excel-input', el)
+  },
+  { immediate: true },
+)
 
 function triggerUpload() {
   fileInputRef.value?.click()

@@ -1,11 +1,12 @@
-# ruff: noqa
 """Candidate selection and planning for duty-workforce burn-in."""
+
 from __future__ import annotations
+
 import importlib
 from collections import Counter
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Any, Dict, Iterable, Optional
-from modstore_server.duty_workforce_burnin_policy import _payload_sha256, assess_burn_in_eligibility
+
 from modstore_server.duty_workforce_contracts import (
     load_reviewed_duty_manifest,
     workforce_contract_map,
@@ -15,6 +16,7 @@ from modstore_server.duty_workforce_receipts import (
     recent_attempt_manifest_shas,
 )
 from modstore_server.models import EmployeeExecutionMetric, get_session_factory
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -103,9 +105,12 @@ def build_burn_in_plan(
         contract.setdefault("employee_id", employee_id)
         try:
             manifest = manifests.get(employee_id) or _facade()._load_manifest(employee_id)
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             skipped.append(
-                {"employee_id": employee_id, "reason": f"manifest_unavailable:{type(exc).__name__}"}
+                {
+                    "employee_id": employee_id,
+                    "reason": f"manifest_unavailable:{type(exc).__name__}",
+                }
             )
             continue
         manifest_sha256 = _facade()._payload_sha256(manifest)
@@ -127,7 +132,10 @@ def build_burn_in_plan(
         eligibility = _facade().assess_burn_in_eligibility(employee_id, contract, manifest)
         if eligibility.get("eligible") is not True:
             skipped.append(
-                {"employee_id": employee_id, "reason": str(eligibility.get("reason") or "blocked")}
+                {
+                    "employee_id": employee_id,
+                    "reason": str(eligibility.get("reason") or "blocked"),
+                }
             )
             continue
         candidates.append(

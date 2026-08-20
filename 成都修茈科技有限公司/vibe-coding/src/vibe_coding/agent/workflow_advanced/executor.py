@@ -32,25 +32,31 @@ keeps running unless ``RunOptions.fail_fast`` is set.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
+from collections.abc import Callable
 from concurrent.futures import (
     FIRST_COMPLETED,
     Future,
     ThreadPoolExecutor,
+)
+from concurrent.futures import (
     wait as futures_wait,
 )
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable
+from typing import Any
+
+from vibe_coding.operational_errors import BOUNDARY_ERRORS
 
 from ...workflow_conditions import ConditionError, evaluate_condition
-from .events import EventBus, WorkflowEvent
+from .events import EventBus
 from .graph import (
     AdvancedEdge,
     AdvancedNode,
     AdvancedWorkflow,
+    ExecutionState,
     NodeKind,
     NodeRunner,
-    ParallelGroup,
 )
 
 
@@ -219,8 +225,7 @@ class AdvancedWorkflowExecutor:
                             )
                     continue
                 preds_done = all(
-                    p in completed or p in skipped
-                    for p in [e.source for e in edges if e.target == edge.target]
+                    p in completed or p in skipped for p in [e.source for e in edges if e.target == edge.target]
                 )
                 if preds_done:
                     scheduled.add(edge.target)
@@ -281,7 +286,7 @@ class AdvancedWorkflowExecutor:
                     duration_ms=round((time.perf_counter() - t0) * 1000, 3),
                     attempts=attempt,
                 )
-            except Exception as exc:  # noqa: BLE001
+            except BOUNDARY_ERRORS as exc:
                 last_err = f"{type(exc).__name__}: {exc}"
         return NodeExecution(
             node_id=node.id,
@@ -303,9 +308,7 @@ class AdvancedWorkflowExecutor:
         outputs: dict[str, dict[str, Any]] = {}
         errors: dict[str, str] = {}
         threshold = (
-            len(group.children)
-            if group.mode == "all"
-            else (1 if group.mode == "any" else max(1, group.threshold))
+            len(group.children) if group.mode == "all" else (1 if group.mode == "any" else max(1, group.threshold))
         )
         t0 = time.perf_counter()
         pool = ThreadPoolExecutor(max_workers=self.options.max_concurrency)
@@ -414,18 +417,14 @@ class AdvancedWorkflowExecutor:
     def _notify_start(self, node: AdvancedNode) -> None:
         if self.options.on_node_start is None:
             return
-        try:
+        with contextlib.suppress(*BOUNDARY_ERRORS):
             self.options.on_node_start(node)
-        except Exception:  # noqa: BLE001
-            pass
 
     def _notify_complete(self, outcome: NodeExecution) -> None:
         if self.options.on_node_complete is None:
             return
-        try:
+        with contextlib.suppress(*BOUNDARY_ERRORS):
             self.options.on_node_complete(outcome)
-        except Exception:  # noqa: BLE001
-            pass
 
 
 # ----------------------------------------------------------------- async
@@ -459,17 +458,13 @@ class AsyncWorkflowExecutor:
         return execution
 
     async def _run_inner(self, workflow: AdvancedWorkflow, execution: WorkflowExecution) -> None:
-        sync_executor = AdvancedWorkflowExecutor(
-            event_bus=self.event_bus, options=self.options
-        )
+        sync_executor = AdvancedWorkflowExecutor(event_bus=self.event_bus, options=self.options)
         # The async executor delegates the control-flow logic to the sync
         # variant via :meth:`asyncio.to_thread` — sync executor's own
         # ``ThreadPoolExecutor`` keeps real concurrency for parallel nodes.
         # Pure-async runners are still discovered via ``inspect.iscoroutinefunction``
         # below so the user can pass ``async def`` runners too.
-        await asyncio.to_thread(
-            sync_executor._run_inner, workflow, execution
-        )
+        await asyncio.to_thread(sync_executor._run_inner, workflow, execution)
 
 
 # ----------------------------------------------------------------- helpers
@@ -511,7 +506,7 @@ def skill_runner_for(runtime: Any, skill_id: str) -> NodeRunner:
     advanced workflow — the runner returns the run's ``output_data``.
     """
 
-    def _run(kwargs: dict[str, Any], execution: WorkflowExecution) -> dict[str, Any]:
+    def _run(kwargs: dict[str, Any], execution: ExecutionState) -> dict[str, Any]:
         run = runtime.run(skill_id, dict(kwargs))
         return dict(run.output_data or {})
 

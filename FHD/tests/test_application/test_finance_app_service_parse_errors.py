@@ -95,6 +95,8 @@ class TestDashboard:
 
     def test_dashboard_db_error_returns_failure(self) -> None:
         svc = FinanceAppService()
-        with patch("app.application.finance_app_service.get_db", side_effect=RuntimeError("db down")):
+        with patch(
+            "app.application.finance_app_service.get_db", side_effect=RuntimeError("db down")
+        ):
             with pytest.raises(Exception):
                 svc.get_dashboard()

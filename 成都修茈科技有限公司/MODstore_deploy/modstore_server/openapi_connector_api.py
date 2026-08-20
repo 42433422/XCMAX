@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """OpenAPI 连接器 REST API。
 
 闭环：导入 spec -> 解析 operation -> 配置鉴权 -> 服务端试调用 -> 发布工作流节点 -> 查日志。
@@ -7,12 +8,13 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from modstore_server import openapi_connector_support as _support
 from modstore_server.api.deps import _get_current_user
 from modstore_server.infrastructure.db import get_db
 from modstore_server.llm_crypto import fernet_configured
@@ -39,7 +41,6 @@ from modstore_server.openapi_connector_runtime import (
     call_generated_operation,
     encrypt_credential_payload,
 )
-from modstore_server import openapi_connector_support as _support
 
 CredentialBody = _support.CredentialBody
 ImportConnectorBody = _support.ImportConnectorBody
@@ -91,7 +92,7 @@ def _persist_parsed_spec(
         connector.last_error = ""
         connector.generated_version = int(connector.generated_version or 0) + 1
         connector.operation_count = len(parsed.operations)
-        connector.updated_at = datetime.now(timezone.utc)
+        connector.updated_at = datetime.now(UTC)
     else:
         connector = OpenApiConnector(
             user_id=user.id,
@@ -303,7 +304,7 @@ async def put_credentials(
     if row:
         row.auth_type = auth_type
         row.config_encrypted = ciphertext
-        row.updated_at = datetime.now(timezone.utc)
+        row.updated_at = datetime.now(UTC)
     else:
         row = OpenApiCredential(
             user_id=user.id,
@@ -348,7 +349,7 @@ async def patch_operation(
     _fetch_connector_or_404(db, user, connector_id)
     op = _fetch_operation_or_404(db, connector_id, operation_id)
     op.enabled = bool(body.enabled)
-    op.updated_at = datetime.now(timezone.utc)
+    op.updated_at = datetime.now(UTC)
     db.commit()
     return {"ok": True, "operation": _serialize_operation(op)}
 

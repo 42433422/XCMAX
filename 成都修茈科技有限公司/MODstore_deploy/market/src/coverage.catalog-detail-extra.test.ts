@@ -89,7 +89,11 @@ beforeEach(() => {
   localStorage.setItem('modstore_token', 'token')
 
   apiMock.catalogDetail.mockResolvedValue(catalogItem())
-  apiMock.catalogReviews.mockResolvedValue({ reviews: [{ id: 1, rating: 5, content: 'good' }], average_rating: 5, total: 1 })
+  apiMock.catalogReviews.mockResolvedValue({
+    reviews: [{ id: 1, rating: 5, content: 'good' }],
+    average_rating: 5,
+    total: 1,
+  })
   apiMock.catalogQuality.mockResolvedValue({
     six_dimension: {
       overall_score: 91.25,
@@ -105,13 +109,19 @@ beforeEach(() => {
   apiMock.catalogToggleFavorite.mockResolvedValue({ favorited: true })
   apiMock.catalogSubmitReview.mockResolvedValue({})
   apiMock.catalogSubmitComplaint.mockResolvedValue({})
-  apiMock.getEmployeeStatus.mockResolvedValue({ status: 'online', execution_stats: { total_executions: 7, success_rate: 0.9 } })
+  apiMock.getEmployeeStatus.mockResolvedValue({
+    status: 'online',
+    execution_stats: { total_executions: 7, success_rate: 0.9 },
+  })
   apiMock.buyItem.mockResolvedValue({ message: 'owned' })
   apiMock.paymentCheckout.mockResolvedValue({ ok: true, type: 'precreate', order_id: 'ord_1' })
   apiMock.downloadItem.mockResolvedValue({})
   apiMock.adminDeleteCatalog.mockResolvedValue({})
 
-  vi.stubGlobal('confirm', vi.fn(() => true))
+  vi.stubGlobal(
+    'confirm',
+    vi.fn(() => true),
+  )
   vi.stubGlobal('alert', vi.fn())
 })
 
@@ -154,7 +164,10 @@ describe('catalog detail coverage', () => {
 
     localStorage.removeItem('modstore_token')
     await vm.toggleAuthorFollow()
-    expect(routerMock.push).toHaveBeenCalledWith({ name: 'login', query: { redirect: '/catalog/10' } })
+    expect(routerMock.push).toHaveBeenCalledWith({
+      name: 'login',
+      query: { redirect: '/catalog/10' },
+    })
     localStorage.setItem('modstore_token', 'token')
 
     await vm.loadQuality(true)
@@ -187,7 +200,10 @@ describe('catalog detail coverage', () => {
 
     localStorage.removeItem('modstore_token')
     await vm.toggleFavorite()
-    expect(routerMock.push).toHaveBeenCalledWith({ name: 'login', query: { redirect: '/catalog/10' } })
+    expect(routerMock.push).toHaveBeenCalledWith({
+      name: 'login',
+      query: { redirect: '/catalog/10' },
+    })
 
     localStorage.setItem('modstore_token', 'token')
     await vm.toggleFavorite()
@@ -218,12 +234,19 @@ describe('catalog detail coverage', () => {
     expect(vm.complaintPanelOpen).toBe(true)
     expect(vm.customerServiceLink('refund')).toEqual({
       name: 'customer-service',
-      query: expect.objectContaining({ scene: 'refund', catalog_id: '10', pkg_id: 'emp_customer_service' }),
+      query: expect.objectContaining({
+        scene: 'refund',
+        catalog_id: '10',
+        pkg_id: 'emp_customer_service',
+      }),
     })
 
     localStorage.removeItem('modstore_token')
     await vm.submitComplaint()
-    expect(routerMock.push).toHaveBeenCalledWith({ name: 'login', query: { redirect: '/catalog/10' } })
+    expect(routerMock.push).toHaveBeenCalledWith({
+      name: 'login',
+      query: { redirect: '/catalog/10' },
+    })
 
     localStorage.setItem('modstore_token', 'token')
     vm.complaintReason = 'abc'
@@ -252,7 +275,10 @@ describe('catalog detail coverage', () => {
 
     localStorage.removeItem('modstore_token')
     await vm.doBuy()
-    expect(routerMock.push).toHaveBeenCalledWith({ name: 'login', query: { redirect: '/catalog/10' } })
+    expect(routerMock.push).toHaveBeenCalledWith({
+      name: 'login',
+      query: { redirect: '/catalog/10' },
+    })
 
     localStorage.setItem('modstore_token', 'token')
     vm.item.price = 0
@@ -270,7 +296,11 @@ describe('catalog detail coverage', () => {
     await vm.doBuy()
     expect(window.alert).toHaveBeenCalledWith('pay failed')
 
-    apiMock.paymentCheckout.mockResolvedValueOnce({ ok: true, type: 'precreate', order_id: 'ord_2' })
+    apiMock.paymentCheckout.mockResolvedValueOnce({
+      ok: true,
+      type: 'precreate',
+      order_id: 'ord_2',
+    })
     await vm.doBuy()
     expect(routerMock.push).toHaveBeenCalledWith({ name: 'checkout', params: { orderId: 'ord_2' } })
 
@@ -287,7 +317,6 @@ describe('catalog detail coverage', () => {
     apiMock.downloadItem.mockRejectedValueOnce(new Error('download failed'))
     await vm.doDownload()
     expect(window.alert).toHaveBeenCalledWith('download failed')
-
     ;(window.confirm as UnsafeTestValue).mockReturnValueOnce(false)
     await vm.delistItem()
     expect(apiMock.adminDeleteCatalog).not.toHaveBeenCalled()

@@ -1,11 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 const toggleMock = vi.fn()
-const statusLineMock = vi.fn((row: { enabled: boolean; snapshot?: { progressPct?: number } }) =>
-  row.enabled ? '运行中' : '已停止',
-)
+const statusLineMock = vi.fn((row: { enabled: boolean; snapshot?: { progressPct?: number } }) => (row.enabled ? '运行中' : '已停止'))
 const isBusyMock = vi.fn((row: { snapshot?: { busy?: boolean } }) => Boolean(row.snapshot?.busy))
 
 vi.mock('@/stores/workflowAiEmployees', () => ({

@@ -1,5 +1,7 @@
 import sqlite3
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 
 def check_all_statistics():
     """检查所有相关的统计数据"""
@@ -36,7 +38,7 @@ def check_all_statistics():
         print(f"   购买单位列表: {[unit[0] for unit in units]}")
 
         conn.close()
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 检查customer数据库时出错: {e}")
 
     print()
@@ -69,7 +71,7 @@ def check_all_statistics():
                 print(f"  - {unit}: {count} 个产品")
 
         conn.close()
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 检查products数据库时出错: {e}")
 
     print()
@@ -129,7 +131,7 @@ def add_more_purchase_units():
 
         return added_count > 0
 
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 添加测试购买单位时出错: {e}")
         return False
 

@@ -3,6 +3,7 @@
 
 Requires desktop relay poller running (see start_desktop_relay_poller.sh).
 """
+
 from __future__ import annotations
 
 import sys
@@ -16,9 +17,7 @@ FRESH_SEC = 5 * 60
 
 
 def _sort_key(row: dict) -> str:
-    return str(
-        row.get("last_seen_at") or row.get("updated_at") or row.get("paired_at") or ""
-    )
+    return str(row.get("last_seen_at") or row.get("updated_at") or row.get("paired_at") or "")
 
 
 def _is_fresh(row: dict) -> bool:

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="var-annotated"
 """GET /api/admin/genai/traces 查询 API 测试。"""
 
 from __future__ import annotations

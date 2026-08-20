@@ -56,16 +56,43 @@
 ## 输出格式
 
 ### Mod 包审核报告
+
 ```json
-{ "status": "approved | rejected | pending_fix", "issues": [], "secret_leak": false, "schema_valid": true, "review_notes": "" }
+{
+  "status": "approved | rejected | pending_fix",
+  "issues": [],
+  "secret_leak": false,
+  "schema_valid": true,
+  "review_notes": ""
+}
 ```
 
 ### 原型推进报告
+
 ```json
-{ "status": "approved | rejected | pending_fix", "experiment_id": "", "issues": [], "secret_leak": false, "logic_type_valid": true, "review_notes": "", "recommended_next": "employee-pack-curator | fix_and_retry | abandon" }
+{
+  "status": "approved | rejected | pending_fix",
+  "experiment_id": "",
+  "issues": [],
+  "secret_leak": false,
+  "logic_type_valid": true,
+  "review_notes": "",
+  "recommended_next": "employee-pack-curator | fix_and_retry | abandon"
+}
 ```
 
 ### 包批量审核报告
+
 ```json
-{ "status": "completed | partial | failed", "total_packages": 0, "audited": 0, "approved": 0, "rejected": 0, "orphaned": [], "deprecated": [], "issues": [], "audit_date": "" }
+{
+  "status": "completed | partial | failed",
+  "total_packages": 0,
+  "audited": 0,
+  "approved": 0,
+  "rejected": 0,
+  "orphaned": [],
+  "deprecated": [],
+  "issues": [],
+  "audit_date": ""
+}
 ```

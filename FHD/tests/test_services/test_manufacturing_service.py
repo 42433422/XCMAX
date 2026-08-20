@@ -23,6 +23,7 @@ from app.db.models.inventory import InventoryLedger, Warehouse
 from app.db.models.mrp import Bom, BomLine, ManufacturingOrder, ManufacturingOrderLine
 from app.db.models.product import Product
 from app.services.manufacturing_service import ManufacturingService
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 
 @pytest.fixture(scope="function")
@@ -42,7 +43,7 @@ def mrp_env():
         try:
             yield db
             db.commit()
-        except Exception:
+        except BOUNDARY_ERRORS:
             db.rollback()
             raise
         finally:

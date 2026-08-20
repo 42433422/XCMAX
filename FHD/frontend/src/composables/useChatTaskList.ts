@@ -1,10 +1,5 @@
 import { ref, computed, type Ref } from 'vue'
-import {
-  TASK_HISTORY_LIMIT,
-  type TaskItem,
-  type TaskFilter,
-  type TaskStatus,
-} from './useChatPersistence'
+import { TASK_HISTORY_LIMIT, type TaskItem, type TaskFilter, type TaskStatus } from './useChatPersistence'
 
 export type { TaskItem, TaskStatus }
 
@@ -27,14 +22,8 @@ export function useChatTaskList(options: UseChatTaskListOptions = {}) {
 
   function sortTaskList() {
     taskList.value.sort((a, b) => {
-      const rank = (s: TaskStatus) => (
-        s === 'running' ? 0
-          : s === 'queued' ? 1
-            : s === 'blocked' ? 2
-              : s === 'paused' ? 3
-                : s === 'failed' ? 4
-                  : s === 'success' ? 5 : 6
-      )
+      const rank = (s: TaskStatus) =>
+        s === 'running' ? 0 : s === 'queued' ? 1 : s === 'blocked' ? 2 : s === 'paused' ? 3 : s === 'failed' ? 4 : s === 'success' ? 5 : 6
       const r = rank(a.status) - rank(b.status)
       if (r !== 0) return r
       const startedDiff = (a.startedAt || 0) - (b.startedAt || 0)
@@ -46,7 +35,14 @@ export function useChatTaskList(options: UseChatTaskListOptions = {}) {
     }
   }
 
-  function upsertTask(partial: Partial<TaskItem> & { id: string; title: string; source: TaskItem['source']; type: string }) {
+  function upsertTask(
+    partial: Partial<TaskItem> & {
+      id: string
+      title: string
+      source: TaskItem['source']
+      type: string
+    },
+  ) {
     const now = Date.now()
     const idx = taskList.value.findIndex((t) => t.id === partial.id)
     if (idx === -1) {

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import gc
+
 from fastapi.testclient import TestClient
 
 from app.desktop_runtime import configure_desktop_environment
@@ -12,6 +14,10 @@ def test_desktop_status_api_local_sqlite(tmp_path, monkeypatch):
 
     monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
     monkeypatch.setenv("XCAGI_DESKTOP_FAST_START", "0")
+    # This test validates local desktop bootstrap/status only.  Isolate it from
+    # the user's persisted cloud-relay binding so the suite never opens a real
+    # network socket or starts singleton background workers.
+    monkeypatch.setenv("XCAGI_PASSIVE_NODE", "1")
     monkeypatch.setenv("LAN_GUARD_ENABLED", "0")
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.delenv("XCAGI_DESKTOP_KEEP_DATABASE_URL", raising=False)
@@ -23,8 +29,9 @@ def test_desktop_status_api_local_sqlite(tmp_path, monkeypatch):
 
     configure_desktop_environment(tmp_path)
 
-    client = TestClient(create_fastapi_app())
-    response = client.get("/api/desktop/status")
+    with TestClient(create_fastapi_app()) as client:
+        response = client.get("/api/desktop/status")
+    gc.collect()
     assert response.status_code == 200, response.text
 
     payload = response.json()

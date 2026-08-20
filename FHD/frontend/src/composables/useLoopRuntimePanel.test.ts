@@ -9,14 +9,7 @@ vi.mock('@/api/xcmaxMarketProxy', () => ({
   },
 }))
 
-import {
-  asArray,
-  asNumber,
-  asRecord,
-  asString,
-  firstText,
-  useLoopRuntimePanel,
-} from './useLoopRuntimePanel'
+import { asArray, asNumber, asRecord, asString, firstText, useLoopRuntimePanel } from './useLoopRuntimePanel'
 
 function makeHost(getLimit: () => number) {
   return defineComponent({

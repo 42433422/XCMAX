@@ -119,7 +119,11 @@ function setupDefaultApiResponses(overrides: Record<string, unknown> = {}) {
     if (url.includes('/panel')) return Promise.resolve(panel)
     if (url.includes('/manifest')) return Promise.resolve(manifest)
     if (url.includes('/install')) return Promise.resolve(install)
-    if (url.includes('/mcp')) return Promise.resolve({ ok: true, data: { success: true, server: 'AIOPEN', tool_count: 9 } })
+    if (url.includes('/mcp'))
+      return Promise.resolve({
+        ok: true,
+        data: { success: true, server: 'AIOPEN', tool_count: 9 },
+      })
     return Promise.resolve({ ok: true, data: { success: true } })
   })
 }
@@ -159,7 +163,7 @@ describe('AIOpenPanel functions', () => {
     const btn = wrapper.find('.aiopen-primary-btn')
     expect(btn.exists()).toBe(true)
     // Setup control endpoint to return ok
-    mockSafeJsonRequest.mockImplementation((url: string, opts?: unknown) => {
+    mockSafeJsonRequest.mockImplementation((url: string, _opts?: unknown) => {
       if (url.includes('/control')) return Promise.resolve({ ok: true, data: { success: true } })
       if (url.includes('/keys')) return Promise.resolve({ ok: true, data: { success: true, key: 'test-key' } })
       if (url.includes('/panel')) return Promise.resolve({ ok: true, data: { success: true, routes: [], keys: [] } })
@@ -190,7 +194,11 @@ describe('AIOpenPanel functions', () => {
     })
     mockSafeJsonRequest.mockImplementation((url: string) => {
       if (url.includes('/control')) return Promise.resolve({ ok: true, data: { success: true } })
-      if (url.includes('/panel')) return Promise.resolve({ ok: true, data: { success: true, routes: [], keys: [], remote_control_enabled: true } })
+      if (url.includes('/panel'))
+        return Promise.resolve({
+          ok: true,
+          data: { success: true, routes: [], keys: [], remote_control_enabled: true },
+        })
       if (url.includes('/manifest')) return Promise.resolve({ ok: true, data: { success: true, name: 'AIOPEN', tools: [] } })
       if (url.includes('/install')) return Promise.resolve({ ok: true, data: { success: true } })
       if (url.includes('/mcp')) return Promise.resolve({ ok: true, data: { success: true, server: 'AIOPEN' } })
@@ -231,7 +239,11 @@ describe('AIOpenPanel functions', () => {
     const wrapper = await mountPanel()
     mockSafeJsonRequest.mockImplementation((url: string) => {
       if (url.includes('/keys')) return Promise.resolve({ ok: true, data: { success: true, key: 'new-key' } })
-      if (url.includes('/install')) return Promise.resolve({ ok: true, data: { success: true, methods: { stdio: { script_path: '/p' } } } })
+      if (url.includes('/install'))
+        return Promise.resolve({
+          ok: true,
+          data: { success: true, methods: { stdio: { script_path: '/p' } } },
+        })
       if (url.includes('/panel')) return Promise.resolve({ ok: true, data: { success: true, routes: [], keys: [] } })
       if (url.includes('/manifest')) return Promise.resolve({ ok: true, data: { success: true, name: 'AIOPEN', tools: [] } })
       if (url.includes('/mcp')) return Promise.resolve({ ok: true, data: { success: true, server: 'AIOPEN' } })
@@ -251,6 +263,7 @@ describe('AIOpenPanel functions', () => {
     const wrapper = await mountPanel()
     // Open the "更多设置" details
     const moreDetails = wrapper.find('.aiopen-more')
+    expect(moreDetails.exists()).toBe(true)
     // Find the remote control checkbox
     const checkboxes = wrapper.findAll('.aiopen-switch-row input[type="checkbox"]')
     expect(checkboxes.length).toBeGreaterThanOrEqual(1)
@@ -447,7 +460,10 @@ describe('AIOpenPanel functions', () => {
       send: vi.fn(),
       close: vi.fn(),
     }
-    vi.stubGlobal('WebSocket', vi.fn(() => mockWs))
+    vi.stubGlobal(
+      'WebSocket',
+      vi.fn(() => mockWs),
+    )
     const wsBtn = wrapper.findAll('.aiopen-row button').find((b) => b.text().includes('WS'))
     if (wsBtn) {
       await wsBtn.trigger('click')

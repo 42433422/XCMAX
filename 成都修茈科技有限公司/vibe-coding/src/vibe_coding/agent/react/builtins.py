@@ -36,7 +36,6 @@ from ..sandbox import SandboxDriver, SandboxJob, SandboxPolicy, SubprocessSandbo
 from ..security.paths import PathSafetyError, resolve_within_root
 from .tools import Tool, ToolError, ToolRegistry, ToolResult, render_observation, tool
 
-
 # ----------------------------------------------------------------- helpers
 
 
@@ -162,13 +161,9 @@ def make_filesystem_tools(root: Path | str) -> list[Tool]:
         original = target.read_text(encoding="utf-8")
         count = original.count(old_text)
         if count == 0:
-            raise ToolError(
-                f"old_text not found in {path}; first 200 chars of file:\n{original[:200]!r}"
-            )
+            raise ToolError(f"old_text not found in {path}; first 200 chars of file:\n{original[:200]!r}")
         if count > 1:
-            raise ToolError(
-                f"old_text appears {count} times in {path}; expand it for uniqueness"
-            )
+            raise ToolError(f"old_text appears {count} times in {path}; expand it for uniqueness")
         patched = original.replace(old_text, new_text, 1)
         target.write_text(patched, encoding="utf-8")
         return ToolResult(
@@ -275,7 +270,7 @@ def make_search_tools(root: Path | str) -> list[Tool]:
                 "name": "include",
                 "type": "string",
                 "required": False,
-                "description": "glob filter, e.g. \"*.py\"",
+                "description": 'glob filter, e.g. "*.py"',
             },
             {
                 "name": "max_results",
@@ -311,9 +306,7 @@ def make_search_tools(root: Path | str) -> list[Tool]:
             for ln, line in enumerate(text.splitlines(), start=1):
                 if regex.search(line):
                     rel = fp.relative_to(safe_root).as_posix()
-                    matches.append(
-                        {"file": rel, "line": ln, "snippet": line.strip()[:240]}
-                    )
+                    matches.append({"file": rel, "line": ln, "snippet": line.strip()[:240]})
                     if len(matches) >= max_results:
                         return {"pattern": pattern, "matches": matches, "truncated": True}
         return {"pattern": pattern, "matches": matches, "truncated": False}

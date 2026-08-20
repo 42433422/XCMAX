@@ -1,7 +1,4 @@
-import {
-  OFFICE_EMPLOYEE_PACK_BRIDGE_MOD_ID,
-  readOfficeEmployeePackModPagesEnabled,
-} from '@/constants/officeEmployeePackMod'
+import { OFFICE_EMPLOYEE_PACK_BRIDGE_MOD_ID, readOfficeEmployeePackModPagesEnabled } from '@/constants/officeEmployeePackMod'
 
 const MOD_PREFIX = `/mod/${OFFICE_EMPLOYEE_PACK_BRIDGE_MOD_ID}`
 

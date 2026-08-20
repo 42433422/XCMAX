@@ -86,9 +86,7 @@ def test_resolve_within_root_rejects_absolute(tmp_path: Path) -> None:
 
 def test_resolve_within_root_allows_fresh_destination(tmp_path: Path) -> None:
     """A non-existent leaf is allowed when ``allow_existing_symlink=True``."""
-    out = resolve_within_root(
-        tmp_path, "new_dir/new_file.py", allow_existing_symlink=True
-    )
+    out = resolve_within_root(tmp_path, "new_dir/new_file.py", allow_existing_symlink=True)
     assert str(out).startswith(str(tmp_path.resolve()))
 
 

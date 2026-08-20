@@ -8,6 +8,7 @@ publish 脚本无 --check 模式且会写文件；MVP check 采用只读 header 
 也被当作脚本直接运行（注册表 check 命令 python .../ci_workflows.py check）。
 故用绝对 import + sys.path 兜底，兼容两种调用方式。
 """
+
 from __future__ import annotations
 
 import sys

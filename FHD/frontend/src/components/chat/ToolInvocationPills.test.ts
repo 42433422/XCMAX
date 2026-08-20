@@ -16,7 +16,11 @@ describe('ToolInvocationPills', () => {
   })
 
   it('renders a chip when content contains a tool invocation JSON line', () => {
-    const json = JSON.stringify({ action: 'read', tool_id: 'excel_reader', file_path: '/tmp/a.xlsx' })
+    const json = JSON.stringify({
+      action: 'read',
+      tool_id: 'excel_reader',
+      file_path: '/tmp/a.xlsx',
+    })
     const wrapper = mount(ToolInvocationPills, {
       props: { content: json },
     })
@@ -25,7 +29,11 @@ describe('ToolInvocationPills', () => {
   })
 
   it('renders the label "工具"', () => {
-    const json = JSON.stringify({ action: 'read', tool_id: 'excel_reader', file_path: '/tmp/a.xlsx' })
+    const json = JSON.stringify({
+      action: 'read',
+      tool_id: 'excel_reader',
+      file_path: '/tmp/a.xlsx',
+    })
     const wrapper = mount(ToolInvocationPills, { props: { content: json } })
     expect(wrapper.find('.context-summary__label').text()).toContain('工具')
   })

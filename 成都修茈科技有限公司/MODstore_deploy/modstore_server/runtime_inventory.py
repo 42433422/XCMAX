@@ -1,3 +1,4 @@
+# mypy: disable-error-code="call-overload"
 """运行时真相投影（MODstore 侧）：读公开 JSON 或本机轻量探针。
 
 完整探针 SSOT 在 ``FHD/scripts/ops/runtime_inventory.py``；此处供公司大厅 /
@@ -10,7 +11,7 @@ import json
 import logging
 import os
 import socket
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -45,7 +46,10 @@ def _candidate_paths() -> List[Path]:
         / "download-runtime-inventory.json",
         root / "FHD" / "config" / "runtime_inventory.generated.json",
     ]
-    for raw in ("/root/成都修茈科技有限公司", "/opt/xcmax/current/成都修茈科技有限公司"):
+    for raw in (
+        "/root/成都修茈科技有限公司",
+        "/opt/xcmax/current/成都修茈科技有限公司",
+    ):
         try:
             live = Path(raw)
             if live.is_dir():
@@ -101,7 +105,7 @@ def probe_local(*, host: str = "127.0.0.1") -> Dict[str, Any]:
     running = sum(1 for i in items if i["actual"] == "running")
     return {
         "schema": SCHEMA,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "host": host,
         "ok": failed == 0,
         "failed_must_run": failed,

@@ -82,10 +82,7 @@ export const catalog = {
     window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
   },
   downloadHostFoundationEmployeePack: async () => {
-    const blob = await fetchZipBlob(
-      '/api/market/catalog/host-foundation-employee-pack/download',
-      authHeaders(),
-    )
+    const blob = await fetchZipBlob('/api/market/catalog/host-foundation-employee-pack/download', authHeaders())
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -108,14 +105,24 @@ export const catalog = {
   },
   catalogReviews: (id: string | number) => req(`/api/market/catalog/${encodeURIComponent(String(id))}/reviews`),
   catalogSubmitReview: (id: string | number, rating: number, content = '') =>
-    req(`/api/market/catalog/${encodeURIComponent(String(id))}/review`, { method: 'POST', body: JSON.stringify({ rating, content }) }),
+    req(`/api/market/catalog/${encodeURIComponent(String(id))}/review`, {
+      method: 'POST',
+      body: JSON.stringify({ rating, content }),
+    }),
   catalogSubmitComplaint: (id: string | number, complaintType: string, reason: string, evidence: Record<string, unknown> = {}) =>
     req(`/api/market/catalog/${encodeURIComponent(String(id))}/complaints`, {
       method: 'POST',
       body: JSON.stringify({ complaint_type: complaintType, reason, evidence }),
     }),
-  catalogToggleFavorite: (id: string | number) => req<CatalogActionResponse>(`/api/market/catalog/${encodeURIComponent(String(id))}/favorite`, { method: 'POST', body: '{}' }),
-  buyItem: (id: string | number) => req<CatalogActionResponse>(`/api/market/catalog/${encodeURIComponent(String(id))}/buy`, { method: 'POST' }),
+  catalogToggleFavorite: (id: string | number) =>
+    req<CatalogActionResponse>(`/api/market/catalog/${encodeURIComponent(String(id))}/favorite`, {
+      method: 'POST',
+      body: '{}',
+    }),
+  buyItem: (id: string | number) =>
+    req<CatalogActionResponse>(`/api/market/catalog/${encodeURIComponent(String(id))}/buy`, {
+      method: 'POST',
+    }),
   downloadItem: async (id: string | number) => {
     const blob = await fetchZipBlob(`/api/market/catalog/${encodeURIComponent(String(id))}/download`, authHeaders())
     const url = URL.createObjectURL(blob)

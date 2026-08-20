@@ -1,3 +1,4 @@
+# mypy: disable-error-code="index"
 """PPT edit plan schema: structured ops for compose/enhance pipelines."""
 
 from __future__ import annotations
@@ -228,7 +229,7 @@ def validate_edit_plan(raw: Any) -> Tuple[Dict[str, Any], List[str]]:
             norm = _validate_op(op, i, errors)
             if norm:
                 ops_out.append(norm)
-    plan = {
+    plan: Dict[str, Any] = {
         "version": str(raw.get("version") or PLAN_VERSION),
         "mode": mode,
         "title": title,
@@ -277,7 +278,7 @@ def plan_from_presentation(table: Dict[str, Any], *, mode: str = "compose") -> D
                 images.append(
                     {
                         "logical_id": str(
-                            img.get("id") or img.get("logical_id") or f"img{len(images)+1}"
+                            img.get("id") or img.get("logical_id") or f"img{len(images) + 1}"
                         ),
                         "image_ref": rel,
                         "path": rel,
@@ -294,7 +295,13 @@ def plan_from_presentation(table: Dict[str, Any], *, mode: str = "compose") -> D
         )
     if not slides_out:
         slides_out = [
-            {"index": 1, "title": title, "bullets": ["暂无内容"], "images": [], "notes": ""}
+            {
+                "index": 1,
+                "title": title,
+                "bullets": ["暂无内容"],
+                "images": [],
+                "notes": "",
+            }
         ]
     ops: List[Dict[str, Any]] = []
     for s in slides_out:

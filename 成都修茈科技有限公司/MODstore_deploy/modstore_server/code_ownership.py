@@ -10,6 +10,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.yuangon_paths import resolve_yuangon_repo_root
 
 _PATH_KEYS = {
@@ -69,11 +70,16 @@ def _iter_path_values(value: Any) -> Iterable[str]:
     if isinstance(value, dict):
         for key, inner in value.items():
             key_s = str(key or "").strip().lower()
-            if key_s in _PATH_KEYS:
+            if key_s in _PATH_KEYS or isinstance(inner, (dict, list, tuple, set)):
                 yield from _iter_path_values(inner)
-            elif isinstance(inner, (dict, list, tuple, set)):
-                yield from _iter_path_values(inner)
-            elif key_s in {"summary", "snippet", "message", "error", "details", "description"}:
+            elif key_s in {
+                "summary",
+                "snippet",
+                "message",
+                "error",
+                "details",
+                "description",
+            }:
                 yield from _iter_path_values(str(inner or ""))
         return
     if isinstance(value, (list, tuple, set)):
@@ -150,7 +156,7 @@ def _glob_to_regex(pattern: str) -> str:
 def _load_from_yuangon() -> List[Dict[str, Any]]:
     try:
         import yaml
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return []
 
     root = _repo_root()
@@ -161,7 +167,7 @@ def _load_from_yuangon() -> List[Dict[str, Any]]:
     for path in sorted(ydir.glob("**/employee.yaml")):
         try:
             data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        except Exception:
+        except RECOVERABLE_ERRORS:
             continue
         if not isinstance(data, dict):
             continue
@@ -196,7 +202,7 @@ def _load_from_routing_table() -> List[Dict[str, Any]]:
         rows = raw.get("employees") if isinstance(raw, dict) else None
         if isinstance(rows, list):
             return [row for row in rows if isinstance(row, dict) and row.get("id")]
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return []
     return []
 
@@ -258,7 +264,10 @@ def resolve_code_owners(paths: Iterable[str], *, limit: int = 8) -> Dict[str, An
 
     owners = sorted(
         scores.values(),
-        key=lambda item: (int(item.get("match_score") or 0), int(item.get("match_count") or 0)),
+        key=lambda item: (
+            int(item.get("match_score") or 0),
+            int(item.get("match_count") or 0),
+        ),
         reverse=True,
     )[: max(1, int(limit or 8))]
     return {

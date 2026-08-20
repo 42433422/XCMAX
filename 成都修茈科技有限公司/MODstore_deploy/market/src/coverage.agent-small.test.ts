@@ -58,12 +58,16 @@ vi.mock('./utils/agent/agentSkillRegistry', () => ({
 vi.mock('./composables/useSpeechRecognition', () => ({ useSpeechRecognition: () => mockSpeech }))
 vi.mock('./composables/asr/FunASRBackend', () => ({
   FunASRBackend: class {
-    isAvailable() { return true }
+    isAvailable() {
+      return true
+    }
   },
 }))
 vi.mock('./composables/asr/WebSpeechBackend', () => ({
   WebSpeechBackend: class {
-    isAvailable() { return false }
+    isAvailable() {
+      return false
+    }
   },
 }))
 vi.mock('./composables/useStreamingTts', () => ({
@@ -223,7 +227,11 @@ describe('small composable and agent skill coverage', () => {
 
     const pending = privacy.requestAction('delete', 'high', '删除', { id: 1 })
     expect(mockAgentStore.setPendingAction).toHaveBeenCalled()
-    const action = mockAgentStore.pendingAction as { id: string; resolve: (ok: boolean) => void; args: Record<string, unknown> }
+    const action = mockAgentStore.pendingAction as {
+      id: string
+      resolve: (ok: boolean) => void
+      args: Record<string, unknown>
+    }
     expect(action.id).toBe('action-1')
     expect(action.args).toEqual({ id: 1 })
     action.resolve(false)
@@ -332,48 +340,95 @@ describe('small composable and agent skill coverage', () => {
   })
 
   it('matches and executes contact intake skill flows', async () => {
-    const {
-      executeCorpIntakeMatch,
-      matchCorpIntakeIntent,
-      runIntakeFillFromMessage,
-      runIntakeQuickTask,
-    } = await import('./composables/agent/skills/corpIntakeSkill')
+    const { executeCorpIntakeMatch, matchCorpIntakeIntent, runIntakeFillFromMessage, runIntakeQuickTask } =
+      await import('./composables/agent/skills/corpIntakeSkill')
 
-    expect(matchCorpIntakeIntent({ route: '/contact', userMessage: '帮我填写需求问卷' } as UnsafeTestValue)).toEqual({ kind: 'fill' })
-    expect(matchCorpIntakeIntent({ route: '/contact', userMessage: '跳到联系方式' } as UnsafeTestValue)).toEqual({ kind: 'step', stepId: 'contact' })
+    expect(
+      matchCorpIntakeIntent({
+        route: '/contact',
+        userMessage: '帮我填写需求问卷',
+      } as UnsafeTestValue),
+    ).toEqual({ kind: 'fill' })
+    expect(matchCorpIntakeIntent({ route: '/contact', userMessage: '跳到联系方式' } as UnsafeTestValue)).toEqual({
+      kind: 'step',
+      stepId: 'contact',
+    })
     expect(matchCorpIntakeIntent({ route: '/contact', userMessage: '提交前核对' } as UnsafeTestValue)).toEqual({ kind: 'review' })
-    expect(matchCorpIntakeIntent({ route: '/pricing', userMessage: '帮我填写需求问卷' } as UnsafeTestValue)).toBeNull()
+    expect(
+      matchCorpIntakeIntent({
+        route: '/pricing',
+        userMessage: '帮我填写需求问卷',
+      } as UnsafeTestValue),
+    ).toBeNull()
 
-    await expect(runIntakeFillFromMessage('msg', 'summary')).resolves.toMatchObject({ success: true, assistantReply: expect.stringContaining('问卷尚未就绪') })
+    await expect(runIntakeFillFromMessage('msg', 'summary')).resolves.toMatchObject({
+      success: true,
+      assistantReply: expect.stringContaining('问卷尚未就绪'),
+    })
     expect(mockBridgeState.scrollToIntake).toHaveBeenCalled()
 
     mockBridgeState.bridge = makeBridge({ isSubmitted: vi.fn(() => true) })
-    await expect(runIntakeFillFromMessage('msg', 'summary')).resolves.toMatchObject({ assistantReply: expect.stringContaining('已提交过') })
+    await expect(runIntakeFillFromMessage('msg', 'summary')).resolves.toMatchObject({
+      assistantReply: expect.stringContaining('已提交过'),
+    })
 
     mockBridgeState.bridge = makeBridge()
     mockApi.agentCorpIntakeFill.mockResolvedValueOnce({ success: true, reply: '', draft: {} })
-    await expect(runIntakeFillFromMessage('msg', 'summary')).resolves.toMatchObject({ assistantReply: expect.stringContaining('未能从描述中解析') })
+    await expect(runIntakeFillFromMessage('msg', 'summary')).resolves.toMatchObject({
+      assistantReply: expect.stringContaining('未能从描述中解析'),
+    })
 
-    mockApi.agentCorpIntakeFill.mockResolvedValueOnce({ success: true, reply: '已生成', draft: { name: '张三', directions: ['自动化'] } })
-    await expect(runIntakeFillFromMessage('msg', 'summary')).resolves.toMatchObject({ assistantReply: expect.stringContaining('已尝试写入') })
-    expect(mockBridgeState.applyDraftSafe).toHaveBeenCalledWith({ name: '张三', directions: ['自动化'] })
+    mockApi.agentCorpIntakeFill.mockResolvedValueOnce({
+      success: true,
+      reply: '已生成',
+      draft: { name: '张三', directions: ['自动化'] },
+    })
+    await expect(runIntakeFillFromMessage('msg', 'summary')).resolves.toMatchObject({
+      assistantReply: expect.stringContaining('已尝试写入'),
+    })
+    expect(mockBridgeState.applyDraftSafe).toHaveBeenCalledWith({
+      name: '张三',
+      directions: ['自动化'],
+    })
 
     mockBridgeState.applyDraftSafe.mockReturnValueOnce(false)
     mockApi.agentCorpIntakeFill.mockResolvedValueOnce({ success: true, draft: { name: '李四' } })
-    await expect(runIntakeFillFromMessage('msg', 'summary')).resolves.toMatchObject({ assistantReply: expect.stringContaining('无法继续预填') })
+    await expect(runIntakeFillFromMessage('msg', 'summary')).resolves.toMatchObject({
+      assistantReply: expect.stringContaining('无法继续预填'),
+    })
 
     mockApi.agentCorpIntakeFill.mockRejectedValueOnce(new Error('api down'))
-    await expect(runIntakeFillFromMessage('msg', 'summary')).resolves.toMatchObject({ assistantReply: expect.stringContaining('智能预填暂时不可用') })
+    await expect(runIntakeFillFromMessage('msg', 'summary')).resolves.toMatchObject({
+      assistantReply: expect.stringContaining('智能预填暂时不可用'),
+    })
 
     const bridge = makeBridge()
     mockBridgeState.bridge = bridge
-    await expect(executeCorpIntakeMatch({ kind: 'review' }, { userMessage: '', pageSummary: '' } as UnsafeTestValue)).resolves.toMatchObject({ assistantReply: expect.stringContaining('核对并提交') })
+    await expect(
+      executeCorpIntakeMatch({ kind: 'review' }, {
+        userMessage: '',
+        pageSummary: '',
+      } as UnsafeTestValue),
+    ).resolves.toMatchObject({ assistantReply: expect.stringContaining('核对并提交') })
     expect(bridge.goToStep).toHaveBeenCalledWith('review')
-    await expect(executeCorpIntakeMatch({ kind: 'step', stepId: 'plan' }, { userMessage: '', pageSummary: '' } as UnsafeTestValue)).resolves.toMatchObject({ assistantReply: expect.stringContaining('计划') })
+    await expect(
+      executeCorpIntakeMatch({ kind: 'step', stepId: 'plan' }, {
+        userMessage: '',
+        pageSummary: '',
+      } as UnsafeTestValue),
+    ).resolves.toMatchObject({ assistantReply: expect.stringContaining('计划') })
     expect(bridge.goToStep).toHaveBeenCalledWith('plan')
 
-    await expect(runIntakeQuickTask({ label: '去填写', task: 'intake_step', payload: { stepId: 'contact' } } as UnsafeTestValue)).resolves.toMatchObject({ assistantReply: expect.stringContaining('contact') })
-    await expect(runIntakeQuickTask({ label: '核对', task: 'intake_review', payload: {} } as UnsafeTestValue)).resolves.toMatchObject({ assistantReply: expect.stringContaining('核对页') })
+    await expect(
+      runIntakeQuickTask({
+        label: '去填写',
+        task: 'intake_step',
+        payload: { stepId: 'contact' },
+      } as UnsafeTestValue),
+    ).resolves.toMatchObject({ assistantReply: expect.stringContaining('contact') })
+    await expect(runIntakeQuickTask({ label: '核对', task: 'intake_review', payload: {} } as UnsafeTestValue)).resolves.toMatchObject({
+      assistantReply: expect.stringContaining('核对页'),
+    })
     await expect(runIntakeQuickTask({ label: '空任务' } as UnsafeTestValue)).resolves.toBeNull()
   })
 
@@ -413,11 +468,22 @@ describe('small composable and agent skill coverage', () => {
         all_hands_report: {
           ok: true,
           employees: [{ employee_id: 'E1', name: '员工', status: 'done' }],
-          synthesized_answer: { question: 'q', markdown: '', cited_employees: [], generated_at: 'now', model: 'm', error: 'LLM down' },
+          synthesized_answer: {
+            question: 'q',
+            markdown: '',
+            cited_employees: [],
+            generated_at: 'now',
+            model: 'm',
+            error: 'LLM down',
+          },
         },
       },
     })
-    await expect(askAllHandsSkill.execute({ userMessage: '问全员库存状态', } as UnsafeTestValue, { question: '库存状态' })).resolves.toMatchObject({
+    await expect(
+      askAllHandsSkill.execute({ userMessage: '问全员库存状态' } as UnsafeTestValue, {
+        question: '库存状态',
+      }),
+    ).resolves.toMatchObject({
       success: true,
       assistantReply: expect.stringContaining('综合答复异常'),
     })

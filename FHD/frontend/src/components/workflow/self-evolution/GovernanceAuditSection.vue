@@ -13,13 +13,26 @@ defineProps<{
     <div class="selp-governance-audit-head">
       <span>操作审计</span>
       <strong>{{ firstText(summary.health, '正常') }} · {{ recent.length }}</strong>
-      <small>{{ summary.success_count ?? 0 }} 正常 · {{ summary.failure_count ?? 0 }} 失败 · 连续 {{ summary.consecutive_failures ?? 0 }}</small>
+      <small
+        >{{ summary.success_count ?? 0 }} 正常 · {{ summary.failure_count ?? 0 }} 失败 · 连续 {{ summary.consecutive_failures ?? 0 }}</small
+      >
     </div>
     <ul>
       <li v-for="item in recent.slice().reverse().slice(0, 5)" :key="`${item.created_at || item.action}-${item.exit_code ?? ''}`">
         <span>{{ item.action || '治理' }}</span>
         <strong>{{ item.status || (item.ok === false ? '失败' : '成功') }}</strong>
-        <small>{{ summaryText(item) }}<template v-if="asArray(item.target_employee_ids).length"> · {{ asArray(item.target_employee_ids).map((id) => String(id)).slice(0, 3).join(' / ') }}</template></small>
+        <small
+          >{{ summaryText(item)
+          }}<template v-if="asArray(item.target_employee_ids).length">
+            ·
+            {{
+              asArray(item.target_employee_ids)
+                .map((id) => String(id))
+                .slice(0, 3)
+                .join(' / ')
+            }}</template
+          ></small
+        >
       </li>
     </ul>
   </div>

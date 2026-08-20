@@ -14,12 +14,12 @@ export interface ShipmentProduct {
   product_name?: string
   unit_price?: number
   price?: number
-  '型号'?: string
-  '桶数'?: number
-  '规格'?: number
-  '单价'?: number
-  '产品名称'?: string
-  '单位'?: string
+  型号?: string
+  桶数?: number
+  规格?: number
+  单价?: number
+  产品名称?: string
+  单位?: string
 }
 
 export interface ShipmentTask {
@@ -51,26 +51,13 @@ export interface ShipmentTask {
   __xcagiAutoConfirmScheduled?: boolean
 }
 
-interface ChatMessageLike {
-  role: 'user' | 'ai' | 'task'
-  content: string
-  time: string
-}
-
 interface UseChatMessagesReturn {
-  addAndSaveMessage: (
-    content: string,
-    role?: 'user' | 'ai' | 'task',
-    extras?: ChatMessageExtras
-  ) => Promise<void>
+  addAndSaveMessage: (content: string, role?: 'user' | 'ai' | 'task', extras?: ChatMessageExtras) => Promise<void>
 }
 
 const SHIPMENT_PREVIEW_COLUMNS = ['单位', '型号', '产品名称', '桶数', '规格', '单价', '总价']
 
-export function useShipmentTask(
-  messages: UseChatMessagesReturn,
-  currentTask: Ref<ShipmentTask | null>
-) {
+export function useShipmentTask(messages: UseChatMessagesReturn, currentTask: Ref<ShipmentTask | null>) {
   const lastShipmentExecution = ref<{
     filePath: string
     purchaseUnit: string
@@ -108,7 +95,7 @@ export function useShipmentTask(
   async function handleAddProduct(
     products: ShipmentProduct[],
     command: { product?: { model_number: string; quantity_tins: number; tin_spec: number } },
-    task: ShipmentTask
+    task: ShipmentTask,
   ): Promise<boolean> {
     if (!command.product?.model_number) {
       const tip = '再加格式示例：再加 1桶 9803 规格 28'
@@ -118,7 +105,7 @@ export function useShipmentTask(
 
     const productMeta = await fetchProductMetaForPreview({
       model: command.product.model_number,
-      unitName: task.payload?.params?.unit_name || ''
+      unitName: task.payload?.params?.unit_name || '',
     })
 
     const unitPrice = productMeta?.unit_price
@@ -128,36 +115,26 @@ export function useShipmentTask(
       model_number: command.product.model_number,
       quantity_tins: command.product.quantity_tins,
       tin_spec: command.product.tin_spec || productMeta?.tin_spec || 10,
-      ...(unitPrice !== null && typeof unitPrice !== 'undefined'
-        ? { unit_price: unitPrice, price: unitPrice }
-        : {})
+      ...(unitPrice !== null && typeof unitPrice !== 'undefined' ? { unit_price: unitPrice, price: unitPrice } : {}),
     }
 
     products.push(newProduct)
     updateShipmentTaskPreview(task, products)
 
-    const pricedText = (unitPrice !== null && typeof unitPrice !== 'undefined')
-      ? `，单价${unitPrice.toFixed(2)}`
-      : ''
+    const pricedText = unitPrice !== null && typeof unitPrice !== 'undefined' ? `，单价${unitPrice.toFixed(2)}` : ''
     const tip = `已加入：${command.product.model_number}，${command.product.quantity_tins}桶，规格${newProduct.tin_spec}${pricedText}。`
     await messages.addAndSaveMessage(tip, 'ai')
     return true
   }
 
-  function handleRemoveProduct(
-    products: ShipmentProduct[],
-    command: { model?: string },
-    task: ShipmentTask
-  ): boolean {
+  function handleRemoveProduct(products: ShipmentProduct[], command: { model?: string }, task: ShipmentTask): boolean {
     const model = command.model || ''
     if (!model) {
       messages.addAndSaveMessage('删除格式示例：删除 9803', 'ai')
       return true
     }
 
-    const idx = products.findIndex(
-      (p) => normalizeModel(p?.model_number || p?.型号 || p?.name || '') === model
-    )
+    const idx = products.findIndex((p) => normalizeModel(p?.model_number || p?.型号 || p?.name || '') === model)
     if (idx < 0) {
       messages.addAndSaveMessage(`未找到型号 ${model}，请确认后再试。`, 'ai')
       return true
@@ -172,18 +149,15 @@ export function useShipmentTask(
   function handleEditProduct(
     products: ShipmentProduct[],
     command: { product?: { model_number: string; quantity_tins: number; tin_spec: number } },
-    task: ShipmentTask
+    task: ShipmentTask,
   ): boolean {
-    const model = command.product?.model_number
-      || normalizeModel(products[0]?.model_number || '')
+    const model = command.product?.model_number || normalizeModel(products[0]?.model_number || '')
     if (!model) {
       messages.addAndSaveMessage('修改格式示例：改成 9803 2桶 规格 28', 'ai')
       return true
     }
 
-    const idx = products.findIndex(
-      (p) => normalizeModel(p?.model_number || p?.型号 || p?.name || '') === model
-    )
+    const idx = products.findIndex((p) => normalizeModel(p?.model_number || p?.型号 || p?.name || '') === model)
     if (idx < 0) {
       messages.addAndSaveMessage(`未找到型号 ${model}，请先"再加 ${model} ..."后再修改。`, 'ai')
       return true
@@ -194,7 +168,7 @@ export function useShipmentTask(
       ...old,
       model_number: model,
       quantity_tins: command.product?.quantity_tins || old.quantity_tins || 1,
-      tin_spec: command.product?.tin_spec || old.tin_spec || 10
+      tin_spec: command.product?.tin_spec || old.tin_spec || 10,
     }
 
     updateShipmentTaskPreview(task, products)
@@ -205,7 +179,7 @@ export function useShipmentTask(
 
   async function fetchProductMetaForPreview({
     model,
-    unitName = ''
+    unitName = '',
   }: {
     model: string
     unitName?: string
@@ -229,7 +203,7 @@ export function useShipmentTask(
         return {
           name: asString(best.name || best.product_name).trim(),
           unit_price: toNumber(best.price ?? best.unit_price) ?? undefined,
-          tin_spec: toNumber(best.tin_spec ?? best.specification ?? best.spec) ?? undefined
+          tin_spec: toNumber(best.tin_spec ?? best.specification ?? best.spec) ?? undefined,
         }
       } catch (_err) {
         // Ignore network/query errors in preview enrichment.
@@ -243,7 +217,11 @@ export function useShipmentTask(
     if (!target) return asRecord(records[0])
 
     const normalizeProductToken = (value: string) =>
-      String(value || '').trim().toUpperCase().replace(/\s+/g, '').replace(/-/g, '')
+      String(value || '')
+        .trim()
+        .toUpperCase()
+        .replace(/\s+/g, '')
+        .replace(/-/g, '')
 
     const targetNorm = normalizeProductToken(target)
 
@@ -278,11 +256,7 @@ export function useShipmentTask(
       if (key) oldByModel[key] = item
     })
 
-    const unitName = String(
-      task.payload?.params?.unit_name ||
-      (oldItems[0] && asRecord(oldItems[0])['单位']) ||
-      ''
-    ).trim()
+    const unitName = String(task.payload?.params?.unit_name || (oldItems[0] && asRecord(oldItems[0])['单位']) || '').trim()
 
     const nextItems = products.map((p) => {
       const model = normalizeModel(p?.model_number || p?.型号 || p?.name || '')
@@ -299,7 +273,7 @@ export function useShipmentTask(
         桶数: qty,
         规格: spec,
         单价: priceNum !== null ? priceNum.toFixed(2) : '-',
-        总价: totalNum !== null ? totalNum.toFixed(2) : '-'
+        总价: totalNum !== null ? totalNum.toFixed(2) : '-',
       }
     })
 
@@ -334,9 +308,7 @@ export function useShipmentTask(
   }
 
   async function enrichShipmentPreviewProducts(task: ShipmentTask): Promise<void> {
-    const currentProducts = Array.isArray(task?.payload?.params?.products)
-      ? [...task.payload.params.products]
-      : []
+    const currentProducts = Array.isArray(task?.payload?.params?.products) ? [...task.payload.params.products] : []
     if (!currentProducts.length) return
 
     const unitName = String(task?.payload?.params?.unit_name || '').trim()
@@ -403,7 +375,7 @@ export function useShipmentTask(
       const row: Record<string, unknown> = {}
       SHIPMENT_PREVIEW_COLUMNS.forEach((col) => {
         const value = rec[col]
-        row[col] = (value === null || typeof value === 'undefined' || value === '') ? '-' : value
+        row[col] = value === null || typeof value === 'undefined' || value === '' ? '-' : value
       })
       return row
     })
@@ -412,12 +384,7 @@ export function useShipmentTask(
   function getTaskOrderNumber(task: ShipmentTask | null): string {
     if (!task) return ''
 
-    const explicitOrderNo = String(
-      task?.order_number ||
-      task?.data?.order_number ||
-      task?.document?.order_number ||
-      ''
-    ).trim()
+    const explicitOrderNo = String(task?.order_number || task?.data?.order_number || task?.document?.order_number || '').trim()
     if (explicitOrderNo) return explicitOrderNo
 
     if (task?.type === 'shipment_generate' && !task?.completed) {
@@ -435,6 +402,6 @@ export function useShipmentTask(
     updateShipmentTaskPreview,
     getTaskTableColumns,
     getTaskTableItems,
-    getTaskOrderNumber
+    getTaskOrderNumber,
   }
 }

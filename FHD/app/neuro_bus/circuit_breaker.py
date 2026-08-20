@@ -34,8 +34,6 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 
-
-
 class CircuitBreaker(CircuitBreakerExecutionMixin):
     """
     熔断器（工业级实现）
@@ -368,8 +366,6 @@ class CircuitBreaker(CircuitBreakerExecutionMixin):
                 "fallback_calls": self._fallback_success_count + self._fallback_failure_count,
                 "concurrent_executions": self._concurrent_executions,
             }
-
-
 
 
 _manager_module = importlib.import_module("app.neuro_bus.circuit_breaker_manager")

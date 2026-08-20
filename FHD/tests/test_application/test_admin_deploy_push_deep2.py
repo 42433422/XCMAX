@@ -37,6 +37,7 @@ def _consume_scheduled_coroutine(coro):
     coro.close()
     return Mock()
 
+
 # ── _local_git_sha deep ──────────────────────────────────────────────────────
 
 

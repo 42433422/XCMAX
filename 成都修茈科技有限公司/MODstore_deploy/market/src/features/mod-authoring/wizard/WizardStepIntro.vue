@@ -2,8 +2,7 @@
 import IndustryPresetField from '../shared/IndustryPresetField.vue'
 import { useModAuthoringContext } from '../composables/useModAuthoringContext'
 
-const { modId, nameDraft, descriptionDraft, saveDescriptionFromWizard, savingManifest } =
-  useModAuthoringContext()
+const { modId, nameDraft, descriptionDraft, saveDescriptionFromWizard, savingManifest } = useModAuthoringContext()
 </script>
 
 <template>
@@ -26,20 +25,9 @@ const { modId, nameDraft, descriptionDraft, saveDescriptionFromWizard, savingMan
     </div>
     <div class="form-group full-width">
       <label class="label">介绍</label>
-      <textarea
-        v-model="descriptionDraft"
-        class="input textarea"
-        rows="2"
-        maxlength="2000"
-        placeholder="一句话说明用途"
-      />
+      <textarea v-model="descriptionDraft" class="input textarea" rows="2" maxlength="2000" placeholder="一句话说明用途" />
     </div>
-    <button
-      type="button"
-      class="btn btn-primary btn-sm"
-      :disabled="savingManifest"
-      @click="() => void saveDescriptionFromWizard()"
-    >
+    <button type="button" class="btn btn-primary btn-sm" :disabled="savingManifest" @click="() => void saveDescriptionFromWizard()">
       {{ savingManifest ? '保存中…' : '保存' }}
     </button>
     <IndustryPresetField />

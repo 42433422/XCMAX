@@ -20,7 +20,11 @@ def test_surface_audit_badge_warns_on_console_errors() -> None:
 
     badge, color, _sub = _surface_audit_badge(
         [
-            {"lane": "P-W", "status": 200, "console_errors": ["net::ERR_CONNECTION_CLOSED"]},
+            {
+                "lane": "P-W",
+                "status": 200,
+                "console_errors": ["net::ERR_CONNECTION_CLOSED"],
+            },
             {"lane": "P-S", "status": 200, "console_errors": []},
         ]
     )
@@ -36,7 +40,9 @@ def test_surface_audit_badge_ps_missing() -> None:
     assert color == "#b45309"
 
 
-def test_daily_surface_targets_pw_full_plus_ps_papp_full(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_daily_surface_targets_pw_full_plus_ps_papp_full(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.delenv("MODSTORE_DAILY_SURFACE_AUDIT_MODE", raising=False)
     monkeypatch.setenv("MODSTORE_SURFACE_AUDIT_CATALOG_MAX", "0")
     monkeypatch.setenv("MODSTORE_SURFACE_AUDIT_SKIP_CATALOG", "1")
@@ -56,7 +62,9 @@ def test_daily_surface_targets_pw_full_plus_ps_papp_full(monkeypatch: pytest.Mon
     assert len(pa) == len(_PAPP_PUBLIC_PAGES) + len(_AI_STORE_TABS)
 
 
-def test_daily_pw_adds_up_to_three_catalog_details(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_daily_pw_adds_up_to_three_catalog_details(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.delenv("MODSTORE_DAILY_SURFACE_AUDIT_MODE", raising=False)
     monkeypatch.setenv("MODSTORE_SURFACE_AUDIT_CATALOG_MAX", "3")
     monkeypatch.setenv("MODSTORE_SURFACE_AUDIT_SKIP_CATALOG", "0")
@@ -80,7 +88,9 @@ def test_daily_pw_adds_up_to_three_catalog_details(monkeypatch: pytest.MonkeyPat
     assert len(pw) == len([t for t in pw if "/market/catalog/" not in t.path]) + 3
 
 
-def test_default_surface_targets_sample_one_per_lane(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_default_surface_targets_sample_one_per_lane(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("MODSTORE_DAILY_SURFACE_AUDIT_MODE", "sample")
     monkeypatch.setenv("MODSTORE_DAILY_SURFACE_AUDIT_MAX_PER_LANE", "1")
     targets = default_surface_targets()
@@ -101,7 +111,9 @@ def test_default_surface_targets_sample_one_per_lane(monkeypatch: pytest.MonkeyP
     assert "ai_employee" in (pa.prepare or "")
 
 
-def test_build_surface_targets_single_ai_store_tab(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_build_surface_targets_single_ai_store_tab(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("MODSTORE_DAILY_SURFACE_AUDIT_MODE", "full")
     monkeypatch.setenv("MODSTORE_SURFACE_AUDIT_SKIP_CATALOG", "1")
     targets = build_surface_targets()
@@ -139,14 +151,18 @@ def test_catalog_targets_respect_max_and_ai_employee_filter(
     assert paths == {"/market/catalog/2", "/market/catalog/3", "/market/catalog/4"}
 
 
-def test_full_surface_targets_include_many_pages(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_full_surface_targets_include_many_pages(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("MODSTORE_DAILY_SURFACE_AUDIT_MODE", "full")
     monkeypatch.setenv("MODSTORE_SURFACE_AUDIT_SKIP_CATALOG", "1")
     targets = build_surface_targets()
     assert len(targets) > 10
 
 
-def test_default_surface_targets_cover_three_lanes(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_default_surface_targets_cover_three_lanes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("MODSTORE_DAILY_SURFACE_AUDIT_MODE", "full")
     monkeypatch.setenv("MODSTORE_SURFACE_AUDIT_SKIP_CATALOG", "1")
     targets = default_surface_targets()
@@ -160,8 +176,20 @@ def test_surface_audit_excerpt_markdown_groups_by_lane():
     report = {
         "ok": False,
         "results": [
-            {"lane": "P-W", "name": "首页", "status": 200, "console_errors": [], "error": None},
-            {"lane": "P-S", "name": "下载", "status": 500, "console_errors": ["x"], "error": None},
+            {
+                "lane": "P-W",
+                "name": "首页",
+                "status": 200,
+                "console_errors": [],
+                "error": None,
+            },
+            {
+                "lane": "P-S",
+                "name": "下载",
+                "status": 500,
+                "console_errors": ["x"],
+                "error": None,
+            },
         ],
     }
     md = surface_audit_excerpt_markdown(report)

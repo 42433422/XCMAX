@@ -7,6 +7,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
+
 class CustomerRelationshipMixin:
     if TYPE_CHECKING:
 

@@ -1,53 +1,52 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
-import { useRoute } from 'vue-router';
-import { ApiError } from '@/api';
-import { authApi } from '@/api/auth';
+import { computed, ref } from 'vue'
+import { useRoute } from 'vue-router'
+import { ApiError } from '@/api'
+import { authApi } from '@/api/auth'
 
-const route = useRoute();
-const email = ref('');
-const loading = ref(false);
-const errorMessage = ref('');
-const successMessage = ref('');
-const usernames = ref<string[]>([]);
+const route = useRoute()
+const email = ref('')
+const loading = ref(false)
+const errorMessage = ref('')
+const successMessage = ref('')
+const usernames = ref<string[]>([])
 
 const loginBackRoute = computed(() => ({
   name: 'login' as const,
   query: route.query,
-}));
+}))
 
 async function submitLookup() {
-  const em = email.value.trim().toLowerCase();
+  const em = email.value.trim().toLowerCase()
   if (!em || !em.includes('@')) {
-    errorMessage.value = '请填写有效邮箱';
-    return;
+    errorMessage.value = '请填写有效邮箱'
+    return
   }
-  loading.value = true;
-  errorMessage.value = '';
-  successMessage.value = '';
-  usernames.value = [];
+  loading.value = true
+  errorMessage.value = ''
+  successMessage.value = ''
+  usernames.value = []
   try {
-    const res = await authApi.forgotAccount(em);
-    const raw = res as unknown as Record<string, unknown>;
-    const data = (raw.data as Record<string, unknown> | undefined) || {};
-    const list = Array.isArray(data.usernames) ? (data.usernames as string[]) : [];
-    usernames.value = list;
+    const res = await authApi.forgotAccount(em)
+    const raw = res as unknown as Record<string, unknown>
+    const data = (raw.data as Record<string, unknown> | undefined) || {}
+    const list = Array.isArray(data.usernames) ? (data.usernames as string[]) : []
+    usernames.value = list
     successMessage.value =
-      (typeof raw.message === 'string' && raw.message) ||
-      (list.length ? `找到账号：${list.join('、')}` : '未找到关联账号');
+      (typeof raw.message === 'string' && raw.message) || (list.length ? `找到账号：${list.join('、')}` : '未找到关联账号')
   } catch (error: unknown) {
     if (error instanceof ApiError) {
-      const d = error.data as Record<string, unknown> | undefined;
-      const errObj = d?.error as Record<string, unknown> | undefined;
+      const d = error.data as Record<string, unknown> | undefined
+      const errObj = d?.error as Record<string, unknown> | undefined
       errorMessage.value =
         (typeof d?.message === 'string' && d.message) ||
         (typeof errObj?.message === 'string' && (errObj.message as string)) ||
-        error.message;
+        error.message
     } else {
-      errorMessage.value = '查询失败，请确认后端已连接数据库';
+      errorMessage.value = '查询失败，请确认后端已连接数据库'
     }
   } finally {
-    loading.value = false;
+    loading.value = false
   }
 }
 </script>

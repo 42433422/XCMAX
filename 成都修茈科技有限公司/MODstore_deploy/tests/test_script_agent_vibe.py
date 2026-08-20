@@ -59,7 +59,11 @@ def _bad_then_good_sandbox():
         calls["n"] += 1
         if calls["n"] == 1:
             return _make_sandbox_result(
-                ok=False, returncode=1, stdout="", stderr="ZeroDivisionError", errors=["err"]
+                ok=False,
+                returncode=1,
+                stdout="",
+                stderr="ZeroDivisionError",
+                errors=["err"],
             )
         return _make_sandbox_result()
 

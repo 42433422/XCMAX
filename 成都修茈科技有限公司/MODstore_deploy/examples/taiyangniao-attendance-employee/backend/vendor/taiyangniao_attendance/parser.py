@@ -15,6 +15,8 @@ from .header_resolver import (
     resolve_raw_records_header,
 )
 
+BOUNDARY_ERRORS = (Exception,)
+
 DATE_RE = re.compile(r"(\d{2,4})-(\d{1,2})-(\d{1,2})")
 DATETIME_FORMATS = (
     "%Y-%m-%d %H:%M",
@@ -75,7 +77,7 @@ def _safe_float(value: object) -> float:
         return 0.0
     try:
         return float(value)
-    except Exception:
+    except BOUNDARY_ERRORS:
         return 0.0
 
 
@@ -111,7 +113,9 @@ def parse_work_date(value: object) -> date | None:
         return None
 
 
-def parse_clock_datetime(value: object, *, fallback_date: date | None = None) -> datetime | None:
+def parse_clock_datetime(
+    value: object, *, fallback_date: date | None = None
+) -> datetime | None:
     if isinstance(value, datetime):
         return value
     if isinstance(value, time):
@@ -182,7 +186,9 @@ def _parse_raw_record_times(
         for row in ws.iter_rows(min_row=resolved.data_start_row, values_only=True):
             employee_name = _cell_text(_get(row, name_idx))
             work_date = parse_work_date(_get(row, date_idx))
-            punch_dt = parse_clock_datetime(_get(row, punch_idx), fallback_date=work_date)
+            punch_dt = parse_clock_datetime(
+                _get(row, punch_idx), fallback_date=work_date
+            )
             if employee_name and work_date and punch_dt:
                 punches[(employee_name, work_date)].append(punch_dt)
         return punches, resolved
@@ -304,8 +310,12 @@ def parse_attendance_workbook(
                 early_count_hint=_safe_float(_get(row, early_idx)),
                 missing_card_count=_safe_float(_get(row, miss_on_idx))
                 + _safe_float(_get(row, miss_off_idx)),
-                work_duration_raw=_safe_float(_get(row, wh_idx)) if wh_idx is not None else 0.0,
-                attendance_day_hint=_safe_float(_get(row, ad_idx)) if ad_idx is not None else 0.0,
+                work_duration_raw=_safe_float(_get(row, wh_idx))
+                if wh_idx is not None
+                else 0.0,
+                attendance_day_hint=_safe_float(_get(row, ad_idx))
+                if ad_idx is not None
+                else 0.0,
             )
             if record.leave_hours:
                 record.notes.append(f"leave_hours={record.leave_hours:g}")

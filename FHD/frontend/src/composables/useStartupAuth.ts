@@ -26,10 +26,7 @@ export function useStartupAuth(options: {
       const handoff = await fetchSessionMarketHandoff()
       persistMarketTokensFromHandoff(handoff)
     } catch (error) {
-      console.debug(
-        '[useStartupAuth] session-handoff skipped:',
-        error instanceof Error ? error.message : error
-      )
+      console.debug('[useStartupAuth] session-handoff skipped:', error instanceof Error ? error.message : error)
     }
   }
 
@@ -38,25 +35,21 @@ export function useStartupAuth(options: {
       const res = await authApi.validateSession()
       const resRow = asRecord(res)
       const dataRow = asRecord(res?.data)
-      if (
-        res?.success === true
-        || resRow.valid === true
-        || dataRow.valid === true
-      ) {
+      if (res?.success === true || resRow.valid === true || dataRow.valid === true) {
         clearHostPackSkippedSession()
         // P0 优化3：Market token 同步与账户资料刷新彼此无依赖，并行执行节省 ~1RT
         const marketPromise = syncMarketTokensFromSession()
         const profilePromise = import('@/stores/accountProfile')
           .then((m) => m.useAccountProfileStore().refreshFromServer())
-          .catch(() => { /* ignore */ })
+          .catch(() => {
+            /* ignore */
+          })
         await Promise.all([marketPromise, profilePromise])
         let entitledModIds: string[] = []
         let accountUsername = ''
         try {
           entitledModIds = readEntitledModIdsFromAuthPayload(res)
-          const data = res?.data && typeof res.data === 'object' && !Array.isArray(res.data)
-            ? asRecord(res.data)
-            : resRow
+          const data = res?.data && typeof res.data === 'object' && !Array.isArray(res.data) ? asRecord(res.data) : resRow
           const user = asRecord(data.user)
           accountUsername = asString(data.username || user.username).trim()
         } catch {

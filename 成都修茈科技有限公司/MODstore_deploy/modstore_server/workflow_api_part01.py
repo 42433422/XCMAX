@@ -1,6 +1,8 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
 
 
@@ -18,7 +20,10 @@ def _guess_employee_id_from_empty_workflow(workflow: _facade().Workflow) -> str:
     text = f"{workflow.name or ''}\n{workflow.description or ''}"
     import re
 
-    for pat in ("employee_id[=:：]\\s*([a-z0-9._-]+)", "pack_id[=:：]\\s*([a-z0-9._-]+)"):
+    for pat in (
+        "employee_id[=:：]\\s*([a-z0-9._-]+)",
+        "pack_id[=:：]\\s*([a-z0-9._-]+)",
+    ):
         m = re.search(pat, text, flags=re.I)
         if m:
             return m.group(1).strip()

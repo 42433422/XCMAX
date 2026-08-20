@@ -7,7 +7,10 @@ from pathlib import Path
 
 
 def test_excel_routing_keywords():
-    from modstore_server.excel_tabular_runtime import is_excel_full_read, is_excel_generate
+    from modstore_server.excel_tabular_runtime import (
+        is_excel_full_read,
+        is_excel_generate,
+    )
 
     assert is_excel_full_read("制作 Excel读取员工，上传 xlsx 读 sheet 表头 单元格全量")
     assert not is_excel_generate("制作 Excel读取员工，上传 xlsx 读 sheet 表头 单元格全量")
@@ -72,7 +75,10 @@ def test_excel_generate_convert_writes_xlsx(tmp_path: Path):
             template_path=None,
             payload={},
             ctx={},
-            rule_spec={"default_output_relpath": "outputs/output.xlsx", "output_schema": []},
+            rule_spec={
+                "default_output_relpath": "outputs/output.xlsx",
+                "output_schema": [],
+            },
         )
     )
     assert out.is_file()

@@ -84,7 +84,14 @@ describe('AnalyticsView', () => {
       execution: { total: 1, success: 1, failed: 0, success_rate: 100, total_tokens: 100 },
       spending: { total: 0 },
       recent_executions: [
-        { id: 1, employee_id: 'emp-1', task: 'test task', status: 'done', llm_tokens: 50, created_at: '2026-01-01' },
+        {
+          id: 1,
+          employee_id: 'emp-1',
+          task: 'test task',
+          status: 'done',
+          llm_tokens: 50,
+          created_at: '2026-01-01',
+        },
       ],
     })
     router.push('/')

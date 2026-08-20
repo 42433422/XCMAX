@@ -47,7 +47,11 @@ def register_fastapi_routes(app, mod_id: str) -> None:
     def handlers_registry():
         from app.mod_sdk.neuro_bus_handler_registry import list_neuro_bus_handler_registry
 
-        return {"success": True, "data": list_neuro_bus_handler_registry(), "source": f"mod:{mod_id}"}
+        return {
+            "success": True,
+            "data": list_neuro_bus_handler_registry(),
+            "source": f"mod:{mod_id}",
+        }
 
     @router.get("/handlers/catalog")
     def handlers_catalog():

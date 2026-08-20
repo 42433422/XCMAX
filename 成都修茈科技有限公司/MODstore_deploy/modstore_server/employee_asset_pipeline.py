@@ -1,3 +1,4 @@
+# isort: skip_file
 # ruff: noqa: E402, F401
 """Asset-driven employee_pack generation helpers.
 
@@ -21,6 +22,8 @@ import zipfile
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 from modstore_server.csv_tabular_runtime import (
     build_csv_generate_rule_spec,
     build_csv_read_rule_spec,
@@ -30,7 +33,9 @@ from modstore_server.csv_tabular_runtime import (
     render_csv_read_convert_module,
 )
 from modstore_server.employee_ai_scaffold import parse_employee_pack_llm_json
-from modstore_server.employee_pack_blueprints_template import render_employee_pack_blueprints_py
+from modstore_server.employee_pack_blueprints_template import (
+    render_employee_pack_blueprints_py,
+)
 from modstore_server.excel_tabular_runtime import (
     build_excel_generate_rule_spec,
     build_excel_read_rule_spec,
@@ -120,7 +125,6 @@ from modstore_server.employee_asset_pipeline_part01 import (
     _runtime_package_name as _runtime_package_name,
 )
 
-
 DOC_SUFFIXES = {".docx", ".doc", ".pdf", ".rtf"}
 
 
@@ -144,7 +148,6 @@ from modstore_server.employee_asset_pipeline_part03 import (
     _normalize_manifest as _normalize_manifest,
     _sanitize_workflow_bundles as _sanitize_workflow_bundles,
 )
-
 
 _PLACEHOLDER_BRIEF = re.compile(r"（无回复）|相处报备|开始写吧", re.I)
 
@@ -171,7 +174,6 @@ from modstore_server.employee_asset_pipeline_part04 import (
 from modstore_server.employee_asset_pipeline_part05 import (
     pack_has_direct_python_runtime as pack_has_direct_python_runtime,
 )
-
 
 DIRECT_PYTHON_RUNTIME_MISSING_MSG = (
     "manifest 声明了 Word/direct_python，但本地库中缺少 rule_spec 与 backend/vendor/convert。"

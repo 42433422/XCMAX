@@ -11,12 +11,12 @@ Dependabot PR 自动合并：patch/minor + 测试通过自动 merge，major 派�
 
 ## 输入
 
-| 字段 | 类型 | 必需 | 说明 |
-|------|------|------|------|
-| `pr_number` | int | 是 | PR 编号 |
-| `repo` | string | 是 | `owner/repo` |
-| `merge_method` | string | 否 | `squash`（默认）/ `merge` / `rebase` |
-| `dry_run` | bool | 否 | true 时只返回"会合并"，不实际调 merge API |
+| 字段           | 类型   | 必需 | 说明                                      |
+| -------------- | ------ | ---- | ----------------------------------------- |
+| `pr_number`    | int    | 是   | PR 编号                                   |
+| `repo`         | string | 是   | `owner/repo`                              |
+| `merge_method` | string | 否   | `squash`（默认）/ `merge` / `rebase`      |
+| `dry_run`      | bool   | 否   | true 时只返回"会合并"，不实际调 merge API |
 
 ## 处理步骤
 
@@ -33,12 +33,12 @@ Dependabot PR 自动合并：patch/minor + 测试通过自动 merge，major 派�
 
 ## 决策矩阵
 
-| PR 类型 | CI 状态 | 行为 |
-|---------|---------|------|
-| Dependabot patch/minor + 仅依赖文件 | 通过 | 自动 merge（squash） |
-| Dependabot major + 仅依赖文件 | 通过 | **不** merge，派发 `vibe-coding-maintainer` |
-| Dependabot security | 通过 | 自动 merge（跳过 major 限制） |
-| Dependabot any | 失败 | **不** merge，request_changes |
+| PR 类型                             | CI 状态 | 行为                                        |
+| ----------------------------------- | ------- | ------------------------------------------- |
+| Dependabot patch/minor + 仅依赖文件 | 通过    | 自动 merge（squash）                        |
+| Dependabot major + 仅依赖文件       | 通过    | **不** merge，派发 `vibe-coding-maintainer` |
+| Dependabot security                 | 通过    | 自动 merge（跳过 major 限制）               |
+| Dependabot any                      | 失败    | **不** merge，request_changes               |
 
 ## 输出
 

@@ -1,4 +1,4 @@
-import type { RouteRecordRaw } from 'vue-router';
+import type { RouteRecordRaw } from 'vue-router'
 
 export const AI_DELIVERY_ROUTES: RouteRecordRaw[] = [
   {
@@ -13,4 +13,4 @@ export const AI_DELIVERY_ROUTES: RouteRecordRaw[] = [
     component: () => import('../views/PrivateModDeliveryView.vue'),
     meta: { title: '生产员工 · 私有交付' },
   },
-];
+]

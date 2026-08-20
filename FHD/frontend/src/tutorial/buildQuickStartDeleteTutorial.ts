@@ -29,8 +29,7 @@ export function buildQuickStartDeleteTutorialSteps(visibleNav: VisibleNavItem[])
   ]
 
   if (hasCustomers) {
-    const customersLabel =
-      visibleNav.find((n) => n.key === 'customers')?.name || '部门管理'
+    const customersLabel = visibleNav.find((n) => n.key === 'customers')?.name || '部门管理'
     steps.push(
       createStep({
         id: 'quickstart-delete-customers-nav',
@@ -59,8 +58,7 @@ export function buildQuickStartDeleteTutorialSteps(visibleNav: VisibleNavItem[])
   }
 
   if (hasProducts) {
-    const productsLabel =
-      visibleNav.find((n) => n.key === 'products')?.name || '人员管理'
+    const productsLabel = visibleNav.find((n) => n.key === 'products')?.name || '人员管理'
     steps.push(
       createStep({
         id: 'quickstart-delete-products-nav',

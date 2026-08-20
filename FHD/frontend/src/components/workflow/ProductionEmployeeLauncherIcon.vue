@@ -19,22 +19,11 @@
       </linearGradient>
     </defs>
     <!-- 安全帽 -->
-    <path
-      d="M13 21.5c0-5.8 4.9-9.5 11-9.5s11 3.7 11 9.5"
-      stroke="url(#prod-icon-helmet)"
-      stroke-width="2.6"
-      stroke-linecap="round"
-    />
+    <path d="M13 21.5c0-5.8 4.9-9.5 11-9.5s11 3.7 11 9.5" stroke="url(#prod-icon-helmet)" stroke-width="2.6" stroke-linecap="round" />
     <rect x="11.5" y="21" width="25" height="3.8" rx="1.8" fill="#ffffff" fill-opacity="0.92" />
     <!-- 员工轮廓 -->
     <circle cx="24" cy="28.5" r="4.2" fill="#ffffff" fill-opacity="0.88" />
-    <path
-      d="M16.5 32.5c1.8-2.6 4.6-4 7.5-4s5.7 1.4 7.5 4"
-      stroke="#ffffff"
-      stroke-width="2.4"
-      stroke-linecap="round"
-      fill="none"
-    />
+    <path d="M16.5 32.5c1.8-2.6 4.6-4 7.5-4s5.7 1.4 7.5 4" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" fill="none" />
     <!-- 产线轨道 -->
     <rect x="7" y="37.5" width="34" height="3.2" rx="1.6" fill="url(#prod-icon-belt)" />
     <circle cx="13" cy="35.8" r="2.1" fill="#ffffff" fill-opacity="0.75" />

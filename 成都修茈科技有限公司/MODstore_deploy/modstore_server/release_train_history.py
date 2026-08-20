@@ -7,6 +7,8 @@ import logging
 from pathlib import Path
 from typing import Any, Dict
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 
 def list_history(
     history_directory: Path,
@@ -38,7 +40,7 @@ def list_history(
                     "last_bump_day": state.get("last_bump_day"),
                 }
             )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("release_train: read history failed")
         return []
     rows.reverse()

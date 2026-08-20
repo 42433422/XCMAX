@@ -1,5 +1,7 @@
 import sqlite3
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 msg_db = r"E:\FHD\XCAGI\resources\wechat-decrypt\decrypted\message\message_0.db"
 conn = sqlite3.connect(msg_db)
 cur = conn.cursor()
@@ -22,7 +24,7 @@ for t in tables:
         rows = cur.fetchall()
         for r in rows:
             print(f"  {r}")
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"错误: {e}")
 
 conn.close()

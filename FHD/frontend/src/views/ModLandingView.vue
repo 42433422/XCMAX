@@ -25,12 +25,7 @@
       </p>
 
       <div v-if="menu.length" class="grid">
-        <router-link
-          v-for="item in menu"
-          :key="item.id || item.path"
-          :to="item.path"
-          class="card"
-        >
+        <router-link v-for="item in menu" :key="item.id || item.path" :to="item.path" class="card">
           <span class="card-title">{{ item.label }}</span>
           <span class="card-meta">{{ item.path }}</span>
         </router-link>
@@ -43,77 +38,74 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
-import { useModsStore } from '@/stores/mods';
-import { apiFetch } from '@/utils/apiBase';
+import { computed, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useModsStore } from '@/stores/mods'
+import { apiFetch } from '@/utils/apiBase'
 
-const route = useRoute();
-const router = useRouter();
-const modsStore = useModsStore();
+const route = useRoute()
+const router = useRouter()
+const modsStore = useModsStore()
 
-const modId = computed(() => String(route.params.modId || '').trim());
+const modId = computed(() => String(route.params.modId || '').trim())
 const modMeta = computed(
-  () =>
-    modsStore.modsForUi.find((m) => m.id === modId.value) ||
-    modsStore.mods.find((m) => m.id === modId.value) ||
-    null
-);
-const primary = computed(() => Boolean(modMeta.value?.primary));
-const heroTitle = computed(() => modMeta.value?.name || modId.value || 'Mod');
-const menu = computed(() => (Array.isArray(modMeta.value?.menu) ? modMeta.value!.menu! : []));
+  () => modsStore.modsForUi.find((m) => m.id === modId.value) || modsStore.mods.find((m) => m.id === modId.value) || null,
+)
+const primary = computed(() => Boolean(modMeta.value?.primary))
+const heroTitle = computed(() => modMeta.value?.name || modId.value || 'Mod')
+const menu = computed(() => (Array.isArray(modMeta.value?.menu) ? modMeta.value!.menu! : []))
 
-const pushLoading = ref(false);
-const pushMessage = ref('');
+const pushLoading = ref(false)
+const pushMessage = ref('')
 
 function goChat() {
-  router.push({ name: 'chat' });
+  router.push({ name: 'chat' })
 }
 
 async function pushToXcagi() {
-  pushMessage.value = '';
-  if (!modId.value) return;
-  pushLoading.value = true;
+  pushMessage.value = ''
+  if (!modId.value) return
+  pushLoading.value = true
   try {
     const res = await apiFetch(`/api/mods/${encodeURIComponent(modId.value)}/publish-to-xcagi`, {
       method: 'POST',
-    });
+    })
     const j = (await res.json()) as {
-      success?: boolean;
-      message?: string;
-      error?: string;
+      success?: boolean
+      message?: string
+      error?: string
       data?: {
-        message?: string;
-        postgresql_summary?: { database_name?: string; host_port?: string };
-        database_reachable?: boolean;
-      };
-    };
-    if (j.success && j.data) {
-      let line = j.data.message || '请求已处理。';
-      const s = j.data.postgresql_summary;
-      if (s && (s.database_name || s.host_port)) {
-        const tail = [s.database_name, s.host_port].filter(Boolean).join(' @ ');
-        if (tail) line += ` 当前进程连接：${tail}。`;
+        message?: string
+        postgresql_summary?: { database_name?: string; host_port?: string }
+        database_reachable?: boolean
       }
-      pushMessage.value = line;
+    }
+    if (j.success && j.data) {
+      let line = j.data.message || '请求已处理。'
+      const s = j.data.postgresql_summary
+      if (s && (s.database_name || s.host_port)) {
+        const tail = [s.database_name, s.host_port].filter(Boolean).join(' @ ')
+        if (tail) line += ` 当前进程连接：${tail}。`
+      }
+      pushMessage.value = line
       try {
-        window.dispatchEvent(new CustomEvent('xcagi:test-db-status-refresh'));
+        window.dispatchEvent(new CustomEvent('xcagi:test-db-status-refresh'))
       } catch {
         /* ignore */
       }
     } else {
-      pushMessage.value = j.message || j.error || `请求失败（HTTP ${res.status}）`;
+      pushMessage.value = j.message || j.error || `请求失败（HTTP ${res.status}）`
     }
   } catch (e) {
-    pushMessage.value = e instanceof Error ? e.message : '网络错误';
+    pushMessage.value = e instanceof Error ? e.message : '网络错误'
   } finally {
-    pushLoading.value = false;
+    pushLoading.value = false
   }
 }
 
 onMounted(async () => {
-  await modsStore.initialize();
-});
+  await modsStore.initialize()
+})
 </script>
 
 <style scoped>
@@ -214,7 +206,9 @@ onMounted(async () => {
   background: #fff;
   text-decoration: none;
   color: inherit;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .card:hover {

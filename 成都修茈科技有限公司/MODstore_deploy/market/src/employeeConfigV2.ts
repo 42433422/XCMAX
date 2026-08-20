@@ -57,9 +57,7 @@ type EmployeeConfigPatch = Omit<Partial<EmployeeConfigRecord>, 'identity' | 'col
 }
 
 function asRecord(value: unknown): UnknownRecord | null {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-    ? (value as UnknownRecord)
-    : null
+  return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as UnknownRecord) : null
 }
 
 const DEFAULT_IDENTITY = {
@@ -74,9 +72,7 @@ function clone<T>(v: T): T {
   return JSON.parse(JSON.stringify(v))
 }
 
-export function createEmptyEmployeeConfigV2(opts?: {
-  model?: Partial<{ provider: string; model_name: string }>
-}): CompleteEmployeeConfig {
+export function createEmptyEmployeeConfigV2(opts?: { model?: Partial<{ provider: string; model_name: string }> }): CompleteEmployeeConfig {
   const provider = String(opts?.model?.provider ?? '').trim() || 'auto'
   const model_name = String(opts?.model?.model_name ?? '').trim() || 'auto'
   return {
@@ -246,10 +242,7 @@ export function validateEmployeeConfigV2(config: unknown): { valid: boolean; err
     errs.push('role.tone 仅支持 formal/friendly/professional/casual')
   }
   const provider = String(c?.cognition?.agent?.model?.provider || '')
-  if (
-    provider &&
-    !['deepseek', 'openai', 'anthropic', 'local', 'auto'].includes(provider)
-  ) {
+  if (provider && !['deepseek', 'openai', 'anthropic', 'local', 'auto'].includes(provider)) {
     errs.push('model.provider 仅支持 deepseek/openai/anthropic/local/auto')
   }
   const model = c?.cognition?.agent?.model || {}

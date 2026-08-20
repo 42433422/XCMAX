@@ -7,12 +7,12 @@
 
 ## 决策（草案）
 
-| 里程碑 | 动作 |
-|--------|------|
-| **M0（当前）** | 保留文件；新功能不得向 `routes_registry` 增加路由，一律走 `app_factory` 或独立 `APIRouter` 模块。 |
-| **M1** | 全仓库检索 `routes_registry` / `register_all_routes` 引用；若有脚本或分叉入口，登记到运维 Runbook。 |
-| **M2** | 若无运行时引用：删除 `routes_registry.py` 或拆分为已命名域的小路由模块并删除壳文件。 |
-| **M3** | 更新 `docs/ARCHITECTURE.md` 与 `docs/FRONTEND_AND_GATEWAY_ROADMAP.md` 中的路由来源描述。 |
+| 里程碑         | 动作                                                                                                |
+| -------------- | --------------------------------------------------------------------------------------------------- |
+| **M0（当前）** | 保留文件；新功能不得向 `routes_registry` 增加路由，一律走 `app_factory` 或独立 `APIRouter` 模块。   |
+| **M1**         | 全仓库检索 `routes_registry` / `register_all_routes` 引用；若有脚本或分叉入口，登记到运维 Runbook。 |
+| **M2**         | 若无运行时引用：删除 `routes_registry.py` 或拆分为已命名域的小路由模块并删除壳文件。                |
+| **M3**         | 更新 `docs/ARCHITECTURE.md` 与 `docs/FRONTEND_AND_GATEWAY_ROADMAP.md` 中的路由来源描述。            |
 
 ## 退役触发条件
 

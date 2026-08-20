@@ -48,20 +48,12 @@ async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
             strategy_intent=str(data.get("strategy_intent") or data.get("task") or ""),
             changed_files=changed_files,
             persy_evidence=(
-                data.get("persy_evidence")
-                if isinstance(data.get("persy_evidence"), dict)
-                else {}
+                data.get("persy_evidence") if isinstance(data.get("persy_evidence"), dict) else {}
             ),
             para_evidence=(
-                data.get("para_evidence")
-                if isinstance(data.get("para_evidence"), dict)
-                else {}
+                data.get("para_evidence") if isinstance(data.get("para_evidence"), dict) else {}
             ),
-            veto_state=(
-                data.get("veto_state")
-                if isinstance(data.get("veto_state"), dict)
-                else {}
-            ),
+            veto_state=(data.get("veto_state") if isinstance(data.get("veto_state"), dict) else {}),
         )
     except (ImportError, RuntimeError, TypeError, ValueError) as exc:
         return _error(f"strategic_council_failed:{type(exc).__name__}")

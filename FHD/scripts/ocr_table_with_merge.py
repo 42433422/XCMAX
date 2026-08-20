@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment, var-annotated"
 """
 使用 PaddleOCR + 文本位置分析检测合并单元格
 """

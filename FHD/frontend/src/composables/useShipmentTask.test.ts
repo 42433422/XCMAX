@@ -53,7 +53,10 @@ describe('useShipmentTask handleModifyCommand', () => {
     const m = makeMessages()
     const task = ref<ShipmentTask | null>(shipmentTask())
     const s = useShipmentTask(m, task)
-    mockFetchOnce({ success: true, data: [{ model_number: '9803', name: '蓝漆', price: 50, tin_spec: 28 }] })
+    mockFetchOnce({
+      success: true,
+      data: [{ model_number: '9803', name: '蓝漆', price: 50, tin_spec: 28 }],
+    })
     const ok = await s.handleModifyCommand('再加 1桶9803规格28')
     expect(ok).toBe(true)
     expect(task.value!.payload!.params!.products).toHaveLength(1)
@@ -119,7 +122,10 @@ describe('useShipmentTask order number and enrichment', () => {
     const m = makeMessages()
     const task = ref<ShipmentTask | null>(shipmentTask([{ model_number: '9803' }]))
     const s = useShipmentTask(m, task)
-    mockFetchOnce({ success: true, data: [{ model_number: '9803', name: '蓝漆', price: 42, tin_spec: 18 }] })
+    mockFetchOnce({
+      success: true,
+      data: [{ model_number: '9803', name: '蓝漆', price: 42, tin_spec: 18 }],
+    })
     await s.enrichShipmentPreviewProducts(task.value!)
     expect(task.value!.payload!.params!.products[0].name).toBe('蓝漆')
   })

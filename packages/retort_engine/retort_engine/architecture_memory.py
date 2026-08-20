@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 ARCHITECTURE_SIGNAL_COMPONENTS = {
     "review_pipeline": ("review_pipeline", "context_localization"),
@@ -32,15 +32,17 @@ def build_architecture_record(
     code_graph_proof: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     signals = [str(item) for item in profile.get("signals") or []]
-    pipeline = (
+    pipeline = cast(
+        dict[str, Any],
         review_report.get("review_pipeline")
         if isinstance(review_report.get("review_pipeline"), dict)
-        else {}
+        else {},
     )
-    workflow = (
+    workflow = cast(
+        dict[str, Any],
         pipeline.get("depth_absorption_workflow")
         if isinstance(pipeline.get("depth_absorption_workflow"), dict)
-        else {}
+        else {},
     )
     components = _architecture_components(source, profile, workflow)
     return {
@@ -129,10 +131,11 @@ def deep_architecture_tasks(memory: dict[str, Any]) -> list[dict[str, Any]]:
 def _architecture_components(
     source: str, profile: dict[str, Any], workflow: dict[str, Any]
 ) -> list[dict[str, Any]]:
-    evidence = (
+    evidence = cast(
+        dict[str, Any],
         profile.get("signal_evidence")
         if isinstance(profile.get("signal_evidence"), dict)
-        else {}
+        else {},
     )
     by_component: dict[str, dict[str, Any]] = {}
     for signal in profile.get("signals") or []:

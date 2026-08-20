@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -58,7 +58,7 @@ def _write_state(ok: bool) -> Path:
                 "probes": [
                     {"name": "health", "url": "drill", "status": 200 if ok else 503, "ok": ok}
                 ],
-                "ran_at": datetime.now(timezone.utc).isoformat(),
+                "ran_at": datetime.now(UTC).isoformat(),
                 "drill": True,
             },
             ensure_ascii=False,

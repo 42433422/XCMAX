@@ -1,10 +1,4 @@
-import {
-  req,
-  authRequest,
-  requestBlob,
-  setTokensFromAuthResponse,
-  type AuthResponse,
-} from './shared'
+import { req, authRequest, requestBlob, setTokensFromAuthResponse, type AuthResponse } from './shared'
 
 export interface MeResponse extends Record<string, unknown> {
   ok?: boolean
@@ -44,8 +38,7 @@ export const auth = {
     setTokensFromAuthResponse(res as AuthResponse)
     return res
   },
-  sendPhoneCode: (phone: string) =>
-    req('/api/auth/send-phone-code', { method: 'POST', body: JSON.stringify({ phone }) }),
+  sendPhoneCode: (phone: string) => req('/api/auth/send-phone-code', { method: 'POST', body: JSON.stringify({ phone }) }),
   loginWithPhoneCode: async (phone: string, code: string) => {
     const res = await authRequest('/api/auth/login-with-phone-code', {
       method: 'POST',
@@ -56,12 +49,13 @@ export const auth = {
   },
   me: () => req<MeResponse>('/api/auth/me'),
   accountBootstrap: () => req('/api/account/bootstrap'),
-  sendVerificationCode: (email: string) =>
-    req('/api/auth/send-code', { method: 'POST', body: JSON.stringify({ email }) }),
-  sendRegisterVerificationCode: (email: string) =>
-    req('/api/auth/send-register-code', { method: 'POST', body: JSON.stringify({ email }) }),
+  sendVerificationCode: (email: string) => req('/api/auth/send-code', { method: 'POST', body: JSON.stringify({ email }) }),
+  sendRegisterVerificationCode: (email: string) => req('/api/auth/send-register-code', { method: 'POST', body: JSON.stringify({ email }) }),
   sendResetPasswordCode: (email: string) =>
-    req<PasswordResetResponse>('/api/auth/send-reset-password-code', { method: 'POST', body: JSON.stringify({ email }) }),
+    req<PasswordResetResponse>('/api/auth/send-reset-password-code', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
   resetPassword: (email: string, code: string, newPassword: string) =>
     req<PasswordResetResponse>('/api/auth/reset-password', {
       method: 'POST',
@@ -102,8 +96,7 @@ export const auth = {
         cs_t: data.cs_t ?? '',
       }),
     }),
-  updateProfile: (username: string) =>
-    req('/api/auth/profile', { method: 'PUT', body: JSON.stringify({ username }) }),
+  updateProfile: (username: string) => req('/api/auth/profile', { method: 'PUT', body: JSON.stringify({ username }) }),
   changePassword: (currentPassword: string, newPassword: string) =>
     req('/api/auth/change-password', {
       method: 'POST',
@@ -117,8 +110,7 @@ export const auth = {
       body: fd,
     })
   },
-  deleteAvatar: () =>
-    req<{ ok: boolean; avatar_url: null }>('/api/auth/avatar', { method: 'DELETE' }),
+  deleteAvatar: () => req<{ ok: boolean; avatar_url: null }>('/api/auth/avatar', { method: 'DELETE' }),
   fetchAvatarBlob: (avatarUrl: string) => {
     const path = avatarUrl.startsWith('/') ? avatarUrl : `/${avatarUrl}`
     return requestBlob(path)

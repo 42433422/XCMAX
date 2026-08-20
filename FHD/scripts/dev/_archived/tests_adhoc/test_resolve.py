@@ -1,7 +1,10 @@
+# mypy: disable-error-code="import-not-found"
 """测试路径解析"""
 
 import os
 import sys
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 # 设置环境变量
 os.environ["WORKSPACE_ROOT"] = r"e:\FHD"
@@ -14,7 +17,7 @@ from taiyangniao_attendance.paths import resolve_workspace_excel
 template_relpath = "424/考勤 -2026-3 月份考勤统计表.xlsx"
 
 print(f"测试路径：{template_relpath}")
-print(f'WORKSPACE_ROOT: {os.environ["WORKSPACE_ROOT"]}')
+print(f"WORKSPACE_ROOT: {os.environ['WORKSPACE_ROOT']}")
 
 try:
     template_path = resolve_workspace_excel(template_relpath)
@@ -46,7 +49,7 @@ try:
     if not found:
         print("  ✗ 未找到匹配文件")
 
-except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"✗ 解析失败：{e}")
     import traceback
 

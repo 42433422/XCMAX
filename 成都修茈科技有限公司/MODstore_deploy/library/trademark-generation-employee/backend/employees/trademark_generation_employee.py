@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 import sys
 
+BOUNDARY_ERRORS = (Exception,)
+
 EMPLOYEE_ID = "trademark-generation-employee"
 EMPLOYEE_LABEL = "商标生成员"
 SYSTEM_PROMPT = (
@@ -98,7 +100,9 @@ async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
     payload = dict(payload or {})
     ctx = dict(ctx or {})
     action = (
-        str(payload.get("action") or RULE_SPEC.get("default_action") or "generate").strip().lower()
+        str(payload.get("action") or RULE_SPEC.get("default_action") or "generate")
+        .strip()
+        .lower()
     )
     if action in ("help", "说明", "status"):
         return _ok(
@@ -118,7 +122,9 @@ async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
         from trademark_generation.convert import convert_trademark_profile
 
         out = _resolve_output(payload, ctx)
-        result = convert_trademark_profile(payload, ctx, output_path=out, rule_spec=RULE_SPEC)
+        result = convert_trademark_profile(
+            payload, ctx, output_path=out, rule_spec=RULE_SPEC
+        )
         if asyncio.iscoroutine(result):
             result = await result
         if not out.is_file():
@@ -128,14 +134,16 @@ async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
             )
         return _ok(
             result,
-            warnings=list(result.get("warnings") or []) if isinstance(result, dict) else [],
+            warnings=list(result.get("warnings") or [])
+            if isinstance(result, dict)
+            else [],
             meta={
                 "handler": "direct_python",
                 "action": "generate",
                 "runtime": "trademark_generation",
             },
         )
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         return _err(
             str(exc),
             warnings=["请检查品牌名、行业、商标类型、风格描述和生图密钥配置。"],

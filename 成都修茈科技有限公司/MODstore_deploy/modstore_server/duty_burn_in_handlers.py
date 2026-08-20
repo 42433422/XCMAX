@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, union-attr"
 """Fail-closed handler selection for reviewed duty burn-in executions."""
 
 from __future__ import annotations

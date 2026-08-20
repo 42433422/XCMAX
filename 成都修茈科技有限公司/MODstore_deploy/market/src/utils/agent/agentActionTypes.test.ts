@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  AGENT_ACTIONS,
-  validateNavigateArgs,
-  ROUTE_NAME_MAP,
-  ACTION_RISKS,
-} from './agentActionTypes'
+import { AGENT_ACTIONS, validateNavigateArgs, ROUTE_NAME_MAP, ACTION_RISKS } from './agentActionTypes'
 
 describe('AGENT_ACTIONS', () => {
   it('has expected action types', () => {

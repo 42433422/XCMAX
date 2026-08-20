@@ -1,3 +1,4 @@
+# isort: skip_file
 # ruff: noqa: E402, F401
 """Mod AI 脚手架：LLM 生成 manifest + zip 导入（供 /api/mods/ai-scaffold 与工作台编排复用）。"""
 
@@ -27,7 +28,9 @@ from modstore_server.employee_ai_scaffold import (
     build_employee_pack_zip,
     parse_employee_pack_llm_json,
 )
-from modstore_server.employee_pack_export import build_employee_pack_manifest_from_workflow
+from modstore_server.employee_pack_export import (
+    build_employee_pack_manifest_from_workflow,
+)
 from modstore_server.llm_chat_proxy import chat_dispatch
 from modstore_server.llm_key_resolver import (
     KNOWN_PROVIDERS,
@@ -76,7 +79,6 @@ from modstore_server.mod_scaffold_runner_part01 import (
     mod_compileall_warnings as mod_compileall_warnings,
     employee_pack_consistency_warnings as employee_pack_consistency_warnings,
 )
-
 
 _logger = logging.getLogger(__name__)
 

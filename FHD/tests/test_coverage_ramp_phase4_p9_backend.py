@@ -1,3 +1,4 @@
+# mypy: disable-error-code="index, union-attr"
 """COVERAGE_RAMP Phase 4 round 9: template_export_utils (0%) + upload_helpers (0%)."""
 
 from __future__ import annotations

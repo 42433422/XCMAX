@@ -50,14 +50,7 @@
         <div class="actions">
           <router-link to="/plans" class="btn btn-primary">返回套餐页</router-link>
           <router-link :to="{ name: 'wallet-purchased' }" class="btn btn-ghost">已购资产</router-link>
-          <button
-            v-if="order.status === 'paid'"
-            type="button"
-            class="btn btn-refund"
-            @click="goRefund"
-          >
-            申请退款
-          </button>
+          <button v-if="order.status === 'paid'" type="button" class="btn btn-refund" @click="goRefund">申请退款</button>
         </div>
       </template>
 
@@ -160,7 +153,11 @@ function goRefund() {
   min-height: 100vh;
   background: #0a0a0a;
   color: #ffffff;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family:
+    'Inter',
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
   display: flex;
   justify-content: center;
   padding-top: 80px;
@@ -180,7 +177,8 @@ function goRefund() {
   letter-spacing: -0.02em;
 }
 
-.loading, .not-found {
+.loading,
+.not-found {
   text-align: center;
   padding: 48px 0;
   color: rgba(255, 255, 255, 0.5);

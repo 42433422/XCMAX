@@ -31,25 +31,15 @@
       <!-- 下：字段属性面板 -->
       <div class="properties-section" v-if="selectedField">
         <h4 class="section-title"><i class="fa fa-cog" aria-hidden="true"></i> 字段属性</h4>
-        
+
         <div class="property-row">
           <div class="property-group half">
             <label class="property-label">字段名</label>
-            <input
-              type="text"
-              class="form-control"
-              v-model="selectedField.label"
-              @input="onFieldChange"
-            />
+            <input type="text" class="form-control" v-model="selectedField.label" @input="onFieldChange" />
           </div>
           <div class="property-group half">
             <label class="property-label">字段值</label>
-            <input
-              type="text"
-              class="form-control"
-              v-model="selectedField.value"
-              @input="onFieldChange"
-            />
+            <input type="text" class="form-control" v-model="selectedField.value" @input="onFieldChange" />
           </div>
         </div>
 
@@ -57,23 +47,19 @@
           <div class="property-group">
             <label class="property-label">类型</label>
             <div class="type-buttons">
-              <button
-                :class="['type-btn', selectedField.type === 'fixed' ? 'active' : '']"
-                @click="selectedField.type = 'fixed'; onFieldChange()"
-              >固定</button>
-              <button
-                :class="['type-btn', selectedField.type === 'dynamic' ? 'active' : '']"
-                @click="selectedField.type = 'dynamic'; onFieldChange()"
-              >可变</button>
+              <button :class="['type-btn', selectedField.type === 'fixed' ? 'active' : '']" @click="setSelectedFieldType('fixed')">
+                固定
+              </button>
+              <button :class="['type-btn', selectedField.type === 'dynamic' ? 'active' : '']" @click="setSelectedFieldType('dynamic')">
+                可变
+              </button>
             </div>
           </div>
         </div>
 
         <div class="property-row">
           <div class="property-group">
-            <button class="btn btn-danger" @click="deleteSelectedField">
-              <i class="fa fa-trash-o" aria-hidden="true"></i> 删除
-            </button>
+            <button class="btn btn-danger" @click="deleteSelectedField"><i class="fa fa-trash-o" aria-hidden="true"></i> 删除</button>
           </div>
         </div>
       </div>
@@ -97,7 +83,7 @@ import { useResizablePane } from '@/composables/useResizablePane'
 export default {
   name: 'LabelVisualEditor',
   components: {
-    PaneResizeHandle
+    PaneResizeHandle,
   },
   setup() {
     const LABEL_EDITOR_MQ = '(max-width: 960px)'
@@ -155,16 +141,16 @@ export default {
   props: {
     fields: {
       type: Array,
-      default: () => []
+      default: () => [],
     },
     grid: {
       type: Object,
-      default: () => ({})
+      default: () => ({}),
     },
     imageSize: {
       type: Object,
-      default: () => ({ width: 900, height: 600 })
-    }
+      default: () => ({ width: 900, height: 600 }),
+    },
   },
   data() {
     return {
@@ -176,7 +162,7 @@ export default {
       isDragging: false,
       dragOffset: { x: 0, y: 0 },
       hoverFieldId: null,
-      ctx: null
+      ctx: null,
     }
   },
   watch: {
@@ -188,7 +174,7 @@ export default {
         })
       },
       deep: true,
-      immediate: true
+      immediate: true,
     },
     imageSize: {
       handler(newSize) {
@@ -200,8 +186,8 @@ export default {
           this.drawCanvas()
         })
       },
-      immediate: true
-    }
+      immediate: true,
+    },
   },
   mounted() {
     console.log('LabelVisualEditor mounted - canvas ref:', this.$refs.labelCanvas)
@@ -241,7 +227,7 @@ export default {
         this.ctx.lineWidth = 1
 
         // 水平线
-        this.grid.horizontal_lines.forEach(y => {
+        this.grid.horizontal_lines.forEach((y) => {
           const scaledY = y * this.scale
           this.ctx.beginPath()
           this.ctx.moveTo(0, scaledY)
@@ -250,7 +236,7 @@ export default {
         })
 
         // 垂直线
-        this.grid.vertical_lines.forEach(x => {
+        this.grid.vertical_lines.forEach((x) => {
           const scaledX = x * this.scale
           this.ctx.beginPath()
           this.ctx.moveTo(scaledX, 0)
@@ -260,18 +246,18 @@ export default {
       }
 
       // 绘制字段
-      this.fields.forEach(field => {
+      this.fields.forEach((field) => {
         this.drawField(field)
       })
     },
 
     drawField(field) {
       // 兼容 position 格式：{x, y, width, height} 或 {left, top, width, height}
-      const posX = field.position.x !== undefined ? field.position.x : (field.position.left || 0)
-      const posY = field.position.y !== undefined ? field.position.y : (field.position.top || 0)
+      const posX = field.position.x !== undefined ? field.position.x : field.position.left || 0
+      const posY = field.position.y !== undefined ? field.position.y : field.position.top || 0
       const width = field.position.width || 100
       const height = field.position.height || 30
-      
+
       const x = posX * this.scale
       const y = posY * this.scale
       const fieldWidth = width * this.scale
@@ -307,15 +293,15 @@ export default {
       this.ctx.fillStyle = '#000000'
       const fontSize = Math.max(12, Math.min(16, 14 * this.scale))
       this.ctx.font = `bold ${fontSize}px Arial`
-      
+
       // 显示值（可变字段用 X 占位）
-      const displayValue = field.type === 'dynamic' && !field.value ? 'X' : (field.value || 'X')
+      const displayValue = field.type === 'dynamic' && !field.value ? 'X' : field.value || 'X'
       const text = `${field.label}: ${displayValue}`
-      
+
       // 文本基线位置（也按比例缩放）
       const textY = y + Math.min(25, 20 * this.scale)
       const lineHeight = Math.max(16, 18 * this.scale)
-      
+
       // 文本换行处理
       this.wrapText(text, x + 5, textY, fieldWidth - 10, lineHeight)
     },
@@ -328,7 +314,7 @@ export default {
       for (let i = 0; i < words.length; i++) {
         const testLine = line + words[i]
         const metrics = this.ctx.measureText(testLine)
-        
+
         if (metrics.width > maxWidth && i > 0) {
           this.ctx.fillText(line, x, currentY)
           line = words[i]
@@ -349,11 +335,11 @@ export default {
       for (let i = this.fields.length - 1; i >= 0; i--) {
         const field = this.fields[i]
         // 兼容 position 格式
-        const posX = field.position.x !== undefined ? field.position.x : (field.position.left || 0)
-        const posY = field.position.y !== undefined ? field.position.y : (field.position.top || 0)
+        const posX = field.position.x !== undefined ? field.position.x : field.position.left || 0
+        const posY = field.position.y !== undefined ? field.position.y : field.position.top || 0
         const fw = (field.position.width || 100) * this.scale
         const fh = (field.position.height || 30) * this.scale
-        
+
         const fx = posX * this.scale
         const fy = posY * this.scale
 
@@ -366,7 +352,7 @@ export default {
 
     handleCanvasClick(e) {
       const field = this.getFieldAtPosition(e.clientX, e.clientY)
-      
+
       if (field) {
         this.selectedField = field
         this.selectedFieldId = field.id
@@ -381,11 +367,11 @@ export default {
 
     handleMouseMove(e) {
       const field = this.getFieldAtPosition(e.clientX, e.clientY)
-      
+
       if (field && field.id !== this.hoverFieldId) {
         this.hoverFieldId = field ? field.id : null
         this.drawCanvas()
-        
+
         // 设置鼠标样式
         this.$refs.labelCanvas.style.cursor = field ? 'pointer' : 'default'
       }
@@ -404,7 +390,7 @@ export default {
           this.selectedField.position.left = Math.max(0, Math.round((x - this.dragOffset.x) / this.scale))
           this.selectedField.position.top = Math.max(0, Math.round((y - this.dragOffset.y) / this.scale))
         }
-        
+
         this.drawCanvas()
       }
     },
@@ -421,10 +407,10 @@ export default {
         const x = (e.clientX - rect.left) * (this.canvasWidth / rect.width)
         const y = (e.clientY - rect.top) * (this.canvasHeight / rect.height)
 
-        const posX = field.position.x !== undefined ? field.position.x : (field.position.left || 0)
-        const posY = field.position.y !== undefined ? field.position.y : (field.position.top || 0)
-        this.dragOffset.x = x - (posX * this.scale)
-        this.dragOffset.y = y - (posY * this.scale)
+        const posX = field.position.x !== undefined ? field.position.x : field.position.left || 0
+        const posY = field.position.y !== undefined ? field.position.y : field.position.top || 0
+        this.dragOffset.x = x - posX * this.scale
+        this.dragOffset.y = y - posY * this.scale
         this.isDragging = true
 
         this.drawCanvas()
@@ -450,12 +436,18 @@ export default {
       this.$emit('fields-update', this.fields)
     },
 
+    setSelectedFieldType(type) {
+      if (!this.selectedField) return
+      this.selectedField.type = type
+      this.onFieldChange()
+    },
+
     deleteSelectedField() {
       if (!this.selectedField) return
 
-      const index = this.fields.findIndex(f => f.id === this.selectedFieldId)
+      const index = this.fields.findIndex((f) => f.id === this.selectedFieldId)
       if (index > -1) {
-        const updated = this.fields.filter(f => f.id !== this.selectedFieldId)
+        const updated = this.fields.filter((f) => f.id !== this.selectedFieldId)
         this.selectedField = null
         this.selectedFieldId = null
         this.drawCanvas()
@@ -465,8 +457,8 @@ export default {
 
     getFields() {
       return this.fields
-    }
-  }
+    },
+  },
 }
 </script>
 

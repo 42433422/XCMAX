@@ -5,24 +5,17 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // ── 使用 vi.hoisted 创建 mock 变量，确保 vi.mock 工厂能访问到 ──
-const {
-  capturedDriverConfigRef,
-  mockHighlight,
-  mockDestroy,
-  mockWaitForSelector,
-  mockDemoGroupCleanup,
-  mockSleep,
-  mockGetVirtualCursor,
-} = vi.hoisted(() => ({
-  // 用 ref 对象保存 driver() 配置，避免 let 变量在 hoist 时不可用
-  capturedDriverConfigRef: { value: null as any },
-  mockHighlight: vi.fn(),
-  mockDestroy: vi.fn(),
-  mockWaitForSelector: vi.fn(),
-  mockDemoGroupCleanup: vi.fn(),
-  mockSleep: vi.fn().mockResolvedValue(undefined),
-  mockGetVirtualCursor: vi.fn(() => ({ hide: vi.fn() })),
-}))
+const { capturedDriverConfigRef, mockHighlight, mockDestroy, mockWaitForSelector, mockDemoGroupCleanup, mockSleep, mockGetVirtualCursor } =
+  vi.hoisted(() => ({
+    // 用 ref 对象保存 driver() 配置，避免 let 变量在 hoist 时不可用
+    capturedDriverConfigRef: { value: null as any },
+    mockHighlight: vi.fn(),
+    mockDestroy: vi.fn(),
+    mockWaitForSelector: vi.fn(),
+    mockDemoGroupCleanup: vi.fn(),
+    mockSleep: vi.fn().mockResolvedValue(undefined),
+    mockGetVirtualCursor: vi.fn(() => ({ hide: vi.fn() })),
+  }))
 
 vi.mock('driver.js', () => ({
   driver: vi.fn((config: any) => {
@@ -48,11 +41,7 @@ vi.mock('@/tutorial/demoHelpers', () => ({
 }))
 
 // 在 vi.mock 之后导入被测模块
-import {
-  runOnboardingTour,
-  type RunOnboardingTourOptions,
-  type OnboardingTourStoreLike,
-} from './runOnboardingTour'
+import { runOnboardingTour, type RunOnboardingTourOptions, type OnboardingTourStoreLike } from './runOnboardingTour'
 
 // ── 辅助函数 ──
 function makeMockStore(overrides: Partial<OnboardingTourStoreLike> = {}): OnboardingTourStoreLike {
@@ -320,9 +309,7 @@ describe('runOnboardingTour - navigateIfNeeded', () => {
       onSkip: vi.fn(),
     })
 
-    await vi.waitFor(() =>
-      expect(router.push).toHaveBeenCalledWith({ name: 'chat', query: { tab: 'new' } }),
-    )
+    await vi.waitFor(() => expect(router.push).toHaveBeenCalledWith({ name: 'chat', query: { tab: 'new' } }))
     cleanup()
   })
 
@@ -377,9 +364,7 @@ describe('runOnboardingTour - navigateIfNeeded', () => {
       onSkip: vi.fn(),
     })
 
-    await vi.waitFor(() =>
-      expect(router.push).toHaveBeenCalledWith({ name: 'chat', query: { tab: 'new' } }),
-    )
+    await vi.waitFor(() => expect(router.push).toHaveBeenCalledWith({ name: 'chat', query: { tab: 'new' } }))
     cleanup()
   })
 })
@@ -393,18 +378,14 @@ describe('runOnboardingTour - runStep 元素查找', () => {
 
     await vi.waitFor(() => expect(mockHighlight).toHaveBeenCalled())
     // highlight 第一个参数应包含 element
-    expect(mockHighlight).toHaveBeenCalledWith(
-      expect.objectContaining({ element: el }),
-    )
+    expect(mockHighlight).toHaveBeenCalledWith(expect.objectContaining({ element: el }))
     cleanup()
   })
 
   it('未找到元素 + actionType=click → 重试等待', async () => {
     mockWaitForSelector.mockResolvedValue(null)
 
-    const cleanup = runOnboardingTour(
-      makeOptions([makeStep({ actionType: 'click', isLast: true })]),
-    )
+    const cleanup = runOnboardingTour(makeOptions([makeStep({ actionType: 'click', isLast: true })]))
 
     // click 类型会先 waitForSelector，失败后 sleep(400)，再 waitForSelector(6000)
     await vi.waitFor(() => expect(mockWaitForSelector).toHaveBeenCalledTimes(2))
@@ -416,9 +397,7 @@ describe('runOnboardingTour - runStep 元素查找', () => {
   it('未找到元素 + actionType=observe → 不重试', async () => {
     mockWaitForSelector.mockResolvedValue(null)
 
-    const cleanup = runOnboardingTour(
-      makeOptions([makeStep({ actionType: 'observe', isLast: true })]),
-    )
+    const cleanup = runOnboardingTour(makeOptions([makeStep({ actionType: 'observe', isLast: true })]))
 
     await vi.waitFor(() => expect(mockWaitForSelector).toHaveBeenCalled())
     // observe 类型只调用一次 waitForSelector
@@ -461,9 +440,7 @@ describe('runOnboardingTour - demo 回退消息', () => {
     await vi.waitFor(() => {
       const calls = mockHighlight.mock.calls
       // 找到包含 fallbackMsg 的 highlight 调用
-      const fallbackCall = calls.find(
-        (call: any[]) => call[0]?.popover?.description === '回退提示文案',
-      )
+      const fallbackCall = calls.find((call: any[]) => call[0]?.popover?.description === '回退提示文案')
       expect(fallbackCall).toBeDefined()
     })
     cleanup()
@@ -485,9 +462,7 @@ describe('runOnboardingTour - demo 回退消息', () => {
     await vi.waitFor(() => expect(mockHighlight).toHaveBeenCalled())
     // 只有初始 highlight，没有 fallback
     const calls = mockHighlight.mock.calls
-    const hasFallback = calls.some(
-      (call: any[]) => call[0]?.popover?.description === '回退提示文案',
-    )
+    const hasFallback = calls.some((call: any[]) => call[0]?.popover?.description === '回退提示文案')
     expect(hasFallback).toBe(false)
     cleanup()
   })
@@ -542,6 +517,7 @@ describe('runOnboardingTour - isLast 步骤', () => {
     finishBtn.click()
 
     expect(onComplete).toHaveBeenCalled()
+    cleanup()
   })
 })
 
@@ -625,7 +601,7 @@ describe('runOnboardingTour - skip 与 destroy', () => {
     const el = makeVisibleElement()
     mockWaitForSelector.mockResolvedValue(el)
 
-    const cleanup = runOnboardingTour(makeOptions([makeStep({ isLast: true })]))
+    runOnboardingTour(makeOptions([makeStep({ isLast: true })]))
 
     await vi.waitFor(() => expect(mockHighlight).toHaveBeenCalled())
 

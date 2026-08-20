@@ -1,23 +1,12 @@
 <template>
   <Teleport to="body">
-    <div
-      v-if="open"
-      class="nav-self-credit-overlay nav-admin-digest-unlock-overlay"
-      role="presentation"
-      @click.self="onCancel"
-    >
-      <div
-        class="nav-self-credit-dialog"
-        role="dialog"
-        aria-modal="true"
-        :aria-label="title"
-        @click.stop
-        @keydown.esc.prevent="onCancel"
-      >
+    <div v-if="open" class="nav-self-credit-overlay nav-admin-digest-unlock-overlay" role="presentation" @click.self="onCancel">
+      <div class="nav-self-credit-dialog" role="dialog" aria-modal="true" :aria-label="title" @click.stop @keydown.esc.prevent="onCancel">
         <h3 class="nav-self-credit-dialog__title">{{ title }}</h3>
         <p class="nav-self-credit-dialog__hint">
           <template v-if="hint">{{ hint }}<br /></template>
-          请输入<strong>连续 6 位</strong>十六进制身份校验码（与顶栏「解锁管理端」相同，可从 XCmax 页眉<strong>身份码</strong>或当日摘要邮件复制）。
+          请输入<strong>连续 6 位</strong>十六进制身份校验码（与顶栏「解锁管理端」相同，可从 XCmax
+          页眉<strong>身份码</strong>或当日摘要邮件复制）。
           <span class="nav-admin-unlock__hint-warn">须与当前浏览器所连市场 API 为同一套 MODstore。</span>
         </p>
         <label class="nav-self-credit-dialog__label">身份校验码</label>
@@ -39,9 +28,7 @@
           <button type="button" class="nav-self-credit-dialog__primary" :disabled="busy" @click="emit('submit')">
             {{ busy ? '校验中…' : submitLabel }}
           </button>
-          <button type="button" class="nav-self-credit-dialog__secondary" @click="onCancel">
-            取消
-          </button>
+          <button type="button" class="nav-self-credit-dialog__secondary" @click="onCancel">取消</button>
         </div>
       </div>
     </div>

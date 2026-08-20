@@ -13,6 +13,7 @@ Usage::
     python audit_evolution.py --summary
     python audit_evolution.py --mark-audited <event_id> --verdict approved
 """
+
 from __future__ import annotations
 
 import argparse
@@ -54,16 +55,10 @@ def _print_table(events: list[dict]) -> None:
         et = e.get("event_type", "")
         tid = e.get("trace_id", "")[:12]
         proposal = e.get("llm_proposal") or {}
-        pid = (
-            e.get("pack_id")
-            or proposal.get("employee_pack", {}).get("name", "")
-            or ""
-        )
+        pid = e.get("pack_id") or proposal.get("employee_pack", {}).get("name", "") or ""
         cost = str(e.get("cost_tokens", ""))
         status = e.get("final_status", "")
-        print(
-            f"{ts:<26} {eid:<10} {et:<22} {tid:<14} {pid:<28} {cost:<8} {status:<22}"
-        )
+        print(f"{ts:<26} {eid:<10} {et:<22} {tid:<14} {pid:<28} {cost:<8} {status:<22}")
 
 
 def _print_summary(events: list[dict], since_label: str) -> None:

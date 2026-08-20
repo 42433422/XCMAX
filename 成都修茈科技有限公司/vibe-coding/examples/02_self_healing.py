@@ -37,12 +37,7 @@ def build_mock_llm() -> MockLLM:
         "quality_gate": {"required_keys": ["name"]},
         "domain_keywords": [],
     }
-    naive_code = {
-        "source_code": (
-            "def extract_name(user):\n"
-            "    return {'name': user['name']}\n"
-        )
-    }
+    naive_code = {"source_code": ("def extract_name(user):\n    return {'name': user['name']}\n")}
     return MockLLM([json.dumps(spec), json.dumps(naive_code)])
 
 

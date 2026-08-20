@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     Boolean,
@@ -39,11 +39,11 @@ class WebhookSubscription(Base):
     failure_count = Column(Integer, default=0)
     last_delivery_at = Column(DateTime, nullable=True)
     last_delivery_status = Column(String(32), default="")
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
     updated_at = Column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
 
@@ -72,7 +72,7 @@ class WebhookDelivery(Base):
     response_body = Column(Text, default="")
     error_message = Column(Text, default="")
     duration_ms = Column(Float, default=0.0)
-    started_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    started_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
     completed_at = Column(DateTime, nullable=True)
 
 
@@ -98,5 +98,5 @@ class OutboxEvent(Base):
     status = Column(String(16), default="pending", index=True)
     attempts = Column(Integer, default=0, nullable=False)
     last_error = Column(Text, default="")
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
     dispatched_at = Column(DateTime, nullable=True)

@@ -7,7 +7,11 @@ export interface EmployeePublishFlowInputs {
   selectedFile: Ref<File | null>
   resolvedWorkflowId: Ref<number>
   linkedModId: Ref<string>
-  listingHints: Ref<{ industryCoerced?: string; priceFromManifest?: number | null; [k: string]: unknown }>
+  listingHints: Ref<{
+    industryCoerced?: string
+    priceFromManifest?: number | null
+    [k: string]: unknown
+  }>
   employeeConfigV2: Ref<unknown>
 }
 
@@ -73,9 +77,20 @@ export function useEmployeePublishFlow({
         const o = JSON.parse(raw)
         input = typeof o === 'object' && o !== null && !Array.isArray(o) ? o : {}
       }
-      const r1 = await api.workflowSandboxRun(wid, { input_data: input, mock_employees: true, validate_only: true })
-      if (!r1.ok) { wfSandboxReport.value = r1; return }
-      const r2 = await api.workflowSandboxRun(wid, { input_data: input, mock_employees: true, validate_only: false })
+      const r1 = await api.workflowSandboxRun(wid, {
+        input_data: input,
+        mock_employees: true,
+        validate_only: true,
+      })
+      if (!r1.ok) {
+        wfSandboxReport.value = r1
+        return
+      }
+      const r2 = await api.workflowSandboxRun(wid, {
+        input_data: input,
+        mock_employees: true,
+        validate_only: false,
+      })
       wfSandboxReport.value = r2
       wfSandboxOk.value = r2.ok === true
     } catch (e) {

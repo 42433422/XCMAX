@@ -4,9 +4,7 @@
 
 import type { LlmProviderBlock } from '../composables/llmCatalogModelHelpers'
 
-export type OpenAiVisionPart =
-  | { type: 'text'; text: string }
-  | { type: 'image_url'; image_url: { url: string } }
+export type OpenAiVisionPart = { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }
 
 const VISION_HINT_RE =
   /vision|vl-|vlm|deepseek-vl|qwen-vl|llava|omni|gpt-4o|gpt-4\.1|gpt-4-turbo|gemini-1\.5|gemini-2|claude-3|claude-sonnet|claude-opus|4k图|多模态/i
@@ -78,10 +76,7 @@ export async function compressImageFileToDataUrl(
   }
 }
 
-export function buildUserMultimodalContent(
-  text: string,
-  imageDataUrls: string[],
-): string | OpenAiVisionPart[] {
+export function buildUserMultimodalContent(text: string, imageDataUrls: string[]): string | OpenAiVisionPart[] {
   const t = String(text || '').trim()
   const urls = (imageDataUrls || []).filter((u) => typeof u === 'string' && u.trim())
   if (!urls.length) return t

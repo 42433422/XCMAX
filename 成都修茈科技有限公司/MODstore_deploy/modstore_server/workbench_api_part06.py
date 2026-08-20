@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="attr-defined, index, misc, no-any-return, union-attr, valid-type"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -15,7 +19,11 @@ async def employee_save_impl(
     import re as _re
     import tempfile as _tmp
     import zipfile as _zipfile
-    from modstore_server.catalog_store import append_package, package_manifest_alignment_errors
+
+    from modstore_server.catalog_store import (
+        append_package,
+        package_manifest_alignment_errors,
+    )
     from modstore_server.catalog_sync import upsert_catalog_item_from_xc_package_dict
 
     mf = body.manifest
@@ -34,7 +42,7 @@ async def employee_save_impl(
             400, f"无法从 employee_id/manifest.id 生成合法 pack_id: {raw_id!r}"
         )
     mf["id"] = mf.get("id") or pack_id
-    (mf, registry_errs) = _facade().normalize_editor_manifest_for_registry(mf, pack_id)
+    mf, registry_errs = _facade().normalize_editor_manifest_for_registry(mf, pack_id)
     if registry_errs:
         _facade()._LOG.info("employee_save: manifest 校验警告 pack=%s: %s", pack_id, registry_errs)
     ref_warnings: _facade().List[str] = []
@@ -46,7 +54,7 @@ async def employee_save_impl(
             )
 
             embed_workflow_bundles_in_manifest(db_ref, mf)
-        except Exception as _bundle_exc:
+        except RECOVERABLE_ERRORS as _bundle_exc:
             _facade()._LOG.warning(
                 "employee_save: embed bundles failed pack=%s: %s", pack_id, _bundle_exc
             )
@@ -55,7 +63,8 @@ async def employee_save_impl(
 
     if normalize_artifact(mf) != "employee_pack":
         raise _facade().HTTPException(
-            400, f"manifest 规范化后 artifact 仍无效；校验详情: {'; '.join(registry_errs)}"
+            400,
+            f"manifest 规范化后 artifact 仍无效；校验详情: {'; '.join(registry_errs)}",
         )
     from modstore_server.employee_asset_pipeline import (
         DIRECT_PYTHON_RUNTIME_MISSING_MSG,
@@ -77,12 +86,12 @@ async def employee_save_impl(
         raise _facade().HTTPException(400, DIRECT_PYTHON_RUNTIME_MISSING_MSG)
     try:
         mf = persist_manifest_to_pack_dir(pack_dir, mf, brief=_brief_for_pack)
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         raise _facade().HTTPException(500, f"manifest 落盘失败: {exc}") from exc
     if not _has_runtime:
         try:
             zip_bytes = _facade().build_employee_pack_zip(pack_id, mf)
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             raise _facade().HTTPException(500, f"员工包打包失败: {exc}") from exc
         try:
             with _tmp.NamedTemporaryFile(suffix=".xcemp", delete=False) as tmp:
@@ -97,12 +106,12 @@ async def employee_save_impl(
                         dest.parent.mkdir(parents=True, exist_ok=True)
                         if not member.endswith("/"):
                             dest.write_bytes(zf.read(member))
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             _facade()._LOG.warning("employee_save: zip 解压失败 pack=%s: %s", pack_id, exc)
         finally:
             try:
                 tmp_zip_path.unlink(missing_ok=True)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 pass
     try:
         from modstore_server.mod_scaffold_runner import rehydrate_employee_pack_bundles
@@ -113,7 +122,7 @@ async def employee_save_impl(
             mf_path_rh = pack_dir / "manifest.json"
             if mf_path_rh.is_file():
                 mf = _facade().json.loads(mf_path_rh.read_text(encoding="utf-8"))
-    except Exception as _rh_exc:
+    except RECOVERABLE_ERRORS as _rh_exc:
         _facade()._LOG.warning(
             "employee_save: rehydrate bundles failed pack=%s: %s", pack_id, _rh_exc
         )
@@ -124,12 +133,16 @@ async def employee_save_impl(
     }
     if body.register_skills:
         try:
-            from modstore_server.employee_skill_register import register_employee_pack_as_eskills
-            from modstore_server.mod_scaffold_runner import resolve_llm_provider_model_auto
+            from modstore_server.employee_skill_register import (
+                register_employee_pack_as_eskills,
+            )
+            from modstore_server.mod_scaffold_runner import (
+                resolve_llm_provider_model_auto,
+            )
 
             sf_reg = _facade().get_session_factory()
             with sf_reg() as db_reg:
-                (prov, mdl, perr) = await resolve_llm_provider_model_auto(
+                prov, mdl, perr = await resolve_llm_provider_model_auto(
                     db_reg, user, body.provider, body.model
                 )
             if perr:
@@ -196,7 +209,7 @@ async def employee_save_impl(
                         _facade().json.dumps(mf, ensure_ascii=False, indent=2) + "\n",
                         encoding="utf-8",
                     )
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             _facade()._LOG.warning(
                 "employee_save: Skill 注册异常（保存继续）pack=%s: %s", pack_id, exc
             )
@@ -208,7 +221,7 @@ async def employee_save_impl(
         )
     except ValueError as exc:
         raise _facade().HTTPException(400, str(exc)) from exc
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         raise _facade().HTTPException(500, f"员工包打包失败: {exc}") from exc
     version = str(mf.get("version") or (mf.get("identity") or {}).get("version") or "1.0.0").strip()
     name = str(mf.get("name") or (mf.get("identity") or {}).get("name") or pack_id).strip()
@@ -235,7 +248,7 @@ async def employee_save_impl(
                 400, "员工包 metadata 与包内 manifest 不一致: " + "; ".join(align_errs)
             )
         saved = append_package(rec, tmp_path)
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         tmp_path.unlink(missing_ok=True)
         raise _facade().HTTPException(500, f"写入 catalog_store 失败: {exc}") from exc
     finally:
@@ -261,14 +274,14 @@ async def employee_save_impl(
             row.stored_filename = saved.get("stored_filename") or ""
             row.sha256 = saved.get("sha256") or ""
             db.commit()
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             db.rollback()
             raise _facade().HTTPException(500, f"写入数据库失败: {exc}") from exc
     try:
         from modstore_server.employee_api import sync_triggers_after_registration
 
         sync_triggers_after_registration(mf)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         _facade()._LOG.exception("employee_save: sync triggers failed pack=%s", pack_id)
     return {
         "ok": True,
@@ -315,7 +328,8 @@ class EmployeeExportBody(_facade().BaseModel):
     "/employee-export", summary="根据当前 manifest 生成完整 .xcemp 并下载（不落盘）"
 )
 async def employee_export(
-    body: EmployeeExportBody, user: _facade().User = _facade().Depends(_facade()._get_current_user)
+    body: EmployeeExportBody,
+    user: _facade().User = _facade().Depends(_facade()._get_current_user),
 ):
     """接收前端当前 manifest，用后端模板生成完整 .xcemp（含 blueprints.py + employee.py），直接返回 zip 流。
     ``standalone=true`` 时额外嵌入 zipapp 入口（与 employee_pack_export._build_employee_pack_zip_with_source 一致），
@@ -336,7 +350,7 @@ async def employee_export(
         raise _facade().HTTPException(400, "manifest 中缺少 identity.id 或顶层 id 字段")
     pack_id = _re.sub("[^a-z0-9._-]", "-", raw_id.lower()).strip("-")[:48] or "employee"
     mf["id"] = mf.get("id") or pack_id
-    (mf, registry_errs) = _facade().normalize_editor_manifest_for_registry(mf, pack_id)
+    mf, registry_errs = _facade().normalize_editor_manifest_for_registry(mf, pack_id)
     if registry_errs:
         _facade()._LOG.info(
             "employee_export: manifest 校验警告 pack=%s: %s", pack_id, registry_errs
@@ -350,9 +364,11 @@ async def employee_export(
             )
 
             embed_workflow_bundles_in_manifest(db_ref, mf)
-        except Exception as _bundle_exc:
+        except RECOVERABLE_ERRORS as _bundle_exc:
             _facade()._LOG.warning(
-                "employee_export: embed bundles failed pack=%s: %s", pack_id, _bundle_exc
+                "employee_export: embed bundles failed pack=%s: %s",
+                pack_id,
+                _bundle_exc,
             )
             ref_warnings = _facade()._write_workflow_reference_report(db_ref, user, mf)
     from modstore_server.employee_asset_pipeline import (
@@ -376,16 +392,21 @@ async def employee_export(
         raise _facade().HTTPException(400, DIRECT_PYTHON_RUNTIME_MISSING_MSG)
     try:
         if body.standalone:
-            from modstore_server.employee_pack_export import _build_employee_pack_zip_with_source
+            from modstore_server.employee_pack_export import (
+                _build_employee_pack_zip_with_source,
+            )
 
             zip_bytes = _build_employee_pack_zip_with_source(pack_id, mf, None)
         else:
             zip_bytes = build_employee_pack_zip_for_library(
-                pack_id, mf, pack_dir=_lib_pack if _lib_pack.is_dir() else None, brief=_export_brief
+                pack_id,
+                mf,
+                pack_dir=_lib_pack if _lib_pack.is_dir() else None,
+                brief=_export_brief,
             )
     except ValueError as exc:
         raise _facade().HTTPException(400, str(exc)) from exc
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         raise _facade().HTTPException(500, f"员工包打包失败: {exc}") from exc
     dl_name = f"{pack_id}-standalone.xcemp" if body.standalone else f"{pack_id}.xcemp"
     return _facade().Response(
@@ -416,7 +437,8 @@ class DispatchRequest(_facade().BaseModel):
 
 @_facade().router.post("/dispatch", summary="任务拆解路由 → 多员工并行执行")
 async def dispatch_task(
-    body: DispatchRequest, user: _facade().User = _facade().Depends(_facade()._get_current_user)
+    body: DispatchRequest,
+    user: _facade().User = _facade().Depends(_facade()._get_current_user),
 ):
     """接收自然语言任务描述，由 task_router 拆解为子任务列表，按拓扑执行各员工。
 

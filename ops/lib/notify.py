@@ -38,6 +38,7 @@ DEFAULT_ALERT_TO = "ler231573@gmail.com"
 DEFAULT_MODSTORE_ENV = "/root/XCMAX/成都修茈科技有限公司/MODstore_deploy/.env"
 
 LEVELS = ("crit", "warn", "ok", "info")
+BOUNDARY_ERRORS = (Exception,)
 
 
 def _tls12_context():
@@ -60,7 +61,7 @@ def _read_env_file(path):
                 if not line or line.startswith("#") or "=" not in line:
                     continue
                 if line.startswith("export "):
-                    line = line[len("export "):]
+                    line = line[len("export ") :]
                 key, _, value = line.partition("=")
                 value = value.strip().strip('"').strip("'")
                 data[key.strip()] = value
@@ -170,7 +171,7 @@ def send_smtp(level, title, body):
         finally:
             server.quit()
         return True, "smtp -> %s" % cfg["to"]
-    except Exception as exc:  # smtplib/socket 异常族杂，告警路径上一律吞并报告
+    except BOUNDARY_ERRORS as exc:  # smtplib/socket 异常族杂，告警路径上一律吞并报告
         return False, "smtp 失败: %s" % exc
 
 
@@ -201,7 +202,7 @@ def send_webhook(level, title, body):
         if 200 <= code < 300:
             return True, "webhook %s" % code
         return False, "webhook http %s" % code
-    except Exception as exc:
+    except BOUNDARY_ERRORS as exc:
         return False, "webhook 失败: %s" % exc
 
 
@@ -261,7 +262,8 @@ def main(argv=None):
         delivered, details = deliver(
             "info",
             "xcmax-ops 自检",
-            "这是一条测试告警。收到它说明告警链路可用。\n通道状态:\n" + channel_status(),
+            "这是一条测试告警。收到它说明告警链路可用。\n通道状态:\n"
+            + channel_status(),
         )
         print("发送结果: %s (%s)" % ("送达" if delivered else "未送达", details))
         return 0 if delivered else 3

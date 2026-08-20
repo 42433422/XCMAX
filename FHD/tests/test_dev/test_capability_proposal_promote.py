@@ -1,3 +1,4 @@
+# mypy: disable-error-code="func-returns-value"
 """Governance and idempotency tests for capability proposal promotion."""
 
 from __future__ import annotations

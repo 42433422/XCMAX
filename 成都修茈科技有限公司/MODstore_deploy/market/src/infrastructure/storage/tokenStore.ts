@@ -13,9 +13,7 @@ export function getRefreshToken(): string {
   return getStorage()?.getItem(REFRESH_TOKEN_KEY) || ''
 }
 
-export function setAuthTokens(
-  tokens: { access_token?: string; refresh_token?: string } | null | undefined,
-): void {
+export function setAuthTokens(tokens: { access_token?: string; refresh_token?: string } | null | undefined): void {
   const storage = getStorage()
   if (!storage) return
   if (tokens?.access_token) storage.setItem(ACCESS_TOKEN_KEY, tokens.access_token)

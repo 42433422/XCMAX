@@ -26,6 +26,10 @@ jobs:
         run: python -m unittest scripts.dev.test_source_governance
       - name: Check cross-stack source debt
         run: python scripts/dev/source_governance.py --top 10
+      - name: Check operational exception boundaries
+        run: python scripts/ci/check_operational_errors_gate.py
+      - name: Check broad exception ratchet
+        run: python scripts/ci/check_broad_except_gate.py
 
   sunbird-source-build:
     runs-on: ubuntu-latest

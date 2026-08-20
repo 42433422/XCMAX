@@ -1,11 +1,5 @@
 <template>
-  <svg
-    class="aiopen-launcher-svg"
-    viewBox="0 0 48 48"
-    fill="none"
-    xmlns="http://www.w3.org/2000/svg"
-    aria-hidden="true"
-  >
+  <svg class="aiopen-launcher-svg" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <defs>
       <linearGradient id="aiopen-icon-bg" x1="8" y1="6" x2="40" y2="42" gradientUnits="userSpaceOnUse">
         <stop stop-color="#3b82f6" />

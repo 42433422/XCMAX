@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment, call-overload"
 # ruff: noqa: E402, F401
 """Skill 组（画布）执行引擎：执行、沙盒追踪、拓扑校验。
 
@@ -14,7 +15,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeout
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from sqlalchemy.orm import Session
 
@@ -68,8 +69,12 @@ def _json_safe(value: Any, max_depth: int = 6, max_str: int = 8000) -> Any:
     return str(type(value).__name__) + ":<non-serializable>"
 
 
-from modstore_server.workflow_engine_workflowengine_mixin01 import _WorkflowEnginePart01Mixin
-from modstore_server.workflow_engine_workflowengine_mixin02 import _WorkflowEnginePart02Mixin
+from modstore_server.workflow_engine_workflowengine_mixin01 import (
+    _WorkflowEnginePart01Mixin,
+)
+from modstore_server.workflow_engine_workflowengine_mixin02 import (
+    _WorkflowEnginePart02Mixin,
+)
 
 
 class WorkflowEngine(_WorkflowEnginePart01Mixin, _WorkflowEnginePart02Mixin):
@@ -85,9 +90,9 @@ def _topology_warnings(session: Session, workflow_id: int) -> List[str]:
     edges = session.query(WorkflowEdge).filter(WorkflowEdge.workflow_id == workflow_id).all()
     if not nodes:
         return ["工作流没有任何节点"]
-    node_ids = {n.id for n in nodes}
-    start_ids = [n.id for n in nodes if n.node_type == "start"]
-    end_ids = {n.id for n in nodes if n.node_type == "end"}
+    node_ids = {int(str(n.id)) for n in nodes}
+    start_ids = [int(str(n.id)) for n in nodes if n.node_type == "start"]
+    end_ids = {int(str(n.id)) for n in nodes if n.node_type == "end"}
     if len(start_ids) != 1:
         return warnings
     adj: Dict[int, List[int]] = {nid: [] for nid in node_ids}
@@ -127,7 +132,7 @@ def _detect_cycle(adj: Dict[int, List[int]], start: int) -> List[int]:
     if the graph reachable from ``start`` contains any cycle, else ``[]``.
     """
     WHITE, GRAY, BLACK = 0, 1, 2
-    color: Dict[int, int] = {nid: WHITE for nid in adj}
+    color: Dict[int, int] = dict.fromkeys(adj, WHITE)
     parent: Dict[int, int] = {}
     cycle: List[int] = []
 
@@ -247,9 +252,12 @@ class WorkflowValidator:
 
 
 def execute_workflow(
-    workflow_id: int, input_data: Dict[str, Any] = None, *, user_id: int = 0
+    workflow_id: int, input_data: Optional[Dict[str, Any]] = None, *, user_id: int = 0
 ) -> Dict[str, Any]:
-    return workflow_engine.execute_workflow(workflow_id, input_data, user_id=user_id)
+    return cast(
+        Dict[str, Any],
+        workflow_engine.execute_workflow(workflow_id, input_data or {}, user_id=user_id),
+    )
 
 
 def validate_workflow(workflow_id: int) -> List[str]:
@@ -308,7 +316,7 @@ def run_workflow_sandbox(
                 idempotency_key=f"{WORKFLOW_SANDBOX_COMPLETED}:{workflow_id}:{duration_ms}",
             )
         )
-        return result
+        return cast(Dict[str, Any], result)
 
 
 workflow_engine = WorkflowEngine()

@@ -11,7 +11,12 @@ def butler_orchestrate_steps() -> List[Dict[str, Any]]:
     return [
         {"id": "snapshot", "label": "备份快照", "status": "pending", "message": None},
         {"id": "plan", "label": "规划改动", "status": "pending", "message": None},
-        {"id": "vibe", "label": "vibe-coding 改写", "status": "pending", "message": None},
+        {
+            "id": "vibe",
+            "label": "vibe-coding 改写",
+            "status": "pending",
+            "message": None,
+        },
         {"id": "validate", "label": "服务端校验", "status": "pending", "message": None},
         {"id": "complete", "label": "完成", "status": "pending", "message": None},
     ]

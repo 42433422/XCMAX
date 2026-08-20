@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="no-any-return"
 """coverage_ramp stub 配额棘轮：stub 文件数量只减不增。
 
 ``tests/**/test_coverage_ramp_*.py`` 是行覆盖率填充 stub（pyproject markers 自承

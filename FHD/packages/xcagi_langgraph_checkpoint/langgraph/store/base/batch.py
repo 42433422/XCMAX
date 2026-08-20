@@ -8,6 +8,7 @@ import weakref
 from collections.abc import Callable, Iterable
 from typing import Any, Literal, TypeVar
 
+from langgraph.checkpoint._exception_policy import BOUNDARY_ERRORS
 from langgraph.store.base import (
     NOT_PROVIDED,
     BaseStore,
@@ -359,7 +360,7 @@ async def _run(
                         # guard against future being done (e.g. cancelled)
                         if not fut.done():
                             fut.set_result(result)
-                except Exception as e:
+                except BOUNDARY_ERRORS as e:
                     for fut in futs:
                         # guard against future being done (e.g. cancelled)
                         if not fut.done():

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment"
 """作者分润结算 API。
 
 分润模型：
@@ -21,7 +22,7 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -214,7 +215,7 @@ def admin_settle_earnings(
     """管理员批量将 pending 分润标记为 settled（表示已核算入账）。"""
     if not user.is_admin:
         raise HTTPException(403, "需要管理员权限")
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
     sf = get_session_factory()
     with sf() as session:
         rows = (
@@ -285,7 +286,7 @@ def admin_process_withdrawal(
     """
     if not user.is_admin:
         raise HTTPException(403, "需要管理员权限")
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
     sf = get_session_factory()
     with sf() as session:
         w = (
@@ -301,7 +302,10 @@ def admin_process_withdrawal(
             w.status = "done"
             settled = (
                 session.query(AuthorEarning)
-                .filter(AuthorEarning.author_id == w.author_id, AuthorEarning.status == "settled")
+                .filter(
+                    AuthorEarning.author_id == w.author_id,
+                    AuthorEarning.status == "settled",
+                )
                 .order_by(AuthorEarning.settled_at)
                 .all()
             )

@@ -26,12 +26,7 @@
       </linearGradient>
     </defs>
     <!-- 数据网格 -->
-    <path
-      d="M8 12h32M8 20h32M8 28h32M8 36h32M16 8v32M24 8v32M32 8v32"
-      stroke="#ffffff"
-      stroke-opacity="0.12"
-      stroke-width="0.8"
-    />
+    <path d="M8 12h32M8 20h32M8 28h32M8 36h32M16 8v32M24 8v32M32 8v32" stroke="#ffffff" stroke-opacity="0.12" stroke-width="0.8" />
     <!-- 柱状 -->
     <rect x="9" y="28" width="6" height="10" rx="1.4" fill="url(#smart-icon-bar-1)" />
     <rect x="19" y="22" width="6" height="16" rx="1.4" fill="url(#smart-icon-bar-2)" />

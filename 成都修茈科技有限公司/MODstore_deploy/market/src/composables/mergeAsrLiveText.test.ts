@@ -11,9 +11,7 @@ describe('mergeAsrLiveText', () => {
   })
 
   it('prefers final offline text', () => {
-    expect(
-      mergeAsrLiveText('问题就是我这边说的字', '问题就是我这边说的字，他没显示全', true),
-    ).toBe('问题就是我这边说的字，他没显示全')
+    expect(mergeAsrLiveText('问题就是我这边说的字', '问题就是我这边说的字，他没显示全', true)).toBe('问题就是我这边说的字，他没显示全')
   })
 
   it('joins overlapping suffix segments', () => {

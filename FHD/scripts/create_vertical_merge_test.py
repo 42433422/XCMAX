@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """
 创建真正有垂直合并的测试图片
 """

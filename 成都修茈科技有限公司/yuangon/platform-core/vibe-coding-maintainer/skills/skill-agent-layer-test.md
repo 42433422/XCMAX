@@ -2,12 +2,12 @@
 
 ## 元信息
 
-| 字段 | 值 |
-|------|----|
-| skill_id | `skill-agent-layer-test` |
-| 所属员工 | `vibe-coding-maintainer` |
-| 业务域 | vibe-coding agent 子包质量维护 |
-| 版本 | 1.0.0 |
+| 字段     | 值                             |
+| -------- | ------------------------------ |
+| skill_id | `skill-agent-layer-test`       |
+| 所属员工 | `vibe-coding-maintainer`       |
+| 业务域   | vibe-coding agent 子包质量维护 |
+| 版本     | 1.0.0                          |
 
 ---
 
@@ -28,6 +28,7 @@ python -m compileall -q src/vibe_coding/agent
 
 **说明**：`tests/agent/marketplace/` 含技能包发布相关单测，包含在 `tests/agent/` 内，无需单独列出。
 **输出 schema**：
+
 ```json
 {
   "status": "ok | error",
@@ -40,6 +41,7 @@ python -m compileall -q src/vibe_coding/agent
 ```
 
 **工具绑定**：
+
 - `python -m py_compile` — 语法检查
 - `python -m pytest tests/agent/` — 测试运行
 - `python -m pytest --cov` — 覆盖率检查
@@ -48,9 +50,9 @@ python -m compileall -q src/vibe_coding/agent
 
 ## 2. 动态触发条件
 
-| 触发类型 | 具体规则 | 阈值 |
-|----------|----------|------|
-| 执行报错 | SyntaxError / ImportError | 即触发 |
+| 触发类型   | 具体规则                                  | 阈值   |
+| ---------- | ----------------------------------------- | ------ |
+| 执行报错   | SyntaxError / ImportError                 | 即触发 |
 | 结果不达标 | `tests_failed > 0` 或 `coverage_pct < 85` | 即触发 |
 
 ---
@@ -58,10 +60,12 @@ python -m compileall -q src/vibe_coding/agent
 ## 3. 动态自适应阶段
 
 **预算限制**：
+
 - 最大 token：5000
 - 最大步数：6
 
 **允许改动的模块白名单**：
+
 - `vibe-coding/src/vibe_coding/agent/**`
 - `vibe-coding/tests/agent/**`
 
@@ -72,6 +76,7 @@ python -m compileall -q src/vibe_coding/agent
 ## 4. 固化
 
 **验收标准**：
+
 - `tests_failed == 0`
 - `coverage_pct ≥ 85`
 - agent 层公开接口签名无 break
@@ -81,9 +86,9 @@ python -m compileall -q src/vibe_coding/agent
 
 ## 5. 评估指标
 
-| 指标 | 目标值 |
-|------|--------|
-| agent 层测试通过率 | 100% |
-| agent 层覆盖率 | ≥ 85% |
-| 静态路径成功率 | ≥ 95% |
-| 平均延迟 | < 30s（含测试运行） |
+| 指标               | 目标值              |
+| ------------------ | ------------------- |
+| agent 层测试通过率 | 100%                |
+| agent 层覆盖率     | ≥ 85%               |
+| 静态路径成功率     | ≥ 95%               |
+| 平均延迟           | < 30s（含测试运行） |

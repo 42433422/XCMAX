@@ -27,20 +27,28 @@ describe('authApi', () => {
   it('login primes csrf and posts credentials', async () => {
     await authApi.login('u', 'p')
     expect(primeCsrfCookie).toHaveBeenCalled()
-    expect(apiMock.post).toHaveBeenCalledWith('/api/auth/login', {
-      username: 'u',
-      password: 'p',
-      account_kind: 'enterprise',
-    }, { timeoutMs: 30_000 })
+    expect(apiMock.post).toHaveBeenCalledWith(
+      '/api/auth/login',
+      {
+        username: 'u',
+        password: 'p',
+        account_kind: 'enterprise',
+      },
+      { timeoutMs: 30_000 },
+    )
   })
 
   it('loginWithPhoneCode posts phone+code', async () => {
     await authApi.loginWithPhoneCode('139', '0000', 'personal')
-    expect(apiMock.post).toHaveBeenCalledWith('/api/auth/login-with-phone-code', {
-      phone: '139',
-      code: '0000',
-      account_kind: 'personal',
-    }, { timeoutMs: 30_000 })
+    expect(apiMock.post).toHaveBeenCalledWith(
+      '/api/auth/login-with-phone-code',
+      {
+        phone: '139',
+        code: '0000',
+        account_kind: 'personal',
+      },
+      { timeoutMs: 30_000 },
+    )
   })
 
   it('covers remaining endpoints', async () => {
@@ -61,7 +69,9 @@ describe('authApi', () => {
     await authApi.resetForgotPassword('a@b.com', '123', 'newpass')
     expect(apiMock.get).toHaveBeenCalled()
     expect(apiMock.patch).toHaveBeenCalledWith('/api/auth/profile', { display_name: 'x' })
-    expect(apiMock.post).toHaveBeenCalledWith('/api/market/send-register-code', { email: 'a@b.com' })
+    expect(apiMock.post).toHaveBeenCalledWith('/api/market/send-register-code', {
+      email: 'a@b.com',
+    })
   })
 
   it('uploadAvatar posts FormData', async () => {

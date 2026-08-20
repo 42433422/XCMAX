@@ -33,6 +33,7 @@ class PersyMemoryGraphMixin:
     _lock: threading.RLock
 
     if TYPE_CHECKING:
+
         @property
         def memory_service(self) -> UserMemoryService: ...
         def list_memories(

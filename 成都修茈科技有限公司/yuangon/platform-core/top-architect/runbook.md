@@ -33,15 +33,15 @@
 
 ## Handoff
 
-| 目标 | 派发员工 |
-|------|----------|
-| FHD 后端代码 | `fhd-core-maintainer` |
-| MODstore 后端 | `modstore-backend-api` |
-| MODstore 前端 | `market-frontend-dev` 或 `workbench-ux-stylist` |
-| 移动发布 | `mobile-android-release-officer` / `mobile-ios-release-officer`（均基于 Flutter） |
-| 测试验收 | `test-qa-runner` |
-| 文档固化 | `doc-knowledge-curator` |
-| 员工包制作 | `employee-planner` → `artifact-generator` → `quality-validator` |
+| 目标          | 派发员工                                                                          |
+| ------------- | --------------------------------------------------------------------------------- |
+| FHD 后端代码  | `fhd-core-maintainer`                                                             |
+| MODstore 后端 | `modstore-backend-api`                                                            |
+| MODstore 前端 | `market-frontend-dev` 或 `workbench-ux-stylist`                                   |
+| 移动发布      | `mobile-android-release-officer` / `mobile-ios-release-officer`（均基于 Flutter） |
+| 测试验收      | `test-qa-runner`                                                                  |
+| 文档固化      | `doc-knowledge-curator`                                                           |
+| 员工包制作    | `employee-planner` → `artifact-generator` → `quality-validator`                   |
 
 ## 验收检查
 

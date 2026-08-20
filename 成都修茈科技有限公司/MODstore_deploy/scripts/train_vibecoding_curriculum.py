@@ -13,6 +13,8 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -202,7 +204,7 @@ async def _run_one_pack(
                 if v == golden_id:
                     entry["runtime_kind"] = k
                     break
-        except Exception as exc:  # noqa: BLE001
+        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
             entry["ok"] = False
             entry["error"] = str(exc)[:500]
         finally:

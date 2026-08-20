@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, union-attr"
 """开发者凭证管理：Personal Access Token 的 CRUD。
 
 Token 体验对齐 GitHub PAT：
@@ -10,7 +11,7 @@ Token 体验对齐 GitHub PAT：
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -46,7 +47,7 @@ def _serialize_token(row: DeveloperToken) -> Dict[str, Any]:
             scopes = []
     except json.JSONDecodeError:
         scopes = []
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expires_at = as_utc_aware(row.expires_at)
     return {
         "id": row.id,
@@ -73,9 +74,7 @@ async def create_developer_token(
         raise HTTPException(400, str(e)) from e
     raw, prefix, digest = generate_pat()
     expires_at = (
-        datetime.now(timezone.utc) + timedelta(days=int(body.expires_days))
-        if body.expires_days
-        else None
+        datetime.now(UTC) + timedelta(days=int(body.expires_days)) if body.expires_days else None
     )
     row = DeveloperToken(
         user_id=user.id,
@@ -124,6 +123,6 @@ async def revoke_developer_token(
     if not row:
         raise HTTPException(404, "Token 不存在")
     if row.revoked_at is None:
-        row.revoked_at = datetime.now(timezone.utc)
+        row.revoked_at = datetime.now(UTC)
         db.commit()
     return {"ok": True, "id": row.id}

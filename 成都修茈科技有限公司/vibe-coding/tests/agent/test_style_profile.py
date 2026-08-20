@@ -5,8 +5,6 @@ from __future__ import annotations
 import textwrap
 from pathlib import Path
 
-import pytest
-
 from vibe_coding.agent.memory.style import StyleProfile
 from vibe_coding.agent.repo_index import build_index
 

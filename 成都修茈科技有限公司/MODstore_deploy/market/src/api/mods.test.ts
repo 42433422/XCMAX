@@ -69,10 +69,7 @@ describe('mods api', () => {
     })
 
     await mods.putRepoConfig(undefined as UnsafeTestValue)
-    expect(vi.mocked(req).mock.calls[1]).toEqual([
-      '/api/config',
-      expect.objectContaining({ method: 'PUT', body: '{}' }),
-    ])
+    expect(vi.mocked(req).mock.calls[1]).toEqual(['/api/config', expect.objectContaining({ method: 'PUT', body: '{}' })])
   })
 
   it('push calls req with POST', async () => {
@@ -191,21 +188,15 @@ describe('mods api', () => {
 
   it('exportEmployeePackZip falls back to legacy route on missing new route', async () => {
     const zip = new Blob(['zip'])
-    vi.mocked(fetchZipBlob)
-      .mockRejectedValueOnce(new Error('Not Found'))
-      .mockResolvedValueOnce(zip)
+    vi.mocked(fetchZipBlob).mockRejectedValueOnce(new Error('Not Found')).mockResolvedValueOnce(zip)
 
     await expect(mods.exportEmployeePackZip(' mod/1 ', -1)).resolves.toBe(zip)
-    expect(fetchZipBlob).toHaveBeenNthCalledWith(
-      1,
-      '/api/mods/mod%2F1/export-employee-pack?workflow_index=0',
-      { Authorization: 'Bearer test' },
-    )
-    expect(fetchZipBlob).toHaveBeenNthCalledWith(
-      2,
-      '/api/mods/mod%2F1/export_employee_pack?workflow_index=0',
-      { Authorization: 'Bearer test' },
-    )
+    expect(fetchZipBlob).toHaveBeenNthCalledWith(1, '/api/mods/mod%2F1/export-employee-pack?workflow_index=0', {
+      Authorization: 'Bearer test',
+    })
+    expect(fetchZipBlob).toHaveBeenNthCalledWith(2, '/api/mods/mod%2F1/export_employee_pack?workflow_index=0', {
+      Authorization: 'Bearer test',
+    })
   })
 
   it('exportEmployeePackZip classifies stale route and non-route errors', async () => {
@@ -269,7 +260,11 @@ describe('packages api', () => {
 
   it('registerWorkflowEmployeeCatalog calls req with POST', async () => {
     vi.mocked(req).mockResolvedValue({})
-    await packages.registerWorkflowEmployeeCatalog('mod1', 0, { industry: 'tech', price: 100, release_channel: 'beta' })
+    await packages.registerWorkflowEmployeeCatalog('mod1', 0, {
+      industry: 'tech',
+      price: 100,
+      release_channel: 'beta',
+    })
     expect(req).toHaveBeenCalledWith('/api/mods/mod1/register-workflow-employee-catalog', expect.objectContaining({ method: 'POST' }))
   })
 
@@ -283,7 +278,11 @@ describe('packages api', () => {
       release_channel: 'stable',
     })
 
-    await packages.runWorkflowEmployeeClosure('mod1', { register_missing: false, patch_canvas: false, industry: '' })
+    await packages.runWorkflowEmployeeClosure('mod1', {
+      register_missing: false,
+      patch_canvas: false,
+      industry: '',
+    })
     expect(JSON.parse((vi.mocked(req).mock.calls[1] as UnsafeTestValue[])[1].body)).toEqual({
       register_missing: false,
       patch_canvas: false,

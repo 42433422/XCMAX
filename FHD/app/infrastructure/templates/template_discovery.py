@@ -31,7 +31,9 @@ def business_scope(template_type: str | None) -> str | None:
     return None
 
 
-def discovery_directories(base_dir: str, template_dir: str, *, runtime_root: str | None = None) -> list[str]:
+def discovery_directories(
+    base_dir: str, template_dir: str, *, runtime_root: str | None = None
+) -> list[str]:
     """Return built-in and current-tenant directories without shared-runtime leakage."""
     runtime_root = runtime_root or get_app_data_dir()
     candidates = [base_dir, template_dir, os.path.join(base_dir, "resources", "templates")]
@@ -42,7 +44,10 @@ def discovery_directories(base_dir: str, template_dir: str, *, runtime_root: str
     if tenant_id is not None:
         tenant_root = os.path.join(runtime_root, "tenants", str(tenant_id))
         candidates.extend(
-            [os.path.join(tenant_root, "templates"), os.path.join(tenant_root, "document_templates")]
+            [
+                os.path.join(tenant_root, "templates"),
+                os.path.join(tenant_root, "document_templates"),
+            ]
         )
     deduped: list[str] = []
     seen: set[str] = set()

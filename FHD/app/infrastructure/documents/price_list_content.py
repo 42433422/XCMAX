@@ -26,7 +26,11 @@ def replace_placeholders_in_paragraphs(doc: Any, mapping: dict[str, str]) -> Non
     keys = tuple(mapping.keys())
 
     def fix_paragraph(paragraph: Any) -> None:
-        text = "".join(run.text for run in paragraph.runs) if paragraph.runs else (paragraph.text or "")
+        text = (
+            "".join(run.text for run in paragraph.runs)
+            if paragraph.runs
+            else (paragraph.text or "")
+        )
         if not text or not any(key in text for key in keys):
             return
         merged = replace(text)
@@ -46,8 +50,12 @@ def replace_placeholders_in_paragraphs(doc: Any, mapping: dict[str, str]) -> Non
 def product_row_cell_values(product: dict[str, Any]) -> list[str]:
     model = str(product.get("model_number") or product.get("型号") or "")
     name = str(product.get("name") or product.get("产品名称") or product.get("名称") or "")
-    specification = str(product.get("specification") or product.get("spec") or product.get("规格") or "")
-    price = format_price_cell(product.get("price") or product.get("单价") or product.get("unit_price"))
+    specification = str(
+        product.get("specification") or product.get("spec") or product.get("规格") or ""
+    )
+    price = format_price_cell(
+        product.get("price") or product.get("单价") or product.get("unit_price")
+    )
     return [model, name, specification, price]
 
 

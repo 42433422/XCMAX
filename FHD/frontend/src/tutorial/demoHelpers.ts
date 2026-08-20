@@ -27,11 +27,7 @@ export function getVirtualCursor(): VirtualCursorApi | undefined {
   return window.virtualCursor
 }
 
-export function cursorClick(
-  el: HTMLElement,
-  label?: string,
-  duration = 700 * TUTORIAL_DEMO_SPEED,
-): void {
+export function cursorClick(el: HTMLElement, label?: string, duration = 700 * TUTORIAL_DEMO_SPEED): void {
   const vc = getVirtualCursor()
   if (vc) {
     vc.click(el, { duration, label })
@@ -46,11 +42,7 @@ export function cursorClick(
   }, duration)
 }
 
-export function safeClick(
-  selector: string,
-  label?: string,
-  duration = 700 * TUTORIAL_DEMO_SPEED,
-): boolean {
+export function safeClick(selector: string, label?: string, duration = 700 * TUTORIAL_DEMO_SPEED): boolean {
   const el = document.querySelector<HTMLElement>(selector)
   if (!el) return false
   try {
@@ -63,9 +55,7 @@ export function safeClick(
 }
 
 export function fireKey(key: string, code: string, meta = false): void {
-  const isMac =
-    typeof navigator !== 'undefined' &&
-    /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent)
+  const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent)
   const ev = new KeyboardEvent('keydown', {
     key,
     code,

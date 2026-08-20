@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """OpenAPI connector service port.
 
 The connector domain holds outbound HTTP calls to user-imported OpenAPI

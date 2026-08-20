@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.contract_runtime_rehearsal import build_contract_runtime_rehearsal
 
@@ -28,8 +28,11 @@ def build_contract_stability_stress(
         )
         for index in range(1, normalized_rounds + 1)
     ]
-    run_summaries = [
-        run.get("summary") if isinstance(run.get("summary"), dict) else {}
+    run_summaries: list[dict[str, Any]] = [
+        cast(
+            dict[str, Any],
+            run.get("summary") if isinstance(run.get("summary"), dict) else {},
+        )
         for run in runs
     ]
     total_faults = sum(
@@ -44,7 +47,7 @@ def build_contract_stability_stress(
         int(summary.get("concurrent_rollback_verified_count") or 0)
         for summary in run_summaries
     )
-    summary = {
+    summary: dict[str, Any] = {
         "round_count": len(runs),
         "ready_round_count": sum(1 for run in runs if run.get("status") == "ready"),
         "concurrent_worker_count": normalized_workers,

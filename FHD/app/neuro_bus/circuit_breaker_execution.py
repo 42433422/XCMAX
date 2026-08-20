@@ -14,7 +14,7 @@ from app.neuro_bus.circuit_breaker_primitives import (
     CircuitBreakerOpen,
     RollingWindowCounter,
 )
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 
 class CircuitBreakerExecutionMixin:
@@ -28,6 +28,7 @@ class CircuitBreakerExecutionMixin:
     _fallback_failure_count: int
 
     if TYPE_CHECKING:
+
         def can_execute(self) -> bool: ...
         def record_success(self) -> None: ...
         def record_failure(self, *, is_timeout: bool = False) -> None: ...
@@ -56,12 +57,12 @@ class CircuitBreakerExecutionMixin:
             raise CircuitBreakerOpen(f"Circuit [{self._name}] is OPEN and no fallback")
 
         result: list[Any] = [None]
-        exc: list[BaseException | None] = [None]
+        exc: list[Exception | None] = [None]
 
         def _worker() -> None:
             try:
                 result[0] = fallback()
-            except BaseException as e:  # noqa: BLE001 - 需捕获所有异常以透传
+            except BOUNDARY_ERRORS as e:
                 exc[0] = e
 
         thread = threading.Thread(target=_worker, daemon=True)
@@ -102,7 +103,7 @@ class CircuitBreakerExecutionMixin:
             with self._lock:
                 self._fallback_success_count += 1
             return result
-        except BaseException:  # noqa: BLE001 - 需捕获所有异常以透传
+        except BOUNDARY_ERRORS + (asyncio.CancelledError,):
             with self._lock:
                 self._fallback_failure_count += 1
             raise
@@ -202,4 +203,3 @@ class CircuitBreakerExecutionMixin:
             raise
         finally:
             self._release_execution_slot()
-

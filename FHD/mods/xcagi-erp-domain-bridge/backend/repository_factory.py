@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """里程碑 L++：统一仓储装配入口（宿主仅通过 registry 调用本 Mod）。"""
 
 from __future__ import annotations
@@ -10,8 +9,8 @@ FACTORY_PHASE = "L++"
 
 
 def _load_adapters():
-    from app.mod_sdk.host_services import import_mod_backend_py
     from app.mod_sdk.erp_domain_compat import ERP_DOMAIN_BRIDGE_MOD_ID, _resolve_mod_dir
+    from app.mod_sdk.host_services import import_mod_backend_py
 
     mod_dir = _resolve_mod_dir()
     if not mod_dir:

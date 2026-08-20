@@ -7,7 +7,7 @@ describe('kittenDatasetParser', () => {
     const file = {
       name: 'sales.csv',
       size: text.length,
-      text: () => Promise.resolve(text)
+      text: () => Promise.resolve(text),
     } as File
 
     const parsed = await parseDatasetFile(file)

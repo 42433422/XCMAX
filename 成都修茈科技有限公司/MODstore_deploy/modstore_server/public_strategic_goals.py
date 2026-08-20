@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -33,7 +33,7 @@ def _shanghai_day_and_time(value: Any) -> tuple[str, str]:
     try:
         parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
         if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
+            parsed = parsed.replace(tzinfo=UTC)
         local = parsed.astimezone(ZoneInfo("Asia/Shanghai"))
         return local.strftime("%Y-%m-%d"), local.strftime("%H:%M")
     except (TypeError, ValueError, ZoneInfoNotFoundError):

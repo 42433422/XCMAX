@@ -1,3 +1,4 @@
+# isort: skip_file
 # ruff: noqa: E402, F401
 """管理员：在岗员工图执行能力与图级编排运行 API。"""
 
@@ -51,7 +52,15 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/admin", tags=["admin-duty-graph"])
 
 _HIGH_RISK_HANDLERS = frozenset(
-    {"shell_exec", "ssh_exec", "vibe_edit", "vibe_heal", "vibe_code", "openapi_tool", "agent"}
+    {
+        "shell_exec",
+        "ssh_exec",
+        "vibe_edit",
+        "vibe_heal",
+        "vibe_code",
+        "openapi_tool",
+        "agent",
+    }
 )
 _LLM_FREE_HANDLERS = frozenset({"echo", "webhook"})
 _MAX_RUN_INPUT_BYTES = 100_000

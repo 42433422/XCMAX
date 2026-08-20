@@ -1,17 +1,8 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { isDesktopShell } from '@/utils/desktopShell'
-import {
-  normalizeReleaseMedia,
-  type ReleaseMediaSlide,
-} from '@/utils/releaseMedia'
+import { normalizeReleaseMedia, type ReleaseMediaSlide } from '@/utils/releaseMedia'
 
-export type DesktopUpdatePhase =
-  | 'idle'
-  | 'available'
-  | 'available-with-error'
-  | 'downloading'
-  | 'downloaded'
-  | 'error'
+export type DesktopUpdatePhase = 'idle' | 'available' | 'available-with-error' | 'downloading' | 'downloaded' | 'error'
 
 export interface DesktopUpdateInfo {
   version?: string
@@ -104,8 +95,7 @@ function onUpdateEvent(raw: unknown) {
     applyAvailable(data)
     phase.value = 'available-with-error'
     errorMessage.value = String(
-      (data as DesktopUpdateInfo & { lastError?: { message?: string } }).lastError?.message
-        || '更新检查出错，请稍后重试',
+      (data as DesktopUpdateInfo & { lastError?: { message?: string } }).lastError?.message || '更新检查出错，请稍后重试',
     )
     return
   }
@@ -158,8 +148,7 @@ async function syncUpdateStatusFromHost() {
     const identity = await window.xcagiDesktop?.getAppIdentity?.()
     const install = identity?.install
     if (install?.canSelfUpdate === false) {
-      selfUpdateBlockReason.value = install.reason
-        || '当前不是“应用程序”目录中的正式安装副本，请安装到 /Applications/XCAGI.app 后再更新。'
+      selfUpdateBlockReason.value = install.reason || '当前不是“应用程序”目录中的正式安装副本，请安装到 /Applications/XCAGI.app 后再更新。'
     }
   } catch {
     // Identity is advisory for the UI. The main process remains the authority.

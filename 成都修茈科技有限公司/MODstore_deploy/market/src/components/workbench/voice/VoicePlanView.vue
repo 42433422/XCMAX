@@ -1,28 +1,17 @@
 <template>
   <div class="voice-plan-view">
     <div class="voice-plan-view__orb-area">
-      <div
-        class="voice-plan-view__orb"
-        :class="`voice-plan-view__orb--${voiceState}`"
-        @click="handleOrbClick"
-      >
+      <div class="voice-plan-view__orb" :class="`voice-plan-view__orb--${voiceState}`" @click="handleOrbClick">
         <div class="voice-plan-view__orb-glow"></div>
         <div class="voice-plan-view__orb-core"></div>
       </div>
     </div>
 
     <h2 class="voice-plan-view__title">{{ titleText }}</h2>
-    <p class="voice-plan-view__subtitle">
-      点击呼吸球开始语音规划。浏览器不支持语音时，可用下方文字补充。
-    </p>
+    <p class="voice-plan-view__subtitle">点击呼吸球开始语音规划。浏览器不支持语音时，可用下方文字补充。</p>
 
     <div class="voice-plan-view__actions">
-      <button
-        class="voice-plan-view__btn voice-plan-view__btn--primary"
-        @click="emit('start-voice')"
-      >
-        开始说话
-      </button>
+      <button class="voice-plan-view__btn voice-plan-view__btn--primary" @click="emit('start-voice')">开始说话</button>
       <button
         class="voice-plan-view__btn voice-plan-view__btn--secondary"
         :disabled="voiceState === 'idle'"
@@ -30,22 +19,13 @@
       >
         发送文字
       </button>
-      <button
-        class="voice-plan-view__btn voice-plan-view__btn--secondary"
-        :disabled="voiceState !== 'summary'"
-        @click="emit('confirm')"
-      >
+      <button class="voice-plan-view__btn voice-plan-view__btn--secondary" :disabled="voiceState !== 'summary'" @click="emit('confirm')">
         确认并制作
       </button>
     </div>
 
     <div class="voice-plan-view__fallback">
-      <textarea
-        v-model="fallbackText"
-        class="voice-plan-view__textarea"
-        placeholder="输入文字描述你想制作的内容…"
-        rows="3"
-      ></textarea>
+      <textarea v-model="fallbackText" class="voice-plan-view__textarea" placeholder="输入文字描述你想制作的内容…" rows="3"></textarea>
     </div>
   </div>
 </template>

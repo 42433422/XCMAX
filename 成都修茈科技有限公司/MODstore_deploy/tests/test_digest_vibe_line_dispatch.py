@@ -63,7 +63,10 @@ def test_split_vibe_prep_to_production_lines():
     out = split_vibe_prep_to_production_lines(
         updates_markdown=updates,
         patches_markdown=patches,
-        version_ctx={"base_version": "2026-06-03#main+abc#r1", "digest_day": "2026-06-03"},
+        version_ctx={
+            "base_version": "2026-06-03#main+abc#r1",
+            "digest_day": "2026-06-03",
+        },
         six_line_map=_SAMPLE_SIX_LINE_MAP,
     )
     assert out["ok"] is True
@@ -97,7 +100,10 @@ def test_split_routes_app_employee_to_app_markdown():
     )
     out = split_vibe_prep_to_production_lines(
         patches_markdown=patches,
-        version_ctx={"base_version": "2026-06-04#main+abc#r1", "digest_day": "2026-06-04"},
+        version_ctx={
+            "base_version": "2026-06-04#main+abc#r1",
+            "digest_day": "2026-06-04",
+        },
         six_line_map=_SAMPLE_SIX_LINE_MAP,
     )
     assert out["ok"] is True

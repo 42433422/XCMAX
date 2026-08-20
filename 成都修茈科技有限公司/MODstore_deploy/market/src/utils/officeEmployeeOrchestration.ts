@@ -43,16 +43,14 @@ const EXT_TO_FORMAT: Record<string, OfficeFormat> = {
 }
 
 /** 勿单独匹配 pptx/docx/xlsx，避免「@附件1 xxx.pptx」误判为生成意图 */
-const GENERATE_KEYWORDS =
-  /生成|导出|写入|输出|制作|创建|写一份|写个|做一份|起草|撰写|word文档|word文件|pdf文件|render|generate|export/i
+const GENERATE_KEYWORDS = /生成|导出|写入|输出|制作|创建|写一份|写个|做一份|起草|撰写|word文档|word文件|pdf文件|render|generate|export/i
 const GENERATE_OFFICE_EXT_PHRASE =
   /(?:生成|导出|制作|创建|输出|写入).{0,24}(?:pptx?|docx?|xlsx?|pdf|csv)|(?:pptx?|docx?|xlsx?|pdf|csv).{0,24}(?:生成|导出|制作|创建)/i
 const GENERATE_EXCLUDE = /全量提取|仅提取|只提取|仅读取|只读|extract only|read only/i
 const ANALYZE_KEYWORDS = /总结|分析|解读|要点|洞察|概括|归纳|对比|审查|review|summarize|analyze/i
 /** 无「生成」字样但明显要产出 Office 文稿（合同/模板等），避免只走 LLM 口头「稍等」 */
 const DOCUMENT_CREATE_NOUN = /合同|协议|模板|证明|通知书|函|简历|清单|报表/
-const DOCUMENT_CREATE_EXCLUDE =
-  /什么意思|是什么|解释|帮我看|帮我读|审查|风险|条款.*[吗？?]|有没有生成|是否已生成|生成了吗/i
+const DOCUMENT_CREATE_EXCLUDE = /什么意思|是什么|解释|帮我看|帮我读|审查|风险|条款.*[吗？?]|有没有生成|是否已生成|生成了吗/i
 
 export function officeFormatFromExtension(ext: string): OfficeFormat | null {
   const e = String(ext || '')
@@ -73,7 +71,10 @@ export function normalizeOfficeIntentText(userText: string): string {
   let t = String(userText || '').trim()
   t = t.replace(/\n?\[附件顺序：[^\]]+\]/g, '').trim()
   t = t.replace(/@附件\d+\s*/g, '').trim()
-  t = t.replace(/[^\s]+\.(?:pptx?|docx?|xlsx?|xlsm?|xls|csv|pdf)\b/gi, ' ').replace(/\s+/g, ' ').trim()
+  t = t
+    .replace(/[^\s]+\.(?:pptx?|docx?|xlsx?|xlsm?|xls|csv|pdf)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
   return t
 }
 
@@ -126,18 +127,13 @@ export function detectOfficeAnalyzeIntent(userText: string): boolean {
 }
 
 /** PPT 生成时优先用用户上传的源幻灯片作模板（保留图片与版式）。 */
-export function pickPptTemplateFromSources(
-  sources: Array<{ name: string; file?: File | null }>,
-): File | null {
+export function pickPptTemplateFromSources(sources: Array<{ name: string; file?: File | null }>): File | null {
   const row = sources.find((s) => /\.pptx?$/i.test(String(s.name || '')) && s.file instanceof File)
   return row?.file ?? null
 }
 
 /** 用户已上传 Office 附件且意图为编辑/动效/完成作业（非纯「总结/解读」）。 */
-export function detectOfficeEnhanceAttachedIntent(
-  userText: string,
-  attachmentNames: string[] = [],
-): boolean {
+export function detectOfficeEnhanceAttachedIntent(userText: string, attachmentNames: string[] = []): boolean {
   const t = normalizeOfficeIntentText(userText)
   if (!t || GENERATE_EXCLUDE.test(t)) return false
   const hasOffice = attachmentNames.some((n) => officeFormatFromFileName(n) != null)
@@ -172,10 +168,7 @@ export type OfficeMessageAttachmentLike = { name?: string }
 
 /** 从近期用户消息收集曾上传的 Office 附件名（发送后附件会从输入区清空）。 */
 /** 合并近期用户话术，避免仅发「完成」时丢失上一轮「跑马灯/动画」等意图。 */
-export function collectRecentUserIntentText(
-  messages: Array<{ role?: string; content?: string }>,
-  maxUserTurns = 8,
-): string {
+export function collectRecentUserIntentText(messages: Array<{ role?: string; content?: string }>, maxUserTurns = 8): string {
   const parts: string[] = []
   let userTurns = 0
   for (let i = messages.length - 1; i >= 0 && userTurns < maxUserTurns; i -= 1) {
@@ -241,29 +234,21 @@ export function shouldRecoverOfficeGenerate(
 export function assistantGaveManualOfficeStepsOnly(assistantText: string): boolean {
   const s = String(assistantText || '')
   if (!s.trim()) return false
-  const manual =
-    /手动操作|在\s*PowerPoint|python-pptx|请告知您的偏好|选项\s*1|选项\s*2|幻灯片放映|动画窗格/i.test(s)
+  const manual = /手动操作|在\s*PowerPoint|python-pptx|请告知您的偏好|选项\s*1|选项\s*2|幻灯片放映|动画窗格/i.test(s)
   const hasRealCardHint = /见下方文件卡片|已生成.*output\.pptx/i.test(s)
   return manual && !hasRealCardHint
 }
 
-export function classifyOfficeTask(
-  userText: string,
-  attachmentNames: string[],
-  opts?: { conversationUserText?: string },
-): OfficeTaskKind {
+export function classifyOfficeTask(userText: string, attachmentNames: string[], opts?: { conversationUserText?: string }): OfficeTaskKind {
   const conv = String(opts?.conversationUserText || '').trim()
   const mergedForIntent = conv ? `${userText}\n${conv}` : userText
   const intentText = normalizeOfficeIntentText(userText)
-  const formats = attachmentNames
-    .map((n) => officeFormatFromFileName(n))
-    .filter((f): f is OfficeFormat => f != null)
+  const formats = attachmentNames.map((n) => officeFormatFromFileName(n)).filter((f): f is OfficeFormat => f != null)
   const gen = detectOfficeGenerateIntent(mergedForIntent)
   const createDoc = detectOfficeDocumentCreateIntent(mergedForIntent)
   const enhanceAttached = detectOfficeEnhanceAttachedIntent(mergedForIntent, attachmentNames)
   const wantsGenerate = Boolean(gen || createDoc || enhanceAttached)
-  const guideOnly =
-    formats.length && GUIDE_ONLY_INTENT.test(intentText) && !ENHANCE_ATTACHED_KEYWORDS.test(intentText)
+  const guideOnly = formats.length && GUIDE_ONLY_INTENT.test(intentText) && !ENHANCE_ATTACHED_KEYWORDS.test(intentText)
   if (formats.length && OFFICE_INTENT_TRIVIAL.test(intentText)) {
     return enhanceAttached ? 'generate' : 'analyze'
   }
@@ -290,15 +275,7 @@ export function primaryOfficeFormatFromAttachments(names: string[]): OfficeForma
 export function officeGenerateMissingInputMessage(format?: OfficeFormat | null): string {
   const fmt = format || 'word'
   const extHint =
-    fmt === 'word'
-      ? '.docx / .doc'
-      : fmt === 'excel'
-        ? '.xlsx / .xls'
-        : fmt === 'ppt'
-          ? '.pptx'
-          : fmt === 'csv'
-            ? '.csv'
-            : '.pdf'
+    fmt === 'word' ? '.docx / .doc' : fmt === 'excel' ? '.xlsx / .xls' : fmt === 'ppt' ? '.pptx' : fmt === 'csv' ? '.csv' : '.pdf'
   return (
     `要生成可下载的 Office 文件，您可以：**直接用文字描述内容**（平台调用「${resolveGenerateEmployeeForFormat(fmt)}」真实写文件），` +
     `或上传源文件（${extHint}）/结构化 JSON，由「${resolveReadEmployeeForFormat(fmt)}」读取后再生成。对话模型不会直接伪造下载链接。`

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Authenticated API closed-loop probes for each sidebar domain (correct primary paths)."""
+
 from __future__ import annotations
 
 import json
@@ -8,6 +9,8 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 SESSION = os.environ.get("XCAGI_SESSION_ID", "58f95427-7d27-4fe5-89de-5b2f39d98a44")
 BASE = os.environ.get("XCAGI_API_BASE", "http://127.0.0.1:17500")
@@ -41,7 +44,7 @@ def req(path: str, method: str = "GET", body: dict | None = None, csrf: str | No
         except json.JSONDecodeError:
             payload = raw[:300]
         return {"ok": False, "status": exc.code, "data": payload}
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         return {"ok": False, "status": 0, "error": str(exc)}
 
 
@@ -229,8 +232,14 @@ def main() -> None:
     before_items = _items(before)
     after_items = _items(after)
     root_items = _items(after_root)
-    found = any(code in json.dumps(item, ensure_ascii=False) or name in json.dumps(item, ensure_ascii=False) for item in after_items)
-    found_root = any(code in json.dumps(item, ensure_ascii=False) or name in json.dumps(item, ensure_ascii=False) for item in root_items)
+    found = any(
+        code in json.dumps(item, ensure_ascii=False) or name in json.dumps(item, ensure_ascii=False)
+        for item in after_items
+    )
+    found_root = any(
+        code in json.dumps(item, ensure_ascii=False) or name in json.dumps(item, ensure_ascii=False)
+        for item in root_items
+    )
     biz = {
         "create_ok": bool(created.get("ok")),
         "create_status": created.get("status"),
@@ -251,9 +260,12 @@ def main() -> None:
         raw = printers.get("data")
         pdata = raw if isinstance(raw, dict) else {}
     # When FastAPI JSONResponse returns flat body, req stores whole JSON as data
-    if isinstance(printers.get("data"), dict) and "printers" in printers["data"]:
-        pdata = printers["data"]
-    elif isinstance(printers.get("data"), dict) and "count" in printers["data"]:
+    if (
+        isinstance(printers.get("data"), dict)
+        and "printers" in printers["data"]
+        or isinstance(printers.get("data"), dict)
+        and "count" in printers["data"]
+    ):
         pdata = printers["data"]
     printer_loop = {
         "ok": bool(printers.get("ok")),

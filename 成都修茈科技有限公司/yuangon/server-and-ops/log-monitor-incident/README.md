@@ -6,19 +6,19 @@
 
 ## 负责文件
 
-| 类型 | 路径 |
-|------|------|
-| 测试覆盖率 | `coverage/**` |
-| E2E 报告 | `playwright-report/**`、`test-results/**` |
-| AI Agent 日志 | `.cursor_*_log.txt` |
-| 共享错误码契约 | `.cursor/contracts/error-code-map.yaml`（与 `test-qa-runner` 共用） |
-| pytest 缓存 | `MODstore_deploy/.pytest_cache/**`、`vibe-coding/.pytest_cache/**` |
-| 监控体系文档 | `MODstore_deploy/docs/observability.md` |
-| 监控与告警文档 | `MODstore_deploy/docs/OPS_MONITORING.md` |
-| 事故响应文档 | `MODstore_deploy/docs/runbooks/incident-response.md` |
-| SRE 运行体系文档 | `MODstore_deploy/docs/sre-operating-model.md` |
-| 灾备恢复文档 | `MODstore_deploy/docs/runbooks/disaster-recovery.md` |
-| 混沌演练文档 | `MODstore_deploy/docs/runbooks/chaos-game-day.md` |
+| 类型             | 路径                                                                |
+| ---------------- | ------------------------------------------------------------------- |
+| 测试覆盖率       | `coverage/**`                                                       |
+| E2E 报告         | `playwright-report/**`、`test-results/**`                           |
+| AI Agent 日志    | `.cursor_*_log.txt`                                                 |
+| 共享错误码契约   | `.cursor/contracts/error-code-map.yaml`（与 `test-qa-runner` 共用） |
+| pytest 缓存      | `MODstore_deploy/.pytest_cache/**`、`vibe-coding/.pytest_cache/**`  |
+| 监控体系文档     | `MODstore_deploy/docs/observability.md`                             |
+| 监控与告警文档   | `MODstore_deploy/docs/OPS_MONITORING.md`                            |
+| 事故响应文档     | `MODstore_deploy/docs/runbooks/incident-response.md`                |
+| SRE 运行体系文档 | `MODstore_deploy/docs/sre-operating-model.md`                       |
+| 灾备恢复文档     | `MODstore_deploy/docs/runbooks/disaster-recovery.md`                |
+| 混沌演练文档     | `MODstore_deploy/docs/runbooks/chaos-game-day.md`                   |
 
 ## 典型任务
 
@@ -33,12 +33,12 @@
 
 ## KPI
 
-| 指标 | 目标 |
-|------|------|
-| 告警生成延迟（日志产生→告警） | < 15 分钟 |
-| 漏报的 P0 事故 | 0 |
-| 每日报告按时生成率 | ≥ 95% |
-| 错误码映射覆盖率（有 incident 时） | ≥ 80% |
+| 指标                               | 目标      |
+| ---------------------------------- | --------- |
+| 告警生成延迟（日志产生→告警）      | < 15 分钟 |
+| 漏报的 P0 事故                     | 0         |
+| 每日报告按时生成率                 | ≥ 95%     |
+| 错误码映射覆盖率（有 incident 时） | ≥ 80%     |
 
 ## 禁区
 

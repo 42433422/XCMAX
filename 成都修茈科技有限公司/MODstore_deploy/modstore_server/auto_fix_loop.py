@@ -39,6 +39,7 @@ from modstore_server.auto_fix_security_signals import (
 from modstore_server.auto_fix_security_signals import (
     trigger_gitleaks_response as trigger_gitleaks_response,
 )
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -153,7 +154,9 @@ def trigger_cve_autofix(
     else:
         risk_level = "low"
 
-    from modstore_server.employee_change_request_service import defer_write_as_change_request
+    from modstore_server.employee_change_request_service import (
+        defer_write_as_change_request,
+    )
     from modstore_server.integrations.ops_action_handlers import repo_root
 
     root = str(repo_root())
@@ -171,7 +174,7 @@ def trigger_cve_autofix(
                     scope_globs=["requirements*.txt", "pyproject.toml"],
                 )
                 results.append({"file": req_file, "cr_id": cr_id})
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             logger.warning("cve autofix: patch %s failed: %s", req_file, exc)
             results.append({"file": req_file, "error": str(exc)})
 
@@ -188,7 +191,7 @@ def trigger_cve_autofix(
                     scope_globs=["pyproject.toml"],
                 )
                 results.append({"file": "pyproject.toml", "cr_id": cr_id})
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             logger.warning("cve autofix: patch pyproject.toml failed: %s", exc)
             results.append({"file": "pyproject.toml", "error": str(exc)})
 
@@ -326,7 +329,7 @@ def register_auto_fix_event_bindings() -> None:
                     session.add(b)
             session.commit()
         logger.info("auto_fix event bindings registered")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("register_auto_fix_event_bindings failed")
 
 

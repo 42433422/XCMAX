@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment, operator"
 """Audited automatic resolution for outbox dead letters.
 
 Infrastructure failures can become stale operational debt after the original
@@ -11,7 +12,7 @@ from __future__ import annotations
 
 import os
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -40,13 +41,13 @@ def _env_int(name: str, default: int) -> int:
 
 
 def _utcnow_naive() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 def _event_age_hours(row: OutboxDeadLetter, now: datetime) -> float:
     happened = row.moved_at or row.created_at or now
     if happened.tzinfo is not None:
-        happened = happened.astimezone(timezone.utc).replace(tzinfo=None)
+        happened = happened.astimezone(UTC).replace(tzinfo=None)
     return max(0.0, (now - happened).total_seconds() / 3600.0)
 
 
@@ -160,7 +161,7 @@ def reconcile_dead_letters(*, limit: int = 200, now: datetime | None = None) -> 
 
     checked_at = now or _utcnow_naive()
     if checked_at.tzinfo is not None:
-        checked_at = checked_at.astimezone(timezone.utc).replace(tzinfo=None)
+        checked_at = checked_at.astimezone(UTC).replace(tzinfo=None)
     min_age_hours = max(1, _env_int("MODSTORE_DLQ_AUTO_RESOLVE_MIN_AGE_HOURS", 24))
     storage = verify_storage_recovered()
     prefixes = _safe_replay_prefixes()
@@ -219,7 +220,11 @@ def dead_letter_health() -> dict[str, Any]:
             .filter(OutboxDeadLetter.resolved_at.is_not(None))
             .count()
         )
-    return {"ok": unresolved == 0, "unresolved_count": unresolved, "resolved_count": resolved}
+    return {
+        "ok": unresolved == 0,
+        "unresolved_count": unresolved,
+        "resolved_count": resolved,
+    }
 
 
 __all__ = ["dead_letter_health", "reconcile_dead_letters", "verify_storage_recovered"]

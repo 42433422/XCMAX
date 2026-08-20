@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment, attr-defined, no-any-return, valid-type"
 """将 Vibe 预备双清单（更新 + 补丁）拆分并投递到四产线：P-W / P-S / P-App / S-R。
 
 P-App（移动 / App 发布线）由 ``mobile-android-release-officer`` /
@@ -14,6 +15,8 @@ import re
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +59,7 @@ def _six_line_map_path() -> Path:
         from modstore_server.integrations.ops_action_handlers import repo_root
 
         root = Path(repo_root())
-    except Exception:
+    except RECOVERABLE_ERRORS:
         root = Path(__file__).resolve().parents[2]
     candidates = [
         root / "FHD" / "config" / "six_line_employee_map.json",
@@ -76,7 +79,7 @@ def load_six_line_employee_map() -> Dict[str, Any]:
         return {"lines": {}}
     try:
         return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("load_six_line_employee_map failed path=%s", path)
         return {"lines": {}}
 
@@ -91,7 +94,7 @@ def build_employee_dispatch_map(
         from modstore_server.duty_roster import all_planned_employee_ids
 
         planned_ids = all_planned_employee_ids()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         planned_ids = frozenset()
     for line_key, block in (doc.get("lines") or {}).items():
         dispatch = SIX_LINE_TO_DISPATCH.get(str(line_key))
@@ -299,7 +302,7 @@ def persist_line_dispatch_on_digest_record(record_id: int, dispatch: Dict[str, A
                 ensure_ascii=False,
             )
             session.commit()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("persist_line_dispatch_on_digest_record failed id=%s", record_id)
 
 

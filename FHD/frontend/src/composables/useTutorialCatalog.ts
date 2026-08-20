@@ -23,15 +23,9 @@ export function useTutorialCatalog() {
 
   const tutorialTracks = computed(() => getTrackMetas(buildContext.value))
 
-  const advancedNavPreviewNames = computed(() =>
-    visibleNavItems.value
-      .filter((n) => n.key !== 'settings')
-      .map((n) => n.name),
-  )
+  const advancedNavPreviewNames = computed(() => visibleNavItems.value.filter((n) => n.key !== 'settings').map((n) => n.name))
 
-  const advancedTrackHint = computed(() =>
-    formatAdvancedTrackHint(advancedNavPreviewNames.value),
-  )
+  const advancedTrackHint = computed(() => formatAdvancedTrackHint(advancedNavPreviewNames.value))
 
   return {
     buildContext,

@@ -6,8 +6,11 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.ppt_convert_templates import (
     render_ppt_generate_convert_module as render_ppt_generate_convert_module,
+)
+from modstore_server.ppt_convert_templates import (
     render_ppt_read_convert_module as render_ppt_read_convert_module,
 )
 
@@ -164,7 +167,12 @@ def ppt_generate_structured_spec(brief: str) -> Dict[str, Any]:
             "禁止仅输出纯文字幻灯片冒充带动效/带图作业",
             "作业跑马灯可走 homework_marquee 确定性配方",
         ],
-        "suggested_capabilities": ["ppt.write", "ppt.ooxml", "data.json_read", "llm.plan"],
+        "suggested_capabilities": [
+            "ppt.write",
+            "ppt.ooxml",
+            "data.json_read",
+            "llm.plan",
+        ],
         "suggested_handlers": ["direct_python", "agent"],
     }
 
@@ -261,7 +269,9 @@ def _validate_ppt_backend(
     handlers: List[str] = []
     if mf_path.is_file():
         try:
-            from modstore_server.employee_asset_pipeline import manifest_actions_handlers
+            from modstore_server.employee_asset_pipeline import (
+                manifest_actions_handlers,
+            )
 
             mf = json.loads(mf_path.read_text(encoding="utf-8"))
             handlers = manifest_actions_handlers(mf)
@@ -295,7 +305,7 @@ def minimal_pptx_fixture_bytes() -> bytes:
         bio = io.BytesIO()
         prs.save(bio)
         return bio.getvalue()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return b""
 
 
@@ -355,7 +365,7 @@ def ppt_generate_orchestration_plan(brief: str, payload: Dict[str, Any]) -> Dict
     return {
         "employee_name": short,
         "employee_brief": (
-            f"{merged or clean}\n\n" "JSON 为中介；direct_python 写 pptx；禁止无输入编造幻灯片。"
+            f"{merged or clean}\n\nJSON 为中介；direct_python 写 pptx；禁止无输入编造幻灯片。"
         ),
         "script_workflow_name": f"{short} 脚本工作流",
         "script_brief": script_brief,

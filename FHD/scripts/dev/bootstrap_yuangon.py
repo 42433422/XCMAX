@@ -8,6 +8,7 @@
 
 运行：python FHD/scripts/dev/bootstrap_yuangon.py [--dry-run]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -15,6 +16,8 @@ import json
 import sys
 import textwrap
 from pathlib import Path
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 REPO = Path(__file__).resolve().parents[3]
 EMP_ROOT = REPO / "FHD" / "mods" / "_employees"
@@ -169,9 +172,7 @@ def _make_readme(pkg_id: str, mf: dict) -> str:
     scope_globs = wp.get("scope_globs", [])[:6]
 
     depends_list = "\n".join(f"- `{d}`" for d in depends_on) if depends_on else "- （无上游依赖）"
-    handler_list = "\n".join(
-        f"- `{h}`：{HANDLER_DOCS.get(h, '—')}" for h in handlers
-    )
+    handler_list = "\n".join(f"- `{h}`：{HANDLER_DOCS.get(h, '—')}" for h in handlers)
     scope_list = "\n".join(f"- `{g}`" for g in scope_globs) if scope_globs else "- （见 manifest）"
 
     ios_warning = ""
@@ -234,11 +235,11 @@ def _make_runbook(pkg_id: str, mf: dict) -> str:
                 f"- **门禁**：依赖完成前本岗不得继续\n"
             )
 
-    handoff_text = "\n".join(handoff_sections) if handoff_sections else "（无上游依赖，直接接受 intake 派发）"
-
-    handler_rows = "\n".join(
-        f"| `{h}` | {HANDLER_DOCS.get(h, '—')} |" for h in handlers
+    handoff_text = (
+        "\n".join(handoff_sections) if handoff_sections else "（无上游依赖，直接接受 intake 派发）"
     )
+
+    handler_rows = "\n".join(f"| `{h}` | {HANDLER_DOCS.get(h, '—')} |" for h in handlers)
 
     ios_note = ""
     if pkg_id == "mobile-ios-release-officer":
@@ -313,7 +314,7 @@ def bootstrap_all(dry_run: bool = False) -> None:
             continue
         try:
             mf = json.loads(mf_path.read_text())
-        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             print(f"WARN: skip {emp_dir.name} – {e}")
             continue
 

@@ -1,8 +1,4 @@
-import {
-  ERP_DOMAIN_BRIDGE_MOD_ID,
-  LEGACY_CLIENT_ERP_MOD_ID,
-  readErpDomainModFacadeEnabled,
-} from '@/constants/erpDomainMod'
+import { ERP_DOMAIN_BRIDGE_MOD_ID, LEGACY_CLIENT_ERP_MOD_ID, readErpDomainModFacadeEnabled } from '@/constants/erpDomainMod'
 import { CLIENT_PRIMARY_ERP_MOD_ID } from '@/constants/genericModPack'
 import { isProtectedClientModId } from '@/constants/protectedMods'
 import { clientModPolicies } from '@/stores/hostConfig'
@@ -23,24 +19,23 @@ const ERP_ON_CLIENT_MOD_PREFIXES: readonly string[] = [
 ]
 
 /** 选中客户 Mod 时仍走领域门面的路径（勿用 /api/shipment 整段前缀，否则会盖住 units 走客户库） */
-const ERP_ON_BRIDGE_WHEN_CLIENT_ACTIVE: readonly string[] = [
-  '/api/orders',
-]
+const ERP_ON_BRIDGE_WHEN_CLIENT_ACTIVE: readonly string[] = ['/api/orders']
 
 /**
  * 与 app.mod_sdk.erp_domain_compat.DOMAIN_SPECS 及 Mod blueprints 实际挂载路径对齐。
  * 按 host 前缀长度降序匹配（最长前缀优先）。
  */
 const ERP_DOMAIN_PREFIX_SOURCE = [
-    ['/api/shipment', `${MOD_FACADE_BASE}/shipment`],
-    ['/api/products', `${MOD_FACADE_BASE}/products`],
-    ['/api/customers', `${MOD_FACADE_BASE}/customers`],
-    ['/api/purchase_units', `${MOD_FACADE_BASE}/purchase_units`],
-    ['/api/orders', `${MOD_FACADE_BASE}/orders`],
-  ] as const
+  ['/api/shipment', `${MOD_FACADE_BASE}/shipment`],
+  ['/api/products', `${MOD_FACADE_BASE}/products`],
+  ['/api/customers', `${MOD_FACADE_BASE}/customers`],
+  ['/api/purchase_units', `${MOD_FACADE_BASE}/purchase_units`],
+  ['/api/orders', `${MOD_FACADE_BASE}/orders`],
+] as const
 
-const ERP_DOMAIN_PREFIX_MAP: ReadonlyArray<readonly [hostPrefix: string, facadePrefix: string]> =
-  [...ERP_DOMAIN_PREFIX_SOURCE].sort((a, b) => b[0].length - a[0].length)
+const ERP_DOMAIN_PREFIX_MAP: ReadonlyArray<readonly [hostPrefix: string, facadePrefix: string]> = [...ERP_DOMAIN_PREFIX_SOURCE].sort(
+  (a, b) => b[0].length - a[0].length,
+)
 
 /** 客户 Mod（太阳鸟等）未实现的 API，继续走宿主 /api */
 const HOST_ONLY_API_PREFIXES: readonly string[] = [
@@ -114,7 +109,9 @@ function pathMatchesPrefixes(pathOnly: string, prefixes: readonly string[]): boo
 }
 
 function isIndustryShellModId(modId: string): boolean {
-  return String(modId || '').trim().endsWith('-industry')
+  return String(modId || '')
+    .trim()
+    .endsWith('-industry')
 }
 
 /** 该 mod 是否为可路由的客户 ERP mod（受保护客户 mod，且非行业壳 mod） */
@@ -139,9 +136,7 @@ function resolveErpBaseForClientMod(activeClient: string, installedModIds: strin
 
 function isHostOnlyApiPath(pathOnly: string): boolean {
   if (!pathOnly.startsWith('/api/')) return true
-  return HOST_ONLY_API_PREFIXES.some(
-    (prefix) => pathOnly === prefix || pathOnly.startsWith(`${prefix}/`),
-  )
+  return HOST_ONLY_API_PREFIXES.some((prefix) => pathOnly === prefix || pathOnly.startsWith(`${prefix}/`))
 }
 
 /**
@@ -160,12 +155,7 @@ export function resolveErpApiBase(installedModIds?: string[]): string {
     return resolveErpBaseForClientMod(activeClient, ids)
   }
   const primary = readHostClientPrimaryErpModId()
-  if (
-    !activeClient &&
-    primary &&
-    isRoutableClientErpModId(primary) &&
-    ids.includes(primary)
-  ) {
+  if (!activeClient && primary && isRoutableClientErpModId(primary) && ids.includes(primary)) {
     return resolveErpBaseForClientMod(primary, ids)
   }
   if (readErpDomainModFacadeEnabled()) {

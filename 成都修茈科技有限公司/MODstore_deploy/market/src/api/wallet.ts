@@ -79,11 +79,14 @@ export interface RefundListResponse extends Record<string, unknown> {
 
 export const wallet = {
   balance: () => req<WalletBalanceResponse>('/api/wallet/balance'),
-  walletOverview: (limit = 20, offset = 0) =>
-    req<WalletOverviewResponse>(`/api/wallet/overview?limit=${limit}&offset=${offset}`),
+  walletOverview: (limit = 20, offset = 0) => req<WalletOverviewResponse>(`/api/wallet/overview?limit=${limit}&offset=${offset}`),
   walletAdminSelfCredit: (amount: number, description = '') =>
-    req('/api/wallet/admin-self-credit', { method: 'POST', body: JSON.stringify({ amount, description }) }),
-  recharge: (amount: number, description = '') => req('/api/wallet/recharge', { method: 'POST', body: JSON.stringify({ amount, description }) }),
+    req('/api/wallet/admin-self-credit', {
+      method: 'POST',
+      body: JSON.stringify({ amount, description }),
+    }),
+  recharge: (amount: number, description = '') =>
+    req('/api/wallet/recharge', { method: 'POST', body: JSON.stringify({ amount, description }) }),
   transactions: (limit = 50, offset = 0) =>
     req<{ transactions?: WalletTransactionResponse[] }>(`/api/wallet/transactions?limit=${limit}&offset=${offset}`),
 }
@@ -161,7 +164,10 @@ export const payment = {
 
 export const refunds = {
   refundsApply: async (orderNo: string, reason: string): Promise<RefundApplyResponse> => {
-    const res = (await req('/api/refunds/apply', { method: 'POST', body: JSON.stringify({ order_no: orderNo, reason }) })) as RefundApplyResponse
+    const res = (await req('/api/refunds/apply', {
+      method: 'POST',
+      body: JSON.stringify({ order_no: orderNo, reason }),
+    })) as RefundApplyResponse
     if (res?.ok === false) throw new Error(res.message || '退款申请失败')
     return res
   },

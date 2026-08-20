@@ -1,11 +1,11 @@
-import { describe, it, expect } from 'vitest';
-import { mount } from '@vue/test-utils';
-import LanGateView from './LanGateView.vue';
+import { describe, it, expect } from 'vitest'
+import { mount } from '@vue/test-utils'
+import LanGateView from './LanGateView.vue'
 
 describe('LanGateView.vue', () => {
   it('exports a Vue component', () => {
-    expect(LanGateView).toBeTruthy();
-  });
+    expect(LanGateView).toBeTruthy()
+  })
 
   it('renders host mod bridge stub', () => {
     const wrapper = mount(LanGateView, {
@@ -16,7 +16,7 @@ describe('LanGateView.vue', () => {
           },
         },
       },
-    });
-    expect(wrapper.find('.host-mod-bridge-stub').exists()).toBe(true);
-  });
-});
+    })
+    expect(wrapper.find('.host-mod-bridge-stub').exists()).toBe(true)
+  })
+})

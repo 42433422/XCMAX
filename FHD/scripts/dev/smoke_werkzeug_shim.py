@@ -1,3 +1,4 @@
+# mypy: disable-error-code="import-not-found"
 """一次性冒烟：password_hash 与 secure_filename 相对 werkzeug 的等价性。"""
 
 from __future__ import annotations

@@ -1,5 +1,7 @@
 import os
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 # 使用短路径和简单的文件名
 pdf_path = r"E:/FHD/XCAGI/longxiang_copy.pdf"
 
@@ -13,7 +15,7 @@ try:
     shutil.copy2(source, dest)
     print(f"文件已复制：{dest}")
     print(f"文件大小：{os.path.getsize(dest)}")
-except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"复制失败：{e}")
     # 尝试直接列出目录
     print("\nXCAGI 目录中的 PDF 文件:")

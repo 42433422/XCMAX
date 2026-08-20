@@ -1,9 +1,12 @@
+# mypy: disable-error-code="attr-defined"
 """测试简化后的考勤转换功能"""
 
 import os
 from pathlib import Path
 
 from openpyxl import load_workbook
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 # 设置 WORKSPACE_ROOT
 os.environ["WORKSPACE_ROOT"] = r"e:\FHD"
@@ -69,7 +72,7 @@ try:
 
     print(f"\n✓ 测试完成！输出文件：{output_file}")
 
-except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"✗ 转换失败：{e}")
     import traceback
 

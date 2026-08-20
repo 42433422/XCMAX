@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """测试 ai_group_chat_service 的补充分支覆盖（第二批）。
 
 覆盖目标（第一批 test_ai_group_chat_service_branch_cov.py 未覆盖的方法与分支）：

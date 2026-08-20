@@ -12,11 +12,7 @@ import { isMobileVoiceDevice } from './voiceDevice'
 const BARGE_LEVEL_MULTIPLIER_DESKTOP = 2.8
 const BARGE_LEVEL_MULTIPLIER_MOBILE = 3.4
 
-export function shouldTriggerVoiceBargeIn(
-  level: number,
-  speechLevel: number,
-  ttsPlaying: boolean,
-): boolean {
+export function shouldTriggerVoiceBargeIn(level: number, speechLevel: number, ttsPlaying: boolean): boolean {
   const mul = isMobileVoiceDevice() ? BARGE_LEVEL_MULTIPLIER_MOBILE : BARGE_LEVEL_MULTIPLIER_DESKTOP
   if (!ttsPlaying) return level >= speechLevel
   return level >= speechLevel * mul

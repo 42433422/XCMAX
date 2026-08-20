@@ -55,7 +55,9 @@ def test_change_request_approve_applies_file(admin_client):
     target = tmp_path / rel
     target.parent.mkdir(parents=True, exist_ok=True)
 
-    from modstore_server.employee_change_request_service import defer_write_as_change_request
+    from modstore_server.employee_change_request_service import (
+        defer_write_as_change_request,
+    )
 
     cid = defer_write_as_change_request(
         "modstore-backend-api", str(tmp_path), rel, "approved-content"
@@ -70,7 +72,9 @@ def test_change_request_reject(admin_client):
     ws = str(tmp_path / "ws2")
     Path(ws).mkdir(parents=True, exist_ok=True)
 
-    from modstore_server.employee_change_request_service import defer_write_as_change_request
+    from modstore_server.employee_change_request_service import (
+        defer_write_as_change_request,
+    )
     from modstore_server.models import EmployeeChangeRequest, get_session_factory
 
     cid = defer_write_as_change_request("x", ws, "nope.txt", "x")
@@ -97,7 +101,9 @@ def test_high_risk_change_request_waits_for_human_through_autonomy_ssot(
     monkeypatch.setenv("XCAGI_AUTONOMY_AUDIT_DB_PATH", str(tmp_path / "autonomy.sqlite3"))
     monkeypatch.setenv("XCAGI_AUTONOMY_AUDIT_LOG_PATH", str(tmp_path / "autonomy.jsonl"))
 
-    from modstore_server.employee_change_request_service import defer_write_as_change_request
+    from modstore_server.employee_change_request_service import (
+        defer_write_as_change_request,
+    )
     from modstore_server.models import EmployeeChangeRequest, get_session_factory
 
     target = workspace / ".env.production"

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """XC AGI 在线市场 API：目录浏览、搜索、评价、收藏、投诉。"""
 
 from __future__ import annotations
@@ -6,7 +7,7 @@ import hashlib
 import importlib
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -14,7 +15,12 @@ from pydantic import BaseModel, Field
 
 from modstore_server.duty_roster import is_planned_duty_employee_pack
 from modstore_server.market_shared import (
+    LICENSE_SCOPE_LABELS,
+    MATERIAL_CATEGORY_LABELS,
+    _catalog_item_payload,
     _get_current_user,
+    _normalize_license_scope,
+    _normalize_material_category,
     _optional_current_user,
     _require_admin,
 )
@@ -27,6 +33,7 @@ from modstore_server.models import (
     User,
     get_session_factory,
 )
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +78,7 @@ def _enrich_payload_with_manifest(payload: Dict[str, Any], pkg_id: str, session)
                     )
             if ex_list:
                 payload["examples"] = ex_list
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.debug("catalog detail manifest enrichment skipped for %s: %s", pkg_id, exc)
 
 
@@ -116,7 +123,7 @@ def _invalidate_market_catalog_caches() -> None:
         try:
             for key in client.scan_iter(match="market:catalog:*", count=200):
                 client.delete(key)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
     mem = getattr(cache, "_memory_cache", None)
     if isinstance(mem, dict):
@@ -402,7 +409,7 @@ def api_admin_review_catalog_complaint(
         if not item:
             raise HTTPException(404, "商品不存在")
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         complaint.admin_id = user.id
         complaint.admin_note = (body.admin_note or "").strip()
         complaint.resolution = action

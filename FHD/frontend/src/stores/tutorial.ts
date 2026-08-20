@@ -28,9 +28,7 @@ type TutorialReturnContext = {
 /** 构建上下文由调用方注入（副窗启动教程时传入 visibleNav / industry / mods） */
 let tutorialBuildContextFactory: (() => import('@/tutorial/types').TutorialBuildContext) | null = null
 
-export function setTutorialBuildContextFactory(
-  factory: () => import('@/tutorial/types').TutorialBuildContext,
-) {
+export function setTutorialBuildContextFactory(factory: () => import('@/tutorial/types').TutorialBuildContext) {
   tutorialBuildContextFactory = factory
 }
 

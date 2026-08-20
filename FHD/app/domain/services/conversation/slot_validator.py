@@ -7,7 +7,10 @@ from typing import Any
 
 class SlotValidator:
     REQUIRED_SLOTS = {
-        "shipment_generate": {"required": ["unit_name", "model_number", "tin_spec", "quantity_tins"], "optional": ["contact_phone"]},
+        "shipment_generate": {
+            "required": ["unit_name", "model_number", "tin_spec", "quantity_tins"],
+            "optional": ["contact_phone"],
+        },
         "product_query": {"required": [], "optional": ["keyword", "model_number", "tin_spec"]},
         "customer_query": {"required": [], "optional": ["keyword", "customer_name"]},
         "customer_supplement": {"required": ["field_name", "field_value"], "optional": []},
@@ -16,15 +19,23 @@ class SlotValidator:
         "wechat_send": {"required": ["unit_name"], "optional": ["contact_person"]},
     }
     SLOT_LABELS = {
-        "unit_name": "客户", "model_number": "编号", "tin_spec": "规格", "quantity_tins": "桶数",
-        "contact_phone": "联系电话", "keyword": "关键词", "customer_name": "客户名称",
-        "field_name": "字段名", "field_value": "字段值",
+        "unit_name": "客户",
+        "model_number": "编号",
+        "tin_spec": "规格",
+        "quantity_tins": "桶数",
+        "contact_phone": "联系电话",
+        "keyword": "关键词",
+        "customer_name": "客户名称",
+        "field_name": "字段名",
+        "field_value": "字段值",
     }
 
     def validate(self, intent: str, slots: dict[str, Any]) -> tuple[bool, list[str]]:
         if intent not in self.REQUIRED_SLOTS:
             return True, []
-        missing = [slot for slot in self.REQUIRED_SLOTS[intent].get("required", []) if not slots.get(slot)]
+        missing = [
+            slot for slot in self.REQUIRED_SLOTS[intent].get("required", []) if not slots.get(slot)
+        ]
         return len(missing) == 0, missing
 
     def build_followup(
@@ -41,8 +52,10 @@ class SlotValidator:
     def _build_single_question(self, intent: str, slot: str) -> str:
         if intent == "shipment_generate":
             questions = {
-                "unit_name": "请问要发货给哪个客户呢？", "model_number": "编号是多少呢？",
-                "tin_spec": "规格是多少呢？", "quantity_tins": "这次需要多少桶呢？",
+                "unit_name": "请问要发货给哪个客户呢？",
+                "model_number": "编号是多少呢？",
+                "tin_spec": "规格是多少呢？",
+                "quantity_tins": "这次需要多少桶呢？",
             }
             return questions.get(slot, f"请问{slot}是多少呢？")
         return f"请问{self.SLOT_LABELS.get(slot, slot)}是多少呢？"

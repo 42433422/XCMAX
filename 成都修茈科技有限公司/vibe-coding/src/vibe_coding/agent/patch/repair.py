@@ -28,8 +28,8 @@ used per hunk so callers can record it (telemetry, telemetry, telemetry).
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Iterable
 
 from .hunk import Hunk
 
@@ -97,9 +97,7 @@ def apply_hunks_to_source(
             text = new_text
             results.append(HunkApplyResult(index=idx, strategy=strategy, success=True))
             continue
-        results.append(
-            HunkApplyResult(index=idx, strategy="", success=False, reason=error or "no strategy matched")
-        )
+        results.append(HunkApplyResult(index=idx, strategy="", success=False, reason=error or "no strategy matched"))
         if raise_on_failure:
             raise HunkApplyError(hunk_index=idx, reason=error or "no strategy matched")
     return HunkApplyOutcome(source=text, results=results)
@@ -227,10 +225,7 @@ def _stripped_old_text_replace(text: str, hunk: Hunk) -> tuple[str, bool]:
         candidate = text_lines[i]
         if candidate.lstrip() != needle_first_stripped:
             continue
-        if all(
-            text_lines[i + j].lstrip() == old_lines[j].lstrip()
-            for j in range(needle_count)
-        ):
+        if all(text_lines[i + j].lstrip() == old_lines[j].lstrip() for j in range(needle_count)):
             matches.append(i)
     if len(matches) != 1:
         return "", False
@@ -244,11 +239,7 @@ def _stripped_old_text_replace(text: str, hunk: Hunk) -> tuple[str, bool]:
         new_lines = [extra + line if line.strip() else line for line in new_lines]
     elif not hunk_indent and file_indent:
         new_lines = [file_indent + line if line.strip() else line for line in new_lines]
-    rebuilt = (
-        "".join(text_lines[:start])
-        + "".join(new_lines)
-        + "".join(text_lines[start + needle_count :])
-    )
+    rebuilt = "".join(text_lines[:start]) + "".join(new_lines) + "".join(text_lines[start + needle_count :])
     return rebuilt, True
 
 

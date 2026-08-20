@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -72,7 +76,7 @@ def _parse_rubric_scores(content: str) -> _facade().Dict[str, float]:
     try:
         data = _facade().json.loads(raw)
     except _facade().json.JSONDecodeError:
-        (i, j) = (raw.find("["), raw.rfind("]"))
+        i, j = (raw.find("["), raw.rfind("]"))
         if i < 0 or j <= i:
             return {}
         try:
@@ -148,7 +152,7 @@ async def _llm_rubric_scores_platform(
 
 
 def _level_scores_from_entries(
-    tasks_result: _facade().List[_facade().Dict[str, _facade().Any]]
+    tasks_result: _facade().List[_facade().Dict[str, _facade().Any]],
 ) -> _facade().Dict[int, float]:
     buckets: _facade().Dict[int, _facade().List[float]] = _facade().defaultdict(list)
     for e in tasks_result:
@@ -199,9 +203,12 @@ def _run_single_task(
         else:
             ok = bool(res)
             cost_tokens = 0
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         _facade().logger.warning(
-            "bench task failed employee=%s task=%r: %s", employee_id, task_desc[:40], exc
+            "bench task failed employee=%s task=%r: %s",
+            employee_id,
+            task_desc[:40],
+            exc,
         )
         ok = False
         cost_tokens = 0
@@ -217,7 +224,9 @@ def _run_single_task(
     }
 
 
-def _score_level(level_results: _facade().List[_facade().Dict[str, _facade().Any]]) -> float:
+def _score_level(
+    level_results: _facade().List[_facade().Dict[str, _facade().Any]],
+) -> float:
     """对某一级的多条任务结果计算平均得分（0-100）。"""
     if not level_results:
         return 0.0

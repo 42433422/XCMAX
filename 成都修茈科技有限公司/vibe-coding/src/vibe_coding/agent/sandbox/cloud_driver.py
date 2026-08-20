@@ -32,11 +32,12 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
-from .driver import SandboxJob, SandboxPolicy, SandboxResult
+from vibe_coding.operational_errors import BOUNDARY_ERRORS
 
+from .driver import SandboxJob, SandboxPolicy, SandboxResult
 
 # ----------------------------------------------------------------- protocol
 
@@ -138,7 +139,7 @@ class CloudSandboxDriver:
                     error_type="ValueError",
                     error_message=f"unknown job kind {job.kind!r}",
                 )
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:
             return SandboxResult(
                 success=False,
                 driver=self.name,
@@ -156,10 +157,7 @@ class CloudSandboxDriver:
             error_type=str(raw.get("error_type") or ""),
             error_message=str(raw.get("error_message") or ""),
             traceback_str=str(raw.get("traceback_str") or ""),
-            duration_ms=float(
-                raw.get("duration_ms")
-                or round((time.perf_counter() - t0) * 1000, 3)
-            ),
+            duration_ms=float(raw.get("duration_ms") or round((time.perf_counter() - t0) * 1000, 3)),
         )
 
 
@@ -248,7 +246,9 @@ class HTTPCloudBackend:
         url = self.base_url.rstrip("/") + path
         body = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(
-            url=url, data=body, method="POST",
+            url=url,
+            data=body,
+            method="POST",
             headers={"Content-Type": "application/json"},
         )
         if self.auth_token:
@@ -374,7 +374,9 @@ class E2BBackend:
             }
         ).encode("utf-8")
         req = urllib.request.Request(
-            url=url, data=body, method="POST",
+            url=url,
+            data=body,
+            method="POST",
             headers={
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {api_key}",

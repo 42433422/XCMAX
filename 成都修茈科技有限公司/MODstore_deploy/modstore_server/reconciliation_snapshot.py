@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr"
 """Period aggregation and skill payloads for reconciliation APIs."""
 
 from __future__ import annotations
@@ -6,6 +7,7 @@ from datetime import datetime
 from typing import Any, Optional
 
 from modstore_server.models import AuthorEarning, Transaction
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def compute_period_snapshot(
@@ -23,7 +25,7 @@ def compute_period_snapshot(
         raw_ts = order.get("paid_at") or order.get("created_at") or ""
         try:
             ts = datetime.fromisoformat(str(raw_ts).replace("Z", "+00:00")).replace(tzinfo=None)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             continue
         if period_start <= ts < period_end:
             paid_in_range.append(order)
@@ -33,7 +35,7 @@ def compute_period_snapshot(
                 refund_ts = datetime.fromisoformat(
                     str(refund_ts_raw).replace("Z", "+00:00")
                 ).replace(tzinfo=None)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 refund_ts = ts
             if period_start <= refund_ts < period_end:
                 refunded_in_range.append(order)

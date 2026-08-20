@@ -7,6 +7,8 @@ from typing import Any, Literal, cast
 import httpx
 import orjson
 
+from langgraph_sdk._exception_policy import BOUNDARY_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -37,7 +39,7 @@ class APIError(httpx.HTTPStatusError, LangGraphError):
             req = response_or_request
             response = None
 
-        httpx.HTTPStatusError.__init__(self, message, request=req, response=response)  # ty: ignore[invalid-argument-type]
+        httpx.HTTPStatusError.__init__(self, message, request=req, response=response)
         LangGraphError.__init__(self, message)
 
         self.request = req
@@ -158,32 +160,32 @@ def _extract_error_message(body: object | None, fallback: str) -> str:
 async def _adecode_error_body(r: httpx.Response) -> object | None:
     try:
         data = await r.aread()
-    except Exception:
+    except BOUNDARY_ERRORS:
         return None
     if not data:
         return None
     try:
         return orjson.loads(data)
-    except Exception:
+    except BOUNDARY_ERRORS:
         try:
             return data.decode()
-        except Exception:
+        except BOUNDARY_ERRORS:
             return None
 
 
 def _decode_error_body(r: httpx.Response) -> object | None:
     try:
         data = r.read()
-    except Exception:
+    except BOUNDARY_ERRORS:
         return None
     if not data:
         return None
     try:
         return orjson.loads(data)
-    except Exception:
+    except BOUNDARY_ERRORS:
         try:
             return data.decode()
-        except Exception:
+        except BOUNDARY_ERRORS:
             return None
 
 

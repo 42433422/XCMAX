@@ -62,14 +62,7 @@ export interface KnowledgeRuntimeHealth {
   recommended_dataset_id?: string
 }
 
-export type KnowledgeGraphNodeType =
-  | 'core'
-  | 'source'
-  | 'topic'
-  | 'knowledge'
-  | 'memory'
-  | 'recall'
-  | 'onboarding'
+export type KnowledgeGraphNodeType = 'core' | 'source' | 'topic' | 'knowledge' | 'memory' | 'recall' | 'onboarding'
 
 export interface KnowledgeGraphNode {
   id: string
@@ -311,10 +304,7 @@ export const knowledgeBaseApi = {
     })
   },
 
-  status(
-    datasetId = PERSY_KNOWLEDGE_DATASET_ID,
-    options: { includeDocuments?: boolean } = {},
-  ): Promise<KnowledgeBaseStatus> {
+  status(datasetId = PERSY_KNOWLEDGE_DATASET_ID, options: { includeDocuments?: boolean } = {}): Promise<KnowledgeBaseStatus> {
     const includeDocuments = options.includeDocuments !== false
     const suffix = includeDocuments ? '/status' : '/status?include_documents=false'
     return api.get<KnowledgeBaseStatus>(datasetPath(datasetId, suffix))
@@ -332,10 +322,7 @@ export const knowledgeBaseApi = {
     })
   },
 
-  async rollbackVersion(
-    datasetId: string,
-    payload: { version: string; tenantId?: string },
-  ): Promise<Record<string, unknown>> {
+  async rollbackVersion(datasetId: string, payload: { version: string; tenantId?: string }): Promise<Record<string, unknown>> {
     await primeCsrfCookie()
     return api.post(datasetPath(datasetId, '/versions/rollback'), {
       version: payload.version,
@@ -343,39 +330,30 @@ export const knowledgeBaseApi = {
     })
   },
 
-  async rebuildIndex(
-    datasetId: string,
-    payload: { tenantId?: string } = {},
-  ): Promise<Record<string, unknown>> {
+  async rebuildIndex(datasetId: string, payload: { tenantId?: string } = {}): Promise<Record<string, unknown>> {
     await primeCsrfCookie()
     return api.post(datasetPath(datasetId, '/index/rebuild'), {
       tenant_id: payload.tenantId || '',
     })
   },
 
-  graph(
-    datasetId = PERSY_KNOWLEDGE_DATASET_ID,
-    limit = 80,
-  ): Promise<KnowledgeGraphResponse> {
+  graph(datasetId = PERSY_KNOWLEDGE_DATASET_ID, limit = 80): Promise<KnowledgeGraphResponse> {
     const boundedLimit = Math.max(20, Math.min(Number(limit) || 80, 160))
     return api.get<KnowledgeGraphResponse>(datasetPath(datasetId, `/graph?limit=${boundedLimit}`))
   },
 
   async ingestDocument(payload: KnowledgeBaseIngestPayload): Promise<KnowledgeBaseIngestResponse> {
     await primeCsrfCookie()
-    return api.post<KnowledgeBaseIngestResponse>(
-      datasetPath(payload.datasetId || PERSY_KNOWLEDGE_DATASET_ID, '/documents'),
-      {
-        source: payload.source,
-        text: payload.text,
-        document_id: payload.documentId || '',
-        tenant_id: payload.tenantId || '',
-        version: payload.version || '',
-        version_label: payload.versionLabel || '',
-        chunk_strategy: 'semantic',
-        metadata: payload.metadata || {},
-      },
-    )
+    return api.post<KnowledgeBaseIngestResponse>(datasetPath(payload.datasetId || PERSY_KNOWLEDGE_DATASET_ID, '/documents'), {
+      source: payload.source,
+      text: payload.text,
+      document_id: payload.documentId || '',
+      tenant_id: payload.tenantId || '',
+      version: payload.version || '',
+      version_label: payload.versionLabel || '',
+      chunk_strategy: 'semantic',
+      metadata: payload.metadata || {},
+    })
   },
 
   async uploadDocument(payload: KnowledgeBaseUploadPayload): Promise<KnowledgeBaseIngestResponse> {
@@ -387,26 +365,20 @@ export const knowledgeBaseApi = {
     form.append('version', payload.version || '')
     form.append('version_label', payload.versionLabel || '')
     form.append('chunk_strategy', 'semantic')
-    return api.post<KnowledgeBaseIngestResponse>(
-      datasetPath(payload.datasetId || PERSY_KNOWLEDGE_DATASET_ID, '/documents/upload'),
-      form,
-    )
+    return api.post<KnowledgeBaseIngestResponse>(datasetPath(payload.datasetId || PERSY_KNOWLEDGE_DATASET_ID, '/documents/upload'), form)
   },
 
   async query(payload: KnowledgeBaseQueryPayload): Promise<KnowledgeBaseQueryResponse> {
     await primeCsrfCookie()
-    return api.post<KnowledgeBaseQueryResponse>(
-      datasetPath(payload.datasetId || PERSY_KNOWLEDGE_DATASET_ID, '/query'),
-      {
-        query: payload.query,
-        top_k: payload.topK || 5,
-        include_answer: payload.includeAnswer !== false,
-        tenant_id: payload.tenantId || '',
-        version: payload.version || '',
-        metadata_filter: payload.metadataFilter || {},
-        rerank: payload.rerank === true,
-      },
-    )
+    return api.post<KnowledgeBaseQueryResponse>(datasetPath(payload.datasetId || PERSY_KNOWLEDGE_DATASET_ID, '/query'), {
+      query: payload.query,
+      top_k: payload.topK || 5,
+      include_answer: payload.includeAnswer !== false,
+      tenant_id: payload.tenantId || '',
+      version: payload.version || '',
+      metadata_filter: payload.metadataFilter || {},
+      rerank: payload.rerank === true,
+    })
   },
 
   memories(
@@ -417,9 +389,7 @@ export const knowledgeBaseApi = {
     if (filters.status) params.set('status', filters.status)
     if (filters.memoryType) params.set('memory_type', filters.memoryType)
     params.set('limit', String(Math.max(1, Math.min(Number(filters.limit) || 200, 1000))))
-    return api.get<PersyMemoryListResponse>(
-      datasetPath(datasetId, `/memories?${params.toString()}`),
-    )
+    return api.get<PersyMemoryListResponse>(datasetPath(datasetId, `/memories?${params.toString()}`))
   },
 
   async queryMemories(
@@ -428,72 +398,37 @@ export const knowledgeBaseApi = {
     },
   ): Promise<PersyMemoryQueryResponse> {
     await primeCsrfCookie()
-    return api.post<PersyMemoryQueryResponse>(
-      datasetPath(payload.datasetId || PERSY_KNOWLEDGE_DATASET_ID, '/memories/query'),
-      {
-        query: payload.query,
-        top_k: Math.max(1, Math.min(Number(payload.topK) || 5, 20)),
-        reinforce: payload.reinforce !== false,
-      },
-    )
+    return api.post<PersyMemoryQueryResponse>(datasetPath(payload.datasetId || PERSY_KNOWLEDGE_DATASET_ID, '/memories/query'), {
+      query: payload.query,
+      top_k: Math.max(1, Math.min(Number(payload.topK) || 5, 20)),
+      reinforce: payload.reinforce !== false,
+    })
   },
 
-  async confirmMemory(
-    datasetId: string,
-    memoryId: string,
-    correction: Record<string, unknown> = {},
-  ): Promise<PersyMemoryMutationResponse> {
+  async confirmMemory(datasetId: string, memoryId: string, correction: Record<string, unknown> = {}): Promise<PersyMemoryMutationResponse> {
     await primeCsrfCookie()
-    return api.post<PersyMemoryMutationResponse>(
-      datasetPath(datasetId, `/memories/${encodeURIComponent(memoryId)}/confirm`),
-      correction,
-    )
+    return api.post<PersyMemoryMutationResponse>(datasetPath(datasetId, `/memories/${encodeURIComponent(memoryId)}/confirm`), correction)
   },
 
-  async rejectMemory(
-    datasetId: string,
-    memoryId: string,
-    reason = '',
-  ): Promise<PersyMemoryMutationResponse> {
+  async rejectMemory(datasetId: string, memoryId: string, reason = ''): Promise<PersyMemoryMutationResponse> {
     await primeCsrfCookie()
-    return api.post<PersyMemoryMutationResponse>(
-      datasetPath(datasetId, `/memories/${encodeURIComponent(memoryId)}/reject`),
-      { reason },
-    )
+    return api.post<PersyMemoryMutationResponse>(datasetPath(datasetId, `/memories/${encodeURIComponent(memoryId)}/reject`), { reason })
   },
 
-  async updateMemory(
-    datasetId: string,
-    memoryId: string,
-    patch: Record<string, unknown>,
-  ): Promise<PersyMemoryMutationResponse> {
+  async updateMemory(datasetId: string, memoryId: string, patch: Record<string, unknown>): Promise<PersyMemoryMutationResponse> {
     await primeCsrfCookie()
-    return api.patch<PersyMemoryMutationResponse>(
-      datasetPath(datasetId, `/memories/${encodeURIComponent(memoryId)}`),
-      patch,
-    )
+    return api.patch<PersyMemoryMutationResponse>(datasetPath(datasetId, `/memories/${encodeURIComponent(memoryId)}`), patch)
   },
 
-  async deleteMemory(
-    datasetId: string,
-    memoryId: string,
-    reason = '',
-  ): Promise<PersyMemoryMutationResponse> {
+  async deleteMemory(datasetId: string, memoryId: string, reason = ''): Promise<PersyMemoryMutationResponse> {
     await primeCsrfCookie()
     const query = reason ? `?reason=${encodeURIComponent(reason)}` : ''
-    return api.delete<PersyMemoryMutationResponse>(
-      datasetPath(datasetId, `/memories/${encodeURIComponent(memoryId)}${query}`),
-    )
+    return api.delete<PersyMemoryMutationResponse>(datasetPath(datasetId, `/memories/${encodeURIComponent(memoryId)}${query}`))
   },
 
-  async deleteDocument(
-    datasetId: string,
-    documentId: string,
-  ): Promise<KnowledgeBaseStatus> {
+  async deleteDocument(datasetId: string, documentId: string): Promise<KnowledgeBaseStatus> {
     await primeCsrfCookie()
-    return api.delete<KnowledgeBaseStatus>(
-      datasetPath(datasetId, `/documents/${encodeURIComponent(documentId)}`),
-    )
+    return api.delete<KnowledgeBaseStatus>(datasetPath(datasetId, `/documents/${encodeURIComponent(documentId)}`))
   },
 }
 

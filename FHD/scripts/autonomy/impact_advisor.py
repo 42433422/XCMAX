@@ -14,6 +14,8 @@ import os
 import re
 from typing import Any
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -64,7 +66,7 @@ async def advise_impact(
 
     try:
         from app.domain.neuro.cognition.llm_port import get_llm_port
-    except Exception:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:  # noqa: BLE001
         return {
             "enabled": True,
             "allow": True,

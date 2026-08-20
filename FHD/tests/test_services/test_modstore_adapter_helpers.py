@@ -1,3 +1,4 @@
+# mypy: disable-error-code="index"
 """app/services/conversation/modstore_adapter 纯函数单测。"""
 
 from __future__ import annotations

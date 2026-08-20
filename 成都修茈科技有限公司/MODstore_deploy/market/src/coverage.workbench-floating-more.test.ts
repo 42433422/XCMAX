@@ -77,12 +77,24 @@ describe('workbench and floating agent extra component coverage', () => {
     expect(wrapper.text()).toContain('我的销售')
     expect(wrapper.text()).not.toContain('脚本助手')
 
-    await wrapper.findAll('.am-cat').find((btn) => btn.text().startsWith('收藏'))!.trigger('click')
+    await wrapper
+      .findAll('.am-cat')
+      .find((btn) => btn.text().startsWith('收藏'))!
+      .trigger('click')
     expect(wrapper.text()).toContain('我的销售')
 
-    await wrapper.findAll('button').find((btn) => btn.text().includes('开始对话'))!.trigger('click')
-    await wrapper.findAll('button').find((btn) => btn.text().includes('删除'))!.trigger('click')
-    await wrapper.findAll('button').find((btn) => btn.text().includes('已收藏'))!.trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((btn) => btn.text().includes('开始对话'))!
+      .trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((btn) => btn.text().includes('删除'))!
+      .trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((btn) => btn.text().includes('已收藏'))!
+      .trigger('click')
     expect(wrapper.emitted('start')?.[0]?.[0]).toMatchObject({ id: 'my_sales' })
     expect(wrapper.emitted('remove')?.[0]?.[0]).toMatchObject({ id: 'my_sales' })
     expect(wrapper.emitted('favorite')?.[0]?.[0]).toMatchObject({ id: 'my_sales' })
@@ -94,13 +106,19 @@ describe('workbench and floating agent extra component coverage', () => {
       props: { open: true, bots },
     })
 
-    await wrapper.findAll('button').find((btn) => btn.text().includes('创建智能体'))!.trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((btn) => btn.text().includes('创建智能体'))!
+      .trigger('click')
     await wrapper.find('input[placeholder="例如：抖音脚本搭子"]').setValue('运营搭子')
     await wrapper.find('input[placeholder="按口播节奏写脚本，附拍摄分镜"]').setValue('')
     await wrapper.find('textarea').setValue('你负责输出运营建议和下一步动作')
     await wrapper.find('input[placeholder="嗨～告诉我你想做什么主题的视频？"]').setValue('')
     await wrapper.find('input[placeholder="抖音, 脚本, 口播"]').setValue('运营，增长, 复盘, 超出')
-    await wrapper.findAll('button').find((btn) => btn.text().includes('保存到'))!.trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((btn) => btn.text().includes('保存到'))!
+      .trigger('click')
 
     const created = wrapper.emitted('create')?.[0]?.[0] as AgentBot
     expect(created).toMatchObject({
@@ -149,7 +167,10 @@ describe('workbench and floating agent extra component coverage', () => {
       },
     })
 
-    await wrapper.findAll('button').find((btn) => btn.text() === '朗读')!.trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((btn) => btn.text() === '朗读')!
+      .trigger('click')
     await wrapper.find('[aria-label="复制"]').trigger('click')
     await nextTick()
     expect(writeText).toHaveBeenCalledWith('回复内容')
@@ -159,8 +180,14 @@ describe('workbench and floating agent extra component coverage', () => {
     expect(wrapper.text()).toContain('复制')
 
     await wrapper.find('[aria-label="重新生成"]').trigger('click')
-    await wrapper.findAll('button').find((btn) => btn.text() === '👍')!.trigger('click')
-    await wrapper.findAll('button').find((btn) => btn.text() === '👎')!.trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((btn) => btn.text() === '👍')!
+      .trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((btn) => btn.text() === '👎')!
+      .trigger('click')
     expect(wrapper.emitted('speak')).toHaveLength(1)
     expect(wrapper.emitted('regenerate')).toHaveLength(1)
     expect(wrapper.emitted('feedback')?.map((row) => row[0])).toEqual([null, 'down'])
@@ -176,7 +203,10 @@ describe('workbench and floating agent extra component coverage', () => {
     })
 
     await wrapper.find('[aria-label="复制"]').trigger('click')
-    await wrapper.findAll('button').find((btn) => btn.text() === '编辑')!.trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((btn) => btn.text() === '编辑')!
+      .trigger('click')
     expect(wrapper.emitted('edit')).toHaveLength(1)
     expect(wrapper.text()).toContain('复制')
   })
@@ -190,21 +220,54 @@ describe('workbench and floating agent extra component coverage', () => {
     expect(assistant.html()).toContain('&lt;script&gt;')
     expect(assistant.text()).toContain('10:05')
 
-    expect(mount(AgentMessageBubble, {
-      props: { msg: { ...base, role: 'assistant', content: '', isLoading: true } },
-    }).find('.bubble-dots').exists()).toBe(true)
-    expect(mount(AgentMessageBubble, {
-      props: { msg: { ...base, role: 'tool_call', content: '', toolCall: { name: 'search', args: { q: '客户', limit: 2 } } } },
-    }).text()).toContain('search: q=客户, limit=2')
-    expect(mount(AgentMessageBubble, {
-      props: { msg: { ...base, role: 'action_preview', content: '', actionPreview: { action: 'delete', label: '删除资料', risk: 'high', args: {} } } },
-    }).text()).toContain('高风险')
-    expect(mount(AgentMessageBubble, {
-      props: { msg: { ...base, role: 'action_preview', content: '', actionPreview: { action: 'sync', label: '同步客户', risk: 'medium', args: {} } } },
-    }).text()).toContain('中风险')
-    expect(mount(AgentMessageBubble, {
-      props: { msg: { ...base, role: 'user', content: '用户问题' } },
-    }).text()).toContain('用户问题')
+    expect(
+      mount(AgentMessageBubble, {
+        props: { msg: { ...base, role: 'assistant', content: '', isLoading: true } },
+      })
+        .find('.bubble-dots')
+        .exists(),
+    ).toBe(true)
+    expect(
+      mount(AgentMessageBubble, {
+        props: {
+          msg: {
+            ...base,
+            role: 'tool_call',
+            content: '',
+            toolCall: { name: 'search', args: { q: '客户', limit: 2 } },
+          },
+        },
+      }).text(),
+    ).toContain('search: q=客户, limit=2')
+    expect(
+      mount(AgentMessageBubble, {
+        props: {
+          msg: {
+            ...base,
+            role: 'action_preview',
+            content: '',
+            actionPreview: { action: 'delete', label: '删除资料', risk: 'high', args: {} },
+          },
+        },
+      }).text(),
+    ).toContain('高风险')
+    expect(
+      mount(AgentMessageBubble, {
+        props: {
+          msg: {
+            ...base,
+            role: 'action_preview',
+            content: '',
+            actionPreview: { action: 'sync', label: '同步客户', risk: 'medium', args: {} },
+          },
+        },
+      }).text(),
+    ).toContain('中风险')
+    expect(
+      mount(AgentMessageBubble, {
+        props: { msg: { ...base, role: 'user', content: '用户问题' } },
+      }).text(),
+    ).toContain('用户问题')
   })
 
   it('renders AgentStatusBar labels and stop controls', async () => {
@@ -217,28 +280,69 @@ describe('workbench and floating agent extra component coverage', () => {
 
     expect(mount(AgentStatusBar, { props: { mode: 'thinking' } }).text()).toContain('AI 思考中')
     expect(mount(AgentStatusBar, { props: { mode: 'operating' } }).text()).toContain('正在操作页面')
-    expect(mount(AgentStatusBar, { props: { mode: 'awaiting_confirm' } }).find('button').exists()).toBe(false)
+    expect(
+      mount(AgentStatusBar, { props: { mode: 'awaiting_confirm' } })
+        .find('button')
+        .exists(),
+    ).toBe(false)
     expect(mount(AgentStatusBar, { props: { mode: 'speaking' } }).text()).toContain('AI 正在朗读')
     expect(mount(AgentStatusBar, { props: { mode: 'error' } }).text()).toContain('出现错误')
   })
 
   it('emits AgentActionPreview confirmation events for risk levels', async () => {
     const high = mount(AgentActionPreview, {
-      props: { action: { id: 'danger', action: 'delete', label: '删除全部', risk: 'high', args: {}, resolve: vi.fn() } },
+      props: {
+        action: {
+          id: 'danger',
+          action: 'delete',
+          label: '删除全部',
+          risk: 'high',
+          args: {},
+          resolve: vi.fn(),
+        },
+      },
     })
     expect(high.text()).toContain('高风险')
     expect(high.text()).toContain('无法撤销')
-    await high.findAll('button').find((btn) => btn.text() === '取消')!.trigger('click')
-    await high.findAll('button').find((btn) => btn.text().includes('确认执行'))!.trigger('click')
+    await high
+      .findAll('button')
+      .find((btn) => btn.text() === '取消')!
+      .trigger('click')
+    await high
+      .findAll('button')
+      .find((btn) => btn.text().includes('确认执行'))!
+      .trigger('click')
     expect(high.emitted('cancel')).toHaveLength(1)
     expect(high.emitted('confirm')).toHaveLength(1)
 
-    expect(mount(AgentActionPreview, {
-      props: { action: { id: 'medium', action: 'sync', label: '同步客户', risk: 'medium', args: {}, resolve: vi.fn() } },
-    }).text()).toContain('中风险')
-    expect(mount(AgentActionPreview, {
-      props: { action: { id: 'low', action: 'read', label: '读取资料', risk: 'low', args: {}, resolve: vi.fn() } },
-    }).text()).toContain('低风险')
+    expect(
+      mount(AgentActionPreview, {
+        props: {
+          action: {
+            id: 'medium',
+            action: 'sync',
+            label: '同步客户',
+            risk: 'medium',
+            args: {},
+            resolve: vi.fn(),
+          },
+        },
+      }).text(),
+    ).toContain('中风险')
+    expect(
+      mount(AgentActionPreview, {
+        props: {
+          action: {
+            id: 'low',
+            action: 'read',
+            label: '读取资料',
+            risk: 'low',
+            args: {},
+            resolve: vi.fn(),
+          },
+        },
+      }).text(),
+    ).toContain('低风险')
   })
 
   it('routes or opens panel from AgentSuggestionToast actions', async () => {
@@ -253,7 +357,10 @@ describe('workbench and floating agent extra component coverage', () => {
         },
       },
     })
-    await routed.findAll('button').find((btn) => btn.text() === '打开')!.trigger('click')
+    await routed
+      .findAll('button')
+      .find((btn) => btn.text() === '打开')!
+      .trigger('click')
     expect(componentMocks.routerPush).toHaveBeenCalledWith({ name: 'settings' })
     expect(routed.emitted('dismiss')?.[0]).toEqual(['s1'])
 
@@ -267,14 +374,24 @@ describe('workbench and floating agent extra component coverage', () => {
         },
       },
     })
-    await panel.findAll('button').find((btn) => btn.text() === '处理')!.trigger('click')
+    await panel
+      .findAll('button')
+      .find((btn) => btn.text() === '处理')!
+      .trigger('click')
     expect(componentMocks.openPanel).toHaveBeenCalled()
     expect(panel.emitted('open-panel')).toHaveLength(1)
     expect(panel.emitted('dismiss')?.[0]).toEqual(['s2'])
 
-    await panel.findAll('button').find((btn) => btn.text() === '忽略')!.trigger('click')
+    await panel
+      .findAll('button')
+      .find((btn) => btn.text() === '忽略')!
+      .trigger('click')
     expect(panel.emitted('dismiss')?.[1]).toEqual(['s2'])
-    expect(mount(AgentSuggestionToast, { props: { suggestion: null } }).find('.suggestion-toast').exists()).toBe(false)
+    expect(
+      mount(AgentSuggestionToast, { props: { suggestion: null } })
+        .find('.suggestion-toast')
+        .exists(),
+    ).toBe(false)
   })
 
   it('emits CorpWelcomeBoard tasks and opens contact intake on mobile', async () => {

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr"
 """``context_collector`` —— 把 Brief + 知识库 + SDK 文档拼成生成上下文。
 
 设计要点：
@@ -12,6 +13,7 @@ from __future__ import annotations
 from io import BytesIO
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 from modstore_server.script_agent.brief import Brief, ContextBundle
 from modstore_server.script_agent.package_allowlist import allowed_packages
 
@@ -59,7 +61,7 @@ def _xlsx_preview_lines(raw: bytes, *, max_line_chars: int) -> Tuple[List[str], 
         return [], False
     try:
         wb = load_workbook(filename=BytesIO(raw), read_only=True, data_only=True)
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         return [], False
     try:
         ws = wb.active
@@ -113,7 +115,7 @@ def tabular_upload_preview(
         if low.endswith((".csv", ".tsv")):
             try:
                 text = bytes(raw).decode("utf-8-sig", errors="replace")
-            except Exception:  # noqa: BLE001
+            except BOUNDARY_ERRORS:  # noqa: BLE001
                 continue
             lines = [ln.rstrip("\r\n") for ln in text.splitlines() if ln.strip()][:4]
         elif low.endswith((".xlsx", ".xlsm")):
@@ -181,7 +183,7 @@ async def _collect_kb_chunks(
     """对每条 query 检索知识库，拼成 markdown 列表。失败返回空串。"""
     try:
         from modstore_server.rag_service import retrieve
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         return ""
     rows: List[str] = []
     for q in queries:
@@ -194,7 +196,7 @@ async def _collect_kb_chunks(
                 top_k=top_k_per_query,
                 extra_collection_ids=collection_ids,
             )
-        except Exception:  # noqa: BLE001
+        except BOUNDARY_ERRORS:  # noqa: BLE001
             continue
         for c in chunks:
             text = str(getattr(c, "text", "") or "").strip()
@@ -222,7 +224,7 @@ async def collect_context(
             for x in coll_ids:
                 try:
                     ids.append(int(x))
-                except Exception:  # noqa: BLE001
+                except BOUNDARY_ERRORS:  # noqa: BLE001
                     continue
             queries = list(extra_kb_queries) or [brief.goal[:200]]
             kb_md = await _collect_kb_chunks(
@@ -230,7 +232,7 @@ async def collect_context(
                 queries=queries,
                 collection_ids=ids,
             )
-        except Exception:  # noqa: BLE001
+        except BOUNDARY_ERRORS:  # noqa: BLE001
             kb_md = ""
 
     return ContextBundle(

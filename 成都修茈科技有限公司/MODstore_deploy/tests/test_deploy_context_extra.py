@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 from unittest.mock import patch
 
-
 from modstore_server.deploy_context import (
     health_payload,
     is_production_tier,

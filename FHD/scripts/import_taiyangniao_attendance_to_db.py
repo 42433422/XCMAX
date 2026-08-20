@@ -7,6 +7,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -153,7 +155,7 @@ def import_attendance(input_file: Path, db_file: Path, month: str | None = None)
         )
         conn.commit()
         return parsed.rows_in, rows_written
-    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
         conn.rollback()
         raise
     finally:

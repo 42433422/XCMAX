@@ -16,10 +16,14 @@ via :meth:`AgentObservability.uninstrument`.
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
+
+from vibe_coding.operational_errors import BOUNDARY_ERRORS
 
 from .logging import StructuredLogger, get_default_logger
 from .metrics import MetricsRegistry, TimerContext, get_default_registry
@@ -64,10 +68,8 @@ class AgentObservability:
             for (tid, name), original in list(self._originals.items()):
                 if tid != obj_id:
                     continue
-                try:
+                with contextlib.suppress(*BOUNDARY_ERRORS):
                     setattr(target, name, original)
-                except Exception:  # noqa: BLE001
-                    pass
                 self._originals.pop((tid, name), None)
                 self._wrappers.pop((tid, name), None)
 
@@ -184,13 +186,11 @@ def _wrap_method(
             "vibe.method": name,
         }
         with obs.tracer.start_span(f"{component}.{name}", attributes=attrs) as span:
-            obs.logger.info(
-                "action.start", f"{component}.{name} starting", method=name
-            )
+            obs.logger.info("action.start", f"{component}.{name} starting", method=name)
             with TimerContext(histogram, labels={"method": name}):
                 try:
                     result = original(*args, **kwargs)
-                except Exception as exc:
+                except BOUNDARY_ERRORS as exc:
                     failure_counter.inc(1, labels={"method": name, "error": type(exc).__name__})
                     obs.logger.error(
                         "action.error",
@@ -203,9 +203,7 @@ def _wrap_method(
                     span.set_attribute("vibe.error_type", type(exc).__name__)
                     raise
             counter.inc(1, labels={"method": name})
-            obs.logger.info(
-                "action.end", f"{component}.{name} done", method=name
-            )
+            obs.logger.info("action.end", f"{component}.{name} done", method=name)
             return result
 
     return wrapper

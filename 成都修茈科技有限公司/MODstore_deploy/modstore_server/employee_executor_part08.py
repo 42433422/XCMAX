@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -66,7 +70,7 @@ def list_employees() -> _facade().List[_facade().Dict[str, _facade().Any]]:
                 "created_at": str(best.get("created_at") or ""),
                 "source": "v1_catalog",
             }
-    except Exception as ex:
+    except RECOVERABLE_ERRORS as ex:
         _facade().logger.warning("list_employees: merge packages.json failed: %s", ex)
     out = list(merged_by_norm.values())
     out.sort(key=lambda x: str(x.get("name") or x.get("id") or "").lower())

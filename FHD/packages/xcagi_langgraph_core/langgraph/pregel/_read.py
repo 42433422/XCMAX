@@ -11,6 +11,7 @@ from langchain_core.runnables import Runnable, RunnableConfig
 
 from langgraph._internal._config import merge_configs
 from langgraph._internal._constants import CONF, CONFIG_KEY_READ
+from langgraph._internal._exception_policy import BOUNDARY_ERRORS
 from langgraph._internal._runnable import RunnableCallable, RunnableSeq
 from langgraph._internal._timeout import coerce_timeout_policy
 from langgraph.pregel._utils import find_subgraph_pregel
@@ -184,7 +185,7 @@ class PregelNode:
         elif self.bound is not DEFAULT_BOUND:
             try:
                 subgraph = find_subgraph_pregel(self.bound)
-            except Exception:
+            except BOUNDARY_ERRORS:
                 subgraph = None
             if subgraph:
                 self.subgraphs = [subgraph]

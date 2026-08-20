@@ -1,6 +1,8 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
 
 
@@ -8,7 +10,9 @@ def _facade():
     return importlib.import_module("modstore_server.production_line_orchestrator")
 
 
-def _step_status_map(pipeline: _facade().Dict[str, _facade().Any]) -> _facade().Dict[str, str]:
+def _step_status_map(
+    pipeline: _facade().Dict[str, _facade().Any],
+) -> _facade().Dict[str, str]:
     out: _facade().Dict[str, str] = {}
     for block in ("production_line", "operations_line"):
         for s in pipeline.get(block, {}).get("steps", []):

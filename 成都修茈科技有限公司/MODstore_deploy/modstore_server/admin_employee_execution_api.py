@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """管理员：员工任务执行指标（employee_execution_metrics）只读分页 API。"""
 
 from __future__ import annotations

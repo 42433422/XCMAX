@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """影子模式启动验证：跑 13 类真实事件，确认 NN 决策被记录且不影响实际路由。"""
+
 import json
 import os
 import time
@@ -50,7 +51,7 @@ print("\n=== 影子模式验证结果 ===")
 print(f"  总事件数：{len(test_cases)}")
 print(f"  返回 None（不影响路由）：{null_returns}/{len(test_cases)}")
 print(f"  实际路由影响：{shadow_decisions}（应为 0）")
-print(f"  总耗时：{elapsed:.2f}ms（均值 {elapsed/len(test_cases):.3f}ms/条）")
+print(f"  总耗时：{elapsed:.2f}ms（均值 {elapsed / len(test_cases):.3f}ms/条）")
 print(f"  日志增长：{new_bytes} bytes（NN 决策已记录）")
 
 print("\n=== 影子日志样本（最后 13 条）===")

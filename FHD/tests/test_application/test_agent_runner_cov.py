@@ -1,3 +1,4 @@
+# mypy: disable-error-code="no-any-return"
 """覆盖率补强测试：app.application.employee_runtime.agent_runner。
 
 聚焦于 _run_async / _resolve_employee_llm_config / _chat_completion /

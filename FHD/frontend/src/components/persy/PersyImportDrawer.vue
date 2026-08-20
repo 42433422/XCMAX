@@ -71,24 +71,12 @@
               <span v-if="selectedFile">{{ fileSizeText(selectedFile.size) }}</span>
               <span v-else>PDF、Word、Excel、Markdown、CSV、JSON，最大 25 MB</span>
             </button>
-            <button
-              v-if="selectedFile"
-              type="button"
-              class="clear-file-button"
-              @click="clearSelectedFile"
-            >
-              移除文件
-            </button>
+            <button v-if="selectedFile" type="button" class="clear-file-button" @click="clearSelectedFile">移除文件</button>
           </template>
 
           <template v-else>
             <label class="field-label" for="persy-text">内容</label>
-            <textarea
-              id="persy-text"
-              v-model="documentText"
-              rows="14"
-              :placeholder="textPlaceholder"
-            ></textarea>
+            <textarea id="persy-text" v-model="documentText" rows="14" :placeholder="textPlaceholder"></textarea>
           </template>
 
           <details class="advanced-settings">

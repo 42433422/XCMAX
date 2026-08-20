@@ -1,3 +1,4 @@
+# isort: skip_file
 # ruff: noqa: E402, F401
 """Self-maintenance loop runner for MODstore employees.
 
@@ -53,11 +54,17 @@ from .self_evolution_knowledge import (
 from .self_maintenance_merge_policy import (
     absolute_forbidden_globs as _shared_auto_merge_absolute_forbidden_globs,
 )
-from .self_maintenance_merge_policy import file_matches_any_glob as _shared_file_matches_any_glob
-from .self_maintenance_merge_policy import forbidden_globs as _shared_auto_merge_forbidden_globs
+from .self_maintenance_merge_policy import (
+    file_matches_any_glob as _shared_file_matches_any_glob,
+)
+from .self_maintenance_merge_policy import (
+    forbidden_globs as _shared_auto_merge_forbidden_globs,
+)
 from .self_maintenance_merge_policy import max_files as _shared_auto_merge_max_files
 from .self_maintenance_merge_policy import max_lines as _shared_auto_merge_max_lines
-from .self_maintenance_merge_policy import normalize_repo_path as _shared_normalize_repo_path
+from .self_maintenance_merge_policy import (
+    normalize_repo_path as _shared_normalize_repo_path,
+)
 from .self_maintenance_merge_policy import scope_globs as _shared_auto_merge_scope_globs
 from .self_maintenance_para_merge_remediation import (
     classify_para_merge_review_detail,
@@ -67,15 +74,21 @@ from .self_maintenance_para_merge_remediation import (
     resume_candidate_from_para_ai_review_item,
     resume_from_clean_baseline_for_para_merge,
 )
-from .self_maintenance_quality_gate import diff_quality_commands as _diff_quality_commands
+from .self_maintenance_quality_gate import (
+    diff_quality_commands as _diff_quality_commands,
+)
 from .self_maintenance_quality_gate import (
     matches_focused_test_command as _matches_focused_test_command,
 )
 from .self_maintenance_quality_gate import (
     qa_executor_infrastructure_unavailable as _qa_executor_infrastructure_unavailable,
 )
-from .self_maintenance_quality_gate import qa_verdict_failure_reason as _qa_verdict_failure_reason
-from .self_maintenance_quality_gate import quality_check_failure as _quality_check_failure
+from .self_maintenance_quality_gate import (
+    qa_verdict_failure_reason as _qa_verdict_failure_reason,
+)
+from .self_maintenance_quality_gate import (
+    quality_check_failure as _quality_check_failure,
+)
 from .self_maintenance_recovery_policy import pending_run_recovery
 from .self_maintenance_remediation_lineage import (
     automated_remediation_resume_plan as _automated_remediation_resume_plan,
@@ -98,7 +111,10 @@ from .self_maintenance_remediation_prompts import (
     qa_executor_retry_prompt,
     structured_report_remediation_prompt,
 )
-from .self_maintenance_retry import close_successful_code_resume, is_transient_dispatch_failure
+from .self_maintenance_retry import (
+    close_successful_code_resume,
+    is_transient_dispatch_failure,
+)
 from .self_maintenance_runtime_evidence import retain_completed_merge_runs
 from .self_maintenance_subprocess import run_cmd_excerpt as _run_cmd_excerpt
 
@@ -238,7 +254,6 @@ from modstore_server.self_maintenance_loop_runner_part04 import (
     should_run_self_maintenance_loop as should_run_self_maintenance_loop,
 )
 
-
 # Preferred Para nests for delivery_validation lookup. Order is part of the
 # determinism contract: same payload shape always yields the same DV.
 _DELIVERY_VALIDATION_PREFERRED_KEYS = (
@@ -288,7 +303,6 @@ from modstore_server.self_maintenance_loop_runner_part06 import (
     _json_after_marker as _json_after_marker,
 )
 
-
 _REVIEW_DIMENSION_KEYS = ("security", "business_logic", "performance")
 _REVIEW_DIMENSION_STATUSES = frozenset({"pass", "fail", "n/a"})
 _REVIEW_SEVERITIES = frozenset({"none", "low", "medium", "high", "critical"})
@@ -319,7 +333,6 @@ from modstore_server.self_maintenance_loop_runner_part07 import (
     _kb_json_kind_for_repo_path as _kb_json_kind_for_repo_path,
     _validate_kb_json_changes_for_auto_merge as _validate_kb_json_changes_for_auto_merge,
 )
-
 
 KB_SCHEMA_RETRY_MAX = 2
 KB_SCHEMA_FAILED_LABEL = "kb-schema-failed"
@@ -389,7 +402,6 @@ from modstore_server.self_maintenance_loop_runner_part11 import (
     _decide_post_loop_policy as _decide_post_loop_policy,
 )
 
-
 LOOP_EVICT_MAX_ITEMS = 100
 LOOP_EVICT_STUCK_AGE_SECONDS = 24 * 3600
 LOOP_EVICT_STUCK_RETRY_THRESHOLD = 3
@@ -410,7 +422,6 @@ from modstore_server.self_maintenance_loop_runner_part12 import (
 from modstore_server.self_maintenance_loop_runner_part13 import (
     get_self_maintenance_runtime_status as get_self_maintenance_runtime_status,
 )
-
 
 __all__ = [
     "cron_trigger_for_self_maintenance",

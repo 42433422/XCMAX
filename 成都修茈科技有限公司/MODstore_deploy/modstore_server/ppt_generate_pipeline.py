@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from modstore_server.office_plaintext_generate import resolve_presentation_spec
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.ppt_compose_base import copy_template_base, create_compose_deck
 from modstore_server.ppt_edit_plan import plan_from_presentation, validate_edit_plan
 from modstore_server.ppt_homework_marquee import enhance_pptx_homework_marquee
@@ -65,7 +66,7 @@ async def run_ppt_generate(
         warnings.extend(spec_warnings or [])
         if isinstance(table, dict) and table.get("slides"):
             presentation = table
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         warnings.append(f"解析 JSON 输入：{exc}")
 
     if not presentation and payload.get("presentation_full"):
@@ -138,14 +139,14 @@ async def run_ppt_generate(
                         }
                     )
                 )
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             warnings.append(f"fallback 失败：{exc}")
 
     media_count = 0
     try:
         with zipfile.ZipFile(pptx_path, "r") as z:
             media_count = len([n for n in z.namelist() if n.startswith("ppt/media/")])
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
 
     has_timing = bool(exec_result.get("has_animation"))
@@ -156,7 +157,7 @@ async def run_ppt_generate(
                     if name.startswith("ppt/slides/") and b"timing>" in z.read(name):
                         has_timing = True
                         break
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
 
     return {

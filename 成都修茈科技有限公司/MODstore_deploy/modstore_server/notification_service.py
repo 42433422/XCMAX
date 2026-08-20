@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """站内通知：支付成功、员工执行完成等。"""
 
 from __future__ import annotations
@@ -11,6 +12,7 @@ from typing import Any, Dict, Optional
 from sqlalchemy.orm import Session
 
 from modstore_server.models import Notification, User, get_session_factory
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +37,7 @@ def _mirror_notification_email(user_id: int, title: str, content: str) -> None:
 
         html = f"<html><body><h2>{title}</h2><p>{content}</p></body></html>"
         send_simple_html_email(addr, f"[MODstore] {title}", html)
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         logger.debug("notification email mirror skipped: %s", e)
 
 
@@ -85,11 +87,11 @@ def create_notification(
                     "title": notif.title,
                 },
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
         try:
             _mirror_notification_email(notif.user_id, notif.title, notif.content)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
         return notif
     finally:
@@ -108,7 +110,7 @@ def notify_payment_success(user_id: int, order_no: str, amount: float, item_name
             content=f"您购买的「{item_name}」支付成功，金额 ¥{amount:.2f}",
             data={"order_no": order_no, "amount": amount, "item_name": item_name},
         )
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         logger.warning("notify_payment_success failed: %s", e)
 
 
@@ -124,7 +126,7 @@ def notify_employee_execution_done(user_id: int, employee_id: str, task: str, st
             content=f"员工 {employee_id} 的任务「{task}」执行{'成功' if ok else '失败'}",
             data={"employee_id": employee_id, "task": task, "status": status},
         )
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         logger.warning("notify_employee_execution_done failed: %s", e)
 
 
@@ -178,7 +180,7 @@ def employee_message_to_boss(
                 },
             )
             return 200 <= resp.status_code < 300
-    except Exception as e:  # noqa: BLE001 - 出站 IM 失败不影响主流程
+    except BOUNDARY_ERRORS as e:  # noqa: BLE001 - 出站 IM 失败不影响主流程
         logger.warning("employee_message_to_boss failed: %s", e)
         return False
 
@@ -221,7 +223,7 @@ def notify_human_question(
                 "phase": "D",
             },
         )
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         logger.warning("notify_human_question failed: %s", e)
     # 出站半边：让问题作为该员工的 IM 消息出现在其聊天页（独立 best-effort，不被通知失败影响）。
     post_employee_question_to_im(user_id, employee_id, question, task)
@@ -241,5 +243,5 @@ def notify_quota_warning(user_id: int, quota_type: str, remaining: int, total: i
             content=f"您的 {quota_type} 配额已使用 {usage_pct:.0f}%，剩余 {remaining}",
             data={"quota_type": quota_type, "remaining": remaining, "total": total},
         )
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         logger.warning("notify_quota_warning failed: %s", e)

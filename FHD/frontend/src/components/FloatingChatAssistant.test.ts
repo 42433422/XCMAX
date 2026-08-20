@@ -86,9 +86,7 @@ describe('FloatingChatAssistant', () => {
 
   it('toggle button has correct aria-label', () => {
     const wrapper = mountAssistant()
-    expect(wrapper.find('.floating-chat-toggle').attributes('aria-label')).toBe(
-      '小C助理'
-    )
+    expect(wrapper.find('.floating-chat-toggle').attributes('aria-label')).toBe('小C助理')
   })
 
   it('panel is hidden by default', () => {

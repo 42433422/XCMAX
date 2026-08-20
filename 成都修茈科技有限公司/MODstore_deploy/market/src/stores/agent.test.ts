@@ -7,9 +7,15 @@ const localStorageMock = (() => {
   let store: Record<string, string> = {}
   return {
     getItem: (k: string) => store[k] ?? null,
-    setItem: (k: string, v: string) => { store[k] = v },
-    removeItem: (k: string) => { delete store[k] },
-    clear: () => { store = {} },
+    setItem: (k: string, v: string) => {
+      store[k] = v
+    },
+    removeItem: (k: string) => {
+      delete store[k]
+    },
+    clear: () => {
+      store = {}
+    },
   }
 })()
 
@@ -139,7 +145,7 @@ describe('useAgentStore', () => {
   it('clearOrchestration 仅在 orchestrating 模式下重置 mode', () => {
     const store = useAgentStore()
     store.orchestrationSession = { sessionId: 's1', steps: [], status: 'done' }
-    store.setMode('thinking')          // not orchestrating
+    store.setMode('thinking') // not orchestrating
     store.clearOrchestration()
     expect(store.mode).toBe('thinking') // unchanged
     expect(store.orchestrationSession).toBeNull()

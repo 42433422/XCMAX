@@ -32,9 +32,12 @@ from __future__ import annotations
 import json
 import threading
 import time
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Literal, Sequence
+from typing import Any, Literal
+
+from vibe_coding.operational_errors import BOUNDARY_ERRORS
 
 from .embedder import Embedder, HashingEmbedder, cosine_similarity
 from .exemplars import Exemplar
@@ -68,7 +71,7 @@ class KnowledgeRecord:
         }
 
     @classmethod
-    def from_dict(cls, raw: dict[str, Any]) -> "KnowledgeRecord":
+    def from_dict(cls, raw: dict[str, Any]) -> KnowledgeRecord:
         ex_raw = raw.get("exemplar")
         if not isinstance(ex_raw, dict):
             raise ValueError("knowledge record missing 'exemplar'")
@@ -156,10 +159,7 @@ class GlobalKnowledgeBase:
             for ex in exemplars:
                 # De-duplicate by (project_id, patch_id) so promoting
                 # twice doesn't double-count a record.
-                if any(
-                    r.project_id == project_id and r.exemplar.patch_id == ex.patch_id
-                    for r in self._records
-                ):
+                if any(r.project_id == project_id and r.exemplar.patch_id == ex.patch_id for r in self._records):
                     continue
                 if only_successes and ex.outcome != "success":
                     continue
@@ -230,13 +230,10 @@ class GlobalKnowledgeBase:
                 retriever = Retriever([r.exemplar for r in pool])
                 top_text = retriever.search(query, k=min(k * 2, len(pool)))
                 bm25_ids = {ex.id for ex in top_text}
-            except Exception:  # noqa: BLE001
+            except BOUNDARY_ERRORS:
                 bm25_ids = set()
             scored.sort(
-                key=lambda triple: (
-                    triple[0]
-                    + (0.05 if triple[1].exemplar.id in bm25_ids else 0.0)
-                ),
+                key=lambda triple: triple[0] + (0.05 if triple[1].exemplar.id in bm25_ids else 0.0),
                 reverse=True,
             )
             return [rec for _, rec in scored[:k]]
@@ -258,9 +255,7 @@ class GlobalKnowledgeBase:
         outcome: Literal["success", "failure", "any"] = "success",
     ) -> str:
         """Render a ``## 跨项目知识`` block ready to splice into prompts."""
-        records = self.search(
-            query, k=k, language=language, framework=framework, outcome=outcome
-        )
+        records = self.search(query, k=k, language=language, framework=framework, outcome=outcome)
         if not records:
             return ""
         lines = ["## 跨项目知识（仅供参考，请按当前项目风格调整）"]
@@ -284,9 +279,7 @@ class GlobalKnowledgeBase:
             by_outcome: dict[str, int] = {}
             by_language: dict[str, int] = {}
             for r in self._records:
-                by_project[r.project_id or "unknown"] = (
-                    by_project.get(r.project_id or "unknown", 0) + 1
-                )
+                by_project[r.project_id or "unknown"] = by_project.get(r.project_id or "unknown", 0) + 1
                 by_outcome[r.exemplar.outcome] = by_outcome.get(r.exemplar.outcome, 0) + 1
                 for lang in r.languages or [""]:
                     by_language[lang or "unknown"] = by_language.get(lang or "unknown", 0) + 1
@@ -313,7 +306,7 @@ class GlobalKnowledgeBase:
         elif language is None:
             languages = None
         else:
-            languages = {l.lower() for l in language}
+            languages = {language_name.lower() for language_name in language}
         framework_norm = (framework or "").strip().lower()
         required_tags = {t.lower() for t in (tags or [])}
 
@@ -321,15 +314,11 @@ class GlobalKnowledgeBase:
         for rec in self._records:
             if outcome != "any" and rec.exemplar.outcome != outcome:
                 continue
-            if languages is not None and not any(
-                lang.lower() in languages for lang in rec.languages
-            ):
+            if languages is not None and not any(lang.lower() in languages for lang in rec.languages):
                 continue
             if framework_norm and rec.framework.lower() != framework_norm:
                 continue
-            if required_tags and not required_tags.issubset(
-                {t.lower() for t in rec.tags}
-            ):
+            if required_tags and not required_tags.issubset({t.lower() for t in rec.tags}):
                 continue
             out.append(rec)
         return out
@@ -337,7 +326,7 @@ class GlobalKnowledgeBase:
     def _embed(self, text: str) -> list[float]:
         try:
             vectors = self.embedder.embed([text or ""])
-        except Exception:  # noqa: BLE001
+        except BOUNDARY_ERRORS:
             vectors = []
         if not vectors or not vectors[0]:
             return []

@@ -53,10 +53,7 @@ vi.mock('@/utils/adminConsoleUrl', () => ({
   isAdminConsoleSpa: () => isAdminConsoleSpaMock(),
 }))
 
-import {
-  resolveHostBusinessPagePath,
-  resolveHostBusinessPageRedirect,
-} from './hostBusinessPageRedirect'
+import { resolveHostBusinessPagePath, resolveHostBusinessPageRedirect } from './hostBusinessPageRedirect'
 
 describe('hostBusinessPageRedirect', () => {
   beforeEach(() => {

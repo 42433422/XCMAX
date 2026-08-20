@@ -27,6 +27,8 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from datetime import UTC
+
 from modstore_server.self_maintenance_loop_runner import (  # noqa: E402
     _extract_failure_reason,
     _find_delivery_validation,
@@ -446,9 +448,9 @@ def main(argv: Optional[List[str]] = None) -> int:
 
 def _iso_now() -> str:
     """UTC ISO8601 时间戳。"""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 if __name__ == "__main__":

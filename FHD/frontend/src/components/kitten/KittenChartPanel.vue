@@ -52,7 +52,14 @@
       </label>
       <label>
         <span>聚合</span>
-        <select :value="localConfig.aggregate" @change="updateConfig({ aggregate: ($event.target as HTMLSelectElement).value as KittenChartAggregate })">
+        <select
+          :value="localConfig.aggregate"
+          @change="
+            updateConfig({
+              aggregate: ($event.target as HTMLSelectElement).value as KittenChartAggregate,
+            })
+          "
+        >
           <option value="count">计数</option>
           <option value="sum">求和</option>
           <option value="avg">平均</option>
@@ -71,9 +78,7 @@
       </label>
     </div>
 
-    <div v-if="!localConfig.xField" class="chart-empty">
-      请选择一个 X / 分类字段，或点击上方推荐图表。
-    </div>
+    <div v-if="!localConfig.xField" class="chart-empty">请选择一个 X / 分类字段，或点击上方推荐图表。</div>
     <div v-else-if="dashboardMode" class="chart-dashboard">
       <div class="chart-dashboard-kpi">
         <div class="chart-dashboard-kpi__value">{{ rows.length }}</div>
@@ -91,23 +96,23 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as echarts from 'echarts/core'
 import { BarChart, LineChart, PieChart, ScatterChart } from 'echarts/charts'
-import {
+import { GridComponent, LegendComponent, TooltipComponent, DatasetComponent } from 'echarts/components'
+import { CanvasRenderer } from 'echarts/renderers'
+import type { EChartsCoreOption } from 'echarts/core'
+import type { KittenChartAggregate, KittenChartConfig, KittenChartRecommendation, KittenChartType } from '@/composables/useKittenAnalyzer'
+import type { KittenFieldProfile, KittenFieldType } from '@/utils/kittenDatasetParser'
+
+echarts.use([
+  BarChart,
+  LineChart,
+  PieChart,
+  ScatterChart,
   GridComponent,
   LegendComponent,
   TooltipComponent,
   DatasetComponent,
-} from 'echarts/components'
-import { CanvasRenderer } from 'echarts/renderers'
-import type { EChartsCoreOption } from 'echarts/core'
-import type {
-  KittenChartAggregate,
-  KittenChartConfig,
-  KittenChartRecommendation,
-  KittenChartType,
-} from '@/composables/useKittenAnalyzer'
-import type { KittenFieldProfile, KittenFieldType } from '@/utils/kittenDatasetParser'
-
-echarts.use([BarChart, LineChart, PieChart, ScatterChart, GridComponent, LegendComponent, TooltipComponent, DatasetComponent, CanvasRenderer])
+  CanvasRenderer,
+])
 
 const props = defineProps<{
   rows: Record<string, unknown>[]
@@ -133,9 +138,7 @@ let dashBarChart: echarts.ECharts | null = null
 let dashLineChart: echarts.ECharts | null = null
 let dashPieChart: echarts.ECharts | null = null
 
-const resolvedPalette = computed(() =>
-  props.palette?.length ? props.palette : ['#2563eb', '#059669', '#d97706', '#7c3aed', '#dc2626'],
-)
+const resolvedPalette = computed(() => (props.palette?.length ? props.palette : ['#2563eb', '#059669', '#d97706', '#7c3aed', '#dc2626']))
 
 const chartTypes: Array<{ value: KittenChartType; label: string }> = [
   { value: 'bar', label: '柱状' },
@@ -197,7 +200,7 @@ function buildGroupedData() {
     .map((bucket) => ({
       label: bucket.label,
       group: bucket.group,
-      value: aggregateValues(bucket.values, cfg.yField ? cfg.aggregate : 'count')
+      value: aggregateValues(bucket.values, cfg.yField ? cfg.aggregate : 'count'),
     }))
     .sort((a, b) => String(a.label).localeCompare(String(b.label), 'zh-CN'))
     .slice(0, 80)
@@ -223,7 +226,7 @@ function buildOptionForType(type: KittenChartType): EChartsCoreOption {
       grid: { left: 40, right: 20, top: 28, bottom: 42 },
       xAxis: { type: 'value', name: cfg.xField },
       yAxis: { type: 'value', name: cfg.yField },
-      series: [{ type: 'scatter', data: buildScatterData(), symbolSize: 8 }]
+      series: [{ type: 'scatter', data: buildScatterData(), symbolSize: 8 }],
     }
   }
 
@@ -242,10 +245,10 @@ function buildOptionForType(type: KittenChartType): EChartsCoreOption {
           top: 28,
           data: labels.map((label) => ({
             name: label,
-            value: rows.filter((row) => row.label === label).reduce((sum, row) => sum + row.value, 0)
-          }))
-        }
-      ]
+            value: rows.filter((row) => row.label === label).reduce((sum, row) => sum + row.value, 0),
+          })),
+        },
+      ],
     }
   }
 
@@ -262,8 +265,8 @@ function buildOptionForType(type: KittenChartType): EChartsCoreOption {
       type: seriesType,
       areaStyle: type === 'area' ? {} : undefined,
       smooth: type !== 'bar',
-      data: labels.map((label) => rows.find((row) => row.label === label && row.group === group)?.value ?? 0)
-    }))
+      data: labels.map((label) => rows.find((row) => row.label === label && row.group === group)?.value ?? 0),
+    })),
   }
 }
 
@@ -307,7 +310,7 @@ function onResize() {
 watch(
   () => [props.rows, props.fieldProfiles, props.config, props.palette, props.dashboardMode],
   () => nextTick(renderChart),
-  { deep: true }
+  { deep: true },
 )
 
 onMounted(() => {

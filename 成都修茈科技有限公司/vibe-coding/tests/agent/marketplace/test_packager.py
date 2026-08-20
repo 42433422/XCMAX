@@ -21,21 +21,15 @@ from vibe_coding._internals import (
 )
 from vibe_coding.agent.marketplace import (
     PackagingError,
-    SkillPackager,
     SkillPackageOptions,
+    SkillPackager,
 )
 
 
 @pytest.fixture
 def sample_skill() -> CodeSkill:
-    sig = CodeFunctionSignature(
-        params=["text"], return_type="dict", required_params=["text"]
-    )
-    src = (
-        '"""Reverse a string."""\n'
-        "def reverse_text(text):\n"
-        "    return {'reversed': text[::-1]}\n"
-    )
+    sig = CodeFunctionSignature(params=["text"], return_type="dict", required_params=["text"])
+    src = '"""Reverse a string."""\ndef reverse_text(text):\n    return {\'reversed\': text[::-1]}\n'
     version = CodeSkillVersion(
         version=1,
         source_code=src,
@@ -58,9 +52,7 @@ def sample_skill() -> CodeSkill:
     )
 
 
-def test_package_minimal_skill_creates_xcmod(
-    sample_skill: CodeSkill, tmp_path: Path
-) -> None:
+def test_package_minimal_skill_creates_xcmod(sample_skill: CodeSkill, tmp_path: Path) -> None:
     pkg = SkillPackager(output_dir=tmp_path)
     art = pkg.package_skill(sample_skill)
     assert art.archive_path.is_file()
@@ -84,15 +76,11 @@ def test_package_minimal_skill_creates_xcmod(
     assert not missing, f"missing entries: {missing}"
 
 
-def test_manifest_passes_modstore_validation(
-    sample_skill: CodeSkill, tmp_path: Path
-) -> None:
+def test_manifest_passes_modstore_validation(sample_skill: CodeSkill, tmp_path: Path) -> None:
     pkg = SkillPackager(output_dir=tmp_path)
     art = pkg.package_skill(
         sample_skill,
-        options=SkillPackageOptions(
-            pkg_id="reverse-string-vc", version="1.2.3", name="Reverse String"
-        ),
+        options=SkillPackageOptions(pkg_id="reverse-string-vc", version="1.2.3", name="Reverse String"),
     )
     with zipfile.ZipFile(art.archive_path) as zf:
         manifest_raw = zf.read(f"{art.pkg_id}/manifest.json").decode("utf-8")
@@ -108,9 +96,7 @@ def test_manifest_passes_modstore_validation(
     assert manifest["vibe_coding"]["skill_id"] == "reverse_string"
 
 
-def test_employee_pack_artifact_emits_employee_block(
-    sample_skill: CodeSkill, tmp_path: Path
-) -> None:
+def test_employee_pack_artifact_emits_employee_block(sample_skill: CodeSkill, tmp_path: Path) -> None:
     pkg = SkillPackager(output_dir=tmp_path)
     art = pkg.package_skill(
         sample_skill,
@@ -145,9 +131,7 @@ def test_invalid_version_rejected(sample_skill: CodeSkill) -> None:
         )
 
 
-def test_blueprint_includes_skill_endpoint(
-    sample_skill: CodeSkill, tmp_path: Path
-) -> None:
+def test_blueprint_includes_skill_endpoint(sample_skill: CodeSkill, tmp_path: Path) -> None:
     pkg = SkillPackager(output_dir=tmp_path)
     art = pkg.package_skill(sample_skill)
     with zipfile.ZipFile(art.archive_path) as zf:
@@ -167,9 +151,7 @@ def test_meta_tests_json_present(sample_skill: CodeSkill, tmp_path: Path) -> Non
 
 
 def test_workflow_bundles_siblings(sample_skill: CodeSkill, tmp_path: Path) -> None:
-    sibling_sig = CodeFunctionSignature(
-        params=["x"], return_type="dict", required_params=["x"]
-    )
+    sibling_sig = CodeFunctionSignature(params=["x"], return_type="dict", required_params=["x"])
     sibling = CodeSkill(
         skill_id="echo",
         name="Echo",

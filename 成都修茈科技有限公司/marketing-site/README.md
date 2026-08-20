@@ -4,13 +4,13 @@
 
 ## 源文件
 
-| 路径 | 用途 |
-|------|------|
-| `data/news.json` | 新闻资讯唯一数据源 |
-| `templates/partials/header.njk` | 桌面/移动导航骨架 |
-| `templates/news-page.njk` | 新闻页正文 |
-| `templates/shell.njk` | 常规页：`head` + `header.njk` + 原文 main/footer |
-| `scripts/build.mjs` | 拼装并写回仓库根 |
+| 路径                            | 用途                                             |
+| ------------------------------- | ------------------------------------------------ |
+| `data/news.json`                | 新闻资讯唯一数据源                               |
+| `templates/partials/header.njk` | 桌面/移动导航骨架                                |
+| `templates/news-page.njk`       | 新闻页正文                                       |
+| `templates/shell.njk`           | 常规页：`head` + `header.njk` + 原文 main/footer |
+| `scripts/build.mjs`             | 拼装并写回仓库根                                 |
 
 ## 流程
 

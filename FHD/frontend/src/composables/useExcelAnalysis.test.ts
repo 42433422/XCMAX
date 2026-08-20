@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ref } from 'vue'
-import { setActivePinia, createPinia } from 'pinia'
 import { useExcelAnalysis } from './useExcelAnalysis'
 
 const addMessage = vi.fn()

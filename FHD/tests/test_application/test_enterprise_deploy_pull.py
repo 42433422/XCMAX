@@ -28,6 +28,7 @@ def _consume_scheduled_coroutine(coro):
     coro.close()
     return Mock()
 
+
 # ========================= _read_deployed_sha256 ==============================
 
 

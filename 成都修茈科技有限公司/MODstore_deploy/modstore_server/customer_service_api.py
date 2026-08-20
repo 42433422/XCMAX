@@ -1,7 +1,11 @@
+# mypy: disable-error-code="arg-type, assignment"
+# isort: skip_file
 # ruff: noqa: E402
 """独立 AI 客服平台 API。"""
 
 from __future__ import annotations
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 import logging
 import threading
@@ -63,7 +67,7 @@ def _publish_customer_ticket_incident(payload: Dict[str, Any]) -> None:
             source="customer-service-api",
             fingerprint=None,
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("customer-service ticket incident publish failed")
 
 
@@ -153,9 +157,7 @@ async def customer_service_chat(
                 "xiu-ci",
                 "xiuci",
             )
-        ):
-            scope = "website"
-        elif issue_domain in {"website", "官网"}:
+        ) or issue_domain in {"website", "官网"}:
             scope = "website"
         elif issue_domain in {"desktop", "android", "fhd", "modstore"}:
             scope = issue_domain
@@ -305,7 +307,8 @@ async def list_actions(
         q = q.filter(CustomerServiceAction.ticket_id == ticket.id)
     elif not user.is_admin:
         q = q.join(
-            CustomerServiceTicket, CustomerServiceAction.ticket_id == CustomerServiceTicket.id
+            CustomerServiceTicket,
+            CustomerServiceAction.ticket_id == CustomerServiceTicket.id,
         ).filter(CustomerServiceTicket.user_id == user.id)
     rows = q.order_by(CustomerServiceAction.id.desc()).limit(limit).all()
     return {"items": [action_payload(r) for r in rows]}
@@ -320,7 +323,9 @@ async def list_standards(
     # SSOT 四种默认标准：库空时自愈补种（避免发布/迁库后后台空白）
     if not rows:
         try:
-            from modstore_server.models_db import init_default_customer_service_standards
+            from modstore_server.models_db import (
+                init_default_customer_service_standards,
+            )
 
             init_default_customer_service_standards()
             rows = (
@@ -328,7 +333,7 @@ async def list_standards(
                 .order_by(CustomerServiceStandard.priority.asc())
                 .all()
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             rows = []
     return {"items": [_standard_payload(r, include_policy=user.is_admin) for r in rows]}
 

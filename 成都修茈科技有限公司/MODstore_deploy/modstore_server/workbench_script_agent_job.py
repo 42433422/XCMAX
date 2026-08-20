@@ -1,10 +1,14 @@
-# ruff: noqa
 """Multi-iteration script-agent workbench job adapter."""
+
 from __future__ import annotations
+
 import importlib
 import logging
 from typing import Any, Awaitable, Callable, Dict, List, Optional
+
 from sqlalchemy.orm import Session
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.script_agent.brief import Brief, BriefInputFile
 from modstore_server.script_agent.llm_client import RealLlmClient
 
@@ -21,7 +25,8 @@ def _facade():
 def _brief_from_workbench(brief: str, files: List[Dict[str, Any]]) -> Brief:
     inputs = [
         BriefInputFile(
-            filename=str((f or {}).get("filename") or "input.bin"), description="工作台上传样本文件"
+            filename=str((f or {}).get("filename") or "input.bin"),
+            description="工作台上传样本文件",
         )
         for f in files or []
     ]
@@ -62,7 +67,7 @@ async def run_script_agent_job(
         if status_hook:
             try:
                 await status_hook(msg)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 pass
 
     async def _notify_rich(
@@ -117,11 +122,15 @@ async def run_script_agent_job(
             if not (model or "").strip():
                 model = str(resolved.get("model") or "").strip() or model
             _facade().logger.info(
-                "run_script_agent_job: auto-resolved provider=%r model=%r", provider, model
+                "run_script_agent_job: auto-resolved provider=%r model=%r",
+                provider,
+                model,
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.warning(
-                "run_script_agent_job: auto-resolve failed for user=%s", user_id, exc_info=True
+                "run_script_agent_job: auto-resolve failed for user=%s",
+                user_id,
+                exc_info=True,
             )
     if not (provider or "").strip() or not (model or "").strip():
         _facade().logger.warning(
@@ -144,7 +153,7 @@ async def run_script_agent_job(
             ],
             "repair_trace": [],
         }
-    (key, _src) = _facade().resolve_api_key(db, user_id, provider)
+    key, _src = _facade().resolve_api_key(db, user_id, provider)
     if not key:
         return {
             "ok": False,

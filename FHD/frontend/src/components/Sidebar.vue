@@ -2,14 +2,7 @@
   <div class="sidebar">
     <div class="sidebar-header">
       <div class="sidebar-brand" aria-label="品牌与标题">
-        <img
-          class="sidebar-brand-logo"
-          :src="sidebarLogoSrc"
-          height="40"
-          alt="XC"
-          decoding="async"
-          @error="onSidebarLogoError"
-        />
+        <img class="sidebar-brand-logo" :src="sidebarLogoSrc" height="40" alt="XC" decoding="async" @error="onSidebarLogoError" />
         <div class="sidebar-brand-text">
           <h4>{{ sidebarBrandTitle }}</h4>
           <small style="opacity: 0.7">{{ sidebarBrandSubtitle }}</small>
@@ -35,9 +28,7 @@
             item.key,
             item.name,
             activeView === item.key || activeParentKeys.has(item.key),
-            item.children?.length
-              ? (item.children.find((child) => child.key === activeView)?.key ?? '')
-              : '',
+            item.children?.length ? (item.children.find((child) => child.key === activeView)?.key ?? '') : '',
             expandedKeys.has(item.key),
             pressingKey === item.key,
             draggingKey === item.key,
@@ -111,11 +102,7 @@
           >
             <span class="sidebar-mod-chip">{{ primaryModChip.shortLabel }}</span>
           </div>
-          <span
-            v-if="sidebarAppVersionText"
-            class="sidebar-version-chip"
-            :title="sidebarAppVersionTitle"
-          >
+          <span v-if="sidebarAppVersionText" class="sidebar-version-chip" :title="sidebarAppVersionTitle">
             {{ sidebarAppVersionText }}
           </span>
         </div>
@@ -131,17 +118,12 @@ import { useIndustryStore } from '@/stores/industry'
 import { useSidebarLayoutStore } from '@/stores/sidebarLayout'
 import { useModsStore } from '@/stores/mods'
 import { useAccountProfileStore } from '@/stores/accountProfile'
-import {
-  ADMIN_OPERATOR_BRAND_SUBTITLE,
-  ADMIN_OPERATOR_BRAND_TITLE,
-} from '@/constants/adminOperatorNav'
+import { ADMIN_OPERATOR_BRAND_SUBTITLE, ADMIN_OPERATOR_BRAND_TITLE } from '@/constants/adminOperatorNav'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import { DEFAULT_INDUSTRY_ID } from '@/constants/industryDefaults'
 import { getIndustryPreset } from '@/constants/industryPresets'
 import { useIndustryUiText } from '@/composables/useIndustryUiText'
-import {
-  isPlatformShellModeEnabled,
-} from '@/constants/platformShellMode'
+import { isPlatformShellModeEnabled } from '@/constants/platformShellMode'
 import { SETTINGS_MENU_ITEM, sidebarLayoutSeedKeys } from '@/constants/coreMenuCatalog'
 import { useVisibleNavItems } from '@/composables/useVisibleNavItems'
 import { useImUnreadBadge } from '@/composables/useImUnreadBadge'
@@ -226,11 +208,7 @@ function startupAsset(fileName) {
 }
 
 /** 与开屏 / 登录同源：带 XC 字标；PNG 透明底，JPG 作兜底 */
-const brandLogoCandidates = [
-  startupAsset('xc-logo-text.png'),
-  startupAsset('xc-logo-text.jpg'),
-  startupAsset('xc-logo-base.jpg'),
-]
+const brandLogoCandidates = [startupAsset('xc-logo-text.png'), startupAsset('xc-logo-text.jpg'), startupAsset('xc-logo-base.jpg')]
 const sidebarLogoSrc = ref(brandLogoCandidates[0])
 let brandLogoFallbackIndex = 0
 
@@ -319,9 +297,7 @@ const sidebarAppVersionTitle = computed(() => {
 })
 
 const sidebarFooterMetaVisible = computed(
-  () =>
-    Boolean(sidebarAppVersionText.value) ||
-    Boolean(primaryModChip.value && !isAdminConsoleSpa()),
+  () => Boolean(sidebarAppVersionText.value) || Boolean(primaryModChip.value && !isAdminConsoleSpa()),
 )
 
 async function refreshHealthAppVersion() {
@@ -343,11 +319,7 @@ function displayVersion(value) {
 }
 
 const adminDeployDisplayVersion = computed(() =>
-  displayVersion(
-    adminDeployStatus.value?.update_hub?.version ||
-      adminDeployStatus.value?.admin_local?.version ||
-      '',
-  ),
+  displayVersion(adminDeployStatus.value?.update_hub?.version || adminDeployStatus.value?.admin_local?.version || ''),
 )
 
 const adminDeployStatusTone = computed(() => {
@@ -379,7 +351,9 @@ const adminDeployStatusTitle = computed(() => {
     local.version ? `管理端 ${displayVersion(local.version)}` : '',
     hub.version ? `update 站 ${displayVersion(hub.version)}` : '',
     hub.git_sha ? `Git ${String(hub.git_sha).slice(0, 12)}` : '',
-  ].filter(Boolean).join(' · ')
+  ]
+    .filter(Boolean)
+    .join(' · ')
 })
 
 const entitlementSyncHasFreshNotice = computed(() => entitlementSyncNoticeUntil.value > Date.now())
@@ -411,15 +385,13 @@ const entitlementSyncStatusTitle = computed(() => {
     profile.tier ? `等级 ${profile.tier}` : '',
     profile.industry_id ? `行业 ${profile.industry_id}` : '',
     mods ? `Mod ${mods}` : '',
-  ].filter(Boolean).join(' · ')
+  ]
+    .filter(Boolean)
+    .join(' · ')
 })
 
 function entitlementSyncStorageKey() {
-  const accountKey =
-    accountProfileStore.marketUserId ||
-    accountProfileStore.impersonatingMarketUserId ||
-    displayBrand.value ||
-    'current'
+  const accountKey = accountProfileStore.marketUserId || accountProfileStore.impersonatingMarketUserId || displayBrand.value || 'current'
   return `xcagi_entitlements_seen_${accountKey}`
 }
 
@@ -448,8 +420,7 @@ function fallbackEntitlementSyncStatus(updatedAtMs = 0) {
       market_is_admin: accountProfileStore.marketIsAdmin,
     },
     snapshot: {
-      market_user_id:
-        accountProfileStore.marketUserId == null ? '' : String(accountProfileStore.marketUserId),
+      market_user_id: accountProfileStore.marketUserId == null ? '' : String(accountProfileStore.marketUserId),
       username: displayBrand.value || '',
       is_admin: accountProfileStore.marketIsAdmin,
       is_enterprise: accountProfileStore.marketIsEnterprise,
@@ -547,8 +518,7 @@ async function refreshEntitlementSyncStatus(options = {}) {
       statusData = res?.data || null
     } catch {
       const afterSignature = accountEntitlementSignature()
-      const changedAtMs =
-        beforeSignature && afterSignature && beforeSignature !== afterSignature ? Date.now() : 0
+      const changedAtMs = beforeSignature && afterSignature && beforeSignature !== afterSignature ? Date.now() : 0
       statusData = fallbackEntitlementSyncStatus(changedAtMs)
       if (changedAtMs > 0) {
         markEntitlementSyncNotice(changedAtMs)
@@ -578,8 +548,7 @@ async function refreshEntitlementSyncStatus(options = {}) {
       }
     }
   } catch (e) {
-    entitlementSyncStatusError.value =
-      e instanceof Error ? e.message : String(e || '权益同步失败')
+    entitlementSyncStatusError.value = e instanceof Error ? e.message : String(e || '权益同步失败')
   } finally {
     entitlementSyncLoading.value = false
   }
@@ -641,18 +610,22 @@ const onParentMenuClick = (item) => {
   selectView(item.key)
 }
 
-watch(() => props.activeView, (viewKey) => {
-  if (!viewKey) return
-  for (const item of menuItems.value) {
-    if (item.children?.length && item.children.some((c) => c.key === viewKey)) {
-      if (!expandedKeys.value.has(item.key)) {
-        const next = new Set(expandedKeys.value)
-        next.add(item.key)
-        expandedKeys.value = next
+watch(
+  () => props.activeView,
+  (viewKey) => {
+    if (!viewKey) return
+    for (const item of menuItems.value) {
+      if (item.children?.length && item.children.some((c) => c.key === viewKey)) {
+        if (!expandedKeys.value.has(item.key)) {
+          const next = new Set(expandedKeys.value)
+          next.add(item.key)
+          expandedKeys.value = next
+        }
       }
     }
-  }
-}, { immediate: true })
+  },
+  { immediate: true },
+)
 
 watch(shouldShowAdminDeployStatus, () => {
   syncAdminDeployStatusPolling()
@@ -677,12 +650,7 @@ function focusMenuItemByKey(targetKey) {
 }
 
 function onMenuItemKeydown(event, key) {
-  if (
-    event.key !== 'ArrowDown' &&
-    event.key !== 'ArrowUp' &&
-    event.key !== 'Home' &&
-    event.key !== 'End'
-  ) {
+  if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'Home' && event.key !== 'End') {
     return
   }
   const keys = displayMenuItems.value.map((i) => i.key)
@@ -719,12 +687,7 @@ function menuKeyUnderPoint(clientX, clientY) {
   const root = sidebarMenuRef.value
   if (!root) return ''
   const rect = root.getBoundingClientRect()
-  if (
-    clientX < rect.left ||
-    clientX > rect.right ||
-    clientY < rect.top ||
-    clientY > rect.bottom
-  ) {
+  if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
     return ''
   }
   if (!menuHitCache.length) refreshMenuHitCache()
@@ -804,7 +767,11 @@ function onWindowPointerUp(event) {
     const from = draggingKey.value
     const to = dragOverKey.value
     if (to && to !== from) {
-      sidebarLayoutStore.moveItem(from, to, menuItems.value.map((m) => m.key))
+      sidebarLayoutStore.moveItem(
+        from,
+        to,
+        menuItems.value.map((m) => m.key),
+      )
     }
   }
   clearReorderGesture()

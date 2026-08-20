@@ -8,8 +8,7 @@ import {
 import type { WorkflowDocsRuntimeContext } from './workflowEmployeeDocs'
 import { WORKFLOW_EMPLOYEE_MOD_IDS } from '@/constants/workflowEmployeeMods'
 
-const baseDocs = () =>
-  normalizeWorkflowEmployeeDocs(bundledDocs as import('@/types/workflowEmployeeDocs').WorkflowEmployeeDocsV1)
+const baseDocs = () => normalizeWorkflowEmployeeDocs(bundledDocs as import('@/types/workflowEmployeeDocs').WorkflowEmployeeDocsV1)
 
 const sixModsCtx: WorkflowDocsRuntimeContext = {
   clientModsUiOff: false,

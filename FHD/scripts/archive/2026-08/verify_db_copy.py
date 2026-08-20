@@ -1,5 +1,7 @@
 import sqlite3
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 
 def verify_db_copy():
     """验证数据库复制结果"""
@@ -44,7 +46,7 @@ def verify_db_copy():
         conn.close()
         return True
 
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 验证数据库失败: {e}")
         return False
 
@@ -88,7 +90,7 @@ def check_backend_api():
             print(f"❌ API请求失败，状态码: {response.status_code}")
             return False
 
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 检查后端API失败: {e}")
         return False
 

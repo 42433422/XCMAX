@@ -97,9 +97,7 @@ def resolve_dataset_id(
     return f"user_{user_id or 'anonymous'}"
 
 
-def resolve_tenant_id(
-    user_id: str, context: dict[str, Any], artifacts: list[AgentArtifact]
-) -> str:
+def resolve_tenant_id(user_id: str, context: dict[str, Any], artifacts: list[AgentArtifact]) -> str:
     candidates: list[Any] = [
         context.get("tenant_id"),
         context.get("tenantId"),

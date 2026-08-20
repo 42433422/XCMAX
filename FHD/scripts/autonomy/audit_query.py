@@ -96,7 +96,9 @@ def parse_since(since: str) -> datetime:
 def parse_filter(filter_str: str) -> tuple[str, str]:
     """解析 --filter key=value 参数。"""
     if "=" not in filter_str:
-        raise argparse.ArgumentTypeError(f"invalid --filter format (expected key=value): {filter_str}")
+        raise argparse.ArgumentTypeError(
+            f"invalid --filter format (expected key=value): {filter_str}"
+        )
     key, value = filter_str.split("=", 1)
     return key.strip(), value.strip()
 
@@ -184,10 +186,13 @@ def query(
     entries = load_entries(path)
     # 时间过滤
     if since is not None:
-        entries = [
-            e for e in entries
-            if _parse_entry_ts(e.ts) is None or _parse_entry_ts(e.ts) >= since
-        ]
+        cutoff = since
+
+        def _at_or_after_cutoff(entry: AuditEntry) -> bool:
+            parsed = _parse_entry_ts(entry.ts)
+            return parsed is None or parsed >= cutoff
+
+        entries = [entry for entry in entries if _at_or_after_cutoff(entry)]
     # 字段过滤
     if filters:
         entries = [e for e in entries if matches_filter(e, filters)]

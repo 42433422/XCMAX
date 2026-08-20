@@ -1,3 +1,4 @@
+# mypy: disable-error-code="misc"
 """code-editor 路由单测（不依赖 backend/tests 的 PostgreSQL conftest）。"""
 
 from __future__ import annotations

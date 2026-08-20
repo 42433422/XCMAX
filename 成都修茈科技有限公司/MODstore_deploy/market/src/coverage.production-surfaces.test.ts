@@ -10,53 +10,54 @@ const apiState = vi.hoisted(() => ({
 }))
 
 vi.mock('./api', () => ({
-  api: new Proxy({}, {
-    get: (_target, property) => vi.fn(async (...args: unknown[]) => {
-      if (apiState.fail) throw new Error(`${String(property)} unavailable`)
-      const key = String(property)
-      if (Object.prototype.hasOwnProperty.call(apiState.responses, key)) {
-        const override = apiState.responses[key]
-        return typeof override === 'function'
-          ? (override as (...params: unknown[]) => unknown)(...args)
-          : override
-      }
-      switch (key) {
-        case 'listWorkflows':
-        case 'listEmployees':
-          return []
-        case 'listV1Packages':
-          return { packages: [] }
-        case 'catalog':
-          return { items: [], total: 0 }
-        case 'listMods':
-          return { data: [], mods: [] }
-        case 'llmCatalog':
-        case 'llmStatus':
-          return { providers: [], models: [] }
-        case 'knowledgeListDocuments':
-          return { documents: [] }
-        case 'knowledgeStatus':
-          return { ok: true }
-        case 'me':
-          return { ok: true, username: 'tester' }
-        default:
-          return { ok: true, success: true, data: [], items: [] }
-      }
-    }),
-  }),
+  api: new Proxy(
+    {},
+    {
+      get: (_target, property) =>
+        vi.fn(async (...args: unknown[]) => {
+          if (apiState.fail) throw new Error(`${String(property)} unavailable`)
+          const key = String(property)
+          if (Object.prototype.hasOwnProperty.call(apiState.responses, key)) {
+            const override = apiState.responses[key]
+            return typeof override === 'function' ? (override as (...params: unknown[]) => unknown)(...args) : override
+          }
+          switch (key) {
+            case 'listWorkflows':
+            case 'listEmployees':
+              return []
+            case 'listV1Packages':
+              return { packages: [] }
+            case 'catalog':
+              return { items: [], total: 0 }
+            case 'listMods':
+              return { data: [], mods: [] }
+            case 'llmCatalog':
+            case 'llmStatus':
+              return { providers: [], models: [] }
+            case 'knowledgeListDocuments':
+              return { documents: [] }
+            case 'knowledgeStatus':
+              return { ok: true }
+            case 'me':
+              return { ok: true, username: 'tester' }
+            default:
+              return { ok: true, success: true, data: [], items: [] }
+          }
+        }),
+    },
+  ),
 }))
 
 vi.mock('./utils/llmStream', () => ({
-  streamLLMChat: vi.fn((options: {
-    onToken?: (delta: string, soFar: string) => void
-    onDone?: (full: string, aborted: boolean) => void
-  }) => {
-    const text = apiState.streamText
-    options.onToken?.(text.slice(0, Math.max(1, Math.floor(text.length / 2))), text.slice(0, Math.max(1, Math.floor(text.length / 2))))
-    options.onToken?.(text, text)
-    options.onDone?.(text, false)
-    return { abort: vi.fn(), done: Promise.resolve({ content: text, aborted: false }) }
-  }),
+  streamLLMChat: vi.fn(
+    (options: { onToken?: (delta: string, soFar: string) => void; onDone?: (full: string, aborted: boolean) => void }) => {
+      const text = apiState.streamText
+      options.onToken?.(text.slice(0, Math.max(1, Math.floor(text.length / 2))), text.slice(0, Math.max(1, Math.floor(text.length / 2))))
+      options.onToken?.(text, text)
+      options.onDone?.(text, false)
+      return { abort: vi.fn(), done: Promise.resolve({ content: text, aborted: false }) }
+    },
+  ),
 }))
 
 import WorkflowView from './views/WorkflowView.vue'
@@ -87,20 +88,32 @@ describe('large production surfaces', () => {
     apiState.fail = false
     apiState.responses = {}
     apiState.streamText = 'covered reply'
-    vi.stubGlobal('matchMedia', vi.fn(() => ({
-      matches: false,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-    })))
-    vi.stubGlobal('ResizeObserver', class {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    })
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    })))
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({
+        matches: false,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    )
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    )
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response('{}', {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+      ),
+    )
     Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
       configurable: true,
       value: vi.fn(),
@@ -131,17 +144,13 @@ describe('large production surfaces', () => {
     // every synchronous/HTTP-backed handler once against empty state so newly
     // added controls cannot remain completely unexecuted. Browser media loops
     // are covered by their dedicated composable suites and are skipped here.
-    const vm = (wrapper.vm as unknown as { $?: { setupState?: Record<string, unknown> } })
-      .$?.setupState ?? {}
-    const safeQueryHandler = /^(format|is|has|can|should|resolve|build|compute|normalize|sanitize|label|status|pick|parse|get|find|detect|infer|looks|friendly|strip|clean|employee|direct|workflow|orch|read)/i
+    const vm = (wrapper.vm as unknown as { $?: { setupState?: Record<string, unknown> } }).$?.setupState ?? {}
+    const safeQueryHandler =
+      /^(format|is|has|can|should|resolve|build|compute|normalize|sanitize|label|status|pick|parse|get|find|detect|infer|looks|friendly|strip|clean|employee|direct|workflow|orch|read)/i
     const skipBrowserLoop = /(voice|speech|microphone|mic|audio|record|camera|poll|timer|interval)/i
     let exercised = 0
     for (const [name, candidate] of Object.entries(vm)) {
-      if (
-        typeof candidate !== 'function'
-        || !safeQueryHandler.test(name)
-        || skipBrowserLoop.test(name)
-      ) continue
+      if (typeof candidate !== 'function' || !safeQueryHandler.test(name) || skipBrowserLoop.test(name)) continue
       try {
         await candidate()
       } catch {
@@ -181,8 +190,7 @@ describe('large production surfaces', () => {
     })
     await flushPromises()
 
-    const vm = (wrapper.vm as unknown as { $?: { setupState?: Record<string, UnsafeTestValue> } })
-      .$?.setupState ?? {}
+    const vm = (wrapper.vm as unknown as { $?: { setupState?: Record<string, UnsafeTestValue> } }).$?.setupState ?? {}
     const hooks = vm.coverageHooks as Record<string, (...args: UnsafeTestValue[]) => UnsafeTestValue>
     expect(hooks).toBeTruthy()
 
@@ -194,13 +202,9 @@ describe('large production surfaces', () => {
       embeddingProvider: 'deepseek',
       embeddingModel: 'embedding-v1',
     })
-    hooks.__setRef('directEmployeeOptions', [
-      { id: 'excel-reader', name: 'Excel reader', accepts: ['xlsx', 'csv'] },
-    ])
+    hooks.__setRef('directEmployeeOptions', [{ id: 'excel-reader', name: 'Excel reader', accepts: ['xlsx', 'csv'] }])
     hooks.__setRef('directChatEmployeeId', 'excel-reader')
-    hooks.__setRef('allBots', [
-      { id: 'customer-service', name: 'AI 客服', desc: '售后支持' },
-    ])
+    hooks.__setRef('allBots', [{ id: 'customer-service', name: 'AI 客服', desc: '售后支持' }])
     hooks.__setRef('conversations', [])
 
     const files = [
@@ -250,20 +254,25 @@ describe('large production surfaces', () => {
     hooks.togglePlatformChatMode()
     hooks.dismissHomeBodyOverlays()
 
-    await router.push({ path: '/workbench', query: {
-      assistant: 'customer-service',
-      scene: 'refund',
-      order_no: 'ORD-1',
-      complaint_type: 'quality',
-    } })
+    await router.push({
+      path: '/workbench',
+      query: {
+        assistant: 'customer-service',
+        scene: 'refund',
+        order_no: 'ORD-1',
+        complaint_type: 'quality',
+      },
+    })
     await hooks.applyCustomerServiceRouteContext()
     expect(hooks.customerServiceQueryContext()).toContain('ORD-1')
 
     // Call remaining low-risk presentation helpers once. Functions which need
     // active media devices, streaming loops, writes, or destructive actions
     // stay in their dedicated suites.
-    const presentational = /^(format|is|has|can|should|resolve|build|compute|normalize|sanitize|label|status|pick|parse|get|find|detect|infer|looks|friendly|strip|clean|employee|direct|workflow|orch|read|clear|close|dismiss|back|cancel)/i
-    const sideEffecting = /(voice|speech|microphone|mic|audio|record|camera|poll|timer|interval|stream|upload|download|delete|remove|execute|dispatch|orchestration|chat|tts|media|knowledge|inline|speak|start|stop)/i
+    const presentational =
+      /^(format|is|has|can|should|resolve|build|compute|normalize|sanitize|label|status|pick|parse|get|find|detect|infer|looks|friendly|strip|clean|employee|direct|workflow|orch|read|clear|close|dismiss|back|cancel)/i
+    const sideEffecting =
+      /(voice|speech|microphone|mic|audio|record|camera|poll|timer|interval|stream|upload|download|delete|remove|execute|dispatch|orchestration|chat|tts|media|knowledge|inline|speak|start|stop)/i
     let exercised = 0
     for (const [name, candidate] of Object.entries(vm)) {
       if (typeof candidate !== 'function' || !presentational.test(name) || sideEffecting.test(name)) continue
@@ -289,8 +298,7 @@ describe('large production surfaces', () => {
       },
     })
     await flushPromises()
-    const vm = (wrapper.vm as unknown as { $?: { setupState?: Record<string, UnsafeTestValue> } })
-      .$?.setupState ?? {}
+    const vm = (wrapper.vm as unknown as { $?: { setupState?: Record<string, UnsafeTestValue> } }).$?.setupState ?? {}
 
     const event = {
       key: 'Escape',
@@ -306,7 +314,8 @@ describe('large production surfaces', () => {
       dataTransfer: { files: [], types: [], dropEffect: 'copy' },
       clipboardData: { items: [] },
     }
-    const skipUnbounded = /(poll|timer|interval|draw.*wave|wave.*draw|voice|recognition|listening|microphone|audio|s2s|unified|stream|orchestration|autopilot|speak|upload|download|delete|remove|execute|rundirect|submitdraft|senddirect|sendplan|inline)/i
+    const skipUnbounded =
+      /(poll|timer|interval|draw.*wave|wave.*draw|voice|recognition|listening|microphone|audio|s2s|unified|stream|orchestration|autopilot|speak|upload|download|delete|remove|execute|rundirect|submitdraft|senddirect|sendplan|inline)/i
     let exercised = 0
     for (const [name, candidate] of Object.entries(vm)) {
       if (typeof candidate !== 'function' || skipUnbounded.test(name)) continue
@@ -351,7 +360,9 @@ describe('large production surfaces', () => {
       },
       llmGenerateImage: { images: ['https://example.invalid/generated.png'] },
       llmGenerateVideo: {
-        status: 'pending', job_id: 'video-1', preview_url: 'https://example.invalid/video.mp4',
+        status: 'pending',
+        job_id: 'video-1',
+        preview_url: 'https://example.invalid/video.mp4',
       },
     }
     localStorage.setItem('modstore_token', 'coverage-token')
@@ -363,21 +374,25 @@ describe('large production surfaces', () => {
       },
     })
     await flushPromises()
-    const vm = (wrapper.vm as unknown as { $?: { setupState?: Record<string, UnsafeTestValue> } })
-      .$?.setupState ?? {}
+    const vm = (wrapper.vm as unknown as { $?: { setupState?: Record<string, UnsafeTestValue> } }).$?.setupState ?? {}
     const hooks = vm.coverageHooks as Record<string, (...args: UnsafeTestValue[]) => UnsafeTestValue>
 
     hooks.__setRef('conversations', [])
     hooks.__setRef('activeConversationId', '')
-    hooks.__setRef('allBots', [{
-      id: 'customer-service', name: 'AI 客服', persona: 'Answer from verified support knowledge.',
-    }])
+    hooks.__setRef('allBots', [
+      {
+        id: 'customer-service',
+        name: 'AI 客服',
+        persona: 'Answer from verified support knowledge.',
+      },
+    ])
     hooks.__setRef('activeBotId', 'customer-service')
     hooks.__setRef('modelMode', 'manual')
     hooks.__setRef('selectedProvider', 'openai')
     hooks.__setRef('selectedModel', 'gpt-4o-mini')
     hooks.__setRef('personalSettings', {
-      embeddingProvider: 'openai', embeddingModel: 'text-embedding-3-small',
+      embeddingProvider: 'openai',
+      embeddingModel: 'text-embedding-3-small',
     })
 
     const persy = await hooks.retrieveKnowledgeForDirect('How do I refund?', 'openai', 'gpt-4o-mini')
@@ -394,9 +409,14 @@ describe('large production surfaces', () => {
     await hooks.removeDirectAttachedFile(attachment.id)
     expect(vm.directAttachedFiles).toHaveLength(0)
 
-    hooks.__setRef('directEmployeeOptions', [{
-      id: 'excel-reader', name: 'Excel reader', accepts: ['xlsx', 'csv'], sourceLabel: 'catalog',
-    }])
+    hooks.__setRef('directEmployeeOptions', [
+      {
+        id: 'excel-reader',
+        name: 'Excel reader',
+        accepts: ['xlsx', 'csv'],
+        sourceLabel: 'catalog',
+      },
+    ])
     hooks.__setRef('directChatEmployeeId', 'excel-reader')
     const readResult = await hooks.runDirectEmployeeReadForLlm({
       files: [{ file: textFile, name: textFile.name, readEmployeeId: 'excel-reader' }],
@@ -413,14 +433,16 @@ describe('large production surfaces', () => {
 
     const mediaCatalog = {
       preferences: { provider: 'openai', model: 'gpt-4o-mini' },
-      providers: [{
-        provider: 'openai',
-        models_detailed: [
-          { id: 'gpt-image-1', category: 'image' },
-          { id: 'sora', category: 'video' },
-        ],
-        media_counts: { image: 1, video: 1 },
-      }],
+      providers: [
+        {
+          provider: 'openai',
+          models_detailed: [
+            { id: 'gpt-image-1', category: 'image' },
+            { id: 'sora', category: 'video' },
+          ],
+          media_counts: { image: 1, video: 1 },
+        },
+      ],
     }
     hooks.__setRef('llmCatalog', mediaCatalog)
     hooks.__setRef('directImageGenEnabled', true)
@@ -434,11 +456,13 @@ describe('large production surfaces', () => {
     }
     hooks.__setRef('llmCatalog', {
       preferences: { provider: 'doubao', model: 'doubao-seedance-2-0-260128' },
-      providers: [{
-        provider: 'doubao',
-        models_detailed: [{ id: 'doubao-seedance-2-0-260128', category: 'video' }],
-        media_counts: { video: 1 },
-      }],
+      providers: [
+        {
+          provider: 'doubao',
+          models_detailed: [{ id: 'doubao-seedance-2-0-260128', category: 'video' }],
+          media_counts: { video: 1 },
+        },
+      ],
     })
     hooks.__setRef('directImageGenEnabled', false)
     hooks.__setRef('directVideoGenEnabled', true)
@@ -479,8 +503,7 @@ describe('large production surfaces', () => {
       },
     })
     await flushPromises()
-    const vm = (wrapper.vm as unknown as { $?: { setupState?: Record<string, UnsafeTestValue> } })
-      .$?.setupState ?? {}
+    const vm = (wrapper.vm as unknown as { $?: { setupState?: Record<string, UnsafeTestValue> } }).$?.setupState ?? {}
     const hooks = vm.coverageHooks as Record<string, (...args: UnsafeTestValue[]) => UnsafeTestValue>
     hooks.__setRef('modelMode', 'manual')
     hooks.__setRef('selectedProvider', 'openai')
@@ -525,7 +548,9 @@ describe('large production surfaces', () => {
       intentKey: 'mod',
       intentTitle: 'Mod',
       suggestedModId: 'coverage-mod',
-      executionChecklist: [], planningMessages: [], files: [],
+      executionChecklist: [],
+      planningMessages: [],
+      files: [],
     })
     expect(await hooks.runOrchestration()).toBe(true)
     expect(vm.makeCompletionResult.intent).toBe('mod')
@@ -544,18 +569,28 @@ describe('large production surfaces', () => {
       intentKey: 'employee',
       intentTitle: 'Employee',
       employeeTarget: 'pack_only',
-      executionChecklist: [], planningMessages: [], files: [],
+      executionChecklist: [],
+      planningMessages: [],
+      files: [],
     })
     expect(await hooks.runOrchestration()).toBe(true)
     expect(vm.makeCompletionResult.intent).toBe('employee')
 
     apiState.responses.workbenchGetSession = {
-      session_id: 'session-error', status: 'error', error: 'backend rejected', steps: [], artifact: {},
+      session_id: 'session-error',
+      status: 'error',
+      error: 'backend rejected',
+      steps: [],
+      artifact: {},
     }
     apiState.responses.workbenchStartSession = { session_id: 'session-error' }
     hooks.__setRef('pendingHandoff', {
-      description: 'Fail safely', intentKey: 'mod', intentTitle: 'Mod',
-      executionChecklist: [], planningMessages: [], files: [],
+      description: 'Fail safely',
+      intentKey: 'mod',
+      intentTitle: 'Mod',
+      executionChecklist: [],
+      planningMessages: [],
+      files: [],
     })
     expect(await hooks.runOrchestration()).toBe(false)
     expect(vm.finalizeError).toBe('backend rejected')
@@ -574,8 +609,7 @@ describe('large production surfaces', () => {
       },
     })
     await flushPromises()
-    const vm = (wrapper.vm as unknown as { $?: { setupState?: Record<string, UnsafeTestValue> } })
-      .$?.setupState ?? {}
+    const vm = (wrapper.vm as unknown as { $?: { setupState?: Record<string, UnsafeTestValue> } }).$?.setupState ?? {}
     const hooks = vm.coverageHooks as Record<string, (...args: UnsafeTestValue[]) => UnsafeTestValue>
     hooks.__setRef('modelMode', 'manual')
     hooks.__setRef('selectedProvider', 'openai')
@@ -635,9 +669,33 @@ describe('large production surfaces', () => {
       description: 'Process orders',
       is_active: true,
       nodes: [
-        { id: 11, workflow_id: 7, name: 'Start', node_type: 'start', config: {}, position_x: 10, position_y: 20 },
-        { id: 12, workflow_id: 7, name: 'Worker', node_type: 'employee', config: { employee_id: 'emp-1' }, position_x: 210, position_y: 20 },
-        { id: 13, workflow_id: 7, name: 'End', node_type: 'end', config: {}, position_x: 410, position_y: 20 },
+        {
+          id: 11,
+          workflow_id: 7,
+          name: 'Start',
+          node_type: 'start',
+          config: {},
+          position_x: 10,
+          position_y: 20,
+        },
+        {
+          id: 12,
+          workflow_id: 7,
+          name: 'Worker',
+          node_type: 'employee',
+          config: { employee_id: 'emp-1' },
+          position_x: 210,
+          position_y: 20,
+        },
+        {
+          id: 13,
+          workflow_id: 7,
+          name: 'End',
+          node_type: 'end',
+          config: {},
+          position_x: 410,
+          position_y: 20,
+        },
       ],
       edges: [
         { id: 21, source_node_id: 11, target_node_id: 12, condition: '' },
@@ -651,7 +709,11 @@ describe('large production surfaces', () => {
       listWorkflowExecutions: [{ id: 31, workflow_id: 7, status: 'completed' }],
       getWorkflow: graph,
       listWorkflowTriggers: [{ id: 41, workflow_id: 7, trigger_type: 'cron' }],
-      listWorkflowsByEmployee: { workflows: [{ id: 7, name: graph.name, source: 'node' }], node_hits: 1, manifest_hits: 0 },
+      listWorkflowsByEmployee: {
+        workflows: [{ id: 7, name: graph.name, source: 'node' }],
+        node_hits: 1,
+        manifest_hits: 0,
+      },
       workflowSandboxRun: { ok: true, steps: [], output: { processed: 1 } },
       getEmployeeStatus: { status: 'active' },
       createWorkflow: { id: 7 },
@@ -664,7 +726,10 @@ describe('large production surfaces', () => {
       updateWorkflow: { ok: true },
       deleteWorkflow: { ok: true },
     }
-    vi.stubGlobal('confirm', vi.fn(() => true))
+    vi.stubGlobal(
+      'confirm',
+      vi.fn(() => true),
+    )
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: { writeText: vi.fn(async () => undefined) },
@@ -679,8 +744,7 @@ describe('large production surfaces', () => {
       },
     })
     await flushPromises()
-    const vm = (wrapper.vm as unknown as { $?: { setupState?: Record<string, UnsafeTestValue> } })
-      .$?.setupState ?? {}
+    const vm = (wrapper.vm as unknown as { $?: { setupState?: Record<string, UnsafeTestValue> } }).$?.setupState ?? {}
 
     expect(vm.formatDate('2026-08-17T00:00:00Z')).toBeTruthy()
     expect(vm.formatDate(undefined)).toBe('')
@@ -716,7 +780,14 @@ describe('large production surfaces', () => {
 
     const dragTarget = document.createElement('div')
     dragTarget.getBoundingClientRect = () => ({
-      x: 0, y: 0, width: 100, height: 50, top: 0, right: 100, bottom: 50, left: 0,
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 50,
+      top: 0,
+      right: 100,
+      bottom: 50,
+      left: 0,
       toJSON: () => ({}),
     })
     const dragNode = vm.nodes[0]

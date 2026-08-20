@@ -1,3 +1,4 @@
+# isort: skip_file
 # ruff: noqa: E402, F401
 from __future__ import annotations
 
@@ -120,7 +121,10 @@ _TAGS = [
     {"name": "mods", "description": "Mod 列表、详情、manifest、文件读写、导入导出"},
     {"name": "sync", "description": "与 XCAGI/mods 推送与拉回"},
     {"name": "debug", "description": "沙箱目录、primary 批量标记、XCAGI 状态代理"},
-    {"name": "authoring", "description": "扩展面文档、蓝图路由静态扫描、宿主 OpenAPI 合并"},
+    {
+        "name": "authoring",
+        "description": "扩展面文档、蓝图路由静态扫描、宿主 OpenAPI 合并",
+    },
     {"name": "payment", "description": "支付、订单与会员计划"},
     {"name": "workflow", "description": "工作流编排与执行"},
     {"name": "webhooks", "description": "业务 Webhook 投递与重放"},
@@ -175,7 +179,6 @@ from modstore_server.routes_registry_part02 import (
     api_xcagi_installed_mods as api_xcagi_installed_mods,
     _include_optional as _include_optional,
 )
-
 
 _OPTIONAL_MODULES = (
     "modstore_server.llm_api",

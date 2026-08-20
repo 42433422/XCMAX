@@ -10,11 +10,7 @@ const emit = defineEmits<{
 
 <template>
   <label class="mode-toggle">
-    <input
-      type="checkbox"
-      :checked="expertMode"
-      @change="emit('update:expertMode', ($event.target as HTMLInputElement).checked)"
-    />
+    <input type="checkbox" :checked="expertMode" @change="emit('update:expertMode', ($event.target as HTMLInputElement).checked)" />
     <span>专家模式</span>
   </label>
 </template>

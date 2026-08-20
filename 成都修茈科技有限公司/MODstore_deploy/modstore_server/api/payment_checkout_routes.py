@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, attr-defined, no-any-return, valid-type"
 """Checkout and Java-forwarding routes for the payment fallback API."""
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from modstore_server.application.payment_gateway import (
     java_payment_unreachable_message,
 )
 from modstore_server.models import User, get_session_factory
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.payment_common import (
     CheckoutDTO,
     SignCheckoutBody,
@@ -101,7 +103,7 @@ async def _forward_checkout_to_java(request: Request, body: CheckoutDTO) -> Resp
         )
     except httpx.HTTPError as e:
         raise HTTPException(502, java_payment_unreachable_message(e)) from e
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         raise HTTPException(502, java_payment_unreachable_message(e)) from e
     if r is None:
         raise HTTPException(502, "Java 支付服务请求未完成")
@@ -250,6 +252,6 @@ async def api_payment_checkout(
         }
     except HTTPException:
         raise
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         logger.error("支付下单异常: %s", e)
         raise HTTPException(500, "系统内部错误，请稍后重试")

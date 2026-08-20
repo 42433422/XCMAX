@@ -280,10 +280,16 @@ async def attendance_convert_upload(
 
     raw_tpl_rel = unquote(template_relpath or "").strip()
     if raw_tpl_rel:
+        if not raw_tpl_rel.replace("\\", "/").lstrip("/"):
+            return JSONResponse(
+                {"success": False, "error": "missing template_relpath"}, status_code=400
+            )
         try:
             normalized_raw_tpl = _normalize_relpath(raw_tpl_rel, field_name="template_relpath")
-        except ValueError as exc:
-            return JSONResponse({"success": False, "error": str(exc)}, status_code=400)
+        except ValueError:
+            return JSONResponse(
+                {"success": False, "error": "template_relpath 无效"}, status_code=400
+            )
         if normalized_raw_tpl != DEFAULT_TEMPLATE_RELPATH:
             return JSONResponse(
                 {"success": False, "error": f"请使用固定模板: {DEFAULT_TEMPLATE_RELPATH}"},
@@ -401,12 +407,14 @@ async def attendance_convert_upload(
 
 @router.get("/attendance/download", response_model=None)
 async def attendance_download(relpath: str):
+    if not unquote(relpath or "").strip().replace("\\", "/").lstrip("/"):
+        return JSONResponse({"success": False, "error": "missing relpath"}, status_code=400)
     try:
         p = _safe_workspace_file(relpath, field_name="relpath")
     except FileNotFoundError:
         return JSONResponse({"success": False, "error": "file not found"}, status_code=404)
-    except ValueError as exc:
-        return JSONResponse({"success": False, "error": str(exc)}, status_code=400)
+    except ValueError:
+        return JSONResponse({"success": False, "error": "relpath 无效"}, status_code=400)
     except RECOVERABLE_ERRORS:
         return JSONResponse({"success": False, "error": "下载路径无效"}, status_code=400)
 

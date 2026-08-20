@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """COVERAGE_RAMP Phase 4 round 15: aibiz_web_terminal_service pure helpers (27%→)."""
 
 from __future__ import annotations

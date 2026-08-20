@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """
 测试垂直合并检测 - 创建一个有垂直合并的测试图片
 """
@@ -173,8 +174,8 @@ for i in range(rows):
 
 print("\n单元格边框检测：")
 for cell in cells:
-    right_info = f"右侧{cell['right_border_ratio']*100:.0f}%"
-    bottom_info = f"底部{cell['bottom_border_ratio']*100:.0f}%"
+    right_info = f"右侧{cell['right_border_ratio'] * 100:.0f}%"
+    bottom_info = f"底部{cell['bottom_border_ratio'] * 100:.0f}%"
 
     status = []
     if cell["should_merge_right"]:

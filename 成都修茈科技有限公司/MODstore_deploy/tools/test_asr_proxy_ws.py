@@ -8,6 +8,8 @@ import sys
 
 import websockets
 
+BOUNDARY_ERRORS = (Exception,)
+
 URL = os.getenv("ASR_WS_URL", "ws://127.0.0.1:8765/api/asr/funasr")
 TOKEN = os.getenv("ASR_TOKEN", "")
 
@@ -29,7 +31,7 @@ async def main():
                 return 0
             print("unexpected:", data)
             return 1
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         print("FAIL:", e)
         return 1
 

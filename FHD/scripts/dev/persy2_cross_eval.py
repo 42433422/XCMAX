@@ -1,3 +1,4 @@
+# mypy: disable-error-code="no-any-return"
 """persy2 交叉评估脚本：mimo + bai/minimax-m3 交叉测试 persona 拟人度。
 
 交叉逻辑：
@@ -8,6 +9,7 @@
 用法：
     cd FHD && python scripts/dev/persy2_cross_eval.py [--rounds 10] [--industry 零售业]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -23,6 +25,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 from dotenv import load_dotenv
+
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 load_dotenv()
 
@@ -107,14 +111,16 @@ async def llm_chat(model_key: str, messages: list[dict], **params) -> str:
                 r.raise_for_status()
                 content = r.json()["choices"][0]["message"]["content"]
             return strip_think(content)
-        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             last_err = e
             # 429 限流用更长延迟（15秒），其他错误 2 秒
             is_rate_limit = "429" in str(e) or "Too Many Requests" in str(e)
             delay = 15 if is_rate_limit else 2
-            print(f"  [llm_chat 重试 {attempt+1}/3] {model_key} 失败: {type(e).__name__}: {e}")
+            print(f"  [llm_chat 重试 {attempt + 1}/3] {model_key} 失败: {type(e).__name__}: {e}")
             await asyncio.sleep(delay)
-    raise RuntimeError(f"{model_key} API 调用失败（3次重试）: {type(last_err).__name__}: {last_err}")
+    raise RuntimeError(
+        f"{model_key} API 调用失败（3次重试）: {type(last_err).__name__}: {last_err}"
+    )
 
 
 def init_persona_service():
@@ -182,7 +188,15 @@ async def run_evaluator(
             user_msg = "嗯嗯，然后呢"
         latency_eval = time.time() - t0
         eval_messages.append({"role": "assistant", "content": user_msg})
-        dialogue.append({"round": i + 1, "speaker": "evaluator", "model": eval_model, "content": user_msg, "latency_s": round(latency_eval, 2)})
+        dialogue.append(
+            {
+                "round": i + 1,
+                "speaker": "evaluator",
+                "model": eval_model,
+                "content": user_msg,
+                "latency_s": round(latency_eval, 2),
+            }
+        )
 
         # 2. persona 生成回复
         t0 = time.time()
@@ -211,10 +225,19 @@ async def run_evaluator(
         persona_history.append({"role": "user", "content": user_msg})
         persona_history.append({"role": "assistant", "content": persona_reply})
         eval_messages.append({"role": "user", "content": persona_reply})
-        dialogue.append({"round": i + 1, "speaker": "persona", "model": cross_model, "content": persona_reply, "latency_s": round(latency_persona, 2), "system_prompt": system_prompt})
+        dialogue.append(
+            {
+                "round": i + 1,
+                "speaker": "persona",
+                "model": cross_model,
+                "content": persona_reply,
+                "latency_s": round(latency_persona, 2),
+                "system_prompt": system_prompt,
+            }
+        )
 
-        print(f"  [{i+1}/{rounds}] 评估员({eval_model}): {user_msg[:60]}")
-        print(f"  [{i+1}/{rounds}] persona({cross_model}): {persona_reply[:60]}")
+        print(f"  [{i + 1}/{rounds}] 评估员({eval_model}): {user_msg[:60]}")
+        print(f"  [{i + 1}/{rounds}] persona({cross_model}): {persona_reply[:60]}")
         print()
         # 每轮对话之间加 3 秒延迟，避免 API 限流
         if i < rounds - 1:
@@ -229,7 +252,10 @@ async def run_evaluator(
             else:
                 # 短上下文重试：只保留 system + 对话摘要
                 dialogue_text = "\n".join(
-                    [f"{'用户' if d['speaker']=='evaluator' else '客服'}: {d['content']}" for d in dialogue]
+                    [
+                        f"{'用户' if d['speaker'] == 'evaluator' else '客服'}: {d['content']}"
+                        for d in dialogue
+                    ]
                 )
                 score_messages = [
                     {"role": "system", "content": SCORER_SYSTEM},
@@ -241,9 +267,9 @@ async def run_evaluator(
             score = parse_score(score_raw)
             if "error" not in score:
                 break
-            print(f"  [打分重试 {score_attempt+1}/3] 解析失败，重试...")
-        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
-            print(f"  [打分重试 {score_attempt+1}/3] {type(e).__name__}: {e}")
+            print(f"  [打分重试 {score_attempt + 1}/3] 解析失败，重试...")
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+            print(f"  [打分重试 {score_attempt + 1}/3] {type(e).__name__}: {e}")
             score_raw = f"打分异常: {type(e).__name__}: {e}"
 
     return {
@@ -272,15 +298,15 @@ def parse_score(raw: str) -> dict:
     depth = 0
     start = -1
     for i, c in enumerate(raw):
-        if c == '{':
+        if c == "{":
             if depth == 0:
                 start = i
             depth += 1
-        elif c == '}':
+        elif c == "}":
             depth -= 1
             if depth == 0 and start >= 0:
                 try:
-                    return json.loads(raw[start:i + 1])
+                    return json.loads(raw[start : i + 1])
                 except json.JSONDecodeError:
                     start = -1
     # 4. fallback：旧的正则（不含嵌套花括号）
@@ -320,9 +346,9 @@ async def main():
     # 运行两个评估员
     results = {}
     for eval_m, cross_m in [("mimo", "bai"), ("bai", "mimo")]:
-        print(f"\n{'='*70}")
+        print(f"\n{'=' * 70}")
         print(f"评估员: {eval_m} | persona 生成: {cross_m}")
-        print(f"{'='*70}")
+        print(f"{'=' * 70}")
         try:
             result = await run_evaluator(
                 eval_model=eval_m,
@@ -333,8 +359,9 @@ async def main():
                 prompt_boost=args.boost,
             )
             results[eval_m] = result
-        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except BOUNDARY_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             import traceback
+
             print(f"评估员 {eval_m} 失败: {type(e).__name__}: {e}")
             traceback.print_exc()
             results[eval_m] = {"error": f"{type(e).__name__}: {e}"}
@@ -366,7 +393,9 @@ async def main():
         "industry": args.industry,
         "rounds": args.rounds,
         "boost": args.boost,
-        "results": {k: {kk: vv for kk, vv in v.items() if kk != "dialogue"} for k, v in results.items()},
+        "results": {
+            k: {kk: vv for kk, vv in v.items() if kk != "dialogue"} for k, v in results.items()
+        },
     }
     with open(output_path, "a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")

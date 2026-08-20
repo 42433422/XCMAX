@@ -106,7 +106,14 @@ from app.application.ai_group_chat_service_aigroupchatservice_mixin03 import (
 )
 
 
-class AiGroupChatService(_AiGroupChatServicePart01Mixin, _AiGroupChatServicePart02Mixin, _AiGroupChatServicePart03Mixin, AiGroupChatDispatchMixin, AiGroupChatFormattingMixin, AiGroupChatStorageMixin):
+class AiGroupChatService(
+    _AiGroupChatServicePart01Mixin,
+    _AiGroupChatServicePart02Mixin,
+    _AiGroupChatServicePart03Mixin,
+    AiGroupChatDispatchMixin,
+    AiGroupChatFormattingMixin,
+    AiGroupChatStorageMixin,
+):
     """微信式 AI 群聊：建群 / 拉 AI 成员 / 群内多 AI 回复。
 
     ``mode`` 决定部门模型 + 员工 SSOT：
@@ -114,61 +121,9 @@ class AiGroupChatService(_AiGroupChatServicePart01Mixin, _AiGroupChatServicePart
     - ``"enterprise"``：4 部门 + 上架/未上架员工
     """
 
-
     # ── 公开 API ──
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     # ── 部门种子 ──
-
 
 
 __all__ = [

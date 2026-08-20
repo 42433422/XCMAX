@@ -9,9 +9,7 @@
         <div class="tts-banner-text">
           <template v-if="downloading">
             <div class="tts-banner-title">正在下载离线语音包…</div>
-            <div class="tts-banner-sub">
-              首次约 60MB，已完成 {{ Math.round(status.offlineProgress * 100) }}%，之后无需联网
-            </div>
+            <div class="tts-banner-sub">首次约 60MB，已完成 {{ Math.round(status.offlineProgress * 100) }}%，之后无需联网</div>
             <div class="tts-progress">
               <div class="tts-progress-bar" :style="{ width: `${Math.round(status.offlineProgress * 100)}%` }"></div>
             </div>
@@ -23,8 +21,8 @@
           <template v-else-if="status.effectiveEngine === 'online'">
             <div class="tts-banner-title">已启用在线语音（Microsoft Edge TTS）</div>
             <div class="tts-banner-sub">
-              经本机后端合成，需联网；当前音色 <code>{{ status.onlineVoiceId }}</code>。
-              失败时朗读会自动回退到系统语音。
+              经本机后端合成，需联网；当前音色 <code>{{ status.onlineVoiceId }}</code
+              >。 失败时朗读会自动回退到系统语音。
             </div>
           </template>
           <template v-else-if="status.yunxiAvailable">
@@ -38,8 +36,8 @@
           <template v-else>
             <div class="tts-banner-title">没检测到云希/晓晓 神经网络语音</div>
             <div class="tts-banner-sub">
-              当前 TTS：<strong>{{ status.systemVoice || '浏览器默认（可能是英文）' }}</strong>。
-              可一键使用<strong>在线神经网络</strong>（Edge），或安装系统云希 / 下载离线包。
+              当前 TTS：<strong>{{ status.systemVoice || '浏览器默认（可能是英文）' }}</strong
+              >。 可一键使用<strong>在线神经网络</strong>（Edge），或安装系统云希 / 下载离线包。
             </div>
           </template>
         </div>
@@ -56,7 +54,9 @@
         <button
           v-if="!downloading && status.engineMode !== 'online'"
           class="tts-btn"
-          :class="{ 'tts-btn-primary': status.yunxiAvailable === false && !status.neuralAvailable && status.effectiveEngine !== 'offline' }"
+          :class="{
+            'tts-btn-primary': status.yunxiAvailable === false && !status.neuralAvailable && status.effectiveEngine !== 'offline',
+          }"
           @click="useOnline"
         >
           在线语音 (Edge)
@@ -78,9 +78,7 @@
         <button v-if="!downloading && status.effectiveEngine === 'offline' && status.yunxiAvailable" class="tts-btn" @click="useSystem">
           切到系统云希
         </button>
-        <button v-if="!downloading && status.effectiveEngine === 'online'" class="tts-btn" @click="useSystem">
-          切到系统语音
-        </button>
+        <button v-if="!downloading && status.effectiveEngine === 'online'" class="tts-btn" @click="useSystem">切到系统语音</button>
         <button v-if="!downloading" class="tts-btn tts-btn-ghost" @click="close">不再提示</button>
       </div>
       <el-dialog v-model="psDialog" title="安装 Windows 云希语音" width="520" append-to-body>
@@ -88,8 +86,8 @@
           <p>两种方式任选其一：</p>
           <ol>
             <li>
-              打开 <code>Windows 设置 → 时间和语言 → 语音 → 管理语音 → 添加语音</code>，
-              搜索"中文（简体）Microsoft 云希"。已点"打开设置"按钮自动跳转。
+              打开 <code>Windows 设置 → 时间和语言 → 语音 → 管理语音 → 添加语音</code>， 搜索"中文（简体）Microsoft
+              云希"。已点"打开设置"按钮自动跳转。
             </li>
             <li>
               以 <strong>管理员身份</strong>打开 PowerShell，执行：
@@ -98,8 +96,7 @@
             </li>
           </ol>
           <p class="tts-tip">
-            安装完成后重启浏览器（推荐 Microsoft Edge，对 Windows 神经网络语音兼容最好），
-            再回到这里就能看到 Yunxi 生效。
+            安装完成后重启浏览器（推荐 Microsoft Edge，对 Windows 神经网络语音兼容最好）， 再回到这里就能看到 Yunxi 生效。
           </p>
         </div>
       </el-dialog>
@@ -165,10 +162,7 @@ async function installWindowsVoice() {
   const hint = ElMessage.info({ message: '正在申请管理员权限以安装中文语音包…', duration: 0 })
   try {
     // 优先走本机后端一键提权安装：UAC 通过后由独立 PowerShell 窗口显示进度
-    const resp = await api.post<{ success: boolean; message?: string; code?: number }>(
-      '/api/tts/install-system-voice',
-      {},
-    )
+    const resp = await api.post<{ success: boolean; message?: string; code?: number }>('/api/tts/install-system-voice', {})
     hint.close()
     if (resp && resp.success) {
       ElMessage.success(resp.message || '已发起安装，请在 UAC 对话框点"是"并等待完成')
@@ -176,7 +170,11 @@ async function installWindowsVoice() {
     }
     // 失败时回退到"打开设置 + 手动命令"旧流程
     ElMessage.warning(resp?.message || '自动安装未成功，已为你打开手动安装说明')
-    try { window.location.href = 'ms-settings:speech' } catch { /* ignore */ }
+    try {
+      window.location.href = 'ms-settings:speech'
+    } catch {
+      /* ignore */
+    }
     psDialog.value = true
   } catch (e: unknown) {
     hint.close()
@@ -188,7 +186,11 @@ async function installWindowsVoice() {
       const msg = e instanceof Error ? e.message : String(e)
       ElMessage.warning(`自动安装不可用（${msg}），已切换到手动安装模式`)
     }
-    try { window.location.href = 'ms-settings:speech' } catch { /* ignore */ }
+    try {
+      window.location.href = 'ms-settings:speech'
+    } catch {
+      /* ignore */
+    }
     psDialog.value = true
   } finally {
     installing.value = false
@@ -341,8 +343,13 @@ function close() {
   background: #f0f2f5;
   border-color: #f0f2f5;
 }
-.tts-dialog-body ol { padding-left: 20px; }
-.tts-dialog-body li { margin-bottom: 10px; line-height: 1.6; }
+.tts-dialog-body ol {
+  padding-left: 20px;
+}
+.tts-dialog-body li {
+  margin-bottom: 10px;
+  line-height: 1.6;
+}
 .tts-ps-code {
   margin: 8px 0;
   padding: 8px 10px;
@@ -360,6 +367,15 @@ function close() {
   font-size: 12px;
 }
 
-.fade-enter-active, .fade-leave-active { transition: opacity 0.25s ease, transform 0.25s ease; }
-.fade-enter-from, .fade-leave-to { opacity: 0; transform: translateY(-6px); }
+.fade-enter-active,
+.fade-leave-active {
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
 </style>

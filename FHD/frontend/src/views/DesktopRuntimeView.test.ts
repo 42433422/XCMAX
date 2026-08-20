@@ -6,11 +6,11 @@ describe('DesktopRuntimeView', () => {
   const originalXcagiDesktop = (window as unknown as { xcagiDesktop?: unknown }).xcagiDesktop
 
   beforeEach(() => {
-    (window as unknown as { xcagiDesktop?: unknown }).xcagiDesktop = undefined
+    ;(window as unknown as { xcagiDesktop?: unknown }).xcagiDesktop = undefined
   })
 
   afterEach(() => {
-    (window as unknown as { xcagiDesktop?: unknown }).xcagiDesktop = originalXcagiDesktop
+    ;(window as unknown as { xcagiDesktop?: unknown }).xcagiDesktop = originalXcagiDesktop
   })
 
   function mockFetch(statusPayload: unknown, modelsPayload: { models: unknown[] }) {
@@ -56,7 +56,7 @@ describe('DesktopRuntimeView', () => {
   })
 
   it('renders check updates button when desktop shell is available', () => {
-    (window as unknown as { xcagiDesktop?: unknown }).xcagiDesktop = {
+    ;(window as unknown as { xcagiDesktop?: unknown }).xcagiDesktop = {
       checkForUpdates: vi.fn().mockResolvedValue({ ok: true }),
       onUpdateEvent: vi.fn(),
     }
@@ -138,20 +138,14 @@ describe('DesktopRuntimeView', () => {
   })
 
   it('displays desktopMode as "是" or "否"', async () => {
-    mockFetch(
-      { desktopMode: true, dataDir: '', database: '', modsDir: '', modelsDir: '' },
-      { models: [] },
-    )
+    mockFetch({ desktopMode: true, dataDir: '', database: '', modsDir: '', modelsDir: '' }, { models: [] })
     const wrapper = mount(DesktopRuntimeView)
     await flushPromises()
     expect(wrapper.text()).toContain('是')
   })
 
   it('displays "暂无已安装模型" when models list is empty', async () => {
-    mockFetch(
-      { desktopMode: false, dataDir: '', database: '', modsDir: '', modelsDir: '' },
-      { models: [] },
-    )
+    mockFetch({ desktopMode: false, dataDir: '', database: '', modsDir: '', modelsDir: '' }, { models: [] })
     const wrapper = mount(DesktopRuntimeView)
     await flushPromises()
     expect(wrapper.text()).toContain('暂无已安装模型')
@@ -162,10 +156,7 @@ describe('DesktopRuntimeView', () => {
       { name: 'modelA', version: '1.0', path: '/models/a' },
       { name: 'modelB', version: '2.0', path: '/models/b' },
     ]
-    mockFetch(
-      { desktopMode: false, dataDir: '', database: '', modsDir: '', modelsDir: '' },
-      { models },
-    )
+    mockFetch({ desktopMode: false, dataDir: '', database: '', modsDir: '', modelsDir: '' }, { models })
     const wrapper = mount(DesktopRuntimeView)
     await flushPromises()
     expect(wrapper.text()).toContain('modelA')
@@ -174,10 +165,7 @@ describe('DesktopRuntimeView', () => {
   })
 
   it('refreshes status when refresh button is clicked', async () => {
-    const fetchMock = mockFetch(
-      { desktopMode: false, dataDir: '/old', database: '', modsDir: '', modelsDir: '' },
-      { models: [] },
-    )
+    const fetchMock = mockFetch({ desktopMode: false, dataDir: '/old', database: '', modsDir: '', modelsDir: '' }, { models: [] })
     const wrapper = mount(DesktopRuntimeView)
     await flushPromises()
     fetchMock.mockClear()
@@ -193,10 +181,7 @@ describe('DesktopRuntimeView', () => {
       checkForUpdates,
       onUpdateEvent: vi.fn(),
     }
-    mockFetch(
-      { desktopMode: true, dataDir: '', database: '', modsDir: '', modelsDir: '' },
-      { models: [] },
-    )
+    mockFetch({ desktopMode: true, dataDir: '', database: '', modsDir: '', modelsDir: '' }, { models: [] })
     const wrapper = mount(DesktopRuntimeView)
     await flushPromises()
     const updateBtn = wrapper.findAll('button').find((b) => b.text().includes('检查桌面更新'))!
@@ -212,10 +197,7 @@ describe('DesktopRuntimeView', () => {
       checkForUpdates: vi.fn(),
       onUpdateEvent,
     }
-    mockFetch(
-      { desktopMode: true, dataDir: '', database: '', modsDir: '', modelsDir: '' },
-      { models: [] },
-    )
+    mockFetch({ desktopMode: true, dataDir: '', database: '', modsDir: '', modelsDir: '' }, { models: [] })
     const wrapper = mount(DesktopRuntimeView)
     await flushPromises()
     expect(onUpdateEvent).toHaveBeenCalled()
@@ -228,10 +210,7 @@ describe('DesktopRuntimeView', () => {
       checkForUpdates: vi.fn(),
       onUpdateEvent,
     }
-    mockFetch(
-      { desktopMode: true, dataDir: '', database: '', modsDir: '', modelsDir: '' },
-      { models: [] },
-    )
+    mockFetch({ desktopMode: true, dataDir: '', database: '', modsDir: '', modelsDir: '' }, { models: [] })
     const wrapper = mount(DesktopRuntimeView)
     await flushPromises()
     const cb = onUpdateEvent.mock.calls[0][0] as (event: unknown) => void
@@ -259,10 +238,7 @@ describe('DesktopRuntimeView', () => {
   })
 
   it('renders "—" when databaseUrlRedacted is absent', async () => {
-    mockFetch(
-      { desktopMode: false, dataDir: '', database: '', modsDir: '', modelsDir: '' },
-      { models: [] },
-    )
+    mockFetch({ desktopMode: false, dataDir: '', database: '', modsDir: '', modelsDir: '' }, { models: [] })
     const wrapper = mount(DesktopRuntimeView)
     await flushPromises()
     expect(wrapper.text()).toContain('—')

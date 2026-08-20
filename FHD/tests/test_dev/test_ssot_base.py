@@ -1,3 +1,4 @@
+# mypy: disable-error-code="no-any-return"
 """SSOT plugin 基础设施单测。"""
 
 from __future__ import annotations

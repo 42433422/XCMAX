@@ -5,6 +5,7 @@ Revises: 2026_06_05_tenant_saas
 """
 
 from __future__ import annotations
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 import json
 from pathlib import Path
@@ -35,7 +36,7 @@ def _cfg() -> dict:
             raw = json.loads(_CONFIG.read_text(encoding="utf-8"))
             if isinstance(raw, dict):
                 return {**defaults, **raw}
-        except Exception:
+        except BOUNDARY_ERRORS:
             pass
     return defaults
 

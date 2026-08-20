@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  isKellaiImagePlaceholder,
-  resolveKellaiMessageImageSrc,
-} from './kellaiMessageMedia'
+import { isKellaiImagePlaceholder, resolveKellaiMessageImageSrc } from './kellaiMessageMedia'
 
 describe('kellaiMessageMedia', () => {
   it('resolves metadata.media_url', () => {

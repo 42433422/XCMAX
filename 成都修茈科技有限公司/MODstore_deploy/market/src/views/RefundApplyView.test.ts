@@ -19,9 +19,7 @@ describe('RefundApplyView', () => {
     vi.clearAllMocks()
     router = createRouter({
       history: createMemoryHistory(),
-      routes: [
-        { path: '/', name: 'refunds', component: { template: '<div />' } },
-      ],
+      routes: [{ path: '/', name: 'refunds', component: { template: '<div />' } }],
     })
   })
 
@@ -52,7 +50,14 @@ describe('RefundApplyView', () => {
   it('renders refund records in table', async () => {
     vi.mocked(api.refundsMy).mockResolvedValue({
       refunds: [
-        { id: 1, order_no: 'ORD-001', amount: 99.9, reason: '不想要了', status: 'pending', created_at: '2026-01-01' },
+        {
+          id: 1,
+          order_no: 'ORD-001',
+          amount: 99.9,
+          reason: '不想要了',
+          status: 'pending',
+          created_at: '2026-01-01',
+        },
       ],
     })
     router.push('/')

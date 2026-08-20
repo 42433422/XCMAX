@@ -7,11 +7,7 @@ vi.mock('html2canvas', () => ({
 }))
 
 import html2canvas from 'html2canvas'
-import {
-  _clearCaptureCache,
-  invalidateCaptureCache,
-  onCaptureMeta,
-} from './screenshotCapture'
+import { _clearCaptureCache, invalidateCaptureCache, onCaptureMeta } from './screenshotCapture'
 
 const mockHtml2canvas = html2canvas as unknown as ReturnType<typeof vi.fn>
 
@@ -46,9 +42,7 @@ describe('screenshotCapture — captureViewport', () => {
   })
 
   it('html2canvas 抛 SecurityError → reason=cors', async () => {
-    mockHtml2canvas.mockRejectedValue(
-      new Error('SecurityError: Tainted canvases may not be exported.'),
-    )
+    mockHtml2canvas.mockRejectedValue(new Error('SecurityError: Tainted canvases may not be exported.'))
     const result = await captureViewport()
     expect(result.ok).toBe(false)
     if (!result.ok) {
@@ -338,9 +332,7 @@ describe('screenshotCapture — captureViewport', () => {
 
   // -------------------------- v1.1 新增：severity / 截断 / 重试 / cache 失效 --------------------------
   it('失败结果带 severity 字段（cors + 无 textFallback → critical，但本测试有 fallback → degraded）', async () => {
-    mockHtml2canvas.mockRejectedValue(
-      new Error('SecurityError: Tainted canvases may not be exported.'),
-    )
+    mockHtml2canvas.mockRejectedValue(new Error('SecurityError: Tainted canvases may not be exported.'))
     const r = await captureViewport()
     if (!r.ok) {
       expect(r.reason).toBe('cors')
@@ -368,9 +360,7 @@ describe('screenshotCapture — captureViewport', () => {
 
   it('textFallback 超过 noteMaxLen → noteTruncated=true + noteOriginalLength 正确', async () => {
     // 把 pageSerializer 输出撑到 200 字符
-    document.body.innerHTML = Array.from({ length: 50 }, (_, i) =>
-      `<p>text ${i} ${'x'.repeat(20)}</p>`,
-    ).join('')
+    document.body.innerHTML = Array.from({ length: 50 }, (_, i) => `<p>text ${i} ${'x'.repeat(20)}</p>`).join('')
     mockHtml2canvas.mockRejectedValue(new Error('render failed'))
     const r = await captureViewport({ noteMaxLen: 50 })
     if (!r.ok) {

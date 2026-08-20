@@ -57,17 +57,32 @@ import { appAlert } from '@/utils/appDialog'
 // ── 创建默认 mock analyzer ────────────────────────────────────
 function createMockAnalyzer(overrides: Record<string, unknown> = {}) {
   return {
-    messages: ref([
-      { role: 'ai', content: '欢迎', time: '10:00' },
-    ]),
+    messages: ref([{ role: 'ai', content: '欢迎', time: '10:00' }]),
     inputText: ref(''),
     isChatLoading: ref(false),
     isKittenStreaming: ref(false),
     isDatasetParsing: ref(false),
-    currentResult: ref(null as null | { id: number; title: string; summary: string; chart: boolean; type: string; kind: string }),
+    currentResult: ref(
+      null as null | {
+        id: number
+        title: string
+        summary: string
+        chart: boolean
+        type: string
+        kind: string
+      },
+    ),
     fileInput: ref(null),
     chatMessagesRef: ref(null),
-    datasetSummary: ref(null as null | { name: string; rows: number; columns: number; fieldNames: string[]; previewText: string }),
+    datasetSummary: ref(
+      null as null | {
+        name: string
+        rows: number
+        columns: number
+        fieldNames: string[]
+        previewText: string
+      },
+    ),
     datasetRows: ref([] as Record<string, unknown>[]),
     fieldProfiles: ref([]),
     chartConfig: ref({ type: 'bar', xField: '', yField: '', groupField: '', aggregate: 'count' }),
@@ -102,7 +117,14 @@ function createMockAnalyzer(overrides: Record<string, unknown> = {}) {
 function createMockVizEmployees(overrides: Record<string, unknown> = {}) {
   return {
     employees: ref([
-      { pkgId: 'emp1', name: '员工1', installed: false, chartType: 'bar', palette: ['#000'], dashboard: null },
+      {
+        pkgId: 'emp1',
+        name: '员工1',
+        installed: false,
+        chartType: 'bar',
+        palette: ['#000'],
+        dashboard: null,
+      },
     ]),
     selected: ref({
       pkgId: 'emp1',
@@ -127,7 +149,8 @@ const VizEmployeeStripStub = {
 
 const ChartPanelStub = {
   name: 'KittenChartPanel',
-  template: '<div class="chart-panel-stub"><button class="update-config-btn" @click="$emit(\'updateConfig\', { type: \'line\' })">Update</button><button class="apply-rec-btn" @click="$emit(\'applyRecommendation\', { id: \'test\', label: \'Test\', description: \'d\', config: { type: \'pie\' } })">Apply</button></div>',
+  template:
+    "<div class=\"chart-panel-stub\"><button class=\"update-config-btn\" @click=\"$emit('updateConfig', { type: 'line' })\">Update</button><button class=\"apply-rec-btn\" @click=\"$emit('applyRecommendation', { id: 'test', label: 'Test', description: 'd', config: { type: 'pie' } })\">Apply</button></div>",
 } as unknown as Component
 
 const LauncherIconStub = {
@@ -180,7 +203,13 @@ describe('KittenAnalyzerView.vue - 覆盖率补齐', () => {
 
     it('有数据集时显示数据集栏', () => {
       const wrapper = mountView({
-        datasetSummary: ref({ name: 'test.csv', rows: 100, columns: 3, fieldNames: ['a', 'b', 'c'], previewText: '' }),
+        datasetSummary: ref({
+          name: 'test.csv',
+          rows: 100,
+          columns: 3,
+          fieldNames: ['a', 'b', 'c'],
+          previewText: '',
+        }),
       })
       expect(wrapper.find('.kitten-dataset-bar').exists()).toBe(true)
       expect(wrapper.text()).toContain('test.csv')
@@ -203,7 +232,11 @@ describe('KittenAnalyzerView.vue - 覆盖率补齐', () => {
     it('消息含取件链接时显示下载按钮', () => {
       const wrapper = mountView({
         messages: ref([
-          { role: 'ai', content: '文档已生成 /api/ai/kitten/document/pickup/abc123', time: '10:00' },
+          {
+            role: 'ai',
+            content: '文档已生成 /api/ai/kitten/document/pickup/abc123',
+            time: '10:00',
+          },
         ]),
       })
       expect(wrapper.find('.download-btn').exists()).toBe(true)
@@ -211,9 +244,7 @@ describe('KittenAnalyzerView.vue - 覆盖率补齐', () => {
 
     it('消息不含取件链接时不显示下载按钮', () => {
       const wrapper = mountView({
-        messages: ref([
-          { role: 'ai', content: '普通回复', time: '10:00' },
-        ]),
+        messages: ref([{ role: 'ai', content: '普通回复', time: '10:00' }]),
       })
       expect(wrapper.find('.download-btn').exists()).toBe(false)
     })
@@ -267,7 +298,13 @@ describe('KittenAnalyzerView.vue - 覆盖率补齐', () => {
 
     it('有数据集时侧边栏显示字段预览', () => {
       const wrapper = mountView({
-        datasetSummary: ref({ name: 'test.csv', rows: 10, columns: 3, fieldNames: ['a', 'b', 'c'], previewText: '' }),
+        datasetSummary: ref({
+          name: 'test.csv',
+          rows: 10,
+          columns: 3,
+          fieldNames: ['a', 'b', 'c'],
+          previewText: '',
+        }),
         datasetFieldPreview: ref(['a', 'b', 'c']),
       })
       // 展开侧边栏
@@ -278,7 +315,13 @@ describe('KittenAnalyzerView.vue - 覆盖率补齐', () => {
 
     it('字段超过 8 个时显示省略号', () => {
       const wrapper = mountView({
-        datasetSummary: ref({ name: 'test.csv', rows: 10, columns: 10, fieldNames: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'], previewText: '' }),
+        datasetSummary: ref({
+          name: 'test.csv',
+          rows: 10,
+          columns: 10,
+          fieldNames: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'],
+          previewText: '',
+        }),
         datasetFieldPreview: ref(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']),
       })
       wrapper.find('.panel-collapse-toggle').trigger('click')
@@ -298,7 +341,11 @@ describe('KittenAnalyzerView.vue - 覆盖率补齐', () => {
     })
 
     it('引用列表最多显示 5 条', () => {
-      const hits = Array.from({ length: 7 }, (_, i) => ({ title: `引用${i}`, url: `https://example.com/${i}`, snippet: '' }))
+      const hits = Array.from({ length: 7 }, (_, i) => ({
+        title: `引用${i}`,
+        url: `https://example.com/${i}`,
+        snippet: '',
+      }))
       const wrapper = mountView({
         lastWebSearchHits: ref(hits),
       })
@@ -316,7 +363,14 @@ describe('KittenAnalyzerView.vue - 覆盖率补齐', () => {
 
     it('有 currentResult 时导出按钮启用', () => {
       const wrapper = mountView({
-        currentResult: ref({ id: 1, title: '结果', summary: '摘要', chart: false, type: 't', kind: 'k' }),
+        currentResult: ref({
+          id: 1,
+          title: '结果',
+          summary: '摘要',
+          chart: false,
+          type: 't',
+          kind: 'k',
+        }),
       })
       wrapper.find('.panel-collapse-toggle').trigger('click')
       const exportBtn = wrapper.find('.export-row .btn-primary')
@@ -325,7 +379,14 @@ describe('KittenAnalyzerView.vue - 覆盖率补齐', () => {
 
     it('有 currentResult 时显示结果预览', () => {
       const wrapper = mountView({
-        currentResult: ref({ id: 1, title: '测试结果', summary: '测试摘要', chart: false, type: 't', kind: 'k' }),
+        currentResult: ref({
+          id: 1,
+          title: '测试结果',
+          summary: '测试摘要',
+          chart: false,
+          type: 't',
+          kind: 'k',
+        }),
       })
       wrapper.find('.panel-collapse-toggle').trigger('click')
       expect(wrapper.find('.result-preview').exists()).toBe(true)
@@ -429,9 +490,7 @@ describe('KittenAnalyzerView.vue - 覆盖率补齐', () => {
       const select = wrapper.find('.quick-select')
       await select.setValue('分析销量趋势')
       await select.trigger('change')
-      expect(mockAnalyzer.sendQuickAction).toHaveBeenCalledWith(
-        expect.objectContaining({ text: '分析销量趋势' }),
-      )
+      expect(mockAnalyzer.sendQuickAction).toHaveBeenCalledWith(expect.objectContaining({ text: '分析销量趋势' }))
     })
 
     it('选择空值时不调用 sendQuickAction', async () => {
@@ -459,9 +518,7 @@ describe('KittenAnalyzerView.vue - 覆盖率补齐', () => {
       await nextTick()
       // onQuickPick 内部先重置 quickPick='' 再调用 sendQuickAction
       // sendQuickAction 被调用即证明 onQuickPick 执行完毕
-      expect(mockAnalyzer.sendQuickAction).toHaveBeenCalledWith(
-        expect.objectContaining({ text: '分析销量趋势' }),
-      )
+      expect(mockAnalyzer.sendQuickAction).toHaveBeenCalledWith(expect.objectContaining({ text: '分析销量趋势' }))
     })
 
     it('数据集解析中快捷选择禁用', () => {
@@ -569,7 +626,14 @@ describe('KittenAnalyzerView.vue - 覆盖率补齐', () => {
   describe('导出按钮', () => {
     function mountWithResult() {
       return mountView({
-        currentResult: ref({ id: 1, title: '结果', summary: '摘要', chart: false, type: 't', kind: 'k' }),
+        currentResult: ref({
+          id: 1,
+          title: '结果',
+          summary: '摘要',
+          chart: false,
+          type: 't',
+          kind: 'k',
+        }),
       })
     }
 
@@ -602,7 +666,13 @@ describe('KittenAnalyzerView.vue - 覆盖率补齐', () => {
   describe('可视化员工选择 onVizEmployeeSelect', () => {
     it('选择员工时调用 selectEmployee', async () => {
       const wrapper = mountView({
-        datasetSummary: ref({ name: 'test.csv', rows: 10, columns: 3, fieldNames: ['a'], previewText: '' }),
+        datasetSummary: ref({
+          name: 'test.csv',
+          rows: 10,
+          columns: 3,
+          fieldNames: ['a'],
+          previewText: '',
+        }),
       })
       const strip = wrapper.findComponent({ name: 'KittenVizEmployeeStrip' })
       strip.vm.$emit('select', 'emp2')
@@ -611,18 +681,27 @@ describe('KittenAnalyzerView.vue - 覆盖率补齐', () => {
     })
 
     it('员工已安装且有数据集时设置图表类型（非 dashboard）', async () => {
-      const wrapper = mountView({
-        datasetSummary: ref({ name: 'test.csv', rows: 10, columns: 3, fieldNames: ['a'], previewText: '' }),
-      }, {
-        selected: ref({
-          pkgId: 'emp1',
-          name: '员工1',
-          installed: true,
-          chartType: 'line',
-          palette: ['#000'],
-          dashboard: null,
-        }),
-      })
+      const wrapper = mountView(
+        {
+          datasetSummary: ref({
+            name: 'test.csv',
+            rows: 10,
+            columns: 3,
+            fieldNames: ['a'],
+            previewText: '',
+          }),
+        },
+        {
+          selected: ref({
+            pkgId: 'emp1',
+            name: '员工1',
+            installed: true,
+            chartType: 'line',
+            palette: ['#000'],
+            dashboard: null,
+          }),
+        },
+      )
       const strip = wrapper.findComponent({ name: 'KittenVizEmployeeStrip' })
       strip.vm.$emit('select', 'emp1')
       await nextTick()
@@ -630,18 +709,27 @@ describe('KittenAnalyzerView.vue - 覆盖率补齐', () => {
     })
 
     it('员工已安装且有数据集且为 dashboard 时设置图表类型为 bar', async () => {
-      const wrapper = mountView({
-        datasetSummary: ref({ name: 'test.csv', rows: 10, columns: 3, fieldNames: ['a'], previewText: '' }),
-      }, {
-        selected: ref({
-          pkgId: 'emp1',
-          name: '员工1',
-          installed: true,
-          chartType: 'pie',
-          palette: ['#000'],
-          dashboard: { title: 'dash' },
-        }),
-      })
+      const wrapper = mountView(
+        {
+          datasetSummary: ref({
+            name: 'test.csv',
+            rows: 10,
+            columns: 3,
+            fieldNames: ['a'],
+            previewText: '',
+          }),
+        },
+        {
+          selected: ref({
+            pkgId: 'emp1',
+            name: '员工1',
+            installed: true,
+            chartType: 'pie',
+            palette: ['#000'],
+            dashboard: { title: 'dash' },
+          }),
+        },
+      )
       const strip = wrapper.findComponent({ name: 'KittenVizEmployeeStrip' })
       strip.vm.$emit('select', 'emp1')
       await nextTick()
@@ -649,18 +737,27 @@ describe('KittenAnalyzerView.vue - 覆盖率补齐', () => {
     })
 
     it('员工未安装时不设置图表类型', async () => {
-      const wrapper = mountView({
-        datasetSummary: ref({ name: 'test.csv', rows: 10, columns: 3, fieldNames: ['a'], previewText: '' }),
-      }, {
-        selected: ref({
-          pkgId: 'emp1',
-          name: '员工1',
-          installed: false,
-          chartType: 'line',
-          palette: ['#000'],
-          dashboard: null,
-        }),
-      })
+      const wrapper = mountView(
+        {
+          datasetSummary: ref({
+            name: 'test.csv',
+            rows: 10,
+            columns: 3,
+            fieldNames: ['a'],
+            previewText: '',
+          }),
+        },
+        {
+          selected: ref({
+            pkgId: 'emp1',
+            name: '员工1',
+            installed: false,
+            chartType: 'line',
+            palette: ['#000'],
+            dashboard: null,
+          }),
+        },
+      )
       const strip = wrapper.findComponent({ name: 'KittenVizEmployeeStrip' })
       strip.vm.$emit('select', 'emp1')
       await nextTick()
@@ -672,16 +769,19 @@ describe('KittenAnalyzerView.vue - 覆盖率补齐', () => {
       // 因此无法通过 UI 触发 onVizEmployeeSelect。
       // 此分支由 "数据集名称变化但员工未安装时不触发" 等测试覆盖。
       // 这里验证组件正常挂载不报错
-      const wrapper = mountView({}, {
-        selected: ref({
-          pkgId: 'emp1',
-          name: '员工1',
-          installed: true,
-          chartType: 'line',
-          palette: ['#000'],
-          dashboard: null,
-        }),
-      })
+      const wrapper = mountView(
+        {},
+        {
+          selected: ref({
+            pkgId: 'emp1',
+            name: '员工1',
+            installed: true,
+            chartType: 'line',
+            palette: ['#000'],
+            dashboard: null,
+          }),
+        },
+      )
       expect(wrapper.find('.kitten-shell').exists()).toBe(true)
       // 无数据集时 strip 不渲染
       expect(wrapper.findComponent({ name: 'KittenVizEmployeeStrip' }).exists()).toBe(false)
@@ -691,42 +791,76 @@ describe('KittenAnalyzerView.vue - 覆盖率补齐', () => {
   // ── applyVizEmployeeChartType watch 触发 ─────────────────────
   describe('applyVizEmployeeChartType watch 触发', () => {
     it('数据集名称变化时触发 applyVizEmployeeChartType', async () => {
-      const datasetSummary = ref(null as null | { name: string; rows: number; columns: number; fieldNames: string[]; previewText: string })
-      const wrapper = mountView({
-        datasetSummary,
-      }, {
-        selected: ref({
-          pkgId: 'emp1',
-          name: '员工1',
-          installed: true,
-          chartType: 'line',
-          palette: ['#000'],
-          dashboard: null,
-        }),
-      })
+      const datasetSummary = ref(
+        null as null | {
+          name: string
+          rows: number
+          columns: number
+          fieldNames: string[]
+          previewText: string
+        },
+      )
+      mountView(
+        {
+          datasetSummary,
+        },
+        {
+          selected: ref({
+            pkgId: 'emp1',
+            name: '员工1',
+            installed: true,
+            chartType: 'line',
+            palette: ['#000'],
+            dashboard: null,
+          }),
+        },
+      )
       // 初始无数据集，不触发 setChartConfig
       expect(mockAnalyzer.setChartConfig).not.toHaveBeenCalled()
       // 设置数据集，触发 watch
-      datasetSummary.value = { name: 'new.csv', rows: 10, columns: 3, fieldNames: ['a'], previewText: '' }
+      datasetSummary.value = {
+        name: 'new.csv',
+        rows: 10,
+        columns: 3,
+        fieldNames: ['a'],
+        previewText: '',
+      }
       await nextTick()
       expect(mockAnalyzer.setChartConfig).toHaveBeenCalledWith({ type: 'line' })
     })
 
     it('数据集名称变化但员工未安装时不触发 setChartConfig', async () => {
-      const datasetSummary = ref(null as null | { name: string; rows: number; columns: number; fieldNames: string[]; previewText: string })
-      const wrapper = mountView({
-        datasetSummary,
-      }, {
-        selected: ref({
-          pkgId: 'emp1',
-          name: '员工1',
-          installed: false,
-          chartType: 'line',
-          palette: ['#000'],
-          dashboard: null,
-        }),
-      })
-      datasetSummary.value = { name: 'new.csv', rows: 10, columns: 3, fieldNames: ['a'], previewText: '' }
+      const datasetSummary = ref(
+        null as null | {
+          name: string
+          rows: number
+          columns: number
+          fieldNames: string[]
+          previewText: string
+        },
+      )
+      mountView(
+        {
+          datasetSummary,
+        },
+        {
+          selected: ref({
+            pkgId: 'emp1',
+            name: '员工1',
+            installed: false,
+            chartType: 'line',
+            palette: ['#000'],
+            dashboard: null,
+          }),
+        },
+      )
+      datasetSummary.value = {
+        name: 'new.csv',
+        rows: 10,
+        columns: 3,
+        fieldNames: ['a'],
+        previewText: '',
+      }
       await nextTick()
       expect(mockAnalyzer.setChartConfig).not.toHaveBeenCalled()
     })
@@ -736,7 +870,13 @@ describe('KittenAnalyzerView.vue - 覆盖率补齐', () => {
   describe('图表面板事件', () => {
     it('updateConfig 事件调用 setChartConfig', async () => {
       const wrapper = mountView({
-        datasetSummary: ref({ name: 'test.csv', rows: 10, columns: 3, fieldNames: ['a'], previewText: '' }),
+        datasetSummary: ref({
+          name: 'test.csv',
+          rows: 10,
+          columns: 3,
+          fieldNames: ['a'],
+          previewText: '',
+        }),
         datasetRows: ref([{ a: 1 }]),
       })
       const panel = wrapper.findComponent({ name: 'KittenChartPanel' })
@@ -747,7 +887,13 @@ describe('KittenAnalyzerView.vue - 覆盖率补齐', () => {
 
     it('applyRecommendation 事件调用 applyChartRecommendation', async () => {
       const wrapper = mountView({
-        datasetSummary: ref({ name: 'test.csv', rows: 10, columns: 3, fieldNames: ['a'], previewText: '' }),
+        datasetSummary: ref({
+          name: 'test.csv',
+          rows: 10,
+          columns: 3,
+          fieldNames: ['a'],
+          previewText: '',
+        }),
         datasetRows: ref([{ a: 1 }]),
       })
       const rec = { id: 'test', label: 'Test', description: 'd', config: { type: 'pie' as const } }
@@ -759,7 +905,13 @@ describe('KittenAnalyzerView.vue - 覆盖率补齐', () => {
 
     it('无数据集行时不显示图表面板', () => {
       const wrapper = mountView({
-        datasetSummary: ref({ name: 'test.csv', rows: 10, columns: 3, fieldNames: ['a'], previewText: '' }),
+        datasetSummary: ref({
+          name: 'test.csv',
+          rows: 10,
+          columns: 3,
+          fieldNames: ['a'],
+          previewText: '',
+        }),
         datasetRows: ref([]),
       })
       expect(wrapper.findComponent({ name: 'KittenChartPanel' }).exists()).toBe(false)
@@ -1081,33 +1233,31 @@ describe('KittenAnalyzerView.vue - 覆盖率补齐', () => {
     }
 
     it('点击消息中的下载按钮触发 openDownloadLink（相对路径）', async () => {
-      mockFetchResponse({ contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      mockFetchResponse({
+        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      })
       const wrapper = mountView({
-        messages: ref([
-          { role: 'ai', content: '文档 /api/ai/kitten/document/pickup/abc', time: '10:00' },
-        ]),
+        messages: ref([{ role: 'ai', content: '文档 /api/ai/kitten/document/pickup/abc', time: '10:00' }]),
       })
       await wrapper.find('.download-btn').trigger('click')
       await nextTick()
-      expect(global.fetch).toHaveBeenCalledWith(
-        'http://localhost:5000/api/ai/kitten/document/pickup/abc',
-        { credentials: 'include' },
-      )
+      expect(global.fetch).toHaveBeenCalledWith('http://localhost:5000/api/ai/kitten/document/pickup/abc', { credentials: 'include' })
     })
 
     it('点击消息中的下载按钮触发 openDownloadLink（绝对路径）', async () => {
       mockFetchResponse({ contentType: 'application/octet-stream' })
       const wrapper = mountView({
         messages: ref([
-          { role: 'ai', content: '文档 https://example.com/api/ai/kitten/document/pickup/xyz', time: '10:00' },
+          {
+            role: 'ai',
+            content: '文档 https://example.com/api/ai/kitten/document/pickup/xyz',
+            time: '10:00',
+          },
         ]),
       })
       await wrapper.find('.download-btn').trigger('click')
       await nextTick()
-      expect(global.fetch).toHaveBeenCalledWith(
-        'https://example.com/api/ai/kitten/document/pickup/xyz',
-        { credentials: 'include' },
-      )
+      expect(global.fetch).toHaveBeenCalledWith('https://example.com/api/ai/kitten/document/pickup/xyz', { credentials: 'include' })
     })
 
     it('成功下载 Excel 文件时调用 downloadBlob', async () => {
@@ -1116,9 +1266,7 @@ describe('KittenAnalyzerView.vue - 覆盖率补齐', () => {
         contentDisposition: 'attachment; filename="report.xlsx"',
       })
       const wrapper = mountView({
-        messages: ref([
-          { role: 'ai', content: '/api/ai/kitten/document/pickup/excel', time: '10:00' },
-        ]),
+        messages: ref([{ role: 'ai', content: '/api/ai/kitten/document/pickup/excel', time: '10:00' }]),
       })
       await wrapper.find('.download-btn').trigger('click')
       await nextTick()
@@ -1131,17 +1279,12 @@ describe('KittenAnalyzerView.vue - 覆盖率补齐', () => {
         contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       })
       const wrapper = mountView({
-        messages: ref([
-          { role: 'ai', content: '/api/ai/kitten/document/pickup/word', time: '10:00' },
-        ]),
+        messages: ref([{ role: 'ai', content: '/api/ai/kitten/document/pickup/word', time: '10:00' }]),
       })
       await wrapper.find('.download-btn').trigger('click')
       await nextTick()
       await nextTick()
-      expect(getFilenameFromDisposition).toHaveBeenCalledWith(
-        null,
-        '文档.docx',
-      )
+      expect(getFilenameFromDisposition).toHaveBeenCalledWith(null, '文档.docx')
     })
 
     it('成功下载其他文件时扩展名为 bin', async () => {
@@ -1149,17 +1292,12 @@ describe('KittenAnalyzerView.vue - 覆盖率补齐', () => {
         contentType: 'application/octet-stream',
       })
       const wrapper = mountView({
-        messages: ref([
-          { role: 'ai', content: '/api/ai/kitten/document/pickup/bin', time: '10:00' },
-        ]),
+        messages: ref([{ role: 'ai', content: '/api/ai/kitten/document/pickup/bin', time: '10:00' }]),
       })
       await wrapper.find('.download-btn').trigger('click')
       await nextTick()
       await nextTick()
-      expect(getFilenameFromDisposition).toHaveBeenCalledWith(
-        null,
-        '文档.bin',
-      )
+      expect(getFilenameFromDisposition).toHaveBeenCalledWith(null, '文档.bin')
     })
 
     it('响应非 ok 且为 JSON 时抛出含 message 的错误', async () => {
@@ -1170,9 +1308,7 @@ describe('KittenAnalyzerView.vue - 覆盖率补齐', () => {
         json: { message: '服务器内部错误' },
       })
       const wrapper = mountView({
-        messages: ref([
-          { role: 'ai', content: '/api/ai/kitten/document/pickup/err', time: '10:00' },
-        ]),
+        messages: ref([{ role: 'ai', content: '/api/ai/kitten/document/pickup/err', time: '10:00' }]),
       })
       await wrapper.find('.download-btn').trigger('click')
       await nextTick()
@@ -1187,9 +1323,7 @@ describe('KittenAnalyzerView.vue - 覆盖率补齐', () => {
         contentType: 'text/html',
       })
       const wrapper = mountView({
-        messages: ref([
-          { role: 'ai', content: '/api/ai/kitten/document/pickup/404', time: '10:00' },
-        ]),
+        messages: ref([{ role: 'ai', content: '/api/ai/kitten/document/pickup/404', time: '10:00' }]),
       })
       await wrapper.find('.download-btn').trigger('click')
       await nextTick()
@@ -1205,9 +1339,7 @@ describe('KittenAnalyzerView.vue - 覆盖率补齐', () => {
         json: { message: '未登录' },
       })
       const wrapper = mountView({
-        messages: ref([
-          { role: 'ai', content: '/api/ai/kitten/document/pickup/json', time: '10:00' },
-        ]),
+        messages: ref([{ role: 'ai', content: '/api/ai/kitten/document/pickup/json', time: '10:00' }]),
       })
       await wrapper.find('.download-btn').trigger('click')
       await nextTick()
@@ -1223,9 +1355,7 @@ describe('KittenAnalyzerView.vue - 覆盖率补齐', () => {
         json: {},
       })
       const wrapper = mountView({
-        messages: ref([
-          { role: 'ai', content: '/api/ai/kitten/document/pickup/json2', time: '10:00' },
-        ]),
+        messages: ref([{ role: 'ai', content: '/api/ai/kitten/document/pickup/json2', time: '10:00' }]),
       })
       await wrapper.find('.download-btn').trigger('click')
       await nextTick()
@@ -1237,9 +1367,7 @@ describe('KittenAnalyzerView.vue - 覆盖率补齐', () => {
       global.fetch = vi.fn().mockRejectedValue(new Error('Network error'))
       const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
       const wrapper = mountView({
-        messages: ref([
-          { role: 'ai', content: '/api/ai/kitten/document/pickup/neterr', time: '10:00' },
-        ]),
+        messages: ref([{ role: 'ai', content: '/api/ai/kitten/document/pickup/neterr', time: '10:00' }]),
       })
       await wrapper.find('.download-btn').trigger('click')
       await nextTick()
@@ -1261,9 +1389,7 @@ describe('KittenAnalyzerView.vue - 覆盖率补齐', () => {
         },
       } as unknown as Response)
       const wrapper = mountView({
-        messages: ref([
-          { role: 'ai', content: '/api/ai/kitten/document/pickup/parse', time: '10:00' },
-        ]),
+        messages: ref([{ role: 'ai', content: '/api/ai/kitten/document/pickup/parse', time: '10:00' }]),
       })
       await wrapper.find('.download-btn').trigger('click')
       await nextTick()
@@ -1283,9 +1409,7 @@ describe('KittenAnalyzerView.vue - 覆盖率补齐', () => {
         },
       } as unknown as Response)
       const wrapper = mountView({
-        messages: ref([
-          { role: 'ai', content: '/api/ai/kitten/document/pickup/parse2', time: '10:00' },
-        ]),
+        messages: ref([{ role: 'ai', content: '/api/ai/kitten/document/pickup/parse2', time: '10:00' }]),
       })
       await wrapper.find('.download-btn').trigger('click')
       await nextTick()
@@ -1310,9 +1434,7 @@ describe('KittenAnalyzerView.vue - 覆盖率补齐', () => {
         throw new Error('blocked')
       })
       const wrapper = mountView({
-        messages: ref([
-          { role: 'ai', content: '/api/ai/kitten/document/pickup/blocked', time: '10:00' },
-        ]),
+        messages: ref([{ role: 'ai', content: '/api/ai/kitten/document/pickup/blocked', time: '10:00' }]),
       })
       await wrapper.find('.download-btn').trigger('click')
       await nextTick()
@@ -1325,9 +1447,7 @@ describe('KittenAnalyzerView.vue - 覆盖率补齐', () => {
       global.fetch = vi.fn().mockRejectedValue('string error')
       vi.spyOn(window, 'open').mockImplementation(() => null)
       const wrapper = mountView({
-        messages: ref([
-          { role: 'ai', content: '/api/ai/kitten/document/pickup/strerr', time: '10:00' },
-        ]),
+        messages: ref([{ role: 'ai', content: '/api/ai/kitten/document/pickup/strerr', time: '10:00' }]),
       })
       await wrapper.find('.download-btn').trigger('click')
       await nextTick()

@@ -2,12 +2,7 @@ import { computed, ref, watch, type Ref } from 'vue'
 
 import type { EtlCapabilities, EtlTemplate } from '@/api/etl'
 
-const COMPATIBILITY_TARGETS = new Set([
-  'customer_products',
-  'customers',
-  'products',
-  'shipment_records',
-])
+const COMPATIBILITY_TARGETS = new Set(['customer_products', 'customers', 'products', 'shipment_records'])
 
 // A saved delivery layout is intentionally stored in the same private ETL
 // tables as mappings so it can retain tenant + owner isolation. It is not an
@@ -20,30 +15,23 @@ export function useEtlTemplateSelection(options: {
   targetType: Ref<string>
 }) {
   const templateSelection = ref('')
-  const compatibleTemplates = computed(() => (
-    options.templates.value.filter((item) => (
-      (options.targetType.value === 'auto' || item.target_type === options.targetType.value)
-      && item.description !== SHIPMENT_DOCUMENT_LAYOUT_DESCRIPTION
-    ))
-  ))
-  const compatiblePresets = computed(() => (
-    COMPATIBILITY_TARGETS.has(options.targetType.value)
-      ? options.capabilities.value?.compatibility_presets || []
-      : []
-  ))
-  const templateId = computed(() => (
-    templateSelection.value.startsWith('template:')
-      ? templateSelection.value.slice('template:'.length)
-      : ''
-  ))
-  const compatibilityPresetId = computed(() => (
-    templateSelection.value.startsWith('preset:')
-      ? templateSelection.value.slice('preset:'.length)
-      : ''
-  ))
-  const selectedCompatibilityPreset = computed(() => (
-    compatiblePresets.value.find((item) => item.id === compatibilityPresetId.value)
-  ))
+  const compatibleTemplates = computed(() =>
+    options.templates.value.filter(
+      (item) =>
+        (options.targetType.value === 'auto' || item.target_type === options.targetType.value) &&
+        item.description !== SHIPMENT_DOCUMENT_LAYOUT_DESCRIPTION,
+    ),
+  )
+  const compatiblePresets = computed(() =>
+    COMPATIBILITY_TARGETS.has(options.targetType.value) ? options.capabilities.value?.compatibility_presets || [] : [],
+  )
+  const templateId = computed(() =>
+    templateSelection.value.startsWith('template:') ? templateSelection.value.slice('template:'.length) : '',
+  )
+  const compatibilityPresetId = computed(() =>
+    templateSelection.value.startsWith('preset:') ? templateSelection.value.slice('preset:'.length) : '',
+  )
+  const selectedCompatibilityPreset = computed(() => compatiblePresets.value.find((item) => item.id === compatibilityPresetId.value))
 
   watch(options.targetType, (targetType) => {
     const selection = templateSelection.value

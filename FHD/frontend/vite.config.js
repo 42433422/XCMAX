@@ -27,24 +27,20 @@ export default defineConfig(({ mode }) => {
   const hmrHost = devHmrHost || '127.0.0.1'
   const hmr = isDev
     ? {
-      overlay: false,
-      host: hmrHost,
-      port: devPort,
-      clientPort: devPort,
-      protocol: 'ws',
-    }
+        overlay: false,
+        host: hmrHost,
+        port: devPort,
+        clientPort: devPort,
+        protocol: 'ws',
+      }
     : { overlay: false }
 
-  const productSku = String(env.VITE_XCAGI_PRODUCT_SKU || '').trim().toLowerCase()
+  const productSku = String(env.VITE_XCAGI_PRODUCT_SKU || '')
+    .trim()
+    .toLowerCase()
   // 企业宿主需要预打包桥接路由与账号定制路由；通用版保持干净空 glob。
   const editionSuffix =
-    mode === 'minimal'
-      ? 'minimal'
-      : productSku === 'enterprise'
-        ? 'enterprise'
-        : mode === 'generic'
-          ? 'generic'
-          : 'full'
+    mode === 'minimal' ? 'minimal' : productSku === 'enterprise' ? 'enterprise' : mode === 'generic' ? 'generic' : 'full'
   const constantsDir = path.resolve(__dirname, './src/constants')
 
   return {
@@ -156,7 +152,7 @@ export default defineConfig(({ mode }) => {
     },
     publicDir: 'public',
     worker: {
-      format: 'es'
+      format: 'es',
     },
     build: createBuildOptions(),
     optimizeDeps: {
@@ -167,7 +163,7 @@ export default defineConfig(({ mode }) => {
       },
     },
     css: {
-      devSourcemap: true
-    }
+      devSourcemap: true,
+    },
   }
 })

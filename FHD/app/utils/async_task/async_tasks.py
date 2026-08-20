@@ -34,6 +34,7 @@ logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
+
 class AsyncTaskManager:
     """
     异步任务管理器
@@ -490,4 +491,3 @@ def get_async_task_manager() -> AsyncTaskManager:
         _async_task_manager = AsyncTaskManager()
         _register_default_tasks(_async_task_manager)
     return _async_task_manager
-

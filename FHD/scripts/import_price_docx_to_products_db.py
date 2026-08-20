@@ -222,7 +222,7 @@ def import_data(db_path: Path, customer: str, rows: list[dict], dry_run: bool) -
             vals.append(1)
         ph = ",".join(["?"] * len(vals))
         sql = f"INSERT INTO products ({', '.join(cols)}) VALUES ({ph})"
-        print(f"  新增产品: {model} | {name} | {r.get('specification','')}")
+        print(f"  新增产品: {model} | {name} | {r.get('specification', '')}")
         if not dry_run:
             cur.execute(sql, vals)
         inserted += 1

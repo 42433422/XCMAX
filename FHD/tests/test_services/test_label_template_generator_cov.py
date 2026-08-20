@@ -69,6 +69,7 @@ from app.services.skills.label_template_generator.label_template_generator impor
     generate_template_code,
     get_label_template_generator_skill,
 )
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -1301,7 +1302,7 @@ class TestClassifyFieldJiaSuffix:
 
 
 class TestAnalyzeColorsExceptionPath:
-    """The bare 'except Exception' in _analyze_colors returns default fallback dict."""
+    """The bare 'except BOUNDARY_ERRORS' in _analyze_colors returns default fallback dict."""
 
     def test_exception_during_color_analysis_returns_default(self):
         """If img.convert raises an exception → fallback with #FFFFFF background."""

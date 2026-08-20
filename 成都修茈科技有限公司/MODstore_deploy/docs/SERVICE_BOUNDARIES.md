@@ -22,23 +22,23 @@ flowchart LR
 
 ### 1.1 模块归属
 
-| 服务 | 当前 Python 模块 | API 表面 | 数据 | 备注 |
-| --- | --- | --- | --- | --- |
-| Employee | `employee_api.py`、`employee_executor.py`、`employee_runtime.py`、`employee_config_v2.py`、`employee_pack_export.py`、`employee_ai_scaffold.py` | `/api/employees/**`、`/api/mods/{id}/workflow-employees/**`、`/api/mods/{id}/export-employee-pack` | `EmployeeExecutionMetric`、`CatalogItem(artifact='employee_pack')` 部分 | 执行入口必须经过 `EmployeeRuntimeClient` |
-| Workflow | `workflow_api.py`、`workflow_engine.py`、`workflow_scheduler.py`、`workflow_variables.py`、`workflow_nl_graph.py`、`workflow_mod_link.py`、`workflow_employee_scaffold.py` | `/api/workflow/**` | `Workflow`、`WorkflowNode`、`WorkflowEdge`、`WorkflowExecution`、`WorkflowTrigger` | 调用 employee/llm 必须走 ports |
-| LLM | `llm_api.py`、`llm_chat_proxy.py`、`llm_key_resolver.py`、`llm_catalog.py`、`llm_billing.py`、`llm_model_taxonomy.py`、`llm_crypto.py`、`knowledge_vector_api.py`、`knowledge_vector_store.py`、`embedding_service.py` | `/api/llm/**`、`/api/knowledge/**` | `UserLlmCredential`、`User.default_llm_json`、向量索引 | 第一阶段 LLM + Knowledge 合并；第二阶段再视量级拆分 |
-| Payment（Java） | `java_payment_service/**` + `application/payment_gateway.py` | `/api/payment/**`、`/api/wallet/**`、`/api/refunds/**` | `Order`、`Wallet`、`Transaction`、`Refund`、`UserPlan`、`Quota`、`Entitlement`（与 Python 共享 PostgreSQL） | 见 `PAYMENT_CONTRACT.md` |
-| 平台层（不拆） | `auth_service.py`、`market_api.py` 中 auth+wallet 入口、`catalog_api.py`、`catalog_store.py`、`api/deps.py`、`infrastructure/db.py`、`eventing/**` | `/api/auth/**`、`/api/market/**`、`/v1/**`、事件总线 | `User`、`CatalogItem`、`Purchase`、`PlanTemplate`、事件契约 | 通过事件解耦，不参与第一轮拆分 |
+| 服务            | 当前 Python 模块                                                                                                                                                                                                       | API 表面                                                                                           | 数据                                                                                                        | 备注                                                |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| Employee        | `employee_api.py`、`employee_executor.py`、`employee_runtime.py`、`employee_config_v2.py`、`employee_pack_export.py`、`employee_ai_scaffold.py`                                                                        | `/api/employees/**`、`/api/mods/{id}/workflow-employees/**`、`/api/mods/{id}/export-employee-pack` | `EmployeeExecutionMetric`、`CatalogItem(artifact='employee_pack')` 部分                                     | 执行入口必须经过 `EmployeeRuntimeClient`            |
+| Workflow        | `workflow_api.py`、`workflow_engine.py`、`workflow_scheduler.py`、`workflow_variables.py`、`workflow_nl_graph.py`、`workflow_mod_link.py`、`workflow_employee_scaffold.py`                                             | `/api/workflow/**`                                                                                 | `Workflow`、`WorkflowNode`、`WorkflowEdge`、`WorkflowExecution`、`WorkflowTrigger`                          | 调用 employee/llm 必须走 ports                      |
+| LLM             | `llm_api.py`、`llm_chat_proxy.py`、`llm_key_resolver.py`、`llm_catalog.py`、`llm_billing.py`、`llm_model_taxonomy.py`、`llm_crypto.py`、`knowledge_vector_api.py`、`knowledge_vector_store.py`、`embedding_service.py` | `/api/llm/**`、`/api/knowledge/**`                                                                 | `UserLlmCredential`、`User.default_llm_json`、向量索引                                                      | 第一阶段 LLM + Knowledge 合并；第二阶段再视量级拆分 |
+| Payment（Java） | `java_payment_service/**` + `application/payment_gateway.py`                                                                                                                                                           | `/api/payment/**`、`/api/wallet/**`、`/api/refunds/**`                                             | `Order`、`Wallet`、`Transaction`、`Refund`、`UserPlan`、`Quota`、`Entitlement`（与 Python 共享 PostgreSQL） | 见 `PAYMENT_CONTRACT.md`                            |
+| 平台层（不拆）  | `auth_service.py`、`market_api.py` 中 auth+wallet 入口、`catalog_api.py`、`catalog_store.py`、`api/deps.py`、`infrastructure/db.py`、`eventing/**`                                                                     | `/api/auth/**`、`/api/market/**`、`/v1/**`、事件总线                                               | `User`、`CatalogItem`、`Purchase`、`PlanTemplate`、事件契约                                                 | 通过事件解耦，不参与第一轮拆分                      |
 
 ## 2. Ports（领域间调用接口）
 
 为了让未来把任意一个域抽成独立进程，本仓引入三个客户端抽象（`modstore_server/services/`）。任何跨域调用必须经过这些 ports，**禁止**新代码直接 `from modstore_server.llm_chat_proxy import chat_dispatch` 或 `from modstore_server.employee_executor import execute_employee_task` 等跨域 import。
 
-| Port | 模块 | 默认实现 | 拆分时替换为 |
-| --- | --- | --- | --- |
-| `LlmChatClient` | `services/llm.py` | 进程内调用 `llm_chat_proxy.chat_dispatch` | HTTP 客户端 → LLM 服务 |
+| Port                    | 模块                   | 默认实现                                                | 拆分时替换为                |
+| ----------------------- | ---------------------- | ------------------------------------------------------- | --------------------------- |
+| `LlmChatClient`         | `services/llm.py`      | 进程内调用 `llm_chat_proxy.chat_dispatch`               | HTTP 客户端 → LLM 服务      |
 | `EmployeeRuntimeClient` | `services/employee.py` | 进程内调用 `employee_executor.execute_employee_task` 等 | HTTP 客户端 → Employee 服务 |
-| `WorkflowEngineClient` | `services/workflow.py` | 进程内调用 `workflow_engine.execute_workflow` 等 | HTTP 客户端 → Workflow 服务 |
+| `WorkflowEngineClient`  | `services/workflow.py` | 进程内调用 `workflow_engine.execute_workflow` 等        | HTTP 客户端 → Workflow 服务 |
 
 每个 port 都是一个 ABC，附带：
 

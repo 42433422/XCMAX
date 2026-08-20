@@ -1,3 +1,4 @@
+# mypy: disable-error-code="index, union-attr"
 """Frontend artifact regeneration for an existing authored MOD."""
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ from typing import Any, Dict
 from modman.manifest_util import read_manifest, save_manifest_validated
 from modstore_server.application.catalog import CatalogShellService
 from modstore_server.mod_snapshots import capture_manifest_snapshot
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 
 def regenerate_frontend(mod_dir: Path, mod_id: str, brief: str) -> Dict[str, Any]:
@@ -20,7 +22,7 @@ def regenerate_frontend(mod_dir: Path, mod_id: str, brief: str) -> Dict[str, Any
         snapshot = capture_manifest_snapshot(
             mod_dir, f"重新生成前端前 {time.strftime('%Y-%m-%d %H:%M:%S')}"
         )
-    except Exception:  # noqa: BLE001 - snapshot failure must not block regeneration
+    except BOUNDARY_ERRORS:  # noqa: BLE001 - snapshot failure must not block regeneration
         snapshot = None
     spec = CatalogShellService.frontend_spec_for_existing_mod(mod_dir, manifest, brief)
     mod_name = str(manifest.get("name") or mod_id)
@@ -59,7 +61,8 @@ def regenerate_frontend(mod_dir: Path, mod_id: str, brief: str) -> Dict[str, Any
         json.dumps(spec, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
     (mod_dir / "frontend" / "routes.js").write_text(
-        render_frontend_routes_js(mod_id, mod_name, spec["entry_path"]), encoding="utf-8"
+        render_frontend_routes_js(mod_id, mod_name, spec["entry_path"]),
+        encoding="utf-8",
     )
     (mod_dir / "frontend" / "views" / "HomeView.vue").write_text(
         render_generated_home_vue(mod_id, mod_name, spec), encoding="utf-8"
@@ -70,5 +73,9 @@ def regenerate_frontend(mod_dir: Path, mod_id: str, brief: str) -> Dict[str, Any
         "entry_path": spec["entry_path"],
         "snapshot": snapshot,
         "manifest_warnings": warnings,
-        "files": ["config/frontend_spec.json", "frontend/routes.js", "frontend/views/HomeView.vue"],
+        "files": [
+            "config/frontend_spec.json",
+            "frontend/routes.js",
+            "frontend/views/HomeView.vue",
+        ],
     }

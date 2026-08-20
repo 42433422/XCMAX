@@ -7,6 +7,8 @@
 
 from pathlib import Path
 
+from app.utils.operational_errors import BOUNDARY_ERRORS
+
 # V1 到 V2 的导入映射
 IMPORT_MAPPING = {
     "from app.application.product_app_service import get_product_app_service": "from app.application.product_app_service_v2 import get_product_app_service_v2",
@@ -95,7 +97,7 @@ def main():
                     print(f"  [UPDATED] {route_file.name}")
                 else:
                     print("  [SKIP] 无需更新")
-            except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+            except BOUNDARY_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
                 print(f"  [ERROR] {e}")
 
     print("\n" + "=" * 60)

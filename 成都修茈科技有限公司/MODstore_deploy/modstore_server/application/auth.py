@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any, List, Optional
 
 from modstore_server.auth_service import (
@@ -83,9 +83,7 @@ class AuthApplicationService:
 
         scopes_norm = validate_scopes_or_raise(scopes or [])
         raw, prefix, digest = generate_pat()
-        expires_at = (
-            datetime.now(timezone.utc) + timedelta(days=int(expires_days)) if expires_days else None
-        )
+        expires_at = datetime.now(UTC) + timedelta(days=int(expires_days)) if expires_days else None
         sf = get_session_factory()
         with sf() as session:
             row = DeveloperToken(
@@ -124,6 +122,6 @@ class AuthApplicationService:
             if not row:
                 return False
             if row.revoked_at is None:
-                row.revoked_at = datetime.now(timezone.utc)
+                row.revoked_at = datetime.now(UTC)
                 session.commit()
             return True

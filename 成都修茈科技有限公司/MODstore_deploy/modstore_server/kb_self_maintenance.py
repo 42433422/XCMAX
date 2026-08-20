@@ -1,3 +1,4 @@
+# mypy: disable-error-code="index, union-attr"
 """Self-maintain the self-evolution KB."""
 
 from __future__ import annotations
@@ -6,10 +7,11 @@ import json
 import os
 import re
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.self_evolution_knowledge import kb_root
 
 
@@ -75,7 +77,7 @@ def _load_docs(kind: str) -> List[Tuple[Path, Dict[str, Any]]]:
     for path in sorted(directory.glob("*.json")):
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
+        except RECOVERABLE_ERRORS:
             continue
         if isinstance(data, dict):
             out.append((path, data))
@@ -134,7 +136,7 @@ def _confidence_for_doc(
         {
             "base_confidence": round(base_confidence, 4),
             "confidence": round(confidence, 4),
-            "confidence_updated_at": datetime.now(timezone.utc).isoformat(),
+            "confidence_updated_at": datetime.now(UTC).isoformat(),
             "confidence_source": "phase_d_kb_decay",
         }
     )
@@ -174,7 +176,7 @@ def _merge_similar(
             )
             merged_sources.append({"path": str(drop_path), "similarity": round(score, 4)})
             keep_meta["merged_sources"] = merged_sources[-20:]
-            keep_meta["merged_at"] = datetime.now(timezone.utc).isoformat()
+            keep_meta["merged_at"] = datetime.now(UTC).isoformat()
             keep_meta["merge_source"] = "phase_d_kb_similarity"
             keep_doc["metadata"] = keep_meta
             action = {

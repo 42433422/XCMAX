@@ -10,9 +10,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 APP_ROOT = REPO_ROOT / "FHD" / "app"
 
 OPERATIONAL_RE = re.compile(r"\bOPERATIONAL_ERRORS\b")
-BUG_CATCH_RE = re.compile(
-    r"^\s*except\s+(TypeError|KeyError|AttributeError)\s*:\s*$"
-)
+BUG_CATCH_RE = re.compile(r"^\s*except\s+(TypeError|KeyError|AttributeError)\s*:\s*$")
 
 SKIP_SUFFIXES = (
     "middleware/error_handler.py",
@@ -27,7 +25,9 @@ def _scan(root: Path) -> list[tuple[str, int, str]]:
         rel = path.relative_to(root).as_posix()
         if any(rel.endswith(s) for s in SKIP_SUFFIXES):
             continue
-        for lineno, line in enumerate(path.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+        for lineno, line in enumerate(
+            path.read_text(encoding="utf-8", errors="replace").splitlines(), 1
+        ):
             if OPERATIONAL_RE.search(line):
                 hits.append((rel, lineno, line.strip()))
             if BUG_CATCH_RE.match(line) and "noqa" not in line:

@@ -1,10 +1,11 @@
-# ruff: noqa: E402, F401, I001
+# ruff: noqa: E402, F401, F403, I001
 """移动端 API 扩展：代理列表、设备注册、QR 配对。
 
 本模块为路由处理入口，纯计算辅助函数与模型已按业务领域拆分至
 ``mobile_extensions`` 子包。为保证向后兼容（测试 patch / 直接调用），
 所有公共符号均在此重新导出。
 """
+
 from __future__ import annotations
 import asyncio
 import json
@@ -18,127 +19,296 @@ from typing import TYPE_CHECKING, Any, cast
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from app.application.ai_group_chat_service import AiGroupChatService as AiGroupChatService
-from app.application.claude_super_employee_service import ClaudeSuperEmployeeService as ClaudeSuperEmployeeService
-from app.application.codex_super_employee_service import CodexSuperEmployeeService as CodexSuperEmployeeService
-from app.application.cursor_super_employee_service import CursorSuperEmployeeService as CursorSuperEmployeeService
+from app.application.claude_super_employee_service import (
+    ClaudeSuperEmployeeService as ClaudeSuperEmployeeService,
+)
+from app.application.codex_super_employee_service import (
+    CodexSuperEmployeeService as CodexSuperEmployeeService,
+)
+from app.application.cursor_super_employee_service import (
+    CursorSuperEmployeeService as CursorSuperEmployeeService,
+)
 from app.application.execution_scope import factory_context as factory_context
 from app.application.facades.mobile_relay_facade import MobileRelayService
-from app.application.trae_super_employee_service import TraeSuperEmployeeService as TraeSuperEmployeeService
+from app.application.trae_super_employee_service import (
+    TraeSuperEmployeeService as TraeSuperEmployeeService,
+)
 from app.fastapi_routes.mobile_api import get_mobile_user
-from app.fastapi_routes.mobile_extensions.admin_helpers import _admin_employee_match_keys, _apply_market_profile, _compact_text, _enrich_workflow_employees, _load_admin_duty_records, _load_market_ai_employee_profile_index, _mobile_request_user_id, _mobile_session_meta, _require_mobile_admin
-from app.fastapi_routes.mobile_extensions.admin_helpers import _index_market_ai_employee_profiles as _index_market_ai_employee_profiles
-from app.fastapi_routes.mobile_extensions.admin_helpers import _mobile_session_meta as _mobile_session_meta
-from app.fastapi_routes.mobile_extensions.admin_helpers import _require_mobile_admin_or_enterprise as _require_mobile_admin_or_enterprise
+from app.fastapi_routes.mobile_extensions.admin_helpers import (
+    _admin_employee_match_keys,
+    _apply_market_profile,
+    _compact_text,
+    _enrich_workflow_employees,
+    _load_admin_duty_records,
+    _load_market_ai_employee_profile_index,
+    _mobile_request_user_id,
+    _mobile_session_meta,
+    _require_mobile_admin,
+)
+from app.fastapi_routes.mobile_extensions.admin_helpers import (
+    _index_market_ai_employee_profiles as _index_market_ai_employee_profiles,
+)
+from app.fastapi_routes.mobile_extensions.admin_helpers import (
+    _mobile_session_meta as _mobile_session_meta,
+)
+from app.fastapi_routes.mobile_extensions.admin_helpers import (
+    _require_mobile_admin_or_enterprise as _require_mobile_admin_or_enterprise,
+)
 from app.fastapi_routes.mobile_extensions.constants import ADMIN_MOBILE_FEATURES
-from app.fastapi_routes.mobile_extensions.cs_helpers import _mobile_cs_source_id, _mobile_cs_source_name, _safe_user_id, _safe_user_text
+from app.fastapi_routes.mobile_extensions.cs_helpers import (
+    _mobile_cs_source_id,
+    _mobile_cs_source_name,
+    _safe_user_id,
+    _safe_user_text,
+)
+
 if TYPE_CHECKING:
     from sqlalchemy import Table
-from app.fastapi_routes.mobile_extensions.models import AiCircleCommentBody, AiCirclePostBody, DeviceRegisterBody, MobileServiceBridgeRespondBody, PairingExchangeBody, PairingIssueBody, PairingLookupBody, RelayDesktopCompleteBody, RelayDesktopPollBody, RelayDesktopRegisterBody, RelayMobileBindAccountBody, RelayTaskCreateBody
-from app.fastapi_routes.mobile_extensions.models import AiGroupCreateBody as AiGroupCreateBody
-from app.fastapi_routes.mobile_extensions.models import AiGroupMemberBody as AiGroupMemberBody
-from app.fastapi_routes.mobile_extensions.models import AiGroupMessageBody as AiGroupMessageBody
-from app.fastapi_routes.mobile_extensions.models import AuthQrConfirmBody as AuthQrConfirmBody
-from app.fastapi_routes.mobile_extensions.models import ClaudeSuperEmployeeMobileMessageBody as ClaudeSuperEmployeeMobileMessageBody
-from app.fastapi_routes.mobile_extensions.models import CodexSuperEmployeeMobileMessageBody as CodexSuperEmployeeMobileMessageBody
-from app.fastapi_routes.mobile_extensions.models import CursorSuperEmployeeMobileMessageBody as CursorSuperEmployeeMobileMessageBody
-from app.fastapi_routes.mobile_extensions.models import OidcExchangeBody as OidcExchangeBody
-from app.fastapi_routes.mobile_extensions.models import SyncAckBody as SyncAckBody
-from app.fastapi_routes.mobile_extensions.models import SyncPullBody as SyncPullBody
-from app.fastapi_routes.mobile_extensions.models import SyncPushBody as SyncPushBody
-from app.fastapi_routes.mobile_extensions.models import SyncPushItem as SyncPushItem
-from app.fastapi_routes.mobile_extensions.models import TraeSuperEmployeeMobileMessageBody as TraeSuperEmployeeMobileMessageBody
-from app.fastapi_routes.mobile_extensions.pairing_helpers import _enrich_pairing_payload, _guess_lan_ipv4, _host_is_private_or_loopback, _pairing_issue_port, _pairing_reachable_port
-from app.fastapi_routes.mobile_extensions.relay_helpers import _mobile_user_identity, _mobile_user_public_dict, _relay_admin_fallback_user, _relay_mobile_auth_payload
+from app.fastapi_routes.mobile_extensions.models import *  # noqa: F403
+from app.fastapi_routes.mobile_extensions.pairing_helpers import (
+    _enrich_pairing_payload,
+    _guess_lan_ipv4,
+    _host_is_private_or_loopback,
+    _pairing_issue_port,
+    _pairing_reachable_port,
+)
+from app.fastapi_routes.mobile_extensions.relay_helpers import (
+    _mobile_user_identity,
+    _mobile_user_public_dict,
+    _relay_admin_fallback_user,
+    _relay_mobile_auth_payload,
+)
 from app.mod_sdk.assistant_ssot import dedicated_cs_label
-from app.security.mobile_pairing import consume_by_shortcode, consume_pairing_nonce, issue_pairing_nonce, lookup_by_shortcode
+from app.security.mobile_pairing import (
+    consume_by_shortcode,
+    consume_pairing_nonce,
+    issue_pairing_nonce,
+    lookup_by_shortcode,
+)
 from app.utils.device_system.mobile_api import format_mobile_response, paginate_list
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 logger = logging.getLogger(__name__)
-extension_router = APIRouter(tags=['mobile-api-ext'])
-from app.fastapi_routes.mobile_api_extensions_part01 import _admin_duty_mod_item as _admin_duty_mod_item
-from app.fastapi_routes.mobile_api_extensions_part01 import _admin_duty_records_from_roster as _admin_duty_records_from_roster
-from app.fastapi_routes.mobile_api_extensions_part01 import _admin_employee_items as _admin_employee_items
-from app.fastapi_routes.mobile_api_extensions_part01 import _admin_employee_manifest as _admin_employee_manifest
-from app.fastapi_routes.mobile_api_extensions_part01 import _admin_roster_area_labels as _admin_roster_area_labels
-from app.fastapi_routes.mobile_api_extensions_part01 import _admin_roster_ids_by_department_order as _admin_roster_ids_by_department_order
-from app.fastapi_routes.mobile_api_extensions_part01 import _ai_circle_employee_profiles as _ai_circle_employee_profiles
+extension_router = APIRouter(tags=["mobile-api-ext"])
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _admin_duty_mod_item as _admin_duty_mod_item,
+)
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _admin_duty_records_from_roster as _admin_duty_records_from_roster,
+)
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _admin_employee_items as _admin_employee_items,
+)
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _admin_employee_manifest as _admin_employee_manifest,
+)
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _admin_roster_area_labels as _admin_roster_area_labels,
+)
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _admin_roster_ids_by_department_order as _admin_roster_ids_by_department_order,
+)
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _ai_circle_employee_profiles as _ai_circle_employee_profiles,
+)
 from app.fastapi_routes.mobile_api_extensions_part01 import _ai_circle_user as _ai_circle_user
-from app.fastapi_routes.mobile_api_extensions_part01 import _ai_conversation_changes as _ai_conversation_changes
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _ai_conversation_changes as _ai_conversation_changes,
+)
 from app.fastapi_routes.mobile_api_extensions_part01 import _approval_items as _approval_items
-from app.fastapi_routes.mobile_api_extensions_part01 import _cached_desktop_relay_for_account_binding as _cached_desktop_relay_for_account_binding
-from app.fastapi_routes.mobile_api_extensions_part01 import _ensure_mobile_device_table as _ensure_mobile_device_table
-from app.fastapi_routes.mobile_api_extensions_part01 import _ensure_outbox_table as _ensure_outbox_table
-from app.fastapi_routes.mobile_api_extensions_part01 import _mobile_bridge_request_statuses as _mobile_bridge_request_statuses
-from app.fastapi_routes.mobile_api_extensions_part01 import _mobile_market_authorization as _mobile_market_authorization
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _cached_desktop_relay_for_account_binding as _cached_desktop_relay_for_account_binding,
+)
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _ensure_mobile_device_table as _ensure_mobile_device_table,
+)
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _ensure_outbox_table as _ensure_outbox_table,
+)
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _mobile_bridge_request_statuses as _mobile_bridge_request_statuses,
+)
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _mobile_market_authorization as _mobile_market_authorization,
+)
 from app.fastapi_routes.mobile_api_extensions_part01 import _mobile_mod_items as _mobile_mod_items
-from app.fastapi_routes.mobile_api_extensions_part01 import _mobile_session_id_from_request as _mobile_session_id_from_request
-from app.fastapi_routes.mobile_api_extensions_part01 import _mobile_unauthorized_response as _mobile_unauthorized_response
-from app.fastapi_routes.mobile_api_extensions_part01 import _pairing_issue_host as _pairing_issue_host
-from app.fastapi_routes.mobile_api_extensions_part01 import _persist_mobile_cs_request as _persist_mobile_cs_request
-from app.fastapi_routes.mobile_api_extensions_part01 import _register_desktop_relay_for_pairing as _register_desktop_relay_for_pairing
-from app.fastapi_routes.mobile_api_extensions_part01 import _resolve_mobile_relay_user as _resolve_mobile_relay_user
-from app.fastapi_routes.mobile_api_extensions_part01 import _safe_mobile_sync_items as _safe_mobile_sync_items
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _mobile_session_id_from_request as _mobile_session_id_from_request,
+)
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _mobile_unauthorized_response as _mobile_unauthorized_response,
+)
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _pairing_issue_host as _pairing_issue_host,
+)
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _persist_mobile_cs_request as _persist_mobile_cs_request,
+)
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _register_desktop_relay_for_pairing as _register_desktop_relay_for_pairing,
+)
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _resolve_mobile_relay_user as _resolve_mobile_relay_user,
+)
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _safe_mobile_sync_items as _safe_mobile_sync_items,
+)
 from app.fastapi_routes.mobile_api_extensions_part01 import _shipment_items as _shipment_items
-from app.fastapi_routes.mobile_api_extensions_part01 import _upsert_admin_duty_mod_item as _upsert_admin_duty_mod_item
-from app.fastapi_routes.mobile_api_extensions_part01 import mobile_approval_list as mobile_approval_list
-from app.fastapi_routes.mobile_api_extensions_part02 import _employee_ssot_payload as _employee_ssot_payload
-from app.fastapi_routes.mobile_api_extensions_part02 import mobile_admin_employees as mobile_admin_employees
-from app.fastapi_routes.mobile_api_extensions_part02 import mobile_admin_features as mobile_admin_features
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _upsert_admin_duty_mod_item as _upsert_admin_duty_mod_item,
+)
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    mobile_approval_list as mobile_approval_list,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    _employee_ssot_payload as _employee_ssot_payload,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_admin_employees as mobile_admin_employees,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_admin_features as mobile_admin_features,
+)
 from app.fastapi_routes.mobile_api_extensions_part02 import mobile_customers as mobile_customers
-from app.fastapi_routes.mobile_api_extensions_part02 import mobile_device_register as mobile_device_register
-from app.fastapi_routes.mobile_api_extensions_part02 import mobile_device_unregister as mobile_device_unregister
-from app.fastapi_routes.mobile_api_extensions_part02 import mobile_employee_ssot as mobile_employee_ssot
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_device_register as mobile_device_register,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_device_unregister as mobile_device_unregister,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_employee_ssot as mobile_employee_ssot,
+)
 from app.fastapi_routes.mobile_api_extensions_part02 import mobile_im_cs_inbox as mobile_im_cs_inbox
-from app.fastapi_routes.mobile_api_extensions_part02 import mobile_im_cs_inbox_messages as mobile_im_cs_inbox_messages
-from app.fastapi_routes.mobile_api_extensions_part02 import mobile_im_cs_inbox_reply as mobile_im_cs_inbox_reply
-from app.fastapi_routes.mobile_api_extensions_part02 import mobile_notifications_pending as mobile_notifications_pending
-from app.fastapi_routes.mobile_api_extensions_part02 import mobile_pairing_exchange as mobile_pairing_exchange
-from app.fastapi_routes.mobile_api_extensions_part02 import mobile_pairing_issue as mobile_pairing_issue
-from app.fastapi_routes.mobile_api_extensions_part02 import mobile_pairing_lookup as mobile_pairing_lookup
-from app.fastapi_routes.mobile_api_extensions_part02 import mobile_relay_bind_account as mobile_relay_bind_account
-from app.fastapi_routes.mobile_api_extensions_part02 import mobile_relay_create_task as mobile_relay_create_task
-from app.fastapi_routes.mobile_api_extensions_part02 import mobile_relay_desktop_complete as mobile_relay_desktop_complete
-from app.fastapi_routes.mobile_api_extensions_part02 import mobile_relay_desktop_poll as mobile_relay_desktop_poll
-from app.fastapi_routes.mobile_api_extensions_part02 import mobile_relay_desktop_register as mobile_relay_desktop_register
-from app.fastapi_routes.mobile_api_extensions_part02 import mobile_relay_desktops as mobile_relay_desktops
-from app.fastapi_routes.mobile_api_extensions_part02 import mobile_relay_task_cancel as mobile_relay_task_cancel
-from app.fastapi_routes.mobile_api_extensions_part02 import mobile_relay_task_status as mobile_relay_task_status
-from app.fastapi_routes.mobile_api_extensions_part02 import mobile_service_bridge_request_respond as mobile_service_bridge_request_respond
-from app.fastapi_routes.mobile_api_extensions_part02 import mobile_service_bridge_requests as mobile_service_bridge_requests
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_im_cs_inbox_messages as mobile_im_cs_inbox_messages,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_im_cs_inbox_reply as mobile_im_cs_inbox_reply,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_notifications_pending as mobile_notifications_pending,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_pairing_exchange as mobile_pairing_exchange,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_pairing_issue as mobile_pairing_issue,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_pairing_lookup as mobile_pairing_lookup,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_relay_bind_account as mobile_relay_bind_account,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_relay_create_task as mobile_relay_create_task,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_relay_desktop_complete as mobile_relay_desktop_complete,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_relay_desktop_poll as mobile_relay_desktop_poll,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_relay_desktop_register as mobile_relay_desktop_register,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_relay_desktops as mobile_relay_desktops,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_relay_task_cancel as mobile_relay_task_cancel,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_relay_task_status as mobile_relay_task_status,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_service_bridge_request_respond as mobile_service_bridge_request_respond,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_service_bridge_requests as mobile_service_bridge_requests,
+)
 from app.fastapi_routes.mobile_api_extensions_part02 import mobile_shipments as mobile_shipments
-from app.fastapi_routes.mobile_api_extensions_part03 import _chunk_employee_reply as _chunk_employee_reply
-from app.fastapi_routes.mobile_api_extensions_part03 import _modstore_admin_proxy as _modstore_admin_proxy
-from app.fastapi_routes.mobile_api_extensions_part03 import _modstore_admin_token as _modstore_admin_token
-from app.fastapi_routes.mobile_api_extensions_part03 import _modstore_platform_base as _modstore_platform_base
+from app.fastapi_routes.mobile_api_extensions_part03 import (
+    _chunk_employee_reply as _chunk_employee_reply,
+)
+from app.fastapi_routes.mobile_api_extensions_part03 import (
+    _modstore_admin_proxy as _modstore_admin_proxy,
+)
+from app.fastapi_routes.mobile_api_extensions_part03 import (
+    _modstore_admin_token as _modstore_admin_token,
+)
+from app.fastapi_routes.mobile_api_extensions_part03 import (
+    _modstore_platform_base as _modstore_platform_base,
+)
 from app.fastapi_routes.mobile_api_extensions_part03 import _sse_line as _sse_line
-from app.fastapi_routes.mobile_api_extensions_part03 import mobile_admin_employee_pending_question_answer as mobile_admin_employee_pending_question_answer
-from app.fastapi_routes.mobile_api_extensions_part03 import mobile_admin_employee_pending_questions as mobile_admin_employee_pending_questions
+from app.fastapi_routes.mobile_api_extensions_part03 import (
+    mobile_admin_employee_pending_question_answer as mobile_admin_employee_pending_question_answer,
+)
+from app.fastapi_routes.mobile_api_extensions_part03 import (
+    mobile_admin_employee_pending_questions as mobile_admin_employee_pending_questions,
+)
 from app.fastapi_routes.mobile_api_extensions_part03 import mobile_admin_home as mobile_admin_home
-from app.fastapi_routes.mobile_api_extensions_part03 import mobile_ai_circle_add_comment as mobile_ai_circle_add_comment
-from app.fastapi_routes.mobile_api_extensions_part03 import mobile_ai_circle_create_post as mobile_ai_circle_create_post
-from app.fastapi_routes.mobile_api_extensions_part03 import mobile_ai_circle_posts as mobile_ai_circle_posts
-from app.fastapi_routes.mobile_api_extensions_part03 import mobile_ai_circle_toggle_like as mobile_ai_circle_toggle_like
+from app.fastapi_routes.mobile_api_extensions_part03 import (
+    mobile_ai_circle_add_comment as mobile_ai_circle_add_comment,
+)
+from app.fastapi_routes.mobile_api_extensions_part03 import (
+    mobile_ai_circle_create_post as mobile_ai_circle_create_post,
+)
+from app.fastapi_routes.mobile_api_extensions_part03 import (
+    mobile_ai_circle_posts as mobile_ai_circle_posts,
+)
+from app.fastapi_routes.mobile_api_extensions_part03 import (
+    mobile_ai_circle_toggle_like as mobile_ai_circle_toggle_like,
+)
 from app.fastapi_routes.mobile_api_extensions_part03 import mobile_home as mobile_home
-from app.fastapi_routes.mobile_api_extensions_part03 import mobile_industry_baseline as mobile_industry_baseline
-from app.fastapi_routes.mobile_api_extensions_part03 import mobile_install_customer_delivery_seed as mobile_install_customer_delivery_seed
-from app.fastapi_routes.mobile_api_extensions_part03 import mobile_install_host_foundation as mobile_install_host_foundation
-from app.fastapi_routes.mobile_api_extensions_part03 import mobile_install_industry_seed as mobile_install_industry_seed
+from app.fastapi_routes.mobile_api_extensions_part03 import (
+    mobile_industry_baseline as mobile_industry_baseline,
+)
+from app.fastapi_routes.mobile_api_extensions_part03 import (
+    mobile_install_customer_delivery_seed as mobile_install_customer_delivery_seed,
+)
+from app.fastapi_routes.mobile_api_extensions_part03 import (
+    mobile_install_host_foundation as mobile_install_host_foundation,
+)
+from app.fastapi_routes.mobile_api_extensions_part03 import (
+    mobile_install_industry_seed as mobile_install_industry_seed,
+)
 from app.fastapi_routes.mobile_api_extensions_part03 import mobile_install_mod as mobile_install_mod
-from app.fastapi_routes.mobile_api_extensions_part03 import mobile_mods_summary as mobile_mods_summary
+from app.fastapi_routes.mobile_api_extensions_part03 import (
+    mobile_mods_summary as mobile_mods_summary,
+)
 from app.fastapi_routes.mobile_api_extensions_part03 import mobile_nav_menu as mobile_nav_menu
-from app.fastapi_routes.mobile_api_extensions_part03 import mobile_onboarding_industries as mobile_onboarding_industries
-from app.fastapi_routes.mobile_api_extensions_part03 import mobile_platform_shell as mobile_platform_shell
-from app.fastapi_routes.mobile_api_extensions_part03 import mobile_select_onboarding_industry as mobile_select_onboarding_industry
-from app.fastapi_routes.mobile_api_extensions_part04 import _extract_employee_failure_text as _extract_employee_failure_text
-from app.fastapi_routes.mobile_api_extensions_part04 import _extract_employee_reply_text as _extract_employee_reply_text
-from app.fastapi_routes.mobile_api_extensions_part04 import mobile_employee_chat_stream as mobile_employee_chat_stream
+from app.fastapi_routes.mobile_api_extensions_part03 import (
+    mobile_onboarding_industries as mobile_onboarding_industries,
+)
+from app.fastapi_routes.mobile_api_extensions_part03 import (
+    mobile_platform_shell as mobile_platform_shell,
+)
+from app.fastapi_routes.mobile_api_extensions_part03 import (
+    mobile_select_onboarding_industry as mobile_select_onboarding_industry,
+)
+from app.fastapi_routes.mobile_api_extensions_part04 import (
+    _extract_employee_failure_text as _extract_employee_failure_text,
+)
+from app.fastapi_routes.mobile_api_extensions_part04 import (
+    _extract_employee_reply_text as _extract_employee_reply_text,
+)
+from app.fastapi_routes.mobile_api_extensions_part04 import (
+    mobile_employee_chat_stream as mobile_employee_chat_stream,
+)
 from app.fastapi_routes.mobile_extensions.routes_ai_groups import router as _ai_groups_router
 from app.fastapi_routes.mobile_extensions.routes_auth import router as _auth_router
-from app.fastapi_routes.mobile_extensions.routes_conversations import router as _conversations_router
+from app.fastapi_routes.mobile_extensions.routes_conversations import (
+    router as _conversations_router,
+)
 from app.fastapi_routes.mobile_extensions.routes_cs_contacts import router as _cs_contacts_router
 from app.fastapi_routes.mobile_extensions.routes_payment import router as _payment_router
-from app.fastapi_routes.mobile_extensions.routes_super_employee import router as _super_employee_router
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    router as _super_employee_router,
+)
 from app.fastapi_routes.mobile_extensions.routes_sync import router as _sync_router
+
 extension_router.include_router(_super_employee_router)
 extension_router.include_router(_ai_groups_router)
 extension_router.include_router(_conversations_router)
@@ -146,62 +316,166 @@ extension_router.include_router(_sync_router)
 extension_router.include_router(_auth_router)
 extension_router.include_router(_cs_contacts_router)
 extension_router.include_router(_payment_router)
-from app.fastapi_routes.mobile_extensions.routes_ai_groups import _mobile_group_mode as _mobile_group_mode
-from app.fastapi_routes.mobile_extensions.routes_ai_groups import _mobile_group_uid as _mobile_group_uid
-from app.fastapi_routes.mobile_extensions.routes_ai_groups import mobile_ai_group_add_member as mobile_ai_group_add_member
-from app.fastapi_routes.mobile_extensions.routes_ai_groups import mobile_ai_group_candidates as mobile_ai_group_candidates
-from app.fastapi_routes.mobile_extensions.routes_ai_groups import mobile_ai_group_delete as mobile_ai_group_delete
-from app.fastapi_routes.mobile_extensions.routes_ai_groups import mobile_ai_group_mark_read as mobile_ai_group_mark_read
-from app.fastapi_routes.mobile_extensions.routes_ai_groups import mobile_ai_group_mark_unread as mobile_ai_group_mark_unread
-from app.fastapi_routes.mobile_extensions.routes_ai_groups import mobile_ai_group_messages as mobile_ai_group_messages
-from app.fastapi_routes.mobile_extensions.routes_ai_groups import mobile_ai_group_post as mobile_ai_group_post
-from app.fastapi_routes.mobile_extensions.routes_ai_groups import mobile_ai_group_remove_member as mobile_ai_group_remove_member
-from app.fastapi_routes.mobile_extensions.routes_ai_groups import mobile_ai_group_toggle_followed as mobile_ai_group_toggle_followed
-from app.fastapi_routes.mobile_extensions.routes_ai_groups import mobile_ai_group_toggle_hidden as mobile_ai_group_toggle_hidden
-from app.fastapi_routes.mobile_extensions.routes_ai_groups import mobile_ai_group_toggle_pin as mobile_ai_group_toggle_pin
-from app.fastapi_routes.mobile_extensions.routes_ai_groups import mobile_ai_groups_create as mobile_ai_groups_create
-from app.fastapi_routes.mobile_extensions.routes_ai_groups import mobile_ai_groups_list as mobile_ai_groups_list
-from app.fastapi_routes.mobile_extensions.routes_ai_groups import mobile_git_branches as mobile_git_branches
-from app.fastapi_routes.mobile_extensions.routes_auth import mobile_auth_oidc_exchange as mobile_auth_oidc_exchange
-from app.fastapi_routes.mobile_extensions.routes_auth import mobile_auth_qr_confirm as mobile_auth_qr_confirm
-from app.fastapi_routes.mobile_extensions.routes_conversations import _conversation_state_uid as _conversation_state_uid
-from app.fastapi_routes.mobile_extensions.routes_conversations import mobile_conversation_delete as mobile_conversation_delete
-from app.fastapi_routes.mobile_extensions.routes_conversations import mobile_conversation_mark_read as mobile_conversation_mark_read
-from app.fastapi_routes.mobile_extensions.routes_conversations import mobile_conversation_mark_unread as mobile_conversation_mark_unread
-from app.fastapi_routes.mobile_extensions.routes_conversations import mobile_conversation_toggle_followed as mobile_conversation_toggle_followed
-from app.fastapi_routes.mobile_extensions.routes_conversations import mobile_conversation_toggle_hidden as mobile_conversation_toggle_hidden
-from app.fastapi_routes.mobile_extensions.routes_conversations import mobile_conversation_toggle_pin as mobile_conversation_toggle_pin
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    _mobile_group_mode as _mobile_group_mode,
+)
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    _mobile_group_uid as _mobile_group_uid,
+)
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_group_add_member as mobile_ai_group_add_member,
+)
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_group_candidates as mobile_ai_group_candidates,
+)
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_group_delete as mobile_ai_group_delete,
+)
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_group_mark_read as mobile_ai_group_mark_read,
+)
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_group_mark_unread as mobile_ai_group_mark_unread,
+)
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_group_messages as mobile_ai_group_messages,
+)
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_group_post as mobile_ai_group_post,
+)
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_group_remove_member as mobile_ai_group_remove_member,
+)
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_group_toggle_followed as mobile_ai_group_toggle_followed,
+)
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_group_toggle_hidden as mobile_ai_group_toggle_hidden,
+)
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_group_toggle_pin as mobile_ai_group_toggle_pin,
+)
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_groups_create as mobile_ai_groups_create,
+)
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_groups_list as mobile_ai_groups_list,
+)
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_git_branches as mobile_git_branches,
+)
+from app.fastapi_routes.mobile_extensions.routes_auth import (
+    mobile_auth_oidc_exchange as mobile_auth_oidc_exchange,
+)
+from app.fastapi_routes.mobile_extensions.routes_auth import (
+    mobile_auth_qr_confirm as mobile_auth_qr_confirm,
+)
+from app.fastapi_routes.mobile_extensions.routes_conversations import (
+    _conversation_state_uid as _conversation_state_uid,
+)
+from app.fastapi_routes.mobile_extensions.routes_conversations import (
+    mobile_conversation_delete as mobile_conversation_delete,
+)
+from app.fastapi_routes.mobile_extensions.routes_conversations import (
+    mobile_conversation_mark_read as mobile_conversation_mark_read,
+)
+from app.fastapi_routes.mobile_extensions.routes_conversations import (
+    mobile_conversation_mark_unread as mobile_conversation_mark_unread,
+)
+from app.fastapi_routes.mobile_extensions.routes_conversations import (
+    mobile_conversation_toggle_followed as mobile_conversation_toggle_followed,
+)
+from app.fastapi_routes.mobile_extensions.routes_conversations import (
+    mobile_conversation_toggle_hidden as mobile_conversation_toggle_hidden,
+)
+from app.fastapi_routes.mobile_extensions.routes_conversations import (
+    mobile_conversation_toggle_pin as mobile_conversation_toggle_pin,
+)
 from app.fastapi_routes.mobile_extensions.routes_cs_contacts import get_cs_info as get_cs_info
-from app.fastapi_routes.mobile_extensions.routes_cs_contacts import get_cs_messages as get_cs_messages
-from app.fastapi_routes.mobile_extensions.routes_cs_contacts import get_mobile_fixed_contacts as get_mobile_fixed_contacts
-from app.fastapi_routes.mobile_extensions.routes_cs_contacts import post_cs_message as post_cs_message
-from app.fastapi_routes.mobile_extensions.routes_payment import _mobile_checkout_sign_body as _mobile_checkout_sign_body
-from app.fastapi_routes.mobile_extensions.routes_payment import _normalize_mobile_payment_channel as _normalize_mobile_payment_channel
-from app.fastapi_routes.mobile_extensions.routes_payment import mobile_payment_checkout as mobile_payment_checkout
-from app.fastapi_routes.mobile_extensions.routes_payment import mobile_payment_plans as mobile_payment_plans
-from app.fastapi_routes.mobile_extensions.routes_payment import mobile_payment_query as mobile_payment_query
-from app.fastapi_routes.mobile_extensions.routes_payment import mobile_wallet_balance as mobile_wallet_balance
-from app.fastapi_routes.mobile_extensions.routes_super_employee import _stream_super_employee_invoke as _stream_super_employee_invoke
-from app.fastapi_routes.mobile_extensions.routes_super_employee import mobile_admin_claude_super_employee_invoke as mobile_admin_claude_super_employee_invoke
-from app.fastapi_routes.mobile_extensions.routes_super_employee import mobile_admin_claude_super_employee_messages as mobile_admin_claude_super_employee_messages
-from app.fastapi_routes.mobile_extensions.routes_super_employee import mobile_admin_claude_super_employee_stream as mobile_admin_claude_super_employee_stream
-from app.fastapi_routes.mobile_extensions.routes_super_employee import mobile_admin_codex_super_employee_invoke as mobile_admin_codex_super_employee_invoke
-from app.fastapi_routes.mobile_extensions.routes_super_employee import mobile_admin_codex_super_employee_messages as mobile_admin_codex_super_employee_messages
-from app.fastapi_routes.mobile_extensions.routes_super_employee import mobile_admin_codex_super_employee_stream as mobile_admin_codex_super_employee_stream
-from app.fastapi_routes.mobile_extensions.routes_super_employee import mobile_admin_cursor_super_employee_invoke as mobile_admin_cursor_super_employee_invoke
-from app.fastapi_routes.mobile_extensions.routes_super_employee import mobile_admin_cursor_super_employee_messages as mobile_admin_cursor_super_employee_messages
-from app.fastapi_routes.mobile_extensions.routes_super_employee import mobile_admin_cursor_super_employee_stream as mobile_admin_cursor_super_employee_stream
-from app.fastapi_routes.mobile_extensions.routes_super_employee import mobile_admin_trae_super_employee_invoke as mobile_admin_trae_super_employee_invoke
-from app.fastapi_routes.mobile_extensions.routes_super_employee import mobile_admin_trae_super_employee_messages as mobile_admin_trae_super_employee_messages
-from app.fastapi_routes.mobile_extensions.routes_super_employee import mobile_admin_trae_super_employee_stream as mobile_admin_trae_super_employee_stream
-from app.fastapi_routes.mobile_extensions.routes_sync import _mobile_sync_circle_posts as _mobile_sync_circle_posts
-from app.fastapi_routes.mobile_extensions.routes_sync import _mobile_sync_runtime_contract as _mobile_sync_runtime_contract
+from app.fastapi_routes.mobile_extensions.routes_cs_contacts import (
+    get_cs_messages as get_cs_messages,
+)
+from app.fastapi_routes.mobile_extensions.routes_cs_contacts import (
+    get_mobile_fixed_contacts as get_mobile_fixed_contacts,
+)
+from app.fastapi_routes.mobile_extensions.routes_cs_contacts import (
+    post_cs_message as post_cs_message,
+)
+from app.fastapi_routes.mobile_extensions.routes_payment import (
+    _mobile_checkout_sign_body as _mobile_checkout_sign_body,
+)
+from app.fastapi_routes.mobile_extensions.routes_payment import (
+    _normalize_mobile_payment_channel as _normalize_mobile_payment_channel,
+)
+from app.fastapi_routes.mobile_extensions.routes_payment import (
+    mobile_payment_checkout as mobile_payment_checkout,
+)
+from app.fastapi_routes.mobile_extensions.routes_payment import (
+    mobile_payment_plans as mobile_payment_plans,
+)
+from app.fastapi_routes.mobile_extensions.routes_payment import (
+    mobile_payment_query as mobile_payment_query,
+)
+from app.fastapi_routes.mobile_extensions.routes_payment import (
+    mobile_wallet_balance as mobile_wallet_balance,
+)
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    _stream_super_employee_invoke as _stream_super_employee_invoke,
+)
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    mobile_admin_claude_super_employee_invoke as mobile_admin_claude_super_employee_invoke,
+)
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    mobile_admin_claude_super_employee_messages as mobile_admin_claude_super_employee_messages,
+)
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    mobile_admin_claude_super_employee_stream as mobile_admin_claude_super_employee_stream,
+)
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    mobile_admin_codex_super_employee_invoke as mobile_admin_codex_super_employee_invoke,
+)
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    mobile_admin_codex_super_employee_messages as mobile_admin_codex_super_employee_messages,
+)
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    mobile_admin_codex_super_employee_stream as mobile_admin_codex_super_employee_stream,
+)
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    mobile_admin_cursor_super_employee_invoke as mobile_admin_cursor_super_employee_invoke,
+)
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    mobile_admin_cursor_super_employee_messages as mobile_admin_cursor_super_employee_messages,
+)
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    mobile_admin_cursor_super_employee_stream as mobile_admin_cursor_super_employee_stream,
+)
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    mobile_admin_trae_super_employee_invoke as mobile_admin_trae_super_employee_invoke,
+)
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    mobile_admin_trae_super_employee_messages as mobile_admin_trae_super_employee_messages,
+)
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    mobile_admin_trae_super_employee_stream as mobile_admin_trae_super_employee_stream,
+)
+from app.fastapi_routes.mobile_extensions.routes_sync import (
+    _mobile_sync_circle_posts as _mobile_sync_circle_posts,
+)
+from app.fastapi_routes.mobile_extensions.routes_sync import (
+    _mobile_sync_runtime_contract as _mobile_sync_runtime_contract,
+)
 from app.fastapi_routes.mobile_extensions.routes_sync import mobile_sync_ack as mobile_sync_ack
-from app.fastapi_routes.mobile_extensions.routes_sync import mobile_sync_conflicts as mobile_sync_conflicts
+from app.fastapi_routes.mobile_extensions.routes_sync import (
+    mobile_sync_conflicts as mobile_sync_conflicts,
+)
 from app.fastapi_routes.mobile_extensions.routes_sync import mobile_sync_pull as mobile_sync_pull
 from app.fastapi_routes.mobile_extensions.routes_sync import mobile_sync_push as mobile_sync_push
-from app.fastapi_routes.mobile_extensions.routes_sync import mobile_sync_status as mobile_sync_status
-OPERATIONAL_ERRORS = RECOVERABLE_ERRORS
-_CORE_NAV_ITEMS: list[dict[str, str]] = [{'key': 'chat', 'name': '智能对话', 'icon': 'fa-comments-o', 'path': '/chat'}, {'key': 'im', 'name': '信息', 'icon': 'fa-envelope-o', 'path': '/im'}, {'key': 'ai-ecosystem', 'name': '智能生态', 'icon': 'fa-sitemap', 'path': '/ai-ecosystem'}, {'key': 'employee-workflow', 'name': '员工工作台', 'icon': 'fa-users', 'path': '/employee-workflow'}, {'key': 'products', 'name': '业务对象', 'icon': 'fa-cubes', 'path': '/products'}, {'key': 'customers', 'name': '组织管理', 'icon': 'fa-users', 'path': '/customers'}, {'key': 'orders', 'name': '业务单据', 'icon': 'fa-file-text-o', 'path': '/orders'}, {'key': 'shipment-records', 'name': '业务记录', 'icon': 'fa-industry', 'path': '/shipment-records'}, {'key': 'materials', 'name': '资源库', 'icon': 'fa-archive', 'path': '/materials'}, {'key': 'data-sources', 'name': '数据来源', 'icon': 'fa-database', 'path': '/data-sources'}, {'key': 'print', 'name': '模板与打印', 'icon': 'fa-print', 'path': '/print'}, {'key': 'settings', 'name': '系统设置', 'icon': 'fa-cog', 'path': '/settings'}]
-_ADMIN_NAV_ITEM = {'key': 'admin-entitlements', 'name': '用户管理', 'icon': 'fa-shield', 'path': '/admin-entitlements'}
-_ROLE_VISIBLE_KEYS: dict[str, set[str] | None] = {'admin': None, 'enterprise': {'chat', 'im', 'ai-ecosystem', 'employee-workflow', 'products', 'customers', 'orders', 'shipment-records', 'materials', 'data-sources', 'print', 'settings'}, 'personal': {'chat', 'im', 'ai-ecosystem', 'settings'}}
+from app.fastapi_routes.mobile_extensions.routes_sync import (
+    mobile_sync_status as mobile_sync_status,
+)
+
+from app.fastapi_routes.mobile_extensions.navigation_constants import (
+    _CORE_NAV_ITEMS as _CORE_NAV_ITEMS,
+    _ADMIN_NAV_ITEM as _ADMIN_NAV_ITEM,
+    _ROLE_VISIBLE_KEYS as _ROLE_VISIBLE_KEYS,
+)

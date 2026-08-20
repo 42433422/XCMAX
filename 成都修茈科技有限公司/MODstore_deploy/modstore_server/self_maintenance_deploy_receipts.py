@@ -1,3 +1,5 @@
+# mypy: disable-error-code="arg-type, attr-defined, no-any-return, valid-type"
+# isort: skip_file
 """Fail-closed deployment receipts for self-maintenance runs.
 
 A successful workflow dispatch command is only acceptance. A deployment is
@@ -7,10 +9,11 @@ and health endpoint expose the merge SHA and the same artifact digest.
 
 from __future__ import annotations
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 import re
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Protocol
-
 
 _COMMIT_RE = re.compile(r"^[0-9a-f]{40,64}$")
 _ARTIFACT_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -49,7 +52,7 @@ class BuildIdentity:
     image_digest: str = ""
 
     @classmethod
-    def from_payload(cls, payload: Mapping[str, Any]) -> "BuildIdentity":
+    def from_payload(cls, payload: Mapping[str, Any]) -> BuildIdentity:
         root: Mapping[str, Any] = payload
         data = root.get("data")
         if isinstance(data, Mapping):
@@ -65,7 +68,7 @@ class BuildIdentity:
             image_digest=str(root.get("image_digest") or "").strip().lower(),
         )
 
-    def require_complete(self, source: str) -> "BuildIdentity":
+    def require_complete(self, source: str) -> BuildIdentity:
         if not _COMMIT_RE.fullmatch(self.git_sha):
             raise DeploymentReceiptError(f"{source}_missing_git_sha")
         if not (
@@ -83,7 +86,7 @@ class DispatchReceipt:
     action_id: str
     url: str = ""
 
-    def require_correlation(self, *, merge_sha: str, environment: str) -> "DispatchReceipt":
+    def require_correlation(self, *, merge_sha: str, environment: str) -> DispatchReceipt:
         if not str(self.workflow_run_id or "").strip():
             raise DeploymentReceiptError("dispatch_missing_workflow_run_id")
         if _sha(self.head_sha) != merge_sha:
@@ -101,7 +104,7 @@ class WorkflowCompletion:
     conclusion: str
     url: str = ""
 
-    def require_success(self, receipt: DispatchReceipt) -> "WorkflowCompletion":
+    def require_success(self, receipt: DispatchReceipt) -> WorkflowCompletion:
         if str(self.workflow_run_id) != str(receipt.workflow_run_id):
             raise DeploymentReceiptError("workflow_run_id_mismatch")
         if _sha(self.head_sha) != _sha(receipt.head_sha):
@@ -382,7 +385,7 @@ def resolve_pending_merge_request(
             continue
         try:
             matched = bool(is_ancestor(branch_head, merge_sha))
-        except Exception:
+        except RECOVERABLE_ERRORS:
             matched = False
         if matched:
             matches.append(row)
@@ -411,7 +414,7 @@ def resolve_pending_merge_request(
         if _COMMIT_RE.fullmatch(requested_head) and requested_head != attested_head:
             try:
                 head_advanced = bool(is_ancestor(requested_head, attested_head))
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 head_advanced = False
             if not head_advanced:
                 continue
@@ -438,7 +441,6 @@ from modstore_server.self_maintenance_receipt_recording import (  # noqa: E402
 from modstore_server.self_maintenance_gh_gateway import (  # noqa: E402
     GhActionsDeploymentGateway as GhActionsDeploymentGateway,
 )
-
 
 __all__ = [
     "BuildIdentity",

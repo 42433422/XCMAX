@@ -1,9 +1,12 @@
+# mypy: disable-error-code="assignment"
 """Daily-digest persistence bridge for release-train state."""
 
 from __future__ import annotations
 
 import logging
 from typing import Any, Callable, Dict
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +23,7 @@ def attach_release_train_to_digest(record_id: int, bump_result: Dict[str, Any]) 
             row.release_train_after = str(bump_result.get("after") or "")
             row.release_kind = str(bump_result.get("kind") or "daily")
             session.commit()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("release_train: attach to digest record_id=%s failed", record_id)
 
 
@@ -54,7 +57,7 @@ def release_train_context_for_digest(
                 "release_train_after": after,
                 "release_kind": kind or "daily",
             }
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("release_train: context for digest record_id=%s failed", record_id)
         snapshot = snapshot_public()
         return {

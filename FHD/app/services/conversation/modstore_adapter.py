@@ -37,7 +37,7 @@ import threading
 import time
 from collections.abc import Iterator
 from types import SimpleNamespace
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, Optional, Self, cast
 
 import httpx
 
@@ -216,7 +216,9 @@ from app.services.conversation.modstore_adapter_modstoreplatformadapter_mixin02 
 )
 
 
-class ModstorePlatformAdapter(_ModstorePlatformAdapterPart01Mixin, _ModstorePlatformAdapterPart02Mixin):
+class ModstorePlatformAdapter(
+    _ModstorePlatformAdapterPart01Mixin, _ModstorePlatformAdapterPart02Mixin
+):
     """
     修茈市场平台代理适配器
 
@@ -226,35 +228,6 @@ class ModstorePlatformAdapter(_ModstorePlatformAdapterPart01Mixin, _ModstorePlat
     - 计费结算
     - 错误处理和重试
     """
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 def create_modstore_adapter_from_env() -> Optional[ModstorePlatformAdapter]:

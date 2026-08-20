@@ -9,6 +9,8 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 logger = logging.getLogger(__name__)
 
 _EXEMPT_PATHS = {"/health", "/metrics", "/docs", "/openapi.json", "/redoc"}
@@ -56,8 +58,7 @@ class _RedisBucket:
         # Single Lua script handles both the rate-limit decision AND the
         # Retry-After calculation so that a denied request costs exactly 1
         # Redis round-trip instead of the previous 2 (EVALSHA + ZRANGE).
-        self._lua_check = self._client.register_script(
-            """
+        self._lua_check = self._client.register_script("""
             local key    = KEYS[1]
             local now    = tonumber(ARGV[1])
             local window = tonumber(ARGV[2])
@@ -77,8 +78,7 @@ class _RedisBucket:
                 oldest = tonumber(pair[2])
             end
             return {0, oldest}
-        """
-        )
+        """)
 
     def check(self, key: str, limit: int, window: int) -> tuple[bool, int]:
         """Return ``(allowed, retry_after_seconds)``.
@@ -136,7 +136,7 @@ class RateLimiterMiddleware:
                 bucket = _RedisBucket(redis_url)
                 bucket._client.ping()
                 return bucket
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 logger.warning("Redis unavailable, falling back to in-memory rate limiter")
         return _InMemoryBucket()
 

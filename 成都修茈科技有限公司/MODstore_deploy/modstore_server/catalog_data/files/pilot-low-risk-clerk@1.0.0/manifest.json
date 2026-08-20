@@ -22,13 +22,13 @@
       "name": "低风险闭环验证员",
       "description": "验证自动演化、制品上架和运行时读回闭环。"
     },
-    "perception": {"type": "text"},
-    "memory": {"type": "session"},
+    "perception": { "type": "text" },
+    "memory": { "type": "session" },
     "cognition": {
       "system_prompt": "仅执行低风险跟踪验证，不修改业务数据或治理边界。",
       "reasoning_mode": "default"
     },
-    "actions": {"handlers": ["echo"]}
+    "actions": { "handlers": ["echo"] }
   },
   "acceptance_criteria": [
     "trace_id consistent across all events",

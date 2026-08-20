@@ -27,7 +27,13 @@ def _fake_employees():
             "domain": "marketing",
             "skills": [],
         },
-        {"id": "designer", "name": "设计", "description": "配图", "domain": "design", "skills": []},
+        {
+            "id": "designer",
+            "name": "设计",
+            "description": "配图",
+            "domain": "design",
+            "skills": [],
+        },
     ]
 
 
@@ -55,7 +61,10 @@ def test_decompose_task_produces_multiple_subtasks():
 
     with (
         patch.object(task_router, "_load_all_employee_profiles", return_value=_fake_employees()),
-        patch("modstore_server.models.get_session_factory", return_value=lambda: _DummyCtx()),
+        patch(
+            "modstore_server.models.get_session_factory",
+            return_value=lambda: _DummyCtx(),
+        ),
         patch("modstore_server.services.llm.chat_dispatch_via_session", new=dispatch_mock),
     ):
         subtasks = task_router.decompose_task(
@@ -84,7 +93,10 @@ def test_decompose_task_falls_back_when_llm_not_ok():
 
     with (
         patch.object(task_router, "_load_all_employee_profiles", return_value=_fake_employees()),
-        patch("modstore_server.models.get_session_factory", return_value=lambda: _DummyCtx()),
+        patch(
+            "modstore_server.models.get_session_factory",
+            return_value=lambda: _DummyCtx(),
+        ),
         patch("modstore_server.services.llm.chat_dispatch_via_session", new=dispatch_mock),
     ):
         subtasks = task_router.decompose_task(

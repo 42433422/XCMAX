@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr"
 """ETL 发货/转换模块行为测试（分支覆盖补测）。
 
 覆盖 app/application/etl/ 下 8 个模块：

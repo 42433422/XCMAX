@@ -32,9 +32,7 @@ const emit = defineEmits<{
 }>()
 
 const displayName = computed(() => props.author?.username || '未知创作者')
-const avatarLetter = computed(
-  () => props.author?.avatar_initial || displayName.value.charAt(0).toUpperCase() || '创',
-)
+const avatarLetter = computed(() => props.author?.avatar_initial || displayName.value.charAt(0).toUpperCase() || '创')
 
 function formatCount(n: number | undefined): string {
   const v = Number(n ?? 0)
@@ -105,9 +103,7 @@ const statItems = computed(() => {
           {{ formatCount(stats.favorite_count) }}
         </span>
       </button>
-      <button type="button" class="creator-profile__action creator-profile__action--ghost" @click="emit('complaint')">
-        投诉 / 申诉
-      </button>
+      <button type="button" class="creator-profile__action creator-profile__action--ghost" @click="emit('complaint')">投诉 / 申诉</button>
     </div>
   </section>
 </template>
@@ -171,7 +167,9 @@ const statItems = computed(() => {
   font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
-  transition: opacity 0.2s, transform 0.15s;
+  transition:
+    opacity 0.2s,
+    transform 0.15s;
 }
 
 .creator-profile__follow:hover {
@@ -241,7 +239,9 @@ const statItems = computed(() => {
   font-size: 0.88rem;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.2s, border-color 0.2s;
+  transition:
+    background 0.2s,
+    border-color 0.2s;
 }
 
 .creator-profile__action:hover:not(:disabled) {

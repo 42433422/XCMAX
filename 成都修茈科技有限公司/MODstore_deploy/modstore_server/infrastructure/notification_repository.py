@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """SQLAlchemy adapter implementing
 :class:`modstore_server.domain.notification.ports.NotificationRepository`.
 """
@@ -5,6 +6,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC
 from typing import Any
 
 from sqlalchemy import update
@@ -16,6 +18,7 @@ from modstore_server.domain.notification.types import (
     OutboundNotification,
 )
 from modstore_server.models import Notification as NotificationRow
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _row_to_domain(row: NotificationRow) -> DomainNotification:
@@ -131,7 +134,7 @@ class InMemoryNotificationRepository:
         self._next_id = 1
 
     def add(self, outbound: OutboundNotification) -> DomainNotification:
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         notif = DomainNotification(
             id=self._next_id,
@@ -141,7 +144,7 @@ class InMemoryNotificationRepository:
             content=outbound.content,
             data=dict(outbound.data),
             is_read=False,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         self._next_id += 1
         self._rows.append(notif)
@@ -218,11 +221,11 @@ class WebsocketRealtimePusher:
     def push(self, user_id: int, payload: dict[str, Any]) -> None:
         try:
             from modstore_server.realtime_ws import schedule_push_to_user
-        except Exception:
+        except RECOVERABLE_ERRORS:
             return
         try:
             schedule_push_to_user(user_id, payload)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             return
 
 

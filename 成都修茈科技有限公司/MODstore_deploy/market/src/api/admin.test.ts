@@ -10,7 +10,9 @@ import { req } from './shared'
 const m = vi.mocked(req)
 
 describe('admin API', () => {
-  beforeEach(() => { m.mockClear() })
+  beforeEach(() => {
+    m.mockClear()
+  })
 
   it('adminStatus', async () => {
     await admin.adminStatus()
@@ -254,7 +256,12 @@ describe('admin API', () => {
   })
 
   it('adminCreateAiAccount', async () => {
-    await admin.adminCreateAiAccount({ platform: 'wechat', external_id: 'x', employee_id: 'e1', secret: {} })
+    await admin.adminCreateAiAccount({
+      platform: 'wechat',
+      external_id: 'x',
+      employee_id: 'e1',
+      secret: {},
+    })
     expect(m).toHaveBeenCalledWith('/api/admin/ai-accounts', expect.objectContaining({ method: 'POST' }))
   })
 

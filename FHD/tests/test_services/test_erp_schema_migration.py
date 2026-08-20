@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, no-any-return, return-value"
 """ODOO-W1-01 ERP 正交 schema 迁移测试。
 
 覆盖：

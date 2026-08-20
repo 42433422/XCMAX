@@ -17,12 +17,13 @@ from typing import Any, Dict, List, Optional
 
 from modstore_server.agent_butler_models import (
     ButlerOrchestrateBody,
+)
+from modstore_server.agent_butler_models import (
     butler_orchestrate_steps as _butler_orchestrate_steps,
 )
-from modstore_server.agent_butler_targets import (
-    default_mod_focus as _default_mod_focus,
-    locate_employee_mod as _locate_employee_mod,
-)
+from modstore_server.agent_butler_targets import default_mod_focus as _default_mod_focus
+from modstore_server.agent_butler_targets import locate_employee_mod as _locate_employee_mod
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +115,11 @@ async def _pipeline_mod(
         resolve_llm_provider_model_auto,
     )
     from modstore_server.models import User, get_session_factory
-    from modstore_server.workbench_api import _fail_session, _finalize_session_done, _set_step
+    from modstore_server.workbench_api import (
+        _fail_session,
+        _finalize_session_done,
+        _set_step,
+    )
 
     # ── snapshot ──────────────────────────────────────────────────────
     await _set_step(sid, "snapshot", "running", "正在创建 manifest 快照…")
@@ -133,7 +138,7 @@ async def _pipeline_mod(
                 mod_dir, f"butler 改写前自动备份 {time.strftime('%H:%M:%S')}"
             )
             await _set_step(sid, "snapshot", "done", f"快照 {snap_info.get('snap_id', '?')}")
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             await _set_step(sid, "snapshot", "done", f"快照失败（继续）：{exc}")
     else:
         await _set_step(sid, "snapshot", "done", "已跳过快照")
@@ -152,7 +157,7 @@ async def _pipeline_mod(
             return
 
     focus_paths = focus_paths_override or _default_mod_focus(scope)
-    plan_msg = f"改写 Mod {mod_id}（scope={scope}）：{brief[:120]}" f"；focus_paths={focus_paths}"
+    plan_msg = f"改写 Mod {mod_id}（scope={scope}）：{brief[:120]}；focus_paths={focus_paths}"
     await _set_step(sid, "plan", "done", plan_msg[:240])
 
     # ── vibe ──────────────────────────────────────────────────────────
@@ -180,7 +185,7 @@ async def _pipeline_mod(
             user2 = db2.query(User).filter(User.id == user_id).first()
             if user2:
                 readiness = analyze_mod_employee_readiness(db2, user2, mod_dir)
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("butler pipeline validate failed: %s", exc)
         readiness = {"ok": False, "error": str(exc)}
     await _set_step(sid, "validate", "done", "校验完成")
@@ -211,7 +216,11 @@ async def _pipeline_workflow(
 ) -> None:
     from modstore_server.mod_scaffold_runner import resolve_llm_provider_model_auto
     from modstore_server.models import User, Workflow, get_session_factory
-    from modstore_server.workbench_api import _fail_session, _finalize_session_done, _set_step
+    from modstore_server.workbench_api import (
+        _fail_session,
+        _finalize_session_done,
+        _set_step,
+    )
     from modstore_server.workflow_nl_graph import apply_nl_workflow_graph
 
     # snapshot — workflows have no manifest file; skip gracefully
@@ -256,7 +265,7 @@ async def _pipeline_workflow(
                 provider=prov,
                 model=mdl,
             )
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         await _fail_session(sid, "vibe", f"工作流生成失败：{exc}")
         return
 
@@ -298,7 +307,11 @@ async def _pipeline_employee(
     若找不到 Mod 目录，退化为 refine_system_prompt（仅改 prompt 字段）。"""
     from modstore_server.mod_scaffold_runner import resolve_llm_provider_model_auto
     from modstore_server.models import User, get_session_factory
-    from modstore_server.workbench_api import _fail_session, _finalize_session_done, _set_step
+    from modstore_server.workbench_api import (
+        _fail_session,
+        _finalize_session_done,
+        _set_step,
+    )
 
     await _set_step(sid, "snapshot", "done", "员工场景：跳过文件快照")
 
@@ -409,7 +422,7 @@ def _do_vibe_edit(
                 patch = coder.edit_project(brief, root=root)
 
             apply_result = coder.apply_patch(patch, root=root, dry_run=False)
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("_do_vibe_edit failed")
         return {"ok": False, "error": f"vibe edit 失败: {exc}"}
 
@@ -445,7 +458,7 @@ def _do_refine_system_prompt(
             from modstore_server.employee_ai_pipeline import refine_system_prompt  # type: ignore
             from modstore_server.script_agent.llm_client import RealLlmClient  # type: ignore
 
-            llm = RealLlmClient(provider, model=model)
+            llm = RealLlmClient(provider, api_key="", model=model)
             result, err = await refine_system_prompt(
                 current_prompt="",
                 instruction=brief,
@@ -455,7 +468,7 @@ def _do_refine_system_prompt(
             if err or result is None:
                 return {"ok": False, "error": err or "refine 失败"}
             return {"ok": True, "result": result}
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             return {"ok": False, "error": str(exc)}
 
     try:
@@ -467,7 +480,7 @@ def _do_refine_system_prompt(
                 future = pool.submit(_asyncio.run, _inner())
                 return future.result(timeout=120)
         return loop.run_until_complete(_inner())
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         return {"ok": False, "error": str(exc)}
 
 

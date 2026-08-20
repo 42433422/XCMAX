@@ -223,14 +223,46 @@ from app.application.shipment_excel_etl_app_service_part04 import (
 
 # ruff: noqa: F401
 
-_BUYER_CELL_LABEL = re.compile('^(?:to|bill\\s*to|sold\\s*to|ship\\s*to|consignee|customer|buyer|购货单位|客户名称|客户|采购单位|收货单位|收货方|买方)\\s*[:：]?$', re.IGNORECASE)
+_BUYER_CELL_LABEL = re.compile(
+    "^(?:to|bill\\s*to|sold\\s*to|ship\\s*to|consignee|customer|buyer|购货单位|客户名称|客户|采购单位|收货单位|收货方|买方)\\s*[:：]?$",
+    re.IGNORECASE,
+)
 
-_BUYER_INLINE = re.compile('(?is)(?:bill\\s*to|sold\\s*to|ship\\s*to|(?<![a-z])to|(?<![a-z])buyer|(?<![a-z])customer|购货单位|客户名称|客户|采购单位)\\s*[:：]\\s*([^\\n·|]+?)(?=\\s*(?:·|\\||Incoterms|Payment|Tel|Phone|地址|电话)|$)')
+_BUYER_INLINE = re.compile(
+    "(?is)(?:bill\\s*to|sold\\s*to|ship\\s*to|(?<![a-z])to|(?<![a-z])buyer|(?<![a-z])customer|购货单位|客户名称|客户|采购单位)\\s*[:：]\\s*([^\\n·|]+?)(?=\\s*(?:·|\\||Incoterms|Payment|Tel|Phone|地址|电话)|$)"
+)
 
-_ATTN_CELL_LABEL = re.compile('^(?:attn|attention|联系人)\\s*[:：]?$', re.IGNORECASE)
+_ATTN_CELL_LABEL = re.compile("^(?:attn|attention|联系人)\\s*[:：]?$", re.IGNORECASE)
 
-_ORDER_INLINE = re.compile('(?is)^(?:do\\s*no|invoice\\s*no|buyer\\s*po|po\\s*ref|订单号|订单编号|单号)\\s*[:：]?\\s*([A-Za-z0-9\\-_/]+)')
+_ORDER_INLINE = re.compile(
+    "(?is)^(?:do\\s*no|invoice\\s*no|buyer\\s*po|po\\s*ref|订单号|订单编号|单号)\\s*[:：]?\\s*([A-Za-z0-9\\-_/]+)"
+)
 
-_NON_PRODUCT_TOKENS = frozenset({'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december', 'title', 'identifier', 'subject', 'description', 'notes', 'creator', 'accession', 'my title', 'another title', 'the best image ever'})
+_NON_PRODUCT_TOKENS = frozenset(
+    {
+        "january",
+        "february",
+        "march",
+        "april",
+        "may",
+        "june",
+        "july",
+        "august",
+        "september",
+        "october",
+        "november",
+        "december",
+        "title",
+        "identifier",
+        "subject",
+        "description",
+        "notes",
+        "creator",
+        "accession",
+        "my title",
+        "another title",
+        "the best image ever",
+    }
+)
 
 _svc: ShipmentExcelEtlApplicationService | None = None

@@ -15,9 +15,7 @@
         <label class="pf-field">
           <span>项目</span>
           <select v-model="workspaceId" :disabled="loading" aria-label="选择项目">
-            <option v-for="w in workspaces" :key="w.id" :value="w.id">
-              {{ w.label }}（{{ w.isolation }}）
-            </option>
+            <option v-for="w in workspaces" :key="w.id" :value="w.id">{{ w.label }}（{{ w.isolation }}）</option>
           </select>
         </label>
         <label class="pf-field">
@@ -66,95 +64,90 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
-import {
-  fetchClaudeSuperEmployeeMessages,
-  type ClaudeSuperEmployeeMessage,
-} from '@/api/claudeSuperEmployee';
-import { fetchCodexSuperEmployeeMessages } from '@/api/codexSuperEmployee';
+import { computed, onMounted, ref } from 'vue'
+import { fetchClaudeSuperEmployeeMessages, type ClaudeSuperEmployeeMessage } from '@/api/claudeSuperEmployee'
+import { fetchCodexSuperEmployeeMessages } from '@/api/codexSuperEmployee'
 import {
   dispatchFactoryTask,
   fetchFactoryEmployees,
   fetchFactoryWorkspaces,
   type FactoryEmployee,
   type FactoryWorkspace,
-} from '@/api/factoryConsole';
+} from '@/api/factoryConsole'
 
-const workspaces = ref<FactoryWorkspace[]>([]);
-const employees = ref<FactoryEmployee[]>([]);
-const messages = ref<ClaudeSuperEmployeeMessage[]>([]);
-const workspaceId = ref('');
-const employeeId = ref('');
-const draft = ref('');
-const loading = ref(false);
-const sending = ref(false);
-const errorMsg = ref('');
+const workspaces = ref<FactoryWorkspace[]>([])
+const employees = ref<FactoryEmployee[]>([])
+const messages = ref<ClaudeSuperEmployeeMessage[]>([])
+const workspaceId = ref('')
+const employeeId = ref('')
+const draft = ref('')
+const loading = ref(false)
+const sending = ref(false)
+const errorMsg = ref('')
 
-const currentEmployee = computed(
-  () => employees.value.find((e) => e.id === employeeId.value) ?? null,
-);
+const currentEmployee = computed(() => employees.value.find((e) => e.id === employeeId.value) ?? null)
 
 function roleLabel(role: string): string {
-  if (role === 'user') return '我';
-  if (role === 'assistant') return '员工';
-  return '系统';
+  if (role === 'user') return '我'
+  if (role === 'assistant') return '员工'
+  return '系统'
 }
 
 function errText(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
+  return e instanceof Error ? e.message : String(e)
 }
 
 async function loadMessages(): Promise<void> {
-  const tool = currentEmployee.value?.display_tool;
+  const tool = currentEmployee.value?.display_tool
   if (!tool) {
-    messages.value = [];
-    return;
+    messages.value = []
+    return
   }
   try {
     messages.value =
       tool === 'Codex'
         ? await fetchCodexSuperEmployeeMessages({ scope: 'admin' })
-        : await fetchClaudeSuperEmployeeMessages({ scope: 'admin' });
+        : await fetchClaudeSuperEmployeeMessages({ scope: 'admin' })
   } catch (e) {
-    errorMsg.value = errText(e);
+    errorMsg.value = errText(e)
   }
 }
 
 async function refresh(): Promise<void> {
-  loading.value = true;
-  errorMsg.value = '';
+  loading.value = true
+  errorMsg.value = ''
   try {
-    const [ws, emps] = await Promise.all([fetchFactoryWorkspaces(), fetchFactoryEmployees()]);
-    workspaces.value = ws;
-    employees.value = emps;
-    if (!workspaceId.value && ws.length) workspaceId.value = ws[0].id;
-    if (!employeeId.value && emps.length) employeeId.value = emps[0].id;
-    await loadMessages();
+    const [ws, emps] = await Promise.all([fetchFactoryWorkspaces(), fetchFactoryEmployees()])
+    workspaces.value = ws
+    employees.value = emps
+    if (!workspaceId.value && ws.length) workspaceId.value = ws[0].id
+    if (!employeeId.value && emps.length) employeeId.value = emps[0].id
+    await loadMessages()
   } catch (e) {
-    errorMsg.value = errText(e);
+    errorMsg.value = errText(e)
   } finally {
-    loading.value = false;
+    loading.value = false
   }
 }
 
 async function send(): Promise<void> {
-  const text = draft.value.trim();
-  const emp = currentEmployee.value;
-  if (!text || !emp?.endpoint || !workspaceId.value) return;
-  sending.value = true;
-  errorMsg.value = '';
+  const text = draft.value.trim()
+  const emp = currentEmployee.value
+  if (!text || !emp?.endpoint || !workspaceId.value) return
+  sending.value = true
+  errorMsg.value = ''
   try {
-    await dispatchFactoryTask(emp.endpoint, text, workspaceId.value);
-    draft.value = '';
-    await loadMessages();
+    await dispatchFactoryTask(emp.endpoint, text, workspaceId.value)
+    draft.value = ''
+    await loadMessages()
   } catch (e) {
-    errorMsg.value = errText(e);
+    errorMsg.value = errText(e)
   } finally {
-    sending.value = false;
+    sending.value = false
   }
 }
 
-onMounted(refresh);
+onMounted(refresh)
 </script>
 
 <style scoped>

@@ -3,6 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from app.mod_sdk.errors import RECOVERABLE_ERRORS
+
+
 async def convert_file(
     src_path: Path,
     output_path: Path,
@@ -44,7 +47,9 @@ async def _legacy_convert_file(
 ) -> Dict[str, Any]:
     from app.mod_sdk.host_services import resolve_presentation_spec
 
-    table, _warnings = await resolve_presentation_spec(src_path, payload or {}, ctx or {}, rule_spec or {})
+    table, _warnings = await resolve_presentation_spec(
+        src_path, payload or {}, ctx or {}, rule_spec or {}
+    )
     slides = table.get("slides") if isinstance(table.get("slides"), list) else []
     if not slides:
         raise ValueError("JSON 中 slides 为空，无法生成 PPT")
@@ -64,8 +69,6 @@ async def _legacy_convert_file(
         blob = build_pptx_from_presentation_json(table)
     except ImportError:
         from pptx import Presentation
-        from pptx.dml.color import RGBColor
-        from pptx.util import Inches, Pt
 
         prs = Presentation()
         for raw in slides:
@@ -88,7 +91,7 @@ async def _legacy_convert_file(
             if notes:
                 try:
                     slide.notes_slide.notes_text_frame.text = notes[:8000]
-                except Exception:
+                except RECOVERABLE_ERRORS:
                     pass
         import io
 

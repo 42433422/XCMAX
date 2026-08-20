@@ -153,10 +153,7 @@ export async function resolveDownloadEntry(
   }
 }
 
-export function normalizeXcagiDownloadBase(
-  base: string | undefined,
-  version = DEFAULT_XCAGI_DOWNLOAD_VERSION,
-): string {
+export function normalizeXcagiDownloadBase(base: string | undefined, version = DEFAULT_XCAGI_DOWNLOAD_VERSION): string {
   return (base || `https://xiu-ci.com/xcagi-v${version}`).replace(/\/$/, '')
 }
 
@@ -212,9 +209,7 @@ export function detectMacDownloadArch(): XcagiMacArch {
       if (gl && 'getExtension' in gl) {
         const ext = (gl as WebGLRenderingContext).getExtension('WEBGL_debug_renderer_info')
         if (ext) {
-          const renderer = String(
-            (gl as WebGLRenderingContext).getParameter(ext.UNMASKED_RENDERER_WEBGL),
-          )
+          const renderer = String((gl as WebGLRenderingContext).getParameter(ext.UNMASKED_RENDERER_WEBGL))
           if (/Apple M\d|Apple GPU/i.test(renderer)) return 'arm64'
         }
       }

@@ -24,7 +24,13 @@ vi.mock('@/tutorial/promptAdvancedTutorial', () => ({
 vi.mock('@/composables/useTutorialCatalog', () => ({
   useTutorialCatalog: () => ({
     tutorialTracks: [
-      { id: 'onboarding', title: '宿主入门', summary: '基础教程', description: '从零开始', recommended: true },
+      {
+        id: 'onboarding',
+        title: '宿主入门',
+        summary: '基础教程',
+        description: '从零开始',
+        recommended: true,
+      },
       { id: 'advanced', title: '进阶教程', summary: '高级功能', description: '深入使用' },
     ],
     advancedTrackHint: '需要专业版',
@@ -131,10 +137,12 @@ vi.mock('@/utils/workflowEmployeeRegistry', () => ({
 vi.mock('@/composables/useEnterpriseScopedWorkflowRegistry', () => ({
   useEnterpriseScopedWorkflowRegistry: () => ({
     registry: [],
-    scopedRegistryEntries: { value: [
-      { id: 'wechat_msg', label: '微信消息' },
-      { id: 'label_print', label: '标签打印' },
-    ] },
+    scopedRegistryEntries: {
+      value: [
+        { id: 'wechat_msg', label: '微信消息' },
+        { id: 'label_print', label: '标签打印' },
+      ],
+    },
   }),
 }))
 
@@ -151,7 +159,11 @@ async function mountTopAssistantFloat() {
     history: createMemoryHistory(),
     routes: [
       { path: '/', name: 'chat', component: { template: '<div />' } },
-      { path: '/workflow-visualization', name: 'workflow-visualization', component: { template: '<div />' } },
+      {
+        path: '/workflow-visualization',
+        name: 'workflow-visualization',
+        component: { template: '<div />' },
+      },
     ],
   })
   await router.push('/')
@@ -280,9 +292,7 @@ describe('TopAssistantFloat.vue – push feed', () => {
   it('displays push items when pushFeed has data', async () => {
     const { wrapper } = await mountTopAssistantFloat()
     await wrapper.find('.assistant-float-toggle').trigger('click')
-    wrapper.vm.pushFeed = [
-      { id: '1', title: '测试推送', description: '推送描述' },
-    ]
+    wrapper.vm.pushFeed = [{ id: '1', title: '测试推送', description: '推送描述' }]
     await wrapper.vm.$nextTick()
     expect(wrapper.text()).toContain('测试推送')
     wrapper.unmount()
@@ -314,7 +324,11 @@ describe('TopAssistantFloat.vue – product search', () => {
 
   it('shows loading state during search', async () => {
     let resolveSearch: (value: unknown) => void
-    mockSearchProducts.mockReturnValue(new Promise((resolve) => { resolveSearch = resolve }))
+    mockSearchProducts.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSearch = resolve
+      }),
+    )
     const { wrapper } = await mountTopAssistantFloat()
     await wrapper.find('.assistant-float-toggle').trigger('click')
     const tabs = wrapper.findAll('.assistant-tab')

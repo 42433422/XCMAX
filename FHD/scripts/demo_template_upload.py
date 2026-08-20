@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, union-attr"
 """
 演示脚本：展示模板上传功能的使用
 
@@ -112,7 +113,7 @@ def demo_upload_excel():
             if result["fields"]:
                 print("\n  前 3 个字段:")
                 for i, field in enumerate(result["fields"][:3]):
-                    print(f"    {i+1}. {field['display_name']} ({field['field_type']})")
+                    print(f"    {i + 1}. {field['display_name']} ({field['field_type']})")
 
             if "metadata" in result and "placeholders" in result["metadata"]:
                 placeholders = result["metadata"]["placeholders"]
@@ -156,7 +157,7 @@ def demo_upload_word():
             if result["fields"]:
                 print("\n  字段列表:")
                 for i, field in enumerate(result["fields"][:5]):
-                    print(f"    {i+1}. {field['display_name']} ({field['field_type']})")
+                    print(f"    {i + 1}. {field['display_name']} ({field['field_type']})")
 
             return result["template_id"]
         else:

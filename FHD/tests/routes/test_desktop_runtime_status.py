@@ -1,3 +1,4 @@
+# mypy: disable-error-code="misc"
 """Tests for app.fastapi_routes.desktop_runtime — coverage ramp C3.3-a.
 
 Covers:

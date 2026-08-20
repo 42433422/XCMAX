@@ -142,6 +142,9 @@ async def lifespan(app: FastAPI):
     finally:
         # 无论正常关闭还是被注入异常（如 CancelledError）终止，都在 finally 中
         # 完成全部清理，避免神经总线、监控循环与各调度线程在异常关闭路径下泄漏。
+        from app.fastapi_app.mod_startup import wait_for_background_mod_load
+
+        await asyncio.to_thread(wait_for_background_mod_load, app)
         _stop_agent_tasks(app)
         _close_workflow_resources(app)
         from app.fastapi_app.resource_cleanup import close_llm_http_clients
@@ -196,6 +199,8 @@ async def lifespan(app: FastAPI):
                 logger.warning("⚠️ HealthMonitor 关闭失败: %s", hm_err)
         except RECOVERABLE_ERRORS as e:
             logger.warning("⚠️ 神经总线关闭失败: %s", e)
+
+
 async def _initialize_databases_async(app: FastAPI):
     """异步初始化数据库"""
     db_url = str(getattr(app.state.config, "DATABASE_URL", "") or "").strip()

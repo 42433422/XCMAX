@@ -24,6 +24,8 @@ from modstore_server.eventing.contracts import (
     WALLET_BALANCE_CHANGED,
 )
 
+BOUNDARY_ERRORS = (Exception,)
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -335,10 +337,18 @@ def _all_routes(app) -> set[tuple[str, str]]:
         schema = app.openapi()
         for path, methods_dict in schema.get("paths", {}).items():
             for method in methods_dict:
-                if method.upper() in {"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"}:
+                if method.upper() in {
+                    "GET",
+                    "POST",
+                    "PUT",
+                    "DELETE",
+                    "PATCH",
+                    "HEAD",
+                    "OPTIONS",
+                }:
                     routes.add((method.upper(), path))
         return routes
-    except Exception:
+    except BOUNDARY_ERRORS:
         pass
     # Fallback: recursive traversal (handles _IncludedRouter in Starlette 1.x)
     from fastapi.routing import APIRoute

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 XCAGI 性能审查自动化工具
 
@@ -24,10 +23,26 @@ XCAGI 性能审查自动化工具
 import json
 import os
 import sys
-import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
+
+from app.utils.performance.performance_initializer import get_performance_optimizer
+
+RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    OSError,
+    ValueError,
+    TypeError,
+    KeyError,
+    AttributeError,
+    RuntimeError,
+    ImportError,
+    LookupError,
+    ConnectionError,
+    TimeoutError,
+    ArithmeticError,
+    UnicodeError,
+)
 
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
@@ -53,14 +68,14 @@ class PerformanceAuditor:
     def _load_history(self):
         """加载历史数据"""
         if self.history_file.exists():
-            with open(self.history_file, 'r', encoding='utf-8') as f:
+            with open(self.history_file, encoding="utf-8") as f:
                 self.history = json.load(f)
         else:
             self.history = {"records": [], "last_audit": None}
 
     def _save_history(self):
         """保存历史数据"""
-        with open(self.history_file, 'w', encoding='utf-8') as f:
+        with open(self.history_file, "w", encoding="utf-8") as f:
             json.dump(self.history, f, indent=2, ensure_ascii=False)
 
     def collect_metrics(self) -> Dict[str, Any]:
@@ -80,8 +95,7 @@ class PerformanceAuditor:
         }
 
         try:
-            from app.utils.performance.performance_initializer import get_performance_optimizer
-            optimizer = get_performance_optimization()
+            optimizer = get_performance_optimizer()
 
             if optimizer._initialized:
                 status = optimizer.get_status()
@@ -103,13 +117,14 @@ class PerformanceAuditor:
                     if slow_endpoints:
                         metrics["slow_endpoints"] = slow_endpoints[:5]
 
-        except Exception as e:
+        except RECOVERABLE_ERRORS as e:
             metrics["collection_error"] = str(e)
             print(f"⚠️  指标收集失败: {e}")
 
         # 系统资源
         try:
             import psutil
+
             process = psutil.Process(os.getpid())
             mem_info = process.memory_info()
 
@@ -145,22 +160,26 @@ class PerformanceAuditor:
         avg_ms = api_stats.get("avg_ms", 0)
 
         if avg_ms > 1000:
-            analysis["issues"].append({
-                "level": "critical",
-                "type": "slow_api",
-                "message": f"API平均响应时间过高: {avg_ms:.0f}ms (>1000ms)",
-                "value": avg_ms,
-                "threshold": 1000,
-            })
+            analysis["issues"].append(
+                {
+                    "level": "critical",
+                    "type": "slow_api",
+                    "message": f"API平均响应时间过高: {avg_ms:.0f}ms (>1000ms)",
+                    "value": avg_ms,
+                    "threshold": 1000,
+                }
+            )
             score_deductions.append(30)
         elif avg_ms > 500:
-            analysis["issues"].append({
-                "level": "warning",
-                "type": "slow_api",
-                "message": f"API平均响应时间偏高: {avg_ms:.0f}ms (>500ms)",
-                "value": avg_ms,
-                "threshold": 500,
-            })
+            analysis["issues"].append(
+                {
+                    "level": "warning",
+                    "type": "slow_api",
+                    "message": f"API平均响应时间偏高: {avg_ms:.0f}ms (>500ms)",
+                    "value": avg_ms,
+                    "threshold": 500,
+                }
+            )
             score_deductions.append(15)
 
         # 2. 检查错误率
@@ -170,22 +189,26 @@ class PerformanceAuditor:
         error_rate = ((error_4xx + error_5xx) / total_requests * 100) if total_requests > 0 else 0
 
         if error_rate > 10:
-            analysis["issues"].append({
-                "level": "critical",
-                "type": "high_error_rate",
-                "message": f"错误率过高: {error_rate:.1f}% (>10%)",
-                "value": error_rate,
-                "threshold": 10,
-            })
+            analysis["issues"].append(
+                {
+                    "level": "critical",
+                    "type": "high_error_rate",
+                    "message": f"错误率过高: {error_rate:.1f}% (>10%)",
+                    "value": error_rate,
+                    "threshold": 10,
+                }
+            )
             score_deductions.append(25)
         elif error_rate > 5:
-            analysis["issues"].append({
-                "level": "warning",
-                "type": "high_error_rate",
-                "message": f"错误率偏高: {error_rate:.1f}% (>5%)",
-                "value": error_rate,
-                "threshold": 5,
-            })
+            analysis["issues"].append(
+                {
+                    "level": "warning",
+                    "type": "high_error_rate",
+                    "message": f"错误率偏高: {error_rate:.1f}% (>5%)",
+                    "value": error_rate,
+                    "threshold": 5,
+                }
+            )
             score_deductions.append(10)
 
         # 3. 检查缓存命中率
@@ -193,16 +216,16 @@ class PerformanceAuditor:
         hit_rate = cache_stats.get("hit_rate", 0)
 
         if hit_rate < 50 and hit_rate > 0:
-            analysis["issues"].append({
-                "level": "warning",
-                "type": "low_cache_hit_rate",
-                "message": f"缓存命中率偏低: {hit_rate:.1f}% (<50%)",
-                "value": hit_rate,
-                "threshold": 50,
-            })
-            analysis["recommendations"].append(
-                "考虑增加缓存TTL或优化缓存策略以提升命中率"
+            analysis["issues"].append(
+                {
+                    "level": "warning",
+                    "type": "low_cache_hit_rate",
+                    "message": f"缓存命中率偏低: {hit_rate:.1f}% (<50%)",
+                    "value": hit_rate,
+                    "threshold": 50,
+                }
             )
+            analysis["recommendations"].append("考虑增加缓存TTL或优化缓存策略以提升命中率")
             score_deductions.append(15)
 
         # 4. 检查内存使用
@@ -210,27 +233,29 @@ class PerformanceAuditor:
         memory_mb = system_res.get("memory_rss_mb", 0)
 
         if memory_mb > 1024:
-            analysis["issues"].append({
-                "level": "warning",
-                "type": "high_memory",
-                "message": f"内存占用过高: {memory_mb:.0f}MB (>1GB)",
-                "value": memory_mb,
-                "threshold": 1024,
-            })
-            analysis["recommendations"].append(
-                "建议减小LOCAL_CACHE_SIZE或清理过期缓存"
+            analysis["issues"].append(
+                {
+                    "level": "warning",
+                    "type": "high_memory",
+                    "message": f"内存占用过高: {memory_mb:.0f}MB (>1GB)",
+                    "value": memory_mb,
+                    "threshold": 1024,
+                }
             )
+            analysis["recommendations"].append("建议减小LOCAL_CACHE_SIZE或清理过期缓存")
             score_deductions.append(10)
 
         # 5. 检查慢端点
         slow_endpoints = current.get("slow_endpoints", [])
         if slow_endpoints and len(slow_endpoints) > 3:
-            analysis["issues"].append({
-                "level": "info",
-                "type": "multiple_slow_endpoints",
-                "message": f"发现{len(slow_endpoints)}个慢端点需要优化",
-                "count": len(slow_endpoints),
-            })
+            analysis["issues"].append(
+                {
+                    "level": "info",
+                    "type": "multiple_slow_endpoints",
+                    "message": f"发现{len(slow_endpoints)}个慢端点需要优化",
+                    "count": len(slow_endpoints),
+                }
+            )
 
         # 计算总分
         for deduction in score_deductions:
@@ -302,15 +327,21 @@ class PerformanceAuditor:
         sys_res = metrics.get("system_resources", {})
         if sys_res:
             report.append("\n--- 💻 系统资源 ---")
-            report.append(f"内存占用: {sys_res.get('memory_rss_mb', 'N/A')}MB ({sys_res.get('memory_percent', 'N/A')}%)")
+            report.append(
+                f"内存占用: {sys_res.get('memory_rss_mb', 'N/A')}MB ({sys_res.get('memory_percent', 'N/A')}%)"
+            )
             report.append(f"CPU使用率: {sys_res.get('cpu_percent', 'N/A')}%")
 
         # 问题列表
         if issues:
             report.append("\n--- ⚠️ 发现的问题 ---")
             for i, issue in enumerate(issues, 1):
-                level_icon = {"critical": "🔴", "warning": "🟡", "info": "ℹ️"}.get(issue.get("level"), "❓")
-                report.append(f"{i}. {level_icon} [{issue.get('type', '').upper()}] {issue.get('message', '')}")
+                level_icon = {"critical": "🔴", "warning": "🟡", "info": "ℹ️"}.get(
+                    issue.get("level"), "❓"
+                )
+                report.append(
+                    f"{i}. {level_icon} [{issue.get('type', '').upper()}] {issue.get('message', '')}"
+                )
 
         # 建议
         if recommendations:
@@ -381,7 +412,7 @@ class PerformanceAuditor:
             # 保存本次报告到文件
             date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
             report_file = self.output_dir / f"audit_{date_str}.md"
-            with open(report_file, 'w', encoding='utf-8') as f:
+            with open(report_file, "w", encoding="utf-8") as f:
                 f.write(report_text)
 
             print(f"💾 报告已保存: {report_file}")

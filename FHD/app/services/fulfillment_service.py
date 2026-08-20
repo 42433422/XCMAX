@@ -36,6 +36,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
+
 class FulfillmentService:
     """履行服务：预留、交付（partial/backorder）、退货（return）。"""
 

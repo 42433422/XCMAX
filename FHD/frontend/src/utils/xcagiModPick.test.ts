@@ -11,23 +11,12 @@ describe('xcagiModPick', () => {
   })
 
   it('prefers single primary', () => {
-    expect(
-      pickDefaultActiveModId([
-        { id: 'b-mod' },
-        { id: 'a-mod', primary: true },
-        { id: 'c-mod' },
-      ]),
-    ).toBe('a-mod')
+    expect(pickDefaultActiveModId([{ id: 'b-mod' }, { id: 'a-mod', primary: true }, { id: 'c-mod' }])).toBe('a-mod')
   })
 
   it('falls back to lexicographic first when no unique primary', () => {
-    expect(
-      pickDefaultActiveModId([
-        { id: 'z-mod' },
-        { id: 'a-mod' },
-        { id: 'm-mod', primary: true },
-        { id: 'n-mod', primary: true },
-      ]),
-    ).toBe('a-mod')
+    expect(pickDefaultActiveModId([{ id: 'z-mod' }, { id: 'a-mod' }, { id: 'm-mod', primary: true }, { id: 'n-mod', primary: true }])).toBe(
+      'a-mod',
+    )
   })
 })

@@ -15,6 +15,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 
 @dataclass
 class ServiceStatus:
@@ -153,7 +155,7 @@ class MigrationDetector:
                     if status.has_event_publish or status.has_event_handler:
                         self.report.event_driven_services += 1
 
-        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             print(f"[WARN] 分析文件失败 {file_path}: {e}")
 
     def scan_application_services(self) -> None:
@@ -207,7 +209,7 @@ class MigrationDetector:
                         if status.has_event_publish:
                             self.report.event_driven_app_services += 1
 
-        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             print(f"[WARN] 分析文件失败 {file_path}: {e}")
 
     def scan_routes(self) -> None:
@@ -256,7 +258,7 @@ class MigrationDetector:
                 if status.has_event_publish:
                     self.report.event_driven_routes += 1
 
-        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             print(f"[WARN] 分析文件失败 {file_path}: {e}")
 
     def generate_report(self) -> str:

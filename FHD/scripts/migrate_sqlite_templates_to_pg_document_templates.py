@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="arg-type, var-annotated"
 """
 将 SQLite ``templates.db``（``templates`` / ``template_fields``）迁入 PostgreSQL ``document_templates``。
 

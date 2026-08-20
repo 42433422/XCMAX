@@ -1,6 +1,6 @@
         # 企业使用跟踪员 (`enterprise-adoption-officer`)
 
-        **area**：`platform-core`  
+        **area**：`platform-core`
         **yuangon 路径**：`成都修茈科技有限公司/yuangon/platform-core/enterprise-adoption-officer/`
 
         ## 职责
@@ -14,11 +14,13 @@
         ## 支持的 Handlers
 
         - `llm_md`：接收 Markdown 任务描述，调用 LLM 输出结构化结果
+
 - `echo`：调试用：原样返回输入，用于 smoke 测试
 
         ## Scope（核心文件范围）
 
         - `FHD/app/**/telemetry/**`
+
 - `FHD/app/**/crm/**`
 - `MODstore_deploy/modstore_server/**/tenant**`
 - `yuangon/platform-core/enterprise-adoption-officer/**`

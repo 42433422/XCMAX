@@ -108,13 +108,9 @@ function makeDeps(overrides: DepsOverrides = {}) {
   const taskList = ref<TaskItem[]>(overrides.taskList ?? [])
   const activeTaskId = ref(overrides.activeTaskId ?? '')
   const expandedTaskIds = ref<string[]>(overrides.expandedTaskIds ?? [])
-  const taskFilter = ref<'all' | 'running' | 'success' | 'failed'>(
-    overrides.taskFilter ?? 'all',
-  )
+  const taskFilter = ref<'all' | 'running' | 'success' | 'failed'>(overrides.taskFilter ?? 'all')
   const currentTask = ref<ShipmentTask | null>(overrides.currentTask ?? null)
-  const lastExcelAnalysisContext = ref<Record<string, unknown> | null>(
-    overrides.lastExcelAnalysisContext ?? null,
-  )
+  const lastExcelAnalysisContext = ref<Record<string, unknown> | null>(overrides.lastExcelAnalysisContext ?? null)
   const linkedExcelSheet = ref<LinkedExcelSheet | null>(overrides.linkedExcelSheet ?? null)
   const linkedExcelAllSheets = ref<boolean>(overrides.linkedExcelAllSheets ?? false)
 
@@ -124,9 +120,7 @@ function makeDeps(overrides: DepsOverrides = {}) {
   const applyPersistedTaskPanelStateForSession = vi.fn()
   const clearPersistedTaskPanelState = vi.fn()
   const generateSessionId = vi.fn(() => 'generated-new-sid')
-  const normalizeServerContentToHtml = vi.fn(
-    (raw: unknown) => `<p>${String(raw ?? '')}</p>`,
-  )
+  const normalizeServerContentToHtml = vi.fn((raw: unknown) => `<p>${String(raw ?? '')}</p>`)
 
   return {
     deps: {
@@ -198,13 +192,10 @@ describe('useChatSessionHistory — coverage ramp', () => {
     it('loads server sessions successfully and merges with local', async () => {
       chatApiMock.getConversations.mockResolvedValue({
         success: true,
-        sessions: [
-          { session_id: 'srv1', title: 'Server 1', last_message_at: '2026-06-01' },
-        ],
+        sessions: [{ session_id: 'srv1', title: 'Server 1', last_message_at: '2026-06-01' }],
       })
       const { deps } = makeDeps()
-      const { showHistoryPanel, showHistory, historySessions, historyLoading, historyError } =
-        useChatSessionHistory(deps)
+      const { showHistoryPanel, showHistory, historySessions, historyLoading, historyError } = useChatSessionHistory(deps)
 
       const promise = showHistoryPanel()
       expect(showHistory.value).toBe(true)
@@ -256,10 +247,7 @@ describe('useChatSessionHistory — coverage ramp', () => {
 
     it('falls back to local sessions when API throws', async () => {
       // Provide a local session
-      localStorage.setItem(
-        'xcagi_chat_messages_local1',
-        JSON.stringify([{ role: 'user', content: 'local msg' }]),
-      )
+      localStorage.setItem('xcagi_chat_messages_local1', JSON.stringify([{ role: 'user', content: 'local msg' }]))
       chatApiMock.getConversations.mockRejectedValue(new Error('Network error'))
       const { deps } = makeDeps()
       const { showHistoryPanel, historySessions, historyError } = useChatSessionHistory(deps)
@@ -323,9 +311,7 @@ describe('useChatSessionHistory — coverage ramp', () => {
     })
 
     it('does nothing when already loading', async () => {
-      chatApiMock.getConversation.mockImplementation(
-        () => new Promise(() => {}),
-      )
+      chatApiMock.getConversation.mockImplementation(() => new Promise(() => {}))
       const { deps } = makeDeps()
       const { loadSession, historyLoading } = useChatSessionHistory(deps)
       const p = loadSession('s1')
@@ -382,9 +368,7 @@ describe('useChatSessionHistory — coverage ramp', () => {
       const { loadSession } = useChatSessionHistory(deps)
       await loadSession('s1')
       const loaded = mocks.loadMessages.mock.calls[0][0] as ChatMessage[]
-      expect(loaded[0].time).toBe(
-        new Date(timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
-      )
+      expect(loaded[0].time).toBe(new Date(timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }))
     })
 
     it('uses normalizeServerContentToHtml for content', async () => {
@@ -399,10 +383,7 @@ describe('useChatSessionHistory — coverage ramp', () => {
     })
 
     it('falls back to local messages when server success but no server messages', async () => {
-      localStorage.setItem(
-        'xcagi_chat_messages_local-sid',
-        JSON.stringify([{ role: 'user', content: 'local msg' }]),
-      )
+      localStorage.setItem('xcagi_chat_messages_local-sid', JSON.stringify([{ role: 'user', content: 'local msg' }]))
       chatApiMock.getConversation.mockResolvedValue({
         success: true,
         messages: [],
@@ -448,10 +429,7 @@ describe('useChatSessionHistory — coverage ramp', () => {
     })
 
     it('throws and falls back to local messages when server fails', async () => {
-      localStorage.setItem(
-        'xcagi_chat_messages_local-sid',
-        JSON.stringify([{ role: 'user', content: 'local fallback' }]),
-      )
+      localStorage.setItem('xcagi_chat_messages_local-sid', JSON.stringify([{ role: 'user', content: 'local fallback' }]))
       chatApiMock.getConversation.mockResolvedValue({
         success: false,
         message: '会话不存在',
@@ -559,14 +537,10 @@ describe('useChatSessionHistory — coverage ramp', () => {
     })
 
     it('clears local cache and server sessions successfully', async () => {
-      localStorage.setItem(
-        'xcagi_chat_messages_s1',
-        JSON.stringify([{ role: 'user', content: 'msg' }]),
-      )
+      localStorage.setItem('xcagi_chat_messages_s1', JSON.stringify([{ role: 'user', content: 'msg' }]))
       chatApiMock.clearConversations.mockResolvedValue({ success: true, deleted: 5 })
       const { deps } = makeDeps()
-      const { clearHistorySessions, historyLoading, historyError, historySessions } =
-        useChatSessionHistory(deps)
+      const { clearHistorySessions, historyLoading, historyError, historySessions } = useChatSessionHistory(deps)
       await clearHistorySessions()
       expect(historyLoading.value).toBe(false)
       expect(historyError.value).toBe('')
@@ -790,8 +764,7 @@ describe('useChatSessionHistory — coverage ramp', () => {
 
     it('initializes with default state', () => {
       const { deps } = makeDeps()
-      const { showHistory, historySessions, historyLoading, historyError } =
-        useChatSessionHistory(deps)
+      const { showHistory, historySessions, historyLoading, historyError } = useChatSessionHistory(deps)
       expect(showHistory.value).toBe(false)
       expect(historySessions.value).toEqual([])
       expect(historyLoading.value).toBe(false)

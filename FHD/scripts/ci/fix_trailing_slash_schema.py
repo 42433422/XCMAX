@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """一次性扫描：对运行时尾斜杠重复路由执行 schema 隐藏（调用共享 helper）。"""
+
 from __future__ import annotations
 
 import argparse

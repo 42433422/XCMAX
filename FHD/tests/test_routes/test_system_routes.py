@@ -250,7 +250,8 @@ class TestPerformanceStatus:
         mock_opt = MagicMock()
         mock_opt._initialized = False
         with patch(
-            "app.utils.performance.performance_initializer.get_performance_optimizer", return_value=mock_opt
+            "app.utils.performance.performance_initializer.get_performance_optimizer",
+            return_value=mock_opt,
         ):
             r = client.get("/api/performance/status")
             assert r.status_code == 503
@@ -260,7 +261,8 @@ class TestPerformanceStatus:
         mock_opt._initialized = True
         mock_opt.get_status.return_value = {"status": "ok"}
         with patch(
-            "app.utils.performance.performance_initializer.get_performance_optimizer", return_value=mock_opt
+            "app.utils.performance.performance_initializer.get_performance_optimizer",
+            return_value=mock_opt,
         ):
             r = client.get("/api/performance/status")
             assert r.json()["success"] is True
@@ -279,7 +281,8 @@ class TestPerformanceHealth:
         mock_opt = MagicMock()
         mock_opt.get_health_check.return_value = {"status": "healthy", "timestamp": 0, "checks": {}}
         with patch(
-            "app.utils.performance.performance_initializer.get_performance_optimizer", return_value=mock_opt
+            "app.utils.performance.performance_initializer.get_performance_optimizer",
+            return_value=mock_opt,
         ):
             r = client.get("/api/performance/health")
             assert r.status_code == 200
@@ -292,7 +295,8 @@ class TestPerformanceHealth:
             "checks": {},
         }
         with patch(
-            "app.utils.performance.performance_initializer.get_performance_optimizer", return_value=mock_opt
+            "app.utils.performance.performance_initializer.get_performance_optimizer",
+            return_value=mock_opt,
         ):
             r = client.get("/api/performance/health")
             assert r.status_code == 503
@@ -305,7 +309,8 @@ class TestPerformanceHealth:
             "checks": {},
         }
         with patch(
-            "app.utils.performance.performance_initializer.get_performance_optimizer", return_value=mock_opt
+            "app.utils.performance.performance_initializer.get_performance_optimizer",
+            return_value=mock_opt,
         ):
             r = client.get("/api/performance/health")
             assert r.status_code == 500
@@ -319,7 +324,8 @@ class TestPerformanceHealth:
             "issues": ["slow"],
         }
         with patch(
-            "app.utils.performance.performance_initializer.get_performance_optimizer", return_value=mock_opt
+            "app.utils.performance.performance_initializer.get_performance_optimizer",
+            return_value=mock_opt,
         ):
             r = client.get("/api/performance/health")
             assert r.json()["issues"] == ["slow"]
@@ -338,7 +344,8 @@ class TestPerformanceMetricsSummary:
         mock_opt = MagicMock()
         mock_opt.performance_monitor = None
         with patch(
-            "app.utils.performance.performance_initializer.get_performance_optimizer", return_value=mock_opt
+            "app.utils.performance.performance_initializer.get_performance_optimizer",
+            return_value=mock_opt,
         ):
             r = client.get("/api/performance/metrics/summary")
             assert r.status_code == 503
@@ -347,7 +354,8 @@ class TestPerformanceMetricsSummary:
         mock_opt = MagicMock()
         mock_opt.performance_monitor.get_metrics_summary.return_value = {"avg_ms": 100}
         with patch(
-            "app.utils.performance.performance_initializer.get_performance_optimizer", return_value=mock_opt
+            "app.utils.performance.performance_initializer.get_performance_optimizer",
+            return_value=mock_opt,
         ):
             r = client.get("/api/performance/metrics/summary")
             assert r.json()["success"] is True
@@ -358,7 +366,8 @@ class TestPerformanceMetricsPrometheus:
         mock_opt = MagicMock()
         mock_opt.performance_monitor = None
         with patch(
-            "app.utils.performance.performance_initializer.get_performance_optimizer", return_value=mock_opt
+            "app.utils.performance.performance_initializer.get_performance_optimizer",
+            return_value=mock_opt,
         ):
             r = client.get("/api/performance/metrics/prometheus")
             assert r.status_code == 503
@@ -367,7 +376,8 @@ class TestPerformanceMetricsPrometheus:
         mock_opt = MagicMock()
         mock_opt.performance_monitor.get_prometheus_metrics.return_value = "# metrics"
         with patch(
-            "app.utils.performance.performance_initializer.get_performance_optimizer", return_value=mock_opt
+            "app.utils.performance.performance_initializer.get_performance_optimizer",
+            return_value=mock_opt,
         ):
             r = client.get("/api/performance/metrics/prometheus")
             assert r.status_code == 200
@@ -378,7 +388,8 @@ class TestPerformanceCacheStats:
         mock_opt = MagicMock()
         mock_opt.redis_cache = None
         with patch(
-            "app.utils.performance.performance_initializer.get_performance_optimizer", return_value=mock_opt
+            "app.utils.performance.performance_initializer.get_performance_optimizer",
+            return_value=mock_opt,
         ):
             r = client.get("/api/performance/cache/stats")
             assert r.status_code == 503
@@ -387,7 +398,8 @@ class TestPerformanceCacheStats:
         mock_opt = MagicMock()
         mock_opt.redis_cache.stats = {"hits": 100}
         with patch(
-            "app.utils.performance.performance_initializer.get_performance_optimizer", return_value=mock_opt
+            "app.utils.performance.performance_initializer.get_performance_optimizer",
+            return_value=mock_opt,
         ):
             r = client.get("/api/performance/cache/stats")
             assert r.json()["success"] is True
@@ -398,7 +410,8 @@ class TestPerformanceCacheClear:
         mock_opt = MagicMock()
         mock_opt.redis_cache = None
         with patch(
-            "app.utils.performance.performance_initializer.get_performance_optimizer", return_value=mock_opt
+            "app.utils.performance.performance_initializer.get_performance_optimizer",
+            return_value=mock_opt,
         ):
             r = client.post("/api/performance/cache/clear")
             assert r.status_code == 503
@@ -407,7 +420,8 @@ class TestPerformanceCacheClear:
         mock_opt = MagicMock()
         mock_opt.redis_cache.clear_pattern.return_value = 5
         with patch(
-            "app.utils.performance.performance_initializer.get_performance_optimizer", return_value=mock_opt
+            "app.utils.performance.performance_initializer.get_performance_optimizer",
+            return_value=mock_opt,
         ):
             r = client.post("/api/performance/cache/clear?pattern=test:*")
             assert r.json()["success"] is True
@@ -416,7 +430,8 @@ class TestPerformanceCacheClear:
         mock_opt = MagicMock()
         mock_opt.redis_cache.clear_local_cache = MagicMock()
         with patch(
-            "app.utils.performance.performance_initializer.get_performance_optimizer", return_value=mock_opt
+            "app.utils.performance.performance_initializer.get_performance_optimizer",
+            return_value=mock_opt,
         ):
             r = client.post("/api/performance/cache/clear")
             assert r.json()["success"] is True
@@ -431,7 +446,8 @@ class TestPerformanceCacheInvalidate:
         mock_opt = MagicMock()
         mock_opt.redis_cache = None
         with patch(
-            "app.utils.performance.performance_initializer.get_performance_optimizer", return_value=mock_opt
+            "app.utils.performance.performance_initializer.get_performance_optimizer",
+            return_value=mock_opt,
         ):
             r = client.post("/api/performance/cache/invalidate", json={"keys": ["k1"]})
             assert r.status_code == 503
@@ -440,7 +456,8 @@ class TestPerformanceCacheInvalidate:
         mock_opt = MagicMock()
         mock_opt.redis_cache.delete.return_value = 1
         with patch(
-            "app.utils.performance.performance_initializer.get_performance_optimizer", return_value=mock_opt
+            "app.utils.performance.performance_initializer.get_performance_optimizer",
+            return_value=mock_opt,
         ):
             r = client.post("/api/performance/cache/invalidate", json={"keys": ["k1"]})
             assert r.json()["success"] is True
@@ -451,7 +468,8 @@ class TestPerformanceTasksStatus:
         mock_opt = MagicMock()
         mock_opt.async_task_manager = None
         with patch(
-            "app.utils.performance.performance_initializer.get_performance_optimizer", return_value=mock_opt
+            "app.utils.performance.performance_initializer.get_performance_optimizer",
+            return_value=mock_opt,
         ):
             r = client.get("/api/performance/tasks/status")
             assert r.status_code == 503
@@ -460,7 +478,8 @@ class TestPerformanceTasksStatus:
         mock_opt = MagicMock()
         mock_opt.async_task_manager.get_status.return_value = None
         with patch(
-            "app.utils.performance.performance_initializer.get_performance_optimizer", return_value=mock_opt
+            "app.utils.performance.performance_initializer.get_performance_optimizer",
+            return_value=mock_opt,
         ):
             r = client.get("/api/performance/tasks/status?task_id=bad")
             assert r.status_code == 404
@@ -476,7 +495,8 @@ class TestPerformanceTasksStatus:
         mock_opt = MagicMock()
         mock_opt.async_task_manager.get_status.return_value = mock_result
         with patch(
-            "app.utils.performance.performance_initializer.get_performance_optimizer", return_value=mock_opt
+            "app.utils.performance.performance_initializer.get_performance_optimizer",
+            return_value=mock_opt,
         ):
             r = client.get("/api/performance/tasks/status?task_id=t1")
             assert r.json()["success"] is True
@@ -486,7 +506,8 @@ class TestPerformanceTasksStatus:
         mock_opt.async_task_manager.active_tasks = {}
         mock_opt.async_task_manager.stats = {"total": 0}
         with patch(
-            "app.utils.performance.performance_initializer.get_performance_optimizer", return_value=mock_opt
+            "app.utils.performance.performance_initializer.get_performance_optimizer",
+            return_value=mock_opt,
         ):
             r = client.get("/api/performance/tasks/status")
             assert r.json()["success"] is True
@@ -497,7 +518,8 @@ class TestPerformanceAlerts:
         mock_opt = MagicMock()
         mock_opt.performance_monitor = None
         with patch(
-            "app.utils.performance.performance_initializer.get_performance_optimizer", return_value=mock_opt
+            "app.utils.performance.performance_initializer.get_performance_optimizer",
+            return_value=mock_opt,
         ):
             r = client.get("/api/performance/alerts")
             assert r.status_code == 503
@@ -506,7 +528,8 @@ class TestPerformanceAlerts:
         mock_opt = MagicMock()
         mock_opt.performance_monitor.get_alerts.return_value = []
         with patch(
-            "app.utils.performance.performance_initializer.get_performance_optimizer", return_value=mock_opt
+            "app.utils.performance.performance_initializer.get_performance_optimizer",
+            return_value=mock_opt,
         ):
             r = client.get("/api/performance/alerts")
             assert r.json()["success"] is True
@@ -517,7 +540,8 @@ class TestPerformanceSlowQueries:
         mock_opt = MagicMock()
         mock_opt.query_optimizer = None
         with patch(
-            "app.utils.performance.performance_initializer.get_performance_optimizer", return_value=mock_opt
+            "app.utils.performance.performance_initializer.get_performance_optimizer",
+            return_value=mock_opt,
         ):
             r = client.get("/api/performance/slow-queries")
             assert r.status_code == 503
@@ -526,7 +550,8 @@ class TestPerformanceSlowQueries:
         mock_opt = MagicMock()
         mock_opt.query_optimizer.get_slow_queries.return_value = []
         with patch(
-            "app.utils.performance.performance_initializer.get_performance_optimizer", return_value=mock_opt
+            "app.utils.performance.performance_initializer.get_performance_optimizer",
+            return_value=mock_opt,
         ):
             r = client.get("/api/performance/slow-queries")
             assert r.json()["success"] is True
@@ -537,7 +562,8 @@ class TestPerformanceOptimizeReinitialize:
         mock_opt = MagicMock()
         mock_opt.get_status.return_value = {"status": "ok"}
         with patch(
-            "app.utils.performance.performance_initializer.init_performance_optimization", return_value=mock_opt
+            "app.utils.performance.performance_initializer.init_performance_optimization",
+            return_value=mock_opt,
         ):
             r = client.post("/api/performance/optimize/reinitialize")
             assert r.json()["success"] is True
@@ -699,7 +725,9 @@ class TestSkillsList:
             assert r.json()["success"] is True
 
     def test_error(self, client: TestClient):
-        with patch("app.infrastructure.skills.get_skill_registry", side_effect=RuntimeError("fail")):
+        with patch(
+            "app.infrastructure.skills.get_skill_registry", side_effect=RuntimeError("fail")
+        ):
             r = client.get("/api/skills/list")
             assert r.status_code == 500
 

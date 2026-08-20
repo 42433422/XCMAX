@@ -27,7 +27,10 @@ def test_golden_compare_passes_on_reference_pack():
     golden_dir = resolve_employee_pack_dir("word-full-read-employee")
     if not golden_dir or not golden_dir.is_dir():
         pytest.skip("golden pack word-full-read-employee not in library")
-    smoke = {"ok": True, "output_json_keys": ["paragraphs", "tables", "metadata", "plain_text"]}
+    smoke = {
+        "ok": True,
+        "output_json_keys": ["paragraphs", "tables", "metadata", "plain_text"],
+    }
     result = compare_with_golden(
         golden_dir,
         golden_pack_id="word-full-read-employee",

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="call-overload"
 """Phase-D autonomous merge risk gate.
 
 The Phase-B gate was scope based: structured QA plus a dynamic low-risk
@@ -35,7 +36,11 @@ def _env_int(name: str, default: int) -> int:
 
 def min_safety_score_v3() -> int:
     return max(
-        0, min(_env_int("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_MIN_SAFETY_SCORE_V3", 95), 100)
+        0,
+        min(
+            _env_int("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_MIN_SAFETY_SCORE_V3", 95),
+            100,
+        ),
     )
 
 
@@ -56,7 +61,12 @@ def _file_risk(file_name: str) -> int:
         return 32
     if any(
         token in lower
-        for token in ("dockerfile", "docker-compose", ".github/workflows", "pyproject.toml")
+        for token in (
+            "dockerfile",
+            "docker-compose",
+            ".github/workflows",
+            "pyproject.toml",
+        )
     ):
         return 28
     if any(token in lower for token in ("/api/", "route", "scheduler", "workflow", "employee")):
@@ -187,7 +197,14 @@ def _security_scan(diff_excerpt: str, files: Sequence[str]) -> Dict[str, Any]:
     ]
     medium_hits = [
         token
-        for token in ("auth", "permission", "payment", "migration", "docker", "workflow")
+        for token in (
+            "auth",
+            "permission",
+            "payment",
+            "migration",
+            "docker",
+            "workflow",
+        )
         if token in text or token in paths
     ]
     return {

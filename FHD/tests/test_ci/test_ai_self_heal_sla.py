@@ -1,3 +1,4 @@
+# mypy: disable-error-code="import-not-found"
 """ai_self_heal_sla.py 单元测试。
 
 覆盖：

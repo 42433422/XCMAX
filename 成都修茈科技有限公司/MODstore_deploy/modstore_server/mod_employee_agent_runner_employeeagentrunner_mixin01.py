@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Behavior mixin extracted from the public facade class."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -9,7 +13,6 @@ def _facade():
 
 
 class _EmployeeAgentRunnerPart01Mixin:
-
     def __init__(
         self,
         ctx: _facade().Dict[str, _facade().Any],
@@ -163,7 +166,10 @@ class _EmployeeAgentRunnerPart01Mixin:
             }
             if name == "probe_mod_host":
                 if "host_probe" not in capabilities or employee_id != "host-checker":
-                    return {"ok": False, "error": f"员工 {employee_id or '?'} 无权使用 {name}"}
+                    return {
+                        "ok": False,
+                        "error": f"员工 {employee_id or '?'} 无权使用 {name}",
+                    }
                 from modstore_server.employee_specialized_tools import (
                     configured_host_probe_allowlist,
                     probe_mod_host,
@@ -190,8 +196,13 @@ class _EmployeeAgentRunnerPart01Mixin:
                 )
             if name == "validate_xcemp_package":
                 if "xcemp_validate" not in capabilities or employee_id != "self-checker":
-                    return {"ok": False, "error": f"员工 {employee_id or '?'} 无权使用 {name}"}
-                from modstore_server.employee_specialized_tools import validate_xcemp_package
+                    return {
+                        "ok": False,
+                        "error": f"员工 {employee_id or '?'} 无权使用 {name}",
+                    }
+                from modstore_server.employee_specialized_tools import (
+                    validate_xcemp_package,
+                )
 
                 employee_input = (
                     self.ctx.get("employee_input")
@@ -218,7 +229,10 @@ class _EmployeeAgentRunnerPart01Mixin:
                 "rollback_platform_llm_route",
             }
             if name in llm_ops_tools and employee_id != "llm-ops-engineer":
-                return {"ok": False, "error": f"员工 {employee_id or '?'} 无权使用 {name}"}
+                return {
+                    "ok": False,
+                    "error": f"员工 {employee_id or '?'} 无权使用 {name}",
+                }
             if name == "list_platform_llm_models":
                 from modstore_server.llm_runtime_route import platform_model_catalog
 
@@ -240,7 +254,7 @@ class _EmployeeAgentRunnerPart01Mixin:
                 from modstore_server.llm_quota_monitor import platform_quota_snapshot
                 from modstore_server.llm_runtime_route import platform_model_catalog
 
-                (platform, cli) = await _facade().asyncio.gather(
+                platform, cli = await _facade().asyncio.gather(
                     platform_model_catalog(
                         refresh=bool(input_data.get("refresh", False))
                         and (not bool(self.ctx.get("read_only")))
@@ -276,7 +290,7 @@ class _EmployeeAgentRunnerPart01Mixin:
                 )
                 from modstore_server.services.llm import resolve_platform_bench_llm
 
-                (provider, model) = resolve_platform_bench_llm()
+                provider, model = resolve_platform_bench_llm()
                 return {
                     "ok": True,
                     "scope": "platform_ai_employees",
@@ -296,7 +310,9 @@ class _EmployeeAgentRunnerPart01Mixin:
 
                 return autopilot_status()
             if name == "run_llm_route_autopilot":
-                from modstore_server.llm_runtime_autopilot import reconcile_llm_route_autopilot
+                from modstore_server.llm_runtime_autopilot import (
+                    reconcile_llm_route_autopilot,
+                )
 
                 return await reconcile_llm_route_autopilot(
                     triggered_by=str(input_data.get("reason") or "employee:llm-ops-engineer"),
@@ -379,13 +395,14 @@ class _EmployeeAgentRunnerPart01Mixin:
                 from modstore_server.research_tools import github_repo_snapshot_tool
 
                 return await github_repo_snapshot_tool(
-                    str(input_data.get("owner") or ""), str(input_data.get("repo") or "")
+                    str(input_data.get("owner") or ""),
+                    str(input_data.get("repo") or ""),
                 )
             if name == "call_llm":
                 messages = input_data.get("messages") or []
                 return await self._call_llm(messages)
             return {"ok": False, "error": f"未知工具：{name!r}"}
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             _facade().logger.exception("agent tool dispatch error tool=%s", name)
             return {"ok": False, "error": str(exc)[:300]}
 
@@ -410,9 +427,13 @@ class _EmployeeAgentRunnerPart01Mixin:
             return await self._maybe_cli_fallback(messages, primary)
         except _facade().asyncio.TimeoutError:
             timeout_s = int(_facade()._llm_timeout_seconds())
-            primary = {"ok": False, "content": "", "error": f"LLM 调用超时（{timeout_s}s）"}
+            primary = {
+                "ok": False,
+                "content": "",
+                "error": f"LLM 调用超时（{timeout_s}s）",
+            }
             return await self._maybe_cli_fallback(messages, primary)
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             primary = {"ok": False, "content": "", "error": str(exc)[:300]}
             return await self._maybe_cli_fallback(messages, primary)
 

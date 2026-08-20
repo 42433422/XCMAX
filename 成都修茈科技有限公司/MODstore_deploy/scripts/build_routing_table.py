@@ -23,7 +23,7 @@ import argparse
 import json
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -73,7 +73,7 @@ def _collect() -> list[dict[str, Any]]:
                     s for s in (d.get("forbidden_globs") or []) if isinstance(s, str) and s.strip()
                 ],
                 "depends_on": list(d.get("depends_on") or []),
-                "subscribes": list(((d.get("triggers") or {}).get("subscribes") or [])),
+                "subscribes": list((d.get("triggers") or {}).get("subscribes") or []),
                 "version": str(d.get("version") or "1.0.0"),
                 "yaml_path": str(f.relative_to(REPO_ROOT)).replace("\\", "/"),
             }
@@ -83,7 +83,7 @@ def _collect() -> list[dict[str, Any]]:
 
 
 def _render_md(rows: list[dict[str, Any]]) -> str:
-    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    now = datetime.now(UTC).isoformat(timespec="seconds")
     lines = [
         "# Routing Table",
         "",
@@ -129,7 +129,7 @@ def _render_md(rows: list[dict[str, Any]]) -> str:
 
 def _render_json(rows: list[dict[str, Any]]) -> str:
     payload = {
-        "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "employees": [
             {
                 "id": r["id"],

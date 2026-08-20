@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach, vi } from 'vitest'
+import { describe, expect, it, beforeEach } from 'vitest'
 import { KITTEN_VIZ_EMPLOYEES, KITTEN_VIZ_EMPLOYEE_PKG_IDS, findKittenVizEmployee } from './kittenVisualizationEmployees'
 import { hostViewGlob as hostViewGlobGeneric } from './hostViewGlob.generic'
 import { hostViewGlob as hostViewGlobMinimal } from './hostViewGlob.minimal'
@@ -17,11 +17,7 @@ import { SIX_LINE_DEPARTMENTS } from './sixLineDepartments'
 import { YUANGONG_STITCH_STATION_PLACEMENTS } from './yuangongStitchPlacements'
 import { YUANGONG_STITCH_HOTSPOTS } from './yuangongStitchHotspots'
 import { ALL_PLANNED_YUANGON_PKG_IDS } from './modstoreDutyRosterIds'
-import {
-  xcmaxAutomationPolicyEmbedUrl,
-  xcmaxAutomationPolicyOpenUrl,
-  xcmaxDutyTimeArchitectureEmbedUrl,
-} from './xcmaxDashboardEmbed'
+import { xcmaxAutomationPolicyEmbedUrl, xcmaxAutomationPolicyOpenUrl, xcmaxDutyTimeArchitectureEmbedUrl } from './xcmaxDashboardEmbed'
 import {
   ENTERPRISE_CUSTOMER_SERVICE_KEY,
   INTERNAL_CUSTOMER_SERVICE_KEY,

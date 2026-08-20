@@ -12,6 +12,7 @@ import os as _os
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Optional
 
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 from modstore_server.script_agent.brief import (
     AgentEvent,
     Brief,
@@ -99,7 +100,7 @@ async def run_agent_loop(
 
     try:
         plan = await make_plan(brief, ctx, llm=llm)
-    except Exception as e:  # noqa: BLE001
+    except BOUNDARY_ERRORS as e:  # noqa: BLE001
         outcome = AgentLoopOutcome(ok=False, iterations=0, error=f"planner: {e}", trace=trace)
         yield AgentEvent(
             "error",
@@ -124,7 +125,7 @@ async def run_agent_loop(
             else:
                 code = await repair_code(brief, plan, ctx, last_code, last_failure, llm=llm)
                 phase_label = "repair"
-        except Exception as e:  # noqa: BLE001
+        except BOUNDARY_ERRORS as e:  # noqa: BLE001
             yield AgentEvent("error", i, {"reason": f"{phase_label} failed: {e}"})
             final_outcome.error = f"{phase_label}: {e}"
             yield AgentEvent("error", i, {"outcome": _outcome_dict(final_outcome)})
@@ -161,7 +162,7 @@ async def run_agent_loop(
                 files=files,
                 **sandbox_kwargs,
             )
-        except Exception as e:  # noqa: BLE001
+        except BOUNDARY_ERRORS as e:  # noqa: BLE001
             final_outcome.error = f"sandbox: {e}"
             yield AgentEvent(
                 "error",
@@ -228,7 +229,7 @@ async def run_agent_loop(
         # === observe ===
         try:
             verdict = await judge(brief, plan, result, llm=llm)
-        except Exception as e:  # noqa: BLE001
+        except BOUNDARY_ERRORS as e:  # noqa: BLE001
             verdict = Verdict(ok=False, reason=f"observer 调用失败: {e}")
         yield AgentEvent(
             "observe",
@@ -366,7 +367,7 @@ def _materialize_timeout_summary(
             encoding="utf-8",
         )
         return [{"filename": out.name, "path": str(out), "size": out.stat().st_size}]
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         return []
 
 
@@ -386,9 +387,7 @@ async def run_vibe_agent_loop(
     max_iterations: int = DEFAULT_MAX_ITERATIONS,
 ) -> AsyncIterator[AgentEvent]:
     """Delegate the vibe-coding loop while preserving this module's patch points."""
-    from modstore_server.script_agent.agent_loop_vibe import (
-        run_vibe_agent_loop as _impl,
-    )
+    from modstore_server.script_agent.agent_loop_vibe import run_vibe_agent_loop as _impl
 
     async for event in _impl(
         brief,
@@ -407,7 +406,7 @@ async def run_vibe_agent_loop(
 async def run_agent_loop_v2(
     brief: Brief,
     *,
-    llm: "LlmClient",
+    llm: LlmClient,
     user_id: int,
     session_id: str,
     files: Optional[List[Dict[str, Any]]] = None,

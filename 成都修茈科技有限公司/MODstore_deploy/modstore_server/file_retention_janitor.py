@@ -15,18 +15,21 @@ import os
 import shutil
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from modstore_server.file_retention_support import build_report_md as _build_report_md
+from modstore_server.file_retention_support import format_bytes as _format_bytes
 from modstore_server.file_retention_support import (
-    build_report_md as _build_report_md,
-    format_bytes as _format_bytes,
     prune_notifications,
-    record_retention_runtime as _record_retention_runtime,
-    resolve_admin_user_id as _resolve_admin_user_id,
-    write_metric as _write_metric,
 )
+from modstore_server.file_retention_support import (
+    record_retention_runtime as _record_retention_runtime,
+)
+from modstore_server.file_retention_support import resolve_admin_user_id as _resolve_admin_user_id
+from modstore_server.file_retention_support import write_metric as _write_metric
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -279,7 +282,7 @@ def _process_target(
         # 单次执行硬上限：超过 5 GiB 立即停止扫描该 target。
         if cumulative_released + rep.released_bytes + size > _MAX_RELEASED_BYTES:
             rep.warnings.append(
-                f"达到单次清理上限 {_MAX_RELEASED_BYTES // (1024 ** 3)} GiB，停止此 target"
+                f"达到单次清理上限 {_MAX_RELEASED_BYTES // (1024**3)} GiB，停止此 target"
             )
             break
 
@@ -313,7 +316,7 @@ def run_retention_janitor(
     传入 ``notification_dry_run``，使派生通知按保留契约自动清理，而文件目标
     仍保持预演。
     """
-    started_at = datetime.now(timezone.utc)
+    started_at = datetime.now(UTC)
     t0 = time.perf_counter()
     is_dry = is_dry_run() if dry_run is None else bool(dry_run)
     database_is_dry = is_dry if notification_dry_run is None else bool(notification_dry_run)
@@ -333,13 +336,13 @@ def run_retention_janitor(
             )
             cumulative_released += rep.released_bytes
             target_reports.append(rep)
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.exception("retention janitor failed")
         error_text = str(exc)[:1000]
 
     try:
         database_retention = prune_notifications(dry_run=database_is_dry)
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.exception("notification retention failed")
         database_retention = {
             "ok": False,
@@ -405,7 +408,7 @@ def run_retention_janitor(
             duration_ms=duration_ms,
             error=error_text,
         )
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         logger.exception("retention janitor: write metric failed")
 
     result = {
@@ -458,12 +461,14 @@ def _cli() -> int:
 def cleanup_employee_workspaces() -> Dict[str, Any]:
     """清理过期员工工作区文件（由定时任务或 janitor 主流程调用）。"""
     try:
-        from modstore_server.employee_workspace_manager import cleanup_expired_workspaces
+        from modstore_server.employee_workspace_manager import (
+            cleanup_expired_workspaces,
+        )
 
         result = cleanup_expired_workspaces()
         logger.info("janitor: workspace cleanup: %s", result)
         return result
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("janitor: workspace cleanup failed")
         return {"cleaned_files": 0, "error": str(exc)}
 

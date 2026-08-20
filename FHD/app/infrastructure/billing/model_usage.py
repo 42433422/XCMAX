@@ -260,8 +260,6 @@ def get_model_wallet(user_id: str) -> dict[str, Any]:
     return wallet
 
 
-
-
 def _record_usage_entry(entry: dict[str, Any]) -> dict[str, Any]:
     with _ledger_lock:
         state = _load_usage_state()

@@ -8,9 +8,10 @@ indexes across machines without churn.
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path, PurePosixPath
-from typing import Any, Iterable
+from typing import Any
 
 
 @dataclass(slots=True)
@@ -195,11 +196,7 @@ class RepoIndex:
     @classmethod
     def from_dict(cls, root: str | Path, raw: dict[str, Any]) -> RepoIndex:
         files_raw = raw.get("files") or {}
-        files = {
-            str(p): FileEntry.from_dict(v)
-            for p, v in files_raw.items()
-            if isinstance(v, dict)
-        }
+        files = {str(p): FileEntry.from_dict(v) for p, v in files_raw.items() if isinstance(v, dict)}
         return cls(
             root=Path(root),
             files=files,

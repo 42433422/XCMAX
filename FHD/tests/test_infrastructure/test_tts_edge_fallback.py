@@ -1,3 +1,4 @@
+# mypy: disable-error-code="return-value"
 """Tests for app.services.tts_service — coverage ramp C3.3-b.
 
 Covers:

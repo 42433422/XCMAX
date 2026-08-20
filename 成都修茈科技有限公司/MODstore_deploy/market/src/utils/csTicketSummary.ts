@@ -1,8 +1,4 @@
-import {
-  shortTicketRef,
-  ticketIntentLabel,
-  ticketLifecycleLabel,
-} from './csTicketLifecycle'
+import { shortTicketRef, ticketIntentLabel, ticketLifecycleLabel } from './csTicketLifecycle'
 import { asUnknownRecord, type UnknownRecord } from './typeNarrowing'
 
 function humanizeRationale(raw: unknown): string {
@@ -73,11 +69,7 @@ function actionLine(actions: unknown[]): {
 }
 
 /** 把工单详情收成用户看得懂的一段话（对话里不再堆多张卡） */
-export function composeTicketUserMessage(input: {
-  ticket: UnknownRecord
-  decision?: UnknownRecord | null
-  actions?: unknown[]
-}): string {
+export function composeTicketUserMessage(input: { ticket: UnknownRecord; decision?: UnknownRecord | null; actions?: unknown[] }): string {
   const ticket = input.ticket || {}
   const decision = input.decision || null
   const actions = Array.isArray(input.actions) ? input.actions : []
@@ -117,9 +109,7 @@ export function composeTicketUserMessage(input: {
     return `${head}：已有处理进展，值班员工仍在跟进。可继续补充截图或具体页面。`
   }
   if (decisionKey === 'accepted' || stage === '处理中' || stage === '已收到') {
-    const tip = rationale && !/自动受理|审核标准/.test(rationale)
-      ? rationale
-      : '可继续补充截图或页面位置。'
+    const tip = rationale && !/自动受理|审核标准/.test(rationale) ? rationale : '可继续补充截图或页面位置。'
     return `${head}：已收到，正在跟进处理。${tip}`
   }
   return `${head}：当前进度「${stage}」。`

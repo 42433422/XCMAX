@@ -6,7 +6,9 @@
         <h3>长期记忆</h3>
       </div>
       <div class="memory-summary" aria-label="记忆状态">
-        <span><strong>{{ activeCount }}</strong> 已确认</span>
+        <span
+          ><strong>{{ activeCount }}</strong> 已确认</span
+        >
         <span :class="{ attention: pendingCount }">
           <strong>{{ pendingCount }}</strong> 待确认
         </span>
@@ -29,9 +31,7 @@
             {{ memoryTypeLabel(memory.memory_type) }}
           </span>
           <strong>{{ memory.statement }}</strong>
-          <span class="memory-row__meta">
-            {{ memoryScopeLabel(memory.scope) }} · {{ formatDate(memory.updated_at) }}
-          </span>
+          <span class="memory-row__meta"> {{ memoryScopeLabel(memory.scope) }} · {{ formatDate(memory.updated_at) }} </span>
         </button>
         <div class="memory-strength" :title="`记忆强度 ${strengthText(memory.strength)}`">
           <span><i :style="{ width: strengthText(memory.strength) }"></i></span>

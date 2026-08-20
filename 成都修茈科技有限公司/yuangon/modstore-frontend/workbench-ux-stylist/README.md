@@ -6,15 +6,15 @@
 
 ## 负责文件
 
-| 文件 | 说明 |
-|------|------|
-| `views/workbench/WorkbenchShell.vue` | 工作台外壳布局 |
-| `views/workbench/panels/CanvasStage.vue` | 画布主区域 |
-| `views/workbench/panels/RightRail.vue` | 右侧属性边栏 |
-| `components/workbench/EmployeeAiDraftReview.vue` | AI 草稿审核组件 |
-| `views/WorkbenchHomeView.vue` | 工作台首页（当前：做员工/做 Mod/生成 Skill 组） |
-| `views/WalletLayoutView.vue` | 钱包布局（工作台关联） |
-| `views/workbench/**` | 其他工作台子视图 |
+| 文件                                             | 说明                                            |
+| ------------------------------------------------ | ----------------------------------------------- |
+| `views/workbench/WorkbenchShell.vue`             | 工作台外壳布局                                  |
+| `views/workbench/panels/CanvasStage.vue`         | 画布主区域                                      |
+| `views/workbench/panels/RightRail.vue`           | 右侧属性边栏                                    |
+| `components/workbench/EmployeeAiDraftReview.vue` | AI 草稿审核组件                                 |
+| `views/WorkbenchHomeView.vue`                    | 工作台首页（当前：做员工/做 Mod/生成 Skill 组） |
+| `views/WalletLayoutView.vue`                     | 钱包布局（工作台关联）                          |
+| `views/workbench/**`                             | 其他工作台子视图                                |
 
 ## 典型任务
 
@@ -26,12 +26,12 @@
 
 ## KPI
 
-| 指标 | 目标 |
-|------|------|
-| TypeScript 编译零错误 | 100% |
-| React 依赖引入事件 | 0 |
-| Lighthouse 可访问性分 | ≥ 90 |
-| 设计系统 CSS 变量覆盖率 | ≥ 95%（不硬编码颜色）|
+| 指标                    | 目标                  |
+| ----------------------- | --------------------- |
+| TypeScript 编译零错误   | 100%                  |
+| React 依赖引入事件      | 0                     |
+| Lighthouse 可访问性分   | ≥ 90                  |
+| 设计系统 CSS 变量覆盖率 | ≥ 95%（不硬编码颜色） |
 
 ## 禁区
 

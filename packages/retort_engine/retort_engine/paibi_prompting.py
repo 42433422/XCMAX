@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.llm_schema import RETORT_SCORE_DIMENSIONS
 
@@ -433,30 +433,35 @@ def _evidence_priority(item: str, prefixes: tuple[str, ...]) -> int:
 
 
 def scoring_audit(metadata: dict[str, Any]) -> dict[str, Any]:
-    proof = (
+    proof = cast(
+        dict[str, Any],
         metadata.get("closed_loop_proof")
         if isinstance(metadata.get("closed_loop_proof"), dict)
-        else {}
+        else {},
     )
-    audit = (
+    audit = cast(
+        dict[str, Any],
         metadata.get("capability_absorption_audit")
         if isinstance(metadata.get("capability_absorption_audit"), dict)
-        else {}
+        else {},
     )
-    patch = (
+    patch = cast(
+        dict[str, Any],
         audit.get("employee_patch_closure")
         if isinstance(audit.get("employee_patch_closure"), dict)
-        else {}
+        else {},
     )
-    review_runtime = (
+    review_runtime = cast(
+        dict[str, Any],
         audit.get("pr_review_runtime")
         if isinstance(audit.get("pr_review_runtime"), dict)
-        else {}
+        else {},
     )
-    hardening = (
+    hardening = cast(
+        dict[str, Any],
         audit.get("post_absorption_hardening")
         if isinstance(audit.get("post_absorption_hardening"), dict)
-        else {}
+        else {},
     )
     compact_audit = {
         "local_score_removed": True,

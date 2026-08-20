@@ -14,11 +14,15 @@ arrives.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import threading
 import time
 from collections import deque
-from dataclasses import asdict, dataclass, field
-from typing import Any, Awaitable, Callable, Deque
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from typing import Any
+
+from vibe_coding.operational_errors import BOUNDARY_ERRORS
 
 
 @dataclass(slots=True)
@@ -54,7 +58,7 @@ class EventBus:
     def __init__(self, *, history: int = 100) -> None:
         self._lock = threading.RLock()
         self._cond = threading.Condition(self._lock)
-        self._history: Deque[WorkflowEvent] = deque(maxlen=history)
+        self._history: deque[WorkflowEvent] = deque(maxlen=history)
         self._async_loops: dict[int, list[asyncio.Future]] = {}
 
     # --------------------------------------------------------- producer
@@ -164,7 +168,7 @@ class EventBus:
         if topic is not None:
             items = [e for e in items if e.topic == topic]
         if limit is not None:
-            items = items[-int(limit):]
+            items = items[-int(limit) :]
         return items
 
 
@@ -174,16 +178,14 @@ class EventBus:
 def _safe_set(future: asyncio.Future, event: WorkflowEvent) -> None:
     if future.done():
         return
-    try:
+    with contextlib.suppress(asyncio.InvalidStateError):
         future.set_result(event)
-    except asyncio.InvalidStateError:
-        pass
 
 
 def _safe_filter(filter_fn: SyncFilter, payload: Any) -> bool:
     try:
         return bool(filter_fn(payload))
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:
         return False
 
 

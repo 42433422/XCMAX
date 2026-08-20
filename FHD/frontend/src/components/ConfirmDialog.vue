@@ -11,17 +11,10 @@
           </slot>
         </div>
         <div class="confirm-dialog-footer">
-          <button
-            v-if="showCancel"
-            class="btn btn-secondary"
-            @click="handleCancel"
-          >
+          <button v-if="showCancel" class="btn btn-secondary" @click="handleCancel">
             {{ cancelText }}
           </button>
-          <button
-            :class="['btn', confirmClass]"
-            @click="handleConfirm"
-          >
+          <button :class="['btn', confirmClass]" @click="handleConfirm">
             {{ confirmText }}
           </button>
         </div>
@@ -34,43 +27,39 @@
 const props = defineProps({
   modelValue: {
     type: Boolean,
-    default: false
+    default: false,
   },
   title: {
     type: String,
-    default: '确认操作'
+    default: '确认操作',
   },
   message: {
     type: String,
-    default: '确定要执行此操作吗？'
+    default: '确定要执行此操作吗？',
   },
   confirmText: {
     type: String,
-    default: '确定'
+    default: '确定',
   },
   cancelText: {
     type: String,
-    default: '取消'
+    default: '取消',
   },
   confirmClass: {
     type: String,
-    default: 'btn-primary'
+    default: 'btn-primary',
   },
   showCancel: {
     type: Boolean,
-    default: true
+    default: true,
   },
   maxWidth: {
     type: String,
-    default: '400px'
-  }
+    default: '400px',
+  },
 })
 
-const emit = defineEmits([
-  'update:modelValue',
-  'confirm',
-  'cancel'
-])
+const emit = defineEmits(['update:modelValue', 'confirm', 'cancel'])
 
 const handleConfirm = () => {
   emit('confirm')

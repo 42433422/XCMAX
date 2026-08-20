@@ -16,7 +16,11 @@ def mod_init(app):
         from backend.employees.trademark_generation_employee import run
 
         result = await run(payload or {}, {"employee_id": EMPLOYEE_ID})
-        return {"success": bool(result.get("ok")), "data": result, "error": result.get("error", "")}
+        return {
+            "success": bool(result.get("ok")),
+            "data": result,
+            "error": result.get("error", ""),
+        }
 
     app.include_router(router)
     return {"ok": True, "employee_id": EMPLOYEE_ID, "label": LABEL}

@@ -38,7 +38,7 @@ class KnowledgeSearchHit:
 
 class KnowledgeClient(ABC):
     @abstractmethod
-    def search(self, request: KnowledgeSearchRequest) -> List[KnowledgeSearchHit]: ...
+    async def search(self, request: KnowledgeSearchRequest) -> List[KnowledgeSearchHit]: ...
 
     def index_text_chunks(
         self,
@@ -90,14 +90,14 @@ class InProcessKnowledgeClient(KnowledgeClient):
         name = kb_collection_name(int(collection_id))
         return int(vec_delete(name, ids=ids))
 
-    def search(self, request: KnowledgeSearchRequest) -> List[KnowledgeSearchHit]:
-        from modstore_server.rag_service import retrieve_for_subject
+    async def search(self, request: KnowledgeSearchRequest) -> List[KnowledgeSearchHit]:
+        from modstore_server.rag_service import retrieve
 
         chunks = (
-            retrieve_for_subject(
+            await retrieve(
                 user_id=request.user_id,
                 query=request.query,
-                employee_id=request.employee_id,
+                employee_id=(str(request.employee_id) if request.employee_id is not None else None),
                 workflow_id=request.workflow_id,
                 org_id=request.org_id,
                 extra_collection_ids=request.extra_collection_ids,

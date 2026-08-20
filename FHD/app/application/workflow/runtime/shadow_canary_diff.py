@@ -44,7 +44,9 @@ def _normalize(value: Any, volatile: frozenset[str]) -> Any:
     if isinstance(value, (set, frozenset)):
         return sorted((_normalize(item, volatile) for item in value), key=_canonical_json)
     if is_dataclass(value) and not isinstance(value, type):
-        return _normalize({item.name: getattr(value, item.name) for item in fields(value)}, volatile)
+        return _normalize(
+            {item.name: getattr(value, item.name) for item in fields(value)}, volatile
+        )
     if isinstance(value, Enum):
         return _normalize(value.value, volatile)
     if isinstance(value, (datetime.datetime, datetime.date, datetime.time)):

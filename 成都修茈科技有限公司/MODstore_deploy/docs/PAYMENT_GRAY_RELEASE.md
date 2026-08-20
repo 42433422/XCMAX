@@ -8,16 +8,16 @@
 
 最低要求（详见 [`.env.example`](../.env.example)）：
 
-| 变量 | 必需 | 说明 |
-| --- | --- | --- |
-| `PAYMENT_BACKEND` | yes | 灰度阶段在预发设为 `java`，生产保持 `python` 直到 §3 完成 |
-| `JAVA_PAYMENT_SERVICE_URL` | yes | 形如 `http://java-pay.svc.cluster.local:8080`；不要带尾斜杠 |
-| `MODSTORE_JWT_SECRET` 或 `JWT_SECRET` | yes | Python 与 Java 必须使用同一 secret |
-| `PAYMENT_SECRET_KEY` | yes | 与前端 `VITE_PAYMENT_SECRET` 一致 |
-| `MODSTORE_ADMIN_RECHARGE_TOKEN` | yes | 仅管理员直充使用，Java 端用 `modstore.admin-recharge-token` 覆盖 |
-| `ALIPAY_*` / `WECHATPAY_*` | yes | Python 不再下单时仍需保留以便回滚 |
-| `ALIPAY_NOTIFY_URL` | yes | 灰度生效后必须指向 Java 公网地址：`https://<host>/api/payment/notify/alipay` |
-| `MODSTORE_WEBHOOK_URL` / `MODSTORE_WEBHOOK_SECRET` | optional | 业务 Webhook 出口；建议在灰度前接入观测 |
+| 变量                                               | 必需     | 说明                                                                         |
+| -------------------------------------------------- | -------- | ---------------------------------------------------------------------------- |
+| `PAYMENT_BACKEND`                                  | yes      | 灰度阶段在预发设为 `java`，生产保持 `python` 直到 §3 完成                    |
+| `JAVA_PAYMENT_SERVICE_URL`                         | yes      | 形如 `http://java-pay.svc.cluster.local:8080`；不要带尾斜杠                  |
+| `MODSTORE_JWT_SECRET` 或 `JWT_SECRET`              | yes      | Python 与 Java 必须使用同一 secret                                           |
+| `PAYMENT_SECRET_KEY`                               | yes      | 与前端 `VITE_PAYMENT_SECRET` 一致                                            |
+| `MODSTORE_ADMIN_RECHARGE_TOKEN`                    | yes      | 仅管理员直充使用，Java 端用 `modstore.admin-recharge-token` 覆盖             |
+| `ALIPAY_*` / `WECHATPAY_*`                         | yes      | Python 不再下单时仍需保留以便回滚                                            |
+| `ALIPAY_NOTIFY_URL`                                | yes      | 灰度生效后必须指向 Java 公网地址：`https://<host>/api/payment/notify/alipay` |
+| `MODSTORE_WEBHOOK_URL` / `MODSTORE_WEBHOOK_SECRET` | optional | 业务 Webhook 出口；建议在灰度前接入观测                                      |
 
 ### 1.2 数据迁移就绪
 

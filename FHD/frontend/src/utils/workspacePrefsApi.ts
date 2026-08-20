@@ -1,9 +1,6 @@
 import { apiFetch, DEFAULT_MOD_API_TIMEOUT_MS } from '@/utils/apiBase'
 import { workflowAiEmployeesStorageKey } from '@/stores/workflowAiEmployees'
-import {
-  resolveTenantStorageScopeFromRuntime,
-  writeTenantScopedStorageItem,
-} from '@/utils/tenantStorageScope'
+import { resolveTenantStorageScopeFromRuntime, writeTenantScopedStorageItem } from '@/utils/tenantStorageScope'
 
 const LS_PRODUCT_FLOW_COMPLETED = 'xcagi_product_flow_completed'
 const LS_PRODUCT_FLOW_HOST_ACK = 'xcagi_product_flow_host_ack'
@@ -50,21 +47,13 @@ export function applyWorkspacePrefsToLocalCache(prefs: WorkspacePrefs, scope?: s
   try {
     const tenantScope = scope || resolveTenantStorageScopeFromRuntime()
     if (typeof prefs.product_flow_completed === 'boolean') {
-      writeTenantScopedStorageItem(
-        LS_PRODUCT_FLOW_COMPLETED,
-        prefs.product_flow_completed ? '1' : '0',
-        tenantScope,
-      )
+      writeTenantScopedStorageItem(LS_PRODUCT_FLOW_COMPLETED, prefs.product_flow_completed ? '1' : '0', tenantScope)
       if (tenantScope === 'local') {
         localStorage.setItem(LS_PRODUCT_FLOW_COMPLETED, prefs.product_flow_completed ? '1' : '0')
       }
     }
     if (typeof prefs.host_pack_acknowledged === 'boolean') {
-      writeTenantScopedStorageItem(
-        LS_PRODUCT_FLOW_HOST_ACK,
-        prefs.host_pack_acknowledged ? '1' : '0',
-        tenantScope,
-      )
+      writeTenantScopedStorageItem(LS_PRODUCT_FLOW_HOST_ACK, prefs.host_pack_acknowledged ? '1' : '0', tenantScope)
       if (tenantScope === 'local') {
         localStorage.setItem(LS_PRODUCT_FLOW_HOST_ACK, prefs.host_pack_acknowledged ? '1' : '0')
       }

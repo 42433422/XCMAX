@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="import-not-found"
 """重拍 P-W 营销站截图（修复中文方框后更新 manifest）。"""
+
 from __future__ import annotations
 
 import asyncio

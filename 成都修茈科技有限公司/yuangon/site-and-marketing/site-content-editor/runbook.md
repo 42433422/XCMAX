@@ -1,11 +1,11 @@
 # Runbook — 静态站内容编辑员
 
-| 字段 | 值 |
-|------|----|
-| 员工 ID | `site-content-editor` |
-| 负责区域 | site-and-marketing |
-| 最后更新 | 2026-05-08 |
-| 应急联系 | admin |
+| 字段     | 值                    |
+| -------- | --------------------- |
+| 员工 ID  | `site-content-editor` |
+| 负责区域 | site-and-marketing    |
+| 最后更新 | 2026-05-08            |
+| 应急联系 | admin                 |
 
 ---
 
@@ -53,8 +53,8 @@ python -c "import json; json.load(open('activities.json', encoding='utf-8')); pr
 ## ESkill 动态阶段触发记录
 
 | 日期 | 触发原因 | patch_id | 结果 | 是否固化 |
-|------|----------|----------|------|----------|
-| — | — | — | — | — |
+| ---- | -------- | -------- | ---- | -------- |
+| —    | —        | —        | —    | —        |
 
 ---
 

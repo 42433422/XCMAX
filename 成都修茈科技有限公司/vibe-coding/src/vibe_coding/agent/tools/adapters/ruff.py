@@ -41,7 +41,7 @@ class RuffAdapter:
             SandboxJob(
                 kind="command",
                 workspace_dir=str(root),
-                command=["ruff"] + list(self._args),
+                command=["ruff", *list(self._args)],
             ),
             policy=pol,
         )

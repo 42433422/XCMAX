@@ -6,22 +6,22 @@
 
 ## 负责文件
 
-| 文件 | 说明 |
-|------|------|
-| `employee_ai_scaffold.py` | AI 员工脚手架生成 |
-| `employee_ai_pipeline.py` | 生成流水线 |
-| `employee_bench.py` | 员工测试台 |
-| `employee_executor.py` | 执行引擎 |
-| `employee_skill_register.py` | Skill 注册表 |
-| `employee_pack_export.py` | .xcemp 导出 |
-| `employee_pack_blueprints_template.py` | 蓝图模板 |
-| `services/employee.py` | 员工服务层 |
-| `integrations/vibe_eskill_adapter.py` | vibe-coding 桥接 |
-| `market_files/*.xcemp` | 上架的员工包 |
-| `docs/fhd-employee-composition.md` | 员工组成说明（A/B/C 三种形态） |
-| `docs/modstore/员工制作增强设计方案.md` | 员工制作增强设计方案 |
-| `MODstore_deploy/docs/employee_publish_wizard.md` | 员工发布向导 |
-| `docs/adr/0003-artifacts-bundles-employee-packs.md` | 员工包架构决策记录 |
+| 文件                                                | 说明                           |
+| --------------------------------------------------- | ------------------------------ |
+| `employee_ai_scaffold.py`                           | AI 员工脚手架生成              |
+| `employee_ai_pipeline.py`                           | 生成流水线                     |
+| `employee_bench.py`                                 | 员工测试台                     |
+| `employee_executor.py`                              | 执行引擎                       |
+| `employee_skill_register.py`                        | Skill 注册表                   |
+| `employee_pack_export.py`                           | .xcemp 导出                    |
+| `employee_pack_blueprints_template.py`              | 蓝图模板                       |
+| `services/employee.py`                              | 员工服务层                     |
+| `integrations/vibe_eskill_adapter.py`               | vibe-coding 桥接               |
+| `market_files/*.xcemp`                              | 上架的员工包                   |
+| `docs/fhd-employee-composition.md`                  | 员工组成说明（A/B/C 三种形态） |
+| `docs/modstore/员工制作增强设计方案.md`             | 员工制作增强设计方案           |
+| `MODstore_deploy/docs/employee_publish_wizard.md`   | 员工发布向导                   |
+| `docs/adr/0003-artifacts-bundles-employee-packs.md` | 员工包架构决策记录             |
 
 ## 典型任务
 
@@ -59,13 +59,13 @@ python <pack_id>.xcemp run --llm                 # 需 OPENAI_API_KEY 或 DEEPSE
 
 ## KPI
 
-| 指标 | 目标 |
-|------|------|
-| .xcemp 导出成功率 | ≥ 99% |
-| ESkill 固化周期 | ≤ 24h（动态成功后）|
-| 注册表一致性检查通过率 | 100% |
-| 文档-代码一致性率 | ≥ 95% |
-| 文档同步延迟 | ≤ 24h（代码变更后）|
+| 指标                   | 目标                |
+| ---------------------- | ------------------- |
+| .xcemp 导出成功率      | ≥ 99%               |
+| ESkill 固化周期        | ≤ 24h（动态成功后） |
+| 注册表一致性检查通过率 | 100%                |
+| 文档-代码一致性率      | ≥ 95%               |
+| 文档同步延迟           | ≤ 24h（代码变更后） |
 
 ## 禁区
 

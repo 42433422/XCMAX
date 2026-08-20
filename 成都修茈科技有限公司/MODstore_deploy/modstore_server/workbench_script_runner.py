@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment"
 """Workbench "做脚本" 入口的薄壳：兼容旧 API，内部走新 ``script_agent`` 沙箱。
 
 历史接口保留：

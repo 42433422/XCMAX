@@ -1,4 +1,4 @@
-(function () {
+;(function () {
   'use strict'
 
   const DATA_URL = '/api/public/visualization'

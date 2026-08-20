@@ -116,7 +116,7 @@ async function doLogin() {
 
 .auth-card {
   background: #111111;
-  border: 0.5px solid rgba(255,255,255,0.1);
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
   padding: 32px;
   width: 100%;
@@ -136,23 +136,23 @@ async function doLogin() {
 .form-group label {
   display: block;
   font-size: 13px;
-  color: rgba(255,255,255,0.5);
+  color: rgba(255, 255, 255, 0.5);
   margin-bottom: 6px;
 }
 
 .input {
   width: 100%;
   padding: 10px 12px;
-  border: 0.5px solid rgba(255,255,255,0.15);
+  border: 0.5px solid rgba(255, 255, 255, 0.15);
   border-radius: 8px;
   font-size: 14px;
   outline: none;
-  background: rgba(255,255,255,0.03);
+  background: rgba(255, 255, 255, 0.03);
   color: #ffffff;
 }
 
 .input:focus {
-  border-color: rgba(255,255,255,0.3);
+  border-color: rgba(255, 255, 255, 0.3);
 }
 
 .input:disabled {
@@ -189,7 +189,7 @@ async function doLogin() {
 .btn-text {
   background: none;
   border: none;
-  color: rgba(255,255,255,0.5);
+  color: rgba(255, 255, 255, 0.5);
   cursor: pointer;
   font-size: 13px;
   padding: 4px 0;
@@ -202,7 +202,7 @@ async function doLogin() {
 
 .countdown {
   font-size: 12px;
-  color: rgba(255,255,255,0.3);
+  color: rgba(255, 255, 255, 0.3);
   text-align: center;
   margin-bottom: 8px;
 }
@@ -211,7 +211,7 @@ async function doLogin() {
   text-align: center;
   margin-top: 20px;
   font-size: 14px;
-  color: rgba(255,255,255,0.4);
+  color: rgba(255, 255, 255, 0.4);
 }
 
 .link {
@@ -231,12 +231,12 @@ async function doLogin() {
 }
 
 .flash-ok {
-  background: rgba(74,222,128,0.1);
+  background: rgba(74, 222, 128, 0.1);
   color: #4ade80;
 }
 
 .flash-err {
-  background: rgba(255,80,80,0.1);
+  background: rgba(255, 80, 80, 0.1);
   color: #ff6b6b;
 }
 </style>

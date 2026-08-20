@@ -5,9 +5,9 @@ import type { Order } from '@/types/order'
 import { asRecord } from '@/utils/typeGuards'
 
 interface OperationResult {
-  success: boolean;
-  data?: unknown;
-  message?: string;
+  success: boolean
+  data?: unknown
+  message?: string
 }
 
 export const useOrdersStore = defineStore('orders', () => {
@@ -82,9 +82,7 @@ export const useOrdersStore = defineStore('orders', () => {
         error.value = data?.message || '删除失败'
         return { success: false, message: error.value }
       }
-      orders.value = orders.value.filter(o =>
-        (o.order_number || o.id) !== orderNumber
-      )
+      orders.value = orders.value.filter((o) => (o.order_number || o.id) !== orderNumber)
       return { success: true }
     } catch (e) {
       error.value = e instanceof Error ? e.message : '删除失败'
@@ -95,10 +93,7 @@ export const useOrdersStore = defineStore('orders', () => {
     }
   }
 
-  async function updateOrder(
-    orderNumber: string,
-    payload: Record<string, unknown>
-  ): Promise<OperationResult> {
+  async function updateOrder(orderNumber: string, payload: Record<string, unknown>): Promise<OperationResult> {
     loading.value = true
     error.value = null
     try {
@@ -108,10 +103,8 @@ export const useOrdersStore = defineStore('orders', () => {
         return { success: false, message: error.value }
       }
       const updated = asRecord(data.data) as unknown as Order
-      orders.value = orders.value.map(order =>
-        String(order.id || order.order_number) === String(orderNumber)
-          ? { ...order, ...updated }
-          : order
+      orders.value = orders.value.map((order) =>
+        String(order.id || order.order_number) === String(orderNumber) ? { ...order, ...updated } : order,
       )
       return { success: true, data: updated }
     } catch (e) {
@@ -151,6 +144,6 @@ export const useOrdersStore = defineStore('orders', () => {
     searchOrders,
     updateOrder,
     deleteOrder,
-    clearAllOrders
+    clearAllOrders,
   }
 })

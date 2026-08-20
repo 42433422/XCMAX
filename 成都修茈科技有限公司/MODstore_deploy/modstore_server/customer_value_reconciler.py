@@ -1,3 +1,4 @@
+# mypy: disable-error-code="dict-item"
 """Turn fulfilled catalog-item payments into customer-value receipts."""
 
 from __future__ import annotations

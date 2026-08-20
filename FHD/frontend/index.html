@@ -8,17 +8,17 @@
     <!-- 与服务器 PostgreSQL 账号库一致：登录等 /api 请求走 Nginx 前缀（如 /fhd-api）。构建时设 VITE_XCMAX_PUBLIC_API_PREFIX=/fhd-api 可自动注入下一行；或手动取消注释： -->
     <!-- <script>window.__XCMAX_API_BASE__='/fhd-api'</script> -->
     <script>
-      (function () {
-        if (!('serviceWorker' in navigator)) return;
-        var h = location.hostname;
+      ;(function () {
+        if (!('serviceWorker' in navigator)) return
+        var h = location.hostname
         /* 桌面壳 17500 / dev 5001 等本机端口均需注销，避免 SW 缓存旧 chunk */
-        if (h !== '127.0.0.1' && h !== 'localhost') return;
+        if (h !== '127.0.0.1' && h !== 'localhost') return
         navigator.serviceWorker.getRegistrations().then(function (regs) {
           regs.forEach(function (r) {
-            r.unregister();
-          });
-        });
-      })();
+            r.unregister()
+          })
+        })
+      })()
     </script>
   </head>
   <body>
@@ -30,11 +30,7 @@
       window.addEventListener('load', () => {
         if (!window.__ENABLE_LEGACY__) return
 
-        const legacyScripts = [
-          '/static/js/core/config.js',
-          '/static/js/core/utils.js',
-          '/static/js/modules/file-import.js'
-        ]
+        const legacyScripts = ['/static/js/core/config.js', '/static/js/core/utils.js', '/static/js/modules/file-import.js']
 
         const loadSequentially = (index) => {
           if (index >= legacyScripts.length) return

@@ -1,3 +1,4 @@
+# isort: skip_file
 # ruff: noqa: E402, F401
 """数字管家 ↔ QQ 官方机器人 V2 桥接。
 
@@ -62,7 +63,6 @@ from modstore_server.butler_qq_bridge_part01 import (
     _CredsState as _CredsState,
 )
 
-
 _creds_state = _CredsState()
 
 
@@ -91,7 +91,6 @@ from modstore_server.butler_qq_bridge_part02 import (
     _TokenState as _TokenState,
 )
 
-
 _token_state = _TokenState()
 _TOKEN_REFRESH_LEAD_SECONDS = 300
 
@@ -99,7 +98,6 @@ _TOKEN_REFRESH_LEAD_SECONDS = 300
 from modstore_server.butler_qq_bridge_part03 import (
     get_access_token as get_access_token,
 )
-
 
 # ─── 出站消息客户端 ─────────────────────────────────────────────────
 
@@ -111,7 +109,6 @@ from modstore_server.butler_qq_bridge_part04 import (
     _SeqRegistry as _SeqRegistry,
 )
 
-
 _seq_registry = _SeqRegistry()
 
 
@@ -120,9 +117,8 @@ from modstore_server.butler_qq_bridge_part05 import (
     _BotContext as _BotContext,
 )
 
-
 # 进程内按 app_id 缓存 BotContext，启动时惰性填充
-_bot_ctx_cache: Dict[str, "_BotContext"] = {}
+_bot_ctx_cache: Dict[str, _BotContext] = {}
 _bot_ctx_lock = asyncio.Lock()
 
 
@@ -132,7 +128,6 @@ from modstore_server.butler_qq_bridge_part06 import (
     _specific_ctx_for_employee as _specific_ctx_for_employee,
     _get_bot_ctx_by_employee as _get_bot_ctx_by_employee,
 )
-
 
 # ─── 入站 → 多员工分发 ───────────────────────────────────────────────
 
@@ -153,14 +148,12 @@ from modstore_server.butler_qq_bridge_part07 import (
     _resolve_reply as _resolve_reply,
 )
 
-
 _QQ_REPLY_MAX_LEN = 800
 
 
 from modstore_server.butler_qq_bridge_part08 import (
     _execute_employee_for_qq as _execute_employee_for_qq,
 )
-
 
 _EMPLOYEE_PERSONAS: Dict[str, str] = {
     "xc-digital-butler": "你是 XC AGI 数字管家，平台全站智能助手，擅长页面导航、解答平台问题、协调 AI 员工。",
@@ -177,7 +170,6 @@ from modstore_server.butler_qq_bridge_part09 import (
     _butler_chat as _butler_chat,
 )
 
-
 # ─── FastAPI 路由 ───────────────────────────────────────────────────
 
 
@@ -190,7 +182,6 @@ from modstore_server.butler_qq_bridge_part10 import (
     qq_status as qq_status,
     qq_webhook_probe as qq_webhook_probe,
 )
-
 
 # ─── 已配 QQ 的两位员工：webhook_key → (app_id, employee_id, app_secret) ──
 #
@@ -238,7 +229,6 @@ from modstore_server.butler_qq_bridge_part11 import (
     qq_reload_cache as qq_reload_cache,
     _ensure_runtime_ready as _ensure_runtime_ready,
 )
-
 
 if not _ensure_runtime_ready():
     # 缺 pynacl 时让 app_factory 的 include_router 仍能跑，但路由表保持空。

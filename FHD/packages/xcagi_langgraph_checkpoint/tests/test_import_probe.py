@@ -10,6 +10,7 @@
   - InMemorySaver         (langgraph.checkpoint.memory)
   - BaseStore             (langgraph.store.base)
 """
+
 from __future__ import annotations
 
 import pytest
@@ -23,7 +24,10 @@ def test_base_checkpoint_saver_importable() -> None:
 
 
 def test_serializer_protocol_importable() -> None:
-    from langgraph.checkpoint.serde.base import SerializerProtocol, maybe_add_typed_methods
+    from langgraph.checkpoint.serde.base import (
+        SerializerProtocol,
+        maybe_add_typed_methods,
+    )
 
     assert SerializerProtocol is not None
     assert maybe_add_typed_methods is not None

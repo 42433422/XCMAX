@@ -1447,7 +1447,7 @@ def test_execute_compensate_exception(monkeypatch, delivery_profile, tmp_path):
         "d.xlsx", notes=notes, import_products=False, import_shipments=True
     )
     assert len(res["compensate_errors"]) == 1
-    assert "补偿异常" in res["compensate_errors"][0]
+    assert res["compensate_errors"][0] == "补偿失败"
 
 
 def test_execute_partial_no_compensate(monkeypatch, delivery_profile, tmp_path):

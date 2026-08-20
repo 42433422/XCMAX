@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.real_absorption_run_proof import per_run_code_graph_proof_missing
 
@@ -154,25 +154,29 @@ def _project_replay(root: Path, run: dict[str, Any]) -> dict[str, Any]:
     ]
     employee_results_path = Path(str(run.get("employee_results_path") or ""))
     employee_payload = _read_json(employee_results_path)
-    employee_results = (
+    employee_results = cast(
+        list[Any],
         employee_payload.get("results")
         if isinstance(employee_payload.get("results"), list)
-        else []
+        else [],
     )
-    worker_runtime = (
+    worker_runtime = cast(
+        dict[str, Any],
         employee_payload.get("runtime_evidence")
         if isinstance(employee_payload.get("runtime_evidence"), dict)
-        else {}
+        else {},
     )
-    worker_review = (
+    worker_review = cast(
+        dict[str, Any],
         worker_runtime.get("worker_review")
         if isinstance(worker_runtime.get("worker_review"), dict)
-        else {}
+        else {},
     )
-    proof = (
+    proof = cast(
+        dict[str, Any],
         run.get("code_graph_proof")
         if isinstance(run.get("code_graph_proof"), dict)
-        else {}
+        else {},
     )
     proof_missing = per_run_code_graph_proof_missing(
         proof, run_id=str(run.get("run_id") or "")

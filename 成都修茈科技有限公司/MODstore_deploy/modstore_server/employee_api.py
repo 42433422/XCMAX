@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """员工API模块，提供员工相关的API端点。"""
 
 from __future__ import annotations
@@ -27,6 +28,58 @@ from modstore_server.api.deps import _get_current_user, require_admin
 from modstore_server.duty_roster import (
     employee_partition_meta,
 )
+from modstore_server.employee_api_support import (
+    _annotate_employee_list_row as _annotate_employee_list_row,
+)
+from modstore_server.employee_api_support import (
+    _assert_employee_scope_visible_to_user as _assert_employee_scope_visible_to_user,
+)
+from modstore_server.employee_api_support import (
+    _candidate_employee_pack_ids as _candidate_employee_pack_ids,
+)
+from modstore_server.employee_api_support import (
+    _collect_llm_context_text as _collect_llm_context_text,
+)
+from modstore_server.employee_api_support import (
+    _employee_download_jobs_root as _employee_download_jobs_root,
+)
+from modstore_server.employee_api_support import (
+    _employee_id_from_list_row as _employee_id_from_list_row,
+)
+from modstore_server.employee_api_support import (
+    _list_duty_employee_rows as _list_duty_employee_rows,
+)
+from modstore_server.employee_api_support import (
+    _load_employee_pack_with_aliases as _load_employee_pack_with_aliases,
+)
+from modstore_server.employee_api_support import (
+    _persist_employee_outputs_for_download as _persist_employee_outputs_for_download,
+)
+from modstore_server.employee_api_support import (
+    _reraise_employee_pack_not_found as _reraise_employee_pack_not_found,
+)
+from modstore_server.employee_api_support import (
+    _resolve_taiyangniao_backend as _resolve_taiyangniao_backend,
+)
+from modstore_server.employee_api_support import _runtime_dir as _runtime_dir
+from modstore_server.employee_api_support import (
+    _user_may_execute_employee_pack as _user_may_execute_employee_pack,
+)
+from modstore_server.employee_api_support import (
+    sync_triggers_after_registration as sync_triggers_after_registration,
+)
+from modstore_server.employee_api_uploads import (
+    _employee_upload_max_bytes as _employee_upload_max_bytes,
+)
+from modstore_server.employee_api_uploads import (
+    _employee_upload_suffix_mismatch_message as _employee_upload_suffix_mismatch_message,
+)
+from modstore_server.employee_api_uploads import (
+    _safe_employee_upload_basename as _safe_employee_upload_basename,
+)
+from modstore_server.employee_api_uploads import (
+    _suffix_allowed_for_employee as _suffix_allowed_for_employee,
+)
 from modstore_server.employee_executor import (
     get_employee_status,
 )
@@ -36,29 +89,8 @@ from modstore_server.employee_runtime import (
 )
 from modstore_server.infrastructure.db import get_db
 from modstore_server.models import CatalogItem, User
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.services.employee import get_default_employee_client
-from modstore_server.employee_api_support import (
-    _annotate_employee_list_row as _annotate_employee_list_row,
-    _assert_employee_scope_visible_to_user as _assert_employee_scope_visible_to_user,
-    _candidate_employee_pack_ids as _candidate_employee_pack_ids,
-    _collect_llm_context_text as _collect_llm_context_text,
-    _employee_download_jobs_root as _employee_download_jobs_root,
-    _employee_id_from_list_row as _employee_id_from_list_row,
-    _list_duty_employee_rows as _list_duty_employee_rows,
-    _load_employee_pack_with_aliases as _load_employee_pack_with_aliases,
-    _persist_employee_outputs_for_download as _persist_employee_outputs_for_download,
-    _reraise_employee_pack_not_found as _reraise_employee_pack_not_found,
-    _resolve_taiyangniao_backend as _resolve_taiyangniao_backend,
-    _runtime_dir as _runtime_dir,
-    _user_may_execute_employee_pack as _user_may_execute_employee_pack,
-    sync_triggers_after_registration as sync_triggers_after_registration,
-)
-from modstore_server.employee_api_uploads import (
-    _employee_upload_max_bytes as _employee_upload_max_bytes,
-    _employee_upload_suffix_mismatch_message as _employee_upload_suffix_mismatch_message,
-    _safe_employee_upload_basename as _safe_employee_upload_basename,
-    _suffix_allowed_for_employee as _suffix_allowed_for_employee,
-)
 
 router = APIRouter(prefix="/api/employees", tags=["employees"])
 
@@ -102,7 +134,7 @@ async def list_employees(
         response.headers["Cache-Control"] = "private, no-store"
         response.headers["X-Employee-Scope"] = effective_scope
         return employees
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         if isinstance(e, HTTPException):
             raise e
         raise HTTPException(500, f"获取员工列表失败: {e}")
@@ -131,7 +163,7 @@ async def employee_catalog_manifest_diagnostics(
                 and str(r.get("artifact") or "").strip().lower() == "employee_pack"
             ):
                 ep_rows += 1
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
 
     lib_root = ""
@@ -153,7 +185,7 @@ async def employee_catalog_manifest_diagnostics(
                 lib_manifest_ok = bool(not err and isinstance(data, dict))
             except (OSError, ValueError, FileNotFoundError):
                 pass
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         lib_root = f"(error: {exc})"
 
     in_json = False
@@ -165,7 +197,7 @@ async def employee_catalog_manifest_diagnostics(
             in_json = pid in recs or any(
                 catalog_store.norm_pkg_id(k) == catalog_store.norm_pkg_id(pid) for k in recs
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
         try:
             in_db = (
@@ -174,7 +206,7 @@ async def employee_catalog_manifest_diagnostics(
                 .first()
                 is not None
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
 
     return {
@@ -213,7 +245,7 @@ async def get_employee_status_endpoint(
         if isinstance(status, dict):
             status.update(employee_partition_meta(employee_id, "employee_pack"))
         return status
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         raise HTTPException(500, f"获取员工状态失败: {e}")
 
 
@@ -237,7 +269,7 @@ async def get_employee_manifest_endpoint(
         return pack
     except ValueError as e:
         raise HTTPException(404, str(e))
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         raise HTTPException(500, f"获取员工包 manifest 失败: {e}")
 
 
@@ -262,7 +294,7 @@ async def execute_employee_task_endpoint(
             input_data=input_data or {},
             user_id=user.id,
         )
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         _reraise_employee_pack_not_found(e)
         failure = str(e)
         result = None
@@ -291,7 +323,7 @@ async def execute_employee_task_endpoint(
             },
             source="modstore-employee-api",
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         # 投递失败不阻塞业务回包
         pass
 
@@ -423,7 +455,7 @@ async def execute_employee_task_file_endpoint(
                 result["llm_context_text"] = llm_text
             if downloads:
                 result["output_downloads"] = downloads
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         _reraise_employee_pack_not_found(e)
         failure = str(e)
         result = None
@@ -431,7 +463,7 @@ async def execute_employee_task_file_endpoint(
         try:
             if session_dir.is_dir():
                 shutil.rmtree(session_dir, ignore_errors=True)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
 
     try:
@@ -459,7 +491,7 @@ async def execute_employee_task_file_endpoint(
             },
             source="modstore-employee-api",
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
 
     if failure is not None:

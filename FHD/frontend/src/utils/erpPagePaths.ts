@@ -1,8 +1,5 @@
 import type { RouteLocationRaw, Router } from 'vue-router'
-import {
-  ERP_DOMAIN_BRIDGE_MOD_ID,
-  readErpDomainModFacadeEnabled,
-} from '@/constants/erpDomainMod'
+import { ERP_DOMAIN_BRIDGE_MOD_ID, readErpDomainModFacadeEnabled } from '@/constants/erpDomainMod'
 
 const MOD_PREFIX = `/mod/${ERP_DOMAIN_BRIDGE_MOD_ID}`
 

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr"
 """template/routes 路由测试 — 覆盖 Excel 网格提取、纯函数、多 Sheet 分析等。"""
 
 from __future__ import annotations

@@ -66,15 +66,10 @@ export function buildEmployeePackManifestFromWorkflow(
   if (packId.length > 48) packId = packId.slice(0, 48)
   if (!ID_RE.test(packId)) packId = mid
 
-  const nameSrc = String(
-    wf.label || wf.panel_title || mod.name || packId,
-  ).trim()
+  const nameSrc = String(wf.label || wf.panel_title || mod.name || packId).trim()
   const name = (nameSrc.slice(0, 200) || packId).trim() || packId
-  const ver = String(mod.version != null ? mod.version : '1.0.0')
-    .trim() || '1.0.0'
-  const desc = String(
-    wf.panel_summary || wf.description || mod.description || '',
-  )
+  const ver = String(mod.version != null ? mod.version : '1.0.0').trim() || '1.0.0'
+  const desc = String(wf.panel_summary || wf.description || mod.description || '')
     .trim()
     .slice(0, 4000)
 
@@ -96,10 +91,7 @@ export function buildEmployeePackManifestFromWorkflow(
     description: desc,
     artifact: 'employee_pack',
     scope: 'global',
-    dependencies:
-      mod.dependencies && typeof mod.dependencies === 'object'
-        ? mod.dependencies
-        : { xcagi: '>=1.0.0' },
+    dependencies: mod.dependencies && typeof mod.dependencies === 'object' ? mod.dependencies : { xcagi: '>=1.0.0' },
     employee: {
       id: empId,
       label,
@@ -137,12 +129,7 @@ export function buildEmployeePackZipFromPanel({
     throw new Error('workflow 条目须为 JSON 对象（非数组）')
   }
   const mod = asUnknownRecord(modManifest)
-  const { manifest, error } = buildEmployeePackManifestFromWorkflow(
-    modId.trim(),
-    mod,
-    wfEntry,
-    Number(workflowIndex) || 0,
-  )
+  const { manifest, error } = buildEmployeePackManifestFromWorkflow(modId.trim(), mod, wfEntry, Number(workflowIndex) || 0)
   if (error || !manifest) throw new Error(error || '无法生成 manifest')
 
   const packId = String(manifest.id || '').trim()
@@ -169,13 +156,7 @@ export interface BuildEmployeePackV2Args {
   author?: string
 }
 
-export function buildEmployeePackManifestFromV2({
-  config,
-  packId = '',
-  industry = '',
-  price = 0,
-  author = '',
-}: BuildEmployeePackV2Args) {
+export function buildEmployeePackManifestFromV2({ config, packId = '', industry = '', price = 0, author = '' }: BuildEmployeePackV2Args) {
   const c = asUnknownRecord(config)
   const identity = asUnknownRecord(c.identity)
   const collaboration = asUnknownRecord(c.collaboration)
@@ -549,7 +530,9 @@ export function buildEmployeePackZipFromV2({
 
   const inputFiles = files && typeof files === 'object' ? files : {}
   for (const [rel, body] of Object.entries(inputFiles)) {
-    const clean = String(rel || '').replace(/^\/+/, '').trim()
+    const clean = String(rel || '')
+      .replace(/^\/+/, '')
+      .trim()
     if (!clean) continue
     if (body instanceof Uint8Array) zipEntries[`${finalPackId}/${clean}`] = body
     else zipEntries[`${finalPackId}/${clean}`] = strToU8(String(body ?? ''))

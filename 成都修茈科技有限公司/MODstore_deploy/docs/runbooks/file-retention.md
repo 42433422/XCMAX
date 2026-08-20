@@ -9,30 +9,30 @@
 
 ## 1. 触发方式
 
-| 方式 | 触发器 | 入口 |
-|------|--------|------|
-| 周期 | APScheduler `retention_janitor_daily`（每天 03:15） | `MODstore_deploy/modstore_server/workflow_scheduler.py` |
-| 存储压力 | APScheduler `storage_pressure_self_heal`（默认每 15 分钟） | 达阈值后自动执行受控真清理 |
-| 手动 | CLI | `python -m modstore_server.file_retention_janitor` |
-| 员工 | 员工大会 / 浮动管家发问「过期文件谁清理」 | 由 `retention-officer` 直接回答 |
+| 方式     | 触发器                                                     | 入口                                                    |
+| -------- | ---------------------------------------------------------- | ------------------------------------------------------- |
+| 周期     | APScheduler `retention_janitor_daily`（每天 03:15）        | `MODstore_deploy/modstore_server/workflow_scheduler.py` |
+| 存储压力 | APScheduler `storage_pressure_self_heal`（默认每 15 分钟） | 达阈值后自动执行受控真清理                              |
+| 手动     | CLI                                                        | `python -m modstore_server.file_retention_janitor`      |
+| 员工     | 员工大会 / 浮动管家发问「过期文件谁清理」                  | 由 `retention-officer` 直接回答                         |
 
 ## 2. RETENTION_TARGETS（与代码 `MODstore_deploy/modstore_server/file_retention_janitor.py` 同步）
 
-| 路径 / 模式 | 默认 TTL | 备注 |
-|-------------|----------|------|
-| `MODstore_deploy/modstore_server/workbench_script_runs/*` | 7 天 | sandbox 单次 run 工作目录。 |
-| `MODstore_deploy/modstore_server/market_files/.tmp_chunks/*` | 1 天 | catalog 上传分片合并失败的残留。 |
-| `MODstore_deploy/modstore_server/webhook_events/*.json` | 30 天 | webhook 投递事件存档。 |
-| `.cursor_*_log.txt`（仓库根） | 14 天 | Cursor agent / smoke 日志。 |
-| `coverage/`、`playwright-report/`、`test-results/` 旧批次 | 30 天 | 历史测试产物。 |
+| 路径 / 模式                                                  | 默认 TTL | 备注                             |
+| ------------------------------------------------------------ | -------- | -------------------------------- |
+| `MODstore_deploy/modstore_server/workbench_script_runs/*`    | 7 天     | sandbox 单次 run 工作目录。      |
+| `MODstore_deploy/modstore_server/market_files/.tmp_chunks/*` | 1 天     | catalog 上传分片合并失败的残留。 |
+| `MODstore_deploy/modstore_server/webhook_events/*.json`      | 30 天    | webhook 投递事件存档。           |
+| `.cursor_*_log.txt`（仓库根）                                | 14 天    | Cursor agent / smoke 日志。      |
+| `coverage/`、`playwright-report/`、`test-results/` 旧批次    | 30 天    | 历史测试产物。                   |
 
 ### 数据库通知保留
 
-| 通知类型 | 默认规则 | 备注 |
-|---------|----------|------|
-| `system` | 每用户保留最新 200 条，且最长 30 天 | 健康巡检、系统状态等派生告警。 |
-| `employee_execution_done` | 每用户保留最新 200 条，且最长 30 天 | 员工执行完成的派生提醒。 |
-| `payment_success` / `payment_failed` / `human_question_asked` | 不清理 | 业务与人工协同证据。 |
+| 通知类型                                                      | 默认规则                            | 备注                           |
+| ------------------------------------------------------------- | ----------------------------------- | ------------------------------ |
+| `system`                                                      | 每用户保留最新 200 条，且最长 30 天 | 健康巡检、系统状态等派生告警。 |
+| `employee_execution_done`                                     | 每用户保留最新 200 条，且最长 30 天 | 员工执行完成的派生提醒。       |
+| `payment_success` / `payment_failed` / `human_question_asked` | 不清理                              | 业务与人工协同证据。           |
 
 可用 `MODSTORE_NOTIFICATION_SYSTEM_KEEP_PER_USER`、
 `MODSTORE_NOTIFICATION_EXECUTION_KEEP_PER_USER`、

@@ -1,10 +1,11 @@
 from __future__ import annotations
+from retort_engine.operational_errors import BOUNDARY_ERRORS
 
 import json
 import re
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.pr_dry_run import review_pr_url
 
@@ -136,7 +137,7 @@ def build_pr_holdout_blind_eval(
 def _evaluate_case(url: str, reviewer: Reviewer) -> dict[str, Any]:
     try:
         review = reviewer(url)
-    except Exception as exc:  # noqa: BLE001  # pragma: no cover
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001  # pragma: no cover
         return {
             "pr_url": url,
             "repo": _repo_slug(url),
@@ -145,14 +146,19 @@ def _evaluate_case(url: str, reviewer: Reviewer) -> dict[str, Any]:
             "error": str(exc)[-300:],
             "expectation": _expectation(),
         }
-    summary = review.get("summary") if isinstance(review.get("summary"), dict) else {}
-    nested_review = (
-        review.get("review") if isinstance(review.get("review"), dict) else {}
+    summary = cast(
+        dict[str, Any],
+        review.get("summary") if isinstance(review.get("summary"), dict) else {},
     )
-    nested_summary = (
+    nested_review = cast(
+        dict[str, Any],
+        review.get("review") if isinstance(review.get("review"), dict) else {},
+    )
+    nested_summary = cast(
+        dict[str, Any],
         nested_review.get("summary")
         if isinstance(nested_review.get("summary"), dict)
-        else {}
+        else {},
     )
     files = [
         item for item in nested_review.get("files") or [] if isinstance(item, dict)

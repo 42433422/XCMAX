@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, misc"
 """COVERAGE_RAMP Phase 6 round 11: backend low-coverage modules.
 
 Targets:

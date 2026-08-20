@@ -67,13 +67,19 @@ describe('resolveStepHighlightRect branches', () => {
 
   it('pads assistant-panel selectors', () => {
     sizedEl((el) => (el.className = 'assistant-panel'))
-    const r = resolveStepHighlightRect({ id: 's', highlightSelector: '.assistant-panel' } as TutorialStep)
+    const r = resolveStepHighlightRect({
+      id: 's',
+      highlightSelector: '.assistant-panel',
+    } as TutorialStep)
     expect(r).toEqual({ top: 4, left: 14, width: 112, height: 62 })
   })
 
   it('pads page-content selectors', () => {
     sizedEl((el) => (el.className = 'page-content'))
-    const r = resolveStepHighlightRect({ id: 's', targetSelector: '.page-content' } as TutorialStep)
+    const r = resolveStepHighlightRect({
+      id: 's',
+      targetSelector: '.page-content',
+    } as TutorialStep)
     expect(r).toEqual({ top: 6, left: 16, width: 108, height: 58 })
   })
 

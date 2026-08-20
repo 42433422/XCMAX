@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  applyTemplateV2,
-  createEmptyEmployeeConfigV2,
-  upgradeLegacyToV2,
-  validateEmployeeConfigV2,
-} from './employeeConfigV2'
+import { applyTemplateV2, createEmptyEmployeeConfigV2, upgradeLegacyToV2, validateEmployeeConfigV2 } from './employeeConfigV2'
 
 describe('employeeConfigV2', () => {
   it('creates a workflow employee config with required defaults', () => {

@@ -17,8 +17,8 @@ explaining how to install ``fastapi``.
 
 from __future__ import annotations
 
-from .server import create_app, run_server
 from .lsp import LSPMessage, LSPServer, handle_lsp_request
+from .server import create_app, run_server
 
 __all__ = [
     "LSPMessage",

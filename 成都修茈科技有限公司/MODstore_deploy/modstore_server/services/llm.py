@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 from threading import Lock
 from typing import Any, Dict, List, Optional
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 
 @dataclass(frozen=True)
 class LlmChatRequest:
@@ -37,7 +39,7 @@ class LlmChatResponse:
     raw: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_dict(cls, payload: Dict[str, Any]) -> "LlmChatResponse":
+    def from_dict(cls, payload: Dict[str, Any]) -> LlmChatResponse:
         return cls(
             ok=bool(payload.get("ok")),
             content=str(payload.get("content") or ""),
@@ -116,7 +118,7 @@ async def chat_dispatch_via_session(
         from modstore_server.platform_llm_scope import platform_llm_scope_active
 
         _platform_scope = platform_llm_scope_active()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         _platform_scope = False
     if _platform_scope:
         p_prov, p_mdl = resolve_platform_bench_llm()
@@ -164,7 +166,10 @@ async def chat_dispatch_via_session(
     if uid > 0 and result.get("ok"):
         # 统一计费：按 token 算出 ¥ 金额从钱包扣（计次配额已退役）。
         try:
-            from modstore_server.llm_billing import calculate_charge, usage_from_response
+            from modstore_server.llm_billing import (
+                calculate_charge,
+                usage_from_response,
+            )
             from modstore_server.quota_middleware import consume_llm_credit
 
             usage = usage_from_response(
@@ -172,7 +177,7 @@ async def chat_dispatch_via_session(
             )
             charge = calculate_charge(session, provider, model, usage)
             consume_llm_credit(session, uid, 1, charge=charge)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
     return result
 
@@ -230,7 +235,7 @@ def resolve_platform_bench_llm() -> tuple[str, str] | tuple[None, None]:
         from modstore_server.llm_runtime_route import current_runtime_route
 
         runtime = current_runtime_route()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         runtime = None
     if runtime:
         runtime_prov = str(runtime.get("provider") or "").strip()
@@ -275,7 +280,10 @@ async def chat_dispatch_via_platform_only(
 
     api_key = platform_api_key(provider)
     if not api_key:
-        return {"ok": False, "error": f"no platform api key configured for provider: {provider}"}
+        return {
+            "ok": False,
+            "error": f"no platform api key configured for provider: {provider}",
+        }
 
     base_url = None
     if provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS:

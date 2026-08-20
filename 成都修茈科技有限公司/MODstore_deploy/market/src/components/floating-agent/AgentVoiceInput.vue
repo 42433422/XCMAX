@@ -112,8 +112,13 @@ function toggle() {
 }
 
 @keyframes voice-pulse-light {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.28); }
-  50% { box-shadow: 0 0 0 5px rgba(37, 99, 235, 0); }
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.28);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(37, 99, 235, 0);
+  }
 }
 
 .voice-hint {
@@ -135,7 +140,12 @@ function toggle() {
 }
 
 @keyframes voice-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(0, 220, 255, 0.3); }
-  50% { box-shadow: 0 0 0 5px rgba(0, 220, 255, 0); }
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 220, 255, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(0, 220, 255, 0);
+  }
 }
 </style>

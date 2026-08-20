@@ -7,6 +7,8 @@ import os
 import cv2
 import numpy as np
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 # 使用 Unicode 路径
 image_path = "e:\\FHD\\26-0300001A_第 1 项_PE 封固底漆稀料.png"
 
@@ -21,7 +23,7 @@ try:
     if img_array is None:
         print("❌ 解码失败")
         exit(1)
-except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"❌ 读取失败：{e}")
     # 尝试使用 glob 找到的第一个文件
     import glob

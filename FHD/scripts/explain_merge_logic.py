@@ -144,7 +144,7 @@ for cell in cells:
         status = "✓ 合并" if cell["should_merge_with_next"] else "✗ 独立"
         print(
             f"  单元格[{cell['row']},{cell['col']}]: 右侧边框黑色占比 "
-            f"{cell['right_border_black_ratio']*100:.1f}% → {status}"
+            f"{cell['right_border_black_ratio'] * 100:.1f}% → {status}"
         )
 
 print("\n【第三步：实际合并单元格】")

@@ -32,14 +32,10 @@ def current_timestamp(incoming: Path, state: Path, component: str) -> int:
     current_sha = read_text(state / f"release_applied_{component}_sha")
     if not SHA_RE.fullmatch(current_sha):
         return 0
-    return read_timestamp(
-        incoming / current_sha / f"{component}.CREATED_AT"
-    )
+    return read_timestamp(incoming / current_sha / f"{component}.CREATED_AT")
 
 
-def should_apply(
-    incoming: Path, state: Path, candidate: Path, component: str
-) -> bool:
+def should_apply(incoming: Path, state: Path, candidate: Path, component: str) -> bool:
     sha = candidate.name
     if not SHA_RE.fullmatch(sha):
         return False
@@ -47,12 +43,9 @@ def should_apply(
         return False
     if read_text(state / f"release_applied_{component}_sha") == sha:
         return False
-    candidate_timestamp = read_timestamp(
-        candidate / f"{component}.CREATED_AT"
-    )
-    return (
-        candidate_timestamp > 0
-        and candidate_timestamp > current_timestamp(incoming, state, component)
+    candidate_timestamp = read_timestamp(candidate / f"{component}.CREATED_AT")
+    return candidate_timestamp > 0 and candidate_timestamp > current_timestamp(
+        incoming, state, component
     )
 
 
@@ -70,9 +63,7 @@ def select_release(incoming: Path, state: Path) -> Path | None:
             if should_apply(incoming, state, candidate, component)
         ]
         if component_timestamps:
-            candidates.append(
-                (max(component_timestamps), candidate.name, candidate)
-            )
+            candidates.append((max(component_timestamps), candidate.name, candidate))
     if not candidates:
         return None
     return max(candidates)[2]
@@ -106,15 +97,11 @@ def main() -> int:
     if args.command == "should-apply":
         return (
             0
-            if should_apply(
-                args.incoming, args.state, args.candidate, args.component
-            )
+            if should_apply(args.incoming, args.state, args.candidate, args.component)
             else 3
         )
 
-    timestamp = read_timestamp(
-        args.candidate / f"{args.component}.CREATED_AT"
-    )
+    timestamp = read_timestamp(args.candidate / f"{args.component}.CREATED_AT")
     if timestamp <= 0:
         return 4
     print(timestamp)

@@ -29,6 +29,7 @@ from app.services.accounting_values import (
 
 logger = logging.getLogger(__name__)
 
+
 def query_financial_ledger(
     account_id: int | None = None,
     account_code: str | None = None,

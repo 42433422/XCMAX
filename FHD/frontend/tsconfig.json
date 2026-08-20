@@ -27,21 +27,11 @@
       "@admin-console-inject/adminHostRoutes": ["./src/router/adminHostRoutes.stub.ts"],
       "@/data/workflow-employee-docs.json": ["./public/workflow-employee-docs.json"],
       "@/data/workflow-employees.json": ["./public/workflow-employees.json"],
-      "@mod-frontend/xcagi-customer-service-bridge/*": [
-        "./../mods/xcagi-customer-service-bridge/frontend/*"
-      ]
+      "@mod-frontend/xcagi-customer-service-bridge/*": ["./../mods/xcagi-customer-service-bridge/frontend/*"]
     },
     "types": ["vite/client"]
   },
-  "include": [
-    "src/**/*.ts",
-    "src/**/*.d.ts",
-    "src/**/*.tsx",
-    "src/**/*.vue"
-  ],
-  "exclude": [
-    "src/views/temp2.vue",
-    "src/**/*.test.ts"
-  ],
+  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue"],
+  "exclude": ["src/views/temp2.vue", "src/**/*.test.ts"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

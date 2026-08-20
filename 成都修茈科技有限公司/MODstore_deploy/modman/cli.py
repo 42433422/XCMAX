@@ -9,7 +9,11 @@ from modman import __version__
 from modman.catalog_publish import main_publish
 from modman.db_bundle import collect_sources_from_dir, copy_databases_into_mod
 from modman.fhd_shell_export import build_fhd_shell_mod_rows, write_fhd_shell_mods_json
-from modman.manifest_util import patch_manifest_fields, read_manifest, validate_manifest_dict
+from modman.manifest_util import (
+    patch_manifest_fields,
+    read_manifest,
+    validate_manifest_dict,
+)
 from modman.scaffold import create_mod
 from modman.store import (
     default_library,
@@ -103,7 +107,10 @@ def cmd_push(ns: argparse.Namespace) -> int:
     lib = _library_path(ns)
     xcagi = Path(ns.xcagi).expanduser().resolve() if ns.xcagi else default_xcagi_root()
     if not xcagi or not xcagi.is_dir():
-        print("未找到 XCAGI 根目录。请设置环境变量 XCAGI_ROOT 或传入 --xcagi", file=sys.stderr)
+        print(
+            "未找到 XCAGI 根目录。请设置环境变量 XCAGI_ROOT 或传入 --xcagi",
+            file=sys.stderr,
+        )
         return 1
     ids = [x.strip() for x in ns.mods.split(",") if x.strip()] if ns.mods else None
     done = deploy_to_xcagi(ids, lib, xcagi, replace=not ns.no_replace)
@@ -209,7 +216,8 @@ def cmd_set_meta(ns: argparse.Namespace) -> int:
         updates["primary"] = ns.primary
     if not updates:
         print(
-            "请至少指定 --name / --version / --author / --description / --primary", file=sys.stderr
+            "请至少指定 --name / --version / --author / --description / --primary",
+            file=sys.stderr,
         )
         return 1
     patch_manifest_fields(mod_dir, updates)
@@ -243,7 +251,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("path", nargs="?", help="单个 Mod 目录；省略则校验库内全部")
 
     sp = sub.add_parser(
-        "ingest", parents=[lib_arg], help="从任意目录拷贝入库（按 manifest.id 命名目标文件夹）"
+        "ingest",
+        parents=[lib_arg],
+        help="从任意目录拷贝入库（按 manifest.id 命名目标文件夹）",
     )
     sp.set_defaults(func=cmd_ingest)
     sp.add_argument("src", help="含 manifest.json 的 Mod 源码目录")

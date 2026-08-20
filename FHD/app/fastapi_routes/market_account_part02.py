@@ -1,382 +1,72 @@
-# ruff: noqa
-# mypy: ignore-errors
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
 
+
 def _facade():
-    return importlib.import_module('app.fastapi_routes.market_account')
+    return importlib.import_module("app.fastapi_routes.market_account")
 
-async def _proxy_json(method: str, path: str, *, json_body: dict[str, _facade().Any] | None=None, authorization: str='', extra_headers: dict[str, str] | None=None, return_error_payload: bool=False, timeout: float | None=None, retries: int | None=None):
-    url = f'{_facade()._market_base_url()}{path}'
-    headers: dict[str, str] = {'Accept': 'application/json'}
-    if authorization:
-        headers['Authorization'] = _facade()._auth_header(authorization)
-    if extra_headers:
-        for (key, val) in extra_headers.items():
-            if key and val:
-                headers[str(key)] = str(val)
-    timeout = _facade()._market_http_timeout() if timeout is None else float(timeout)
-    retries = _facade()._market_http_retries() if retries is None else max(0, int(retries))
-    last_exc: Exception | None = None
-    mutating = str(method).upper() in {'POST', 'PUT', 'PATCH', 'DELETE'}
-    for attempt in range(retries):
-        try:
-            async with _facade().httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
-                req_headers = dict(headers)
-                if mutating:
-                    try:
-                        await client.get(f'{_facade()._market_base_url()}/api/csrf')
-                        csrf = client.cookies.get('csrf_token')
-                        if csrf:
-                            req_headers['X-CSRF-Token'] = csrf
-                    except _facade().httpx.HTTPError:
-                        pass
-                res = await client.request(method, url, json=json_body, headers=req_headers)
-            break
-        except _facade().httpx.HTTPError as exc:
-            last_exc = exc
-            if attempt + 1 >= retries:
-                (message, status_code) = _facade()._transport_error_message(exc)
-                return _facade().JSONResponse({'success': False, 'message': message, 'error': {'code': 'MARKET_AUTH_UNAVAILABLE', 'message': message}, 'data': {'market_base_url': _facade()._market_base_url()}}, status_code=status_code)
-        except _facade().RECOVERABLE_ERRORS as exc:
-            _facade().logger.warning('_proxy_json transport error to %s: %s', url, exc)
-            (message, status_code) = _facade()._transport_error_message(exc)
-            return _facade().JSONResponse({'success': False, 'message': message, 'error': {'code': 'MARKET_AUTH_UNAVAILABLE', 'message': message}, 'data': {'market_base_url': _facade()._market_base_url()}}, status_code=status_code)
-    else:
-        if last_exc is not None:
-            (message, status_code) = _facade()._transport_error_message(last_exc)
-            return _facade().JSONResponse({'success': False, 'message': message, 'error': {'code': 'MARKET_AUTH_UNAVAILABLE', 'message': message}, 'data': {'market_base_url': _facade()._market_base_url()}}, status_code=status_code)
-        return _facade().JSONResponse({'success': False, 'message': '市场请求失败'}, status_code=502)
-    try:
-        payload = res.json()
-    except ValueError:
-        payload = {'detail': res.text}
-    if res.status_code >= 400:
-        if res.status_code >= 500:
-            _facade().logger.warning('market proxy %s %s -> %s body=%s', method, url, res.status_code, _facade()._body_snippet(payload))
-        if return_error_payload:
-            return {'__proxy_error__': True, 'status_code': res.status_code, 'payload': payload}
-        detail = _facade()._error_message(payload, res.status_code)
-        return _facade().JSONResponse({'success': False, 'message': str(detail), 'data': {**(payload if isinstance(payload, dict) else {}), 'market_base_url': _facade()._market_base_url()}}, status_code=res.status_code)
-    return payload
 
-async def fetch_market_membership_tier(market_token: str) -> str | None:
-    """登录后从修茈市场拉取当前用户会员等级 tier（free/vip/vip_plus/svip1..8）。
-
-    市场登录响应不含会员等级，需单独调 ``GET /api/payment/my-plan``。
-    任何失败均返回 None（不阻断登录）。
-    """
-    token = (market_token or '').strip()
-    if not token:
-        return None
-    try:
-        data = await _facade()._proxy_json('GET', '/api/payment/my-plan', authorization=token, return_error_payload=True)
-    except _facade().RECOVERABLE_ERRORS:
-        _facade().logger.warning('fetch_market_membership_tier 调用失败', exc_info=True)
-        return None
-    if not isinstance(data, dict) or data.get('__proxy_error__'):
-        return None
-    membership = data.get('membership')
-    if isinstance(membership, dict):
-        tier = str(membership.get('tier') or '').strip()
-        return tier or None
-    return None
-
-@_facade().router.get('/membership-plans')
-async def market_membership_plans():
-    """会员套餐列表（代理市场公开接口 ``GET /api/payment/plans``）。
-
-    供 ModelPaymentView 读取，替代前端硬编码；市场不可达时返回空列表，前端用本地 FALLBACK。
-    """
-    data = await _facade()._proxy_json('GET', '/api/payment/plans', return_error_payload=True)
-    if isinstance(data, dict) and (not data.get('__proxy_error__')):
-        plans = data.get('plans')
-        return {'success': True, 'data': {'plans': plans if isinstance(plans, list) else []}}
-    return {'success': True, 'data': {'plans': []}}
-
-def _token_from_auth_response(payload: _facade().Any) -> str:
-    """Extract access JWT from market ``POST /api/auth/login`` JSON (several response shapes)."""
-    if not isinstance(payload, dict):
-        return ''
-    inner = payload.get('data') if isinstance(payload.get('data'), dict) else None
-    candidates: list[_facade().Any] = []
-    if inner:
-        candidates.extend([inner.get('access_token'), inner.get('token'), inner.get('market_access_token')])
-        nested = inner.get('tokens') if isinstance(inner.get('tokens'), dict) else None
-        if nested:
-            candidates.extend([nested.get('access_token'), nested.get('accessToken')])
-    candidates.extend([payload.get('access_token'), payload.get('token'), payload.get('market_access_token')])
-    nested_top = payload.get('tokens') if isinstance(payload.get('tokens'), dict) else None
-    if nested_top:
-        candidates.extend([nested_top.get('access_token'), nested_top.get('accessToken')])
-    for c in candidates:
-        if c is None:
-            continue
-        s = str(c).strip()
-        if s:
-            return s
-    return ''
-
-def _refresh_token_from_auth_response(payload: _facade().Any) -> str:
-    if not isinstance(payload, dict):
-        return ''
-    inner = payload.get('data') if isinstance(payload.get('data'), dict) else None
-    candidates: list[_facade().Any] = []
-    if inner:
-        candidates.extend([inner.get('refresh_token'), inner.get('refreshToken')])
-        nested = inner.get('tokens') if isinstance(inner.get('tokens'), dict) else None
-        if nested:
-            candidates.extend([nested.get('refresh_token'), nested.get('refreshToken')])
-    candidates.extend([payload.get('refresh_token'), payload.get('refreshToken')])
-    nested_top = payload.get('tokens') if isinstance(payload.get('tokens'), dict) else None
-    if nested_top:
-        candidates.extend([nested_top.get('refresh_token'), nested_top.get('refreshToken')])
-    for c in candidates:
-        if c is None:
-            continue
-        s = str(c).strip()
-        if s:
-            return s
-    return ''
-
-async def refresh_session_market_token(session_id: str) -> str:
-    """Use persisted modstore refresh_token to obtain a new access_token."""
-    sid = (session_id or '').strip()
-    if not sid:
-        return ''
-    refresh = _facade().session_market_refresh_token(sid)
-    if not refresh:
-        return ''
-    payload = await _facade()._proxy_json('POST', '/api/auth/refresh', json_body={'refresh_token': refresh}, return_error_payload=True)
-    if isinstance(payload, _facade().JSONResponse):
-        return ''
-    if isinstance(payload, dict) and payload.get('__proxy_error__'):
-        return ''
-    access = _facade()._token_from_auth_response(payload)
-    new_refresh = _facade()._refresh_token_from_auth_response(payload) or refresh
-    if access and sid:
-        _facade().save_session_market_token(sid, access, new_refresh)
-    return access
-
-async def resolve_valid_market_access_token(session_id: str) -> str:
-    """Return a working market access token, refreshing when /api/auth/me returns 401."""
-    from app.application.surface_audit_demo_account import is_local_demo_market_token
-    sid = (session_id or '').strip()
-    user_id = _facade()._user_id_from_session(sid)
-    tok = _facade()._normalize_bearer_token(_facade().session_market_token(sid))
-    if not tok and user_id is not None:
-        tok = _facade()._normalize_bearer_token(_facade().latest_session_market_token(user_id=user_id))
-    if not tok:
-        return ''
-    if is_local_demo_market_token(tok):
-        return tok
-    me = await _facade()._proxy_json('GET', '/api/auth/me', authorization=f'Bearer {tok}', return_error_payload=True)
-    if isinstance(me, _facade().JSONResponse):
-        _facade().logger.warning('market unreachable during token validation (session_id=%s), using local token', sid[:8] if sid else '')
-        return tok
-    if isinstance(me, dict) and me.get('__proxy_error__'):
-        if _facade()._proxy_error_http_status(me) == 401:
-            refreshed = await _facade().refresh_session_market_token(sid)
-            return _facade()._normalize_bearer_token(refreshed)
-        _facade().logger.warning('market /api/auth/me error status=%s, using local token', me.get('status_code'))
-        return tok
-    if isinstance(me, dict) and (me.get('ok') is False or me.get('success') is False):
-        refreshed = await _facade().refresh_session_market_token(sid)
-        return _facade()._normalize_bearer_token(refreshed)
-    return tok
-
-def _market_validate_fast_timeout() -> float:
-    """会话校验专用快速超时：宁可 fail-open 也不阻塞导航。"""
-    try:
-        return max(0.5, float(_facade().os.environ.get('XCAGI_MARKET_VALIDATE_TIMEOUT', '2')))
-    except ValueError:
-        return 2.0
-
-async def resolve_valid_market_access_token_fast(session_id: str) -> str:
-    """返回市场 token，但绝不因市场慢而阻塞调用方。
-
-    供路由守卫/会话校验等对延迟敏感的路径使用：用短超时 + 零重试探测
-    /api/auth/me，任何瞬时失败（超时/连接不上/5xx）都直接返回本地 token
-    （fail-open），因为本地会话本身已有效。仅当市场明确返回 401 判定
-    token 过期时才尝试刷新。
-    """
-    from app.application.surface_audit_demo_account import is_local_demo_market_token
-    sid = (session_id or '').strip()
-    user_id = _facade()._user_id_from_session(sid)
-    tok = _facade()._normalize_bearer_token(_facade().session_market_token(sid))
-    if not tok and user_id is not None:
-        tok = _facade()._normalize_bearer_token(_facade().latest_session_market_token(user_id=user_id))
-    if not tok:
-        return ''
-    if is_local_demo_market_token(tok):
-        return tok
-    try:
-        me = await _facade()._proxy_json('GET', '/api/auth/me', authorization=f'Bearer {tok}', return_error_payload=True, timeout=_facade()._market_validate_fast_timeout(), retries=0)
-    except _facade().RECOVERABLE_ERRORS:
-        _facade().logger.warning('market token fast-validate transport error (session_id=%s), fail-open to local token', sid[:8] if sid else '')
-        return tok
-    if isinstance(me, _facade().JSONResponse):
-        return tok
-    if isinstance(me, dict) and me.get('__proxy_error__'):
-        if _facade()._proxy_error_http_status(me) == 401:
-            refreshed = await _facade().refresh_session_market_token(sid)
-            return _facade()._normalize_bearer_token(refreshed)
-        return tok
-    if isinstance(me, dict) and (me.get('ok') is False or me.get('success') is False):
-        refreshed = await _facade().refresh_session_market_token(sid)
-        return _facade()._normalize_bearer_token(refreshed)
-    return tok
-
-def _looks_like_verification_required(payload: _facade().Any) -> bool:
-    """Classify a market response without changing registration behavior."""
-    msg = _facade()._error_message(payload, 400)
-    return bool(_facade().re.search('验证码|verification|code', msg, _facade().re.I))
-
-async def _register_without_verification(username: str, password: str, email: str):
-    """Use the explicitly enabled server-side API for the dev diagnostic only.
-
-    The public registration flow never calls this helper and therefore cannot
-    silently bypass email verification.
-    """
-    payload = await _facade()._proxy_json('POST', '/api/market/open/register', json_body={'username': username, 'password': password, 'email': email}, return_error_payload=True)
-    if isinstance(payload, dict) and payload.get('__proxy_error__'):
-        payload = await _facade()._proxy_json('POST', '/api/auth/register-open', json_body={'username': username, 'password': password, 'email': email}, return_error_payload=True)
-    return payload
-
-async def send_market_reset_password_code(email: str) -> dict[str, _facade().Any]:
-    """Request password-reset verification email from the configured market server."""
-    email_norm = (email or '').strip().lower()
-    if not email_norm or '@' not in email_norm:
-        return {'success': False, 'message': '请填写有效邮箱'}
-    payload = await _facade()._proxy_json('POST', '/api/auth/send-reset-password-code', json_body={'email': email_norm}, return_error_payload=True)
-    if isinstance(payload, _facade().JSONResponse):
-        return {'success': False, 'message': '市场服务不可用'}
-    if isinstance(payload, dict) and payload.get('__proxy_error__'):
-        status_code = int(payload.get('status_code') or 502)
-        raw = payload.get('payload')
-        return {'success': False, 'message': _facade()._error_message(raw, status_code) or '无法连接修茈市场发送验证码', 'market_base_url': _facade()._market_base_url()}
-    msg = ''
-    if isinstance(payload, dict):
-        msg = str(payload.get('message') or '').strip()
-    return {'success': True, 'message': msg or '若该邮箱已注册，将收到验证码邮件', 'market_base_url': _facade()._market_base_url(), 'raw': payload}
-
-async def send_market_register_code(email: str) -> dict[str, _facade().Any]:
-    """Request a registration code from the canonical market identity service."""
-    email_norm = (email or '').strip().lower()
-    if not email_norm or '@' not in email_norm:
-        return {'success': False, 'message': '请填写有效邮箱', 'status_code': 400}
-    payload = await _facade()._proxy_json('POST', '/api/auth/send-register-code', json_body={'email': email_norm}, return_error_payload=True)
-    if isinstance(payload, _facade().JSONResponse):
-        return {'success': False, 'message': '市场服务不可用', 'status_code': 502}
-    if isinstance(payload, dict) and payload.get('__proxy_error__'):
-        status_code = int(payload.get('status_code') or 502)
-        raw = payload.get('payload')
-        return {'success': False, 'message': _facade()._error_message(raw, status_code) or '发送验证码失败', 'status_code': status_code}
-    message = str(payload.get('message') or '') if isinstance(payload, dict) else ''
-    return {'success': True, 'message': message or '验证码已发送'}
-
-async def reset_market_password_with_code(email: str, code: str, new_password: str) -> dict[str, _facade().Any]:
-    """Reset password on market server using email verification code."""
-    email_norm = (email or '').strip().lower()
-    code_s = (code or '').strip()
-    if not email_norm or '@' not in email_norm:
-        return {'success': False, 'message': '请填写有效邮箱'}
-    if len(code_s) < 4:
-        return {'success': False, 'message': '请填写验证码'}
-    if len(new_password or '') < 6:
-        return {'success': False, 'message': '新密码至少 6 个字符'}
-    payload = await _facade()._proxy_json('POST', '/api/auth/reset-password', json_body={'email': email_norm, 'code': code_s, 'new_password': new_password}, return_error_payload=True)
-    if isinstance(payload, _facade().JSONResponse):
-        return {'success': False, 'message': '市场服务不可用'}
-    if isinstance(payload, dict) and payload.get('__proxy_error__'):
-        status_code = int(payload.get('status_code') or 400)
-        raw = payload.get('payload')
-        return {'success': False, 'message': _facade()._error_message(raw, status_code) or '重置失败', 'raw': raw}
-    if isinstance(payload, dict) and payload.get('success') is False:
-        return {'success': False, 'message': str(payload.get('message') or payload.get('detail') or '重置失败'), 'raw': payload}
-    return {'success': True, 'message': '密码已重置', 'raw': payload}
-
-async def register_market_user(username: str, password: str, email: str, verification_code: str='') -> dict[str, _facade().Any]:
-    """Register on the configured Xiuci market server. Returns success/message/token/raw."""
-    register_body = {'username': username, 'password': password, 'email': email, 'verification_code': (verification_code or '').strip()}
-    payload = await _facade()._proxy_json('POST', '/api/auth/register', json_body=register_body, return_error_payload=True)
-    if isinstance(payload, _facade().JSONResponse):
-        return {'success': False, 'message': '市场服务不可用'}
-    if isinstance(payload, dict) and payload.get('__proxy_error__'):
-        status_code = int(payload.get('status_code') or 400)
-        raw_error = payload.get('payload')
-        if status_code >= 400:
-            return {'success': False, 'message': _facade()._error_message(raw_error, status_code), 'raw': raw_error}
-    normalized = await _facade()._normalize_market_auth_payload(payload)
-    normalized['market_user_id'] = _facade()._market_user_id_from_auth_payload(payload)
-    return normalized
-
-@_facade().router.post('/register')
-async def market_register(request: _facade().Request, body: dict[str, _facade().Any]=_facade().Body(default_factory=dict)):
-    """Register a Xiuci market account through the configured market server."""
-    username = str(body.get('username') or '').strip()
-    password = str(body.get('password') or '')
-    email = str(body.get('email') or '').strip()
-    verification_code = str(body.get('verification_code') or body.get('code') or '').strip()
-    if not username or not password:
-        return _facade().JSONResponse({'success': False, 'message': 'username、password 必填'}, status_code=400)
-    result = await _facade().register_market_user(username, password, email, verification_code)
-    if not result.get('success'):
-        return _facade().JSONResponse({'success': False, 'message': result.get('message', '注册失败'), 'data': result.get('raw')}, status_code=400)
-    (token, _) = _facade().bind_market_auth_to_session(request, result)
-    return {'success': True, 'data': {'market_base_url': result.get('market_base_url'), 'token': token, 'refresh_token': result.get('refresh_token'), 'account_state': result.get('account_state'), 'next_action': result.get('next_action'), 'desktop_access': bool(result.get('desktop_access')), 'active_plan_id': result.get('active_plan_id'), 'account_tier': result.get('account_tier'), 'raw': result.get('raw')}}
-
-@_facade().router.post('/login')
-async def market_login(request: _facade().Request, body: dict[str, _facade().Any]=_facade().Body(default_factory=dict)):
-    """Login to Xiuci market (username/password) and bind JWT to the current FHD session.
-
-    Prefer ``POST /api/auth/login`` for the desktop app; this route remains for
-    settings/tools that only need market credentials. Token-only bind: ``POST /account-sync``.
-    """
-    username = str(body.get('username') or body.get('email') or '').strip()
-    password = str(body.get('password') or '')
-    if not username or not password:
-        return _facade().JSONResponse({'success': False, 'message': 'username 与 password 必填'}, status_code=400)
-    market_result = await _facade().login_market_with_password(username, password)
-    if not market_result.get('success'):
-        return _facade().JSONResponse({'success': False, 'message': market_result.get('message', '市场登录失败')}, status_code=403)
-    (token, refresh) = _facade().bind_market_auth_to_session(request, market_result)
-    return {'success': True, 'data': {'market_base_url': _facade()._market_base_url(), 'token': token, 'refresh_token': refresh, 'account_state': market_result.get('account_state'), 'next_action': market_result.get('next_action'), 'desktop_access': bool(market_result.get('desktop_access')), 'active_plan_id': market_result.get('active_plan_id'), 'account_tier': market_result.get('account_tier'), 'raw': market_result.get('raw')}}
-
-def _is_local_market_base(url: str) -> bool:
-    host = (url or '').strip().lower()
-    return '127.0.0.1' in host or 'localhost' in host
-
-def _demo_market_login_payload(shim: dict[str, _facade().Any], *, market_base_url: str) -> dict[str, _facade().Any]:
-    raw_out = dict(shim.get('raw') or {})
-    if not isinstance(raw_out.get('user'), dict):
-        raw_out['user'] = {'id': int((shim.get('raw') or {}).get('user', {}).get('id') or 900001), 'username': str((shim.get('raw') or {}).get('user', {}).get('username') or ''), 'is_enterprise': True, 'is_admin': False}
-    return {'success': True, 'market_base_url': market_base_url, 'token': str(shim.get('token') or '').strip(), 'refresh_token': str(shim.get('refresh_token') or '').strip(), 'is_enterprise': bool(shim.get('is_enterprise')), 'is_market_admin': bool(shim.get('is_market_admin')), 'raw': raw_out}
-
-async def _normalize_market_auth_payload(payload: _facade().Any, *, market_base: str | None=None) -> dict[str, _facade().Any]:
-    """Turn market login JSON into normalized token payload."""
-    if isinstance(payload, _facade().JSONResponse):
-        try:
-            raw_body = _facade().json.loads(bytes(payload.body).decode('utf-8') if payload.body else '{}')
-        except _facade().RECOVERABLE_ERRORS:
-            raw_body = {}
-        status_code = int(payload.status_code or 502)
-        message = str(raw_body.get('message') or '').strip() or str(raw_body.get('detail') or '').strip() or _facade()._error_message(raw_body, status_code)
-        err = raw_body.get('error') if isinstance(raw_body.get('error'), dict) else {}
-        code = str(err.get('code') or '').strip()
-        if status_code >= 500 and (not code):
-            code = 'MARKET_AUTH_UNAVAILABLE'
-        return {'success': False, 'message': message, 'status_code': status_code, 'error_code': code or ('MARKET_AUTH_UNAVAILABLE' if status_code >= 500 else 'MARKET_AUTH_FAILED'), 'raw': raw_body, 'market_base_url': market_base or _facade()._market_base_url()}
-    token = _facade()._token_from_auth_response(payload)
-    refresh = _facade()._refresh_token_from_auth_response(payload)
-    if not token:
-        return {'success': False, 'message': '市场登录成功但未返回 access_token', 'raw': payload}
-    me = await _facade()._proxy_json('GET', '/api/auth/me', authorization=f'Bearer {token}', return_error_payload=True)
-    (is_enterprise, is_market_admin, user_blob) = _facade()._market_identity_from_payloads(payload, me)
-    lifecycle = _facade()._market_lifecycle_from_payloads(payload, me)
-    _facade().logger.info('market auth normalized base=%s success=True is_enterprise=%s is_market_admin=%s username=%s raw_keys=%s me_keys=%s', market_base or _facade()._market_base_url(), is_enterprise, is_market_admin, str(user_blob.get('username') or ''), sorted(payload.keys()) if isinstance(payload, dict) else [], sorted(me.keys()) if isinstance(me, dict) else [])
-    raw_out = dict(payload) if isinstance(payload, dict) else {}
-    if user_blob and (not isinstance(raw_out.get('user'), dict)):
-        raw_out['user'] = user_blob
-    return {'success': True, 'market_base_url': market_base or _facade()._market_base_url(), 'token': token, 'refresh_token': refresh, 'is_enterprise': is_enterprise, 'is_market_admin': is_market_admin, **lifecycle, 'raw': raw_out}
+from app.fastapi_routes.market_account_part02_part01 import (
+    _looks_like_verification_required as _looks_like_verification_required,
+)
+from app.fastapi_routes.market_account_part02_part01 import (
+    _market_validate_fast_timeout as _market_validate_fast_timeout,
+)
+from app.fastapi_routes.market_account_part02_part01 import (
+    _proxy_json as _proxy_json,
+)
+from app.fastapi_routes.market_account_part02_part01 import (
+    _refresh_token_from_auth_response as _refresh_token_from_auth_response,
+)
+from app.fastapi_routes.market_account_part02_part01 import (
+    _register_without_verification as _register_without_verification,
+)
+from app.fastapi_routes.market_account_part02_part01 import (
+    _token_from_auth_response as _token_from_auth_response,
+)
+from app.fastapi_routes.market_account_part02_part01 import (
+    fetch_market_membership_tier as fetch_market_membership_tier,
+)
+from app.fastapi_routes.market_account_part02_part01 import (
+    market_membership_plans as market_membership_plans,
+)
+from app.fastapi_routes.market_account_part02_part01 import (
+    refresh_session_market_token as refresh_session_market_token,
+)
+from app.fastapi_routes.market_account_part02_part01 import (
+    resolve_valid_market_access_token as resolve_valid_market_access_token,
+)
+from app.fastapi_routes.market_account_part02_part01 import (
+    resolve_valid_market_access_token_fast as resolve_valid_market_access_token_fast,
+)
+from app.fastapi_routes.market_account_part02_part02 import (
+    _demo_market_login_payload as _demo_market_login_payload,
+)
+from app.fastapi_routes.market_account_part02_part02 import (
+    _is_local_market_base as _is_local_market_base,
+)
+from app.fastapi_routes.market_account_part02_part02 import (
+    _normalize_market_auth_payload as _normalize_market_auth_payload,
+)
+from app.fastapi_routes.market_account_part02_part02 import (
+    market_login as market_login,
+)
+from app.fastapi_routes.market_account_part02_part02 import (
+    market_register as market_register,
+)
+from app.fastapi_routes.market_account_part02_part02 import (
+    register_market_user as register_market_user,
+)
+from app.fastapi_routes.market_account_part02_part02 import (
+    reset_market_password_with_code as reset_market_password_with_code,
+)
+from app.fastapi_routes.market_account_part02_part02 import (
+    send_market_register_code as send_market_register_code,
+)
+from app.fastapi_routes.market_account_part02_part02 import (
+    send_market_reset_password_code as send_market_reset_password_code,
+)

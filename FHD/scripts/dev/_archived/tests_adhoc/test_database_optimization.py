@@ -11,6 +11,8 @@
 import os
 import sys
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -66,7 +68,7 @@ def test_foreign_keys_exist():
             else:
                 print(f"✗ {table}.{column} -> {parent_table}.id - 不存在")
                 all_passed = False
-        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             print(f"✗ 检查表 {table} 失败：{e}")
             all_passed = False
 
@@ -109,7 +111,7 @@ def test_indexes_exist():
             else:
                 print(f"✗ {index_name} - 不存在")
                 all_passed = False
-        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             print(f"✗ 检查索引 {index_name} 失败：{e}")
             all_passed = False
 
@@ -163,7 +165,7 @@ def test_cascade_delete():
                 print("✗ 级联删除测试失败 - 会话未被删除")
                 return False
 
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"✗ 级联删除测试异常：{e}")
         return False
     finally:
@@ -194,7 +196,7 @@ def test_alembic_migration():
         print("\n✓ Alembic 配置正确")
         return True
 
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"✗ Alembic 测试失败：{e}")
         return False
 

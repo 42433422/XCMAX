@@ -6,9 +6,10 @@ import logging
 from pathlib import Path
 from urllib.parse import unquote
 
-from fastapi import APIRouter, Body, File, Form, UploadFile
+from fastapi import APIRouter, File, Form, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 
+from app.mod_sdk.errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 from app.mod_sdk.host_services import workspace_root
 
 logger = logging.getLogger(__name__)
@@ -18,9 +19,8 @@ DEFAULT_TEMPLATE_RELPATH = "424/考勤-2026-3月份考勤统计表.xlsx"
 def _load_products_personnel_roster_from_host() -> list[tuple[str, str, str]]:
     """主应用「人员管理」同一套 Product 表（model 为 app.db.models.product.Product）。"""
     try:
-        from app.mod_sdk.host_services import Product
-        from app.mod_sdk.host_services import get_db
-    except Exception:  # noqa: BLE001 - optional host models may be unavailable
+        from app.mod_sdk.host_services import Product, get_db
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - optional host models may be unavailable
         return []
     out: list[tuple[str, str, str]] = []
     seen: set[str] = set()
@@ -35,7 +35,7 @@ def _load_products_personnel_roster_from_host() -> list[tuple[str, str, str]]:
                 dept = (getattr(p, "unit", None) or "").strip()
                 spec = (getattr(p, "specification", None) or "").strip()
                 out.append((dept, spec, name))
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("读取主库人员(products)失败")
         return []
     return out
@@ -120,7 +120,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
             from resources.config.approval_config import get_approval_config
 
             pol = getattr(get_approval_config(), "attendance_policy", None) or {}
-        except Exception:  # noqa: BLE001 - route boundary returns a generic error
+        except BOUNDARY_ERRORS:  # noqa: BLE001 - route boundary returns a generic error
             logger.exception("读取考勤策略失败")
             return JSONResponse(
                 {"success": False, "message": "读取考勤策略失败"},
@@ -129,7 +129,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         return {"success": True, "attendance_policy": pol}
 
     @router.post("/attendance/policy", response_model=None)
-    async def attendance_policy_post(body: dict = Body(default_factory=dict)) -> dict:
+    async def attendance_policy_post(body: dict) -> dict:
         payload = body if isinstance(body, dict) else {}
         raw = payload.get("attendance_policy")
         if not isinstance(raw, dict):
@@ -153,7 +153,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
                 "message": "考勤规则已保存",
                 "attendance_policy": config.attendance_policy,
             }
-        except Exception:  # noqa: BLE001 - route boundary returns a generic error
+        except BOUNDARY_ERRORS:  # noqa: BLE001 - route boundary returns a generic error
             logger.exception("保存考勤策略失败")
             return JSONResponse(
                 {"success": False, "message": "保存考勤策略失败"},
@@ -244,7 +244,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
             content = await file.read()
             with src_path.open("wb") as f:
                 f.write(content)
-        except Exception:  # noqa: BLE001 - route boundary returns a generic error
+        except BOUNDARY_ERRORS:  # noqa: BLE001 - route boundary returns a generic error
             logger.exception("Failed to save attendance upload")
             return JSONResponse(
                 {"success": False, "error": "保存上传文件失败"},
@@ -256,7 +256,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
             out_path = allocate_generated_workspace_file("attendance-output")
             out_rel = out_path.relative_to(workspace_root()).as_posix()
-        except Exception:  # noqa: BLE001 - route boundary returns a generic error
+        except BOUNDARY_ERRORS:  # noqa: BLE001 - route boundary returns a generic error
             return JSONResponse({"success": False, "error": "输出路径无效"}, status_code=400)
 
         raw_tpl_rel = unquote(template_relpath or "").strip()
@@ -286,7 +286,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
                     {"success": False, "error": f"模板路径不是文件: {tpl_rel}"},
                     status_code=400,
                 )
-        except Exception:  # noqa: BLE001 - route boundary returns a generic error
+        except BOUNDARY_ERRORS:  # noqa: BLE001 - route boundary returns a generic error
             return JSONResponse({"success": False, "error": "模板文件无效"}, status_code=400)
 
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -325,7 +325,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
                 use_llm=use_llm_flag or None,  # None -> 交给 env 开关决定
                 personnel_roster=roster,
             )
-        except Exception:
+        except BOUNDARY_ERRORS:
             logger.exception("Attendance conversion crashed")
             return JSONResponse(
                 {"success": False, "error": "考勤转换失败"},
@@ -394,7 +394,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
             p = resolve_existing_workspace_file(rel)
         except ValueError:
             return JSONResponse({"success": False, "error": "下载路径无效"}, status_code=400)
-        except Exception:  # noqa: BLE001 - route boundary returns a generic error
+        except BOUNDARY_ERRORS:  # noqa: BLE001 - route boundary returns a generic error
             return JSONResponse({"success": False, "error": "下载路径无效"}, status_code=400)
 
         if not p.exists() or not p.is_file():
@@ -670,7 +670,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         return {"success": True, "data": []}
 
     @router.get("/customers", response_model=None)
-    @router.get("/customers/", response_model=None)
+    @router.get("/customers/", response_model=None, include_in_schema=False)
     async def customers_all(page: int = 1, per_page: int = 20, keyword: str = ""):
         return await customers_list(page=page, per_page=per_page, keyword=keyword)
 
@@ -770,13 +770,13 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         return sorted(values, key=str.casefold)
 
     @router.get("/purchase_units")
-    @router.get("/purchase_units/")
+    @router.get("/purchase_units/", include_in_schema=False)
     async def purchase_units_list():
         units = _distinct_customer_purchase_units()
         return {"success": True, "data": units}
 
     @router.get("/shipment/shipment-records/units")
-    @router.get("/shipment/shipment-records/units/")
+    @router.get("/shipment/shipment-records/units/", include_in_schema=False)
     async def shipment_record_units_compat():
         units = _distinct_attendance_departments()
         return {"success": True, "data": units, "units": units}

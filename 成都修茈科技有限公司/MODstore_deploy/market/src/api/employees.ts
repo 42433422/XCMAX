@@ -23,8 +23,7 @@ export interface EmployeeStatusResponse extends Record<string, unknown> {
 
 export const employees = {
   listEmployees: () => req<EmployeeRow[]>('/api/employees/'),
-  getEmployeeStatus: (employeeId: string) =>
-    req<EmployeeStatusResponse>(`/api/employees/${encodeURIComponent(employeeId)}/status`),
+  getEmployeeStatus: (employeeId: string) => req<EmployeeStatusResponse>(`/api/employees/${encodeURIComponent(employeeId)}/status`),
   getEmployeeManifest: async (employeeId: string): Promise<EmployeeManifestResponse> => {
     try {
       return await req<EmployeeManifestResponse>(`/api/employees/${encodeURIComponent(employeeId)}/manifest`)
@@ -41,7 +40,10 @@ export const employees = {
     return req(`/api/employees/catalog-manifest-diagnostics${q}`)
   },
   executeEmployeeTask: (employeeId: string, task: string, inputData: unknown) =>
-    req(`/api/employees/${employeeId}/execute`, { method: 'POST', body: JSON.stringify({ task, input_data: inputData }) }),
+    req(`/api/employees/${employeeId}/execute`, {
+      method: 'POST',
+      body: JSON.stringify({ task, input_data: inputData }),
+    }),
   employeeExecuteFile: (
     employeeId: string,
     file: File,

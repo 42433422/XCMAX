@@ -29,7 +29,9 @@ def test_resolve_nested_xcmax_company_root(tmp_path: Path) -> None:
     assert resolve_yuangon_repo_root(tmp_path) == company_root.resolve()
 
 
-def test_resolve_unique_structural_child_when_company_name_changes(tmp_path: Path) -> None:
+def test_resolve_unique_structural_child_when_company_name_changes(
+    tmp_path: Path,
+) -> None:
     company_root = tmp_path / "renamed-company"
     _make_repo(company_root)
 

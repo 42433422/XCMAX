@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """Mod library CRUD and shell UI routes."""
 
 from __future__ import annotations
@@ -18,7 +19,12 @@ from modman.manifest_util import (
     validate_manifest_dict,
 )
 from modman.scaffold import create_mod
-from modman.store import import_zip, list_mod_relative_files, list_mods, remove_mod_by_manifest_id
+from modman.store import (
+    import_zip,
+    list_mod_relative_files,
+    list_mods,
+    remove_mod_by_manifest_id,
+)
 from modstore_server.api.auth_deps import (
     assert_user_owns_mod,
     get_optional_user,
@@ -203,7 +209,9 @@ def api_delete_mod(mod_id: str, user: User = Depends(require_user)):
 
 @router.post("/api/mods/import")
 async def api_import_mod(
-    file: UploadFile = File(...), replace: bool = True, user: User = Depends(require_user)
+    file: UploadFile = File(...),
+    replace: bool = True,
+    user: User = Depends(require_user),
 ):
     if not file.filename or not file.filename.lower().endswith(".zip"):
         raise HTTPException(400, "请上传 .zip")

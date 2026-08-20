@@ -33,9 +33,7 @@ describe('usePrintService', () => {
     })
 
     it('returns failure when API responds non-ok', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-        jsonResponse({ success: false, message: 'Printer error' }, false, 500),
-      )
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(jsonResponse({ success: false, message: 'Printer error' }, false, 500))
       const result = await service.printLabel('/path/to/label.pdf')
       expect(result.success).toBe(false)
       expect(result.message).toContain('Printer error')
@@ -56,18 +54,14 @@ describe('usePrintService', () => {
     })
 
     it('sends copies parameter', async () => {
-      const fetchSpy = vi
-        .spyOn(globalThis, 'fetch')
-        .mockResolvedValueOnce(jsonResponse({ success: true }))
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(jsonResponse({ success: true }))
       await service.printLabel('/path/to/label.pdf', 3)
       const body = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string)
       expect(body.copies).toBe(3)
     })
 
     it('defaults copies to 1', async () => {
-      const fetchSpy = vi
-        .spyOn(globalThis, 'fetch')
-        .mockResolvedValueOnce(jsonResponse({ success: true }))
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(jsonResponse({ success: true }))
       await service.printLabel('/path/to/label.pdf')
       const body = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string)
       expect(body.copies).toBe(1)
@@ -77,7 +71,9 @@ describe('usePrintService', () => {
       vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => { throw new Error('invalid json') },
+        json: async () => {
+          throw new Error('invalid json')
+        },
         headers: { get: () => 'application/json' },
       } as Response)
       const result = await service.printLabel('/path/to/label.pdf')
@@ -94,9 +90,7 @@ describe('usePrintService', () => {
     })
 
     it('returns failure on API error', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-        jsonResponse({ success: false, message: 'Print failed' }, false, 500),
-      )
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(jsonResponse({ success: false, message: 'Print failed' }, false, 500))
       const result = await service.printDocument('/path/to/doc.pdf')
       expect(result.success).toBe(false)
     })
@@ -111,36 +105,28 @@ describe('usePrintService', () => {
 
   describe('markAsPrinted', () => {
     it('returns success when API responds ok', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-        jsonResponse({ success: true, updated: true }),
-      )
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(jsonResponse({ success: true, updated: true }))
       const result = await service.markAsPrinted('/path/to/doc.pdf', 123)
       expect(result.success).toBe(true)
       expect(result.message).toContain('打印状态已更新')
     })
 
     it('includes orderId in payload when provided', async () => {
-      const fetchSpy = vi
-        .spyOn(globalThis, 'fetch')
-        .mockResolvedValueOnce(jsonResponse({ success: true, updated: true }))
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(jsonResponse({ success: true, updated: true }))
       await service.markAsPrinted('/path/to/doc.pdf', 42)
       const body = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string)
       expect(body.order_id).toBe(42)
     })
 
     it('omits orderId when not provided', async () => {
-      const fetchSpy = vi
-        .spyOn(globalThis, 'fetch')
-        .mockResolvedValueOnce(jsonResponse({ success: true, updated: true }))
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(jsonResponse({ success: true, updated: true }))
       await service.markAsPrinted('/path/to/doc.pdf')
       const body = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string)
       expect(body.order_id).toBeUndefined()
     })
 
     it('returns failure when updated is false', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-        jsonResponse({ success: true, updated: false }),
-      )
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(jsonResponse({ success: true, updated: false }))
       const result = await service.markAsPrinted('/path/to/doc.pdf')
       expect(result.success).toBe(false)
     })
@@ -156,9 +142,7 @@ describe('usePrintService', () => {
     })
 
     it('returns success summary when all operations succeed', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-        jsonResponse({ success: true, updated: true }),
-      )
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ success: true, updated: true }))
       const summary = await service.executePrintTask(['/label1.pdf', '/label2.pdf'], '/doc.pdf', 1)
       expect(summary.labelSuccess).toBe(2)
       expect(summary.labelFailed).toBe(0)
@@ -188,17 +172,13 @@ describe('usePrintService', () => {
     })
 
     it('logs warning when orderId is missing', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-        jsonResponse({ success: true, updated: true }),
-      )
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ success: true, updated: true }))
       const summary = await service.executePrintTask(['/label.pdf'], '/doc.pdf')
       expect(summary.logs).toContainEqual(expect.stringContaining('缺少记录ID'))
     })
 
     it('succeeds with no label paths', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-        jsonResponse({ success: true, updated: true }),
-      )
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ success: true, updated: true }))
       const summary = await service.executePrintTask([], '/doc.pdf', 1)
       expect(summary.labelSuccess).toBe(0)
       expect(summary.labelFailed).toBe(0)

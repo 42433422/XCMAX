@@ -15,9 +15,7 @@
       </svg>
     </button>
     <div v-if="open" class="wb-user-menu__panel" role="menu" @click.stop>
-      <div v-if="balance !== null" class="wb-user-menu__balance" role="presentation">
-        余额 ¥{{ balance.toFixed(2) }}
-      </div>
+      <div v-if="balance !== null" class="wb-user-menu__balance" role="presentation">余额 ¥{{ balance.toFixed(2) }}</div>
       <router-link v-if="levelProfile" :to="{ name: 'account' }" class="wb-user-menu__item" role="menuitem" @click="close">
         Lv.{{ levelProfile.level }} · {{ levelProfile.title || '新手' }}
       </router-link>

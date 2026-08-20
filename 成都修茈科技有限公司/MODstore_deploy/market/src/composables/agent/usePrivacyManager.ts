@@ -16,12 +16,7 @@ export function usePrivacyManager() {
    * - high risk → 显示强确认弹窗
    * 返回 true 表示用户同意，false 表示取消/拒绝
    */
-  async function requestAction(
-    action: string,
-    risk: ActionRisk,
-    label: string,
-    args: Record<string, unknown> = {},
-  ): Promise<boolean> {
+  async function requestAction(action: string, risk: ActionRisk, label: string, args: Record<string, unknown> = {}): Promise<boolean> {
     const permission = buildActionPermission(action, risk, label, args)
 
     if (permission.confirmStrategy === 'auto') return true

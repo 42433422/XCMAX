@@ -1,9 +1,10 @@
-# -*- coding: utf-8 -*-
 """里程碑 G/G2：ERP 四领域 handler（编排层在 Mod；DB/Service 仍用宿主）。"""
 
 from __future__ import annotations
 
 from typing import Any
+
+from app.mod_sdk.errors import BOUNDARY_ERRORS
 
 MOD_SOURCE = "mod:xcagi-erp-domain-bridge"
 EXECUTION_PATH = "mod_domain_handler"
@@ -49,8 +50,7 @@ def _products_list(**kw: Any) -> Any:
                 unit=unit,
             )
         )
-    from app.mod_sdk.host_services import verify_db_read_token_header
-    from app.mod_sdk.host_services import _load_products_list_impl_pg
+    from app.mod_sdk.host_services import _load_products_list_impl_pg, verify_db_read_token_header
 
     if request is not None:
         verify_db_read_token_header(request)
@@ -60,7 +60,7 @@ def _products_list(**kw: Any) -> Any:
         if schema_hint:
             out["schema_hint"] = schema_hint
         return _tag(out)
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         logging.getLogger(__name__).exception("products list failed (mod handler)")
         return _tag({"success": False, "message": str(e), "data": [], "total": 0})
 
@@ -182,14 +182,12 @@ def _customers_list(**kw: Any) -> Any:
     if _use_customers_service():
         from app.mod_sdk.erp_customers_facade import customers_list as svc_list
 
-        return _tag(
-            svc_list(request, page=page, per_page=per_page, keyword=keyword)
-        )
-    from app.mod_sdk.host_services import verify_db_read_token_header
+        return _tag(svc_list(request, page=page, per_page=per_page, keyword=keyword))
     from app.mod_sdk.host_services import (
         _customer_row_matches_keyword,
         _customers_schema_hint_if_empty,
         _load_customers_rows,
+        verify_db_read_token_header,
     )
 
     if request is not None:
@@ -236,9 +234,7 @@ def _customers_update(**kw: Any) -> Any:
     if _use_customers_service():
         from app.mod_sdk.erp_customers_facade import customers_update as svc_update
 
-        return _tag(
-            svc_update(kw.get("request"), int(kw.get("customer_id")), kw.get("body") or {})
-        )
+        return _tag(svc_update(kw.get("request"), int(kw.get("customer_id")), kw.get("body") or {}))
     from app.mod_sdk.host_services import customers_update
 
     return _tag(customers_update(**kw))

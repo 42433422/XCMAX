@@ -221,7 +221,10 @@
   font-weight: 600;
   padding: 8px 12px;
   cursor: pointer;
-  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease;
 }
 .im-cli-model-switch__btn.active {
   border-color: var(--xc-color-primary, #0052d9);

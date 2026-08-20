@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr"
 """Persistent runtime routing for platform-funded AI employee LLM calls.
 
 The platform model catalog (``llm_catalog.get_models_for_provider``) remains the
@@ -14,7 +15,7 @@ import os
 import threading
 import uuid
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -24,7 +25,7 @@ _LOCK = threading.RLock()
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    return datetime.now(UTC).replace(microsecond=0).isoformat()
 
 
 def _secret_safe(value: Any) -> Any:

@@ -22,8 +22,9 @@ Convenience helpers:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 from .driver import SandboxJob, SandboxPolicy, SandboxResult
 
@@ -40,9 +41,7 @@ class _CallRecord:
 class MockSandboxDriver:
     """In-memory driver that returns scripted results."""
 
-    response: SandboxResult = field(
-        default_factory=lambda: SandboxResult(success=True, driver="mock")
-    )
+    response: SandboxResult = field(default_factory=lambda: SandboxResult(success=True, driver="mock"))
     handler: JobHandler | None = None
     available: bool = True
     name: str = "mock"
@@ -58,10 +57,7 @@ class MockSandboxDriver:
     ) -> SandboxResult:
         pol = policy or SandboxPolicy()
         self.calls.append(_CallRecord(job=job, policy=pol))
-        if self.handler is not None:
-            res = self.handler(job, pol)
-        else:
-            res = SandboxResult(**self.response.to_dict())
+        res = self.handler(job, pol) if self.handler is not None else SandboxResult(**self.response.to_dict())
         # Force the driver name field so consumers don't have to set it
         # in every scripted response.
         res.driver = self.name
@@ -76,9 +72,7 @@ class MockSandboxDriver:
             if list(record.job.command)[: len(prefix)] == list(prefix):
                 return
         commands = [list(c.job.command) for c in self.calls if c.job.kind == "command"]
-        raise AssertionError(
-            f"no recorded command starts with {list(prefix)}; saw {commands}"
-        )
+        raise AssertionError(f"no recorded command starts with {list(prefix)}; saw {commands}")
 
     def assert_called_with_function(self, function_name: str) -> None:
         for record in self.calls:
@@ -95,7 +89,7 @@ class MockSandboxDriver:
     # ----------------------------------------------------------------- factories
 
     @classmethod
-    def passing(cls, *, stdout: str = "", stderr: str = "", output: dict[str, Any] | None = None) -> "MockSandboxDriver":
+    def passing(cls, *, stdout: str = "", stderr: str = "", output: dict[str, Any] | None = None) -> MockSandboxDriver:
         return cls(
             response=SandboxResult(
                 success=True,
@@ -108,7 +102,7 @@ class MockSandboxDriver:
         )
 
     @classmethod
-    def failing(cls, *, stderr: str = "boom", exit_code: int = 1) -> "MockSandboxDriver":
+    def failing(cls, *, stderr: str = "boom", exit_code: int = 1) -> MockSandboxDriver:
         return cls(
             response=SandboxResult(
                 success=False,

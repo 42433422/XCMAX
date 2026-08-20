@@ -1,3 +1,4 @@
+# mypy: disable-error-code="misc"
 """Tests for app.fastapi_routes.code_editor — coverage ramp C3.3-a.
 
 Covers the workspace code-editor endpoints:

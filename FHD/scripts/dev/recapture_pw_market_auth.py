@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="import-not-found"
 """重拍需登录的 /market/* 页（注入 modstore_token 后更新 manifest PNG）。"""
+
 from __future__ import annotations
 
 import asyncio

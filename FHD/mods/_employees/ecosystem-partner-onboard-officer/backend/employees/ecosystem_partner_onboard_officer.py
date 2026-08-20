@@ -55,7 +55,9 @@ def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         {"code": "missing_field", "path": f"partner_profile.{field}"} for field in missing
     ]
     if profile.get("tenant_id") and not bool(profile.get("tenant_isolated")):
-        issues.append({"code": "tenant_isolation_unproven", "path": "partner_profile.tenant_isolated"})
+        issues.append(
+            {"code": "tenant_isolation_unproven", "path": "partner_profile.tenant_isolated"}
+        )
     if "admin" in {str(value).strip().lower() for value in permissions}:
         issues.append({"code": "overbroad_permission", "path": "partner_profile.permissions"})
     status = "approved" if not issues else "rejected"

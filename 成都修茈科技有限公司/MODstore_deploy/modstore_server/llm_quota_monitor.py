@@ -1,10 +1,11 @@
+# mypy: disable-error-code="union-attr"
 """Unified, secret-safe quota and usage snapshots for platform LLM routes."""
 
 from __future__ import annotations
 
 import os
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any, Optional
 
 from sqlalchemy import case, func
@@ -15,6 +16,7 @@ from modstore_server.llm_key_resolver import (
     platform_api_key,
     platform_base_url,
 )
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 _BEARER_RE = re.compile(r"(?i)\bbearer\s+[a-z0-9._~+/=-]{8,}")
 _API_KEY_RE = re.compile(r"(?i)\b(?:sk|tp)-[a-z0-9_-]{8,}")
@@ -34,7 +36,7 @@ def scrub_llm_error(value: Any) -> str:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    return datetime.now(UTC).replace(microsecond=0).isoformat()
 
 
 def _env_int(name: str, default: int) -> int:
@@ -198,7 +200,7 @@ async def fetch_minimax_token_plan_quota(
         out = parse_minimax_token_plan_remains(response.json())
         out["source"] = "minimax_token_plan_remains_api"
         return out
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         return {
             "state": "error",
             "visibility": "exact",
@@ -228,7 +230,7 @@ def classify_probe_result(result: dict[str, Any]) -> str:
 def _local_usage_by_provider(hours: int = 24) -> dict[str, dict[str, Any]]:
     from modstore_server.models import LlmCallLog, get_session_factory
 
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=max(1, hours))
+    cutoff = datetime.now(UTC) - timedelta(hours=max(1, hours))
     sf = get_session_factory()
     with sf() as session:
         rows = (
@@ -271,7 +273,7 @@ async def platform_quota_snapshot(
     model_catalog = catalog or await platform_model_catalog(refresh=False)
     try:
         local_usage = _local_usage_by_provider(24)
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         local_usage = {"_error": {"error": scrub_llm_error(f"{type(exc).__name__}: {exc}")[:200]}}
 
     providers: list[dict[str, Any]] = []

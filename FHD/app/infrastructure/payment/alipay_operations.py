@@ -230,9 +230,7 @@ def query_refund(
         return {"success": False, "message": str(exc), "raw": None}
     request_no = out_request_no or out_trade_no
     try:
-        result = client.api_alipay_trade_fastpay_refund_query(
-            request_no, out_trade_no=out_trade_no
-        )
+        result = client.api_alipay_trade_fastpay_refund_query(request_no, out_trade_no=out_trade_no)
     except transient_errors as exc:
         logger.exception("alipay.trade.fastpay.refund.query 请求异常")
         return {"success": False, "message": f"请求支付宝异常: {exc}", "raw": None}

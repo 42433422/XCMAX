@@ -23,9 +23,9 @@ event loop，导致并发能力严重受限。
 
 ### 已修改文件
 
-| 文件 | 修改说明 |
-|------|---------|
-| `modstore_server/llm_api.py::llm_status` | 移除 `Depends(get_db)`；整体在 `asyncio.to_thread` 中打开新 Session 执行 |
+| 文件                                               | 修改说明                                                                                                |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `modstore_server/llm_api.py::llm_status`           | 移除 `Depends(get_db)`；整体在 `asyncio.to_thread` 中打开新 Session 执行                                |
 | `modstore_server/llm_api.py::resolve_chat_default` | 首批 sync DB 操作（prefs + API keys）移至 `asyncio.to_thread`；`get_models_for_provider` async 调用保持 |
 
 ### 还需要修改的热点（留待完整迁移）
@@ -54,6 +54,7 @@ PY
 ```
 
 已知优先级高的剩余热点：
+
 - `llm_api.py` — `llm_catalog`, `post_detect_bare_credential`, `put_llm_credentials`, `delete_llm_credentials`
 - `market_api.py` — `api_admin_upload_catalog`
 
@@ -66,15 +67,15 @@ PY
 
 ### 迁移成本估算
 
-| 组件 | 工作量 |
-|------|------|
+| 组件                                         | 工作量                                                           |
+| -------------------------------------------- | ---------------------------------------------------------------- |
 | `models.py` get_engine / get_session_factory | 1 天：改 URL (postgresql+asyncpg://), 改 engine, 改 sessionmaker |
-| `infrastructure/db.py` get_db | 半天：改 AsyncSession + async generator |
-| 122 个 `Depends(get_db)` 注入点 | 2-3 天：全部路由函数加 await + select() |
-| 数百个 `get_session_factory()` 直接使用 | 3-4 天：改为 async_sessionmaker |
-| Alembic env.py | 半天：保持 sync 连接（NullPool psycopg）|
-| asyncpg driver 安装 | 10 分钟：`pip install asyncpg` + pyproject.toml |
-| 本地 SQLite 兼容（dev 环境） | 额外半天：`aiosqlite` 或强制 PostgreSQL dev |
+| `infrastructure/db.py` get_db                | 半天：改 AsyncSession + async generator                          |
+| 122 个 `Depends(get_db)` 注入点              | 2-3 天：全部路由函数加 await + select()                          |
+| 数百个 `get_session_factory()` 直接使用      | 3-4 天：改为 async_sessionmaker                                  |
+| Alembic env.py                               | 半天：保持 sync 连接（NullPool psycopg）                         |
+| asyncpg driver 安装                          | 10 分钟：`pip install asyncpg` + pyproject.toml                  |
+| 本地 SQLite 兼容（dev 环境）                 | 额外半天：`aiosqlite` 或强制 PostgreSQL dev                      |
 
 **总估计：1-2 周，高风险，建议在独立功能分支 + 全量测试覆盖后合并。**
 

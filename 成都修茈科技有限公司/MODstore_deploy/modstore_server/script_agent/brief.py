@@ -69,7 +69,7 @@ class Brief:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Brief":
+    def from_dict(cls, data: Dict[str, Any]) -> Brief:
         inputs_raw = data.get("inputs") or []
         inputs = [
             (

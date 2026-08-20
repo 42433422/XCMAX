@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 from modstore_server.xiaoc_identity import (
     VisitorIdentity,
     active_plan_id_for_user,
@@ -28,11 +29,11 @@ from modstore_server.xiaoc_identity import (
     sanitize_visitor_label,
 )
 from modstore_server.xiaoc_policy_data import (
+    _PRIVATE_DATASET_PREFIXES,
     INTERNAL_DATASET_ID,
     PERSY_DATASET_ID,
     PUBLIC_DATASET_ID,
     XIAOC_PERMISSIONS,
-    _PRIVATE_DATASET_PREFIXES,
 )
 
 logger = logging.getLogger(__name__)
@@ -81,7 +82,7 @@ def _format_permission_block(mode: str) -> str:
     p = permission_policy(mode=mode)
     allowed = "；".join(p.get("allowed") or [])
     denied = "；".join(p.get("denied") or [])
-    return f"【权限契约·{p.get('label')}】\n" f"允许：{allowed}\n" f"禁止：{denied}"
+    return f"【权限契约·{p.get('label')}】\n允许：{allowed}\n禁止：{denied}"
 
 
 XIAOC_CORE_PERSONA = """你是「XC AGI 数字管家」，叫小C，是这个平台的老熟人。
@@ -244,7 +245,7 @@ def _http_retrieve(
                     "dataset_id": dataset_id or PUBLIC_DATASET_ID,
                 },
             )
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.debug("cs-ssot http retrieve failed: %s", exc)
         return []
     if resp.status_code < 200 or resp.status_code >= 300:
@@ -252,7 +253,7 @@ def _http_retrieve(
         return []
     try:
         data = resp.json()
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         return []
     chunks = data.get("chunks") if isinstance(data, dict) else None
     return list(chunks) if isinstance(chunks, list) else []
@@ -269,7 +270,7 @@ def _local_retrieve(
     # XCMAX layout: …/MODstore_deploy/modstore_server → parents[3]=XCMAX
     try:
         roots.append(Path(__file__).resolve().parents[3] / "FHD")
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         pass
     for root in roots:
         if not root or not (root / "app").is_dir():
@@ -299,7 +300,7 @@ def _local_retrieve(
             )
             chunks = result.get("chunks") if isinstance(result, dict) else []
             return list(chunks) if isinstance(chunks, list) else []
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
             logger.debug("cs-ssot local retrieve failed via %s: %s", root, exc)
             continue
     return []

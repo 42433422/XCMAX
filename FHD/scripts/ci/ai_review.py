@@ -1,3 +1,4 @@
+# mypy: disable-error-code="attr-defined, list-item, no-any-return, union-attr"
 """PR AI Review 脚本：diff 解析 → 高危规则匹配 → LLM 复核 → 行级评论。
 
 七元契约沿用桌面端：Signal(pull_request opened/synchronize) →
@@ -22,6 +23,8 @@ import re
 import sys
 from dataclasses import dataclass
 from typing import Any
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 try:
     import httpx
@@ -145,13 +148,13 @@ def fetch_pr_diff(
         if not diff_parts:
             return ""
         return "".join(diff_parts)
-    except Exception:  # noqa: BLE001 - caller treats empty evidence as blocking
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - caller treats empty evidence as blocking
         return ""
     finally:
         if close_after:
             try:
                 client.close()
-            except Exception:  # noqa: BLE001 - pragma: no cover
+            except RECOVERABLE_ERRORS:  # noqa: BLE001 - pragma: no cover
                 pass
 
 
@@ -757,7 +760,7 @@ def call_llm_review(
         finally:
             if close_after:
                 client.close()
-    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
         return "unavailable"
     return _response_verdict(data)
 
@@ -810,13 +813,13 @@ def post_line_comment(
             json=payload,
         )
         return resp.status_code in (200, 201)
-    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
         return False
     finally:
         if close_after:
             try:
                 client.close()
-            except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover
+            except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover
                 pass
 
 

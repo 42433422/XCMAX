@@ -1,10 +1,11 @@
+# mypy: disable-error-code="union-attr"
 """Phase A/B release-train line dispatch and strategic escalation."""
 
 from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Dict, List, Sequence, Tuple
 
 from modstore_server.digest_line_executor import (
@@ -13,6 +14,7 @@ from modstore_server.digest_line_executor import (
 )
 from modstore_server.digest_vibe_line_dispatch import DISPATCH_APP, DISPATCH_PS
 from modstore_server.digest_vibe_work_units import DISPATCH_PW, DISPATCH_SR
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +47,7 @@ def _merge_phase_block(
 ) -> Dict[str, Any]:
     out = dict(meta or {})
     out[block_key] = payload
-    out[f"{block_key}_at"] = payload.get("completed_at") or datetime.now(timezone.utc).isoformat()
+    out[f"{block_key}_at"] = payload.get("completed_at") or datetime.now(UTC).isoformat()
     return out
 
 
@@ -69,7 +71,11 @@ def trigger_strategic_layer_dispatch(
         ``{"ok": True/False, "skipped": True/False, "reason": str, "decision_id": str, ...}``
     """
     if not _env_bool("MODSTORE_STRATEGIC_LAYER_INTEGRATION_ENABLED", "1"):
-        return {"ok": True, "skipped": True, "reason": "strategic_layer integration disabled"}
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "strategic_layer integration disabled",
+        }
 
     if result.get("shadow"):
         return {"ok": True, "skipped": True, "reason": "shadow mode"}
@@ -94,8 +100,7 @@ def trigger_strategic_layer_dispatch(
     if not overall_ok:
         action = "review_digest_failure"
         title = (
-            f"daily-digest#{record_id} 失败 review "
-            f"(phases: {','.join(failed_phases) or 'unknown'})"
+            f"daily-digest#{record_id} 失败 review (phases: {','.join(failed_phases) or 'unknown'})"
         )
         decision_type = DecisionType.OPERATIONAL
         rationale = (
@@ -153,7 +158,7 @@ def trigger_strategic_layer_dispatch(
             "action": action,
             "title": title,
         }
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("strategic_layer dispatch failed record_id=%s", record_id)
         return {"ok": False, "error": str(exc)}
 
@@ -161,7 +166,11 @@ def trigger_strategic_layer_dispatch(
 def wait_for_phase_a(record_id: int, *, required: bool = True) -> Dict[str, Any]:
     """08:25 前确认 08:15 Phase A（P-S + P-App 补丁）已完成或跳过。"""
     if not _env_bool("MODSTORE_RELEASE_TRAIN_WAIT_PHASE_A", "1"):
-        return {"ok": True, "skipped": True, "reason": "MODSTORE_RELEASE_TRAIN_WAIT_PHASE_A=0"}
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "MODSTORE_RELEASE_TRAIN_WAIT_PHASE_A=0",
+        }
 
     meta = _read_execute_meta(int(record_id))
     runs = meta.get("runs") or {}
@@ -210,11 +219,15 @@ def execute_phase_a_line_chain(
 ) -> Dict[str, Any]:
     """08:15 Phase A：P-S 软件补丁 + P-App 移动发布补丁派发。"""
     if not _env_bool("MODSTORE_DAILY_VIBE_EXECUTE_ENABLED", "1"):
-        return {"ok": True, "skipped": True, "reason": "MODSTORE_DAILY_VIBE_EXECUTE_ENABLED=0"}
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "MODSTORE_DAILY_VIBE_EXECUTE_ENABLED=0",
+        }
 
     from modstore_server.digest_line_executor import execute_digest_line_work_units
 
-    started_at = datetime.now(timezone.utc).isoformat()
+    started_at = datetime.now(UTC).isoformat()
     line_results: Dict[str, Any] = {}
     all_ok = True
 
@@ -232,7 +245,7 @@ def execute_phase_a_line_chain(
         if not out.get("ok"):
             all_ok = False
 
-    completed_at = datetime.now(timezone.utc).isoformat()
+    completed_at = datetime.now(UTC).isoformat()
     block: Dict[str, Any] = {
         "ok": all_ok,
         "phase": "A",
@@ -258,11 +271,11 @@ def execute_phase_a_line_chain(
     )
 
     logger.info(
-        "phase_a line chain record_id=%s ok=%s employees=%s lines=%s",
+        "phase_a line chain record_id=%s ok=%s employee_count=%s line_count=%s",
         record_id,
         all_ok,
-        block["employee_chain"],
-        block["lines"],
+        len(block["employee_chain"]),
+        len(block["lines"]),
     )
     return block
 
@@ -279,17 +292,22 @@ def execute_phase_b_line_chain(
     默认包含 P-App，用于独立链路联调；release orchestrator 可按需禁用。
     """
     if not _env_bool("MODSTORE_RELEASE_TRAIN_PHASE_B_ENABLED", "1"):
-        return {"ok": True, "skipped": True, "reason": "MODSTORE_RELEASE_TRAIN_PHASE_B_ENABLED=0"}
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "MODSTORE_RELEASE_TRAIN_PHASE_B_ENABLED=0",
+        }
 
     phase_a_gate = wait_for_phase_a(
-        int(record_id), required=_env_bool("MODSTORE_RELEASE_TRAIN_REQUIRE_PHASE_A", "1")
+        int(record_id),
+        required=_env_bool("MODSTORE_RELEASE_TRAIN_REQUIRE_PHASE_A", "1"),
     )
     if not phase_a_gate.get("ok"):
         return phase_a_gate
 
     from modstore_server.digest_line_executor import execute_digest_line_work_units
 
-    started_at = datetime.now(timezone.utc).isoformat()
+    started_at = datetime.now(UTC).isoformat()
     line_results: Dict[str, Any] = {}
     all_ok = True
 
@@ -308,7 +326,7 @@ def execute_phase_b_line_chain(
         if not out.get("ok"):
             all_ok = False
 
-    completed_at = datetime.now(timezone.utc).isoformat()
+    completed_at = datetime.now(UTC).isoformat()
     block: Dict[str, Any] = {
         "ok": all_ok,
         "phase": "B",
@@ -342,10 +360,10 @@ def execute_phase_b_line_chain(
     )
 
     logger.info(
-        "phase_b line chain record_id=%s shadow=%s ok=%s employees=%s",
+        "phase_b line chain record_id=%s shadow=%s ok=%s employee_count=%s",
         record_id,
         shadow,
         all_ok,
-        employees,
+        len(employees),
     )
     return block

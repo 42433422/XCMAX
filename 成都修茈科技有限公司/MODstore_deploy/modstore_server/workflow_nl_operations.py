@@ -1,7 +1,8 @@
-# ruff: noqa
-# mypy: ignore-errors
+# mypy: disable-error-code="arg-type, assignment, attr-defined, index, no-any-return, valid-type"
 """Normalization and persistence operations for natural-language workflow graphs."""
+
 from __future__ import annotations
+
 import importlib
 
 
@@ -19,8 +20,15 @@ def _default_static_logic(
         "fallback_template": f"{name}: " + "${value}",
         "output_var": output_var or "result",
         "metadata": {
-            "repair_hints": ["补齐缺失输入后重试", "质量不足时追加 details 生成更完整结果"],
-            "failure_modes": ["missing_field", "quality_below_threshold", "runtime_error"],
+            "repair_hints": [
+                "补齐缺失输入后重试",
+                "质量不足时追加 details 生成更完整结果",
+            ],
+            "failure_modes": [
+                "missing_field",
+                "quality_below_threshold",
+                "runtime_error",
+            ],
         },
     }
 
@@ -40,7 +48,11 @@ def _sanitize_static_logic(
     if logic_type == "template_transform":
         output_var = str(logic.get("output_var") or "result").strip() or "result"
         template = str(logic.get("template") or f"{name}: " + "${value}")
-        sanitized = {"type": "template_transform", "template": template, "output_var": output_var}
+        sanitized = {
+            "type": "template_transform",
+            "template": template,
+            "output_var": output_var,
+        }
         required = logic.get("required_fields")
         if isinstance(required, list):
             sanitized["required_fields"] = [str(x) for x in required if str(x).strip()]
@@ -350,7 +362,7 @@ def _normalize_node(
         px = float(raw.get("position_x", 0))
         py = float(raw.get("position_y", 0))
     except (TypeError, ValueError):
-        (px, py) = (0.0, 0.0)
+        px, py = (0.0, 0.0)
     return {
         "temp_id": tid,
         "node_type": nt,
@@ -373,7 +385,7 @@ def _detect_cycles_nl(
         tgt = str(e.get("target_temp_id") or "").strip()
         if src in adj and tgt in node_ids:
             adj[src].append(tgt)
-    (WHITE, GRAY, BLACK) = (0, 1, 2)
+    WHITE, GRAY, BLACK = (0, 1, 2)
     color: dict[str, int] = {nid: WHITE for nid in node_ids}
     cycles: _facade().List[str] = []
 

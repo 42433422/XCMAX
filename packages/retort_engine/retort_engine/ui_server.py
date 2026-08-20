@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from retort_engine.operational_errors import BOUNDARY_ERRORS
+
 import json
 import mimetypes
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -7,7 +9,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from retort_engine.core import RetortService
+from retort_engine.service import RetortService
 
 
 class RetortUIServer:
@@ -123,9 +125,7 @@ class RetortUIServer:
                         self._json(outer.service.llm_parallel_status(payload))
                     else:
                         self.send_error(404)
-                except (
-                    Exception  # noqa: BLE001 - HTTP boundary normalizes failures
-                ) as exc:
+                except BOUNDARY_ERRORS as exc:
                     self._json({"status": "error", "error": str(exc)}, 400)
 
             def log_message(self, format: str, *args: Any) -> None:

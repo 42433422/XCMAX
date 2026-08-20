@@ -90,11 +90,7 @@ class Cdp {
     })
   }
   async evaluate(expression, awaitPromise = false, timeout = 120000) {
-    const r = await this.send(
-      'Runtime.evaluate',
-      { expression, awaitPromise, returnByValue: true, userGesture: true },
-      timeout,
-    )
+    const r = await this.send('Runtime.evaluate', { expression, awaitPromise, returnByValue: true, userGesture: true }, timeout)
     if (r.exceptionDetails) {
       const ex = r.exceptionDetails.exception?.description || r.exceptionDetails.text
       throw new Error(ex)
@@ -187,8 +183,7 @@ const PAGE_API = {
 async function main() {
   const pages = await waitTargets()
   // Prefer non-splash; else use splash (content may load in-place)
-  const target =
-    pages.find((p) => !String(p.url || '').includes('splash.html')) || pages[0]
+  const target = pages.find((p) => !String(p.url || '').includes('splash.html')) || pages[0]
   const cdp = new Cdp(target.webSocketDebuggerUrl)
   await cdp.ready()
   await cdp.send('Runtime.enable')
@@ -472,7 +467,11 @@ async function main() {
     const code = `CL${Date.now() % 100000}`
     const created = await api('/api/customers', 'POST', { name: `闭环组织${code}`, code })
     const after = await api('/api/customers')
-    const beforeCount = Array.isArray(before?.data) ? before.data.length : Array.isArray(before?.data?.items) ? before.data.items.length : null
+    const beforeCount = Array.isArray(before?.data)
+      ? before.data.length
+      : Array.isArray(before?.data?.items)
+        ? before.data.items.length
+        : null
     const afterCount = Array.isArray(after?.data) ? after.data.length : Array.isArray(after?.data?.items) ? after.data.items.length : null
     bizLoop = {
       ok: Boolean(created?.ok) && (afterCount == null || beforeCount == null || afterCount >= beforeCount),
@@ -503,10 +502,7 @@ async function main() {
       '',
       `组织创建闭环：${bizLoop.ok ? 'OK' : 'FAIL'}`,
       '',
-      ...results.map(
-        (r) =>
-          `- [${r.closed_loop?.ok ? 'x' : ' '}] ${r.label}（api=${r.closed_loop?.api_ok} ui=${r.closed_loop?.ui_ok}）`,
-      ),
+      ...results.map((r) => `- [${r.closed_loop?.ok ? 'x' : ' '}] ${r.label}（api=${r.closed_loop?.api_ok} ui=${r.closed_loop?.ui_ok}）`),
       '',
     ].join('\n'),
   )

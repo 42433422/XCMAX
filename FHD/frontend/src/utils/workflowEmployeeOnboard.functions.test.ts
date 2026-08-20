@@ -158,9 +158,7 @@ describe('workflowEmployeeOnboard', () => {
     })
 
     it('returns empty array for mods without workflow employees', async () => {
-      const result = await autoOnboardWorkflowEmployeesFromMods([
-        { id: 'mod1', workflow_employees: [] },
-      ])
+      const result = await autoOnboardWorkflowEmployeesFromMods([{ id: 'mod1', workflow_employees: [] }])
       expect(result).toEqual([])
     })
   })

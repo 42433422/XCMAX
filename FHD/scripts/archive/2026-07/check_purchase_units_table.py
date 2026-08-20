@@ -1,5 +1,7 @@
 import sqlite3
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 
 def check_purchase_units_table():
     """检查purchase_units表的内容"""
@@ -65,7 +67,7 @@ def check_purchase_units_table():
             "units_list": units,
         }
 
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 检查purchase_units表时出错: {e}")
         return {"error": str(e)}
 
@@ -109,7 +111,7 @@ def add_bandao_fengqing_to_purchase_units():
         conn.close()
         return True
 
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 添加半岛风情到purchase_units表时出错: {e}")
         return False
 

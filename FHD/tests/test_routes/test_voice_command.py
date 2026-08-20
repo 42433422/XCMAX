@@ -1,3 +1,4 @@
+# mypy: disable-error-code="var-annotated"
 """Tests for app.fastapi_routes.voice_routes — POST /api/voice/command 端到端语音指令。
 
 覆盖 ASR → 意图识别 → 可选自动执行 的关键分支：

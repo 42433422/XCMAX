@@ -42,11 +42,7 @@ def persist_workflow_approval(
                 applicant = facade._resolve_applicant(db, runtime_context)
                 if applicant is None:
                     raise RuntimeError("无法从当前登录会话解析审批申请人")
-                flow = (
-                    db.query(ApprovalFlow)
-                    .filter(ApprovalFlow.flow_key == flow_key)
-                    .first()
-                )
+                flow = db.query(ApprovalFlow).filter(ApprovalFlow.flow_key == flow_key).first()
                 if flow is None:
                     flow = ApprovalFlow(
                         flow_key=flow_key,
@@ -106,9 +102,7 @@ def persist_workflow_approval(
                     request_no=request.request_id,
                     flow_id=int(flow.id),
                     business_type="workflow_tool",
-                    business_data=facade.json.dumps(
-                        business_data, ensure_ascii=False, default=str
-                    ),
+                    business_data=facade.json.dumps(business_data, ensure_ascii=False, default=str),
                     applicant_id=int(applicant.id),
                     applicant_name=str(
                         applicant.display_name or applicant.username or applicant.id
@@ -190,9 +184,7 @@ def mark_durable_outcome(
 
     del message
     status = ApprovalStatus.APPROVED.value if success else ApprovalStatus.CANCELLED.value
-    safe_code, safe_message = facade.canonical_workflow_outcome(
-        success=success, code=code
-    )
+    safe_code, safe_message = facade.canonical_workflow_outcome(success=success, code=code)
     try:
         with get_db() as db:
             persisted = (
@@ -205,9 +197,7 @@ def mark_durable_outcome(
             if str(persisted.business_type or "").strip() != "workflow_tool":
                 return
             business_data = (
-                facade.json.loads(persisted.business_data)
-                if persisted.business_data
-                else {}
+                facade.json.loads(persisted.business_data) if persisted.business_data else {}
             )
             if not isinstance(business_data, dict):
                 business_data = {}
@@ -243,9 +233,7 @@ def mark_durable_outcome(
                         },
                     )
                 except facade._APPROVAL_STORAGE_ERRORS:
-                    facade.logger.warning(
-                        "AI 审批执行失败审计写入失败 request_no=%s", request_id
-                    )
+                    facade.logger.warning("AI 审批执行失败审计写入失败 request_no=%s", request_id)
             persisted.updated_at = datetime.now()
             db.commit()
     except facade._APPROVAL_STORAGE_ERRORS as exc:

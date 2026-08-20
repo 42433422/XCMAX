@@ -19,7 +19,7 @@ bands / policy 等领域参数留给人或领域方补充后固化。
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 RULES_VERSION = 1
@@ -124,10 +124,7 @@ def _cells_index(sheet: Dict[str, Any]) -> Dict[Tuple[int, int], Dict[str, Any]]
 
 
 def _block_tops(block: Dict[str, Any]) -> List[int]:
-    return [
-        block["first_top"] + i * block["rows"]
-        for i in range(block["count"])
-    ]
+    return [block["first_top"] + i * block["rows"] for i in range(block["count"])]
 
 
 def _text(value: Any) -> str:
@@ -405,7 +402,9 @@ def infer_rules(
     if sheet_name:
         sheet = next((s for s in sheets if s.get("name") == sheet_name), None)
         if sheet is None:
-            raise ValueError(f"未找到 sheet：{sheet_name!r}；可用 {[s.get('name') for s in sheets]}")
+            raise ValueError(
+                f"未找到 sheet：{sheet_name!r}；可用 {[s.get('name') for s in sheets]}"
+            )
     else:
         sheet = max(sheets, key=lambda s: int(s.get("cell_count") or 0))
 
@@ -424,7 +423,9 @@ def infer_rules(
 
     key_col, key_score = _detect_key_col(cells, tops, max_col)
     if key_col is None:
-        open_questions.append("未能确定键列（块首行无高区分度文本列），请人工指定 template_map.key_col")
+        open_questions.append(
+            "未能确定键列（块首行无高区分度文本列），请人工指定 template_map.key_col"
+        )
 
     # 模板常带空白备用块（如太阳鸟 151 块仅 27 块在住）：结构检测用全部块，
     # 键列置信/公式检测用有效块，避免空块稀释覆盖率。
@@ -497,7 +498,7 @@ def infer_rules(
         "policy": {"value_number_format": "0.0"},
         "evidence": {
             "source": source_name,
-            "inferred_at": datetime.now(timezone.utc).isoformat(),
+            "inferred_at": datetime.now(UTC).isoformat(),
             "support_cols": block_meta.get("support_cols") or [],
             "confidences": confidences,
             "open_questions": open_questions,

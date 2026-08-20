@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """P-W 增加 AI 市场 + 软件下载 两页（官网导航入口）。"""
+
 from __future__ import annotations
 
 import sys
@@ -11,12 +12,12 @@ TARGET = Path(
     else "/root/modstore-git/MODstore_deploy/modstore_server/daily_digest_surface_audit.py"
 )
 
-OLD = '''    ("Excel转AI", "/excel-to-ai.html"),
+OLD = """    ("Excel转AI", "/excel-to-ai.html"),
 )
 
-_PS_PUBLIC_PAGES'''
+_PS_PUBLIC_PAGES"""
 
-NEW = '''    ("Excel转AI", "/excel-to-ai.html"),
+NEW = """    ("Excel转AI", "/excel-to-ai.html"),
 )
 
 _PW_MARKET_ENTRY_PAGES: Tuple[Tuple[str, str], ...] = (
@@ -24,7 +25,7 @@ _PW_MARKET_ENTRY_PAGES: Tuple[Tuple[str, str], ...] = (
     ("软件下载", "/market/workbench/download"),
 )
 
-_PS_PUBLIC_PAGES'''
+_PS_PUBLIC_PAGES"""
 
 text = TARGET.read_text(encoding="utf-8")
 if "_PW_MARKET_ENTRY_PAGES" in text:
@@ -34,18 +35,18 @@ if OLD not in text:
     raise SystemExit("anchor not found")
 text = text.replace(OLD, NEW, 1)
 
-LOOP_OLD = '''    for name, path in _STATIC_PW_PAGES:
+LOOP_OLD = """    for name, path in _STATIC_PW_PAGES:
         out.append(SurfaceTarget("P-W", "网站 P-W", name, path, "desktop"))
 
-    for name, path in _PS_PUBLIC_PAGES:'''
+    for name, path in _PS_PUBLIC_PAGES:"""
 
-LOOP_NEW = '''    for name, path in _STATIC_PW_PAGES:
+LOOP_NEW = """    for name, path in _STATIC_PW_PAGES:
         out.append(SurfaceTarget("P-W", "网站 P-W", name, path, "desktop"))
 
     for name, path in _PW_MARKET_ENTRY_PAGES:
         out.append(SurfaceTarget("P-W", "网站 P-W", name, path, "desktop"))
 
-    for name, path in _PS_PUBLIC_PAGES:'''
+    for name, path in _PS_PUBLIC_PAGES:"""
 
 if LOOP_OLD not in text:
     raise SystemExit("loop anchor not found")

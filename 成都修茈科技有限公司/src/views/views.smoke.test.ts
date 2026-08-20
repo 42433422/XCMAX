@@ -48,62 +48,63 @@ vi.mock('../api', () => ({
   api: new Proxy(
     {},
     {
-      get: (_target, property) => vi.fn(async () => {
-        if (apiMockState.reject) throw new Error(`mock ${String(property)} failure`)
-        if (Object.prototype.hasOwnProperty.call(apiMockState.responses, String(property))) {
-          const configured = apiMockState.responses[String(property)]
-          if (configured instanceof Error) throw configured
-          return configured
-        }
-        switch (String(property)) {
-          case 'catalogDetail':
-            return {
-              id: 1,
-              name: 'Starter MOD',
-              pkg_id: 'starter.mod',
-              version: '1.0.0',
-              industry: '通用',
-              artifact: 'workflow',
-              description: 'A test catalog item',
-              price: 0,
-              purchased: true,
-            }
-          case 'paymentQuery':
-            return {
-              id: 'order-1',
-              order_id: 'order-1',
-              status: 'paid',
-              subject: 'Starter plan',
-              total_amount: 10,
-              created_at: '2026-08-17T00:00:00Z',
-              paid_at: '2026-08-17T00:01:00Z',
-            }
-          case 'paymentCheckout':
-            return { ok: false, message: 'checkout unavailable in component test' }
-          case 'getMod':
-            return { id: 'demo', manifest: {}, files: [] }
-          case 'getModAuthoringSummary':
-            return { files: [], warnings: [], validation: { errors: [], warnings: [] } }
-          case 'getModFile':
-            return { content: '' }
-          case 'putModManifest':
-          case 'putModFile':
-            return { warnings: [], manifest_warnings: [] }
-          case 'createMod':
-          case 'importZIP':
-            return { id: 'demo' }
-          case 'pull':
-            return { pulled: [] }
-          case 'push':
-            return { deployed: [] }
-          case 'login':
-          case 'loginWithCode':
-          case 'register':
-            return { ...apiResult, access_token: 'test-token', refresh_token: 'test-refresh' }
-          default:
-            return { ...apiResult }
-        }
-      }),
+      get: (_target, property) =>
+        vi.fn(async () => {
+          if (apiMockState.reject) throw new Error(`mock ${String(property)} failure`)
+          if (Object.prototype.hasOwnProperty.call(apiMockState.responses, String(property))) {
+            const configured = apiMockState.responses[String(property)]
+            if (configured instanceof Error) throw configured
+            return configured
+          }
+          switch (String(property)) {
+            case 'catalogDetail':
+              return {
+                id: 1,
+                name: 'Starter MOD',
+                pkg_id: 'starter.mod',
+                version: '1.0.0',
+                industry: '通用',
+                artifact: 'workflow',
+                description: 'A test catalog item',
+                price: 0,
+                purchased: true,
+              }
+            case 'paymentQuery':
+              return {
+                id: 'order-1',
+                order_id: 'order-1',
+                status: 'paid',
+                subject: 'Starter plan',
+                total_amount: 10,
+                created_at: '2026-08-17T00:00:00Z',
+                paid_at: '2026-08-17T00:01:00Z',
+              }
+            case 'paymentCheckout':
+              return { ok: false, message: 'checkout unavailable in component test' }
+            case 'getMod':
+              return { id: 'demo', manifest: {}, files: [] }
+            case 'getModAuthoringSummary':
+              return { files: [], warnings: [], validation: { errors: [], warnings: [] } }
+            case 'getModFile':
+              return { content: '' }
+            case 'putModManifest':
+            case 'putModFile':
+              return { warnings: [], manifest_warnings: [] }
+            case 'createMod':
+            case 'importZIP':
+              return { id: 'demo' }
+            case 'pull':
+              return { pulled: [] }
+            case 'push':
+              return { deployed: [] }
+            case 'login':
+            case 'loginWithCode':
+            case 'register':
+              return { ...apiResult, access_token: 'test-token', refresh_token: 'test-refresh' }
+            default:
+              return { ...apiResult }
+          }
+        }),
     },
   ),
   setTokens: vi.fn(),
@@ -285,9 +286,7 @@ describe('application views', () => {
     apiMockState.reject = true
     apiMockState.responses = {}
     localStorage.setItem('modstore_token', 'test-token')
-    const consoleError = _name === 'database viewer'
-      ? vi.spyOn(console, 'error').mockImplementation(() => undefined)
-      : null
+    const consoleError = _name === 'database viewer' ? vi.spyOn(console, 'error').mockImplementation(() => undefined) : null
     const router = createRouter({
       history: createMemoryHistory(),
       routes: [{ path: '/:pathMatch(.*)*', component: { template: '<div />' } }],

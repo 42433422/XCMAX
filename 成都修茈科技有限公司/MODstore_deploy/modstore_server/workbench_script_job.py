@@ -1,11 +1,15 @@
-# ruff: noqa
 """Single-pass workbench script generation and sandbox execution."""
+
 from __future__ import annotations
+
 import importlib
 import logging
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional
+
 from sqlalchemy.orm import Session
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger("modstore_server.workbench_script_runner")
 StatusHook = Callable[[str], Awaitable[None]]
@@ -34,7 +38,7 @@ async def run_script_job(
         if status_hook:
             try:
                 await status_hook(msg)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 pass
 
     fake_input_files = [Path(str((f or {}).get("filename") or "input.bin")) for f in files or []]
@@ -65,10 +69,10 @@ async def run_script_job(
     base_url: Optional[str] = None
     if db is not None and provider:
         try:
-            (api_key, _src) = _facade().resolve_api_key(db, user_id, provider)
+            api_key, _src = _facade().resolve_api_key(db, user_id, provider)
             base_url = _facade().resolve_base_url(db, user_id, provider)
-        except Exception:
-            (api_key, base_url) = (None, None)
+        except RECOVERABLE_ERRORS:
+            api_key, base_url = (None, None)
     code = gen.code
     last_errors: List[str] = []
     last_stdout = ""

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """里程碑 S：NeuroBus 运行时提供方入口。"""
 
 from __future__ import annotations

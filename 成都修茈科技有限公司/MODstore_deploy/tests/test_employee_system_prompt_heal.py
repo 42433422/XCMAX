@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from modstore_server.mod_employee_impl_scaffold import _employee_py_paths_missing_system_prompt
+from modstore_server.mod_employee_impl_scaffold import (
+    _employee_py_paths_missing_system_prompt,
+)
 
 
 def test_missing_system_prompt_paths_detected(tmp_path):
@@ -13,7 +15,7 @@ def test_missing_system_prompt_paths_detected(tmp_path):
         encoding="utf-8",
     )
     (emp_dir / "has_prompt.py").write_text(
-        'SYSTEM_PROMPT = "你是助手"\n' "async def run(payload, ctx):\n    return {}\n",
+        'SYSTEM_PROMPT = "你是助手"\nasync def run(payload, ctx):\n    return {}\n',
         encoding="utf-8",
     )
     employees = [{"id": "no_prompt"}, {"id": "has_prompt"}]

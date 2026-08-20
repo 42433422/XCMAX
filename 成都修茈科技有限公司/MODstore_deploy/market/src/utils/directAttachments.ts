@@ -11,9 +11,7 @@ export const DIRECT_EMPLOYEE_FILE_MAX_BYTES = 100 * 1024 * 1024
 
 /** 工作台一档附件：知识库支持的文档 + 可走视觉的多模态图片（不入向量库，压缩后以 data URL 发送）。 */
 export const VISION_IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'] as const
-export const DIRECT_AND_VISION_ACCEPT = [...DIRECT_ATTACH_DOC_EXTENSIONS, ...VISION_IMAGE_EXTENSIONS]
-  .map((ext) => `.${ext}`)
-  .join(',')
+export const DIRECT_AND_VISION_ACCEPT = [...DIRECT_ATTACH_DOC_EXTENSIONS, ...VISION_IMAGE_EXTENSIONS].map((ext) => `.${ext}`).join(',')
 
 /** .xlsx / .xlsm / .xls — 可标为「给员工处理」并由 multipart execute-file 提交。 */
 export function isEmployeeSpreadsheetExt(ext: string): boolean {
@@ -54,7 +52,8 @@ export function directFileExt(filename: string): string {
 
 export function directFileKind(filename: string, mime = ''): DirectAttachmentKind {
   const ext = directFileExt(filename)
-  if (VISION_IMAGE_EXTENSIONS.includes(ext as (typeof VISION_IMAGE_EXTENSIONS)[number]) || String(mime).startsWith('image/')) return 'vision'
+  if (VISION_IMAGE_EXTENSIONS.includes(ext as (typeof VISION_IMAGE_EXTENSIONS)[number]) || String(mime).startsWith('image/'))
+    return 'vision'
   if (ext === 'xlsx' || ext === 'xlsm' || ext === 'xls') return 'excel'
   if (ext === 'pdf') return 'pdf'
   if (ext === 'docx') return 'word'
@@ -141,8 +140,6 @@ export function resolveDirectAttachmentOutcome(input: {
     extractedText,
     docId: '',
     error: '',
-    ingestError: input.uploadError
-      ? normalizeDirectAttachmentError(input.uploadError, '资料库入库失败，已改为直接读取附件内容')
-      : '',
+    ingestError: input.uploadError ? normalizeDirectAttachmentError(input.uploadError, '资料库入库失败，已改为直接读取附件内容') : '',
   }
 }

@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from sandbox_app.banner_inject import inject_sandbox_banner
+from sandbox_app.operational_errors import BOUNDARY_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -48,9 +49,11 @@ def mount_vue_static(app: FastAPI, vue_dist_dir: Path) -> None:
         if directory.is_dir():
             mount_path = f"/{sub}"
             try:
-                app.mount(mount_path, StaticFiles(directory=str(directory)), name=f"sandbox-vue-{sub}")
+                app.mount(
+                    mount_path, StaticFiles(directory=str(directory)), name=f"sandbox-vue-{sub}"
+                )
                 logger.info("sandbox static: %s -> %s", mount_path, directory)
-            except Exception as e:
+            except BOUNDARY_ERRORS as e:
                 logger.warning("sandbox static mount failed %s: %s", mount_path, e)
 
     css_dir = vue_dist_dir / "assets" / "css"
@@ -80,7 +83,7 @@ def mount_vue_static(app: FastAPI, vue_dist_dir: Path) -> None:
         try:
             app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="sandbox_vue_assets")
             logger.info("sandbox static: /assets -> %s", assets_dir)
-        except Exception as e:
+        except BOUNDARY_ERRORS as e:
             logger.warning("sandbox /assets mount failed: %s", e)
 
     def _route_factory(fp: Path):

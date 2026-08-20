@@ -1,3 +1,4 @@
+# isort: skip_file
 # ruff: noqa: E402, F401
 """7 阶段 AI 员工流水线：NL → 完整 employee_pack manifest + 实现代码。
 
@@ -13,6 +14,8 @@ import json
 import re
 from dataclasses import asdict, dataclass, field
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 from modstore_server.employee_ai_scaffold import (
     _default_capabilities,

@@ -21,18 +21,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent, h } from 'vue'
 import { mount } from '@vue/test-utils'
 
-import {
-  usePerformanceMonitor,
-  useFrameRateLimiter,
-  useAnimationFrame,
-} from './usePerformanceMonitor'
+import { usePerformanceMonitor, useFrameRateLimiter, useAnimationFrame } from './usePerformanceMonitor'
 
 // ── 辅助函数 ──────────────────────────────────────────────────────────
 
 /** 在组件 setup 中调用 composable，触发 onMounted/onUnmounted */
-function mountWithComposable<T>(
-  setup: () => T,
-): { wrapper: ReturnType<typeof mount>; api: T } {
+function mountWithComposable<T>(setup: () => T): { wrapper: ReturnType<typeof mount>; api: T } {
   let api!: T
   const Comp = defineComponent({
     setup() {
@@ -52,9 +46,7 @@ describe('usePerformanceMonitor - coverage ramp', () => {
   let nowValue: number
   let rafCallbacks: FrameRequestCallback[]
   let intervalCallbacks: Array<() => void>
-  let observerCallback:
-    | ((list: { getEntries: () => PerformanceEntry[] }) => void)
-    | null
+  let observerCallback: ((list: { getEntries: () => PerformanceEntry[] }) => void) | null
   let observerObserve: ReturnType<typeof vi.fn>
   let originalPerformanceObserver: typeof PerformanceObserver | undefined
 
@@ -73,7 +65,10 @@ describe('usePerformanceMonitor - coverage ramp', () => {
         return rafCallbacks.length
       }),
     )
-    vi.stubGlobal('cancelAnimationFrame', vi.fn(() => {}))
+    vi.stubGlobal(
+      'cancelAnimationFrame',
+      vi.fn(() => {}),
+    )
     vi.stubGlobal(
       'setInterval',
       vi.fn((cb: () => void) => {
@@ -81,17 +76,18 @@ describe('usePerformanceMonitor - coverage ramp', () => {
         return intervalCallbacks.length
       }) as unknown as typeof setInterval,
     )
-    vi.stubGlobal('clearInterval', vi.fn(() => {}))
+    vi.stubGlobal(
+      'clearInterval',
+      vi.fn(() => {}),
+    )
 
     originalPerformanceObserver = globalThis.PerformanceObserver
     vi.stubGlobal(
       'PerformanceObserver',
-      vi.fn(
-        (cb: (list: { getEntries: () => PerformanceEntry[] }) => void) => {
-          observerCallback = cb
-          return { observe: observerObserve }
-        },
-      ),
+      vi.fn((cb: (list: { getEntries: () => PerformanceEntry[] }) => void) => {
+        observerCallback = cb
+        return { observe: observerObserve }
+      }),
     )
   })
 
@@ -111,18 +107,14 @@ describe('usePerformanceMonitor - coverage ramp', () => {
 
   /** 取最后注册的 rAF 回调 */
   function lastRaf(): FrameRequestCallback | null {
-    return rafCallbacks.length > 0
-      ? rafCallbacks[rafCallbacks.length - 1]
-      : null
+    return rafCallbacks.length > 0 ? rafCallbacks[rafCallbacks.length - 1] : null
   }
 
   // ── 基础 API 返回值 ──────────────────────────────────────────────
 
   describe('基础 API 返回值', () => {
     it('返回完整的监控 API surface', () => {
-      const { wrapper, api } = mountWithComposable(() =>
-        usePerformanceMonitor({ autoStart: false }),
-      )
+      const { wrapper, api } = mountWithComposable(() => usePerformanceMonitor({ autoStart: false }))
       expect(api.fps).toBeDefined()
       expect(api.memory).toBeDefined()
       expect(api.longTasks).toBeDefined()
@@ -140,17 +132,13 @@ describe('usePerformanceMonitor - coverage ramp', () => {
 
   describe('onMounted / autoStart', () => {
     it('autoStart 默认 true 时 onMounted 自动启动监控', () => {
-      const { wrapper, api } = mountWithComposable(() =>
-        usePerformanceMonitor({ enableMemory: false, enableLongTask: false }),
-      )
+      const { wrapper, api } = mountWithComposable(() => usePerformanceMonitor({ enableMemory: false, enableLongTask: false }))
       expect(api.isMonitoring.value).toBe(true)
       wrapper.unmount()
     })
 
     it('autoStart=false 时 onMounted 不启动监控', () => {
-      const { wrapper, api } = mountWithComposable(() =>
-        usePerformanceMonitor({ autoStart: false }),
-      )
+      const { wrapper, api } = mountWithComposable(() => usePerformanceMonitor({ autoStart: false }))
       expect(api.isMonitoring.value).toBe(false)
       wrapper.unmount()
     })
@@ -257,9 +245,12 @@ describe('usePerformanceMonitor - coverage ramp', () => {
 
     it('enableLongTask=true 但 PerformanceObserver 抛异常时 console.warn', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-      vi.stubGlobal('PerformanceObserver', vi.fn(() => {
-        throw new Error('not supported')
-      }))
+      vi.stubGlobal(
+        'PerformanceObserver',
+        vi.fn(() => {
+          throw new Error('not supported')
+        }),
+      )
       const { wrapper, api } = mountWithComposable(() =>
         usePerformanceMonitor({
           autoStart: false,
@@ -305,9 +296,7 @@ describe('usePerformanceMonitor - coverage ramp', () => {
       expect(intervalCallbacks.length).toBe(1)
       // 调用 sample interval 回调
       intervalCallbacks[intervalCallbacks.length - 1]()
-      expect(onPerformanceUpdate).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'sample' }),
-      )
+      expect(onPerformanceUpdate).toHaveBeenCalledWith(expect.objectContaining({ type: 'sample' }))
       wrapper.unmount()
     })
 
@@ -598,9 +587,7 @@ describe('usePerformanceMonitor - coverage ramp', () => {
 
       expect(api.longTasks.value.length).toBe(1)
       expect(api.performanceMetrics.value.totalLongTasks).toBe(1)
-      expect(onPerformanceUpdate).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'longTask' }),
-      )
+      expect(onPerformanceUpdate).toHaveBeenCalledWith(expect.objectContaining({ type: 'longTask' }))
       wrapper.unmount()
     })
 
@@ -689,9 +676,7 @@ describe('usePerformanceMonitor - coverage ramp', () => {
     })
 
     it('未启动时停止不报错', () => {
-      const { wrapper, api } = mountWithComposable(() =>
-        usePerformanceMonitor({ autoStart: false }),
-      )
+      const { wrapper, api } = mountWithComposable(() => usePerformanceMonitor({ autoStart: false }))
       expect(() => api.stopMonitoring()).not.toThrow()
       wrapper.unmount()
     })
@@ -701,9 +686,7 @@ describe('usePerformanceMonitor - coverage ramp', () => {
 
   describe('resetMetrics', () => {
     it('重置所有指标到初始值', () => {
-      const { wrapper, api } = mountWithComposable(() =>
-        usePerformanceMonitor({ autoStart: false }),
-      )
+      const { wrapper, api } = mountWithComposable(() => usePerformanceMonitor({ autoStart: false }))
       api.fps.value = 30
       api.memory.value = 100
       api.longTasks.value = [{ test: true }]
@@ -735,9 +718,7 @@ describe('usePerformanceMonitor - coverage ramp', () => {
 
   describe('getMetrics', () => {
     it('返回当前所有指标', () => {
-      const { wrapper, api } = mountWithComposable(() =>
-        usePerformanceMonitor({ autoStart: false }),
-      )
+      const { wrapper, api } = mountWithComposable(() => usePerformanceMonitor({ autoStart: false }))
       api.fps.value = 45
       api.memory.value = 50
       api.longTasks.value = [{ duration: 100 }]
@@ -846,7 +827,10 @@ describe('useAnimationFrame - coverage ramp', () => {
         return rafCallbacks.length
       }),
     )
-    vi.stubGlobal('cancelAnimationFrame', vi.fn(() => {}))
+    vi.stubGlobal(
+      'cancelAnimationFrame',
+      vi.fn(() => {}),
+    )
   })
 
   afterEach(() => {

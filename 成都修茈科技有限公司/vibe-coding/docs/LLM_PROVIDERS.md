@@ -6,15 +6,15 @@ OpenAI-compatible HTTP endpoint (vLLM, Ollama, LMStudio,
 together.ai, your own gateway) works out of the box via
 `OpenAICompatibleLLM`.
 
-| Vendor | Class | Default endpoint | API key env var |
-| --- | --- | --- | --- |
-| OpenAI | `OpenAILLM` (SDK-backed) | `https://api.openai.com/v1` | `OPENAI_API_KEY` |
-| Alibaba 通义千问 | `QwenLLM` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `DASHSCOPE_API_KEY` (or `QWEN_API_KEY`) |
-| 智谱 GLM | `ZhipuLLM` | `https://open.bigmodel.cn/api/paas/v4` | `ZHIPUAI_API_KEY` |
-| Moonshot Kimi | `MoonshotLLM` | `https://api.moonshot.cn/v1` | `MOONSHOT_API_KEY` (or `KIMI_API_KEY`) |
-| DeepSeek | `DeepSeekLLM` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` |
-| Anthropic Claude | `AnthropicLLM` | `https://api.anthropic.com/v1` | `ANTHROPIC_API_KEY` |
-| Anything OpenAI-compatible | `OpenAICompatibleLLM` | (set `base_url`) | (set `api_key`) |
+| Vendor                     | Class                    | Default endpoint                                    | API key env var                         |
+| -------------------------- | ------------------------ | --------------------------------------------------- | --------------------------------------- |
+| OpenAI                     | `OpenAILLM` (SDK-backed) | `https://api.openai.com/v1`                         | `OPENAI_API_KEY`                        |
+| Alibaba 通义千问           | `QwenLLM`                | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `DASHSCOPE_API_KEY` (or `QWEN_API_KEY`) |
+| 智谱 GLM                   | `ZhipuLLM`               | `https://open.bigmodel.cn/api/paas/v4`              | `ZHIPUAI_API_KEY`                       |
+| Moonshot Kimi              | `MoonshotLLM`            | `https://api.moonshot.cn/v1`                        | `MOONSHOT_API_KEY` (or `KIMI_API_KEY`)  |
+| DeepSeek                   | `DeepSeekLLM`            | `https://api.deepseek.com`                          | `DEEPSEEK_API_KEY`                      |
+| Anthropic Claude           | `AnthropicLLM`           | `https://api.anthropic.com/v1`                      | `ANTHROPIC_API_KEY`                     |
+| Anything OpenAI-compatible | `OpenAICompatibleLLM`    | (set `base_url`)                                    | (set `api_key`)                         |
 
 ## Quick start
 

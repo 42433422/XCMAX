@@ -1,12 +1,7 @@
 import type { Ref } from 'vue'
 import agentRunsApi from '@/api/agentRuns'
 import type { TaskItem } from './useChatPersistence'
-import {
-  activeRunIdOfTask,
-  conversationIdOfTask,
-  groupAgentRunsIntoTasks,
-  taskSummariesToTaskItems,
-} from '@/utils/agentTaskWorkspaceModel'
+import { activeRunIdOfTask, conversationIdOfTask, groupAgentRunsIntoTasks, taskSummariesToTaskItems } from '@/utils/agentTaskWorkspaceModel'
 
 export interface UseAgentTaskWorkspaceOptions {
   taskList: Ref<TaskItem[]>
@@ -88,10 +83,7 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
     options.onJumpToMessage?.(task)
   }
 
-  async function controlTask(
-    taskId: string,
-    action: 'pause' | 'resume' | 'cancel' | 'retry' | 'approve',
-  ): Promise<void> {
+  async function controlTask(taskId: string, action: 'pause' | 'resume' | 'cancel' | 'retry' | 'approve'): Promise<void> {
     const task = options.taskList.value.find((item) => item.id === taskId)
     if (!task || task.type !== 'agent_task') return
     const runId = activeRunIdOfTask(task)
@@ -109,13 +101,15 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
   }
 
   async function archiveCompletedTasks(): Promise<void> {
-    const completed = options.taskList.value.filter((task) =>
-      task.type === 'agent_task' && ['success', 'failed', 'cancelled'].includes(task.status),
+    const completed = options.taskList.value.filter(
+      (task) => task.type === 'agent_task' && ['success', 'failed', 'cancelled'].includes(task.status),
     )
-    await Promise.all(completed.map(async (task) => {
-      const taskId = String(task.payload?.taskId || '').trim()
-      if (taskId) await agentRunsApi.archiveTask(taskId)
-    }))
+    await Promise.all(
+      completed.map(async (task) => {
+        const taskId = String(task.payload?.taskId || '').trim()
+        if (taskId) await agentRunsApi.archiveTask(taskId)
+      }),
+    )
     const archivedIds = new Set(completed.map((task) => task.id))
     options.taskList.value = options.taskList.value.filter((task) => !archivedIds.has(task.id))
     options.onPersist?.()

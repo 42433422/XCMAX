@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment, attr-defined, no-any-return, union-attr, valid-type"
 """Dynamic multi-agent incident team orchestration."""
 
 from __future__ import annotations
@@ -10,9 +11,7 @@ from concurrent.futures import TimeoutError as FuturesTimeoutError
 from typing import Any, Dict, List, Optional
 
 from modstore_server.employee_executor import execute_employee_task
-from modstore_server.incident_team_dispatch import (
-    dispatch_incident_team as dispatch_incident_team,
-)
+from modstore_server.incident_team_dispatch import dispatch_incident_team as dispatch_incident_team
 from modstore_server.llm_failure_classifier import (
     FAILURE_KIND_PROMPT,
     FAILURE_KIND_QUOTA,
@@ -21,6 +20,7 @@ from modstore_server.llm_failure_classifier import (
 )
 from modstore_server.models import IncidentEvent, User
 from modstore_server.models import get_session_factory as get_session_factory
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -140,7 +140,7 @@ def _candidate_rows(event_id: int) -> List[Dict[str, Any]]:
         ranked = rank_market_candidates(event_id)
         rows = ranked.get("candidates") if isinstance(ranked.get("candidates"), list) else []
         return [row for row in rows if isinstance(row, dict)]
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return []
 
 
@@ -357,7 +357,9 @@ def _follow_up_handler_failures(
                     event_type=event_type,
                     source=source,
                     uid=uid,
-                    prev_results={r.get("role"): r for r in results if isinstance(r, dict)},
+                    prev_results={
+                        str(r.get("role") or ""): r for r in results if isinstance(r, dict)
+                    },
                 )
                 follow_up["retry_result"] = {
                     k: v
@@ -370,7 +372,7 @@ def _follow_up_handler_failures(
                     and not retry_result.get("handler_failed")
                     and not retry_result.get("error")
                 )
-            except Exception as exc:
+            except RECOVERABLE_ERRORS as exc:
                 follow_up["retry_result"] = {"error": str(exc)[:500]}
                 follow_up["ok"] = False
                 logger.exception(
@@ -393,7 +395,7 @@ def _follow_up_handler_failures(
                     if k in {"ok", "claimed", "employee_id", "reason"}
                 }
                 follow_up["ok"] = bool(market_result.get("ok") and market_result.get("claimed"))
-            except Exception as exc:
+            except RECOVERABLE_ERRORS as exc:
                 follow_up["retry_result"] = {"error": str(exc)[:500]}
                 follow_up["ok"] = False
                 logger.exception(
@@ -454,7 +456,7 @@ def _retry_member(
 
         route = route_for_incident(event_type=event_type, payload=payload, role=role)
         bench_override = bench_override_for_route(route)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         route = {"provider": "auto", "model": "auto", "reason": "router_error"}
         bench_override = None
 

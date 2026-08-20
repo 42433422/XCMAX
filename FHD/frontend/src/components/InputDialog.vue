@@ -14,19 +14,11 @@
             :placeholder="placeholder"
             class="input-field"
             @keyup.enter="handleConfirm"
-          >
+          />
         </div>
         <div class="input-dialog-footer">
-          <button
-            class="btn btn-secondary"
-            @click="handleCancel"
-          >
-            取消
-          </button>
-          <button
-            :class="['btn', confirmClass]"
-            @click="handleConfirm"
-          >
+          <button class="btn btn-secondary" @click="handleCancel">取消</button>
+          <button :class="['btn', confirmClass]" @click="handleConfirm">
             {{ confirmText }}
           </button>
         </div>
@@ -41,53 +33,52 @@ import { ref, watch, nextTick } from 'vue'
 const props = defineProps({
   modelValue: {
     type: Boolean,
-    default: false
+    default: false,
   },
   title: {
     type: String,
-    default: '输入'
+    default: '输入',
   },
   message: {
     type: String,
-    default: ''
+    default: '',
   },
   placeholder: {
     type: String,
-    default: ''
+    default: '',
   },
   confirmText: {
     type: String,
-    default: '确定'
+    default: '确定',
   },
   confirmClass: {
     type: String,
-    default: 'btn-primary'
+    default: 'btn-primary',
   },
   maxWidth: {
     type: String,
-    default: '400px'
+    default: '400px',
   },
   inputType: {
     type: String,
-    default: 'text'
-  }
+    default: 'text',
+  },
 })
 
-const emit = defineEmits([
-  'update:modelValue',
-  'confirm',
-  'cancel'
-])
+const emit = defineEmits(['update:modelValue', 'confirm', 'cancel'])
 
 const inputRef = ref(null)
 const inputValue = ref('')
 
-watch(() => props.modelValue, async (newVal) => {
-  if (newVal) {
-    await nextTick()
-    inputRef.value?.focus()
-  }
-})
+watch(
+  () => props.modelValue,
+  async (newVal) => {
+    if (newVal) {
+      await nextTick()
+      inputRef.value?.focus()
+    }
+  },
+)
 
 const handleConfirm = () => {
   emit('confirm', inputValue.value)

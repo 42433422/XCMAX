@@ -1,10 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { Router } from 'vue-router'
-import {
-  getSidebarNavigationGeneration,
-  navigateFromSidebarKey,
-  resetSidebarNavigationForTests,
-} from '@/utils/sidebarNavigation'
+import { getSidebarNavigationGeneration, navigateFromSidebarKey, resetSidebarNavigationForTests } from '@/utils/sidebarNavigation'
 
 vi.mock('@/utils/desktopShell', () => ({
   isDesktopShell: () => true,

@@ -43,7 +43,10 @@ def detected_excel_header_row_1based(
         sheets = excel_analysis.get("sheets")
         if isinstance(sheets, list):
             for sheet in sheets:
-                if isinstance(sheet, dict) and str(sheet.get("sheet_name") or "").strip() == preferred:
+                if (
+                    isinstance(sheet, dict)
+                    and str(sheet.get("sheet_name") or "").strip() == preferred
+                ):
                     hit = _from_sheet_entry(sheet)
                     if hit is not None:
                         return hit
@@ -52,7 +55,10 @@ def detected_excel_header_row_1based(
             all_sheets = preview.get("all_sheets")
             if isinstance(all_sheets, list):
                 for sheet in all_sheets:
-                    if isinstance(sheet, dict) and str(sheet.get("sheet_name") or "").strip() == preferred:
+                    if (
+                        isinstance(sheet, dict)
+                        and str(sheet.get("sheet_name") or "").strip() == preferred
+                    ):
                         hit = _from_sheet_entry(sheet)
                         if hit is not None:
                             return hit
@@ -102,9 +108,10 @@ def enrich_template_preview_arguments(
     analysis = excel_analysis_from_runtime(runtime_context)
     if not analysis:
         return output
-    context_path = str(analysis.get("file_path") or "").strip() or str(
-        (analysis.get("preview_data") or {}).get("file_path") or ""
-    ).strip()
+    context_path = (
+        str(analysis.get("file_path") or "").strip()
+        or str((analysis.get("preview_data") or {}).get("file_path") or "").strip()
+    )
     if context_path and not str(output.get("file_path") or "").strip():
         output["file_path"] = context_path
     if not str(output.get("sheet_name") or "").strip() and runtime_context:

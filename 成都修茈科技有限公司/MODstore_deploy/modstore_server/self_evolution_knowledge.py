@@ -1,3 +1,4 @@
+# isort: skip_file
 """Self-evolution knowledge base and proactive task signals.
 
 The loop stores durable, file-backed knowledge under FHD/XCAGI/kb so later runs
@@ -7,11 +8,13 @@ reason from scratch.
 
 from __future__ import annotations
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 import json
 import os
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any, Dict, List, Optional as Optional, Sequence, Tuple
 
@@ -22,7 +25,7 @@ MAX_CONTEXT_TEXT = 12000
 
 
 def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _iso_now() -> str:
@@ -115,7 +118,14 @@ def _write_kb_doc(kind: str, prefix: str, payload: Dict[str, Any]) -> Path:
         path = directory / f"{stamp}-{prefix}-{_safe_slug(str(slug_source), kind)}-{counter}.json"
         counter += 1
     with path.open("w", encoding="utf-8") as fh:
-        json.dump(payload, fh, ensure_ascii=False, indent=2, sort_keys=True, default=_json_default)
+        json.dump(
+            payload,
+            fh,
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+            default=_json_default,
+        )
         fh.write("\n")
     return path
 
@@ -278,7 +288,7 @@ def _retrieve_with_fhd_rag(query: str, docs: Sequence[Dict[str, Any]], limit: in
         if not isinstance(chunks, list):
             return []
         return [str(chunk.get("text") or "") for chunk in chunks[:limit] if isinstance(chunk, dict)]
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return []
     finally:
         if inserted:
@@ -304,7 +314,10 @@ def _rank_docs(
             score += 0.75
         if score > 0:
             ranked.append(
-                (score, {**doc, "score": round(score, 4), "rag_chunks": rag_chunks[:limit]})
+                (
+                    score,
+                    {**doc, "score": round(score, 4), "rag_chunks": rag_chunks[:limit]},
+                )
             )
     ranked.sort(key=lambda item: item[0], reverse=True)
     return [item[1] for item in ranked[:limit]]
@@ -331,7 +344,7 @@ def _rank_docs_with_redisvl(
         if rows:
             return rows, meta
         return [], meta
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         return [], {
             "backend": "redisvl",
             "error": str(exc)[:500],
@@ -364,7 +377,6 @@ from modstore_server.self_evolution_operations import (  # noqa: E402
     search_code_patterns as search_code_patterns,
     search_fix_knowledge as search_fix_knowledge,
 )
-
 
 __all__ = [
     "build_self_evolution_context",

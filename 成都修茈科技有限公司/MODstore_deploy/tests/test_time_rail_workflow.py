@@ -115,8 +115,16 @@ def test_ensure_non_triggered_time_rail_decisions_marks_daily_skips():
         release_kind="daily",
         line_dispatch={
             "line_meta": {
-                "P-W": {"updates_sections": 0, "patches_sections": 0, "total_sections": 0},
-                "S-R": {"updates_sections": 0, "patches_sections": 0, "total_sections": 0},
+                "P-W": {
+                    "updates_sections": 0,
+                    "patches_sections": 0,
+                    "total_sections": 0,
+                },
+                "S-R": {
+                    "updates_sections": 0,
+                    "patches_sections": 0,
+                    "total_sections": 0,
+                },
             }
         },
         phase_c_pipeline={"ok": True, "step_ids": ["P3", "P7", "P8"]},

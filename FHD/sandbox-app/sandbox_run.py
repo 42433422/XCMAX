@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import logging
 import os
-import shutil
 import sys
 from pathlib import Path
 
@@ -41,10 +40,11 @@ logging.basicConfig(
 
 
 def _bootstrap_runtime() -> None:
-    from app.desktop_runtime.paths import configure_desktop_environment
-    from app.desktop_runtime.migrate import _should_bootstrap_sqlite, bootstrap_sqlite_schema
     from sandbox_app.boot import ensure_sandbox_admin
     from sandbox_app.sandbox_settings import RUNTIME_ROOT, SANDBOX_RESET_ON_BOOT, default_mods_root
+
+    from app.desktop_runtime.migrate import _should_bootstrap_sqlite, bootstrap_sqlite_schema
+    from app.desktop_runtime.paths import configure_desktop_environment
 
     runtime = str(RUNTIME_ROOT)
     configure_desktop_environment(runtime)

@@ -2,6 +2,7 @@
 
 两者共享 ANCHORS 列表，保证"检测的锚点 = 同步的锚点"。
 """
+
 from __future__ import annotations
 
 from typing import Any

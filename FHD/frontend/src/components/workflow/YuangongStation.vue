@@ -32,7 +32,7 @@ const props = withDefaults(
      */
     alwaysShowStaff?: boolean
   }>(),
-  { pixelLayout: 'default', alwaysShowStaff: false, composedIdleDeskVisible: true }
+  { pixelLayout: 'default', alwaysShowStaff: false, composedIdleDeskVisible: true },
 )
 
 const deskSrc = ref(YUANGONG_DESK_PNG)
@@ -65,7 +65,7 @@ watch(
     if (!showStaffLayer.value) return
     staffSrc.value = staffPrimaryPng()
   },
-  { immediate: true }
+  { immediate: true },
 )
 
 function onDeskError() {
@@ -89,12 +89,7 @@ function onStaffError() {
 </script>
 
 <template>
-  <div
-    class="yuangong-stack"
-    :class="{ 'yuangong-stack--composed': pixelLayout === 'composed' }"
-    role="group"
-    :aria-label="ariaLabel"
-  >
+  <div class="yuangong-stack" :class="{ 'yuangong-stack--composed': pixelLayout === 'composed' }" role="group" :aria-label="ariaLabel">
     <template v-if="pixelLayout === 'composed'">
       <img
         v-if="composedIdleDeskVisible"
@@ -115,13 +110,7 @@ function onStaffError() {
       />
     </template>
     <template v-else>
-      <img
-        class="yuangong-desk"
-        :src="deskSrc"
-        alt=""
-        decoding="async"
-        @error="onDeskError"
-      />
+      <img class="yuangong-desk" :src="deskSrc" alt="" decoding="async" @error="onDeskError" />
       <img
         v-if="showStaffLayer"
         class="yuangong-staff"

@@ -27,25 +27,14 @@
                 @click="onBubbleClick($event, msg)"
               />
               <p v-else-if="msg.imageDataUrl" class="cs-bubble__text">已附上图片</p>
-              <img
-                v-if="msg.imageDataUrl"
-                :src="msg.imageDataUrl"
-                alt="补充图片"
-                class="cs-bubble__img"
-              />
+              <img v-if="msg.imageDataUrl" :src="msg.imageDataUrl" alt="补充图片" class="cs-bubble__img" />
             </div>
           </article>
 
           <div v-if="messages.length === 0" class="cs-empty">
             <p class="cs-empty__title">先说说你遇到的问题，也可以点下面的示例开始</p>
             <div class="cs-chips">
-              <button
-                v-for="chip in quickPrompts"
-                :key="chip"
-                type="button"
-                class="cs-chip"
-                @click="usePrompt(chip)"
-              >
+              <button v-for="chip in quickPrompts" :key="chip" type="button" class="cs-chip" @click="usePrompt(chip)">
                 {{ chip }}
               </button>
             </div>
@@ -53,13 +42,7 @@
         </div>
 
         <form class="cs-composer" @submit.prevent="send">
-          <input
-            ref="imageInputRef"
-            type="file"
-            accept="image/*"
-            class="cs-image-input"
-            @change="onImagePicked"
-          />
+          <input ref="imageInputRef" type="file" accept="image/*" class="cs-image-input" @change="onImagePicked" />
           <div v-if="pendingImageDataUrl" class="cs-attach">
             <img :src="pendingImageDataUrl" alt="待发送图片预览" class="cs-attach__preview" />
             <button type="button" class="cs-link" @click="clearPendingImage">移除图片</button>
@@ -74,21 +57,12 @@
           />
           <div class="cs-composer__footer">
             <div class="cs-composer__left">
-              <button
-                type="button"
-                class="cs-btn cs-btn--ghost"
-                :disabled="loading || imagePicking"
-                @click="openImagePicker"
-              >
+              <button type="button" class="cs-btn cs-btn--ghost" :disabled="loading || imagePicking" @click="openImagePicker">
                 {{ imagePicking ? '处理中…' : '图片' }}
               </button>
               <span :class="{ 'cs-error': !!error }">{{ error || 'Enter 换行 · ⌘/Ctrl+Enter 发送' }}</span>
             </div>
-            <button
-              type="submit"
-              class="cs-btn"
-              :disabled="loading || imagePicking || (!draft.trim() && !pendingImageDataUrl)"
-            >
+            <button type="submit" class="cs-btn" :disabled="loading || imagePicking || (!draft.trim() && !pendingImageDataUrl)">
               {{ loading ? '处理中…' : '发送' }}
             </button>
           </div>
@@ -98,14 +72,11 @@
       <aside class="cs-side">
         <section class="cs-side-card cs-side-card--tickets">
           <div class="cs-side-card__head">
-            <h3>我的工单 <small v-if="tickets.length">{{ tickets.length }}</small></h3>
+            <h3>
+              我的工单 <small v-if="tickets.length">{{ tickets.length }}</small>
+            </h3>
             <div class="cs-side-card__actions">
-              <button
-                v-if="tickets.length"
-                type="button"
-                class="cs-link"
-                @click="toggleAllTickets"
-              >
+              <button v-if="tickets.length" type="button" class="cs-link" @click="toggleAllTickets">
                 {{ allTicketsExpanded ? '全部收起' : '全部展开' }}
               </button>
               <button type="button" class="cs-link" @click="loadTickets">刷新</button>
@@ -116,22 +87,11 @@
             还没有工单。普通聊天不会建单；材料齐可自动受理，或点「提交工单」后会出现在这里。
           </div>
           <div v-else class="cs-side-list">
-            <article
-              v-for="ticket in tickets"
-              :key="ticket.id"
-              :class="['cs-ticket', { 'cs-ticket--open': isTicketExpanded(ticket.id) }]"
-            >
+            <article v-for="ticket in tickets" :key="ticket.id" :class="['cs-ticket', { 'cs-ticket--open': isTicketExpanded(ticket.id) }]">
               <div class="cs-ticket__row">
-                <button
-                  type="button"
-                  class="cs-ticket__main"
-                  @click="openTicket(ticket)"
-                >
+                <button type="button" class="cs-ticket__main" @click="openTicket(ticket)">
                   <b>{{ friendlyTicketTitle(ticket) }}</b>
-                  <span
-                    v-if="issueDomainLabel(ticket)"
-                    class="cs-ticket__domain"
-                  >{{ issueDomainLabel(ticket) }}</span>
+                  <span v-if="issueDomainLabel(ticket)" class="cs-ticket__domain">{{ issueDomainLabel(ticket) }}</span>
                   <span class="cs-ticket__stage">{{ ticketLifecycleLabel(ticket) }}</span>
                 </button>
                 <button
@@ -213,16 +173,9 @@ const imagePickError = ref('')
 const imagePicking = ref(false)
 const imageInputRef = ref<HTMLInputElement | null>(null)
 
-const allTicketsExpanded = computed(
-  () => tickets.value.length > 0 && expandedTicketIds.value.size >= tickets.value.length,
-)
+const allTicketsExpanded = computed(() => tickets.value.length > 0 && expandedTicketIds.value.size >= tickets.value.length)
 
-const quickPrompts = [
-  '你好，想了解一下会员怎么买',
-  '退款一般需要提供哪些信息？',
-  '商品有问题想先了解怎么投诉',
-  '账号权益没到账是怎么回事',
-]
+const quickPrompts = ['你好，想了解一下会员怎么买', '退款一般需要提供哪些信息？', '商品有问题想先了解怎么投诉', '账号权益没到账是怎么回事']
 
 onMounted(() => {
   hydrateFromQuery()
@@ -300,9 +253,7 @@ function toggleAllTickets() {
     expandedTicketIds.value = new Set()
     return
   }
-  expandedTicketIds.value = new Set(
-    tickets.value.map((t) => Number(t.id)).filter((n) => n > 0),
-  )
+  expandedTicketIds.value = new Set(tickets.value.map((t) => Number(t.id)).filter((n) => n > 0))
 }
 
 function preferExpandWaitingTickets(items: CustomerTicket[]) {
@@ -401,17 +352,17 @@ async function sendText(raw: string, extras?: { reason?: string }) {
       ...queryContext(),
       ...(extras?.reason ? { reason: extras.reason } : {}),
     }
-    const res = asUnknownRecord(await api.customerServiceChat({
-      message: text,
-      session_id: activeSessionId.value,
-      context: ctx,
-      image_data_url: imageDataUrl || undefined,
-    }))
+    const res = asUnknownRecord(
+      await api.customerServiceChat({
+        message: text,
+        session_id: activeSessionId.value,
+        context: ctx,
+        image_data_url: imageDataUrl || undefined,
+      }),
+    )
     const session = asUnknownRecord(res.session)
     const responseMessage = asUnknownRecord(res.message)
-    const ticket = Object.keys(asUnknownRecord(res.ticket)).length
-      ? (asUnknownRecord(res.ticket) as CustomerTicket)
-      : null
+    const ticket = Object.keys(asUnknownRecord(res.ticket)).length ? (asUnknownRecord(res.ticket) as CustomerTicket) : null
     activeSessionId.value = Number(session.id || activeSessionId.value || 0) || null
     // 对话里只用白话正文；不再堆「进度/下一步/已办理」多卡
     let content = String(responseMessage.content || '已处理。')
@@ -422,11 +373,7 @@ async function sendText(raw: string, extras?: { reason?: string }) {
       const composed = composeTicketUserMessage({
         ticket,
         decision: decisionCard || asUnknownRecord(res.decision),
-        actions: Array.isArray(actionsCard?.items)
-          ? actionsCard.items
-          : Array.isArray(res.actions)
-            ? res.actions
-            : [],
+        actions: Array.isArray(actionsCard?.items) ? actionsCard.items : Array.isArray(res.actions) ? res.actions : [],
       })
       const st = String(ticket.status || '').toLowerCase()
       // 已结案用侧栏口径摘要；跟进中优先后端话术（含问题复述），避免盖成「已处理完成」

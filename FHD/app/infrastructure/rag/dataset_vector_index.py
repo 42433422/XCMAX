@@ -84,8 +84,6 @@ class DatasetVectorIndexBackend(Protocol):
         raise NotImplementedError
 
 
-
-
 class DatasetVectorPgIndex:
     """Dataset vector index backed by PostgreSQL + pgvector."""
 
@@ -413,4 +411,3 @@ class DatasetVectorPgIndex:
             "index_count": len(rows),
             "indexes": [dict(row) for row in rows],
         }
-

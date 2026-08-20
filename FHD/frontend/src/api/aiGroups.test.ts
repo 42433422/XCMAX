@@ -5,14 +5,7 @@ vi.mock('@/utils/apiBase', () => ({
   apiFetch: (...args: unknown[]) => apiFetchMock(...args),
 }))
 
-import {
-  fetchAiGroups,
-  createAiGroup,
-  fetchAiGroupMessages,
-  postAiGroupMessage,
-  addAiGroupMember,
-  removeAiGroupMember,
-} from './aiGroups'
+import { fetchAiGroups, createAiGroup, fetchAiGroupMessages, postAiGroupMessage, addAiGroupMember, removeAiGroupMember } from './aiGroups'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return {
@@ -42,16 +35,11 @@ describe('aiGroups API', () => {
     it('fetches groups from mobile scope when specified', async () => {
       apiFetchMock.mockResolvedValue(jsonResponse({ groups: [] }))
       await fetchAiGroups('mobile')
-      expect(apiFetchMock).toHaveBeenCalledWith(
-        '/api/mobile/v1/ai-groups',
-        expect.any(Object),
-      )
+      expect(apiFetchMock).toHaveBeenCalledWith('/api/mobile/v1/ai-groups', expect.any(Object))
     })
 
     it('unwraps data.groups when nested', async () => {
-      apiFetchMock.mockResolvedValue(
-        jsonResponse({ data: { groups: [{ id: 'nested' }] } }),
-      )
+      apiFetchMock.mockResolvedValue(jsonResponse({ data: { groups: [{ id: 'nested' }] } }))
       const result = await fetchAiGroups()
       expect(result).toEqual([{ id: 'nested' }])
     })
@@ -83,9 +71,7 @@ describe('aiGroups API', () => {
     })
 
     it('throws when success is false', async () => {
-      apiFetchMock.mockResolvedValue(
-        jsonResponse({ success: false, message: '加载失败' }),
-      )
+      apiFetchMock.mockResolvedValue(jsonResponse({ success: false, message: '加载失败' }))
       await expect(fetchAiGroups()).rejects.toThrow('加载失败')
     })
 
@@ -116,17 +102,13 @@ describe('aiGroups API', () => {
     })
 
     it('unwraps data.group when nested', async () => {
-      apiFetchMock.mockResolvedValue(
-        jsonResponse({ data: { group: { id: 'nested' } } }),
-      )
+      apiFetchMock.mockResolvedValue(jsonResponse({ data: { group: { id: 'nested' } } }))
       const result = await createAiGroup('test')
       expect(result).toEqual({ id: 'nested' })
     })
 
     it('throws on success false', async () => {
-      apiFetchMock.mockResolvedValue(
-        jsonResponse({ success: false, message: '建群失败原因' }),
-      )
+      apiFetchMock.mockResolvedValue(jsonResponse({ success: false, message: '建群失败原因' }))
       await expect(createAiGroup('test')).rejects.toThrow('建群失败原因')
     })
 
@@ -138,33 +120,22 @@ describe('aiGroups API', () => {
     it('uses mobile scope', async () => {
       apiFetchMock.mockResolvedValue(jsonResponse({ group: { id: 'g' } }))
       await createAiGroup('test', 'mobile')
-      expect(apiFetchMock).toHaveBeenCalledWith(
-        '/api/mobile/v1/ai-groups',
-        expect.any(Object),
-      )
+      expect(apiFetchMock).toHaveBeenCalledWith('/api/mobile/v1/ai-groups', expect.any(Object))
     })
   })
 
   describe('fetchAiGroupMessages', () => {
     it('fetches messages for a group', async () => {
-      apiFetchMock.mockResolvedValue(
-        jsonResponse({ messages: [{ id: 'm1' }] }),
-      )
+      apiFetchMock.mockResolvedValue(jsonResponse({ messages: [{ id: 'm1' }] }))
       const result = await fetchAiGroupMessages('group-1')
-      expect(apiFetchMock).toHaveBeenCalledWith(
-        '/api/admin/ai-groups/group-1/messages',
-        expect.any(Object),
-      )
+      expect(apiFetchMock).toHaveBeenCalledWith('/api/admin/ai-groups/group-1/messages', expect.any(Object))
       expect(result).toEqual([{ id: 'm1' }])
     })
 
     it('encodes groupId in URL', async () => {
       apiFetchMock.mockResolvedValue(jsonResponse({ messages: [] }))
       await fetchAiGroupMessages('group with spaces')
-      expect(apiFetchMock).toHaveBeenCalledWith(
-        '/api/admin/ai-groups/group%20with%20spaces/messages',
-        expect.any(Object),
-      )
+      expect(apiFetchMock).toHaveBeenCalledWith('/api/admin/ai-groups/group%20with%20spaces/messages', expect.any(Object))
     })
 
     it('returns empty array when no messages field', async () => {
@@ -174,17 +145,13 @@ describe('aiGroups API', () => {
     })
 
     it('unwraps data.messages when nested', async () => {
-      apiFetchMock.mockResolvedValue(
-        jsonResponse({ data: { messages: [{ id: 'nested' }] } }),
-      )
+      apiFetchMock.mockResolvedValue(jsonResponse({ data: { messages: [{ id: 'nested' }] } }))
       const result = await fetchAiGroupMessages('g1')
       expect(result).toEqual([{ id: 'nested' }])
     })
 
     it('throws on success false', async () => {
-      apiFetchMock.mockResolvedValue(
-        jsonResponse({ success: false, message: '加载消息失败' }),
-      )
+      apiFetchMock.mockResolvedValue(jsonResponse({ success: false, message: '加载消息失败' }))
       await expect(fetchAiGroupMessages('g1')).rejects.toThrow('加载消息失败')
     })
 
@@ -264,9 +231,7 @@ describe('aiGroups API', () => {
     })
 
     it('throws on success false', async () => {
-      apiFetchMock.mockResolvedValue(
-        jsonResponse({ success: false, message: '发送失败原因' }),
-      )
+      apiFetchMock.mockResolvedValue(jsonResponse({ success: false, message: '发送失败原因' }))
       await expect(postAiGroupMessage('g1', 'hi')).rejects.toThrow('发送失败原因')
     })
 
@@ -297,19 +262,13 @@ describe('aiGroups API', () => {
     })
 
     it('throws on success false', async () => {
-      apiFetchMock.mockResolvedValue(
-        jsonResponse({ success: false, message: '添加失败' }),
-      )
-      await expect(
-        addAiGroupMember('g1', { employee_id: 'emp-1' }),
-      ).rejects.toThrow('添加失败')
+      apiFetchMock.mockResolvedValue(jsonResponse({ success: false, message: '添加失败' }))
+      await expect(addAiGroupMember('g1', { employee_id: 'emp-1' })).rejects.toThrow('添加失败')
     })
 
     it('throws default message on success false', async () => {
       apiFetchMock.mockResolvedValue(jsonResponse({ success: false }))
-      await expect(
-        addAiGroupMember('g1', { employee_id: 'emp-1' }),
-      ).rejects.toThrow('添加成员失败')
+      await expect(addAiGroupMember('g1', { employee_id: 'emp-1' })).rejects.toThrow('添加成员失败')
     })
   })
 
@@ -317,20 +276,14 @@ describe('aiGroups API', () => {
     it('removes member via DELETE', async () => {
       apiFetchMock.mockResolvedValue(jsonResponse({ group: { id: 'g1' } }))
       const result = await removeAiGroupMember('g1', 'emp-1')
-      expect(apiFetchMock).toHaveBeenCalledWith(
-        '/api/admin/ai-groups/g1/members/emp-1',
-        expect.objectContaining({ method: 'DELETE' }),
-      )
+      expect(apiFetchMock).toHaveBeenCalledWith('/api/admin/ai-groups/g1/members/emp-1', expect.objectContaining({ method: 'DELETE' }))
       expect(result).toEqual({ id: 'g1' })
     })
 
     it('encodes employeeId in URL', async () => {
       apiFetchMock.mockResolvedValue(jsonResponse({ group: {} }))
       await removeAiGroupMember('g1', 'emp with spaces')
-      expect(apiFetchMock).toHaveBeenCalledWith(
-        '/api/admin/ai-groups/g1/members/emp%20with%20spaces',
-        expect.any(Object),
-      )
+      expect(apiFetchMock).toHaveBeenCalledWith('/api/admin/ai-groups/g1/members/emp%20with%20spaces', expect.any(Object))
     })
 
     it('returns null when no group field', async () => {
@@ -340,9 +293,7 @@ describe('aiGroups API', () => {
     })
 
     it('throws on success false', async () => {
-      apiFetchMock.mockResolvedValue(
-        jsonResponse({ success: false, message: '移除失败' }),
-      )
+      apiFetchMock.mockResolvedValue(jsonResponse({ success: false, message: '移除失败' }))
       await expect(removeAiGroupMember('g1', 'emp-1')).rejects.toThrow('移除失败')
     })
 

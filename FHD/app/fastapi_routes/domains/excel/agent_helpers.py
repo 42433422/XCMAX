@@ -31,7 +31,11 @@ def trace_excel_route(
         run = create_chat_trace_run(
             payload,
             message=message,
-            runtime_context={"route": route, "source": "legacy_excel_route", **(runtime_context or {})},
+            runtime_context={
+                "route": route,
+                "source": "legacy_excel_route",
+                **(runtime_context or {}),
+            },
             user_id=user_id or "legacy-excel-route",
             source="legacy_excel_route",
             channel="excel_ai_route",
@@ -133,4 +137,9 @@ def run_excel_skill_agent(
     return agent_node_payload(run, node_id)
 
 
-__all__ = ["agent_node_payload", "run_excel_skill_agent", "trace_excel_route", "user_id_from_excel_skill_request"]
+__all__ = [
+    "agent_node_payload",
+    "run_excel_skill_agent",
+    "trace_excel_route",
+    "user_id_from_excel_skill_request",
+]

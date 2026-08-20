@@ -7,21 +7,23 @@
         ## 上游 Handoff 契约
 
         ### handoff: test-qa-runner → 本岗
+
 - **触发条件**：`employee.task.done:test-qa-runner`（pytest 全绿 + coverage gate 通过）
 - **输入**：CI 测试报告路径、覆盖率摘要
 - **门禁**：测试红灯时本岗不得继续；回滚上游修复后重触发
 
+          ## Handlers
 
-        ## Handlers
+          | Handler | 说明 |
+          |---------|------|
+          | `llm_md` | 接收 Markdown 任务描述，调用 LLM 输出结构化结果 |
 
-        | Handler | 说明 |
-        |---------|------|
-        | `llm_md` | 接收 Markdown 任务描述，调用 LLM 输出结构化结果 |
-| `echo` | 调试用：原样返回输入，用于 smoke 测试 |
+  | `echo` | 调试用：原样返回输入，用于 smoke 测试 |
 
-        ## 核心 Scope
+          ## 核心 Scope
 
-        - `FHD/app/**`
+          - `FHD/app/**`
+
 - `FHD/tests/**`
 - `FHD/frontend/src/**`
 - `FHD/pyproject.toml`

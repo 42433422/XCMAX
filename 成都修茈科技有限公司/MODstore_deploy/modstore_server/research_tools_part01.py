@@ -1,6 +1,8 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
 
 
@@ -12,7 +14,10 @@ def _cap_for_key(counter_key: str) -> int:
     if counter_key == "bucket:daily_digest":
         return max(1, int(_facade().os.environ.get("MODSTORE_DIGEST_RESEARCH_CAP", "64")))
     if counter_key == "bucket:agent_tool":
-        return max(1, int(_facade().os.environ.get("MODSTORE_AGENT_RESEARCH_TOOL_DAILY_CAP", "80")))
+        return max(
+            1,
+            int(_facade().os.environ.get("MODSTORE_AGENT_RESEARCH_TOOL_DAILY_CAP", "80")),
+        )
     return max(
         1,
         int(

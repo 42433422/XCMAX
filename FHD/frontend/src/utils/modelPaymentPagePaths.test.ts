@@ -1,8 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import {
-  resolveModelPaymentPagePath,
-  resolveModelPaymentPageRedirectForRouteName,
-} from './modelPaymentPagePaths'
+import { resolveModelPaymentPagePath, resolveModelPaymentPageRedirectForRouteName } from './modelPaymentPagePaths'
 
 describe('modelPaymentPagePaths', () => {
   afterEach(() => {
@@ -11,12 +8,8 @@ describe('modelPaymentPagePaths', () => {
 
   it('maps model-payment page when facade on', () => {
     vi.stubGlobal('localStorage', { getItem: () => '1' })
-    expect(resolveModelPaymentPagePath('/model-payment')).toBe(
-      '/settings?section=model-payment',
-    )
-    expect(resolveModelPaymentPagePath('/kitten-finance')).toBe(
-      '/mod/xcagi-model-payment-bridge/kitten-finance',
-    )
+    expect(resolveModelPaymentPagePath('/model-payment')).toBe('/settings?section=model-payment')
+    expect(resolveModelPaymentPagePath('/kitten-finance')).toBe('/mod/xcagi-model-payment-bridge/kitten-finance')
   })
 
   it('normalizes a host path without a leading slash', () => {
@@ -26,9 +19,7 @@ describe('modelPaymentPagePaths', () => {
 
   it('keeps the query suffix on the model-payment redirect', () => {
     vi.stubGlobal('localStorage', { getItem: () => '1' })
-    expect(resolveModelPaymentPagePath('/model-payment?tab=bills')).toBe(
-      '/settings?tab=bills',
-    )
+    expect(resolveModelPaymentPagePath('/model-payment?tab=bills')).toBe('/settings?tab=bills')
   })
 
   it('keeps host path when facade off', () => {
@@ -44,12 +35,8 @@ describe('modelPaymentPagePaths', () => {
 
   it('maps redirect route name when facade on', () => {
     vi.stubGlobal('localStorage', { getItem: () => '1' })
-    expect(resolveModelPaymentPageRedirectForRouteName('model-payment')).toBe(
-      '/settings?section=model-payment',
-    )
-    expect(resolveModelPaymentPageRedirectForRouteName('kitten-finance')).toBe(
-      '/mod/xcagi-model-payment-bridge/kitten-finance',
-    )
+    expect(resolveModelPaymentPageRedirectForRouteName('model-payment')).toBe('/settings?section=model-payment')
+    expect(resolveModelPaymentPageRedirectForRouteName('kitten-finance')).toBe('/mod/xcagi-model-payment-bridge/kitten-finance')
   })
 
   it('returns null for unmapped redirect route name when facade on', () => {

@@ -23,10 +23,20 @@ context).
 from __future__ import annotations
 
 import enum
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Literal
+from typing import Any, Literal, Protocol
 
-NodeRunner = Callable[[dict[str, Any], "WorkflowExecution"], dict[str, Any]]
+
+class ExecutionState(Protocol):
+    """Structural execution state exposed to user-provided node runners."""
+
+    context: dict[str, Any]
+
+    def output_for(self, node_id: str) -> dict[str, Any]: ...
+
+
+NodeRunner = Callable[[dict[str, Any], ExecutionState], dict[str, Any]]
 """Sync runner signature: (input_kwargs, execution_state) -> output_dict."""
 
 
@@ -72,7 +82,7 @@ class ParallelGroup:
     - ``"at_least"`` — wait until ``threshold`` children succeed.
     """
 
-    children: list["AdvancedNode"] = field(default_factory=list)
+    children: list[AdvancedNode] = field(default_factory=list)
     mode: Literal["all", "any", "at_least"] = "all"
     threshold: int = 1
     fail_fast: bool = True
@@ -190,13 +200,9 @@ __all__ = [
     "AdvancedNode",
     "AdvancedWorkflow",
     "DynamicSpawn",
+    "ExecutionState",
     "NodeKind",
     "NodeRunner",
     "ParallelGroup",
     "TriggerSpec",
 ]
-
-
-# Forward-reference used in NodeRunner above; pylint stays happy.
-class WorkflowExecution:  # pragma: no cover - sentinel
-    pass

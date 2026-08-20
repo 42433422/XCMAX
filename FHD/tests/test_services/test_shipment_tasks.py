@@ -256,7 +256,9 @@ class TestCleanupOldShipmentDocuments:
     def test_outer_exception_returns_zero(self):
         from app.tasks.shipment_tasks import cleanup_old_shipment_documents
 
-        with patch("app.utils.path_io.path_utils.get_app_data_dir", side_effect=RuntimeError("fail")):
+        with patch(
+            "app.utils.path_io.path_utils.get_app_data_dir", side_effect=RuntimeError("fail")
+        ):
             result = cleanup_old_shipment_documents(90)
         assert result == 0
 

@@ -84,7 +84,9 @@ def _resolve_rules_and_records(
     if records is None and records_path:
         p = Path(records_path).expanduser()
         if not p.is_absolute():
-            root = Path(str(payload.get("workspace_root") or ctx.get("workspace_root") or Path.cwd()))
+            root = Path(
+                str(payload.get("workspace_root") or ctx.get("workspace_root") or Path.cwd())
+            )
             p = root / records_path
         if not p.is_file():
             raise ValueError(f"records_path 文件不存在：{p}")
@@ -149,9 +151,7 @@ async def convert_file(
             source_name=str(data.get("source") or (src_path.name if src_path else "")),
         )
         if _llm_enabled(payload, ctx):
-            rules = await llm_refine_rules(
-                rules, _pick_sheet(data, sheet_name), ctx["call_llm"]
-            )
+            rules = await llm_refine_rules(rules, _pick_sheet(data, sheet_name), ctx["call_llm"])
         out = output_dir / "rules.json"
         out.write_text(
             json.dumps(rules, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
@@ -185,7 +185,9 @@ async def convert_file(
             raise ValueError("solidify 缺少 source_workbook（读取员读源表的 workbook.json）")
         rules = data.get("rules") if isinstance(data.get("rules"), dict) else payload.get("rules")
         if not isinstance(rules, dict):
-            raise ValueError("solidify 缺少 rules：请在组合 JSON 或 payload.rules 提供固化结构规则。")
+            raise ValueError(
+                "solidify 缺少 rules：请在组合 JSON 或 payload.rules 提供固化结构规则。"
+            )
         expected_records = data.get("expected_records")
         if not isinstance(expected_records, list):
             golden_workbook = data.get("golden_workbook")
@@ -248,9 +250,7 @@ async def convert_file(
         clear_first=bool(payload.get("clear_first", True)),
     )
     out = output_dir / "plan.json"
-    out.write_text(
-        json.dumps(plan, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
-    )
+    out.write_text(json.dumps(plan, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     return {
         "action": "compile",
         "output_path": str(out),

@@ -15,9 +15,11 @@ from __future__ import annotations
 
 import fnmatch
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -77,11 +79,10 @@ def _scan_scope_files(
                         {
                             "path": rel,
                             "size_bytes": int(st.st_size),
-                            "mtime_iso": datetime.fromtimestamp(
-                                st.st_mtime, tz=timezone.utc
-                            ).isoformat(),
+                            "mtime_iso": datetime.fromtimestamp(st.st_mtime, tz=UTC).isoformat(),
                             "mtime_age_hours": round(
-                                (datetime.now(timezone.utc).timestamp() - st.st_mtime) / 3600.0, 1
+                                (datetime.now(UTC).timestamp() - st.st_mtime) / 3600.0,
+                                1,
                             ),
                         }
                     )
@@ -112,7 +113,7 @@ def _recent_runs_from_db(
             .limit(limit)
             .all()
         )
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.debug("recent_runs query failed employee_id=%s err=%s", employee_id, exc)
         return []
     out: List[Dict[str, Any]] = []
@@ -153,7 +154,7 @@ def _recent_failures_from_db(
             .limit(limit)
             .all()
         )
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.debug("recent_failures query failed employee_id=%s err=%s", employee_id, exc)
         return []
     out: List[Dict[str, Any]] = []
@@ -202,14 +203,18 @@ def enrich_perception(
     forbidden_globs = [str(x) for x in (wp.get("forbidden_globs") or []) if str(x).strip()]
     if not scope_globs and not forbidden_globs and manifest:
         try:
-            from modstore_server.employee_scope_policy import workspace_policy_from_manifest
+            from modstore_server.employee_scope_policy import (
+                workspace_policy_from_manifest,
+            )
 
             _sg, _fg, _ag = workspace_policy_from_manifest(manifest)
             scope_globs = _sg or []
             forbidden_globs = _fg or []
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
             logger.debug(
-                "workspace_policy_from_manifest failed employee_id=%s err=%s", employee_id, exc
+                "workspace_policy_from_manifest failed employee_id=%s err=%s",
+                employee_id,
+                exc,
             )
 
     ni["_scope_summary"] = {
@@ -227,7 +232,7 @@ def enrich_perception(
                 "scope_root": str(project_root),
                 "note": f"你负责的代码（scope_globs 匹配）最近修改的 {len(files)} 个文件",
             }
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
             ni["_workspace_signals"] = {"error": str(exc)[:200]}
     else:
         ni["_workspace_signals"] = {"note": "未配置 scope_globs 或 project_root，无法扫描代码文件"}
@@ -239,7 +244,7 @@ def enrich_perception(
             "runs": runs,
             "note": f"你最近 {len(runs)} 次执行记录（含成功/失败）",
         }
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         ni["_recent_runs"] = {"error": str(exc)[:200]}
 
     # 最近失败（重点看失败原因）
@@ -249,7 +254,7 @@ def enrich_perception(
             "failures": failures,
             "note": f"你最近 {len(failures)} 次失败任务的失败原因（如果有的话）",
         }
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         ni["_recent_failures"] = {"error": str(exc)[:200]}
 
     return perceived

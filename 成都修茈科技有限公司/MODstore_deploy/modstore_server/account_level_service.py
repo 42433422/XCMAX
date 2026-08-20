@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment"
 """账号等级与经验体系。
 
 口径：

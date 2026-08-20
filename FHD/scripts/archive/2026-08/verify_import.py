@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment, var-annotated"
 import sys
 
 sys.path.insert(0, r"e:\FHD\XCAGI")

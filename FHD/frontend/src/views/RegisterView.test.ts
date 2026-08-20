@@ -334,7 +334,11 @@ describe('RegisterView.vue', () => {
 
   it('shows loading text during registration', async () => {
     let resolveRegister: (value: unknown) => void
-    register.mockReturnValue(new Promise((r) => { resolveRegister = r }))
+    register.mockReturnValue(
+      new Promise((r) => {
+        resolveRegister = r
+      }),
+    )
     const { wrapper } = await mountView()
     await wrapper.find('input[name="username"]').setValue('user')
     await wrapper.find('input[name="password"]').setValue('password123')
@@ -355,9 +359,7 @@ describe('RegisterView.vue', () => {
     await wrapper.find('form').trigger('submit')
     await wrapper.vm.$nextTick()
     await wrapper.vm.$nextTick()
-    expect(register).toHaveBeenCalledWith(
-      expect.objectContaining({ username: 'testuser' }),
-    )
+    expect(register).toHaveBeenCalledWith(expect.objectContaining({ username: 'testuser' }))
   })
 
   it('shows error when submitting with empty fields', async () => {

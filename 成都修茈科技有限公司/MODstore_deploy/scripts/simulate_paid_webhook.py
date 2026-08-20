@@ -111,9 +111,7 @@ def main() -> int:
 
     print(f"POST {args.url}")
     print(json.dumps(event, ensure_ascii=False, indent=2))
-    req = urllib.request.Request(
-        args.url, data=body, headers=headers, method="POST"
-    )
+    req = urllib.request.Request(args.url, data=body, headers=headers, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=10.0) as resp:
             print(f"\nHTTP {resp.status}")

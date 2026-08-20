@@ -31,7 +31,9 @@ class TestPrinterAutomationUnavailableResult:
 
 
 class TestPrinterAutomationMoveMouse:
-    @patch("app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=False)
+    @patch(
+        "app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=False
+    )
     def test_move_mouse_unavailable(self, mock_avail):
         pa = PrinterAutomation()
         # Should return None silently when unavailable
@@ -39,7 +41,9 @@ class TestPrinterAutomationMoveMouse:
         assert result is None
 
     @patch("app.utils.path_io.printer_automation.win32api", create=True)
-    @patch("app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=True)
+    @patch(
+        "app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=True
+    )
     def test_move_mouse_available(self, mock_avail, mock_win32api):
         pa = PrinterAutomation()
         pa.move_mouse(100, 200)
@@ -47,7 +51,9 @@ class TestPrinterAutomationMoveMouse:
 
 
 class TestPrinterAutomationClickMouse:
-    @patch("app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=False)
+    @patch(
+        "app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=False
+    )
     def test_click_mouse_unavailable(self, mock_avail):
         pa = PrinterAutomation()
         result = pa.click_mouse(100, 200)
@@ -56,7 +62,9 @@ class TestPrinterAutomationClickMouse:
     @patch("app.utils.path_io.printer_automation.time.sleep")
     @patch("app.utils.path_io.printer_automation.win32con", create=True)
     @patch("app.utils.path_io.printer_automation.win32api", create=True)
-    @patch("app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=True)
+    @patch(
+        "app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=True
+    )
     def test_click_mouse_left(self, mock_avail, mock_win32api, mock_win32con, mock_sleep):
         mock_win32con.MOUSEEVENTF_LEFTDOWN = 1
         mock_win32con.MOUSEEVENTF_LEFTUP = 2
@@ -68,7 +76,9 @@ class TestPrinterAutomationClickMouse:
     @patch("app.utils.path_io.printer_automation.time.sleep")
     @patch("app.utils.path_io.printer_automation.win32con", create=True)
     @patch("app.utils.path_io.printer_automation.win32api", create=True)
-    @patch("app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=True)
+    @patch(
+        "app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=True
+    )
     def test_click_mouse_right(self, mock_avail, mock_win32api, mock_win32con, mock_sleep):
         mock_win32con.MOUSEEVENTF_RIGHTDOWN = 3
         mock_win32con.MOUSEEVENTF_RIGHTUP = 4
@@ -79,14 +89,18 @@ class TestPrinterAutomationClickMouse:
 
 
 class TestPrinterAutomationFindWindow:
-    @patch("app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=False)
+    @patch(
+        "app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=False
+    )
     def test_find_window_unavailable(self, mock_avail):
         pa = PrinterAutomation()
         result = pa.find_window("打印")
         assert result == 0
 
     @patch("app.utils.path_io.printer_automation.win32gui", create=True)
-    @patch("app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=True)
+    @patch(
+        "app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=True
+    )
     def test_find_window_found(self, mock_avail, mock_win32gui):
         def enum_callback(cb, result_list):
             result_list.append(12345)
@@ -103,14 +117,18 @@ class TestPrinterAutomationFindWindow:
 
 
 class TestPrinterAutomationGetWindowPosition:
-    @patch("app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=False)
+    @patch(
+        "app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=False
+    )
     def test_get_window_position_unavailable(self, mock_avail):
         pa = PrinterAutomation()
         result = pa.get_window_position(12345)
         assert result == (0, 0, 0, 0)
 
     @patch("app.utils.path_io.printer_automation.win32gui", create=True)
-    @patch("app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=True)
+    @patch(
+        "app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=True
+    )
     def test_get_window_position_available(self, mock_avail, mock_win32gui):
         mock_win32gui.GetWindowRect.return_value = (10, 20, 500, 400)
         pa = PrinterAutomation()
@@ -119,7 +137,9 @@ class TestPrinterAutomationGetWindowPosition:
 
 
 class TestPrinterAutomationSetDefaultPrinter:
-    @patch("app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=False)
+    @patch(
+        "app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=False
+    )
     def test_set_default_printer_unavailable(self, mock_avail):
         pa = PrinterAutomation()
         result = pa.set_default_printer("HP LaserJet")
@@ -127,7 +147,9 @@ class TestPrinterAutomationSetDefaultPrinter:
 
     @patch("app.utils.path_io.printer_automation.time.sleep")
     @patch("app.utils.path_io.printer_automation.subprocess.run")
-    @patch("app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=True)
+    @patch(
+        "app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=True
+    )
     def test_set_default_printer_success(self, mock_avail, mock_run, mock_sleep):
         mock_run.return_value = MagicMock(returncode=0)
         pa = PrinterAutomation()
@@ -136,7 +158,9 @@ class TestPrinterAutomationSetDefaultPrinter:
         mock_run.assert_called_once()
 
     @patch("app.utils.path_io.printer_automation.subprocess.run")
-    @patch("app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=True)
+    @patch(
+        "app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=True
+    )
     def test_set_default_printer_failure(self, mock_avail, mock_run):
         mock_run.return_value = MagicMock(returncode=1, stderr="error")
         pa = PrinterAutomation()
@@ -144,7 +168,9 @@ class TestPrinterAutomationSetDefaultPrinter:
         assert result is False
 
     @patch("app.utils.path_io.printer_automation.subprocess.run")
-    @patch("app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=True)
+    @patch(
+        "app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=True
+    )
     def test_set_default_printer_exception(self, mock_avail, mock_run):
         mock_run.side_effect = OSError("subprocess failed")
         pa = PrinterAutomation()
@@ -153,14 +179,18 @@ class TestPrinterAutomationSetDefaultPrinter:
 
 
 class TestPrinterAutomationHandlePrinterDialog:
-    @patch("app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=False)
+    @patch(
+        "app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=False
+    )
     def test_handle_dialog_unavailable(self, mock_avail):
         pa = PrinterAutomation()
         result = pa.handle_printer_dialog("HP LaserJet")
         assert result is False
 
     @patch("app.utils.path_io.printer_automation.time.sleep")
-    @patch("app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=True)
+    @patch(
+        "app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=True
+    )
     def test_handle_dialog_no_window_found(self, mock_avail, mock_sleep):
         pa = PrinterAutomation()
         with patch.object(pa, "find_window", return_value=0):
@@ -168,7 +198,9 @@ class TestPrinterAutomationHandlePrinterDialog:
         assert result is False
 
     @patch("app.utils.path_io.printer_automation.time.sleep")
-    @patch("app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=True)
+    @patch(
+        "app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=True
+    )
     def test_handle_dialog_window_found(self, mock_avail, mock_sleep):
         pa = PrinterAutomation()
         with patch.object(pa, "find_window", return_value=12345):
@@ -179,7 +211,9 @@ class TestPrinterAutomationHandlePrinterDialog:
 
 
 class TestPrinterAutomationPrintWithAutomation:
-    @patch("app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=False)
+    @patch(
+        "app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=False
+    )
     def test_print_unavailable(self, mock_avail):
         pa = PrinterAutomation()
         result = pa.print_with_automation("/tmp/test.docx", "HP LaserJet")
@@ -188,7 +222,9 @@ class TestPrinterAutomationPrintWithAutomation:
     @patch("app.utils.path_io.printer_automation.time.sleep")
     @patch("app.utils.path_io.printer_automation.win32api", create=True)
     @patch("app.utils.path_io.printer_automation.win32print", create=True)
-    @patch("app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=True)
+    @patch(
+        "app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=True
+    )
     def test_print_success_same_printer(
         self, mock_avail, mock_win32print, mock_win32api, mock_sleep
     ):
@@ -203,7 +239,9 @@ class TestPrinterAutomationPrintWithAutomation:
     @patch("app.utils.path_io.printer_automation.time.sleep")
     @patch("app.utils.path_io.printer_automation.win32api", create=True)
     @patch("app.utils.path_io.printer_automation.win32print", create=True)
-    @patch("app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=True)
+    @patch(
+        "app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=True
+    )
     def test_print_different_printer_changes_default(
         self, mock_avail, mock_win32print, mock_win32api, mock_sleep
     ):
@@ -220,7 +258,9 @@ class TestPrinterAutomationPrintWithAutomation:
     @patch("app.utils.path_io.printer_automation.time.sleep")
     @patch("app.utils.path_io.printer_automation.win32api", create=True)
     @patch("app.utils.path_io.printer_automation.win32print", create=True)
-    @patch("app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=True)
+    @patch(
+        "app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=True
+    )
     def test_print_shell_execute_failure(
         self, mock_avail, mock_win32print, mock_win32api, mock_sleep
     ):
@@ -233,7 +273,9 @@ class TestPrinterAutomationPrintWithAutomation:
             pa.print_with_automation("/tmp/test.docx", "HP LaserJet")
 
     @patch("app.utils.path_io.printer_automation.win32print", create=True)
-    @patch("app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=True)
+    @patch(
+        "app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=True
+    )
     def test_print_exception_recovers_printer(self, mock_avail, mock_win32print):
         mock_win32print.GetDefaultPrinter.side_effect = OSError("no printer")
         pa = PrinterAutomation()
@@ -242,13 +284,17 @@ class TestPrinterAutomationPrintWithAutomation:
 
 
 class TestEnhancedPrinterUtils:
-    @patch("app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=False)
+    @patch(
+        "app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=False
+    )
     def test_print_file_enhanced_automation_unavailable(self, mock_avail):
         epu = EnhancedPrinterUtils()
         result = epu.print_file_enhanced("/tmp/test.docx", "HP LaserJet", use_automation=True)
         assert result["success"] is False
 
-    @patch("app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=True)
+    @patch(
+        "app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=True
+    )
     def test_print_file_enhanced_no_automation(self, mock_avail):
         epu = EnhancedPrinterUtils()
         with patch("app.utils.path_io.print_utils.PrinterUtils") as mock_utils_cls:
@@ -261,7 +307,9 @@ class TestEnhancedPrinterUtils:
     @patch("app.utils.path_io.printer_automation.time.sleep")
     @patch("app.utils.path_io.printer_automation.win32api", create=True)
     @patch("app.utils.path_io.printer_automation.win32print", create=True)
-    @patch("app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=True)
+    @patch(
+        "app.utils.path_io.printer_automation.PrinterAutomation._is_available", return_value=True
+    )
     def test_print_file_enhanced_with_automation(
         self, mock_avail, mock_win32print, mock_win32api, mock_sleep
     ):

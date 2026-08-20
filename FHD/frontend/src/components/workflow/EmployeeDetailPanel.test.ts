@@ -15,12 +15,8 @@ vi.mock('@/composables/useWorkflowEmployeeDesks', () => ({
   totalWorkMs: vi.fn(() => 60000),
   useNowMsTicker: vi.fn(() => ({ value: 1000000 })),
   useWorkflowEmployeeDesks: () => ({
-    statusLine: vi.fn((row: { enabled: boolean }) =>
-      row.enabled ? '运行中' : '副窗未启用'
-    ),
-    isBusy: vi.fn((row: { enabled: boolean; snapshot?: { visuallyBusy?: boolean } }) =>
-      row.enabled && row.snapshot?.visuallyBusy === true
-    ),
+    statusLine: vi.fn((row: { enabled: boolean }) => (row.enabled ? '运行中' : '副窗未启用')),
+    isBusy: vi.fn((row: { enabled: boolean; snapshot?: { visuallyBusy?: boolean } }) => row.enabled && row.snapshot?.visuallyBusy === true),
     desks: { value: [] },
     onDutyDesks: { value: [] },
     employeeIds: { value: [] },
@@ -44,7 +40,7 @@ vi.mock('@/utils/workflowEmployeeDocs', () => ({
           ],
         },
       ],
-    })
+    }),
   ),
 }))
 
@@ -264,9 +260,7 @@ describe('EmployeeDetailPanel', () => {
     const router = wrapper.vm.$.appContext.config.globalProperties.$router
     const pushSpy = vi.spyOn(router, 'push')
     await wrapper.find('.edp-db-btn').trigger('click')
-    expect(pushSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'print' })
-    )
+    expect(pushSpy).toHaveBeenCalledWith(expect.objectContaining({ name: 'print' }))
   })
 
   it('clicking database button for wechat_msg includes query', async () => {
@@ -278,7 +272,7 @@ describe('EmployeeDetailPanel', () => {
       expect.objectContaining({
         name: 'data-sources',
         query: { source: 'wechat_local_db' },
-      })
+      }),
     )
   })
 

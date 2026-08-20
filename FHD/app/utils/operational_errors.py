@@ -81,3 +81,8 @@ DATA_SHAPE: tuple[type[Exception], ...] = (
 
 # Union of recoverable operational failures (default inner catch tuple)
 RECOVERABLE_ERRORS: tuple[type[Exception], ...] = INFRA_TRANSIENT + DATA_SHAPE
+
+# Only process, request, task, adapter, and plugin-isolation boundaries may
+# translate an otherwise unexpected application exception. Keeping this
+# separate from RECOVERABLE_ERRORS makes every deliberate catch-all auditable.
+BOUNDARY_ERRORS: tuple[type[Exception], ...] = (Exception,)

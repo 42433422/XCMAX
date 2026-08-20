@@ -6,13 +6,9 @@ import json
 import textwrap
 from pathlib import Path
 
-import pytest
-
 from vibe_coding import MockLLM
-from vibe_coding.agent.context import AgentContext
-from vibe_coding.agent.debug_reasoner import DebugReasoner, Hypothesis, DebugReport
+from vibe_coding.agent.debug_reasoner import DebugReasoner, DebugReport, Hypothesis
 from vibe_coding.agent.repo_index import build_index
-
 
 _MOCK_HYPOTHESES = json.dumps(
     {
@@ -75,9 +71,7 @@ def test_analyse_with_mock_llm(tmp_path: Path) -> None:
 
 def test_analyse_enriches_frames_from_index(tmp_path: Path) -> None:
     (tmp_path / "pkg").mkdir()
-    (tmp_path / "pkg" / "math.py").write_text(
-        "def add(a, b):\n    return a + b\n", encoding="utf-8"
-    )
+    (tmp_path / "pkg" / "math.py").write_text("def add(a, b):\n    return a + b\n", encoding="utf-8")
     index = build_index(tmp_path)
     llm = MockLLM([_MOCK_HYPOTHESES])
     reasoner = DebugReasoner(llm, index=index, root=tmp_path)
@@ -106,9 +100,7 @@ def test_debug_report_to_dict() -> None:
         error_type="TypeError",
         error_message="bad",
         traceback_str="...",
-        hypotheses=[
-            Hypothesis(id="h1", hypothesis="foo", evidence="bar", confidence="high")
-        ],
+        hypotheses=[Hypothesis(id="h1", hypothesis="foo", evidence="bar", confidence="high")],
         suggested_patch_briefing="fix foo",
     )
     d = report.to_dict()

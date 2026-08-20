@@ -9,7 +9,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.absorption_state import (
     advance_absorption_state as _state_advance_absorption_state,
@@ -249,10 +249,11 @@ class RetortHistory:
                     ),
                 )
             elif table == "employee_tasks":
-                task = (
+                task = cast(
+                    dict[str, Any],
                     payload.get("task")
                     if isinstance(payload.get("task"), dict)
-                    else payload
+                    else payload,
                 )
                 conn.execute(
                     "INSERT INTO employee_tasks(created_at, queue_id, task_id, owner_hint, status, payload_json) VALUES (?, ?, ?, ?, ?, ?)",
@@ -517,7 +518,7 @@ class RetortService:
         ).to_dict()
         llm_payload = dict(payload)
         llm_payload["use_llm"] = True
-        result = {
+        result: dict[str, Any] = {
             "status": "blocked",
             "stop_reason": "llm_deep_review_required",
             "final_assessment": base,
@@ -793,10 +794,11 @@ class RetortService:
         assessment = assess_project(
             project, run_local_gates=bool(payload.get("run_local_gates"))
         ).to_dict()
-        metadata = (
+        metadata = cast(
+            dict[str, Any],
             assessment.get("metadata", {})
             if isinstance(assessment.get("metadata"), dict)
-            else {}
+            else {},
         )
         external_source, external_path = _llm_external_reference(
             metadata,
@@ -1069,7 +1071,10 @@ def _employee_result_files(root: Path) -> list[Path]:
 def _tasks_from_assessment(
     source: str, external_path: Path | None = None
 ) -> list[dict[str, str]]:
-    profile = _external_project_profile(external_path) if external_path else {}
+    profile = cast(
+        dict[str, Any],
+        _external_project_profile(external_path) if external_path else {},
+    )
     tasks: list[dict[str, str]] = []
     if external_path and external_path.is_dir():
         from retort_engine.repository_intelligence import (

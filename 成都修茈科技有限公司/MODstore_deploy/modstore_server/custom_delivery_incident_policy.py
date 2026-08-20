@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 
@@ -30,8 +30,8 @@ def apply_ticket_outcome(ticket: Any, team_ok: bool, delivery_managed: bool) -> 
     if not delivery_managed:
         ticket.decision_status = "approved"
     ticket.status = "resolved" if team_ok and not delivery_managed else "processing"
-    ticket.closed_at = datetime.now(timezone.utc) if ticket.status == "resolved" else None
-    ticket.updated_at = datetime.now(timezone.utc)
+    ticket.closed_at = datetime.now(UTC) if ticket.status == "resolved" else None
+    ticket.updated_at = datetime.now(UTC)
 
 
 __all__ = ["apply_ticket_outcome", "is_delivery_managed", "success_reply"]

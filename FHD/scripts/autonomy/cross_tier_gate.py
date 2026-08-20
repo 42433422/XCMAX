@@ -81,8 +81,7 @@ def check_before_action(
             return GateResult(
                 allow=False,
                 reasons=[
-                    "服务器端 manifest 已冻结，推送新版本会覆盖冻结状态；"
-                    "请联系运维解除冻结后再推送"
+                    "服务器端 manifest 已冻结，推送新版本会覆盖冻结状态；请联系运维解除冻结后再推送"
                 ],
             )
 

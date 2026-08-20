@@ -217,8 +217,7 @@ vi.mock('@/router/registerModRoutes', () => ({
 vi.mock('./Sidebar.vue', () => ({
   default: {
     name: 'Sidebar',
-    template:
-      '<nav class="sidebar-stub" @change-view="$emit(\'change-view\', $event)"><slot /></nav>',
+    template: '<nav class="sidebar-stub" @change-view="$emit(\'change-view\', $event)"><slot /></nav>',
     props: ['activeView'],
     emits: ['change-view'],
   },
@@ -417,9 +416,10 @@ describe('MainLayout.vue - coverage ramp', () => {
       testState.accountProfileStore.isImpersonating = true
       let resolveEndImpersonate: () => void
       testState.xcmaxAdminApi.endImpersonate = vi.fn(
-        () => new Promise<void>((resolve) => {
-          resolveEndImpersonate = resolve
-        }),
+        () =>
+          new Promise<void>((resolve) => {
+            resolveEndImpersonate = resolve
+          }),
       )
 
       Object.defineProperty(window, 'location', {
@@ -704,9 +704,7 @@ describe('MainLayout.vue - coverage ramp', () => {
     it('modItem.path 未注册但 legacy 路由存在时 push legacy', async () => {
       const { wrapper, router } = await mountMainLayout()
       const pushSpy = vi.spyOn(router, 'push')
-      testState.modMenuItems.value = [
-        { key: 'mod-approval', path: '/mod/test/approval-hub/workspace' },
-      ]
+      testState.modMenuItems.value = [{ key: 'mod-approval', path: '/mod/test/approval-hub/workspace' }]
 
       await wrapper.vm.navigateToView('mod-approval')
       expect(pushSpy).toHaveBeenCalledWith({ name: 'approval-workspace' })
@@ -730,10 +728,7 @@ describe('MainLayout.vue - coverage ramp', () => {
       testState.modMenuItems.value = [{ key: 'mod-unknown', path: '/mod/unknown/path' }]
 
       await wrapper.vm.navigateToView('mod-unknown')
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Mod 路由未注册'),
-        '/mod/unknown/path',
-      )
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Mod 路由未注册'), '/mod/unknown/path')
       warnSpy.mockRestore()
       wrapper.unmount()
     })
@@ -817,10 +812,7 @@ describe('MainLayout.vue - coverage ramp', () => {
       const { wrapper } = await mountMainLayout()
 
       await wrapper.vm.navigateToView('nonexistent-view')
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('侧栏无对应路由'),
-        'nonexistent-view',
-      )
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('侧栏无对应路由'), 'nonexistent-view')
       warnSpy.mockRestore()
       wrapper.unmount()
     })

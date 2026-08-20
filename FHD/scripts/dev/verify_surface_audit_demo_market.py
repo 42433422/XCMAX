@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """校验 surface_audit 演示企业号能否在修茈市场登录。"""
+
 from __future__ import annotations
 
 import json

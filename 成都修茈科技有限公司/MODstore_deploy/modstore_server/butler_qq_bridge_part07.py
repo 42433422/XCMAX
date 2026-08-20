@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -88,9 +92,12 @@ async def dispatch_to_employee(
         reply = "（AI 员工未生成回复）"
     try:
         await ctx.send(kind, target_id, reply, msg_id=msg_id)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         _facade().logger.exception(
-            "QQ 出站失败 kind=%s target=%s employee=%s", kind, target_id, ctx.employee_id
+            "QQ 出站失败 kind=%s target=%s employee=%s",
+            kind,
+            target_id,
+            ctx.employee_id,
         )
 
 
@@ -99,7 +106,7 @@ async def _resolve_reply(employee_id: str, user_text: str) -> str:
     if employee_id == _facade()._BUTLER_EMPLOYEE_ID:
         try:
             return await _facade()._employee_chat(user_text, employee_id=employee_id)
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             _facade().logger.exception("管家 chat 失败")
             return f"数字管家暂时不可用：{exc}"
     try:
@@ -107,12 +114,12 @@ async def _resolve_reply(employee_id: str, user_text: str) -> str:
         if reply:
             return reply
         _facade().logger.info("执行器无文本输出 employee=%s，回退到 persona chat", employee_id)
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         _facade().logger.exception(
             "执行器失败 employee=%s，回退到 persona chat: %s", employee_id, exc
         )
     try:
         return await _facade()._employee_chat(user_text, employee_id=employee_id)
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         _facade().logger.exception("persona chat 也失败 employee=%s", employee_id)
         return f"AI 员工暂时不可用：{exc}"

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="misc"
 """Tests for app.fastapi_routes.fhd_meta — coverage ramp C3.3-a.
 
 Covers ``/api/fhd/db-tokens/status`` with various states of the

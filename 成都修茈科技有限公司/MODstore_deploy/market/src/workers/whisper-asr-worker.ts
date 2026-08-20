@@ -8,10 +8,7 @@ env.remotePathTemplate = '{model}/resolve/{revision}/'
 function resolveOrtWasmBase(): string {
   const base = (import.meta.env.BASE_URL || '/market/').replace(/\/?$/, '/')
   try {
-    const origin =
-      typeof self !== 'undefined' && 'location' in self
-        ? (self as typeof globalThis).location?.origin
-        : ''
+    const origin = typeof self !== 'undefined' && 'location' in self ? (self as typeof globalThis).location?.origin : ''
     if (origin && origin !== 'null') return `${origin}${base}asr-ort/`
   } catch {
     /* ignore */
@@ -96,7 +93,11 @@ self.onmessage = async (e: MessageEvent) => {
       self.postMessage({ type: 'result', jobId, data: result.text || '' })
     } catch (err: unknown) {
       if (jobId !== activeJobId) return
-      self.postMessage({ type: 'error', jobId, data: err instanceof Error ? err.message : String(err) })
+      self.postMessage({
+        type: 'error',
+        jobId,
+        data: err instanceof Error ? err.message : String(err),
+      })
     }
   }
 }

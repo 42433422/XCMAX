@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -13,7 +17,11 @@ def run_daily_digest_email() -> _facade().Dict[str, _facade().Any]:
     raw = _facade().os.environ.get("MODSTORE_DAILY_DIGEST_ENABLED", "1").strip().lower()
     if raw in ("0", "false", "no", "off"):
         _facade().logger.info("daily digest disabled by MODSTORE_DAILY_DIGEST_ENABLED")
-        return {"ok": True, "skipped": True, "reason": "MODSTORE_DAILY_DIGEST_ENABLED=0"}
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "MODSTORE_DAILY_DIGEST_ENABLED=0",
+        }
     from modstore_server.autonomy_guard_delegate import evaluate_risk
 
     risk_decision = evaluate_risk(
@@ -42,7 +50,7 @@ def run_daily_digest_email() -> _facade().Dict[str, _facade().Any]:
         from modstore_server.surface_audit_deps import surface_audit_stop_after_enabled
 
         stop_ephemeral_after = surface_audit_stop_after_enabled()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         stop_ephemeral_after = False
     recipients = _facade().parse_daily_digest_recipient_emails(
         _facade()
@@ -57,7 +65,7 @@ def run_daily_digest_email() -> _facade().Dict[str, _facade().Any]:
             from modstore_server.inbox_poller import poll_fail_streak as _poll_fail_streak
 
             _streak = _poll_fail_streak()
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _streak = 0
         imap_alert_html = ""
         if _streak >= 3:
@@ -85,7 +93,7 @@ def run_daily_digest_email() -> _facade().Dict[str, _facade().Any]:
                 for row in session.query(_facade().OpsApprovalToken.token_hash).all()
                 if row[0]
             }
-            (token_batch, staged_section_html) = _facade().build_digest_approval_bundle(
+            token_batch, staged_section_html = _facade().build_digest_approval_bundle(
                 pending=pending,
                 auth_email=auth_email,
                 expires_at=expires_at,
@@ -98,17 +106,19 @@ def run_daily_digest_email() -> _facade().Dict[str, _facade().Any]:
             "yes",
         ):
             try:
-                from modstore_server.daily_employee_briefs import build_daily_brief_html_sync
+                from modstore_server.daily_employee_briefs import (
+                    build_daily_brief_html_sync,
+                )
 
                 employee_briefs_html = build_daily_brief_html_sync()
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 _facade().logger.exception("daily digest: employee briefs failed")
                 employee_briefs_html = '<div style="margin-top:16px"><p style="color:#b91c1c;font-size:14px">各岗位方案段落生成失败（见服务器日志）。</p></div>'
         try:
             from modstore_server.tls_cert_inspection import scan_tls_certificates
 
             cert_results = scan_tls_certificates()
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.exception("daily digest: tls cert scan failed")
             cert_results = []
         _facade()._publish_tls_cert_security_alerts(cert_results)
@@ -121,7 +131,9 @@ def run_daily_digest_email() -> _facade().Dict[str, _facade().Any]:
         surface_ppt_meta: _facade().Dict[str, _facade().Any] = {}
         if surface_audit_bundle.get("ok"):
             try:
-                from modstore_server.daily_digest_surface_ppt import build_surface_audit_pptx
+                from modstore_server.daily_digest_surface_ppt import (
+                    build_surface_audit_pptx,
+                )
 
                 surface_ppt_meta = build_surface_audit_pptx(surface_audit_report)
                 if surface_ppt_meta.get("ok") and (not surface_ppt_meta.get("skipped")):
@@ -133,9 +145,10 @@ def run_daily_digest_email() -> _facade().Dict[str, _facade().Any]:
                     )
                 elif surface_ppt_meta.get("error"):
                     _facade().logger.warning(
-                        "daily digest: surface ppt error=%s", surface_ppt_meta.get("error")
+                        "daily digest: surface ppt error=%s",
+                        surface_ppt_meta.get("error"),
                     )
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 _facade().logger.exception("daily digest: surface ppt failed")
         else:
             _facade().logger.warning(
@@ -200,12 +213,14 @@ def run_daily_digest_email() -> _facade().Dict[str, _facade().Any]:
         )
         if record_id and meeting_minutes_html:
             try:
-                from modstore_server.employee_collab_reporter import report_meeting_minutes
+                from modstore_server.employee_collab_reporter import (
+                    report_meeting_minutes,
+                )
 
                 report_meeting_minutes(
                     record_id=int(record_id), day=day, minutes_html=meeting_minutes_html
                 )
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 _facade().logger.exception(
                     "collab report (meeting minutes) failed record_id=%s", record_id
                 )
@@ -214,7 +229,7 @@ def run_daily_digest_email() -> _facade().Dict[str, _facade().Any]:
                 from modstore_server.release_train import bump_release_train
 
                 bump_release_train(record_id=int(record_id), digest_day=day)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 _facade().logger.exception(
                     "daily digest: release_train bump failed record_id=%s", record_id
                 )
@@ -237,7 +252,7 @@ def run_daily_digest_email() -> _facade().Dict[str, _facade().Any]:
                 meta = {"record_id": int(record_id), "day": day}
                 for nid in ("ASM", "P", "M", "PPTX", "SW", "SS", "SA", "V"):
                     record_node_run(nid, ok=digest_ok, source="daily_digest", meta=meta)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 _facade().logger.exception("daily digest: time_rail runtime record failed")
         identity_tokens = [
             t for t in token_batch or [] if getattr(t, "kind", None) == "digest_identity"
@@ -251,7 +266,8 @@ def run_daily_digest_email() -> _facade().Dict[str, _facade().Any]:
                     session.add(t)
                 session.commit()
             _facade().logger.info(
-                "daily digest: persisted %d digest_identity token(s)", len(identity_tokens)
+                "daily digest: persisted %d digest_identity token(s)",
+                len(identity_tokens),
             )
         if deploy_tokens and any_delivered:
             with sf() as session:
@@ -259,7 +275,8 @@ def run_daily_digest_email() -> _facade().Dict[str, _facade().Any]:
                     session.add(t)
                 session.commit()
             _facade().logger.info(
-                "daily digest: persisted %d deploy approval token(s)", len(deploy_tokens)
+                "daily digest: persisted %d deploy approval token(s)",
+                len(deploy_tokens),
             )
         return {
             "ok": bool(any_delivered),
@@ -271,25 +288,28 @@ def run_daily_digest_email() -> _facade().Dict[str, _facade().Any]:
             "delivery_rows": delivery_rows,
             "reason": "" if any_delivered else "no_email_delivered",
         }
-    except Exception:
+    except RECOVERABLE_ERRORS:
         _facade().logger.exception("daily digest failed")
         try:
             from modstore_server.time_rail_runtime import record_node_run
 
             record_node_run("ASM", ok=False, source="daily_digest", meta={"error": "job_failed"})
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.exception("daily digest: time_rail failure record failed")
         return {"ok": False, "delivered": False, "reason": "job_failed"}
     finally:
         if stop_ephemeral_after:
             try:
-                from modstore_server.surface_audit_deps import stop_surface_audit_ephemeral
+                from modstore_server.surface_audit_deps import (
+                    stop_surface_audit_ephemeral,
+                )
 
                 stopped = stop_surface_audit_ephemeral()
                 _facade().logger.info(
-                    "daily digest: surface audit ephemeral stopped %s", stopped.get("stopped")
+                    "daily digest: surface audit ephemeral stopped %s",
+                    stopped.get("stopped"),
                 )
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 _facade().logger.exception("daily digest: stop surface audit ephemeral failed")
 
 
@@ -300,7 +320,7 @@ def cron_trigger_for_digest():
 
         tz_name = _facade().os.environ.get("MODSTORE_DAILY_DIGEST_TZ", "Asia/Shanghai").strip()
         tz = ZoneInfo(tz_name)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         tz = None
     hour = int(_facade().os.environ.get("MODSTORE_DAILY_DIGEST_HOUR", "8"))
     minute = int(_facade().os.environ.get("MODSTORE_DAILY_DIGEST_MINUTE", "0"))

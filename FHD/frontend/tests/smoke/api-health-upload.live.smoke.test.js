@@ -17,7 +17,7 @@ const run = Boolean(base)
 /** 最小有效 PNG（1×1） */
 const MIN_PNG = Buffer.from(
   '89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000a49444154789c63000100000500001d0d4e120000000049454e44ae426082',
-  'hex'
+  'hex',
 )
 
 function postMultipartUpload(urlStr, fileField, filename, fileBuf, mime) {
@@ -28,7 +28,7 @@ function postMultipartUpload(urlStr, fileField, filename, fileBuf, mime) {
       `--${boundary}\r\n` +
         `Content-Disposition: form-data; name="${fileField}"; filename="${filename}"\r\n` +
         `Content-Type: ${mime}\r\n\r\n`,
-      'utf8'
+      'utf8',
     )
     const epilog = Buffer.from(`\r\n--${boundary}--\r\n`, 'utf8')
     const body = Buffer.concat([prelude, fileBuf, epilog])
@@ -50,7 +50,7 @@ function postMultipartUpload(urlStr, fileField, filename, fileBuf, mime) {
           const text = Buffer.concat(chunks).toString('utf8')
           resolve({ status: res.statusCode, text })
         })
-      }
+      },
     )
     req.on('error', reject)
     req.write(body)
@@ -67,13 +67,7 @@ function postMultipartUpload(urlStr, fileField, filename, fileBuf, mime) {
   })
 
   it('POST /api/upload/temp multipart → 200', async () => {
-    const { status, text } = await postMultipartUpload(
-      `${base}/api/upload/temp`,
-      'file',
-      'smoke.png',
-      MIN_PNG,
-      'image/png'
-    )
+    const { status, text } = await postMultipartUpload(`${base}/api/upload/temp`, 'file', 'smoke.png', MIN_PNG, 'image/png')
     let j
     try {
       j = JSON.parse(text)

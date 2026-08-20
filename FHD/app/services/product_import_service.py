@@ -215,10 +215,12 @@ class ProductImportService(NeuroEventPublisherMixin):
                         )
                         db.add(product)
                         result["imported"] += 1
-                    except RECOVERABLE_ERRORS as e:
-                        logger.error("导入产品失败：%s", e)
+                    except RECOVERABLE_ERRORS:
+                        logger.exception("导入产品失败")
                         result["failed"] += 1
-                        result["details"]["failed_items"].append({"data": row, "error": str(e)})
+                        result["details"]["failed_items"].append(
+                            {"data": row, "error": "product_import_failed"}
+                        )
 
                 db.commit()
 
@@ -236,9 +238,9 @@ class ProductImportService(NeuroEventPublisherMixin):
                 result["failed"],
             )
 
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("导入产品数据失败：%s", e)
-            result["error"] = str(e)
+        except RECOVERABLE_ERRORS:
+            logger.exception("导入产品数据失败")
+            result["error"] = "product_import_failed"
 
         return result
 
@@ -277,9 +279,9 @@ class ProductImportService(NeuroEventPublisherMixin):
             result["success"] = not bool(result.get("error"))
             result["count"] = int(result.get("imported") or 0)
             return result
-        except (OSError, ValueError, TypeError, ImportError) as exc:
-            logger.exception("读取产品导入文件失败: %s", exc)
-            return {"success": False, "message": f"读取导入文件失败：{exc}", "count": 0}
+        except (OSError, ValueError, TypeError, ImportError):
+            logger.exception("读取产品导入文件失败")
+            return {"success": False, "message": "读取导入文件失败", "count": 0}
 
     def batch_add_products(self, products: list[dict[str, Any]], unit_name: str) -> dict[str, Any]:
         rows = [dict(item) for item in products]

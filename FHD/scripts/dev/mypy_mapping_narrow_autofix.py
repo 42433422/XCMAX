@@ -46,10 +46,13 @@ def _statement_for_line(module: ast.Module, line: int) -> ast.stmt | None:
     candidates = [
         node
         for node in ast.walk(module)
-        if isinstance(node, ast.stmt)
-        and node.lineno <= line <= int(node.end_lineno or node.lineno)
+        if isinstance(node, ast.stmt) and node.lineno <= line <= int(node.end_lineno or node.lineno)
     ]
-    return min(candidates, key=lambda node: int(node.end_lineno or node.lineno) - node.lineno) if candidates else None
+    return (
+        min(candidates, key=lambda node: int(node.end_lineno or node.lineno) - node.lineno)
+        if candidates
+        else None
+    )
 
 
 def _mapping_name_at_line(module: ast.Module, line: int) -> str | None:
@@ -98,7 +101,9 @@ def _fix_file(path: Path, error_lines: list[int]) -> int:
     for index, block in sorted(insertions, reverse=True):
         lines[index:index] = block
     if insertions:
-        path.write_text("\n".join(lines) + ("\n" if original.endswith("\n") else ""), encoding="utf-8")
+        path.write_text(
+            "\n".join(lines) + ("\n" if original.endswith("\n") else ""), encoding="utf-8"
+        )
     return len(insertions)
 
 

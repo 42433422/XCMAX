@@ -1,14 +1,20 @@
-# ruff: noqa
+# mypy: disable-error-code="attr-defined, misc, no-any-return, valid-type"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.production_line_orchestrator_productionlineorchestrator_mixin01 import (
+    _ProductionLineOrchestratorPart01Mixin,
+)
 
 
 def _facade():
     return importlib.import_module("modstore_server.production_line_orchestrator")
 
 
-class ProductionLineOrchestrator(_facade()._ProductionLineOrchestratorPart01Mixin):
+class ProductionLineOrchestrator(_ProductionLineOrchestratorPart01Mixin):
     pass
 
 

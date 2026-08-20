@@ -9,6 +9,7 @@
 - Windows 安装包为用户级安装（`asInvoker` + `allowElevation=false`），避免下载后安装时误触发管理员权限路径。
 
 ## 本地构建
+
 ```bash
 cd desktop-shell
 npm install
@@ -20,4 +21,5 @@ npm run dist:win      # 产物在 desktop-shell/dist/
 不得在本目录新增或恢复 `build-desktop.yml`。正式 Windows 签名、macOS 公证、企业版制品上传、统一 manifest 和下载验真必须由 `Release Desktop` 一次完成；个人版按 `specs/product-lines-3-plus-2.md` 保持冻结。
 
 ## 后续
+
 如需恢复此壳的产品化或个人版发布，必须先修改产品线 SSOT 并重新评审发布边界。

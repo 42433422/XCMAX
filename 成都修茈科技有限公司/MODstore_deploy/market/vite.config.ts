@@ -6,10 +6,7 @@ import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-const ORT_WASM_FILES = [
-  'ort-wasm-simd-threaded.asyncify.wasm',
-  'ort-wasm-simd-threaded.asyncify.mjs',
-] as const
+const ORT_WASM_FILES = ['ort-wasm-simd-threaded.asyncify.wasm', 'ort-wasm-simd-threaded.asyncify.mjs'] as const
 
 /** 复制 ONNX Runtime WASM 到 dist/asr-ort/，供 Whisper Worker 用固定 URL 加载（避免 hash 文件名 404） */
 function copyOrtWasmAssets() {
@@ -41,9 +38,7 @@ function copyOrtWasmAssets() {
   }
 }
 
-const apiProxyTarget =
-  (process.env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8765').trim() ||
-  'http://127.0.0.1:8765'
+const apiProxyTarget = (process.env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8765').trim() || 'http://127.0.0.1:8765'
 
 export function normalizeBase(raw: string | undefined): string {
   const t = (raw || '').trim()
@@ -54,12 +49,7 @@ export function normalizeBase(raw: string | undefined): string {
 
 export default defineConfig(({ command }) => {
   const envRaw = (process.env.VITE_PUBLIC_BASE || '').trim()
-  const base =
-    command === 'build'
-      ? normalizeBase(envRaw || '/market/')
-      : envRaw
-        ? normalizeBase(envRaw)
-        : '/'
+  const base = command === 'build' ? normalizeBase(envRaw || '/market/') : envRaw ? normalizeBase(envRaw) : '/'
 
   return {
     plugins: [vue(), copyOrtWasmAssets()],
@@ -108,8 +98,8 @@ export default defineConfig(({ command }) => {
             }
             return undefined
           },
-        }
-      }
+        },
+      },
     },
     server: {
       port: 5176,

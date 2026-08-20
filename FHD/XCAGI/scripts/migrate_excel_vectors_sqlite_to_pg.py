@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 将本地 SQLite excel_vectors.db 中的索引与向量块复制到 PostgreSQL（pgvector）。
 
@@ -14,6 +13,7 @@
   - 默认按 chunk_id 覆盖写入（先删目标 index_id 下已有块再插入，与 PgVectorStore.upsert_chunks 行为类似）。
   - 大库请分批或改用 COPY。
 """
+
 from __future__ import annotations
 
 import argparse
@@ -138,7 +138,9 @@ def main() -> int:
                         "chunk_count": int(idx.get("chunk_count") or len(chunks)),
                     },
                 )
-                conn.execute(text("DELETE FROM excel_vector_chunks WHERE index_id = :i"), {"i": index_id})
+                conn.execute(
+                    text("DELETE FROM excel_vector_chunks WHERE index_id = :i"), {"i": index_id}
+                )
                 for ch in chunks:
                     emb_raw = ch.get("embedding")
                     if isinstance(emb_raw, (bytes, memoryview)):

@@ -1,3 +1,4 @@
+# isort: skip_file
 # ruff: noqa: E402, F401
 """独立 AI 客服编排层。
 
@@ -50,7 +51,13 @@ ESCALATE_RE = re.compile(
     r"转人工|人工客服|提交工单|创建工单|升级处理|要工单|找人工|处理不了|没解决",
 )
 TICKET_INTENTS = frozenset(
-    {"refund", "catalog_complaint", "catalog_review", "account_support", "llm_extension"}
+    {
+        "refund",
+        "catalog_complaint",
+        "catalog_review",
+        "account_support",
+        "llm_extension",
+    }
 )
 KNOWN_INTENTS = frozenset(
     {
@@ -78,7 +85,6 @@ ISSUE_DOMAIN_LABELS = {
 from modstore_server.customer_service_orchestrator_part01 import (
     _parse_domain_clarify_reply as _parse_domain_clarify_reply,
 )
-
 
 _INTENT_CLASSIFY_PROMPT = """你是 MODstore 客服意图分类器。只根据语义判断，不要死磕关键词。
 只输出一行 JSON，不要其它文字、不要解释、不要思考过程。
@@ -126,7 +132,6 @@ from modstore_server.customer_service_orchestrator_part03 import (
     _maybe_dispatch_employee_followup as _maybe_dispatch_employee_followup,
 )
 
-
 _RAW_STRUCTURE_RE = re.compile(
     r"(\(hybrid\)|\[hybrid\]|template_name|template_scope|\"fields\"\s*:|\{[\"']fields)",
     re.I,
@@ -154,7 +159,6 @@ from modstore_server.customer_service_orchestrator_part04 import (
     subject_type_for_intent as subject_type_for_intent,
     session_payload as session_payload,
 )
-
 
 TICKET_LIFECYCLE_STEPS: tuple[tuple[int, str], ...] = (
     (1, "已收到"),

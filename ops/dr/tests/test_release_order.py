@@ -27,9 +27,7 @@ class ReleaseOrderTest(unittest.TestCase):
     def tearDown(self) -> None:
         self.tempdir.cleanup()
 
-    def add_component(
-        self, sha: str, component: str, created_at: int
-    ) -> Path:
+    def add_component(self, sha: str, component: str, created_at: int) -> Path:
         candidate = self.incoming / sha
         candidate.mkdir(exist_ok=True)
         (candidate / f"{component}.MANIFEST.txt").write_text(
@@ -60,18 +58,12 @@ class ReleaseOrderTest(unittest.TestCase):
         fhd_release = self.add_component(fhd_sha, "fhd", 300)
         self.add_component(fhd_sha, "modstore", 50)
 
-        self.assertEqual(
-            ORDER.select_release(self.incoming, self.state), fhd_release
-        )
+        self.assertEqual(ORDER.select_release(self.incoming, self.state), fhd_release)
         self.assertTrue(
-            ORDER.should_apply(
-                self.incoming, self.state, fhd_release, "fhd"
-            )
+            ORDER.should_apply(self.incoming, self.state, fhd_release, "fhd")
         )
         self.assertFalse(
-            ORDER.should_apply(
-                self.incoming, self.state, fhd_release, "modstore"
-            )
+            ORDER.should_apply(self.incoming, self.state, fhd_release, "modstore")
         )
         self.set_current("fhd", fhd_sha, 300)
 
@@ -79,9 +71,7 @@ class ReleaseOrderTest(unittest.TestCase):
             ORDER.select_release(self.incoming, self.state), modstore_release
         )
         self.assertFalse(
-            ORDER.should_apply(
-                self.incoming, self.state, stale_mixed, "fhd"
-            )
+            ORDER.should_apply(self.incoming, self.state, stale_mixed, "fhd")
         )
         self.set_current("modstore", modstore_sha, 200)
         self.assertIsNone(ORDER.select_release(self.incoming, self.state))
@@ -96,9 +86,7 @@ class ReleaseOrderTest(unittest.TestCase):
         )
 
         self.assertFalse(
-            ORDER.should_apply(
-                self.incoming, self.state, older, "modstore"
-            )
+            ORDER.should_apply(self.incoming, self.state, older, "modstore")
         )
         self.assertIsNone(ORDER.select_release(self.incoming, self.state))
 
@@ -109,9 +97,7 @@ class ReleaseOrderTest(unittest.TestCase):
         candidate = self.add_component("c" * 40, "fhd", 0)
 
         self.assertFalse(
-            ORDER.should_apply(
-                self.incoming, self.state, candidate, "fhd"
-            )
+            ORDER.should_apply(self.incoming, self.state, candidate, "fhd")
         )
         self.assertIsNone(ORDER.select_release(self.incoming, self.state))
 

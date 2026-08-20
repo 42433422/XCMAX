@@ -15,22 +15,13 @@ export function resolveModeScopedChatUserId(): string {
 }
 
 export function useChatDbTokenGate(deps: UseChatDbTokenGateDeps) {
-  const {
-    sessionId,
-    pendingDbWriteChatRetryMessages,
-    plannerWriteUnlockResumeDraft,
-    executeRemoteChatRound,
-  } = deps
+  const { pendingDbWriteChatRetryMessages, executeRemoteChatRound } = deps
 
   function resolveChatDbTokensForPayload(): { db_read_token?: string; db_write_token?: string } {
     return {}
   }
 
-  function handleChatRequiresToken(
-    tokenName?: unknown,
-    tokenDescription?: unknown,
-    retryMessages?: string[] | null
-  ) {
+  function handleChatRequiresToken(tokenName?: unknown, tokenDescription?: unknown, retryMessages?: string[] | null) {
     void tokenName
     void tokenDescription
     void retryMessages

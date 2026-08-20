@@ -23,11 +23,7 @@ export interface PersonalSettings {
 
 const KEY = 'workbench_personal_settings_v1'
 
-const DEFAULT_SUGGESTIONS = [
-  '帮我把今天的工作拆成步骤',
-  '帮我分析一个自动化流程',
-  '帮我写一段客户沟通话术',
-]
+const DEFAULT_SUGGESTIONS = ['帮我把今天的工作拆成步骤', '帮我分析一个自动化流程', '帮我写一段客户沟通话术']
 
 export function defaultPersonalSettings(): PersonalSettings {
   return {
@@ -55,31 +51,23 @@ export function loadPersonalSettings(): PersonalSettings {
     const ttsVoiceName = typeof obj.ttsVoiceName === 'string' ? obj.ttsVoiceName.slice(0, 256) : def.ttsVoiceName
     // 废弃浏览器系统 TTS：旧 browser 偏好升级为 auto（MiMo→Edge）
     const ttsEngine =
-      obj.ttsEngine === 'edge-online'
-        ? 'edge-online'
-        : obj.ttsEngine === 'auto' || obj.ttsEngine === 'browser'
-          ? 'auto'
-          : def.ttsEngine
+      obj.ttsEngine === 'edge-online' ? 'edge-online' : obj.ttsEngine === 'auto' || obj.ttsEngine === 'browser' ? 'auto' : def.ttsEngine
     const ttsEdgeVoice =
-      typeof obj.ttsEdgeVoice === 'string' && obj.ttsEdgeVoice.trim()
-        ? obj.ttsEdgeVoice.trim().slice(0, 120)
-        : def.ttsEdgeVoice
+      typeof obj.ttsEdgeVoice === 'string' && obj.ttsEdgeVoice.trim() ? obj.ttsEdgeVoice.trim().slice(0, 120) : def.ttsEdgeVoice
     let voiceSpeechMode =
-      obj.voiceSpeechMode === 'cascade' ||
-      obj.voiceSpeechMode === 's2s' ||
-      obj.voiceSpeechMode === 'unified'
+      obj.voiceSpeechMode === 'cascade' || obj.voiceSpeechMode === 's2s' || obj.voiceSpeechMode === 'unified'
         ? obj.voiceSpeechMode
         : def.voiceSpeechMode
     // 旧默认 s2s：升级到 unified（单连接流式 ASR，电话式体验更好）
     if (obj.voiceSpeechMode === 's2s') voiceSpeechMode = 'unified'
     return {
-      theme:
-        obj.theme === 'light' || obj.theme === 'dark' || obj.theme === 'auto' ? obj.theme : def.theme,
+      theme: obj.theme === 'light' || obj.theme === 'dark' || obj.theme === 'auto' ? obj.theme : def.theme,
       fontPx: Number.isFinite(Number(obj.fontPx)) ? Math.max(13, Math.min(20, Number(obj.fontPx))) : def.fontPx,
       memory: typeof obj.memory === 'string' ? obj.memory.slice(0, 600) : '',
-      suggestions: Array.isArray(obj.suggestions) && obj.suggestions.length
-        ? obj.suggestions.filter((x: unknown) => typeof x === 'string' && (x as string).trim()).slice(0, 6)
-        : def.suggestions,
+      suggestions:
+        Array.isArray(obj.suggestions) && obj.suggestions.length
+          ? obj.suggestions.filter((x: unknown) => typeof x === 'string' && (x as string).trim()).slice(0, 6)
+          : def.suggestions,
       ttsEngine,
       ttsEdgeVoice,
       ttsVoiceName,
@@ -102,8 +90,7 @@ export function savePersonalSettings(v: PersonalSettings): void {
 export function resolveWorkbenchTheme(theme: 'dark' | 'light' | 'auto'): 'dark' | 'light' {
   if (theme === 'light') return 'light'
   if (theme === 'auto') {
-    const prefersLight =
-      typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: light)').matches
+    const prefersLight = typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: light)').matches
     return prefersLight ? 'light' : 'dark'
   }
   return 'dark'

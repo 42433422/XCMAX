@@ -6,7 +6,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.cross_domain_end_to_end import build_cross_domain_end_to_end
 
@@ -36,7 +36,10 @@ def build_cross_domain_ci_regression(
             json.dumps(run, ensure_ascii=False, indent=2, sort_keys=True),
             encoding="utf-8",
         )
-        summary = run.get("summary") if isinstance(run.get("summary"), dict) else {}
+        summary = cast(
+            dict[str, Any],
+            run.get("summary") if isinstance(run.get("summary"), dict) else {},
+        )
         runs.append(
             {
                 "round_index": index,

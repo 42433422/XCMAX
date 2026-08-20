@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr"
 """SubscriptionGateMiddleware 单元测试。"""
 
 from __future__ import annotations

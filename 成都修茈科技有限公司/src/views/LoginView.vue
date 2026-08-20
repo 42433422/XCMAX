@@ -26,14 +26,27 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api'
 
 const route = useRoute()
+const router = useRouter()
 const username = ref('')
 const password = ref('')
 const loading = ref(false)
 const err = ref('')
+
+function safePostLoginTarget(value: unknown): string {
+  const candidate = Array.isArray(value) ? value[0] : value
+  if (typeof candidate !== 'string' || !candidate.trim()) return '/'
+  try {
+    const target = new URL(candidate, window.location.origin)
+    if (target.origin !== window.location.origin) return '/'
+    return `${target.pathname}${target.search}${target.hash}`
+  } catch {
+    return '/'
+  }
+}
 
 async function doLogin() {
   loading.value = true
@@ -44,9 +57,7 @@ async function doLogin() {
     const wt = (res as any).web_tokens || {}
     localStorage.setItem('modstore_token', wt.access_token || res.token || '')
     if (wt.refresh_token) localStorage.setItem('modstore_refresh_token', wt.refresh_token)
-    const rawRedirect = route.query.redirect
-    const redirect = Array.isArray(rawRedirect) ? rawRedirect[0] || '/' : rawRedirect || '/'
-    window.location.href = String(redirect)
+    await router.replace(safePostLoginTarget(route.query.redirect))
   } catch (e: any) {
     err.value = e?.message ?? String(e)
   } finally {
@@ -56,12 +67,45 @@ async function doLogin() {
 </script>
 
 <style scoped>
-.auth-page { display: flex; justify-content: center; padding-top: 60px; }
-.auth-card { background: #111111; border-radius: 12px; border: 0.5px solid rgba(255,255,255,0.1); padding: 32px; width: 100%; max-width: 400px; }
-.auth-card h2 { font-size: 22px; margin-bottom: 24px; text-align: center; color: #ffffff; }
-.form-group { margin-bottom: 16px; }
-.form-group label { display: block; font-size: 13px; color: rgba(255,255,255,0.5); margin-bottom: 6px; }
-.btn-block { width: 100%; }
-.auth-footer { text-align: center; margin-top: 16px; font-size: 14px; color: rgba(255,255,255,0.5); }
-.link { color: #ffffff; font-weight: 500; }
+.auth-page {
+  display: flex;
+  justify-content: center;
+  padding-top: 60px;
+}
+.auth-card {
+  background: #111111;
+  border-radius: 12px;
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  padding: 32px;
+  width: 100%;
+  max-width: 400px;
+}
+.auth-card h2 {
+  font-size: 22px;
+  margin-bottom: 24px;
+  text-align: center;
+  color: #ffffff;
+}
+.form-group {
+  margin-bottom: 16px;
+}
+.form-group label {
+  display: block;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 6px;
+}
+.btn-block {
+  width: 100%;
+}
+.auth-footer {
+  text-align: center;
+  margin-top: 16px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.5);
+}
+.link {
+  color: #ffffff;
+  font-weight: 500;
+}
 </style>

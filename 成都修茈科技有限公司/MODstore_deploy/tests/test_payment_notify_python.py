@@ -14,6 +14,8 @@ from fastapi.testclient import TestClient
 
 from modstore_server.api.app_factory import create_app, load_default_config
 
+BOUNDARY_ERRORS = (Exception,)
+
 
 def _make_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.delenv("PAYMENT_BACKEND", raising=False)
@@ -48,7 +50,7 @@ def _notify_plain_text(r):
     """兼容 JSON 字符串体与纯文本体（支付宝约定 success / fail）。"""
     try:
         return r.json()
-    except Exception:
+    except BOUNDARY_ERRORS:
         return r.text
 
 

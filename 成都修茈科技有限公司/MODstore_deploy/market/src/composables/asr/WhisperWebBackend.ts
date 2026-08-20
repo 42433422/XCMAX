@@ -48,10 +48,9 @@ export class WhisperWebBackend implements ASRBackend {
 
   private ensureWorker(): Worker {
     if (this.worker) return this.worker
-    this.worker = new Worker(
-      new URL('../../workers/whisper-asr-worker.ts', import.meta.url),
-      { type: 'module' },
-    )
+    this.worker = new Worker(new URL('../../workers/whisper-asr-worker.ts', import.meta.url), {
+      type: 'module',
+    })
     this.worker.onmessage = (e: MessageEvent<WorkerMsg>) => {
       const msg = e.data
       if (msg.type === 'ready') {

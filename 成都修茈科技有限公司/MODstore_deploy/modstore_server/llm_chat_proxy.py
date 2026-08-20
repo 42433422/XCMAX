@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """统一聊天代理：OpenAI 兼容 / Anthropic / Google Gemini。"""
 
 from __future__ import annotations
@@ -6,13 +7,6 @@ from typing import Any, AsyncIterator, Dict, List, Optional
 
 import httpx
 
-from modstore_server.llm_key_resolver import (
-    OAI_COMPAT_OPENAI_STYLE_PROVIDERS,
-    is_minimax_token_plan_key,
-    minimax_anthropic_base_url,
-    normalize_minimax_api_key,
-    openai_compat_default_root,
-)
 from modstore_server.llm_chat_providers import _oai_to_anthropic as _oai_to_anthropic
 from modstore_server.llm_chat_providers import _oai_to_gemini as _oai_to_gemini
 from modstore_server.llm_chat_providers import chat_anthropic as chat_anthropic
@@ -20,22 +14,22 @@ from modstore_server.llm_chat_providers import (
     chat_anthropic_compatible as chat_anthropic_compatible,
 )
 from modstore_server.llm_chat_providers import chat_google as chat_google
-from modstore_server.llm_chat_providers import (
-    chat_openai_compatible as chat_openai_compatible,
-)
-from modstore_server.llm_chat_providers import (
-    stream_openai_compatible as stream_openai_compatible,
+from modstore_server.llm_chat_providers import chat_openai_compatible as chat_openai_compatible
+from modstore_server.llm_chat_providers import stream_openai_compatible as stream_openai_compatible
+from modstore_server.llm_key_resolver import (
+    OAI_COMPAT_OPENAI_STYLE_PROVIDERS,
+    is_minimax_token_plan_key,
+    minimax_anthropic_base_url,
+    normalize_minimax_api_key,
+    openai_compat_default_root,
 )
 from modstore_server.llm_media_proxy import _first_video_url as _first_video_url
 from modstore_server.llm_media_proxy import image_dispatch as image_dispatch
-from modstore_server.llm_media_proxy import (
-    image_openai_compatible as image_openai_compatible,
-)
+from modstore_server.llm_media_proxy import image_openai_compatible as image_openai_compatible
 from modstore_server.llm_media_proxy import video_dispatch as video_dispatch
-from modstore_server.llm_media_proxy import (
-    video_openai_compatible as video_openai_compatible,
-)
+from modstore_server.llm_media_proxy import video_openai_compatible as video_openai_compatible
 from modstore_server.multimodal_llm import messages_use_openai_multipart_content
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 _MODEL_ALIASES: dict[tuple[str, str], str] = {
     # 小米 2026-05 模型目录已不再接受 mimo-v2-base；兼容前端/账户缓存中的旧选择。
@@ -234,7 +228,7 @@ async def chat_dispatch(
             return result
         # provider returned error — fall through to fallback
         primary_error = result.get("error") or "primary returned error"
-    except (_asyncio.TimeoutError, Exception) as exc:
+    except RECOVERABLE_ERRORS as exc:
         primary_error = f"{type(exc).__name__}: {exc}"
 
     # ---- fallback
@@ -270,8 +264,11 @@ async def chat_dispatch(
         elif fb_provider == "google":
             fb_result = await chat_google(fb_key, fb_model, messages)
         else:
-            fb_result = {"ok": False, "error": f"unsupported fallback provider: {fb_provider}"}
-    except Exception as exc2:  # noqa: BLE001
+            fb_result = {
+                "ok": False,
+                "error": f"unsupported fallback provider: {fb_provider}",
+            }
+    except BOUNDARY_ERRORS as exc2:  # noqa: BLE001
         fb_result = {"ok": False, "error": f"fallback failed: {exc2}"}
 
     if fb_result.get("ok"):

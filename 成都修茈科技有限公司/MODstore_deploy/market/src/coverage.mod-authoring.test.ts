@@ -118,26 +118,54 @@ function wireApi() {
     }
     return { content: `content:${path}` }
   })
-  api.listWorkflows.mockResolvedValue([{ id: 9, name: '报价流' }, { id: 10, name: '售后流' }])
-  api.listModSnapshots.mockResolvedValue({ snapshots: [{ id: 'snap-1', ts: 1710000000, label: '初始' }] })
+  api.listWorkflows.mockResolvedValue([
+    { id: 9, name: '报价流' },
+    { id: 10, name: '售后流' },
+  ])
+  api.listModSnapshots.mockResolvedValue({
+    snapshots: [{ id: 'snap-1', ts: 1710000000, label: '初始' }],
+  })
   api.captureModSnapshot.mockResolvedValue({ ok: true })
   api.restoreModSnapshot.mockResolvedValue({ ok: true })
-  api.bumpModManifestPatchVersion.mockResolvedValue({ manifest: { version: '1.0.1' }, warnings: ['minor'] })
+  api.bumpModManifestPatchVersion.mockResolvedValue({
+    manifest: { version: '1.0.1' },
+    warnings: ['minor'],
+  })
   api.putModManifest.mockImplementation(async (_modId: string, manifest: UnsafeTestValue) => {
     modMocks.detail.manifest = clone(manifest)
     return { warnings: ['saved-warning'] }
   })
   api.regenerateModFrontend.mockResolvedValue({ frontend_spec: { title: '新前端' } })
   api.putModFile.mockResolvedValue({ manifest_warnings: ['file-warning'] })
-  api.refineSystemPrompt.mockResolvedValue({ improved_prompt: '优化后的提示词', diff_explanation: '更清楚' })
+  api.refineSystemPrompt.mockResolvedValue({
+    improved_prompt: '优化后的提示词',
+    diff_explanation: '更清楚',
+  })
   api.listEmployees.mockResolvedValue([{ id: 'sql-employee', name: 'SQL员工', description: 'sql desc' }])
-  api.listV1Packages.mockResolvedValue({ packages: [{ id: 'pkg-employee', name: '包员工', version: '1.0.0', description: 'pkg desc' }] })
-  api.catalog.mockResolvedValue({ items: [{ pkg_id: 'cat-employee', name: '市场员工', version: '2.0.0', description: 'cat desc' }] })
+  api.listV1Packages.mockResolvedValue({
+    packages: [{ id: 'pkg-employee', name: '包员工', version: '1.0.0', description: 'pkg desc' }],
+  })
+  api.catalog.mockResolvedValue({
+    items: [{ pkg_id: 'cat-employee', name: '市场员工', version: '2.0.0', description: 'cat desc' }],
+  })
   api.modWorkflowLink.mockResolvedValue({ manifest_warnings: ['linked'] })
-  api.runWorkflowEmployeeClosure.mockResolvedValue({ ok: true, pack_register: { errors: [] }, readiness_after: { gaps: [] } })
-  api.patchModWorkflowEmployeeNodes.mockResolvedValue({ employee_readiness: { ok: true }, graph_patch: { patches: [] } })
-  api.registerWorkflowEmployeeCatalog.mockResolvedValue({ package: { id: 'sales', version: '1.0.0' }, employee_readiness: { employees: [{ index: 0, gaps: [] }] } })
-  api.scaffoldWorkflowEmployee.mockResolvedValue({ merge_hint: 'merge this', merged_blueprint: true })
+  api.runWorkflowEmployeeClosure.mockResolvedValue({
+    ok: true,
+    pack_register: { errors: [] },
+    readiness_after: { gaps: [] },
+  })
+  api.patchModWorkflowEmployeeNodes.mockResolvedValue({
+    employee_readiness: { ok: true },
+    graph_patch: { patches: [] },
+  })
+  api.registerWorkflowEmployeeCatalog.mockResolvedValue({
+    package: { id: 'sales', version: '1.0.0' },
+    employee_readiness: { employees: [{ index: 0, gaps: [] }] },
+  })
+  api.scaffoldWorkflowEmployee.mockResolvedValue({
+    merge_hint: 'merge this',
+    merged_blueprint: true,
+  })
 }
 
 function createSubject(query: Record<string, unknown> = {}, params: Record<string, unknown> = { modId: 'mod-1' }) {
@@ -153,12 +181,19 @@ beforeEach(() => {
   sessionStorage.clear()
   modMocks.detail = makeDetail()
   modMocks.summary = {
-    employee_readiness: { summary: { total: 2, ready: 1 }, gaps: ['summary gap'], employees: [{ index: 0, ready: false, gaps: ['x'] }] },
+    employee_readiness: {
+      summary: { total: 2, ready: 1 },
+      gaps: ['summary gap'],
+      employees: [{ index: 0, ready: false, gaps: ['x'] }],
+    },
   }
   wireApi()
   Object.defineProperty(window, 'prompt', { configurable: true, value: vi.fn(() => '请优化') })
   Object.defineProperty(window, 'confirm', { configurable: true, value: vi.fn(() => true) })
-  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn(async () => undefined) } })
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText: vi.fn(async () => undefined) },
+  })
 })
 
 afterEach(() => {
@@ -259,17 +294,30 @@ describe('coverage mod authoring composable', () => {
 
     await state.openEmployeePickModal()
     state.goMyEmployees()
-    expect(router.push).toHaveBeenCalledWith({ name: 'workbench-unified', query: { focus: 'employee' } })
+    expect(router.push).toHaveBeenCalledWith({
+      name: 'workbench-unified',
+      query: { focus: 'employee' },
+    })
 
     state.openEmployeeModal('add')
     await state.submitEmployeeModal()
     expect(state.empModalError.value).toContain('显示名')
-    state.empDraft.value = { id: 'new-emp', label: '新员工', panel_title: '新员工标题', panel_summary: '摘要' }
+    state.empDraft.value = {
+      id: 'new-emp',
+      label: '新员工',
+      panel_title: '新员工标题',
+      panel_summary: '摘要',
+    }
     await state.submitEmployeeModal()
     expect(modMocks.api.putModManifest).toHaveBeenCalled()
 
     state.openEmployeeModal('add')
-    state.empDraft.value = { id: 'router-emp', label: '路由员工', panel_title: '', panel_summary: '' }
+    state.empDraft.value = {
+      id: 'router-emp',
+      label: '路由员工',
+      panel_title: '',
+      panel_summary: '',
+    }
     state.empScaffoldRouter.value = true
     await state.submitEmployeeModal()
     expect(modMocks.api.scaffoldWorkflowEmployee).toHaveBeenCalledWith('mod-1', expect.objectContaining({ id: 'router-emp' }))
@@ -284,7 +332,13 @@ describe('coverage mod authoring composable', () => {
     await state.confirmDeleteEmployee(0)
     expect(window.confirm).toHaveBeenCalled()
 
-    const row = state.workflowEmployeesRows.value[0] || { index: 0, bodyFull: 'body', raw: {}, title: '员工', id: 'sales' }
+    const row = state.workflowEmployeesRows.value[0] || {
+      index: 0,
+      bodyFull: 'body',
+      raw: {},
+      title: '员工',
+      id: 'sales',
+    }
     state.goEmployeePrefill(row)
     expect(sessionStorage.getItem('modstore_employee_prefill')).toContain('mod-1')
     expect(router.push).toHaveBeenCalledWith({ name: 'workbench-employee' })
@@ -297,13 +351,19 @@ describe('coverage mod authoring composable', () => {
     state.openWorkflowSandboxDecompose({ linkedWorkflowId: 0 })
     expect(state.messageOk.value).toBe(false)
     state.openWorkflowSandboxDecompose({ linkedWorkflowId: 9 })
-    expect(router.push).toHaveBeenCalledWith({ name: 'workbench-workflow', query: { edit: '9', tab: 'sandbox' } })
+    expect(router.push).toHaveBeenCalledWith({
+      name: 'workbench-workflow',
+      query: { edit: '9', tab: 'sandbox' },
+    })
 
     await state.applyWorkflowLinkToRow({ index: 0 })
     expect(state.message.value).toContain('下拉框')
     state.linkPick[0] = 10
     await state.applyWorkflowLinkToRow({ index: 0 })
-    expect(modMocks.api.modWorkflowLink).toHaveBeenCalledWith('mod-1', { workflow_id: 10, workflow_index: 0 })
+    expect(modMocks.api.modWorkflowLink).toHaveBeenCalledWith('mod-1', {
+      workflow_id: 10,
+      workflow_index: 0,
+    })
     expect(modMocks.api.modWorkflowLink).toHaveBeenCalled()
 
     await state.runWorkflowEmployeeClosure()
@@ -365,7 +425,9 @@ describe('coverage mod authoring composable', () => {
     delete (detail.manifest as UnsafeTestValue).config
     delete (detail.manifest as UnsafeTestValue).frontend
     ;(detail.manifest as UnsafeTestValue).artifact = 'bundle'
-    ;(detail.manifest as UnsafeTestValue).employee_config_v2 = { metadata: { suggested_pricing: { tier: 'team', cny: 199, period: 'year' } } }
+    ;(detail.manifest as UnsafeTestValue).employee_config_v2 = {
+      metadata: { suggested_pricing: { tier: 'team', cny: 199, period: 'year' } },
+    }
     detail.files = []
     modMocks.detail = detail
     modMocks.summary = null
@@ -410,12 +472,17 @@ describe('coverage mod authoring composable', () => {
     expect(state.message.value).toContain('system_prompt')
 
     Object.defineProperty(window, 'prompt', { configurable: true, value: vi.fn(() => '   ') })
-    ;(modMocks.detail.manifest as UnsafeTestValue).employee_config_v2 = { cognition: { agent: { system_prompt: '旧提示' } } }
+    ;(modMocks.detail.manifest as UnsafeTestValue).employee_config_v2 = {
+      cognition: { agent: { system_prompt: '旧提示' } },
+    }
     await state.reload()
     await state.handleRefineSystemPrompt()
     expect(modMocks.api.refineSystemPrompt).not.toHaveBeenCalled()
 
-    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn(async () => Promise.reject(new Error('denied'))) } })
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: vi.fn(async () => Promise.reject(new Error('denied'))) },
+    })
     ;(modMocks.detail.manifest as UnsafeTestValue).employee_config_v2 = {
       metadata: { suggested_pricing: { tier: 'once', cny: 9, period: 'once' } },
     }
@@ -437,9 +504,13 @@ describe('coverage mod authoring composable', () => {
     modMocks.api.refineSystemPrompt.mockResolvedValueOnce({})
     await state.handleRefineSystemPrompt()
     expect(state.refinePromptError.value).toContain('未收到优化结果')
-
-    ;(modMocks.detail.manifest as UnsafeTestValue).employee_config_v2 = { cognition: { agent: { system_prompt: '旧提示' } } }
-    modMocks.api.refineSystemPrompt.mockResolvedValueOnce({ improved_prompt: '补齐嵌套结构', diff_explanation: '' })
+    ;(modMocks.detail.manifest as UnsafeTestValue).employee_config_v2 = {
+      cognition: { agent: { system_prompt: '旧提示' } },
+    }
+    modMocks.api.refineSystemPrompt.mockResolvedValueOnce({
+      improved_prompt: '补齐嵌套结构',
+      diff_explanation: '',
+    })
     await state.reload()
     await state.handleRefineSystemPrompt()
     expect(modMocks.api.putModManifest).toHaveBeenCalledWith('mod-1', expect.objectContaining({ employee_config_v2: expect.any(Object) }))
@@ -455,7 +526,12 @@ describe('coverage mod authoring composable', () => {
     state.empPickSaving.value = false
 
     modMocks.api.putModManifest.mockRejectedValueOnce(new Error('pick failed'))
-    await state.confirmPickEmployee({ id: 'manual-employee', name: '', description: '', sourceLabel: '手动来源' })
+    await state.confirmPickEmployee({
+      id: 'manual-employee',
+      name: '',
+      description: '',
+      sourceLabel: '手动来源',
+    })
     expect(state.empPickError.value).toContain('pick failed')
 
     localStorage.setItem('modstore_token', 'token')
@@ -524,14 +600,24 @@ describe('coverage mod authoring composable', () => {
     expect(state.empModalError.value).toContain('已存在')
 
     modMocks.api.scaffoldWorkflowEmployee.mockResolvedValueOnce({ merged_blueprint: false })
-    state.empDraft.value = { id: 'router_empty_hint', label: '路由无提示', panel_title: '', panel_summary: '' }
+    state.empDraft.value = {
+      id: 'router_empty_hint',
+      label: '路由无提示',
+      panel_title: '',
+      panel_summary: '',
+    }
     state.empScaffoldRouter.value = true
     await state.submitEmployeeModal()
     expect(state.empModalOpen.value).toBe(false)
 
     state.openEmployeeModal('add')
     modMocks.api.scaffoldWorkflowEmployee.mockRejectedValueOnce(new Error('scaffold boom'))
-    state.empDraft.value = { id: 'router_error', label: '路由错误', panel_title: '', panel_summary: '' }
+    state.empDraft.value = {
+      id: 'router_error',
+      label: '路由错误',
+      panel_title: '',
+      panel_summary: '',
+    }
     state.empScaffoldRouter.value = true
     await state.submitEmployeeModal()
     expect(state.empModalError.value).toBe('scaffold boom')

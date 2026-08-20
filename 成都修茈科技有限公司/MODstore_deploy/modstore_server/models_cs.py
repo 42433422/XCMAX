@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     Boolean,
@@ -30,11 +30,11 @@ class CustomerServiceSession(Base):
     intent = Column(String(64), default="", index=True)
     context_json = Column(Text, default="{}")
     last_message = Column(Text, default="")
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
     updated_at = Column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
 
@@ -60,11 +60,11 @@ class CustomerServiceTicket(Base):
     decision_status = Column(String(24), default="pending", index=True)
     automation_level = Column(String(24), default="auto", index=True)
     assigned_admin_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
     updated_at = Column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
     closed_at = Column(DateTime, nullable=True)
 
@@ -83,7 +83,7 @@ class CustomerServiceMessage(Base):
     role = Column(String(32), nullable=False, index=True)
     content = Column(Text, default="")
     payload_json = Column(Text, default="{}")
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
 
 
 class CustomerServiceStandard(Base):
@@ -101,11 +101,11 @@ class CustomerServiceStandard(Base):
     risk_level = Column(String(16), default="low", index=True)
     priority = Column(Integer, default=100, index=True)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
     updated_at = Column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
 
@@ -127,7 +127,7 @@ class CustomerServiceDecision(Base):
     rationale = Column(Text, default="")
     extracted_json = Column(Text, default="{}")
     criteria_json = Column(Text, default="[]")
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
 
 
 class CustomerServiceAction(Base):
@@ -152,11 +152,11 @@ class CustomerServiceAction(Base):
     result_json = Column(Text, default="{}")
     error = Column(Text, default="")
     idempotency_key = Column(String(128), nullable=False, default="")
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
     updated_at = Column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
 
@@ -172,11 +172,11 @@ class CustomerServiceIntegration(Base):
     config_json = Column(Text, default="{}")
     enabled = Column(Boolean, default=True, index=True)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
     updated_at = Column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
 
@@ -194,4 +194,4 @@ class CustomerServiceAuditLog(Base):
     actor_type = Column(String(32), default="system", index=True)
     event_type = Column(String(64), nullable=False, index=True)
     detail_json = Column(Text, default="{}")
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)

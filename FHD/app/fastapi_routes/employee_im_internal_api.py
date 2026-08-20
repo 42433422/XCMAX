@@ -176,17 +176,14 @@ async def employee_im_send(request: Request, payload: EmployeeImSendRequest = Bo
             result.get("conversation_id"),
         )
         return JSONResponse({"success": True, "data": result, "boss_user_id": boss_uid})
-    except ValueError as exc:
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception(
-            "employee_im_send failed: boss=%s employee=%s hook=%s err=%s",
-            payload.boss_user_id,
-            payload.employee_id,
-            payload.hook,
-            exc,
+    except ValueError:
+        return JSONResponse({"success": False, "message": "员工消息参数无效"}, status_code=400)
+    except RECOVERABLE_ERRORS:
+        logger.exception("employee_im_send failed")
+        return JSONResponse(
+            {"success": False, "message": "员工消息推送服务暂时不可用，请稍后重试"},
+            status_code=500,
         )
-        return JSONResponse({"success": False, "message": f"推送失败：{exc}"}, status_code=500)
     finally:
         try:
             db.close()
@@ -212,9 +209,9 @@ def employee_im_set_owner(request: Request, payload: EmployeeImSetOwnerRequest =
         from app.db import SessionLocal
 
         db = SessionLocal()
-    except ImportError as exc:
+    except ImportError:
         return JSONResponse(
-            {"success": False, "message": f"server misconfigured: {exc}"}, status_code=500
+            {"success": False, "message": "员工消息服务配置不完整"}, status_code=500
         )
     try:
         svc = ImApplicationService(db)
@@ -228,11 +225,14 @@ def employee_im_set_owner(request: Request, payload: EmployeeImSetOwnerRequest =
                 status_code=404,
             )
         return JSONResponse({"success": True})
-    except ValueError as exc:
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("employee_im_set_owner failed: %s", exc)
-        return JSONResponse({"success": False, "message": f"设置失败：{exc}"}, status_code=500)
+    except ValueError:
+        return JSONResponse({"success": False, "message": "员工归属参数无效"}, status_code=400)
+    except RECOVERABLE_ERRORS:
+        logger.exception("employee_im_set_owner failed")
+        return JSONResponse(
+            {"success": False, "message": "员工归属设置服务暂时不可用，请稍后重试"},
+            status_code=500,
+        )
     finally:
         try:
             db.close()

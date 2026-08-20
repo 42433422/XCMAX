@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, misc, var-annotated"
 """测试 app.mod_sdk.duty_roster 的分支覆盖。
 
 覆盖目标：

@@ -60,7 +60,9 @@ def test_tavily_api_key_accepts_tvly_alias(monkeypatch: pytest.MonkeyPatch) -> N
 
 
 @pytest.mark.asyncio
-async def test_ddg_fallback_retries_alternate_host(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_ddg_fallback_retries_alternate_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from modstore_server import research_tools as rt
     from modstore_server.infrastructure import http_clients
 
@@ -99,6 +101,20 @@ def test_request_error_fragment_falls_back_to_exception_type() -> None:
     assert rt._request_error_fragment(_Quiet()) == "_Quiet"
 
 
+def test_ddg_result_url_uses_exact_hostname_boundary() -> None:
+    from modstore_server import research_tools as rt
+    from modstore_server import research_tools_part02 as rt_part02
+
+    redirected = "https://html.duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Fsafe"
+    lookalike = "https://duckduckgo.com.evil.example/l/?uddg=https%3A%2F%2Fexample.com%2Funsafe"
+
+    assert rt.ddg_result_url(redirected) == "https://example.com/safe"
+    assert rt.ddg_result_url(lookalike) == lookalike
+    assert rt_part02.is_duckduckgo_host("duckduckgo.com") is True
+    assert rt_part02.is_duckduckgo_host("html.duckduckgo.com.") is True
+    assert rt_part02.is_duckduckgo_host("duckduckgo.com.evil.example") is False
+
+
 @pytest.mark.asyncio
 async def test_web_search_free_tier_uses_searx_when_ddg_empty(
     monkeypatch: pytest.MonkeyPatch,
@@ -120,7 +136,11 @@ async def test_web_search_free_tier_uses_searx_when_ddg_empty(
             if "sx.test" in url:
                 payload = {
                     "results": [
-                        {"title": "Hi", "url": "https://example.org/x", "content": "snippet"},
+                        {
+                            "title": "Hi",
+                            "url": "https://example.org/x",
+                            "content": "snippet",
+                        },
                     ]
                 }
                 return httpx.Response(200, request=req, json=payload)

@@ -69,9 +69,7 @@ const router = useRouter()
 
 const KittenAnalyzerView = defineAsyncComponent(() => import('@/components/kitten/KittenAnalyzerView.vue'))
 const AIOpenPanel = defineAsyncComponent(() => import('@/components/aiopen/AIOpenPanel.vue'))
-const PrivateModDeliveryPanel = defineAsyncComponent(
-  () => import('@/components/privateMod/PrivateModDeliveryPanel.vue'),
-)
+const PrivateModDeliveryPanel = defineAsyncComponent(() => import('@/components/privateMod/PrivateModDeliveryPanel.vue'))
 
 const inAnalyzer = ref(false)
 const activeApp = ref('kitten')
@@ -97,7 +95,11 @@ const exitAnalyzer = () => {
 </script>
 
 <style scoped>
-.chat-view { height: 100%; display: flex; flex-direction: column; }
+.chat-view {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
 .ecosystem-home {
   flex: 1;
   display: flex;

@@ -1,7 +1,10 @@
-# ruff: noqa
 """Scheduler startup registration phase."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -12,7 +15,9 @@ def _register_scheduler_phase_02():
 
     def _autonomy_metrics_snapshot() -> None:
         try:
-            from modstore_server.autonomy_metrics_job import run_autonomy_metrics_snapshot
+            from modstore_server.autonomy_metrics_job import (
+                run_autonomy_metrics_snapshot,
+            )
 
             result = _facade()._run_tracked_scheduler_job(
                 "autonomy_metrics_snapshot", run_autonomy_metrics_snapshot
@@ -35,7 +40,7 @@ def _register_scheduler_phase_02():
                 _facade().logger.warning(message)
             else:
                 _facade().logger.info(message)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.exception("autonomy metrics snapshot job failed")
 
     try:
@@ -50,12 +55,14 @@ def _register_scheduler_phase_02():
             coalesce=True,
             max_instances=1,
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         _facade().logger.exception("register autonomy metrics snapshot cron failed")
 
     def _autonomy_posthoc_audit() -> None:
         try:
-            from modstore_server.autonomy_posthoc_auditor import run_autonomy_posthoc_audit
+            from modstore_server.autonomy_posthoc_auditor import (
+                run_autonomy_posthoc_audit,
+            )
 
             result = _facade()._run_tracked_scheduler_job(
                 "autonomy_posthoc_audit", run_autonomy_posthoc_audit
@@ -66,7 +73,7 @@ def _register_scheduler_phase_02():
                 result.get("audited_count"),
                 result.get("incomplete_count"),
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.exception("autonomy posthoc audit job failed")
 
     try:
@@ -81,7 +88,7 @@ def _register_scheduler_phase_02():
             coalesce=True,
             max_instances=1,
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         _facade().logger.exception("register autonomy posthoc audit job failed")
 
     def _daily_digest_email() -> None:
@@ -136,7 +143,7 @@ def _register_scheduler_phase_02():
                         release_result.get("ok") if isinstance(release_result, dict) else None,
                         release_result.get("skipped") if isinstance(release_result, dict) else None,
                     )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.exception("daily digest email job failed")
 
     try:
@@ -152,21 +159,25 @@ def _register_scheduler_phase_02():
             max_instances=1,
             **_facade()._startup_recovery_kwargs("daily_digest", delay_seconds=20),
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         _facade().logger.exception("register daily digest cron failed")
 
     def _daily_vibe_line_execute_job() -> None:
         try:
-            from modstore_server.daily_vibe_line_execute_job import run_daily_vibe_line_execute_job
+            from modstore_server.daily_vibe_line_execute_job import (
+                run_daily_vibe_line_execute_job,
+            )
 
             _facade()._run_daily_pipeline_stage(
                 "daily_vibe_line_execute", run_daily_vibe_line_execute_job
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.exception("daily vibe line execute job failed")
 
     try:
-        from modstore_server.daily_vibe_line_execute_job import cron_trigger_for_vibe_line_execute
+        from modstore_server.daily_vibe_line_execute_job import (
+            cron_trigger_for_vibe_line_execute,
+        )
 
         if _facade()._env_bool("MODSTORE_DAILY_CHAIN_CRON_FALLBACK_ENABLED", False):
             _facade()._scheduler.add_job(
@@ -182,15 +193,17 @@ def _register_scheduler_phase_02():
             _facade().logger.info(
                 "daily vibe line cron disabled; digest completion event is primary"
             )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         _facade().logger.exception("register daily vibe line execute cron failed")
 
     def _daily_orchestrator_job() -> None:
         try:
-            from modstore_server.daily_orchestrator_job import run_daily_orchestrator_job
+            from modstore_server.daily_orchestrator_job import (
+                run_daily_orchestrator_job,
+            )
 
             run_daily_orchestrator_job()
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.exception("daily orchestrator job failed")
 
     try:
@@ -205,24 +218,28 @@ def _register_scheduler_phase_02():
             coalesce=True,
             max_instances=1,
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         _facade().logger.exception("register daily orchestrator cron failed")
 
     def _self_maintenance_loop_job() -> None:
         try:
 
             def _run() -> None:
-                from modstore_server.self_maintenance_loop_runner import run_self_maintenance_loop
+                from modstore_server.self_maintenance_loop_runner import (
+                    run_self_maintenance_loop,
+                )
 
                 result = run_self_maintenance_loop(triggered_by="scheduler")
                 _facade().logger.info("self-maintenance loop finished: %s", result)
 
             _facade()._run_tracked_scheduler_job("self_maintenance_loop_daily", _run)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.exception("self-maintenance loop job failed")
 
     try:
-        from modstore_server.self_maintenance_loop_runner import cron_trigger_for_self_maintenance
+        from modstore_server.self_maintenance_loop_runner import (
+            cron_trigger_for_self_maintenance,
+        )
 
         _facade()._scheduler.add_job(
             _self_maintenance_loop_job,
@@ -234,7 +251,7 @@ def _register_scheduler_phase_02():
             max_instances=1,
             **_facade()._startup_recovery_kwargs("self_maintenance_loop_daily", delay_seconds=40),
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         _facade().logger.exception("register self-maintenance loop cron failed")
 
     def _self_maintenance_heartbeat_job() -> None:
@@ -253,13 +270,16 @@ def _register_scheduler_phase_02():
                 )
 
             _facade()._run_tracked_scheduler_job("self_maintenance_heartbeat", _run)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.exception("self-maintenance heartbeat failed")
 
     _facade()._scheduler.add_job(
         _self_maintenance_heartbeat_job,
         _facade().IntervalTrigger(
-            minutes=max(15, _facade()._env_int("MODSTORE_SELF_MAINTENANCE_HEARTBEAT_MINUTES", 120))
+            minutes=max(
+                15,
+                _facade()._env_int("MODSTORE_SELF_MAINTENANCE_HEARTBEAT_MINUTES", 120),
+            )
         ),
         id="self_maintenance_heartbeat",
         replace_existing=True,
@@ -277,7 +297,7 @@ def _register_scheduler_phase_02():
             _facade()._run_daily_pipeline_stage(
                 "release_train_orchestrator", run_daily_release_train_orchestrator_job
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.exception("daily release_train orchestrator job failed")
 
     try:
@@ -299,7 +319,7 @@ def _register_scheduler_phase_02():
             _facade().logger.info(
                 "daily release_train cron disabled; digest completion event is primary"
             )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         _facade().logger.exception("register daily release_train orchestrator cron failed")
 
     def _daily_backup_job() -> None:
@@ -310,7 +330,7 @@ def _register_scheduler_phase_02():
             _facade().logger.info(
                 "daily backup job: ok=%s dir=%s", r.get("ok"), r.get("backup_dir")
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.exception("daily backup job failed")
 
     try:
@@ -325,7 +345,7 @@ def _register_scheduler_phase_02():
             coalesce=True,
             max_instances=1,
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         _facade().logger.exception("register daily backup cron failed")
 
     def _dr_recovery_probe_job() -> None:
@@ -341,7 +361,7 @@ def _register_scheduler_phase_02():
                     r.get("probe_retry_count"),
                     r.get("escalated"),
                 )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.exception("dr recovery probe job failed")
 
     try:

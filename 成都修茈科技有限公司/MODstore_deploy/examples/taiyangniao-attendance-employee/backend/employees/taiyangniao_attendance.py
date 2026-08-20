@@ -13,6 +13,8 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+BOUNDARY_ERRORS = (Exception,)
+
 EMPLOYEE_ID = "taiyangniao-attendance"
 EMPLOYEE_LABEL = "太阳鸟考勤员"
 SOURCE_MOD_ID = "taiyangniao-pro"
@@ -27,7 +29,10 @@ SYSTEM_PROMPT = (
 
 
 def _ok(
-    data: Any, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+    data: Any,
+    *,
+    warnings: Optional[List[str]] = None,
+    meta: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     return {
         "ok": True,
@@ -40,7 +45,10 @@ def _ok(
 
 
 def _err(
-    msg: str, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+    msg: str,
+    *,
+    warnings: Optional[List[str]] = None,
+    meta: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     return {
         "ok": False,
@@ -126,14 +134,18 @@ def _resolve_path(
     return None, f"文件不存在：{path}"
 
 
-def _resolve_output_path(raw_path: str, ctx: Dict[str, Any], payload: Dict[str, Any]) -> Path:
+def _resolve_output_path(
+    raw_path: str, ctx: Dict[str, Any], payload: Dict[str, Any]
+) -> Path:
     raw = Path(raw_path).expanduser()
     if raw.is_absolute():
         return raw
     return _workspace_root(ctx, payload) / raw_path
 
 
-def _resolve_template_path(raw_path: str, ctx: Dict[str, Any], payload: Dict[str, Any]) -> Path:
+def _resolve_template_path(
+    raw_path: str, ctx: Dict[str, Any], payload: Dict[str, Any]
+) -> Path:
     raw = Path(raw_path).expanduser()
     if raw.is_absolute():
         return raw
@@ -188,7 +200,9 @@ def _candidate_backend_dirs(ctx: Dict[str, Any], payload: Dict[str, Any]) -> Lis
     return dedup
 
 
-def _load_taiyangniao_modules(ctx: Dict[str, Any], payload: Dict[str, Any]) -> Tuple[Any, Any, str]:
+def _load_taiyangniao_modules(
+    ctx: Dict[str, Any], payload: Dict[str, Any]
+) -> Tuple[Any, Any, str]:
     errors: List[str] = []
     for backend_dir in _candidate_backend_dirs(ctx, payload):
         pkg_dir = backend_dir / "taiyangniao_attendance"
@@ -201,7 +215,7 @@ def _load_taiyangniao_modules(ctx: Dict[str, Any], payload: Dict[str, Any]) -> T
             convert_mod = importlib.import_module("taiyangniao_attendance.convert")
             rules_mod = importlib.import_module("taiyangniao_attendance.rules")
             return convert_mod, rules_mod, backend_str
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
             errors.append(f"{backend_dir}: {exc}")
     detail = (
         "; ".join(errors[-3:])
@@ -222,8 +236,10 @@ def _rules_payload(rules_mod: Any) -> Dict[str, Any]:
     saturday_label = ""
     try:
         first = list(saturday or [])[0]
-        saturday_label = f"{first.start.strftime('%H:%M')} - {first.end.strftime('%H:%M')}"
-    except Exception:
+        saturday_label = (
+            f"{first.start.strftime('%H:%M')} - {first.end.strftime('%H:%M')}"
+        )
+    except BOUNDARY_ERRORS:
         saturday_label = "13:30 - 16:00"
     return {
         "lines": lines,
@@ -269,10 +285,14 @@ def _offline_help(payload: Dict[str, Any]) -> Dict[str, Any]:
 async def _rules(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
     try:
         _convert_mod, rules_mod, backend_dir = _load_taiyangniao_modules(ctx, payload)
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         return _err(
             "无法导入太阳鸟 pro 考勤规则模块：" + str(exc),
-            meta={"handler": "direct_python", "action": "rules", "source_mod_id": SOURCE_MOD_ID},
+            meta={
+                "handler": "direct_python",
+                "action": "rules",
+                "source_mod_id": SOURCE_MOD_ID,
+            },
         )
     data = _rules_payload(rules_mod)
     return _ok(
@@ -304,13 +324,17 @@ async def _convert(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, An
 
     try:
         convert_mod, _rules_mod, backend_dir = _load_taiyangniao_modules(ctx, payload)
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         return _err(
             "无法导入太阳鸟 pro 转换模块：" + str(exc),
             warnings=[
                 "可通过 payload.taiyangniao_backend_path 指定 e:/FHD/mods/taiyangniao-pro/backend。"
             ],
-            meta={"handler": "direct_python", "action": "convert", "source_mod_id": SOURCE_MOD_ID},
+            meta={
+                "handler": "direct_python",
+                "action": "convert",
+                "source_mod_id": SOURCE_MOD_ID,
+            },
         )
 
     out_rel = (
@@ -326,7 +350,11 @@ async def _convert(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, An
     if not tpl_path.is_file():
         return _err(
             f"模板文件不存在：{tpl_path}",
-            meta={"handler": "direct_python", "action": "convert", "template_relpath": tpl_rel},
+            meta={
+                "handler": "direct_python",
+                "action": "convert",
+                "template_relpath": tpl_rel,
+            },
         )
 
     try:
@@ -336,20 +364,30 @@ async def _convert(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, An
             template_path=str(tpl_path),
             month=str(payload.get("month") or "") or None,
             header_row=int(
-                payload.get("header_row") if payload.get("header_row") is not None else 0
+                payload.get("header_row")
+                if payload.get("header_row") is not None
+                else 0
             ),
             use_llm=bool(payload.get("use_llm")),
             personnel_roster=None,
         )
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         return _err(
             "太阳鸟 pro Python 转换执行异常：" + str(exc),
-            meta={"handler": "direct_python", "action": "convert", "backend_dir": backend_dir},
+            meta={
+                "handler": "direct_python",
+                "action": "convert",
+                "backend_dir": backend_dir,
+            },
         )
     if not isinstance(result, dict) or not result.get("success"):
         return _err(
             str((result or {}).get("error") or "转换失败"),
-            meta={"handler": "direct_python", "action": "convert", "backend_dir": backend_dir},
+            meta={
+                "handler": "direct_python",
+                "action": "convert",
+                "backend_dir": backend_dir,
+            },
         )
     return _ok(
         {

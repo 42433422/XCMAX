@@ -3,8 +3,8 @@
     <header class="vibe-head">
       <h2>AI 代码技能 · vibe-coding</h2>
       <p class="muted small">
-        用一句自然语言描述你想要的 Python 函数，vibe-coding 会写代码 → 跑沙箱 → 自动修复，
-        完成后可一键打包成 <code>.xcmod</code> 上架到 MODstore。
+        用一句自然语言描述你想要的 Python 函数，vibe-coding 会写代码 → 跑沙箱 → 自动修复， 完成后可一键打包成 <code>.xcmod</code> 上架到
+        MODstore。
       </p>
     </header>
 
@@ -20,13 +20,7 @@
 
       <div class="vibe-row">
         <label>试运行 input (JSON)</label>
-        <textarea
-          v-model="runInputJson"
-          rows="3"
-          placeholder='{"x": 1}'
-          class="vibe-input mono"
-          :disabled="busy"
-        />
+        <textarea v-model="runInputJson" rows="3" placeholder='{"x": 1}' class="vibe-input mono" :disabled="busy" />
       </div>
 
       <div class="vibe-row vibe-row-inline">
@@ -50,14 +44,7 @@
         <div class="vibe-pub-row vibe-pub-3">
           <div>
             <label>价格</label>
-            <input
-              v-model.number="pubPrice"
-              type="number"
-              min="0"
-              step="0.01"
-              class="vibe-input"
-              :disabled="busy"
-            />
+            <input v-model.number="pubPrice" type="number" min="0" step="0.01" class="vibe-input" :disabled="busy" />
           </div>
           <div>
             <label>artifact</label>
@@ -75,7 +62,7 @@
 
       <div class="vibe-actions">
         <button type="button" class="btn btn-primary" :disabled="busy || !brief.trim()" @click="submit">
-          {{ busy ? '执行中…' : (publishAfter && !dryRun ? '生成 → 试跑 → 上架' : '生成 → 试跑') }}
+          {{ busy ? '执行中…' : publishAfter && !dryRun ? '生成 → 试跑 → 上架' : '生成 → 试跑' }}
         </button>
       </div>
     </div>
@@ -273,7 +260,11 @@ function sendToEmployeeWorkbench() {
 }
 
 .vibe-input.mono {
-  font-family: ui-monospace, SF Mono, Menlo, monospace;
+  font-family:
+    ui-monospace,
+    SF Mono,
+    Menlo,
+    monospace;
   font-size: 0.85rem;
 }
 
@@ -403,7 +394,11 @@ function sendToEmployeeWorkbench() {
   padding: 0.6rem 0.8rem;
   overflow: auto;
   max-height: 380px;
-  font: 0.8rem/1.5 ui-monospace, SF Mono, Menlo, monospace;
+  font:
+    0.8rem/1.5 ui-monospace,
+    SF Mono,
+    Menlo,
+    monospace;
   white-space: pre-wrap;
 }
 

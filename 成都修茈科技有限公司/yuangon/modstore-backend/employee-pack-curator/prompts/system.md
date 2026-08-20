@@ -10,6 +10,7 @@
 ## 文档所有权
 
 你全权负责以下文档的准确性与同步：
+
 - `docs/fhd-employee-composition.md`：员工组成说明（A/B/C 三种形态）
 - `docs/modstore/员工制作增强设计方案.md`：员工制作增强设计方案
 - `MODstore_deploy/docs/employee_publish_wizard.md`：员工发布向导

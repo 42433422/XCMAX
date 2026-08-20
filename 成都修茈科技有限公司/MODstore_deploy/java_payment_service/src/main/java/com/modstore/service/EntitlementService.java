@@ -111,7 +111,8 @@ public class EntitlementService {
         userPlan.setActive(true);
         AccountLicensePlans.find(plan.getId())
                 .map(AccountLicensePlans.Metadata::durationDays)
-                .filter(days -> days != null && days > 0)
+                // Optional.map already discards null duration values.
+                .filter(days -> days > 0)
                 .ifPresent(days -> userPlan.setExpiresAt(LocalDateTime.now().plusDays(days)));
         userPlanRepository.save(userPlan);
 

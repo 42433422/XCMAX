@@ -100,9 +100,7 @@ def png_http_response(raw: bytes, *, view: str = "") -> Response:
         media_type="image/png",
         headers={
             "Cache-Control": (
-                "public, max-age=86400, immutable"
-                if cacheable
-                else "no-cache, must-revalidate"
+                "public, max-age=86400, immutable" if cacheable else "no-cache, must-revalidate"
             )
         },
     )
@@ -133,9 +131,7 @@ async def load_surface_png_bytes(
                 return png_path.read_bytes()
         from app.application.surface_audit_service import resolve_lane_page_png_path
 
-        resolved = resolve_lane_page_png_path(
-            lane, index, page if isinstance(page, dict) else None
-        )
+        resolved = resolve_lane_page_png_path(lane, index, page if isinstance(page, dict) else None)
         if resolved is not None:
             return bytes(resolved.read_bytes())
         encoded = str(page.get("screenshot_b64") or "").strip()
@@ -160,9 +156,7 @@ async def load_surface_png_bytes(
             f"?lane={lane}&index={index}"
         )
         async with httpx.AsyncClient(timeout=120.0, trust_env=False) as client:
-            response = await client.get(
-                url, headers={"Authorization": f"Bearer {authorization}"}
-            )
+            response = await client.get(url, headers={"Authorization": f"Bearer {authorization}"})
         if response.status_code == 200:
             return bytes(response.content)
     page = await facade._local_surface_page(lane, index)
@@ -170,9 +164,7 @@ async def load_surface_png_bytes(
     return raw or None
 
 
-def strip_b64_attach_image_urls(
-    surface: dict[str, Any], *, terminal: str
-) -> dict[str, Any]:
+def strip_b64_attach_image_urls(surface: dict[str, Any], *, terminal: str) -> dict[str, Any]:
     """Return page metadata with file-stream URLs instead of inline PNG data."""
     from app.application import aibiz_web_terminal_service as facade
 
@@ -237,9 +229,7 @@ def strip_b64_attach_image_urls(
             for key, value in page.items()
             if key not in ("screenshot_b64", "screenshot_saved")
         }
-        row["image_url"] = facade._surface_image_url(
-            terminal, index, v=cache_token
-        )
+        row["image_url"] = facade._surface_image_url(terminal, index, v=cache_token)
         if index == hero_index:
             row["preview"] = True
             row["preview_image_url"] = facade._surface_image_url(

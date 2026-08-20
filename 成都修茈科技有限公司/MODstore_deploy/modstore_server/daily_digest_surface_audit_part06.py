@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -31,7 +35,7 @@ def lane_employee_ids(lane: str, *, limit: int = 6) -> _facade().List[str]:
             for sz in subzones.values():
                 for pid in sz.get("ids") or [] if isinstance(sz, dict) else []:
                     _push(pid)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.debug("surface audit: lane_employee_ids fallback lane=%s", lane)
     for pid in _facade()._LANE_OWNER_FALLBACK.get(lane, []):
         _push(pid)

@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -15,5 +19,5 @@ def digest_calendar_day() -> str:
         from zoneinfo import ZoneInfo
 
         return _facade().datetime.now(ZoneInfo(tz_name)).strftime("%Y-%m-%d")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return _facade().datetime.now(_facade().timezone.utc).strftime("%Y-%m-%d")

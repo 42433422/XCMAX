@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from retort_engine.operational_errors import BOUNDARY_ERRORS
+
 import json
 import re
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 DEPTH_TERMS = {
     "pr": 10,
@@ -160,9 +162,7 @@ def run_similar_project_loop(
                     }
                 )
                 runs.append(_loop_run_summary(candidate, result))
-            except (
-                Exception  # noqa: BLE001 - one candidate must not abort the loop
-            ) as exc:
+            except BOUNDARY_ERRORS as exc:
                 runs.append(_loop_failure_summary(candidate, exc))
     else:
         runs = [{"candidate": candidate, "status": "dry_run"} for candidate in selected]
@@ -512,8 +512,9 @@ def _core_signals(run: dict[str, Any]) -> list[str]:
 def _loop_run_summary(
     candidate: dict[str, Any], result: dict[str, Any]
 ) -> dict[str, Any]:
-    execution = (
-        result.get("execution") if isinstance(result.get("execution"), dict) else {}
+    execution = cast(
+        dict[str, Any],
+        result.get("execution") if isinstance(result.get("execution"), dict) else {},
     )
     return {
         "candidate": candidate,

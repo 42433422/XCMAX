@@ -10,29 +10,34 @@
 ## 🌟 功能特性
 
 ### AI 员工交互
+
 - 🤖 **智能对话界面** - 与 AI 员工自然语言交互
 - 🗣️ **TTS 语音播报** - 实时语音反馈
 - 💬 **多轮对话** - 上下文理解和连续对话
 - 🎯 **意图可视化** - 实时显示 AI 识别的意图
 
 ### 单据管理
+
 - 📊 **Excel 单据处理** - 上传、解析、确认
 - 🏷️ **标签打印** - 模板编辑、批量打印
 - 📦 **出货管理** - 创建、查询、发货
 - ✅ **收货管理** - 收货确认、库存更新
 
 ### 数据管理
+
 - 📦 **产品管理** - CRUD、导入导出
 - 👥 **客户管理** - 客户信息、价格体系
 - 📚 **物料管理** - 原材料仓库管理
 - 📈 **数据可视化** - 业务数据图表
 
 ### 微信集成
+
 - 💬 **微信消息** - 消息接收和回复
 - 👥 **联系人同步** - 自动同步微信联系人
 - 🤖 **自动任务** - 基于微信消息创建任务
 
 ### Pro 模式（高级功能）
+
 - 🎨 **Jarvis 界面** - 钢铁侠风格监控界面
 - 📊 **实时监控** - 系统状态、性能指标
 - 🎯 **快捷操作** - 悬浮面板、快速查询
@@ -42,7 +47,7 @@
 
 ### 环境要求
 
-- Node.js 18+ 
+- Node.js 18+
 - npm 9+
 - 后端服务运行中（http://localhost:5000）
 
@@ -173,11 +178,7 @@ import JarvisCore from '@/components/pro-mode/JarvisCore.vue'
 
 ```vue
 <template>
-  <DataTable 
-    :columns="columns"
-    :data="products"
-    :pagination="true"
-  />
+  <DataTable :columns="columns" :data="products" :pagination="true" />
 </template>
 
 <script setup>
@@ -197,10 +198,10 @@ export default {
     proxy: {
       '/api': {
         target: 'http://localhost:5000',
-        changeOrigin: true
-      }
-    }
-  }
+        changeOrigin: true,
+      },
+    },
+  },
 }
 ```
 
@@ -266,10 +267,10 @@ export default {
     terserOptions: {
       compress: {
         drop_console: true,
-        drop_debugger: true
-      }
-    }
-  }
+        drop_debugger: true,
+      },
+    },
+  },
 }
 ```
 
@@ -300,7 +301,7 @@ import { authApi } from '@/api/auth'
 // 登录
 const { token } = await authApi.login({
   username: 'admin',
-  password: 'password'
+  password: 'password',
 })
 
 // 存储 token
@@ -315,12 +316,12 @@ import { chatApi } from '@/api/chat'
 // 发送消息
 const response = await chatApi.sendMessage({
   message: '帮我创建出货单',
-  context: { customerId: '123' }
+  context: { customerId: '123' },
 })
 
 // 处理响应
 console.log(response.intent) // 识别的意图
-console.log(response.reply)  // AI 回复
+console.log(response.reply) // AI 回复
 ```
 
 ### 单据处理
@@ -345,10 +346,10 @@ const order = await orderApi.createShipment({
 ```css
 /* src/styles/variables.css */
 :root {
-  --primary-color: #409EFF;
-  --success-color: #67C23A;
-  --warning-color: #E6A23C;
-  --danger-color: #F56C6C;
+  --primary-color: #409eff;
+  --success-color: #67c23a;
+  --warning-color: #e6a23c;
+  --danger-color: #f56c6c;
   --info-color: #909399;
 }
 ```

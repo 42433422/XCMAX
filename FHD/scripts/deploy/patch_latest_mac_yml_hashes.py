@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Overwrite sha512/size fields in latest-mac.yml with remotely measured values."""
+
 from __future__ import annotations
 
 import sys

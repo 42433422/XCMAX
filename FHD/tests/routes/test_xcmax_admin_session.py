@@ -1,3 +1,4 @@
+# mypy: disable-error-code="misc, union-attr"
 """Tests for app.fastapi_routes.xcmax_admin — coverage ramp C3.3-a.
 
 Covers:

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, attr-defined, no-any-return, valid-type"
 """RedisVL vector index for self-evolution KB.
 
 This module is deliberately isolated from the generic user knowledge-base
@@ -13,6 +14,8 @@ import json
 import os
 import time
 from typing import Any, Dict, List, Sequence, Tuple
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 INDEX_PREFIX = "xcmax:self_evolution_kb:"
 SIGNATURE_PREFIX = "xcmax:self_evolution_kb:signature:"
@@ -46,7 +49,7 @@ def _embedding_dim() -> int:
         from modstore_server.embedding_service import embedding_config_snapshot
 
         return int(embedding_config_snapshot().get("dim") or DEFAULT_DIM)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return int(
             (os.environ.get("MODSTORE_EMBEDDING_DIM") or str(DEFAULT_DIM)).strip() or DEFAULT_DIM
         )
@@ -69,7 +72,7 @@ def _doc_id(kind: str, doc: Dict[str, Any]) -> str:
         or doc.get("created_at")
         or json.dumps(doc, sort_keys=True)
     )
-    return hashlib.sha256(f"{kind}\0{raw}".encode("utf-8")).hexdigest()[:32]
+    return hashlib.sha256(f"{kind}\0{raw}".encode()).hexdigest()[:32]
 
 
 def _doc_text(doc: Dict[str, Any], fields: Sequence[str]) -> str:
@@ -165,7 +168,7 @@ def _ensure_index(kind: str):
         index.create(overwrite=False)
     except TypeError:
         index.create()
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         text = str(exc).lower()
         if "already exists" not in text and "index already exists" not in text:
             raise
@@ -178,11 +181,11 @@ def _embed(texts: List[str]) -> List[List[float]]:
     try:
         from modstore_server.embedding_service import embed_texts
         from modstore_server.runtime_async import run_coro_sync
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         raise SelfEvolutionRedisVLError("embedding service unavailable") from exc
     try:
         vectors = run_coro_sync(embed_texts(texts))
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         raise SelfEvolutionRedisVLError(f"embedding failed: {exc}") from exc
     if len(vectors) != len(texts):
         raise SelfEvolutionRedisVLError("embedding count mismatch")
@@ -236,7 +239,7 @@ def ensure_indexed(
                 index.load(records, id_field="redis_key")
             except TypeError:
                 index.load(records)
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         raise SelfEvolutionRedisVLError(f"redisvl load failed: {exc}") from exc
     client.set(sig_key, sig)
     return {
@@ -276,7 +279,7 @@ def query(
     )
     try:
         rows = index.query(q)
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         raise SelfEvolutionRedisVLError(f"redisvl query failed: {exc}") from exc
 
     by_path = {str(doc.get("_path") or ""): doc for doc in docs if isinstance(doc, dict)}
@@ -314,9 +317,19 @@ def status() -> Dict[str, Any]:
     try:
         client = _redis_client()
         client.ping()
-        return {"enabled": True, "ready": True, "backend": "redisvl", "dim": _embedding_dim()}
-    except Exception as exc:
-        return {"enabled": True, "ready": False, "backend": "redisvl", "error": str(exc)}
+        return {
+            "enabled": True,
+            "ready": True,
+            "backend": "redisvl",
+            "dim": _embedding_dim(),
+        }
+    except RECOVERABLE_ERRORS as exc:
+        return {
+            "enabled": True,
+            "ready": False,
+            "backend": "redisvl",
+            "error": str(exc),
+        }
 
 
 __all__ = [

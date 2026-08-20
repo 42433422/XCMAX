@@ -1,3 +1,4 @@
+# mypy: disable-error-code="index, method-assign"
 """InstrumentedProvider 集成测试：遥测落盘 / 输入拦截 / 输出脱敏 / 异常透传。"""
 
 from __future__ import annotations

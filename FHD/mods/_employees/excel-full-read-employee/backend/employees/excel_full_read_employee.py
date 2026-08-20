@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from app.mod_sdk.errors import BOUNDARY_ERRORS
+
 EMPLOYEE_ID = "excel-full-read-employee"
 EMPLOYEE_LABEL = "Excel 读取员"
 SYSTEM_PROMPT = "你是Excel 读取员。你必须按 direct_python 方式处理真实文件，读取 payload 中的 file_path/path/excel_path，必要时使用打包模板，成功条件是实际写出输出文件。任何输入缺失、模板缺失、转换模块异常都要返回明确错误，禁止编造已完成。"
@@ -188,7 +190,7 @@ async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
             "error": normalized["error"],
             "meta": normalized["meta"],
         }
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         return _err(
             str(exc),
             warnings=["请检查输入文件、模板文件和题目规则是否匹配。"],

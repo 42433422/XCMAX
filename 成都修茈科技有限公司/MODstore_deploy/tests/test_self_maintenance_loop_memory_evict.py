@@ -277,7 +277,8 @@ def test_evict_does_not_raise_when_audit_write_fails(monkeypatch, tmp_path):
     memory_path = tmp_path / "loop_memory.json"
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(memory_path))
     monkeypatch.setenv(
-        "MODSTORE_SELF_MAINTENANCE_GOVERNANCE_AUDIT", str(tmp_path / "missing" / "audit.jsonl")
+        "MODSTORE_SELF_MAINTENANCE_GOVERNANCE_AUDIT",
+        str(tmp_path / "missing" / "audit.jsonl"),
     )
 
     item = _stuck_failed_step(

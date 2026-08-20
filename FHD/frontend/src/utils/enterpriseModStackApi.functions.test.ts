@@ -1,16 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-const {
-  mockFetchWorkspacePrefs,
-  mockFetchOnboardingIndustryCatalog,
-  mockFetchIndustryBaseline,
-  mockBuildEnterpriseModStack,
-} = vi.hoisted(() => ({
-  mockFetchWorkspacePrefs: vi.fn(),
-  mockFetchOnboardingIndustryCatalog: vi.fn(),
-  mockFetchIndustryBaseline: vi.fn(),
-  mockBuildEnterpriseModStack: vi.fn(),
-}))
+const { mockFetchWorkspacePrefs, mockFetchOnboardingIndustryCatalog, mockFetchIndustryBaseline, mockBuildEnterpriseModStack } = vi.hoisted(
+  () => ({
+    mockFetchWorkspacePrefs: vi.fn(),
+    mockFetchOnboardingIndustryCatalog: vi.fn(),
+    mockFetchIndustryBaseline: vi.fn(),
+    mockBuildEnterpriseModStack: vi.fn(),
+  }),
+)
 
 vi.mock('./workspacePrefsApi', () => ({
   fetchWorkspacePrefs: mockFetchWorkspacePrefs,
@@ -25,10 +22,7 @@ vi.mock('@/constants/enterpriseModStack', () => ({
   buildEnterpriseModStack: mockBuildEnterpriseModStack,
 }))
 
-import {
-  resolveEnterpriseModStack,
-  invalidateEnterpriseModStackCache,
-} from './enterpriseModStackApi'
+import { resolveEnterpriseModStack, invalidateEnterpriseModStackCache } from './enterpriseModStackApi'
 
 function makeStack(overrides: Record<string, unknown> = {}) {
   return {

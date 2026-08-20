@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ChatMessage } from '@/composables/useChatMessages'
-import {
-  hasAiMessageSidecar,
-  isAiTypingOnly,
-  shouldRenderChatMessageRow,
-} from './chatMessageRender'
+import { hasAiMessageSidecar, isAiTypingOnly, shouldRenderChatMessageRow } from './chatMessageRender'
 
 function aiMsg(partial: Partial<ChatMessage> = {}): ChatMessage {
   return { role: 'ai', content: '', time: '12:00', ...partial }

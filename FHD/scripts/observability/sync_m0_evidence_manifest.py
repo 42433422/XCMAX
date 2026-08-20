@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Sync m0-evidence-manifest.json from on-disk PNGs and /metrics probe."""
+
 from __future__ import annotations
 
 import json
@@ -16,10 +17,38 @@ DATE_SUFFIX = "202606"
 METRICS_URL = "http://127.0.0.1:5000/metrics"
 
 SLO_PANELS = [
-    {"uid": "xcagi-slo", "panel_id": 1, "suffix": "api-availability", "title": "SLO-API-01 · Availability (30d)", "target": "99.9%", "slo_id": "SLO-API-01"},
-    {"uid": "xcagi-mod-store", "panel_id": 5, "suffix": "db-mod-sqlite-copies", "title": "Per-mod SQLite DB copies", "target": "M0 路径图", "slo_id": None},
-    {"uid": "xcagi-slo", "panel_id": 3, "suffix": "ai-chat-p95", "title": "SLO-AI-01 · Chat first-byte P95", "target": "< 1500ms", "slo_id": "SLO-AI-01"},
-    {"uid": "xcagi-slo", "panel_id": 7, "suffix": "neurobus-delivery", "title": "NeuroBus delivery success", "target": ">= 99.95%", "slo_id": "SLO-BUS-01"},
+    {
+        "uid": "xcagi-slo",
+        "panel_id": 1,
+        "suffix": "api-availability",
+        "title": "SLO-API-01 · Availability (30d)",
+        "target": "99.9%",
+        "slo_id": "SLO-API-01",
+    },
+    {
+        "uid": "xcagi-mod-store",
+        "panel_id": 5,
+        "suffix": "db-mod-sqlite-copies",
+        "title": "Per-mod SQLite DB copies",
+        "target": "M0 路径图",
+        "slo_id": None,
+    },
+    {
+        "uid": "xcagi-slo",
+        "panel_id": 3,
+        "suffix": "ai-chat-p95",
+        "title": "SLO-AI-01 · Chat first-byte P95",
+        "target": "< 1500ms",
+        "slo_id": "SLO-AI-01",
+    },
+    {
+        "uid": "xcagi-slo",
+        "panel_id": 7,
+        "suffix": "neurobus-delivery",
+        "title": "NeuroBus delivery success",
+        "target": ">= 99.95%",
+        "slo_id": "SLO-BUS-01",
+    },
 ]
 
 MOD_STEPS = [
@@ -32,7 +61,11 @@ MOD_STEPS = [
 
 def file_row(path: Path, rel_root: Path = ROOT) -> dict:
     if path.is_file() and path.stat().st_size > 0:
-        return {"present": True, "bytes": path.stat().st_size, "path": str(path.relative_to(rel_root))}
+        return {
+            "present": True,
+            "bytes": path.stat().st_size,
+            "path": str(path.relative_to(rel_root)),
+        }
     return {"present": False, "bytes": 0, "path": str(path.relative_to(rel_root))}
 
 
@@ -116,7 +149,9 @@ def build_manifest() -> dict:
             "blocker": "T36–T37 · 需 KUBECONFIG + staging 7d 流量（export --prefix staging）",
             "ready": staging_ok,
             "total": 4,
-            "scaffold_ready": sum(1 for p in staging_panels if p["preview"] == "scaffold" and p["present"]),
+            "scaffold_ready": sum(
+                1 for p in staging_panels if p["preview"] == "scaffold" and p["present"]
+            ),
             "acceptance_ready": staging_accepted,
             "status": staging_status(),
             "panels": staging_panels,

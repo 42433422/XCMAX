@@ -17,7 +17,8 @@ def main() -> None:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr(
-            f"{PACK_ID}/manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2) + "\n"
+            f"{PACK_ID}/manifest.json",
+            json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
         )
         for path in sorted((ROOT / "backend").rglob("*")):
             if not path.is_file():

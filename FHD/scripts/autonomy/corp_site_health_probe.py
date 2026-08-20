@@ -30,6 +30,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 try:
     import httpx
 except ImportError:  # pragma: no cover - CVM venv 必装
@@ -171,7 +173,7 @@ def probe_url(
                 return result
         result.ok = True
         return result
-    except Exception as exc:  # noqa: BLE001 - 探测层覆盖所有异常转 ProbeResult
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - 探测层覆盖所有异常转 ProbeResult
         result.error = f"http error: {exc!r}"
         return result
     finally:
@@ -180,7 +182,7 @@ def probe_url(
         if close_after:
             try:
                 client.close()
-            except Exception:  # noqa: BLE001 - pragma: no cover
+            except RECOVERABLE_ERRORS:  # noqa: BLE001 - pragma: no cover
                 pass
 
 
@@ -210,7 +212,7 @@ def run_probe(
         if close_client and client is not None:
             try:
                 client.close()
-            except Exception:  # noqa: BLE001 - pragma: no cover
+            except RECOVERABLE_ERRORS:  # noqa: BLE001 - pragma: no cover
                 pass
     report.finished_at = datetime.now(UTC).isoformat()
     return report
@@ -275,7 +277,7 @@ def _post_to_approval_ledger(
     try:
         with httpx.Client(timeout=10.0) as client:
             resp = client.post(url, headers=headers, json=body)
-    except Exception as exc:  # noqa: BLE001 - fail-open 覆盖网络/超时
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - fail-open 覆盖网络/超时
         print(f"[corp-probe] ledger http error: {exc!r}", file=sys.stderr)
         return None
     if resp.status_code < 200 or resp.status_code >= 300:
@@ -286,7 +288,7 @@ def _post_to_approval_ledger(
         return None
     try:
         data = resp.json()
-    except Exception as exc:  # noqa: BLE001 - pragma: no cover
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - pragma: no cover
         print(f"[corp-probe] ledger json decode error: {exc!r}", file=sys.stderr)
         return None
     if not isinstance(data, dict):
@@ -382,12 +384,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[corp-probe] PASS - all {len(report.results)} surfaces OK")
         return 0
 
-    print(
-        f"[corp-probe] FAIL - {report.failed_count}/{len(report.results)} surfaces failed"
-    )
+    print(f"[corp-probe] FAIL - {report.failed_count}/{len(report.results)} surfaces failed")
     ledger_result = escalate(report, dry_run=args.dry_run)
     if ledger_result is not None:
-        print(f"[corp-probe] ledger accepted: {json.dumps(ledger_result, ensure_ascii=False)[:300]}")
+        print(
+            f"[corp-probe] ledger accepted: {json.dumps(ledger_result, ensure_ascii=False)[:300]}"
+        )
     elif args.dry_run:
         print("[corp-probe] dry-run: ledger not called")
     else:

@@ -4,34 +4,34 @@
 
 ## 北星指标
 
-| 指标 | 说明 |
-|------|------|
-| 墙钟时间 | `/market/workbench/home` 从点击「开始生成」到 `complete` |
-| 一次通过率 | validate + six_dim_gate 无需人工改 brief 重跑 |
-| 规划轮次 | 语音/聊天里为澄清需求来回次数 |
+| 指标       | 说明                                                     |
+| ---------- | -------------------------------------------------------- |
+| 墙钟时间   | `/market/workbench/home` 从点击「开始生成」到 `complete` |
+| 一次通过率 | validate + six_dim_gate 无需人工改 brief 重跑            |
+| 规划轮次   | 语音/聊天里为澄清需求来回次数                            |
 
 ## 路径对照
 
 ### 快路径：`word_full_extract`（模板，约 10–14s @8765）
 
-| 步骤 | 行为 | LLM |
-|------|------|-----|
-| spec | 规则化 `word_extract_structured_spec`，模糊 brief 才一次结构化 LLM | 0–1 |
-| employee_plan | `word_extract_orchestration_plan` 或 brief 含 pack_id+runtime_kind 时跳过规划 LLM | 0 |
-| generate | 内置 convert 模板 + `_fallback_manifest`；**并行**轻量 enrich（description/behavior_rules） | 0 convert + 1 短 enrich |
-| validate / six_dim | 本地校验 + 门禁 | 0 |
-| pack_only | workflow/script 多数 skipped | — |
+| 步骤               | 行为                                                                                        | LLM                     |
+| ------------------ | ------------------------------------------------------------------------------------------- | ----------------------- |
+| spec               | 规则化 `word_extract_structured_spec`，模糊 brief 才一次结构化 LLM                          | 0–1                     |
+| employee_plan      | `word_extract_orchestration_plan` 或 brief 含 pack_id+runtime_kind 时跳过规划 LLM           | 0                       |
+| generate           | 内置 convert 模板 + `_fallback_manifest`；**并行**轻量 enrich（description/behavior_rules） | 0 convert + 1 短 enrich |
+| validate / six_dim | 本地校验 + 门禁                                                                             | 0                       |
+| pack_only          | workflow/script 多数 skipped                                                                | —                       |
 
 **勿用**：`force_llm_convert`、全量 `design_asset_employee_manifest` LLM、成功后再阻塞 polish。
 
 ### 富路径：`llm_scaffold` / 合同审核
 
-| 步骤 | 行为 |
-|------|------|
-| spec | 模糊 brief → 一次结构化 JSON（替代多轮规划聊天） |
-| employee_plan | 一站式规划 LLM（仅非确定性管线） |
-| generate | 全量 manifest + vibecoding convert |
-| 失败时 | `repair_runtime_convert_module` **仅** validate 报错后 1 轮 |
+| 步骤          | 行为                                                        |
+| ------------- | ----------------------------------------------------------- |
+| spec          | 模糊 brief → 一次结构化 JSON（替代多轮规划聊天）            |
+| employee_plan | 一站式规划 LLM（仅非确定性管线）                            |
+| generate      | 全量 manifest + vibecoding convert                          |
+| 失败时        | `repair_runtime_convert_module` **仅** validate 报错后 1 轮 |
 
 ## 已移除（反模式）
 
@@ -48,14 +48,14 @@
 
 ## 预期耗时（pack_only + Word 全量提取 brief）
 
-| 阶段 | 优化前（典型） | 优化后（目标） |
-|------|----------------|----------------|
-| spec | +1.5s LLM 常开 | 0s（确定性 brief） |
-| employee_plan | +2–4s LLM | 0s（模板 plan） |
-| generate manifest | +3–6s 全量 LLM | +0.8s 并行 enrich |
-| generate convert | 内置 ~0s | 内置 ~0s |
-| 轮询 UI | 1500ms 固定 | 1000ms running |
-| **合计** | ~18–25s | **~10–14s** |
+| 阶段              | 优化前（典型） | 优化后（目标）     |
+| ----------------- | -------------- | ------------------ |
+| spec              | +1.5s LLM 常开 | 0s（确定性 brief） |
+| employee_plan     | +2–4s LLM      | 0s（模板 plan）    |
+| generate manifest | +3–6s 全量 LLM | +0.8s 并行 enrich  |
+| generate convert  | 内置 ~0s       | 内置 ~0s           |
+| 轮询 UI           | 1500ms 固定    | 1000ms running     |
+| **合计**          | ~18–25s        | **~10–14s**        |
 
 ## 验证
 

@@ -1,6 +1,8 @@
-# ruff: noqa
+# mypy: disable-error-code="attr-defined, misc, no-any-return, valid-type"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
 
 
@@ -27,7 +29,7 @@ def _check_admin(request: _facade().Request) -> None:
 
 @_facade().router.get("/status")
 async def qq_status() -> _facade().Dict[str, _facade().Any]:
-    (own_provider, own_model, own_key, _own_base) = _facade()._own_llm()
+    own_provider, own_model, own_key, _own_base = _facade()._own_llm()
     has_own_brain = bool(own_provider and own_key)
     creds = _facade()._resolve_creds()
     employees: _facade().List[_facade().Dict[str, _facade().Any]] = []

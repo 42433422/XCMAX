@@ -1,3 +1,4 @@
+# mypy: disable-error-code="method-assign"
 """COVERAGE_RAMP Phase 1 (p1-p0-core): system/product/excel/conversation/shipment/misc routes."""
 
 from __future__ import annotations

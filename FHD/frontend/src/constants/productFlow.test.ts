@@ -20,11 +20,7 @@ import {
   LS_PRODUCT_FLOW_COMPLETED,
   LS_PRODUCT_FLOW_HOST_ACK,
 } from './productFlow'
-import {
-  buildTenantScopedStorageKey,
-  invalidateTenantStorageScopeCache,
-  setTenantStorageScopeCache,
-} from '@/utils/tenantStorageScope'
+import { buildTenantScopedStorageKey, invalidateTenantStorageScopeCache, setTenantStorageScopeCache } from '@/utils/tenantStorageScope'
 
 describe('productFlow', () => {
   beforeEach(() => {

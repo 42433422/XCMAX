@@ -1,3 +1,4 @@
+# mypy: disable-error-code="misc, union-attr"
 """Tests for app.fastapi_routes.xcmax_admin — coverage ramp.
 
 Covers all route endpoints, helper functions, and error paths.

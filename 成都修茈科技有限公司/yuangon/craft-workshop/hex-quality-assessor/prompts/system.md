@@ -2,14 +2,14 @@
 
 ## 六维定义（键名必须完全一致）
 
-| 键 | 中文 | 含义 |
-|---|---|---|
-| requirement_clarity | 需求理解 | brief/规格是否与所选管线一致、需求是否清晰 |
-| pack_compliance | 包体合规 | manifest、artifact、validate 硬错误 |
-| code_robustness | 代码健壮 | Python 编译、包体一致性、mod 沙箱 |
-| executability | 可执行性 | handlers 契约、独立包自检、登记与 runtime |
-| workflow_connectivity | 流程贯通 | 登记、工作流结构、真实调用链 |
-| domain_delivery | 领域交付 | 与管线（Word/Excel/资产 direct_python 等）匹配的交付能力 |
+| 键                    | 中文     | 含义                                                     |
+| --------------------- | -------- | -------------------------------------------------------- |
+| requirement_clarity   | 需求理解 | brief/规格是否与所选管线一致、需求是否清晰               |
+| pack_compliance       | 包体合规 | manifest、artifact、validate 硬错误                      |
+| code_robustness       | 代码健壮 | Python 编译、包体一致性、mod 沙箱                        |
+| executability         | 可执行性 | handlers 契约、独立包自检、登记与 runtime                |
+| workflow_connectivity | 流程贯通 | 登记、工作流结构、真实调用链                             |
+| domain_delivery       | 领域交付 | 与管线（Word/Excel/资产 direct_python 等）匹配的交付能力 |
 
 ## 输出要求
 
@@ -19,17 +19,17 @@
 4. `recommend_release`：综合是否建议放行（boolean）。
 5. `summary`：一句中文总结（≤120 字）。
 
-## JSON  schema
+## JSON schema
 
 ```json
 {
   "dimensions": {
-    "requirement_clarity": {"score": 0, "reasons": ["…"]},
-    "pack_compliance": {"score": 0, "reasons": ["…"]},
-    "code_robustness": {"score": 0, "reasons": ["…"]},
-    "executability": {"score": 0, "reasons": ["…"]},
-    "workflow_connectivity": {"score": 0, "reasons": ["…"]},
-    "domain_delivery": {"score": 0, "reasons": ["…"]}
+    "requirement_clarity": { "score": 0, "reasons": ["…"] },
+    "pack_compliance": { "score": 0, "reasons": ["…"] },
+    "code_robustness": { "score": 0, "reasons": ["…"] },
+    "executability": { "score": 0, "reasons": ["…"] },
+    "workflow_connectivity": { "score": 0, "reasons": ["…"] },
+    "domain_delivery": { "score": 0, "reasons": ["…"] }
   },
   "summary": "…",
   "recommend_release": false

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """验证 OpenAPI enrich 后元数据是否满足 --strict（不直接改源码，供 CI 辅助）。"""
+
 from __future__ import annotations
 
 import argparse

@@ -30,10 +30,7 @@ vi.mock('@/tutorial/runtime', () => ({
   shouldNeverAutoSkipStep: () => false,
 }))
 
-import {
-  useTutorialStore,
-  getTutorialTtsWarmupTexts,
-} from './tutorial'
+import { useTutorialStore, getTutorialTtsWarmupTexts } from './tutorial'
 
 const baseSteps = [
   { id: 's1', actionType: 'observe' },

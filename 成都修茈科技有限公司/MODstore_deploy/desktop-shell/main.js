@@ -11,7 +11,10 @@ const pendingDownloads = new Map()
 
 function sanitizeDownloadFileName(filename) {
   const base = path.basename(String(filename || '').trim())
-  const cleaned = base.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').replace(/\s+/g, ' ').trim()
+  const cleaned = base
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim()
   return cleaned || 'XCAGI-download'
 }
 
@@ -82,9 +85,7 @@ function enqueueDownload(webContents, url, savePath) {
 function configureDownloadHandling() {
   session.defaultSession.on('will-download', (event, item, webContents) => {
     const pending = webContents ? takePendingDownload(webContents, item) : null
-    const suggestedName = sanitizeDownloadFileName(
-      pending?.savePath ? path.basename(pending.savePath) : item.getFilename(),
-    )
+    const suggestedName = sanitizeDownloadFileName(pending?.savePath ? path.basename(pending.savePath) : item.getFilename())
     const savePath = pending?.savePath || path.join(app.getPath('downloads'), suggestedName)
 
     item.setSavePath(savePath)
@@ -113,9 +114,7 @@ function configureDownloadHandling() {
       buttonLabel: '保存',
       properties: ['createDirectory'],
     }
-    const { canceled, filePath } = win
-      ? await dialog.showSaveDialog(win, saveOptions)
-      : await dialog.showSaveDialog(saveOptions)
+    const { canceled, filePath } = win ? await dialog.showSaveDialog(win, saveOptions) : await dialog.showSaveDialog(saveOptions)
     if (canceled || !filePath) return { ok: false, canceled: true }
     return enqueueDownload(event.sender, url, filePath)
   })

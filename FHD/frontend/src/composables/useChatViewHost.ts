@@ -45,9 +45,7 @@ export function useChatViewHost(deps: UseChatViewHostDeps) {
   const persistAutoRefreshWechatSetting = () => {
     const enabled = !!autoRefreshStarredWechat.value
     localStorage.setItem(AUTO_REFRESH_STARRED_WECHAT_KEY, enabled ? '1' : '0')
-    window.dispatchEvent(
-      new CustomEvent('xcagi:auto-refresh-wechat-changed', { detail: { enabled } }),
-    )
+    window.dispatchEvent(new CustomEvent('xcagi:auto-refresh-wechat-changed', { detail: { enabled } }))
   }
 
   const onAutoRefreshToolbarChange = (enabled: boolean) => {
@@ -72,19 +70,16 @@ export function useChatViewHost(deps: UseChatViewHostDeps) {
 
     legacyAutoActionHandler =
       typeof (window as unknown as { handleAutoAction?: unknown }).handleAutoAction === 'function'
-        ? (window as Window & { handleAutoAction?: (a: unknown, m?: string) => void }).handleAutoAction ?? null
+        ? ((window as Window & { handleAutoAction?: (a: unknown, m?: string) => void }).handleAutoAction ?? null)
         : null
-    ;(window as unknown as { __VUE_CHAT_SEND__?: (m: string) => Promise<boolean> }).__VUE_CHAT_SEND__ =
-      async (message: string) => {
-        const text = String(message || '').trim()
-        if (!text) return false
-        messageInput.value = text
-        await sendMessage()
-        return true
-      }
-    ;(window as unknown as { __VUE_CHAT_FILL__?: (m: string) => boolean }).__VUE_CHAT_FILL__ = (
-      message: string,
-    ) => {
+    ;(window as unknown as { __VUE_CHAT_SEND__?: (m: string) => Promise<boolean> }).__VUE_CHAT_SEND__ = async (message: string) => {
+      const text = String(message || '').trim()
+      if (!text) return false
+      messageInput.value = text
+      await sendMessage()
+      return true
+    }
+    ;(window as unknown as { __VUE_CHAT_FILL__?: (m: string) => boolean }).__VUE_CHAT_FILL__ = (message: string) => {
       const text = String(message || '').trim()
       if (!text) return false
       messageInput.value = text
@@ -104,8 +99,7 @@ export function useChatViewHost(deps: UseChatViewHostDeps) {
       latestAssistantPush.value = detail
     }
     window.addEventListener('xcagi:assistant-push', onAssistantPush)
-    taskPaneViewportMedia =
-      typeof window.matchMedia === 'function' ? window.matchMedia(CHAT_RIGHT_PANE_MQ) : null
+    taskPaneViewportMedia = typeof window.matchMedia === 'function' ? window.matchMedia(CHAT_RIGHT_PANE_MQ) : null
     if (taskPaneViewportMedia) {
       onTaskPaneViewportChange(taskPaneViewportMedia)
     } else {
@@ -124,8 +118,7 @@ export function useChatViewHost(deps: UseChatViewHostDeps) {
     if (w.__VUE_CHAT_FILL__) delete w.__VUE_CHAT_FILL__
     w.__VUE_HANDLE_AUTO_ACTION__ = false
     if (legacyAutoActionHandler) {
-      ;(window as unknown as { handleAutoAction: typeof legacyAutoActionHandler }).handleAutoAction =
-        legacyAutoActionHandler
+      ;(window as unknown as { handleAutoAction: typeof legacyAutoActionHandler }).handleAutoAction = legacyAutoActionHandler
     }
     if (onAssistantPush) {
       window.removeEventListener('xcagi:assistant-push', onAssistantPush)

@@ -157,9 +157,7 @@ class OpenAICompatibleLLM:
         try:
             payload = json.loads(raw)
         except json.JSONDecodeError as exc:
-            raise LLMError(
-                f"{type(self).__name__} non-JSON response: {raw[:200]!r}"
-            ) from exc
+            raise LLMError(f"{type(self).__name__} non-JSON response: {raw[:200]!r}") from exc
         if not isinstance(payload, dict):
             raise LLMError(f"{type(self).__name__} expected object, got: {type(payload).__name__}")
         return payload

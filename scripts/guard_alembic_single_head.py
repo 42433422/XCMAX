@@ -25,7 +25,6 @@ Run manually:  python3 scripts/guard_alembic_single_head.py
 from __future__ import annotations
 
 import re
-import sys
 from pathlib import Path
 
 # Live trees only. FHD/XCAGI/alembic/versions is deliberately excluded: its
@@ -37,7 +36,9 @@ LIVE_TREES = (
 )
 
 _REV = re.compile(r"^revision\s*[:=]\s*(.+)$", re.MULTILINE)
-_DOWN = re.compile(r"^down_revision\s*[:=]\s*(.+?)(?:\n[A-Za-z_#]|\Z)", re.MULTILINE | re.DOTALL)
+_DOWN = re.compile(
+    r"^down_revision\s*[:=]\s*(.+?)(?:\n[A-Za-z_#]|\Z)", re.MULTILINE | re.DOTALL
+)
 
 
 def _ids(text: str | None) -> list[str]:
@@ -84,8 +85,7 @@ def check_tree(rel: str, root: Path) -> list[str]:
     if len(heads) > 1:
         errors.append(
             f"[{rel}] 多头 ({len(heads)} 个 head),alembic upgrade head 不确定。"
-            " 请加一个 merge 迁移收口:\n"
-            + "\n".join(f"    - {h}" for h in heads)
+            " 请加一个 merge 迁移收口:\n" + "\n".join(f"    - {h}" for h in heads)
         )
     return errors
 

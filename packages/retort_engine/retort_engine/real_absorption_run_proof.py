@@ -4,7 +4,7 @@ import json
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.codebase_graph import code_graph_absorption_proof
 
@@ -61,12 +61,18 @@ def per_run_code_graph_proof_missing(
         missing.append("code_graph_proof_run_id_mismatch")
     if proof.get("per_run_required") is not True:
         missing.append("code_graph_proof_not_marked_per_run")
-    evidence = proof.get("evidence") if isinstance(proof.get("evidence"), dict) else {}
+    evidence = cast(
+        dict[str, Any],
+        proof.get("evidence") if isinstance(proof.get("evidence"), dict) else {},
+    )
     if evidence.get("style") != REQUIRED_PROOF_STYLE:
         missing.append("code_graph_proof_style_missing")
     if evidence.get("scope") != "per_real_absorption_run":
         missing.append("code_graph_proof_scope_missing")
-    summary = proof.get("summary") if isinstance(proof.get("summary"), dict) else {}
+    summary = cast(
+        dict[str, Any],
+        proof.get("summary") if isinstance(proof.get("summary"), dict) else {},
+    )
     if "graph_status" not in summary:
         missing.append("code_graph_proof_graph_status_missing")
     if "changed_file_count" not in summary:

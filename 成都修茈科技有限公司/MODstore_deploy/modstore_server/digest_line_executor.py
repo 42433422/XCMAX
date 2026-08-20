@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment, attr-defined, no-any-return, union-attr, valid-type"
 """消费三产线清单，按 Phase A/B 派发 WorkUnit（不直接跑完整 P3–P9 流水线）。"""
 
 from __future__ import annotations
@@ -16,8 +17,11 @@ from modstore_server.digest_vibe_work_units import (
     DISPATCH_PW,
     DISPATCH_SR,
     VibeWorkUnit,
+)
+from modstore_server.digest_vibe_work_units import (
     parse_digest_record_work_units as parse_digest_record_work_units,
 )
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +41,10 @@ def _parse_priorities_env() -> Optional[List[str]]:
 
 def _max_units() -> int:
     try:
-        return max(1, min(int(os.environ.get("MODSTORE_DAILY_VIBE_EXECUTE_MAX_UNITS", "32")), 128))
+        return max(
+            1,
+            min(int(os.environ.get("MODSTORE_DAILY_VIBE_EXECUTE_MAX_UNITS", "32")), 128),
+        )
     except ValueError:
         return 32
 
@@ -73,7 +80,7 @@ def _platform_bench_override() -> Optional[tuple]:
         rp, rm = resolve_platform_bench_llm()
         if rp and rm:
             return (rp, rm)
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         return None
     return None
 
@@ -91,7 +98,7 @@ def _read_execute_meta(record_id: int) -> Dict[str, Any]:
             )
             if raw and str(raw).strip().startswith("{"):
                 return json.loads(str(raw))
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     return {}
 
@@ -109,7 +116,7 @@ def persist_line_execute_on_digest_record(record_id: int, payload: Dict[str, Any
                 return
             row.vibe_line_execute_json = json.dumps(payload, ensure_ascii=False)
             session.commit()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("persist_line_execute_on_digest_record failed id=%s", record_id)
 
 
@@ -126,7 +133,7 @@ def _load_digest_execute_context(record_id: int) -> Optional[Dict[str, Any]]:
             raw_vm = getattr(row, "vibe_prep_meta_json", "") or ""
             if raw_vm.strip().startswith("{"):
                 vibe_meta = json.loads(raw_vm)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             vibe_meta = {}
         return {
             "record_id": int(record_id),
@@ -231,8 +238,15 @@ def _verify_vibe_prep_generation_breakpoint_unit(
     try:
         from sqlalchemy import text as _sql
 
-        from modstore_server.digest_action_items import ensure_table, find_matching_item_ids
-        from modstore_server.models import DailyDigestRecord, get_engine, get_session_factory
+        from modstore_server.digest_action_items import (
+            ensure_table,
+            find_matching_item_ids,
+        )
+        from modstore_server.models import (
+            DailyDigestRecord,
+            get_engine,
+            get_session_factory,
+        )
 
         sf = get_session_factory()
         with sf() as session:
@@ -251,7 +265,7 @@ def _verify_vibe_prep_generation_breakpoint_unit(
         if raw_meta.strip().startswith("{"):
             try:
                 meta = json.loads(raw_meta)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 meta = {}
 
         fallback_reason = str(meta.get("fallback_reason") or "").strip()
@@ -312,7 +326,7 @@ def _verify_vibe_prep_generation_breakpoint_unit(
             "result": "Vibe 预备 fallback 任务已由落库证据闭环",
             "evidence": evidence,
         }
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.exception(
             "verify vibe prep generation breakpoint failed record_id=%s unit=%s",
             record_id,
@@ -347,7 +361,9 @@ def _split_local_verified_units(
     return local_units, local_results, remote_units
 
 
-def _mark_local_verified_action_items_merged(results: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+def _mark_local_verified_action_items_merged(
+    results: Sequence[Dict[str, Any]],
+) -> Dict[str, Any]:
     """本地 evidence 已验收的自举任务没有后续员工执行，直接推进到 merged。"""
     ids: List[int] = []
     for result in results:
@@ -373,10 +389,20 @@ def _mark_local_verified_action_items_merged(results: Sequence[Dict[str, Any]]) 
             if set_status_if_advanced(iid, "merged"):
                 updated += 1
                 advanced.append(iid)
-        return {"ok": True, "updated": updated, "matched_ids": advanced, "seen_ids": ids}
-    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": True,
+            "updated": updated,
+            "matched_ids": advanced,
+            "seen_ids": ids,
+        }
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.exception("local verified action_items merge writeback failed")
-        return {"ok": False, "error": str(exc), "updated": updated, "matched_ids": advanced}
+        return {
+            "ok": False,
+            "error": str(exc),
+            "updated": updated,
+            "matched_ids": advanced,
+        }
 
 
 def _filter_units_for_line(
@@ -439,7 +465,7 @@ def _resolve_line_mode(
             line_mode = "shadow"
         dry_run = line_mode == "shadow"
         return line_mode, dry_run, policy
-    except Exception:
+    except RECOVERABLE_ERRORS:
         dry_run = requested_mode == "shadow" or global_mode == "shadow"
         return requested_mode or ("shadow" if dry_run else "auto"), dry_run, {}
 

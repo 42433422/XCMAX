@@ -38,6 +38,7 @@ class ModPackageError(Exception):
 class ModSignatureError(Exception):
     """MOD 签名验证错误"""
 
+
 class ModPackage:
     """MOD 打包与解包工具"""
 

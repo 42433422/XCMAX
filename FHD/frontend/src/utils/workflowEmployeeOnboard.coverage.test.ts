@@ -26,8 +26,7 @@ vi.mock('@/api/modStore', () => ({
 }))
 
 vi.mock('@/constants/enterpriseModStack', () => ({
-  defaultHostModIdForMarketEmployee: (...a: unknown[]) =>
-    mockDefaultHostModIdForMarketEmployee(...a),
+  defaultHostModIdForMarketEmployee: (...a: unknown[]) => mockDefaultHostModIdForMarketEmployee(...a),
   EnterpriseModStack: {},
 }))
 
@@ -53,13 +52,11 @@ vi.mock('@/utils/enterpriseModStackApi', () => ({
 }))
 
 vi.mock('@/utils/workflowEmployeeScope', () => ({
-  filterModsForEnterpriseWorkflowRegistry: (...a: unknown[]) =>
-    mockFilterModsForEnterpriseWorkflowRegistry(...a),
+  filterModsForEnterpriseWorkflowRegistry: (...a: unknown[]) => mockFilterModsForEnterpriseWorkflowRegistry(...a),
 }))
 
 vi.mock('@/utils/modWorkflowEmployees', () => ({
-  filterWorkflowRegistrySourceMods: (...a: unknown[]) =>
-    mockFilterWorkflowRegistrySourceMods(...a),
+  filterWorkflowRegistrySourceMods: (...a: unknown[]) => mockFilterWorkflowRegistrySourceMods(...a),
   isNonWorkflowDeskEmployeeId: (id: string) => mockIsNonWorkflowDeskEmployeeId(id),
 }))
 
@@ -140,9 +137,7 @@ describe('workflowEmployeeOnboard – 覆盖率补齐', () => {
     })
 
     it('workflow_employees 含非工作流工位员工时被过滤', () => {
-      mockIsNonWorkflowDeskEmployeeId.mockImplementation((id: string) =>
-        id === 'host_foundation' || id === 'placeholder',
-      )
+      mockIsNonWorkflowDeskEmployeeId.mockImplementation((id: string) => id === 'host_foundation' || id === 'placeholder')
       const item: MarketInstallCatalogItem = {
         id: 'pkg1',
         workflow_employees: [
@@ -156,9 +151,7 @@ describe('workflowEmployeeOnboard – 覆盖率补齐', () => {
     })
 
     it('workflow_employees 全部被过滤时回退到 employee.id', () => {
-      mockIsNonWorkflowDeskEmployeeId.mockImplementation((id: string) =>
-        id === 'host_foundation',
-      )
+      mockIsNonWorkflowDeskEmployeeId.mockImplementation((id: string) => id === 'host_foundation')
       const item: MarketInstallCatalogItem = {
         id: 'pkg1',
         workflow_employees: [{ id: 'host_foundation', label: 'Host' }],
@@ -313,10 +306,7 @@ describe('workflowEmployeeOnboard – 覆盖率补齐', () => {
       const result = await autoOnboardInstalledMarketItem(item)
 
       expect(result.plannerRefreshed).toBe(false)
-      expect(warnSpy).toHaveBeenCalledWith(
-        '[workflowEmployeeOnboard] reloadEmployeePacks failed:',
-        expect.any(Error),
-      )
+      expect(warnSpy).toHaveBeenCalledWith('[workflowEmployeeOnboard] reloadEmployeePacks failed:', expect.any(Error))
       warnSpy.mockRestore()
     })
 
@@ -348,10 +338,7 @@ describe('workflowEmployeeOnboard – 覆盖率补齐', () => {
 
       const result = await autoOnboardInstalledMarketItem(item)
 
-      expect(mockWfStoreAssignHostMod).toHaveBeenCalledWith(
-        ['wf-1', 'wf-2'],
-        'attendance-industry',
-      )
+      expect(mockWfStoreAssignHostMod).toHaveBeenCalledWith(['wf-1', 'wf-2'], 'attendance-industry')
       expect(mockWfStoreEnableEmployees).toHaveBeenCalledWith(['wf-1', 'wf-2'], {
         onlyNew: false,
       })
@@ -376,10 +363,7 @@ describe('workflowEmployeeOnboard – 覆盖率补齐', () => {
       const result = await autoOnboardInstalledMarketItem(item)
 
       // wf-1 来自 catalogItem，wf-3 来自 mod，去重后传入 enableEmployees
-      expect(mockWfStoreAssignHostMod).toHaveBeenCalledWith(
-        expect.arrayContaining(['wf-1', 'wf-3']),
-        'attendance-industry',
-      )
+      expect(mockWfStoreAssignHostMod).toHaveBeenCalledWith(expect.arrayContaining(['wf-1', 'wf-3']), 'attendance-industry')
       expect(result.onboardedIds).toEqual(['wf-1', 'wf-3'])
     })
 
@@ -638,9 +622,7 @@ describe('workflowEmployeeOnboard – 覆盖率补齐', () => {
       mockFilterWorkflowRegistrySourceMods.mockImplementation((mods: unknown[]) => mods)
       mockWfStoreEnableEmployees.mockReturnValue([])
 
-      await autoOnboardWorkflowEmployeesFromMods([
-        { id: 'mod-1', name: 'Mod1', workflow_employees: [{ id: 'wf-1', label: 'WF1' }] },
-      ])
+      await autoOnboardWorkflowEmployeesFromMods([{ id: 'mod-1', name: 'Mod1', workflow_employees: [{ id: 'wf-1', label: 'WF1' }] }])
 
       expect(mockModsStoreRefresh).toHaveBeenCalled()
       expect(mockWfStoreRefreshRegistry).toHaveBeenCalled()

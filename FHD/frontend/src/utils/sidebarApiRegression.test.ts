@@ -34,16 +34,12 @@ describe('sidebarApiRegression', () => {
 
   it('approval menu uses approval-bridge when facade on', () => {
     localStorage.setItem(APPROVAL_LS, '1')
-    expect(resolveApprovalApiPath('/api/approval/requests')).toBe(
-      '/api/mod/xcagi-approval-bridge/requests',
-    )
+    expect(resolveApprovalApiPath('/api/approval/requests')).toBe('/api/mod/xcagi-approval-bridge/requests')
   })
 
   it('host business routes redirect to mod pages when ERP facade on', () => {
     localStorage.setItem(ERP_LS, '1')
-    expect(resolveErpPageRedirectForRouteName('products')).toBe(
-      '/mod/xcagi-erp-domain-bridge/products',
-    )
+    expect(resolveErpPageRedirectForRouteName('products')).toBe('/mod/xcagi-erp-domain-bridge/products')
   })
 
   it('workflow visualization redirects to visualization-bridge mod when facade on', () => {

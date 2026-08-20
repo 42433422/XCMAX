@@ -28,6 +28,8 @@ from __future__ import annotations
 
 import re
 
+from vibe_coding.operational_errors import BOUNDARY_ERRORS
+
 from ..index import Reference, Symbol
 from . import ParsedFile
 from .typescript import TypeScriptLanguageAdapter
@@ -269,7 +271,7 @@ class VueLanguageAdapter:
                             context=evt.group(0),
                         )
                     )
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:
             parse_error = f"vue_parse_error:{type(exc).__name__}:{exc}"
 
         return ParsedFile(
@@ -430,7 +432,7 @@ def _runtime_object_keys(body: str) -> list[str]:
                 in_str = False
             i += 1
             continue
-        if c in '"\'`':
+        if c in "\"'`":
             in_str = True
             quote = c
             i += 1

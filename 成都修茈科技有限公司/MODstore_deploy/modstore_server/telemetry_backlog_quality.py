@@ -1,9 +1,13 @@
-# ruff: noqa
+# mypy: disable-error-code="attr-defined, misc, no-any-return, valid-type, var-annotated"
 """Coverage-ratchet and generated-workflow drift scanners."""
+
 from __future__ import annotations
+
 import logging
 import sys
 from typing import Any, Dict, List
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +96,7 @@ def _scan_coverage_ratchet_gap() -> List[Dict[str, Any]]:
                         },
                     }
                 )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         _facade().logger.debug("coverage ratchet gap scan skipped")
     return signals
 
@@ -158,6 +162,6 @@ def _scan_workflow_drift() -> List[Dict[str, Any]]:
                     },
                 }
             )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         _facade().logger.debug("workflow drift scan skipped")
     return signals

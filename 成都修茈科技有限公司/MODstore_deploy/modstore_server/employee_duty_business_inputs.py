@@ -11,8 +11,7 @@ def enterprise_input(now: datetime):
 
     users, users_truncated = core._bounded(
         core._query_rows(
-            "SELECT id, created_at FROM users "
-            "WHERE is_enterprise = true ORDER BY id ASC LIMIT 501"
+            "SELECT id, created_at FROM users WHERE is_enterprise = true ORDER BY id ASC LIMIT 501"
         )
     )
     transactions = core._query_rows(

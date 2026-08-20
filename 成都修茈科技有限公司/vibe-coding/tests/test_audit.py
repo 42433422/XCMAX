@@ -6,9 +6,9 @@ import json
 
 import pytest
 
-from vibe_coding.runtime import CodeSkillRuntime, JsonCodeSkillStore
 from vibe_coding import MockLLM, PatchLedger
 from vibe_coding.code_factory import NLCodeSkillFactory
+from vibe_coding.runtime import CodeSkillRuntime, JsonCodeSkillStore
 
 
 def _seed_skill_with_two_versions(tmp_path) -> tuple[JsonCodeSkillStore, str]:
@@ -33,9 +33,7 @@ def _seed_skill_with_two_versions(tmp_path) -> tuple[JsonCodeSkillStore, str]:
     }
     code = {
         "source_code": (
-            "def extract(user):\n"
-            "    \"\"\"Extract a user's name.\"\"\"\n"
-            "    return {'name': user['name']}\n"
+            'def extract(user):\n    """Extract a user\'s name."""\n    return {\'name\': user[\'name\']}\n'
         )
     }
     llm = MockLLM([json.dumps(spec), json.dumps(code)])
@@ -79,7 +77,7 @@ def test_rollback_unknown_version_raises(tmp_path):
 
 
 def test_report_aggregates_health(tmp_path):
-    store, sid = _seed_skill_with_two_versions(tmp_path)
+    store, _sid = _seed_skill_with_two_versions(tmp_path)
     ledger = PatchLedger(code_store=store)
     report = ledger.report()
     assert report["totals"]["skills"] == 1

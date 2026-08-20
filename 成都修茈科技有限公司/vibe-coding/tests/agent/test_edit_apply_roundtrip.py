@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 import json
-import textwrap
 from pathlib import Path
-
-import pytest
 
 from vibe_coding import MockLLM, VibeCoder
 

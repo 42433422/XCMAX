@@ -25,9 +25,7 @@ export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
   function attachThinkingStepsToLastAiMessage(data: ChatPlannerPayload): void {
     const inner = nestedData(data)
     const envelope = asRecord(data.data)
-    const thinkingSteps = asString(
-      inner.thinking_steps || envelope.thinking_steps || data.thinking_steps,
-    ).trim()
+    const thinkingSteps = asString(inner.thinking_steps || envelope.thinking_steps || data.thinking_steps).trim()
     if (!thinkingSteps) return
 
     for (let i = messages.value.length - 1; i >= 0; i -= 1) {
@@ -178,7 +176,7 @@ export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
         progress: 10,
         summary: '等待确认执行',
         messageRef,
-        payload: { response: resp }
+        payload: { response: resp },
       })
       return
     }
@@ -232,7 +230,7 @@ export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
           status: 'running',
           progress,
           stage: `节点 ${done}/${nodeResults.length}`,
-          messageRef
+          messageRef,
         })
       }
     }

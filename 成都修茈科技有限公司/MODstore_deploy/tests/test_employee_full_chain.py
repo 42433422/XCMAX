@@ -52,7 +52,10 @@ def test_employee_runtime_loads_manifest_from_registered_zip(tmp_path, monkeypat
     from modstore_server import models
     from modstore_server.catalog_store import append_package
     from modstore_server.employee_ai_scaffold import build_employee_pack_zip
-    from modstore_server.employee_runtime import load_employee_pack, parse_employee_config_v2
+    from modstore_server.employee_runtime import (
+        load_employee_pack,
+        parse_employee_config_v2,
+    )
     from modstore_server.models import CatalogItem
 
     models._engine = None
@@ -153,7 +156,8 @@ def test_run_employee_ai_scaffold_registers_runtime_catalog(tmp_path, monkeypatc
 
     monkeypatch.setattr("modstore_server.mod_scaffold_runner.chat_dispatch", fake_chat_dispatch)
     monkeypatch.setattr(
-        "modstore_server.mod_scaffold_runner.resolve_api_key", lambda *args, **kwargs: ("k", "test")
+        "modstore_server.mod_scaffold_runner.resolve_api_key",
+        lambda *args, **kwargs: ("k", "test"),
     )
     monkeypatch.setattr(
         "modstore_server.mod_scaffold_runner.load_config",
@@ -201,7 +205,9 @@ def test_run_employee_ai_scaffold_skips_catalog_when_publish_disabled(tmp_path, 
     sf = models.get_session_factory()
     with sf() as db:
         user = User(
-            username="chain-noimport", email="chain-noimport@example.local", password_hash="x"
+            username="chain-noimport",
+            email="chain-noimport@example.local",
+            password_hash="x",
         )
         db.add(user)
         db.commit()
@@ -229,7 +235,8 @@ def test_run_employee_ai_scaffold_skips_catalog_when_publish_disabled(tmp_path, 
 
     monkeypatch.setattr("modstore_server.mod_scaffold_runner.chat_dispatch", fake_chat_dispatch)
     monkeypatch.setattr(
-        "modstore_server.mod_scaffold_runner.resolve_api_key", lambda *args, **kwargs: ("k", "test")
+        "modstore_server.mod_scaffold_runner.resolve_api_key",
+        lambda *args, **kwargs: ("k", "test"),
     )
     monkeypatch.setattr(
         "modstore_server.mod_scaffold_runner.load_config",
@@ -384,7 +391,10 @@ def test_employee_pack_can_attach_generated_skill_workflow(tmp_path, monkeypatch
                     },
                 },
                 "quality_gate": {"required_keys": ["invoice_fields"]},
-                "trigger_policy": {"on_error": True, "on_quality_below_threshold": True},
+                "trigger_policy": {
+                    "on_error": True,
+                    "on_quality_below_threshold": True,
+                },
             }
         ],
         "workflow": {
@@ -418,25 +428,38 @@ def test_employee_pack_can_attach_generated_skill_workflow(tmp_path, monkeypatch
                 },
             ],
             "edges": [
-                {"source_temp_id": "start", "target_temp_id": "extract", "condition": ""},
+                {
+                    "source_temp_id": "start",
+                    "target_temp_id": "extract",
+                    "condition": "",
+                },
                 {"source_temp_id": "extract", "target_temp_id": "end", "condition": ""},
             ],
         },
     }
 
     async def fake_workflow_chat(*args, **kwargs):
-        return {"ok": True, "content": json.dumps(skill_workflow_payload, ensure_ascii=False)}
+        return {
+            "ok": True,
+            "content": json.dumps(skill_workflow_payload, ensure_ascii=False),
+        }
 
     monkeypatch.setattr("modstore_server.mod_scaffold_runner.chat_dispatch", fake_employee_chat)
     monkeypatch.setattr(
-        "modstore_server.workflow_nl_graph.chat_dispatch_via_session", fake_workflow_chat
+        "modstore_server.workflow_nl_graph.chat_dispatch_via_session",
+        fake_workflow_chat,
     )
     monkeypatch.setattr(
-        "modstore_server.mod_scaffold_runner.resolve_api_key", lambda *args, **kwargs: ("k", "test")
+        "modstore_server.mod_scaffold_runner.resolve_api_key",
+        lambda *args, **kwargs: ("k", "test"),
     )
     monkeypatch.setattr(
         "modstore_server.mod_scaffold_runner.resolve_llm_provider_model",
-        lambda db, user, provider, model: (provider or "test", model or "test-model", None),
+        lambda db, user, provider, model: (
+            provider or "test",
+            model or "test-model",
+            None,
+        ),
     )
     monkeypatch.setattr(
         "modstore_server.mod_scaffold_runner.load_config",

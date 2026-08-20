@@ -33,7 +33,9 @@ def _char_column(line: str, byte_column: int) -> int:
 
 
 def _offset(lines: list[str], line_no: int, byte_column: int) -> int:
-    return sum(len(line) + 1 for line in lines[: line_no - 1]) + _char_column(lines[line_no - 1], byte_column)
+    return sum(len(line) + 1 for line in lines[: line_no - 1]) + _char_column(
+        lines[line_no - 1], byte_column
+    )
 
 
 def _fix_file(path: Path, diagnostics: list[tuple[int, str]]) -> int:
@@ -49,7 +51,9 @@ def _fix_file(path: Path, diagnostics: list[tuple[int, str]]) -> int:
             and node.lineno <= error_line <= int(node.end_lineno or node.lineno)
             for keyword in node.keywords
             if keyword.arg == argument_name
-            and keyword.value.lineno <= error_line <= int(keyword.value.end_lineno or keyword.value.lineno)
+            and keyword.value.lineno
+            <= error_line
+            <= int(keyword.value.end_lineno or keyword.value.lineno)
         ]
         if not candidates:
             continue
@@ -74,9 +78,7 @@ def _fix_file(path: Path, diagnostics: list[tuple[int, str]]) -> int:
         updated_lines = updated.splitlines()
         updated_module = ast.parse(updated)
         imports = [
-            node
-            for node in updated_module.body
-            if isinstance(node, (ast.Import, ast.ImportFrom))
+            node for node in updated_module.body if isinstance(node, (ast.Import, ast.ImportFrom))
         ]
         insert_line = max((int(node.end_lineno or node.lineno) for node in imports), default=0)
         updated_lines.insert(insert_line, IMPORT)

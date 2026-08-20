@@ -94,7 +94,7 @@ vi.mock('@/constants/productFlow', () => ({
 vi.mock('@/constants/genericModPack', () => ({
   catalogStoreCollection: (...args: unknown[]) => mockCatalogStoreCollection(...args),
   HOST_FOUNDATION_EMPLOYEE_PACK_ID: 'xcagi-host-foundation-employee',
-  isHostFoundationEmployeePackId: (...args: unknown[]) => mockIsHostFoundationEmployeePackId(...args as [string]),
+  isHostFoundationEmployeePackId: (...args: unknown[]) => mockIsHostFoundationEmployeePackId(...(args as [string])),
   readBuildEdition: (...args: unknown[]) => mockReadBuildEdition(...args),
   STORE_COLLECTION_HOST_FOUNDATION: 'host_foundation',
   STORE_COLLECTION_INDUSTRY_MOD: 'industry_mod',
@@ -104,8 +104,8 @@ vi.mock('@/constants/genericModPack', () => ({
 }))
 
 vi.mock('@/constants/officeEmployeePack', () => ({
-  isOfficeAuxPack1Pkg: (...args: unknown[]) => mockIsOfficeAuxPack1Pkg(...args as [string]),
-  isOfficeEmployeePkg: (...args: unknown[]) => mockIsOfficeEmployeePkg(...args as [string]),
+  isOfficeAuxPack1Pkg: (...args: unknown[]) => mockIsOfficeAuxPack1Pkg(...(args as [string])),
+  isOfficeEmployeePkg: (...args: unknown[]) => mockIsOfficeEmployeePkg(...(args as [string])),
   OFFICE_AUX_PACK_1_COLLECTION: 'office_employee_aux_pack_1',
   OFFICE_EMPLOYEE_COLLECTION: 'office_employee_pack',
 }))
@@ -161,8 +161,16 @@ async function mountModStore(query: Record<string, string> = {}) {
       { path: '/mod-store', name: 'mod-store', component: ModStore },
       { path: '/', name: 'home', component: { template: '<div />' } },
       { path: '/ai-ecosystem', name: 'ai-ecosystem', component: { template: '<div />' } },
-      { path: '/workflow-employee-space', name: 'workflow-employee-space', component: { template: '<div />' } },
-      { path: '/employee-workspace', name: 'employee-workspace', component: { template: '<div />' } },
+      {
+        path: '/workflow-employee-space',
+        name: 'workflow-employee-space',
+        component: { template: '<div />' },
+      },
+      {
+        path: '/employee-workspace',
+        name: 'employee-workspace',
+        component: { template: '<div />' },
+      },
     ],
   })
   await router.push({ path: '/mod-store', query })
@@ -420,9 +428,7 @@ describe('ModStore.coverage – oneClickPendingCount / oneClickCtaLabel', () => 
     vm.currentTab = 'workflow'
     vm.allMods = []
     expect(vm.oneClickCtaLabel).toBe('完成入驻')
-    vm.allMods = [
-      makeMod({ id: 'wf1', store_collection: 'workflow_employee', is_installed: false }),
-    ]
+    vm.allMods = [makeMod({ id: 'wf1', store_collection: 'workflow_employee', is_installed: false })]
     expect(vm.oneClickCtaLabel).toContain('一键安装并入驻 (1)')
     wrapper.unmount()
   })
@@ -450,7 +456,10 @@ describe('ModStore.coverage – onboarding / 导航', () => {
   })
 
   it('onboardingBanner：deliverableOk=false 显示 banner 且 missingModHint 拼接', async () => {
-    mockFetchDeliverableStatus.mockResolvedValue({ deliverable: false, missing_mod_ids: ['mod-x', 'mod-y'] })
+    mockFetchDeliverableStatus.mockResolvedValue({
+      deliverable: false,
+      missing_mod_ids: ['mod-x', 'mod-y'],
+    })
     const { wrapper } = await mountModStore()
     await waitForAsync()
     expect(wrapper.find('.onboarding-banner').exists()).toBe(true)
@@ -481,7 +490,11 @@ describe('ModStore.coverage – onboarding / 导航', () => {
     // stub window.history.length > 1
     const origLength = window.history.length
     try {
-      Object.defineProperty(window.history, 'length', { configurable: true, value: 3, writable: true })
+      Object.defineProperty(window.history, 'length', {
+        configurable: true,
+        value: 3,
+        writable: true,
+      })
       const { wrapper, router } = await mountModStore()
       await waitForAsync()
       const backSpy = vi.spyOn(router, 'back')
@@ -490,14 +503,22 @@ describe('ModStore.coverage – onboarding / 导航', () => {
       expect(backSpy).toHaveBeenCalled()
       wrapper.unmount()
     } finally {
-      Object.defineProperty(window.history, 'length', { configurable: true, value: origLength, writable: true })
+      Object.defineProperty(window.history, 'length', {
+        configurable: true,
+        value: origLength,
+        writable: true,
+      })
     }
   })
 
   it('goBackFromStore：无 redirect 且 history.length<=1 时 push ai-ecosystem', async () => {
     const origLength = window.history.length
     try {
-      Object.defineProperty(window.history, 'length', { configurable: true, value: 1, writable: true })
+      Object.defineProperty(window.history, 'length', {
+        configurable: true,
+        value: 1,
+        writable: true,
+      })
       const { wrapper, router } = await mountModStore()
       await waitForAsync()
       const pushSpy = vi.spyOn(router, 'push')
@@ -506,7 +527,11 @@ describe('ModStore.coverage – onboarding / 导航', () => {
       expect(pushSpy).toHaveBeenCalledWith({ name: 'ai-ecosystem' })
       wrapper.unmount()
     } finally {
-      Object.defineProperty(window.history, 'length', { configurable: true, value: origLength, writable: true })
+      Object.defineProperty(window.history, 'length', {
+        configurable: true,
+        value: origLength,
+        writable: true,
+      })
     }
   })
 
@@ -719,7 +744,11 @@ describe('ModStore.coverage – installMod', () => {
     mockInstallHostFoundation.mockResolvedValue({ success: true, message: '' })
     const { wrapper } = await mountModStore({ tab: 'all' })
     await waitForAsync()
-    const mod = makeMod({ id: 'xcagi-host-foundation-employee', pkg_id: 'xcagi-host-foundation-employee', is_installed: false })
+    const mod = makeMod({
+      id: 'xcagi-host-foundation-employee',
+      pkg_id: 'xcagi-host-foundation-employee',
+      is_installed: false,
+    })
     const vm: any = wrapper.vm
     await vm.installMod(mod)
     await flushPromises()
@@ -734,7 +763,11 @@ describe('ModStore.coverage – installMod', () => {
     mockInstallHostFoundation.mockResolvedValue({ success: true, message: '' })
     const { wrapper } = await mountModStore({ tab: 'all' })
     await waitForAsync()
-    const mod = makeMod({ id: 'xcagi-host-foundation-employee', pkg_id: 'xcagi-host-foundation-employee', is_installed: false })
+    const mod = makeMod({
+      id: 'xcagi-host-foundation-employee',
+      pkg_id: 'xcagi-host-foundation-employee',
+      is_installed: false,
+    })
     const vm: any = wrapper.vm
     await vm.installMod(mod)
     await flushPromises()
@@ -969,10 +1002,7 @@ describe('ModStore.coverage – applyFilters / 排序分支', () => {
     const { wrapper } = await mountModStore({ tab: 'all' })
     await waitForAsync()
     const vm: any = wrapper.vm
-    vm.allMods = [
-      makeMod({ id: 'a', name: 'A', total_downloads: 5 }),
-      makeMod({ id: 'b', name: 'B', download_count: 10 }),
-    ]
+    vm.allMods = [makeMod({ id: 'a', name: 'A', total_downloads: 5 }), makeMod({ id: 'b', name: 'B', download_count: 10 })]
     vm.sortBy = 'downloads'
     vm.applyFilters()
     expect(vm.filteredMods[0].id).toBe('b')
@@ -983,10 +1013,7 @@ describe('ModStore.coverage – applyFilters / 排序分支', () => {
     const { wrapper } = await mountModStore({ tab: 'all' })
     await waitForAsync()
     const vm: any = wrapper.vm
-    vm.allMods = [
-      makeMod({ id: 'a', name: 'A', avg_rating: 3 }),
-      makeMod({ id: 'b', name: 'B', avg_rating: 5 }),
-    ]
+    vm.allMods = [makeMod({ id: 'a', name: 'A', avg_rating: 3 }), makeMod({ id: 'b', name: 'B', avg_rating: 5 })]
     vm.sortBy = 'rating'
     vm.applyFilters()
     expect(vm.filteredMods[0].id).toBe('b')
@@ -997,10 +1024,7 @@ describe('ModStore.coverage – applyFilters / 排序分支', () => {
     const { wrapper } = await mountModStore({ tab: 'all' })
     await waitForAsync()
     const vm: any = wrapper.vm
-    vm.allMods = [
-      makeMod({ id: 'a', name: 'A', created_at: '2024-01-01' }),
-      makeMod({ id: 'b', name: 'B', created_at: '2024-06-01' }),
-    ]
+    vm.allMods = [makeMod({ id: 'a', name: 'A', created_at: '2024-01-01' }), makeMod({ id: 'b', name: 'B', created_at: '2024-06-01' })]
     vm.sortBy = 'created_at'
     vm.applyFilters()
     expect(vm.filteredMods[0].id).toBe('b')
@@ -1011,10 +1035,7 @@ describe('ModStore.coverage – applyFilters / 排序分支', () => {
     const { wrapper } = await mountModStore({ tab: 'all' })
     await waitForAsync()
     const vm: any = wrapper.vm
-    vm.allMods = [
-      makeMod({ id: 'b', name: 'Banana' }),
-      makeMod({ id: 'a', name: 'Apple' }),
-    ]
+    vm.allMods = [makeMod({ id: 'b', name: 'Banana' }), makeMod({ id: 'a', name: 'Apple' })]
     vm.sortBy = 'name'
     vm.applyFilters()
     expect(vm.filteredMods[0].id).toBe('a')
@@ -1025,10 +1046,7 @@ describe('ModStore.coverage – applyFilters / 排序分支', () => {
     const { wrapper } = await mountModStore({ tab: 'all' })
     await waitForAsync()
     const vm: any = wrapper.vm
-    vm.allMods = [
-      makeMod({ id: 'a', name: 'A', is_installed: true }),
-      makeMod({ id: 'b', name: 'B', is_installed: false }),
-    ]
+    vm.allMods = [makeMod({ id: 'a', name: 'A', is_installed: true }), makeMod({ id: 'b', name: 'B', is_installed: false })]
     vm.filterInstalled = true
     vm.applyFilters()
     expect(vm.filteredMods.length).toBe(1)
@@ -1191,10 +1209,7 @@ describe('ModStore.coverage – loadMods / loadMarketTab 错误路径', () => {
     // 回退成功时 loadError 应包含「市场分类接口较慢」或为空（取决于 allMods 是否非空）
     const loadError = (wrapper.vm as any).loadError
     expect(
-      loadError === '' ||
-      loadError.includes('市场分类接口较慢') ||
-      loadError.includes('市场同步失败') ||
-      loadError.includes('market down')
+      loadError === '' || loadError.includes('市场分类接口较慢') || loadError.includes('市场同步失败') || loadError.includes('market down'),
     ).toBe(true)
     wrapper.unmount()
   })
@@ -1247,10 +1262,10 @@ describe('ModStore.coverage – runOneClickInstallAndOnboard', () => {
 
   it('pending=0 时直接 finishOnboardingFromStore', async () => {
     const { wrapper, router } = await mountModStore({ tab: 'workflow' })
+    const replaceSpy = vi.spyOn(router, 'replace')
     await waitForAsync()
     const vm: any = wrapper.vm
     vm.allMods = []
-    const replaceSpy = vi.spyOn(router, 'replace')
     await vm.runOneClickInstallAndOnboard()
     await flushPromises()
     expect(mockMarkProductFlowCompleted).toHaveBeenCalled()
@@ -1326,9 +1341,7 @@ describe('ModStore.coverage – runOneClickInstallAndOnboard', () => {
     const { wrapper } = await mountModStore({ tab: 'office' })
     await waitForAsync()
     const vm: any = wrapper.vm
-    vm.allMods = [
-      makeMod({ id: 'office-emp-1', is_installed: false, name: 'Office1' }),
-    ]
+    vm.allMods = [makeMod({ id: 'office-emp-1', is_installed: false, name: 'Office1' })]
     await vm.runOneClickInstallAndOnboard()
     await waitForAsync()
     // 应该 alert 包含失败信息
@@ -1346,9 +1359,7 @@ describe('ModStore.coverage – runOneClickInstallAndOnboard', () => {
     const { wrapper } = await mountModStore({ tab: 'office' })
     await waitForAsync()
     const vm: any = wrapper.vm
-    vm.allMods = [
-      makeMod({ id: 'office-emp-1', is_installed: false, name: 'Office1' }),
-    ]
+    vm.allMods = [makeMod({ id: 'office-emp-1', is_installed: false, name: 'Office1' })]
     await vm.runOneClickInstallAndOnboard()
     await waitForAsync()
     const alertCalls = mockAppAlert.mock.calls.map((c: any[]) => c[0] as string)
@@ -1359,11 +1370,10 @@ describe('ModStore.coverage – runOneClickInstallAndOnboard', () => {
   it('completePackOnboard：promptResult=started 时不 replace', async () => {
     mockFetchDeliverableStatus.mockResolvedValue({ deliverable: true, missing_mod_ids: [] })
     mockPromptAdvancedTutorialAfterInstall.mockResolvedValue('started')
-    const { wrapper, router } = await mountModStore({ tab: 'workflow' })
+    const { wrapper } = await mountModStore({ tab: 'workflow' })
     await waitForAsync()
     const vm: any = wrapper.vm
     vm.allMods = []
-    const replaceSpy = vi.spyOn(router, 'replace')
     await vm.runOneClickInstallAndOnboard()
     await waitForAsync()
     // started 时不 replace（但 finishOnboardingFromStore 可能会 replace）
@@ -1388,7 +1398,14 @@ describe('ModStore.coverage – runOneClickInstallAndOnboard', () => {
     await waitForAsync()
     const vm: any = wrapper.vm
     // 确保 allMods 有未安装的 mod（pending>0 才会走 install 循环）
-    vm.allMods = [makeMod({ id: 'wf1', store_collection: 'workflow_employee', is_installed: false, name: 'WF1' })]
+    vm.allMods = [
+      makeMod({
+        id: 'wf1',
+        store_collection: 'workflow_employee',
+        is_installed: false,
+        name: 'WF1',
+      }),
+    ]
     await flushPromises()
     mockAppAlert.mockClear()
     await vm.runOneClickInstallAndOnboard()
@@ -1412,7 +1429,14 @@ describe('ModStore.coverage – runOneClickInstallAndOnboard', () => {
     const { wrapper, router } = await mountModStore({ tab: 'workflow' })
     await waitForAsync()
     const vm: any = wrapper.vm
-    vm.allMods = [makeMod({ id: 'wf1', store_collection: 'workflow_employee', is_installed: false, name: 'WF1' })]
+    vm.allMods = [
+      makeMod({
+        id: 'wf1',
+        store_collection: 'workflow_employee',
+        is_installed: false,
+        name: 'WF1',
+      }),
+    ]
     await flushPromises()
     const replaceSpy = vi.spyOn(router, 'replace')
     await vm.runOneClickInstallAndOnboard()
@@ -1436,9 +1460,7 @@ describe('ModStore.coverage – runOneClickInstallAndOnboard', () => {
     const { wrapper } = await mountModStore({ tab: 'office' })
     await waitForAsync()
     const vm: any = wrapper.vm
-    vm.allMods = [
-      makeMod({ id: 'office-emp-1', is_installed: false, name: 'Office1' }),
-    ]
+    vm.allMods = [makeMod({ id: 'office-emp-1', is_installed: false, name: 'Office1' })]
     await vm.runOneClickInstallAndOnboard()
     await waitForAsync()
     // 应该 alert 提示仍有未安装

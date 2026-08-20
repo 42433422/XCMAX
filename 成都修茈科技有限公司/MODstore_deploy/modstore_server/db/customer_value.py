@@ -7,7 +7,7 @@ the original row remains available for audit.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import DDL, Column, DateTime, Index, Integer, String, Text, event
 
@@ -19,7 +19,11 @@ class CustomerValueReceipt(Base):
     __table_args__ = (
         Index("ix_customer_value_receipts_order_no", "order_no"),
         Index("ix_customer_value_receipts_goal_id", "customer_goal_id"),
-        Index("ix_customer_value_receipts_kind_status", "receipt_kind", "verification_status"),
+        Index(
+            "ix_customer_value_receipts_kind_status",
+            "receipt_kind",
+            "verification_status",
+        ),
         Index("ix_customer_value_receipts_occurred_at", "occurred_at"),
     )
 
@@ -44,7 +48,7 @@ class CustomerValueReceipt(Base):
     evidence_json = Column(Text, nullable=False, default="{}")
     evidence_digest = Column(String(64), nullable=False)
     occurred_at = Column(DateTime, nullable=False)
-    recorded_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    recorded_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
 
 
 # ``Base.metadata.create_all`` is the init migration used by the self-hosted
@@ -53,53 +57,45 @@ class CustomerValueReceipt(Base):
 event.listen(
     CustomerValueReceipt.__table__,
     "after_create",
-    DDL(
-        """
+    DDL("""
         CREATE TRIGGER customer_value_receipts_no_update
         BEFORE UPDATE ON customer_value_receipts
         BEGIN
           SELECT RAISE(ABORT, 'customer_value_receipts is append-only');
         END
-        """
-    ).execute_if(dialect="sqlite"),
+        """).execute_if(dialect="sqlite"),
 )
 event.listen(
     CustomerValueReceipt.__table__,
     "after_create",
-    DDL(
-        """
+    DDL("""
         CREATE TRIGGER customer_value_receipts_no_delete
         BEFORE DELETE ON customer_value_receipts
         BEGIN
           SELECT RAISE(ABORT, 'customer_value_receipts is append-only');
         END
-        """
-    ).execute_if(dialect="sqlite"),
+        """).execute_if(dialect="sqlite"),
 )
 event.listen(
     CustomerValueReceipt.__table__,
     "after_create",
-    DDL(
-        """
+    DDL("""
         CREATE OR REPLACE FUNCTION reject_customer_value_receipt_mutation()
         RETURNS trigger AS $$
         BEGIN
           RAISE EXCEPTION 'customer_value_receipts is append-only';
         END;
         $$ LANGUAGE plpgsql
-        """
-    ).execute_if(dialect="postgresql"),
+        """).execute_if(dialect="postgresql"),
 )
 event.listen(
     CustomerValueReceipt.__table__,
     "after_create",
-    DDL(
-        """
+    DDL("""
         CREATE TRIGGER customer_value_receipts_no_mutation
         BEFORE UPDATE OR DELETE ON customer_value_receipts
         FOR EACH ROW EXECUTE FUNCTION reject_customer_value_receipt_mutation()
-        """
-    ).execute_if(dialect="postgresql"),
+        """).execute_if(dialect="postgresql"),
 )
 
 

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, attr-defined, no-any-return, union-attr, valid-type"
 """自进化信号采集：CI 失败 / 运行异常 / 性能退化 → 每日 work unit 事实源。"""
 
 from __future__ import annotations
@@ -5,9 +6,11 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +18,11 @@ logger = logging.getLogger(__name__)
 def _lookback_hours() -> int:
     try:
         return max(
-            1, min(int(os.environ.get("MODSTORE_EVOLUTION_SIGNAL_LOOKBACK_HOURS", "24")), 168)
+            1,
+            min(
+                int(os.environ.get("MODSTORE_EVOLUTION_SIGNAL_LOOKBACK_HOURS", "24")),
+                168,
+            ),
         )
     except ValueError:
         return 24
@@ -26,7 +33,7 @@ def _repo_root() -> Path:
         from modstore_server.daily_digest import _repo_root
 
         return Path(_repo_root())
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return Path(os.environ.get("MODSTORE_REPO_ROOT", ".")).resolve()
 
 
@@ -50,14 +57,14 @@ def _collect_pytest_failures(*, root: Path, limit: int = 12) -> List[Dict[str, s
                 if line:
                     items.append({"kind": "pytest", "nodeid": line[:240]})
         return items
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.debug("collect pytest failures failed", exc_info=True)
         return []
 
 
 def _collect_runtime_anomalies(*, lookback_hours: int, limit: int = 20) -> List[Dict[str, str]]:
     """近窗口 incident_bus 入库事件。"""
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=lookback_hours)
+    cutoff = datetime.now(UTC) - timedelta(hours=lookback_hours)
     try:
         from modstore_server.models import IncidentEvent, get_session_factory
 
@@ -83,7 +90,7 @@ def _collect_runtime_anomalies(*, lookback_hours: int, limit: int = 20) -> List[
                     }
                 )
         return out
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.debug("collect runtime anomalies failed", exc_info=True)
         return []
 
@@ -121,7 +128,7 @@ def _collect_performance_signals() -> List[Dict[str, str]]:
         for s in slow[:5]:
             items.append({"kind": "performance", "signal": "slow_probe", "detail": s})
         return items
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.debug("collect performance signals failed", exc_info=True)
         return []
 
@@ -133,7 +140,7 @@ def _collect_loop_memory_signals(limit: int = 12) -> List[Dict[str, str]]:
         from modstore_server.self_maintenance_policy import load_loop_memory
 
         memory = load_loop_memory()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.debug("collect loop memory signals failed", exc_info=True)
         return []
     if not isinstance(memory, dict) or not memory:
@@ -192,7 +199,10 @@ def _collect_loop_memory_signals(limit: int = 12) -> List[Dict[str, str]]:
                 continue
             action = str(item.get("action") or "")
             status = str(item.get("status") or "")
-            if action not in {"await_human_strategy_approval", "stop"} and status not in {
+            if action not in {
+                "await_human_strategy_approval",
+                "stop",
+            } and status not in {
                 "failed",
                 "completed_waiting_human_strategy",
             }:

@@ -1,3 +1,4 @@
+# isort: skip_file
 # ruff: noqa: E402, F401
 """联网检索 + GitHub 公开资料（微软 Bing HTML 爬虫，Tavily 兜底，再 DDG/SearXNG）。
 
@@ -23,7 +24,6 @@ from modstore_server.research_tools_part01 import (
     _today_allowed as _today_allowed,
     _resolve_counter_key as _resolve_counter_key,
 )
-
 
 _GH_URL_RE = re.compile(
     r"https?://github\.com/([a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38})/([a-zA-Z0-9._-]+)",
@@ -89,7 +89,6 @@ from modstore_server.research_tools_part02 import (
     web_search_with_fallback as web_search_with_fallback,
 )
 
-
 _COMPANY_SUFFIXES = (
     "股份有限公司",
     "有限责任公司",
@@ -136,7 +135,6 @@ from modstore_server.research_tools_part03 import (
     _extract_companies_for_query as _extract_companies_for_query,
     contact_web_company_search_enabled as contact_web_company_search_enabled,
 )
-
 
 _TITLE_SOURCE_MARKERS = (
     "爱企查",

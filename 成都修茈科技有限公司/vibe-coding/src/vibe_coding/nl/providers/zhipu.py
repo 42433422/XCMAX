@@ -37,12 +37,7 @@ class ZhipuLLM(OpenAICompatibleLLM):
         timeout_s: float | None = None,
         verify_ssl: bool = True,
     ) -> None:
-        resolved = (
-            api_key
-            or os.environ.get("ZHIPUAI_API_KEY")
-            or os.environ.get("ZHIPU_API_KEY")
-            or ""
-        )
+        resolved = api_key or os.environ.get("ZHIPUAI_API_KEY") or os.environ.get("ZHIPU_API_KEY") or ""
         super().__init__(
             api_key=resolved,
             model=model,

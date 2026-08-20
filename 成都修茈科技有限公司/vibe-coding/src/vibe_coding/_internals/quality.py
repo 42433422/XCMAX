@@ -14,9 +14,7 @@ def quality_report(output: dict[str, Any], gate: dict[str, Any]) -> dict[str, An
     score = 1.0
     min_length = int(gate.get("min_length") or 0)
     text = " ".join(
-        str(v)
-        for k, v in output.items()
-        if k not in {"logic_type", "eskill_logic_type", "solidified_version"}
+        str(v) for k, v in output.items() if k not in {"logic_type", "eskill_logic_type", "solidified_version"}
     )
     if min_length > 0 and len(text) < min_length:
         issues.append(f"min_length:{len(text)}<{min_length}")

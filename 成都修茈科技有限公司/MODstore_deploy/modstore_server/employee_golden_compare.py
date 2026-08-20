@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr"
 """只读黄金员工包对比 oracle（不向 LLM 提供黄金源码）。"""
 
 from __future__ import annotations
@@ -6,7 +7,10 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from modstore_server.catalog_quality import PUBLIC_TABULAR_PKG_IDS, resolve_employee_pack_dir
+from modstore_server.catalog_quality import (
+    PUBLIC_TABULAR_PKG_IDS,
+    resolve_employee_pack_dir,
+)
 
 GOLDEN_PARITY_PASS_THRESHOLD = 85
 

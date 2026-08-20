@@ -34,6 +34,9 @@ if TYPE_CHECKING:
     from app.application.workflow.ports.checkpoint import CheckpointStore
     from app.application.workflow.ports.runtime import WorkflowRuntime
     from app.application.workflow.types import PlanGraph
+else:
+    CheckpointStore = Any
+    WorkflowRuntime = Any
 
 from app.di.registry import get_service_registry
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -114,7 +117,14 @@ from app.application.ai_chat_app_service_aichatapplicationservice_mixin03 import
 )
 
 
-class AIChatApplicationService(_AIChatApplicationServicePart01Mixin, _AIChatApplicationServicePart02Mixin, _AIChatApplicationServicePart03Mixin, AIChatExcelImportMixin, AIChatWorkflowResponseMixin, AIChatInstantToolsMixin):
+class AIChatApplicationService(
+    _AIChatApplicationServicePart01Mixin,
+    _AIChatApplicationServicePart02Mixin,
+    _AIChatApplicationServicePart03Mixin,
+    AIChatExcelImportMixin,
+    AIChatWorkflowResponseMixin,
+    AIChatInstantToolsMixin,
+):
     """
     AI 聊天应用服务
 
@@ -124,38 +134,9 @@ class AIChatApplicationService(_AIChatApplicationServicePart01Mixin, _AIChatAppl
     - 响应格式构建
     """
 
-
-
-
-
-
-
-
-
-
-
     _HEADER_HINT_RE = re.compile(
         r"(产品|名称|规格|型号|编号|单价|价格|调价|金额|单位|客户|厂名|品名)"
     )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 def get_ai_chat_app_service() -> AIChatApplicationService:

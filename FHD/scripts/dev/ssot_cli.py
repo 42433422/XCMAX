@@ -12,6 +12,7 @@
 
 退出码: 0=一致 1=漂移 2=配置错误 3=脚本执行失败
 """
+
 from __future__ import annotations
 
 import argparse
@@ -173,7 +174,9 @@ def cmd_drift(args: argparse.Namespace) -> int:
     report = []
     for d in domains:
         code, msg = _run_domain_check(d, silent=True)
-        report.append({"domain": d["name"], "status": "ok" if code == 0 else "drift", "message": msg})
+        report.append(
+            {"domain": d["name"], "status": "ok" if code == 0 else "drift", "message": msg}
+        )
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return EXIT_OK if all(r["status"] == "ok" for r in report) else EXIT_DRIFT
 

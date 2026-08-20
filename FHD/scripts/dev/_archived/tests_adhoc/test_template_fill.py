@@ -1,3 +1,4 @@
+# mypy: disable-error-code="import-not-found"
 """测试从钉钉数据填充模板的完整流程"""
 
 import sys

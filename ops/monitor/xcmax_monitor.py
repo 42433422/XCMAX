@@ -30,7 +30,9 @@ import subprocess
 import sys
 import time
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "lib"))
+sys.path.insert(
+    0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "lib")
+)
 import notify  # noqa: E402
 
 STATE_DIR = os.environ.get("OPS_STATE_DIR", "/var/lib/xcmax-ops")
@@ -61,6 +63,7 @@ MANIFEST = os.environ.get(
 )
 FHD_DEPLOY_ROOT = os.environ.get("OPS_FHD_DEPLOY_ROOT", "/opt/fhd-full")
 TLS_DOMAIN = os.environ.get("OPS_DOMAIN", "xiu-ci.com")
+BOUNDARY_ERRORS = (Exception,)
 
 JOURNAL_ERR_WARN = int(os.environ.get("OPS_JOURNAL_ERR_WARN", "30"))
 JOURNAL_ERR_CRIT = int(os.environ.get("OPS_JOURNAL_ERR_CRIT", "200"))
@@ -94,10 +97,10 @@ def _http_get(url, timeout=8):
     except urllib.error.HTTPError as exc:
         try:
             body = exc.read(65536).decode("utf-8", "replace")
-        except Exception:
+        except BOUNDARY_ERRORS:
             body = ""
         return exc.code, body
-    except Exception as exc:
+    except BOUNDARY_ERRORS as exc:
         return 0, str(exc)
 
 
@@ -179,7 +182,10 @@ def check_scheduler_runtime():
     if code != 200:
         return [
             _result(
-                "sched:runtime", False, "warn", "runtime 端点 http=%s（无法判定停摆）" % code
+                "sched:runtime",
+                False,
+                "warn",
+                "runtime 端点 http=%s（无法判定停摆）" % code,
             )
         ]
     try:
@@ -219,9 +225,17 @@ def check_journal_errors():
     rc, out = _run(
         [
             "journalctl",
-            "-u", "fhd-full", "-u", "modstore", "-u", "modstore-scheduler",
-            "--since", "10 min ago",
-            "--no-pager", "-o", "cat",
+            "-u",
+            "fhd-full",
+            "-u",
+            "modstore",
+            "-u",
+            "modstore-scheduler",
+            "--since",
+            "10 min ago",
+            "--no-pager",
+            "-o",
+            "cat",
         ],
         timeout=25,
     )
@@ -253,7 +267,8 @@ def check_journal_errors():
             "journal:quota",
             quota_count < QUOTA_BURST_WARN,
             "warn",
-            "近 10 分钟配额失败/熔断信号 %s 条——LLM 配额疑似熄火，loop 在空转" % quota_count,
+            "近 10 分钟配额失败/熔断信号 %s 条——LLM 配额疑似熄火，loop 在空转"
+            % quota_count,
         )
     )
     return results
@@ -284,9 +299,7 @@ def check_disk_mem():
         avail = meminfo.get("MemAvailable", 0)
         total = meminfo.get("MemTotal", 1)
         pct = avail * 100 // total
-        results.append(
-            _result("mem:avail", pct >= 5, "warn", "可用内存 %s%%" % pct)
-        )
+        results.append(_result("mem:avail", pct >= 5, "warn", "可用内存 %s%%" % pct))
     except (IOError, OSError, ValueError, IndexError):
         results.append(_result("mem:avail", True, "warn", "/proc/meminfo 不可读，跳过"))
     return results
@@ -305,7 +318,10 @@ def check_backup_freshness():
     if not newest:
         return [
             _result(
-                "backup:fresh", False, "crit", "无任何备份产物（%s/daily 为空）" % BACKUP_DIR
+                "backup:fresh",
+                False,
+                "crit",
+                "无任何备份产物（%s/daily 为空）" % BACKUP_DIR,
             )
         ]
     age_h = (time.time() - newest) / 3600.0
@@ -365,9 +381,7 @@ def check_wal_freshness():
                 )
             )
         except (IOError, OSError, ValueError):
-            results.append(
-                _result(check_id, False, "crit", "%s 尚无成功状态" % label)
-            )
+            results.append(_result(check_id, False, "crit", "%s 尚无成功状态" % label))
     return results
 
 
@@ -446,9 +460,11 @@ def check_tls_expiry():
                 "%s 证书 %.0f 天后到期" % (TLS_DOMAIN, days),
             )
         ]
-    except Exception as exc:
+    except BOUNDARY_ERRORS as exc:
         return [
-            _result("cert:tls", False, "warn", "TLS 检查失败(%s): %s" % (TLS_DOMAIN, exc))
+            _result(
+                "cert:tls", False, "warn", "TLS 检查失败(%s): %s" % (TLS_DOMAIN, exc)
+            )
         ]
 
 
@@ -491,7 +507,7 @@ def run_checks():
     for fn in CHECKS:
         try:
             results.extend(fn())
-        except Exception as exc:  # 单项检查崩溃不拖垮整轮
+        except BOUNDARY_ERRORS as exc:  # 单项检查崩溃不拖垮整轮
             results.append(
                 _result("check:%s" % fn.__name__, False, "warn", "检查器异常: %s" % exc)
             )
@@ -525,7 +541,9 @@ def evaluate(results, state, now=None):
             elif now - prev.get("last_alert", 0) >= REALERT_HOURS * 3600:
                 entry["last_alert"] = now
                 res = dict(res)
-                res["detail"] += "（持续 %.1fh 未恢复）" % ((now - entry["since"]) / 3600)
+                res["detail"] += "（持续 %.1fh 未恢复）" % (
+                    (now - entry["since"]) / 3600
+                )
                 realert.append(res)
             else:
                 entry["last_alert"] = prev.get("last_alert", now)
@@ -539,7 +557,9 @@ def format_report(results, newly_bad, realert, recovered):
     if bad_now:
         lines.append("故障 (%d):" % len(bad_now))
         for res in sorted(bad_now, key=lambda r: (r["level"] != "crit", r["id"])):
-            lines.append("  [%s] %s — %s" % (res["level"].upper(), res["id"], res["detail"]))
+            lines.append(
+                "  [%s] %s — %s" % (res["level"].upper(), res["id"], res["detail"])
+            )
     if recovered:
         lines.append("恢复 (%d):" % len(recovered))
         for res in recovered:
@@ -551,7 +571,9 @@ def format_report(results, newly_bad, realert, recovered):
         lines.append("当前所有异常项:")
         for res in results:
             if not res["ok"]:
-                lines.append("  [%s] %s — %s" % (res["level"].upper(), res["id"], res["detail"]))
+                lines.append(
+                    "  [%s] %s — %s" % (res["level"].upper(), res["id"], res["detail"])
+                )
     lines.append("")
     lines.append("处置手册: /root/XCMAX/ops/README.md")
     return "\n".join(lines)
@@ -570,7 +592,11 @@ def main(argv=None):
         for res in results:
             print(
                 "%-18s %-4s %s"
-                % (res["id"], "OK" if res["ok"] else res["level"].upper(), res["detail"])
+                % (
+                    res["id"],
+                    "OK" if res["ok"] else res["level"].upper(),
+                    res["detail"],
+                )
             )
 
     if no_alert:
@@ -587,7 +613,9 @@ def main(argv=None):
         worst = "crit" if any(r["level"] == "crit" for r in to_alert) else "warn"
         crit_n = sum(1 for r in to_alert if r["level"] == "crit")
         title = "%d 项故障（%d crit）" % (len(to_alert), crit_n)
-        notify.deliver(worst, title, format_report(results, newly_bad, realert, recovered))
+        notify.deliver(
+            worst, title, format_report(results, newly_bad, realert, recovered)
+        )
     elif recovered:
         notify.deliver(
             "ok",

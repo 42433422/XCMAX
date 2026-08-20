@@ -21,10 +21,7 @@ describe('adminAuditApi', () => {
         data: { items: [{ id: 1 }], total: 1 },
       })
       const result = await adminAuditApi.list()
-      expect(apiGetMock).toHaveBeenCalledWith(
-        '/api/admin/audit-logs',
-        { limit: 50, offset: 0 },
-      )
+      expect(apiGetMock).toHaveBeenCalledWith('/api/admin/audit-logs', { limit: 50, offset: 0 })
       expect(result.success).toBe(true)
       expect(result.data.items).toHaveLength(1)
       expect(result.data.total).toBe(1)
@@ -33,19 +30,13 @@ describe('adminAuditApi', () => {
     it('calls API with custom limit and offset', async () => {
       apiGetMock.mockResolvedValue({ success: true, data: { items: [], total: 0 } })
       await adminAuditApi.list(100, 200)
-      expect(apiGetMock).toHaveBeenCalledWith(
-        '/api/admin/audit-logs',
-        { limit: 100, offset: 200 },
-      )
+      expect(apiGetMock).toHaveBeenCalledWith('/api/admin/audit-logs', { limit: 100, offset: 200 })
     })
 
     it('handles zero limit and offset', async () => {
       apiGetMock.mockResolvedValue({ success: true, data: { items: [], total: 0 } })
       await adminAuditApi.list(0, 0)
-      expect(apiGetMock).toHaveBeenCalledWith(
-        '/api/admin/audit-logs',
-        { limit: 0, offset: 0 },
-      )
+      expect(apiGetMock).toHaveBeenCalledWith('/api/admin/audit-logs', { limit: 0, offset: 0 })
     })
 
     it('propagates API errors', async () => {

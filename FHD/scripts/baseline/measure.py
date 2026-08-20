@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="arg-type, misc, return-value"
 """四套基线测量工具 — 数据驱动优化的度量底座。
 
 度量四套基线(桌面端 + 手机端 + 前端):
@@ -17,6 +18,7 @@
   python3 FHD/scripts/baseline/measure.py --no-write       # 只打印,不落盘(CI 干跑)
   python3 FHD/scripts/baseline/measure.py --only runtime_perf
 """
+
 from __future__ import annotations
 
 import argparse
@@ -30,12 +32,14 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
+
 # ---------------------------------------------------------------------------
 # 路径锚点。脚本位于 FHD/scripts/baseline/measure.py。
 # ---------------------------------------------------------------------------
 SCRIPT = Path(__file__).resolve()
-FHD_ROOT = SCRIPT.parents[2]          # .../XCMAX/FHD
-REPO_ROOT = SCRIPT.parents[3]         # .../XCMAX
+FHD_ROOT = SCRIPT.parents[2]  # .../XCMAX/FHD
+REPO_ROOT = SCRIPT.parents[3]  # .../XCMAX
 OUT_DIR = FHD_ROOT / "baselines"
 SNAP_DIR = OUT_DIR / "snapshots"
 
@@ -47,7 +51,7 @@ def human(n: int | None) -> str:
         return "—"
     if n < 1024:
         return f"{n} B"
-    for unit, div in (("GB", 1024 ** 3), ("MB", MB), ("KB", 1024)):
+    for unit, div in (("GB", 1024**3), ("MB", MB), ("KB", 1024)):
         if n >= div:
             return f"{n / div:.2f} {unit}"
     return f"{n} B"
@@ -58,13 +62,11 @@ def du_bytes(path: Path) -> int | None:
     if not path.exists():
         return None
     try:
-        out = subprocess.run(
-            ["du", "-sk", str(path)], capture_output=True, text=True, timeout=120
-        )
+        out = subprocess.run(["du", "-sk", str(path)], capture_output=True, text=True, timeout=120)
         if out.returncode == 0:
             kb = int(out.stdout.split()[0])
             return kb * 1024
-    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
         pass
     if path.is_file():
         return path.stat().st_size
@@ -92,9 +94,13 @@ def git_context() -> dict[str, str]:
             return subprocess.run(
                 ["git", *args], cwd=REPO_ROOT, capture_output=True, text=True, timeout=10
             ).stdout.strip()
-        except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
             return ""
-    return {"branch": _q(["rev-parse", "--abbrev-ref", "HEAD"]), "commit": _q(["rev-parse", "--short", "HEAD"])}
+
+    return {
+        "branch": _q(["rev-parse", "--abbrev-ref", "HEAD"]),
+        "commit": _q(["rev-parse", "--short", "HEAD"]),
+    }
 
 
 # ===========================================================================
@@ -111,7 +117,10 @@ def _desktop_package() -> dict[str, Any]:
         str(FHD_ROOT / "dist" / "**" / "*.app"),
     )
     if not app:
-        return {"status": "missing", "hint": "先构建桌面包:cd FHD/desktop && npm run pack(或 build-installer.ps1)"}
+        return {
+            "status": "missing",
+            "hint": "先构建桌面包:cd FHD/desktop && npm run pack(或 build-installer.ps1)",
+        }
 
     res = app / "Contents" / "Resources"
     frameworks = app / "Contents" / "Frameworks"
@@ -135,12 +144,16 @@ def _desktop_package() -> dict[str, Any]:
     dup = []
     emb_b, extra_b = du_bytes(embedded_fe), du_bytes(extra_fe)
     if emb_b and extra_b:
-        dup.append({
-            "name": "前端 vue-dist 被打包两次(后端内嵌 + frontend extraResource)",
-            "embedded_bytes": emb_b, "extra_bytes": extra_b,
-            "removable_bytes": extra_b, "removable_human": human(extra_b),
-            "note": "serve 路径是后端内嵌副本(loadURL→FastAPI);frontend extraResource 仅 cache-hash fallback,可去",
-        })
+        dup.append(
+            {
+                "name": "前端 vue-dist 被打包两次(后端内嵌 + frontend extraResource)",
+                "embedded_bytes": emb_b,
+                "extra_bytes": extra_b,
+                "removable_bytes": extra_b,
+                "removable_human": human(extra_b),
+                "note": "serve 路径是后端内嵌副本(loadURL→FastAPI);frontend extraResource 仅 cache-hash fallback,可去",
+            }
+        )
 
     # 后端大件 top（瘦身候选）
     top_libs = []
@@ -156,16 +169,21 @@ def _desktop_package() -> dict[str, Any]:
     removable_now = []
     mypy_b = du_bytes(internal / "mypy")
     if mypy_b:
-        removable_now.append({"name": "mypy(冻结包死代码,运行时零 import)", "bytes": mypy_b, "human": human(mypy_b)})
+        removable_now.append(
+            {"name": "mypy(冻结包死代码,运行时零 import)", "bytes": mypy_b, "human": human(mypy_b)}
+        )
     if extra_b:
-        removable_now.append({"name": "frontend 重复打包", "bytes": extra_b, "human": human(extra_b)})
+        removable_now.append(
+            {"name": "frontend 重复打包", "bytes": extra_b, "human": human(extra_b)}
+        )
 
     total = du_bytes(app) or 0
     removable_total = sum(r["bytes"] for r in removable_now)
     return {
         "status": "ok",
         "app_path": str(app.relative_to(REPO_ROOT)),
-        "total_bytes": total, "total_human": human(total),
+        "total_bytes": total,
+        "total_human": human(total),
         "components": components,
         "duplication": dup,
         "top_backend_libs": top_libs[:15],
@@ -179,7 +197,9 @@ def _desktop_package() -> dict[str, Any]:
 def _mobile_package() -> dict[str, Any]:
     apk = first_glob(
         str(REPO_ROOT / "release" / "**" / "*Android*.apk"),
-        str(FHD_ROOT / "mobile-flutter-poc" / "build" / "app" / "outputs" / "flutter-apk" / "*.apk"),
+        str(
+            FHD_ROOT / "mobile-flutter-poc" / "build" / "app" / "outputs" / "flutter-apk" / "*.apk"
+        ),
         str(REPO_ROOT / "release" / "**" / "*.apk"),
     )
     out: dict[str, Any] = {}
@@ -187,8 +207,12 @@ def _mobile_package() -> dict[str, Any]:
         return {"status": "missing", "hint": "先在 FHD/mobile-flutter-poc 运行 flutter build apk"}
     if apk:
         b = apk.stat().st_size
-        out["android_apk"] = {"path": str(apk.relative_to(REPO_ROOT)), "bytes": b, "human": human(b),
-                              "breakdown": _apk_breakdown(apk)}
+        out["android_apk"] = {
+            "path": str(apk.relative_to(REPO_ROOT)),
+            "bytes": b,
+            "human": human(b),
+            "breakdown": _apk_breakdown(apk),
+        }
     out["status"] = "ok"
     return out
 
@@ -196,16 +220,33 @@ def _mobile_package() -> dict[str, Any]:
 def _apk_breakdown(apk: Path) -> list[dict[str, Any]]:
     """APK 是 zip;按顶层目录聚合压缩后大小(dex/lib/res/assets)。"""
     import zipfile
+
     buckets: dict[str, int] = {}
     try:
         with zipfile.ZipFile(apk) as z:
             for info in z.infolist():
                 top = info.filename.split("/")[0]
-                key = top if (top.endswith(".dex") or top in {"lib", "res", "assets", "META-INF", "kotlin", "resources.arsc", "AndroidManifest.xml"}) else "other"
+                key = (
+                    top
+                    if (
+                        top.endswith(".dex")
+                        or top
+                        in {
+                            "lib",
+                            "res",
+                            "assets",
+                            "META-INF",
+                            "kotlin",
+                            "resources.arsc",
+                            "AndroidManifest.xml",
+                        }
+                    )
+                    else "other"
+                )
                 if info.filename.endswith(".dex"):
                     key = "dex"
                 buckets[key] = buckets.get(key, 0) + info.compress_size
-    except Exception as exc:  # noqa: BLE001
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
         return [{"name": "breakdown_unavailable", "error": str(exc)}]
     items = [{"name": k, "bytes": v, "human": human(v)} for k, v in buckets.items()]
     items.sort(key=lambda c: c["bytes"], reverse=True)
@@ -235,7 +276,7 @@ def measure_startup() -> dict[str, Any]:
             idx = text.rfind(marker)
             if idx == -1:
                 continue
-            tail = text[idx + len(marker):]
+            tail = text[idx + len(marker) :]
             brace = tail.find("{")
             if brace == -1:
                 continue
@@ -251,19 +292,25 @@ def measure_startup() -> dict[str, Any]:
             if end == -1:
                 continue
             try:
-                latest = {"source": str(Path(path).relative_to(REPO_ROOT)), "marks": json.loads(tail[brace:end])}
+                latest = {
+                    "source": str(Path(path).relative_to(REPO_ROOT)),
+                    "marks": json.loads(tail[brace:end]),
+                }
             except json.JSONDecodeError:
                 continue
     desktop: dict[str, Any]
     if latest:
         m = latest["marks"]
         desktop = {
-            "status": "ok", "source": latest["source"], "marks": m,
+            "status": "ok",
+            "source": latest["source"],
+            "marks": m,
             "note": "marks 含 backendSpawnMs/tcp5000Ms/desktopStatusMs:首屏当前阻塞在后端健康检查(tcp5000Ms),即'分钟级'根因",
         }
     else:
         desktop = {
-            "status": "no_run_captured", "logs_scanned": scanned,
+            "status": "no_run_captured",
+            "logs_scanned": scanned,
             "hint": "从终端启动一次桌面 app 复现埋点:cd FHD/desktop && npm run dev,关注 stdout 的 [xcagi-desktop] startup {...}",
         }
     mobile = {
@@ -279,8 +326,10 @@ def measure_startup() -> dict[str, Any]:
 # ===========================================================================
 def measure_update_size() -> dict[str, Any]:
     rel = FHD_ROOT / "release"
-    zips = sorted(glob.glob(str(rel / "**" / "*-mac-*.zip"), recursive=True)
-                  + glob.glob(str(rel / "**" / "*Setup*.exe"), recursive=True))
+    zips = sorted(
+        glob.glob(str(rel / "**" / "*-mac-*.zip"), recursive=True)
+        + glob.glob(str(rel / "**" / "*Setup*.exe"), recursive=True)
+    )
     if not zips:
         return {"status": "missing", "hint": "先构建桌面包,产物含 *.zip/*.exe + *.blockmap"}
     artifacts = []
@@ -292,21 +341,27 @@ def measure_update_size() -> dict[str, Any]:
         seen_names.add(p.name)
         bm = Path(str(p) + ".blockmap")
         full = p.stat().st_size
-        artifacts.append({
-            "file": p.name,
-            "full_bytes": full, "full_human": human(full),
-            "blockmap_present": bm.exists(),
-            "blockmap_bytes": bm.stat().st_size if bm.exists() else None,
-            "differential_supported": bm.exists(),
-        })
+        artifacts.append(
+            {
+                "file": p.name,
+                "full_bytes": full,
+                "full_human": human(full),
+                "blockmap_present": bm.exists(),
+                "blockmap_bytes": bm.stat().st_size if bm.exists() else None,
+                "differential_supported": bm.exists(),
+            }
+        )
     any_bm = any(a["blockmap_present"] for a in artifacts)
     return {
         "status": "ok",
         "artifacts": artifacts,
         "differential_ready": any_bm,
-        "note": ("blockmap 已生成 → electron-updater 在生成版 provider 下会自动只下增量块;"
-                 "下一步应实测一次跨版本更新的真实下载字节(本工具暂以全量为基线)。"
-                 if any_bm else "未发现 blockmap,当前只能全量更新。"),
+        "note": (
+            "blockmap 已生成 → electron-updater 在生成版 provider 下会自动只下增量块;"
+            "下一步应实测一次跨版本更新的真实下载字节(本工具暂以全量为基线)。"
+            if any_bm
+            else "未发现 blockmap,当前只能全量更新。"
+        ),
         "measured_differential_bytes": None,  # 待跨版本实测填入
     }
 
@@ -317,7 +372,12 @@ def measure_update_size() -> dict[str, Any]:
 def measure_runtime_perf() -> dict[str, Any]:
     dist = FHD_ROOT / "templates" / "vue-dist"
     if not dist.is_dir():
-        return {"frontend_bundle": {"status": "missing", "hint": "先构建前端:cd FHD/frontend && npm run build"}}
+        return {
+            "frontend_bundle": {
+                "status": "missing",
+                "hint": "先构建前端:cd FHD/frontend && npm run build",
+            }
+        }
 
     js_dir = dist / "assets" / "js"
     css_dir = dist / "assets" / "css"
@@ -333,11 +393,19 @@ def measure_runtime_perf() -> dict[str, Any]:
             r = f.stat().st_size
             try:
                 g = len(gzip.compress(f.read_bytes(), 6))
-            except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
+            except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
                 g = 0
             raw += r
             gz += g
-            items.append({"name": f.name, "bytes": r, "gzip_bytes": g, "human": human(r), "gzip_human": human(g)})
+            items.append(
+                {
+                    "name": f.name,
+                    "bytes": r,
+                    "gzip_bytes": g,
+                    "human": human(r),
+                    "gzip_human": human(g),
+                }
+            )
         items.sort(key=lambda c: c["bytes"], reverse=True)
         return raw, gz, items
 
@@ -365,16 +433,27 @@ def measure_runtime_perf() -> dict[str, Any]:
             heavy.append({"name": label, "bytes": b, "human": human(b)})
     for c in js_items[:6]:
         if any(tok in c["name"] for tok in ("transformers", "xlsx", "echarts", "mermaid")):
-            heavy.append({"name": f"懒加载大块 {c['name']}(随包发布但多数用户不触发)", "bytes": c["bytes"], "human": human(c["bytes"])})
+            heavy.append(
+                {
+                    "name": f"懒加载大块 {c['name']}(随包发布但多数用户不触发)",
+                    "bytes": c["bytes"],
+                    "human": human(c["bytes"]),
+                }
+            )
 
     total = du_bytes(dist) or 0
     return {
         "frontend_bundle": {
             "status": "ok",
             "dist_path": str(dist.relative_to(REPO_ROOT)),
-            "total_bytes": total, "total_human": human(total),
-            "js_total_bytes": js_raw, "js_total_human": human(js_raw), "js_gzip_human": human(js_gz),
-            "css_total_bytes": css_raw, "css_total_human": human(css_raw), "css_gzip_human": human(css_gz),
+            "total_bytes": total,
+            "total_human": human(total),
+            "js_total_bytes": js_raw,
+            "js_total_human": human(js_raw),
+            "js_gzip_human": human(js_gz),
+            "css_total_bytes": css_raw,
+            "css_total_human": human(css_raw),
+            "css_gzip_human": human(css_gz),
             "chunk_count": len(js_items),
             "entry_chunk": entry,
             "top_chunks": js_items[:8],
@@ -403,7 +482,9 @@ def _headline(snap: dict[str, Any]) -> dict[str, int | None]:
         "desktop_app_bytes": pkg.get("desktop", {}).get("total_bytes"),
         "desktop_removable_now_bytes": pkg.get("desktop", {}).get("removable_now_bytes"),
         "mobile_apk_bytes": pkg.get("mobile", {}).get("android_apk", {}).get("bytes"),
-        "frontend_dist_bytes": b.get("runtime_perf", {}).get("frontend_bundle", {}).get("total_bytes"),
+        "frontend_dist_bytes": b.get("runtime_perf", {})
+        .get("frontend_bundle", {})
+        .get("total_bytes"),
         "frontend_js_gzip": None,
     }
 
@@ -422,7 +503,9 @@ def render_markdown(snap: dict[str, Any], prev: dict[str, Any] | None) -> str:
     L: list[str] = []
     L.append("# 四套基线 — 真实测量报告\n")
     L.append(f"- 采集时间(UTC):`{snap['captured_at']}`")
-    L.append(f"- Git:`{snap['git']['branch']}@{snap['git']['commit']}`  ·  平台:`{snap['host']['platform']}/{snap['host']['arch']}`")
+    L.append(
+        f"- Git:`{snap['git']['branch']}@{snap['git']['commit']}`  ·  平台:`{snap['host']['platform']}/{snap['host']['arch']}`"
+    )
     L.append("- 由 `FHD/scripts/baseline/measure.py` 自动生成;数字均来自真实产物,非估算。\n")
 
     cur_h = _headline(snap)
@@ -430,10 +513,16 @@ def render_markdown(snap: dict[str, Any], prev: dict[str, Any] | None) -> str:
     L.append("## 速览(对比上次快照)\n")
     L.append("| 指标 | 当前 | 环比 |")
     L.append("|---|---:|---|")
-    L.append(f"| 桌面 .app 体积 | {human(cur_h['desktop_app_bytes'])} |{_delta(cur_h['desktop_app_bytes'], prev_h.get('desktop_app_bytes'))} |")
+    L.append(
+        f"| 桌面 .app 体积 | {human(cur_h['desktop_app_bytes'])} |{_delta(cur_h['desktop_app_bytes'], prev_h.get('desktop_app_bytes'))} |"
+    )
     L.append(f"| 桌面可立即削减(P0) | {human(cur_h['desktop_removable_now_bytes'])} | — |")
-    L.append(f"| 手机 APK 体积 | {human(cur_h['mobile_apk_bytes'])} |{_delta(cur_h['mobile_apk_bytes'], prev_h.get('mobile_apk_bytes'))} |")
-    L.append(f"| 前端 vue-dist 体积 | {human(cur_h['frontend_dist_bytes'])} |{_delta(cur_h['frontend_dist_bytes'], prev_h.get('frontend_dist_bytes'))} |")
+    L.append(
+        f"| 手机 APK 体积 | {human(cur_h['mobile_apk_bytes'])} |{_delta(cur_h['mobile_apk_bytes'], prev_h.get('mobile_apk_bytes'))} |"
+    )
+    L.append(
+        f"| 前端 vue-dist 体积 | {human(cur_h['frontend_dist_bytes'])} |{_delta(cur_h['frontend_dist_bytes'], prev_h.get('frontend_dist_bytes'))} |"
+    )
     L.append("")
 
     b = snap["baselines"]
@@ -454,15 +543,20 @@ def render_markdown(snap: dict[str, Any], prev: dict[str, Any] | None) -> str:
                 L.append(f"- {dup['name']} → 可去 **{dup['removable_human']}**({dup['note']})")
             L.append("")
         if d.get("removable_now"):
-            L.append(f"**P0 可立即削减合计 {human(d['removable_now_bytes'])} → 预计降到 {d['projected_after_p0_quickwins_human']}:**")
+            L.append(
+                f"**P0 可立即削减合计 {human(d['removable_now_bytes'])} → 预计降到 {d['projected_after_p0_quickwins_human']}:**"
+            )
             for r in d["removable_now"]:
                 L.append(f"- {r['name']}:{r['human']}")
             L.append("")
         if d.get("top_backend_libs"):
-            L.append("**后端大件(P1/P2 瘦身候选):** " + ", ".join(f"{c['name']} {c['human']}" for c in d["top_backend_libs"][:10]))
+            L.append(
+                "**后端大件(P1/P2 瘦身候选):** "
+                + ", ".join(f"{c['name']} {c['human']}" for c in d["top_backend_libs"][:10])
+            )
             L.append("")
     else:
-        L.append(f"_产物缺失:{d.get('hint','')}_\n")
+        L.append(f"_产物缺失:{d.get('hint', '')}_\n")
 
     m = b.get("package_size", {}).get("mobile", {})
     L.append("## ① 包体积基线 — 手机\n")
@@ -471,12 +565,15 @@ def render_markdown(snap: dict[str, Any], prev: dict[str, Any] | None) -> str:
             a = m["android_apk"]
             L.append(f"**Android APK** `{a['path']}` = **{a['human']}**")
             if a.get("breakdown"):
-                L.append("  · " + ", ".join(f"{x['name']} {x['human']}" for x in a["breakdown"] if "human" in x))
+                L.append(
+                    "  · "
+                    + ", ".join(f"{x['name']} {x['human']}" for x in a["breakdown"] if "human" in x)
+                )
         if "harmony_hap" in m:
             L.append(f"\n**Harmony HAP** = {m['harmony_hap']['human']}")
         L.append("")
     else:
-        L.append(f"_产物缺失:{m.get('hint','')}_\n")
+        L.append(f"_产物缺失:{m.get('hint', '')}_\n")
 
     # ② 启动
     s = b.get("startup", {})
@@ -486,8 +583,8 @@ def render_markdown(snap: dict[str, Any], prev: dict[str, Any] | None) -> str:
         L.append(f"桌面(来源 `{sd['source']}`):`{json.dumps(sd['marks'], ensure_ascii=False)}`")
         L.append(f"> {sd['note']}")
     else:
-        L.append(f"桌面:_{sd.get('status')}_ — {sd.get('hint','')}")
-    L.append(f"\n手机:{s.get('mobile', {}).get('android_cold_start','')}")
+        L.append(f"桌面:_{sd.get('status')}_ — {sd.get('hint', '')}")
+    L.append(f"\n手机:{s.get('mobile', {}).get('android_cold_start', '')}")
     L.append("")
 
     # ③ 更新包
@@ -497,20 +594,26 @@ def render_markdown(snap: dict[str, Any], prev: dict[str, Any] | None) -> str:
         L.append("| 产物 | 全量 | blockmap | 支持增量 |")
         L.append("|---|---:|---:|:--:|")
         for a in u["artifacts"]:
-            L.append(f"| {a['file']} | {a['full_human']} | {human(a['blockmap_bytes'])} | {'✅' if a['differential_supported'] else '❌'} |")
+            L.append(
+                f"| {a['file']} | {a['full_human']} | {human(a['blockmap_bytes'])} | {'✅' if a['differential_supported'] else '❌'} |"
+            )
         L.append(f"\n> {u['note']}")
     else:
-        L.append(f"_产物缺失:{u.get('hint','')}_")
+        L.append(f"_产物缺失:{u.get('hint', '')}_")
     L.append("")
 
     # ④ 运行时
     fb = b.get("runtime_perf", {}).get("frontend_bundle", {})
     L.append("## ④ 运行时性能基线 — 前端 bundle\n")
     if fb.get("status") == "ok":
-        L.append(f"**{fb['dist_path']}** 总 **{fb['total_human']}** · JS {fb['js_total_human']}(gzip {fb['js_gzip_human']}) · CSS {fb['css_total_human']}(gzip {fb['css_gzip_human']}) · {fb['chunk_count']} 个 JS chunk")
+        L.append(
+            f"**{fb['dist_path']}** 总 **{fb['total_human']}** · JS {fb['js_total_human']}(gzip {fb['js_gzip_human']}) · CSS {fb['css_total_human']}(gzip {fb['css_gzip_human']}) · {fb['chunk_count']} 个 JS chunk"
+        )
         if fb.get("entry_chunk"):
             e = fb["entry_chunk"]
-            L.append(f"\n入口 chunk(启动关键路径):`{e['name']}` {e['human']}(gzip {e['gzip_human']})")
+            L.append(
+                f"\n入口 chunk(启动关键路径):`{e['name']}` {e['human']}(gzip {e['gzip_human']})"
+            )
         L.append("\n**最大 chunk:**")
         for c in fb["top_chunks"][:6]:
             L.append(f"- {c['name']}:{c['human']}(gzip {c['gzip_human']})")
@@ -520,7 +623,7 @@ def render_markdown(snap: dict[str, Any], prev: dict[str, Any] | None) -> str:
                 L.append(f"- {h['name']}:{h['human']}")
         L.append(f"\n> {fb['note']}")
     else:
-        L.append(f"_产物缺失:{fb.get('hint','')}_")
+        L.append(f"_产物缺失:{fb.get('hint', '')}_")
     L.append("")
     return "\n".join(L) + "\n"
 
@@ -538,7 +641,10 @@ def main() -> int:
         "schema_version": 1,
         "captured_at": now,
         "git": git_context(),
-        "host": {"platform": sys.platform, "arch": os.uname().machine if hasattr(os, "uname") else "unknown"},
+        "host": {
+            "platform": sys.platform,
+            "arch": os.uname().machine if hasattr(os, "uname") else "unknown",
+        },
         "baselines": baselines,
     }
 
@@ -547,10 +653,14 @@ def main() -> int:
     if latest_json.exists():
         try:
             prev = json.loads(latest_json.read_text())
-        except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except BOUNDARY_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
             prev = None
 
-    md = render_markdown(snap, prev) if not args.only else json.dumps(snap, ensure_ascii=False, indent=2)
+    md = (
+        render_markdown(snap, prev)
+        if not args.only
+        else json.dumps(snap, ensure_ascii=False, indent=2)
+    )
     print(md)
 
     if not args.no_write:

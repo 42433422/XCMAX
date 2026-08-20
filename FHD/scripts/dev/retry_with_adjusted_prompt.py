@@ -3,6 +3,7 @@
 
 3 次都败 → 写 ledger final_status=needs_human。
 """
+
 from __future__ import annotations
 
 import sys
@@ -55,27 +56,36 @@ def run_with_retries(
         result = action(current_prompt)
         is_failure, reason = failure_checker(result)
         if not is_failure:
-            return {"success": True, "result": result, "attempts": attempt, "failure_reasons": failure_reasons}
+            return {
+                "success": True,
+                "result": result,
+                "attempts": attempt,
+                "failure_reasons": failure_reasons,
+            }
 
         if reason:
             failure_reasons.append(reason)
-        append_event({
+        append_event(
+            {
+                "event_type": "implement_failed",
+                "triggered_by": (proposal or {}).get("triggered_by"),
+                "llm_proposal": proposal,
+                "retry_count": attempt,
+                "failure_reason": reason or "unknown",
+            }
+        )
+
+    # 全部失败 → 转 needs_human
+    append_event(
+        {
             "event_type": "implement_failed",
             "triggered_by": (proposal or {}).get("triggered_by"),
             "llm_proposal": proposal,
-            "retry_count": attempt,
-            "failure_reason": reason or "unknown",
-        })
-
-    # 全部失败 → 转 needs_human
-    append_event({
-        "event_type": "implement_failed",
-        "triggered_by": (proposal or {}).get("triggered_by"),
-        "llm_proposal": proposal,
-        "final_status": "needs_human",
-        "retry_count": MAX_RETRIES,
-        "failure_reasons": failure_reasons,
-    })
+            "final_status": "needs_human",
+            "retry_count": MAX_RETRIES,
+            "failure_reasons": failure_reasons,
+        }
+    )
     return {
         "success": False,
         "attempts": MAX_RETRIES,

@@ -69,7 +69,7 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
     if (linkedExcelSheet.value?.sheet_name) {
       contextPayload.excel_analysis_selected_sheet = {
         sheet_name: linkedExcelSheet.value.sheet_name,
-        sheet_index: linkedExcelSheet.value.sheet_index
+        sheet_index: linkedExcelSheet.value.sheet_index,
       }
       contextPayload.preferred_sheet_name = linkedExcelSheet.value.sheet_name
       contextPayload.preferred_sheet_index = linkedExcelSheet.value.sheet_index
@@ -83,10 +83,7 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
     return true
   }
 
-  function consumeMultimodalIntoPlannerContext(
-    contextPayload: Record<string, unknown>,
-    contextParts: string[]
-  ) {
+  function consumeMultimodalIntoPlannerContext(contextPayload: Record<string, unknown>, contextParts: string[]) {
     const rows = multimodalStaging.value
     if (!rows.length) return
     contextPayload.multimodal_attachments = rows.map((r) => ({ ...r }))
@@ -110,10 +107,9 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
     multimodalStaging.value = [...multimodalStaging.value, ...res.rows].slice(-6)
     await addAndSaveMessage(
       `[附件] 已加入 ${res.rows.length} 个文件（${res.rows.map((r) => r.filename).join('、')}），发送下一条消息时将一并提交给模型。`,
-      'ai'
+      'ai',
     )
   }
-
 
   async function bindExcelSheetToChat(sheet: LinkedExcelSheet): Promise<void> {
     const name = String(sheet?.sheet_name || '').trim()
@@ -122,20 +118,24 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
     linkedExcelAllSheets.value = false
     linkedExcelSheet.value = { sheet_name: name, sheet_index: idx }
     const excelCtx = resolveExcelAnalysisContextForRequest()
-    window.dispatchEvent(new CustomEvent('xcagi:excel-sheet-context', {
-      detail: {
-        select_all_sheets: false,
-        selected_sheet: linkedExcelSheet.value,
-        excel_analysis: excelCtx
-      }
-    }))
-    window.dispatchEvent(new CustomEvent('xcagi:open-assistant-float', {
-      detail: {
-        feature: 'assistant',
-        forceOpen: true,
-        task: true
-      }
-    }))
+    window.dispatchEvent(
+      new CustomEvent('xcagi:excel-sheet-context', {
+        detail: {
+          select_all_sheets: false,
+          selected_sheet: linkedExcelSheet.value,
+          excel_analysis: excelCtx,
+        },
+      }),
+    )
+    window.dispatchEvent(
+      new CustomEvent('xcagi:open-assistant-float', {
+        detail: {
+          feature: 'assistant',
+          forceOpen: true,
+          task: true,
+        },
+      }),
+    )
     // 仅更新上下文，不插入聊天提示，避免打断会话阅读。
   }
 
@@ -146,21 +146,25 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
     if (!allSheets.length) return
     linkedExcelAllSheets.value = true
     linkedExcelSheet.value = allSheets[0]
-    window.dispatchEvent(new CustomEvent('xcagi:excel-sheet-context', {
-      detail: {
-        selected_sheet: linkedExcelSheet.value,
-        select_all_sheets: true,
-        selected_sheets: allSheets,
-        excel_analysis: excelCtx
-      }
-    }))
-    window.dispatchEvent(new CustomEvent('xcagi:open-assistant-float', {
-      detail: {
-        feature: 'assistant',
-        forceOpen: true,
-        task: true
-      }
-    }))
+    window.dispatchEvent(
+      new CustomEvent('xcagi:excel-sheet-context', {
+        detail: {
+          selected_sheet: linkedExcelSheet.value,
+          select_all_sheets: true,
+          selected_sheets: allSheets,
+          excel_analysis: excelCtx,
+        },
+      }),
+    )
+    window.dispatchEvent(
+      new CustomEvent('xcagi:open-assistant-float', {
+        detail: {
+          feature: 'assistant',
+          forceOpen: true,
+          task: true,
+        },
+      }),
+    )
   }
 
   return {
@@ -176,7 +180,6 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
     onMultimodalFileChange,
     bindExcelSheetToChat,
     bindAllExcelSheetsToChat,
-    persistExcelAnalysisContextForSession: (sid: string, ctx: Record<string, unknown> | null) =>
-      persistExcelAnalysisContext(sid, ctx),
+    persistExcelAnalysisContextForSession: (sid: string, ctx: Record<string, unknown> | null) => persistExcelAnalysisContext(sid, ctx),
   }
 }

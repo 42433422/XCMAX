@@ -63,12 +63,7 @@ export function usePrintService() {
     }
   }
 
-  async function executePrintTask(
-    labelPaths: string[],
-    filePath: string,
-    orderId?: number,
-    _purchaseUnit?: string
-  ): Promise<PrintSummary> {
+  async function executePrintTask(labelPaths: string[], filePath: string, orderId?: number, _purchaseUnit?: string): Promise<PrintSummary> {
     isPrinting.value = true
 
     const summary: PrintSummary = {
@@ -114,19 +109,13 @@ export function usePrintService() {
     const shipmentOk = !filePath || (summary.shipmentPrinted && summary.shipmentMarked)
     const labelsOk = labelPaths.length === 0 || summary.labelFailed === 0
     summary.success = labelsOk && shipmentOk
-    summary.message =
-      summary.logs.join('；') || (summary.success ? '打印完成' : '打印未完全成功')
+    summary.message = summary.logs.join('；') || (summary.success ? '打印完成' : '打印未完全成功')
 
     isPrinting.value = false
     return summary
   }
 
-  function buildPrintSummaryMessage(
-    summary: PrintSummary,
-    labelCount: number,
-    filePath?: string,
-    _purchaseUnit?: string
-  ): string {
+  function buildPrintSummaryMessage(summary: PrintSummary, labelCount: number, filePath?: string, _purchaseUnit?: string): string {
     const parts = ['打印执行完成']
 
     parts.push(`标签：${summary.labelSuccess}/${labelCount || 0} 成功`)
@@ -149,6 +138,6 @@ export function usePrintService() {
     printDocument,
     markAsPrinted,
     executePrintTask,
-    buildPrintSummaryMessage
+    buildPrintSummaryMessage,
   }
 }

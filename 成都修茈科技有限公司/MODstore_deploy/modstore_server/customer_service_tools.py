@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """受控 AI 客服动作工具层。
 
 这里不让模型直接碰业务表；编排器只产生标准化 action，再由本模块做权限、
@@ -7,7 +8,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Dict, Optional
 
 from sqlalchemy.orm import Session
@@ -22,6 +23,7 @@ from modstore_server.models_cs import (
     CustomerServiceIntegration,
 )
 from modstore_server.openapi_connector_runtime import call_generated_operation
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 from modstore_server.workflow_engine import workflow_engine
 
 
@@ -72,7 +74,7 @@ def enqueue_customer_service_event(
             payload,
             source="modstore-customer-service",
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         # 事件系统不能阻断客服主交易，审计表仍保留事实。
         audit(
             db,
@@ -141,17 +143,20 @@ def execute_action(db: Session, action: CustomerServiceAction, user: User) -> Cu
         action.result_json = json_dumps(
             {"ok": False, "message": "拒绝执行：客服通道禁止提权/开通管理员"}
         )
-        action.updated_at = datetime.now(timezone.utc)
+        action.updated_at = datetime.now(UTC)
         audit(
             db,
             event_type="action_forbidden",
             ticket_id=action.ticket_id,
             actor=user,
-            detail={"action_type": action.action_type, "reason": "privilege_escalation"},
+            detail={
+                "action_type": action.action_type,
+                "reason": "privilege_escalation",
+            },
         )
         return action
     action.status = "running"
-    action.updated_at = datetime.now(timezone.utc)
+    action.updated_at = datetime.now(UTC)
     request = json_loads(action.request_json, {})
     try:
         if action.action_type == "refund.apply":
@@ -171,11 +176,11 @@ def execute_action(db: Session, action: CustomerServiceAction, user: User) -> Cu
         action.status = "completed" if result.get("ok") else "failed"
         action.result_json = json_dumps(result)
         action.error = "" if result.get("ok") else str(result.get("message") or "动作执行失败")
-    except Exception as exc:  # noqa: BLE001 - 动作失败需写审计，不向外抛破坏会话
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001 - 动作失败需写审计，不向外抛破坏会话
         action.status = "failed"
         action.error = str(exc)
         action.result_json = json_dumps({"ok": False, "message": str(exc)})
-    action.updated_at = datetime.now(timezone.utc)
+    action.updated_at = datetime.now(UTC)
     audit(
         db,
         event_type="action_executed",
@@ -326,7 +331,11 @@ def _mark_catalog_for_review(
         return {"ok": False, "message": "商品不存在"}
     item.compliance_status = str(request.get("compliance_status") or "reviewing")[:32]
     item.delist_reason = str(request.get("reason") or item.delist_reason or "")[:2000]
-    return {"ok": True, "catalog_id": item.id, "compliance_status": item.compliance_status}
+    return {
+        "ok": True,
+        "catalog_id": item.id,
+        "compliance_status": item.compliance_status,
+    }
 
 
 def _execute_workflow(

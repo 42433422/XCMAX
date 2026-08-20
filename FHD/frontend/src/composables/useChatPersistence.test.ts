@@ -20,10 +20,7 @@ describe('useChatPersistence', () => {
     })
 
     it('returns parsed context from sessionStorage', () => {
-      sessionStorage.setItem(
-        EXCEL_ANALYSIS_STORAGE_PREFIX + 'test',
-        JSON.stringify({ file_path: '/test.xlsx' }),
-      )
+      sessionStorage.setItem(EXCEL_ANALYSIS_STORAGE_PREFIX + 'test', JSON.stringify({ file_path: '/test.xlsx' }))
       const result = readPersistedExcelAnalysisContext('test')
       expect(result).toEqual({ file_path: '/test.xlsx' })
     })
@@ -143,7 +140,12 @@ describe('useChatPersistence', () => {
       const ctx = {
         preview_data: {
           all_sheets: [
-            { sheet_name: 'Sheet1', sheet_index: 1, fields: [{ label: 'Name' }], sample_rows: [{ Name: 'Test' }] },
+            {
+              sheet_name: 'Sheet1',
+              sheet_index: 1,
+              fields: [{ label: 'Name' }],
+              sample_rows: [{ Name: 'Test' }],
+            },
           ],
         },
       }

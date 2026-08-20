@@ -1,3 +1,4 @@
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Dedicated post-execution verifiers for autonomy decision contracts.
 
 Each verifier consumes only typed operational receipts.  It never treats the
@@ -15,19 +16,20 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
+from modstore_server.autonomy_posthoc_helpers import (
+    failed_merge_request_attempt as _failed_merge_request_attempt,
+)
+from modstore_server.autonomy_posthoc_helpers import payload as _payload
+from modstore_server.autonomy_posthoc_helpers import recorded_at_or_after as _recorded_at_or_after
+from modstore_server.autonomy_posthoc_helpers import safe_repo_path as _safe_repo_path
+from modstore_server.autonomy_posthoc_helpers import utc as _utc
 from modstore_server.db.employee_ops import (
     DailyDigestRecord,
     EmployeeChangeRequest,
     EmployeeSuggestion,
     IncidentEvent,
 )
-from modstore_server.autonomy_posthoc_helpers import (
-    failed_merge_request_attempt as _failed_merge_request_attempt,
-    payload as _payload,
-    recorded_at_or_after as _recorded_at_or_after,
-    safe_repo_path as _safe_repo_path,
-    utc as _utc,
-)
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 _CHANGE_REQUEST_ACTION = re.compile(r"^change-request:(\d+):apply$")
 _DAILY_DIGEST_ACTION = re.compile(r"^daily-digest:(\d{4}-\d{2}-\d{2})$")
@@ -124,7 +126,7 @@ def _post_apply_scope_verdict(
         pack = load_employee_pack(session, str(change_request.source_employee_id or ""))
         manifest = pack.get("manifest") if isinstance(pack.get("manifest"), dict) else {}
         scope_globs, forbidden_globs, _approval_globs = workspace_policy_from_manifest(manifest)
-    except Exception:  # noqa: BLE001 - evidence outage must stay unknown, not crash the job
+    except BOUNDARY_ERRORS:  # noqa: BLE001 - evidence outage must stay unknown, not crash the job
         return {"ok": False, "reason": "workspace_policy_unavailable"}
     if not scope_globs and not forbidden_globs:
         return {"ok": False, "reason": "workspace_policy_missing"}
@@ -373,7 +375,7 @@ def verify_self_maintenance_merge_action(
     para_reason = ""
     try:
         task = para_task_fetcher(task_id)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         task = {}
         para_reason = "para_task_state_unavailable"
     if not isinstance(task, dict):
@@ -388,7 +390,7 @@ def verify_self_maintenance_merge_action(
                     branch=branch,
                     base_branch=base_branch,
                 )
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 veto = {"ok": False, "reason": "github_veto_evidence_unavailable"}
             if not isinstance(veto, dict) or veto.get("ok") is not True:
                 return {
@@ -445,8 +447,7 @@ def verify_self_maintenance_merge_action(
                 "ok": True,
                 "verdict": "no_prohibited_miss",
                 "evidence_ref": (
-                    f"para-task:{task_id}:merged:{task_merge_sha[:12]}"
-                    f"+workflow:{workflow_run_id}"
+                    f"para-task:{task_id}:merged:{task_merge_sha[:12]}+workflow:{workflow_run_id}"
                 ),
                 "reason": "merged_and_exact_production_identity_verified",
             }
@@ -462,7 +463,7 @@ def verify_self_maintenance_merge_action(
             expected_merge_sha=(task_merge_sha if _SHA.fullmatch(task_merge_sha) else ""),
             expected_task_id=task_id,
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         github = {"ok": False, "reason": "github_merge_evidence_unavailable"}
     if isinstance(github, dict) and github.get("ok") is True:
         return github

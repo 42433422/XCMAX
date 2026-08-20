@@ -30,8 +30,20 @@
 ## 可导入入口（本任务验收）
 
 ```python
-from langgraph.prebuilt import ToolNode, ToolRuntime, tools_condition, create_react_agent, ValidationNode
-from langgraph.prebuilt.interrupt import HumanInterrupt, HumanResponse, ActionRequest, HumanInterruptConfig
+from langgraph.prebuilt import (
+    ToolNode,
+    ToolRuntime,
+    tools_condition,
+    create_react_agent,
+    ValidationNode,
+)
+from langgraph.prebuilt.interrupt import (
+    HumanInterrupt,
+    HumanResponse,
+    ActionRequest,
+    HumanInterruptConfig,
+)
+
 # 通用中断/恢复原语（langgraph 核心 langgraph.types 提供）
 from langgraph.types import interrupt, Command
 ```

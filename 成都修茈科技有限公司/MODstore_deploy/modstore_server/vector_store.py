@@ -12,6 +12,7 @@ import threading
 from typing import Any, Dict, List, Optional
 
 from modstore_server import vector_engine
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 _lock = threading.Lock()
 
@@ -30,7 +31,7 @@ def _collection():
     client = get_vector_client()
     try:
         return client.get_collection(name="catalog_embeddings")
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         return client.create_collection(
             name="catalog_embeddings",
             metadata={"hnsw:space": "cosine"},
@@ -136,4 +137,4 @@ def count_embeddings() -> int:
     """返回集合中的向量总数。"""
     with _lock:
         col = _collection()
-        return col.count()
+        return int(col.count())

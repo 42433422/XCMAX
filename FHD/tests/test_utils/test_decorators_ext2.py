@@ -48,7 +48,9 @@ class TestGetOptimizerComponents:
         fake_optimizer.async_task_manager = "async_obj"
         fake_module = MagicMock()
         fake_module.get_performance_optimizer.return_value = fake_optimizer
-        with patch.dict("sys.modules", {"app.utils.performance.performance_initializer": fake_module}):
+        with patch.dict(
+            "sys.modules", {"app.utils.performance.performance_initializer": fake_module}
+        ):
             out = dec.get_optimizer_components()
         assert out["cache"] == "cache_obj"
         assert out["monitor"] == "monitor_obj"
@@ -63,7 +65,9 @@ class TestGetOptimizerComponents:
         fake_optimizer.async_task_manager = None
         fake_module = MagicMock()
         fake_module.get_performance_optimizer.return_value = fake_optimizer
-        with patch.dict("sys.modules", {"app.utils.performance.performance_initializer": fake_module}):
+        with patch.dict(
+            "sys.modules", {"app.utils.performance.performance_initializer": fake_module}
+        ):
             out = dec.get_optimizer_components()
         assert out["cache"] == "cache_obj"
         assert out["monitor"] is None
@@ -274,7 +278,9 @@ class TestMonitored:
             request_deduplicator=None,
             async_task_manager=None,
         )
-        with patch.dict("sys.modules", {"app.utils.performance.performance_initializer": fake_module}):
+        with patch.dict(
+            "sys.modules", {"app.utils.performance.performance_initializer": fake_module}
+        ):
 
             @dec.monitored("my_metric")
             def fn(x):
@@ -297,7 +303,9 @@ class TestMonitored:
             request_deduplicator=None,
             async_task_manager=None,
         )
-        with patch.dict("sys.modules", {"app.utils.performance.performance_initializer": fake_module}):
+        with patch.dict(
+            "sys.modules", {"app.utils.performance.performance_initializer": fake_module}
+        ):
 
             @dec.monitored("my_metric")
             def fn():
@@ -330,7 +338,9 @@ class TestDeduplicated:
             request_deduplicator=dedup,
             async_task_manager=None,
         )
-        with patch.dict("sys.modules", {"app.utils.performance.performance_initializer": fake_module}):
+        with patch.dict(
+            "sys.modules", {"app.utils.performance.performance_initializer": fake_module}
+        ):
 
             @dec.deduplicated(window_seconds=30)
             def fn(x):
@@ -349,7 +359,9 @@ class TestDeduplicated:
             request_deduplicator=dedup,
             async_task_manager=None,
         )
-        with patch.dict("sys.modules", {"app.utils.performance.performance_initializer": fake_module}):
+        with patch.dict(
+            "sys.modules", {"app.utils.performance.performance_initializer": fake_module}
+        ):
 
             @dec.deduplicated(window_seconds=30)
             def fn(x):
@@ -408,7 +420,9 @@ class TestAsyncTask:
             request_deduplicator=None,
             async_task_manager=async_mgr,
         )
-        with patch.dict("sys.modules", {"app.utils.performance.performance_initializer": fake_module}):
+        with patch.dict(
+            "sys.modules", {"app.utils.performance.performance_initializer": fake_module}
+        ):
 
             @dec.async_task()
             def fn(x):
@@ -431,7 +445,9 @@ class TestAsyncTask:
             request_deduplicator=None,
             async_task_manager=async_mgr,
         )
-        with patch.dict("sys.modules", {"app.utils.performance.performance_initializer": fake_module}):
+        with patch.dict(
+            "sys.modules", {"app.utils.performance.performance_initializer": fake_module}
+        ):
 
             @dec.async_task()
             def fn(x):
@@ -456,7 +472,9 @@ class TestAsyncTask:
             request_deduplicator=None,
             async_task_manager=async_mgr,
         )
-        with patch.dict("sys.modules", {"app.utils.performance.performance_initializer": fake_module}):
+        with patch.dict(
+            "sys.modules", {"app.utils.performance.performance_initializer": fake_module}
+        ):
 
             @dec.async_task()
             def fn(x):
@@ -477,7 +495,9 @@ class TestAsyncTask:
             request_deduplicator=None,
             async_task_manager=async_mgr,
         )
-        with patch.dict("sys.modules", {"app.utils.performance.performance_initializer": fake_module}):
+        with patch.dict(
+            "sys.modules", {"app.utils.performance.performance_initializer": fake_module}
+        ):
 
             @dec.async_task()
             def fn(x):

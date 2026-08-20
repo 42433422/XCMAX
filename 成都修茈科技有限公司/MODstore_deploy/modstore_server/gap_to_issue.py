@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any, Dict
 
 from modstore_server.evolution_ledger import append_event, list_events
@@ -23,13 +23,13 @@ class DuplicateProposalError(ValueError):
 
 def build_issue_body(proposal: Dict[str, Any]) -> str:
     """构造 issue body，含 LLM 提议 JSON code block。"""
-    return f"""# 自动演化提议：{proposal.get('employee_pack', {}).get('name', '<unnamed>')}
+    return f"""# 自动演化提议：{proposal.get("employee_pack", {}).get("name", "<unnamed>")}
 
-**Department**: {proposal.get('department')}
-**Triggered by**: {proposal.get('triggered_by')}
-**Signal score**: {proposal.get('signal_score')}
-**Estimated files**: {proposal.get('estimated_files')}
-**Estimated tokens**: {proposal.get('estimated_tokens')}
+**Department**: {proposal.get("department")}
+**Triggered by**: {proposal.get("triggered_by")}
+**Signal score**: {proposal.get("signal_score")}
+**Estimated files**: {proposal.get("estimated_files")}
+**Estimated tokens**: {proposal.get("estimated_tokens")}
 
 ## Employee Pack Proposal
 
@@ -39,7 +39,7 @@ def build_issue_body(proposal: Dict[str, Any]) -> str:
 
 ## Acceptance Criteria
 
-{chr(10).join('- ' + c for c in proposal.get('employee_pack', {}).get('acceptance_criteria', []))}
+{chr(10).join("- " + c for c in proposal.get("employee_pack", {}).get("acceptance_criteria", []))}
 
 ---
 
@@ -53,7 +53,7 @@ def dedupe_signal(proposal: Dict[str, Any]) -> None:
     if not proposal_id:
         return
     recent = list_events(since_days=1)
-    cutoff = datetime.now(timezone.utc) - timedelta(minutes=DEDUP_WINDOW_MINUTES)
+    cutoff = datetime.now(UTC) - timedelta(minutes=DEDUP_WINDOW_MINUTES)
     for evt in recent:
         if evt.get("event_type") != "issue_opened":
             continue

@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="attr-defined, import-not-found, no-any-return, valid-type"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -34,7 +38,7 @@ def _load_creds_from_pool() -> _facade().Optional[_facade().Dict[str, _facade().
             "source": "pool",
             "account_id": rec.get("id"),
         }
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         _facade().logger.debug("从账号池读取 QQ 凭证失败，降级到 ENV：%s", exc)
         return None
 
@@ -170,7 +174,7 @@ def _verify_inbound_for(timestamp: str, body: bytes, signature_hex: str, app_sec
         return True
     except BadSignatureError:
         return False
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return False
 
 
@@ -196,7 +200,10 @@ def _all_known_app_secrets() -> _facade().Dict[str, str]:
         with sf() as session:
             rows = (
                 session.query(AIEmployeeAccount)
-                .filter(AIEmployeeAccount.platform == "qq", AIEmployeeAccount.status == "active")
+                .filter(
+                    AIEmployeeAccount.platform == "qq",
+                    AIEmployeeAccount.status == "active",
+                )
                 .all()
             )
         for row in rows:
@@ -206,7 +213,7 @@ def _all_known_app_secrets() -> _facade().Dict[str, str]:
                 asecret = str(sec.get("app_secret") or "").strip()
                 if aid and asecret:
                     result[aid] = asecret
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         _facade().logger.debug("_all_known_app_secrets 读账号池失败: %s", exc)
     for webhook_key, spec in _facade()._SPECIFIC_WEBHOOKS.items():
         aid = str(spec.get("app_id") or "").strip()
@@ -216,7 +223,8 @@ def _all_known_app_secrets() -> _facade().Dict[str, str]:
         if secret:
             if result.get(aid) and result[aid] != secret:
                 _facade().logger.info(
-                    "QQ AppSecret 覆盖：app_id=%s 以 ENV/老员工专用解析为准（账号池值已忽略）", aid
+                    "QQ AppSecret 覆盖：app_id=%s 以 ENV/老员工专用解析为准（账号池值已忽略）",
+                    aid,
                 )
             result[aid] = secret
     return result

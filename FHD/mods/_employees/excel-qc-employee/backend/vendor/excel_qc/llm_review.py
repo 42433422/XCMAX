@@ -15,6 +15,8 @@ import json
 import re
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
+from app.mod_sdk.errors import BOUNDARY_ERRORS
+
 CallLLM = Callable[..., Awaitable[Dict[str, Any]]]
 
 _JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
@@ -70,7 +72,11 @@ def build_review_prompt(
     expected = plan.get("expected") if isinstance(plan.get("expected"), dict) else {}
     policy = (rules or {}).get("policy") if isinstance(rules, dict) else None
     det_summary = {
-        name: {"status": sec.get("status"), "stats": sec.get("stats"), "issues": sec.get("issues", [])[:4]}
+        name: {
+            "status": sec.get("status"),
+            "stats": sec.get("stats"),
+            "issues": sec.get("issues", [])[:4],
+        }
         for name, sec in deterministic_sections.items()
     }
     payload = {
@@ -91,8 +97,8 @@ def build_review_prompt(
         "你是表格交付的业务质检员。确定性检查（逐格对账/哈希/重算）已完成且不容你推翻；"
         "你只负责业务合理性审查：数值是否符合常理（如单键数值合计异常大/小、负数、单日超 24 的工时类数值）、"
         "被丢弃的记录是否可疑（键名错字/漏人）、无记录的块是否需要提醒、警告的轻重。"
-        "仅输出 JSON：{\"findings\": [{\"severity\": \"fail\"|\"warn\"|\"info\", \"detail\": str, \"evidence\": str}],"
-        " \"summary_zh\": str}。"
+        '仅输出 JSON：{"findings": [{"severity": "fail"|"warn"|"info", "detail": str, "evidence": str}],'
+        ' "summary_zh": str}。'
         "证据不足就用 info/warn，禁止编造数据；summary_zh 用两三句给业务人员讲清结论。"
     )
     return [
@@ -119,7 +125,7 @@ async def llm_semantic_review(
             temperature=0.1,
             response_format={"type": "json_object"},
         )
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         section["status"] = "warn"
         section["issues"].append(
             {"severity": "warn", "detail": f"LLM 调用异常，语义审查未完成：{exc}", "source": "llm"}
@@ -140,7 +146,11 @@ async def llm_semantic_review(
     if data is None:
         section["status"] = "warn"
         section["issues"].append(
-            {"severity": "warn", "detail": "LLM 输出无法解析为 JSON，语义审查未完成", "source": "llm"}
+            {
+                "severity": "warn",
+                "detail": "LLM 输出无法解析为 JSON，语义审查未完成",
+                "source": "llm",
+            }
         )
         return section
 

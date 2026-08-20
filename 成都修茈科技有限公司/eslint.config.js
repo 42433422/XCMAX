@@ -47,10 +47,7 @@ export const baseRules = {
   rules: {
     'no-console': ['warn', { allow: ['warn', 'error'] }],
     'no-debugger': 'error',
-    '@typescript-eslint/no-unused-vars': [
-      'warn',
-      { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
-    ],
+    '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
     '@typescript-eslint/no-explicit-any': 'off',
     // 模板里的 a && b 表达式容易误报；交给后续单独的 lint 收紧 PR 处理。
     '@typescript-eslint/no-unused-expressions': 'off',

@@ -383,9 +383,11 @@ def import_products(data: dict[str, Any] = Body(default_factory=dict)):
                 "details": result["details"],
             }
         )
-    except RECOVERABLE_ERRORS as e:
-        logger.error("导入产品数据失败：%s", e)
-        return JSONResponse({"success": False, "message": f"导入失败：{str(e)}"}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("导入产品数据失败")
+        return JSONResponse(
+            {"success": False, "message": "产品导入服务暂时不可用，请稍后重试"}, status_code=500
+        )
 
 
 @router.post("/import/customers")
@@ -433,9 +435,11 @@ def import_customers(data: dict[str, Any] = Body(default_factory=dict)):
                 "details": result["details"],
             }
         )
-    except RECOVERABLE_ERRORS as e:
-        logger.error("导入客户数据失败：%s", e)
-        return JSONResponse({"success": False, "message": f"导入失败：{str(e)}"}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("导入客户数据失败")
+        return JSONResponse(
+            {"success": False, "message": "客户导入服务暂时不可用，请稍后重试"}, status_code=500
+        )
 
 
 from app.fastapi_routes.excel_extract_shipment import (

@@ -82,7 +82,9 @@ def mock_intent_packages():
     return _empty_data()
 
 
-@_fallback.api_route("/api/{full_path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"])
+@_fallback.api_route(
+    "/api/{full_path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
+)
 async def sandbox_api_fallback(full_path: str, request: Request):
     if request.method == "OPTIONS":
         return Response(status_code=204)

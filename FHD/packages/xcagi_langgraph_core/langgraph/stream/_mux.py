@@ -5,6 +5,7 @@ import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from langgraph._internal._exception_policy import TERMINATION_ERRORS
 from langgraph.stream._types import (
     ProtocolEvent,
     StreamTransformer,
@@ -313,7 +314,7 @@ class StreamMux:
         for transformer in self._transformers:
             try:
                 transformer.finalize()
-            except BaseException as e:
+            except TERMINATION_ERRORS as e:
                 if first_error is None:
                     first_error = e
         for ch in self._channels:
@@ -337,7 +338,7 @@ class StreamMux:
         for transformer in self._transformers:
             try:
                 transformer.fail(err)
-            except BaseException:
+            except TERMINATION_ERRORS:
                 pass
         for ch in self._channels:
             if not ch._closed:
@@ -411,7 +412,7 @@ class StreamMux:
         for transformer in self._transformers:
             try:
                 await transformer.afinalize()
-            except BaseException as e:
+            except TERMINATION_ERRORS as e:
                 if first_error is None:
                     first_error = e
         for ch in self._channels:
@@ -440,7 +441,7 @@ class StreamMux:
         for transformer in self._transformers:
             try:
                 await transformer.afail(err)
-            except BaseException:
+            except TERMINATION_ERRORS:
                 pass
         for ch in self._channels:
             if not ch._closed:

@@ -1,3 +1,4 @@
+# isort: skip_file
 # ruff: noqa: E402, F401
 """Bridge MODstore duty employees to Para / DevFleet.
 
@@ -58,7 +59,6 @@ from modstore_server.para_delegate_handler_part01 import (
     _first_para_error as _first_para_error,
 )
 
-
 # ── Para 分级派工：一级=本机单设备，二级=多设备协同（与 FHD super_employee_service 同构） ──
 #
 # loops 后半经此桥接 Para/DevFleet。原先只认单个写死的 MODSTORE_PARA_DEVICE_ID，没配
@@ -74,7 +74,6 @@ from modstore_server.para_delegate_handler_part02 import (
     _fallback_order_tools as _fallback_order_tools,
     _dev_tool as _dev_tool,
 )
-
 
 _VALID_DEV_TOOLS = ("codex", "claude_code", "cursor", "trae")
 _TOOL_INPUT_ALIASES = {
@@ -136,5 +135,8 @@ from modstore_server.para_delegate_handler_part04 import (
     dispatch_para_delegate as dispatch_para_delegate,
 )
 
-
-__all__ = ["dispatch_para_delegate", "para_delegate_enabled", "para_delegate_ready_for_dispatch"]
+__all__ = [
+    "dispatch_para_delegate",
+    "para_delegate_enabled",
+    "para_delegate_ready_for_dispatch",
+]

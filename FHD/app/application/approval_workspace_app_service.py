@@ -164,4 +164,9 @@ from app.application.approval_workspace_app_service_part02 import (
 
 # ruff: noqa: F401
 
-_FINAL_STATUSES: tuple[str, ...] = (ApprovalStatus.APPROVED.value, ApprovalStatus.REJECTED.value, ApprovalStatus.WITHDRAWN.value, ApprovalStatus.CANCELLED.value)
+_FINAL_STATUSES: tuple[str, ...] = (
+    ApprovalStatus.APPROVED.value,
+    ApprovalStatus.REJECTED.value,
+    ApprovalStatus.WITHDRAWN.value,
+    ApprovalStatus.CANCELLED.value,
+)

@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -9,7 +13,7 @@ def _facade():
 
 
 def _post_para_api_once(
-    req: _facade().Dict[str, _facade().Any]
+    req: _facade().Dict[str, _facade().Any],
 ) -> _facade().Dict[str, _facade().Any]:
     base = _facade()._api_base()
     if not base:
@@ -51,7 +55,7 @@ def _post_para_api_once(
         with _facade().httpx.Client(timeout=_facade()._api_timeout(), trust_env=False) as client:
             token_info = _facade()._get_para_token(client, base)
             token = token_info["token"]
-            (tier, sel_devices, select_reason) = _facade()._resolve_dispatch_devices(
+            tier, sel_devices, select_reason = _facade()._resolve_dispatch_devices(
                 client, base, token, req
             )
             if not sel_devices:
@@ -93,7 +97,9 @@ def _post_para_api_once(
                 if not first_payload:
                     first_payload = payload
                 resp = client.post(
-                    f"{base}/api/tasks", headers={"Authorization": f"Bearer {token}"}, json=payload
+                    f"{base}/api/tasks",
+                    headers={"Authorization": f"Bearer {token}"},
+                    json=payload,
                 )
                 body = _facade()._safe_json(resp)
                 ok = (
@@ -141,7 +147,8 @@ def _post_para_api_once(
                 if not task_id:
                     task_id = str(accepted.get("task_id") or "").strip()
                 _facade()._force_single_device_attempt(
-                    {**req, "device_id": device_id, "report_only": report_only}, accepted
+                    {**req, "device_id": device_id, "report_only": report_only},
+                    accepted,
                 )
                 dispatched.append(
                     {
@@ -206,7 +213,7 @@ def _post_para_api_once(
                 "request": _facade()._public_request(req),
                 "devices": dispatched,
             }
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         return _facade()._outbox_response(
             {**req, "para_payload": first_payload},
             status="para_api_failed_outboxed",
@@ -229,7 +236,9 @@ def _coerce_bool(value: _facade().Any, default: bool) -> bool:
     return default
 
 
-def _post_webhook(req: _facade().Dict[str, _facade().Any]) -> _facade().Dict[str, _facade().Any]:
+def _post_webhook(
+    req: _facade().Dict[str, _facade().Any],
+) -> _facade().Dict[str, _facade().Any]:
     url = _facade()._webhook_url()
     if not url:
         return _facade()._post_para_api(req)
@@ -243,7 +252,7 @@ def _post_webhook(req: _facade().Dict[str, _facade().Any]) -> _facade().Dict[str
         body: _facade().Any = {}
         try:
             body = resp.json() if resp.content else {}
-        except Exception:
+        except RECOVERABLE_ERRORS:
             body = {"raw": resp.text[:4000]}
         ok = resp.status_code < 400 and bool(body.get("ok", resp.status_code < 300))
         return {
@@ -255,7 +264,7 @@ def _post_webhook(req: _facade().Dict[str, _facade().Any]) -> _facade().Dict[str
             "request": _facade()._public_request(req),
             "error": "" if ok else str(body.get("error") or body.get("detail") or resp.text[:500]),
         }
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         return _facade()._outbox_response(
             req,
             status="webhook_failed_outboxed",

@@ -36,9 +36,7 @@ function looksLikeHtmlErrorBody(s: string): boolean {
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null
+  return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : null
 }
 
 function errorMessage(data: unknown, fallback: string): string {
@@ -183,11 +181,7 @@ export type RequestJsonInit = RequestInit & {
   timeoutMs?: number
 }
 
-export async function requestJson<T = unknown>(
-  path: string,
-  opts: RequestJsonInit = {},
-  authAttempt = 0,
-): Promise<T> {
+export async function requestJson<T = unknown>(path: string, opts: RequestJsonInit = {}, authAttempt = 0): Promise<T> {
   const { timeoutMs, ...fetchOpts } = opts
   const { method, headers, body } = prepareAuthedRequest(path, fetchOpts)
 
@@ -216,11 +210,7 @@ export async function requestJson<T = unknown>(
     })
   } catch (e: unknown) {
     if (timeoutController?.signal.aborted && (e as Error)?.name === 'AbortError') {
-      throw new ApiError(
-        '请求超时（LLM 生成量化报告可能需 1–3 分钟；若反复超时请检查 API Key 或稍后重试）。',
-        408,
-        null,
-      )
+      throw new ApiError('请求超时（LLM 生成量化报告可能需 1–3 分钟；若反复超时请检查 API Key 或稍后重试）。', 408, null)
     }
     throw e
   } finally {
@@ -237,13 +227,7 @@ export async function requestJson<T = unknown>(
         path.includes('/api/admin') ||
         path.includes('/api/auth/verify-admin-digest-code') ||
         pathOnly === '/api/auth/me'))
-  if (
-    looksLikeAuthFailure &&
-    authAttempt === 0 &&
-    getAccessToken() &&
-    !shouldSkipRefresh(path) &&
-    !headers.has('X-Skip-Auth-Refresh')
-  ) {
+  if (looksLikeAuthFailure && authAttempt === 0 && getAccessToken() && !shouldSkipRefresh(path) && !headers.has('X-Skip-Auth-Refresh')) {
     const newToken = await refreshAccessTokenOnce()
     if (newToken) return requestJson<T>(path, opts, 1)
   }
@@ -280,7 +264,13 @@ export async function fetchZipBlob(path: string, headers?: HeadersInit): Promise
 export async function requestBlob(path: string, opts: RequestInit = {}, authAttempt = 0): Promise<Blob> {
   const { method, headers, body } = prepareAuthedRequest(path, opts)
 
-  const res = await fetch(`${BASE}${path}`, { ...opts, method, headers, body, credentials: 'include' })
+  const res = await fetch(`${BASE}${path}`, {
+    ...opts,
+    method,
+    headers,
+    body,
+    credentials: 'include',
+  })
   if (
     looksLikeAuthFailure(path, res) &&
     authAttempt === 0 &&
@@ -299,7 +289,13 @@ export async function requestBlob(path: string, opts: RequestInit = {}, authAtte
 export async function requestStreamResponse(path: string, opts: RequestInit = {}, authAttempt = 0): Promise<Response> {
   const { method, headers, body } = prepareAuthedRequest(path, opts)
 
-  const res = await fetch(`${BASE}${path}`, { ...opts, method, headers, body, credentials: 'include' })
+  const res = await fetch(`${BASE}${path}`, {
+    ...opts,
+    method,
+    headers,
+    body,
+    credentials: 'include',
+  })
   if (
     looksLikeAuthFailure(path, res) &&
     authAttempt === 0 &&

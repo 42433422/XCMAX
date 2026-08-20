@@ -34,7 +34,11 @@ from app.application.ai_chat.excel_import_pipeline_aichatexcelimportmixin_mixin0
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
-class AIChatExcelImportMixin(_AIChatExcelImportMixinPart01Mixin, _AIChatExcelImportMixinPart02Mixin, _AIChatExcelImportMixinPart03Mixin):
+class AIChatExcelImportMixin(
+    _AIChatExcelImportMixinPart01Mixin,
+    _AIChatExcelImportMixinPart02Mixin,
+    _AIChatExcelImportMixinPart03Mixin,
+):
     if TYPE_CHECKING:
         _is_number_text: Any
         _merge_tool_runtime_context: Any
@@ -51,16 +55,6 @@ class AIChatExcelImportMixin(_AIChatExcelImportMixinPart01Mixin, _AIChatExcelImp
         ) -> dict[str, Any]:
             raise NotImplementedError
 
-
-
-
-
-
-
-
-
-
-
     _PACK_OR_MEASURE_RE = re.compile(
         r"^\s*\d+(\.\d+)?\s*[/／]\s*\d+(\.\d+)?\s*(kg|KG|公斤|g|G|桶|箱|组|套|升|L|l)?\s*$"
         r"|^\s*\d+(\.\d+)?\s*(kg|KG|公斤|g|G|ml|ML|l|L|升|斤|吨)\s*[/／]\s*(桶|箱|组|套|包|袋|罐|个|只)\s*$"
@@ -68,18 +62,3 @@ class AIChatExcelImportMixin(_AIChatExcelImportMixinPart01Mixin, _AIChatExcelImp
         r"|^\s*(桶|箱|包|袋|罐|套|组|个|只|张|升|公斤|千克|斤)\s*$",
         re.I,
     )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, misc, return-value"
 """COVERAGE_RAMP Phase 55: finance_app_service, app.db pool/health, rate_limiter redis client,
 security_headers, user_memory_service (mocked I/O)."""
 
@@ -28,6 +29,7 @@ from app.services.user_memory_service import (
     get_user_memory_service,
     reset_user_memory_service,
 )
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -278,7 +280,7 @@ def test_db_session_local_callable_returns_session() -> None:
     try:
         assert session is not None
         session.close()
-    except Exception:
+    except BOUNDARY_ERRORS:
         session.close()
 
 

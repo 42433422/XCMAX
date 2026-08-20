@@ -78,13 +78,31 @@ describe('useBatchAnalyzeStore', () => {
 
   it('canStartAnalyze is true when sheets exist and phase is idle', () => {
     const store = useBatchAnalyzeStore()
-    store.extractedSheets = [{ fileName: 'a.xlsx', sheetName: 'Sheet1', sheetIndex: 0, fields: [], rowCount: 0, sampleRows: [] }]
+    store.extractedSheets = [
+      {
+        fileName: 'a.xlsx',
+        sheetName: 'Sheet1',
+        sheetIndex: 0,
+        fields: [],
+        rowCount: 0,
+        sampleRows: [],
+      },
+    ]
     expect(store.canStartAnalyze).toBe(true)
   })
 
   it('canStartAnalyze is false when phase is not idle', () => {
     const store = useBatchAnalyzeStore()
-    store.extractedSheets = [{ fileName: 'a.xlsx', sheetName: 'Sheet1', sheetIndex: 0, fields: [], rowCount: 0, sampleRows: [] }]
+    store.extractedSheets = [
+      {
+        fileName: 'a.xlsx',
+        sheetName: 'Sheet1',
+        sheetIndex: 0,
+        fields: [],
+        rowCount: 0,
+        sampleRows: [],
+      },
+    ]
     store.phase = 'extracting'
     expect(store.canStartAnalyze).toBe(false)
   })
@@ -107,7 +125,16 @@ describe('useBatchAnalyzeStore', () => {
     store.totalFiles = 5
     store.progress = 100
     store.errorMessage = 'test'
-    store.extractedSheets = [{ fileName: 'a.xlsx', sheetName: 'Sheet1', sheetIndex: 0, fields: [], rowCount: 0, sampleRows: [] }]
+    store.extractedSheets = [
+      {
+        fileName: 'a.xlsx',
+        sheetName: 'Sheet1',
+        sheetIndex: 0,
+        fields: [],
+        rowCount: 0,
+        sampleRows: [],
+      },
+    ]
     store.reset()
     expect(store.phase).toBe('idle')
     expect(store.totalFiles).toBe(0)
@@ -146,7 +173,14 @@ describe('useBatchAnalyzeStore', () => {
 
   it('addExtractedSheets appends sheets', () => {
     const store = useBatchAnalyzeStore()
-    const sheet = { fileName: 'a.xlsx', sheetName: 'Sheet1', sheetIndex: 0, fields: [], rowCount: 0, sampleRows: [] }
+    const sheet = {
+      fileName: 'a.xlsx',
+      sheetName: 'Sheet1',
+      sheetIndex: 0,
+      fields: [],
+      rowCount: 0,
+      sampleRows: [],
+    }
     store.addExtractedSheets([sheet])
     expect(store.extractedSheets).toHaveLength(1)
   })
@@ -188,7 +222,16 @@ describe('useBatchAnalyzeStore', () => {
 
   it('updateSheetGridData updates matching sheet', () => {
     const store = useBatchAnalyzeStore()
-    store.extractedSheets = [{ fileName: 'a.xlsx', sheetName: 'Sheet1', sheetIndex: 0, fields: [], rowCount: 0, sampleRows: [] }]
+    store.extractedSheets = [
+      {
+        fileName: 'a.xlsx',
+        sheetName: 'Sheet1',
+        sheetIndex: 0,
+        fields: [],
+        rowCount: 0,
+        sampleRows: [],
+      },
+    ]
     store.updateSheetGridData('a.xlsx', 'Sheet1', { rows: [] })
     expect(store.extractedSheets[0].gridData).toEqual({ rows: [] })
   })
@@ -211,7 +254,16 @@ describe('useBatchAnalyzeStore', () => {
   it('updateGroupSheets replaces matched sheets', () => {
     const store = useBatchAnalyzeStore()
     store.groups = [{ id: '1', matchedSheets: [] } as any]
-    const newSheets = [{ fileName: 'b.xlsx', sheetName: 'Sheet2', sheetIndex: 0, fields: [], rowCount: 0, sampleRows: [] }]
+    const newSheets = [
+      {
+        fileName: 'b.xlsx',
+        sheetName: 'Sheet2',
+        sheetIndex: 0,
+        fields: [],
+        rowCount: 0,
+        sampleRows: [],
+      },
+    ]
     store.updateGroupSheets('1', newSheets)
     expect(store.groups[0].matchedSheets).toHaveLength(1)
   })

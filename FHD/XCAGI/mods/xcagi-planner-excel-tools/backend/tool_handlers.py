@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """里程碑 F～F4：Planner 工作流工具原生实现（Mod 侧）。"""
 
 from __future__ import annotations
@@ -6,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any
+
+from app.mod_sdk.errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 MOD_SOURCE = "mod:xcagi-planner-excel-tools"
 
@@ -30,7 +31,7 @@ def _parse_args(args: dict[str, Any] | str) -> dict[str, Any]:
         try:
             parsed = json.loads(args or "{}")
             return parsed if isinstance(parsed, dict) else {}
-        except Exception:
+        except RECOVERABLE_ERRORS:
             return {}
     return {}
 
@@ -68,11 +69,11 @@ def _handle_excel_chart_recommend(_args: dict[str, Any]) -> str:
 
 def _handle_excel_schema_understand(args: dict[str, Any], workspace_root: str | None) -> str:
     from app.mod_sdk.host_services import (
+        ExcelSchemaUnderstandingService,
         _parse_excel_header_row_1based,
         _read_excel_dataframe,
         resolve_safe_excel_path,
     )
-    from app.mod_sdk.host_services import ExcelSchemaUnderstandingService
 
     file_path = str(args.get("file_path") or "")
     sheet_n = args.get("sheet_name")
@@ -100,7 +101,7 @@ def _handle_excel_schema_understand(args: dict[str, Any], workspace_root: str | 
         if isinstance(out, dict):
             _tag_source(out)
         return json.dumps(out, ensure_ascii=False)
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         return json.dumps(
             _tag_source(
                 {
@@ -185,9 +186,7 @@ def _handle_excel_join_compare(args: dict[str, Any], workspace_root: str | None)
                 only_l = [idx for idx in la.index if idx not in lb.index]
                 only_r = [idx for idx in lb.index if idx not in la.index]
                 common = [idx for idx in la.index if idx in lb.index]
-                changed = sum(
-                    1 for idx in common if not la.loc[idx].equals(lb.loc[idx])
-                )
+                changed = sum(1 for idx in common if not la.loc[idx].equals(lb.loc[idx]))
                 return json.dumps(
                     _tag_source(
                         {
@@ -207,7 +206,7 @@ def _handle_excel_join_compare(args: dict[str, Any], workspace_root: str | None)
             _tag_source({"success": False, "error": f"unknown action: {action}"}),
             ensure_ascii=False,
         )
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         return json.dumps(_tag_source({"success": False, "error": str(e)}), ensure_ascii=False)
 
 
@@ -237,8 +236,7 @@ def _handle_generate_office_document(args: dict[str, Any]) -> str:
             ensure_ascii=False,
         )
     try:
-        from app.mod_sdk.host_services import generate_office_file
-        from app.mod_sdk.host_services import store_document_pickup
+        from app.mod_sdk.host_services import generate_office_file, store_document_pickup
 
         content, fname = generate_office_file(req, fmt)  # type: ignore[arg-type]
         mime = (
@@ -286,7 +284,7 @@ def _handle_generate_office_document(args: dict[str, Any]) -> str:
             ),
             ensure_ascii=False,
         )
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         return json.dumps(_tag_source({"success": False, "error": str(e)}), ensure_ascii=False)
 
 
@@ -308,8 +306,10 @@ def _handle_products_bulk_import(
 
 
 def _handle_excel_vector_index(args: dict[str, Any], workspace_root: str | None) -> str:
-    from app.mod_sdk.host_services import get_excel_vector_ingest_app_service
-    from app.mod_sdk.host_services import resolve_safe_excel_path
+    from app.mod_sdk.host_services import (
+        get_excel_vector_ingest_app_service,
+        resolve_safe_excel_path,
+    )
 
     file_path = str(args.get("file_path") or "").strip()
     if not file_path:

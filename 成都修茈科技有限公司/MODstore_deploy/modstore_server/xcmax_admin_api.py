@@ -29,14 +29,16 @@ import os
 import sqlite3
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone  # noqa: F401
 from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import APIRouter, Body, Depends, Header
 from fastapi.responses import JSONResponse
+
 from modstore_server import xcmax_admin_surface_routes as _surface_routes
 from modstore_server import xcmax_admin_sync_routes as _sync_routes
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +76,7 @@ def _resolve_sync_db_path() -> Path:
             from modstore_server.db.base import default_db_path
 
             p = default_db_path().parent / "xcmax_sync.db"
-        except Exception:
+        except RECOVERABLE_ERRORS:
             p = Path(__file__).resolve().parent / "xcmax_sync.db"
     p.parent.mkdir(parents=True, exist_ok=True)
     return p
@@ -90,8 +92,7 @@ def _init_schema_once() -> None:
     """幂等建表 + WAL；多 worker 安全。"""
     with _db_lock:
         with _connect() as conn:
-            conn.executescript(
-                """
+            conn.executescript("""
                 PRAGMA journal_mode=WAL;
                 PRAGMA synchronous=NORMAL;
                 CREATE TABLE IF NOT EXISTS xcmax_changes (
@@ -124,8 +125,7 @@ def _init_schema_once() -> None:
                     key TEXT PRIMARY KEY,
                     value TEXT NOT NULL DEFAULT ''
                 );
-                """
-            )
+                """)
             conn.commit()
 
 
@@ -139,7 +139,7 @@ def _ensure_schema() -> None:
     try:
         _init_schema_once()
         _schema_ready = True
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("xcmax_sync schema init failed")
 
 
@@ -224,7 +224,7 @@ def _collect_catalog_modules() -> list[dict[str, Any]]:
                     "version": str(it.get("version") or ""),
                 }
             )
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.debug("xcmax modules: catalog_store unavailable: %s", exc)
     return rows
 
@@ -248,13 +248,13 @@ _PROCESS_START_TS = time.time()
 async def remote_status() -> dict[str, Any]:
     try:
         from modstore_server.deploy_context import health_payload
-    except Exception:
+    except RECOVERABLE_ERRORS:
         health_payload = lambda: {}  # noqa: E731
 
     ctx = {}
     try:
         ctx = health_payload() or {}
-    except Exception:
+    except RECOVERABLE_ERRORS:
         ctx = {}
 
     return {
@@ -263,7 +263,7 @@ async def remote_status() -> dict[str, Any]:
             "reachable": True,
             "latency_ms": 0,
             "version": str(ctx.get("git_sha") or "0.2.0"),
-            "deploy_time": datetime.fromtimestamp(_PROCESS_START_TS, tz=timezone.utc).isoformat(),
+            "deploy_time": datetime.fromtimestamp(_PROCESS_START_TS, tz=UTC).isoformat(),
             "hostname": str(ctx.get("hostname") or ""),
             "deploy_tier": str(ctx.get("deploy_tier") or "local"),
         },
@@ -320,7 +320,7 @@ async def scheduler_health() -> dict[str, Any]:
                         "trigger": str(j.trigger),
                     }
                 )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.exception("scheduler_health: get_jobs failed")
 
         running = bool(getattr(_scheduler, "running", False))
@@ -345,15 +345,15 @@ async def scheduler_health() -> dict[str, Any]:
                 "unhealthy_runtime_jobs": runtime_health["unhealthy_jobs"],
                 "recovering_runtime_jobs": runtime_health["recovering_jobs"],
                 "jobs": jobs_payload,
-                "reported_at": datetime.now(timezone.utc).isoformat(),
+                "reported_at": datetime.now(UTC).isoformat(),
             },
         }
-    except Exception as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("scheduler_health endpoint failed")
         return {
             "success": False,
             "ok": False,
-            "data": {"reason": str(exc)},
+            "data": {"reason": "scheduler health unavailable"},
         }
 
 
@@ -388,10 +388,10 @@ async def xcmax_admin_loop_memory_evict(
             admin_user_id=getattr(admin_user, "id", None),
         )
         return {"success": True, "data": result}
-    except Exception as exc:
-        logger.warning("xcmax loop memory evict failed: %s", exc)
+    except RECOVERABLE_ERRORS:
+        logger.exception("xcmax loop memory evict failed")
         return JSONResponse(
-            {"success": False, "message": str(exc)},
+            {"success": False, "message": "循环记忆清理服务暂时不可用，请稍后重试"},
             status_code=500,
         )
 

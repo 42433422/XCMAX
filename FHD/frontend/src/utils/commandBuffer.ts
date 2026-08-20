@@ -1,10 +1,7 @@
 export type CommandIntentType = 'sales_contract' | 'price_list' | 'start_print'
 import { asRecord, asString, asNumber } from '@/utils/typeGuards'
 
-export type CommandHandlerKey =
-  | 'handleSalesContractCommand'
-  | 'handlePriceListCommand'
-  | 'handleStartPrintCommand'
+export type CommandHandlerKey = 'handleSalesContractCommand' | 'handlePriceListCommand' | 'handleStartPrintCommand'
 
 export interface CommandIntentMatch {
   intent: CommandIntentType
@@ -29,22 +26,7 @@ const COMMAND_BUFFER_LIMIT = 200
 /** 超过未使用的条目视为过期，避免长期运行 localStorage 只增不减 */
 const COMMAND_BUFFER_ENTRY_TTL_MS = 30 * 24 * 60 * 60 * 1000
 const START_PRINT_COMMAND_RE = /^开始打印(?:吧|一下)?$/
-const COMMAND_VERBS = [
-  '打印',
-  '生成',
-  '创建',
-  '更新',
-  '修改',
-  '调整',
-  '刷新',
-  '打一下',
-  '打一份',
-  '打一个',
-  '打',
-  '开一份',
-  '开一个',
-  '开'
-]
+const COMMAND_VERBS = ['打印', '生成', '创建', '更新', '修改', '调整', '刷新', '打一下', '打一份', '打一个', '打', '开一份', '开一个', '开']
 const INTENT_TOKENS = [
   '销售合同',
   '价格表',
@@ -64,7 +46,7 @@ const INTENT_TOKENS = [
   '打',
   '开一份',
   '开一个',
-  '开'
+  '开',
 ]
 
 function canUseStorage(): boolean {
@@ -87,7 +69,9 @@ function containsAnyVerb(text: string): boolean {
 
 function extractMatchTokens(text: string): string[] {
   const tokens = new Set<string>()
-  const raw = String(text || '').trim().toLowerCase()
+  const raw = String(text || '')
+    .trim()
+    .toLowerCase()
   if (!raw) return []
   for (const t of INTENT_TOKENS) {
     if (raw.includes(t)) tokens.add(t)
@@ -123,11 +107,7 @@ export function isSalesContractCommandText(message: string): boolean {
 
 /** 与口语「报价表」「价目表」对齐，避免只写「价格表」才走本地价表逻辑。 */
 function hasPriceListDocKeyword(text: string): boolean {
-  return (
-    text.includes('价格表') ||
-    text.includes('报价表') ||
-    text.includes('价目表')
-  )
+  return text.includes('价格表') || text.includes('报价表') || text.includes('价目表')
 }
 
 export function isPriceListCommandText(message: string): boolean {
@@ -169,11 +149,7 @@ function safeParseEntries(raw: string | null): CommandBufferEntry[] {
           lastUsedAt: asNumber(row.lastUsedAt),
         } satisfies CommandBufferEntry
       })
-      .filter((x: CommandBufferEntry) =>
-        !!x.intent &&
-        !!x.handlerKey &&
-        !!x.normalizedText
-      )
+      .filter((x: CommandBufferEntry) => !!x.intent && !!x.handlerKey && !!x.normalizedText)
   } catch {
     return []
   }
@@ -214,15 +190,9 @@ export function saveBuffer(entries: CommandBufferEntry[]): void {
   }
 }
 
-function pickContainsMatch(
-  entries: CommandBufferEntry[],
-  intent: CommandIntentType,
-  normalizedText: string
-): CommandBufferEntry | null {
+function pickContainsMatch(entries: CommandBufferEntry[], intent: CommandIntentType, normalizedText: string): CommandBufferEntry | null {
   if (normalizedText.length < 8) return null
-  const candidates = entries
-    .filter((x) => x.intent === intent)
-    .sort((a, b) => b.lastUsedAt - a.lastUsedAt)
+  const candidates = entries.filter((x) => x.intent === intent).sort((a, b) => b.lastUsedAt - a.lastUsedAt)
   for (const row of candidates) {
     const cached = row.normalizedText
     if (!cached || cached.length < 8) continue
@@ -251,7 +221,7 @@ export function findRunnableCachedCommand(message: string): CommandBufferHit | n
       handlerKey: exact.handlerKey,
       normalizedText,
       strategy: 'exact',
-      cachedEntry: exact
+      cachedEntry: exact,
     }
   }
 
@@ -262,7 +232,7 @@ export function findRunnableCachedCommand(message: string): CommandBufferHit | n
     handlerKey: contains.handlerKey,
     normalizedText,
     strategy: 'contains',
-    cachedEntry: contains
+    cachedEntry: contains,
   }
 }
 
@@ -278,7 +248,7 @@ export function recordCommandHit(params: CommandIntentMatch & { message: string 
       ...entries[idx],
       handlerKey: params.handlerKey,
       hitCount: hitCount + 1,
-      lastUsedAt: now
+      lastUsedAt: now,
     }
   } else {
     entries.push({
@@ -287,7 +257,7 @@ export function recordCommandHit(params: CommandIntentMatch & { message: string 
       normalizedText,
       hitCount: 1,
       createdAt: now,
-      lastUsedAt: now
+      lastUsedAt: now,
     })
   }
   saveBuffer(entries)

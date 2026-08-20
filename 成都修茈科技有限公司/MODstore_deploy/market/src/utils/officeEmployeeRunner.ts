@@ -65,7 +65,11 @@ export async function runOfficeReadPhase(opts: {
       readErrors.push(`${item.name}：未匹配读取员工`)
       continue
     }
-    const ext = String(item.name || '').split('.').pop()?.toLowerCase() || ''
+    const ext =
+      String(item.name || '')
+        .split('.')
+        .pop()
+        ?.toLowerCase() || ''
     if (!employeeAcceptsFileExtension(employeeId, ext)) {
       readErrors.push(`${item.name}：${employeeFileMismatchHint(employeeId, ext)}`)
       continue
@@ -105,22 +109,14 @@ export async function runOfficeReadPhase(opts: {
   }
 }
 
-async function buildJsonFileForGenerate(
-  raw: unknown,
-  _fallbackName: string,
-  format: OfficeFormat,
-): Promise<File | null> {
+async function buildJsonFileForGenerate(raw: unknown, _fallbackName: string, format: OfficeFormat): Promise<File | null> {
   const jsonName = format === 'ppt' ? 'presentation_full.json' : 'document_full.json'
-  const text =
-    format === 'ppt' ? extractPresentationFullJsonText(raw) : extractDocumentFullJsonText(raw)
+  const text = format === 'ppt' ? extractPresentationFullJsonText(raw) : extractDocumentFullJsonText(raw)
   if (text?.trim()) {
     return new File([text], jsonName, { type: 'application/json' })
   }
   const downloads = parseEmployeeOutputDownloads(raw)
-  const dl =
-    format === 'ppt'
-      ? pickPresentationFullJsonDownload(downloads)
-      : pickDocumentFullJsonDownload(downloads)
+  const dl = format === 'ppt' ? pickPresentationFullJsonDownload(downloads) : pickDocumentFullJsonDownload(downloads)
   if (dl) {
     try {
       const blob = await api.employeeOutputDownload(dl.jobId, dl.filename)
@@ -206,11 +202,7 @@ export async function runOfficeGeneratePhase(opts: {
     }
     const templateFile =
       opts.templateFile ??
-      (opts.format === 'ppt'
-        ? pickPptTemplateFromSources(
-            (opts.extraAttachmentFiles || []).map((f) => ({ name: f.name, file: f })),
-          )
-        : null)
+      (opts.format === 'ppt' ? pickPptTemplateFromSources((opts.extraAttachmentFiles || []).map((f) => ({ name: f.name, file: f }))) : null)
     if (templateFile) {
       inputData.has_template = true
       inputData.enhance_homework_marquee = '1'

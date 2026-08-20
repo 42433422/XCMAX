@@ -1,9 +1,10 @@
+# mypy: disable-error-code="arg-type, assignment"
 """Canonical registration, payment, entitlement, and desktop-access lifecycle."""
 
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -42,7 +43,7 @@ class AccountLifecycle:
 
 
 def _active_plan(session: Session, user_id: int, *, account_license: bool) -> UserPlan | None:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     rows = (
         session.query(UserPlan)
         .filter(UserPlan.user_id == user_id, UserPlan.is_active.is_(True))

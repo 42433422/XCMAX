@@ -16,8 +16,8 @@ from .adapters import LanguageAdapter, ParsedFile
 from .adapters.python import PythonLanguageAdapter
 from .adapters.typescript import TypeScriptLanguageAdapter
 from .adapters.vue import VueLanguageAdapter
-from .index import FileEntry, Reference, RepoIndex, Symbol
 from .builder import build_index
+from .index import FileEntry, Reference, RepoIndex, Symbol
 
 __all__ = [
     "FileEntry",

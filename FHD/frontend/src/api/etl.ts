@@ -102,7 +102,12 @@ export type EtlRunRow = {
   normalized: Record<string, unknown>
   provenance: Record<string, unknown>
   validation_issues: EtlValidationIssue[]
-  llm_suggestion: { action?: EtlAction; reason?: string; used_llm?: boolean; advisory_only?: boolean }
+  llm_suggestion: {
+    action?: EtlAction
+    reason?: string
+    used_llm?: boolean
+    advisory_only?: boolean
+  }
   suggested_action: EtlAction
   final_action: EtlAction
   action_overridden: boolean
@@ -175,10 +180,7 @@ export const etlApi = {
       suffix: string
       size_bytes: number
       sha256: string
-    }>(
-      '/api/etl/uploads',
-      { method: 'POST', body: form },
-    )
+    }>('/api/etl/uploads', { method: 'POST', body: form })
   },
   preview: (body: {
     upload_id: string
@@ -193,9 +195,7 @@ export const etlApi = {
       body: JSON.stringify(body),
     }),
   runs: (limit = 50, batchId = '') =>
-    request<EtlRun[]>(
-      `/api/etl/runs?limit=${limit}${batchId ? `&batch_id=${encodeURIComponent(batchId)}` : ''}`,
-    ),
+    request<EtlRun[]>(`/api/etl/runs?limit=${limit}${batchId ? `&batch_id=${encodeURIComponent(batchId)}` : ''}`),
   run: (id: string) => request<EtlRun>(`/api/etl/runs/${encodeURIComponent(id)}`),
   rows: (id: string, page = 1, pageSize = 50, action = '') =>
     request<{ page: number; page_size: number; total: number; items: EtlRunRow[] }>(
@@ -228,10 +228,8 @@ export const etlApi = {
         ...(sourceRegionId ? { source_region_id: sourceRegionId } : {}),
       }),
     }),
-  retry: (id: string) =>
-    request<EtlRun>(`/api/etl/runs/${encodeURIComponent(id)}/retry`, { method: 'POST' }),
-  rollback: (id: string) =>
-    request<EtlRun>(`/api/etl/runs/${encodeURIComponent(id)}/rollback`, { method: 'POST' }),
+  retry: (id: string) => request<EtlRun>(`/api/etl/runs/${encodeURIComponent(id)}/retry`, { method: 'POST' }),
+  rollback: (id: string) => request<EtlRun>(`/api/etl/runs/${encodeURIComponent(id)}/rollback`, { method: 'POST' }),
   templates: () => request<EtlTemplate[]>('/api/etl/templates'),
   createTemplate: (body: {
     name: string
@@ -246,12 +244,7 @@ export const etlApi = {
       body: JSON.stringify(body),
     }),
   targetConfigs: () => request<EtlTargetConfig[]>('/api/etl/targets'),
-  createTargetConfig: (body: {
-    name: string
-    endpoint_url: string
-    headers?: Record<string, string>
-    secret?: string
-  }) =>
+  createTargetConfig: (body: { name: string; endpoint_url: string; headers?: Record<string, string>; secret?: string }) =>
     request<EtlTargetConfig>('/api/etl/targets', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

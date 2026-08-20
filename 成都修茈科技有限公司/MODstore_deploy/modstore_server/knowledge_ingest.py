@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr"
 """Parse uploaded knowledge files into text chunks.
 
 Supports two chunking strategies:
@@ -19,6 +20,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from fastapi import HTTPException
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -302,7 +305,7 @@ class SemanticChunker:
             vecs = await embed_texts(sentences)
             if vecs and len(vecs) == len(sentences):
                 return [list(v) for v in vecs]
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             logger.warning("SemanticChunker: embedding failed: %s", exc)
         return None
 

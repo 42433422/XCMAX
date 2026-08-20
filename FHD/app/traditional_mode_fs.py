@@ -50,16 +50,23 @@ _watchdog_thread: threading.Thread | None = None
 _watchdog_prev: dict[str, float] = {}
 
 
-def resolve_safe_path(relative_path: str = "") -> str | None:
-    root_abs = os.path.abspath(ROOT_DIR)
-    safe = os.path.abspath(os.path.normpath(os.path.join(root_abs, relative_path or "")))
+def resolve_path_under_root(root: str, relative_path: str = "") -> str | None:
+    """Resolve a relative path below ``root``, following and containing symlinks."""
+
+    fragment = str(relative_path or "")
+    if os.path.isabs(fragment):
+        return None
+    root_path = os.path.realpath(os.path.abspath(os.path.expanduser(root)))
+    candidate = os.path.realpath(os.path.abspath(os.path.join(root_path, fragment)))
     try:
-        common = os.path.commonpath([root_abs, safe])
+        common = os.path.commonpath((root_path, candidate))
     except ValueError:
         return None
-    if common != root_abs:
-        return None
-    return safe
+    return candidate if common == root_path else None
+
+
+def resolve_safe_path(relative_path: str = "") -> str | None:
+    return resolve_path_under_root(ROOT_DIR, relative_path)
 
 
 def root_info_response() -> dict[str, Any]:

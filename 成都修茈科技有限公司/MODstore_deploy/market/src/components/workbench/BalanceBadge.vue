@@ -1,42 +1,21 @@
 <template>
   <div class="bb" role="group" aria-label="账号与余量">
-    <button
-      type="button"
-      class="bb__pill bb__pill--balance"
-      :title="balanceTitle"
-      @click="$emit('open-balance')"
-    >
+    <button type="button" class="bb__pill bb__pill--balance" :title="balanceTitle" @click="$emit('open-balance')">
       <span class="bb__icon" aria-hidden="true">💎</span>
       <span class="bb__label">余量</span>
       <span class="bb__value">{{ formattedBalance }}</span>
     </button>
 
-    <button
-      v-if="!isMember"
-      type="button"
-      class="bb__pill bb__pill--upgrade"
-      @click="$emit('upgrade')"
-    >
+    <button v-if="!isMember" type="button" class="bb__pill bb__pill--upgrade" @click="$emit('upgrade')">
       <span class="bb__icon" aria-hidden="true">✨</span>
       升级会员
     </button>
-    <button
-      v-else
-      type="button"
-      class="bb__pill bb__pill--member"
-      :title="memberTitle"
-      @click="$emit('upgrade')"
-    >
+    <button v-else type="button" class="bb__pill bb__pill--member" :title="memberTitle" @click="$emit('upgrade')">
       <span class="bb__icon" aria-hidden="true">👑</span>
       {{ memberLabel }}
     </button>
 
-    <button
-      type="button"
-      class="bb__pill bb__pill--invite"
-      @click="$emit('invite')"
-      title="复制邀请链接，好友登录后双方各得额度"
-    >
+    <button type="button" class="bb__pill bb__pill--invite" @click="$emit('invite')" title="复制邀请链接，好友登录后双方各得额度">
       <span class="bb__icon" aria-hidden="true">🎁</span>
       邀请
     </button>
@@ -116,7 +95,9 @@ const balanceTitle = computed(() => {
   color: rgba(226, 232, 240, 0.92);
   font-size: 0.78rem;
   cursor: pointer;
-  transition: background 140ms ease, border-color 140ms ease;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease;
 }
 
 .bb__pill:hover {
@@ -163,8 +144,17 @@ const balanceTitle = computed(() => {
 }
 
 @keyframes bbToast {
-  0% { opacity: 0; transform: translateY(-4px); }
-  10%, 80% { opacity: 1; transform: translateY(0); }
-  100% { opacity: 0; }
+  0% {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  10%,
+  80% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+  }
 }
 </style>

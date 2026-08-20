@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """里程碑 S：NeuroBus 运行时委托（生命周期 + 同步发布）。"""
 
 from __future__ import annotations
@@ -24,9 +23,11 @@ class ModNeuroBusRuntimeAdapter:
         }
 
     async def setup(self) -> None:
-        from app.mod_sdk.host_services import setup_neuro_bus
-        from app.mod_sdk.host_services import get_domain_registry
-        from app.mod_sdk.host_services import get_processor_coordinator
+        from app.mod_sdk.host_services import (
+            get_domain_registry,
+            get_processor_coordinator,
+            setup_neuro_bus,
+        )
 
         await setup_neuro_bus()
         domain_registry = get_domain_registry()
@@ -34,8 +35,7 @@ class ModNeuroBusRuntimeAdapter:
         get_processor_coordinator()
 
     async def teardown(self) -> None:
-        from app.mod_sdk.host_services import teardown_neuro_bus
-        from app.mod_sdk.host_services import get_domain_registry
+        from app.mod_sdk.host_services import get_domain_registry, teardown_neuro_bus
 
         try:
             domain_registry = get_domain_registry()
@@ -44,8 +44,7 @@ class ModNeuroBusRuntimeAdapter:
             await teardown_neuro_bus()
 
     def publish(self, event_type: str, payload: dict[str, Any], domain: str = "global") -> bool:
-        from app.mod_sdk.host_services import get_neuro_bus
-        from app.mod_sdk.host_services import EventPriority, NeuroEvent
+        from app.mod_sdk.host_services import EventPriority, NeuroEvent, get_neuro_bus
 
         bus = get_neuro_bus()
         if not bus.is_running:
@@ -59,9 +58,11 @@ class ModNeuroBusRuntimeAdapter:
         return bool(bus.publish(ev))
 
     def health(self) -> dict[str, Any]:
-        from app.mod_sdk.host_services import get_neuro_bus
-        from app.mod_sdk.host_services import get_neuro_bus_manager
-        from app.mod_sdk.host_services import get_domain_registry
+        from app.mod_sdk.host_services import (
+            get_domain_registry,
+            get_neuro_bus,
+            get_neuro_bus_manager,
+        )
 
         manager = get_neuro_bus_manager()
         bus = get_neuro_bus()

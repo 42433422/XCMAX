@@ -14,7 +14,7 @@ ledger entry reads cleanly.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 from typing import Any, Literal
 from uuid import uuid4

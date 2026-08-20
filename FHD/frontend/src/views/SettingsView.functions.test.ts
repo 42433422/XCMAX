@@ -26,8 +26,17 @@ const mockIntentPackagesApiGetPackages = vi.fn().mockResolvedValue({ success: fa
 const mockAdminAuditApiList = vi.fn().mockResolvedValue({ ok: true, data: { items: [], total: 0 } })
 
 /* memoryV2Api mocks */
-const mockMemoryV2List = vi.fn().mockResolvedValue({ success: true, memories: [], summary: { total: 0, by_status: {}, by_type: {} }, planner_context: '' })
-const mockMemoryV2Summary = vi.fn().mockResolvedValue({ success: true, summary: { total: 0, by_status: {}, by_type: {} }, planner_context: '' })
+const mockMemoryV2List = vi.fn().mockResolvedValue({
+  success: true,
+  memories: [],
+  summary: { total: 0, by_status: {}, by_type: {} },
+  planner_context: '',
+})
+const mockMemoryV2Summary = vi.fn().mockResolvedValue({
+  success: true,
+  summary: { total: 0, by_status: {}, by_type: {} },
+  planner_context: '',
+})
 const mockMemoryV2CreateCandidate = vi.fn().mockResolvedValue({ success: true })
 const mockMemoryV2Confirm = vi.fn().mockResolvedValue({ success: true })
 const mockMemoryV2Reject = vi.fn().mockResolvedValue({ success: true })
@@ -172,8 +181,8 @@ vi.mock('@/i18n', () => ({
 }))
 
 vi.mock('@/utils/typeGuards', () => ({
-  asRecord: (v: unknown) => (v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {}),
-  asArray: <T>(v: unknown) => (Array.isArray(v) ? v as T[] : [] as T[]),
+  asRecord: (v: unknown) => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {}),
+  asArray: <T>(v: unknown) => (Array.isArray(v) ? (v as T[]) : ([] as T[])),
   asString: (v: unknown, fallback = '') => (typeof v === 'string' ? v : fallback),
   asBoolean: (v: unknown, fallback = false) => (typeof v === 'boolean' ? v : fallback),
   asDisposable: (v: unknown) => (typeof v === 'function' ? v : () => {}),
@@ -181,7 +190,12 @@ vi.mock('@/utils/typeGuards', () => ({
 
 /* ── store mocks ── */
 const mockIndustryStore = {
-  industries: [] as Array<{ id: string | number; name: string; code: string; [k: string]: unknown }>,
+  industries: [] as Array<{
+    id: string | number
+    name: string
+    code: string
+    [k: string]: unknown
+  }>,
   currentIndustry: null as unknown,
   currentConfig: null as unknown,
   currentIndustryId: 'default',
@@ -277,9 +291,9 @@ vi.mock('@/constants/accountModBinding', () => ({
 vi.mock('@/constants/genericModPack', () => ({
   ACCOUNT_CUSTOM_MOD_IDS: ['taiyangniao-pro', 'sz-qsm-pro'],
   expectedHostBridgeModIds: () => ['host-bridge-1', 'host-bridge-2'],
-  isHostBridgeModId: (...args: unknown[]) => mockIsHostBridgeModId(...args as [string]),
-  isSelectableExtensionModId: (...args: unknown[]) => mockIsSelectableExtensionModId(...args as [string]),
-  isWorkflowEmployeeModId: (...args: unknown[]) => mockIsWorkflowEmployeeModId(...args as [string]),
+  isHostBridgeModId: (...args: unknown[]) => mockIsHostBridgeModId(...(args as [string])),
+  isSelectableExtensionModId: (...args: unknown[]) => mockIsSelectableExtensionModId(...(args as [string])),
+  isWorkflowEmployeeModId: (...args: unknown[]) => mockIsWorkflowEmployeeModId(...(args as [string])),
 }))
 
 vi.mock('@/api', () => ({
@@ -365,24 +379,43 @@ function resetApiMocks() {
   mockApiPost.mockResolvedValue({ success: true })
   mockApiDelete.mockResolvedValue({ success: true, message: 'ok' })
   mockAuthApiValidateSession.mockResolvedValue({ success: false })
-  mockAuthApiGetCurrentUser.mockResolvedValue({ success: false, data: { user: null, permissions: [] } })
+  mockAuthApiGetCurrentUser.mockResolvedValue({
+    success: false,
+    data: { user: null, permissions: [] },
+  })
   mockAuthApiLogout.mockResolvedValue({})
   mockAuthApiUpdateCompanyBrand.mockResolvedValue({ success: true })
-  mockAuthApiUploadAvatar.mockResolvedValue({ success: true, data: { avatar_url: '/api/auth/avatar' } })
+  mockAuthApiUploadAvatar.mockResolvedValue({
+    success: true,
+    data: { avatar_url: '/api/auth/avatar' },
+  })
   mockAuthApiUpdateProfile.mockResolvedValue({ success: true, data: { user: null } })
   mockSystemApiGetIndustries.mockResolvedValue({ success: true, data: [] })
   mockSystemApiGetCurrentIndustry.mockResolvedValue({ success: false })
   mockIntentPackagesApiGetPackages.mockResolvedValue({ success: false, data: null })
   mockAdminAuditApiList.mockResolvedValue({ ok: true, data: { items: [], total: 0 } })
-  mockMemoryV2List.mockResolvedValue({ success: true, memories: [], summary: { total: 0, by_status: {}, by_type: {} }, planner_context: '' })
-  mockMemoryV2Summary.mockResolvedValue({ success: true, summary: { total: 0, by_status: {}, by_type: {} }, planner_context: '' })
+  mockMemoryV2List.mockResolvedValue({
+    success: true,
+    memories: [],
+    summary: { total: 0, by_status: {}, by_type: {} },
+    planner_context: '',
+  })
+  mockMemoryV2Summary.mockResolvedValue({
+    success: true,
+    summary: { total: 0, by_status: {}, by_type: {} },
+    planner_context: '',
+  })
   mockMemoryV2CreateCandidate.mockResolvedValue({ success: true })
   mockMemoryV2Confirm.mockResolvedValue({ success: true })
   mockMemoryV2Reject.mockResolvedValue({ success: true })
   mockMemoryV2Correct.mockResolvedValue({ success: true })
   mockMemoryV2Remove.mockResolvedValue({ success: true })
   mockButlerProfileGet.mockResolvedValue({ success: true, profile: null })
-  mockButlerProfileInfer.mockResolvedValue({ success: true, profile: null, inference: { reasons: [] } })
+  mockButlerProfileInfer.mockResolvedValue({
+    success: true,
+    profile: null,
+    inference: { reasons: [] },
+  })
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -728,7 +761,7 @@ describe('SettingsView functions – memoryV2FoldMeta computed', () => {
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    await new Promise(r => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 50))
     const vm = wrapper.vm as any
     expect(vm.memoryV2FoldMeta).toContain('待确认 2')
     expect(vm.memoryV2FoldMeta).toContain('已确认 3')
@@ -750,8 +783,17 @@ describe('SettingsView functions – loadMemoryV2', () => {
 
   it('成功加载记忆列表', async () => {
     const records = [{ memory_id: 'm1', memory_type: 'preference', key: 'k1', value: 'v1', status: 'active' }]
-    mockMemoryV2List.mockResolvedValue({ success: true, memories: records, summary: { total: 1, by_status: { active: 1 }, by_type: {} }, planner_context: 'ctx' })
-    mockMemoryV2Summary.mockResolvedValue({ success: true, summary: { total: 1, by_status: { active: 1 }, by_type: {} }, planner_context: 'ctx' })
+    mockMemoryV2List.mockResolvedValue({
+      success: true,
+      memories: records,
+      summary: { total: 1, by_status: { active: 1 }, by_type: {} },
+      planner_context: 'ctx',
+    })
+    mockMemoryV2Summary.mockResolvedValue({
+      success: true,
+      summary: { total: 1, by_status: { active: 1 }, by_type: {} },
+      planner_context: 'ctx',
+    })
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
@@ -774,7 +816,11 @@ describe('SettingsView functions – loadMemoryV2', () => {
   })
 
   it('summary 返回 success:false 时设置错误', async () => {
-    mockMemoryV2List.mockResolvedValue({ success: true, memories: [], summary: { total: 0, by_status: {}, by_type: {} } })
+    mockMemoryV2List.mockResolvedValue({
+      success: true,
+      memories: [],
+      summary: { total: 0, by_status: {}, by_type: {} },
+    })
     mockMemoryV2Summary.mockResolvedValue({ success: false, message: '摘要失败' })
     const wrapper = await mountSettings()
     const vm = wrapper.vm as any
@@ -796,7 +842,11 @@ describe('SettingsView functions – loadMemoryV2', () => {
   })
 
   it('list 返回非数组时使用空数组', async () => {
-    mockMemoryV2List.mockResolvedValue({ success: true, memories: 'not-array' as any, summary: { total: 0, by_status: {}, by_type: {} } })
+    mockMemoryV2List.mockResolvedValue({
+      success: true,
+      memories: 'not-array' as any,
+      summary: { total: 0, by_status: {}, by_type: {} },
+    })
     const wrapper = await mountSettings()
     const vm = wrapper.vm as any
     await vm.loadMemoryV2()
@@ -1147,7 +1197,7 @@ describe('SettingsView functions – persyFoldMeta computed', () => {
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    await new Promise(r => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 50))
     const vm = wrapper.vm as any
     expect(vm.persyFoldMeta).toContain('复合身份')
     expect(vm.persyFoldMeta).toContain('互动 42')
@@ -1171,7 +1221,7 @@ describe('SettingsView functions – persyFoldMeta computed', () => {
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    await new Promise(r => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 50))
     const vm = wrapper.vm as any
     expect(vm.persyFoldMeta).toContain('主身份')
     wrapper.unmount()
@@ -1187,7 +1237,16 @@ describe('SettingsView functions – loadPersyProfile', () => {
   })
 
   it('成功加载 profile', async () => {
-    const profile = { user_id: 1, identity_primary: '助手', identity_composite: '', four_axes: { warmth: 50, verbosity: 50, proactiveness: 50, structuredness: 50 }, mbti_type: 'INTJ', mbti_confidence: 0.8, interaction_count: 0, last_inferred_at: null }
+    const profile = {
+      user_id: 1,
+      identity_primary: '助手',
+      identity_composite: '',
+      four_axes: { warmth: 50, verbosity: 50, proactiveness: 50, structuredness: 50 },
+      mbti_type: 'INTJ',
+      mbti_confidence: 0.8,
+      interaction_count: 0,
+      last_inferred_at: null,
+    }
     mockButlerProfileGet.mockResolvedValue({ success: true, profile })
     const wrapper = await mountSettings()
     const vm = wrapper.vm as any
@@ -1227,11 +1286,25 @@ describe('SettingsView functions – runPersyInfer', () => {
   })
 
   it('成功推断并更新 profile', async () => {
-    const profile = { user_id: 1, identity_primary: '新身份', identity_composite: '', four_axes: { warmth: 50, verbosity: 50, proactiveness: 50, structuredness: 50 }, mbti_type: 'INTJ', mbti_confidence: 0.8, interaction_count: 1, last_inferred_at: null }
+    const profile = {
+      user_id: 1,
+      identity_primary: '新身份',
+      identity_composite: '',
+      four_axes: { warmth: 50, verbosity: 50, proactiveness: 50, structuredness: 50 },
+      mbti_type: 'INTJ',
+      mbti_confidence: 0.8,
+      interaction_count: 1,
+      last_inferred_at: null,
+    }
     mockButlerProfileInfer.mockResolvedValue({
       success: true,
       profile,
-      inference: { mbti_type: 'INTJ', identity_changed: true, confidence: 0.9, reasons: ['原因1', '原因2'] },
+      inference: {
+        mbti_type: 'INTJ',
+        identity_changed: true,
+        confidence: 0.9,
+        reasons: ['原因1', '原因2'],
+      },
     })
     const wrapper = await mountSettings()
     const vm = wrapper.vm as any
@@ -1296,7 +1369,17 @@ describe('SettingsView functions – persyUserId computed', () => {
   it('不再使用登录用户的数字 id', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValue({
       success: true,
-      data: { user: { id: 42, username: 'test', display_name: 'Test', email: '', role: 'user', is_active: true }, permissions: [] },
+      data: {
+        user: {
+          id: 42,
+          username: 'test',
+          display_name: 'Test',
+          email: '',
+          role: 'user',
+          is_active: true,
+        },
+        permissions: [],
+      },
     })
     const wrapper = await mountSettings()
     await nextTick()
@@ -1309,7 +1392,17 @@ describe('SettingsView functions – persyUserId computed', () => {
   it('登录用户 id 无效时仍使用聊天会话键', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValue({
       success: true,
-      data: { user: { id: 'invalid', username: 'test', display_name: 'Test', email: '', role: 'user', is_active: true }, permissions: [] },
+      data: {
+        user: {
+          id: 'invalid',
+          username: 'test',
+          display_name: 'Test',
+          email: '',
+          role: 'user',
+          is_active: true,
+        },
+        permissions: [],
+      },
     })
     const wrapper = await mountSettings()
     await nextTick()
@@ -1322,7 +1415,17 @@ describe('SettingsView functions – persyUserId computed', () => {
   it('登录用户 id 为负数时仍使用聊天会话键', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValue({
       success: true,
-      data: { user: { id: -5, username: 'test', display_name: 'Test', email: '', role: 'user', is_active: true }, permissions: [] },
+      data: {
+        user: {
+          id: -5,
+          username: 'test',
+          display_name: 'Test',
+          email: '',
+          role: 'user',
+          is_active: true,
+        },
+        permissions: [],
+      },
     })
     const wrapper = await mountSettings()
     await nextTick()
@@ -1588,7 +1691,14 @@ describe('SettingsView functions – syncProfileDraftsFromUser', () => {
   it('有 user 时填充草稿', async () => {
     const wrapper = await mountSettings()
     const vm = wrapper.vm as any
-    vm.syncProfileDraftsFromUser({ id: 1, username: 'test', display_name: '测试', email: 'test@test.com', role: 'user', is_active: true })
+    vm.syncProfileDraftsFromUser({
+      id: 1,
+      username: 'test',
+      display_name: '测试',
+      email: 'test@test.com',
+      role: 'user',
+      is_active: true,
+    })
     expect(vm.profileDisplayNameDraft).toBe('测试')
     expect(vm.profileEmailDraft).toBe('test@test.com')
     wrapper.unmount()
@@ -1597,7 +1707,14 @@ describe('SettingsView functions – syncProfileDraftsFromUser', () => {
   it('user 无 display_name 时使用 username', async () => {
     const wrapper = await mountSettings()
     const vm = wrapper.vm as any
-    vm.syncProfileDraftsFromUser({ id: 1, username: 'testuser', display_name: '', email: '', role: 'user', is_active: true })
+    vm.syncProfileDraftsFromUser({
+      id: 1,
+      username: 'testuser',
+      display_name: '',
+      email: '',
+      role: 'user',
+      is_active: true,
+    })
     expect(vm.profileDisplayNameDraft).toBe('testuser')
     wrapper.unmount()
   })
@@ -1605,7 +1722,14 @@ describe('SettingsView functions – syncProfileDraftsFromUser', () => {
   it('user 无 email 时为空字符串', async () => {
     const wrapper = await mountSettings()
     const vm = wrapper.vm as any
-    vm.syncProfileDraftsFromUser({ id: 1, username: 'testuser', display_name: 'Test', email: undefined as any, role: 'user', is_active: true })
+    vm.syncProfileDraftsFromUser({
+      id: 1,
+      username: 'testuser',
+      display_name: 'Test',
+      email: undefined as any,
+      role: 'user',
+      is_active: true,
+    })
     expect(vm.profileEmailDraft).toBe('')
     wrapper.unmount()
   })
@@ -2075,7 +2199,17 @@ describe('SettingsView functions – isLocalAdmin computed', () => {
   it('role 为 admin 时返回 true', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValue({
       success: true,
-      data: { user: { id: 1, username: 'admin', display_name: 'Admin', email: '', role: 'admin', is_active: true }, permissions: [] },
+      data: {
+        user: {
+          id: 1,
+          username: 'admin',
+          display_name: 'Admin',
+          email: '',
+          role: 'admin',
+          is_active: true,
+        },
+        permissions: [],
+      },
     })
     const wrapper = await mountSettings()
     await nextTick()
@@ -2088,7 +2222,17 @@ describe('SettingsView functions – isLocalAdmin computed', () => {
   it('role 为 superadmin 时返回 true', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValue({
       success: true,
-      data: { user: { id: 1, username: 'super', display_name: 'Super', email: '', role: 'superadmin', is_active: true }, permissions: [] },
+      data: {
+        user: {
+          id: 1,
+          username: 'super',
+          display_name: 'Super',
+          email: '',
+          role: 'superadmin',
+          is_active: true,
+        },
+        permissions: [],
+      },
     })
     const wrapper = await mountSettings()
     await nextTick()
@@ -2101,7 +2245,17 @@ describe('SettingsView functions – isLocalAdmin computed', () => {
   it('role 为 user 时返回 false', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValue({
       success: true,
-      data: { user: { id: 1, username: 'user', display_name: 'User', email: '', role: 'user', is_active: true }, permissions: [] },
+      data: {
+        user: {
+          id: 1,
+          username: 'user',
+          display_name: 'User',
+          email: '',
+          role: 'user',
+          is_active: true,
+        },
+        permissions: [],
+      },
     })
     const wrapper = await mountSettings()
     await nextTick()
@@ -2130,7 +2284,17 @@ describe('SettingsView functions – memoryV2UserId computed', () => {
   it('有 user.username 时返回 username', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValue({
       success: true,
-      data: { user: { id: 1, username: 'testuser', display_name: 'Test', email: '', role: 'user', is_active: true }, permissions: [] },
+      data: {
+        user: {
+          id: 1,
+          username: 'testuser',
+          display_name: 'Test',
+          email: '',
+          role: 'user',
+          is_active: true,
+        },
+        permissions: [],
+      },
     })
     const wrapper = await mountSettings()
     await nextTick()
@@ -2144,7 +2308,17 @@ describe('SettingsView functions – memoryV2UserId computed', () => {
     // unwrapUserFromMe 要求 username 非空，否则返回 null
     mockAuthApiGetCurrentUser.mockResolvedValue({
       success: true,
-      data: { user: { id: 42, username: '', display_name: 'Test', email: '', role: 'user', is_active: true }, permissions: [] },
+      data: {
+        user: {
+          id: 42,
+          username: '',
+          display_name: 'Test',
+          email: '',
+          role: 'user',
+          is_active: true,
+        },
+        permissions: [],
+      },
     })
     const wrapper = await mountSettings()
     await nextTick()
@@ -2158,7 +2332,17 @@ describe('SettingsView functions – memoryV2UserId computed', () => {
   it('username 为空白时回退到 default', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValue({
       success: true,
-      data: { user: { id: 0, username: '   ', display_name: 'Test', email: '', role: 'user', is_active: true }, permissions: [] },
+      data: {
+        user: {
+          id: 0,
+          username: '   ',
+          display_name: 'Test',
+          email: '',
+          role: 'user',
+          is_active: true,
+        },
+        permissions: [],
+      },
     })
     const wrapper = await mountSettings()
     await nextTick()

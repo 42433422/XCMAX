@@ -3,29 +3,19 @@ import { ref, computed } from 'vue'
 import { productsApi } from '@/api/products'
 import type { ProductUpdateDTO } from '@/types/product'
 export interface Company {
-  id: number | string;
-  name: string;
-  [key: string]: unknown;
+  id: number | string
+  name: string
+  [key: string]: unknown
 }
 
 export interface LocalProduct {
-  id: number | string;
-  name: string;
-  model?: string;
-  code?: string;
-  companyId: number | string;
-  companyName?: string;
-  [key: string]: unknown;
-}
-
-interface ProductQueryState {
-  companies: Company[];
-  products: LocalProduct[];
-  selectedCompany: Company | null;
-  selectedProduct: LocalProduct | null;
-  searchQuery: string;
-  loading: boolean;
-  error: string | null;
+  id: number | string
+  name: string
+  model?: string
+  code?: string
+  companyId: number | string
+  companyName?: string
+  [key: string]: unknown
 }
 
 export const useProductQueryStore = defineStore('productQuery', () => {
@@ -39,32 +29,33 @@ export const useProductQueryStore = defineStore('productQuery', () => {
 
   const filteredProducts = computed(() => {
     if (!searchQuery.value) return products.value
-    
+
     const query = searchQuery.value.toLowerCase()
-    return products.value.filter(product => 
-      product.name?.toLowerCase().includes(query) ||
-      product.model?.toLowerCase().includes(query) ||
-      product.code?.toLowerCase().includes(query)
+    return products.value.filter(
+      (product) =>
+        product.name?.toLowerCase().includes(query) ||
+        product.model?.toLowerCase().includes(query) ||
+        product.code?.toLowerCase().includes(query),
     )
   })
 
   function companyProducts(companyId: number | string): LocalProduct[] {
-    return products.value.filter(product => product.companyId === companyId)
+    return products.value.filter((product) => product.companyId === companyId)
   }
 
   async function loadCompanies() {
     loading.value = true
     error.value = null
-    
+
     try {
       const response = await productsApi.getProducts()
-      const productsData = response.data as unknown as LocalProduct[] || []
+      const productsData = (response.data as unknown as LocalProduct[]) || []
       products.value = productsData
-      
-      const uniqueCompanies = [...new Set(productsData.map(p => p.companyId))]
-      companies.value = uniqueCompanies.map(id => ({
+
+      const uniqueCompanies = [...new Set(productsData.map((p) => p.companyId))]
+      companies.value = uniqueCompanies.map((id) => ({
         id,
-        name: productsData.find(p => p.companyId === id)?.companyName || `公司${id}`
+        name: productsData.find((p) => p.companyId === id)?.companyName || `公司${id}`,
       }))
     } catch (err) {
       error.value = err instanceof Error ? err.message : '加载公司列表失败'
@@ -77,11 +68,11 @@ export const useProductQueryStore = defineStore('productQuery', () => {
   async function loadProducts(companyId: number | string) {
     loading.value = true
     error.value = null
-    
+
     try {
       const response = await productsApi.getProducts()
-      const allProducts = response.data as unknown as LocalProduct[] || []
-      products.value = allProducts.filter(p => p.companyId === companyId)
+      const allProducts = (response.data as unknown as LocalProduct[]) || []
+      products.value = allProducts.filter((p) => p.companyId === companyId)
     } catch (err) {
       error.value = err instanceof Error ? err.message : '加载产品列表失败'
       console.error('Failed to load products:', err)
@@ -93,15 +84,15 @@ export const useProductQueryStore = defineStore('productQuery', () => {
   async function loadAllProducts() {
     loading.value = true
     error.value = null
-    
+
     try {
       const response = await productsApi.getProducts()
-      products.value = response.data as unknown as LocalProduct[] || []
-      
-      const uniqueCompanies = [...new Set(products.value.map(p => p.companyId))]
-      companies.value = uniqueCompanies.map(id => ({
+      products.value = (response.data as unknown as LocalProduct[]) || []
+
+      const uniqueCompanies = [...new Set(products.value.map((p) => p.companyId))]
+      companies.value = uniqueCompanies.map((id) => ({
         id,
-        name: products.value.find(p => p.companyId === id)?.companyName || `公司${id}`
+        name: products.value.find((p) => p.companyId === id)?.companyName || `公司${id}`,
       }))
     } catch (err) {
       error.value = err instanceof Error ? err.message : '加载产品列表失败'
@@ -114,7 +105,7 @@ export const useProductQueryStore = defineStore('productQuery', () => {
   function selectCompany(company: Company) {
     selectedCompany.value = company
     selectedProduct.value = null
-    
+
     if (company) {
       loadProducts(company.id)
     }
@@ -131,11 +122,11 @@ export const useProductQueryStore = defineStore('productQuery', () => {
   async function updateProduct(productId: number | string, data: ProductUpdateDTO) {
     loading.value = true
     error.value = null
-    
+
     try {
       await productsApi.updateProduct(productId, data)
-      
-      const index = products.value.findIndex(p => p.id === productId)
+
+      const index = products.value.findIndex((p) => p.id === productId)
       if (index !== -1) {
         products.value[index] = { ...products.value[index], ...data }
       }
@@ -187,6 +178,6 @@ export const useProductQueryStore = defineStore('productQuery', () => {
     searchProducts,
     updateProduct,
     exportProducts,
-    reset
+    reset,
   }
 })

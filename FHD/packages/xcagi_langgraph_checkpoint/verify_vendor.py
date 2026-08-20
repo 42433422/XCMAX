@@ -18,6 +18,7 @@ SHA 与 PROVENANCE.json 锁定的 `41341457342327166d72fc11952ab28fb61ec0bf` 一
 
 退出码: 0=全部通过; 1=校验失败。
 """
+
 from __future__ import annotations
 
 import argparse
@@ -115,7 +116,9 @@ def verify_manifest() -> bool:
     actual = collect_files()
     missing = [rel for rel in expected if rel not in actual]
     extra = [rel for rel in actual if rel not in expected]
-    changed = [rel for rel in actual if rel in expected and actual[rel] != expected[rel]]
+    changed = [
+        rel for rel in actual if rel in expected and actual[rel] != expected[rel]
+    ]
 
     ok = True
     for rel in sorted(missing):
@@ -146,8 +149,9 @@ def verify_license() -> bool:
 
 
 def _git(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", "-C", str(cwd), *args], check=False,
-                          stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    return subprocess.run(
+        ["git", "-C", str(cwd), *args], check=False, capture_output=True
+    )
 
 
 def _fetch_tagged_source(prov: dict, base: Path) -> tuple[bool, str]:
@@ -155,9 +159,9 @@ def _fetch_tagged_source(prov: dict, base: Path) -> tuple[bool, str]:
 
     返回 (成功, 错误信息)。成功时 base 下生成 <src>/langgraph 与 <src>/LICENSE。
     """
-    tag = prov["upstream_tag"]          # e.g. "1.2.10" (无 v 前缀)
+    tag = prov["upstream_tag"]  # e.g. "1.2.10" (无 v 前缀)
     sha = prov["upstream_commit_sha"]
-    src = prov["source_path"]           # e.g. "libs/checkpoint"
+    src = prov["source_path"]  # e.g. "libs/checkpoint"
     repo = base / "upstream"
     repo.mkdir()
 
@@ -168,7 +172,10 @@ def _fetch_tagged_source(prov: dict, base: Path) -> tuple[bool, str]:
 
     fetch = _git(["fetch", "--depth", "1", "origin", "tag", tag], repo)
     if fetch.returncode != 0:
-        return False, f"git fetch origin tag {tag} 失败: {fetch.stderr.decode().strip()[:200]}"
+        return (
+            False,
+            f"git fetch origin tag {tag} 失败: {fetch.stderr.decode().strip()[:200]}",
+        )
 
     resolved = _git(["rev-parse", f"{tag}^{{commit}}"], repo).stdout.decode().strip()
     if resolved != sha:
@@ -177,7 +184,10 @@ def _fetch_tagged_source(prov: dict, base: Path) -> tuple[bool, str]:
     upstream_paths = [f"{src}/langgraph", f"{src}/LICENSE"]
     archive = _git(["archive", "--format=tar", sha, *upstream_paths], repo)
     if archive.returncode != 0:
-        return False, f"git archive {sha[:12]} 失败: {archive.stderr.decode().strip()[:200]}"
+        return (
+            False,
+            f"git archive {sha[:12]} 失败: {archive.stderr.decode().strip()[:200]}",
+        )
 
     with tarfile.open(fileobj=io.BytesIO(archive.stdout)) as tar:
         kwargs = {"filter": "data"} if sys.version_info >= (3, 12) else {}
@@ -213,8 +223,10 @@ def verify_upstream(prov: dict) -> bool:
 
     ok = not mismatches
     if ok:
-        print(f"[OK] 与远端 tag {prov['upstream_tag']} ({prov['upstream_commit_sha'][:12]}) 的 "
-              f"{src}/langgraph 字节级一致")
+        print(
+            f"[OK] 与远端 tag {prov['upstream_tag']} ({prov['upstream_commit_sha'][:12]}) 的 "
+            f"{src}/langgraph 字节级一致"
+        )
     else:
         for m in mismatches:
             print(f"[FAIL] 与上游不一致: {m}")

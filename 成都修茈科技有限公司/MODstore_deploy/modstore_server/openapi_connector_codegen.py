@@ -1,3 +1,4 @@
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """受控 Python 客户端代码生成器。
 
 不从 OpenAPI spec 中拼接任意可执行表达式：所有生成代码只是结构化元数据加上一个固定的运行时

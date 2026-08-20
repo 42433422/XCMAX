@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -59,7 +63,7 @@ async def _send(
             raise _facade().HTTPException(r.status_code, f"QQ 接口失败: {r.text[:300]}")
         try:
             return r.json()
-        except Exception:
+        except RECOVERABLE_ERRORS:
             return {"ok": True}
 
 
@@ -123,7 +127,10 @@ class _BotContext:
         base = self.api_base()
         if kind == "group":
             url = f"{base}/v2/groups/{target_id}/messages"
-            body: _facade().Dict[str, _facade().Any] = {"content": content, "msg_type": 0}
+            body: _facade().Dict[str, _facade().Any] = {
+                "content": content,
+                "msg_type": 0,
+            }
         elif kind == "c2c":
             url = f"{base}/v2/users/{target_id}/messages"
             body = {"content": content, "msg_type": 0}
@@ -156,5 +163,5 @@ class _BotContext:
                 raise _facade().HTTPException(r.status_code, f"QQ 接口失败: {r.text[:300]}")
             try:
                 return r.json()
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 return {"ok": True}

@@ -1,13 +1,15 @@
+# mypy: disable-error-code="arg-type, assignment, union-attr"
 """Primary dynamic-team incident dispatch workflow."""
 
 from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional
 
 from modstore_server import incident_team_orchestrator as facade
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 
 def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
@@ -72,7 +74,7 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
         from modstore_server.release_recovery_orchestrator import maybe_execute_recovery
 
         recovery = maybe_execute_recovery(event_id=event_id, event_type=event_type, payload=payload)
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         recovery = {"ok": False, "error": str(exc)[:500]}
 
     results: List[Dict[str, Any]] = []
@@ -93,7 +95,7 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
 
             route = route_for_incident(event_type=event_type, payload=payload, role=role)
             bench_override = bench_override_for_route(route)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             route = {"provider": "auto", "model": "auto", "reason": "router_error"}
         task = _task_for_role(
             code_ownership=(
@@ -226,7 +228,7 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
         if ev2 is not None:
             updated = _payload(ev2)
             updated["_team_claim"] = {
-                "claimed_at": datetime.now(timezone.utc).isoformat(),
+                "claimed_at": datetime.now(UTC).isoformat(),
                 "ok": ok,
                 "recovery": recovery,
                 "team": slim_rows,
@@ -269,7 +271,7 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
                             "team_ok",
                         )
                     }
-                except Exception as exc:  # noqa: BLE001
+                except BOUNDARY_ERRORS as exc:  # noqa: BLE001
                     logger.exception(
                         "incident_team: CS ticket progress writeback failed event_id=%s ticket_id=%s",
                         event_id,

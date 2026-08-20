@@ -115,7 +115,10 @@ describe('useKittenVizEmployees', () => {
   it('refreshInstalled sets loading state', async () => {
     let resolvePromise: (v: any) => void
     vi.mocked(safeJsonRequest).mockImplementationOnce(
-      () => new Promise((resolve) => { resolvePromise = resolve })
+      () =>
+        new Promise((resolve) => {
+          resolvePromise = resolve
+        }),
     )
     const composable = useKittenVizEmployees()
     const promise = composable.refreshInstalled()

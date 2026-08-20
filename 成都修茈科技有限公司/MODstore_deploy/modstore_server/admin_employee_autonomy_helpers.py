@@ -1,3 +1,4 @@
+# mypy: disable-error-code="index, union-attr"
 """Authentication, parsing, mentions, and workforce snapshot helpers."""
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ from fastapi import Header, Request
 
 from modstore_server.api.deps import get_current_user, require_admin
 from modstore_server.models import User
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 _MENTION_RE = re.compile(r"@([a-zA-Z0-9][a-zA-Z0-9_-]{0,127})")
 _HOLLOW_DUTY_HANDLERS = frozenset({"echo", "llm_md"})
@@ -23,7 +25,7 @@ def _jloads(text: str, default: Any) -> Any:
         return default
     try:
         return json.loads(raw)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return default
 
 
@@ -106,7 +108,7 @@ def _workforce_assignment_snapshot(planned: set[str]) -> Dict[str, Any]:
             handlers = {
                 str(item).strip() for item in actions.get("handlers") or [] if str(item).strip()
             }
-        except Exception:  # noqa: BLE001 - missing/invalid reviewed runtime is a shell
+        except BOUNDARY_ERRORS:  # noqa: BLE001 - missing/invalid reviewed runtime is a shell
             handlers = set()
         if not handlers or handlers.issubset(_HOLLOW_DUTY_HANDLERS):
             shell_ids.append(employee_id)

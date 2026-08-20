@@ -16,6 +16,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import ProgrammingError, SQLAlchemyError
 
 from modstore_server.models import LandingContactSubmission, get_session_factory
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.research_tools import (
     is_plausible_company_name,
     sanitize_contact_company_web_error,
@@ -94,7 +95,7 @@ def _erp_company_names(query: str, limit: int) -> list[str]:
             conn.close()
             if names:
                 break
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.debug("erp company match skipped for %s", db_path, exc_info=True)
     return names[:limit]
 
@@ -201,10 +202,10 @@ async def build_company_match_payload(query: str, limit: int, web: bool) -> dict
                     "last_submitted_at": (existing or {}).get("last_submitted_at"),
                     "_score": max(int((existing or {}).get("_score") or 0), score),
                 }
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("company match web search timed out for q=%r", query)
             web_error = "联网检索超时"
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             logger.warning("company match web search failed: %s", exc)
             web_error = "联网检索暂时不可用"
     web_error = sanitize_contact_company_web_error(web_error)

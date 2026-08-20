@@ -70,16 +70,14 @@ export const QUICK_START_PAGE_HIGHLIGHTS: Record<string, TutorialPageHighlight[]
     {
       idSuffix: 'model-payment',
       title: '系统设置 · 看余额',
-      description:
-        '用助手、调模型都会花额度。展开「模型服务」，这儿能看还剩多少钱；旁边可以刷新、打开钱包或套餐。',
+      description: '用助手、调模型都会花额度。展开「模型服务」，这儿能看还剩多少钱；旁边可以刷新、打开钱包或套餐。',
       targetSelector: '[data-tutorial-id="settings-model-payment"]',
       highlightSelector: '[data-tour="settings-model-balance"]',
     },
     {
       idSuffix: 'recharge',
       title: '系统设置 · 快捷充值',
-      description:
-        '余额不够就点「快捷充值」，选一个金额或套餐购买；付完款回到这页点「刷新」，数字就会更新。',
+      description: '余额不够就点「快捷充值」，选一个金额或套餐购买；付完款回到这页点「刷新」，数字就会更新。',
       targetSelector: '[data-tour="settings-quick-recharge"]',
       highlightSelector: '[data-tour="settings-quick-recharge"]',
     },

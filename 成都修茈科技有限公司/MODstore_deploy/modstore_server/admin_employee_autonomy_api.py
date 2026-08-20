@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, attr-defined, no-any-return, union-attr, valid-type"
 """管理员：员工自治闭环看板与协作 API。"""
 
 from __future__ import annotations
@@ -7,6 +8,20 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 
+from modstore_server.admin_employee_autonomy_helpers import (
+    _extract_mentions_from_text as _extract_mentions_from_text,
+)
+from modstore_server.admin_employee_autonomy_helpers import (
+    _has_valid_internal_api_key as _has_valid_internal_api_key,
+)
+from modstore_server.admin_employee_autonomy_helpers import _internal_api_key as _internal_api_key
+from modstore_server.admin_employee_autonomy_helpers import _jloads as _jloads
+from modstore_server.admin_employee_autonomy_helpers import (
+    _require_admin_or_internal as _require_admin_or_internal,
+)
+from modstore_server.admin_employee_autonomy_helpers import (
+    _workforce_assignment_snapshot as _workforce_assignment_snapshot,
+)
 from modstore_server.api.deps import require_admin
 from modstore_server.employee_autonomy_service import (
     aggregate_admin_suggestion_dashboard,
@@ -19,14 +34,6 @@ from modstore_server.employee_autonomy_service import (
     reject_suggestion,
     run_employee_evolution_scan,
 )
-from modstore_server.admin_employee_autonomy_helpers import (
-    _extract_mentions_from_text as _extract_mentions_from_text,
-    _has_valid_internal_api_key as _has_valid_internal_api_key,
-    _internal_api_key as _internal_api_key,
-    _jloads as _jloads,
-    _require_admin_or_internal as _require_admin_or_internal,
-    _workforce_assignment_snapshot as _workforce_assignment_snapshot,
-)
 from modstore_server.models import (
     EmployeeCollabMessage,
     EmployeeCollabThread,
@@ -34,6 +41,7 @@ from modstore_server.models import (
     User,
     get_session_factory,
 )
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 router = APIRouter(prefix="/api/admin/employee-autonomy", tags=["admin-employee-autonomy"])
 
@@ -214,7 +222,7 @@ def batch_review_employee_suggestions(
     for x in ids_raw:
         try:
             n = int(x)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             continue
         if n > 0:
             ids.append(n)

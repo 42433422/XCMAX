@@ -1,4 +1,5 @@
 from __future__ import annotations
+from retort_engine.operational_errors import BOUNDARY_ERRORS
 
 import json
 import os
@@ -7,7 +8,7 @@ import urllib.error
 import urllib.request
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.paibi_prompting import (
     build_retort_paibi_panel_prompt as _prompting_build_retort_paibi_panel_prompt,
@@ -80,8 +81,9 @@ def record_paibi_llm_deep_result(
     if not status.get("scores"):
         return
     root = Path(project).expanduser().resolve()
-    dispatch = (
-        review.get("dispatch") if isinstance(review.get("dispatch"), dict) else {}
+    dispatch = cast(
+        dict[str, Any],
+        review.get("dispatch") if isinstance(review.get("dispatch"), dict) else {},
     )
     _record_llm_review(
         root,
@@ -134,7 +136,7 @@ def request_paibi_parallel_review(
     selected = list(panels or DEFAULT_PARALLEL_PANELS)[
         : max(1, min(8, int(max_parallel or 3)))
     ]
-    prompts = []
+    prompts: list[dict[str, Any]] = []
     for panel in selected:
         panel_id = str(
             panel.get("panel_id") or panel.get("id") or f"panel_{len(prompts) + 1}"
@@ -337,8 +339,11 @@ class PaibiLLMClient:
                 "report_only": True,
             }
             task_body = self._request("POST", "/api/tasks", token=token, json_body=body)
-            task = (
-                task_body.get("task") if isinstance(task_body.get("task"), dict) else {}
+            task = cast(
+                dict[str, Any],
+                task_body.get("task")
+                if isinstance(task_body.get("task"), dict)
+                else {},
             )
             return {
                 "status": "accepted",
@@ -354,7 +359,7 @@ class PaibiLLMClient:
                 },
                 "response": task_body,
             }
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
             return self._outbox(
                 project, title, prompt, f"paibi_dispatch_error: {str(exc)[:400]}"
             )
@@ -423,15 +428,17 @@ class PaibiLLMClient:
                 task_body = self._request(
                     "POST", "/api/tasks", token=token, json_body=body
                 )
-                task = (
+                task = cast(
+                    dict[str, Any],
                     task_body.get("task")
                     if isinstance(task_body.get("task"), dict)
-                    else {}
+                    else {},
                 )
-                subtask = (
+                subtask = cast(
+                    dict[str, Any],
                     task_body.get("subtask")
                     if isinstance(task_body.get("subtask"), dict)
-                    else {}
+                    else {},
                 )
                 task_id = str(task.get("id") or task_id)
                 previous_subtask_id = str(subtask.get("id") or previous_subtask_id)
@@ -475,7 +482,7 @@ class PaibiLLMClient:
                 ),
                 "dispatches": dispatches,
             }
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
             return self._group_outbox(
                 project, title, prompts, f"paibi_dispatch_error: {str(exc)[:400]}"
             )
@@ -561,7 +568,10 @@ class PaibiLLMClient:
         return worker_slots or selected
 
     def _device_tool_candidates(self, device: dict[str, Any]) -> list[str]:
-        tools = device.get("tools") if isinstance(device.get("tools"), list) else []
+        tools = cast(
+            list[Any],
+            device.get("tools") if isinstance(device.get("tools"), list) else [],
+        )
         available: list[str] = []
         for tool in tools:
             if not isinstance(tool, dict):
@@ -588,10 +598,11 @@ class PaibiLLMClient:
                 ordered.append(name)
         if ordered:
             return ordered
-        capabilities = (
+        capabilities = cast(
+            dict[str, Any],
             device.get("capabilities")
             if isinstance(device.get("capabilities"), dict)
-            else {}
+            else {},
         )
         if dev_tool in PAIBI_SUPPORTED_TOOLS and not tools:
             return [dev_tool]

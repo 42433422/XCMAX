@@ -23,7 +23,10 @@ describe('router index behavior', () => {
     const scrollBehavior = router.options.scrollBehavior
 
     expect(scrollBehavior({ path: '/' }, {}, { left: 4, top: 8 })).toEqual({ left: 4, top: 8 })
-    expect(scrollBehavior({ hash: '#api-keys' }, {}, null)).toEqual({ el: '#api-keys', behavior: 'smooth' })
+    expect(scrollBehavior({ hash: '#api-keys' }, {}, null)).toEqual({
+      el: '#api-keys',
+      behavior: 'smooth',
+    })
     expect(scrollBehavior({ path: '/' }, {}, null)).toEqual({ top: 0 })
 
     await router.push('/about')

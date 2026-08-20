@@ -2,6 +2,7 @@
 
 历史路径 ``scripts/ci/autonomy_callback`` 仍可 import；实现已合并到 autonomy 包。
 """
+
 from __future__ import annotations
 
 import importlib.util

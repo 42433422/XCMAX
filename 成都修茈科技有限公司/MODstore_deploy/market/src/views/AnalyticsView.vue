@@ -8,14 +8,26 @@
       <div class="grid">
         <div class="card">
           <h3 class="card-title">执行</h3>
-          <p class="stat">总次数 <strong>{{ dash.execution?.total ?? 0 }}</strong></p>
-          <p class="stat">成功 <strong>{{ dash.execution?.success ?? dash.execution?.completed ?? 0 }}</strong> · 失败 <strong>{{ dash.execution?.failed ?? 0 }}</strong></p>
-          <p class="stat">成功率 <strong>{{ Number(dash.execution?.success_rate ?? 0).toFixed(1) }}%</strong></p>
-          <p class="stat">累计 Token <strong>{{ dash.execution?.total_tokens ?? 0 }}</strong></p>
+          <p class="stat">
+            总次数 <strong>{{ dash.execution?.total ?? 0 }}</strong>
+          </p>
+          <p class="stat">
+            成功 <strong>{{ dash.execution?.success ?? dash.execution?.completed ?? 0 }}</strong> · 失败
+            <strong>{{ dash.execution?.failed ?? 0 }}</strong>
+          </p>
+          <p class="stat">
+            成功率 <strong>{{ Number(dash.execution?.success_rate ?? 0).toFixed(1) }}%</strong>
+          </p>
+          <p class="stat">
+            累计 Token <strong>{{ dash.execution?.total_tokens ?? 0 }}</strong>
+          </p>
         </div>
         <div class="card">
           <h3 class="card-title">消费</h3>
-          <p class="stat">已购商品金额合计 <strong>¥{{ Number(dash.spending?.total ?? dash.spending?.total_spent ?? 0).toFixed(2) }}</strong></p>
+          <p class="stat">
+            已购商品金额合计
+            <strong>¥{{ Number(dash.spending?.total ?? dash.spending?.total_spent ?? 0).toFixed(2) }}</strong>
+          </p>
           <p class="hint">基于「购买」记录汇总，不含钱包充值余额。</p>
         </div>
       </div>
@@ -168,17 +180,43 @@ onMounted(async () => {
   color: rgba(255, 255, 255, 0.5);
 }
 
-html[data-workbench-theme='light'] .analytics-page { background: #f5f5f7; color: #1d1d1f; }
-html[data-workbench-theme='light'] .page-title { color: #1d1d1f; }
-html[data-workbench-theme='light'] .page-desc { color: #86868b; }
-html[data-workbench-theme='light'] .card { background: #ffffff; border-color: rgba(0,0,0,0.06); }
-html[data-workbench-theme='light'] .card-title { color: #1d1d1f; }
-html[data-workbench-theme='light'] .stat { color: #515154; }
-html[data-workbench-theme='light'] .stat strong { color: #1d1d1f; }
-html[data-workbench-theme='light'] .hint { color: #86868b; }
+html[data-workbench-theme='light'] .analytics-page {
+  background: #f5f5f7;
+  color: #1d1d1f;
+}
+html[data-workbench-theme='light'] .page-title {
+  color: #1d1d1f;
+}
+html[data-workbench-theme='light'] .page-desc {
+  color: #86868b;
+}
+html[data-workbench-theme='light'] .card {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.06);
+}
+html[data-workbench-theme='light'] .card-title {
+  color: #1d1d1f;
+}
+html[data-workbench-theme='light'] .stat {
+  color: #515154;
+}
+html[data-workbench-theme='light'] .stat strong {
+  color: #1d1d1f;
+}
+html[data-workbench-theme='light'] .hint {
+  color: #86868b;
+}
 html[data-workbench-theme='light'] .tbl th,
-html[data-workbench-theme='light'] .tbl td { border-bottom-color: rgba(0,0,0,0.06); color: #1d1d1f; }
-html[data-workbench-theme='light'] .flash-err { background: rgba(220,53,69,0.08); color: #dc2626; }
+html[data-workbench-theme='light'] .tbl td {
+  border-bottom-color: rgba(0, 0, 0, 0.06);
+  color: #1d1d1f;
+}
+html[data-workbench-theme='light'] .flash-err {
+  background: rgba(220, 53, 69, 0.08);
+  color: #dc2626;
+}
 html[data-workbench-theme='light'] .loading,
-html[data-workbench-theme='light'] .empty { color: #86868b; }
+html[data-workbench-theme='light'] .empty {
+  color: #86868b;
+}
 </style>

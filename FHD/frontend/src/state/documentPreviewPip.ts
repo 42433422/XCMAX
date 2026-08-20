@@ -33,13 +33,7 @@ function inferKind(fileName: string, mimeType: string): DocumentPreviewKind {
   return 'office'
 }
 
-function showPreview(input: {
-  title?: string
-  summary?: string
-  url: string
-  fileName?: string
-  mimeType?: string
-}) {
+function showPreview(input: { title?: string; summary?: string; url: string; fileName?: string; mimeType?: string }) {
   const fileName = String(input.fileName || input.title || '生成文档').trim()
   const mimeType = String(input.mimeType || '').trim()
   Object.assign(documentPreviewPip, {
@@ -74,11 +68,7 @@ async function hydrateExcelPreview(blob: Blob) {
   }
 }
 
-export function openDocumentPreviewFromBlob(
-  blob: Blob,
-  fileName: string,
-  summary = '',
-) {
+export function openDocumentPreviewFromBlob(blob: Blob, fileName: string, summary = '') {
   releaseOwnedBlobUrl()
   ownedBlobUrl = URL.createObjectURL(blob)
   showPreview({
@@ -92,15 +82,10 @@ export function openDocumentPreviewFromBlob(
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {}
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
 }
 
-function findDocumentCandidate(
-  value: unknown,
-  depth = 0,
-): Record<string, unknown> | null {
+function findDocumentCandidate(value: unknown, depth = 0): Record<string, unknown> | null {
   if (depth > 6) return null
   if (Array.isArray(value)) {
     for (const item of value) {
@@ -116,10 +101,7 @@ function findDocumentCandidate(
   const url = String(row.preview_url || row.download_url || row.file_url || '').trim()
   const artifactType = String(row.artifact_type || row.type || '').toLowerCase()
   const documentHint = `${fileName} ${mimeType} ${artifactType} ${url}`
-  if (
-    url
-    && /(document|office|pdf|word|excel|docx|xlsx|\.pdf\b|\.docx?\b|\.xlsx?\b)/i.test(documentHint)
-  ) {
+  if (url && /(document|office|pdf|word|excel|docx|xlsx|\.pdf\b|\.docx?\b|\.xlsx?\b)/i.test(documentHint)) {
     return row
   }
   for (const nested of Object.values(row)) {
@@ -132,9 +114,7 @@ function findDocumentCandidate(
 export function openDocumentPreviewFromResult(result: unknown): boolean {
   const candidate = findDocumentCandidate(result)
   if (!candidate) return false
-  const rawUrl = String(
-    candidate.preview_url || candidate.download_url || candidate.file_url || '',
-  ).trim()
+  const rawUrl = String(candidate.preview_url || candidate.download_url || candidate.file_url || '').trim()
   if (!rawUrl) return false
   const fileName = String(candidate.file_name || candidate.filename || candidate.name || '生成文档')
   const mimeType = String(candidate.mime_type || candidate.content_type || '')

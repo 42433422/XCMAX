@@ -1,12 +1,6 @@
 <template>
   <Teleport to="body">
-    <div
-      v-if="modalVisible"
-      class="global-lan-gate-overlay"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="global-lan-gate-title"
-    >
+    <div v-if="modalVisible" class="global-lan-gate-overlay" role="dialog" aria-modal="true" aria-labelledby="global-lan-gate-title">
       <div id="global-lan-gate-title" class="sr-only">局域网授权</div>
       <div class="global-lan-gate-backdrop" @click.self="dismissLanGateModal" />
       <div class="global-lan-gate-shell" @click.stop>
@@ -17,12 +11,12 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount } from 'vue';
-import LanGatePanel from '@/components/lan/LanGatePanel.vue';
-import { useLanGate } from '@/composables/useLanGate';
-import { XCAGI_PROMPT_LAN_GATE_EVENT } from '@/api/core';
+import { onMounted, onBeforeUnmount } from 'vue'
+import LanGatePanel from '@/components/lan/LanGatePanel.vue'
+import { useLanGate } from '@/composables/useLanGate'
+import { XCAGI_PROMPT_LAN_GATE_EVENT } from '@/api/core'
 
-const { modalVisible, modalRedirect, dismissLanGateModal, openLanGateModal, refresh } = useLanGate();
+const { modalVisible, modalRedirect, dismissLanGateModal, openLanGateModal, refresh } = useLanGate()
 
 /**
  * 任一业务请求拿到 401+license_* 时触发；直接打开授权框而不是把异常抛到各业务页。
@@ -30,26 +24,25 @@ const { modalVisible, modalRedirect, dismissLanGateModal, openLanGateModal, refr
  */
 async function handleLanGatePrompt() {
   try {
-    await refresh(true);
+    await refresh(true)
   } catch {
     /* refresh 本身可能因未授权失败，这里无需处理 */
   }
   if (!modalVisible.value) {
-    const currentPath =
-      typeof window !== 'undefined' && window.location ? window.location.pathname + window.location.search : '/';
-    openLanGateModal(currentPath || '/');
+    const currentPath = typeof window !== 'undefined' && window.location ? window.location.pathname + window.location.search : '/'
+    openLanGateModal(currentPath || '/')
   }
 }
 
 onMounted(() => {
-  if (typeof window === 'undefined') return;
-  window.addEventListener(XCAGI_PROMPT_LAN_GATE_EVENT, handleLanGatePrompt as EventListener);
-});
+  if (typeof window === 'undefined') return
+  window.addEventListener(XCAGI_PROMPT_LAN_GATE_EVENT, handleLanGatePrompt as EventListener)
+})
 
 onBeforeUnmount(() => {
-  if (typeof window === 'undefined') return;
-  window.removeEventListener(XCAGI_PROMPT_LAN_GATE_EVENT, handleLanGatePrompt as EventListener);
-});
+  if (typeof window === 'undefined') return
+  window.removeEventListener(XCAGI_PROMPT_LAN_GATE_EVENT, handleLanGatePrompt as EventListener)
+})
 </script>
 
 <style scoped>

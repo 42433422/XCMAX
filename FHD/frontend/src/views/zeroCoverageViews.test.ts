@@ -18,15 +18,60 @@ const hostStub = {
 }
 
 const hostBridgeViews = [
-  { name: 'ApprovalFlowManagementView', modId: 'xcagi-approval-bridge', view: 'ApprovalFlowManagementView', title: '审批' },
-  { name: 'ApprovalHubView', modId: 'xcagi-approval-bridge', view: 'ApprovalHubView', title: '审批' },
-  { name: 'ApprovalRulesView', modId: 'xcagi-approval-bridge', view: 'ApprovalRulesView', title: '审批' },
-  { name: 'ApprovalWorkspaceView', modId: 'xcagi-approval-bridge', view: 'ApprovalWorkspaceView', title: '审批' },
-  { name: 'BatchAnalyzeView', modId: 'xcagi-erp-domain-bridge', view: 'BatchAnalyzeView', title: 'ERP 业务页' },
-  { name: 'ChatDebugView', modId: 'xcagi-planner-bridge', view: 'ChatDebugView', title: 'Planner 页' },
-  { name: 'LabelEditorView', modId: 'xcagi-erp-domain-bridge', view: 'LabelEditorView', title: 'ERP 业务页' },
-  { name: 'TemplatePreviewView', modId: 'xcagi-erp-domain-bridge', view: 'TemplatePreviewView', title: 'ERP 业务页' },
-  { name: 'WorkflowVisualizationView', modId: 'xcagi-workflow-visualization-bridge', view: 'WorkflowVisualizationView', title: '流程可视化' },
+  {
+    name: 'ApprovalFlowManagementView',
+    modId: 'xcagi-approval-bridge',
+    view: 'ApprovalFlowManagementView',
+    title: '审批',
+  },
+  {
+    name: 'ApprovalHubView',
+    modId: 'xcagi-approval-bridge',
+    view: 'ApprovalHubView',
+    title: '审批',
+  },
+  {
+    name: 'ApprovalRulesView',
+    modId: 'xcagi-approval-bridge',
+    view: 'ApprovalRulesView',
+    title: '审批',
+  },
+  {
+    name: 'ApprovalWorkspaceView',
+    modId: 'xcagi-approval-bridge',
+    view: 'ApprovalWorkspaceView',
+    title: '审批',
+  },
+  {
+    name: 'BatchAnalyzeView',
+    modId: 'xcagi-erp-domain-bridge',
+    view: 'BatchAnalyzeView',
+    title: 'ERP 业务页',
+  },
+  {
+    name: 'ChatDebugView',
+    modId: 'xcagi-planner-bridge',
+    view: 'ChatDebugView',
+    title: 'Planner 页',
+  },
+  {
+    name: 'LabelEditorView',
+    modId: 'xcagi-erp-domain-bridge',
+    view: 'LabelEditorView',
+    title: 'ERP 业务页',
+  },
+  {
+    name: 'TemplatePreviewView',
+    modId: 'xcagi-erp-domain-bridge',
+    view: 'TemplatePreviewView',
+    title: 'ERP 业务页',
+  },
+  {
+    name: 'WorkflowVisualizationView',
+    modId: 'xcagi-workflow-visualization-bridge',
+    view: 'WorkflowVisualizationView',
+    title: '流程可视化',
+  },
 ]
 
 describe('HostModBridge stub views (zero coverage)', () => {
@@ -49,9 +94,7 @@ describe('BusinessDockingView', () => {
   it('renders an empty redirect stub and navigates to the ETL data docking center', async () => {
     const router = createRouter({
       history: createMemoryHistory(),
-      routes: [
-        { path: '/business-docking', name: 'business-docking', component: { template: '<div />' } },
-      ],
+      routes: [{ path: '/business-docking', name: 'business-docking', component: { template: '<div />' } }],
     })
     await router.push('/')
     await router.isReady()

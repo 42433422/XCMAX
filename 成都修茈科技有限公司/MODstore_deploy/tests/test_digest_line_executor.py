@@ -96,7 +96,10 @@ def test_execute_ps_patches_dispatches(monkeypatch):
 
     def fake_dispatch(subtasks, **kwargs):
         calls.append({"n": len(subtasks), "kwargs": kwargs})
-        return {"ok": True, "results": [{"employee_id": "fhd-core-maintainer", "ok": True}]}
+        return {
+            "ok": True,
+            "results": [{"employee_id": "fhd-core-maintainer", "ok": True}],
+        }
 
     monkeypatch.setenv("MODSTORE_DAILY_VIBE_EXECUTE_ENABLED", "1")
     monkeypatch.setattr(
@@ -114,7 +117,7 @@ def test_execute_ps_patches_dispatches(monkeypatch):
 
 
 def test_execute_skips_when_no_units(monkeypatch):
-    ps = "# Vibe 预备 · P-S 软件线 · 补丁清单\n\n" "## [fhd-core-maintainer] 核心\n\n"
+    ps = "# Vibe 预备 · P-S 软件线 · 补丁清单\n\n## [fhd-core-maintainer] 核心\n\n"
     rid = _seed_digest(ps)
     monkeypatch.setenv("MODSTORE_DAILY_VIBE_EXECUTE_ENABLED", "1")
     out = execute_digest_line_work_units(rid, force=True)
@@ -136,7 +139,10 @@ def test_execute_fallback_breakpoint_units_complete_locally(monkeypatch):
     )
     rid = _seed_fallback_digest(ps)
 
-    from modstore_server.digest_action_items import list_action_items, parse_and_store_action_items
+    from modstore_server.digest_action_items import (
+        list_action_items,
+        parse_and_store_action_items,
+    )
 
     parse_and_store_action_items(
         day="2026-06-28",

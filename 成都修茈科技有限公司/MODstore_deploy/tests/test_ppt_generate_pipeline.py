@@ -40,7 +40,10 @@ async def test_compose_pipeline_no_llm(tmp_path: Path):
         template_path=None,
         payload={"user_query": "做一份3页产品介绍PPT", "workspace_root": str(tmp_path)},
         ctx={},
-        rule_spec={"default_output_relpath": "outputs/output.pptx", "output_schema": []},
+        rule_spec={
+            "default_output_relpath": "outputs/output.pptx",
+            "output_schema": [],
+        },
     )
     assert Path(result["output_path"]).is_file()
     assert result.get("slide_count", 0) >= 1
@@ -52,7 +55,8 @@ async def test_compose_pipeline_no_llm(tmp_path: Path):
 async def test_enhance_homework_pipeline(tmp_path: Path):
     src = tmp_path / "plan.json"
     src.write_text(
-        '{"title":"作业","slides":[{"index":1,"title":"t","bullets":[]}]}', encoding="utf-8"
+        '{"title":"作业","slides":[{"index":1,"title":"t","bullets":[]}]}',
+        encoding="utf-8",
     )
     out = tmp_path / "outputs" / "output.pptx"
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -62,7 +66,10 @@ async def test_enhance_homework_pipeline(tmp_path: Path):
         template_path=ORIGINAL,
         payload={"user_query": "完成跑马灯动画", "workspace_root": str(tmp_path)},
         ctx={},
-        rule_spec={"default_output_relpath": "outputs/output.pptx", "output_schema": []},
+        rule_spec={
+            "default_output_relpath": "outputs/output.pptx",
+            "output_schema": [],
+        },
     )
     pptx = Path(result["output_path"])
     assert pptx.stat().st_size > 100_000

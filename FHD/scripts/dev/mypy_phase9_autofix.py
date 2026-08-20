@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="union-attr"
 """Mechanical Phase 9 mypy fixes for explicit Any boundaries.
 
 The fixer is deliberately narrow: it only wraps a single-line ``return`` that
@@ -56,7 +57,11 @@ def _add_typing_name(lines: list[str], name: str) -> None:
             return
         for close_index in range(index + 1, len(lines)):
             if lines[close_index].strip() == ")":
-                indent = re.match(r"\s*", lines[index + 1]).group(0) if index + 1 < len(lines) else "    "
+                indent = (
+                    re.match(r"\s*", lines[index + 1]).group(0)
+                    if index + 1 < len(lines)
+                    else "    "
+                )
                 lines.insert(close_index, f"{indent}{name},")
                 return
 
@@ -102,7 +107,9 @@ def _fix_file(path: Path, diagnostics: list[tuple[str, int, str]]) -> int:
             fixed += 1
         elif kind == "var":
             name = detail
-            match = re.match(rf"^(?P<indent>\s*){re.escape(name)}\s*=\s*(?P<expr>\[\]|\{{\}})\s*$", line)
+            match = re.match(
+                rf"^(?P<indent>\s*){re.escape(name)}\s*=\s*(?P<expr>\[\]|\{{\}})\s*$", line
+            )
             if not match:
                 continue
             lines[index] = f"{match.group('indent')}{name}: Any = {match.group('expr')}"
@@ -114,7 +121,9 @@ def _fix_file(path: Path, diagnostics: list[tuple[str, int, str]]) -> int:
     if needs_any:
         _add_typing_name(lines, "Any")
     if fixed:
-        path.write_text("\n".join(lines) + ("\n" if original.endswith("\n") else ""), encoding="utf-8")
+        path.write_text(
+            "\n".join(lines) + ("\n" if original.endswith("\n") else ""), encoding="utf-8"
+        )
     return fixed
 
 

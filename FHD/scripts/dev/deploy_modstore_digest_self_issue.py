@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="import-untyped"
 """部署 MODstore 管理端身份码 · 方案 A（公网自签发）到 xiu-ci.com 生产。"""
+
 from __future__ import annotations
 
 import os

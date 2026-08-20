@@ -36,16 +36,10 @@ function goExpertFiles() {
   <div>
     <div class="emp-head-row">
       <h3 class="sub-title">员工</h3>
-      <button v-if="mode === 'wizard'" type="button" class="linkish btn-ghost-inline" @click="goExpertFiles">
-        编辑文件
-      </button>
-      <button v-if="mode === 'expert'" type="button" class="btn btn-primary btn-sm" @click="openEmployeePickModal">
-        添加
-      </button>
+      <button v-if="mode === 'wizard'" type="button" class="linkish btn-ghost-inline" @click="goExpertFiles">编辑文件</button>
+      <button v-if="mode === 'expert'" type="button" class="btn btn-primary btn-sm" @click="openEmployeePickModal">添加</button>
     </div>
-    <p v-if="!workflowEmployeesRows.length" class="muted small emp-empty">
-      暂无员工。请点上方「从 AI 市场选择」或「从本地添加」。
-    </p>
+    <p v-if="!workflowEmployeesRows.length" class="muted small emp-empty">暂无员工。请点上方「从 AI 市场选择」或「从本地添加」。</p>
     <div v-else class="emp-table-wrap">
       <table class="emp-table">
         <thead>
@@ -70,10 +64,16 @@ function goExpertFiles() {
                   class="input input-sm wf-link-select"
                   :value="linkPick[row.index] ?? 0"
                   :disabled="linkWorkflowBusy || !linkableWorkflows.length"
-                  @change="(ev) => { linkPick[row.index] = Number((ev.target as HTMLSelectElement).value) }"
+                  @change="
+                    (ev) => {
+                      linkPick[row.index] = Number((ev.target as HTMLSelectElement).value)
+                    }
+                  "
                 >
                   <option :value="0">选择…</option>
-                  <option v-for="w in linkableWorkflows" :key="w.id" :value="w.id">{{ w.name }}</option>
+                  <option v-for="w in linkableWorkflows" :key="w.id" :value="w.id">
+                    {{ w.name }}
+                  </option>
                 </select>
                 <button
                   type="button"
@@ -102,12 +102,7 @@ function goExpertFiles() {
                 >
                   {{ registerCatalogBusy === row.index ? '…' : '登记' }}
                 </button>
-                <button
-                  v-if="row.linkedWorkflowId"
-                  type="button"
-                  class="btn btn-sm btn-ghost"
-                  @click="openWorkflowSandboxDecompose(row)"
-                >
+                <button v-if="row.linkedWorkflowId" type="button" class="btn btn-sm btn-ghost" @click="openWorkflowSandboxDecompose(row)">
                   沙盒
                 </button>
               </template>

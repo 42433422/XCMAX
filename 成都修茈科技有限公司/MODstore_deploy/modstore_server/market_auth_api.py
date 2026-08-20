@@ -1,3 +1,4 @@
+# isort: skip_file
 # ruff: noqa: E402, F401
 """XC AGI 在线市场 API：认证、注册、登录、公开联系表单。"""
 

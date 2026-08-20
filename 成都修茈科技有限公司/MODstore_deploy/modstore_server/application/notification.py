@@ -19,6 +19,7 @@ from modstore_server.domain.notification.types import (
     NotificationType,
     OutboundNotification,
 )
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +65,7 @@ class NotificationApplicationService:
                     "title": notif.title,
                 },
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.warning(
                 "realtime push failed for notification id=%s user=%s",
                 notif.id,

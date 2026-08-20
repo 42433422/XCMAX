@@ -8,7 +8,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.external_advantage_matrix import build_external_advantage_matrix
 
@@ -49,10 +49,11 @@ def build_external_process_adjudication(
         check=False,
     )
     adjudication = _read_json(output_path)
-    summary = (
+    summary = cast(
+        dict[str, Any],
         adjudication.get("summary")
         if isinstance(adjudication.get("summary"), dict)
-        else {}
+        else {},
     )
     script_text = script_path.read_text(encoding="utf-8")
     result_summary = {
@@ -111,7 +112,9 @@ def build_external_process_adjudication(
 
 
 def _redacted_case(row: dict[str, Any]) -> dict[str, Any]:
-    retort = row.get("retort") if isinstance(row.get("retort"), dict) else {}
+    retort = cast(
+        dict[str, Any], row.get("retort") if isinstance(row.get("retort"), dict) else {}
+    )
     return {
         "case_id": str(row.get("case_id") or ""),
         "source_project": str(row.get("source_project") or ""),

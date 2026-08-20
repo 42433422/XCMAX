@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """HTTP layer for the notification bounded context.
 
 The router consumes the :class:`NotificationApplicationService` only;

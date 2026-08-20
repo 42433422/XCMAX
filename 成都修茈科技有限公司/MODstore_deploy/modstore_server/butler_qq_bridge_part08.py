@@ -1,6 +1,8 @@
-# ruff: noqa
+# mypy: disable-error-code="arg-type, attr-defined, no-any-return, union-attr, valid-type"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
 
 

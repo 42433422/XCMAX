@@ -13,6 +13,7 @@ from langchain_protocol import Event
 from websockets.asyncio.client import connect as websocket_connect
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 
+from langgraph_sdk._exception_policy import BOUNDARY_ERRORS
 from langgraph_sdk._shared.utilities import _quote_path_param
 from langgraph_sdk.stream.transport.base import (
     EventStreamHandle,
@@ -137,7 +138,7 @@ class ProtocolWebSocketTransport:
                     ready.set_exception(err)
                 if not done.done():
                     done.set_result(err)
-            except Exception as err:
+            except BOUNDARY_ERRORS as err:
                 if not ready.done():
                     ready.set_exception(err)
                 if not done.done():

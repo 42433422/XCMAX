@@ -47,7 +47,11 @@ describe('xcmaxMarketProxy', () => {
 
   it('adminEmployeeExecutionMetrics builds query string', async () => {
     apiGet.mockResolvedValue({})
-    await xcmaxMarketProxy.adminEmployeeExecutionMetrics('e1', { limit: 10, offset: 5, user_id: 3 })
+    await xcmaxMarketProxy.adminEmployeeExecutionMetrics('e1', {
+      limit: 10,
+      offset: 5,
+      user_id: 3,
+    })
     const url = apiGet.mock.calls[0][0] as string
     expect(url).toContain('limit=10')
     expect(url).toContain('offset=5')
@@ -88,10 +92,10 @@ describe('xcmaxMarketProxy', () => {
   it('localRunEmployeeCronJob posts manual run payload', async () => {
     apiPost.mockResolvedValue({ ok: true })
     await xcmaxMarketProxy.localRunEmployeeCronJob('job 1', { task: 'sync', input_data: { a: 1 } })
-    expect(apiPost).toHaveBeenCalledWith(
-      '/api/xcmax/local/employee-cron/jobs/job%201/run',
-      { task: 'sync', input_data: { a: 1 } },
-    )
+    expect(apiPost).toHaveBeenCalledWith('/api/xcmax/local/employee-cron/jobs/job%201/run', {
+      task: 'sync',
+      input_data: { a: 1 },
+    })
   })
 })
 
@@ -112,18 +116,14 @@ describe('xcmaxMarketProxy local duty api probe', () => {
     apiGet.mockResolvedValueOnce({})
     apiGet.mockRejectedValueOnce({ status: 404 })
     const mod = await import('./xcmaxMarketProxy')
-    await expect(mod.default.getEmployeeStatus('emp1')).rejects.toThrow(
-      'AI 员工 emp1 的运行状态不存在',
-    )
+    await expect(mod.default.getEmployeeStatus('emp1')).rejects.toThrow('AI 员工 emp1 的运行状态不存在')
   })
 
   it('getEmployeeManifest rejects instead of fabricating empty handlers when not found', async () => {
     apiGet.mockResolvedValueOnce({})
     apiGet.mockRejectedValueOnce({ message: '员工不存在' })
     const mod = await import('./xcmaxMarketProxy')
-    await expect(mod.default.getEmployeeManifest('emp2')).rejects.toThrow(
-      'AI 员工 emp2 的 manifest 不存在',
-    )
+    await expect(mod.default.getEmployeeManifest('emp2')).rejects.toThrow('AI 员工 emp2 的 manifest 不存在')
   })
 
   it('adminDutyGraphHealth reports unavailable when both health APIs fail', async () => {
@@ -143,9 +143,7 @@ describe('xcmaxMarketProxy local duty api probe', () => {
   it('getEmployeeStatus rejects when local api is unavailable', async () => {
     apiGet.mockRejectedValueOnce({ status: 404 })
     const mod = await import('./xcmaxMarketProxy')
-    await expect(mod.default.getEmployeeStatus('emp3')).rejects.toThrow(
-      'AI 员工运行时不可用',
-    )
+    await expect(mod.default.getEmployeeStatus('emp3')).rejects.toThrow('AI 员工运行时不可用')
   })
 
   it('adminDutyGraphHealth preserves explicit ops fallback health', async () => {
@@ -180,10 +178,10 @@ describe('xcmaxMarketProxy local duty api probe', () => {
     const r = await mod.default.executeEmployeeTask('emp 1', 'daily.brief', { topic: 'ops' })
     expect(r).toEqual({ ok: true, source: 'local' })
     expect(apiGet).toHaveBeenCalledWith('/api/xcmax/local/duty-graph/health')
-    expect(apiPost).toHaveBeenCalledWith(
-      '/api/xcmax/local/employees/emp%201/execute',
-      { task: 'daily.brief', input_data: { topic: 'ops' } },
-    )
+    expect(apiPost).toHaveBeenCalledWith('/api/xcmax/local/employees/emp%201/execute', {
+      task: 'daily.brief',
+      input_data: { topic: 'ops' },
+    })
   })
 
   it('executeEmployeeTask falls back to market proxy when local execute returns 404', async () => {
@@ -193,15 +191,13 @@ describe('xcmaxMarketProxy local duty api probe', () => {
     const mod = await import('./xcmaxMarketProxy')
     const r = await mod.default.executeEmployeeTask('emp 2', 'daily.brief', { topic: 'ops' })
     expect(r).toEqual({ ok: true, source: 'market' })
-    expect(apiPost).toHaveBeenNthCalledWith(
-      1,
-      '/api/xcmax/local/employees/emp%202/execute',
-      { task: 'daily.brief', input_data: { topic: 'ops' } },
-    )
-    expect(apiPost).toHaveBeenNthCalledWith(
-      2,
-      '/api/xcmax/market-proxy/employees/emp%202/execute',
-      { task: 'daily.brief', input_data: { topic: 'ops' } },
-    )
+    expect(apiPost).toHaveBeenNthCalledWith(1, '/api/xcmax/local/employees/emp%202/execute', {
+      task: 'daily.brief',
+      input_data: { topic: 'ops' },
+    })
+    expect(apiPost).toHaveBeenNthCalledWith(2, '/api/xcmax/market-proxy/employees/emp%202/execute', {
+      task: 'daily.brief',
+      input_data: { topic: 'ops' },
+    })
   })
 })

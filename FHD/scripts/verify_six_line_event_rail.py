@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """验收六线事件轨：O7 backlog + O4 incident + status API。"""
+
 from __future__ import annotations
 
 import json

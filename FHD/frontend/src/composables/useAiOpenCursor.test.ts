@@ -1,11 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createRouter, createMemoryHistory } from 'vue-router'
-import {
-  aiopenCursorEnabled,
-  setAiOpenCursorEnabled,
-  initAiOpenCursor,
-  useAiOpenCursor,
-} from './useAiOpenCursor'
+import { aiopenCursorEnabled, setAiOpenCursorEnabled, initAiOpenCursor, useAiOpenCursor } from './useAiOpenCursor'
 
 vi.mock('@/utils/apiBase', () => ({
   getApiBase: () => 'http://127.0.0.1:5000',

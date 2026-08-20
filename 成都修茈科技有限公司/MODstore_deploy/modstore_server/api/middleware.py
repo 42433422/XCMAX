@@ -12,6 +12,8 @@ import httpx
 from fastapi import Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
+
 logger = logging.getLogger(__name__)
 
 _MARKET_DIST = Path(__file__).resolve().parent.parent.parent / "market" / "dist"
@@ -33,7 +35,7 @@ async def request_id_middleware(request: Request, call_next):
         from modstore_server.eventing.request_trace import set_trace_ids
 
         set_trace_ids(rid, span_id="")
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         pass
     response = await call_next(request)
     response.headers["X-Request-Id"] = rid
@@ -118,7 +120,7 @@ async def payment_backend_proxy_middleware(request: Request, call_next):
             headers={"X-Request-Id": request_id},
             status_code=502,
         )
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         observe_payment_proxy(method, request.url.path, 502, time.perf_counter() - started)
         return JSONResponse(
             {"ok": False, "message": java_payment_unreachable_message(exc)},

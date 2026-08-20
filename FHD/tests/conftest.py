@@ -1,3 +1,4 @@
+# mypy: disable-error-code="no-redef"
 """
 pytest 配置与 fixtures（FastAPI 版）
 """
@@ -16,6 +17,8 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 os.environ.setdefault("SECRET_KEY", "xcagi-test-only-secret-key-32-bytes-minimum")
 
@@ -104,11 +107,12 @@ def pytest_sessionfinish(session, exitstatus):
     _legacy_sync_test_loops.clear()
     asyncio.set_event_loop(None)
 
+
 # pytest-cov 采集时会多次触达 ORM；先一次性加载全部 model，避免 Table 重复注册。
 try:
     import app.db.models  # noqa: F401
     import app.infrastructure.mods.employee_registry  # noqa: F401
-except Exception:  # pragma: no cover - 个别桌面/缺依赖环境允许后续用例自行 skip
+except BOUNDARY_ERRORS:  # pragma: no cover - 个别桌面/缺依赖环境允许后续用例自行 skip
     pass
 
 
@@ -257,7 +261,7 @@ def mock_file_system():
 
     try:
         shutil.rmtree(temp_dir)
-    except Exception:
+    except BOUNDARY_ERRORS:
         pass
 
 

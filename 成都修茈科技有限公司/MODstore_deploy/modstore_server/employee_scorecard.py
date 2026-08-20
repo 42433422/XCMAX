@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any, Dict, List
 
 from sqlalchemy import func
@@ -59,7 +59,7 @@ def get_employee_scorecard(
     except (TypeError, ValueError):
         days, limit_recent = 7, 5
 
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    cutoff = datetime.now(UTC) - timedelta(days=days)
     sf = get_session_factory()
     with sf() as session:
         from modstore_server.models_user import EmployeeExecutionMetric
@@ -205,7 +205,7 @@ def list_all_employee_scorecards(
     if sort_by not in valid_sort:
         sort_by = "total_tasks"
 
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    cutoff = datetime.now(UTC) - timedelta(days=days)
     sf = get_session_factory()
     with sf() as session:
         from modstore_server.models_user import EmployeeExecutionMetric

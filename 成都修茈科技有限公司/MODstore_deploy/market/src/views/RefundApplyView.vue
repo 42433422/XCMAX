@@ -56,13 +56,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { api } from '../api'
-import {
-  REFUND_REASON_MAX,
-  formatRefundTime,
-  refundStatusText,
-  refundStatusTone,
-  validateRefundForm,
-} from '../refundStatus'
+import { REFUND_REASON_MAX, formatRefundTime, refundStatusText, refundStatusTone, validateRefundForm } from '../refundStatus'
 
 const route = useRoute()
 const orderNo = ref('')
@@ -280,36 +274,97 @@ onMounted(() => {
   .tbl td::before {
     color: rgba(255, 255, 255, 0.45);
   }
-  .tbl td:nth-child(1)::before { content: '订单号'; }
-  .tbl td:nth-child(2)::before { content: '金额'; }
-  .tbl td:nth-child(3)::before { content: '原因'; }
-  .tbl td:nth-child(4)::before { content: '状态'; }
-  .tbl td:nth-child(5)::before { content: '时间'; }
+  .tbl td:nth-child(1)::before {
+    content: '订单号';
+  }
+  .tbl td:nth-child(2)::before {
+    content: '金额';
+  }
+  .tbl td:nth-child(3)::before {
+    content: '原因';
+  }
+  .tbl td:nth-child(4)::before {
+    content: '状态';
+  }
+  .tbl td:nth-child(5)::before {
+    content: '时间';
+  }
   .reason-cell {
     max-width: min(56vw, 260px);
   }
 }
 
-html[data-workbench-theme='light'] .refund-page { background: #f5f5f7; color: #1d1d1f; }
-html[data-workbench-theme='light'] .page-title { color: #1d1d1f; }
-html[data-workbench-theme='light'] .page-desc { color: #86868b; }
-html[data-workbench-theme='light'] .card { background: #ffffff; border-color: rgba(0,0,0,0.06); }
-html[data-workbench-theme='light'] .card-title { color: #1d1d1f; }
-html[data-workbench-theme='light'] .label { color: #86868b; }
-html[data-workbench-theme='light'] .counter { color: #86868b; }
-html[data-workbench-theme='light'] .counter.invalid { color: #dc2626; }
-html[data-workbench-theme='light'] .input { border-color: rgba(0,0,0,0.1); background: #ffffff; color: #1d1d1f; }
+html[data-workbench-theme='light'] .refund-page {
+  background: #f5f5f7;
+  color: #1d1d1f;
+}
+html[data-workbench-theme='light'] .page-title {
+  color: #1d1d1f;
+}
+html[data-workbench-theme='light'] .page-desc {
+  color: #86868b;
+}
+html[data-workbench-theme='light'] .card {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.06);
+}
+html[data-workbench-theme='light'] .card-title {
+  color: #1d1d1f;
+}
+html[data-workbench-theme='light'] .label {
+  color: #86868b;
+}
+html[data-workbench-theme='light'] .counter {
+  color: #86868b;
+}
+html[data-workbench-theme='light'] .counter.invalid {
+  color: #dc2626;
+}
+html[data-workbench-theme='light'] .input {
+  border-color: rgba(0, 0, 0, 0.1);
+  background: #ffffff;
+  color: #1d1d1f;
+}
 html[data-workbench-theme='light'] .tbl th,
-html[data-workbench-theme='light'] .tbl td { border-bottom-color: rgba(0,0,0,0.06); color: #1d1d1f; }
-html[data-workbench-theme='light'] .status-pill { border-color: rgba(0,0,0,0.08); background: rgba(0,0,0,0.03); }
-html[data-workbench-theme='light'] .status-pending { color: #b45309; border-color: rgba(180,83,9,0.2); }
-html[data-workbench-theme='light'] .status-approved { color: #16a34a; border-color: rgba(22,163,74,0.2); }
+html[data-workbench-theme='light'] .tbl td {
+  border-bottom-color: rgba(0, 0, 0, 0.06);
+  color: #1d1d1f;
+}
+html[data-workbench-theme='light'] .status-pill {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(0, 0, 0, 0.03);
+}
+html[data-workbench-theme='light'] .status-pending {
+  color: #b45309;
+  border-color: rgba(180, 83, 9, 0.2);
+}
+html[data-workbench-theme='light'] .status-approved {
+  color: #16a34a;
+  border-color: rgba(22, 163, 74, 0.2);
+}
 html[data-workbench-theme='light'] .status-rejected,
-html[data-workbench-theme='light'] .status-failed { color: #dc2626; border-color: rgba(220,38,38,0.2); }
-html[data-workbench-theme='light'] .flash-ok { background: rgba(34,197,94,0.08); color: #16a34a; }
-html[data-workbench-theme='light'] .flash-err { background: rgba(220,53,69,0.08); color: #dc2626; }
+html[data-workbench-theme='light'] .status-failed {
+  color: #dc2626;
+  border-color: rgba(220, 38, 38, 0.2);
+}
+html[data-workbench-theme='light'] .flash-ok {
+  background: rgba(34, 197, 94, 0.08);
+  color: #16a34a;
+}
+html[data-workbench-theme='light'] .flash-err {
+  background: rgba(220, 53, 69, 0.08);
+  color: #dc2626;
+}
 html[data-workbench-theme='light'] .loading,
-html[data-workbench-theme='light'] .empty { color: #86868b; }
-html[data-workbench-theme='light'] .btn-primary { background: #0071e3; color: #ffffff; border-color: #0071e3; }
-html[data-workbench-theme='light'] .btn-primary:hover:not(:disabled) { background: #005bb5; }
+html[data-workbench-theme='light'] .empty {
+  color: #86868b;
+}
+html[data-workbench-theme='light'] .btn-primary {
+  background: #0071e3;
+  color: #ffffff;
+  border-color: #0071e3;
+}
+html[data-workbench-theme='light'] .btn-primary:hover:not(:disabled) {
+  background: #005bb5;
+}
 </style>

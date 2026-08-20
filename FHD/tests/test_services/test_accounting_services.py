@@ -1,3 +1,4 @@
+# mypy: disable-error-code="no-any-return"
 """
 财务冲销/账龄/科目初始化服务测试（Task 5, upgrade-erp-modules-odoo18）
 

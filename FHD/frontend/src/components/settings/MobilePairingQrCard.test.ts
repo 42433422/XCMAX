@@ -49,9 +49,7 @@ describe('MobilePairingQrCard.vue', () => {
   })
 
   it('shows "尚未绑定手机" hint when not paired', async () => {
-    mockApiFetch.mockResolvedValue(
-      jsonRes({ paired: false, mobileUsername: '', lastRelaySyncAt: 0 }),
-    )
+    mockApiFetch.mockResolvedValue(jsonRes({ paired: false, mobileUsername: '', lastRelaySyncAt: 0 }))
     const wrapper = mount(MobilePairingQrCard)
     await flushPromises()
     expect(wrapper.text()).toContain('尚未绑定手机')
@@ -60,9 +58,7 @@ describe('MobilePairingQrCard.vue', () => {
 
   it('shows connected status with mobile username and "服务器中继正常" when synced recently', async () => {
     const now = Math.floor(Date.now() / 1000)
-    mockApiFetch.mockResolvedValue(
-      jsonRes({ paired: true, mobileUsername: '李雷', lastRelaySyncAt: now - 5 }),
-    )
+    mockApiFetch.mockResolvedValue(jsonRes({ paired: true, mobileUsername: '李雷', lastRelaySyncAt: now - 5 }))
     const wrapper = mount(MobilePairingQrCard)
     await flushPromises()
     expect(wrapper.text()).toContain('已连接：李雷 的手机')
@@ -72,9 +68,7 @@ describe('MobilePairingQrCard.vue', () => {
 
   it('shows stale-sync warning when last sync is old', async () => {
     const now = Math.floor(Date.now() / 1000)
-    mockApiFetch.mockResolvedValue(
-      jsonRes({ paired: true, mobileUsername: '王五', lastRelaySyncAt: now - 20 * 60 }),
-    )
+    mockApiFetch.mockResolvedValue(jsonRes({ paired: true, mobileUsername: '王五', lastRelaySyncAt: now - 20 * 60 }))
     const wrapper = mount(MobilePairingQrCard)
     await flushPromises()
     expect(wrapper.text()).toContain('中继暂时不通')

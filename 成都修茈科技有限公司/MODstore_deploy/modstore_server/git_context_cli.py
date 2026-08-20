@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from modstore_server.deploy_context import normalized_deploy_tier, resolve_hostname
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def main() -> None:
@@ -27,7 +28,7 @@ def main() -> None:
                 return (r.stdout or "").strip()
             err = (r.stderr or "").strip()
             return f"(git exit {r.returncode}) {err[:400]}"
-        except Exception as e:
+        except RECOVERABLE_ERRORS as e:
             return str(e)[:400]
 
     sha = run_git(["rev-parse", "HEAD"])

@@ -24,7 +24,12 @@ const status = ref<StatusPayload | null>(null)
 const pkgIds = ref('')
 const dryRunBusy = ref(false)
 const runBusy = ref(false)
-const lastRun = ref<{ ok?: boolean; exit_code?: number; stdout_tail?: string; stderr_tail?: string } | null>(null)
+const lastRun = ref<{
+  ok?: boolean
+  exit_code?: number
+  stdout_tail?: string
+  stderr_tail?: string
+} | null>(null)
 
 async function loadStatus() {
   if (!isAdmin.value) return
@@ -86,9 +91,17 @@ onMounted(() => void loadStatus())
     <p v-if="error" class="yo-err">{{ error }}</p>
 
     <section v-if="status" class="yo-card">
-      <p><strong>{{ t('admin.yuangonOnboard.repo') }}</strong> <code class="yo-code">{{ status.repo_root }}</code></p>
       <p>
-        {{ t('admin.yuangonOnboard.counts', { y: status.yuangon_employee_count ?? 0, c: status.catalog_employee_pack_count ?? 0 }) }}
+        <strong>{{ t('admin.yuangonOnboard.repo') }}</strong>
+        <code class="yo-code">{{ status.repo_root }}</code>
+      </p>
+      <p>
+        {{
+          t('admin.yuangonOnboard.counts', {
+            y: status.yuangon_employee_count ?? 0,
+            c: status.catalog_employee_pack_count ?? 0,
+          })
+        }}
       </p>
       <p v-if="(status.missing_in_catalog?.length ?? 0) > 0" class="yo-warn">
         {{ t('admin.yuangonOnboard.missing') }}
@@ -251,16 +264,44 @@ onMounted(() => void loadStatus())
   background: rgba(255, 255, 255, 0.06);
 }
 
-html[data-workbench-theme='light'] .yo-card{background:#fff;border-color:#e2e8f0}
-html[data-workbench-theme='light'] .yo-input{background:#fff;color:#1a1a1a;border-color:#d1d5db}
-html[data-workbench-theme='light'] .yo-pre{background:rgba(0,0,0,0.04)}
-html[data-workbench-theme='light'] .yo-err{color:#dc2626}
-html[data-workbench-theme='light'] .yo-warn{color:#d97706}
-html[data-workbench-theme='light'] .yo-parse-err{color:#dc2626}
-html[data-workbench-theme='light'] .yo-log .ok{color:#059669}
-html[data-workbench-theme='light'] .yo-log .bad{color:#dc2626}
-html[data-workbench-theme='light'] .yo-stderr{border-color:rgba(0,0,0,0.12)}
-html[data-workbench-theme='light'] .btn{border-color:#d1d5db}
-html[data-workbench-theme='light'] .btn.primary{background:#3b82f6;color:#fff}
-html[data-workbench-theme='light'] .btn.ghost:hover{background:rgba(0,0,0,0.04)}
+html[data-workbench-theme='light'] .yo-card {
+  background: #fff;
+  border-color: #e2e8f0;
+}
+html[data-workbench-theme='light'] .yo-input {
+  background: #fff;
+  color: #1a1a1a;
+  border-color: #d1d5db;
+}
+html[data-workbench-theme='light'] .yo-pre {
+  background: rgba(0, 0, 0, 0.04);
+}
+html[data-workbench-theme='light'] .yo-err {
+  color: #dc2626;
+}
+html[data-workbench-theme='light'] .yo-warn {
+  color: #d97706;
+}
+html[data-workbench-theme='light'] .yo-parse-err {
+  color: #dc2626;
+}
+html[data-workbench-theme='light'] .yo-log .ok {
+  color: #059669;
+}
+html[data-workbench-theme='light'] .yo-log .bad {
+  color: #dc2626;
+}
+html[data-workbench-theme='light'] .yo-stderr {
+  border-color: rgba(0, 0, 0, 0.12);
+}
+html[data-workbench-theme='light'] .btn {
+  border-color: #d1d5db;
+}
+html[data-workbench-theme='light'] .btn.primary {
+  background: #3b82f6;
+  color: #fff;
+}
+html[data-workbench-theme='light'] .btn.ghost:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
 </style>

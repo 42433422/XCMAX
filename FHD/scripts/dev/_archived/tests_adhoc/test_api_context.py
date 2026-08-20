@@ -1,7 +1,10 @@
+# mypy: disable-error-code="import-not-found, var-annotated"
 # Direct test of _query_messages_by_numeric_id logic
 
 import os
 import sys
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 sys.path.insert(0, r"E:\FHD\XCAGI")
 from app.utils.path_io.path_utils import get_resource_path
@@ -23,7 +26,7 @@ try:
     from mcp_server import _decompress_content
 
     print(f"_decompress_content: {_decompress_content}")
-except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"Import error: {e}")
     _decompress_content = None
 
@@ -66,7 +69,7 @@ try:
                         break
                 if len(all_messages) >= limit:
                     break
-            except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+            except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
                 print(f"  Error in {table}: {e}")
                 continue
 
@@ -96,12 +99,12 @@ try:
                             break
                     if all_messages:
                         break
-            except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+            except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
                 print(f"  Error in {table}: {e}")
                 continue
 
     conn.close()
-except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"Outer error: {e}")
 
 print(f"\nTotal messages: {len(all_messages)}")

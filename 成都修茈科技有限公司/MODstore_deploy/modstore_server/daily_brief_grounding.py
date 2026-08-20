@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr"
 """Repository-grounding utilities for daily employee briefs."""
 
 from __future__ import annotations
@@ -11,6 +12,7 @@ from typing import List, Set, Tuple
 from modstore_server.duty_roster import yuangon_area_for_pkg
 from modstore_server.employee_runtime import load_employee_pack
 from modstore_server.models import get_session_factory
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +36,7 @@ def _workspace_repo_root_candidates() -> List[Path]:
             from modstore_server.integrations.ops_action_handlers import repo_root as _ops_rr
 
             seeds.append(Path(_ops_rr()))
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
         seeds.append(Path(__file__).resolve().parents[2])
         try:
@@ -127,8 +129,8 @@ def _manifest_ground_globs(pkg_id: str) -> List[str]:
                 if s and ".." not in s and not s.startswith(("/", "\\")):
                     out.append(s)
             return out
-    except Exception:
-        logger.debug("daily brief: no manifest ground globs for %s", pkg_id, exc_info=True)
+    except RECOVERABLE_ERRORS:
+        logger.debug("daily brief: manifest ground globs unavailable")
     return []
 
 
@@ -185,8 +187,8 @@ def _safe_glob_under_pack(pack_dir: Path, pattern: str) -> List[Path]:
             except ValueError:
                 continue
             found.append(p)
-    except OSError as exc:
-        logger.warning("glob failed pattern=%s err=%s", pattern, exc)
+    except OSError:
+        logger.warning("daily brief grounding glob failed")
     return found
 
 
@@ -323,9 +325,8 @@ def collect_yuangon_pack_excerpt(pkg_id: str) -> Tuple[str, List[str]]:
 
     if truncated_files:
         logger.warning(
-            "yuangon excerpt truncated %s file(s) for pkg_id=%s (budget=%s)",
+            "yuangon excerpt truncated %s file(s) (budget=%s)",
             truncated_files,
-            pkg_id,
             budget,
         )
         warns.append(

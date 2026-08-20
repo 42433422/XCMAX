@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="attr-defined, import-not-found, no-any-return, valid-type"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -26,7 +30,9 @@ async def tool_read_workspace_file(
     rr = ctx.get("ops_readonly_repo_root")
     if rr:
         try:
-            from modstore_server.integrations.ops_action_handlers import ops_path_allowed
+            from modstore_server.integrations.ops_action_handlers import (
+                ops_path_allowed,
+            )
 
             root = _facade().Path(str(rr)).resolve()
             norm = path.replace("\\", "/").lstrip("./")
@@ -50,7 +56,7 @@ async def tool_read_workspace_file(
                         }
                     except OSError as exc:
                         return {"ok": False, "error": str(exc)[:300]}
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             return {"ok": False, "error": f"ops read failed: {exc}"[:300]}
     resolved = _facade()._guard_path(workspace_root, path)
     if resolved is None:
@@ -96,10 +102,12 @@ async def tool_write_workspace_file(
                 "ok": False,
                 "error": "无法在仓库根下解析路径（scope 校验需要 MODSTORE_REPO_ROOT 与工作区位于仓库内）",
             }
-        (ok_sc, msg_sc) = validate_agent_repo_write(rel_repo, sg, fg)
+        ok_sc, msg_sc = validate_agent_repo_write(rel_repo, sg, fg)
         if not ok_sc:
             try:
-                from modstore_server.employee_autonomy_service import create_employee_suggestion
+                from modstore_server.employee_autonomy_service import (
+                    create_employee_suggestion,
+                )
 
                 create_employee_suggestion(
                     source_employee_id=str(ctx.get("employee_id") or "unknown"),
@@ -117,7 +125,7 @@ async def tool_write_workspace_file(
                     emit_event=True,
                     auto_dispatch=True,
                 )
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 pass
             return {"ok": False, "error": msg_sc[:400]}
     emp_id = str(ctx.get("employee_id") or "").strip()
@@ -144,12 +152,16 @@ async def tool_write_workspace_file(
                 "path": path,
                 "message": "变更已提交审批队列，批准后将写入文件",
             }
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             return {"ok": False, "error": str(exc)[:400]}
     try:
         _facade().os.makedirs(_facade().os.path.dirname(resolved) or ".", exist_ok=True)
         _facade().Path(resolved).write_text(content or "", encoding="utf-8")
-        return {"ok": True, "path": path, "bytes_written": len((content or "").encode("utf-8"))}
+        return {
+            "ok": True,
+            "path": path,
+            "bytes_written": len((content or "").encode("utf-8")),
+        }
     except OSError as exc:
         return {"ok": False, "error": str(exc)[:300]}
 
@@ -213,7 +225,7 @@ async def tool_run_sandboxed_python(
         return {"ok": False, "error": f"执行超时（{timeout:.0f}s）"}
     except FileNotFoundError:
         return {"ok": False, "error": "Python 运行时不可用"}
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         return {"ok": False, "error": str(exc)[:300]}
 
 
@@ -281,7 +293,15 @@ async def tool_identify_file_types(
         return {"ok": False, "error": f"路径越界：{path!r}"}
     if not _facade().os.path.isdir(resolved):
         return {"ok": False, "error": f"目录不存在：{path!r}"}
-    skip_dirs = {".git", "node_modules", "__pycache__", ".venv", "venv", "dist", "build"}
+    skip_dirs = {
+        ".git",
+        "node_modules",
+        "__pycache__",
+        ".venv",
+        "venv",
+        "dist",
+        "build",
+    }
     ext_count: _facade().Dict[str, int] = {}
     total = 0
     for cur, dirs, files in _facade().os.walk(resolved):
@@ -329,7 +349,7 @@ async def tool_analyze_project_summary(
         }
     except ImportError:
         pass
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         _facade().logger.warning("analyze_project failed, falling back: %s", exc)
     top_level = sorted(_facade().os.listdir(resolved))[:40]
     manifests: _facade().Dict[str, _facade().Any] = {}

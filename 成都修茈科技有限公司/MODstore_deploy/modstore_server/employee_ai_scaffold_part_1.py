@@ -1,7 +1,8 @@
-# ruff: noqa
-# mypy: ignore-errors
+# mypy: disable-error-code="attr-defined, index, no-any-return, operator, union-attr, valid-type"
 """Employee scaffold helpers split by generation responsibility."""
+
 from __future__ import annotations
+
 import importlib
 
 
@@ -17,7 +18,10 @@ def _is_template_brief(brief: str) -> bool:
 
 
 def _validate_skill_quality(
-    skills: _facade().List[_facade().Dict[str, _facade().Any]], *, label: str, description: str
+    skills: _facade().List[_facade().Dict[str, _facade().Any]],
+    *,
+    label: str,
+    description: str,
 ) -> _facade().List[_facade().Dict[str, _facade().Any]]:
     for sk in skills:
         if not isinstance(sk, dict):
@@ -46,7 +50,7 @@ def _default_capabilities(
     caps = [str(x).strip()[:128] for x in capabilities if str(x).strip()]
     if caps:
         return caps[:8]
-    (preset_caps, _preset_meta) = _facade().resolve_preset_capabilities(department_preset)
+    preset_caps, _preset_meta = _facade().resolve_preset_capabilities(department_preset)
     if preset_caps:
         return preset_caps[:8]
     text = " ".join([pid, name, description, employee_id, label]).lower()
@@ -196,8 +200,16 @@ def _seo_skill_structure(cap: str) -> _facade().Dict[str, _facade().Any]:
             "logic": logic_by_cap.get(cap, "执行 SEO 静态文件检查并输出修复 diff。"),
         },
         "trigger_rules": [
-            {"type": "execution_error", "rule": "读取/解析文件失败", "threshold": "immediate"},
-            {"type": "quality_gate", "rule": "quality_score < 0.85", "threshold": "0.85"},
+            {
+                "type": "execution_error",
+                "rule": "读取/解析文件失败",
+                "threshold": "immediate",
+            },
+            {
+                "type": "quality_gate",
+                "rule": "quality_score < 0.85",
+                "threshold": "0.85",
+            },
             {
                 "type": "special_case",
                 "rule": "发现未确认的验证 token 或未知 SEO 文件",
@@ -248,7 +260,16 @@ def _is_seo_context(*parts: str) -> bool:
     return any(
         (
             k in text
-            for k in ("seo", "sitemap", "站点地图", "robots", "百度", "baidu", "bing", "push")
+            for k in (
+                "seo",
+                "sitemap",
+                "站点地图",
+                "robots",
+                "百度",
+                "baidu",
+                "bing",
+                "push",
+            )
         )
     )
 
@@ -303,7 +324,12 @@ def _seo_prompt_suffix(write_mode: str) -> str:
 
 
 def _ensure_seo_runtime_details(
-    out: _facade().Dict[str, _facade().Any], *, pid: str, name: str, description: str, label: str
+    out: _facade().Dict[str, _facade().Any],
+    *,
+    pid: str,
+    name: str,
+    description: str,
+    label: str,
 ) -> None:
     if not _facade()._is_seo_context(pid, name, description, label):
         return

@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol, Sequence, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
-from ..sandbox import SandboxDriver, SandboxJob, SandboxPolicy, SubprocessSandboxDriver
+from vibe_coding.operational_errors import BOUNDARY_ERRORS
+
+from ..sandbox import SandboxDriver, SandboxPolicy, SubprocessSandboxDriver
 
 
 @dataclass(slots=True)
@@ -94,7 +97,7 @@ class ToolRunner:
             t0 = time.perf_counter()
             try:
                 report = adapter.run(root, sandbox=self.sandbox, policy=self.policy)
-            except Exception as exc:  # noqa: BLE001
+            except BOUNDARY_ERRORS as exc:
                 report = ToolReport(
                     tool=adapter.name,
                     passed=False,
@@ -111,9 +114,9 @@ class ToolRunner:
 
 
 def _default_adapters() -> list[ToolAdapter]:
-    from .adapters.ruff import RuffAdapter
     from .adapters.mypy import MypyAdapter
     from .adapters.pytest import PytestAdapter
+    from .adapters.ruff import RuffAdapter
 
     return [RuffAdapter(), MypyAdapter(), PytestAdapter()]
 

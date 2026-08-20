@@ -22,5 +22,5 @@ with pdfplumber.open(pdf_path) as pdf:
     for i in range(min(15, len(pdf.pages))):
         page = pdf.pages[i]
         text = page.extract_text()
-        print(f"\n=== 第 {i+1} 页 ===")
+        print(f"\n=== 第 {i + 1} 页 ===")
         print(text[:4000] if text else "[无文本内容]")

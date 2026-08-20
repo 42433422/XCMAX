@@ -66,11 +66,7 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
     sessionId,
     getActiveModId: () => String(modsStore.activeModId || ''),
   })
-  const {
-    mergeHistorySessions,
-    clearLocalHistoryCache,
-    readLocalMessagesBySession,
-  } = historyPersistence
+  const { mergeHistorySessions, clearLocalHistoryCache, readLocalMessagesBySession } = historyPersistence
 
   const showHistory = ref(false)
   const historySessions = ref<HistorySessionItem[]>([])
@@ -87,14 +83,12 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
       if (!data?.success) throw new Error(String(data?.message || '加载历史失败'))
 
       const dataRow = asRecord(data)
-      const sessionsRaw = asArray(
-        dataRow.sessions ?? dataRow.data ?? dataRow.conversations,
-      )
+      const sessionsRaw = asArray(dataRow.sessions ?? dataRow.data ?? dataRow.conversations)
       historySessions.value = mergeHistorySessions(sessionsRaw) as HistorySessionItem[]
     } catch (e) {
       const localFallback = mergeHistorySessions([]) as HistorySessionItem[]
       historySessions.value = localFallback
-      historyError.value = localFallback.length ? '' : (e instanceof Error ? e.message : '加载历史失败，请稍后重试')
+      historyError.value = localFallback.length ? '' : e instanceof Error ? e.message : '加载历史失败，请稍后重试'
       console.error('加载历史失败:', e)
     } finally {
       historyLoading.value = false
@@ -119,34 +113,38 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
       const serverMessages = asArray(dataRow.messages)
       const localMessages = readLocalMessagesBySession(sid)
       if (data.success && serverMessages.length > 0) {
-        loadMessages(serverMessages.map((msg: unknown) => {
-          const row = asRecord(msg)
-          const roleRaw = asString(row.role)
-          return {
-            role: roleRaw === 'user' || roleRaw === 'task' ? roleRaw : 'ai',
-            content: normalizeServerContentToHtml(asString(row.content)),
-            time: formatChatMessageTime(
-              row.time ?? row.timestamp ?? row.created_at ?? row.createdAt ?? row.updated_at,
-            ),
-          }
-        }))
+        loadMessages(
+          serverMessages.map((msg: unknown) => {
+            const row = asRecord(msg)
+            const roleRaw = asString(row.role)
+            return {
+              role: roleRaw === 'user' || roleRaw === 'task' ? roleRaw : 'ai',
+              content: normalizeServerContentToHtml(asString(row.content)),
+              time: formatChatMessageTime(row.time ?? row.timestamp ?? row.created_at ?? row.createdAt ?? row.updated_at),
+            }
+          }),
+        )
       } else if (localMessages.length > 0) {
-        loadMessages(localMessages.map((msg) => {
-          const row = asRecord(msg)
-          const roleRaw = asString(row.role || (msg as { role?: string }).role)
-          return {
-            role: roleRaw === 'user' || roleRaw === 'task' ? roleRaw : 'ai',
-            // 本地缓存已经是可展示内容；再次 HTML 转义会把 &quot; 变成可见实体。
-            content: asString(row.content || (msg as { content?: string }).content),
-            time: formatChatMessageTime(row.time ?? row.timestamp ?? row.created_at),
-          }
-        }))
+        loadMessages(
+          localMessages.map((msg) => {
+            const row = asRecord(msg)
+            const roleRaw = asString(row.role || (msg as { role?: string }).role)
+            return {
+              role: roleRaw === 'user' || roleRaw === 'task' ? roleRaw : 'ai',
+              // 本地缓存已经是可展示内容；再次 HTML 转义会把 &quot; 变成可见实体。
+              content: asString(row.content || (msg as { content?: string }).content),
+              time: formatChatMessageTime(row.time ?? row.timestamp ?? row.created_at),
+            }
+          }),
+        )
       } else if (data.success) {
-        loadMessages([{
-          role: 'ai',
-          content: '该会话暂无消息记录。',
-          time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-        }])
+        loadMessages([
+          {
+            role: 'ai',
+            content: '该会话暂无消息记录。',
+            time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+          },
+        ])
       } else {
         throw new Error(asString((data as { message?: unknown }).message, '加载会话失败'))
       }
@@ -154,15 +152,17 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
     } catch (e) {
       const localMessages = readLocalMessagesBySession(sid)
       if (localMessages.length > 0) {
-        loadMessages(localMessages.map((msg) => {
-          const row = asRecord(msg)
-          const roleRaw = asString(row.role || (msg as { role?: string }).role)
-          return {
-            role: roleRaw === 'user' || roleRaw === 'task' ? roleRaw : 'ai',
-            content: asString(row.content || (msg as { content?: string }).content),
-            time: formatChatMessageTime(row.time ?? row.timestamp ?? row.created_at),
-          }
-        }))
+        loadMessages(
+          localMessages.map((msg) => {
+            const row = asRecord(msg)
+            const roleRaw = asString(row.role || (msg as { role?: string }).role)
+            return {
+              role: roleRaw === 'user' || roleRaw === 'task' ? roleRaw : 'ai',
+              content: asString(row.content || (msg as { content?: string }).content),
+              time: formatChatMessageTime(row.time ?? row.timestamp ?? row.created_at),
+            }
+          }),
+        )
         historyError.value = ''
         showHistory.value = false
       } else {

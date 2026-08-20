@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr"
 """FHD 宿主侧「副窗 / 内置轨道」与 employee_pack manifest 扩展字段校验。
 
 与文档 docs/fhd-employee-composition.md 中 ``xcagi_host_profile`` 约定对齐；字段全部可选，向后兼容旧包。
@@ -22,7 +23,9 @@ BUILTIN_TRACK_IDS = frozenset(
 VALID_PANEL_KINDS = frozenset({"builtin_track", "mod_http", "placeholder"})
 
 
-def normalize_xcagi_host_profile(raw: Any) -> Tuple[Optional[Dict[str, Any]], List[str]]:
+def normalize_xcagi_host_profile(
+    raw: Any,
+) -> Tuple[Optional[Dict[str, Any]], List[str]]:
     """
     校验并返回可写入 manifest 的 ``xcagi_host_profile``；错误时 errs 非空且返回 (None, errs)。
     """

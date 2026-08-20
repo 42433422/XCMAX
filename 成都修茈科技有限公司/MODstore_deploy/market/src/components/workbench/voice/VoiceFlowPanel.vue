@@ -28,7 +28,9 @@ let resizeObs: ResizeObserver | null = null
 
 function cleanVoiceText(raw: string): string {
   return normalizeVoiceAsrText(
-    stripInternalMarkers(String(raw || '')).replace(/\s+\n/g, '\n').trim(),
+    stripInternalMarkers(String(raw || ''))
+      .replace(/\s+\n/g, '\n')
+      .trim(),
   )
 }
 
@@ -40,9 +42,9 @@ const displayMessages = computed(() =>
         content: cleanVoiceText(m.content),
       }))
       .filter((m) => m.content && m.content !== '（无回复）') as Array<{
-        role: 'user' | 'assistant'
-        content: string
-      }>,
+      role: 'user' | 'assistant'
+      content: string
+    }>,
   ),
 )
 
@@ -63,9 +65,7 @@ const asrHintText = computed(() => {
   return '听到了，等你说完'
 })
 
-const isEmpty = computed(
-  () => !displayMessages.value.length && !showLiveLine.value && !liveUserDisplay.value,
-)
+const isEmpty = computed(() => !displayMessages.value.length && !showLiveLine.value && !liveUserDisplay.value)
 
 const showLiveLine = computed(() => {
   if (!liveDisplay.value) return false
@@ -116,9 +116,7 @@ onUnmounted(() => {
         <p class="wb-voice-flow__welcome-sub">
           一句话、半个想法，或者一段需求都可以。我会接住上下文，先把你的意思聊顺，需要时再转任务或进制作流。
         </p>
-        <p class="wb-voice-flow__welcome-hint">
-          需要生成 Mod/员工时，请关闭顶部「平台模式」。
-        </p>
+        <p class="wb-voice-flow__welcome-hint">需要生成 Mod/员工时，请关闭顶部「平台模式」。</p>
         <div class="wb-voice-flow__starter-row" aria-hidden="true">
           <span>今天有点卡住</span>
           <span>帮我捋一下思路</span>
@@ -138,26 +136,24 @@ onUnmounted(() => {
         </div>
         <div v-else class="wb-voice-turn__assistant-col">
           <div class="wb-voice-turn__assistant">
-            <MessageBody
-              :content="m.content"
-              :streaming="streaming && i === lastAssistantIdx"
-            />
+            <MessageBody :content="m.content" :streaming="streaming && i === lastAssistantIdx" />
           </div>
         </div>
       </article>
 
       <article v-if="liveUserDisplay" class="wb-voice-turn wb-voice-turn--user wb-voice-turn--live-user">
         <div class="wb-voice-turn__user-col">
-          <p class="wb-voice-turn__user">
-            {{ liveUserDisplay }}<span class="wb-voice-turn__cursor">▌</span>
-          </p>
+          <p class="wb-voice-turn__user">{{ liveUserDisplay }}<span class="wb-voice-turn__cursor">▌</span></p>
           <p v-if="recognizing && !speculating" class="wb-voice-turn__asr-hint">
             {{ asrHintText }}
           </p>
         </div>
       </article>
 
-      <article v-if="speculating && !liveUserDisplay && !showLiveLine" class="wb-voice-turn wb-voice-turn--assistant wb-voice-turn--speculating">
+      <article
+        v-if="speculating && !liveUserDisplay && !showLiveLine"
+        class="wb-voice-turn wb-voice-turn--assistant wb-voice-turn--speculating"
+      >
         <div class="wb-voice-turn__assistant-col">
           <p class="wb-voice-turn__spec-hint">正在整理…</p>
         </div>
@@ -166,10 +162,7 @@ onUnmounted(() => {
       <article v-if="showLiveLine" class="wb-voice-turn wb-voice-turn--assistant wb-voice-turn--live">
         <div class="wb-voice-turn__assistant-col">
           <div class="wb-voice-turn__assistant">
-            <MessageBody
-              :content="liveDisplay"
-              :streaming="isLiveNarrating || streaming"
-            />
+            <MessageBody :content="liveDisplay" :streaming="isLiveNarrating || streaming" />
           </div>
         </div>
       </article>

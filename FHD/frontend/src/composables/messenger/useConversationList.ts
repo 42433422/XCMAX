@@ -5,8 +5,8 @@
  * 返回侧栏列表渲染所需的全部 computeds/函数。父组件通过
  * selectConversation / activatePinnedEntry 回调驱动会话切换。
  */
-import { computed, type Ref } from 'vue';
-import { type ImContact, type ImConversationSummary } from '@/api/im';
+import { computed, type Ref } from 'vue'
+import { type ImContact, type ImConversationSummary } from '@/api/im'
 import {
   CLAUDE_SUPER_EMPLOYEE_ENTRY,
   CODEX_SUPER_EMPLOYEE_ENTRY,
@@ -30,20 +30,20 @@ import {
   type ImSidebarListItem,
   type PinnedImEntry,
   type SystemEmployeeEntry,
-} from './useMessengerEntries';
+} from './useMessengerEntries'
 
 export type UseConversationListParams = {
-  conversations: Ref<ImConversationSummary[]>;
-  contacts: Ref<ImContact[]>;
-  dutyEmployees: Ref<DutyEmployeeEntry[]>;
-  activeConversationId: Ref<number | null>;
-  activeSystemEntry: Ref<SystemEmployeeEntry | null>;
-  activeExternalEntry: Ref<ExternalAppEntry | null>;
-  activeGroupChat: Ref<boolean>;
-  isAdminCustomerServiceConsole: Ref<boolean>;
-  selectConversation: (id: number) => Promise<void>;
-  activatePinnedEntry: (entry: PinnedImEntry) => Promise<void>;
-};
+  conversations: Ref<ImConversationSummary[]>
+  contacts: Ref<ImContact[]>
+  dutyEmployees: Ref<DutyEmployeeEntry[]>
+  activeConversationId: Ref<number | null>
+  activeSystemEntry: Ref<SystemEmployeeEntry | null>
+  activeExternalEntry: Ref<ExternalAppEntry | null>
+  activeGroupChat: Ref<boolean>
+  isAdminCustomerServiceConsole: Ref<boolean>
+  selectConversation: (id: number) => Promise<void>
+  activatePinnedEntry: (entry: PinnedImEntry) => Promise<void>
+}
 
 export function useConversationList(params: UseConversationListParams) {
   const {
@@ -57,42 +57,40 @@ export function useConversationList(params: UseConversationListParams) {
     isAdminCustomerServiceConsole,
     selectConversation,
     activatePinnedEntry,
-  } = params;
+  } = params
 
   function existingDedicatedConversation(contact: ImContact): ImConversationSummary | undefined {
-    const username = contact.username.trim().toLowerCase();
+    const username = contact.username.trim().toLowerCase()
     return conversations.value.find((c) => {
-      if (c.is_enterprise_dedicated_cs) return true;
-      return username && c.title.trim().toLowerCase() === contact.display_name.trim().toLowerCase();
-    });
+      if (c.is_enterprise_dedicated_cs) return true
+      return username && c.title.trim().toLowerCase() === contact.display_name.trim().toLowerCase()
+    })
   }
 
   const visibleConversations = computed(() =>
-    conversations.value.filter(
-      (c) => !isAdminCustomerServiceConsole.value || !isEnterpriseDedicatedConversation(c),
-    ),
-  );
+    conversations.value.filter((c) => !isAdminCustomerServiceConsole.value || !isEnterpriseDedicatedConversation(c)),
+  )
 
   const pinnedContacts = computed<PinnedImEntry[]>(() => {
     if (isAdminCustomerServiceConsole.value) {
-      return [CODEX_SUPER_EMPLOYEE_ENTRY, CURSOR_SUPER_EMPLOYEE_ENTRY, CLAUDE_SUPER_EMPLOYEE_ENTRY, ...dutyEmployees.value];
+      return [CODEX_SUPER_EMPLOYEE_ENTRY, CURSOR_SUPER_EMPLOYEE_ENTRY, CLAUDE_SUPER_EMPLOYEE_ENTRY, ...dutyEmployees.value]
     }
-    return [...contacts.value.filter((c) => isEnterpriseDedicatedContact(c))];
-  });
+    return [...contacts.value.filter((c) => isEnterpriseDedicatedContact(c))]
+  })
 
   const externalChannelEntries = computed<ExternalAppEntry[]>(() => [
     // 企业端与管理端信息列表顶部均展示客来来客户通道
     KELLAI_CUSTOMER_IM_ENTRY,
-  ]);
+  ])
 
   const sidebarListItems = computed<ImSidebarListItem[]>(() => {
-    const pinnedConversationIds = new Set<number>();
+    const pinnedConversationIds = new Set<number>()
     for (const entry of pinnedContacts.value) {
       if (isSuperEmployeeEntry(entry) || isDutyEmployeeEntry(entry) || isExternalAppEntry(entry) || isAiGroupChatEntry(entry)) {
-        continue;
+        continue
       }
-      const conv = existingDedicatedConversation(entry);
-      if (conv) pinnedConversationIds.add(conv.id);
+      const conv = existingDedicatedConversation(entry)
+      if (conv) pinnedConversationIds.add(conv.id)
     }
     return [
       ...pinnedContacts.value.map((entry) => ({
@@ -107,45 +105,43 @@ export function useConversationList(params: UseConversationListParams) {
           key: `conversation-${conversation.id}`,
           conversation,
         })),
-    ];
-  });
+    ]
+  })
 
-  const superCliTools = computed(() =>
-    isAdminCustomerServiceConsole.value ? SUPER_CLI_TOOLS : [],
-  );
+  const superCliTools = computed(() => (isAdminCustomerServiceConsole.value ? SUPER_CLI_TOOLS : []))
 
   function isPinnedContactActive(contact: PinnedImEntry): boolean {
-    if (isExternalAppEntry(contact)) return activeExternalEntry.value?.id === contact.id;
-    if (isAiGroupChatEntry(contact)) return activeGroupChat.value;
+    if (isExternalAppEntry(contact)) return activeExternalEntry.value?.id === contact.id
+    if (isAiGroupChatEntry(contact)) return activeGroupChat.value
     if (isSuperEmployeeEntry(contact)) {
-      return activeSystemEntry.value?.id === contact.id;
+      return activeSystemEntry.value?.id === contact.id
     }
     if (isDutyEmployeeEntry(contact)) {
-      return activeSystemEntry.value?.id === contact.id;
+      return activeSystemEntry.value?.id === contact.id
     }
-    const conv = existingDedicatedConversation(contact);
-    return !!conv && conv.id === activeConversationId.value;
+    const conv = existingDedicatedConversation(contact)
+    return !!conv && conv.id === activeConversationId.value
   }
 
   function isSidebarItemActive(item: ImSidebarListItem): boolean {
-    return item.kind === 'pinned'
-      ? isPinnedContactActive(item.entry)
-      : item.conversation.id === activeConversationId.value;
+    return item.kind === 'pinned' ? isPinnedContactActive(item.entry) : item.conversation.id === activeConversationId.value
   }
 
   function sidebarItemClasses(item: ImSidebarListItem) {
     return [
       'im-conv-item',
       { 'im-conv-item--pinned': item.kind === 'pinned' },
-      { 'im-conv-item--admin-contact': item.kind === 'pinned' && isAdminCustomerServiceConsole.value },
+      {
+        'im-conv-item--admin-contact': item.kind === 'pinned' && isAdminCustomerServiceConsole.value,
+      },
       { active: isSidebarItemActive(item) },
-    ];
+    ]
   }
 
   function sidebarItemAvatarClasses(item: ImSidebarListItem) {
-    if (item.kind === 'conversation') return ['im-avatar'];
-    const entry = item.entry;
-    const avatarKey = superEmployeeAvatarKey(entry);
+    if (item.kind === 'conversation') return ['im-avatar']
+    const entry = item.entry
+    const avatarKey = superEmployeeAvatarKey(entry)
     return [
       'im-avatar',
       {
@@ -155,11 +151,11 @@ export function useConversationList(params: UseConversationListParams) {
         'im-avatar--external': isExternalAppEntry(entry),
         'im-avatar--group': isAiGroupChatEntry(entry),
       },
-    ];
+    ]
   }
 
   function sidebarItemPinClasses(item: ImSidebarListItem) {
-    if (item.kind !== 'pinned') return [];
+    if (item.kind !== 'pinned') return []
     return [
       'fa',
       isAiGroupChatEntry(item.entry)
@@ -175,43 +171,39 @@ export function useConversationList(params: UseConversationListParams) {
         'im-pin--employee': isDutyEmployeeEntry(item.entry),
         'im-pin--external': isExternalAppEntry(item.entry),
       },
-    ];
+    ]
   }
 
   function sidebarItemShowsPin(item: ImSidebarListItem): boolean {
-    return item.kind === 'pinned' && (isExternalAppEntry(item.entry) || !isAdminCustomerServiceConsole.value);
+    return item.kind === 'pinned' && (isExternalAppEntry(item.entry) || !isAdminCustomerServiceConsole.value)
   }
 
   function sidebarItemTitle(item: ImSidebarListItem): string {
-    return item.kind === 'pinned' ? item.entry.display_name : item.conversation.title;
+    return item.kind === 'pinned' ? item.entry.display_name : item.conversation.title
   }
 
   function sidebarItemPreview(item: ImSidebarListItem): string {
-    return item.kind === 'pinned'
-      ? pinnedEntryPreview(item.entry)
-      : item.conversation.last_message_preview || '暂无消息';
+    return item.kind === 'pinned' ? pinnedEntryPreview(item.entry) : item.conversation.last_message_preview || '暂无消息'
   }
 
   function sidebarItemAvatarText(item: ImSidebarListItem): string {
-    return item.kind === 'pinned'
-      ? pinnedAvatarText(item.entry)
-      : avatarText(item.conversation.title);
+    return item.kind === 'pinned' ? pinnedAvatarText(item.entry) : avatarText(item.conversation.title)
   }
 
   function sidebarItemSuperAvatarSrc(item: ImSidebarListItem): string | null {
-    return item.kind === 'pinned' ? superEmployeeAvatarSrc(item.entry) : null;
+    return item.kind === 'pinned' ? superEmployeeAvatarSrc(item.entry) : null
   }
 
   function sidebarItemUnread(item: ImSidebarListItem): number {
-    return item.kind === 'conversation' ? item.conversation.unread_count || 0 : 0;
+    return item.kind === 'conversation' ? item.conversation.unread_count || 0 : 0
   }
 
   function selectSidebarItem(item: ImSidebarListItem): void {
     if (item.kind === 'pinned') {
-      void activatePinnedEntry(item.entry);
-      return;
+      void activatePinnedEntry(item.entry)
+      return
     }
-    void selectConversation(item.conversation.id);
+    void selectConversation(item.conversation.id)
   }
 
   return {
@@ -234,5 +226,5 @@ export function useConversationList(params: UseConversationListParams) {
     sidebarItemSuperAvatarSrc,
     sidebarItemUnread,
     selectSidebarItem,
-  };
+  }
 }

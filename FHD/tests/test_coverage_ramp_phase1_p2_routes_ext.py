@@ -1,3 +1,4 @@
+# mypy: disable-error-code="method-assign"
 """COVERAGE_RAMP Phase 1 round 2: domains routes ext (auth/conversation/misc/static/product compat)."""
 
 from __future__ import annotations

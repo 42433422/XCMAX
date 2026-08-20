@@ -7,8 +7,12 @@ import re
 import shutil
 from typing import Any, Dict, Optional
 
-from modstore_server.catalog_quality import OFFICE_AUX_PACK_1_PKG_IDS, PUBLIC_TABULAR_PKG_IDS
+from modstore_server.catalog_quality import (
+    OFFICE_AUX_PACK_1_PKG_IDS,
+    PUBLIC_TABULAR_PKG_IDS,
+)
 from modstore_server.employee_golden_compare import PROTECTED_GOLDEN_IDS
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +64,7 @@ def cleanup_experimental_pack(
         if mod_dir.is_dir():
             shutil.rmtree(mod_dir, ignore_errors=True)
             result["library_removed"] = True
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.warning("cleanup library dir failed %s: %s", pid, exc)
         result["library_error"] = str(exc)[:300]
 
@@ -69,7 +73,7 @@ def cleanup_experimental_pack(
 
         n = remove_package(pid, version=None)
         result["packages_json_removed"] = n
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.warning("cleanup packages.json failed %s: %s", pid, exc)
         result["packages_json_error"] = str(exc)[:300]
 

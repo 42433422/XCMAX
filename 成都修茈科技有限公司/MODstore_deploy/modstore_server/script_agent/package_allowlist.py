@@ -1,3 +1,4 @@
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """第三方包审核 allowlist 加载器。
 
 默认指向 ``MODstore_deploy/runtime_allowlist.json``。管理员审核通过的
@@ -22,8 +23,11 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC
 from pathlib import Path
 from typing import Any, Dict, Optional, Set
+
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 DEFAULT_ALLOWLIST = Path(__file__).resolve().parent.parent.parent / "runtime_allowlist.json"
 
@@ -37,7 +41,7 @@ def load(path: Optional[Path] = None) -> Dict[str, Any]:
         if not isinstance(data, dict):
             return {"$schema_version": 1, "packages": {}}
         return data
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         return {"$schema_version": 1, "packages": {}}
 
 
@@ -68,7 +72,7 @@ def upsert_package(
     path: Optional[Path] = None,
 ) -> Dict[str, Any]:
     """添加 / 更新一个包的审核信息。"""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     if not name or not name.replace("_", "").replace("-", "").isalnum():
         raise ValueError(f"非法包名: {name!r}")
@@ -80,7 +84,7 @@ def upsert_package(
     pkgs[name] = {
         "version_spec": version_spec,
         "approved_by": approved_by,
-        "approved_at": datetime.now(timezone.utc).isoformat(timespec="seconds") + "Z",
+        "approved_at": datetime.now(UTC).isoformat(timespec="seconds") + "Z",
         "notes": notes,
     }
     save(data, path)

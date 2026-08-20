@@ -7,11 +7,7 @@
     }"
     :aria-label="navStore.sidebarCollapsed ? '工作台侧边栏（已折叠）' : '工作台侧边栏'"
   >
-    <div
-      v-if="navStore.sidebarMobileOpen"
-      class="wb-sidebar__backdrop"
-      @click="navStore.toggleMobileSidebar"
-    />
+    <div v-if="navStore.sidebarMobileOpen" class="wb-sidebar__backdrop" @click="navStore.toggleMobileSidebar" />
 
     <div class="wb-sidebar__inner">
       <div class="wb-sidebar__head">
@@ -41,12 +37,7 @@
         </button>
       </div>
 
-      <button
-        type="button"
-        class="wb-sidebar__new-chat"
-        aria-label="新建对话"
-        @click="emit('new-chat')"
-      >
+      <button type="button" class="wb-sidebar__new-chat" aria-label="新建对话" @click="emit('new-chat')">
         <svg
           class="wb-sidebar__new-chat-icon"
           width="16"
@@ -127,12 +118,7 @@
           <span class="wb-sidebar__label">语音</span>
         </button>
 
-        <button
-          type="button"
-          class="wb-sidebar__fn-btn"
-          aria-label="设置"
-          @click="emit('open-settings')"
-        >
+        <button type="button" class="wb-sidebar__fn-btn" aria-label="设置" @click="emit('open-settings')">
           <svg
             class="wb-sidebar__fn-icon"
             width="16"
@@ -164,13 +150,16 @@ import { useWorkbenchNavStore } from '../../../stores/workbenchNav'
 
 const navStore = useWorkbenchNavStore()
 
-const props = withDefaults(defineProps<{
-  displayName?: string
-  activePanel?: string
-}>(), {
-  displayName: '用户',
-  activePanel: '',
-})
+const props = withDefaults(
+  defineProps<{
+    displayName?: string
+    activePanel?: string
+  }>(),
+  {
+    displayName: '用户',
+    activePanel: '',
+  },
+)
 
 const emit = defineEmits<{
   (e: 'new-chat'): void
@@ -247,7 +236,9 @@ function handlePanelToggle(type: string) {
   background: rgba(255, 255, 255, 0.05);
   color: rgba(255, 255, 255, 0.6);
   cursor: pointer;
-  transition: background 150ms cubic-bezier(0.4, 0, 0.2, 1), color 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    background 150ms cubic-bezier(0.4, 0, 0.2, 1),
+    color 150ms cubic-bezier(0.4, 0, 0.2, 1);
   padding: 0;
 }
 
@@ -283,7 +274,10 @@ function handlePanelToggle(type: string) {
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 150ms cubic-bezier(0.4, 0, 0.2, 1), border-color 150ms cubic-bezier(0.4, 0, 0.2, 1), color 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    background 150ms cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+    color 150ms cubic-bezier(0.4, 0, 0.2, 1);
   white-space: nowrap;
   overflow: hidden;
 }
@@ -378,7 +372,9 @@ function handlePanelToggle(type: string) {
   color: rgba(255, 255, 255, 0.6);
   font-size: 13px;
   cursor: pointer;
-  transition: background 150ms cubic-bezier(0.4, 0, 0.2, 1), color 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    background 150ms cubic-bezier(0.4, 0, 0.2, 1),
+    color 150ms cubic-bezier(0.4, 0, 0.2, 1);
   white-space: nowrap;
   overflow: hidden;
 }

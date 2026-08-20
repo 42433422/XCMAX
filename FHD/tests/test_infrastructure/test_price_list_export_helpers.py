@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment"
 """app/infrastructure/documents/price_list_export 辅助函数单测（独立文件便于 Phase 2 追踪）。"""
 
 from __future__ import annotations

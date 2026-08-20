@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment, attr-defined, no-any-return, valid-type"
 # 成都修茈科技有限公司/MODstore_deploy/modstore_server/build_employee_pack.py
 """PR 合并后构建 employee_pack + 注册 + 触发审核。"""
 
@@ -9,11 +10,12 @@ import os
 import re
 import subprocess
 import zipfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
 from modstore_server.evolution_ledger import append_event
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 try:  # Task 10 才会创建 evaluate_employee_pack，提前导入失败时降级
     from modstore_server.auto_approve_policy import evaluate_employee_pack
@@ -195,7 +197,7 @@ def register_in_packages_json(
         "is_duty_employee": False,
         "is_store_employee": True,
         "market_visible": True,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
     }
     clean_source_commit = str(source_commit_sha or "").strip().lower()
     if _COMMIT_RE.fullmatch(clean_source_commit):
@@ -250,7 +252,7 @@ def build_pack_from_commit(*, commit_sha: str, repo_root: Path) -> Dict[str, Any
             raise RuntimeError("evaluate_employee_pack not implemented")
         risk_level, reason = evaluate_employee_pack(pack_id_resolved)
         approved = risk_level == "low"
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         risk_level, reason = "high", f"evaluate_employee_pack failed: {e}"
         approved = False
 

@@ -52,6 +52,7 @@ ACTION_TO_PROCESSOR = {
 def _import_torch():
     try:
         import torch  # type: ignore[import-not-found]
+
         return torch
     except ImportError as e:  # pragma: no cover
         print(f"ERROR: 缺 torch 依赖：{e}", file=sys.stderr)
@@ -60,6 +61,7 @@ def _import_torch():
 
 def _import_routing_mlp():
     from app.neuro_bus.routing.policy_nn import RoutingMLP  # noqa: WPS433
+
     return RoutingMLP
 
 
@@ -192,9 +194,7 @@ def measure_latency_p99(model: Any, n_samples: int = 1000) -> tuple[float, list[
 
     rng = random.Random(42)
     # 随机生成 16 维特征
-    x = torch.tensor(
-        [[rng.random() for _ in range(16)]], dtype=torch.float32
-    )
+    x = torch.tensor([[rng.random() for _ in range(16)]], dtype=torch.float32)
     latencies: list[float] = []
     # warmup
     with torch.no_grad():

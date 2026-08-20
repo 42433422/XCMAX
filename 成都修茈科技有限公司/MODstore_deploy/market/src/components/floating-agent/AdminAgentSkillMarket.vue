@@ -85,21 +85,48 @@ onMounted(fetchSkills)
   margin: 0 auto;
 }
 
-.skill-market__header { margin-bottom: 20px; }
-.skill-market__title { font-size: 1.4rem; font-weight: 700; color: #fff; margin: 0 0 4px; }
-.skill-market__sub { font-size: 0.85rem; color: rgba(255,255,255,0.45); margin: 0; }
+.skill-market__header {
+  margin-bottom: 20px;
+}
+.skill-market__title {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #fff;
+  margin: 0 0 4px;
+}
+.skill-market__sub {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.45);
+  margin: 0;
+}
 
-.skill-market__toolbar { margin-bottom: 16px; display: flex; gap: 10px; }
+.skill-market__toolbar {
+  margin-bottom: 16px;
+  display: flex;
+  gap: 10px;
+}
 
 .skill-market__loading,
-.skill-market__empty { color: rgba(255,255,255,0.4); font-size: 0.9rem; padding: 20px 0; }
-.skill-market__error { color: #f87171; font-size: 0.9rem; padding: 12px 0; }
+.skill-market__empty {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 0.9rem;
+  padding: 20px 0;
+}
+.skill-market__error {
+  color: #f87171;
+  font-size: 0.9rem;
+  padding: 12px 0;
+}
 
-.skill-list { display: flex; flex-direction: column; gap: 12px; }
+.skill-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 
 .skill-card {
   background: #111;
-  border: 1px solid rgba(255,255,255,0.09);
+  border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 12px;
   padding: 16px 18px;
 }
@@ -111,24 +138,50 @@ onMounted(fetchSkills)
   margin-bottom: 6px;
 }
 
-.skill-card__name { font-size: 0.95rem; font-weight: 700; color: #fff; }
-.skill-card__version { font-size: 0.72rem; color: rgba(255,255,255,0.35); }
-.skill-card__status { font-size: 0.7rem; font-weight: 700; padding: 1px 8px; border-radius: 999px; margin-left: auto; }
-.skill-card__status--active { background: rgba(74,222,128,0.15); color: #4ade80; }
-.skill-card__status--off { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.4); }
+.skill-card__name {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #fff;
+}
+.skill-card__version {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.35);
+}
+.skill-card__status {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 999px;
+  margin-left: auto;
+}
+.skill-card__status--active {
+  background: rgba(74, 222, 128, 0.15);
+  color: #4ade80;
+}
+.skill-card__status--off {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.4);
+}
 
-.skill-card__desc { font-size: 0.84rem; color: rgba(255,255,255,0.55); margin: 0 0 8px; }
+.skill-card__desc {
+  font-size: 0.84rem;
+  color: rgba(255, 255, 255, 0.55);
+  margin: 0 0 8px;
+}
 
 .skill-card__meta {
   display: flex;
   gap: 14px;
   font-size: 0.75rem;
-  color: rgba(255,255,255,0.35);
+  color: rgba(255, 255, 255, 0.35);
   margin-bottom: 10px;
   flex-wrap: wrap;
 }
 
-.skill-card__actions { display: flex; justify-content: flex-end; }
+.skill-card__actions {
+  display: flex;
+  justify-content: flex-end;
+}
 
 .sm-btn {
   padding: 6px 16px;
@@ -136,17 +189,34 @@ onMounted(fetchSkills)
   font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
-  border: 1px solid rgba(255,255,255,0.12);
-  background: rgba(255,255,255,0.06);
-  color: rgba(255,255,255,0.75);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.75);
   transition: all 0.15s;
 }
 
-.sm-btn:hover { background: rgba(255,255,255,0.1); }
+.sm-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
 
-.sm-btn--small { padding: 4px 12px; font-size: 0.78rem; }
-.sm-btn--success { background: rgba(74,222,128,0.12); color: #4ade80; border-color: rgba(74,222,128,0.25); }
-.sm-btn--success:hover { background: rgba(74,222,128,0.2); }
-.sm-btn--danger { background: rgba(248,113,113,0.1); color: #f87171; border-color: rgba(248,113,113,0.25); }
-.sm-btn--danger:hover { background: rgba(248,113,113,0.18); }
+.sm-btn--small {
+  padding: 4px 12px;
+  font-size: 0.78rem;
+}
+.sm-btn--success {
+  background: rgba(74, 222, 128, 0.12);
+  color: #4ade80;
+  border-color: rgba(74, 222, 128, 0.25);
+}
+.sm-btn--success:hover {
+  background: rgba(74, 222, 128, 0.2);
+}
+.sm-btn--danger {
+  background: rgba(248, 113, 113, 0.1);
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.25);
+}
+.sm-btn--danger:hover {
+  background: rgba(248, 113, 113, 0.18);
+}
 </style>

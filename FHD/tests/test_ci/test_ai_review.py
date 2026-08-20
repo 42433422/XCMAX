@@ -1,3 +1,4 @@
+# mypy: disable-error-code="import-not-found"
 """ai_review.py 单元测试。
 
 覆盖：
@@ -18,6 +19,8 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 # 把 FHD/scripts/ci 加入 sys.path 以便直接 import ai_review 模块
 FHD_ROOT = Path(__file__).resolve().parents[2]
@@ -280,7 +283,7 @@ class TestMatchRules:
                     (2, "+", "    time.sleep(1)"),
                     (3, "+", "    rows = cur.fetchall()"),
                     (4, "+", "for u in users: db.query(User).get(u.id)"),
-                    (5, "+", "except Exception: pass"),
+                    (5, "+", "except BOUNDARY_ERRORS: pass"),
                 ],
                 raw_header="@@ -1,1 +1,5 @@",
             )

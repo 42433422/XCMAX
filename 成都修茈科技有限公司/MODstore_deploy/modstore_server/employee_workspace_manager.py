@@ -13,9 +13,11 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Dict, List
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +84,7 @@ def enforce_workspace_limit(employee_id: str) -> Dict[str, object]:
         try:
             f.unlink()
             deleted += 1
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
 
     after_mb = get_workspace_size_mb(employee_id)
@@ -105,7 +107,7 @@ def cleanup_expired_workspaces() -> Dict[str, object]:
     if not ws_root.exists():
         return {"cleaned_files": 0, "employees": []}
 
-    cutoff = datetime.now(timezone.utc) - timedelta(days=_retention_days())
+    cutoff = datetime.now(UTC) - timedelta(days=_retention_days())
     cleaned = 0
     employees_cleaned: List[str] = []
 
@@ -122,7 +124,7 @@ def cleanup_expired_workspaces() -> Dict[str, object]:
                     f.unlink()
                     emp_files_cleaned += 1
                     cleaned += 1
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 pass
         if emp_files_cleaned > 0:
             employees_cleaned.append(emp_dir.name)

@@ -19,8 +19,12 @@ describe('refreshLevelAndWalletAfterLlm', () => {
     const { useWalletStore } = await import('../stores/wallet')
     const mockRefreshSession = vi.fn()
     const mockRefreshBalance = vi.fn()
-    vi.mocked(useAuthStore).mockReturnValue({ refreshSession: mockRefreshSession } as UnsafeTestValue)
-    vi.mocked(useWalletStore).mockReturnValue({ refreshBalance: mockRefreshBalance } as UnsafeTestValue)
+    vi.mocked(useAuthStore).mockReturnValue({
+      refreshSession: mockRefreshSession,
+    } as UnsafeTestValue)
+    vi.mocked(useWalletStore).mockReturnValue({
+      refreshBalance: mockRefreshBalance,
+    } as UnsafeTestValue)
 
     refreshLevelAndWalletAfterLlm()
 

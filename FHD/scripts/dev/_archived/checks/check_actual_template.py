@@ -1,9 +1,12 @@
+# mypy: disable-error-code="attr-defined"
 """检查实际使用的模板文件"""
 
 import os
 from pathlib import Path
 
 from openpyxl import load_workbook
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 # 设置 WORKSPACE_ROOT
 os.environ["WORKSPACE_ROOT"] = r"e:\FHD"
@@ -25,7 +28,7 @@ try:
         for i, ws_name in enumerate(wb.sheetnames):
             ws = wb[ws_name]
             merged_count = len(list(ws.merged_cells.ranges)) if ws.merged_cells.ranges else 0
-            print(f"    [{i+1}] {ws_name}: {merged_count} 个合并单元格")
+            print(f"    [{i + 1}] {ws_name}: {merged_count} 个合并单元格")
             if merged_count > 0:
                 for m in ws.merged_cells.ranges:
                     print(f"        {m}")
@@ -34,7 +37,7 @@ try:
     else:
         print("✗ 模板文件不存在")
 
-except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"✗ 错误：{e}")
 
 # 列出 424 目录下所有 Excel 文件

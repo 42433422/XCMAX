@@ -43,6 +43,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 try:
     import httpx
 except ImportError:  # pragma: no cover
@@ -81,8 +83,8 @@ PROMPT_SYSTEM = (
     "- reflex：反射级（<1ms），简单问候/确认/紧急停止/纯命令式短输入\n"
     "- subconscious：潜意识级（<10ms），状态查询/帮助/常见 FAQ\n"
     "- conscious：显意识级（<200ms），复杂推理/多轮对话/需要 LLM 生成\n"
-    "只输出 JSON：{\"processor\": \"reflex|subconscious|conscious\", "
-    "\"reason\": \"<=50字\", \"confidence\": 0.0-1.0}"
+    '只输出 JSON：{"processor": "reflex|subconscious|conscious", '
+    '"reason": "<=50字", "confidence": 0.0-1.0}'
 )
 
 
@@ -120,7 +122,7 @@ def _build_messages(row: dict[str, Any]) -> list[dict[str, str]]:
             continue
         label_lines.append(
             f"- {provider}: processor={v.get('processor')}, "
-            f"confidence={v.get('confidence')}, reason={v.get('reason','')}"
+            f"confidence={v.get('confidence')}, reason={v.get('reason', '')}"
         )
     labels_block = "\n".join(label_lines) or "- (无可用标注)"
     history = row.get("history_action") or "(无)"
@@ -208,10 +210,10 @@ async def _call_arbitrator(
             resp = await client.post(BAI_BASE_URL, json=payload, headers=headers, timeout=timeout)
             resp.raise_for_status()
             data = resp.json()
-        except Exception as e2:  # noqa: BLE001
+        except RECOVERABLE_ERRORS as e2:  # noqa: BLE001
             logger.warning("B.AI 仲裁重试仍失败：%s", e2)
             return None
-    except Exception as e:  # noqa: BLE001
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001
         logger.warning("B.AI 仲裁调用失败：%s", e)
         return None
     try:
@@ -275,6 +277,7 @@ async def run_arbitration(args: argparse.Namespace) -> int:
     sem = asyncio.Semaphore(max(1, args.concurrency))
 
     async with httpx.AsyncClient() as client:
+
         async def _bounded(row: dict[str, Any]) -> dict[str, Any] | None:
             async with sem:
                 return await _call_arbitrator(client, row, args.timeout)
@@ -350,7 +353,9 @@ def main(argv: list[str] | None = None) -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--input", type=Path, default=DEFAULT_INPUT, help="labeled_data.jsonl 路径")
-    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT, help="输出 arbitrated_data.jsonl 路径")
+    parser.add_argument(
+        "--output", type=Path, default=DEFAULT_OUTPUT, help="输出 arbitrated_data.jsonl 路径"
+    )
     parser.add_argument(
         "--threshold",
         type=float,

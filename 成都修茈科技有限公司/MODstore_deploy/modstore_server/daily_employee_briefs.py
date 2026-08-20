@@ -1,3 +1,4 @@
+# mypy: disable-error-code="attr-defined, no-any-return, union-attr, valid-type"
 """每日摘要邮件：catalog 与编制交集内的员工岗位简报（联网调研 + LLM）。
 
 可见「文件」与索引的两条路径（排查员工看不见资料时）：
@@ -25,17 +26,18 @@ import json
 import logging
 import os
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Dict, List, Tuple
 
+from modstore_server.daily_brief_grounding import _resolve_pack_dir as _resolve_pack_dir
 from modstore_server.daily_brief_grounding import (
     collect_yuangon_pack_excerpt as collect_yuangon_pack_excerpt,
 )
-from modstore_server.daily_brief_grounding import _resolve_pack_dir as _resolve_pack_dir
 from modstore_server.duty_roster import all_planned_employee_ids
 from modstore_server.employee_executor import execute_employee_task
 from modstore_server.employee_runtime import load_employee_pack
 from modstore_server.models import CatalogItem, get_session_factory
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 from modstore_server.research_tools import build_research_context
 from modstore_server.services.llm import resolve_platform_bench_llm
 
@@ -190,7 +192,7 @@ def resolve_daily_brief_research_brief(pkg_id: str, display_name: str) -> str:
             v = meta.get(key)
             if v and str(v).strip():
                 return str(v).strip()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.debug("daily brief: no manifest seed for %s", pkg_id, exc_info=True)
     return f"{display_name}（{pkg_id}）MODstore 运维、质量、发布与近期行业公开动态"
 
@@ -303,7 +305,7 @@ async def _one_brief_html(pkg_id: str, display_name: str, prov: str, mdl: str) -
                         enqueue_daily_brief_todos,
                     )
 
-                    source_ref = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                    source_ref = datetime.now(UTC).strftime("%Y-%m-%d")
                     enq = enqueue_daily_brief_todos(
                         owner_employee_id=pkg_id,
                         todo_markdown=todo_md,
@@ -326,7 +328,7 @@ async def _one_brief_html(pkg_id: str, display_name: str, prov: str, mdl: str) -
                             + (f"，已触发调度完成 {dispatched} 条" if dispatched > 0 else "")
                             + "</p>"
                         )
-                except Exception:
+                except RECOVERABLE_ERRORS:
                     logger.exception("daily brief todo enqueue failed employee=%s", pkg_id)
             inner = (
                 warn_html
@@ -336,7 +338,7 @@ async def _one_brief_html(pkg_id: str, display_name: str, prov: str, mdl: str) -
             )
         else:
             inner = warn_html + '<p style="color:#888;font-size:13px">（无输出）</p>'
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.exception("daily brief failed employee=%s", pkg_id)
         inner = f'<p style="color:#b91c1c;font-size:13px">{html.escape(str(exc)[:500])}</p>'
 

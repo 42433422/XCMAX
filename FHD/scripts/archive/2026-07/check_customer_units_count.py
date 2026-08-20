@@ -1,5 +1,7 @@
 import sqlite3
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 
 def check_customer_units_count():
     """检查customer数据库中的购买单位数量"""
@@ -70,7 +72,7 @@ def check_customer_units_count():
             "bandao_exists": bool(bandao_exists),
         }
 
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 检查购买单位数量时出错: {e}")
         return {"error": str(e)}
 
@@ -117,7 +119,7 @@ def fix_bandao_fengqing_status():
         conn.close()
         return True
 
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 修复半岛风情状态时出错: {e}")
         return False
 

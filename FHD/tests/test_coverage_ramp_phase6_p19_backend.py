@@ -694,10 +694,18 @@ class TestPerformanceOptimizerInit:
         mock_cache = MagicMock()
         mock_cache.is_available = True
         with (
-            patch("app.utils.performance.redis_cache.init_redis_cache_from_app", return_value=mock_cache),
+            patch(
+                "app.utils.performance.redis_cache.init_redis_cache_from_app",
+                return_value=mock_cache,
+            ),
             patch("app.utils.performance.redis_cache.get_redis_cache", return_value=mock_cache),
-            patch("app.utils.performance.query_optimizer.get_query_optimizer", return_value=MagicMock()),
-            patch("app.utils.async_task.async_tasks.get_async_task_manager", return_value=MagicMock()),
+            patch(
+                "app.utils.performance.query_optimizer.get_query_optimizer",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "app.utils.async_task.async_tasks.get_async_task_manager", return_value=MagicMock()
+            ),
             patch(
                 "app.utils.resilience.request_deduplicator.get_request_deduplicator",
                 return_value=MagicMock(),
@@ -721,9 +729,17 @@ class TestPerformanceOptimizerInit:
 
         opt = PerformanceOptimizer()
         with (
-            patch("app.utils.performance.redis_cache.get_redis_cache", side_effect=RuntimeError("no redis")),
-            patch("app.utils.performance.query_optimizer.get_query_optimizer", return_value=MagicMock()),
-            patch("app.utils.async_task.async_tasks.get_async_task_manager", return_value=MagicMock()),
+            patch(
+                "app.utils.performance.redis_cache.get_redis_cache",
+                side_effect=RuntimeError("no redis"),
+            ),
+            patch(
+                "app.utils.performance.query_optimizer.get_query_optimizer",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "app.utils.async_task.async_tasks.get_async_task_manager", return_value=MagicMock()
+            ),
             patch(
                 "app.utils.resilience.request_deduplicator.get_request_deduplicator",
                 return_value=MagicMock(),
@@ -768,10 +784,16 @@ class TestPerformanceOptimizerInit:
         mock_cache.is_available = True
         with (
             patch(
-                "app.utils.performance.redis_cache.init_redis_cache_from_app", return_value=mock_cache
+                "app.utils.performance.redis_cache.init_redis_cache_from_app",
+                return_value=mock_cache,
             ) as mock_init,
-            patch("app.utils.performance.query_optimizer.get_query_optimizer", return_value=MagicMock()),
-            patch("app.utils.async_task.async_tasks.get_async_task_manager", return_value=MagicMock()),
+            patch(
+                "app.utils.performance.query_optimizer.get_query_optimizer",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "app.utils.async_task.async_tasks.get_async_task_manager", return_value=MagicMock()
+            ),
             patch(
                 "app.utils.resilience.request_deduplicator.get_request_deduplicator",
                 return_value=MagicMock(),
@@ -924,7 +946,9 @@ class TestInitPerformanceOptimization:
     def test_calls_initialize(self):
         from app.utils.performance.performance_initializer import init_performance_optimization
 
-        with patch("app.utils.performance.performance_initializer.get_performance_optimizer") as mock_get:
+        with patch(
+            "app.utils.performance.performance_initializer.get_performance_optimizer"
+        ) as mock_get:
             mock_opt = MagicMock()
             mock_get.return_value = mock_opt
             result = init_performance_optimization()

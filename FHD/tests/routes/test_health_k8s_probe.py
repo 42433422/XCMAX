@@ -1,3 +1,4 @@
+# mypy: disable-error-code="misc"
 """Tests for app.fastapi_routes.health_k8s — coverage ramp C3.3-a.
 
 Covers the four health endpoints:

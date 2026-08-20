@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Mapping, Sequence
 
 import httpx
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.self_maintenance_deploy_receipts import (
     BuildIdentity,
     DeploymentReceiptError,
@@ -57,7 +58,7 @@ class GhActionsDeploymentGateway:
             raise DeploymentReceiptError("github_deploy_config_missing")
 
     @classmethod
-    def from_environment(cls, *, repo_root: Path, ref: str) -> "GhActionsDeploymentGateway":
+    def from_environment(cls, *, repo_root: Path, ref: str) -> GhActionsDeploymentGateway:
         return cls(
             repo_root=repo_root,
             repository=str(
@@ -198,7 +199,7 @@ class GhActionsDeploymentGateway:
                 response = client.get(url)
                 response.raise_for_status()
                 payload = response.json()
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             raise DeploymentReceiptError("identity_fetch_failed") from exc
         if not isinstance(payload, Mapping):
             raise DeploymentReceiptError("identity_payload_invalid")

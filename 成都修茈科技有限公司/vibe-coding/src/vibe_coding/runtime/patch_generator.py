@@ -8,6 +8,8 @@ import re
 from abc import ABC, abstractmethod
 from typing import Any
 
+from vibe_coding.operational_errors import BOUNDARY_ERRORS
+
 from .._internals.code_models import CodeDiagnosis, CodeFunctionSignature, CodePatch, CodeTestCase
 
 
@@ -21,14 +23,11 @@ class CodePatchGenerator(ABC):
         diagnosis: CodeDiagnosis,
         test_cases: list[CodeTestCase],
         history: list[CodePatch] | None = None,
-    ) -> CodePatch | None:
-        ...
+    ) -> CodePatch | None: ...
 
 
 _KEY_FROM_MSG = re.compile(r"^['\"]?(?P<key>[^'\"]+)['\"]?$")
-_ATTR_FROM_MSG = re.compile(
-    r"has no attribute ['\"](?P<attr>[^'\"]+)['\"]"
-)
+_ATTR_FROM_MSG = re.compile(r"has no attribute ['\"](?P<attr>[^'\"]+)['\"]")
 
 
 def _extract_key_from_keyerror(message: str) -> str | None:
@@ -51,7 +50,7 @@ def _extract_attr_from_attributeerror(message: str) -> str | None:
 def _safe_unparse(node: ast.AST) -> str:
     try:
         return ast.unparse(node)
-    except Exception:
+    except BOUNDARY_ERRORS:
         return ""
 
 
@@ -222,9 +221,7 @@ def _coerce_numeric(node: ast.expr) -> ast.expr:
     # Skip literal numeric constants — already concrete.
     if isinstance(node, ast.Constant) and isinstance(node.value, (int, float, complex)):
         return node
-    test = ast.Compare(
-        left=node, ops=[ast.Is()], comparators=[ast.Constant(value=None)]
-    )
+    test = ast.Compare(left=node, ops=[ast.Is()], comparators=[ast.Constant(value=None)])
     return ast.IfExp(
         test=test,
         body=ast.Constant(value=0),
@@ -253,9 +250,7 @@ class _CoerceNumericBinOps(ast.NodeTransformer):
         if new_left is node.left and new_right is node.right:
             return node
         self.changed = True
-        return ast.copy_location(
-            ast.BinOp(left=new_left, op=node.op, right=new_right), node
-        )
+        return ast.copy_location(ast.BinOp(left=new_left, op=node.op, right=new_right), node)
 
     def visit_AugAssign(self, node: ast.AugAssign) -> ast.AST:
         self.generic_visit(node)
@@ -265,9 +260,7 @@ class _CoerceNumericBinOps(ast.NodeTransformer):
         if new_value is node.value:
             return node
         self.changed = True
-        return ast.copy_location(
-            ast.AugAssign(target=node.target, op=node.op, value=new_value), node
-        )
+        return ast.copy_location(ast.AugAssign(target=node.target, op=node.op, value=new_value), node)
 
 
 def _apply_transformer(source_code: str, transformer: ast.NodeTransformer) -> str | None:
@@ -281,7 +274,7 @@ def _apply_transformer(source_code: str, transformer: ast.NodeTransformer) -> st
         return None
     try:
         return ast.unparse(new_tree)
-    except Exception:
+    except BOUNDARY_ERRORS:
         return None
 
 

@@ -109,7 +109,9 @@ export function useVoiceInput(onFinalText: (text: string) => Promise<void>) {
     }
   }
 
-  onBeforeUnmount(() => { stopAll() })
+  onBeforeUnmount(() => {
+    stopAll()
+  })
 
   return {
     state,

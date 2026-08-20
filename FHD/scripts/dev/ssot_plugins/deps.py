@@ -7,6 +7,7 @@ SSOT: pyproject.toml [project.optional-dependencies]
 check 只读比较包名集合（忽略版本号），报告差异。
 sync 不自动执行（需人工 reconcile，因 requirements.txt 可能含额外运行时依赖）。
 """
+
 from __future__ import annotations
 
 import re

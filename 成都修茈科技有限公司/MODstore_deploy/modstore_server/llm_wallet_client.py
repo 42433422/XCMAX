@@ -21,7 +21,12 @@ class JavaWalletClient:
         return cast(str, self.gateway.backend) == "java"
 
     async def preauthorize(
-        self, authorization: str, amount: Decimal, provider: str, model: str, request_id: str
+        self,
+        authorization: str,
+        amount: Decimal,
+        provider: str,
+        model: str,
+        request_id: str,
     ) -> WalletHold:
         if not self.enabled:
             return WalletHold(hold_no=f"debug-{request_id}", amount=money(amount), enabled=False)
@@ -44,7 +49,11 @@ class JavaWalletClient:
         )
 
     async def settle(
-        self, authorization: str, hold: WalletHold, actual_amount: Decimal, request_id: str
+        self,
+        authorization: str,
+        hold: WalletHold,
+        actual_amount: Decimal,
+        request_id: str,
     ) -> None:
         if hold.enabled:
             await self._post(
@@ -79,12 +88,17 @@ class JavaWalletClient:
         try:
             response = await get_java_client().post(
                 f"{self.gateway.target_base_url()}{path}",
-                headers={"Authorization": authorization, "Content-Type": "application/json"},
+                headers={
+                    "Authorization": authorization,
+                    "Content-Type": "application/json",
+                },
                 json=body,
                 timeout=20.0,
             )
         except httpx.HTTPError as error:
-            from modstore_server.application.payment_gateway import java_payment_unreachable_message
+            from modstore_server.application.payment_gateway import (
+                java_payment_unreachable_message,
+            )
 
             raise HTTPException(502, java_payment_unreachable_message(error)) from error
         if response.status_code >= 400:

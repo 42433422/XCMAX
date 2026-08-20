@@ -17,10 +17,7 @@ const { modData, goRepo } = useModAuthoringContext()
   <header class="page-header">
     <div class="header-top">
       <button type="button" class="btn btn-ghost" @click="goRepo">← Mod 仓库</button>
-      <span
-        class="badge"
-        :class="modData?.validation_ok ? 'badge-ok' : 'badge-warn'"
-      >
+      <span class="badge" :class="modData?.validation_ok ? 'badge-ok' : 'badge-warn'">
         {{ modData?.validation_ok ? '已通过' : '待修正' }}
       </span>
       <div class="header-top-spacer" />

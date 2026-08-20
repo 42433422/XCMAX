@@ -6,10 +6,7 @@ import { Controls } from '@vue-flow/controls'
 import { MiniMap } from '@vue-flow/minimap'
 import { computeGridLayout } from '@/composables/useAutoLayout'
 import type { WorkflowEmployeeDeskRow } from '@/composables/useWorkflowEmployeeDesks'
-import {
-  ENTERPRISE_ORG_LAYERS,
-  resolveEnterpriseOrgLayer,
-} from '@/constants/enterpriseWorkflowEstablishment'
+import { ENTERPRISE_ORG_LAYERS, resolveEnterpriseOrgLayer } from '@/constants/enterpriseWorkflowEstablishment'
 import { asRecord, asString } from '@/utils/typeGuards'
 
 import '@vue-flow/core/dist/style.css'
@@ -130,19 +127,11 @@ function buildGraph(): { nodes: Node[]; edges: Edge[] } {
           minWidth: `${NODE_W}px`,
           maxWidth: `${NODE_W}px`,
           borderRadius: '8px',
-          border:
-            props.selectedEmpId === slot.empId
-              ? `2px solid ${color}`
-              : '1px solid rgba(148, 163, 184, 0.55)',
-          background: enabled
-            ? busy
-              ? 'linear-gradient(180deg, #eff6ff 0%, #fff 100%)'
-              : '#fff'
-            : '#f8fafc',
+          border: props.selectedEmpId === slot.empId ? `2px solid ${color}` : '1px solid rgba(148, 163, 184, 0.55)',
+          background: enabled ? (busy ? 'linear-gradient(180deg, #eff6ff 0%, #fff 100%)' : '#fff') : '#f8fafc',
           padding: '8px 10px',
           fontSize: '0.82rem',
-          boxShadow:
-            props.selectedEmpId === slot.empId ? `0 0 0 2px ${color}33` : '0 1px 2px rgba(15,23,42,0.06)',
+          boxShadow: props.selectedEmpId === slot.empId ? `0 0 0 2px ${color}33` : '0 1px 2px rgba(15,23,42,0.06)',
         },
       })
     }
@@ -187,19 +176,9 @@ function applyZoneLayout(rawNodes: Node[], groupIds: string[]) {
     }
   }
 
-  const colWidths = [0, 1].map((c) =>
-    Math.max(
-      240,
-      ...groupIds.filter((_, i) => i % OUTER_COLS === c).map((gid) => boxSizes.get(gid)!.w),
-    ),
-  )
+  const colWidths = [0, 1].map((c) => Math.max(240, ...groupIds.filter((_, i) => i % OUTER_COLS === c).map((gid) => boxSizes.get(gid)!.w)))
   const rowHeights = [0, 1].map((r) =>
-    Math.max(
-      160,
-      ...groupIds
-        .filter((_, i) => Math.floor(i / OUTER_COLS) === r)
-        .map((gid) => boxSizes.get(gid)!.h),
-    ),
+    Math.max(160, ...groupIds.filter((_, i) => Math.floor(i / OUTER_COLS) === r).map((gid) => boxSizes.get(gid)!.h)),
   )
 
   groupIds.forEach((gid, idx) => {
@@ -236,7 +215,10 @@ watch(
   () => scheduleFit(),
 )
 
-watch(() => props.selectedEmpId, () => scheduleFit())
+watch(
+  () => props.selectedEmpId,
+  () => scheduleFit(),
+)
 
 onMounted(() => scheduleFit())
 </script>

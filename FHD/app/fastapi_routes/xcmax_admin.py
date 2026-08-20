@@ -38,6 +38,10 @@ REMOTE_PORT = int(os.environ.get("XCMAX_REMOTE_PORT", "9999"))
 _DEFAULT_URLOPEN = urllib.request.urlopen
 
 
+# ruff: noqa: F401
+from app.fastapi_routes.xcmax_admin_core_modules import (
+    CORE_MODULES as CORE_MODULES,
+)
 from app.fastapi_routes.xcmax_admin_part01 import (
     _digest_local_or_proxy as _digest_local_or_proxy,
 )
@@ -354,13 +358,9 @@ from app.fastapi_routes.xcmax_admin_part05 import (
     admin_token_usage as admin_token_usage,
 )
 
-# ruff: noqa: F401
+_VALID_TIERS = {"personal", "enterprise", "admin"}
 
-CORE_MODULES = [{'module_id': 'xcmax-admin', 'display_name': '服务器后台', 'route': '/xcmax-admin', 'source': 'core', 'sync_scope': 'system', 'active': True, 'version': '1.0'}, {'module_id': 'chat', 'display_name': '智能对话', 'route': '/', 'source': 'core', 'sync_scope': 'none', 'active': True, 'version': '1.0'}, {'module_id': 'ai-ecosystem', 'display_name': '智能生态', 'route': '/ai-ecosystem', 'source': 'core', 'sync_scope': 'none', 'active': True, 'version': '1.0'}, {'module_id': 'model-payment', 'display_name': '模型服务', 'route': '/model-payment', 'source': 'core', 'sync_scope': 'none', 'active': True, 'version': '1.0'}, {'module_id': 'products', 'display_name': '人员管理', 'route': '/products', 'source': 'core', 'sync_scope': 'personnel,departments', 'active': True, 'version': '1.0'}, {'module_id': 'materials-list', 'display_name': '班次列表', 'route': '/materials-list', 'source': 'core', 'sync_scope': 'materials', 'active': True, 'version': '1.0'}, {'module_id': 'materials', 'display_name': '排班资源', 'route': '/materials', 'source': 'core', 'sync_scope': 'materials', 'active': True, 'version': '1.0'}, {'module_id': 'server-functions', 'display_name': '服务器功能模块', 'route': '/server-functions', 'source': 'core', 'sync_scope': 'server,digest,all_hands', 'active': True, 'version': '1.0'}, {'module_id': 'traditional-mode', 'display_name': '表格模式', 'route': '/traditional-mode', 'source': 'core', 'sync_scope': 'none', 'active': True, 'version': '1.0'}, {'module_id': 'business-docking', 'display_name': '数据对接中心', 'route': '/business-docking', 'source': 'core', 'sync_scope': 'none', 'active': True, 'version': '1.0'}, {'module_id': 'orders', 'display_name': '考勤单管理', 'route': '/orders', 'source': 'core', 'sync_scope': 'orders', 'active': True, 'version': '1.0'}, {'module_id': 'shipment-records', 'display_name': '考勤记录', 'route': '/shipment-records', 'source': 'core', 'sync_scope': 'attendance', 'active': True, 'version': '1.0'}, {'module_id': 'customers', 'display_name': '部门管理', 'route': '/customers', 'source': 'core', 'sync_scope': 'departments', 'active': True, 'version': '1.0'}, {'module_id': 'data-sources', 'display_name': '数据来源', 'route': '/data-sources', 'source': 'core', 'sync_scope': 'none', 'active': True, 'version': '1.0'}, {'module_id': 'print', 'display_name': '考勤表打印', 'route': '/print', 'source': 'core', 'sync_scope': 'templates', 'active': True, 'version': '1.0'}, {'module_id': 'printer-list', 'display_name': '打印机列表', 'route': '/printer-list', 'source': 'core', 'sync_scope': 'none', 'active': True, 'version': '1.0'}, {'module_id': 'template-preview', 'display_name': '模板库', 'route': '/template-preview', 'source': 'core', 'sync_scope': 'templates', 'active': True, 'version': '1.0'}, {'module_id': 'settings', 'display_name': '系统设置', 'route': '/settings', 'source': 'core', 'sync_scope': 'system', 'active': True, 'version': '1.0'}, {'module_id': 'tools', 'display_name': '工具表', 'route': '/tools', 'source': 'core', 'sync_scope': 'none', 'active': True, 'version': '1.0'}, {'module_id': 'approval-hub', 'display_name': '审批中心', 'route': '/approval-hub', 'source': 'core', 'sync_scope': 'approvals', 'active': True, 'version': '1.0'}, {'module_id': 'other-tools', 'display_name': '员工工作流', 'route': '/other-tools', 'source': 'core', 'sync_scope': 'none', 'active': True, 'version': '1.0'}]
+SYNC_POLL_INTERVAL_S = float(os.environ.get("XCMAX_SYNC_POLL_S", "10"))
 
-_VALID_TIERS = {'personal', 'enterprise', 'admin'}
-
-SYNC_POLL_INTERVAL_S = float(os.environ.get('XCMAX_SYNC_POLL_S', '10'))
-
-for _market_proxy_method in ('GET', 'POST', 'PUT', 'DELETE', 'PATCH'):
+for _market_proxy_method in ("GET", "POST", "PUT", "DELETE", "PATCH"):
     _register_market_proxy_method(_market_proxy_method)

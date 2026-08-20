@@ -9,6 +9,8 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -23,11 +25,11 @@ def register_extensions(
         )
 
         register_capability_proposal_relay_job(scheduler, track_job=track_job)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("register capability proposal relay failed")
     try:
         from modstore_server.cs_webhook_outbox import register_retry_job
 
         register_retry_job(scheduler, track_job=track_job)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("register cs webhook outbox retry failed")

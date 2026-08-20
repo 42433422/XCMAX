@@ -62,9 +62,7 @@ def test_default_allowlist_covers_essentials() -> None:
             assert required in DEFAULT_ENV_ALLOWLIST
 
 
-def test_subprocess_command_does_not_leak_env(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_subprocess_command_does_not_leak_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Run a tiny script that prints whether OPENAI_API_KEY is visible."""
     monkeypatch.setenv("OPENAI_API_KEY", "leaked-secret-12345")
     monkeypatch.setenv("MY_PRIVATE_TOKEN", "leaked-token")
@@ -76,17 +74,14 @@ def test_subprocess_command_does_not_leak_env(
             command=[
                 sys.executable,
                 "-c",
-                "import os; print('OPENAI_API_KEY' in os.environ); "
-                "print('MY_PRIVATE_TOKEN' in os.environ)",
+                "import os; print('OPENAI_API_KEY' in os.environ); print('MY_PRIVATE_TOKEN' in os.environ)",
             ],
         ),
         policy=SandboxPolicy(timeout_s=5),
     )
     assert res.success, res.stderr
     lines = res.stdout.strip().splitlines()
-    assert lines == ["False", "False"], (
-        f"Sandbox leaked secrets! Output: {res.stdout!r}"
-    )
+    assert lines == ["False", "False"], f"Sandbox leaked secrets! Output: {res.stdout!r}"
 
 
 def test_subprocess_command_can_opt_in_to_env_var(tmp_path: Path) -> None:

@@ -14,13 +14,13 @@
    - `employee_id` / `domain` / `capabilities` / `task_type_distribution`。
 2. 按任务类型分类路由：
 
-   | 任务类型 | 推荐模型 | 备选 | 兜底 |
-   |---|---|---|---|
-   | 文档解析 / 格式化 | deepseek-chat | qwen-turbo | glm-4-flash |
-   | 多轮对话 / 工具调用 | deepseek-chat | qwen-plus | glm-4 |
-   | 代码生成 / 审查 | deepseek-reasoner | qwen-coder | claude-sonnet（仅关键审查） |
-   | 长链推理 / 数学 | deepseek-reasoner-r1 | qwen-max | ollama:qwen2.5 |
-   | 离线 / 隐私场景 | ollama:qwen2.5 | ollama:deepseek-r1-distill | （无） |
+   | 任务类型            | 推荐模型             | 备选                       | 兜底                        |
+   | ------------------- | -------------------- | -------------------------- | --------------------------- |
+   | 文档解析 / 格式化   | deepseek-chat        | qwen-turbo                 | glm-4-flash                 |
+   | 多轮对话 / 工具调用 | deepseek-chat        | qwen-plus                  | glm-4                       |
+   | 代码生成 / 审查     | deepseek-reasoner    | qwen-coder                 | claude-sonnet（仅关键审查） |
+   | 长链推理 / 数学     | deepseek-reasoner-r1 | qwen-max                   | ollama:qwen2.5              |
+   | 离线 / 隐私场景     | ollama:qwen2.5       | ollama:deepseek-r1-distill | （无）                      |
 
 3. 输出路由策略表：
 
@@ -30,8 +30,8 @@
   "routing": {
     "default_model": "deepseek-chat",
     "by_task_type": {
-      "code_review": {"model": "deepseek-reasoner", "rationale": "需更强推理"},
-      "translation": {"model": "qwen-turbo", "rationale": "简单任务用便宜模型"}
+      "code_review": { "model": "deepseek-reasoner", "rationale": "需更强推理" },
+      "translation": { "model": "qwen-turbo", "rationale": "简单任务用便宜模型" }
     },
     "fallback": "ollama:qwen2.5"
   },

@@ -1,6 +1,8 @@
-# ruff: noqa
+# mypy: disable-error-code="assignment, attr-defined, no-any-return, valid-type"
 """Employee snapshot collection and digest-record persistence."""
+
 from __future__ import annotations
+
 import asyncio
 import importlib
 import json
@@ -9,6 +11,8 @@ import os
 import re
 from html import unescape
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger("modstore_server.digest_vibe_prep")
 DigestVibeProgressCallback = Callable[[Dict[str, Any]], Awaitable[None]]
@@ -35,7 +39,7 @@ def _finalize_vibe_result(
         patches = _facade()._apply_version_stamp(
             "patches", str(synth.get("patches_markdown") or ""), ctx
         )
-        (patches, backlog_meta) = _facade()._merge_event_backlog_into_patches(patches)
+        patches, backlog_meta = _facade()._merge_event_backlog_into_patches(patches)
         return {
             "ok": True,
             "error": "",
@@ -54,7 +58,7 @@ def _finalize_vibe_result(
             "model": str(synth.get("model") or ""),
             "synthesizer": "llm",
         }
-    (updates, patches) = _facade()._build_template_vibe_markdowns(
+    updates, patches = _facade()._build_template_vibe_markdowns(
         employees=employees,
         ctx=ctx,
         digest_excerpt=digest_excerpt,
@@ -62,7 +66,7 @@ def _finalize_vibe_result(
         surface_audit_excerpt=surface_audit_excerpt,
         fallback_reason=str(synth.get("error") or "LLM 不可用"),
     )
-    (patches, backlog_meta) = _facade()._merge_event_backlog_into_patches(patches)
+    patches, backlog_meta = _facade()._merge_event_backlog_into_patches(patches)
     return {
         "ok": True,
         "error": "",
@@ -75,7 +79,9 @@ def _finalize_vibe_result(
     }
 
 
-def _merge_event_backlog_into_patches(patches_markdown: str) -> tuple[str, Dict[str, Any]]:
+def _merge_event_backlog_into_patches(
+    patches_markdown: str,
+) -> tuple[str, Dict[str, Any]]:
     """事件轨 M2：合并 ``six_line_digest_backlog.jsonl`` 进补丁清单。"""
     if (os.environ.get("MODSTORE_EVENT_BACKLOG_MERGE_ENABLED", "1") or "").strip().lower() in (
         "0",
@@ -85,10 +91,12 @@ def _merge_event_backlog_into_patches(patches_markdown: str) -> tuple[str, Dict[
     ):
         return (patches_markdown, {"merged_count": 0, "skipped": True})
     try:
-        from modstore_server.six_line_event_router import merge_event_backlog_into_vibe_patches
+        from modstore_server.six_line_event_router import (
+            merge_event_backlog_into_vibe_patches,
+        )
 
         return merge_event_backlog_into_vibe_patches(patches_markdown, consume=True)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         _facade().logger.exception("digest_vibe_prep: event backlog merge failed")
         return (patches_markdown, {"merged_count": 0, "error": "merge_failed"})
 
@@ -125,7 +133,9 @@ def _lightweight_employee_snapshot(pkg_id: str, display_name: str) -> Dict[str, 
 
 
 async def _collect_lightweight(
-    pairs: List[Tuple[str, str]], *, progress_cb: Optional[DigestVibeProgressCallback] = None
+    pairs: List[Tuple[str, str]],
+    *,
+    progress_cb: Optional[DigestVibeProgressCallback] = None,
 ) -> List[Dict[str, Any]]:
     total = len(pairs)
     out: List[Dict[str, Any]] = []
@@ -152,7 +162,7 @@ async def _collect_manual_reports(
     concurrency: int,
     progress_cb: Optional[DigestVibeProgressCallback] = None,
 ) -> List[Dict[str, Any]]:
-    (bench_prov, bench_mdl) = _facade().resolve_platform_bench_llm()
+    bench_prov, bench_mdl = _facade().resolve_platform_bench_llm()
     if not bench_prov or not bench_mdl:
         return []
     other_ids = [p for (p, _) in pairs]
@@ -232,7 +242,7 @@ def persist_vibe_prep_on_digest_record(record_id: int, result: Dict[str, Any]) -
             row.vibe_prep_patches_md = str(result.get("patches_markdown") or "")
             row.vibe_prep_meta_json = json.dumps(meta, ensure_ascii=False)
             session.commit()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         _facade().logger.exception("persist_vibe_prep_on_digest_record failed id=%s", record_id)
 
 
@@ -268,7 +278,7 @@ def run_digest_vibe_prep_sync(
                 record_id=record_id,
             )
         )
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         _facade().logger.exception("run_digest_vibe_prep_sync failed")
         return {
             "ok": False,

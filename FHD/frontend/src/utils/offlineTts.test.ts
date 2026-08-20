@@ -41,15 +41,11 @@ describe('offlineTts', () => {
 
   describe('synthesizeOffline', () => {
     it('throws when pipeline not loaded', async () => {
-      await expect(synthesizeOffline('hello')).rejects.toThrow(
-        '离线 TTS 尚未加载，请先调用 ensureOfflineReady()',
-      )
+      await expect(synthesizeOffline('hello')).rejects.toThrow('离线 TTS 尚未加载，请先调用 ensureOfflineReady()')
     })
 
     it('throws with empty string when pipeline not loaded', async () => {
-      await expect(synthesizeOffline('')).rejects.toThrow(
-        '离线 TTS 尚未加载',
-      )
+      await expect(synthesizeOffline('')).rejects.toThrow('离线 TTS 尚未加载')
     })
   })
 

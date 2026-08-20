@@ -1,6 +1,8 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
 
 
@@ -20,7 +22,9 @@ def _positive_int_env(name: str, default: int, *, maximum: int) -> int:
 
 def _cache_ttl_seconds() -> int:
     return _facade()._positive_int_env(
-        "XIUCI_VISUALIZATION_CACHE_TTL_SECONDS", _facade()._DEFAULT_CACHE_TTL_SECONDS, maximum=300
+        "XIUCI_VISUALIZATION_CACHE_TTL_SECONDS",
+        _facade()._DEFAULT_CACHE_TTL_SECONDS,
+        maximum=300,
     )
 
 
@@ -57,7 +61,8 @@ def _access_log_paths() -> list[_facade().Path]:
     pattern = (_facade().os.environ.get("XIUCI_VISUALIZATION_ACCESS_LOG_GLOB") or "").strip()
     matches = _facade().glob.glob(pattern or _facade()._DEFAULT_LOG_GLOB)
     return sorted(
-        (_facade().Path(match) for match in matches if _facade().Path(match).is_file()), key=str
+        (_facade().Path(match) for match in matches if _facade().Path(match).is_file()),
+        key=str,
     )
 
 
@@ -170,7 +175,10 @@ def _read_traffic_metrics(
                     platform = next(
                         (
                             name
-                            for (suffix, name) in _facade()._DOWNLOAD_PLATFORM_BY_SUFFIX.items()
+                            for (
+                                suffix,
+                                name,
+                            ) in _facade()._DOWNLOAD_PLATFORM_BY_SUFFIX.items()
                             if target_lower.endswith(suffix)
                         ),
                         None,
@@ -185,7 +193,7 @@ def _read_traffic_metrics(
         except (OSError, EOFError):
             unreadable_files += 1
     if parsed_lines == 0:
-        (ai, downloads) = _facade()._empty_traffic_metrics()
+        ai, downloads = _facade()._empty_traffic_metrics()
         return (
             ai,
             downloads,
@@ -229,7 +237,10 @@ def _read_traffic_metrics(
             "macos": download_platforms["macos"],
             "android": download_platforms["android"],
         },
-        "products": {"xcagi": download_products["xcagi"], "kellai": download_products["kellai"]},
+        "products": {
+            "xcagi": download_products["xcagi"],
+            "kellai": download_products["kellai"],
+        },
         "daily": daily,
         "window_start": _facade()._iso_date(retained_start),
         "window_end": _facade()._iso_date(retained_end),

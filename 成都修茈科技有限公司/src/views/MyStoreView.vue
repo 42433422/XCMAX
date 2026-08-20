@@ -58,12 +58,44 @@ function formatDate(iso) {
 </script>
 
 <style scoped>
-.page-title { font-size: 22px; margin-bottom: 20px; color: #ffffff; }
-.mod-card { background: #111111; border-radius: 12px; border: 0.5px solid rgba(255,255,255,0.1); padding: 20px; }
-.mod-name { font-size: 16px; font-weight: 600; color: #ffffff; margin-bottom: 6px; }
-.mod-meta { font-size: 13px; color: rgba(255,255,255,0.3); margin-bottom: 8px; }
-.mod-purchase-info { font-size: 12px; color: rgba(255,255,255,0.5); margin-bottom: 12px; }
-.loading { text-align: center; padding: 40px; color: rgba(255,255,255,0.4); }
-.empty-state { text-align: center; padding: 60px 20px; }
-.empty-state p { color: rgba(255,255,255,0.4); margin-bottom: 16px; }
+.page-title {
+  font-size: 22px;
+  margin-bottom: 20px;
+  color: #ffffff;
+}
+.mod-card {
+  background: #111111;
+  border-radius: 12px;
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  padding: 20px;
+}
+.mod-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #ffffff;
+  margin-bottom: 6px;
+}
+.mod-meta {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.3);
+  margin-bottom: 8px;
+}
+.mod-purchase-info {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 12px;
+}
+.loading {
+  text-align: center;
+  padding: 40px;
+  color: rgba(255, 255, 255, 0.4);
+}
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+}
+.empty-state p {
+  color: rgba(255, 255, 255, 0.4);
+  margin-bottom: 16px;
+}
 </style>

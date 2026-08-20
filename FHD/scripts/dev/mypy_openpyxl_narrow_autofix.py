@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="union-attr"
 """Insert explicit non-null guards for openpyxl active worksheets.
 
 ``Workbook.active`` is typed as optional by openpyxl, while newly created and
@@ -78,7 +79,9 @@ def _fix_file(path: Path, error_lines: list[int]) -> int:
     for index, statement in sorted(insertions, reverse=True):
         lines.insert(index, statement)
     if insertions:
-        path.write_text("\n".join(lines) + ("\n" if original.endswith("\n") else ""), encoding="utf-8")
+        path.write_text(
+            "\n".join(lines) + ("\n" if original.endswith("\n") else ""), encoding="utf-8"
+        )
     return len(insertions)
 
 

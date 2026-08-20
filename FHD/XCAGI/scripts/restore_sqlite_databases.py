@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 从备份目录或单个 .db 文件恢复 XCAGI 本地 SQLite 数据。
 
@@ -23,6 +22,8 @@ import shutil
 import sys
 import time
 from pathlib import Path
+
+BOUNDARY_ERRORS: tuple[type[Exception], ...] = (Exception,)
 
 _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
@@ -133,7 +134,9 @@ def main() -> int:
     lines: list[str] = []
     try:
         if args.from_appdata:
-            lines.extend(restore_from_appdata(backup_root, include_units=not args.no_unit_databases))
+            lines.extend(
+                restore_from_appdata(backup_root, include_units=not args.no_unit_databases)
+            )
         elif args.source:
             src = Path(os.path.expandvars(os.path.expanduser(args.source))).resolve()
             if src.is_file():
@@ -158,7 +161,7 @@ def main() -> int:
                 + ", users.db）。",
                 file=sys.stderr,
             )
-            print(f"若曾备份到其他路径，请将整目录作为 --from 参数。", file=sys.stderr)
+            print("若曾备份到其他路径，请将整目录作为 --from 参数。", file=sys.stderr)
             return 2
 
         print(f"预备份目录（本次被覆盖前的文件）: {backup_root}")
@@ -166,7 +169,7 @@ def main() -> int:
             print(line)
         print("完成。请重启后端再打开前端。")
         return 0
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         print(f"失败: {e}", file=sys.stderr)
         return 1
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 
 def build_production_recovery_drill(
@@ -92,9 +92,13 @@ def build_production_recovery_drill(
 
 def _scenario(name: str, path: Path, checker: Any) -> dict[str, Any]:
     payload = _read_json(path)
-    summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
-    evidence = (
-        payload.get("evidence") if isinstance(payload.get("evidence"), dict) else {}
+    summary = cast(
+        dict[str, Any],
+        payload.get("summary") if isinstance(payload.get("summary"), dict) else {},
+    )
+    evidence = cast(
+        dict[str, Any],
+        payload.get("evidence") if isinstance(payload.get("evidence"), dict) else {},
     )
     recovered = checker(payload)
     return {
@@ -114,14 +118,20 @@ def _scenario(name: str, path: Path, checker: Any) -> dict[str, Any]:
 
 
 def _readonly_recovered(payload: dict[str, Any]) -> bool:
-    summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+    summary = cast(
+        dict[str, Any],
+        payload.get("summary") if isinstance(payload.get("summary"), dict) else {},
+    )
     return str(payload.get("status") or "") == "read_only_degraded" and bool(
         summary.get("degraded_without_write")
     )
 
 
 def _live_write_recovered(payload: dict[str, Any]) -> bool:
-    summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+    summary = cast(
+        dict[str, Any],
+        payload.get("summary") if isinstance(payload.get("summary"), dict) else {},
+    )
     return (
         str(payload.get("status") or "") == "live_rolled_back"
         and bool(summary.get("live_github_write"))
@@ -130,9 +140,13 @@ def _live_write_recovered(payload: dict[str, Any]) -> bool:
 
 
 def _low_permission_recovered(payload: dict[str, Any]) -> bool:
-    summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
-    evidence = (
-        payload.get("evidence") if isinstance(payload.get("evidence"), dict) else {}
+    summary = cast(
+        dict[str, Any],
+        payload.get("summary") if isinstance(payload.get("summary"), dict) else {},
+    )
+    evidence = cast(
+        dict[str, Any],
+        payload.get("evidence") if isinstance(payload.get("evidence"), dict) else {},
     )
     return (
         str(payload.get("status") or "") == "permission_denied_degraded"
@@ -142,14 +156,20 @@ def _low_permission_recovered(payload: dict[str, Any]) -> bool:
 
 
 def _sandbox_recovered(payload: dict[str, Any]) -> bool:
-    summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+    summary = cast(
+        dict[str, Any],
+        payload.get("summary") if isinstance(payload.get("summary"), dict) else {},
+    )
     return bool(summary.get("created_comment_count")) and bool(
         summary.get("rollback_verified")
     )
 
 
 def _patch_recovered(payload: dict[str, Any]) -> bool:
-    summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+    summary = cast(
+        dict[str, Any],
+        payload.get("summary") if isinstance(payload.get("summary"), dict) else {},
+    )
     return (
         bool(summary.get("all_expected_outcomes_verified"))
         and int(summary.get("unexpected_gate_failure_count") or 0) == 0
@@ -157,7 +177,10 @@ def _patch_recovered(payload: dict[str, Any]) -> bool:
 
 
 def _quality_recovered(payload: dict[str, Any]) -> bool:
-    summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+    summary = cast(
+        dict[str, Any],
+        payload.get("summary") if isinstance(payload.get("summary"), dict) else {},
+    )
     return bool(summary.get("all_gates_passed"))
 
 

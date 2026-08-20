@@ -1,6 +1,8 @@
-# ruff: noqa
+# mypy: disable-error-code="attr-defined, misc, no-any-return, valid-type"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
 
 
@@ -23,7 +25,9 @@ class EmployeeAgentRunner(_facade()._EmployeeAgentRunnerPart01Mixin):
     """
 
 
-def _try_parse_json(text: str) -> _facade().Optional[_facade().Dict[str, _facade().Any]]:
+def _try_parse_json(
+    text: str,
+) -> _facade().Optional[_facade().Dict[str, _facade().Any]]:
     """Lenient JSON parser: strip fences and try multiple extract strategies."""
     t = (text or "").strip()
     t = (
@@ -45,7 +49,7 @@ def _try_parse_json(text: str) -> _facade().Optional[_facade().Dict[str, _facade
         if char != "{":
             continue
         try:
-            (data, _end) = decoder.raw_decode(t[index:])
+            data, _end = decoder.raw_decode(t[index:])
         except (_facade().json.JSONDecodeError, ValueError):
             continue
         if not isinstance(data, dict):
@@ -58,7 +62,9 @@ def _try_parse_json(text: str) -> _facade().Optional[_facade().Dict[str, _facade
 
 
 def build_agent_runner(
-    ctx: _facade().Dict[str, _facade().Any], *, max_rounds: _facade().Optional[int] = None
+    ctx: _facade().Dict[str, _facade().Any],
+    *,
+    max_rounds: _facade().Optional[int] = None,
 ) -> EmployeeAgentRunner:
     """Convenience factory; used by generated blueprints.py."""
     workspace_root = str(ctx.get("workspace_root") or ".")

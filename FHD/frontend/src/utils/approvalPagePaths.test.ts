@@ -8,12 +8,8 @@ describe('approvalPagePaths', () => {
 
   it('maps approval hub when facade on', () => {
     vi.stubGlobal('localStorage', { getItem: () => '1' })
-    expect(resolveApprovalPagePath('/approval-hub/workspace')).toBe(
-      '/mod/xcagi-approval-bridge/approval-hub/workspace',
-    )
-    expect(resolveApprovalPageRedirectForRouteName('approval-workspace')).toBe(
-      '/mod/xcagi-approval-bridge/approval-hub/workspace',
-    )
+    expect(resolveApprovalPagePath('/approval-hub/workspace')).toBe('/mod/xcagi-approval-bridge/approval-hub/workspace')
+    expect(resolveApprovalPageRedirectForRouteName('approval-workspace')).toBe('/mod/xcagi-approval-bridge/approval-hub/workspace')
   })
 
   it('keeps host path when facade off', () => {
@@ -24,9 +20,7 @@ describe('approvalPagePaths', () => {
 
   it('normalizes a host path without a leading slash', () => {
     vi.stubGlobal('localStorage', { getItem: () => '1' })
-    expect(resolveApprovalPagePath('approval-hub/workspace')).toBe(
-      '/mod/xcagi-approval-bridge/approval-hub/workspace',
-    )
+    expect(resolveApprovalPagePath('approval-hub/workspace')).toBe('/mod/xcagi-approval-bridge/approval-hub/workspace')
   })
 
   it('keeps unknown host path unchanged when facade on', () => {

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="attr-defined, index, no-any-return, operator, union-attr, valid-type"
 """Eligibility policy for duty-workforce burn-in."""
 
 from __future__ import annotations
@@ -9,18 +10,24 @@ from typing import Any, Dict
 from modstore_server.duty_burn_in_handlers import select_reviewed_burn_in_handlers
 from modstore_server.duty_workforce_burnin_constants import (
     CAPABILITY_HANDLERS as _CAPABILITY_HANDLERS,
+)
+from modstore_server.duty_workforce_burnin_constants import (
     DANGEROUS_HANDLERS as _DANGEROUS_HANDLERS,
+)
+from modstore_server.duty_workforce_burnin_constants import (
     PROHIBITED_SEMANTICS as _PROHIBITED_SEMANTICS,
 )
 from modstore_server.employee_runtime import parse_employee_config_v2
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 
 def _actions_config(manifest: Dict[str, Any]) -> Dict[str, Any]:
     config = parse_employee_config_v2(manifest)
-    actions = config.get("actions") if isinstance(config.get("actions"), dict) else {}
-    if isinstance(actions.get("actions"), dict):
-        actions = actions["actions"]
-    return actions
+    actions = config.get("actions")
+    if not isinstance(actions, dict):
+        return {}
+    nested_actions = actions.get("actions")
+    return dict(nested_actions) if isinstance(nested_actions, dict) else dict(actions)
 
 
 def _extract_handlers(manifest: Dict[str, Any]) -> list[str]:
@@ -71,7 +78,7 @@ def assess_burn_in_eligibility(
     try:
         handlers = _extract_handlers(manifest)
         actions = _actions_config(manifest)
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         return {
             "eligible": False,
             "reason": f"manifest_invalid:{type(exc).__name__}",

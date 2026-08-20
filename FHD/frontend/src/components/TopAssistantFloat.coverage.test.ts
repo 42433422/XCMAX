@@ -11,7 +11,10 @@ import TopAssistantFloat from './TopAssistantFloat.vue'
 const RouterLinkStub = defineComponent({
   name: 'RouterLinkStub',
   props: { to: { type: [String, Object], default: '/' } },
-  setup: (props, { slots }) => () => h('a', { href: typeof props.to === 'string' ? props.to : '#' }, slots.default?.()),
+  setup:
+    (props, { slots }) =>
+    () =>
+      h('a', { href: typeof props.to === 'string' ? props.to : '#' }, slots.default?.()),
 })
 
 // ExcelPreview 桩组件，附带 $el 与 querySelector 以覆盖滚动同步逻辑
@@ -46,14 +49,31 @@ vi.mock('@/api/products', () => {
     success: true,
     data: String(keyword).trim()
       ? [
-        { id: 1, model_number: 'M-1', name: '产品A', product_name: '产品A', price: 10, unit: '件' },
-        { id: 2, model_number: 'M-2', name: '产品B', product_name: '产品B', price: 20, unit: '套' },
-      ]
+          {
+            id: 1,
+            model_number: 'M-1',
+            name: '产品A',
+            product_name: '产品A',
+            price: 10,
+            unit: '件',
+          },
+          {
+            id: 2,
+            model_number: 'M-2',
+            name: '产品B',
+            product_name: '产品B',
+            price: 20,
+            unit: '套',
+          },
+        ]
       : [],
     total: String(keyword).trim() ? 2 : 0,
   }))
   const updateProduct = vi.fn(async () => ({ success: true }))
-  return { default: { searchProducts, updateProduct }, productsApi: { searchProducts, updateProduct } }
+  return {
+    default: { searchProducts, updateProduct },
+    productsApi: { searchProducts, updateProduct },
+  }
 })
 
 vi.mock('@/tutorial/promptAdvancedTutorial', () => ({
@@ -63,7 +83,13 @@ vi.mock('@/tutorial/promptAdvancedTutorial', () => ({
 vi.mock('@/composables/useTutorialCatalog', () => ({
   useTutorialCatalog: () => ({
     tutorialTracks: [
-      { id: 'host', title: '宿主入门', summary: '认识XC', description: '宿主入门说明', recommended: true },
+      {
+        id: 'host',
+        title: '宿主入门',
+        summary: '认识XC',
+        description: '宿主入门说明',
+        recommended: true,
+      },
       { id: 'advanced', title: '进阶', summary: '进阶教程', description: '进阶说明' },
     ],
     advancedTrackHint: '进阶路线提示',
@@ -89,7 +115,9 @@ vi.mock('@/utils/erpDomainPaths', () => ({
 
 vi.mock('@/composables/useEnterpriseScopedWorkflowRegistry', () => ({
   useEnterpriseScopedWorkflowRegistry: () => ({
-    scopedRegistryEntries: { value: [{ id: 'wechat_msg' }, { id: 'label_print' }, { id: 'receipt_confirm' }] },
+    scopedRegistryEntries: {
+      value: [{ id: 'wechat_msg' }, { id: 'label_print' }, { id: 'receipt_confirm' }],
+    },
   }),
 }))
 
@@ -133,9 +161,22 @@ function makeFetchResponse(body: unknown = { ok: true }, ok = true) {
 
 function createTestRouter() {
   const names = [
-    'home', 'login', 'register', 'settings', 'mod-store', 'products', 'product-onboarding',
-    'chat', 'dashboard', 'workflow-visualization', 'shipment-records', 'customers',
-    'template-preview', 'materials', 'inventory', 'approval-hub',
+    'home',
+    'login',
+    'register',
+    'settings',
+    'mod-store',
+    'products',
+    'product-onboarding',
+    'chat',
+    'dashboard',
+    'workflow-visualization',
+    'shipment-records',
+    'customers',
+    'template-preview',
+    'materials',
+    'inventory',
+    'approval-hub',
   ]
   const EmptyComp = defineComponent({ setup: () => () => h('div') })
   const routes = names.map((name) => ({ path: `/${name}`, name, component: EmptyComp }))
@@ -169,7 +210,10 @@ function dispatchWindowEvent(name: string, detail: Record<string, unknown> = {})
 describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => makeFetchResponse()),
+    )
     // 重置 localStorage 状态
     localStorage.clear()
   })
@@ -372,11 +416,11 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
 
   it('查询返回空结果显示未找到提示', async () => {
     const productsApi = (await import('@/api/products')).default
-      ; (productsApi.searchProducts as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        success: true,
-        data: [],
-        total: 0,
-      })
+    ;(productsApi.searchProducts as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      success: true,
+      data: [],
+      total: 0,
+    })
     const { wrapper } = await mountComponent()
     await wrapper.find('.assistant-float-toggle').trigger('click')
     await flushPromises()
@@ -393,9 +437,7 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
   it('查询失败显示错误信息', async () => {
     const { ApiError } = await import('@/api')
     const productsApi = (await import('@/api/products')).default
-      ; (productsApi.searchProducts as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
-        new ApiError('服务器错误', 500),
-      )
+    ;(productsApi.searchProducts as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new ApiError('服务器错误', 500))
     const { wrapper } = await mountComponent()
     await wrapper.find('.assistant-float-toggle').trigger('click')
     await flushPromises()
@@ -411,10 +453,10 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
 
   it('查询返回 success:false 显示失败提示', async () => {
     const productsApi = (await import('@/api/products')).default
-      ; (productsApi.searchProducts as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        success: false,
-        message: '查询异常',
-      })
+    ;(productsApi.searchProducts as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      success: false,
+      message: '查询异常',
+    })
     const { wrapper } = await mountComponent()
     await wrapper.find('.assistant-float-toggle').trigger('click')
     await flushPromises()
@@ -430,7 +472,7 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
 
   it('查询时网络异常显示网络异常提示', async () => {
     const productsApi = (await import('@/api/products')).default
-      ; (productsApi.searchProducts as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('网络异常'))
+    ;(productsApi.searchProducts as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('网络异常'))
     const { wrapper } = await mountComponent()
     await wrapper.find('.assistant-float-toggle').trigger('click')
     await flushPromises()
@@ -479,7 +521,7 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
 
   it('保存产品行失败仍重置 savingProductId', async () => {
     const productsApi = (await import('@/api/products')).default
-      ; (productsApi.updateProduct as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('保存失败'))
+    ;(productsApi.updateProduct as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('保存失败'))
     // 捕获未处理的 rejection（saveProductRow 不 catch，由 finally 重置状态）
     const rejectionHandler = vi.fn()
     process.on('unhandledRejection', rejectionHandler)
@@ -526,7 +568,9 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
   it('点击新手教程标签触发预热事件', async () => {
     const { wrapper } = await mountComponent()
     let warmed = false
-    window.addEventListener('xcagi:warmup-tutorial-tts', () => { warmed = true })
+    window.addEventListener('xcagi:warmup-tutorial-tts', () => {
+      warmed = true
+    })
     await wrapper.find('.assistant-float-toggle').trigger('click')
     await flushPromises()
     const tabs = wrapper.findAll('.assistant-tab')
@@ -701,7 +745,13 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
       excel_analysis: {
         preview_data: {
           all_sheets: [
-            { sheet_name: '默认Sheet', sheet_index: 0, grid_preview: null, fields: [], sample_rows: [] },
+            {
+              sheet_name: '默认Sheet',
+              sheet_index: 0,
+              grid_preview: null,
+              fields: [],
+              sample_rows: [],
+            },
           ],
         },
       },
@@ -796,7 +846,11 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
     await wrapper.find('.assistant-float-toggle').trigger('click')
     await flushPromises()
     expect(wrapper.find('.assistant-float-panel').exists()).toBe(true)
-    const escEvent = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+    const escEvent = new KeyboardEvent('keydown', {
+      key: 'Escape',
+      bubbles: true,
+      cancelable: true,
+    })
     window.dispatchEvent(escEvent)
     await flushPromises()
     expect(wrapper.find('.assistant-float-panel').exists()).toBe(false)
@@ -804,7 +858,11 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
 
   it('副窗关闭时 Escape 键不触发', async () => {
     const { wrapper } = await mountComponent()
-    const escEvent = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+    const escEvent = new KeyboardEvent('keydown', {
+      key: 'Escape',
+      bubbles: true,
+      cancelable: true,
+    })
     window.dispatchEvent(escEvent)
     await flushPromises()
     expect(wrapper.find('.assistant-float-panel').exists()).toBe(false)
@@ -909,12 +967,12 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
 
   it('查询成功后修改关键词显示关键词已变更提示', async () => {
     const productsApi = (await import('@/api/products')).default
-      // 先让搜索返回空结果，使 productRows.length === 0
-      ; (productsApi.searchProducts as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        success: true,
-        data: [],
-        total: 0,
-      })
+    // 先让搜索返回空结果，使 productRows.length === 0
+    ;(productsApi.searchProducts as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      success: true,
+      data: [],
+      total: 0,
+    })
     const { wrapper } = await mountComponent()
     await wrapper.find('.assistant-float-toggle').trigger('click')
     await flushPromises()
@@ -994,7 +1052,11 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
     const { wrapper } = await mountComponent()
     await wrapper.find('.assistant-float-toggle').trigger('click')
     await flushPromises()
-    const escEvent = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+    const escEvent = new KeyboardEvent('keydown', {
+      key: 'Escape',
+      bubbles: true,
+      cancelable: true,
+    })
     window.dispatchEvent(escEvent)
     await flushPromises()
     expect(wrapper.find('.assistant-float-panel').exists()).toBe(true)

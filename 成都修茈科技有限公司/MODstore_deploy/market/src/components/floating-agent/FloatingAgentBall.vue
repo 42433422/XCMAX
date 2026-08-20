@@ -37,10 +37,7 @@
     >
       {{ fileOverflowCount > 9 ? '9+' : fileOverflowCount }}
     </span>
-    <span
-      v-else-if="unreadCount > 0 && !isOpen"
-      class="butler-ball__badge"
-    >
+    <span v-else-if="unreadCount > 0 && !isOpen" class="butler-ball__badge">
       {{ unreadCount > 9 ? '9+' : unreadCount }}
     </span>
     <span v-if="!consentGiven" class="butler-ball__hint">点我启用</span>
@@ -68,15 +65,11 @@ const props = defineProps<{
   maleAvatar?: boolean
 }>()
 
-const avatarFileName = computed(() =>
-  props.maleAvatar ? 'ai-butler-male-avatar-v1.jpg' : 'ai-butler-female-avatar-v1.png',
-)
+const avatarFileName = computed(() => (props.maleAvatar ? 'ai-butler-male-avatar-v1.jpg' : 'ai-butler-female-avatar-v1.png'))
 
 /** 官网固定女版；市场内按 maleAvatar 切换管理员男版 / 普通女版。 */
 const brandLogoUrl = computed(() =>
-  props.corpMode
-    ? '/corp-butler/ai-butler-female-avatar-v1.png'
-    : `${import.meta.env.BASE_URL}${avatarFileName.value}`,
+  props.corpMode ? '/corp-butler/ai-butler-female-avatar-v1.png' : `${import.meta.env.BASE_URL}${avatarFileName.value}`,
 )
 
 const ballRef = ref<HTMLButtonElement | null>(null)
@@ -260,7 +253,9 @@ onBeforeUnmount(() => {
   border: 1px solid color-mix(in srgb, var(--wb-accent-primary, #818cf8) 36%, transparent);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
   flex: 0 0 auto;
-  transition: transform 180ms ease, box-shadow 180ms ease;
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease;
   user-select: none;
   -webkit-user-drag: none;
 }

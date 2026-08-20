@@ -1,6 +1,8 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Provider-specific chat protocols for the unified LLM proxy."""
+
 from __future__ import annotations
+
 import json
 from typing import Any, AsyncIterator, Dict, List, Optional
 
@@ -24,7 +26,11 @@ async def chat_openai_compatible(
 ) -> Dict[str, Any]:
     url = f"{base_url.rstrip('/')}/chat/completions"
     body = _facade()._openai_chat_body(
-        provider, model, messages, max_tokens=max_tokens, response_format=response_format
+        provider,
+        model,
+        messages,
+        max_tokens=max_tokens,
+        response_format=response_format,
     )
     async with _facade().httpx.AsyncClient(
         timeout=_facade()._LLM_TIMEOUT, limits=_facade()._LLM_LIMITS
@@ -38,7 +44,7 @@ async def chat_openai_compatible(
     data = r.json()
     choice0 = (data.get("choices") or [{}])[0]
     msg = choice0.get("message") or {}
-    (content, reasoning_trace) = _facade()._openai_assistant_message_parts(msg)
+    content, reasoning_trace = _facade()._openai_assistant_message_parts(msg)
     if forbid_reasoning_fallback:
         if not (content or "").strip():
             msg_err = "模型未输出正文 content（常见于推理模型占满 max_tokens 或仅返回 reasoning）。代码生成路径禁止将推理链当作正文；请增大 max_tokens、换用非推理模型，或降低推理长度。"
@@ -96,7 +102,10 @@ async def stream_openai_compatible(
     )
     async with _facade().httpx.AsyncClient(timeout=None, limits=_facade()._STREAM_LIMITS) as client:
         async with client.stream(
-            "POST", url, headers=_facade()._openai_request_headers(provider, api_key), json=body
+            "POST",
+            url,
+            headers=_facade()._openai_request_headers(provider, api_key),
+            json=body,
         ) as r:
             if r.status_code >= 400:
                 text = await r.aread()
@@ -161,7 +170,9 @@ async def stream_openai_compatible(
                     }
 
 
-def _oai_to_anthropic(messages: List[Dict[str, str]]) -> tuple[str, List[Dict[str, Any]]]:
+def _oai_to_anthropic(
+    messages: List[Dict[str, str]],
+) -> tuple[str, List[Dict[str, Any]]]:
     system_parts: List[str] = []
     out: List[Dict[str, Any]] = []
     for m in messages:
@@ -193,7 +204,7 @@ async def chat_anthropic_compatible(
     *,
     max_tokens: int = 1024,
 ) -> Dict[str, Any]:
-    (system, msgs) = _facade()._oai_to_anthropic(messages)
+    system, msgs = _facade()._oai_to_anthropic(messages)
     url = f"{base_url.rstrip('/')}/v1/messages"
     body: Dict[str, Any] = {"model": model, "max_tokens": max_tokens, "messages": msgs}
     if system:
@@ -219,7 +230,12 @@ async def chat_anthropic_compatible(
     for b in blocks:
         if isinstance(b, dict) and b.get("type") == "text":
             parts.append(str(b.get("text") or ""))
-    return {"ok": True, "content": "\n".join(parts), "usage": data.get("usage") or {}, "raw": data}
+    return {
+        "ok": True,
+        "content": "\n".join(parts),
+        "usage": data.get("usage") or {},
+        "raw": data,
+    }
 
 
 def _oai_to_gemini(messages: List[Dict[str, str]]) -> List[Dict[str, Any]]:

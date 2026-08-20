@@ -31,7 +31,9 @@ def test_old_host_sqlite_uses_packaged_driver(monkeypatch: pytest.MonkeyPatch) -
     assert sys.modules["sqlite3"] is packaged
 
 
-def test_old_host_sqlite_fails_with_actionable_error(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_old_host_sqlite_fails_with_actionable_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     real_import = builtins.__import__
 
     def missing_pysqlite(name, *args, **kwargs):

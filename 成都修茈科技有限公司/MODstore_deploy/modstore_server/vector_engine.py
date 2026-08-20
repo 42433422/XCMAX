@@ -19,6 +19,8 @@ import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
+from modstore_server.operational_errors import BOUNDARY_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -105,7 +107,7 @@ def get_client():
 
         try:
             client = chromadb.PersistentClient(path=str(path))
-        except Exception as e:  # noqa: BLE001 — chromadb 自身异常类型多变
+        except BOUNDARY_ERRORS as e:  # noqa: BLE001 — chromadb 自身异常类型多变
             raise VectorEngineError(f"初始化 Chroma PersistentClient 失败: {e}") from e
 
         _client = client
@@ -148,7 +150,7 @@ def get_or_create_collection(name: str, *, metadata: Optional[Dict[str, Any]] = 
     client = get_client()
     try:
         from chromadb.utils import embedding_functions  # noqa: F401  ensure module available
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         pass
     safe_name = _sanitize_collection_name(name)
     meta = {"hnsw:space": "cosine"}
@@ -174,7 +176,7 @@ def get_collection(name: str):
     safe_name = _sanitize_collection_name(name)
     try:
         return client.get_collection(name=safe_name)
-    except Exception as e:  # noqa: BLE001
+    except BOUNDARY_ERRORS as e:  # noqa: BLE001
         raise VectorEngineError(f"集合不存在: {safe_name}") from e
 
 
@@ -185,7 +187,7 @@ def drop_collection(name: str, *, missing_ok: bool = True) -> bool:
     try:
         client.delete_collection(safe_name)
         return True
-    except Exception as e:  # noqa: BLE001
+    except BOUNDARY_ERRORS as e:  # noqa: BLE001
         if missing_ok:
             return False
         raise VectorEngineError(f"删除集合失败: {safe_name}: {e}") from e
@@ -232,7 +234,7 @@ def upsert(
             documents=[str(d) for d in documents],
             metadatas=cleaned_metas,
         )
-    except Exception as e:  # noqa: BLE001
+    except BOUNDARY_ERRORS as e:  # noqa: BLE001
         raise VectorEngineError(f"upsert 失败 collection={collection_name}: {e}") from e
     return n
 
@@ -265,7 +267,7 @@ def query(
             where=where_clause,
             include=["documents", "metadatas", "distances"],
         )
-    except Exception as e:  # noqa: BLE001
+    except BOUNDARY_ERRORS as e:  # noqa: BLE001
         raise VectorEngineError(f"query 失败 collection={collection_name}: {e}") from e
 
     items: List[Dict[str, Any]] = []
@@ -299,7 +301,7 @@ def delete(
     before = 0
     try:
         before = int(coll.count())
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         pass
     where_clause: Optional[Dict[str, Any]] = None
     if where:
@@ -314,12 +316,12 @@ def delete(
             ids=[str(i) for i in ids] if ids else None,
             where=where_clause,
         )
-    except Exception as e:  # noqa: BLE001
+    except BOUNDARY_ERRORS as e:  # noqa: BLE001
         raise VectorEngineError(f"delete 失败 collection={collection_name}: {e}") from e
     after = 0
     try:
         after = int(coll.count())
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         pass
     return max(0, before - after)
 
@@ -332,7 +334,7 @@ def count(collection_name: str) -> int:
         return 0
     try:
         return int(coll.count())
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         return 0
 
 
@@ -350,12 +352,12 @@ def status() -> Dict[str, Any]:
         try:
             cols = client.list_collections()
             out["collections"] = len(list(cols))
-        except Exception:  # noqa: BLE001
+        except BOUNDARY_ERRORS:  # noqa: BLE001
             out["collections"] = 0
         out["ready"] = True
     except VectorEngineError as e:
         out["error"] = str(e)
-    except Exception as e:  # noqa: BLE001
+    except BOUNDARY_ERRORS as e:  # noqa: BLE001
         out["error"] = str(e)
     return out
 

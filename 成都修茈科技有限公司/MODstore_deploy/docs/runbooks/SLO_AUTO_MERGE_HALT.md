@@ -4,20 +4,20 @@
 
 ## CI 侧
 
-| 工作流 | 用途 |
-|--------|------|
-| `FHD/.github/workflows/sla-probe.yml` | 夜间 `/api/health` 延迟预算（`tests/test_sla_health_probe.py`） |
-| `FHD/.github/workflows/test.yml` → `performance-gate` | PR 上 k6 smoke（advisory） |
+| 工作流                                                | 用途                                                            |
+| ----------------------------------------------------- | --------------------------------------------------------------- |
+| `FHD/.github/workflows/sla-probe.yml`                 | 夜间 `/api/health` 延迟预算（`tests/test_sla_health_probe.py`） |
+| `FHD/.github/workflows/test.yml` → `performance-gate` | PR 上 k6 smoke（advisory）                                      |
 
 ## 生产侧（MODstore）
 
 环境变量（`.env`）：
 
-| 变量 | 说明 |
-|------|------|
-| `MODSTORE_SLO_HALT_AUTO_MERGE` | `1` 时：最近一次 `post_deploy_smoke` 失败则 `daily_orchestrator` 跳过 auto-merge 路径 |
-| `MODSTORE_POST_DEPLOY_SMOKE_ENABLED` | 默认 `1` |
-| `MODSTORE_POST_DEPLOY_MARKET_URL` | 默认 `https://xiu-ci.com/market/download` |
+| 变量                                 | 说明                                                                                  |
+| ------------------------------------ | ------------------------------------------------------------------------------------- |
+| `MODSTORE_SLO_HALT_AUTO_MERGE`       | `1` 时：最近一次 `post_deploy_smoke` 失败则 `daily_orchestrator` 跳过 auto-merge 路径 |
+| `MODSTORE_POST_DEPLOY_SMOKE_ENABLED` | 默认 `1`                                                                              |
+| `MODSTORE_POST_DEPLOY_MARKET_URL`    | 默认 `https://xiu-ci.com/market/download`                                             |
 
 实现位置：`modstore_server/post_deploy_smoke.py` · `modstore_server/daily_orchestrator_job.py`（读取最近一次 smoke 结果日志）。
 

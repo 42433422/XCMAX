@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="attr-defined, no-any-return, union-attr, valid-type"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -29,7 +33,7 @@ def _emp_im_notify_boss(employee_id: str, manifest: _facade().Any, body: str, ho
                 )
                 _emp_display = str(_ident.get("name") or manifest.get("name") or "").strip()
                 _emp_mod_id = str(manifest.get("mod_id") or manifest.get("id") or "").strip()
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.debug("emp_im_notify manifest parse skipped", exc_info=True)
         _notify_boss_im(
             employee_id,
@@ -38,5 +42,5 @@ def _emp_im_notify_boss(employee_id: str, manifest: _facade().Any, body: str, ho
             mod_id=_emp_mod_id,
             display_name=_emp_display,
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         _facade().logger.debug("emp_im_notify %s skipped", hook, exc_info=True)

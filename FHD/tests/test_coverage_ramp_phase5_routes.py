@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """COVERAGE_RAMP Phase 5: FastAPI routes (print, xcmax_admin, legacy helpers, misc)."""
 
 from __future__ import annotations

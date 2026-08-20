@@ -122,10 +122,12 @@ exclude = [
     "venv",
     "node_modules",
     "frontend",
+    "(^|/)build/",
     "build",
     "dist",
     "migrations",
     "alembic/versions",
+    "third_party",
     "*.ipynb"
 ]
 
@@ -211,21 +213,19 @@ python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 ignore_missing_imports = false
+explicit_package_bases = true
 exclude = [
     "venv",
     ".venv",
     "node_modules",
     "frontend",
+    "XCAGI/data",
+    "XCAGI/mods",
     "migrations",
     "alembic/versions",
     "app/infrastructure/skills/sidebar-menu-manager",
     "app/infrastructure/skills/skill-maker",
 ]
-
-# Phase 9：全 app/ 默认严格；仅 tests 保留 ignore_errors
-[[tool.mypy.overrides]]
-module = "tests.*"
-ignore_errors = true
 
 # modstore_server 为可选外部包（MODstore 部署时安装），路由层 try/except 回退到本地 JSON，
 # 故对 mypy 标记为 ignore_missing_imports 而非在代码中散布 # type: ignore。

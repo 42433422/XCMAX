@@ -11,4 +11,4 @@ test_cases = [
 print("意图识别测试:")
 for msg in test_cases:
     r = recognize_intents(msg)
-    print(f'{msg}: tool_key={r.get("tool_key")}, primary_intent={r.get("primary_intent")}')
+    print(f"{msg}: tool_key={r.get('tool_key')}, primary_intent={r.get('primary_intent')}")

@@ -1,12 +1,16 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """LLM synthesis and top-level digest vibe-prep orchestration."""
+
 from __future__ import annotations
+
 import importlib
 import json
 import logging
 import re
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, List, Optional
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger("modstore_server.digest_vibe_prep")
 DigestVibeProgressCallback = Callable[[Dict[str, Any]], Awaitable[None]]
@@ -39,13 +43,13 @@ def _build_llm_user_content(
         )
 
         evolution_block = format_evolution_signals_for_prompt(collect_evolution_signals())
-    except Exception:
+    except RECOVERABLE_ERRORS:
         _facade().logger.debug("digest_vibe_prep: evolution signals unavailable", exc_info=True)
     return f"模式：{mode}\n摘要日期：{digest_day}\n摘要主题：{digest_subject}\n基线版本：{ver.get('base_version') or '（待写入）'}\n更新清单版本：{ver.get('updates_version') or ''}\n补丁清单版本：{ver.get('patches_version') or ''}\n\n## 进化事实信号（优先于截图）\n{evolution_block}\n\n## 每日摘要正文节选\n{digest_excerpt or '（无）'}\n\n## 员工大会摘要节选\n{meeting_excerpt or '（无）'}\n\n## 三端页面截图巡检节选（辅助 · P-W 网站 · P-S 软件 · P-App 移动）\n{surface_audit_excerpt or '（无）'}\n\n## 员工快照 JSON（{len(employees)} 人）\n```json\n{emp_json}\n```"
 
 
 async def _synthesize_vibe_markdowns(*, user_content: str, user_id: int) -> Dict[str, Any]:
-    (bench_prov, bench_mdl) = _facade().resolve_platform_bench_llm()
+    bench_prov, bench_mdl = _facade().resolve_platform_bench_llm()
     if not bench_prov or not bench_mdl:
         return {
             "ok": False,
@@ -67,7 +71,7 @@ async def _synthesize_vibe_markdowns(*, user_content: str, user_id: int) -> Dict
             result = await chat_dispatch_via_session(
                 db, int(user_id or 0), bench_prov, bench_mdl, messages, max_tokens=4096
             )
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         _facade().logger.exception("digest_vibe_prep synthesize failed")
         return {
             "ok": False,
@@ -153,7 +157,10 @@ async def build_digest_vibe_prep(
         max_employees, default=52 if mode_norm == "auto" else 16
     )
     version_ctx = _facade().resolve_vibe_prep_version_context(
-        digest_day=digest_day, digest_subject=digest_subject, record_id=record_id, mode=mode_norm
+        digest_day=digest_day,
+        digest_subject=digest_subject,
+        record_id=record_id,
+        mode=mode_norm,
     )
 
     async def _emit(payload: _facade().Dict[str, _facade().Any]) -> None:
@@ -161,7 +168,7 @@ async def build_digest_vibe_prep(
             return
         try:
             await progress_cb(payload)
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             _facade().logger.debug("digest_vibe_prep progress cb failed: %s", exc)
 
     pairs = _facade()._resolve_employee_pairs(employee_ids, max_employees=cap)

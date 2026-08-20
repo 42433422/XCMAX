@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="no-any-return"
 """Top-20 端点 SLO 棘轮（复刻 coverage_ratchet.py 思路，只升不降）。
 
 数据源：Prometheus `api_requests_total` + `api_request_duration_seconds_bucket`
@@ -22,6 +23,8 @@ import urllib.parse
 import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 ROOT = Path(__file__).resolve().parents[2]
 BASELINE_PATH = ROOT / "metrics" / "slo_endpoint_baseline.json"
@@ -73,7 +76,7 @@ def query_prometheus(prom_url: str, promql: str) -> float | None:
         if not result:
             return None
         return float(result[0]["value"][1])
-    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
         return None
 
 
@@ -104,13 +107,17 @@ def cmd_check(prom_url: str, window: str) -> int:
 
         # 判定
         if avail is not None and avail < floor["availability"]:
-            failures.append(f"{endpoint} availability {avail:.2f}% < floor {floor['availability']}%")
+            failures.append(
+                f"{endpoint} availability {avail:.2f}% < floor {floor['availability']}%"
+            )
         if p95 is not None and p95 > floor["p95_ms"]:
             failures.append(f"{endpoint} p95 {p95:.0f}ms > floor {floor['p95_ms']}ms")
         if p99 is not None and p99 > floor["p99_ms"]:
             failures.append(f"{endpoint} p99 {p99:.0f}ms > floor {floor['p99_ms']}ms")
         if err_rate is not None and err_rate > floor["error_rate_pct"]:
-            failures.append(f"{endpoint} error_rate {err_rate:.2f}% > floor {floor['error_rate_pct']}%")
+            failures.append(
+                f"{endpoint} error_rate {err_rate:.2f}% > floor {floor['error_rate_pct']}%"
+            )
 
     MEASURED_PATH.write_text(
         json.dumps(
@@ -201,7 +208,7 @@ def cmd_audit() -> int:
                 # 标准化：去掉末尾斜杠
                 path = path.rstrip("/") or "/"
                 all_endpoints.add(path)
-        except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
             continue
 
     print(f"[audit] 静态扫描发现 {len(all_endpoints)} 个端点")
@@ -262,7 +269,7 @@ def cmd_top20(prom_url: str, window: str) -> int:
             rate = float(item["value"][1])
             print(f"  {i:2d}. {ep:60s} {rate:>10.2f} req/s")
         return 0
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"[top20] ❌ Prometheus 查询失败: {e}", file=sys.stderr)
         return 1
 

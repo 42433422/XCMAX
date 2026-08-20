@@ -242,7 +242,11 @@ describe('TtsSetupBanner.coverage', () => {
 
   it('installWindowsVoice does nothing when already installing', async () => {
     let resolveInstall!: (v: any) => void
-    apiPost.mockReturnValueOnce(new Promise((r) => { resolveInstall = r }))
+    apiPost.mockReturnValueOnce(
+      new Promise((r) => {
+        resolveInstall = r
+      }),
+    )
     const wrapper = mountComponent()
     await nextTick()
     const btn = wrapper.find('.tts-btn-primary')
@@ -356,7 +360,12 @@ describe('TtsSetupBanner.coverage', () => {
   })
 
   it('useSystem switches to system when offline and yunxi available', async () => {
-    setStatus({ engineMode: 'online', effectiveEngine: 'offline', offlineReady: true, yunxiAvailable: true })
+    setStatus({
+      engineMode: 'online',
+      effectiveEngine: 'offline',
+      offlineReady: true,
+      yunxiAvailable: true,
+    })
     const wrapper = mountComponent()
     await nextTick()
     const btn = wrapper.findAll('.tts-btn').find((b) => b.text().includes('切到系统云希'))
@@ -412,7 +421,11 @@ describe('TtsSetupBanner.coverage', () => {
 
   it('shows installing text when installing', async () => {
     let resolveInstall!: (v: any) => void
-    apiPost.mockReturnValueOnce(new Promise((r) => { resolveInstall = r }))
+    apiPost.mockReturnValueOnce(
+      new Promise((r) => {
+        resolveInstall = r
+      }),
+    )
     const wrapper = mountComponent()
     await nextTick()
     const btn = wrapper.find('.tts-btn-primary')

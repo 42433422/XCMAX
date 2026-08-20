@@ -16,19 +16,22 @@ import hashlib
 import logging
 import os
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional
 
 from modstore_server.digest_action_status import (
     find_matching_item_ids,
-    normalize_match_text as _normalize_match_text,
+)
+from modstore_server.digest_action_status import normalize_match_text as _normalize_match_text
+from modstore_server.digest_action_status import (
     set_status,
     set_status_if_advanced,
     stats,
     sync_dispatched_for_work_units,
     sync_merged_on_deploy,
-    text_matches as _text_matches,
 )
+from modstore_server.digest_action_status import text_matches as _text_matches
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +96,7 @@ def _infer_priority(text: str, *, kind: str, section_priority: str, indent: int)
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _normalize_action_text(text: str) -> str:
@@ -179,7 +182,7 @@ def ensure_table() -> None:
         ):
             try:
                 conn.execute(_sql(stmt))
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 pass
 
 
@@ -218,9 +221,7 @@ def _parse_markdown(markdown: str, *, kind: str) -> List[Dict[str, Any]]:
             pr = _infer_priority(
                 item_text, kind=kind, section_priority=section_priority, indent=indent
             )
-            if indent < 2 and _PRIORITY_RE.search(item_text):
-                section_priority = pr
-            elif indent < 2 and not section_priority:
+            if indent < 2 and _PRIORITY_RE.search(item_text) or indent < 2 and not section_priority:
                 section_priority = pr
             ip = _PATH_RE.search(item_text)
             out.append(
@@ -246,7 +247,7 @@ def parse_and_store_action_items(
     """解析双清单并 upsert 到 daily_action_items；返回计数。失败不抛错（不阻断 digest）。"""
     try:
         ensure_table()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("action_items: ensure_table failed")
         return {"ok": False, "error": "ensure_table failed", "patch": 0, "update": 0}
 
@@ -257,7 +258,7 @@ def parse_and_store_action_items(
         )
 
         emp_lines = build_employee_dispatch_map()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         emp_lines = {}
 
         def pick_dispatch_line(eid, _m, *, list_kind):  # type: ignore
@@ -272,7 +273,7 @@ def parse_and_store_action_items(
             eid = it["employee_id"]
             try:
                 line = pick_dispatch_line(eid, emp_lines, list_kind=lk)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 line = "P-S"
             rows.append(
                 {
@@ -319,11 +320,11 @@ def parse_and_store_action_items(
                     r,
                 )
                 inserted[r["kind"]] = inserted.get(r["kind"], 0) + 1
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 logger.exception("action_items: insert failed key=%s", r.get("dedupe_key"))
         try:
             compacted = _compact_open_backlog(conn)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.exception("action_items: compact open backlog failed")
     logger.info(
         "action_items stored day=%s patch=%s update=%s closed_low_signal=%s closed_duplicates=%s",
@@ -358,7 +359,7 @@ def list_action_items(
 ) -> List[Dict[str, Any]]:
     try:
         ensure_table()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return []
     from sqlalchemy import text as _sql
 
@@ -450,8 +451,13 @@ def compact_open_backlog() -> Dict[str, Any]:
     """手动收敛现有 open backlog；用于运维和测试。"""
     try:
         ensure_table()
-    except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "error": str(exc), "closed_low_signal": 0, "closed_duplicates": 0}
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "error": str(exc),
+            "closed_low_signal": 0,
+            "closed_duplicates": 0,
+        }
     eng = _engine()
     with eng.begin() as conn:
         out = _compact_open_backlog(conn)
@@ -461,7 +467,7 @@ def compact_open_backlog() -> Dict[str, Any]:
 def latest_day(*, kind: Optional[str] = None) -> str:
     try:
         ensure_table()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return ""
     from sqlalchemy import text as _sql
 

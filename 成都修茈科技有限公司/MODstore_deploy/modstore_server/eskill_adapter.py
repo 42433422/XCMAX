@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from string import Template
 from typing import Any, Dict
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def loads(raw: str | None, default: Any) -> Any:
@@ -14,7 +16,7 @@ def loads(raw: str | None, default: Any) -> Any:
         return default
     try:
         return json.loads(raw)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return default
 
 
@@ -60,7 +62,7 @@ class RuleBasedESkillAdapter:
                     "reason": reason,
                     "strategy": "history_reuse",
                     "changes": changes,
-                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "created_at": datetime.now(UTC).isoformat(),
                 }
         if logic_type == "template_transform":
             changes["template"] = (
@@ -102,5 +104,5 @@ class RuleBasedESkillAdapter:
             "reason": reason,
             "strategy": "rule_based_structured_patch",
             "changes": changes,
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
         }

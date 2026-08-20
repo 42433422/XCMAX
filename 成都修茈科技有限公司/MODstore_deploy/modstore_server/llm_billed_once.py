@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """Single-provider billed LLM chat execution without failover."""
 
 from __future__ import annotations
@@ -33,6 +34,7 @@ from modstore_server.multimodal_llm import (
     messages_use_openai_multipart_content,
     validate_multimodal_payload_size,
 )
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -138,10 +140,10 @@ async def run_billed_llm_chat_once(
     except HTTPException as exc:
         try:
             await wallet.release(authorization_header(request), hold, str(exc.detail), request_id)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.exception("failed to release LLM wallet hold")
         raise
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         try:
             save_failure_log(
                 db,
@@ -152,7 +154,7 @@ async def run_billed_llm_chat_once(
                 hold_no=hold.hold_no,
             )
             await wallet.release(authorization_header(request), hold, str(exc), request_id)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.exception("failed to release LLM wallet hold after unexpected error")
         raise
     return {

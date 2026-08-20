@@ -1,3 +1,4 @@
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """微软 Bing / cn.bing SERP HTML 爬虫。可选本机 Edge（Playwright channel=msedge）。"""
 
 from __future__ import annotations
@@ -9,6 +10,8 @@ from typing import Any, Dict, List, Literal, Optional, Set
 from urllib.parse import quote_plus, urlparse
 
 import httpx
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 BingBrowserMode = Literal["auto", "http", "edge"]
 
@@ -191,7 +194,7 @@ async def _fetch_bing_html_via_edge(
     async with async_playwright() as playwright:
         try:
             browser = await playwright.chromium.launch(channel=channel, headless=headless)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             browser = await playwright.chromium.launch(headless=headless)
         try:
             page = await (
@@ -207,7 +210,7 @@ async def _fetch_bing_html_via_edge(
                 await box.press("Enter")
                 await page.wait_for_load_state("domcontentloaded", timeout=25_000)
                 await page.wait_for_selector("li.b_algo, #b_results", timeout=15_000)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 await page.goto(search_url, wait_until="domcontentloaded", timeout=25_000)
                 await page.wait_for_selector("li.b_algo, #b_results", timeout=15_000)
             return await page.content()
@@ -267,7 +270,7 @@ async def bing_html_search(
             if parsed:
                 return parsed
             errors.append("edge+bing: 无可解析结果")
-        except Exception as e:
+        except RECOVERABLE_ERRORS as e:
             errors.append(f"edge+bing: {_request_error_fragment(e)}"[:160])
     elif mode == "http":
         try:
@@ -275,7 +278,7 @@ async def bing_html_search(
             if parsed:
                 return parsed
             errors.append("cn.bing.com: 无可解析结果")
-        except Exception as e:
+        except RECOVERABLE_ERRORS as e:
             errors.append(f"cn.bing.com: {_request_error_fragment(e)}"[:120])
     else:
         try:
@@ -283,14 +286,14 @@ async def bing_html_search(
             if parsed:
                 return parsed
             errors.append("edge+bing: 无可解析结果")
-        except Exception as e:
+        except RECOVERABLE_ERRORS as e:
             errors.append(f"edge+bing: {_request_error_fragment(e)}"[:160])
         try:
             parsed = await _http_crawl()
             if parsed:
                 return parsed
             errors.append("cn.bing.com: 无可解析结果")
-        except Exception as e:
+        except RECOVERABLE_ERRORS as e:
             errors.append(f"cn.bing.com: {_request_error_fragment(e)}"[:120])
 
     if errors:

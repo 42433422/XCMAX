@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 from modstore_server.script_agent.sandbox_host import (
     SandboxHostContext,
     SandboxRpcServer,
@@ -96,7 +97,7 @@ async def _drain(stream: Optional[asyncio.StreamReader], limit: int) -> bytes:
     while True:
         try:
             chunk = await stream.read(8192)
-        except Exception:  # noqa: BLE001 — 进程被 kill 时可能抛 ConnectionResetError
+        except BOUNDARY_ERRORS:  # noqa: BLE001 — 进程被 kill 时可能抛 ConnectionResetError
             break
         if not chunk:
             break
@@ -148,7 +149,7 @@ def _make_preexec():  # pragma: no cover — Linux-only 资源限制
             ):
                 try:
                     resource.setrlimit(r, lim)
-                except Exception:  # noqa: BLE001
+                except BOUNDARY_ERRORS:  # noqa: BLE001
                     pass
 
         return _setup
@@ -261,7 +262,7 @@ async def run_in_sandbox(
 
         try:
             rc = await asyncio.wait_for(proc.wait(), timeout=timeout_seconds)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             timed_out = True
             try:
                 proc.kill()
@@ -269,7 +270,7 @@ async def run_in_sandbox(
                 pass
             try:
                 rc = await proc.wait()
-            except Exception:  # noqa: BLE001
+            except BOUNDARY_ERRORS:  # noqa: BLE001
                 rc = -9
 
         stdout_bytes = await stdout_task
@@ -280,7 +281,7 @@ async def run_in_sandbox(
             try:
                 proc.kill()
                 await proc.wait()
-            except Exception:  # noqa: BLE001
+            except BOUNDARY_ERRORS:  # noqa: BLE001
                 pass
 
     stdout = stdout_bytes.decode("utf-8", errors="replace")

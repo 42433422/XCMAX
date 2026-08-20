@@ -14,7 +14,7 @@ structure/expected 节会报警，触发重新 solidify。
 
 import re
 from collections import defaultdict
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time
 
 TIME_RANGE_RE = re.compile(r"(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})")
 DATE_RE = re.compile(r"(\d{2,4})-(\d{1,2})-(\d{1,2})")
@@ -49,7 +49,7 @@ def _parse_dt(v, d):
     if not text:
         return None
     dm = DATE_RE.search(text)
-    tm = HHMM_RE.search(text[dm.end():] if dm else text)
+    tm = HHMM_RE.search(text[dm.end() :] if dm else text)
     if not tm:
         return None
     base = _parse_date(text) if dm else d
@@ -77,6 +77,7 @@ def _round_half(x):
 
 def _round_whole(x):
     import math
+
     if x <= 0:
         return 0.0
     return float(int(math.floor(x + 0.5)))
@@ -85,7 +86,8 @@ def _round_whole(x):
 def _shift_ranges(shift):
     out = []
     for a, b in TIME_RANGE_RE.findall(str(shift or "").replace("—", "-")):
-        h1, m1 = a.split(":"); h2, m2 = b.split(":")
+        h1, m1 = a.split(":")
+        h2, m2 = b.split(":")
         t1, t2 = time(int(h1), int(m1)), time(int(h2), int(m2))
         if t2 > t1:
             out.append((t1, t2))
@@ -98,16 +100,24 @@ def _is_rest(shift):
 
 
 def _is_factory_group(group, shift):
-    t = (str(group or "") + " " + str(shift or ""))
+    t = str(group or "") + " " + str(shift or "")
     return any(k in t for k in COMPANY_KEYS)
 
 
 def _blocks(name):
     if name in MORNING9:
-        return [("morning", time(9, 0), time(10, 0), 1.0), ("morning", time(10, 0), time(12, 0), 2.0),
-                ("afternoon", time(13, 30), time(15, 30), 2.0), ("afternoon", time(15, 30), time(17, 30), 2.0)]
-    return [("morning", time(8, 0), time(10, 0), 2.0), ("morning", time(10, 0), time(12, 0), 2.0),
-            ("afternoon", time(13, 30), time(15, 30), 2.0), ("afternoon", time(15, 30), time(17, 30), 2.0)]
+        return [
+            ("morning", time(9, 0), time(10, 0), 1.0),
+            ("morning", time(10, 0), time(12, 0), 2.0),
+            ("afternoon", time(13, 30), time(15, 30), 2.0),
+            ("afternoon", time(15, 30), time(17, 30), 2.0),
+        ]
+    return [
+        ("morning", time(8, 0), time(10, 0), 2.0),
+        ("morning", time(10, 0), time(12, 0), 2.0),
+        ("afternoon", time(13, 30), time(15, 30), 2.0),
+        ("afternoon", time(15, 30), time(17, 30), 2.0),
+    ]
 
 
 def _full_day(name, symbol):
@@ -136,8 +146,17 @@ def _schedule(d, group, shift, name):
 def _regular_symbol(dept, group, shift, d):
     if _is_rest(shift):
         return "★"
-    is_factory_person = ("惠州工厂" in str(dept or "")) or ("工厂" in str(group or "")) or ("工厂" in str(shift or ""))
-    if ("公司" in str(shift or "")) and is_factory_person and ("远程" not in str(group or "")) and ("公司-考勤" not in str(group or "")):
+    is_factory_person = (
+        ("惠州工厂" in str(dept or ""))
+        or ("工厂" in str(group or ""))
+        or ("工厂" in str(shift or ""))
+    )
+    if (
+        ("公司" in str(shift or ""))
+        and is_factory_person
+        and ("远程" not in str(group or ""))
+        and ("公司-考勤" not in str(group or ""))
+    ):
         s = "☆"
     else:
         s = "√"
@@ -150,7 +169,10 @@ def produce_records(source_workbook: dict, rules: dict) -> list:
     sheets = {s.get("name"): s for s in source_workbook.get("sheets") or []}
     daily = sheets.get("每日统计") or {"rows": [], "columns": []}
     raw = sheets.get("原始记录") or {"rows": []}
-    keys = {str(b.get("key") or "").strip() for b in (rules.get("template_map") or {}).get("blocks") or []}
+    keys = {
+        str(b.get("key") or "").strip()
+        for b in (rules.get("template_map") or {}).get("blocks") or []
+    }
     keys.discard("")
 
     cal = (rules.get("template_map") or {}).get("calendar") or {}
@@ -175,7 +197,7 @@ def produce_records(source_workbook: dict, rules: dict) -> list:
             if str(cols[k]).startswith("加班时长"):
                 j = k
                 break
-        leave_cols = cols[i + 1:j]
+        leave_cols = cols[i + 1 : j]
 
     clock_cols = [c for c in cols if re.match(r"^(上班|下班)\d+打卡时间$", str(c))]
 
@@ -207,7 +229,7 @@ def produce_records(source_workbook: dict, rules: dict) -> list:
     # 连旷 streak
     streaks = {}
     by_name = defaultdict(list)
-    for (name, d) in per:
+    for name, d in per:
         by_name[name].append(d)
     for name, ds in by_name.items():
         streak = 0
@@ -230,11 +252,13 @@ def produce_records(source_workbook: dict, rules: dict) -> list:
         morning, afternoon, night = [], [], []
 
         if not punches:
-            if (not _is_rest(shift)) and rec["leave"] <= 0 and (dingtalk_hours >= 6.5 or rec["attend_hint"] >= 1.0):
+            if (
+                (not _is_rest(shift))
+                and rec["leave"] <= 0
+                and (dingtalk_hours >= 6.5 or rec["attend_hint"] >= 1.0)
+            ):
                 morning, afternoon = _full_day(name, symbol)
-            elif rec["leave"] > 0:
-                morning, afternoon = _full_day(name, "〇")
-            elif rec["absent"] > 0 and streaks[(name, d)] >= 3:
+            elif rec["leave"] > 0 or rec["absent"] > 0 and streaks[(name, d)] >= 3:
                 morning, afternoon = _full_day(name, "〇")
         else:
             sched = _schedule(d, group, shift, name)
@@ -247,7 +271,11 @@ def produce_records(source_workbook: dict, rules: dict) -> list:
                 if n % 2 == 1:
                     intervals = [(punches[0], punches[-1])] if punches[-1] > punches[0] else []
                 else:
-                    intervals = [(punches[i], punches[i + 1]) for i in range(0, n, 2) if punches[i + 1] > punches[i]]
+                    intervals = [
+                        (punches[i], punches[i + 1])
+                        for i in range(0, n, 2)
+                        if punches[i + 1] > punches[i]
+                    ]
                 eff = intervals
                 if sched:
                     clipped = []
@@ -268,13 +296,19 @@ def produce_records(source_workbook: dict, rules: dict) -> list:
                                 total += _hours(cs, ce)
                         val = min(_round_whole(total), credit)
                         if val > 0:
-                            (morning if band == "morning" else afternoon).append({"symbol": symbol, "value": val})
+                            (morning if band == "morning" else afternoon).append(
+                                {"symbol": symbol, "value": val}
+                            )
                 elif not sched:
                     morning, afternoon = _full_day(name, symbol)
 
             # 夜班加班
             night_symbol = "★" if symbol == "★" else "☆"
-            ot_start = datetime(d.year, d.month, d.day, 18, 30) if name in OT_1830 else datetime(d.year, d.month, d.day, 18, 0)
+            ot_start = (
+                datetime(d.year, d.month, d.day, 18, 30)
+                if name in OT_1830
+                else datetime(d.year, d.month, d.day, 18, 0)
+            )
             base = 0.0
             if punches and punches[-1] > ot_start:
                 base = _round_half(_hours(ot_start, punches[-1]))
@@ -296,7 +330,9 @@ def produce_records(source_workbook: dict, rules: dict) -> list:
                 night.append({"symbol": night_symbol, "value": total_night})
 
         for band, entries in (("morning", morning), ("afternoon", afternoon), ("night", night)):
-            trimmed = [{"symbol": e["symbol"], "value": round(float(e["value"]), 1)} for e in entries[:2]]
+            trimmed = [
+                {"symbol": e["symbol"], "value": round(float(e["value"]), 1)} for e in entries[:2]
+            ]
             if trimmed:
                 records.append({"key": name, "day": d.day, "band": band, "entries": trimmed})
     return records

@@ -7,9 +7,14 @@ import logging
 from fastapi import APIRouter, Body, Depends, Path, Request, Response
 
 from app.mod_sdk.host_services import (
+    AccessRequestPayload,
     AccessRequestReview,
+    ActivateRequest,
     IssueKeyRequest,
+    LanSettingsUpdate,
+    activate,
     approve_access_request_endpoint,
+    host_info,
     issue_key_endpoint,
     kick_session_endpoint,
     list_access_requests_endpoint,
@@ -17,25 +22,20 @@ from app.mod_sdk.host_services import (
     list_audit_endpoint,
     list_keys_endpoint,
     list_sessions_endpoint,
+    logout,
+    my_access_request,
     reject_access_request_endpoint,
+    request_access,
     require_admin,
     revoke_allowlist_endpoint,
     revoke_key_endpoint,
+    status,
     whoami,
 )
 from app.mod_sdk.host_services import (
-    AccessRequestPayload,
-    ActivateRequest,
-    activate,
-    host_info,
-    logout,
-    my_access_request,
-    request_access,
-    status,
+    get_settings as get_settings_view,
 )
 from app.mod_sdk.host_services import (
-    LanSettingsUpdate,
-    get_settings as get_settings_view,
     update_settings as update_settings_view,
 )
 
@@ -51,7 +51,10 @@ def register_fastapi_routes(app, mod_id: str) -> None:
     def mod_status_meta():
         from app.mod_sdk.host_services import list_lan_facade_registry
 
-        return {"success": True, "data": {**list_lan_facade_registry(), "mod_id": mod_id, "phase": "J"}}
+        return {
+            "success": True,
+            "data": {**list_lan_facade_registry(), "mod_id": mod_id, "phase": "J"},
+        }
 
     @router.get("/registry")
     def mod_registry():

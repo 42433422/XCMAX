@@ -144,7 +144,9 @@ def test_retort_scope_remediation_requires_executable_change():
 
 
 def test_memory_has_retort_scope_remediation_flag():
-    from modstore_server.self_maintenance_policy import memory_has_retort_scope_remediation
+    from modstore_server.self_maintenance_policy import (
+        memory_has_retort_scope_remediation,
+    )
 
     memory = {
         "open_items": [

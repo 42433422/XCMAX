@@ -10,15 +10,14 @@ from __future__ import annotations
 import json
 import textwrap
 from pathlib import Path
-from typing import Any
 
 import pytest
 
 from vibe_coding.agent.react import (
     AgentStep,
     ReActAgent,
-    Tool,
     ToolError,
+    ToolNotFoundError,
     ToolRegistry,
     ToolResult,
     builtin_tools,
@@ -26,7 +25,6 @@ from vibe_coding.agent.react import (
 )
 from vibe_coding.agent.sandbox import MockSandboxDriver, SandboxResult
 from vibe_coding.nl import MockLLM
-
 
 # -------------------------------------------------------------- registry
 
@@ -90,15 +88,14 @@ def test_registry_dispatch_and_listing() -> None:
 
 def test_registry_unknown_tool_raises() -> None:
     reg = ToolRegistry()
-    with pytest.raises(Exception):
+    with pytest.raises(ToolNotFoundError):
         reg.call("missing", {})
 
 
 # -------------------------------------------------------------- ReAct loop
 
 
-def _llm_step(thought: str, *, tool: str = "", args: dict | None = None,
-               final_answer: str = "") -> str:
+def _llm_step(thought: str, *, tool: str = "", args: dict | None = None, final_answer: str = "") -> str:
     return json.dumps(
         {
             "thought": thought,
@@ -152,9 +149,7 @@ def test_agent_records_step_callback() -> None:
             _llm_step("done", final_answer="finished"),
         ]
     )
-    agent = ReActAgent(
-        llm=llm, tools=reg, max_steps=5, on_step=lambda s: seen.append(s)
-    )
+    agent = ReActAgent(llm=llm, tools=reg, max_steps=5, on_step=lambda s: seen.append(s))
     agent.run("do thing")
     assert len(seen) == 2
     assert seen[0].tool == "noop"
@@ -288,9 +283,7 @@ def test_builtin_grep_finds_matches(tmp_path: Path) -> None:
 
 
 def test_builtin_run_command_uses_sandbox(tmp_path: Path) -> None:
-    drv = MockSandboxDriver(
-        response=SandboxResult(success=True, stdout="hello\n", exit_code=0)
-    )
+    drv = MockSandboxDriver(response=SandboxResult(success=True, stdout="hello\n", exit_code=0))
     reg = builtin_tools(root=tmp_path, sandbox=drv)
     res = reg.call("run_command", {"command": ["echo", "hello"]})
     assert res.success is True

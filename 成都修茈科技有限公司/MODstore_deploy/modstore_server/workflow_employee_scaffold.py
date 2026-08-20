@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr"
 """从工作台为 Mod 追加 workflow_employees 条目并生成可选 FastAPI 占位路由（骨架 Mod）。"""
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from modman.manifest_util import read_manifest, save_manifest_validated
 from modstore_server.file_safe import write_text_file
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _write_stub(path: Path, content: str) -> None:
@@ -166,7 +168,7 @@ def run_workflow_employee_scaffold(
                 write_text_file(bp_path, new_bp)
                 files_written.append(str(bp_path.relative_to(mod_dir)).replace("\\", "/"))
                 merged_blueprint = True
-            except Exception as e:
+            except RECOVERABLE_ERRORS as e:
                 merge_hint = f"已生成占位文件，但自动合并 blueprints 失败：{e}。请手动在 register_fastapi_routes 内调用 mount_employee_router。"
         elif not can_merge:
             merge_hint = (

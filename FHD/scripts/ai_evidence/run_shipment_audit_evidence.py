@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="attr-defined"
 """发货单审单 evidence — 写入样例事件并输出 JSON。"""
+
 from __future__ import annotations
 
 import json

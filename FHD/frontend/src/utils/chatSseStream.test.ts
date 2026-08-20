@@ -79,28 +79,21 @@ describe('chatSseStream', () => {
 
   it('ignores malformed JSON payloads', async () => {
     const events: string[] = []
-    await readPlannerSseResponse(
-      mockSseResponse(['data: {oops not json}\n\n', 'data: {"type":"done"}\n\n']),
-      (ev) => events.push(ev.type),
-    )
+    await readPlannerSseResponse(mockSseResponse(['data: {oops not json}\n\n', 'data: {"type":"done"}\n\n']), (ev) => events.push(ev.type))
     expect(events).toEqual(['done'])
   })
 
   it('flushes a trailing buffer without a closing separator', async () => {
     const events: string[] = []
-    await readPlannerSseResponse(
-      mockSseResponse(['data: {"type":"token","text":"a"}\n\n', 'data: {"type":"done","result":1}']),
-      (ev) => events.push(ev.type),
+    await readPlannerSseResponse(mockSseResponse(['data: {"type":"token","text":"a"}\n\n', 'data: {"type":"done","result":1}']), (ev) =>
+      events.push(ev.type),
     )
     expect(events).toEqual(['token', 'done'])
   })
 
   it('surfaces error events verbatim', async () => {
     const events: Array<{ type: string; message?: string }> = []
-    await readPlannerSseResponse(
-      mockSseResponse(['data: {"type":"error","message":"boom"}\n\n']),
-      (ev) => events.push(ev),
-    )
+    await readPlannerSseResponse(mockSseResponse(['data: {"type":"error","message":"boom"}\n\n']), (ev) => events.push(ev))
     expect(events[0]).toMatchObject({ type: 'error', message: 'boom' })
   })
 })

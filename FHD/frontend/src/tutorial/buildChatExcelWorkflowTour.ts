@@ -1,7 +1,4 @@
-import {
-  TUTORIAL_DEPT_EMPLOYEE_SAMPLE_XLSX,
-  TUTORIAL_SAMPLE_NAME_PREFIX,
-} from '@/constants/tutorialSamples'
+import { TUTORIAL_DEPT_EMPLOYEE_SAMPLE_XLSX, TUTORIAL_SAMPLE_NAME_PREFIX } from '@/constants/tutorialSamples'
 import type { TutorialStep } from './types'
 import { createStep } from './stepFactory'
 

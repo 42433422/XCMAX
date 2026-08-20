@@ -38,9 +38,7 @@ export async function bootstrapHostConfig(): Promise<void> {
     }>(presetsBody)
     if (presetsData?.presets) {
       industryPresets.value = { ...presetsData.presets }
-      industryPresetIds.value = Array.isArray(presetsData.preset_ids)
-        ? [...presetsData.preset_ids]
-        : Object.keys(presetsData.presets)
+      industryPresetIds.value = Array.isArray(presetsData.preset_ids) ? [...presetsData.preset_ids] : Object.keys(presetsData.presets)
     }
     const rules = unwrapData<EmployeeRegistryRules>(rulesBody)
     if (rules) employeeRegistryRules.value = rules

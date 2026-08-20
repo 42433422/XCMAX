@@ -14,7 +14,9 @@
       <h2>新增/编辑审核标准</h2>
       <div class="form-grid">
         <label>名称<input v-model="standardForm.name" /></label>
-        <label>场景<input v-model="standardForm.scenario" placeholder="refund / catalog_complaint / catalog_review / account_support" /></label>
+        <label
+          >场景<input v-model="standardForm.scenario" placeholder="refund / catalog_complaint / catalog_review / account_support"
+        /></label>
         <label>风险等级<input v-model="standardForm.risk_level" /></label>
         <label>优先级<input v-model.number="standardForm.priority" type="number" /></label>
       </div>
@@ -23,7 +25,9 @@
       <label>动作策略 JSON<textarea v-model="standardPolicyText" /></label>
       <div class="row">
         <label class="check"><input v-model="standardForm.auto_enabled" type="checkbox" /> 启用自动化</label>
-        <button class="btn" @click="saveStandard">{{ editingStandardId ? '保存标准' : '创建标准' }}</button>
+        <button class="btn" @click="saveStandard">
+          {{ editingStandardId ? '保存标准' : '创建标准' }}
+        </button>
         <button class="btn ghost" @click="resetStandard">清空</button>
       </div>
     </section>
@@ -43,7 +47,8 @@
       <h2>新增/编辑对接能力</h2>
       <div class="form-grid">
         <label>名称<input v-model="integrationForm.name" /></label>
-        <label>类型
+        <label
+          >类型
           <select v-model="integrationForm.integration_type">
             <option value="openapi">OpenAPI 网页 API</option>
             <option value="workflow">平台工作流</option>
@@ -56,7 +61,9 @@
       <label>配置 JSON<textarea v-model="integrationConfigText" placeholder='{"operation_id":"createTicket","auto_invoke":true}' /></label>
       <div class="row">
         <label class="check"><input v-model="integrationForm.enabled" type="checkbox" /> 启用</label>
-        <button class="btn" @click="saveIntegration">{{ editingIntegrationId ? '保存对接' : '创建对接' }}</button>
+        <button class="btn" @click="saveIntegration">
+          {{ editingIntegrationId ? '保存对接' : '创建对接' }}
+        </button>
         <button class="btn ghost" @click="resetIntegration">清空</button>
       </div>
     </section>
@@ -333,14 +340,44 @@ textarea {
   color: #d7fbe8;
 }
 
-html[data-workbench-theme='light'] .admin-cs{background:#f8f9fa;color:#1a1a1a}
-html[data-workbench-theme='light'] .admin-cs__header p{color:#d97706}
-html[data-workbench-theme='light'] .panel{background:#fff;border-color:#e2e8f0}
-html[data-workbench-theme='light'] label{color:rgba(0,0,0,0.65)}
-html[data-workbench-theme='light'] input,html[data-workbench-theme='light'] select,html[data-workbench-theme='light'] textarea{background:#fff;color:#1a1a1a;border-color:#d1d5db}
-html[data-workbench-theme='light'] .btn{background:#d97706;color:#fff}
-html[data-workbench-theme='light'] .btn.ghost{background:rgba(0,0,0,0.04);color:#1a1a1a;border-color:#d1d5db}
-html[data-workbench-theme='light'] .list-row{border-top-color:rgba(0,0,0,0.06)}
-html[data-workbench-theme='light'] .list-row span,html[data-workbench-theme='light'] .muted{color:#64748b}
-html[data-workbench-theme='light'] .notice{color:#059669}
+html[data-workbench-theme='light'] .admin-cs {
+  background: #f8f9fa;
+  color: #1a1a1a;
+}
+html[data-workbench-theme='light'] .admin-cs__header p {
+  color: #d97706;
+}
+html[data-workbench-theme='light'] .panel {
+  background: #fff;
+  border-color: #e2e8f0;
+}
+html[data-workbench-theme='light'] label {
+  color: rgba(0, 0, 0, 0.65);
+}
+html[data-workbench-theme='light'] input,
+html[data-workbench-theme='light'] select,
+html[data-workbench-theme='light'] textarea {
+  background: #fff;
+  color: #1a1a1a;
+  border-color: #d1d5db;
+}
+html[data-workbench-theme='light'] .btn {
+  background: #d97706;
+  color: #fff;
+}
+html[data-workbench-theme='light'] .btn.ghost {
+  background: rgba(0, 0, 0, 0.04);
+  color: #1a1a1a;
+  border-color: #d1d5db;
+}
+html[data-workbench-theme='light'] .list-row {
+  border-top-color: rgba(0, 0, 0, 0.06);
+}
+html[data-workbench-theme='light'] .list-row span,
+html[data-workbench-theme='light'] .muted {
+  color: #64748b;
+}
+html[data-workbench-theme='light'] .notice {
+  color: #059669;
+}
 </style>

@@ -1,6 +1,8 @@
 import os
 import sqlite3
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 
 def check_databases():
     """检查数据库状态"""
@@ -37,7 +39,7 @@ def check_databases():
 
                 conn.close()
 
-            except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+            except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
                 print(f"  ❌ 检查失败：{e}")
         else:
             print(f"\n❌ 数据库不存在：{db_path}")
@@ -134,7 +136,7 @@ def create_materials_table():
         conn.close()
         return True
 
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 创建 materials 表失败：{e}")
         return False
 

@@ -1,3 +1,4 @@
+# isort: skip_file
 """LLM 生成 employee_pack manifest + 最小 zip，经 import_zip 落入用户 Mod 库（与商店上架分离，需用户自行上传上架）。"""
 
 from __future__ import annotations
@@ -14,18 +15,40 @@ from modstore_server.employee_pack_blueprints_template import (
     render_employee_pack_employee_py,
 )
 from modstore_server.employee_scaffold_presets import resolve_preset_capabilities
-from modstore_server.employee_stub_template import safe_stub_module_name, stub_module_body
+from modstore_server.employee_stub_template import (
+    safe_stub_module_name,
+    stub_module_body,
+)
 from modstore_server.mod_employee_impl_scaffold import sanitize_employee_stem
 from modstore_server.xcagi_host_profile import (
     merge_workflow_employee_for_manifest,
     normalize_xcagi_host_profile,
 )
 
-_SCAFFOLD_FACADE_EXPORTS: tuple[Any, ...] = (io, json, re, zipfile, Dict, List, Optional, Tuple)
+_SCAFFOLD_FACADE_EXPORTS: tuple[Any, ...] = (
+    io,
+    json,
+    re,
+    zipfile,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+)
 _SCAFFOLD_FACADE_EXPORTS += (validate_manifest_dict, render_employee_pack_blueprints_py)
-_SCAFFOLD_FACADE_EXPORTS += (render_employee_pack_employee_py, resolve_preset_capabilities)
-_SCAFFOLD_FACADE_EXPORTS += (safe_stub_module_name, stub_module_body, sanitize_employee_stem)
-_SCAFFOLD_FACADE_EXPORTS += (merge_workflow_employee_for_manifest, normalize_xcagi_host_profile)
+_SCAFFOLD_FACADE_EXPORTS += (
+    render_employee_pack_employee_py,
+    resolve_preset_capabilities,
+)
+_SCAFFOLD_FACADE_EXPORTS += (
+    safe_stub_module_name,
+    stub_module_body,
+    sanitize_employee_stem,
+)
+_SCAFFOLD_FACADE_EXPORTS += (
+    merge_workflow_employee_for_manifest,
+    normalize_xcagi_host_profile,
+)
 
 _ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 

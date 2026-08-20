@@ -14,33 +14,32 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from modstore_server.public_company_hall_config import (
-    DEPARTMENT_COLORS as DEPARTMENT_COLORS,
-    DEPARTMENT_ORDER as DEPARTMENT_ORDER,
-    LINE_TO_DEPT as _LINE_TO_DEPT,
-    WORKING_STATUSES as _WORKING_STATUSES,
-)
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
+from modstore_server.public_company_hall_config import DEPARTMENT_COLORS as DEPARTMENT_COLORS
+from modstore_server.public_company_hall_config import DEPARTMENT_ORDER as DEPARTMENT_ORDER
+from modstore_server.public_company_hall_config import LINE_TO_DEPT as _LINE_TO_DEPT
+from modstore_server.public_company_hall_config import WORKING_STATUSES as _WORKING_STATUSES
+from modstore_server.public_company_hall_signals import _action_signals as _action_signals
+from modstore_server.public_company_hall_signals import _catalog_names as _catalog_names
+from modstore_server.public_company_hall_signals import _dept_members as _dept_members
 from modstore_server.public_company_hall_signals import (
-    _action_signals as _action_signals,
-    _catalog_names as _catalog_names,
-    _dept_members as _dept_members,
     _load_published_action_board as _load_published_action_board,
-    _metric_signals as _metric_signals,
-    _presence_for as _presence_for,
-    _primary_dept_map as _primary_dept_map,
-    _repo_root as _repo_root,
 )
+from modstore_server.public_company_hall_signals import _metric_signals as _metric_signals
+from modstore_server.public_company_hall_signals import _presence_for as _presence_for
+from modstore_server.public_company_hall_signals import _primary_dept_map as _primary_dept_map
+from modstore_server.public_company_hall_signals import _repo_root as _repo_root
+from modstore_server.public_company_hall_text import _clean as _clean
+from modstore_server.public_company_hall_text import _feed_occurred_at as _feed_occurred_at
 from modstore_server.public_company_hall_text import (
-    _clean as _clean,
-    _feed_occurred_at as _feed_occurred_at,
     _public_ai_driver_snapshot as _public_ai_driver_snapshot,
-    _publicize_feed_text as _publicize_feed_text,
-    _sort_feed as _sort_feed,
 )
+from modstore_server.public_company_hall_text import _publicize_feed_text as _publicize_feed_text
+from modstore_server.public_company_hall_text import _sort_feed as _sort_feed
 
 logger = logging.getLogger(__name__)
 
@@ -119,7 +118,7 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
                     from modstore_server.public_action_board import _calendar_today
 
                     board["calendar_day"] = _calendar_today()
-                except Exception:  # noqa: BLE001
+                except BOUNDARY_ERRORS:  # noqa: BLE001
                     board["calendar_day"] = cal
             if (
                 board.get("day")
@@ -138,8 +137,8 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
         name_to_id = {str(e.get("name") or ""): e["employee_id"] for e in employees}
         changed = False
         for it in (
-            list(((board.get("breakpoints") or {}).get("items") or []))
-            + list(((board.get("goals") or {}).get("items") or []))
+            list((board.get("breakpoints") or {}).get("items") or [])
+            + list((board.get("goals") or {}).get("items") or [])
             + list(board.get("trajectory") or [])
         ):
             eid = str(it.get("employee_id") or "").strip()
@@ -289,7 +288,7 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
         from modstore_server.runtime_inventory import runtime_inventory_summary
 
         runtime = runtime_inventory_summary()
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.warning("company_hall: runtime inventory unavailable: %s", exc)
         runtime = {
             "schema": "xcagi.runtime_inventory/v1",
@@ -300,7 +299,7 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
 
     return {
         "schema": "xcagi.public_company_hall/v1",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "day": board.get("day"),
         "calendar_day": board.get("calendar_day"),
         "day_stale": bool(board.get("day_stale")),
@@ -395,7 +394,7 @@ def public_hall_targets() -> List[Path]:
 def write_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
     try:
         payload = build_public_company_hall(day=day)
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("public_company_hall: build failed")
         return {"ok": False, "error": str(exc), "written": []}
 
@@ -407,7 +406,7 @@ def write_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
                 continue
             tgt.write_text(body, encoding="utf-8")
             written.append(str(tgt))
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.exception("public_company_hall: write failed %s", tgt)
     logger.info(
         "public_company_hall: day=%s roster=%s working=%s alert=%s written=%s",

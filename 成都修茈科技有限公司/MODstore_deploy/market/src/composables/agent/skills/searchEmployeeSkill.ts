@@ -22,7 +22,10 @@ export function createSearchEmployeeSkill(router: ReturnType<typeof import('vue-
           assistantReply: `好的，已为您在 AI 市场中搜索「${query}」，请查看搜索结果。`,
         }
       } catch (e: unknown) {
-        return { success: false, message: `跳转失败：${e instanceof Error ? e.message : String(e)}` }
+        return {
+          success: false,
+          message: `跳转失败：${e instanceof Error ? e.message : String(e)}`,
+        }
       }
     },
   }

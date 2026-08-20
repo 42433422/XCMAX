@@ -27,16 +27,11 @@ const mockResolveLinkedSheetGridPreview = vi.fn()
 const mockFilesToMultimodalRows = vi.fn()
 
 vi.mock('./useChatPersistence', () => ({
-  readPersistedExcelAnalysisContext: (...args: unknown[]) =>
-    mockReadPersistedExcelAnalysisContext(...args),
-  persistExcelAnalysisContext: (...args: unknown[]) =>
-    mockPersistExcelAnalysisContext(...args),
-  resolveExcelFilePathFromAnalysis: (...args: unknown[]) =>
-    mockResolveExcelFilePathFromAnalysis(...args),
-  resolveExcelSheetOptionsFromContext: (...args: unknown[]) =>
-    mockResolveExcelSheetOptionsFromContext(...args),
-  resolveLinkedSheetGridPreview: (...args: unknown[]) =>
-    mockResolveLinkedSheetGridPreview(...args),
+  readPersistedExcelAnalysisContext: (...args: unknown[]) => mockReadPersistedExcelAnalysisContext(...args),
+  persistExcelAnalysisContext: (...args: unknown[]) => mockPersistExcelAnalysisContext(...args),
+  resolveExcelFilePathFromAnalysis: (...args: unknown[]) => mockResolveExcelFilePathFromAnalysis(...args),
+  resolveExcelSheetOptionsFromContext: (...args: unknown[]) => mockResolveExcelSheetOptionsFromContext(...args),
+  resolveLinkedSheetGridPreview: (...args: unknown[]) => mockResolveLinkedSheetGridPreview(...args),
 }))
 
 vi.mock('@/utils/multimodalAttachments', () => ({
@@ -53,8 +48,7 @@ function makeDeps(
   }> = {},
 ) {
   const sessionId = ref(overrides.sessionId ?? 'session-1')
-  const addAndSaveMessage =
-    overrides.addAndSaveMessage ?? vi.fn().mockResolvedValue(undefined)
+  const addAndSaveMessage = overrides.addAndSaveMessage ?? vi.fn().mockResolvedValue(undefined)
   return { sessionId, addAndSaveMessage }
 }
 
@@ -359,10 +353,7 @@ describe('useChatExcelContext — coverage ramp', () => {
       await ctx.onMultimodalFileChange(makeFileInputEvent([{ name: 'a.png' }]))
       expect(ctx.multimodalStaging.value).toHaveLength(1)
       expect(ctx.multimodalStaging.value[0].filename).toBe('a.png')
-      expect(addAndSaveMessage).toHaveBeenCalledWith(
-        expect.stringContaining('已加入 1 个文件'),
-        'ai',
-      )
+      expect(addAndSaveMessage).toHaveBeenCalledWith(expect.stringContaining('已加入 1 个文件'), 'ai')
     })
 
     it('转换成功消息包含所有文件名', async () => {
@@ -380,9 +371,7 @@ describe('useChatExcelContext — coverage ramp', () => {
       const addAndSaveMessage = vi.fn().mockResolvedValue(undefined)
       const ctx = useChatExcelContext(makeDeps({ addAndSaveMessage }))
       // 先放入 4 个
-      ctx.multimodalStaging.value = Array.from({ length: 4 }, (_, i) =>
-        makeRow(`old${i}.png`),
-      )
+      ctx.multimodalStaging.value = Array.from({ length: 4 }, (_, i) => makeRow(`old${i}.png`))
       // 新增 4 个
       const newRows = Array.from({ length: 4 }, (_, i) => makeRow(`new${i}.png`))
       mockFilesToMultimodalRows.mockResolvedValue({ ok: true, rows: newRows })
@@ -408,8 +397,12 @@ describe('useChatExcelContext — coverage ramp', () => {
       let liveFiles = [file]
       let inputValue = '/fake/live.png'
       const input = {
-        get files() { return liveFiles },
-        get value() { return inputValue },
+        get files() {
+          return liveFiles
+        },
+        get value() {
+          return inputValue
+        },
         set value(next: string) {
           inputValue = next
           if (!next) liveFiles = []
@@ -465,9 +458,7 @@ describe('useChatExcelContext — coverage ramp', () => {
     it('sheet 为 null 时不执行', async () => {
       const ctx = useChatExcelContext(makeDeps())
       const dispatchSpy = vi.spyOn(window, 'dispatchEvent')
-      await ctx.bindExcelSheetToChat(
-        null as unknown as Parameters<typeof ctx.bindExcelSheetToChat>[0],
-      )
+      await ctx.bindExcelSheetToChat(null as unknown as Parameters<typeof ctx.bindExcelSheetToChat>[0])
       expect(dispatchSpy).not.toHaveBeenCalled()
       dispatchSpy.mockRestore()
     })

@@ -45,7 +45,11 @@ def _patch_llm(monkeypatch, payload: dict):
     monkeypatch.setattr(wng, "chat_dispatch_via_session", fake_chat_dispatch)
     monkeypatch.setattr(
         "modstore_server.mod_scaffold_runner.resolve_llm_provider_model",
-        lambda db, user, provider, model: (provider or "test", model or "test-model", None),
+        lambda db, user, provider, model: (
+            provider or "test",
+            model or "test-model",
+            None,
+        ),
     )
 
 
@@ -68,7 +72,10 @@ async def test_apply_nl_workflow_graph_creates_skill_blueprints(tmp_path, monkey
                     "output_var": "parsed_order",
                 },
                 "quality_gate": {"required_keys": ["parsed_order"]},
-                "trigger_policy": {"on_error": True, "on_quality_below_threshold": True},
+                "trigger_policy": {
+                    "on_error": True,
+                    "on_quality_below_threshold": True,
+                },
             }
         ],
         "workflow": {
@@ -202,7 +209,10 @@ async def test_apply_nl_workflow_graph_reuses_existing_skill_id(tmp_path, monkey
                         "temp_id": "reuse",
                         "node_type": "eskill",
                         "name": "复用已有 Skill",
-                        "config": {"skill_id": skill.id, "output_var": "existing_result"},
+                        "config": {
+                            "skill_id": skill.id,
+                            "output_var": "existing_result",
+                        },
                         "position_x": 220,
                         "position_y": 0,
                     },
@@ -216,8 +226,16 @@ async def test_apply_nl_workflow_graph_reuses_existing_skill_id(tmp_path, monkey
                     },
                 ],
                 "edges": [
-                    {"source_temp_id": "start", "target_temp_id": "reuse", "condition": ""},
-                    {"source_temp_id": "reuse", "target_temp_id": "end", "condition": ""},
+                    {
+                        "source_temp_id": "start",
+                        "target_temp_id": "reuse",
+                        "condition": "",
+                    },
+                    {
+                        "source_temp_id": "reuse",
+                        "target_temp_id": "end",
+                        "condition": "",
+                    },
                 ],
             },
         }
@@ -304,7 +322,10 @@ async def test_apply_nl_workflow_graph_reuses_same_name_blueprint(tmp_path, monk
                         "temp_id": "reuse",
                         "node_type": "eskill",
                         "name": "复用同名 Skill",
-                        "config": {"temp_skill_id": "skill_reuse", "output_var": "reuse_result"},
+                        "config": {
+                            "temp_skill_id": "skill_reuse",
+                            "output_var": "reuse_result",
+                        },
                         "position_x": 220,
                         "position_y": 0,
                     },
@@ -318,8 +339,16 @@ async def test_apply_nl_workflow_graph_reuses_same_name_blueprint(tmp_path, monk
                     },
                 ],
                 "edges": [
-                    {"source_temp_id": "start", "target_temp_id": "reuse", "condition": ""},
-                    {"source_temp_id": "reuse", "target_temp_id": "end", "condition": ""},
+                    {
+                        "source_temp_id": "start",
+                        "target_temp_id": "reuse",
+                        "condition": "",
+                    },
+                    {
+                        "source_temp_id": "reuse",
+                        "target_temp_id": "end",
+                        "condition": "",
+                    },
                 ],
             },
         }
@@ -372,8 +401,14 @@ async def test_apply_nl_workflow_graph_preserves_repair_ready_skill_metadata(tmp
                         ],
                     },
                 },
-                "quality_gate": {"required_keys": ["invoice_summary"], "min_length": 10},
-                "trigger_policy": {"on_error": True, "on_quality_below_threshold": True},
+                "quality_gate": {
+                    "required_keys": ["invoice_summary"],
+                    "min_length": 10,
+                },
+                "trigger_policy": {
+                    "on_error": True,
+                    "on_quality_below_threshold": True,
+                },
             }
         ],
         "workflow": {
@@ -408,7 +443,11 @@ async def test_apply_nl_workflow_graph_preserves_repair_ready_skill_metadata(tmp
                 },
             ],
             "edges": [
-                {"source_temp_id": "start", "target_temp_id": "invoice", "condition": ""},
+                {
+                    "source_temp_id": "start",
+                    "target_temp_id": "invoice",
+                    "condition": "",
+                },
                 {"source_temp_id": "invoice", "target_temp_id": "end", "condition": ""},
             ],
         },

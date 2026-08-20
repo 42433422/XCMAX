@@ -9,6 +9,8 @@ import re
 import sqlite3
 from datetime import datetime
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 
 class ProfessionalUploadHandlerFixed:
     """专业版上传处理器（修复版）"""
@@ -83,7 +85,7 @@ class ProfessionalUploadHandlerFixed:
             conn.close()
             return analysis_result
 
-        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             return {"error": str(e)}
 
     def ensure_purchase_units_table(self, cursor):
@@ -150,7 +152,7 @@ class ProfessionalUploadHandlerFixed:
             conn.close()
             return True
 
-        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             print(f"❌ 添加购买单位到customer数据库时出错: {e}")
             return False
 
@@ -168,7 +170,7 @@ class ProfessionalUploadHandlerFixed:
             analysis = self.analyze_sqlite_database(file_path)
 
             if "error" in analysis:
-                return {"success": False, "message": f'数据库分析失败: {analysis["error"]}'}
+                return {"success": False, "message": f"数据库分析失败: {analysis['error']}"}
 
             # 检查是否有产品表
             if analysis.get("suggested_action") == "import_products":
@@ -322,7 +324,7 @@ class ProfessionalUploadHandlerFixed:
                 "customer_db_updated": True,
             }
 
-        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             return {"success": False, "message": f"导入失败: {str(e)}"}
 
     def _ensure_products_table_exists(self, cursor):

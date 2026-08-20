@@ -79,8 +79,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (t.length > 128) return '姓名不能超过 128 个字符'
         return ''
       },
-      phone: (value) =>
-        value.trim() && !/^1[3-9]\d{9}$/.test(value.trim()) ? '请输入有效的手机号码' : '',
+      phone: (value) => (value.trim() && !/^1[3-9]\d{9}$/.test(value.trim()) ? '请输入有效的手机号码' : ''),
       email: (value) => {
         const t = value.trim()
         if (!t) return '请输入邮箱'
@@ -98,7 +97,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function readCookie(name) {
-      const parts = (`; ${document.cookie}`).split(`; ${name}=`)
+      const parts = `; ${document.cookie}`.split(`; ${name}=`)
       if (parts.length === 2) return parts.pop().split(';').shift() || ''
       return ''
     }
@@ -121,9 +120,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const d = data.detail
       if (typeof d === 'string') return d
       if (Array.isArray(d)) {
-        return d
-          .map((x) => (x && typeof x === 'object' && x.msg ? x.msg : String(x)))
-          .join('；')
+        return d.map((x) => (x && typeof x === 'object' && x.msg ? x.msg : String(x))).join('；')
       }
       return String(d)
     }
@@ -161,8 +158,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const csrf = readCookie('csrf_token')
         if (!csrf) {
           if (apiError) {
-            apiError.textContent =
-              '无法获取安全令牌（请确认已启用 ModStore 且使用同源访问），请刷新页面后重试。'
+            apiError.textContent = '无法获取安全令牌（请确认已启用 ModStore 且使用同源访问），请刷新页面后重试。'
           }
           return
         }
@@ -199,8 +195,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (auditCode) {
               success.textContent = `提交成功。您的需求审核码为 ${auditCode}，请保存以便查询进度。`
             } else {
-              success.textContent =
-                '提交成功。我们已收到您的需求；若未显示审核码，请刷新后重试或联系客服。'
+              success.textContent = '提交成功。我们已收到您的需求；若未显示审核码，请刷新后重试或联系客服。'
             }
             success.classList.add('visible')
           }
@@ -227,7 +222,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     })
   }
-
 })
 
 /** 官网 AI 管家（/market/ 内由 Vue 应用自带） */

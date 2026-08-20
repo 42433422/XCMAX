@@ -49,9 +49,7 @@ describe('realtimeClient', () => {
 
   it('creates WebSocket with correct URL when token exists', () => {
     connectRealtime()
-    expect(WebSocket).toHaveBeenCalledWith(
-      expect.stringContaining('/api/realtime/ws?token=test-token'),
-    )
+    expect(WebSocket).toHaveBeenCalledWith(expect.stringContaining('/api/realtime/ws?token=test-token'))
   })
 
   it('uses wss protocol on https page', () => {
@@ -95,9 +93,7 @@ describe('realtimeClient', () => {
     mockWs.readyState = 1
     mockWs.onopen!()
     vi.advanceTimersByTime(50_000)
-    expect(mockWs.send).toHaveBeenCalledWith(
-      expect.stringContaining('"type":"ping"'),
-    )
+    expect(mockWs.send).toHaveBeenCalledWith(expect.stringContaining('"type":"ping"'))
   })
 
   it('replaces existing connection on reconnect', () => {
@@ -105,7 +101,10 @@ describe('realtimeClient', () => {
     const firstWs = mockWs
     const secondWs = { ...firstWs, close: vi.fn() }
     mockWs = secondWs
-    vi.stubGlobal('WebSocket', vi.fn(() => secondWs))
+    vi.stubGlobal(
+      'WebSocket',
+      vi.fn(() => secondWs),
+    )
     connectRealtime()
     expect(firstWs.close).toHaveBeenCalledWith(1000, 'replaced')
   })

@@ -2,6 +2,8 @@ import time
 
 import requests
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 
 def final_test():
     """最终测试修复结果"""
@@ -53,7 +55,7 @@ def final_test():
             print(f"📄 响应内容: {response.text}")
             return False
 
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 检查后端API失败: {e}")
         return False
 

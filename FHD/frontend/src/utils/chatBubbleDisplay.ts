@@ -52,7 +52,9 @@ export function tryParseToolInvocationJson(text: string): Record<string, unknown
 }
 
 export function formatToolInvocationChip(obj: Record<string, unknown>): ToolInvocationChip {
-  const action = String(obj.action || obj.tool_action || '').trim().toLowerCase()
+  const action = String(obj.action || obj.tool_action || '')
+    .trim()
+    .toLowerCase()
   const fp = String(obj.file_path || obj.path || obj.excel_path || '').trim()
   const fileName = fp.split('/').pop() || fp
   const actionLabel = ACTION_LABELS[action] || action
@@ -122,7 +124,7 @@ const PLANNER_DISPLAY_MARKERS: RegExp[] = [
   /\[正在调用工具:[^\]\n]+\]/g,
   /【正在调用工具:[^】\n]+】/g,
   /\[正在调用工具:[^\]\n]+(?!\])/g,
-  /【正在调用工具:[^】\n]+(?!\】)/g,
+  /【正在调用工具:[^】\n]+(?!】)/g,
   /\[工具已返回[^\]\n]*\]/g,
   /【工具已返回[^】\n]*】/g,
   /\[工具未成功[^\]\n]*\]/g,
@@ -131,7 +133,7 @@ const PLANNER_DISPLAY_MARKERS: RegExp[] = [
   /【需要授权:[^】\n]+】/g,
   /\[请提供令牌:[^\]\n]+\]/g,
   /【请提供令牌:[^】\n]+】/g,
-  /(?<![\[\【])正在调用工具:[^\s\]\】\n]{1,64}/g,
+  /(?<![[【])正在调用工具:[^\s\]】\n]{1,64}/g,
   /\[工具已返回[^\]\n]*(?!\])/g,
   /（仍在处理中，已等待 \d+ 秒，请稍候…）/g,
   /（正在将 Excel 导入数据库[^）]*）/g,

@@ -9,6 +9,8 @@ from typing import Any, Dict, Optional
 
 from fastapi import APIRouter
 
+BOUNDARY_ERRORS = (Exception,)
+
 logger = logging.getLogger(__name__)
 
 EMPLOYEE_ID = "taiyangniao-attendance"
@@ -34,7 +36,7 @@ def _unified_err(msg: str, **meta):
 def _load_employee_module():
     try:
         return importlib.import_module(f"employees.{STEM}")
-    except Exception:
+    except BOUNDARY_ERRORS:
         logger.exception("load employee module failed stem=%s", STEM)
         return None
 
@@ -71,7 +73,7 @@ async def _dispatch_run(mod_id: str, payload: Optional[Dict[str, Any]]):
                     "text": res.text,
                     "error": "" if res.status_code < 400 else res.text[:500],
                 }
-            except Exception as exc:  # noqa: BLE001
+            except BOUNDARY_ERRORS as exc:  # noqa: BLE001
                 return {"ok": False, "status": 0, "text": "", "error": str(exc)[:500]}
 
         ctx["http_get"] = _http_get
@@ -84,9 +86,11 @@ async def _dispatch_run(mod_id: str, payload: Optional[Dict[str, Any]]):
         if asyncio.iscoroutine(out):
             out = await out
         return {"success": True, "data": out}
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.exception("employee run failed")
-        return _unified_err("employee run failed: " + str(exc)[:300], employee_id=EMPLOYEE_ID)
+        return _unified_err(
+            "employee run failed: " + str(exc)[:300], employee_id=EMPLOYEE_ID
+        )
 
 
 def register_fastapi_routes(app, mod_id: str) -> None:

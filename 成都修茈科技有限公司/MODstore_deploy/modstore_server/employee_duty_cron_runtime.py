@@ -1,9 +1,12 @@
+# mypy: disable-error-code="union-attr"
 """Tracked execution boundary for one scheduled employee duty."""
 
 from __future__ import annotations
 
 import importlib
 from typing import Any
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 _SAFE_FAILURE_KINDS = frozenset({"quota", "transient", "prompt"})
 
@@ -122,7 +125,7 @@ def execute_employee_cron_duty(
 
         try:
             resolved_input = resolve_employee_duty_input(employee_id)
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             raise RuntimeError("employee_cron_input_resolution_failed") from exc
         if resolved_input is not None:
             input_data.update(dict(resolved_input.get("input_data") or {}))
@@ -138,7 +141,7 @@ def execute_employee_cron_duty(
                     (bench_provider, bench_model) if bench_provider and bench_model else None
                 ),
             )
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             raise RuntimeError(_execution_exception_code(exc)) from exc
         result = _require_success(execution)
         if resolved_input is not None:

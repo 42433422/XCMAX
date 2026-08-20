@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """LG-W1-T5 — NeuroBusEventBridge 事件桥验收。
 
 校验 ``app/infrastructure/workflow/neuro_bus_bridge.py``：
@@ -25,7 +26,7 @@ from app.infrastructure.workflow.neuro_bus_bridge import NeuroBusEventBridge
 from app.neuro_bus.events.base import NeuroEvent
 
 _BUS_PATH = Path(__file__).resolve().parents[2] / "app" / "neuro_bus" / "bus.py"
-_BUS_SHA256 = "0743e744939be2ef8fa0da4f30fe2a7263b11c311e251b269a2f4bdc90acc045"
+_BUS_SHA256 = "337b090051859291a062685c97a2e9f4e4abdaabf58b7743f390abc2bd85ebfe"
 
 
 class RecordingBus:

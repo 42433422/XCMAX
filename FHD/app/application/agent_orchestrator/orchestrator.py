@@ -53,38 +53,7 @@ from app.application.agent_orchestrator.orchestrator_agentorchestrator_mixin02 i
 )
 
 
-class AgentOrchestrator(_AgentOrchestratorPart01Mixin, _AgentOrchestratorPart02Mixin, AgentOrchestratorTaskMixin):
+class AgentOrchestrator(
+    _AgentOrchestratorPart01Mixin, _AgentOrchestratorPart02Mixin, AgentOrchestratorTaskMixin
+):
     pass
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

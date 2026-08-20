@@ -4,12 +4,18 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import and_, func, or_, select
 
-from modstore_server.models import EmployeeExecutionMetric, Notification, User, get_session_factory
+from modstore_server.models import (
+    EmployeeExecutionMetric,
+    Notification,
+    User,
+    get_session_factory,
+)
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +40,7 @@ def prune_notifications(
     from modstore_server.file_retention_janitor import is_dry_run
 
     dry = is_dry_run() if dry_run is None else bool(dry_run)
-    current = now or datetime.now(timezone.utc)
+    current = now or datetime.now(UTC)
     system_keep = _bounded_env_int("MODSTORE_NOTIFICATION_SYSTEM_KEEP_PER_USER", 200, 10, 5000)
     execution_keep = _bounded_env_int(
         "MODSTORE_NOTIFICATION_EXECUTION_KEEP_PER_USER", 200, 10, 5000
@@ -214,5 +220,5 @@ def record_retention_runtime(result: Dict[str, Any]) -> None:
                 "metric_id": result.get("metric_id"),
             },
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("retention janitor: time_rail runtime record failed")

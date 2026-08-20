@@ -1,6 +1,5 @@
 """本机用户头像存储（桌面/开发环境 userData/uploads/avatars）。"""
 
-
 from __future__ import annotations
 
 from pathlib import Path

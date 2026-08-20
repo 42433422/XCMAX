@@ -81,7 +81,19 @@ describe('industryPresets constants and functions', () => {
     })
 
     it('returns API-provided preset when available', () => {
-      industryPresetsRef.value = { 'custom': { id: 'custom', name: 'Custom', scenario: '', welcomeIntro: 'hi', welcomeBullets: [], quickButtons: [], placeholderNormal: '', menuLabels: {}, uiLabels: {} } }
+      industryPresetsRef.value = {
+        custom: {
+          id: 'custom',
+          name: 'Custom',
+          scenario: '',
+          welcomeIntro: 'hi',
+          welcomeBullets: [],
+          quickButtons: [],
+          placeholderNormal: '',
+          menuLabels: {},
+          uiLabels: {},
+        },
+      }
       expect(getIndustryPreset('custom').id).toBe('custom')
     })
   })
@@ -135,7 +147,11 @@ describe('industryPresets constants and functions', () => {
     it('skips menu_overrides entries without key or label', () => {
       const result = industryPresetFromManifest({
         id: 'custom',
-        menu_overrides: [{ key: '', label: 'x' }, { key: 'y', label: '' }, { key: 'a', label: 'b' }],
+        menu_overrides: [
+          { key: '', label: 'x' },
+          { key: 'y', label: '' },
+          { key: 'a', label: 'b' },
+        ],
       })
       expect(result?.menuLabels).toEqual({ a: 'b' })
     })

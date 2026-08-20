@@ -1,4 +1,5 @@
 """清理自演化循环遗留的 pending open_items。"""
+
 import datetime
 import json
 import os
@@ -8,9 +9,7 @@ PATHS = [
         "~/Library/Application Support/XCMAX/modstore-daily/runtime/"
         "self_maintenance_loop_memory.json"
     ),
-    os.path.expanduser(
-        "~/.xcmax/modstore-daily/self_maintenance_loop_memory.json"
-    ),
+    os.path.expanduser("~/.xcmax/modstore-daily/self_maintenance_loop_memory.json"),
 ]
 
 now = datetime.datetime.now(datetime.UTC).isoformat()

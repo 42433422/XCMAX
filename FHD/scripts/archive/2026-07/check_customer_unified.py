@@ -1,5 +1,7 @@
 import sqlite3
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 
 def check_customer_unified_database():
     """检查统一的客户/购买单位数据库"""
@@ -77,7 +79,7 @@ def check_customer_unified_database():
             "customers_table_exists": bool(customers_table_exists),
         }
 
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 检查数据库时出错: {e}")
         return {"error": str(e)}
 
@@ -149,7 +151,7 @@ def fix_customer_count():
 
         return True
 
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 修复客户数量时出错: {e}")
         return False
 

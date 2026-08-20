@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, union-attr"
 """解析平台环境变量密钥与用户 BYOK（用户优先）。"""
 
 from __future__ import annotations

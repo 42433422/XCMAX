@@ -38,7 +38,7 @@ consumer's tests.
 
 ## With MODstore (or any FastAPI / Django service)
 
-Pattern: keep the consumer's existing skill registry / runtime, *and* expose
+Pattern: keep the consumer's existing skill registry / runtime, _and_ expose
 a thin endpoint that delegates code-layer work to vibe-coding.
 
 ```python
@@ -73,7 +73,7 @@ def rollback(skill_id: str, version: int):
 ```
 
 The consumer's existing workflow engine remains the source of truth for
-business workflows; vibe-coding only owns the *generated* code-layer skills
+business workflows; vibe-coding only owns the _generated_ code-layer skills
 plus their per-skill self-healing loop. If the consumer wants to consume the
 generated workflow as well, call `coder.workflow(brief)` and translate the
 returned `VibeWorkflowGraph` into the consumer's own node model.
@@ -99,11 +99,11 @@ The sibling project [`MODstore_deploy`](../../MODstore_deploy/) is a
 production reference of the patterns above. It wires vibe-coding into
 **three production lines** simultaneously:
 
-| Line | Surface | vibe-coding API |
-|---|---|---|
-| AI Mod authoring | `mod_employee_impl_scaffold.generate_mod_employee_impls_async` | `ProjectVibeCoder.heal_project` (after LLM-generated employees), `index_project` to cache the symbol table for the authoring page |
-| AI Employees | `employee_executor._actions_real` handlers `vibe_edit` / `vibe_heal` / `vibe_code` | `VibeCoder.edit_project` + `apply_patch`, `heal_project`, `code` + `run` |
-| Skills | `eskill_runtime._execute_logic` kinds `vibe_code` / `vibe_workflow`, canvas nodes `vibe_skill` / `vibe_workflow`, `script_agent.agent_loop.run_vibe_agent_loop` (alternate to `run_agent_loop`), workbench tab "AI 代码技能" | full surface: `code` + `run`, `workflow` + `execute`, `code_factory.repair`, `SkillPackager` + `MODstoreClient` for one-click publish |
+| Line             | Surface                                                                                                                                                                                                                      | vibe-coding API                                                                                                                       |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| AI Mod authoring | `mod_employee_impl_scaffold.generate_mod_employee_impls_async`                                                                                                                                                               | `ProjectVibeCoder.heal_project` (after LLM-generated employees), `index_project` to cache the symbol table for the authoring page     |
+| AI Employees     | `employee_executor._actions_real` handlers `vibe_edit` / `vibe_heal` / `vibe_code`                                                                                                                                           | `VibeCoder.edit_project` + `apply_patch`, `heal_project`, `code` + `run`                                                              |
+| Skills           | `eskill_runtime._execute_logic` kinds `vibe_code` / `vibe_workflow`, canvas nodes `vibe_skill` / `vibe_workflow`, `script_agent.agent_loop.run_vibe_agent_loop` (alternate to `run_agent_loop`), workbench tab "AI 代码技能" | full surface: `code` + `run`, `workflow` + `execute`, `code_factory.repair`, `SkillPackager` + `MODstoreClient` for one-click publish |
 
 Key implementation details worth borrowing:
 

@@ -30,6 +30,7 @@ from fastapi import FastAPI
 
 from modstore_server.api.notification import router as notification_router
 from modstore_server.eventing.subscribers import install_default_subscribers
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ logger = logging.getLogger(__name__)
 async def _lifespan(app: FastAPI):
     try:
         install_default_subscribers()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("notification service failed to install subscribers")
     yield
 

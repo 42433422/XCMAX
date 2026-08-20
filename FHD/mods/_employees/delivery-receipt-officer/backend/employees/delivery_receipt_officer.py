@@ -25,15 +25,11 @@ def run(payload: dict[str, Any], _ctx: dict[str, Any]) -> dict[str, Any]:
             "side_effects": [],
         }
 
-    missing = [
-        key for key in _REQUIRED_LINKS if not str(receipt.get(key) or "").strip()
-    ]
+    missing = [key for key in _REQUIRED_LINKS if not str(receipt.get(key) or "").strip()]
     acceptance = receipt.get("acceptance")
     acceptance_rows = acceptance if isinstance(acceptance, list) else []
     accepted_rows = [
-        row
-        for row in acceptance_rows
-        if isinstance(row, dict) and row.get("passed") is True
+        row for row in acceptance_rows if isinstance(row, dict) and row.get("passed") is True
     ]
     value_evidence = receipt.get("value_evidence")
     has_value_evidence = isinstance(value_evidence, list) and any(

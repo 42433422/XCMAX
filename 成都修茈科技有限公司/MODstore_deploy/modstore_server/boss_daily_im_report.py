@@ -17,8 +17,10 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any, Dict, List, Tuple
+
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +63,7 @@ def _collect_stats(hours: int = 24) -> Dict[str, Any]:
         get_session_factory,
     )
 
-    since = datetime.now(timezone.utc) - timedelta(hours=max(1, int(hours)))
+    since = datetime.now(UTC) - timedelta(hours=max(1, int(hours)))
     stats: Dict[str, Any] = {
         "since": since,
         "runs_total": 0,
@@ -94,7 +96,7 @@ def _collect_stats(hours: int = 24) -> Dict[str, Any]:
                     stats["runs_success"] += int(cnt)
                 per_emp[str(emp)] = per_emp.get(str(emp), 0) + int(cnt)
             stats["top_employees"] = sorted(per_emp.items(), key=lambda kv: -kv[1])[:3]
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.debug("boss daily report: execution metrics query failed", exc_info=True)
 
         try:
@@ -118,7 +120,7 @@ def _collect_stats(hours: int = 24) -> Dict[str, Any]:
                     stats["tasks_failed"] += int(cnt)
                 elif st in ("pending", "running"):
                     stats["tasks_pending"] += int(cnt)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.debug("boss daily report: brief task query failed", exc_info=True)
 
         try:
@@ -131,7 +133,7 @@ def _collect_stats(hours: int = 24) -> Dict[str, Any]:
                 .scalar()
                 or 0
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.debug("boss daily report: suggestion query failed", exc_info=True)
 
         try:
@@ -141,7 +143,7 @@ def _collect_stats(hours: int = 24) -> Dict[str, Any]:
                 .scalar()
                 or 0
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.debug("boss daily report: pending question query failed", exc_info=True)
     return stats
 
@@ -197,7 +199,7 @@ def send_boss_daily_im_report() -> Dict[str, Any]:
         if not sent:
             logger.info("boss daily im report not sent（IM 桥未配或推送失败）")
         return {"ok": True, "sent": bool(sent)}
-    except Exception as exc:  # noqa: BLE001 - 调度任务不允许抛错打断调度器
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001 - 调度任务不允许抛错打断调度器
         logger.exception("boss daily im report failed")
         return {"ok": False, "sent": False, "error": str(exc)[:500]}
 

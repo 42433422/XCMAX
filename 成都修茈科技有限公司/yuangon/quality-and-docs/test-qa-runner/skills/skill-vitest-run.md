@@ -2,16 +2,17 @@
 
 ## 元信息
 
-| 字段 | 值 |
-|------|----|
-| skill_id | `skill-vitest-run` |
-| 所属员工 | `test-qa-runner` |
-| 业务域 | Market 前端单元测试执行与覆盖率检查 |
-| 版本 | 1.0.0 |
+| 字段     | 值                                  |
+| -------- | ----------------------------------- |
+| skill_id | `skill-vitest-run`                  |
+| 所属员工 | `test-qa-runner`                    |
+| 业务域   | Market 前端单元测试执行与覆盖率检查 |
+| 版本     | 1.0.0                               |
 
 ## 1. 静态阶段
 
 **执行逻辑**：
+
 ```
 cd MODstore_deploy/market
 npx vitest run --coverage
@@ -21,6 +22,7 @@ npx vitest run --coverage
 ```
 
 **输出 schema**：
+
 ```json
 {
   "status": "ok | fail",
@@ -41,9 +43,9 @@ npx vitest run --coverage
 
 ## 2. 动态触发条件
 
-| 触发类型 | 规则 |
-|----------|------|
-| 测试失败 | `tests_failed > 0` |
+| 触发类型   | 规则                                                    |
+| ---------- | ------------------------------------------------------- |
+| 测试失败   | `tests_failed > 0`                                      |
 | 覆盖率不足 | `coverage_pct.statements < 80`（当前基线 8%，逐步提升） |
 
 ## 3. 动态阶段

@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import csv
-import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from app.mod_sdk.host_services import resolve_table_spec
 
@@ -17,7 +16,9 @@ async def convert_file(
     ctx: Dict[str, Any],
     rule_spec: Dict[str, Any],
 ) -> Dict[str, Any]:
-    table, _warnings = await resolve_table_spec(src_path, payload or {}, ctx or {}, rule_spec or {}, fmt="csv")
+    table, _warnings = await resolve_table_spec(
+        src_path, payload or {}, ctx or {}, rule_spec or {}, fmt="csv"
+    )
     columns = [str(c) for c in (table.get("columns") or []) if str(c).strip()]
     rows_in = table.get("rows")
     if not isinstance(rows_in, list):

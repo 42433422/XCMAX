@@ -5,9 +5,7 @@ from __future__ import annotations
 from typing import Any, cast
 
 
-def ensure_industries_selectable(
-    catalog: dict[str, Any], industry_ids: set[str]
-) -> dict[str, Any]:
+def ensure_industries_selectable(catalog: dict[str, Any], industry_ids: set[str]) -> dict[str, Any]:
     """Promote account/workspace industries into selectable catalog rows."""
     from app.mod_sdk import industry_baseline as facade
 
@@ -39,9 +37,7 @@ def ensure_industries_selectable(
     preview_packages: list[Any] = []
     for package in catalog.get("preview_packages") or []:
         industry_id = (
-            str(package.get("industry_id") or "").strip()
-            if isinstance(package, dict)
-            else ""
+            str(package.get("industry_id") or "").strip() if isinstance(package, dict) else ""
         )
         if industry_id and industry_id in wanted and industry_id not in open_ids:
             row = dict(package)
@@ -53,9 +49,7 @@ def ensure_industries_selectable(
     for industry_id in wanted:
         if industry_id not in open_ids:
             open_packages.append(
-                facade._onboarding_package_row(
-                    industry_id, selectable=True, presets=presets
-                )
+                facade._onboarding_package_row(industry_id, selectable=True, presets=presets)
             )
             open_ids.add(industry_id)
     result = dict(catalog)
@@ -64,8 +58,7 @@ def ensure_industries_selectable(
     result["open_industry_ids"] = [
         str(package.get("industry_id") or "").strip()
         for package in open_packages
-        if isinstance(package, dict)
-        and str(package.get("industry_id") or "").strip()
+        if isinstance(package, dict) and str(package.get("industry_id") or "").strip()
     ]
     return result
 
@@ -82,9 +75,7 @@ def build_industry_baseline_plan(
 
     document = facade.load_industry_baseline_document()
     labels = {
-        str(key): str(value)
-        for key, value in (document.get("mod_labels") or {}).items()
-        if key
+        str(key): str(value) for key, value in (document.get("mod_labels") or {}).items() if key
     }
     core_ids = facade._dedupe(
         [str(value) for value in (document.get("core_mod_ids") or []) if value]
@@ -102,9 +93,7 @@ def build_industry_baseline_plan(
         ]
     )
     industry_mod_ids = facade._industry_mod_ids_for(industry_key, row)
-    installed = set(
-        facade._installed_mod_ids() if installed_mod_ids is None else installed_mod_ids
-    )
+    installed = set(facade._installed_mod_ids() if installed_mod_ids is None else installed_mod_ids)
 
     def item(
         mod_id: str,
@@ -126,9 +115,7 @@ def build_industry_baseline_plan(
 
                 resolved_label = label_for_account_custom_mod(mod_id, industry_key)
             elif tier == "custom":
-                resolved_label = facade._label_for_custom_mod(
-                    mod_id, industry_key, labels
-                )
+                resolved_label = facade._label_for_custom_mod(mod_id, industry_key, labels)
             else:
                 resolved_label = facade._label_for_mod(mod_id, industry_key, labels)
         return {
@@ -140,14 +127,10 @@ def build_industry_baseline_plan(
             "show_mod_id": visible_id,
         }
 
-    custom_hint, _ = facade._custom_line_spec(
-        industry_mod_ids[0] if industry_mod_ids else ""
-    )
+    custom_hint, _ = facade._custom_line_spec(industry_mod_ids[0] if industry_mod_ids else "")
     from app.mod_sdk.customer_delivery import account_custom_mod_ids_for_industry
 
-    account_custom_base = account_custom_mod_ids_for_industry(
-        industry_key, entitled_mod_ids
-    )
+    account_custom_base = account_custom_mod_ids_for_industry(industry_key, entitled_mod_ids)
     employee_extension_ids = (
         facade._custom_employee_extension_ids(industry_key, row, document)
         if account_custom_base
@@ -167,9 +150,7 @@ def build_industry_baseline_plan(
             "title": "行业侧栏基础线",
             "hint": "按行业补侧栏业务菜单与表格工具等宿主能力卡片（不含 AI 员工）",
             "items": [
-                item(mod_id, "host", True)
-                for mod_id in required_ids
-                if mod_id not in core_ids
+                item(mod_id, "host", True) for mod_id in required_ids if mod_id not in core_ids
             ],
         },
     ]
@@ -208,14 +189,10 @@ def build_industry_baseline_plan(
     groups = [group for group in groups if group.get("items")]
     flat_items = [entry for group in groups for entry in group["items"]]
     missing_required = [
-        entry["mod_id"]
-        for entry in flat_items
-        if entry["required"] and not entry["installed"]
+        entry["mod_id"] for entry in flat_items if entry["required"] and not entry["installed"]
     ]
     missing_optional = [
-        entry["mod_id"]
-        for entry in flat_items
-        if not entry["required"] and not entry["installed"]
+        entry["mod_id"] for entry in flat_items if not entry["required"] and not entry["installed"]
     ]
     missing_industry = [
         entry["mod_id"]
@@ -225,9 +202,7 @@ def build_industry_baseline_plan(
     missing_account_custom = [
         entry["mod_id"]
         for entry in flat_items
-        if entry["tier"] == "account_custom"
-        and entry["required"]
-        and not entry["installed"]
+        if entry["tier"] == "account_custom" and entry["required"] and not entry["installed"]
     ]
     seed_packages: list[dict[str, Any]] = []
     if account_custom_ids:

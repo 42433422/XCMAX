@@ -38,9 +38,7 @@ def run(payload: dict[str, Any], _ctx: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(source, str) or not source.strip():
         return _failed("source is required", "missing_source")
     if language not in {"py", "python"}:
-        return _failed(
-            "only deterministic Python validation is supported", "unsupported_language"
-        )
+        return _failed("only deterministic Python validation is supported", "unsupported_language")
 
     issues: list[dict[str, Any]] = []
     try:
@@ -81,9 +79,7 @@ def run(payload: dict[str, Any], _ctx: dict[str, Any]) -> dict[str, Any]:
             elif isinstance(node, ast.Call):
                 symbol = _call_name(node)
                 if symbol in _BLOCKED_CALLS:
-                    issues.append(
-                        {"code": "blocked_call", "line": node.lineno, "symbol": symbol}
-                    )
+                    issues.append({"code": "blocked_call", "line": node.lineno, "symbol": symbol})
 
     approved = tree is not None and not issues
     return {

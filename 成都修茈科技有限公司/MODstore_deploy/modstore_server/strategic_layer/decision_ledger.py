@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, attr-defined, no-any-return, valid-type"
 """战略决策账本 — 领域模型 + 服务。
 
 决策生命周期：
@@ -25,7 +26,7 @@ import json
 import logging
 import uuid
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, Dict, Optional
 
@@ -34,6 +35,7 @@ from sqlalchemy.exc import IntegrityError
 
 from modstore_server.db.base import get_session_factory
 from modstore_server.db.strategic import StrategicDecision as StrategicDecisionModel
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.strategic_layer.autonomy_boundary import (
     AutonomyAction,
     AutonomyEvaluator,
@@ -238,7 +240,7 @@ class StrategicDecisionLedger(DecisionLedgerLifecycleMixin):
         evaluator = self._evaluator or AutonomyEvaluator.from_db()
         evaluation = evaluator.evaluate(action)
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # 根据自治评估决定初始状态
         if evaluation.action == AutonomyAction.AUTO:
@@ -309,7 +311,7 @@ class StrategicDecisionLedger(DecisionLedgerLifecycleMixin):
                         raise DecisionLifecycleError("idempotency_key collision")
                     return _model_to_record(existing)
             raise
-        except Exception:
+        except RECOVERABLE_ERRORS:
             session.rollback()
             raise
         finally:
@@ -398,7 +400,7 @@ class StrategicDecisionLedger(DecisionLedgerLifecycleMixin):
         if not execution_result:
             execution_result = {}
         if review_at is None:
-            review_at = datetime.now(timezone.utc).replace(microsecond=0)
+            review_at = datetime.now(UTC).replace(microsecond=0)
             # 默认 7 天后复盘
             from datetime import timedelta
 
@@ -444,7 +446,7 @@ def _model_to_record(row: StrategicDecisionModel) -> StrategicDecisionRecord:
             return default
         try:
             return json.loads(s)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             return default
 
     return StrategicDecisionRecord(

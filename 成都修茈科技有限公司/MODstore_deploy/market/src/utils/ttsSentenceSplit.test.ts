@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  createStreamSplitter,
-  extractCompleteSentences,
-  splitSentences,
-  subtractEmittedSegments,
-} from './ttsSentenceSplit'
+import { createStreamSplitter, extractCompleteSentences, splitSentences, subtractEmittedSegments } from './ttsSentenceSplit'
 
 describe('ttsSentenceSplit earlyClause', () => {
   it('emits clause before sentence end when earlyClause enabled', () => {
@@ -43,10 +38,7 @@ describe('ttsSentenceSplit earlyClause', () => {
 
 describe('subtractEmittedSegments', () => {
   it('strips emitted prefix from longer segment', () => {
-    const fresh = subtractEmittedSegments(
-      ['这是一段足够长的流式前缀内容。'],
-      ['这是一段足够长的'],
-    )
+    const fresh = subtractEmittedSegments(['这是一段足够长的流式前缀内容。'], ['这是一段足够长的'])
     expect(fresh.join('')).toBe('流式前缀内容。')
   })
 

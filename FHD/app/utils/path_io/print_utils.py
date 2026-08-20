@@ -39,7 +39,6 @@ class PrinterUtils(PrinterCupsMixin, PrinterFileMixin):
     def __init__(self):
         self._com_initialized = False
 
-
     def _ensure_com_initialized(self):
         if pythoncom is None:
             return
@@ -180,15 +179,18 @@ class PrinterUtils(PrinterCupsMixin, PrinterFileMixin):
         if not self._is_print_backend_available():
             return self._build_unavailable_result()
         try:
-            if not os.path.exists(file_path):
-                return {"success": False, "message": f"文件不存在: {file_path}"}
-
-            _, ext = os.path.splitext(file_path)
-            ext = ext.lower()
-
             if not printer_name:
                 logger.error("未指定打印机名称，拒绝打印")
                 return {"success": False, "message": "未指定打印机名称，无法打印"}
+            validated_file = self._resolve_allowed_print_path(file_path)
+            if validated_file is None:
+                return {"success": False, "message": "文件不存在或不在允许的打印目录中"}
+            file_path = validated_file
+            if not os.path.exists(file_path):
+                return {"success": False, "message": "文件不存在"}
+
+            _, ext = os.path.splitext(file_path)
+            ext = ext.lower()
 
             logger.info("准备打印文件: %s", file_path)
             logger.info("使用打印机: %s", printer_name)
@@ -269,7 +271,6 @@ class PrinterUtils(PrinterCupsMixin, PrinterFileMixin):
         except RECOVERABLE_ERRORS as e:
             logger.error("打印文件失败: %s", e)
             return {"success": False, "message": f"打印失败: {str(e)}"}
-
 
     def get_default_printer(self) -> str | None:
         if not self._is_print_backend_available():

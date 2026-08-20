@@ -1,3 +1,4 @@
+# mypy: disable-error-code="attr-defined"
 """Legacy 使用统计报告。
 
 扫描 ``logs/legacy_usage.log`` JSONL 记录,汇总每个 ``app.legacy.*``

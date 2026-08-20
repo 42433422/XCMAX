@@ -6,7 +6,7 @@ import os
 import re
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.absorption_state import closed_loop_proof
 from retort_engine.bounded_agent_loop import (
@@ -436,8 +436,9 @@ def _source_recorded(root: Path, source_id: str) -> bool:
 
 def _source_record_payload(root: Path, source_id: str) -> dict[str, Any]:
     manifest = _read_json(root / TRACKED_MANIFEST)
-    tracked = (
-        manifest.get("sources") if isinstance(manifest.get("sources"), list) else []
+    tracked = cast(
+        list[Any],
+        manifest.get("sources") if isinstance(manifest.get("sources"), list) else [],
     )
     for row in tracked:
         if isinstance(row, dict) and row.get("source_id") == source_id:

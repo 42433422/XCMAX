@@ -71,28 +71,14 @@
         {
           "created_at": "2026-05-05T10:11:31.437168+00:00",
           "dependencies": [],
-          "domain_keywords": [
-            "斐波那契",
-            "缓存",
-            "数列",
-            "递归",
-            "动态规划"
-          ],
+          "domain_keywords": ["斐波那契", "缓存", "数列", "递归", "动态规划"],
           "function_name": "cached_fibonacci",
           "quality_gate": {
-            "required_keys": [
-              "n",
-              "result",
-              "cached"
-            ]
+            "required_keys": ["n", "result", "cached"]
           },
           "signature": {
-            "params": [
-              "n"
-            ],
-            "required_params": [
-              "n"
-            ],
+            "params": ["n"],
+            "required_params": ["n"],
             "return_type": "dict"
           },
           "source_code": "def cached_fibonacci(n: int) -> dict:\n    \"\"\"\n    计算斐波那契数列的第n项，支持缓存以避免重复计算。\n    \n    参数:\n        n (int): 要计算的斐波那契数列项数，非负整数。\n    \n    返回:\n        dict: 包含n、result和cached字段的字典。\n              如果n为负数，返回带error字段的字典。\n    \"\"\"\n    # 检查输入是否为整数\n    if not isinstance(n, int):\n        return {\"error\": \"n must be an integer\"}\n    \n    # 检查n是否为负数\n    if n < 0:\n        return {\"error\": \"n must be a non-negative integer\"}\n    \n    # 使用模块级缓存（通过函数属性实现）\n    if not hasattr(cached_fibonacci, \"cache\"):\n        cached_fibonacci.cache = {0: 0, 1: 1}\n    \n    cache = cached_fibonacci.cache\n    \n    # 检查缓存中是否已有结果\n    if n in cache:\n        return {\"n\": n, \"result\": cache[n], \"cached\": n > 1}\n    \n    # 计算斐波那契数列\n    # 使用迭代方法避免递归深度问题\n    a, b = 0, 1\n    for i in range(2, n + 1):\n        a, b = b, a + b\n        # 将中间结果存入缓存\n        cache[i] = b\n    \n    # 确保n=0和n=1的情况也被正确处理（已在缓存中）\n    result = cache[n]\n    \n    return {\"n\": n, \"result\": result, \"cached\": False}",

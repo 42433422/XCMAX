@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -33,7 +37,7 @@ def _decide_post_loop_policy(
     governance_gate = _facade()._governance_audit_gate()
     try:
         evolution_gate = _facade().evolution_metrics_gate()
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         _facade().logger.exception(
             "failed to evaluate evolution metrics gate for policy active gates"
         )

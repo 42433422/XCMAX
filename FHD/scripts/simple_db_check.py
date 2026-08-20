@@ -3,6 +3,8 @@ import sqlite3
 
 import requests
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 
 def simple_db_check():
     """简单检查数据库配置"""
@@ -77,14 +79,14 @@ def simple_db_check():
                             rows = cursor.fetchall()
                             print("    样本数据:")
                             for i, row in enumerate(rows):
-                                print(f"      {i+1}. {row}")
+                                print(f"      {i + 1}. {row}")
 
                 if not customer_tables:
                     print("  ❌ 没有找到客户相关表")
 
                 conn.close()
 
-            except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+            except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
                 print(f"  ❌ 无法连接: {e}")
 
     # 检查我们统一的customer数据库
@@ -159,9 +161,9 @@ def check_sqlalchemy_config():
                             lines = content.split("\n")
                             for i, line in enumerate(lines):
                                 if pattern in line:
-                                    print(f"    行 {i+1}: {line.strip()}")
+                                    print(f"    行 {i + 1}: {line.strip()}")
 
-            except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+            except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
                 print(f"  ❌ 读取失败: {e}")
 
 

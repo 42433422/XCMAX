@@ -1,83 +1,83 @@
 import { asRecord, asDisposable } from '@/utils/typeGuards'
 
 export interface ResourceEntry {
-  resource: unknown;
-  type: string;
-  createdAt: number;
-  lastAccessed: number;
+  resource: unknown
+  type: string
+  createdAt: number
+  lastAccessed: number
 }
 
 export interface ListenerEntry {
-  target: EventTarget;
-  event: string;
-  handler: EventListenerOrEventListenerObject;
-  options?: boolean | AddEventListenerOptions;
+  target: EventTarget
+  event: string
+  handler: EventListenerOrEventListenerObject
+  options?: boolean | AddEventListenerOptions
 }
 
 export interface ResourceStats {
-  total: number;
-  byType: Record<string, number>;
-  oldest: string | null;
-  newest: string | null;
-  listeners: number;
-  timers: number;
-  observers: number;
+  total: number
+  byType: Record<string, number>
+  oldest: string | null
+  newest: string | null
+  listeners: number
+  timers: number
+  observers: number
 }
 
 export class ResourceManager {
-  private resources: Map<string, ResourceEntry>;
-  private listeners: Map<string, ListenerEntry>;
-  private timers: Map<string, number>;
-  private observers: MutationObserver[];
-  public isDisposed: boolean;
+  private resources: Map<string, ResourceEntry>
+  private listeners: Map<string, ListenerEntry>
+  private timers: Map<string, number>
+  private observers: MutationObserver[]
+  public isDisposed: boolean
 
   constructor() {
-    this.resources = new Map();
-    this.listeners = new Map();
-    this.timers = new Map();
-    this.observers = [];
-    this.isDisposed = false;
+    this.resources = new Map()
+    this.listeners = new Map()
+    this.timers = new Map()
+    this.observers = []
+    this.isDisposed = false
   }
 
   register(id: string, resource: unknown, type: string = 'generic'): boolean {
     if (this.isDisposed) {
-      console.warn(`ResourceManager: Cannot register resource "${id}" - manager is disposed`);
-      return false;
+      console.warn(`ResourceManager: Cannot register resource "${id}" - manager is disposed`)
+      return false
     }
 
     if (this.resources.has(id)) {
-      console.warn(`ResourceManager: Resource "${id}" already registered, replacing`);
-      this.release(id);
+      console.warn(`ResourceManager: Resource "${id}" already registered, replacing`)
+      this.release(id)
     }
 
     this.resources.set(id, {
       resource,
       type,
       createdAt: Date.now(),
-      lastAccessed: Date.now()
-    });
+      lastAccessed: Date.now(),
+    })
 
-    return true;
+    return true
   }
 
   get(id: string): unknown {
-    const entry = this.resources.get(id);
+    const entry = this.resources.get(id)
     if (entry) {
-      entry.lastAccessed = Date.now();
-      return entry.resource;
+      entry.lastAccessed = Date.now()
+      return entry.resource
     }
-    return null;
+    return null
   }
 
   has(id: string): boolean {
-    return this.resources.has(id);
+    return this.resources.has(id)
   }
 
   release(id: string): boolean {
-    const entry = this.resources.get(id);
-    if (!entry) return false;
+    const entry = this.resources.get(id)
+    if (!entry) return false
 
-    const { resource, type } = entry
+    const { resource } = entry
 
     try {
       const disposable = asDisposable(resource)
@@ -93,192 +93,192 @@ export class ResourceManager {
         this.removeAllListeners(resource)
       }
     } catch (error) {
-      console.error(`ResourceManager: Error releasing resource "${id}":`, error);
+      console.error(`ResourceManager: Error releasing resource "${id}":`, error)
     }
 
-    this.resources.delete(id);
-    return true;
+    this.resources.delete(id)
+    return true
   }
 
   releaseByType(type: string): number {
-    const toRelease: string[] = [];
+    const toRelease: string[] = []
     for (const [id, entry] of this.resources) {
       if (entry.type === type) {
-        toRelease.push(id);
+        toRelease.push(id)
       }
     }
-    toRelease.forEach(id => this.release(id));
-    return toRelease.length;
+    toRelease.forEach((id) => this.release(id))
+    return toRelease.length
   }
 
   releaseAll(): number {
-    const count = this.resources.size;
+    const count = this.resources.size
     for (const [id] of this.resources) {
-      this.release(id);
+      this.release(id)
     }
-    this.listeners.clear();
-    this.timers.forEach(timer => clearInterval(timer));
-    this.timers.clear();
-    this.observers.forEach(obs => {
-      if (obs.disconnect) obs.disconnect();
-    });
-    this.observers = [];
-    return count;
+    this.listeners.clear()
+    this.timers.forEach((timer) => clearInterval(timer))
+    this.timers.clear()
+    this.observers.forEach((obs) => {
+      if (obs.disconnect) obs.disconnect()
+    })
+    this.observers = []
+    return count
   }
 
   dispose(): void {
-    this.releaseAll();
-    this.isDisposed = true;
+    this.releaseAll()
+    this.isDisposed = true
   }
 
   addListener(
     target: EventTarget,
     event: string,
     handler: EventListenerOrEventListenerObject,
-    options: boolean | AddEventListenerOptions = {}
+    options: boolean | AddEventListenerOptions = {},
   ): string {
-    const key = `${target}-${event}-${Date.now()}`;
-    target.addEventListener(event, handler, options);
-    this.listeners.set(key, { target, event, handler, options });
-    return key;
+    const key = `${target}-${event}-${Date.now()}`
+    target.addEventListener(event, handler, options)
+    this.listeners.set(key, { target, event, handler, options })
+    return key
   }
 
   removeListener(key: string): boolean {
-    const listener = this.listeners.get(key);
-    if (!listener) return false;
+    const listener = this.listeners.get(key)
+    if (!listener) return false
 
-    listener.target.removeEventListener(listener.event, listener.handler, listener.options);
-    this.listeners.delete(key);
-    return true;
+    listener.target.removeEventListener(listener.event, listener.handler, listener.options)
+    this.listeners.delete(key)
+    return true
   }
 
   removeAllListeners(target: EventTarget): void {
-    const toRemove: string[] = [];
+    const toRemove: string[] = []
     for (const [key, listener] of this.listeners) {
       if (listener.target === target) {
-        toRemove.push(key);
+        toRemove.push(key)
       }
     }
-    toRemove.forEach(key => this.removeListener(key));
+    toRemove.forEach((key) => this.removeListener(key))
   }
 
   registerTimer(id: string, timer: number): void {
     if (this.timers.has(id)) {
-      this.clearTimer(id);
+      this.clearTimer(id)
     }
-    this.timers.set(id, timer);
+    this.timers.set(id, timer)
   }
 
   clearTimer(id: string): void {
-    const timer = this.timers.get(id);
+    const timer = this.timers.get(id)
     if (timer) {
-      clearInterval(timer);
-      clearTimeout(timer);
-      this.timers.delete(id);
+      clearInterval(timer)
+      clearTimeout(timer)
+      this.timers.delete(id)
     }
   }
 
   clearAllTimers(): void {
-    this.timers.forEach(timer => {
-      clearInterval(timer);
-      clearTimeout(timer);
-    });
-    this.timers.clear();
+    this.timers.forEach((timer) => {
+      clearInterval(timer)
+      clearTimeout(timer)
+    })
+    this.timers.clear()
   }
 
   registerObserver(observer: MutationObserver): void {
-    this.observers.push(observer);
+    this.observers.push(observer)
   }
 
   disconnectAllObservers(): void {
-    this.observers.forEach(obs => {
-      if (obs.disconnect) obs.disconnect();
-    });
-    this.observers = [];
+    this.observers.forEach((obs) => {
+      if (obs.disconnect) obs.disconnect()
+    })
+    this.observers = []
   }
 }
 
-export const globalResourceManager = new ResourceManager();
+export const globalResourceManager = new ResourceManager()
 
 export function createResourceManager(): ResourceManager {
-  return new ResourceManager();
+  return new ResourceManager()
 }
 
 export interface CleanupFunctions {
-  register: (fn: () => void) => void;
-  cleanup: () => void;
+  register: (fn: () => void) => void
+  cleanup: () => void
 }
 
 export function useCleanup(): CleanupFunctions {
-  const cleanupFns: (() => void)[] = [];
+  const cleanupFns: (() => void)[] = []
 
   const register = (fn: () => void) => {
     if (typeof fn === 'function') {
-      cleanupFns.push(fn);
+      cleanupFns.push(fn)
     }
-  };
+  }
 
   const cleanup = () => {
-    cleanupFns.forEach(fn => {
+    cleanupFns.forEach((fn) => {
       try {
-        fn();
+        fn()
       } catch (e) {
-        console.error('Cleanup error:', e);
+        console.error('Cleanup error:', e)
       }
-    });
-    cleanupFns.length = 0;
-  };
+    })
+    cleanupFns.length = 0
+  }
 
-  return { register, cleanup };
+  return { register, cleanup }
 }
 
 export function cleanupCanvas(ctx: CanvasRenderingContext2D | null): void {
-  if (!ctx) return;
+  if (!ctx) return
 
-  const canvas = ctx.canvas;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const canvas = ctx.canvas
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
 
   if (canvas.width !== 0) {
-    canvas.width = 0;
-    canvas.height = 0;
+    canvas.width = 0
+    canvas.height = 0
   }
 }
 
 export function cleanupAnimationFrame(id: number): void {
   if (id && typeof cancelAnimationFrame === 'function') {
-    cancelAnimationFrame(id);
+    cancelAnimationFrame(id)
   }
 }
 
 export function cleanupInterval(id: number | undefined | null): void {
   if (id) {
-    clearInterval(id);
+    clearInterval(id)
   }
 }
 
 export function cleanupTimeout(id: number | undefined | null): void {
   if (id) {
-    clearTimeout(id);
+    clearTimeout(id)
   }
 }
 
 export function cleanupEventListener(
   target: EventTarget | null,
   event: string | null,
-  handler: EventListenerOrEventListenerObject | null
+  handler: EventListenerOrEventListenerObject | null,
 ): void {
   if (target && event && handler) {
-    target.removeEventListener(event, handler);
+    target.removeEventListener(event, handler)
   }
 }
 
 export function cleanupObject(obj: Record<string, unknown>): void {
-  if (!obj) return;
+  if (!obj) return
 
   for (const key in obj) {
     if (obj[key] && typeof obj[key] === 'object') {
-      cleanupObject(asRecord(obj[key]));
+      cleanupObject(asRecord(obj[key]))
     }
-    obj[key] = null;
+    obj[key] = null
   }
 }

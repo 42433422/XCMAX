@@ -1,9 +1,10 @@
+# mypy: disable-error-code="arg-type, assignment"
 """Document ingestion transaction for Knowledge v2 collections."""
 
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Callable, Dict, List
 
 from fastapi import HTTPException, UploadFile
@@ -73,7 +74,7 @@ async def upload_document(
 
     ids: List[str] = [f"{doc_id}:{index}" for index in range(len(chunks))]
     output_metas: List[Dict[str, Any]] = []
-    created_at_ts = int(datetime.now(timezone.utc).timestamp())
+    created_at_ts = int(datetime.now(UTC).timestamp())
     for index, metadata in enumerate(chunk_metas or [{} for _ in chunks]):
         output: Dict[str, Any] = {
             "user_id": str(int(user.id)),

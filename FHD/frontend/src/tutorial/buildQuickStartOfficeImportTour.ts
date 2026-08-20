@@ -9,8 +9,7 @@ export function buildQuickStartOfficeImportSteps(): TutorialStep[] {
     createStep({
       id: 'quickstart-import-go-chat',
       title: '第三步 · 试一下读表格',
-      description:
-        '办公包装好了，去「智能对话」试一下。接下来会自动上传两个 Excel 样本，看能不能解析成功。',
+      description: '办公包装好了，去「智能对话」试一下。接下来会自动上传两个 Excel 样本，看能不能解析成功。',
       routeName: 'chat',
       targetSelector: '[data-tour="chat-input-area"]',
       highlightSelector: '#view-chat button[data-tutorial-id="toolbar-excel-analyze"]',

@@ -5,12 +5,7 @@
     :class="{ 'document-pip--minimized': documentPreviewPip.minimized }"
     aria-label="文档悬浮预览"
   >
-    <button
-      v-if="documentPreviewPip.minimized"
-      class="document-pip__chip"
-      type="button"
-      @click="expandDocumentPreview"
-    >
+    <button v-if="documentPreviewPip.minimized" class="document-pip__chip" type="button" @click="expandDocumentPreview">
       <span class="document-pip__file-icon">{{ fileBadge }}</span>
       <span>{{ documentPreviewPip.fileName }}</span>
     </button>
@@ -28,20 +23,9 @@
       </header>
 
       <div class="document-pip__canvas">
-        <iframe
-          v-if="documentPreviewPip.kind === 'pdf'"
-          :src="documentPreviewPip.url"
-          title="PDF 文档预览"
-        ></iframe>
-        <img
-          v-else-if="documentPreviewPip.kind === 'image'"
-          :src="documentPreviewPip.url"
-          :alt="documentPreviewPip.fileName"
-        />
-        <div
-          v-else-if="documentPreviewPip.kind === 'excel' && documentPreviewPip.previewRows.length"
-          class="document-pip__sheet"
-        >
+        <iframe v-if="documentPreviewPip.kind === 'pdf'" :src="documentPreviewPip.url" title="PDF 文档预览"></iframe>
+        <img v-else-if="documentPreviewPip.kind === 'image'" :src="documentPreviewPip.url" :alt="documentPreviewPip.fileName" />
+        <div v-else-if="documentPreviewPip.kind === 'excel' && documentPreviewPip.previewRows.length" class="document-pip__sheet">
           <table>
             <tbody>
               <tr v-for="(row, rowIndex) in documentPreviewPip.previewRows" :key="rowIndex">
@@ -56,20 +40,14 @@
           <h3>{{ documentPreviewPip.title }}</h3>
           <p v-if="documentPreviewPip.summary">{{ documentPreviewPip.summary }}</p>
           <p v-else>文档已生成。Office 文件请点击下方“打开文档”查看完整排版。</p>
-          <div class="document-pip__lines" aria-hidden="true">
-            <span></span><span></span><span></span><span></span><span></span>
-          </div>
+          <div class="document-pip__lines" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
         </div>
       </div>
 
       <footer class="document-pip__footer">
         <span>{{ formatLabel }}</span>
-        <a :href="documentPreviewPip.url" target="_blank" rel="noopener noreferrer">
-          打开文档
-        </a>
-        <a :href="documentPreviewPip.url" :download="documentPreviewPip.fileName">
-          下载
-        </a>
+        <a :href="documentPreviewPip.url" target="_blank" rel="noopener noreferrer"> 打开文档 </a>
+        <a :href="documentPreviewPip.url" :download="documentPreviewPip.fileName"> 下载 </a>
       </footer>
     </template>
   </aside>
@@ -77,12 +55,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import {
-  closeDocumentPreview,
-  documentPreviewPip,
-  expandDocumentPreview,
-  minimizeDocumentPreview,
-} from '@/state/documentPreviewPip'
+import { closeDocumentPreview, documentPreviewPip, expandDocumentPreview, minimizeDocumentPreview } from '@/state/documentPreviewPip'
 
 const fileBadge = computed(() => {
   if (documentPreviewPip.kind === 'word') return 'W'
@@ -122,7 +95,9 @@ const formatLabel = computed(() => {
   border-radius: 18px;
   color: #172033;
   background: rgba(248, 250, 252, 0.98);
-  box-shadow: 0 26px 64px rgba(15, 23, 42, 0.26), 0 4px 14px rgba(15, 23, 42, 0.12);
+  box-shadow:
+    0 26px 64px rgba(15, 23, 42, 0.26),
+    0 4px 14px rgba(15, 23, 42, 0.12);
   animation: document-pip-enter 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
@@ -232,8 +207,7 @@ const formatLabel = computed(() => {
   padding: 18px;
   background:
     linear-gradient(45deg, rgba(148, 163, 184, 0.08) 25%, transparent 25%),
-    linear-gradient(-45deg, rgba(148, 163, 184, 0.08) 25%, transparent 25%),
-    #e8edf2;
+    linear-gradient(-45deg, rgba(148, 163, 184, 0.08) 25%, transparent 25%), #e8edf2;
   background-size: 18px 18px;
 }
 
@@ -328,10 +302,18 @@ const formatLabel = computed(() => {
   background: #e8edf2;
 }
 
-.document-pip__lines span:nth-child(2) { width: 86%; }
-.document-pip__lines span:nth-child(3) { width: 94%; }
-.document-pip__lines span:nth-child(4) { width: 72%; }
-.document-pip__lines span:nth-child(5) { width: 90%; }
+.document-pip__lines span:nth-child(2) {
+  width: 86%;
+}
+.document-pip__lines span:nth-child(3) {
+  width: 94%;
+}
+.document-pip__lines span:nth-child(4) {
+  width: 72%;
+}
+.document-pip__lines span:nth-child(5) {
+  width: 90%;
+}
 
 .document-pip__footer {
   display: flex;
@@ -368,8 +350,14 @@ const formatLabel = computed(() => {
 }
 
 @keyframes document-pip-enter {
-  from { opacity: 0; transform: translateY(10px) scale(0.98); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 @media (max-width: 640px) {
@@ -382,6 +370,8 @@ const formatLabel = computed(() => {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .document-pip { animation: none; }
+  .document-pip {
+    animation: none;
+  }
 }
 </style>

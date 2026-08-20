@@ -17,13 +17,17 @@ logging never crashes the agent loop.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import sys
 import threading
 import time
+from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, field
-from typing import Any, Callable, Mapping
+from typing import Any
+
+from vibe_coding.operational_errors import BOUNDARY_ERRORS
 
 LogWriter = Callable[[str], None]
 
@@ -51,7 +55,7 @@ def _default_writer(line: str) -> None:
     try:
         sys.stderr.write(line + "\n")
         sys.stderr.flush()
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:
         pass
 
 
@@ -83,7 +87,7 @@ class StructuredLogger:
         """Attach a :class:`Tracer` so every record gets trace/span ids."""
         self._tracer = tracer
 
-    def with_context(self, **extras: Any) -> "StructuredLogger":
+    def with_context(self, **extras: Any) -> StructuredLogger:
         """Return a child logger with merged context."""
         ctx = dict(self._context)
         ctx.update(extras)
@@ -108,10 +112,8 @@ class StructuredLogger:
                 record.trace_id = ctx.trace_id
                 record.span_id = ctx.span_id
         if lvl >= self._level:
-            try:
+            with contextlib.suppress(*BOUNDARY_ERRORS):
                 self._writer(record.to_json())
-            except Exception:  # noqa: BLE001
-                pass
         if self._capture:
             with self._lock:
                 self._records.append(record)

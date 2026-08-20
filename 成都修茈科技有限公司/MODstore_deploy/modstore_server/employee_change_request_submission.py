@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment"
 """Submission workflow for deferred employee code changes."""
 
 from __future__ import annotations
@@ -8,6 +9,7 @@ from pathlib import Path
 from typing import Optional, Sequence
 
 from modstore_server.employee_change_request_verification import _guard_under_workspace
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +74,7 @@ def defer_write_as_change_request(
             forbidden_globs=fg,
             approval_required_globs=ag,
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         risk_level = "medium"
 
     sf = get_session_factory()
@@ -99,7 +101,7 @@ def defer_write_as_change_request(
             from modstore_server.employee_scope_policy import relative_path_under_repo
 
             rel_for_branch = relative_path_under_repo(Path(resolved))
-        except Exception:
+        except RECOVERABLE_ERRORS:
             rel_for_branch = ""
 
     if rel_for_branch:
@@ -127,7 +129,7 @@ def defer_write_as_change_request(
                     cid,
                     stage_out.get("reason"),
                 )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.exception("cr_git_pipeline.stage failed for CR %d", cid)
 
     try:
@@ -141,7 +143,7 @@ def defer_write_as_change_request(
             },
             source=source_employee_id,
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("publish change_request.created failed")
     try:
         publish(
@@ -156,7 +158,7 @@ def defer_write_as_change_request(
             source=source_employee_id,
             fingerprint=None,
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("publish ops.change_request.submitted failed")
 
     # 所有风险等级统一经 autonomy_guard；高风险必须停在人工审批队列。
@@ -164,7 +166,7 @@ def defer_write_as_change_request(
         from modstore_server.auto_approve_policy import maybe_auto_approve
 
         auto_result = maybe_auto_approve(cid, skip_retort_block_check=True)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("auto_approve check failed for CR %d", cid)
         auto_result = {"auto_approved": False}
 
@@ -181,7 +183,7 @@ def defer_write_as_change_request(
                 source_employee_id=source_employee_id,
                 risk_level=risk_level,
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.exception("retort clarification open failed for CR %d", cid)
 
     return cid

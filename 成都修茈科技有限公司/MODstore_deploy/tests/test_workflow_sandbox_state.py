@@ -24,7 +24,13 @@ def _create_minimal_workflow(client):
     start_id = r.json()["id"]
     r = client.post(
         f"/api/workflow/{wid}/nodes",
-        json={"node_type": "end", "name": "end", "config": {}, "position_x": 200, "position_y": 0},
+        json={
+            "node_type": "end",
+            "name": "end",
+            "config": {},
+            "position_x": 200,
+            "position_y": 0,
+        },
     )
     assert r.status_code == 200, r.text
     end_id = r.json()["id"]
@@ -36,7 +42,9 @@ def _create_minimal_workflow(client):
     return wid, start_id
 
 
-def test_sandbox_success_makes_workflow_employee_eligible_and_graph_changes_stale(client):
+def test_sandbox_success_makes_workflow_employee_eligible_and_graph_changes_stale(
+    client,
+):
     from modstore_server.api.deps import get_current_user
     from modstore_server.app import app
 
@@ -61,7 +69,12 @@ def test_sandbox_success_makes_workflow_employee_eligible_and_graph_changes_stal
 
         r = client.put(
             f"/api/workflow/nodes/{start_id}",
-            json={"name": "start changed", "config": {}, "position_x": 0, "position_y": 0},
+            json={
+                "name": "start changed",
+                "config": {},
+                "position_x": 0,
+                "position_y": 0,
+            },
         )
         assert r.status_code == 200, r.text
 
@@ -134,7 +147,12 @@ def test_employee_v2_config_requires_current_graph_sandbox_pass(client):
     try:
         r = client.put(
             f"/api/workflow/nodes/{start_id}",
-            json={"name": "start changed", "config": {}, "position_x": 0, "position_y": 0},
+            json={
+                "name": "start changed",
+                "config": {},
+                "position_x": 0,
+                "position_y": 0,
+            },
         )
         assert r.status_code == 200, r.text
     finally:

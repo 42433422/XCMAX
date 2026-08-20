@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """使用统计仪表盘（员工执行、消费概览）。"""
 
 from __future__ import annotations

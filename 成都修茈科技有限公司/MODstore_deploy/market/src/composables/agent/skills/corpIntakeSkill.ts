@@ -11,10 +11,7 @@ import {
 import { intakeFormPlacementHint } from '../../../corp-butler/corpViewport'
 import { api } from '../../../api'
 
-export type CorpIntakeMatch =
-  | { kind: 'fill' }
-  | { kind: 'step'; stepId: IntakeStepId }
-  | { kind: 'review' }
+export type CorpIntakeMatch = { kind: 'fill' } | { kind: 'step'; stepId: IntakeStepId } | { kind: 'review' }
 
 function reply(text: string): SkillExecuteResult {
   return { success: true, message: text, assistantReply: text }
@@ -64,10 +61,7 @@ export function matchCorpIntakeIntent(ctx: AgentContext): CorpIntakeMatch | null
   return null
 }
 
-export async function runIntakeFillFromMessage(
-  userMessage: string,
-  pageSummary: string,
-): Promise<SkillExecuteResult> {
+export async function runIntakeFillFromMessage(userMessage: string, pageSummary: string): Promise<SkillExecuteResult> {
   const bridge = await waitForBridge()
   if (!bridge) {
     scrollToIntake()
@@ -89,8 +83,7 @@ export async function runIntakeFillFromMessage(
     if (!Object.keys(draft).length) {
       scrollToIntake()
       return reply(
-        assistantText ||
-          `我未能从描述中解析出可填写的字段，请补充岗位、日常事务和联系方式，或直接在${intakeFormPlacementHint()}表单填写。`,
+        assistantText || `我未能从描述中解析出可填写的字段，请补充岗位、日常事务和联系方式，或直接在${intakeFormPlacementHint()}表单填写。`,
       )
     }
 
@@ -104,22 +97,15 @@ export async function runIntakeFillFromMessage(
       return Array.isArray(v) ? v.length > 0 : String(v ?? '').trim()
     })
     const tail =
-      filled.length > 0
-        ? `\n\n已尝试写入：${filled.join('、')}。请在${intakeFormPlacementHint()}核对，不确定的项请自行修改。`
-        : ''
+      filled.length > 0 ? `\n\n已尝试写入：${filled.join('、')}。请在${intakeFormPlacementHint()}核对，不确定的项请自行修改。` : ''
     return reply((assistantText || `已根据您的描述预填问卷，请在${intakeFormPlacementHint()}逐步核对。`) + tail)
   } catch {
     scrollToIntake()
-    return reply(
-      `智能预填暂时不可用，已为您定位到问卷区域。请直接在${intakeFormPlacementHint()}分步填写，或稍后再试。`,
-    )
+    return reply(`智能预填暂时不可用，已为您定位到问卷区域。请直接在${intakeFormPlacementHint()}分步填写，或稍后再试。`)
   }
 }
 
-export async function executeCorpIntakeMatch(
-  match: CorpIntakeMatch,
-  ctx: AgentContext,
-): Promise<SkillExecuteResult> {
+export async function executeCorpIntakeMatch(match: CorpIntakeMatch, ctx: AgentContext): Promise<SkillExecuteResult> {
   const bridge = await waitForBridge()
   if (!bridge) {
     scrollToIntake()
@@ -164,9 +150,7 @@ export async function runIntakeQuickTask(action: QuickAction): Promise<SkillExec
   switch (action.task) {
     case 'intake_fill': {
       const prompt =
-        action.payload?.prompt?.trim() ||
-        action.message?.trim() ||
-        `请根据我的描述帮我填写${intakeFormPlacementHint()}需求问卷`
+        action.payload?.prompt?.trim() || action.message?.trim() || `请根据我的描述帮我填写${intakeFormPlacementHint()}需求问卷`
       return runIntakeFillFromMessage(prompt, '')
     }
     case 'intake_step': {

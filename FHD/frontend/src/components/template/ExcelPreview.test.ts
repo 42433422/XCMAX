@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import ExcelPreview from '@/components/template/ExcelPreview.vue'
@@ -77,7 +77,14 @@ describe('ExcelPreview', () => {
 
   it('renders grid table when hasGridData is true', () => {
     const wrapper = mountExcel({
-      gridData: { rows: [[{ text: 'A', col: 0 }, { text: 'B', col: 1 }]] },
+      gridData: {
+        rows: [
+          [
+            { text: 'A', col: 0 },
+            { text: 'B', col: 1 },
+          ],
+        ],
+      },
     })
     expect(wrapper.find('.real-grid-table').exists()).toBe(true)
     expect(wrapper.findAll('.real-grid-cell')).toHaveLength(2)
@@ -86,10 +93,7 @@ describe('ExcelPreview', () => {
   it('renders row numbers in grid table', () => {
     const wrapper = mountExcel({
       gridData: {
-        rows: [
-          [{ text: 'A', col: 0 }],
-          [{ text: 'B', col: 0 }],
-        ],
+        rows: [[{ text: 'A', col: 0 }], [{ text: 'B', col: 0 }]],
       },
     })
     const rowNums = wrapper.findAll('.real-row-num')
@@ -101,7 +105,12 @@ describe('ExcelPreview', () => {
   it('applies has-content class to cells with text', () => {
     const wrapper = mountExcel({
       gridData: {
-        rows: [[{ text: 'A', col: 0 }, { text: '', col: 1 }]],
+        rows: [
+          [
+            { text: 'A', col: 0 },
+            { text: '', col: 1 },
+          ],
+        ],
       },
     })
     const cells = wrapper.findAll('.real-grid-cell')

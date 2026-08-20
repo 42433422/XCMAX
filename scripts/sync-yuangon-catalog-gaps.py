@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """编制 vs yuangon YAML vs MODstore catalog 缺岗报告；可选触发 onboard。"""
+
 from __future__ import annotations
 
 import argparse
@@ -14,10 +15,16 @@ ROOT = Path(__file__).resolve().parents[1]
 DUTY_ROSTER = ROOT / "FHD" / "config" / "duty_roster.json"
 YUANGON_DIR = ROOT / "成都修茈科技有限公司" / "yuangon"
 ONBOARD_SCRIPT = (
-    ROOT / "成都修茈科技有限公司" / "MODstore_deploy" / "modstore_server" / "scripts" / "onboard_yuangon_employees.py"
+    ROOT
+    / "成都修茈科技有限公司"
+    / "MODstore_deploy"
+    / "modstore_server"
+    / "scripts"
+    / "onboard_yuangon_employees.py"
 )
 OUT = ROOT / ".cache" / "xcmax" / "xcmax-catalog-gap-report.json"
 _BUILD = ROOT / "scripts" / "build-xcmax-tree-data.py"
+BOUNDARY_ERRORS = (Exception,)
 
 
 def _load_build_module():
@@ -61,14 +68,18 @@ def catalog_ids_via_db() -> tuple[set[str] | None, str | None]:
         sys.path.insert(0, str(modstore))
     try:
         from modstore_server.models import CatalogItem, get_session_factory
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:
         return None, f"DB unavailable: {exc}"
     try:
         sf = get_session_factory()
         with sf() as db:
-            rows = db.query(CatalogItem.pkg_id).filter(CatalogItem.artifact == "employee_pack").all()
+            rows = (
+                db.query(CatalogItem.pkg_id)
+                .filter(CatalogItem.artifact == "employee_pack")
+                .all()
+            )
             return {str(r[0]) for r in rows if r[0]}, None
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:
         return None, f"catalog query failed: {exc}"
 
 
@@ -76,7 +87,9 @@ def build_report(check_catalog: bool) -> dict[str, Any]:
     planned = planned_ids()
     on_disk = yaml_ids()
     report: dict[str, Any] = {
-        "version": json.loads(DUTY_ROSTER.read_text(encoding="utf-8")).get("schema_version"),
+        "version": json.loads(DUTY_ROSTER.read_text(encoding="utf-8")).get(
+            "schema_version"
+        ),
         "planned_count": len(planned),
         "yaml_count": len(on_disk),
         "yaml_missing": sorted(planned - on_disk),
@@ -97,8 +110,9 @@ def build_report(check_catalog: bool) -> dict[str, Any]:
         report["catalog_missing"] = None
     report["onboard_command"] = (
         f"python3 {ONBOARD_SCRIPT} --repo-root {ROOT / '成都修茈科技有限公司'} "
-        "--pkg-ids " + ",".join(report.get("catalog_missing") or []) if report.get("catalog_missing") else
-        f"python3 {ONBOARD_SCRIPT} --repo-root {ROOT / '成都修茈科技有限公司'}"
+        "--pkg-ids " + ",".join(report.get("catalog_missing") or [])
+        if report.get("catalog_missing")
+        else f"python3 {ONBOARD_SCRIPT} --repo-root {ROOT / '成都修茈科技有限公司'}"
     )
     return report
 
@@ -122,15 +136,25 @@ def run_onboard(pkg_ids: list[str], dry_run: bool) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="XCMAX yuangon catalog gap report")
-    parser.add_argument("--check-catalog", action="store_true", help="Query MODstore DB for catalog gaps")
-    parser.add_argument("--onboard", action="store_true", help="Run onboard script for catalog_missing")
-    parser.add_argument("--dry-run", action="store_true", help="Pass --dry-run to onboard")
+    parser.add_argument(
+        "--check-catalog",
+        action="store_true",
+        help="Query MODstore DB for catalog gaps",
+    )
+    parser.add_argument(
+        "--onboard", action="store_true", help="Run onboard script for catalog_missing"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Pass --dry-run to onboard"
+    )
     parser.add_argument("-o", "--output", type=Path, default=OUT)
     args = parser.parse_args()
 
     report = build_report(args.check_catalog)
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    args.output.write_text(
+        json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     print(json.dumps(report, ensure_ascii=False, indent=2))
     print(f"\nWrote {args.output}", file=sys.stderr)
 

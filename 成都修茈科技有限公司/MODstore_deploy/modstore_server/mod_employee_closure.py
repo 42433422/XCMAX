@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Mod 工作流员工闭环：登记 employee_pack + 画布对齐 + 可执行性检查（单入口）。"""
 
 from __future__ import annotations

@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -12,7 +16,7 @@ async def _employee_chat(user_text: str, *, employee_id: str) -> str:
     """为指定员工跑一次 LLM 对话，返回文本。优先用管家自己的 LLM 凭证（共享）。"""
     from modstore_server.llm_chat_proxy import chat_dispatch
 
-    (provider, model, api_key, base_url) = await _facade()._resolve_llm_for_butler()
+    provider, model, api_key, base_url = await _facade()._resolve_llm_for_butler()
     persona = _facade()._EMPLOYEE_PERSONAS.get(employee_id, _facade()._EMPLOYEE_FALLBACK_PERSONA)
     msgs: _facade().List[_facade().Dict[str, _facade().Any]] = [
         {"role": "system", "content": persona},
@@ -23,7 +27,12 @@ async def _employee_chat(user_text: str, *, employee_id: str) -> str:
         {"role": "user", "content": user_text},
     ]
     result = await chat_dispatch(
-        provider, api_key=api_key, base_url=base_url, model=model, messages=msgs, max_tokens=600
+        provider,
+        api_key=api_key,
+        base_url=base_url,
+        model=model,
+        messages=msgs,
+        max_tokens=600,
     )
     return str(result.get("content") or "").strip()
 
@@ -34,7 +43,7 @@ async def _resolve_llm_for_butler() -> _facade().Tuple[str, str, str, _facade().
 
     返回 ``(provider, model, api_key, base_url)``。
     """
-    (provider, model, api_key, base_url) = _facade()._own_llm()
+    provider, model, api_key, base_url = _facade()._own_llm()
     if provider and api_key:
         return (provider, model or "gpt-4o-mini", api_key, base_url)
     bridge_uid = _facade()._bridge_user_id()
@@ -62,13 +71,13 @@ async def _resolve_llm_for_butler() -> _facade().Tuple[str, str, str, _facade().
         if raw.strip():
             try:
                 prefs = _facade().json.loads(raw)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 prefs = {}
         provider = str(prefs.get("provider") or "").strip()
         model = str(prefs.get("model") or "").strip()
         if not provider or provider not in KNOWN_PROVIDERS:
             for p in KNOWN_PROVIDERS:
-                (key, _src) = resolve_api_key(db, bridge_uid, p)
+                key, _src = resolve_api_key(db, bridge_uid, p)
                 if key:
                     provider = p
                     break
@@ -76,7 +85,7 @@ async def _resolve_llm_for_butler() -> _facade().Tuple[str, str, str, _facade().
             raise RuntimeError("数字管家：bridge user 名下未配任何 LLM 供应商")
         if not model:
             model = "gpt-4o-mini"
-        (api_key, _src) = resolve_api_key(db, bridge_uid, provider)
+        api_key, _src = resolve_api_key(db, bridge_uid, provider)
         if not api_key:
             raise RuntimeError(f"数字管家：bridge user 在 {provider} 下没有 API Key")
         base_url = (
@@ -88,7 +97,7 @@ async def _resolve_llm_for_butler() -> _facade().Tuple[str, str, str, _facade().
     finally:
         try:
             next(db_gen, None)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
 
 
@@ -97,7 +106,7 @@ async def _butler_chat(user_text: str) -> str:
     from modstore_server.agent_butler_api import BUTLER_SYSTEM_PROMPT
     from modstore_server.llm_chat_proxy import chat_dispatch
 
-    (provider, model, api_key, base_url) = await _facade()._resolve_llm_for_butler()
+    provider, model, api_key, base_url = await _facade()._resolve_llm_for_butler()
     msgs: _facade().List[_facade().Dict[str, _facade().Any]] = [
         {"role": "system", "content": BUTLER_SYSTEM_PROMPT},
         {
@@ -107,6 +116,11 @@ async def _butler_chat(user_text: str) -> str:
         {"role": "user", "content": user_text},
     ]
     result = await chat_dispatch(
-        provider, api_key=api_key, base_url=base_url, model=model, messages=msgs, max_tokens=800
+        provider,
+        api_key=api_key,
+        base_url=base_url,
+        model=model,
+        messages=msgs,
+        max_tokens=800,
     )
     return str(result.get("content") or "").strip()

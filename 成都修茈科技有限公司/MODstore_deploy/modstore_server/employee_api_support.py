@@ -6,9 +6,9 @@ import json
 import os
 import shutil
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, cast
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -20,6 +20,7 @@ from modstore_server.duty_roster import (
     is_planned_duty_employee_pack,
 )
 from modstore_server.models import CatalogItem, Entitlement, User, UserPlan
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _reraise_employee_pack_not_found(exc: BaseException) -> None:
@@ -131,7 +132,7 @@ def _collect_llm_context_text(
                 body = json.dumps(data, ensure_ascii=False, indent=2)
             else:
                 body = rel.read_text(encoding="utf-8", errors="replace")
-        except Exception:
+        except RECOVERABLE_ERRORS:
             continue
         body = (body or "").strip()
         if not body:
@@ -144,7 +145,7 @@ def _collect_llm_context_text(
             blob = json.dumps(exec_result, ensure_ascii=False, indent=2)
             if blob and blob not in ("{}", "null"):
                 parts.append(f"### execute_result\n{blob}")
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
 
     text = "\n\n".join(parts).strip()
@@ -241,7 +242,7 @@ def sync_triggers_after_registration(manifest: Dict) -> None:
         from modstore_server.sync_employee_triggers import sync_triggers_for_manifest
 
         sync_triggers_for_manifest(manifest)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         import logging
 
         logging.getLogger(__name__).exception("sync_triggers_after_registration failed")
@@ -283,7 +284,7 @@ def _user_may_execute_employee_pack(db: Session, user_id: int, pack_id: str) -> 
     if bool(getattr(row, "is_public", False)) and float(row.price or 0) <= 0:
         return True
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     plan = (
         db.query(UserPlan)
         .filter(UserPlan.user_id == user_id, UserPlan.is_active.is_(True))
@@ -296,8 +297,8 @@ def _user_may_execute_employee_pack(db: Session, user_id: int, pack_id: str) -> 
     if exp is None:
         return True
     if exp.tzinfo is None:
-        exp = exp.replace(tzinfo=timezone.utc)
-    return exp > now
+        exp = exp.replace(tzinfo=UTC)
+    return cast(datetime, exp) > now
 
 
 def _candidate_employee_pack_ids(employee_id: str) -> List[str]:

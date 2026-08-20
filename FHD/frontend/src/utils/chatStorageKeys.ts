@@ -1,11 +1,5 @@
-import {
-  readActiveExtensionModIdFromStorage,
-  XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY,
-} from '@/utils/xcagiStorageKeys'
-import {
-  resolveTenantStorageScopeFromRuntime,
-  tenantScopedKeySegment,
-} from '@/utils/tenantStorageScope'
+import { readActiveExtensionModIdFromStorage, XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY } from '@/utils/xcagiStorageKeys'
+import { resolveTenantStorageScopeFromRuntime, tenantScopedKeySegment } from '@/utils/tenantStorageScope'
 
 export const CHAT_MESSAGES_STORAGE_PREFIX = 'xcagi_chat_messages_'
 export const CHAT_SESSION_META_PREFIX = 'xcagi_chat_session_meta_'
@@ -48,12 +42,7 @@ function stripTenantSegment(suffix: string, scope?: string): string | null {
 /**
  * 从 localStorage 原始 key 中识别出属于当前租户 + Mod 的 sessionId。
  */
-export function extractSessionIdForActiveMod(
-  prefix: string,
-  key: string,
-  activeModId?: string,
-  scope?: string,
-): string | null {
+export function extractSessionIdForActiveMod(prefix: string, key: string, activeModId?: string, scope?: string): string | null {
   const raw = String(key || '')
   if (!raw.startsWith(prefix)) return null
   const scoped = stripTenantSegment(raw.slice(prefix.length), scope)

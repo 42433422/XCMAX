@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 from __future__ import annotations
 
 import hashlib
@@ -13,6 +14,7 @@ from modstore_server.infrastructure.db import get_db
 from modstore_server.models import (
     WorkflowTrigger,
 )
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.workflow_event_runner import run_workflow_for_trigger
 
 workflow_hooks_router = APIRouter(prefix="/api/workflow-hooks", tags=["workflow-hooks"])
@@ -51,7 +53,7 @@ async def public_webhook_run_workflow(
 
     try:
         payload: Dict[str, Any] = await request.json()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         payload = {}
 
     try:
@@ -60,5 +62,5 @@ async def public_webhook_run_workflow(
             user_id=trig.user_id,
             input_data=payload or {},
         )
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         raise HTTPException(500, str(e)) from e

@@ -2,16 +2,17 @@
 
 ## 元信息
 
-| 字段 | 值 |
-|------|----|
+| 字段     | 值                      |
+| -------- | ----------------------- |
 | skill_id | `skill-code-validation` |
-| 所属员工 | `code-validator` |
-| 业务域 | 员工包体轻量校验 |
-| 版本 | 1.0.0 |
+| 所属员工 | `code-validator`        |
+| 业务域   | 员工包体轻量校验        |
+| 版本     | 1.0.0                   |
 
 ## 1. 静态阶段
 
 **执行逻辑**：
+
 ```
 analyze_mod_employee_readiness(employee_pack)
 → manifest 合规性结果
@@ -25,6 +26,7 @@ analyze_mod_employee_readiness(employee_pack)
 ```
 
 **输出 schema**：
+
 ```json
 {
   "status": "ok | fail",
@@ -38,16 +40,17 @@ analyze_mod_employee_readiness(employee_pack)
 ```
 
 **工具绑定**：
+
 - analyze_mod_employee_readiness
 - mod_compileall_warnings
-- _build_employee_pack_zip_with_source
+- \_build_employee_pack_zip_with_source
 - validate（子进程）
 
 ## 2. 动态触发条件
 
-| 触发类型 | 规则 |
-|----------|------|
-| 执行报错 | 任意工具调用抛出异常 |
+| 触发类型   | 规则                                                                                                         |
+| ---------- | ------------------------------------------------------------------------------------------------------------ |
+| 执行报错   | 任意工具调用抛出异常                                                                                         |
 | 结果不达标 | manifest_validation.status == "fail" 或 python_compile.status == "fail" 或 xcemp_validation.status == "fail" |
 
 ## 3. 动态阶段
@@ -56,11 +59,13 @@ analyze_mod_employee_readiness(employee_pack)
 **LLM 任务**：分析校验失败原因 → 判断是 manifest 缺陷、编译错误还是包体不一致 → 生成修复建议。
 
 **允许改动的模块白名单**：
-- workbench/validation/* 配置文件
+
+- workbench/validation/\* 配置文件
 
 ## 4. 固化
 
 **验收标准**：
+
 - [ ] manifest_validation.status == "ok"
 - [ ] python_compile.status == "ok"
 - [ ] consistency_check.status == "ok"

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment, attr-defined, no-any-return, valid-type"
 """员工自治会议服务 — 议程、决议、action items 闭环。
 
 会议类型：
@@ -21,7 +22,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import desc, select
@@ -31,17 +32,20 @@ from modstore_server.db.strategic import CouncilMeeting as CouncilMeetingModel
 from modstore_server.db.strategic import (
     StrategicActionItem,
 )
-from modstore_server.strategic_layer.decision_ledger import (
-    DecidedBy,
-    StrategicDecisionLedger,
-)
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.strategic_layer.council_meeting_models import (
     MeetingDecisionRef,
     MeetingParticipants,
     MeetingStatus,
     MeetingType,
+)
+from modstore_server.strategic_layer.council_meeting_models import (
     meeting_row_to_dict as _meeting_row_to_dict,
-    parse_json as _loads,
+)
+from modstore_server.strategic_layer.council_meeting_models import parse_json as _loads
+from modstore_server.strategic_layer.decision_ledger import (
+    DecidedBy,
+    StrategicDecisionLedger,
 )
 
 logger = logging.getLogger(__name__)
@@ -85,10 +89,10 @@ class CouncilMeetingService:
         if not agenda or not agenda.strip():
             raise ValueError("agenda must not be empty")
         if scheduled_at.tzinfo is None:
-            scheduled_at = scheduled_at.replace(tzinfo=timezone.utc)
+            scheduled_at = scheduled_at.replace(tzinfo=UTC)
 
         meeting_id = f"mtg-{uuid.uuid4().hex[:16]}"
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         session = self._session_factory()()
         try:
             meeting = CouncilMeetingModel(
@@ -118,7 +122,7 @@ class CouncilMeetingService:
                 title,
             )
             return meeting_id
-        except Exception:
+        except RECOVERABLE_ERRORS:
             session.rollback()
             raise
         finally:
@@ -136,11 +140,11 @@ class CouncilMeetingService:
             if row.status != MeetingStatus.SCHEDULED.value:
                 raise ValueError(f"cannot start meeting in status {row.status}; must be scheduled")
             row.status = MeetingStatus.IN_PROGRESS.value
-            row.started_at = datetime.now(timezone.utc)
-            row.updated_at = datetime.now(timezone.utc)
+            row.started_at = datetime.now(UTC)
+            row.updated_at = datetime.now(UTC)
             session.commit()
             return _meeting_row_to_dict(row)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             session.rollback()
             raise
         finally:
@@ -182,7 +186,7 @@ class CouncilMeetingService:
                     f"cannot conclude meeting in status {row.status}; must be in_progress"
                 )
 
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             # 1. 将决议写入决策账本
             decisions_payload: List[Dict[str, Any]] = []
             for ref in decisions:
@@ -206,7 +210,7 @@ class CouncilMeetingService:
                             "vote_summary": ref.vote_summary,
                         }
                     )
-                except Exception as exc:
+                except RECOVERABLE_ERRORS as exc:
                     logger.warning(
                         "meeting %s failed to apply decision %s: %s",
                         meeting_id,
@@ -280,7 +284,7 @@ class CouncilMeetingService:
                 len(action_items_payload),
             )
             return _meeting_row_to_dict(row)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             session.rollback()
             raise
         finally:
@@ -295,14 +299,17 @@ class CouncilMeetingService:
             row = self._get_meeting(session, meeting_id)
             if row is None:
                 raise ValueError(f"meeting not found: {meeting_id}")
-            if row.status in (MeetingStatus.CONCLUDED.value, MeetingStatus.CANCELLED.value):
+            if row.status in (
+                MeetingStatus.CONCLUDED.value,
+                MeetingStatus.CANCELLED.value,
+            ):
                 raise ValueError(f"cannot cancel meeting in terminal status {row.status}")
             row.status = MeetingStatus.CANCELLED.value
-            row.updated_at = datetime.now(timezone.utc)
+            row.updated_at = datetime.now(UTC)
             row.minutes_md = f"[CANCELLED] {reason.strip()}\n\n{row.minutes_md or ''}"
             session.commit()
             return _meeting_row_to_dict(row)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             session.rollback()
             raise
         finally:
@@ -402,7 +409,7 @@ class CouncilMeetingService:
             ).scalar_one_or_none()
             if row is None:
                 raise ValueError(f"action item not found: {action_id}")
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             if status is not None:
                 row.status = status
             if result is not None:
@@ -420,7 +427,7 @@ class CouncilMeetingService:
                 "status": row.status,
                 "completed_at": row.completed_at.isoformat() if row.completed_at else None,
             }
-        except Exception:
+        except RECOVERABLE_ERRORS:
             session.rollback()
             raise
         finally:

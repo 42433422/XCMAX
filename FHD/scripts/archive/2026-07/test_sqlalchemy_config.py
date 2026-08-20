@@ -1,3 +1,4 @@
+# mypy: disable-error-code="attr-defined"
 import os
 import sqlite3
 
@@ -55,7 +56,7 @@ def test_sqlalchemy_config():
                 rows = cursor.fetchall()
                 print("    样本数据:")
                 for i, row in enumerate(rows):
-                    print(f"      {i+1}. {row}")
+                    print(f"      {i + 1}. {row}")
 
         conn.close()
 

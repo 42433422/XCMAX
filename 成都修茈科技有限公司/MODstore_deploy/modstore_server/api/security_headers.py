@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 from __future__ import annotations
 
 import secrets
@@ -56,7 +57,10 @@ class SecurityHeadersMiddleware:
                 scheme = scope.get("scheme", "http")
                 if scheme == "https":
                     headers.append(
-                        (b"strict-transport-security", b"max-age=31536000; includeSubDomains")
+                        (
+                            b"strict-transport-security",
+                            b"max-age=31536000; includeSubDomains",
+                        )
                     )
                 message["headers"] = headers
             await send(message)

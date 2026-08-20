@@ -1,5 +1,7 @@
 import sqlite3
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 
 def check_bandao_import_status():
     """检查半岛风情导入状态"""
@@ -71,7 +73,7 @@ def check_bandao_import_status():
             "success": bandao_count > 0,
         }
 
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 检查导入状态时出错: {e}")
         return {"success": False, "error": str(e)}
 

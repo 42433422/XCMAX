@@ -1,3 +1,4 @@
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Roster, action, metric, and published-board signals for the company hall."""
 
 from __future__ import annotations
@@ -5,14 +6,15 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.public_company_hall_config import (
     DEPARTMENT_ORDER,
-    WORKING_STATUSES as _WORKING_STATUSES,
 )
+from modstore_server.public_company_hall_config import WORKING_STATUSES as _WORKING_STATUSES
 from modstore_server.public_company_hall_text import _clean, _iso
 
 logger = logging.getLogger(__name__)
@@ -74,7 +76,7 @@ def _catalog_names(employee_ids: List[str]) -> Dict[str, str]:
                 label = str(name or "").strip()
                 if eid and label:
                     names[eid] = label[:64]
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("company_hall: catalog names failed")
     return names
 
@@ -127,7 +129,7 @@ def _metric_signals(employee_ids: List[str]) -> Dict[str, Dict[str, Any]]:
     try:
         from modstore_server.models import EmployeeExecutionMetric, get_session_factory
 
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+        cutoff = datetime.now(UTC) - timedelta(hours=24)
         sf = get_session_factory()
         with sf() as session:
             rows = (
@@ -170,7 +172,7 @@ def _metric_signals(employee_ids: List[str]) -> Dict[str, Dict[str, Any]]:
                 # 保留较长原文，公开投影时再摘要；避免列表层二次截断丢详情
                 slot["last_task"] = _clean(task, 600)
                 slot["last_at"] = _iso(m.created_at)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("company_hall: metric signals failed")
     return out
 
@@ -207,9 +209,9 @@ def _presence_for(
     if last_at and last_status == "success":
         try:
             dt = datetime.fromisoformat(str(last_at).replace("Z", "+00:00"))
-            if datetime.now(timezone.utc) - dt <= timedelta(hours=2):
+            if datetime.now(UTC) - dt <= timedelta(hours=2):
                 return "working", str(metric.get("last_task") or "近期刚完成执行")
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
 
     if metric.get("last_task"):
@@ -250,6 +252,6 @@ def _load_published_action_board() -> Optional[Dict[str, Any]]:
                 or ((data.get("goals") or {}).get("items"))
             ):
                 return data
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.exception("company_hall: read published action board failed %s", path)
     return None

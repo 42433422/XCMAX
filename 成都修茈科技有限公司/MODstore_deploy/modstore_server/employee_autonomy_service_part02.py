@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -76,7 +80,11 @@ def enqueue_daily_brief_todos(
     if created > 0:
         _facade()._publish_event(
             "employee.brief_todo.created",
-            {"owner_employee_id": owner, "count": created, "source_ref": (source_ref or "")[:128]},
+            {
+                "owner_employee_id": owner,
+                "count": created,
+                "source_ref": (source_ref or "")[:128],
+            },
             source="daily_employee_briefs",
         )
     return {"ok": True, "created": created, "skipped": skipped}
@@ -158,7 +166,7 @@ def dispatch_pending_brief_tasks(limit: int = 20) -> _facade().Dict[str, _facade
                     done += 1
                 else:
                     failed += 1
-            except Exception as exc:
+            except RECOVERABLE_ERRORS as exc:
                 _facade().logger.exception("boss_im dispatch crashed task_id=%s", tid)
                 with sf2() as session:
                     row2 = session.get(_facade().PendingBriefTask, tid)
@@ -191,7 +199,7 @@ def dispatch_pending_brief_tasks(limit: int = 20) -> _facade().Dict[str, _facade
                 done += 1
             else:
                 failed += 1
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             with sf2() as session:
                 row2 = session.get(_facade().PendingBriefTask, tid)
                 if row2:
@@ -206,7 +214,7 @@ def dispatch_pending_brief_tasks(limit: int = 20) -> _facade().Dict[str, _facade
 
             for _tid in task_ids:
                 report_brief_task(task_id=_tid)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.exception("collab report (brief tasks) failed")
     if processed > 0:
         _facade()._publish_event(
@@ -224,10 +232,20 @@ def trigger_doc_autofix_from_report(
     source_ref: str = "",
 ) -> _facade().Dict[str, _facade().Any]:
     if not _facade()._doc_autofix_enabled():
-        return {"ok": True, "enabled": False, "created_suggestions": 0, "created_tasks": 0}
+        return {
+            "ok": True,
+            "enabled": False,
+            "created_suggestions": 0,
+            "created_tasks": 0,
+        }
     issues = report.get("issues") if isinstance(report.get("issues"), list) else []
     if not issues:
-        return {"ok": True, "enabled": True, "created_suggestions": 0, "created_tasks": 0}
+        return {
+            "ok": True,
+            "enabled": True,
+            "created_suggestions": 0,
+            "created_tasks": 0,
+        }
     by_employee: _facade().Dict[str, _facade().List[_facade().Dict[str, _facade().Any]]] = (
         _facade().defaultdict(list)
     )
@@ -285,16 +303,18 @@ def trigger_doc_autofix_from_report(
 
 
 class _PlatformBenchLlmClient:
-
     async def chat(
-        self, messages: _facade().List[_facade().Dict[str, str]], *, max_tokens: int = 1024
+        self,
+        messages: _facade().List[_facade().Dict[str, str]],
+        *,
+        max_tokens: int = 1024,
     ) -> str:
         from modstore_server.services.llm import (
             chat_dispatch_via_platform_only,
             resolve_platform_bench_llm,
         )
 
-        (provider, model) = resolve_platform_bench_llm()
+        provider, model = resolve_platform_bench_llm()
         if not provider or not model:
             raise RuntimeError("platform bench llm not configured")
         out = await chat_dispatch_via_platform_only(

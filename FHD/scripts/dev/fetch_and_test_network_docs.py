@@ -14,6 +14,8 @@ import sys
 import urllib.request
 from pathlib import Path
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -40,7 +42,7 @@ def _download(url: str, dest: Path) -> bool:
         with urllib.request.urlopen(req, timeout=60, context=ctx) as resp:
             dest.write_bytes(resp.read())
         return dest.is_file() and dest.stat().st_size > 100
-    except Exception as exc:  # noqa: BLE001 — 演示脚本容错
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 — 演示脚本容错
         print(f"download fail {url}: {exc}")
         return False
 

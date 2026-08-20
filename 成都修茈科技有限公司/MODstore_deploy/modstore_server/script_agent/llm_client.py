@@ -17,6 +17,7 @@ import json
 import re
 from typing import Any, Dict, List, Optional, Protocol
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.script_agent.llm_output_sanitize import finalize_extracted_python
 
 # Reasoning-heavy models often fill the completion budget with reasoning_* fields first.
@@ -66,7 +67,7 @@ class RealLlmClient:
         model: str,
         *,
         forbid_reasoning_fallback: bool = False,
-    ) -> "RealLlmClient":
+    ) -> RealLlmClient:
         """走 ``llm_key_resolver`` 解析 BYOK,使用 session 路径调用。
 
         与 :class:`modstore_server.integrations.vibe_adapter.ChatDispatchLLMClient`
@@ -85,7 +86,7 @@ class RealLlmClient:
                 if provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS
                 else None
             )
-        except Exception:  # pragma: no cover - resolver 缺失时降级
+        except RECOVERABLE_ERRORS:  # pragma: no cover - resolver 缺失时降级
             api_key = ""
             base_url = None
         return cls(

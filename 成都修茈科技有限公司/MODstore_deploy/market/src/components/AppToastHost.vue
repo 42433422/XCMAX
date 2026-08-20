@@ -1,12 +1,6 @@
 <template>
   <div class="app-toast-host" aria-live="polite" aria-relevant="additions">
-    <div
-      v-for="t in toasts"
-      :key="t.id"
-      class="app-toast"
-      :class="`app-toast--${t.variant}`"
-      role="status"
-    >
+    <div v-for="t in toasts" :key="t.id" class="app-toast" :class="`app-toast--${t.variant}`" role="status">
       {{ t.message }}
       <button type="button" class="app-toast__close" aria-label="关闭" @click="dismissAppToast(t.id)">×</button>
     </div>

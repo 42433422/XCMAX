@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr"
 """Deterministic skill-step derivation and fallback source generation."""
 
 from __future__ import annotations
@@ -41,7 +42,7 @@ def fallback_step_script(step: Dict[str, Any], employee_fn: str) -> str:
     return f'''\
 def {function_name}(**kwargs):
     """
-    {step['sub_brief']}
+    {step["sub_brief"]}
     Auto-generated wrapper; will be upgraded by vibe-coding if LLM is available.
     """
     try:

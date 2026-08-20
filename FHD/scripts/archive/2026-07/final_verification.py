@@ -2,6 +2,8 @@ import time
 
 import requests
 
+from app.utils.operational_errors import BOUNDARY_ERRORS
+
 
 def final_verification():
     """最终验证后端API返回正确数据"""
@@ -53,7 +55,7 @@ def final_verification():
             print(f"📄 响应内容: {response.text}")
             return False
 
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except BOUNDARY_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 检查后端API失败: {e}")
         return False
 
@@ -80,7 +82,7 @@ def final_verification():
             else:
                 print(f"❌ {endpoint} 请求失败: {response.status_code}")
 
-        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except BOUNDARY_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             print(f"❌ {endpoint} 请求失败: {e}")
 
 

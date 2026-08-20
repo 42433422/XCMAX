@@ -1,3 +1,4 @@
+# mypy: disable-error-code="index"
 """Path guards and post-apply verification for employee change requests."""
 
 from __future__ import annotations
@@ -9,6 +10,8 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +96,9 @@ def _maybe_run_post_apply_consistency(
     if raw in ("0", "false", "no", "off"):
         return {"ran": False}
     try:
-        from modstore_server.tools.doc_consistency_checker import run_full_consistency_check
+        from modstore_server.tools.doc_consistency_checker import (
+            run_full_consistency_check,
+        )
 
         out = run_full_consistency_check(
             repo_root,
@@ -104,10 +109,12 @@ def _maybe_run_post_apply_consistency(
         )
     except TypeError:
         # 兼容旧签名
-        from modstore_server.tools.doc_consistency_checker import run_full_consistency_check
+        from modstore_server.tools.doc_consistency_checker import (
+            run_full_consistency_check,
+        )
 
         out = run_full_consistency_check(repo_root)
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         return {"ran": True, "ok": False, "error": str(exc)[:500]}
 
     issues = out.get("issues") if isinstance(out.get("issues"), list) else []
@@ -217,6 +224,6 @@ def _request_post_apply_self_repair(
             auto_dispatch=True,
         )
         return out if isinstance(out, dict) else {"ok": False, "reason": "invalid result"}
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("request post-apply self repair failed for CR %d", change_request_id)
         return {"ok": False, "error": str(exc)[:500]}

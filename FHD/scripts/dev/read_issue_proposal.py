@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="no-any-return"
 """从 GitHub issue body 中提取 LLM 提议 JSON。"""
+
 from __future__ import annotations
 
 import argparse
@@ -47,7 +49,9 @@ def main() -> int:
     args = parser.parse_args()
     body = fetch_issue_body(args.issue_number)
     proposal = extract_proposal_from_issue_body(body)
-    Path(args.output).write_text(json.dumps(proposal, ensure_ascii=False, indent=2), encoding="utf-8")
+    Path(args.output).write_text(
+        json.dumps(proposal, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     print(f"Wrote proposal to {args.output}")
     return 0
 

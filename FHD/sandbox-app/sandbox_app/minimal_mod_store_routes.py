@@ -15,6 +15,7 @@ from pathlib import Path
 from fastapi import APIRouter, File, UploadFile
 from fastapi.responses import JSONResponse
 
+from sandbox_app.operational_errors import BOUNDARY_ERRORS
 from sandbox_app.sandbox_settings import default_mods_root
 
 router = APIRouter(prefix="/api/mod-store", tags=["sandbox-mod-store"])
@@ -79,7 +80,7 @@ async def install_mod(file: UploadFile = File(...)):
         mm = get_mod_manager()
         mm._refresh_mods_root_if_needed()
         mm.load_all_mods()
-    except Exception as exc:
+    except BOUNDARY_ERRORS as exc:
         return {
             "success": True,
             "message": f"Mod {mod_id} 已安装，但重新加载时有警告: {exc}",

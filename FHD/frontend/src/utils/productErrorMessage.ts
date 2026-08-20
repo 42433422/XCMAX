@@ -2,9 +2,7 @@
  * 将 HTTP/SDK 原始错误转为用户可读文案（对齐 Android AppViewModel.productErrorMessage）。
  */
 export function productErrorMessage(raw: unknown, fallback: string): string {
-  const msg = String(
-    raw instanceof Error ? raw.message : raw ?? '',
-  ).trim()
+  const msg = String(raw instanceof Error ? raw.message : (raw ?? '')).trim()
   const lower = msg.toLowerCase()
   if (!msg) return fallback
   if (lower.includes('401') || msg.includes('未授权') || msg.includes('未登录')) {

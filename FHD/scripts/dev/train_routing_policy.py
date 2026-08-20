@@ -56,6 +56,7 @@ def _import_torch():
     try:
         import torch  # type: ignore[import-not-found]
         from torch import nn  # type: ignore[import-not-found]
+
         return torch, nn
     except ImportError as e:  # pragma: no cover
         print(f"ERROR: 缺 torch 依赖：{e}", file=sys.stderr)
@@ -64,6 +65,7 @@ def _import_torch():
 
 def _import_routing_mlp():
     from app.neuro_bus.routing.policy_nn import RoutingMLP  # noqa: WPS433
+
     return RoutingMLP
 
 
@@ -164,16 +166,8 @@ def train(
     y_train = torch.tensor([s[1] for s in train_samples], dtype=torch.long)
     w_train = torch.tensor([s[2] for s in train_samples], dtype=torch.float32)
 
-    X_val = (
-        torch.tensor([s[0] for s in val_samples], dtype=torch.float32)
-        if val_samples
-        else None
-    )
-    y_val = (
-        torch.tensor([s[1] for s in val_samples], dtype=torch.long)
-        if val_samples
-        else None
-    )
+    X_val = torch.tensor([s[0] for s in val_samples], dtype=torch.float32) if val_samples else None
+    y_val = torch.tensor([s[1] for s in val_samples], dtype=torch.long) if val_samples else None
 
     train_losses: list[float] = []
     val_accs: list[float] = []
@@ -324,7 +318,9 @@ def main(argv: list[str] | None = None) -> int:
         description="训练 NeuroBus 路由策略 MLP（16→32→3）",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--labeled", type=Path, default=DEFAULT_LABELED, help="labeled_data.jsonl 路径")
+    parser.add_argument(
+        "--labeled", type=Path, default=DEFAULT_LABELED, help="labeled_data.jsonl 路径"
+    )
     parser.add_argument(
         "--arbitrated", type=Path, default=DEFAULT_ARBITRATED, help="arbitrated_data.jsonl 路径"
     )
@@ -332,9 +328,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--lr", type=float, default=0.001, help="Adam 学习率（默认 0.001）")
     parser.add_argument("--val-ratio", type=float, default=0.2, help="验证集比例（默认 0.2）")
     parser.add_argument("--seed", type=int, default=42, help="随机种子（默认 42）")
-    parser.add_argument(
-        "--manifest", type=Path, default=MANIFEST_PATH, help="manifest.json 路径"
-    )
+    parser.add_argument("--manifest", type=Path, default=MANIFEST_PATH, help="manifest.json 路径")
     parser.add_argument(
         "--no-activate",
         action="store_true",
@@ -353,8 +347,7 @@ def main(argv: list[str] | None = None) -> int:
     total_labeled = len(labeled)
     total_arb = len(arbitrated)
     print(
-        f"[train] 加载 labeled={total_labeled}（gold+silver），"
-        f"arbitrated={total_arb}（accepted）"
+        f"[train] 加载 labeled={total_labeled}（gold+silver），arbitrated={total_arb}（accepted）"
     )
 
     samples = labeled + arbitrated

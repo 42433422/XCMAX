@@ -1,3 +1,4 @@
+# isort: skip_file
 # ruff: noqa: E402, F401
 """员工自治闭环服务层。
 
@@ -23,7 +24,10 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 from sqlalchemy import and_, func, or_
 
 from modstore_server import employee_pack_proposal as _employee_pack_proposal
-from modstore_server.llm_failure_classifier import FAILURE_KIND_QUOTA, FAILURE_KIND_TRANSIENT
+from modstore_server.llm_failure_classifier import (
+    FAILURE_KIND_QUOTA,
+    FAILURE_KIND_TRANSIENT,
+)
 from modstore_server.models import (
     EmployeeChangeRequest,
     EmployeeCollabMessage,
@@ -62,7 +66,6 @@ from modstore_server.employee_autonomy_service_part01 import (
     dispatch_pending_suggestions as dispatch_pending_suggestions,
 )
 
-
 _TODO_BULLET_RE = re.compile(r"^\s*(?:[-*•]|(?:\d+[\.\)\、]))\s*(.+?)\s*$")
 
 
@@ -74,7 +77,6 @@ from modstore_server.employee_autonomy_service_part02 import (
     trigger_doc_autofix_from_report as trigger_doc_autofix_from_report,
     _PlatformBenchLlmClient as _PlatformBenchLlmClient,
 )
-
 
 # 进化引擎只应对「prompt 可修」的失败做 prompt 优化。配额/限流/鉴权/缺 key 等基建类失败
 # 不是 prompt 问题，refine prompt 救不回来；这些失败进入候选会导致进化引擎空转。
@@ -117,7 +119,6 @@ from modstore_server.employee_autonomy_service_part03 import (
     run_employee_evolution_scan as run_employee_evolution_scan,
     aggregate_admin_suggestion_dashboard as aggregate_admin_suggestion_dashboard,
 )
-
 
 __all__ = [
     "aggregate_admin_suggestion_dashboard",

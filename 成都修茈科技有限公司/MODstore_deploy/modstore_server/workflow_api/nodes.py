@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 from __future__ import annotations
 
 import json

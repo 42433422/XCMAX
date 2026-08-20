@@ -3,11 +3,14 @@
 
 运行：python FHD/scripts/dev/fix_manifest_yuangon_glob.py [--dry-run]
 """
+
 from __future__ import annotations
 
 import argparse
 import json
 from pathlib import Path
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 REPO = Path(__file__).resolve().parents[3]
 EMP_ROOT = REPO / "FHD" / "mods" / "_employees"
@@ -23,7 +26,7 @@ def fix_all(dry_run: bool = False) -> None:
             continue
         try:
             mf = json.loads(mf_path.read_text())
-        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             print(f"WARN: skip {d.name} – {e}")
             skipped += 1
             continue

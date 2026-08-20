@@ -7,12 +7,7 @@
         'butler-float-root--speaking': introSpeaking,
       }"
     >
-      <AgentPermissionDialog
-        v-if="showPermissionDialog"
-        corp-mode
-        @agree="onConsentAgreed"
-        @dismiss="agentStore.dismissLater()"
-      />
+      <AgentPermissionDialog v-if="showPermissionDialog" corp-mode @agree="onConsentAgreed" @dismiss="agentStore.dismissLater()" />
 
       <FloatingAgentBall :is-speaking="introSpeaking" force-light corp-mode />
       <Transition name="panel-pop">
@@ -184,9 +179,7 @@ const isContactPage = computed(() => {
 
 const isMobileViewport = ref(isCorpMobileViewport())
 
-const showMobileContactIntake = computed(
-  () => isContactPage.value && isMobileViewport.value,
-)
+const showMobileContactIntake = computed(() => isContactPage.value && isMobileViewport.value)
 
 function onMobileMqChange() {
   isMobileViewport.value = isCorpMobileViewport()
@@ -198,8 +191,7 @@ function onViewportResize() {
 }
 
 function onIntakeAssist(ev: Event) {
-  const detail =
-    (ev as CustomEvent<{ message?: string; prompt?: string; filled?: boolean }>).detail || {}
+  const detail = (ev as CustomEvent<{ message?: string; prompt?: string; filled?: boolean }>).detail || {}
   if (detail.filled) {
     if (agentStore.consentGiven) {
       agentStore.openPanel()

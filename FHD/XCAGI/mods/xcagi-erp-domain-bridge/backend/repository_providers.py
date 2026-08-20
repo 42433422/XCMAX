@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """里程碑 L / L+ / L++：ERP Repository 提供方。"""
 
 from __future__ import annotations
@@ -11,8 +10,8 @@ PHASE = "L++"
 
 
 def _load_adapters():
-    from app.mod_sdk.host_services import import_mod_backend_py
     from app.mod_sdk.erp_domain_compat import ERP_DOMAIN_BRIDGE_MOD_ID, _resolve_mod_dir
+    from app.mod_sdk.host_services import import_mod_backend_py
 
     mod_dir = _resolve_mod_dir()
     if not mod_dir:
@@ -21,8 +20,8 @@ def _load_adapters():
 
 
 def _load_factory():
-    from app.mod_sdk.host_services import import_mod_backend_py
     from app.mod_sdk.erp_domain_compat import ERP_DOMAIN_BRIDGE_MOD_ID, _resolve_mod_dir
+    from app.mod_sdk.host_services import import_mod_backend_py
 
     mod_dir = _resolve_mod_dir()
     if not mod_dir:

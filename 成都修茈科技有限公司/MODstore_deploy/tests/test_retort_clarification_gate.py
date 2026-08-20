@@ -393,7 +393,7 @@ def test_expire_marks_mirrored_boss_inbox(monkeypatch) -> None:
     import modstore_server.models as models
 
     monkeypatch.setattr(models, "PendingHumanQuestion", _PendingHumanQuestion)
-    monkeypatch.setattr(models, "get_session_factory", lambda: (lambda: _Session()))
+    monkeypatch.setattr(models, "get_session_factory", lambda: lambda: _Session())
 
     opened = gate.open_clarification_session(
         strategy_intent="过期同步收件箱",

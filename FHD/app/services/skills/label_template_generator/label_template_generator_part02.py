@@ -1,39 +1,57 @@
-# ruff: noqa
-# mypy: ignore-errors
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
 
-def _facade():
-    return importlib.import_module('app.services.skills.label_template_generator.label_template_generator')
 
-def _generate_code_with_fields(image_path: str, class_name: str, width: int, height: int, colors: dict, fields: list[dict]) -> str:
+def _facade():
+    return importlib.import_module(
+        "app.services.skills.label_template_generator.label_template_generator"
+    )
+
+
+def _generate_code_with_fields(
+    image_path: str, class_name: str, width: int, height: int, colors: dict, fields: list[dict]
+) -> str:
     """基于 OCR 识别的字段生成代码"""
     analysis = _facade().analyze_image(image_path)
-    code = f'''# -*- coding: utf-8 -*-\n"""\n{class_name} - 标签模板生成器\n\n此代码由 label-template-generator 自动生成，基于图片: {analysis['file']}\n生成时间: {_facade().datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n固定标签和可变数据字段已自动识别。\n"""\n\nimport os\nimport logging\nfrom datetime import datetime\nfrom typing import Dict, Any, Optional\nfrom PIL import Image, ImageDraw, ImageFont\n\nlogger = logging.getLogger(__name__)\n\n\nclass {class_name}:\n    """标签模板生成器类 - 支持动态数据填充"""\n    \n    def __init__(self, output_dir: Optional[str] = None):\n        self.width = {width}\n        self.height = {height}\n        self.bg_color = "{colors['background']}"\n        self.border_color = "{colors['border']}"\n        self.text_color = "{colors['text']}"\n        self.output_dir = output_dir or os.getcwd()\n        \n        # 定义固定标签和对应的字段\n        self.fields = {{\n'''
+    code = f'''# -*- coding: utf-8 -*-\n"""\n{class_name} - 标签模板生成器\n\n此代码由 label-template-generator 自动生成，基于图片: {analysis["file"]}\n生成时间: {_facade().datetime.now().strftime("%Y-%m-%d %H:%M:%S")}\n\n固定标签和可变数据字段已自动识别。\n"""\n\nimport os\nimport logging\nfrom datetime import datetime\nfrom typing import Dict, Any, Optional\nfrom PIL import Image, ImageDraw, ImageFont\n\nlogger = logging.getLogger(__name__)\n\n\nclass {class_name}:\n    """标签模板生成器类 - 支持动态数据填充"""\n    \n    def __init__(self, output_dir: Optional[str] = None):\n        self.width = {width}\n        self.height = {height}\n        self.bg_color = "{colors["background"]}"\n        self.border_color = "{colors["border"]}"\n        self.text_color = "{colors["text"]}"\n        self.output_dir = output_dir or os.getcwd()\n        \n        # 定义固定标签和对应的字段\n        self.fields = {{\n'''
     for field in fields:
-        field_key = field.get('field_key', field['label'])
-        label = field['label']
-        value = field.get('value', '')
-        field_type = field.get('type', 'dynamic')
-        code += f'''            "{field_key}": {{\n                "label": "{label}",\n                "default_value": "{value}",\n                "type": "{field_type}",\n                "editable": {(True if field_type == 'fixed_label' else False)}\n            }},\n'''
+        field_key = field.get("field_key", field["label"])
+        label = field["label"]
+        value = field.get("value", "")
+        field_type = field.get("type", "dynamic")
+        code += f'''            "{field_key}": {{\n                "label": "{label}",\n                "default_value": "{value}",\n                "type": "{field_type}",\n                "editable": {(True if field_type == "fixed_label" else False)}\n            }},\n'''
     code += '        }\n    \n    def _get_font(self, size: int) -> ImageFont.FreeTypeFont:\n        """获取中文字体"""\n        import platform\n        \n        font_paths = []\n        \n        if platform.system() == "Windows":\n            font_paths = [\n                "C:\\\\Windows\\\\Fonts\\\\simhei.ttf",\n                "C:\\\\Windows\\\\Fonts\\\\msyh.ttc",\n                "C:\\\\Windows\\\\Fonts\\\\simsun.ttc",\n            ]\n        elif platform.system() == "Darwin":\n            font_paths = [\n                "/System/Library/Fonts/PingFang.ttc",\n                "/System/Library/Fonts/STHeiti Light.ttc",\n            ]\n        else:\n            font_paths = [\n                "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",\n                "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",\n            ]\n        \n        for font_path in font_paths:\n            try:\n                return ImageFont.truetype(font_path, size)\n            except Exception:\n                continue\n        \n        return ImageFont.load_default()\n    \n    def generate_label(\n        self, \n        data: Dict[str, Any], \n        order_number: str = "", \n        label_index: int = 1\n    ) -> Optional[str]:\n        """\n        生成标签图片\n        \n        Args:\n            data: 数据字典，包含所有字段值\n                   例如：{{\n                       "product_name": "XX 运动鞋",\n                       "color": "白色",\n                       "item_number": "1635",\n                       "code_segment": "00001",\n                       "grade": "合格品",\n                       "standard": "QB/T4331-2013",\n                       "price": "199"\n                   }}\n            order_number: 订单号（可选）\n            label_index: 标签序号\n            \n        Returns:\n            生成的文件名，失败返回 None\n        """\n        try:\n            image = Image.new(\'RGB\', (self.width, self.height), self.bg_color)\n            draw = ImageDraw.Draw(image)\n            \n            self._draw_border(draw)\n            self._draw_fields(draw, data)\n            \n            os.makedirs(self.output_dir, exist_ok=True)\n            \n            # 生成文件名\n            product_name = data.get(\'product_name\', data.get(\'item_number\', \'label\'))\n            safe_name = str(product_name).replace("/", "_").replace(" ", "_")[:20]\n            \n            if order_number:\n                filename = f"{{order_number}}_第{{label_index}}项_{{safe_name}}.png"\n            else:\n                filename = f"label_{{safe_name}}_{{datetime.now().strftime(\'%Y%m%d%H%M%S\')}}.png"\n            \n            output_path = os.path.join(self.output_dir, filename)\n            image.save(output_path)\n            logger.info(f"标签已生成：{{output_path}}")\n            return filename\n            \n        except RECOVERABLE_ERRORS as e:\n            logger.error(f"生成标签失败：{{e}}")\n            return None\n    \n    def _draw_border(self, draw: ImageDraw.ImageDraw):\n        """绘制边框"""\n        draw.rectangle([0, 0, self.width - 1, self.height - 1], outline=self.border_color, width=3)\n    \n    def _draw_fields(self, draw: ImageDraw.ImageDraw, data: Dict[str, Any]):\n        """绘制所有字段"""\n        y_offset = 40\n        line_height = 50\n        \n        label_font = self._get_font(36)\n        value_font = self._get_font(40)\n        bold_font = self._get_font(48)\n        \n        # 遍历所有字段并绘制\n        for field_key, field_info in self.fields.items():\n            label = field_info[\'label\']\n            value = data.get(field_key, field_info.get(\'default_value\', \'\'))\n            \n            # 特殊处理价格字段\n            if field_key == \'price\':\n                draw.text((40, y_offset), f"统一零售价：¥ ", font=label_font, fill=self.text_color)\n                draw.text((220, y_offset), str(value), font=bold_font, fill=self.text_color)\n            else:\n                draw.text((40, y_offset), f"{{label}}: ", font=label_font, fill=self.text_color)\n                draw.text((180, y_offset), str(value), font=value_font, fill=self.text_color)\n            \n            y_offset += line_height\n        \n        # 绘制条形码\n        y_offset += 20\n        self._draw_barcode(draw, data, y_offset)\n    \n    def _draw_barcode(self, draw: ImageDraw.ImageDraw, data: Dict[str, Any], y_offset: int):\n        """绘制条形码"""\n        try:\n            # 确定条码数据\n            barcode_data = None\n            if data.get(\'barcode_data\'):\n                barcode_data = str(data.get(\'barcode_data\'))\n            elif data.get(\'auto_barcode\', False):\n                # 自动组合条码数据：货号 + 码段\n                item_number = str(data.get(\'item_number\', \'\'))\n                code_segment = str(data.get(\'code_segment\', \'\'))\n                if item_number and code_segment:\n                    barcode_data = f"{{item_number}}{{code_segment}}"\n                elif item_number:\n                    barcode_data = item_number\n            \n            if barcode_data:\n                # 使用 barcode 库生成条形码\n                from barcode import Code128, EAN13, Code39\n                from barcode.writer import ImageWriter\n                from io import BytesIO\n                \n                # 根据数据选择合适的条码类型\n                if barcode_data.isdigit() and len(barcode_data) >= 12:\n                    BarcodeClass = EAN13\n                    # EAN-13 需要 12 位数据\n                    barcode_value = barcode_data[:12].ljust(12, \'0\')\n                else:\n                    BarcodeClass = Code128\n                    barcode_value = barcode_data\n                \n                # 生成条码\n                barcode = BarcodeClass(barcode_value, writer=ImageWriter())\n                \n                # 保存到 BytesIO\n                buffer = BytesIO()\n                barcode.write(buffer, options={{\n                    \'module_width\': 2,\n                    \'module_height\': 40,\n                    \'font_size\': 10,\n                    \'text_distance\': 5,\n                    \'show_text\': True\n                }})\n                buffer.seek(0)\n                \n                # 转换为 PIL Image 并绘制\n                from PIL import Image\n                barcode_img = Image.open(buffer)\n                \n                # 计算居中位置\n                barcode_width = 360\n                x_offset = (self.width - barcode_width) // 2\n                \n                # 粘贴条码到标签上\n                self.image.paste(barcode_img, (x_offset, y_offset))\n            else:\n                # 无条码数据时绘制占位符\n                draw.rectangle([40, y_offset, self.width - 40, y_offset + 80], outline=self.border_color, width=1)\n                draw.text((self.width // 2 - 60, y_offset + 90), "无条码数据", font=self._get_font(20), fill=self.text_color)\n                \n        except ImportError:\n            # python-barcode 未安装时绘制占位符\n            draw.rectangle([40, y_offset, self.width - 40, y_offset + 80], outline=self.border_color, width=1)\n            draw.text((self.width // 2 - 60, y_offset + 90), "1txm.com", font=self._get_font(20), fill=self.text_color)\n        except RECOVERABLE_ERRORS as e:\n            logger.error(f"绘制条码失败：{{e}}")\n            draw.rectangle([40, y_offset, self.width - 40, y_offset + 80], outline=self.border_color, width=1)\n    \n    def get_field_template(self) -> Dict[str, Any]:\n        """\n        获取字段模板，用于显示哪些是固定标签，哪些是可编辑数据\n        \n        Returns:\n            字段模板字典\n        """\n        return {{\n            field_key: {{\n                "label": info["label"],\n                "type": info["type"],\n                "editable": info["editable"],\n                "example_value": info.get("default_value", "")\n            }}\n            for field_key, info in self.fields.items()\n        }}\n\n\ndef example_usage():\n    """使用示例"""\n    generator = {class_name}(output_dir="./labels")\n    \n    # 示例数据 - 这些是可变的值\n    data = {{\n        "product_name": "XX 运动鞋",\n        "color": "白色",\n        "item_number": "1635",\n        "code_segment": "00001",\n        "grade": "合格品",\n        "standard": "QB/T4331-2013",\n        "price": "199",\n        # 条形码数据（可选）\n        "auto_barcode": True  # 自动组合 item_number + code_segment 生成条码\n        # 或者使用自定义条码数据:\n        # "barcode_data": "163500001"\n    }}\n    \n    filename = generator.generate_label(data, "ORDER-001", 1)\n    print(f"生成的标签：{{filename}}")\n    \n    # 查看字段模板\n    template = generator.get_field_template()\n    print("\\n字段模板:")\n    for key, info in template.items():\n        print(f"  {{key}}: {{info}}")\n\n\nif __name__ == "__main__":\n    example_usage()\n'
     return code
 
-def _generate_basic_code(image_path: str, class_name: str, width: int, height: int, colors: dict) -> str:
+
+def _generate_basic_code(
+    image_path: str, class_name: str, width: int, height: int, colors: dict
+) -> str:
     """生成基础代码（无 OCR 时使用）"""
     analysis = _facade().analyze_image(image_path)
-    code = f'''# -*- coding: utf-8 -*-\n"""\n{class_name} - 标签模板生成器\n\n此代码由 label-template-generator 自动生成，基于图片：{analysis['file']}\n生成时间：{_facade().datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"""\n\nimport os\nimport logging\nfrom datetime import datetime\nfrom typing import Dict, Any, Optional\nfrom PIL import Image, ImageDraw, ImageFont\n\nlogger = logging.getLogger(__name__)\n\n\nclass {class_name}:\n    """标签模板生成器类"""\n    \n    def __init__(self, output_dir: Optional[str] = None):\n        self.width = {width}\n        self.height = {height}\n        self.bg_color = "{colors['background']}"\n        self.border_color = "{colors['border']}"\n        self.text_color = "{colors['text']}"\n        self.output_dir = output_dir or os.getcwd()\n        \n    def _get_font(self, size: int) -> ImageFont.FreeTypeFont:\n        """获取中文字体"""\n        import platform\n        \n        font_paths = []\n        \n        if platform.system() == "Windows":\n            font_paths = [\n                "C:\\\\Windows\\\\Fonts\\\\simhei.ttf",\n                "C:\\\\Windows\\\\Fonts\\\\msyh.ttc",\n                "C:\\\\Windows\\\\Fonts\\\\simsun.ttc",\n            ]\n        elif platform.system() == "Darwin":\n            font_paths = [\n                "/System/Library/Fonts/PingFang.ttc",\n                "/System/Library/Fonts/STHeiti Light.ttc",\n            ]\n        else:\n            font_paths = [\n                "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",\n                "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",\n            ]\n        \n        for font_path in font_paths:\n            try:\n                return ImageFont.truetype(font_path, size)\n            except Exception:\n                continue\n        \n        return ImageFont.load_default()\n    \n    def generate_label(self, product_data: Dict[str, Any], order_number: str, label_index: int = 1) -> Optional[str]:\n        """\n        生成标签图片\n        \n        Args:\n            product_data: 产品数据字典\n            order_number: 订单号\n            label_index: 标签序号\n            \n        Returns:\n            生成的文件名，失败返回 None\n        """\n        try:\n            image = Image.new('RGB', (self.width, self.height), self.bg_color)\n            draw = ImageDraw.Draw(image)\n            \n            self._draw_border(draw)\n            self._draw_content(draw, product_data, order_number)\n            \n            os.makedirs(self.output_dir, exist_ok=True)\n            safe_name = str(product_data.get('name', '') or product_data.get('product_name', ''))\n            safe_name = safe_name.replace("/", "_").replace(" ", "_")[:20]\n            filename = f"{{order_number}}_第{{label_index}}项_{{safe_name}}.png"\n            output_path = os.path.join(self.output_dir, filename)\n            image.save(output_path)\n            logger.info(f"标签已生成：{{output_path}}")\n            return filename\n            \n        except RECOVERABLE_ERRORS as e:\n            logger.error(f"生成标签失败：{{e}}")\n            return None\n    \n    def _draw_border(self, draw: ImageDraw.ImageDraw):\n        """绘制边框"""\n        draw.rectangle([0, 0, self.width - 1, self.height - 1], outline=self.border_color, width=3)\n    \n    def _draw_content(self, draw: ImageDraw.ImageDraw, product_data: Dict[str, Any], order_number: str):\n        """绘制标签内容 - 根据实际图片布局修改此方法"""\n        \n        y_offset = 40\n        line_height = 50\n        \n        label_font = self._get_font(36)\n        value_font = self._get_font(40)\n        \n        # 通用标签内容绘制\n        draw.text((40, y_offset), "品名：", font=label_font, fill=self.text_color)\n        draw.text((180, y_offset), str(product_data.get('product_name', '')), font=value_font, fill=self.text_color)\n        y_offset += line_height\n        \n        draw.text((40, y_offset), "货号：", font=label_font, fill=self.text_color)\n        draw.text((180, y_offset), str(product_data.get('item_number', '')), font=value_font, fill=self.text_color)\n        y_offset += line_height\n        \n        draw.text((40, y_offset), "等级：", font=label_font, fill=self.text_color)\n        draw.text((180, y_offset), str(product_data.get('grade', '合格品')), font=value_font, fill=self.text_color)\n    \n    def generate_labels_for_order(self, order_number: str, products: list) -> list:\n        """\n        为订单生成多个标签\n        \n        Args:\n            order_number: 订单号\n            products: 产品列表\n            \n        Returns:\n            生成的文件名列表\n        """\n        labels = []\n        for i, product in enumerate(products, 1):\n            filename = self.generate_label(product, order_number, i)\n            if filename:\n                labels.append({{\n                    "filename": filename,\n                    "order_number": order_number,\n                    "label_index": i\n                }})\n        return labels\n\n\ndef example_usage():\n    """使用示例"""\n    generator = {class_name}(output_dir="./labels")\n    \n    product = {{\n        "product_name": "示例产品",\n        "item_number": "12345",\n        "grade": "合格品"\n    }}\n    \n    filename = generator.generate_label(product, "ORDER-001", 1)\n    print(f"生成的标签：{{filename}}")\n\n\nif __name__ == "__main__":\n    example_usage()\n'''
+    code = f'''# -*- coding: utf-8 -*-\n"""\n{class_name} - 标签模板生成器\n\n此代码由 label-template-generator 自动生成，基于图片：{analysis["file"]}\n生成时间：{_facade().datetime.now().strftime("%Y-%m-%d %H:%M:%S")}\n"""\n\nimport os\nimport logging\nfrom datetime import datetime\nfrom typing import Dict, Any, Optional\nfrom PIL import Image, ImageDraw, ImageFont\n\nlogger = logging.getLogger(__name__)\n\n\nclass {class_name}:\n    """标签模板生成器类"""\n    \n    def __init__(self, output_dir: Optional[str] = None):\n        self.width = {width}\n        self.height = {height}\n        self.bg_color = "{colors["background"]}"\n        self.border_color = "{colors["border"]}"\n        self.text_color = "{colors["text"]}"\n        self.output_dir = output_dir or os.getcwd()\n        \n    def _get_font(self, size: int) -> ImageFont.FreeTypeFont:\n        """获取中文字体"""\n        import platform\n        \n        font_paths = []\n        \n        if platform.system() == "Windows":\n            font_paths = [\n                "C:\\\\Windows\\\\Fonts\\\\simhei.ttf",\n                "C:\\\\Windows\\\\Fonts\\\\msyh.ttc",\n                "C:\\\\Windows\\\\Fonts\\\\simsun.ttc",\n            ]\n        elif platform.system() == "Darwin":\n            font_paths = [\n                "/System/Library/Fonts/PingFang.ttc",\n                "/System/Library/Fonts/STHeiti Light.ttc",\n            ]\n        else:\n            font_paths = [\n                "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",\n                "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",\n            ]\n        \n        for font_path in font_paths:\n            try:\n                return ImageFont.truetype(font_path, size)\n            except Exception:\n                continue\n        \n        return ImageFont.load_default()\n    \n    def generate_label(self, product_data: Dict[str, Any], order_number: str, label_index: int = 1) -> Optional[str]:\n        """\n        生成标签图片\n        \n        Args:\n            product_data: 产品数据字典\n            order_number: 订单号\n            label_index: 标签序号\n            \n        Returns:\n            生成的文件名，失败返回 None\n        """\n        try:\n            image = Image.new('RGB', (self.width, self.height), self.bg_color)\n            draw = ImageDraw.Draw(image)\n            \n            self._draw_border(draw)\n            self._draw_content(draw, product_data, order_number)\n            \n            os.makedirs(self.output_dir, exist_ok=True)\n            safe_name = str(product_data.get('name', '') or product_data.get('product_name', ''))\n            safe_name = safe_name.replace("/", "_").replace(" ", "_")[:20]\n            filename = f"{{order_number}}_第{{label_index}}项_{{safe_name}}.png"\n            output_path = os.path.join(self.output_dir, filename)\n            image.save(output_path)\n            logger.info(f"标签已生成：{{output_path}}")\n            return filename\n            \n        except RECOVERABLE_ERRORS as e:\n            logger.error(f"生成标签失败：{{e}}")\n            return None\n    \n    def _draw_border(self, draw: ImageDraw.ImageDraw):\n        """绘制边框"""\n        draw.rectangle([0, 0, self.width - 1, self.height - 1], outline=self.border_color, width=3)\n    \n    def _draw_content(self, draw: ImageDraw.ImageDraw, product_data: Dict[str, Any], order_number: str):\n        """绘制标签内容 - 根据实际图片布局修改此方法"""\n        \n        y_offset = 40\n        line_height = 50\n        \n        label_font = self._get_font(36)\n        value_font = self._get_font(40)\n        \n        # 通用标签内容绘制\n        draw.text((40, y_offset), "品名：", font=label_font, fill=self.text_color)\n        draw.text((180, y_offset), str(product_data.get('product_name', '')), font=value_font, fill=self.text_color)\n        y_offset += line_height\n        \n        draw.text((40, y_offset), "货号：", font=label_font, fill=self.text_color)\n        draw.text((180, y_offset), str(product_data.get('item_number', '')), font=value_font, fill=self.text_color)\n        y_offset += line_height\n        \n        draw.text((40, y_offset), "等级：", font=label_font, fill=self.text_color)\n        draw.text((180, y_offset), str(product_data.get('grade', '合格品')), font=value_font, fill=self.text_color)\n    \n    def generate_labels_for_order(self, order_number: str, products: list) -> list:\n        """\n        为订单生成多个标签\n        \n        Args:\n            order_number: 订单号\n            products: 产品列表\n            \n        Returns:\n            生成的文件名列表\n        """\n        labels = []\n        for i, product in enumerate(products, 1):\n            filename = self.generate_label(product, order_number, i)\n            if filename:\n                labels.append({{\n                    "filename": filename,\n                    "order_number": order_number,\n                    "label_index": i\n                }})\n        return labels\n\n\ndef example_usage():\n    """使用示例"""\n    generator = {class_name}(output_dir="./labels")\n    \n    product = {{\n        "product_name": "示例产品",\n        "item_number": "12345",\n        "grade": "合格品"\n    }}\n    \n    filename = generator.generate_label(product, "ORDER-001", 1)\n    print(f"生成的标签：{{filename}}")\n\n\nif __name__ == "__main__":\n    example_usage()\n'''
     return code
+
 
 class LabelTemplateGeneratorSkill:
     """标签模板生成技能类"""
 
     def __init__(self):
-        self.name = 'label_template_generator'
-        self.description = '从图片生成标签模板代码，支持基于参考图片创建 Python 标签生成器，自动识别固定标签和可变数据'
+        self.name = "label_template_generator"
+        self.description = "从图片生成标签模板代码，支持基于参考图片创建 Python 标签生成器，自动识别固定标签和可变数据"
 
-    def execute(self, image_path: str, class_name: str='LabelTemplateGenerator', output_file: str | None=None, enable_ocr: bool=True, verbose: bool=False) -> dict[str, _facade().Any]:
+    def execute(
+        self,
+        image_path: str,
+        class_name: str = "LabelTemplateGenerator",
+        output_file: str | None = None,
+        enable_ocr: bool = True,
+        verbose: bool = False,
+    ) -> dict[str, _facade().Any]:
         """
         执行标签模板生成
 
@@ -49,30 +67,55 @@ class LabelTemplateGeneratorSkill:
         """
         try:
             analysis = _facade().analyze_image(image_path, verbose=verbose)
-            if not analysis['success']:
+            if not analysis["success"]:
                 return analysis
             ocr_result = None
             if enable_ocr:
                 ocr_result = _facade().extract_text_with_ocr(image_path)
-                if ocr_result.get('success'):
-                    _facade().logger.info('OCR 识别成功，提取 %s 个字段', len(ocr_result.get('fields', [])))
+                if ocr_result.get("success"):
+                    _facade().logger.info(
+                        "OCR 识别成功，提取 %s 个字段", len(ocr_result.get("fields", []))
+                    )
             code = _facade().generate_template_code(image_path, class_name, ocr_result, verbose)
-            result = {'success': True, 'analysis': analysis, 'ocr_result': ocr_result, 'code': code}
+            result = {"success": True, "analysis": analysis, "ocr_result": ocr_result, "code": code}
             if output_file:
                 try:
-                    with _facade().open(output_file, 'w', encoding='utf-8') as f:
+                    with _facade().open(output_file, "w", encoding="utf-8") as f:
                         f.write(code)
-                    result['output_file'] = output_file
+                    result["output_file"] = output_file
                 except _facade().RECOVERABLE_ERRORS as e:
-                    result['output_error'] = str(e)
+                    result["output_error"] = str(e)
             return result
         except _facade().RECOVERABLE_ERRORS as e:
-            _facade().logger.error('生成标签模板失败：%s', e)
-            return {'success': False, 'message': str(e)}
+            _facade().logger.error("生成标签模板失败：%s", e)
+            return {"success": False, "message": str(e)}
 
     def get_skill_info(self) -> dict[str, _facade().Any]:
         """获取技能信息"""
-        return {'name': self.name, 'description': self.description, 'parameters': {'image_path': {'type': 'string', 'required': True, 'description': '输入图片路径'}, 'class_name': {'type': 'string', 'required': False, 'description': '生成的类名'}, 'output_file': {'type': 'string', 'required': False, 'description': '输出 Python 文件路径'}, 'enable_ocr': {'type': 'boolean', 'required': False, 'description': '是否启用 OCR 识别'}, 'verbose': {'type': 'boolean', 'required': False, 'description': '是否生成详细代码'}}}
+        return {
+            "name": self.name,
+            "description": self.description,
+            "parameters": {
+                "image_path": {"type": "string", "required": True, "description": "输入图片路径"},
+                "class_name": {"type": "string", "required": False, "description": "生成的类名"},
+                "output_file": {
+                    "type": "string",
+                    "required": False,
+                    "description": "输出 Python 文件路径",
+                },
+                "enable_ocr": {
+                    "type": "boolean",
+                    "required": False,
+                    "description": "是否启用 OCR 识别",
+                },
+                "verbose": {
+                    "type": "boolean",
+                    "required": False,
+                    "description": "是否生成详细代码",
+                },
+            },
+        }
+
 
 def get_label_template_generator_skill() -> LabelTemplateGeneratorSkill:
     """获取标签模板生成技能单例"""

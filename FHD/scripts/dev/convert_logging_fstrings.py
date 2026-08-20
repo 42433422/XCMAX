@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="arg-type"
 """把 ``app/`` 下 ``logger.<level>(f"...")`` 的 f-string 日志转换为惰性 %s 格式（消除 G004）。
 
 策略（保守、可验证）：

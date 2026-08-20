@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """
 PE白底漆 标签网格分析报告
 """
@@ -203,9 +204,9 @@ for cell in cells:
     status_str = ", ".join(status) if status else "独立"
 
     html_content += f"""                        <div class="cell {css_class}">
-                            <div><strong>#[{cell['row']},{cell['col']}]</strong> {status_str}</div>
-                            <div>位置: ({cell['x']}, {cell['y']})</div>
-                            <div>尺寸: {cell['width']}×{cell['height']}</div>
+                            <div><strong>#[{cell["row"]},{cell["col"]}]</strong> {status_str}</div>
+                            <div>位置: ({cell["x"]}, {cell["y"]})</div>
+                            <div>尺寸: {cell["width"]}×{cell["height"]}</div>
                         </div>
 """
 

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """MODstore compatibility facade for the FHD autonomy risk SSOT.
 
 No handler classification or approval policy belongs in this module. Keeping

@@ -21,11 +21,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from vibe_coding.operational_errors import BOUNDARY_ERRORS
+
 from ..nl.llm import LLMClient
 from ..nl.parsing import JSONParseError, safe_parse_json_object
 from ..nl.prompts import MULTI_FILE_EDIT_PROMPT, MULTI_FILE_REPAIR_PROMPT
 from .context import AgentContext
-from .domain import DomainViolation, ProjectDomainGuard
+from .domain import ProjectDomainGuard
 from .memory import ProjectMemory
 from .patch import (
     ApplyResult,
@@ -203,10 +205,8 @@ class ProjectVibeCoder:
                     patch_id=patch.patch_id,
                     applied=False,
                     dry_run=dry_run,
-                    error="domain_guard:" + "; ".join(
-                        f"[{v.code}] {v.message}" + (f" ({v.file})" if v.file else "")
-                        for v in violations
-                    ),
+                    error="domain_guard:"
+                    + "; ".join(f"[{v.code}] {v.message}" + (f" ({v.file})" if v.file else "") for v in violations),
                 )
         result = self.applier.apply(patch, dry_run=dry_run)
         if result.applied and not dry_run:
@@ -323,7 +323,7 @@ class ProjectVibeCoder:
                 tools_passed=tools_passed,
                 languages=index.languages,
             )
-        except Exception:  # noqa: BLE001
+        except BOUNDARY_ERRORS:
             # Memory writes must never break a successful heal round.
             pass
 
@@ -346,7 +346,7 @@ class ProjectVibeCoder:
                 tools_failed=tools_failed,
                 languages=index.languages,
             )
-        except Exception:  # noqa: BLE001
+        except BOUNDARY_ERRORS:
             pass
 
     # ---------------------------------------------------------------- prompts
@@ -368,9 +368,7 @@ class ProjectVibeCoder:
             if block:
                 sections.append(block)
         sections.append(self._format_focus_files(index, context, focus_paths))
-        sections.append(
-            "## 输出要求\n严格按照 ProjectPatch JSON 输出。不要整文件重写。"
-        )
+        sections.append("## 输出要求\n严格按照 ProjectPatch JSON 输出。不要整文件重写。")
         return "\n\n".join(s for s in sections if s)
 
     def _build_repair_user_prompt(
@@ -389,9 +387,7 @@ class ProjectVibeCoder:
             if block:
                 sections.append(block)
         sections.append(self._format_focus_files(index, context, focus_paths))
-        sections.append(
-            "## 输出要求\n严格按照 ProjectPatch JSON 输出。改动尽量小，禁止整文件重写。"
-        )
+        sections.append("## 输出要求\n严格按照 ProjectPatch JSON 输出。改动尽量小，禁止整文件重写。")
         return "\n\n".join(s for s in sections if s)
 
     def _format_focus_files(
@@ -444,9 +440,7 @@ class ProjectVibeCoder:
                 continue
             if len(source) > self.max_file_chars:
                 source = source[: self.max_file_chars] + "\n# ... (truncated)\n"
-            snippets.append(
-                f"### {rel} ({entry.language}, {entry.line_count} lines)\n```\n{source}\n```"
-            )
+            snippets.append(f"### {rel} ({entry.language}, {entry.line_count} lines)\n```\n{source}\n```")
         return "\n\n".join(snippets)
 
     # ----------------------------------------------------------------- parse
@@ -526,4 +520,4 @@ __all__ = [
 
 
 # Defensive references for type-checkers
-_ = (SandboxJob, SandboxPolicy, SandboxResult, FileEdit, Hunk)  # noqa: F841
+_ = (SandboxJob, SandboxPolicy, SandboxResult, FileEdit, Hunk)

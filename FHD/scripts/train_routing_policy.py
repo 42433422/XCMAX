@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="var-annotated"
 """
 Offline training for routing MLP from JSONL logs (features + action index + reward).
 

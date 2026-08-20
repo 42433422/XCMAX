@@ -82,10 +82,7 @@ const storageModeLabel = computed(() => {
 let unsubscribe: (() => void) | undefined
 
 async function refresh() {
-  const [statusResponse, modelsResponse] = await Promise.all([
-    fetch('/api/desktop/status'),
-    fetch('/api/desktop/models'),
-  ])
+  const [statusResponse, modelsResponse] = await Promise.all([fetch('/api/desktop/status'), fetch('/api/desktop/models')])
   status.value = await statusResponse.json()
   const payload = await modelsResponse.json()
   models.value = payload.models || []

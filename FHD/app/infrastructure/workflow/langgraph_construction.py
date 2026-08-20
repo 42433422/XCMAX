@@ -6,8 +6,6 @@ import operator
 from collections.abc import Hashable
 from typing import TYPE_CHECKING, Annotated, Any, TypedDict, cast
 
-from langgraph.graph.state import END, START, StateGraph
-
 from app.application.workflow.ports.checkpoint import CheckpointStore
 from app.application.workflow.types import (
     NodeExecutionResult,
@@ -20,6 +18,9 @@ from app.application.workflow.types import (
 )
 from app.infrastructure.workflow.langgraph_runtime import (
     _INTERNAL_CHANNELS,
+    END,
+    START,
+    StateGraph,
     _merge_dict,
     _ReadersWriterGate,
 )

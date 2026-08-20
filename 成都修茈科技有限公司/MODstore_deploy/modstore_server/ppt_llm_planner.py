@@ -7,6 +7,7 @@ import json
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.ppt_edit_plan import (
     parse_edit_plan_json,
     plan_from_presentation,
@@ -99,7 +100,7 @@ async def plan_with_llm(
                 call_llm(messages, max_tokens=4000, temperature=0.2),
                 timeout=120.0,
             )
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             warnings.append(f"LLM 调用失败：{exc}")
             break
         text = ""

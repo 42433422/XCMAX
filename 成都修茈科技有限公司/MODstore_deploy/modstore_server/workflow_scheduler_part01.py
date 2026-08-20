@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -21,7 +25,10 @@ def _env_bool(name: str, default: bool) -> bool:
 
 
 def _business_misfire_grace_time() -> int:
-    return max(60, _facade()._env_int("MODSTORE_SCHEDULER_BUSINESS_MISFIRE_GRACE_SECONDS", 3600))
+    return max(
+        60,
+        _facade()._env_int("MODSTORE_SCHEDULER_BUSINESS_MISFIRE_GRACE_SECONDS", 3600),
+    )
 
 
 def required_scheduler_job_ids() -> tuple[str, ...]:
@@ -52,7 +59,7 @@ def scheduler_integrity_status() -> dict[str, _facade().Any]:
         engine_running = bool(getattr(_facade()._scheduler, "running", False))
         try:
             active = {str(job.id) for job in _facade()._scheduler.get_jobs()}
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.exception("scheduler integrity: get_jobs failed")
     missing = sorted(set(required) - active)
     complete = bool(_facade()._scheduler_registration_complete)
@@ -72,8 +79,12 @@ def _run_scheduler_startup_probe(stage: str, fn: _facade().Callable[[], _facade(
     try:
         fn()
         return True
-    except Exception as exc:
-        failure = {"stage": stage, "error_type": type(exc).__name__, "message": str(exc)[:240]}
+    except RECOVERABLE_ERRORS as exc:
+        failure = {
+            "stage": stage,
+            "error_type": type(exc).__name__,
+            "message": str(exc)[:240],
+        }
         _facade()._scheduler_startup_probe_failures.append(failure)
         _facade().logger.warning(
             "scheduler startup probe failed; registration continues: stage=%s error=%s",
@@ -88,7 +99,8 @@ def _startup_recovery_kwargs(job_id: str, *, delay_seconds: int) -> dict[str, _f
     if not _facade()._env_bool("MODSTORE_SCHEDULER_STARTUP_RECOVERY_ENABLED", True):
         return {}
     stale_after = max(
-        3600, _facade()._env_int("MODSTORE_SCHEDULER_STARTUP_RECOVERY_STALE_SECONDS", 26 * 3600)
+        3600,
+        _facade()._env_int("MODSTORE_SCHEDULER_STARTUP_RECOVERY_STALE_SECONDS", 26 * 3600),
     )
     due = True
     state = "missing"
@@ -97,18 +109,20 @@ def _startup_recovery_kwargs(job_id: str, *, delay_seconds: int) -> dict[str, _f
 
         runtime = get_runtime_status(stale_after_seconds=stale_after)
         row = next(
-            (item for item in runtime.get("jobs") or [] if item.get("job_id") == job_id), None
+            (item for item in runtime.get("jobs") or [] if item.get("job_id") == job_id),
+            None,
         )
         state = str((row or {}).get("state") or "missing")
         due = not runtime.get("ok") or row is None or state in {"stale", "failing"}
-    except Exception:
+    except RECOVERABLE_ERRORS:
         _facade().logger.exception("scheduler startup recovery status failed: job_id=%s", job_id)
     if not due:
         return {}
     now = _facade().datetime.now(_facade().timezone.utc)
     recovery_at = now + _facade().timedelta(seconds=max(1, delay_seconds))
     grace_seconds = max(
-        300, _facade()._env_int("MODSTORE_SCHEDULER_STARTUP_RECOVERY_GRACE_SECONDS", 3600)
+        300,
+        _facade()._env_int("MODSTORE_SCHEDULER_STARTUP_RECOVERY_GRACE_SECONDS", 3600),
     )
     _facade()._scheduler_startup_recovery_deadlines[job_id] = now + _facade().timedelta(
         seconds=grace_seconds
@@ -135,7 +149,10 @@ def scheduler_runtime_health_status() -> dict[str, _facade().Any]:
     active_required = set(_facade().required_scheduler_job_ids())
     monitored = {
         runtime_id: scheduler_id
-        for (runtime_id, scheduler_id) in _facade()._CRITICAL_RUNTIME_JOB_TO_SCHEDULER_ID.items()
+        for (
+            runtime_id,
+            scheduler_id,
+        ) in _facade()._CRITICAL_RUNTIME_JOB_TO_SCHEDULER_ID.items()
         if scheduler_id in active_required
     }
     runtime = get_runtime_status()
@@ -160,7 +177,11 @@ def scheduler_runtime_health_status() -> dict[str, _facade().Any]:
         state = str(row.get("state") or "missing")
         deadline = _facade()._scheduler_startup_recovery_deadlines.get(runtime_id)
         if state in {"missing", "stale", "failing"} and deadline and (now <= deadline):
-            row = {**row, "state": "recovering", "recovery_deadline": deadline.isoformat()}
+            row = {
+                **row,
+                "state": "recovering",
+                "recovery_deadline": deadline.isoformat(),
+            }
             recovering.append(runtime_id)
         elif state in {"missing", "stale", "failing"}:
             unhealthy.append(runtime_id)
@@ -222,7 +243,7 @@ def _run_tracked_scheduler_job(
 
 
 def _require_customer_value_source_ready(
-    result: dict[str, _facade().Any]
+    result: dict[str, _facade().Any],
 ) -> dict[str, _facade().Any]:
     if result.get("source_ready") is not True:
         owner = str(result.get("source_owner") or "unavailable")
@@ -231,7 +252,7 @@ def _require_customer_value_source_ready(
 
 
 def _run_authoritative_customer_value_job(
-    fn: _facade().Callable[[], dict[str, _facade().Any]]
+    fn: _facade().Callable[[], dict[str, _facade().Any]],
 ) -> dict[str, _facade().Any]:
     """Track source validation inside the scheduler job transaction.
 
@@ -241,7 +262,8 @@ def _run_authoritative_customer_value_job(
     health even though the Java/PostgreSQL authority is unreachable.
     """
     return _facade()._run_tracked_scheduler_job(
-        "customer_value_reconciler", lambda: _facade()._require_customer_value_source_ready(fn())
+        "customer_value_reconciler",
+        lambda: _facade()._require_customer_value_source_ready(fn()),
     )
 
 
@@ -251,7 +273,9 @@ def _trigger_self_maintenance_from_incident(*, emitted: bool, source: str) -> No
     ):
         return
     try:
-        from modstore_server.self_maintenance_loop_runner import run_self_maintenance_loop
+        from modstore_server.self_maintenance_loop_runner import (
+            run_self_maintenance_loop,
+        )
 
         result = run_self_maintenance_loop(
             triggered_by="incident_event",
@@ -264,7 +288,7 @@ def _trigger_self_maintenance_from_incident(*, emitted: bool, source: str) -> No
             result.get("status"),
             result.get("reason") or (result.get("gate") or {}).get("reason"),
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         _facade().logger.exception("incident-driven self-maintenance failed: source=%s", source)
 
 

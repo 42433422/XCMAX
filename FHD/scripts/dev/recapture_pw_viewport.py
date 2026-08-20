@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="import-not-found"
 """按 manifest 重拍 P-W 全部页为 1280×720 视口 PNG。"""
+
 from __future__ import annotations
 
 import asyncio

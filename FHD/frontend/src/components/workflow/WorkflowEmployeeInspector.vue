@@ -32,7 +32,7 @@ watch(
     await nextTick()
     const el = listRef.value.querySelector(`[data-emp-id="${id}"]`) as HTMLElement | null
     el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-  }
+  },
 )
 
 function progressWidth(row: WorkflowEmployeeDeskRow): string {
@@ -44,16 +44,9 @@ function progressWidth(row: WorkflowEmployeeDeskRow): string {
 </script>
 
 <template>
-  <aside
-    class="wfe-inspector"
-    :class="{ 'wfe-inspector--pixel': pixelSkin }"
-    role="complementary"
-    aria-label="工作流员工列表与开关"
-  >
+  <aside class="wfe-inspector" :class="{ 'wfe-inspector--pixel': pixelSkin }" role="complementary" aria-label="工作流员工列表与开关">
     <h3 class="wfe-inspector-h">员工与状态</h3>
-    <p class="wfe-inspector-lead">
-      开关与副窗「一键托管」一致；进度来自任务面板同步的快照。
-    </p>
+    <p class="wfe-inspector-lead">开关与副窗「一键托管」一致；进度来自任务面板同步的快照。</p>
 
     <div ref="listRef" class="wfe-inspector-list" role="list">
       <div
@@ -95,10 +88,7 @@ function progressWidth(row: WorkflowEmployeeDeskRow): string {
     </div>
 
     <p v-if="!hideWorkspaceLink" class="wfe-inspector-foot">
-      <router-link
-        :to="{ name: 'workflow-employee-space', hash: '#ews-workflow-monitor' }"
-        class="wfe-inspector-link"
-      >
+      <router-link :to="{ name: 'workflow-employee-space', hash: '#ews-workflow-monitor' }" class="wfe-inspector-link">
         在员工空间查看工位像素实况
       </router-link>
     </p>

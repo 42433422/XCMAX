@@ -10,11 +10,5 @@ export function useCoreNavLabel(menuKey: string): ComputedRef<string> {
   const industryStore = useIndustryStore()
   const modsStore = useModsStore()
   const { modsForUi } = storeToRefs(modsStore)
-  return computed(() =>
-    resolveCoreNavLabel(
-      menuKey,
-      String(industryStore.currentIndustryId || DEFAULT_INDUSTRY_ID),
-      modsForUi.value,
-    ),
-  )
+  return computed(() => resolveCoreNavLabel(menuKey, String(industryStore.currentIndustryId || DEFAULT_INDUSTRY_ID), modsForUi.value))
 }

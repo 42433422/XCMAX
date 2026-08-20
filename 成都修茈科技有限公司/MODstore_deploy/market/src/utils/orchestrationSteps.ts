@@ -28,18 +28,48 @@ export interface OrchStepVisual {
 /** 后端 step id → 虚拟员工展示 */
 export const ORCH_STEP_VISUAL: Record<string, OrchStepVisual> = {
   spec: { name: YUANGON_PKG_ROLE_LABELS['intent-analyst'] || '需求分析员工', color: '#818cf8' },
-  employee_plan: { name: YUANGON_PKG_ROLE_LABELS['employee-planner'] || '规划设计员工', color: '#60a5fa' },
-  generate: { name: YUANGON_PKG_ROLE_LABELS['artifact-generator'] || '产物生成员工', color: '#4ade80' },
+  employee_plan: {
+    name: YUANGON_PKG_ROLE_LABELS['employee-planner'] || '规划设计员工',
+    color: '#60a5fa',
+  },
+  generate: {
+    name: YUANGON_PKG_ROLE_LABELS['artifact-generator'] || '产物生成员工',
+    color: '#4ade80',
+  },
   validate: { name: YUANGON_PKG_ROLE_LABELS['quality-validator'] || '质检员工', color: '#fb923c' },
-  script_workflow: { name: YUANGON_PKG_ROLE_LABELS['miniapp-builder'] || '小程序员工', color: '#22d3ee' },
-  embed_script: { name: YUANGON_PKG_ROLE_LABELS['script-binder'] || '配置绑定员工', color: '#f472b6' },
-  workflow: { name: YUANGON_PKG_ROLE_LABELS['workflow-automator'] || '流程自动化员工', color: '#facc15' },
-  register_pack: { name: YUANGON_PKG_ROLE_LABELS['pack-registrar'] || '打包登记员工', color: '#2dd4bf' },
-  workflow_sandbox: { name: YUANGON_PKG_ROLE_LABELS['sandbox-tester'] || '测试员工', color: '#f87171' },
-  mod_sandbox: { name: YUANGON_PKG_ROLE_LABELS['code-validator'] || '代码校验员工', color: '#fbbf24' },
-  standalone_smoke: { name: YUANGON_PKG_ROLE_LABELS['self-checker'] || '自检员工', color: '#a3e635' },
+  script_workflow: {
+    name: YUANGON_PKG_ROLE_LABELS['miniapp-builder'] || '小程序员工',
+    color: '#22d3ee',
+  },
+  embed_script: {
+    name: YUANGON_PKG_ROLE_LABELS['script-binder'] || '配置绑定员工',
+    color: '#f472b6',
+  },
+  workflow: {
+    name: YUANGON_PKG_ROLE_LABELS['workflow-automator'] || '流程自动化员工',
+    color: '#facc15',
+  },
+  register_pack: {
+    name: YUANGON_PKG_ROLE_LABELS['pack-registrar'] || '打包登记员工',
+    color: '#2dd4bf',
+  },
+  workflow_sandbox: {
+    name: YUANGON_PKG_ROLE_LABELS['sandbox-tester'] || '测试员工',
+    color: '#f87171',
+  },
+  mod_sandbox: {
+    name: YUANGON_PKG_ROLE_LABELS['code-validator'] || '代码校验员工',
+    color: '#fbbf24',
+  },
+  standalone_smoke: {
+    name: YUANGON_PKG_ROLE_LABELS['self-checker'] || '自检员工',
+    color: '#a3e635',
+  },
   host_check: { name: YUANGON_PKG_ROLE_LABELS['host-checker'] || '运维员工', color: '#94a3b8' },
-  six_dim_gate: { name: YUANGON_PKG_ROLE_LABELS['hex-quality-assessor'] || '六维质检员工', color: '#c084fc' },
+  six_dim_gate: {
+    name: YUANGON_PKG_ROLE_LABELS['hex-quality-assessor'] || '六维质检员工',
+    color: '#c084fc',
+  },
   complete: { name: '完成', color: '#34d399' },
 }
 
@@ -60,7 +90,7 @@ export const ORCH_LABEL_TO_STEP_ID: Record<string, string> = {
   登记员工包: 'register_pack',
   流程沙箱测试: 'workflow_sandbox',
   工作流沙箱测试: 'workflow_sandbox',
-  '包体与Python校验': 'mod_sandbox',
+  包体与Python校验: 'mod_sandbox',
   '包体与 Python 校验': 'mod_sandbox',
   Mod沙箱测试: 'mod_sandbox',
   'Mod 沙箱测试': 'mod_sandbox',
@@ -127,10 +157,7 @@ const STATUS_RANK: Record<string, number> = {
 }
 
 /** 轮询时防止步骤状态从 done/skipped 回退到 pending */
-export function mergeOrchStepsMonotonic<T extends OrchStepLike>(
-  prev: T[] | null | undefined,
-  incoming: T[],
-): T[] {
+export function mergeOrchStepsMonotonic<T extends OrchStepLike>(prev: T[] | null | undefined, incoming: T[]): T[] {
   if (!prev?.length) return incoming
   const prevMap = new Map<string, T>()
   for (const st of prev) prevMap.set(String(st.id || st.label || ''), st)

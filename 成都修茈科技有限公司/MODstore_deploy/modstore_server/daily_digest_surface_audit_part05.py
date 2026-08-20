@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -33,17 +37,17 @@ async def _wait_page_ready(page: _facade().Any, *, timeout_ms: int) -> None:
         await page.add_style_tag(
             content='@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&display=swap");*{font-family:"Noto Sans SC","WenQuanYi Micro Hei","DejaVu Sans",sans-serif!important}'
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     try:
         await page.wait_for_load_state("networkidle", timeout=min(timeout_ms, 25000))
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     try:
         await page.evaluate(
             "() => (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve()"
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     await page.wait_for_timeout(1500)
 
@@ -60,11 +64,11 @@ async def _apply_page_prepare_step(page: _facade().Any, prepare: str, timeout_ms
             if await unlock_btn.is_visible(timeout=2500):
                 await unlock_btn.click(timeout=5000)
                 await page.wait_for_timeout(1000)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
         try:
             await page.wait_for_selector(".wb-sidebar-admin-nav, #app .app-shell", timeout=12000)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
         return
     if prepare.startswith("wb_mode:"):
@@ -93,7 +97,7 @@ async def _apply_page_prepare_step(page: _facade().Any, prepare: str, timeout_ms
             await btn.first.click(timeout=min(timeout_ms, 15000))
             await page.wait_for_selector(".store-adv-filters", state="visible", timeout=6000)
             await page.wait_for_timeout(600)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
         return
 
@@ -109,7 +113,8 @@ async def _capture_one(
 ) -> _facade().Dict[str, _facade().Any]:
     console_errors: _facade().List[str] = []
     page.on(
-        "console", lambda msg: console_errors.append(str(msg.text)) if msg.type == "error" else None
+        "console",
+        lambda msg: (console_errors.append(str(msg.text)) if msg.type == "error" else None),
     )
     vp = _facade()._MOBILE_VIEWPORT if viewport == "mobile" else _facade()._DESKTOP_VIEWPORT
     await page.set_viewport_size(vp)
@@ -126,13 +131,13 @@ async def _capture_one(
         png = await page.screenshot(full_page=False, type="png")
         if save_path is not None:
             save_path.write_bytes(png)
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         err = str(exc)
         try:
             png = await page.screenshot(full_page=False, type="png")
             if save_path is not None:
                 save_path.write_bytes(png)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
         if not save_path or not save_path.is_file():
             return {

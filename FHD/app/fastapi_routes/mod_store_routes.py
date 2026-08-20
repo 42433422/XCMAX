@@ -401,14 +401,42 @@ def _split_package_file(package_file: str) -> tuple[str, str]:
 _normalize_package_zip = normalize_package_zip_path
 
 
-
-
 _delivery_routes = __import__("app.fastapi_routes.private_mod_delivery_routes", fromlist=["router"])
 router.include_router(_delivery_routes.router)
 
 from app.fastapi_routes import mod_store_route_handlers as _route_handlers
 
-_ROUTE_HANDLER_EXPORTS = frozenset(['_can_materialize_host_foundation_without_employee_marker', '_ensure_host_foundation_employee_on_disk', '_install_from_catalog', '_install_host_foundation_internal', 'mod_store_bootstrap_edition_pack', 'mod_store_catalog', 'mod_store_delete_package', 'mod_store_dependencies', 'mod_store_details', 'mod_store_download', 'mod_store_install', 'mod_store_install_customer_delivery_seed', 'mod_store_install_host_foundation', 'mod_store_install_industry_seed', 'mod_store_market_catalog', 'mod_store_popular', 'mod_store_rate', 'mod_store_rebuild_index', 'mod_store_recent', 'mod_store_reload_employees', 'mod_store_search', 'mod_store_sync_modstore_library', 'mod_store_uninstall', 'mod_store_update', 'mod_store_updates', 'mod_store_upload', 'mod_store_validate'])
+_ROUTE_HANDLER_EXPORTS = frozenset(
+    [
+        "_can_materialize_host_foundation_without_employee_marker",
+        "_ensure_host_foundation_employee_on_disk",
+        "_install_from_catalog",
+        "_install_host_foundation_internal",
+        "mod_store_bootstrap_edition_pack",
+        "mod_store_catalog",
+        "mod_store_delete_package",
+        "mod_store_dependencies",
+        "mod_store_details",
+        "mod_store_download",
+        "mod_store_install",
+        "mod_store_install_customer_delivery_seed",
+        "mod_store_install_host_foundation",
+        "mod_store_install_industry_seed",
+        "mod_store_market_catalog",
+        "mod_store_popular",
+        "mod_store_rate",
+        "mod_store_rebuild_index",
+        "mod_store_recent",
+        "mod_store_reload_employees",
+        "mod_store_search",
+        "mod_store_sync_modstore_library",
+        "mod_store_uninstall",
+        "mod_store_update",
+        "mod_store_updates",
+        "mod_store_upload",
+        "mod_store_validate",
+    ]
+)
 
 
 def __getattr__(name: str):

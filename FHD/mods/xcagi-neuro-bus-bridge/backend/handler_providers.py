@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """里程碑 N：NeuroBus 领域事件处理器注册编排（实现委托宿主 handler 模块）。"""
 
 from __future__ import annotations
@@ -8,6 +7,8 @@ import json
 import logging
 from pathlib import Path
 from typing import Any
+
+from app.mod_sdk.errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,7 @@ def load_handler_catalog() -> dict[str, Any]:
     try:
         data = json.loads(p.read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else {"handlers": []}
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return {"handlers": []}
 
 
@@ -91,7 +92,7 @@ def register_all_domain_handlers(bus) -> dict[str, Any]:
             else:
                 errors.append({"domain_id": domain_id, "error": str(exc)})
                 logger.error("[NeuroBusMod] handler import failed: %s", domain_id, exc_info=True)
-        except Exception as exc:
+        except BOUNDARY_ERRORS as exc:
             errors.append({"domain_id": domain_id, "error": str(exc)})
             logger.error("[NeuroBusMod] handler register failed: %s", domain_id, exc_info=True)
 

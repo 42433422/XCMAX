@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -16,12 +20,14 @@ def _strip_fence(text: str) -> str:
     return s.strip()
 
 
-def _parse_task_list(content: str) -> _facade().List[_facade().Dict[str, _facade().Any]]:
+def _parse_task_list(
+    content: str,
+) -> _facade().List[_facade().Dict[str, _facade().Any]]:
     raw = _facade()._strip_fence(content)
     try:
         data = _facade().json.loads(raw)
     except _facade().json.JSONDecodeError:
-        (i, j) = (raw.find("["), raw.rfind("]"))
+        i, j = (raw.find("["), raw.rfind("]"))
         if i < 0 or j <= i:
             return []
         try:
@@ -107,7 +113,7 @@ async def generate_bench_tasks(
             result = await chat_dispatch_via_session(
                 db, user_id, provider, model, messages, max_tokens=_mt
             )
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         msg = f"generate_bench_tasks LLM call failed: {exc}"
         if strict:
             raise RuntimeError(msg) from exc

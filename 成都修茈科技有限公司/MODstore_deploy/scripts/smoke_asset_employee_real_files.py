@@ -9,6 +9,8 @@ import sys
 import zipfile
 from pathlib import Path
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 BRIEF = """我要创建一个和现有「太阳鸟考勤员」一模一样的员工包。
 
 员工包基础信息：
@@ -167,7 +169,11 @@ async def main() -> int:
             api_key, _ = resolve_api_key(db2, u2.id, provider)  # type: ignore[union-attr]
             if not api_key:
                 return None, {"warning": f"{provider} missing api key"}
-            base = resolve_base_url(db2, u2.id, provider) if provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS else None  # type: ignore[union-attr]
+            base = (
+                resolve_base_url(db2, u2.id, provider)
+                if provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS
+                else None
+            )  # type: ignore[union-attr]
             system = (
                 "你是 Python 代码修复器。只输出修复后的 convert.py Python 代码块。"
                 "必须保留 convert_file 签名，必须真实读取 src_path/template_path 并保存 output_path。"
@@ -236,7 +242,7 @@ async def main() -> int:
     try:
         with zipfile.ZipFile(io.BytesIO(raw_zip), "r"):
             xcemp_path.write_bytes(raw_zip)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     report = {
         "ok": bool(result.get("ok"))

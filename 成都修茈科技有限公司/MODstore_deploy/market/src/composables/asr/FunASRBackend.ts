@@ -170,9 +170,17 @@ export class FunASRBackend implements ASRBackend {
     this.ws.binaryType = 'arraybuffer'
 
     const wsOpen = await new Promise<boolean>((resolve) => {
-      const timer = setTimeout(() => { resolve(false) }, FunASRBackend.wsOpenTimeoutMs())
-      this.ws!.onopen = () => { clearTimeout(timer); resolve(true) }
-      this.ws!.onerror = () => { clearTimeout(timer); resolve(false) }
+      const timer = setTimeout(() => {
+        resolve(false)
+      }, FunASRBackend.wsOpenTimeoutMs())
+      this.ws!.onopen = () => {
+        clearTimeout(timer)
+        resolve(true)
+      }
+      this.ws!.onerror = () => {
+        clearTimeout(timer)
+        resolve(false)
+      }
     })
 
     if (!wsOpen || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
@@ -180,7 +188,9 @@ export class FunASRBackend implements ASRBackend {
     }
 
     const serverReady = await new Promise<boolean>((resolve) => {
-      const timer = setTimeout(() => { resolve(false) }, FunASRBackend.serverReadyTimeoutMs())
+      const timer = setTimeout(() => {
+        resolve(false)
+      }, FunASRBackend.serverReadyTimeoutMs())
       const ws = this.ws!
 
       const finish = (ok: boolean) => {
@@ -198,7 +208,9 @@ export class FunASRBackend implements ASRBackend {
             return
           }
           if (msg.type === 'connected') finish(true)
-        } catch { /* wait */ }
+        } catch {
+          /* wait */
+        }
       }
       ws.onerror = () => finish(false)
       ws.onclose = () => finish(false)
@@ -234,7 +246,11 @@ export class FunASRBackend implements ASRBackend {
 
     this.ws.onerror = () => {
       if (this._aborted) return
-      try { this.ws?.close() } catch { /* */ }
+      try {
+        this.ws?.close()
+      } catch {
+        /* */
+      }
     }
 
     this.sendSessionConfig()
@@ -324,7 +340,9 @@ export class FunASRBackend implements ASRBackend {
       const segmentText = await this.waitOfflineAfterSpeaking(false)
       try {
         this.ws.send(JSON.stringify({ is_speaking: true }))
-      } catch { /* */ }
+      } catch {
+        /* */
+      }
       const text = (segmentText || this._offlineFinal || priorOnline).trim()
       this._finalText = ''
       this._onlinePartial = ''
@@ -353,7 +371,7 @@ export class FunASRBackend implements ASRBackend {
 
   private handleServerMessage(msg: Record<string, unknown>) {
     if (msg.type === 'error') {
-      this._onError?.(msg.message as string || 'FunASR 服务错误')
+      this._onError?.((msg.message as string) || 'FunASR 服务错误')
       return
     }
     if (msg.type === 'connected') return
@@ -401,15 +419,20 @@ export class FunASRBackend implements ASRBackend {
       if (remaining.length >= this._SEND_CHUNK_SAMPLES) {
         this._pcmChunksSent += Math.floor(remaining.length / this._SEND_CHUNK_SAMPLES)
       }
-    } catch { /* */ }
+    } catch {
+      /* */
+    }
   }
 
   private waitOfflineAfterSpeaking(fromStop: boolean): Promise<string> {
     return new Promise((resolve) => {
-      const timer = setTimeout(() => {
-        this._flushWaiter = null
-        resolve(this.bestSegmentText())
-      }, fromStop ? 10000 : 8000)
+      const timer = setTimeout(
+        () => {
+          this._flushWaiter = null
+          resolve(this.bestSegmentText())
+        },
+        fromStop ? 10000 : 8000,
+      )
       this._flushWaiter = (text: string) => {
         clearTimeout(timer)
         resolve((text || this.bestSegmentText()).trim())
@@ -447,7 +470,11 @@ export class FunASRBackend implements ASRBackend {
       this.capture = null
     }
     if (this._ownsCapture) this.capture = null
-    try { this.ws?.close() } catch { /* */ }
+    try {
+      this.ws?.close()
+    } catch {
+      /* */
+    }
     this.ws = null
   }
 

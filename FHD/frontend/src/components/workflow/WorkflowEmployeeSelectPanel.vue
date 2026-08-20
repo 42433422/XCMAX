@@ -7,16 +7,12 @@
         :to="workflowVisualizationLocation"
         class="workflow-employee-visual-link"
         :title="workflowPanoramaLinkTitle"
-      >流程可视化</router-link>
+        >流程可视化</router-link
+      >
     </div>
 
     <p v-if="statusHint" class="workflow-employee-hint">{{ statusHint }}</p>
-    <div
-      v-else
-      class="workflow-employee-list"
-      role="group"
-      aria-label="工作流 AI 员工"
-    >
+    <div v-else class="workflow-employee-list" role="group" aria-label="工作流 AI 员工">
       <button
         v-for="emp in workflowEmployeeDefs"
         :key="emp.id"
@@ -26,10 +22,7 @@
         @click="toggleWorkflowEmployee(emp.id)"
       >
         <span class="workflow-employee-label">{{ emp.label }}</span>
-        <div
-          class="toggle-switch workflow-employee-toggle"
-          :class="{ active: workflowEmployeesEnabled[emp.id] }"
-        >
+        <div class="toggle-switch workflow-employee-toggle" :class="{ active: workflowEmployeesEnabled[emp.id] }">
           <div class="toggle-slider"></div>
         </div>
       </button>
@@ -58,25 +51,17 @@ const props = withDefaults(
 )
 
 const { showWorkflowPanoramaNav } = useWorkflowPanoramaNavVisible()
-const effectiveShowPanoramaLink = computed(
-  () => props.showPanoramaLink ?? showWorkflowPanoramaNav.value,
-)
+const effectiveShowPanoramaLink = computed(() => props.showPanoramaLink ?? showWorkflowPanoramaNav.value)
 
 const workflowAiEmployeesStore = useWorkflowAiEmployeesStore()
 useWorkflowEmployeeRegistrySync()
 const { ctx, modWorkflowEmployeesActive } = useWorkflowModsRuntimeContext()
-const {
-  enabled: workflowEmployeesEnabled,
-  registryEntries,
-  registryLoaded,
-} = storeToRefs(workflowAiEmployeesStore)
+const { enabled: workflowEmployeesEnabled, registryEntries, registryLoaded } = storeToRefs(workflowAiEmployeesStore)
 
 const workflowVisualizationLocation = resolveWorkflowVisualizationLocation()
 
 const workflowPanoramaLinkTitle = computed(() =>
-  modWorkflowEmployeesActive.value
-    ? '查看已安装工作流员工的执行逻辑与过程'
-    : '查看工作流执行逻辑与过程',
+  modWorkflowEmployeesActive.value ? '查看已安装工作流员工的执行逻辑与过程' : '查看工作流执行逻辑与过程',
 )
 
 const workflowEmployeeDefs = computed(() =>
@@ -172,7 +157,9 @@ function toggleWorkflowEmployee(id: string) {
   border-radius: 8px;
   background: #f9fafb;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
 }
 .workflow-employee-row:hover {
   background: #f3f4f6;

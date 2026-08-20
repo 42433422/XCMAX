@@ -8,11 +8,7 @@
       <span class="source-total">{{ documents.length }} 个来源</span>
     </div>
     <div v-if="documents.length" class="source-list">
-      <div
-        v-for="doc in documents"
-        :key="doc.document_id || `${doc.source}-${doc.version_label}`"
-        class="source-row"
-      >
+      <div v-for="doc in documents" :key="doc.document_id || `${doc.source}-${doc.version_label}`" class="source-row">
         <button type="button" class="source-row__select" @click="emit('select', doc)">
           <span class="source-row__icon">
             <i class="fa fa-file-text-o" aria-hidden="true"></i>
@@ -37,10 +33,7 @@
           aria-label="删除资料"
           @click="emit('delete', doc)"
         >
-          <i
-            :class="deletingDocumentId === doc.document_id ? 'fa fa-circle-o-notch fa-spin' : 'fa fa-trash-o'"
-            aria-hidden="true"
-          ></i>
+          <i :class="deletingDocumentId === doc.document_id ? 'fa fa-circle-o-notch fa-spin' : 'fa fa-trash-o'" aria-hidden="true"></i>
         </button>
       </div>
     </div>
@@ -54,11 +47,7 @@
 
 <script setup lang="ts">
 import type { KnowledgeBaseDocument } from '@/api/knowledgeBase'
-import {
-  numberText,
-  parserLabel,
-  versionLabel,
-} from '@/composables/persyKnowledgeFormatters'
+import { numberText, parserLabel, versionLabel } from '@/composables/persyKnowledgeFormatters'
 
 defineProps<{
   documents: KnowledgeBaseDocument[]

@@ -22,6 +22,8 @@ import contextvars
 import functools
 from typing import Callable, Optional, Tuple, TypeVar
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 _PLATFORM_LLM_SCOPE: contextvars.ContextVar[bool] = contextvars.ContextVar(
     "modstore_platform_llm_scope", default=False
 )
@@ -64,7 +66,7 @@ def resolve_active_platform_bench() -> Tuple[Optional[str], Optional[str]]:
         from modstore_server.services.llm import resolve_platform_bench_llm
 
         return resolve_platform_bench_llm()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return None, None
 
 

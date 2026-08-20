@@ -2,13 +2,13 @@
 
 ## 元信息
 
-| 字段 | 值 |
-|------|----|
-| skill_id | `skill-static-page-update` |
-| 所属员工 | `site-content-editor` |
-| 业务域 | xiu-ci.com 营销静态页内容维护 |
-| 版本 | 1.1.0 |
-| 父版本 | — |
+| 字段     | 值                            |
+| -------- | ----------------------------- |
+| skill_id | `skill-static-page-update`    |
+| 所属员工 | `site-content-editor`         |
+| 业务域   | xiu-ci.com 营销静态页内容维护 |
+| 版本     | 1.1.0                         |
+| 父版本   | —                             |
 
 ---
 
@@ -17,6 +17,7 @@
 **触发条件**：收到明确的内容更新指令（指定文件、指定位置、指定内容）。
 
 **执行逻辑**：
+
 ```
 识别更新类型
 → 若为新闻列表：改动 marketing-site/data/news.json → npm run build（在 marketing-site）
@@ -26,6 +27,7 @@
 ```
 
 **输出 schema**：
+
 ```json
 {
   "status": "ok | error",
@@ -38,16 +40,15 @@
 
 **工具**：文件读写、`marketing-site/npm run build`、`python -m http.server`（本地预览）
 
-**禁区提醒**：根的 `*.html` 中 **`<header>`、移动菜单** 均由 `marketing-site` 模板生成；手改会被下次构建覆盖。应改 `marketing-site/templates/partials/header.njk`（需沟通 `deploy-release-officer`/CI）。
----
+## **禁区提醒**：根的 `*.html` 中 **`<header>`、移动菜单** 均由 `marketing-site` 模板生成；手改会被下次构建覆盖。应改 `marketing-site/templates/partials/header.njk`（需沟通 `deploy-release-officer`/CI）。
 
 ## 2. 动态触发条件
 
-| 触发类型 | 规则 |
-|----------|------|
-| 执行报错 | 文件解析失败（编码错误、HTML 结构损坏） |
+| 触发类型   | 规则                                          |
+| ---------- | --------------------------------------------- |
+| 执行报错   | 文件解析失败（编码错误、HTML 结构损坏）       |
 | 结果不达标 | `w3c_errors > 0` 或 `broken_image_paths` 非空 |
-| 场景特殊 | 需要新增从未出现过的 HTML 结构段 |
+| 场景特殊   | 需要新增从未出现过的 HTML 结构段              |
 
 ---
 
@@ -62,6 +63,7 @@
 ## 4. 固化
 
 **验收标准**：
+
 - [x] `w3c_errors == 0`
 - [x] `broken_image_paths == []`
 - [x] 页面在本地 HTTP server 下正常渲染

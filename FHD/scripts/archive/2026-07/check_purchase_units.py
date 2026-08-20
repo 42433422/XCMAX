@@ -1,5 +1,7 @@
 import sqlite3
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 
 def check_all_purchase_units():
     """检查系统中所有的购买单位"""
@@ -82,7 +84,7 @@ def check_all_purchase_units():
             "products_without_units": no_unit_count,
         }
 
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 检查购买单位时出错: {e}")
         return {"error": str(e)}
 

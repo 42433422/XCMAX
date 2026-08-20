@@ -2,6 +2,8 @@ import os
 import sqlite3
 from datetime import datetime
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 
 def import_bandao_fengqing():
     """导入半岛风情购买单位和产品数据"""
@@ -132,7 +134,7 @@ def import_bandao_fengqing():
 
         return True
 
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"导入过程中出错: {e}")
         return False
 
@@ -177,7 +179,7 @@ def check_import_result():
 
         conn.close()
 
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"检查导入结果时出错: {e}")
 
 

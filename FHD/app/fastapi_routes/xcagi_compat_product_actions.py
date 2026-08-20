@@ -114,7 +114,9 @@ def execute_product_action(
             return {"success": False, "message": "ids 须为非空数组", "status_code": 400}
         try:
             deleted, skipped = batch_delete_rows(ids)
-            skipped_items = skipped if isinstance(skipped, list) else ([] if not skipped else [skipped])
+            skipped_items = (
+                skipped if isinstance(skipped, list) else ([] if not skipped else [skipped])
+            )
             return {
                 "success": True,
                 "message": f"已删除 {deleted} 条",

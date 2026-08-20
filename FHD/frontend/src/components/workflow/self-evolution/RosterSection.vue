@@ -45,9 +45,7 @@ defineProps<{
   padding: 11px 12px;
   border: 1px solid #ccfbf1;
   border-radius: 12px;
-  background:
-    radial-gradient(circle at 12% 0%, rgba(20, 184, 166, 0.10), transparent 36%),
-    rgba(255, 255, 255, 0.78);
+  background: radial-gradient(circle at 12% 0%, rgba(20, 184, 166, 0.1), transparent 36%), rgba(255, 255, 255, 0.78);
 }
 
 .selp-roster-cards {
@@ -66,10 +64,18 @@ defineProps<{
   background: #f8fafc;
 }
 
-.selp-roster-card--run { background: #ecfeff; }
-.selp-roster-card--ok { background: #f0fdf4; }
-.selp-roster-card--warn { background: #fffbeb; }
-.selp-roster-card--bad { background: #fef2f2; }
+.selp-roster-card--run {
+  background: #ecfeff;
+}
+.selp-roster-card--ok {
+  background: #f0fdf4;
+}
+.selp-roster-card--warn {
+  background: #fffbeb;
+}
+.selp-roster-card--bad {
+  background: #fef2f2;
+}
 
 .selp-roster-card span,
 .selp-roster-card small {

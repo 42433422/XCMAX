@@ -1,6 +1,8 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
 
 
@@ -13,6 +15,7 @@ async def resolve_default_llm_route(
 ) -> dict[str, _facade().Any]:
     """与 ``GET /api/llm/resolve-chat-default`` 同源：解析账户默认 vendor + model。"""
     import asyncio
+
     from modstore_server.models import User as UserModel
     from modstore_server.models import get_session_factory
 
@@ -35,12 +38,12 @@ async def resolve_default_llm_route(
             pref_m = str(prefs.get("model") or "").strip()
             keys: dict[str, str] = {}
             for p in _facade().KNOWN_PROVIDERS:
-                (k, _) = _facade().resolve_api_key(_db, uid, p)
+                k, _ = _facade().resolve_api_key(_db, uid, p)
                 if k:
                     keys[p] = k
         return (pref_p, pref_m, keys)
 
-    (pref_p, pref_m, keys) = await asyncio.to_thread(_load_prefs_and_keys)
+    pref_p, pref_m, keys = await asyncio.to_thread(_load_prefs_and_keys)
 
     async def first_model_id(provider: str) -> str:
         block = await _facade().get_models_for_provider(db, uid, provider, force_refresh=False)
@@ -52,7 +55,12 @@ async def resolve_default_llm_route(
     if pref_p in _facade().KNOWN_PROVIDERS and pref_p in keys:
         m0 = await first_model_id(pref_p)
         if m0:
-            return {"ok": True, "provider": pref_p, "model": m0, "source": "preference_first_model"}
+            return {
+                "ok": True,
+                "provider": pref_p,
+                "model": m0,
+                "source": "preference_first_model",
+            }
     for p in _facade().KNOWN_PROVIDERS:
         if p not in keys:
             continue
@@ -72,7 +80,7 @@ def _membership_meta(plan_id: str | None) -> _facade().Dict[str, _facade().Any]:
         "plan_pro": ("pro", "VIP+", True),
         "plan_enterprise": ("enterprise", "svip", True),
     }
-    (tier, label, can_byok) = tier_map.get(pid, ("free", "普通用户", False))
+    tier, label, can_byok = tier_map.get(pid, ("free", "普通用户", False))
     return {"tier": tier, "label": label, "is_member": bool(pid), "can_byok": can_byok}
 
 
@@ -127,8 +135,11 @@ def _provider_labels() -> _facade().Dict[str, str]:
 
 
 @_facade().router.get("/status")
-async def llm_status(user: _facade().User = _facade().Depends(_facade()._get_current_user)):
+async def llm_status(
+    user: _facade().User = _facade().Depends(_facade()._get_current_user),
+):
     import asyncio
+
     from modstore_server.models import get_session_factory
 
     user_id = int(user.id)

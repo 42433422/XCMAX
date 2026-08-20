@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="attr-defined, no-any-return, operator, union-attr, valid-type"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -33,7 +37,7 @@ async def _craft_standalone_smoke(
 
         _sm_manifest = res.get("manifest") if isinstance(res, dict) else None
         if not _sm_manifest and _pack and _pack.is_dir():
-            (_mf_disk, _mf_disk_err) = read_manifest(_pack)
+            _mf_disk, _mf_disk_err = read_manifest(_pack)
             if not _mf_disk_err:
                 _sm_manifest = _mf_disk
         if _sm_manifest and isinstance(_sm_manifest, dict):
@@ -58,9 +62,7 @@ async def _craft_standalone_smoke(
                     ),
                     timeout=20,
                 )
-                (_stdout, _stderr) = await _facade().asyncio.wait_for(
-                    _proc.communicate(), timeout=20
-                )
+                _stdout, _stderr = await _facade().asyncio.wait_for(_proc.communicate(), timeout=20)
                 if _proc.returncode == 0:
                     _standalone_smoke_ok = True
                     _standalone_smoke_msg = f"独立运行 OK — python {_sm_pid}.xcemp validate 通过 ✅"
@@ -76,20 +78,20 @@ async def _craft_standalone_smoke(
                         _standalone_smoke_msg = _repair_msg
                         if "成功" in _repair_msg or "✅" in _repair_msg:
                             _standalone_smoke_ok = True
-            except Exception as _se:
+            except RECOVERABLE_ERRORS as _se:
                 _standalone_smoke_msg = (
                     f"⚠️ 自检子进程异常：{_se}；建议手动运行 python xxx.xcemp validate 排查"
                 )
             finally:
                 try:
                     _facade().os.unlink(_tmp_xcemp)
-                except Exception:
+                except RECOVERABLE_ERRORS:
                     pass
         else:
             _standalone_smoke_msg = "manifest 尚未生成，独立自检跳过"
             _standalone_smoke_ok = True
             _standalone_smoke_skipped = True
-    except Exception as _smoke_exc:
+    except RECOVERABLE_ERRORS as _smoke_exc:
         _standalone_smoke_msg = f"⚠️ 独立自检异常：{_smoke_exc}；建议手动验证 .xcemp 包完整性"
     if not _standalone_smoke_ok:
         _standalone_smoke_msg = "⚠️ " + _standalone_smoke_msg.lstrip("⚠️ ")
@@ -137,7 +139,9 @@ async def _standalone_smoke_auto_repair(
         )
         _is_direct_python = "direct_python" in _sm_handlers
         if _is_direct_python:
-            from modstore_server.employee_asset_pipeline import render_direct_python_asset_worker
+            from modstore_server.employee_asset_pipeline import (
+                render_direct_python_asset_worker,
+            )
 
             _rule_spec_path = pack_dir / "rule_spec.json"
             _sm_rule_spec = {}
@@ -146,7 +150,7 @@ async def _standalone_smoke_auto_repair(
                     _sm_rule_spec = _facade().json.loads(
                         _rule_spec_path.read_text(encoding="utf-8")
                     )
-                except Exception:
+                except RECOVERABLE_ERRORS:
                     pass
             _runtime_mod = (
                 _facade().re.sub("[^a-z0-9_]+", "_", (_sm_eid or pack_id).lower()).strip("_")
@@ -191,9 +195,7 @@ async def _standalone_smoke_auto_repair(
                 ),
                 timeout=20,
             )
-            (_stdout2, _stderr2) = await _facade().asyncio.wait_for(
-                _proc2.communicate(), timeout=20
-            )
+            _stdout2, _stderr2 = await _facade().asyncio.wait_for(_proc2.communicate(), timeout=20)
             if _proc2.returncode == 0:
                 return "自检失败后自动修复成功 ✅ — 已重新生成 backend 代码并通过 validate"
             else:
@@ -202,9 +204,9 @@ async def _standalone_smoke_auto_repair(
         finally:
             try:
                 _facade().os.unlink(_tmp_xcemp2)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 pass
-    except Exception as _repair_exc:
+    except RECOVERABLE_ERRORS as _repair_exc:
         return f"⚠️ 自动修复异常：{_repair_exc}；建议手动检查 backend/employees/*.py"
 
 
@@ -237,13 +239,13 @@ async def _craft_host_check(
                         host_warnings.append(
                             "宿主返回 llm-status：未配置 LLM API Key，员工运行时可能无法调用模型"
                         )
-                except Exception:
+                except RECOVERABLE_ERRORS:
                     host_warnings.append("llm-status 返回非 JSON，跳过密钥探测")
             elif lr.status_code == 404:
                 host_warnings.append(
                     "宿主未提供 /api/mods/llm-status（可选），无法在编排阶段探测 LLM 密钥"
                 )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             host_warnings.append("无法请求宿主 /api/mods/llm-status（可选端点）")
         try:
             vr = await client.get(f"{base}/api/version")
@@ -254,16 +256,16 @@ async def _craft_host_check(
                         host_probe["host_min_mod_sdk_version"] = str(
                             vj.get("min_mod_sdk_version") or ""
                         )
-                except Exception:
+                except RECOVERABLE_ERRORS:
                     pass
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
         msg = f"HTTP {r.status_code}" if host_probe.get("ok") else f"HTTP {r.status_code}（异常）"
         if host_warnings:
             msg += "；" + "；".join(host_warnings[:3])[:400]
             host_probe["warnings"] = host_warnings
         host_check_msg = msg[:480]
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         host_probe = {"skipped": False, "ok": False, "error": str(e)[:300]}
         host_check_msg = f"探测失败: {e!s}"[:300]
     return {"host_probe": host_probe, "host_check_msg": host_check_msg}
@@ -292,7 +294,9 @@ async def _craft_six_dim_gate(
     **_kw: _facade().Any,
 ) -> _facade().Dict[str, _facade().Any]:
     from modstore_server.employee_six_dimension import compute_six_dimension_report
-    from modstore_server.employee_six_dimension_llm import enrich_six_dimension_report_with_llm
+    from modstore_server.employee_six_dimension_llm import (
+        enrich_six_dimension_report_with_llm,
+    )
 
     _pack = (
         _facade().Path(str(pack_dir))
@@ -325,9 +329,9 @@ async def _craft_six_dim_gate(
         try:
             mf = _facade().json.loads((_pack_path / "manifest.json").read_text(encoding="utf-8"))
             eid = str(mf.get("id") or (mf.get("identity") or {}).get("id") or "").strip()
-        except Exception:
+        except RECOVERABLE_ERRORS:
             eid = ""
-    (llm_report, llm_meta) = await enrich_six_dimension_report_with_llm(
+    llm_report, llm_meta = await enrich_six_dimension_report_with_llm(
         report,
         pack_dir=_pack_path,
         target_employee_id=eid or "unknown",

@@ -1,20 +1,7 @@
 <template>
-  <div
-    v-show="visible"
-    ref="rootRef"
-    class="virtual-cursor-root"
-    :class="{ clicking: clicking }"
-    :style="rootStyle"
-    aria-hidden="true"
-  >
+  <div v-show="visible" ref="rootRef" class="virtual-cursor-root" :class="{ clicking: clicking }" :style="rootStyle" aria-hidden="true">
     <svg width="32" height="32" viewBox="0 0 24 24" fill="none" class="virtual-cursor-svg">
-      <path
-        d="M5 3 L19 12 L12.5 13.5 L9 20 Z"
-        fill="white"
-        stroke="black"
-        stroke-width="1.5"
-        stroke-linejoin="round"
-      />
+      <path d="M5 3 L19 12 L12.5 13.5 L9 20 Z" fill="white" stroke="black" stroke-width="1.5" stroke-linejoin="round" />
     </svg>
     <span v-if="label" class="virtual-cursor-label">{{ label }}</span>
     <span v-if="clicking" class="virtual-cursor-ripple" />
@@ -23,11 +10,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import type {
-  VirtualCursorApi,
-  VirtualCursorClickOptions,
-  VirtualCursorMoveOptions,
-} from '@/tutorial/virtualCursor.types'
+import type { VirtualCursorApi, VirtualCursorClickOptions, VirtualCursorMoveOptions } from '@/tutorial/virtualCursor.types'
 
 const visible = ref(false)
 const x = ref(-9999)
@@ -53,10 +36,7 @@ function centerOf(el: HTMLElement) {
   }
 }
 
-function resolvePoint(
-  target: HTMLElement | { x: number; y: number },
-  scroll = true,
-) {
+function resolvePoint(target: HTMLElement | { x: number; y: number }, scroll = true) {
   if (target instanceof HTMLElement) {
     if (scroll) {
       try {
@@ -83,10 +63,7 @@ function playClickRipple() {
   }, 280)
 }
 
-function moveTo(
-  target: HTMLElement | { x: number; y: number },
-  options: VirtualCursorMoveOptions = {},
-) {
+function moveTo(target: HTMLElement | { x: number; y: number }, options: VirtualCursorMoveOptions = {}) {
   const dur = options.duration ?? 500
   duration.value = dur
   label.value = options.label ?? ''

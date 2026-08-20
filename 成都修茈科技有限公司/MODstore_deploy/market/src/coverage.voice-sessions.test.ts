@@ -183,9 +183,16 @@ describe('voice session coverage', () => {
     expect(mockRefreshLevelAndWalletAfterLlm).toHaveBeenCalled()
 
     await session.runTurnStart(turnOptions({ turnId: 'turn-2' }))
-    expect(JSON.parse(ws.sent.at(-1) as string)).toMatchObject({ type: 'utterance_start', provisional: true })
+    expect(JSON.parse(ws.sent.at(-1) as string)).toMatchObject({
+      type: 'utterance_start',
+      provisional: true,
+    })
     session.sendUtteranceFinalize('最终', 'turn-2')
-    expect(JSON.parse(ws.sent.at(-1) as string)).toEqual({ type: 'utterance_finalize', turn_id: 'turn-2', text: '最终' })
+    expect(JSON.parse(ws.sent.at(-1) as string)).toEqual({
+      type: 'utterance_finalize',
+      turn_id: 'turn-2',
+      text: '最终',
+    })
 
     session.cancelTurn()
     expect(JSON.parse(ws.sent.at(-1) as string)).toEqual({ type: 'cancel', turn_id: 'turn-2' })
@@ -249,7 +256,10 @@ describe('voice session coverage', () => {
     const onTextDelta = vi.fn()
     const end = session.endUtterance(turnOptions({ onTextDelta }))
     await Promise.resolve()
-    expect(JSON.parse(ws.sent.at(-1) as string)).toMatchObject({ type: 'end_utterance', turn_id: 'turn-1' })
+    expect(JSON.parse(ws.sent.at(-1) as string)).toMatchObject({
+      type: 'end_utterance',
+      turn_id: 'turn-1',
+    })
     ws.emit({ type: 'text_delta', delta: '答', so_far: '答' })
     expect(onTextDelta).toHaveBeenCalledWith('答', '答')
     ws.emit({ type: 'audio_chunk', sentence_id: 'u1', data_b64: btoa('c') })
@@ -260,9 +270,16 @@ describe('voice session coverage', () => {
     expect(mockReportVoiceLatencyIfComplete).toHaveBeenCalled()
 
     await session.runTurnStart(turnOptions({ turnId: 'turn-3' }))
-    expect(JSON.parse(ws.sent.at(-1) as string)).toMatchObject({ type: 'utterance_start', turn_id: 'turn-3' })
+    expect(JSON.parse(ws.sent.at(-1) as string)).toMatchObject({
+      type: 'utterance_start',
+      turn_id: 'turn-3',
+    })
     session.sendUtteranceFinalize('最终', 'turn-3')
-    expect(JSON.parse(ws.sent.at(-1) as string)).toEqual({ type: 'utterance_finalize', turn_id: 'turn-3', text: '最终' })
+    expect(JSON.parse(ws.sent.at(-1) as string)).toEqual({
+      type: 'utterance_finalize',
+      turn_id: 'turn-3',
+      text: '最终',
+    })
     session.cancelTurn()
     expect(JSON.parse(ws.sent.at(-1) as string)).toEqual({ type: 'cancel' })
 

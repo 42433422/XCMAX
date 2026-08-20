@@ -12,9 +12,11 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
+from modstore_server.operational_errors import BOUNDARY_ERRORS
+
 try:  # YAML 是可选依赖；缺失时仅支持 JSON spec
     import yaml  # type: ignore
-except Exception:  # noqa: BLE001
+except BOUNDARY_ERRORS:  # noqa: BLE001
     yaml = None  # type: ignore[assignment]
 
 
@@ -137,7 +139,7 @@ def load_spec(text: str) -> Dict[str, Any]:
             raise OpenApiParseError("无法解析为 JSON，且当前环境未安装 PyYAML，无法解析 YAML")
         try:
             data = yaml.safe_load(s)
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
             raise OpenApiParseError(f"YAML 解析失败: {exc}") from exc
     if not isinstance(data, dict):
         raise OpenApiParseError("OpenAPI 文档必须为对象")
@@ -277,7 +279,11 @@ def _extract_base_url(spec: Mapping[str, Any]) -> str:
 def _content_schema(content: Any, spec: Mapping[str, Any]) -> Tuple[Optional[Dict[str, Any]], str]:
     if not isinstance(content, Mapping):
         return None, ""
-    preferred = ("application/json", "application/x-www-form-urlencoded", "multipart/form-data")
+    preferred = (
+        "application/json",
+        "application/x-www-form-urlencoded",
+        "multipart/form-data",
+    )
     for ct in preferred:
         if ct in content and isinstance(content[ct], Mapping):
             schema = content[ct].get("schema")

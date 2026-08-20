@@ -6,9 +6,7 @@ vi.mock('@/utils/adminConsoleUrl', () => ({
 
 describe('hostBusinessPageRedirect admin console', () => {
   it('keeps host paths on admin SPA', async () => {
-    const { resolveHostBusinessPagePath, resolveHostBusinessPageRedirect } = await import(
-      '@/utils/hostBusinessPageRedirect'
-    )
+    const { resolveHostBusinessPagePath, resolveHostBusinessPageRedirect } = await import('@/utils/hostBusinessPageRedirect')
     expect(resolveHostBusinessPageRedirect('internal-customer-service')).toBeNull()
     expect(resolveHostBusinessPageRedirect('data-sources')).toBeNull()
     expect(resolveHostBusinessPagePath('/internal-customer-service')).toBe('/internal-customer-service')

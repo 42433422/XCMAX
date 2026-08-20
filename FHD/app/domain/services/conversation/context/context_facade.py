@@ -462,6 +462,7 @@ class ContextFacade(ContextQuestionMixin):
             "history": self._chat_context.get_history_summary(user_id),
         }
 
+
 class ContextFacadeContainer:
     _instance: ContextFacade | None = None
 

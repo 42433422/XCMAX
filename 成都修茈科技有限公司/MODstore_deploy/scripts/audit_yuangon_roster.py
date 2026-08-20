@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 import fnmatch
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Iterable
 
@@ -176,7 +176,7 @@ def audit(company_root: Path) -> tuple[str, list[str]]:
     overlaps = [(path, owners) for path, owners in writers_by_file.items() if len(owners) > 1]
     covered = len(files) - len(uncovered)
     coverage = 100.0 if not files else covered * 100.0 / len(files)
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     lines = [
         "# Yuangon 覆盖率与编制契约审计报告",
         "",

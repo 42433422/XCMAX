@@ -21,7 +21,10 @@ export function createPurchasePlanSkill(router: ReturnType<typeof import('vue-ro
           assistantReply: '已为您打开会员套餐页面，请选择适合您的套餐。点击购买按钮时我会再次为您确认。',
         }
       } catch (e: unknown) {
-        return { success: false, message: `跳转失败：${e instanceof Error ? e.message : String(e)}` }
+        return {
+          success: false,
+          message: `跳转失败：${e instanceof Error ? e.message : String(e)}`,
+        }
       }
     },
   }

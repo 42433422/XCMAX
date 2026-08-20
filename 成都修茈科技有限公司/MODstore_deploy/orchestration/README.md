@@ -2,10 +2,10 @@
 
 YAML instances validated against JSON Schemas under [`docs/contracts/orchestration/`](../docs/contracts/orchestration/README.md):
 
-| File | Schema |
-|------|--------|
+| File                                           | Schema                        |
+| ---------------------------------------------- | ----------------------------- |
 | [`deploy_topology.yaml`](deploy_topology.yaml) | `deploy_topology.schema.json` |
-| [`ci_pipeline.yaml`](ci_pipeline.yaml) | `ci_pipeline.schema.json` |
+| [`ci_pipeline.yaml`](ci_pipeline.yaml)         | `ci_pipeline.schema.json`     |
 
 Validate locally from `MODstore_deploy/`:
 

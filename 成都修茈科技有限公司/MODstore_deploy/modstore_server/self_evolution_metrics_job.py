@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """Evidence-backed weekly metrics for the self-evolution loop."""
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ import tempfile
 import threading
 import time
 import xml.etree.ElementTree as ET
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
@@ -42,7 +43,7 @@ def _sha256(path: Path) -> str:
 
 
 def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _parse_timestamp(value: Any) -> Optional[datetime]:
@@ -54,8 +55,8 @@ def _parse_timestamp(value: Any) -> Optional[datetime]:
     except ValueError:
         return None
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def _coverage_snapshot(root: Path, now: datetime) -> Dict[str, Any]:
@@ -81,7 +82,10 @@ def _coverage_snapshot(root: Path, now: datetime) -> Dict[str, Any]:
         age_hours = max(0.0, (now - observed_at).total_seconds() / 3600.0)
         max_age_hours = max(
             24,
-            min(int(os.environ.get("MODSTORE_EVOLUTION_COVERAGE_MAX_AGE_HOURS", "336")), 744),
+            min(
+                int(os.environ.get("MODSTORE_EVOLUTION_COVERAGE_MAX_AGE_HOURS", "336")),
+                744,
+            ),
         )
         if age_hours > max_age_hours:
             raise RuntimeError("coverage_artifact_stale")
@@ -277,9 +281,14 @@ def run_self_evolution_metrics_snapshot(
     """Record one verified metric baseline per ISO week, fail-closed."""
 
     if not _RUN_LOCK.acquire(blocking=False):
-        return {"ok": True, "skipped": True, "reason": "already_running", "schema": SCHEMA}
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "already_running",
+            "schema": SCHEMA,
+        }
     try:
-        observed_at = (now or _utc_now()).astimezone(timezone.utc)
+        observed_at = (now or _utc_now()).astimezone(UTC)
         week = observed_at.strftime("%G-W%V")
         for item in load_evolution_metrics():
             metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}

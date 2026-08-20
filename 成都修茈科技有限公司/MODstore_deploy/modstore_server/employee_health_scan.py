@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment"
 """员工健康巡检 + 连续失败自动下架（断点 7）。
 
 核心责任
@@ -25,12 +26,15 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any, Dict, List
 
 from sqlalchemy import and_, func, or_
 
-from modstore_server.llm_failure_classifier import FAILURE_KIND_QUOTA, FAILURE_KIND_TRANSIENT
+from modstore_server.llm_failure_classifier import (
+    FAILURE_KIND_QUOTA,
+    FAILURE_KIND_TRANSIENT,
+)
 from modstore_server.models import (
     CatalogItem,
     EmployeeEvolutionRecord,
@@ -39,6 +43,7 @@ from modstore_server.models import (
     User,
     get_session_factory,
 )
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +128,7 @@ def _notify_admins(title: str, content: str, *, kind: str, payload: Dict[str, An
         # the same alert for every admin on every scan even though the contract
         # says "once per employee per day".  Resolve all recent recipients in
         # one query, then write only missing rows.
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=_notification_cooldown_hours())
+        cutoff = datetime.now(UTC) - timedelta(hours=_notification_cooldown_hours())
         sf = get_session_factory()
         with sf() as session:
             recently_notified = {
@@ -151,9 +156,9 @@ def _notify_admins(title: str, content: str, *, kind: str, payload: Dict[str, An
                     content=content,
                     data=payload,
                 )
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 logger.debug("admin notify failed uid=%s", uid, exc_info=True)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.debug("notification_service unavailable", exc_info=True)
 
 
@@ -203,7 +208,7 @@ def _record_runtime_policy(
             reason="employee_health_scan_failure_rate",
             severity=severity,
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.debug("employee runtime policy update failed eid=%s", employee_id, exc_info=True)
 
 
@@ -219,7 +224,7 @@ def _record_evolution(
         sf = get_session_factory()
         with sf() as session:
             cooldown_min = max(5, _int_env("MODSTORE_HEALTH_SCAN_EVOLUTION_COOLDOWN_MIN", 360))
-            cutoff = datetime.now(timezone.utc) - timedelta(minutes=cooldown_min)
+            cutoff = datetime.now(UTC) - timedelta(minutes=cooldown_min)
             existing = (
                 session.query(EmployeeEvolutionRecord.id)
                 .filter(
@@ -246,7 +251,7 @@ def _record_evolution(
             )
             session.commit()
             return True
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.debug("employee evolution record failed eid=%s", employee_id, exc_info=True)
         return False
 
@@ -288,7 +293,7 @@ def run_health_scan(
     if deactivate_threshold < warn_threshold:
         deactivate_threshold = warn_threshold + 1
 
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=max(1, lookback_hours))
+    cutoff = datetime.now(UTC) - timedelta(hours=max(1, lookback_hours))
     sf = get_session_factory()
     with sf() as session:
         err_col = func.coalesce(EmployeeExecutionMetric.error, "")
@@ -332,7 +337,11 @@ def run_health_scan(
         if not eid or fail_count < warn_threshold:
             continue
         last_iso = last_at.isoformat() if last_at else ""
-        record = {"employee_id": eid, "fail_count": fail_count, "last_failure_at": last_iso}
+        record = {
+            "employee_id": eid,
+            "fail_count": fail_count,
+            "last_failure_at": last_iso,
+        }
 
         if fail_count >= deactivate_threshold:
             ok_deact = _deactivate_catalog_employee(eid)

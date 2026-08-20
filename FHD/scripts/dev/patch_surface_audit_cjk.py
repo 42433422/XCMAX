@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Patch MODstore daily_digest_surface_audit _wait_page_ready for CJK fonts."""
+
 from __future__ import annotations
 
 import re

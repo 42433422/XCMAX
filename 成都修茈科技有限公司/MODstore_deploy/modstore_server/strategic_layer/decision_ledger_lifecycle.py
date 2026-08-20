@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import desc, select
 
 from modstore_server.db.strategic import StrategicActionItem
 from modstore_server.db.strategic import StrategicDecision as StrategicDecisionModel
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -54,10 +55,10 @@ class DecisionLedgerLifecycleMixin:
                 raise ledger.DecisionLifecycleError("decision already reviewed")
             row.review_notes = review_notes.strip()
             row.reviewed_by = reviewer
-            row.updated_at = datetime.now(timezone.utc)
+            row.updated_at = datetime.now(UTC)
             session.commit()
             return ledger._model_to_record(row)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             session.rollback()
             raise
         finally:
@@ -174,7 +175,7 @@ class DecisionLedgerLifecycleMixin:
                 raise ledger.DecisionAlreadyDecidedError(
                     f"decision {decision_id} already in terminal status {current.value}"
                 )
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             row.status = target_status.value
             row.updated_at = now
             if decided_by is not None:
@@ -199,7 +200,7 @@ class DecisionLedgerLifecycleMixin:
                 target_status.value,
             )
             return ledger._model_to_record(row)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             session.rollback()
             raise
         finally:

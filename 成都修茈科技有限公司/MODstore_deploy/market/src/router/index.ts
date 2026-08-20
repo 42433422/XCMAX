@@ -10,8 +10,7 @@ const routes: RouteRecordRaw[] = [
     meta: {
       layout: 'public',
       pageTitle: 'XC AGI 市场 | 智能员工与 AI 工作台',
-      pageDescription:
-        '修茈科技 AI 市场：组合 Mod 与 AI 员工，处理单据、流程与报表；支持注册试用与进入工作台。',
+      pageDescription: '修茈科技 AI 市场：组合 Mod 与 AI 员工，处理单据、流程与报表；支持注册试用与进入工作台。',
     },
   },
   {
@@ -23,16 +22,44 @@ const routes: RouteRecordRaw[] = [
       pageDescription: '浏览与选购 AI 员工、模板与能力包。',
     },
   },
-  { path: '/login', name: 'login', component: () => import('../views/public/LoginView.vue'), meta: { layout: 'public' } },
-  { path: '/login-email', name: 'login-email', component: () => import('../views/public/LoginByEmailView.vue'), meta: { layout: 'public' } },
-  { path: '/forgot-password', name: 'forgot-password', component: () => import('../views/public/ForgotPasswordView.vue'), meta: { layout: 'public' } },
-  { path: '/register', name: 'register', component: () => import('../views/public/RegisterView.vue'), meta: { layout: 'public' } },
+  {
+    path: '/login',
+    name: 'login',
+    component: () => import('../views/public/LoginView.vue'),
+    meta: { layout: 'public' },
+  },
+  {
+    path: '/login-email',
+    name: 'login-email',
+    component: () => import('../views/public/LoginByEmailView.vue'),
+    meta: { layout: 'public' },
+  },
+  {
+    path: '/forgot-password',
+    name: 'forgot-password',
+    component: () => import('../views/public/ForgotPasswordView.vue'),
+    meta: { layout: 'public' },
+  },
+  {
+    path: '/register',
+    name: 'register',
+    component: () => import('../views/public/RegisterView.vue'),
+    meta: { layout: 'public' },
+  },
   { path: '/legacy-login', redirect: { name: 'login' } },
   { path: '/legacy-login-email', redirect: { name: 'login-email' } },
   { path: '/legacy-forgot-password', redirect: { name: 'forgot-password' } },
   { path: '/legacy-register', redirect: { name: 'register' } },
-  { path: '/catalog/:id', name: 'catalog-detail', component: () => import('../views/CatalogDetailView.vue') },
-  { path: '/templates', name: 'templates', component: () => import('../views/templates/TemplatesView.vue') },
+  {
+    path: '/catalog/:id',
+    name: 'catalog-detail',
+    component: () => import('../views/CatalogDetailView.vue'),
+  },
+  {
+    path: '/templates',
+    name: 'templates',
+    component: () => import('../views/templates/TemplatesView.vue'),
+  },
   {
     path: '/templates/:id',
     name: 'template-detail',
@@ -44,16 +71,45 @@ const routes: RouteRecordRaw[] = [
     meta: { auth: true },
     children: [
       { path: '', name: 'wallet', component: () => import('../views/WalletView.vue') },
-      { path: 'purchased', name: 'wallet-purchased', component: () => import('../views/MyStoreView.vue') },
+      {
+        path: 'purchased',
+        name: 'wallet-purchased',
+        component: () => import('../views/MyStoreView.vue'),
+      },
     ],
   },
   { path: '/wallet/keys', redirect: { name: 'account', hash: '#api-keys' } },
   { path: '/my-store', redirect: { name: 'wallet-purchased' } },
-  { path: '/notifications', name: 'notifications', component: () => import('../views/NotificationCenter.vue'), meta: { auth: true } },
-  { path: '/analytics', name: 'analytics', component: () => import('../views/AnalyticsView.vue'), meta: { auth: true } },
-  { path: '/customer-service', name: 'customer-service', component: () => import('../views/CustomerServiceView.vue'), meta: { auth: true } },
-  { path: '/refunds', name: 'refunds', component: () => import('../views/RefundApplyView.vue'), meta: { auth: true } },
-  { path: '/recharge', name: 'recharge', component: () => import('../views/WalletRechargeView.vue'), meta: { auth: true } },
+  {
+    path: '/notifications',
+    name: 'notifications',
+    component: () => import('../views/NotificationCenter.vue'),
+    meta: { auth: true },
+  },
+  {
+    path: '/analytics',
+    name: 'analytics',
+    component: () => import('../views/AnalyticsView.vue'),
+    meta: { auth: true },
+  },
+  {
+    path: '/customer-service',
+    name: 'customer-service',
+    component: () => import('../views/CustomerServiceView.vue'),
+    meta: { auth: true },
+  },
+  {
+    path: '/refunds',
+    name: 'refunds',
+    component: () => import('../views/RefundApplyView.vue'),
+    meta: { auth: true },
+  },
+  {
+    path: '/recharge',
+    name: 'recharge',
+    component: () => import('../views/WalletRechargeView.vue'),
+    meta: { auth: true },
+  },
   {
     path: '/plans',
     name: 'plans',
@@ -74,7 +130,12 @@ const routes: RouteRecordRaw[] = [
       pageDescription: '选择 30 天体验或适合企业的永久方案。',
     },
   },
-  { path: '/workflow', name: 'workflow', component: () => import('../views/WorkflowView.vue'), meta: { auth: true } },
+  {
+    path: '/workflow',
+    name: 'workflow',
+    component: () => import('../views/WorkflowView.vue'),
+    meta: { auth: true },
+  },
   {
     path: '/workflow/v2/:id',
     name: 'workflow-v2-editor',
@@ -124,7 +185,10 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'repository',
         name: 'workbench-repository',
-        redirect: (to) => ({ name: 'workbench-unified', query: { ...to.query, focus: 'repository' } }),
+        redirect: (to) => ({
+          name: 'workbench-unified',
+          query: { ...to.query, focus: 'repository' },
+        }),
       },
       {
         path: 'workflow',
@@ -142,10 +206,17 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'integrations',
         name: 'workbench-integrations',
-        redirect: (to) => ({ name: 'workbench-unified', query: { ...to.query, focus: 'integrations' } }),
+        redirect: (to) => ({
+          name: 'workbench-unified',
+          query: { ...to.query, focus: 'integrations' },
+        }),
       },
       // Mod authoring still uses its own view for now
-      { path: 'mod/:modId', name: 'mod-authoring', component: () => import('../views/ModAuthoringView.vue') },
+      {
+        path: 'mod/:modId',
+        name: 'mod-authoring',
+        component: () => import('../views/ModAuthoringView.vue'),
+      },
       {
         path: 'employees',
         name: 'workbench-employees',
@@ -207,7 +278,12 @@ const routes: RouteRecordRaw[] = [
     redirect: (to) => ({ name: 'mod-authoring', params: { modId: to.params.modId } }),
   },
   { path: '/admin', redirect: '/admin/database', meta: { auth: true, admin: true } },
-  { path: '/admin/database', name: 'admin-database', component: () => import('../views/AdminDatabaseView.vue'), meta: { auth: true, admin: true } },
+  {
+    path: '/admin/database',
+    name: 'admin-database',
+    component: () => import('../views/AdminDatabaseView.vue'),
+    meta: { auth: true, admin: true },
+  },
   {
     path: '/admin/duty-employees',
     name: 'admin-duty-employees',
@@ -244,8 +320,18 @@ const routes: RouteRecordRaw[] = [
     component: () => import('../views/AdminOrchestrateJobsView.vue'),
     meta: { auth: true, admin: true },
   },
-  { path: '/admin/customer-service', name: 'admin-customer-service', component: () => import('../views/AdminCustomerServiceView.vue'), meta: { auth: true, admin: true } },
-  { path: '/admin/butler-skills', name: 'admin-butler-skills', component: () => import('../components/floating-agent/AdminAgentSkillMarket.vue'), meta: { auth: true, admin: true } },
+  {
+    path: '/admin/customer-service',
+    name: 'admin-customer-service',
+    component: () => import('../views/AdminCustomerServiceView.vue'),
+    meta: { auth: true, admin: true },
+  },
+  {
+    path: '/admin/butler-skills',
+    name: 'admin-butler-skills',
+    component: () => import('../components/floating-agent/AdminAgentSkillMarket.vue'),
+    meta: { auth: true, admin: true },
+  },
   {
     path: '/admin/ai-accounts',
     name: 'admin-ai-accounts',
@@ -258,11 +344,36 @@ const routes: RouteRecordRaw[] = [
     component: () => import('../views/AdminOpsTerminalView.vue'),
     meta: { auth: true, admin: true },
   },
-  { path: '/checkout/:orderId', name: 'checkout', component: () => import('../views/PaymentCheckoutView.vue'), meta: { auth: true } },
-  { path: '/order/:orderId', name: 'order-detail', component: () => import('../views/OrderDetailView.vue'), meta: { auth: true } },
-  { path: '/orders', name: 'orders', component: () => import('../views/OrderListView.vue'), meta: { auth: true } },
-  { path: '/account', name: 'account', component: () => import('../views/AccountSettingsView.vue'), meta: { auth: true } },
-  { path: '/knowledge', name: 'knowledge', component: () => import('../views/KnowledgeManagerView.vue'), meta: { auth: true } },
+  {
+    path: '/checkout/:orderId',
+    name: 'checkout',
+    component: () => import('../views/PaymentCheckoutView.vue'),
+    meta: { auth: true },
+  },
+  {
+    path: '/order/:orderId',
+    name: 'order-detail',
+    component: () => import('../views/OrderDetailView.vue'),
+    meta: { auth: true },
+  },
+  {
+    path: '/orders',
+    name: 'orders',
+    component: () => import('../views/OrderListView.vue'),
+    meta: { auth: true },
+  },
+  {
+    path: '/account',
+    name: 'account',
+    component: () => import('../views/AccountSettingsView.vue'),
+    meta: { auth: true },
+  },
+  {
+    path: '/knowledge',
+    name: 'knowledge',
+    component: () => import('../views/KnowledgeManagerView.vue'),
+    meta: { auth: true },
+  },
   {
     path: '/ai-test',
     component: () => import('../views/AiTestLayout.vue'),
@@ -290,7 +401,11 @@ const routes: RouteRecordRaw[] = [
     component: () => import('../views/developer/DeveloperPortalView.vue'),
     meta: { auth: true },
   },
-  { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('../views/NotFoundView.vue') },
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'not-found',
+    component: () => import('../views/NotFoundView.vue'),
+  },
 ]
 
 const router = createRouter({
@@ -309,9 +424,7 @@ router.afterEach((to) => {
   const meta = to.meta || {}
   const rawTitle = (meta.pageTitle as string) || (meta.title as string) || ''
   if (rawTitle) {
-    document.title = rawTitle.includes('XC AGI') || rawTitle.includes('修茈')
-      ? rawTitle
-      : `${rawTitle} | XC AGI`
+    document.title = rawTitle.includes('XC AGI') || rawTitle.includes('修茈') ? rawTitle : `${rawTitle} | XC AGI`
   }
   const desc = meta.pageDescription as string | undefined
   if (desc) {
