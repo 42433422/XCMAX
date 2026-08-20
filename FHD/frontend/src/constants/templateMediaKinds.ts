@@ -48,10 +48,7 @@ export function isTemplateMediaKind(value: unknown): value is TemplateMediaKind 
   return typeof value === 'string' && (TEMPLATE_MEDIA_KINDS as readonly string[]).includes(value)
 }
 
-export function normalizeTemplateMediaKind(
-  value: unknown,
-  fallback: TemplateMediaKind = 'excel'
-): TemplateMediaKind {
+export function normalizeTemplateMediaKind(value: unknown, fallback: TemplateMediaKind = 'excel'): TemplateMediaKind {
   return isTemplateMediaKind(value) ? value : fallback
 }
 

@@ -10,6 +10,7 @@
 
 退出码: 0=一致/已同步 1=有改动需写盘（dry-run） 2=配置错误 3=执行错误
 """
+
 from __future__ import annotations
 
 import argparse
@@ -39,7 +40,7 @@ def _replace_version_in_text(text: str, pattern: str, new_version: str) -> tuple
     """
     changed = False
 
-    def _repl(m: re.Match) -> str:
+    def _repl(m: re.Match[str]) -> str:
         nonlocal changed
         old = m.group(1)
         if old == new_version:
@@ -72,7 +73,9 @@ def sync(
     if override_version:
         try:
             product_version = override_version
-            toolchain_version = override_toolchain_version or _derive_toolchain_version(product_version)
+            toolchain_version = override_toolchain_version or _derive_toolchain_version(
+                product_version
+            )
         except ValueError as e:
             print(f"错误：{e}", file=sys.stderr)
             return 2
@@ -129,8 +132,8 @@ def sync(
     print("-" * 60)
     if errors:
         print(f"错误（{len(errors)}）：")
-        for e in errors:
-            print(f"  - {e}", file=sys.stderr)
+        for error in errors:
+            print(f"  - {error}", file=sys.stderr)
         return 3
 
     if not changes:

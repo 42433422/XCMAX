@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment"
 """Shared catalog-public authentication, caching, and indexing helpers."""
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from fastapi import HTTPException
 from modstore_server.catalog_store import packages_path
 from modstore_server.catalog_sync import upsert_catalog_item_from_xc_package_dict
 from modstore_server.models import get_session_factory
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 _semantic_index_lock = threading.Lock()
@@ -70,7 +72,7 @@ def _index_catalog_item(record: Dict[str, Any]) -> bool:
                 "industry": record.get("industry", "通用"),
             },
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception(
             "catalog semantic indexing degraded pkg_id=%s version=%s",
             record.get("id"),
@@ -108,7 +110,7 @@ async def try_index_catalog_item(record: Dict[str, Any]) -> bool:
     timeout = _semantic_index_timeout_seconds()
     try:
         return await asyncio.wait_for(asyncio.shield(asyncio.wrap_future(future)), timeout=timeout)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         logger.warning(
             "catalog semantic indexing exceeded %.2fs; publication continues pkg_id=%s version=%s",
             timeout,

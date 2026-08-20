@@ -157,7 +157,9 @@ describe('useImSounds', () => {
       global.Notification = { permission: 'denied' } as unknown as typeof Notification
       const desktopNotif = vi.fn().mockResolvedValue(undefined)
       const origDesktop = (window as unknown as { xcagiDesktop?: unknown }).xcagiDesktop
-      ;(window as unknown as { xcagiDesktop?: unknown }).xcagiDesktop = { showNotification: desktopNotif }
+      ;(window as unknown as { xcagiDesktop?: unknown }).xcagiDesktop = {
+        showNotification: desktopNotif,
+      }
       try {
         const { setMode, playIncoming } = useImSounds()
         setMode('notify-only')

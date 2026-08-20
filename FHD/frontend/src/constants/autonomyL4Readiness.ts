@@ -107,8 +107,7 @@ export const AUTONOMY_L4_READINESS: AutonomyL4Readiness = {
       severity: 'P1',
       title: 'runtime 副本双向同步缺失',
       status: 'ok',
-      impact:
-        '已落地 sync-runtime-to-source.sh + install-sync-runtime-to-source-cron.sh，与 install-local-autonomy-runtime 形成双向同步',
+      impact: '已落地 sync-runtime-to-source.sh + install-sync-runtime-to-source-cron.sh，与 install-local-autonomy-runtime 形成双向同步',
       nextStep: '开发机执行一次 install-sync-runtime-to-source-cron.sh 后保持每小时回写',
       ownerSurface: 'modstore',
     },
@@ -117,8 +116,7 @@ export const AUTONOMY_L4_READINESS: AutonomyL4Readiness = {
       severity: 'P1',
       title: '连接点 4 implement-pack 曾仅靠标签隐式触发',
       status: 'ok',
-      impact:
-        'evolution_decision_ledger.cmd_implement_pack 经 gh workflow run 显式触发 fhd-ai-issue-implement.yml；标签路径仅作手工兜底',
+      impact: 'evolution_decision_ledger.cmd_implement_pack 经 gh workflow run 显式触发 fhd-ai-issue-implement.yml；标签路径仅作手工兜底',
       nextStep: '观察一周 evolution-orchestrator → implement 链路成功率',
       ownerSurface: 'ci',
     },
@@ -129,7 +127,8 @@ export const AUTONOMY_L4_READINESS: AutonomyL4Readiness = {
       status: 'ok',
       impact:
         'escalate_to_human / cvm watcher 旁路推老板 IM（fail-open）；需配内部 URL + API key + boss uid。P1-1 已在 approval_resume.py 加 mobile push hook（_notify_autonomy_actor，复用 notify_mobile_user）+ 注册 merge_github_pr / close_github_issue 两个 executor，管理端审批通过后可自动合并 PR / 关闭 issue',
-      nextStep: '在 CI/CVM 配置 XCAGI_FHD_INTERNAL_URL + XCAGI_MARKET_INTERNAL_API_KEY + XCAGI_AUTONOMY_IM_BOSS_USER_ID；管理端配置 XCAGI_ADMIN_NOTIFY_USER_ID 后 mobile push 即生效；实战验证一条 escalate',
+      nextStep:
+        '在 CI/CVM 配置 XCAGI_FHD_INTERNAL_URL + XCAGI_MARKET_INTERNAL_API_KEY + XCAGI_AUTONOMY_IM_BOSS_USER_ID；管理端配置 XCAGI_ADMIN_NOTIFY_USER_ID 后 mobile push 即生效；实战验证一条 escalate',
       ownerSurface: 'ci',
     },
     {
@@ -171,10 +170,7 @@ export const AUTONOMY_L4_READINESS: AutonomyL4Readiness = {
   ],
 }
 
-export function overlayDeployGap(
-  gaps: AutonomyMaturityGap[],
-  autoDispatchEnabled: boolean | null,
-): AutonomyMaturityGap[] {
+export function overlayDeployGap(gaps: AutonomyMaturityGap[], autoDispatchEnabled: boolean | null): AutonomyMaturityGap[] {
   return gaps.map((gap) => {
     if (gap.id !== 'p0-auto-deploy' || autoDispatchEnabled == null) return gap
     if (autoDispatchEnabled) {

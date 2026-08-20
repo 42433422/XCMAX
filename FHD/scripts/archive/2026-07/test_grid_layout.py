@@ -73,7 +73,7 @@ if len(horizontal_lines) >= 2 and len(vertical_lines) >= 2:
                 "height": horizontal_lines[i + 1] - horizontal_lines[i],
             }
             cells.append(cell)
-    print(f"共 {len(cells)} 个单元格 ({len(horizontal_lines)-1}行 x {len(vertical_lines)-1}列)")
+    print(f"共 {len(cells)} 个单元格 ({len(horizontal_lines) - 1}行 x {len(vertical_lines) - 1}列)")
 
 # 5. OCR 识别
 print("\n=== OCR 识别 ===")

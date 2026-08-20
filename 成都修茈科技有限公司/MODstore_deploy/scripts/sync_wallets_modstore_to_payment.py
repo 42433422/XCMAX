@@ -51,7 +51,9 @@ def main() -> int:
     mod_url = (os.environ.get("DATABASE_URL") or "").strip()
     user = (os.environ.get("DATABASE_USER") or "modstore_pay").strip()
     password = (os.environ.get("DATABASE_PASSWORD") or "").strip()
-    jdbc = (os.environ.get("JAVA_DATABASE_URL") or "jdbc:postgresql://127.0.0.1:5432/payment_db").strip()
+    jdbc = (
+        os.environ.get("JAVA_DATABASE_URL") or "jdbc:postgresql://127.0.0.1:5432/payment_db"
+    ).strip()
     if not mod_url:
         print("DATABASE_URL missing", file=sys.stderr)
         return 2
@@ -103,12 +105,16 @@ def main() -> int:
                 if uid in pay_ids:
                     continue
                 if uid not in pay_users:
-                    u = mc.execute(
-                        text(
-                            "select id, username, email, is_admin, created_at from users where id=:id"
-                        ),
-                        {"id": uid},
-                    ).mappings().first()
+                    u = (
+                        mc.execute(
+                            text(
+                                "select id, username, email, is_admin, created_at from users where id=:id"
+                            ),
+                            {"id": uid},
+                        )
+                        .mappings()
+                        .first()
+                    )
                     if not u:
                         skipped_no_user.append(uid)
                         continue
@@ -126,14 +132,12 @@ def main() -> int:
                         if etaken and int(etaken) != uid:
                             email = None
                     pc.execute(
-                        text(
-                            """
+                        text("""
                             INSERT INTO users (id, username, email, password_hash, is_admin, created_at)
                             VALUES (:id, :username, :email, 'external-jwt', :is_admin,
                                     coalesce(CAST(:created_at AS timestamp), NOW()))
                             ON CONFLICT (id) DO NOTHING
-                            """
-                        ),
+                            """),
                         {
                             "id": uid,
                             "username": uname,
@@ -145,12 +149,10 @@ def main() -> int:
                     pay_users.add(uid)
                     ensured_users.append(uid)
                 pc.execute(
-                    text(
-                        """
+                    text("""
                         INSERT INTO wallets (user_id, balance, version, updated_at)
                         VALUES (:uid, :bal, :ver, coalesce(CAST(:upd AS timestamp), NOW()))
-                        """
-                    ),
+                        """),
                     {
                         "uid": uid,
                         "bal": bal,

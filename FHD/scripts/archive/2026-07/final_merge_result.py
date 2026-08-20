@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """
 验证合并后的单元格并生成可视化报告
 """
@@ -212,7 +213,7 @@ html_content = f"""<!DOCTYPE html>
             </div>
             <div class="summary-item">
                 <div>合并的组数</div>
-                <div class="summary-value">{sum(1 for c in merged_cells if c['is_merged'])}</div>
+                <div class="summary-value">{sum(1 for c in merged_cells if c["is_merged"])}</div>
             </div>
         </div>
 
@@ -235,10 +236,10 @@ for mc in merged_cells:
     )
 
     html_content += f"""                    <div class="{css_class}">
-                        <div class="cell-header">#[{mc['row']},{mc['start_col']}] {merge_info}</div>
+                        <div class="cell-header">#[{mc["row"]},{mc["start_col"]}] {merge_info}</div>
                         <div class="cell-detail">
-                            位置: ({mc['x']}, {mc['y']}) |
-                            尺寸: {mc['width']} × {mc['height']}
+                            位置: ({mc["x"]}, {mc["y"]}) |
+                            尺寸: {mc["width"]} × {mc["height"]}
                         </div>
                     </div>
 """

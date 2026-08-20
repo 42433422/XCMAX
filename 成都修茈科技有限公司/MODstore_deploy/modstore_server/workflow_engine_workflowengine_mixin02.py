@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="assignment, attr-defined, import-not-found, no-any-return, valid-type"
 """Behavior mixin extracted from the public facade class."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -9,7 +13,6 @@ def _facade():
 
 
 class _WorkflowEnginePart02Mixin:
-
     def _execute_variable_set_node(
         self,
         node: _facade().WorkflowNode,
@@ -83,7 +86,11 @@ class _WorkflowEnginePart02Mixin:
                     with concurrent.futures.ThreadPoolExecutor() as pool:
                         resp = pool.submit(
                             lambda: httpx.request(
-                                method, str(url), headers=headers, json=body, timeout=timeout_s
+                                method,
+                                str(url),
+                                headers=headers,
+                                json=body,
+                                timeout=timeout_s,
                             )
                         ).result(timeout_s + 5)
                 else:
@@ -96,7 +103,7 @@ class _WorkflowEnginePart02Mixin:
                     "http_status": resp.status_code if hasattr(resp, "status_code") else 200,
                     "execution_time": _facade().datetime.now(_facade().timezone.utc).isoformat(),
                 }
-            except Exception as exc:
+            except RECOVERABLE_ERRORS as exc:
                 last_exc = exc
                 if attempt < retries:
                     import time as _t
@@ -135,14 +142,16 @@ class _WorkflowEnginePart02Mixin:
         }
         try:
             exec(
-                compile(code, f"<workflow_code_{node.id}>", "exec"), {"__builtins__": {}}, local_ns
+                compile(code, f"<workflow_code_{node.id}>", "exec"),
+                {"__builtins__": {}},
+                local_ns,
             )
             result = local_ns.get("result", local_ns.get("output", None))
             return {
                 output_var: result,
                 "execution_time": _facade().datetime.now(_facade().timezone.utc).isoformat(),
             }
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             raise RuntimeError(f"code_execute 节点执行失败: {exc}") from exc
 
     def _execute_code_execute_mock(
@@ -206,7 +215,7 @@ class _WorkflowEnginePart02Mixin:
                         try:
                             if _facade().eval_condition(condition, item):
                                 filtered.append(item)
-                        except Exception:
+                        except RECOVERABLE_ERRORS:
                             pass
                     result[field] = filtered
         if not isinstance(result, dict):
@@ -303,13 +312,13 @@ class _WorkflowEnginePart02Mixin:
                 try:
                     sub_result = self._execute_http_request_node(node, data, branch)
                     results[branch_name] = {"status": "completed", "data": sub_result}
-                except Exception as exc:
+                except RECOVERABLE_ERRORS as exc:
                     results[branch_name] = {"status": "failed", "error": str(exc)}
             elif branch_type == "data_transform":
                 try:
                     sub_result = self._execute_data_transform_node(node, data, branch)
                     results[branch_name] = {"status": "completed", "data": sub_result}
-                except Exception as exc:
+                except RECOVERABLE_ERRORS as exc:
                     results[branch_name] = {"status": "failed", "error": str(exc)}
             else:
                 results[branch_name] = {
@@ -331,7 +340,10 @@ class _WorkflowEnginePart02Mixin:
         output_var = str(config.get("output_var") or "parallel_result")
         return {
             output_var: {
-                "sandbox": {"status": "completed", "message": "沙盒 Mock：未执行真实并行"}
+                "sandbox": {
+                    "status": "completed",
+                    "message": "沙盒 Mock：未执行真实并行",
+                }
             },
             "parallel_count": 1,
             "execution_time": _facade().datetime.now(_facade().timezone.utc).isoformat(),

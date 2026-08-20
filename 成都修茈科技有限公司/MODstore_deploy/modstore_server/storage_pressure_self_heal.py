@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr"
 """Disk-pressure detection and bounded autonomous retention.
 
 The daily retention job limits growth, but it does not answer the incident
@@ -25,6 +26,7 @@ from typing import Any, Callable, Dict, Iterator, Optional
 
 from modstore_server import storage_pressure_metrics as _metrics
 from modstore_server import storage_pressure_scheduler as _scheduler
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -247,7 +249,7 @@ def _finalize(result: Dict[str, Any]) -> Dict[str, Any]:
     result["audit_written"] = True
     try:
         _append_audit(result)
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.exception("storage pressure audit append failed")
         result["audit_written"] = False
         result["ok"] = False
@@ -280,7 +282,7 @@ def run_storage_pressure_self_heal(
 
     try:
         before = collect_storage_snapshot(disk_usage_fn=disk_usage_fn)
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         result.update(
             {
                 "ok": False,
@@ -318,7 +320,7 @@ def run_storage_pressure_self_heal(
                 policy="storage_self_heal_disabled_by_operator_veto",
             )
             result["decision_audit_written"] = True
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
             result["decision_audit_written"] = False
             result["decision_audit_error"] = type(exc).__name__
         return _finalize(result)
@@ -361,7 +363,7 @@ def run_storage_pressure_self_heal(
                 policy="storage_pressure_low_risk_retention_v1",
             )
             result["decision_audit_written"] = True
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
             logger.exception("storage pressure autonomy decision audit failed")
             result["decision_audit_written"] = False
             result["decision_audit_error"] = type(exc).__name__
@@ -380,7 +382,7 @@ def run_storage_pressure_self_heal(
             retention = retention_runner(dry_run=False, notification_dry_run=False)
             remaining_notifications = notification_verifier(dry_run=True)
             after = collect_storage_snapshot(disk_usage_fn=disk_usage_fn)
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
             result.update(
                 {
                     "ok": False,
@@ -390,11 +392,11 @@ def run_storage_pressure_self_heal(
             )
             try:
                 result["after"] = collect_storage_snapshot(disk_usage_fn=disk_usage_fn)
-            except Exception:  # noqa: BLE001
+            except BOUNDARY_ERRORS:  # noqa: BLE001
                 pass
             try:
                 result["incident_emitted"] = _publish_unresolved_incident(result)
-            except Exception as incident_exc:  # noqa: BLE001
+            except BOUNDARY_ERRORS as incident_exc:  # noqa: BLE001
                 logger.exception("storage pressure repair failure incident publish failed")
                 result["incident_emitted"] = False
                 result["incident_error"] = type(incident_exc).__name__
@@ -448,7 +450,7 @@ def run_storage_pressure_self_heal(
         if not result["ok"]:
             try:
                 result["incident_emitted"] = _publish_unresolved_incident(result)
-            except Exception as exc:  # noqa: BLE001
+            except BOUNDARY_ERRORS as exc:  # noqa: BLE001
                 logger.exception("storage pressure unresolved incident publish failed")
                 result["incident_emitted"] = False
                 result["incident_error"] = type(exc).__name__

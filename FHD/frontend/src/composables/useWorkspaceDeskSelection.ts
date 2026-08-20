@@ -20,7 +20,7 @@ export function useWorkspaceDeskSelection(workspaceDesks: Ref<Array<{ empId: str
         selectedEmpId.value = list[0].empId
       }
     },
-    { immediate: true }
+    { immediate: true },
   )
 
   function routeEmployeeId(): string {

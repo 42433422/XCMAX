@@ -91,7 +91,6 @@ describe('MessageBody', () => {
 
   it('applies scoped styles correctly', () => {
     const wrapper = mountBody()
-    const style = wrapper.find('.msg-body').attributes('style') || ''
     expect(wrapper.find('.msg-body').exists()).toBe(true)
   })
 

@@ -25,10 +25,7 @@ export type ChatStreamRoundDeps = {
   queueVoice: (text: string) => void
   clearVoiceQueue: () => void
   ttsEnabled: Ref<boolean>
-  buildPlannerChatRequestPayload: (
-    message: string,
-    opts?: { fromWriteUnlock?: boolean },
-  ) => { body: Record<string, unknown> }
+  buildPlannerChatRequestPayload: (message: string, opts?: { fromWriteUnlock?: boolean }) => { body: Record<string, unknown> }
   resolveChatTimeoutMs: (text: string) => number
   handleChatRequiresToken: (tokenName: string, tokenDesc: string, remoteMessages: string[]) => void
   onStreamDone: (payload: ChatPlannerPayload, primaryText: string, _msgIndex: number) => Promise<void>
@@ -68,11 +65,7 @@ export function useChatStreamRound(deps: ChatStreamRoundDeps) {
     const killTimer = window.setTimeout(() => controller.abort(), timeoutMsS)
     const msgIndex = deps.pushStreamingAiShell()
     const executionProgress: ChatExecutionProgressItem[] = []
-    const updateExecutionProgress = (
-      phase: string,
-      label: string,
-      status: ChatExecutionProgressItem['status'] = 'running',
-    ) => {
+    const updateExecutionProgress = (phase: string, label: string, status: ChatExecutionProgressItem['status'] = 'running') => {
       const previous = executionProgress[executionProgress.length - 1]
       if (previous && previous.phase === phase && previous.label === label) {
         previous.status = status
@@ -127,8 +120,7 @@ export function useChatStreamRound(deps: ChatStreamRoundDeps) {
         software_capabilities: softwareCapabilities,
       }
       const res = await chatApi.sendChatStream(
-        { ...body, message: String(body.message || primaryForStream) } as ChatRequest &
-          Record<string, unknown>,
+        { ...body, message: String(body.message || primaryForStream) } as ChatRequest & Record<string, unknown>,
         { signal: controller.signal },
       )
       if (!res.ok) {
@@ -145,9 +137,7 @@ export function useChatStreamRound(deps: ChatStreamRoundDeps) {
           deps.scrollToBottom()
         } else if (ev.type === 'tool_progress') {
           const label = String(ev.text || ev.label || ev.phase || '工具').trim()
-          const progressText = ev.phase === 'accepted'
-            ? label
-            : label ? `正在调用 ${label}…` : '正在调用工具…'
+          const progressText = ev.phase === 'accepted' ? label : label ? `正在调用 ${label}…` : '正在调用工具…'
           updateExecutionProgress(ev.phase || 'working', progressText)
           deps.setLoadingProgress(progressText)
           deps.scrollToBottom()
@@ -160,10 +150,7 @@ export function useChatStreamRound(deps: ChatStreamRoundDeps) {
           const tokenDesc = ev.token_description || ''
           deps.handleChatRequiresToken(tokenName, tokenDesc, remoteMessages)
           const upTok = String(tokenName || '').toUpperCase()
-          if (
-            upTok.includes('WRITE') ||
-            /写入|导入|入库|二级|数据库写入|DB_WRITE/i.test(String(tokenDesc || ''))
-          ) {
+          if (upTok.includes('WRITE') || /写入|导入|入库|二级|数据库写入|DB_WRITE/i.test(String(tokenDesc || ''))) {
             deps.plannerWriteUnlockResumeDraft.value = streamPlain
           }
         }
@@ -171,10 +158,7 @@ export function useChatStreamRound(deps: ChatStreamRoundDeps) {
 
       if (sseError) throw new Error(sseError)
 
-      const finalText =
-        cleanStreamDisplayText(String(asString(doneResult?.['response']) || streamPlain)) ||
-        streamPlain ||
-        '（无内容）'
+      const finalText = cleanStreamDisplayText(String(asString(doneResult?.['response']) || streamPlain)) || streamPlain || '（无内容）'
       updateExecutionProgress('completed', '任务已完成', 'success')
       deps.patchMessageAtIndex(msgIndex, { toolProgressLabel: undefined })
       deps.applyPlainTextToMessageIndex(msgIndex, finalText)
@@ -184,9 +168,7 @@ export function useChatStreamRound(deps: ChatStreamRoundDeps) {
       }
       await deps.saveMessage('ai', finalText)
       const wrap: ChatPlannerPayload =
-        doneResult && typeof doneResult === 'object'
-          ? (doneResult as ChatPlannerPayload)
-          : { success: true, response: finalText }
+        doneResult && typeof doneResult === 'object' ? (doneResult as ChatPlannerPayload) : { success: true, response: finalText }
       await deps.onStreamDone(wrap, primaryForStream, msgIndex)
       deps.persistMessagesCache()
       openDocumentPreviewFromResult(doneResult)
@@ -207,9 +189,7 @@ export function useChatStreamRound(deps: ChatStreamRoundDeps) {
         return true
       }
       const errText =
-        errObj?.name === 'AbortError'
-          ? `请求超时（>${Math.floor(timeoutMsS / 1000)}s）或已中断`
-          : errObj?.message || '流式对话失败'
+        errObj?.name === 'AbortError' ? `请求超时（>${Math.floor(timeoutMsS / 1000)}s）或已中断` : errObj?.message || '流式对话失败'
       updateExecutionProgress('failed', `处理失败：${errText}`, 'failed')
       deps.patchMessageAtIndex(msgIndex, { toolProgressLabel: undefined })
       deps.applyPlainTextToMessageIndex(msgIndex, `处理失败：${errText}`)

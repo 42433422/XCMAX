@@ -17,9 +17,7 @@ def _spec(skill_id: str, fn: str = "demo") -> str:
             "purpose": "demo",
             "signature": {"params": ["x"], "return_type": "dict", "required_params": ["x"]},
             "dependencies": [],
-            "test_cases": [
-                {"case_id": "happy", "input_data": {"x": 1}, "expected_output": {"y": 1}}
-            ],
+            "test_cases": [{"case_id": "happy", "input_data": {"x": 1}, "expected_output": {"y": 1}}],
             "quality_gate": {"required_keys": ["y"]},
             "domain_keywords": [],
         }
@@ -27,9 +25,7 @@ def _spec(skill_id: str, fn: str = "demo") -> str:
 
 
 def _code(fn: str = "demo") -> str:
-    return json.dumps(
-        {"source_code": f"def {fn}(x):\n    \"\"\"Return x under the y key.\"\"\"\n    return {{'y': x}}\n"}
-    )
+    return json.dumps({"source_code": f'def {fn}(x):\n    """Return x under the y key."""\n    return {{\'y\': x}}\n'})
 
 
 def test_facade_code_generates_skill(tmp_path):
@@ -89,9 +85,7 @@ def test_facade_workflow_end_to_end(tmp_path):
         }
     )
     coder = VibeCoder(
-        llm=MockLLM(
-            [payload, _spec("a", "fa"), _code("fa"), _spec("b", "fb"), _code("fb")]
-        ),
+        llm=MockLLM([payload, _spec("a", "fa"), _code("fa"), _spec("b", "fb"), _code("fb")]),
         store_dir=tmp_path,
         llm_for_repair=False,
     )
@@ -123,7 +117,7 @@ def test_facade_history_and_rollback(tmp_path):
     code = {
         "source_code": (
             "def extract(user):\n"
-            "    \"\"\"Extract the name field from a user mapping.\"\"\"\n"
+            '    """Extract the name field from a user mapping."""\n'
             "    return {'name': user['name']}\n"
         )
     }

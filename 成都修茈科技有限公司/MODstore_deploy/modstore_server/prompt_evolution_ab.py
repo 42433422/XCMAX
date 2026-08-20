@@ -5,9 +5,11 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +41,7 @@ def _override_dir() -> Path:
         from modstore_server.integrations.ops_action_handlers import repo_root
 
         root = Path(repo_root())
-    except Exception:
+    except RECOVERABLE_ERRORS:
         root = Path(os.environ.get("MODSTORE_REPO_ROOT", ".")).resolve()
     return root / raw
 
@@ -51,7 +53,7 @@ def _load_prompt_override(employee_id: str) -> Optional[str]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         return str(data.get("system_prompt") or "").strip() or None
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return None
 
 
@@ -66,12 +68,12 @@ def apply_prompt_override(
     if path.is_file():
         try:
             backup_path.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
     payload = {
         "employee_id": employee_id,
         "system_prompt": system_prompt,
-        "applied_at": datetime.now(timezone.utc).isoformat(),
+        "applied_at": datetime.now(UTC).isoformat(),
         "meta": meta,
     }
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -98,7 +100,7 @@ def get_effective_system_prompt(employee_id: str, manifest_prompt: str) -> str:
 
 
 def _fetch_failed_tasks(employee_id: str, *, lookback_hours: int, limit: int = 3) -> List[str]:
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=lookback_hours)
+    cutoff = datetime.now(UTC) - timedelta(hours=lookback_hours)
     try:
         from sqlalchemy import or_
 
@@ -125,7 +127,7 @@ def _fetch_failed_tasks(employee_id: str, *, lookback_hours: int, limit: int = 3
                 .all()
             )
         return [str(r.task or "").strip() for r in rows if str(r.task or "").strip()]
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return []
 
 
@@ -171,7 +173,7 @@ async def _judge_prompt_pair(
         if "before" in verdict:
             return "before"
         return "tie"
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return "tie"
 
 

@@ -25,14 +25,13 @@ export function getHeldMicStream(): MediaStream | null {
 export function releaseHeldMicStream() {
   try {
     heldStream?.getTracks().forEach((t) => t.stop())
-  } catch { /* */ }
+  } catch {
+    /* */
+  }
   heldStream = null
 }
 
-export async function ensureSharedMicCapture(
-  h: MicHandlers,
-  prefetched?: MediaStream | Promise<MediaStream>,
-): Promise<AudioCapture> {
+export async function ensureSharedMicCapture(h: MicHandlers, prefetched?: MediaStream | Promise<MediaStream>): Promise<AudioCapture> {
   handlers = h
   if (capture?.active) {
     capture.setHandlers(h)

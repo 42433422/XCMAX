@@ -28,8 +28,11 @@ violation as a hard block and surfaces them in the apply result.
 from __future__ import annotations
 
 import fnmatch
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Iterable, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+
+from vibe_coding.operational_errors import BOUNDARY_ERRORS
 
 if TYPE_CHECKING:
     from .patch import ProjectPatch
@@ -64,14 +67,12 @@ class ProjectDomainGuard:
 
     allowed_paths: tuple[str, ...] = ()
     forbidden_paths: tuple[str, ...] = ()
-    forbidden_imports: tuple[str, ...] = field(
-        default_factory=lambda: tuple(DEFAULT_FORBIDDEN_IMPORTS)
-    )
+    forbidden_imports: tuple[str, ...] = field(default_factory=lambda: tuple(DEFAULT_FORBIDDEN_IMPORTS))
     max_files_changed: int = 50
     max_lines_added: int = 5_000
     custom_predicates: tuple[PatchPredicate, ...] = ()
 
-    def validate(self, patch: "ProjectPatch") -> list[DomainViolation]:
+    def validate(self, patch: ProjectPatch) -> list[DomainViolation]:
         """Run every check; return all violations (empty list = approved)."""
         violations: list[DomainViolation] = []
 
@@ -80,10 +81,7 @@ class ProjectDomainGuard:
             violations.append(
                 DomainViolation(
                     code="too_many_files",
-                    message=(
-                        f"patch touches {len(files)} files but max_files_changed="
-                        f"{self.max_files_changed}"
-                    ),
+                    message=(f"patch touches {len(files)} files but max_files_changed={self.max_files_changed}"),
                 )
             )
 
@@ -110,10 +108,7 @@ class ProjectDomainGuard:
             violations.append(
                 DomainViolation(
                     code="too_many_lines",
-                    message=(
-                        f"patch adds {added_lines} net lines but max_lines_added="
-                        f"{self.max_lines_added}"
-                    ),
+                    message=(f"patch adds {added_lines} net lines but max_lines_added={self.max_lines_added}"),
                 )
             )
 
@@ -129,9 +124,7 @@ class ProjectDomainGuard:
                             violations.append(
                                 DomainViolation(
                                     code="forbidden_import",
-                                    message=(
-                                        f"patch introduces forbidden import {imp!r}"
-                                    ),
+                                    message=(f"patch introduces forbidden import {imp!r}"),
                                     file=edit.path,
                                 )
                             )
@@ -139,24 +132,20 @@ class ProjectDomainGuard:
         for predicate in self.custom_predicates:
             try:
                 reason = predicate(patch) or ""
-            except Exception as exc:  # noqa: BLE001
+            except BOUNDARY_ERRORS as exc:
                 violations.append(
                     DomainViolation(
                         code="predicate_error",
-                        message=(
-                            f"custom predicate raised {type(exc).__name__}: {exc}"
-                        ),
+                        message=(f"custom predicate raised {type(exc).__name__}: {exc}"),
                     )
                 )
                 continue
             if reason:
-                violations.append(
-                    DomainViolation(code="custom_predicate", message=reason)
-                )
+                violations.append(DomainViolation(code="custom_predicate", message=reason))
 
         return violations
 
-    def is_safe(self, patch: "ProjectPatch") -> bool:
+    def is_safe(self, patch: ProjectPatch) -> bool:
         return not self.validate(patch)
 
 
@@ -173,13 +162,11 @@ def _matches_any(path: str, patterns: Iterable[str]) -> bool:
     return False
 
 
-def _count_added_lines(patch: "ProjectPatch") -> int:
+def _count_added_lines(patch: ProjectPatch) -> int:
     total = 0
     for edit in patch.edits:
         if edit.operation == "create" and edit.contents:
-            total += edit.contents.count("\n") + (
-                0 if edit.contents.endswith("\n") else 1
-            )
+            total += edit.contents.count("\n") + (0 if edit.contents.endswith("\n") else 1)
             continue
         if edit.operation == "delete":
             continue
@@ -219,9 +206,7 @@ def _imports_in_text(text: str) -> list[str]:
         mod = m.group(1) or m.group(2)
         if mod:
             out.append(mod.split(",")[0].strip())
-    js_import = _re.compile(
-        r"""(?:import\s+[^'"\n]*?\s+from\s+|require\s*\(\s*)['"]([^'"]+)['"]"""
-    )
+    js_import = _re.compile(r"""(?:import\s+[^'"\n]*?\s+from\s+|require\s*\(\s*)['"]([^'"]+)['"]""")
     for m in js_import.finditer(text):
         out.append(m.group(1))
     return out

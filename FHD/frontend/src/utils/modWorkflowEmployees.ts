@@ -35,10 +35,7 @@ export interface WorkflowEmployeeManifestEntry {
 }
 
 /** 由 manifest 字段得到电话 HTTP 根（无则 null） */
-export function resolvePhoneAgentApiBase(
-  e: WorkflowEmployeeManifestEntry | undefined,
-  modId: string
-): string | null {
+export function resolvePhoneAgentApiBase(e: WorkflowEmployeeManifestEntry | undefined, modId: string): string | null {
   if (!e) return null
   const full = e.phone_agent_api_base?.trim()
   if (full) return full.replace(/\/+$/, '')
@@ -60,7 +57,9 @@ export type ModWithWorkflowEmployees = {
 /** 办公/宿主 employee_pack 不得注入工作流员工注册表与员工空间。 */
 export function isEmployeePackModEntry(m: ModWithWorkflowEmployees | undefined): boolean {
   if (!m) return false
-  const t = String(m.type || '').trim().toLowerCase()
+  const t = String(m.type || '')
+    .trim()
+    .toLowerCase()
   if (t !== 'employee_pack') return false
   const id = String(m.id || '').trim()
   if (id === 'xcagi-host-foundation-employee') return true
@@ -119,9 +118,7 @@ export function isWorkflowRegistrySourceMod(m: ModWithWorkflowEmployees | undefi
   return Array.isArray(wf) && wf.length > 0
 }
 
-export function filterWorkflowRegistrySourceMods(
-  mods: ModWithWorkflowEmployees[] | undefined,
-): ModWithWorkflowEmployees[] {
+export function filterWorkflowRegistrySourceMods(mods: ModWithWorkflowEmployees[] | undefined): ModWithWorkflowEmployees[] {
   return (mods || []).filter(isWorkflowRegistrySourceMod)
 }
 
@@ -162,19 +159,16 @@ export function countManifestWorkflowEmployeeRows(mods: ModWithWorkflowEmployees
   return n
 }
 
-export function resolvePhoneChannelForEmployee(
-  mods: ModWithWorkflowEmployees[] | undefined,
-  empId: string,
-): 'wechat' | 'adb' {
+export function resolvePhoneChannelForEmployee(mods: ModWithWorkflowEmployees[] | undefined, empId: string): 'wechat' | 'adb' {
   const e = findWorkflowEmployeeEntry(mods, empId)
-  const ch = String(e?.phone_channel || '').trim().toLowerCase()
+  const ch = String(e?.phone_channel || '')
+    .trim()
+    .toLowerCase()
   if (ch === 'adb' || ch === 'real') return 'adb'
   return 'wechat'
 }
 
-export function listPhoneAgentEmployeeIds(
-  mods: ModWithWorkflowEmployees[] | undefined,
-): string[] {
+export function listPhoneAgentEmployeeIds(mods: ModWithWorkflowEmployees[] | undefined): string[] {
   const out: string[] = []
   for (const m of mods || []) {
     for (const e of m.workflow_employees || []) {
@@ -188,7 +182,7 @@ export function listPhoneAgentEmployeeIds(
 
 export function findWorkflowEmployeeEntry(
   mods: ModWithWorkflowEmployees[] | undefined,
-  empId: string
+  empId: string,
 ): (WorkflowEmployeeManifestEntry & { modId: string; modName: string }) | null {
   const id = String(empId || '').trim()
   if (!id) return null
@@ -207,19 +201,13 @@ export function findWorkflowEmployeeEntry(
 }
 
 /** 副窗开关：该员工是否配置了电话 API 根路径（用于 start/stop） */
-export function getPhoneAgentApiBaseForEmployeeId(
-  mods: ModWithWorkflowEmployees[] | undefined,
-  empId: string
-): string | null {
+export function getPhoneAgentApiBaseForEmployeeId(mods: ModWithWorkflowEmployees[] | undefined, empId: string): string | null {
   const e = findWorkflowEmployeeEntry(mods, empId)
   if (!e) return null
   return resolvePhoneAgentApiBase(e, e.modId)
 }
 
-export function isPhoneAgentStatusEmployee(
-  mods: ModWithWorkflowEmployees[] | undefined,
-  empId: string
-): boolean {
+export function isPhoneAgentStatusEmployee(mods: ModWithWorkflowEmployees[] | undefined, empId: string): boolean {
   const e = findWorkflowEmployeeEntry(mods, empId)
   if (!e) return false
   const base = resolvePhoneAgentApiBase(e, e.modId)
@@ -228,10 +216,7 @@ export function isPhoneAgentStatusEmployee(
   return true
 }
 
-export function isWorkflowPlaceholderEmployee(
-  mods: ModWithWorkflowEmployees[] | undefined,
-  empId: string
-): boolean {
+export function isWorkflowPlaceholderEmployee(mods: ModWithWorkflowEmployees[] | undefined, empId: string): boolean {
   const e = findWorkflowEmployeeEntry(mods, empId)
   if (!e) return false
   if (e.workflow_ui_kind === 'placeholder') return true
@@ -243,7 +228,7 @@ export function isWorkflowPlaceholderEmployee(
  */
 export function getActivePhoneAgentPollTarget(
   mods: ModWithWorkflowEmployees[] | undefined,
-  enabled: Record<string, boolean>
+  enabled: Record<string, boolean>,
 ): { empId: string; apiBase: string } | null {
   for (const m of mods || []) {
     const modId = String(m.id || '').trim()
@@ -262,7 +247,7 @@ export function getActivePhoneAgentPollTarget(
 
 /** 由已加载 Mod 生成任务面板 meta（不含内置四条，仅 Mod 声明的员工） */
 export function buildModWorkflowPanelMeta(
-  mods: ModWithWorkflowEmployees[] | undefined
+  mods: ModWithWorkflowEmployees[] | undefined,
 ): Record<string, { title: string; summary: string }> {
   const out: Record<string, { title: string; summary: string }> = {}
   for (const m of filterWorkflowRegistrySourceMods(mods)) {
@@ -273,9 +258,7 @@ export function buildModWorkflowPanelMeta(
       const label = String(e.label || id).trim() || id
       out[id] = {
         title: e.panel_title?.trim() || `工作流 · ${label}`,
-        summary:
-          e.panel_summary?.trim() ||
-          `由扩展「${modName}」在 manifest 中声明的工作流员工「${label}」。`,
+        summary: e.panel_summary?.trim() || `由扩展「${modName}」在 manifest 中声明的工作流员工「${label}」。`,
       }
     }
   }

@@ -18,7 +18,10 @@ function extractEarlyClauses(text: string, opts: SplitOptions): string[] {
   const minClause = opts.earlyClauseMinLen ?? 8
   const t = (text || '').trim()
   if (!t) return []
-  const parts = t.split(CLAUSE_END).map((p) => p.trim()).filter(Boolean)
+  const parts = t
+    .split(CLAUSE_END)
+    .map((p) => p.trim())
+    .filter(Boolean)
   if (parts.length <= 1) return []
   const endsWithClause = CLAUSE_END.test(t.slice(-2)) || /[，、,]$/.test(t)
   const complete = endsWithClause ? parts : parts.slice(0, -1)
@@ -95,7 +98,10 @@ export function extractCompleteSentences(text: string, opts?: SplitOptions): str
   const t = (text || '').trim()
   if (!t) return []
 
-  const sentenceParts = t.split(SENTENCE_END).map((p) => p.trim()).filter(Boolean)
+  const sentenceParts = t
+    .split(SENTENCE_END)
+    .map((p) => p.trim())
+    .filter(Boolean)
   const endsWithTerminator = SENTENCE_END.test(t.slice(-2)) || /[。！？；.!?]$/.test(t)
   const completeParts = endsWithTerminator ? sentenceParts : sentenceParts.slice(0, -1)
 
@@ -122,7 +128,10 @@ export function splitSentences(text: string, opts?: SplitOptions): string[] {
   const t = (text || '').trim()
   if (!t) return []
 
-  const parts = t.split(SENTENCE_END).map((p) => p.trim()).filter(Boolean)
+  const parts = t
+    .split(SENTENCE_END)
+    .map((p) => p.trim())
+    .filter(Boolean)
   if (!parts.length) return [t]
 
   const expanded: string[] = []

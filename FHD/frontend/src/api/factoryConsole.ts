@@ -1,4 +1,4 @@
-import { apiFetch } from '@/utils/apiBase';
+import { apiFetch } from '@/utils/apiBase'
 
 /**
  * 顶层管理端「项目工厂」控制台 API。
@@ -9,51 +9,59 @@ import { apiFetch } from '@/utils/apiBase';
  */
 
 export interface FactoryWorkspace {
-  id: string;
-  label: string;
-  isolation: string;
-  default_branch: string;
-  vcs_kind: string;
+  id: string
+  label: string
+  isolation: string
+  default_branch: string
+  vcs_kind: string
 }
 
 export interface FactoryEmployee {
-  id: string;
-  display_name: string;
-  display_tool: string;
-  avatar_letter: string;
-  summary: string;
-  scope: string;
-  endpoint: string | null;
+  id: string
+  display_name: string
+  display_tool: string
+  avatar_letter: string
+  summary: string
+  scope: string
+  endpoint: string | null
 }
 
-const jsonHeaders: HeadersInit = { 'Content-Type': 'application/json' };
+const jsonHeaders: HeadersInit = { 'Content-Type': 'application/json' }
 
 async function readJson<T = Record<string, unknown>>(res: Response): Promise<T> {
-  const ct = res.headers.get('content-type') || '';
+  const ct = res.headers.get('content-type') || ''
   if (!ct.toLowerCase().includes('application/json')) {
-    throw new Error(res.status === 401 ? '未登录' : `请求失败（HTTP ${res.status}）`);
+    throw new Error(res.status === 401 ? '未登录' : `请求失败（HTTP ${res.status}）`)
   }
-  return (await res.json()) as T;
+  return (await res.json()) as T
 }
 
 function unwrap<T>(data: { success?: boolean; message?: unknown }, value: T, fallback: string): T {
   if (data.success === false) {
-    const msg = typeof data.message === 'string' && data.message.trim() ? data.message : fallback;
-    throw new Error(msg);
+    const msg = typeof data.message === 'string' && data.message.trim() ? data.message : fallback
+    throw new Error(msg)
   }
-  return value;
+  return value
 }
 
 export async function fetchFactoryWorkspaces(): Promise<FactoryWorkspace[]> {
-  const res = await apiFetch('/api/admin/factory/workspaces', { headers: jsonHeaders });
-  const data = await readJson<{ success?: boolean; message?: string; workspaces?: FactoryWorkspace[] }>(res);
-  return unwrap(data, data.workspaces ?? [], '加载项目列表失败');
+  const res = await apiFetch('/api/admin/factory/workspaces', { headers: jsonHeaders })
+  const data = await readJson<{
+    success?: boolean
+    message?: string
+    workspaces?: FactoryWorkspace[]
+  }>(res)
+  return unwrap(data, data.workspaces ?? [], '加载项目列表失败')
 }
 
 export async function fetchFactoryEmployees(): Promise<FactoryEmployee[]> {
-  const res = await apiFetch('/api/admin/factory/employees', { headers: jsonHeaders });
-  const data = await readJson<{ success?: boolean; message?: string; employees?: FactoryEmployee[] }>(res);
-  return unwrap(data, data.employees ?? [], '加载工厂员工失败');
+  const res = await apiFetch('/api/admin/factory/employees', { headers: jsonHeaders })
+  const data = await readJson<{
+    success?: boolean
+    message?: string
+    employees?: FactoryEmployee[]
+  }>(res)
+  return unwrap(data, data.employees ?? [], '加载工厂员工失败')
 }
 
 /**
@@ -70,7 +78,7 @@ export async function dispatchFactoryTask(
     method: 'POST',
     headers: jsonHeaders,
     body: JSON.stringify({ message, context: { ...context, workspace_id: workspaceId } }),
-  });
-  const data = await readJson<Record<string, unknown>>(res);
-  return unwrap(data, data, '派工失败');
+  })
+  const data = await readJson<Record<string, unknown>>(res)
+  return unwrap(data, data, '派工失败')
 }

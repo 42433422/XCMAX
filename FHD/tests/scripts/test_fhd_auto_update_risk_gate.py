@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment"
 from __future__ import annotations
 
 import json
@@ -31,9 +32,7 @@ def _runtime(tmp_path: Path) -> tuple[Path, Path, dict[str, str]]:
         "FHD_AUTO_UPDATE_LOCK": str(tmp_path / "update.lock"),
         "FHD_AUTONOMY_PYTHON": sys.executable,
         "XCAGI_AUTONOMY_DATA_DIR": str(tmp_path / "autonomy"),
-        "XCAGI_AUTONOMY_AUDIT_LOG_PATH": str(
-            tmp_path / "autonomy" / "autonomy-audit-log.jsonl"
-        ),
+        "XCAGI_AUTONOMY_AUDIT_LOG_PATH": str(tmp_path / "autonomy" / "autonomy-audit-log.jsonl"),
     }
     return deploy_root, manifest, env
 
@@ -52,9 +51,7 @@ def test_deploy_bridge_hard_blocks_prohibited_migration(tmp_path: Path) -> None:
             "FHD_DEPLOY_ROOT": str(deploy_root),
             "FHD_AUTONOMY_PYTHON": sys.executable,
             "XCAGI_AUTONOMY_DATA_DIR": str(data_dir),
-            "XCAGI_AUTONOMY_AUDIT_LOG_PATH": str(
-                data_dir / "autonomy-audit-log.jsonl"
-            ),
+            "XCAGI_AUTONOMY_AUDIT_LOG_PATH": str(data_dir / "autonomy-audit-log.jsonl"),
         },
         capture_output=True,
         text=True,

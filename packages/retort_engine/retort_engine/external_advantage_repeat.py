@@ -31,7 +31,7 @@ def build_external_advantage_repeat(
     first_case_ids = case_ids_by_run[0] if case_ids_by_run else []
     stable_case_set = all(case_ids == first_case_ids for case_ids in case_ids_by_run)
     ready_runs = [run for run in runs if run.get("status") == "ready"]
-    summary = {
+    summary: dict[str, Any] = {
         "repeat_count": len(runs),
         "ready_repeat_count": len(ready_runs),
         "min_case_count": min_cases,

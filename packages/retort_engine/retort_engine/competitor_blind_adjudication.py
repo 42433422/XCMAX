@@ -8,7 +8,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 
 def build_competitor_blind_adjudication(
@@ -49,10 +49,11 @@ def build_competitor_blind_adjudication(
         check=False,
     )
     adjudication = _read_json(output_path)
-    adjudication_summary = (
+    adjudication_summary = cast(
+        dict[str, Any],
         adjudication.get("summary")
         if isinstance(adjudication.get("summary"), dict)
-        else {}
+        else {},
     )
     script_text = script_path.read_text(encoding="utf-8")
     competitor_count = int(adjudication_summary.get("competitor_count") or 0)
@@ -122,15 +123,17 @@ def build_competitor_blind_adjudication(
 
 
 def _blind_input(comparison: dict[str, Any], *, min_delta: int) -> dict[str, Any]:
-    competitor_output = (
+    competitor_output = cast(
+        dict[str, Any],
         comparison.get("competitor_output")
         if isinstance(comparison.get("competitor_output"), dict)
-        else {}
+        else {},
     )
-    retort_output = (
+    retort_output = cast(
+        dict[str, Any],
         comparison.get("retort_output")
         if isinstance(comparison.get("retort_output"), dict)
-        else {}
+        else {},
     )
     comments = [
         item for item in retort_output.get("comments") or [] if isinstance(item, dict)
@@ -148,10 +151,11 @@ def _blind_input(comparison: dict[str, Any], *, min_delta: int) -> dict[str, Any
 
 
 def _redacted_comment(comment: dict[str, Any]) -> dict[str, Any]:
-    anchor = (
+    anchor = cast(
+        dict[str, Any],
         comment.get("comment_anchor")
         if isinstance(comment.get("comment_anchor"), dict)
-        else {}
+        else {},
     )
     return {
         "path": str(anchor.get("path") or comment.get("file") or ""),
@@ -166,11 +170,15 @@ def _redacted_comment(comment: dict[str, Any]) -> dict[str, Any]:
 
 
 def _redacted_runtime(runtime: dict[str, Any]) -> dict[str, Any]:
-    output = runtime.get("output") if isinstance(runtime.get("output"), dict) else {}
-    live = (
+    output = cast(
+        dict[str, Any],
+        runtime.get("output") if isinstance(runtime.get("output"), dict) else {},
+    )
+    live = cast(
+        dict[str, Any],
         runtime.get("live_upstream")
         if isinstance(runtime.get("live_upstream"), dict)
-        else {}
+        else {},
     )
     return {
         "project": str(runtime.get("project") or ""),

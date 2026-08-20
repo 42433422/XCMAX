@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-"""ARCHIVED (2026-06): superseded by RECOVERABLE_ERRORS migration. Do not run."""
-"""Ensure every file using RECOVERABLE_ERRORS imports it after __future__ lines."""
+"""Ensure every file using RECOVERABLE_ERRORS imports it after future imports.
+
+ARCHIVED (2026-06): superseded by the RECOVERABLE_ERRORS migration. Do not run.
+"""
 
 from __future__ import annotations
 
@@ -14,7 +16,10 @@ IMPORT = "from app.utils.operational_errors import OPERATIONAL_ERRORS"
 
 def _has_import(tree: ast.AST) -> bool:
     for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module == "app.utils.operational_errors":
+        if (
+            isinstance(node, ast.ImportFrom)
+            and node.module == "app.utils.operational_errors"
+        ):
             for alias in node.names:
                 if alias.name == "OPERATIONAL_ERRORS":
                     return True

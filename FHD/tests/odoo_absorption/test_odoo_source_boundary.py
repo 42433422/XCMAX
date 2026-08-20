@@ -1,3 +1,4 @@
+# mypy: disable-error-code="no-any-return"
 """ODOO-W0-01 source boundary tests.
 
 Mutation-kill coverage for the Odoo 18 Community source boundary verifier:
@@ -16,6 +17,8 @@ import urllib.error
 from pathlib import Path
 
 import pytest
+
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 # Load the verifier module (stdlib-only) from its sibling directory via
 # importlib.util (no sys.path mutation; the module is not importable by name).
@@ -777,6 +780,6 @@ def test_mutation_license_byte_mismatch_even_when_hash_matches():
 def test_online_integration_real_network():
     try:
         errors = vs.verify_online(_load("source_manifest.json"))
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         pytest.skip(f"network unavailable: {exc}")
     assert errors == []

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Fix surface-audit page/image routes syntax + sort P-W rows by PNG filename."""
+
 from __future__ import annotations
 
 import json
@@ -13,14 +14,14 @@ TARGET = Path(
     else "/root/modstore-git/MODstore_deploy/modstore_server/xcmax_admin_api.py"
 )
 
-HELPER = '''
+HELPER = """
 
 def _sort_surface_rows(rows: list) -> list:
     def _key(row: dict) -> str:
         return Path(str((row or {}).get("screenshot_saved") or "")).name
 
     return sorted([r for r in rows if isinstance(r, dict)], key=_key)
-'''
+"""
 
 text = TARGET.read_text(encoding="utf-8")
 
@@ -35,13 +36,13 @@ if "_sort_surface_rows" not in text:
     text = text.replace(anchor, HELPER.strip() + "\n\n\n" + anchor, 1)
 
 text = text.replace(
-    "rows = [r for r in raw_rows if isinstance(r, dict) and r.get(\"lane\") == lane]",
-    "rows = _sort_surface_rows([r for r in raw_rows if isinstance(r, dict) and r.get(\"lane\") == lane])",
+    'rows = [r for r in raw_rows if isinstance(r, dict) and r.get("lane") == lane]',
+    'rows = _sort_surface_rows([r for r in raw_rows if isinstance(r, dict) and r.get("lane") == lane])',
 )
 
 # _lane_payload: sort lane pages before attach b64
-old_loop = "        for row in report.get(\"results\") if isinstance(report.get(\"results\"), list) else []:\n            if row.get(\"lane\") != lane:"
-new_loop = "        lane_rows = _sort_surface_rows(\n            [\n                row\n                for row in report.get(\"results\") if isinstance(report.get(\"results\"), list) else []\n                if row.get(\"lane\") == lane\n            ]\n        )\n        for row in lane_rows:"
+old_loop = '        for row in report.get("results") if isinstance(report.get("results"), list) else []:\n            if row.get("lane") != lane:'
+new_loop = '        lane_rows = _sort_surface_rows(\n            [\n                row\n                for row in report.get("results") if isinstance(report.get("results"), list) else []\n                if row.get("lane") == lane\n            ]\n        )\n        for row in lane_rows:'
 if old_loop in text and "lane_rows = _sort_surface_rows" not in text:
     text = text.replace(old_loop, new_loop, 1)
 

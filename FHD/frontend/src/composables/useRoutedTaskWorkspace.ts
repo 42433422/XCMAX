@@ -2,12 +2,7 @@ import { computed, watch, type Ref } from 'vue'
 import agentRunsApi from '@/api/agentRuns'
 import type { AgentTaskSummary } from '@/api/agentRuns'
 import type { TaskItem } from './useChatPersistence'
-import {
-  taskNeedsApproval,
-  taskProgressPercent,
-  taskStatusLabel,
-  taskUnreadCount,
-} from '@/utils/taskWorkspacePresentation'
+import { taskNeedsApproval, taskProgressPercent, taskStatusLabel, taskUnreadCount } from '@/utils/taskWorkspacePresentation'
 
 export interface RoutedTaskWorkspaceProps {
   workspaceTaskId?: string
@@ -34,9 +29,7 @@ export function useRoutedTaskWorkspace(options: RoutedTaskWorkspaceOptions) {
   const workspaceMode = computed(() => Boolean(workspaceTaskId.value))
   const visibleTaskList = computed(() => {
     if (!workspaceTaskId.value) return options.taskList.value
-    return options.taskList.value.filter(
-      (task) => String(task.payload?.taskId || '') === workspaceTaskId.value,
-    )
+    return options.taskList.value.filter((task) => String(task.payload?.taskId || '') === workspaceTaskId.value)
   })
   const visibleFilteredTaskList = computed(() => {
     if (!workspaceTaskId.value) return options.filteredTaskList.value
@@ -47,16 +40,12 @@ export function useRoutedTaskWorkspace(options: RoutedTaskWorkspaceOptions) {
     if (!workspaceTaskId.value) return options.activeTaskId.value
     return visibleTaskList.value.some((task) => task.id === options.activeTaskId.value)
       ? options.activeTaskId.value
-      : (visibleTaskList.value[0]?.id || '')
+      : visibleTaskList.value[0]?.id || ''
   })
-  const activeWorkspaceTask = computed(() => (
-    visibleTaskList.value.find((task) => task.id === visibleActiveTaskId.value)
-    || visibleTaskList.value[0]
-    || null
-  ))
-  const activeWorkspaceSummary = computed(() => (
-    options.taskSummaries?.value.find((task) => task.task_id === workspaceTaskId.value) || null
-  ))
+  const activeWorkspaceTask = computed(
+    () => visibleTaskList.value.find((task) => task.id === visibleActiveTaskId.value) || visibleTaskList.value[0] || null,
+  )
+  const activeWorkspaceSummary = computed(() => options.taskSummaries?.value.find((task) => task.task_id === workspaceTaskId.value) || null)
   const workspaceHeader = computed(() => {
     const summary = activeWorkspaceSummary.value
     const localTask = activeWorkspaceTask.value
@@ -88,9 +77,7 @@ export function useRoutedTaskWorkspace(options: RoutedTaskWorkspaceOptions) {
     workspaceTaskId,
     (taskId) => {
       if (!taskId) return
-      const markRead = options.markTaskRead
-        ? options.markTaskRead(taskId)
-        : agentRunsApi.markTaskRead(taskId).then(() => undefined)
+      const markRead = options.markTaskRead ? options.markTaskRead(taskId) : agentRunsApi.markTaskRead(taskId).then(() => undefined)
       void markRead.catch(() => undefined)
     },
     { immediate: true },

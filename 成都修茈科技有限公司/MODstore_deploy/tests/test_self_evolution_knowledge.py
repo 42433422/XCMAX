@@ -163,9 +163,24 @@ def test_collect_proactive_signals_prioritizes_open_workforce_gaps(monkeypatch, 
 
 def test_evolution_metrics_pause_after_two_consecutive_target_misses():
     history = [
-        {"week": "2026-W23", "backend_coverage": 80.0, "pytest_passed": 100, "type_debt": 100},
-        {"week": "2026-W24", "backend_coverage": 80.1, "pytest_passed": 100, "type_debt": 98},
-        {"week": "2026-W25", "backend_coverage": 80.2, "pytest_passed": 99, "type_debt": 98},
+        {
+            "week": "2026-W23",
+            "backend_coverage": 80.0,
+            "pytest_passed": 100,
+            "type_debt": 100,
+        },
+        {
+            "week": "2026-W24",
+            "backend_coverage": 80.1,
+            "pytest_passed": 100,
+            "type_debt": 98,
+        },
+        {
+            "week": "2026-W25",
+            "backend_coverage": 80.2,
+            "pytest_passed": 99,
+            "type_debt": 98,
+        },
     ]
 
     result = evaluate_evolution_regression(history)
@@ -176,9 +191,24 @@ def test_evolution_metrics_pause_after_two_consecutive_target_misses():
 
 def test_evolution_metrics_do_not_pause_without_consecutive_misses():
     history = [
-        {"week": "2026-W23", "backend_coverage": 80.0, "pytest_passed": 100, "type_debt": 100},
-        {"week": "2026-W24", "backend_coverage": 80.6, "pytest_passed": 100, "type_debt": 95},
-        {"week": "2026-W25", "backend_coverage": 81.2, "pytest_passed": 101, "type_debt": 90},
+        {
+            "week": "2026-W23",
+            "backend_coverage": 80.0,
+            "pytest_passed": 100,
+            "type_debt": 100,
+        },
+        {
+            "week": "2026-W24",
+            "backend_coverage": 80.6,
+            "pytest_passed": 100,
+            "type_debt": 95,
+        },
+        {
+            "week": "2026-W25",
+            "backend_coverage": 81.2,
+            "pytest_passed": 101,
+            "type_debt": 90,
+        },
     ]
 
     assert evaluate_evolution_regression(history)["pause"] is False

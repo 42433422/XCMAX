@@ -1,19 +1,24 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """XCmax server-side synchronization routes."""
+
 from __future__ import annotations
+
 import asyncio
 import importlib
 import json
 import logging
 import os
 import sqlite3
-from datetime import datetime, timezone
 from typing import Any
+
 from fastapi import APIRouter, Body, Query, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger("modstore_server.xcmax_admin_api")
 router = APIRouter(prefix="/api/xcmax", tags=["xcmax-admin"])
+_SYNC_UNAVAILABLE = "同步服务暂时不可用，请稍后重试"
 
 
 def _facade():
@@ -57,8 +62,8 @@ async def sync_status() -> dict[str, Any]:
                 "role": "server",
             },
         }
-    except Exception as exc:
-        _facade().logger.warning("sync_status failed: %s", exc)
+    except RECOVERABLE_ERRORS:
+        _facade().logger.exception("sync_status failed")
         return {
             "success": True,
             "data": {
@@ -69,7 +74,7 @@ async def sync_status() -> dict[str, Any]:
                 "last_sync_at": None,
                 "conflict_count": 0,
                 "role": "server",
-                "note": str(exc),
+                "note": _SYNC_UNAVAILABLE,
             },
         }
 
@@ -90,7 +95,7 @@ async def sync_changes(
         for r in rows:
             try:
                 payload = json.loads(r["payload_json"] or "{}")
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 payload = {}
             data.append(
                 {
@@ -106,9 +111,9 @@ async def sync_changes(
                 }
             )
         return {"success": True, "data": data, "count": len(data)}
-    except Exception as exc:
-        _facade().logger.warning("sync_changes failed: %s", exc)
-        return {"success": True, "data": [], "count": 0, "note": str(exc)}
+    except RECOVERABLE_ERRORS:
+        _facade().logger.exception("sync_changes failed")
+        return {"success": True, "data": [], "count": 0, "note": _SYNC_UNAVAILABLE}
 
 
 @router.post("/sync/receive", response_model=None)
@@ -137,12 +142,19 @@ async def sync_receive(body: dict | list = Body(default=None)) -> dict[str, Any]
                 payload = raw.get("payload") or {}
                 try:
                     payload_json = json.dumps(payload, ensure_ascii=False, default=str)
-                except Exception:
+                except RECOVERABLE_ERRORS:
                     payload_json = "{}"
                 origin_node = str(raw.get("origin_node") or "remote").strip() or "remote"
                 conn.execute(
                     "INSERT INTO xcmax_inbox(entity_type, entity_id, operation, payload_json, origin_node, status, received_at) VALUES(?, ?, ?, ?, ?, 'pending', ?)",
-                    (entity_type, entity_id, operation, payload_json, origin_node, now_iso),
+                    (
+                        entity_type,
+                        entity_id,
+                        operation,
+                        payload_json,
+                        origin_node,
+                        now_iso,
+                    ),
                 )
                 conn.execute(
                     "INSERT INTO xcmax_changes(entity_type, entity_id, operation, payload_json, version, actor, origin_node, created_at) VALUES(?, ?, ?, ?, 1, ?, ?, ?)",
@@ -164,9 +176,11 @@ async def sync_receive(body: dict | list = Body(default=None)) -> dict[str, Any]
             "received": written,
             "apply_result": {"applied": written, "conflicts": 0},
         }
-    except Exception as exc:
-        _facade().logger.warning("sync_receive failed: %s", exc)
-        return _facade().JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        _facade().logger.exception("sync_receive failed")
+        return _facade().JSONResponse(
+            {"success": False, "message": _SYNC_UNAVAILABLE}, status_code=500
+        )
 
 
 @router.post("/sync/push", response_model=None)
@@ -175,7 +189,12 @@ async def sync_push() -> dict[str, Any]:
     _facade()._ensure_schema()
     return {
         "success": True,
-        "data": {"sent": 0, "failed": 0, "total_pending": 0, "note": "server-side noop"},
+        "data": {
+            "sent": 0,
+            "failed": 0,
+            "total_pending": 0,
+            "note": "server-side noop",
+        },
     }
 
 
@@ -202,7 +221,7 @@ async def list_conflicts(limit: int = Query(50, ge=1, le=500)) -> dict[str, Any]
         for r in rows:
             try:
                 payload = json.loads(r["payload_json"] or "{}")
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 payload = {}
             data.append(
                 {
@@ -216,8 +235,9 @@ async def list_conflicts(limit: int = Query(50, ge=1, le=500)) -> dict[str, Any]
                 }
             )
         return {"success": True, "data": data, "count": len(data)}
-    except Exception as exc:
-        return {"success": True, "data": [], "count": 0, "note": str(exc)}
+    except RECOVERABLE_ERRORS:
+        _facade().logger.exception("list_conflicts failed")
+        return {"success": True, "data": [], "count": 0, "note": _SYNC_UNAVAILABLE}
 
 
 @router.post("/sync/conflicts/{inbox_id}/resolve", response_model=None)
@@ -229,11 +249,17 @@ async def resolve_conflict(
     new_status = "applied" if action == "apply" else "skipped"
     try:
         with _facade()._db_lock, _facade()._connect() as conn:
-            conn.execute("UPDATE xcmax_inbox SET status=? WHERE id=?", (new_status, int(inbox_id)))
+            conn.execute(
+                "UPDATE xcmax_inbox SET status=? WHERE id=?",
+                (new_status, int(inbox_id)),
+            )
             conn.commit()
         return {"success": True, "inbox_id": int(inbox_id), "action": action}
-    except Exception as exc:
-        return _facade().JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        _facade().logger.exception("resolve_conflict failed")
+        return _facade().JSONResponse(
+            {"success": False, "message": _SYNC_UNAVAILABLE}, status_code=500
+        )
 
 
 SYNC_POLL_INTERVAL_S = float(os.environ.get("XCMAX_SYNC_POLL_S", "10"))
@@ -277,10 +303,15 @@ async def _sse_generator(request: Request, since_cursor: int):
                         "conflict_count": _facade()._inbox_conflict_count(conn),
                         "role": "server",
                     }
-                    heartbeat = {"type": "heartbeat", "cursor": cursor, "status": status}
+                    heartbeat = {
+                        "type": "heartbeat",
+                        "cursor": cursor,
+                        "status": status,
+                    }
                     yield f"data: {json.dumps(heartbeat, ensure_ascii=False, default=str)}\n\n"
-        except Exception as exc:
-            err = {"type": "error", "message": str(exc)}
+        except RECOVERABLE_ERRORS:
+            _facade().logger.exception("sync stream poll failed")
+            err = {"type": "error", "message": _SYNC_UNAVAILABLE}
             yield f"data: {json.dumps(err, ensure_ascii=False)}\n\n"
         await asyncio.sleep(SYNC_POLL_INTERVAL_S)
 

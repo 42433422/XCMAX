@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from vibe_coding import MockLLM, VibeCoder
 from vibe_coding.agent.domain import (
     DomainViolation,
@@ -21,26 +19,20 @@ def _make_patch(*edits: FileEdit, summary: str = "test") -> ProjectPatch:
 
 def test_allowed_paths_accepts_match() -> None:
     guard = ProjectDomainGuard(allowed_paths=("src/**",))
-    patch = _make_patch(
-        FileEdit(path="src/foo.py", operation="create", contents="x = 1\n")
-    )
+    patch = _make_patch(FileEdit(path="src/foo.py", operation="create", contents="x = 1\n"))
     assert guard.is_safe(patch)
 
 
 def test_allowed_paths_rejects_outside() -> None:
     guard = ProjectDomainGuard(allowed_paths=("src/**",))
-    patch = _make_patch(
-        FileEdit(path="docs/secret.md", operation="create", contents="x")
-    )
+    patch = _make_patch(FileEdit(path="docs/secret.md", operation="create", contents="x"))
     violations = guard.validate(patch)
     assert any(v.code == "path_not_allowed" for v in violations)
 
 
 def test_forbidden_paths_blocks_match() -> None:
     guard = ProjectDomainGuard(forbidden_paths=("**/.env", "secrets/*"))
-    patch = _make_patch(
-        FileEdit(path="secrets/keys.txt", operation="create", contents="x")
-    )
+    patch = _make_patch(FileEdit(path="secrets/keys.txt", operation="create", contents="x"))
     violations = guard.validate(patch)
     assert any(v.code == "path_forbidden" for v in violations)
 
@@ -59,9 +51,7 @@ def test_max_files_changed_enforced() -> None:
 def test_max_lines_added_enforced() -> None:
     guard = ProjectDomainGuard(max_lines_added=5)
     huge_content = "\n".join(f"line {i}" for i in range(100)) + "\n"
-    patch = _make_patch(
-        FileEdit(path="a.py", operation="create", contents=huge_content)
-    )
+    patch = _make_patch(FileEdit(path="a.py", operation="create", contents=huge_content))
     violations = guard.validate(patch)
     assert any(v.code == "too_many_lines" for v in violations)
 
@@ -85,10 +75,7 @@ def test_forbidden_js_imports() -> None:
         FileEdit(
             path="x.ts",
             operation="create",
-            contents=(
-                "import { exec } from 'child_process';\n"
-                "const fs = require('fs');\n"
-            ),
+            contents=("import { exec } from 'child_process';\nconst fs = require('fs');\n"),
         )
     )
     violations = guard.validate(patch)
@@ -210,9 +197,7 @@ def test_guard_per_call_override(tmp_path: Path) -> None:
             "patch_id": "ok",
             "summary": "harmless",
             "rationale": "",
-            "edits": [
-                {"path": "b.py", "operation": "create", "contents": "y = 2\n"}
-            ],
+            "edits": [{"path": "b.py", "operation": "create", "contents": "y = 2\n"}],
         }
     )
 

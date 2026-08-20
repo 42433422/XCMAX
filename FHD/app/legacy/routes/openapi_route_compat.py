@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
@@ -75,6 +76,92 @@ def iter_effective_routes(routes: Any, *, prefix: str = ""):
             continue
 
         yield _route_view(route, prefix=prefix)
+
+
+def _normalized_route_key(route: EffectiveRoute) -> set[tuple[str, str]]:
+    """Return comparable HTTP keys for an effective route."""
+    from app.utils.openapi_path import normalize_path_template
+
+    path = normalize_path_template(route.path).rstrip("/") or "/"
+    return {
+        (str(method).upper(), path)
+        for method in route.methods or ()
+        if str(method).upper() in _DOC_METHODS
+    }
+
+
+def _remove_app_local_route_contexts(routes: Any, target_ids: set[int], seen: set[int]) -> int:
+    """Remove route contexts from one app without mutating shared routers."""
+    if id(routes) in seen:
+        return 0
+    seen.add(id(routes))
+    removed = 0
+    for route in list(routes or []):
+        original_route = getattr(route, "original_route", None)
+        if id(route) in target_ids or id(original_route) in target_ids:
+            routes.remove(route)
+            removed += 1
+            continue
+        effective_candidates = getattr(route, "effective_candidates", None)
+        if callable(effective_candidates):
+            candidates = list(effective_candidates())
+            removed += _remove_app_local_route_contexts(candidates, target_ids, seen)
+            route._effective_candidates = candidates
+            original_router = getattr(route, "original_router", None)
+            get_version = getattr(original_router, "_get_routes_version", None)
+            if callable(get_version):
+                route._effective_candidates_version = get_version()
+        if isinstance(route, Mount):
+            removed += _remove_app_local_route_contexts(
+                getattr(route, "routes", []), target_ids, seen
+            )
+    return removed
+
+
+def remove_superseded_host_aliases(
+    app: FastAPI, routes_before: Iterable[EffectiveRoute]
+) -> list[str]:
+    """Remove host fallbacks replaced by routes added in one Mod registration.
+
+    FastAPI 0.137 keeps included routers in lazy ``_IncludedRouter`` wrappers,
+    so comparing or deleting only ``app.router.routes`` misses aliases owned by
+    nested routers.  Match the flattened runtime paths, remove the original
+    route contexts from this app's lazy cache.  The imported source router must
+    remain intact so a later app instance can still mount the compatibility
+    fallback when the private Mod is unavailable.
+    """
+    app_router = getattr(app, "router", None)
+    root_routes = getattr(app_router, "routes", None)
+    if root_routes is None:
+        return []
+
+    before = list(routes_before)
+    before_ids = {id(route.original_route) for route in before}
+    after = list(iter_effective_routes(root_routes))
+    new_keys: set[tuple[str, str]] = set()
+    for route in after:
+        if id(route.original_route) not in before_ids:
+            new_keys.update(_normalized_route_key(route))
+    if not new_keys:
+        return []
+
+    target_ids: set[int] = set()
+    removed_paths: set[str] = set()
+    for route in before:
+        endpoint_name = str(getattr(route.endpoint, "__name__", ""))
+        if not endpoint_name.endswith("_host_alias"):
+            continue
+        if _normalized_route_key(route).intersection(new_keys):
+            target_ids.add(id(route.original_route))
+            removed_paths.add(route.path)
+
+    if not target_ids:
+        return []
+    removed = _remove_app_local_route_contexts(root_routes, target_ids, set())
+    if not removed:
+        return []
+    app.openapi_schema = None
+    return sorted(removed_paths)
 
 
 def hide_trailing_slash_openapi_duplicates(app: FastAPI) -> int:

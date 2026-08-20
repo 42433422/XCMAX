@@ -54,10 +54,7 @@ class AnthropicLLM:
     def chat(self, system: str, user: str, *, json_mode: bool = True) -> str:
         sys_prompt = system
         if json_mode:
-            sys_prompt = (
-                system.rstrip()
-                + "\n\nIMPORTANT: respond with **valid JSON only**, no Markdown fences."
-            )
+            sys_prompt = system.rstrip() + "\n\nIMPORTANT: respond with **valid JSON only**, no Markdown fences."
         body = {
             "model": self.model,
             "max_tokens": self.max_tokens,
@@ -138,7 +135,7 @@ def _trim_to_first_json_block(text: str) -> str:
         if nl >= 0:
             s = s[nl + 1 :]
         if s.endswith("```"):
-            s = s[: -3]
+            s = s[:-3]
         s = s.strip()
     start = s.find("{")
     if start < 0:

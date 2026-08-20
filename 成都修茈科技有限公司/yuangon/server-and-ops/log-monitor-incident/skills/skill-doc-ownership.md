@@ -2,21 +2,23 @@
 
 ## 元信息
 
-| 字段 | 值 |
-|------|----|
-| skill_id | `skill-doc-ownership` |
-| 所属员工 | `log-monitor-incident` |
-| 业务域 | 日志监控、事故响应与 SRE 运维相关文档的准确性维护与代码-文档同步 |
-| 版本 | 1.1.0 |
+| 字段     | 值                                                               |
+| -------- | ---------------------------------------------------------------- |
+| skill_id | `skill-doc-ownership`                                            |
+| 所属员工 | `log-monitor-incident`                                           |
+| 业务域   | 日志监控、事故响应与 SRE 运维相关文档的准确性维护与代码-文档同步 |
+| 版本     | 1.1.0                                                            |
 
 ## 1. 静态阶段
 
 **触发条件**：满足以下全部条件时走静态路径。
+
 - 监控/运维相关代码或配置文件发生变更（git diff 检测）
 - 变更涉及 `metrics.py`、`prometheus.yml`、`modstore-alerts.yml`、`chaos_drill.py`、`sre_smoke_check.py`、`backup_modstore.py`、`restore_postgres.py` 等 scope_globs 内文件
 - 无历史已知异常 flag
 
 **执行逻辑**：
+
 ```
 检测 scope_globs 内代码/配置变更 → 识别受影响的文档
 → 对比文档描述与代码实现是否一致
@@ -36,16 +38,17 @@
 
 **负责文档清单**：
 
-| 文档 | 路径 | 对应代码/配置 |
-|------|------|---------------|
-| Prometheus + Grafana 监控 | `MODstore_deploy/docs/observability.md` | `metrics.py`、`prometheus.yml`、`modstore-alerts.yml` |
-| 监控与 Grafana 统一说明 | `MODstore_deploy/docs/OPS_MONITORING.md` | `metrics.py`、`prometheus.yml` |
-| 事故响应 Runbook | `MODstore_deploy/docs/runbooks/incident-response.md` | `sre_smoke_check.py`、告警规则 |
-| SRE 运行体系 | `MODstore_deploy/docs/sre-operating-model.md` | `sre_smoke_check.py`、`perf/full_link_smoke.js` |
-| 灾备与恢复 Runbook | `MODstore_deploy/docs/runbooks/disaster-recovery.md` | `backup_modstore.py`、`restore_postgres.py` |
-| 混沌演练 Runbook | `MODstore_deploy/docs/runbooks/chaos-game-day.md` | `chaos_drill.py` |
+| 文档                      | 路径                                                 | 对应代码/配置                                         |
+| ------------------------- | ---------------------------------------------------- | ----------------------------------------------------- |
+| Prometheus + Grafana 监控 | `MODstore_deploy/docs/observability.md`              | `metrics.py`、`prometheus.yml`、`modstore-alerts.yml` |
+| 监控与 Grafana 统一说明   | `MODstore_deploy/docs/OPS_MONITORING.md`             | `metrics.py`、`prometheus.yml`                        |
+| 事故响应 Runbook          | `MODstore_deploy/docs/runbooks/incident-response.md` | `sre_smoke_check.py`、告警规则                        |
+| SRE 运行体系              | `MODstore_deploy/docs/sre-operating-model.md`        | `sre_smoke_check.py`、`perf/full_link_smoke.js`       |
+| 灾备与恢复 Runbook        | `MODstore_deploy/docs/runbooks/disaster-recovery.md` | `backup_modstore.py`、`restore_postgres.py`           |
+| 混沌演练 Runbook          | `MODstore_deploy/docs/runbooks/chaos-game-day.md`    | `chaos_drill.py`                                      |
 
 **输出 schema**：
+
 ```json
 {
   "status": "ok | needs_sync | error",
@@ -82,26 +85,29 @@
 **边界**：本员工 **不修改** `MODstore_deploy/monitoring/**/*.yml` 告警规则文件；仅输出 `alert_rule_validation` 与文档同步建议。规则变更由 **admin** 协调 **`modstore-backend-api`** 落地。
 
 **工具绑定**：
+
 - `git diff`（检测代码/配置变更）
 - `promtool check rules`（可选）
 - 文件读取（对比文档与代码实现）
 
 ## 2. 动态触发条件
 
-| 触发类型 | 具体规则 | 阈值 |
-|----------|----------|------|
-| 执行报错 | 文件读取失败、文档格式异常 | 即触发 |
-| 结果不达标 | `metrics.inconsistencies_found > 0` 且自动修复失败 | 可配 |
-| 场景特殊 | 新增代码/配置文件但无对应文档说明 | 可配 |
-| 告警规则 | `alert_rule_validation.syntax_ok == false` | 触发动态阶段或升级 admin |
+| 触发类型   | 具体规则                                           | 阈值                     |
+| ---------- | -------------------------------------------------- | ------------------------ |
+| 执行报错   | 文件读取失败、文档格式异常                         | 即触发                   |
+| 结果不达标 | `metrics.inconsistencies_found > 0` 且自动修复失败 | 可配                     |
+| 场景特殊   | 新增代码/配置文件但无对应文档说明                  | 可配                     |
+| 告警规则   | `alert_rule_validation.syntax_ok == false`         | 触发动态阶段或升级 admin |
 
 ## 3. 动态自适应阶段
 
 **预算限制**：
+
 - 最大 token：`4000`（来自 employee.yaml `max_patch_budget_tokens`）
 - 最大步数：`5`
 
 **允许改动的模块白名单**：
+
 - `MODstore_deploy/docs/observability.md`
 - `MODstore_deploy/docs/OPS_MONITORING.md`
 - `MODstore_deploy/docs/runbooks/incident-response.md`
@@ -112,6 +118,7 @@
 - `yuangon/server-and-ops/log-monitor-incident/runbook.md`
 
 **LLM 补丁格式**：
+
 ```json
 {
   "patch_id": "<uuid>",
@@ -131,6 +138,7 @@
 ## 4. 固化
 
 **验收标准**：
+
 - [ ] 所有受影响文档已与代码实现一致
 - [ ] `metrics.inconsistencies_found == 0`
 - [ ] `alert_rule_validation.syntax_ok == true` 或已提交 admin 跟踪修复
@@ -138,15 +146,16 @@
 - [ ] Sandbox 环境无副作用外溢
 
 **固化后动作**：
+
 1. 生效 delta 写入 `skills/skill-doc-ownership-v2.md`
 2. `employee.yaml` 中版本号递增
 3. 旧版本保留（打 tag `deprecated`）供回滚
 
 ## 5. 评估指标
 
-| 指标 | 目标值 |
-|------|--------|
-| 文档-代码一致性率 | ≥ 95% |
-| 静态路径成功率 | ≥ 90% |
-| 动态触发率 | ≤ 15% |
-| 文档同步延迟 | ≤ 24h（代码变更后） |
+| 指标              | 目标值              |
+| ----------------- | ------------------- |
+| 文档-代码一致性率 | ≥ 95%               |
+| 静态路径成功率    | ≥ 90%               |
+| 动态触发率        | ≤ 15%               |
+| 文档同步延迟      | ≤ 24h（代码变更后） |

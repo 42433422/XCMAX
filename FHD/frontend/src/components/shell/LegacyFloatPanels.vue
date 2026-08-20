@@ -23,7 +23,7 @@
       <span class="progress-percent" id="progressPercent">0%</span>
     </div>
     <div class="progress-bar-wrapper">
-      <div class="progress-bar-fill" id="progressBarFill" style="width: 0%;"></div>
+      <div class="progress-bar-fill" id="progressBarFill" style="width: 0%"></div>
     </div>
     <div class="progress-task" id="progressTask">正在初始化任务...</div>
   </div>
@@ -44,15 +44,15 @@
         <div class="drop-zone-text">拖拽文件到此处或点击选择</div>
         <div class="drop-zone-hint">支持 Excel、CSV、图片等文件</div>
       </div>
-      <input type="file" class="file-input" id="fileInput" multiple accept="*/*">
+      <input type="file" class="file-input" id="fileInput" multiple accept="*/*" />
       <div class="import-actions">
         <button class="btn btn-primary" id="chooseFileBtn">选择文件</button>
         <button class="btn btn-success" id="openCameraBtn"><i class="fa fa-camera" aria-hidden="true"></i> 拍照识别</button>
         <button class="btn btn-secondary" id="cancelImportBtn" data-close-action="closeImportWindow">取消</button>
       </div>
-      <div class="camera-panel" id="cameraPanel" style="display: none;">
+      <div class="camera-panel" id="cameraPanel" style="display: none">
         <video id="cameraVideo" autoplay playsinline></video>
-        <canvas id="cameraCanvas" style="display: none;"></canvas>
+        <canvas id="cameraCanvas" style="display: none"></canvas>
         <div class="camera-buttons">
           <button class="btn btn-primary" id="capturePhotoBtn">拍照</button>
           <button class="btn btn-secondary" id="closeCameraBtn" data-close-action="closeCamera">关闭</button>
@@ -80,7 +80,7 @@
       <div id="labelsExportList" class="labels-export-list">
         <p class="labels-export-hint">暂无标签文件（发货任务生成后可在此下载）</p>
       </div>
-      <div class="import-actions" style="margin-top: 12px;">
+      <div class="import-actions" style="margin-top: 12px">
         <button class="btn btn-secondary" id="labelsExportCloseBtn2" type="button">关闭</button>
       </div>
     </div>
@@ -93,9 +93,9 @@
     </div>
     <div class="import-content">
       <div id="printPanelStatus" class="labels-export-hint">正在连接打印机...</div>
-      <div id="printPanelProgress" class="print-panel-progress" style="display:none; margin:10px 0;"></div>
-      <div id="printPanelResults" class="print-panel-results" style="margin:10px 0; max-height:240px; overflow-y:auto;"></div>
-      <div class="import-actions" style="margin-top: 12px;">
+      <div id="printPanelProgress" class="print-panel-progress" style="display: none; margin: 10px 0"></div>
+      <div id="printPanelResults" class="print-panel-results" style="margin: 10px 0; max-height: 240px; overflow-y: auto"></div>
+      <div class="import-actions" style="margin-top: 12px">
         <button class="btn btn-primary" id="printPanelStartBtn" type="button">开始打印</button>
         <button class="btn btn-secondary" id="printPanelCloseBtn2" type="button">关闭</button>
       </div>

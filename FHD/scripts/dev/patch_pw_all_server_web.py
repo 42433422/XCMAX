@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """P-W 收编服务器全部网页；manifest 中 P-S 行并入 P-W（去重）。"""
+
 from __future__ import annotations
 
 import json
@@ -13,7 +14,7 @@ TARGET = Path(
     else "/root/modstore-git/MODstore_deploy/modstore_server/daily_digest_surface_audit.py"
 )
 
-OLD_LOOP = '''    for name, path in _PS_PUBLIC_PAGES:
+OLD_LOOP = """    for name, path in _PS_PUBLIC_PAGES:
         out.append(SurfaceTarget("P-S", "软件 P-S", name, path, "desktop"))
 
     for tab_name, tab_id in _AI_STORE_TABS:
@@ -41,9 +42,9 @@ OLD_LOOP = '''    for name, path in _PS_PUBLIC_PAGES:
                 f"/market/catalog/{cid}",
                 "desktop",
             )
-        )'''
+        )"""
 
-NEW_LOOP = '''    for name, path in _PS_PUBLIC_PAGES:
+NEW_LOOP = """    for name, path in _PS_PUBLIC_PAGES:
         out.append(SurfaceTarget("P-W", "网站 P-W", name, path, "desktop"))
 
     for tab_name, tab_id in _AI_STORE_TABS:
@@ -71,7 +72,7 @@ NEW_LOOP = '''    for name, path in _PS_PUBLIC_PAGES:
                 f"/market/catalog/{cid}",
                 "desktop",
             )
-        )'''
+        )"""
 
 text = TARGET.read_text(encoding="utf-8")
 if 'SurfaceTarget("P-W", "网站 P-W", tab_name' in text:

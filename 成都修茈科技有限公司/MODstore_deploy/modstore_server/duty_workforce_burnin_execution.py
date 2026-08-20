@@ -1,16 +1,22 @@
-# ruff: noqa
+# mypy: disable-error-code="arg-type, assignment, union-attr"
 """Validation and bounded execution for duty-workforce burn-in."""
+
 from __future__ import annotations
+
 import importlib
 import time
 import uuid
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from typing import Any, Callable, Dict, Optional
+
 from modstore_server.duty_workforce_burnin_constants import (
     READ_ONLY_AGENT_TOOLS as _READ_ONLY_AGENT_TOOLS,
+)
+from modstore_server.duty_workforce_burnin_constants import (
     READ_ONLY_OBSERVATION_TOOLS as _READ_ONLY_OBSERVATION_TOOLS,
 )
 from modstore_server.models import EmployeeExecutionMetric, get_session_factory
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -138,7 +144,7 @@ def _project_root() -> str:
         from modstore_server.workflow_scheduler import _employee_project_root
 
         return str(_employee_project_root() or "")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return ""
 
 
@@ -164,7 +170,7 @@ def _execute_one(
     project_root = _facade()._project_root()
     from modstore_server.services.llm import resolve_platform_bench_llm
 
-    (provider, model) = resolve_platform_bench_llm()
+    provider, model = resolve_platform_bench_llm()
     payload: Dict[str, Any] = {
         "trigger": "duty_workforce_burn_in",
         "burn_in": True,
@@ -204,7 +210,7 @@ def _execute_one(
             user_id=0,
             bench_llm_override=(provider, model) if provider and model else None,
         )
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         return {
             "employee_id": employee_id,
             "marker": marker,
@@ -260,7 +266,12 @@ def run_burn_in(
             "blocked_reason": "MODSTORE_EMPLOYEE_BURN_IN_ENABLED is not enabled",
         }
     if not _facade()._run_lock.acquire(blocking=False):
-        return {**plan, "dry_run": False, "executed": False, "reason": "already_running"}
+        return {
+            **plan,
+            "dry_run": False,
+            "executed": False,
+            "reason": "already_running",
+        }
     lingering = _facade()._lingering_execution_count()
     if lingering:
         _facade()._run_lock.release()
@@ -296,12 +307,12 @@ def run_burn_in(
                 ): item
                 for item in batch
             }
-            (done, pending) = wait(set(futures), timeout=timeout)
+            done, pending = wait(set(futures), timeout=timeout)
             for future in done:
                 item = futures[future]
                 try:
                     row = future.result()
-                except Exception as exc:
+                except RECOVERABLE_ERRORS as exc:
                     row = {
                         "employee_id": str(item.get("employee_id") or ""),
                         "status": "failed",
@@ -318,7 +329,10 @@ def run_burn_in(
                 if not future.done():
                     _facade()._track_lingering_future(future)
                 invalidated = _facade()._mark_receipt_rejected(
-                    employee_id, marker, "burnin_timeout", f"burn-in exceeded {timeout}s"
+                    employee_id,
+                    marker,
+                    "burnin_timeout",
+                    f"burn-in exceeded {timeout}s",
                 )
                 row = {
                     "employee_id": employee_id,
@@ -346,7 +360,11 @@ def run_burn_in(
         "accepted_receipt_count": accepted,
         "rejected_or_failed_count": len(results) - accepted,
         "results": sorted(results, key=lambda item: str(item.get("employee_id") or "")),
-        "limits": {**limits, "timeout_seconds": timeout, "max_concurrency": concurrency},
+        "limits": {
+            **limits,
+            "timeout_seconds": timeout,
+            "max_concurrency": concurrency,
+        },
         "audit_path": str(_facade().burn_in_audit_path()),
     }
     _facade()._append_audit(

@@ -48,7 +48,17 @@ AVATAR_TYPES: Dict[str, Dict[str, Any]] = {
     },
     "interest_symbol": {
         "label": "兴趣符号型",
-        "aliases": ["兴趣", "符号", "车", "相机", "音乐", "代码", "咖啡", "hobby", "symbol"],
+        "aliases": [
+            "兴趣",
+            "符号",
+            "车",
+            "相机",
+            "音乐",
+            "代码",
+            "咖啡",
+            "hobby",
+            "symbol",
+        ],
         "intent": "用爱好或职业符号表达身份，适合工具型和专家型员工。",
         "visual": "single symbolic object with character hints, crisp icon-like composition",
     },
@@ -149,7 +159,10 @@ PROMPT_PRESETS: Dict[str, Dict[str, Any]] = {
             "构图为 1:1 方图，头肩近景，脸占主体，圆角头像安全裁切。鱼类元素只能作为发饰、发色、"
             "水纹和气质，不要鱼脸、不要低龄吉祥物、不要文字水印。"
         ),
-        "postprocess": ["直接缩放为 256x256/512x512", "检查小尺寸眼睛和鱼形发饰仍可识别"],
+        "postprocess": [
+            "直接缩放为 256x256/512x512",
+            "检查小尺寸眼睛和鱼形发饰仍可识别",
+        ],
     },
     "mobile_contact_avatar": {
         "label": "单员工移动端联系人头像",
@@ -264,9 +277,16 @@ def _format_preset_text(template: str, values: Dict[str, str]) -> str:
         return template
 
 
-def _select_prompt_preset(payload: Dict[str, Any], employee_name: str, avatar_type: str) -> str:
+def _select_prompt_preset(
+    payload: Dict[str, Any], employee_name: str, avatar_type: str
+) -> str:
     raw = (
-        str(payload.get("prompt_preset") or payload.get("preset") or payload.get("template") or "")
+        str(
+            payload.get("prompt_preset")
+            or payload.get("preset")
+            or payload.get("template")
+            or ""
+        )
         .strip()
         .lower()
     )
@@ -279,7 +299,9 @@ def _select_prompt_preset(payload: Dict[str, Any], employee_name: str, avatar_ty
                 return preset_id
     if "小c" in text or "小 c" in text or "xiaoc" in text:
         return "xiaoc_human_aquatic"
-    if any(token in text for token in ("4x3", "4 x 3", "sprite", "sheet", "批量", "头像表")):
+    if any(
+        token in text for token in ("4x3", "4 x 3", "sprite", "sheet", "批量", "头像表")
+    ):
         return "employee_avatar_sheet"
     if avatar_type in {"anime_game", "professional_brand"} and any(
         token in text for token in ("ai", "员工", "assistant", "助理", "管家")
@@ -339,15 +361,25 @@ def build_avatar_profile(payload: Dict[str, Any]) -> Dict[str, Any]:
     payload = dict(payload or {})
     avatar_type = normalize_avatar_type(payload)
     spec = AVATAR_TYPES[avatar_type]
-    employee_name = _first(payload, "employee_name", "name", "display_name", default="AI 员工")
-    employee_role = _first(payload, "employee_role", "role", "job", default="企业 AI 员工")
+    employee_name = _first(
+        payload, "employee_name", "name", "display_name", default="AI 员工"
+    )
+    employee_role = _first(
+        payload, "employee_role", "role", "job", default="企业 AI 员工"
+    )
     department = _first(payload, "department", "team", default="XC AGI")
-    personality = _first(payload, "personality", "persona", default="可靠、聪明、清爽、有辨识度")
-    palette = _first(payload, "color_palette", "palette", "colors", default="blue, violet, white")
+    personality = _first(
+        payload, "personality", "persona", default="可靠、聪明、清爽、有辨识度"
+    )
+    palette = _first(
+        payload, "color_palette", "palette", "colors", default="blue, violet, white"
+    )
     target_platform = _first(
         payload, "target_platform", "platform", default="AI 员工头像 / 移动端圆形头像"
     )
-    style = _style_modifier(avatar_type, _first(payload, "style", "art_style", default=""))
+    style = _style_modifier(
+        avatar_type, _first(payload, "style", "art_style", default="")
+    )
     role_text = f"{employee_role} {department} {_text_blob(payload)}"
     symbol = _first(payload, "symbol", "icon", default=_role_symbol(role_text))
     selected_preset = _select_prompt_preset(payload, employee_name, avatar_type)
@@ -419,14 +451,17 @@ def _image_credentials(provider: str) -> Tuple[str, str, str]:
         return (
             os.environ.get("DOUBAO_API_KEY") or os.environ.get("ARK_API_KEY") or "",
             (
-                os.environ.get("DOUBAO_BASE_URL") or "https://ark.cn-beijing.volces.com/api/v3"
+                os.environ.get("DOUBAO_BASE_URL")
+                or "https://ark.cn-beijing.volces.com/api/v3"
             ).rstrip("/"),
             "doubao-seedream-5-0-260128",
         )
     if provider == "openai":
         return (
             os.environ.get("OPENAI_API_KEY") or "",
-            (os.environ.get("OPENAI_BASE_URL") or "https://api.openai.com/v1").rstrip("/"),
+            (os.environ.get("OPENAI_BASE_URL") or "https://api.openai.com/v1").rstrip(
+                "/"
+            ),
             "gpt-image-1",
         )
     return "", "", ""
@@ -474,7 +509,9 @@ async def _generate_images(
     body = {"model": model, "prompt": profile["prompt_en"], "size": size, "n": n}
     headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
     async with httpx.AsyncClient(timeout=120.0) as client:
-        resp = await client.post(f"{base_url}/images/generations", headers=headers, json=body)
+        resp = await client.post(
+            f"{base_url}/images/generations", headers=headers, json=body
+        )
     if resp.status_code >= 400:
         return {
             "ok": False,
@@ -496,9 +533,18 @@ async def _generate_images(
         elif b64:
             data_url = f"data:image/png;base64,{b64}"
             images.append(
-                {"url": data_url, "local_path": _write_data_url(data_url, output_path, idx)}
+                {
+                    "url": data_url,
+                    "local_path": _write_data_url(data_url, output_path, idx),
+                }
             )
-    return {"ok": bool(images), "images": images, "provider": provider, "model": model, "raw": data}
+    return {
+        "ok": bool(images),
+        "images": images,
+        "provider": provider,
+        "model": model,
+        "raw": data,
+    }
 
 
 async def convert_avatar_profile(

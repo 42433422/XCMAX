@@ -1,9 +1,6 @@
 import type { EnterpriseModStack } from '@/constants/enterpriseModStack'
 import { buildEnterpriseModStack } from '@/constants/enterpriseModStack'
-import {
-  fetchIndustryBaseline,
-  fetchOnboardingIndustryCatalog,
-} from '@/utils/platformShellApi'
+import { fetchIndustryBaseline, fetchOnboardingIndustryCatalog } from '@/utils/platformShellApi'
 import { fetchWorkspacePrefs } from '@/utils/workspacePrefsApi'
 
 let cachedStack: EnterpriseModStack | null = null

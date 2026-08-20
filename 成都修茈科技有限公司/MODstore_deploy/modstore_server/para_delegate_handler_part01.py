@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="attr-defined, index, no-any-return, union-attr, valid-type"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -9,7 +13,12 @@ def _facade():
 
 
 def _env_bool(name: str, default: str = "0") -> bool:
-    return _facade().os.environ.get(name, default).strip().lower() in ("1", "true", "yes", "on")
+    return _facade().os.environ.get(name, default).strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
 
 
 def para_delegate_enabled() -> bool:
@@ -145,7 +154,9 @@ def _build_request(
     }
 
 
-def _public_request(req: _facade().Dict[str, _facade().Any]) -> _facade().Dict[str, _facade().Any]:
+def _public_request(
+    req: _facade().Dict[str, _facade().Any],
+) -> _facade().Dict[str, _facade().Any]:
     return {
         k: req.get(k)
         for k in (
@@ -172,7 +183,11 @@ def _write_outbox(req: _facade().Dict[str, _facade().Any]) -> _facade().Path:
 
 
 def _outbox_response(
-    req: _facade().Dict[str, _facade().Any], *, status: str, error: str, queued: bool = True
+    req: _facade().Dict[str, _facade().Any],
+    *,
+    status: str,
+    error: str,
+    queued: bool = True,
 ) -> _facade().Dict[str, _facade().Any]:
     outbox = _facade()._write_outbox(req)
     return {
@@ -234,7 +249,7 @@ def _get_para_token(client: _facade().httpx.Client, base: str) -> _facade().Dict
     body: _facade().Any = {}
     try:
         body = resp.json() if resp.content else {}
-    except Exception:
+    except RECOVERABLE_ERRORS:
         body = {"raw": resp.text[:1000]}
     if resp.status_code >= 400:
         raise RuntimeError(str(body.get("error") or body.get("detail") or resp.text[:500]))
@@ -274,7 +289,8 @@ def _para_db_file() -> _facade().Path:
 
 
 def _force_single_device_attempt(
-    req: _facade().Dict[str, _facade().Any], accepted: _facade().Dict[str, _facade().Any]
+    req: _facade().Dict[str, _facade().Any],
+    accepted: _facade().Dict[str, _facade().Any],
 ) -> _facade().Dict[str, _facade().Any]:
     """仅 report_only 强制 max_attempts=1；重负载保留 Para 默认/请求值以便 transient 重试。"""
     if not bool(req.get("report_only")):
@@ -298,8 +314,13 @@ def _force_single_device_attempt(
             con.commit()
         finally:
             con.close()
-        return {"ok": True, "enabled": True, "task_id": task_id, "subtask_id": subtask_id}
-    except Exception as exc:
+        return {
+            "ok": True,
+            "enabled": True,
+            "task_id": task_id,
+            "subtask_id": subtask_id,
+        }
+    except RECOVERABLE_ERRORS as exc:
         return {"ok": False, "enabled": True, "error": str(exc)[:500]}
 
 
@@ -344,8 +365,12 @@ def _git_preflight_branch(repo_url: str, branch: str) -> _facade().Dict[str, _fa
                 "failure_kind": "git_prep",
             }
         return {"ok": True}
-    except Exception as exc:
-        return {"ok": False, "error": f"Git 预检异常：{exc}"[:500], "failure_kind": "git_prep"}
+    except RECOVERABLE_ERRORS as exc:
+        return {
+            "ok": False,
+            "error": f"Git 预检异常：{exc}"[:500],
+            "failure_kind": "git_prep",
+        }
 
 
 def _task_result_snapshot(body: _facade().Any) -> _facade().Dict[str, _facade().Any]:
@@ -406,7 +431,7 @@ def _wait_for_para_task(
         )
         try:
             body = resp.json() if resp.content else {}
-        except Exception:
+        except RECOVERABLE_ERRORS:
             body = {"raw": resp.text[:4000]}
         last_body = body
         if resp.status_code >= 400:

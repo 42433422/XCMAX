@@ -1,3 +1,4 @@
+# mypy: disable-error-code="import-not-found"
 """测试聚合函数"""
 
 import sys

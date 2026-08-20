@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 行业配置管理
 
@@ -6,14 +5,17 @@
 默认保留涂料行业实现，可扩展更多行业
 """
 
-import os
 import copy
 import json
-import yaml
 import logging
-from typing import Dict, List, Any, Optional
-from pathlib import Path
+import os
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import yaml
+
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +141,7 @@ def _load_config() -> Dict[str, Any]:
     current_mtime = CONFIG_FILE.stat().st_mtime
     if _industry_config is None or current_mtime > _config_mtime:
         try:
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            with open(CONFIG_FILE, encoding="utf-8") as f:
                 loaded = yaml.safe_load(f)
             if not isinstance(loaded, dict):
                 logger.error("行业配置 YAML 根节点不是字典，使用内置默认")
@@ -152,7 +154,7 @@ def _load_config() -> Dict[str, Any]:
                     _industry_config["industries"] = {}
             _config_mtime = current_mtime
             logger.info(f"行业配置已加载: {CONFIG_FILE}")
-        except Exception as e:
+        except BOUNDARY_ERRORS as e:
             logger.error(f"加载行业配置失败: {e}")
             _industry_config = _get_default_config()
 
@@ -359,9 +361,9 @@ def _disk_scan_industries_dict() -> Dict[str, Dict[str, Any]]:
         if not os.path.isfile(manifest_path):
             continue
         try:
-            with open(manifest_path, "r", encoding="utf-8") as f:
+            with open(manifest_path, encoding="utf-8") as f:
                 manifest = json.load(f)
-        except Exception as e:
+        except BOUNDARY_ERRORS as e:
             logger.debug("disk-scan industries: skip %s (manifest unreadable: %s)", entry, e)
             continue
         if not isinstance(manifest, dict):
@@ -405,24 +407,24 @@ def _mod_industries_dict() -> Dict[str, Dict[str, Any]]:
     """
     try:
         from app.infrastructure.mods.mod_manager import get_mod_manager
-    except Exception:
+    except BOUNDARY_ERRORS:
         return {}
 
     try:
         mod_manager = get_mod_manager()
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         logger.debug("Mod manager not ready for industry aggregation: %s", e)
         return {}
 
     try:
         loaded = list(mod_manager.list_loaded_mods())
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         logger.debug("list_loaded_mods failed, treat as empty: %s", e)
         loaded = []
 
     try:
         scanned = list(mod_manager.scan_mods())
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         # scan 失败时仍回到 loaded-only 的旧行为，避免 /api/system/* 直接 500
         logger.debug("scan_mods failed, only use list_loaded_mods: %s", e)
         scanned = []
@@ -572,7 +574,7 @@ def get_current_industry() -> str:
             industry_id = getattr(request.state, "industry_id", None)
             if industry_id:
                 return str(industry_id)
-    except Exception:  # noqa: BLE001 - 请求上下文读取失败不应阻断行业解析
+    except BOUNDARY_ERRORS:  # noqa: BLE001 - 请求上下文读取失败不应阻断行业解析
         pass
 
     config = _load_config()
@@ -661,12 +663,12 @@ def load_mod_config_overrides() -> Dict[str, Any]:
             config_path = os.path.join(mod.mod_path, mod.config_overrides)
             if os.path.isfile(config_path):
                 try:
-                    with open(config_path, "r", encoding="utf-8") as f:
+                    with open(config_path, encoding="utf-8") as f:
                         overrides = yaml.safe_load(f)
                     if isinstance(overrides, dict) and overrides:
                         merged_overrides.update(overrides)
                         logger.info(f"Loaded config overrides from mod: {mod.id}")
-                except Exception as e:
+                except BOUNDARY_ERRORS as e:
                     logger.error(f"Failed to load config override from {mod.id}: {e}")
 
         return merged_overrides
@@ -716,6 +718,6 @@ def save_industry_config(config: Dict[str, Any]) -> bool:
             yaml.dump(config, f, allow_unicode=True, default_flow_style=False)
         reload_industry_config()
         return True
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         logger.error(f"保存行业配置失败: {e}")
         return False

@@ -22,11 +22,14 @@ Python-callable surface.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
+
+from vibe_coding.operational_errors import BOUNDARY_ERRORS
 
 from ...facade import VibeCoder
-from ...nl.llm import LLMClient, MockLLM
+from ...nl.llm import MockLLM
 
 
 class WebUIError(RuntimeError):
@@ -310,7 +313,7 @@ def create_app(
         dry_run = bool(payload.get("dry_run", False))
         try:
             patch = ProjectPatch.from_dict(patch_dict)
-        except Exception as exc:
+        except BOUNDARY_ERRORS as exc:
             raise HTTPException(400, detail=f"invalid patch: {exc}") from exc
         result = _resolve_coder().apply_patch(patch, root=root, dry_run=dry_run)
         return result.to_dict()
@@ -322,9 +325,7 @@ def create_app(
         max_rounds = int(payload.get("max_rounds") or 3)
         if not brief:
             raise HTTPException(400, detail="`brief` is required")
-        result = _resolve_coder().heal_project(
-            brief, root=root, max_rounds=max_rounds
-        )
+        result = _resolve_coder().heal_project(brief, root=root, max_rounds=max_rounds)
         return result.to_dict()
 
     @app.post(f"{api_prefix}/publish")
@@ -333,9 +334,7 @@ def create_app(
         base_url = (payload.get("base_url") or "").strip()
         admin_token = (payload.get("admin_token") or "").strip()
         if not (skill_id and base_url and admin_token):
-            raise HTTPException(
-                400, detail="skill_id, base_url, admin_token are required"
-            )
+            raise HTTPException(400, detail="skill_id, base_url, admin_token are required")
         result = _resolve_coder().publish_skill(
             skill_id,
             base_url=base_url,

@@ -1,11 +1,12 @@
 from __future__ import annotations
+from retort_engine.operational_errors import BOUNDARY_ERRORS
 
 import argparse
 import json
 import os
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.employee_patch_closure import run_employee_patch_closure_suite
 from retort_engine.history import RetortHistoryStore
@@ -104,7 +105,9 @@ def write_employee_runtime_results(payload_file: str | Path) -> dict[str, Any]:
                     evidence=tuple(str(row) for row in item.get("evidence") or []),
                     score_after={
                         str(k): float(v)
-                        for k, v in (item.get("score_after") or {}).items()
+                        for k, v in cast(
+                            dict[str, Any], item.get("score_after") or {}
+                        ).items()
                     },
                 )
             )
@@ -148,7 +151,7 @@ def _apply_behavior_synthesis(
         )
         result["artifact"] = str(artifact)
         return result
-    except Exception as exc:  # noqa: BLE001 - worker must report failure without crashing the parent
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001 - worker must report failure without crashing the parent
         return {"status": "failed", "error": str(exc), "changed_files": []}
 
 

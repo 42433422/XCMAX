@@ -1,15 +1,7 @@
 import { computed, ref, type ComputedRef, type Ref } from 'vue'
-import {
-  PERSY_KNOWLEDGE_DATASET_ID,
-  knowledgeBaseApi,
-  type KnowledgeBaseChunk,
-} from '@/api/knowledgeBase'
+import { PERSY_KNOWLEDGE_DATASET_ID, knowledgeBaseApi, type KnowledgeBaseChunk } from '@/api/knowledgeBase'
 import type { PersyGraphRecall } from '@/components/persy/PersyKnowledgeGraph.vue'
-import {
-  errorText,
-  isMemoryChunk,
-  normalizeAnswer,
-} from '@/composables/persyKnowledgeFormatters'
+import { errorText, isMemoryChunk, normalizeAnswer } from '@/composables/persyKnowledgeFormatters'
 
 export function usePersyRecallQuery(options: {
   activeDatasetId: Ref<string>
@@ -19,14 +11,7 @@ export function usePersyRecallQuery(options: {
   refreshGraph: () => Promise<void>
   onRecallCommitted: () => void
 }) {
-  const {
-    activeDatasetId,
-    adminOmniscient,
-    omniscientQueryEnabled,
-    refreshMemories,
-    refreshGraph,
-    onRecallCommitted,
-  } = options
+  const { activeDatasetId, adminOmniscient, omniscientQueryEnabled, refreshMemories, refreshGraph, onRecallCommitted } = options
 
   const queryText = ref('')
   const topK = ref(6)
@@ -88,10 +73,7 @@ export function usePersyRecallQuery(options: {
       } catch (error) {
         knowledgeFailure = error
       }
-      if (
-        activeDatasetId.value === PERSY_KNOWLEDGE_DATASET_ID &&
-        knowledge?.persy_memory === undefined
-      ) {
+      if (activeDatasetId.value === PERSY_KNOWLEDGE_DATASET_ID && knowledge?.persy_memory === undefined) {
         try {
           memory = await knowledgeBaseApi.queryMemories({
             datasetId: activeDatasetId.value,
@@ -103,12 +85,10 @@ export function usePersyRecallQuery(options: {
           memoryFailure = error
         }
       }
-      const knowledgeChunks =
-        knowledge?.success && Array.isArray(knowledge.chunks) ? knowledge.chunks : []
+      const knowledgeChunks = knowledge?.success && Array.isArray(knowledge.chunks) ? knowledge.chunks : []
       const memoryChunks = memory?.success && Array.isArray(memory.chunks) ? memory.chunks : []
       if (!knowledge?.success && !memory?.success) {
-        const reason =
-          knowledgeFailure || memoryFailure || knowledge?.message || memory?.message || '检索失败'
+        const reason = knowledgeFailure || memoryFailure || knowledge?.message || memory?.message || '检索失败'
         throw new Error(errorText(reason))
       }
       const seen = new Set<string>()

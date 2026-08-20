@@ -1,10 +1,6 @@
 <template>
   <div class="context-summary-pills">
-    <span
-      v-for="item in displayItems"
-      :key="item"
-      class="context-summary-pill"
-    >
+    <span v-for="item in displayItems" :key="item" class="context-summary-pill">
       {{ item }}
     </span>
   </div>
@@ -22,9 +18,7 @@ const displayItems = computed(() => {
   if (Array.isArray(raw)) return raw.map((item) => String(item || '').trim()).filter(Boolean)
   if (raw && typeof raw === 'object') {
     const obj = raw as Record<string, unknown>
-    const items = Array.isArray(obj.items)
-      ? obj.items.map((item) => String(item || '').trim()).filter(Boolean)
-      : []
+    const items = Array.isArray(obj.items) ? obj.items.map((item) => String(item || '').trim()).filter(Boolean) : []
     if (items.length) return items
     const text = String(obj.text || obj.label || '').trim()
     return text ? [text] : []

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="attr-defined, no-any-return, union-attr, valid-type"
 """六维质检：调用 hex-quality-assessor（或平台 LLM 回退）做深度评分。"""
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ from modstore_server.employee_six_dimension import (
     SIX_DIMENSION_KEYS,
     build_six_dimension_report_from_llm_dimensions,
 )
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +42,7 @@ def six_dim_llm_enabled(*, explicit: bool = False) -> bool:
 
         prov, mdl = resolve_platform_bench_llm()
         return bool(prov and mdl)
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         return False
 
 
@@ -182,7 +184,10 @@ async def _call_platform_llm_direct(
     result = await chat_dispatch_via_platform_only(
         provider,
         model,
-        [{"role": "system", "content": _LLM_SYSTEM}, {"role": "user", "content": user_msg}],
+        [
+            {"role": "system", "content": _LLM_SYSTEM},
+            {"role": "user", "content": user_msg},
+        ],
         max_tokens=4000,
     )
     if not result.get("ok"):
@@ -210,7 +215,7 @@ async def _call_hex_quality_assessor_employee(
             user_id,
             bench_llm_override=bench_llm_override,
         )
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         return None, str(exc)[:300]
 
     if not isinstance(result, dict):

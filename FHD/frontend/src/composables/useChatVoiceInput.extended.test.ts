@@ -200,7 +200,7 @@ describe('useChatVoiceInput - extended', () => {
 
   it('submitVoiceBlob appends to existing messageInput', async () => {
     const messageInput = ref('已有文字')
-    const api = useChatVoiceInput({
+    useChatVoiceInput({
       messageInput,
       isLoading: ref(false),
     })

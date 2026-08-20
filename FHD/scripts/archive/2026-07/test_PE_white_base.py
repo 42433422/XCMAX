@@ -22,7 +22,7 @@ img_array = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
 
 height, width = img_array.shape[:2]
 print(f"图片尺寸：{width} x {height}")
-print(f"比例：{width/height:.2f}:1")
+print(f"比例：{width / height:.2f}:1")
 
 gray = cv2.cvtColor(img_array, cv2.COLOR_BGR2GRAY)
 _, binary = cv2.threshold(gray, 50, 255, cv2.THRESH_BINARY_INV)
@@ -162,8 +162,8 @@ print(f"{'单元格':<12} {'右侧边框':<12} {'底部边框':<12} {'状态'}")
 print("-" * 60)
 
 for cell in cells:
-    right_info = f"{cell['right_border_ratio']*100:.1f}%"
-    bottom_info = f"{cell['bottom_border_ratio']*100:.1f}%"
+    right_info = f"{cell['right_border_ratio'] * 100:.1f}%"
+    bottom_info = f"{cell['bottom_border_ratio'] * 100:.1f}%"
 
     status = []
     if cell["should_merge_right"]:

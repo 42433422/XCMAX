@@ -33,9 +33,7 @@ defineProps<{
   padding: 11px 12px;
   border: 1px solid #e0e7ff;
   border-radius: 12px;
-  background:
-    radial-gradient(circle at 12% 0%, rgba(99, 102, 241, 0.11), transparent 36%),
-    rgba(255, 255, 255, 0.78);
+  background: radial-gradient(circle at 12% 0%, rgba(99, 102, 241, 0.11), transparent 36%), rgba(255, 255, 255, 0.78);
 }
 
 .selp-proactive-cards {

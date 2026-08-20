@@ -6,11 +6,7 @@ import { safeJsonRequest } from '@/utils/safeJsonRequest'
 import { appAlert } from '@/utils/appDialog'
 import { chatApi, parseChatStreamErrorResponse } from '@/api/chat'
 import { resolvePlannerChatPath } from '@/utils/plannerChatPaths'
-import {
-  readPlannerSseResponse,
-  isChatStreamEnabled,
-  type PlannerSseEvent,
-} from '@/utils/chatSseStream'
+import { readPlannerSseResponse, isChatStreamEnabled, type PlannerSseEvent } from '@/utils/chatSseStream'
 import type { KittenFieldProfile } from '@/utils/kittenDatasetParser'
 import { openDocumentPreviewFromBlob } from '@/state/documentPreviewPip'
 const MAX_CHAT_MESSAGES = 120
@@ -30,21 +26,25 @@ export const kittenWorkflowSteps = [
   { key: 'ingest', label: '数据接入', desc: '上传或粘贴数据' },
   { key: 'schema', label: '结构识别', desc: '字段与类型预览' },
   { key: 'analyze', label: '洞察分析', desc: '自然语言与快捷意图' },
-  { key: 'deliver', label: '报告输出', desc: '结论、图表与导出' }
+  { key: 'deliver', label: '报告输出', desc: '结论、图表与导出' },
 ] as const
 
 export const kittenOrgCards = [
   { key: 'ingest', title: '数据接入层', desc: 'Excel / CSV / JSON 本地解析，首屏预览' },
   { key: 'schema', title: '语义理解层', desc: '自然语言需求与快捷意图（趋势、ROI、预测等）' },
-  { key: 'analyze', title: '分析执行层', desc: '调用后端 /api/ai/chat（专业链路），结合会话上下文与多轮追问' },
-  { key: 'deliver', title: '交付层', desc: '右侧「分析输出」汇总，支持导出与清除' }
+  {
+    key: 'analyze',
+    title: '分析执行层',
+    desc: '调用后端 /api/ai/chat（专业链路），结合会话上下文与多轮追问',
+  },
+  { key: 'deliver', title: '交付层', desc: '右侧「分析输出」汇总，支持导出与清除' },
 ] as const
 
 export const kittenQuickActions = [
   { text: '分析销量趋势', label: '销量趋势' },
   { text: '计算渠道ROI', label: '渠道ROI' },
   { text: '预测下月销量', label: '销量预测' },
-  { text: '数据质量检查', label: '数据清洗' }
+  { text: '数据质量检查', label: '数据清洗' },
 ] as const
 
 export interface KittenDatasetSummary {
@@ -104,11 +104,7 @@ function pushBounded<T>(arrRef: Ref<T[]>, item: T, maxSize: number) {
 }
 
 function escapeHtml(s: string) {
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
 function textToHtml(s: string) {
@@ -161,22 +157,17 @@ function extractWebSearchHits(body: unknown): Array<{ title: string; url: string
   const layer1 = d.data as Record<string, unknown> | undefined
   const raw = layer1?.web_search_results
   if (!Array.isArray(raw)) return []
-  return raw
-    .filter(Boolean)
-    .map((x) => {
-      const o = x as Record<string, unknown>
-      return {
-        title: String(o.title ?? ''),
-        url: String(o.url ?? ''),
-        snippet: String(o.snippet ?? '')
-      }
-    })
+  return raw.filter(Boolean).map((x) => {
+    const o = x as Record<string, unknown>
+    return {
+      title: String(o.title ?? ''),
+      url: String(o.url ?? ''),
+      snippet: String(o.snippet ?? ''),
+    }
+  })
 }
 
-function buildPreviewTextFromData(data: {
-  preview?: unknown[]
-  columns?: unknown[]
-}): string {
+function buildPreviewTextFromData(data: { preview?: unknown[]; columns?: unknown[] }): string {
   const preview = data.preview
   const cols = data.columns
   if (!preview || !preview.length) return ''
@@ -227,9 +218,7 @@ export function extractKittenDocumentPickupUrl(content: string): string | null {
     .replace(/&#x27;/g, "'")
     .replace(/&#39;/g, "'")
     .replace(/&amp;/g, '&')
-  const absolute = decoded.match(
-    /https?:\/\/[^\s"'<>)\]]+\/api\/ai\/kitten\/document\/pickup\/[^\s"'<>)\]]+/
-  )
+  const absolute = decoded.match(/https?:\/\/[^\s"'<>)\]]+\/api\/ai\/kitten\/document\/pickup\/[^\s"'<>)\]]+/)
   if (absolute) return absolute[0]
   const relative = decoded.match(/\/api\/ai\/kitten\/document\/pickup\/[^\s"'<>)\]]+/)
   if (relative) return relative[0]
@@ -268,7 +257,7 @@ const emptyChartConfig = (): KittenChartConfig => ({
   xField: '',
   yField: '',
   groupField: '',
-  aggregate: 'count'
+  aggregate: 'count',
 })
 
 function buildRecommendedCharts(fields: KittenFieldProfile[]): KittenChartRecommendation[] {
@@ -286,7 +275,13 @@ function buildRecommendedCharts(fields: KittenFieldProfile[]): KittenChartRecomm
       id: `category-count-${dimension.name}`,
       label: `${dimension.name} 分布`,
       description: '按分类字段统计记录数',
-      config: { type: 'bar', xField: dimension.name, yField: '', groupField: '', aggregate: 'count' }
+      config: {
+        type: 'bar',
+        xField: dimension.name,
+        yField: '',
+        groupField: '',
+        aggregate: 'count',
+      },
     })
   }
   if (dimension && metric) {
@@ -294,7 +289,13 @@ function buildRecommendedCharts(fields: KittenFieldProfile[]): KittenChartRecomm
       id: `category-sum-${dimension.name}-${metric.name}`,
       label: `${metric.name} 分类汇总`,
       description: '按分类字段汇总核心数值',
-      config: { type: 'bar', xField: dimension.name, yField: metric.name, groupField: '', aggregate: 'sum' }
+      config: {
+        type: 'bar',
+        xField: dimension.name,
+        yField: metric.name,
+        groupField: '',
+        aggregate: 'sum',
+      },
     })
   }
   if (dateFields[0] && metric) {
@@ -302,7 +303,13 @@ function buildRecommendedCharts(fields: KittenFieldProfile[]): KittenChartRecomm
       id: `date-line-${dateFields[0].name}-${metric.name}`,
       label: `${metric.name} 时间趋势`,
       description: '按日期字段观察数值变化',
-      config: { type: 'line', xField: dateFields[0].name, yField: metric.name, groupField: '', aggregate: 'sum' }
+      config: {
+        type: 'line',
+        xField: dateFields[0].name,
+        yField: metric.name,
+        groupField: '',
+        aggregate: 'sum',
+      },
     })
   }
   if (dimension) {
@@ -310,7 +317,13 @@ function buildRecommendedCharts(fields: KittenFieldProfile[]): KittenChartRecomm
       id: `pie-${dimension.name}`,
       label: `${dimension.name} 占比`,
       description: '用饼图查看分类占比',
-      config: { type: 'pie', xField: dimension.name, yField: metric?.name || '', groupField: '', aggregate: metric ? 'sum' : 'count' }
+      config: {
+        type: 'pie',
+        xField: dimension.name,
+        yField: metric?.name || '',
+        groupField: '',
+        aggregate: metric ? 'sum' : 'count',
+      },
     })
   }
   if (metric && secondMetric) {
@@ -318,7 +331,13 @@ function buildRecommendedCharts(fields: KittenFieldProfile[]): KittenChartRecomm
       id: `scatter-${metric.name}-${secondMetric.name}`,
       label: `${metric.name} / ${secondMetric.name} 相关性`,
       description: '用散点图查看两个数值字段关系',
-      config: { type: 'scatter', xField: metric.name, yField: secondMetric.name, groupField: '', aggregate: 'sum' }
+      config: {
+        type: 'scatter',
+        xField: metric.name,
+        yField: secondMetric.name,
+        groupField: '',
+        aggregate: 'sum',
+      },
     })
   }
 
@@ -330,8 +349,8 @@ export function useKittenAnalyzer() {
     {
       role: 'ai',
       content: KITTEN_WELCOME_HTML,
-      time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-    }
+      time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+    },
   ])
 
   const inputText = ref('')
@@ -375,13 +394,13 @@ export function useKittenAnalyzer() {
       kitten_analyzer: true,
       kitten_include_business_db: kittenIncludeBusinessDb.value,
       kitten_web_search: kittenIncludeWebSearch.value,
-      kitten_session_id: kittenSessionUserId.value
+      kitten_session_id: kittenSessionUserId.value,
     }
     if (!ds) {
       return {
         ...base,
         has_dataset: false,
-        kitten_dataset: null
+        kitten_dataset: null,
       }
     }
     const fields = Array.isArray(ds.fieldNames) ? ds.fieldNames.map((x) => String(x)) : []
@@ -395,21 +414,19 @@ export function useKittenAnalyzer() {
         columns: ds.columns,
         fields,
         field_names: fields,
-        preview_text: ds.previewText || ''
-      }
+        preview_text: ds.previewText || '',
+      },
     }
   }
 
   const buildKittenChatPayload = (query: string) => {
-    const compactHistory = (messages.value || [])
-      .slice(-6)
-      .map((m) => ({
-        role: m.role,
-        content: String(m.content || '')
-          .replace(/<br\s*\/?>/gi, '\n')
-          .replace(/<[^>]*>/g, '')
-          .slice(0, 500)
-      }))
+    const compactHistory = (messages.value || []).slice(-6).map((m) => ({
+      role: m.role,
+      content: String(m.content || '')
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<[^>]*>/g, '')
+        .slice(0, 500),
+    }))
     return {
       message: query,
       user_id: kittenSessionUserId.value,
@@ -417,8 +434,8 @@ export function useKittenAnalyzer() {
       mode: 'pro',
       context: {
         ...buildKittenRequestContext(),
-        recent_messages: compactHistory
-      }
+        recent_messages: compactHistory,
+      },
     }
   }
 
@@ -464,9 +481,9 @@ export function useKittenAnalyzer() {
       {
         role,
         content,
-        time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+        time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
       },
-      MAX_CHAT_MESSAGES
+      MAX_CHAT_MESSAGES,
     )
     scrollChatToBottom()
   }
@@ -477,13 +494,10 @@ export function useKittenAnalyzer() {
       const clearResult = await safeJsonRequest('/api/ai/context/clear', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: uid })
+        body: JSON.stringify({ user_id: uid }),
       })
       if (!clearResult.ok || (clearResult.data as { success?: boolean })?.success === false) {
-        console.warn(
-          '清理会话上下文失败:',
-          clearResult.message || (clearResult.data as { message?: string })?.message || 'unknown'
-        )
+        console.warn('清理会话上下文失败:', clearResult.message || (clearResult.data as { message?: string })?.message || 'unknown')
       }
     }
     kittenSessionUserId.value = makeKittenUserId()
@@ -491,8 +505,8 @@ export function useKittenAnalyzer() {
       {
         role: 'ai',
         content: KITTEN_WELCOME_HTML,
-        time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-      }
+        time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+      },
     ]
     inputText.value = ''
     isChatLoading.value = false
@@ -521,9 +535,10 @@ export function useKittenAnalyzer() {
       kittenDbStatsHint.value = kittenSnapshotCache.text
       return
     }
-    const r = await safeJsonRequest<{ success?: boolean; data?: { stats?: Record<string, unknown> } }>(
-      '/api/ai/kitten/business-snapshot'
-    )
+    const r = await safeJsonRequest<{
+      success?: boolean
+      data?: { stats?: Record<string, unknown> }
+    }>('/api/ai/kitten/business-snapshot')
     const payload = r.data?.data
     if (!r.ok || r.data?.success === false || !payload) {
       kittenDbStatsHint.value = '业务库快照预检失败，发送时服务端仍会重试聚合。'
@@ -552,7 +567,7 @@ export function useKittenAnalyzer() {
   const setChartConfig = (next: Partial<KittenChartConfig>) => {
     chartConfig.value = {
       ...chartConfig.value,
-      ...next
+      ...next,
     }
     const cfg = chartConfig.value
     if (cfg.xField) {
@@ -562,7 +577,7 @@ export function useKittenAnalyzer() {
         summary: `${cfg.type} · ${cfg.xField}${cfg.yField ? ` / ${cfg.yField}` : ''} · ${cfg.aggregate}`,
         chart: true,
         type: 'chart',
-        kind: 'datasetChart'
+        kind: 'datasetChart',
       }
       kittenPhase.value = KITTEN_PHASE.delivered
     }
@@ -592,7 +607,7 @@ export function useKittenAnalyzer() {
         rows: data.rows,
         columns: fieldNames.length,
         fieldNames,
-        previewText: buildPreviewTextFromData(data)
+        previewText: buildPreviewTextFromData(data),
       }
       datasetRows.value = Array.isArray(data.sampleRows) ? data.sampleRows : []
       fieldProfiles.value = Array.isArray(data.fieldProfiles) ? data.fieldProfiles : []
@@ -601,7 +616,7 @@ export function useKittenAnalyzer() {
 
       addMessage(
         'ai',
-        `文件解析完成！<br>检测到 <strong>${data.rows} 行</strong> 数据，<strong>${fieldNames.length} 个字段</strong><br>${preview}`
+        `文件解析完成！<br>检测到 <strong>${data.rows} 行</strong> 数据，<strong>${fieldNames.length} 个字段</strong><br>${preview}`,
       )
 
       currentResult.value = {
@@ -610,7 +625,7 @@ export function useKittenAnalyzer() {
         summary: `${fieldNames.slice(0, 12).join('、')}${fieldNames.length > 12 ? '…' : ''}`,
         chart: Boolean(firstRecommendation),
         type: firstRecommendation ? 'chart' : 'table',
-        kind: firstRecommendation ? 'datasetChart' : 'datasetOverview'
+        kind: firstRecommendation ? 'datasetChart' : 'datasetOverview',
       }
       kittenPhase.value = KITTEN_PHASE.schemaReady
     } catch (err) {
@@ -633,7 +648,7 @@ export function useKittenAnalyzer() {
       ['报告时间', now.toLocaleString('zh-CN')],
       ['分析阶段', kittenPhase.value],
       ['摘要', result?.summary || ''],
-      ['来源', '智慧分析工作台']
+      ['来源', '智慧分析工作台'],
     ]
     if (ds) {
       summaryRows.push(['数据文件', ds.name || ''])
@@ -645,14 +660,12 @@ export function useKittenAnalyzer() {
       序号: idx + 1,
       角色: msg.role === 'ai' ? 'AI' : '用户',
       时间: msg.time || '',
-      内容: htmlToPlainText(msg.content)
+      内容: htmlToPlainText(msg.content),
     }))
     XLSX.utils.book_append_sheet(
       workbook,
-      XLSX.utils.json_to_sheet(
-        messageRows.length ? messageRows : [{ 序号: 1, 角色: '系统', 时间: '', 内容: '暂无对话记录' }]
-      ),
-      '对话记录'
+      XLSX.utils.json_to_sheet(messageRows.length ? messageRows : [{ 序号: 1, 角色: '系统', 时间: '', 内容: '暂无对话记录' }]),
+      '对话记录',
     )
 
     if (ds) {
@@ -661,7 +674,7 @@ export function useKittenAnalyzer() {
         ['总行数', ds.rows || 0],
         ['总列数', ds.columns || 0],
         ['字段列表', Array.isArray(ds.fieldNames) ? ds.fieldNames.join('、') : ''],
-        ['预览文本', ds.previewText || '']
+        ['预览文本', ds.previewText || ''],
       ]
       XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(dataRows), '数据摘要')
     }
@@ -672,7 +685,7 @@ export function useKittenAnalyzer() {
         ['X 字段', chartConfig.value.xField],
         ['Y 字段', chartConfig.value.yField || '记录数'],
         ['分组字段', chartConfig.value.groupField || ''],
-        ['聚合方式', chartConfig.value.aggregate]
+        ['聚合方式', chartConfig.value.aggregate],
       ]
       XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(chartRows), '图表配置')
     }
@@ -688,15 +701,12 @@ export function useKittenAnalyzer() {
       chart: chartConfig.value.xField ? chartConfig.value : undefined,
       messages: messages.value || [],
       industry: localStorage.getItem('currentIndustry') || '通用行业',
-      web_search_results: lastWebSearchHits.value.length ? lastWebSearchHits.value : undefined
+      web_search_results: lastWebSearchHits.value.length ? lastWebSearchHits.value : undefined,
     }
     const resp = await kittenApi.exportReport(payload)
     const blob = await resp.blob()
     await assertKittenFileBlob(resp, blob, 'Excel 导出')
-    const filename = getFilenameFromDisposition(
-      resp.headers.get('content-disposition'),
-      `智慧分析报告_${formatExportTimestamp()}.xlsx`
-    )
+    const filename = getFilenameFromDisposition(resp.headers.get('content-disposition'), `智慧分析报告_${formatExportTimestamp()}.xlsx`)
     downloadBlob(blob, filename)
   }
 
@@ -708,15 +718,12 @@ export function useKittenAnalyzer() {
       chart: chartConfig.value.xField ? chartConfig.value : undefined,
       messages: messages.value || [],
       industry: localStorage.getItem('currentIndustry') || '通用行业',
-      web_search_results: lastWebSearchHits.value.length ? lastWebSearchHits.value : undefined
+      web_search_results: lastWebSearchHits.value.length ? lastWebSearchHits.value : undefined,
     }
     const resp = await kittenApi.exportReportDocx(payload)
     const blob = await resp.blob()
     await assertKittenFileBlob(resp, blob, 'Word 导出')
-    const filename = getFilenameFromDisposition(
-      resp.headers.get('content-disposition'),
-      `智慧分析报告_${formatExportTimestamp()}.docx`
-    )
+    const filename = getFilenameFromDisposition(resp.headers.get('content-disposition'), `智慧分析报告_${formatExportTimestamp()}.docx`)
     downloadBlob(blob, filename)
   }
 
@@ -735,7 +742,7 @@ export function useKittenAnalyzer() {
       await assertKittenFileBlob(resp, blob, format === 'xlsx' ? '表格生成' : '文档生成')
       const filename = getFilenameFromDisposition(
         resp.headers.get('content-disposition'),
-        format === 'xlsx' ? `生成表格_${formatExportTimestamp()}.xlsx` : `生成文档_${formatExportTimestamp()}.docx`
+        format === 'xlsx' ? `生成表格_${formatExportTimestamp()}.xlsx` : `生成文档_${formatExportTimestamp()}.docx`,
       )
       openDocumentPreviewFromBlob(blob, filename, p)
       downloadBlob(blob, filename)
@@ -758,8 +765,11 @@ export function useKittenAnalyzer() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        metadata: { source: 'kitten-workbench', industry: localStorage.getItem('currentIndustry') || '' }
-      })
+        metadata: {
+          source: 'kitten-workbench',
+          industry: localStorage.getItem('currentIndustry') || '',
+        },
+      }),
     })
     if (!r.ok || r.data?.success === false) {
       const msg = (r.data as { message?: string })?.message || r.message || '财务简报生成失败'
@@ -797,11 +807,7 @@ export function useKittenAnalyzer() {
       kittenSessionUserId.value = makeKittenUserId()
     }
 
-    const finishWithAiText = (
-      replyText: string,
-      envelope: Record<string, unknown> | null,
-      failed: boolean
-    ) => {
+    const finishWithAiText = (replyText: string, envelope: Record<string, unknown> | null, failed: boolean) => {
       const hits = envelope ? extractWebSearchHits(envelope) : []
       lastWebSearchHits.value = hits
       const rid = Date.now()
@@ -812,7 +818,7 @@ export function useKittenAnalyzer() {
         summary: buildKittenResultSummary(plain),
         chart: false,
         type: failed ? 'error' : 'analysis',
-        kind: failed ? 'chatError' : 'analysis'
+        kind: failed ? 'chatError' : 'analysis',
       }
       kittenPhase.value = failed ? KITTEN_PHASE.error : KITTEN_PHASE.delivered
     }
@@ -820,12 +826,11 @@ export function useKittenAnalyzer() {
     try {
       if (isChatStreamEnabled()) {
         isKittenStreaming.value = true
-        const streamTime = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-        pushBounded(
-          messages,
-          { role: 'ai', content: '', time: streamTime },
-          MAX_CHAT_MESSAGES
-        )
+        const streamTime = new Date().toLocaleTimeString('zh-CN', {
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+        pushBounded(messages, { role: 'ai', content: '', time: streamTime }, MAX_CHAT_MESSAGES)
         const aiIdx = messages.value.length - 1
         let streamPlain = ''
         let doneResult: unknown = null
@@ -864,10 +869,7 @@ export function useKittenAnalyzer() {
             throw new Error(sseError)
           }
           const dr = doneResult as Record<string, unknown> | null
-          const finalText =
-            String((dr as { response?: string } | null)?.response ?? streamPlain).trim() ||
-            streamPlain ||
-            '（无内容）'
+          const finalText = String((dr as { response?: string } | null)?.response ?? streamPlain).trim() || streamPlain || '（无内容）'
           messages.value[aiIdx].content = textToHtml(finalText)
           const failed = dr ? (dr as { success?: boolean }).success === false : false
           finishWithAiText(finalText, dr, failed)
@@ -896,7 +898,7 @@ export function useKittenAnalyzer() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(buildKittenChatPayload(query)),
-          signal: jsonAbort.signal
+          signal: jsonAbort.signal,
         })
 
         let replyText = ''
@@ -922,9 +924,7 @@ export function useKittenAnalyzer() {
     } catch (err) {
       const raw = err instanceof Error ? err.message : String(err)
       const msg =
-        err instanceof Error && err.name === 'AbortError'
-          ? `请求超时（>${Math.floor(KITTEN_CHAT_TIMEOUT_MS / 1000)}s）或已中断`
-          : raw
+        err instanceof Error && err.name === 'AbortError' ? `请求超时（>${Math.floor(KITTEN_CHAT_TIMEOUT_MS / 1000)}s）或已中断` : raw
       addMessage('ai', textToHtml(`网络异常：${msg}`))
       currentResult.value = {
         id: Date.now(),
@@ -932,7 +932,7 @@ export function useKittenAnalyzer() {
         summary: msg.slice(0, 220),
         chart: false,
         type: 'error',
-        kind: 'networkError'
+        kind: 'networkError',
       }
       kittenPhase.value = KITTEN_PHASE.error
     } finally {
@@ -958,7 +958,7 @@ export function useKittenAnalyzer() {
         const workbook = buildReportWorkbook(XLSX)
         const workbookArray = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' })
         const blob = new Blob([workbookArray as unknown as BlobPart], {
-          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         })
         const fileName = `智慧分析报告_${formatExportTimestamp()}.xlsx`
         downloadBlob(blob, fileName)
@@ -1034,6 +1034,6 @@ export function useKittenAnalyzer() {
     generateAiOfficeDocument,
     runFinancialBrief,
     clearResult,
-    handleInputKeydown
+    handleInputKeydown,
   }
 }

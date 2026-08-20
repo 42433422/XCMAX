@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -62,7 +66,10 @@ def _notify_daily_digest_in_app(subject: str, digest_delivered: bool) -> None:
     if not ids:
         return
     try:
-        from modstore_server.notification_service import NotificationType, create_notification
+        from modstore_server.notification_service import (
+            NotificationType,
+            create_notification,
+        )
 
         body = f"MODstore 每日摘要邮件已投递：{subject}。也可在邮箱中查看全文。"
         for uid in ids:
@@ -74,7 +81,7 @@ def _notify_daily_digest_in_app(subject: str, digest_delivered: bool) -> None:
                 data={"kind": "daily_digest", "subject": subject},
             )
         _facade().logger.info("daily digest in-app notifications sent user_ids=%s", ids)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         _facade().logger.exception("daily digest in-app notify failed")
 
 
@@ -102,7 +109,7 @@ def autonomy_decisions_digest_html() -> str:
         from app.domain.autonomy.audit_log import autonomy_daily_digest_html
 
         return autonomy_daily_digest_html(days=1)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         _facade().logger.debug(
             "daily digest: FHD autonomy audit summary unavailable", exc_info=True
         )

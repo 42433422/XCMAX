@@ -2,16 +2,17 @@
 
 ## 元信息
 
-| 字段 | 值 |
-|------|----|
-| skill_id | `skill-typecheck-guard` |
-| 所属员工 | `test-qa-runner` |
-| 业务域 | Market 前端 TypeScript 类型安全检查 |
-| 版本 | 1.0.0 |
+| 字段     | 值                                  |
+| -------- | ----------------------------------- |
+| skill_id | `skill-typecheck-guard`             |
+| 所属员工 | `test-qa-runner`                    |
+| 业务域   | Market 前端 TypeScript 类型安全检查 |
+| 版本     | 1.0.0                               |
 
 ## 1. 静态阶段
 
 **执行逻辑**：
+
 ```
 cd MODstore_deploy/market
 npx vue-tsc --noEmit -p tsconfig.strict-baseline.json
@@ -21,6 +22,7 @@ npx vue-tsc --noEmit -p tsconfig.strict-baseline.json
 ```
 
 **输出 schema**：
+
 ```json
 {
   "status": "ok | fail",
@@ -43,8 +45,8 @@ npx vue-tsc --noEmit -p tsconfig.strict-baseline.json
 
 ## 2. 动态触发条件
 
-| 触发类型 | 规则 |
-|----------|------|
+| 触发类型 | 规则               |
+| -------- | ------------------ |
 | 类型错误 | `total_errors > 0` |
 
 ## 3. 动态阶段

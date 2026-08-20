@@ -1,3 +1,4 @@
+# isort: skip_file
 # ruff: noqa: E402, F401
 """Privacy-safe public aggregates for the official visualization page.
 
@@ -84,7 +85,6 @@ from modstore_server.public_visualization_api_part01 import (
     _prometheus_job as _prometheus_job,
     _prom_instant as _prom_instant,
 )
-
 
 _METRIC_LINE_RE = re.compile(
     r"^(?P<name>[a-zA-Z_:][a-zA-Z0-9_:]*)(?:\{(?P<labels>[^}]*)\})?\s+(?P<value>[-+0-9.eE]+)\s*$"

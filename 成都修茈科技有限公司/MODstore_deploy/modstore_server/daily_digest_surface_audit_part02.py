@@ -1,6 +1,7 @@
-# ruff: noqa
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
 
 

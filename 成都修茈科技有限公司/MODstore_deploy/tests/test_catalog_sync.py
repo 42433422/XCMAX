@@ -1,7 +1,6 @@
 from pathlib import Path
 from unittest.mock import MagicMock
 
-
 from modstore_server.catalog_sync import (
     _commerce_price,
     market_catalog_files_dir,

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr"
 """测试模板合并单元格保留功能"""
 
 from pathlib import Path

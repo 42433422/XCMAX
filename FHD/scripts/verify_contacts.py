@@ -21,5 +21,5 @@ with Session() as session:
         has_contact = u.contact_person or u.contact_phone or u.address
         status = "✓ 有联系人" if has_contact else "✗ 无联系人"
         print(
-            f'  {u.unit_name}: {u.contact_person or "-"} | {u.contact_phone or "-"} | {u.address or "-"} [{status}]'
+            f"  {u.unit_name}: {u.contact_person or '-'} | {u.contact_phone or '-'} | {u.address or '-'} [{status}]"
         )

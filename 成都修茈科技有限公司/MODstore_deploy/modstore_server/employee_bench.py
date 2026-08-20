@@ -1,3 +1,4 @@
+# isort: skip_file
 # ruff: noqa: E402, F401
 """员工上架前的基准测试：LLM 生成 1-5 级任务 → 执行 → 量化打分 → 五维审核 →（可选）员工包质询。
 
@@ -77,7 +78,6 @@ from modstore_server.employee_bench_part01 import (
     generate_bench_tasks as generate_bench_tasks,
 )
 
-
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 2. 执行 + 量化打分
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -105,7 +105,6 @@ from modstore_server.employee_bench_part02 import (
     _score_level as _score_level,
     _weighted_overall as _weighted_overall,
 )
-
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 3. 五维审核
@@ -149,7 +148,6 @@ from modstore_server.employee_bench_part03 import (
     _audit_single_pack as _audit_single_pack,
     _run_five_dim_audit as _run_five_dim_audit,
 )
-
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 4. 公开入口

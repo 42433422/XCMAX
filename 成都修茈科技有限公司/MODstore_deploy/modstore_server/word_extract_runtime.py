@@ -48,7 +48,10 @@ WORD_OUTPUT_FIELDS = (
 
 def is_word_full_extract(brief: str) -> bool:
     from modstore_server.csv_tabular_runtime import is_csv_full_read, is_csv_generate
-    from modstore_server.excel_tabular_runtime import is_excel_full_read, is_excel_generate
+    from modstore_server.excel_tabular_runtime import (
+        is_excel_full_read,
+        is_excel_generate,
+    )
     from modstore_server.pdf_extract_runtime import is_pdf_full_read, is_pdf_generate
     from modstore_server.ppt_extract_runtime import is_ppt_full_read, is_ppt_generate
     from modstore_server.txt_extract_runtime import is_txt_full_read, is_txt_generate
@@ -172,7 +175,9 @@ def validate_word_extract_backend(pack_dir: Path) -> Tuple[List[str], List[str]]
     handlers: List[str] = []
     if mf_path.is_file():
         try:
-            from modstore_server.employee_asset_pipeline import manifest_actions_handlers
+            from modstore_server.employee_asset_pipeline import (
+                manifest_actions_handlers,
+            )
 
             mf = json.loads(mf_path.read_text(encoding="utf-8"))
             handlers = manifest_actions_handlers(mf)
@@ -209,7 +214,14 @@ def validate_word_extract_backend(pack_dir: Path) -> Tuple[List[str], List[str]]
     ):
         if field not in py_blob:
             warnings.append(f"convert 模块可能未覆盖输出字段：{field}")
-    for tok in ("heading_level", "list_type", "outline", "numpr", "outlinelvl", "sectpr"):
+    for tok in (
+        "heading_level",
+        "list_type",
+        "outline",
+        "numpr",
+        "outlinelvl",
+        "sectpr",
+    ):
         if tok not in py_blob:
             warnings.append(f"convert 模块可能未覆盖解析能力：{tok}")
 

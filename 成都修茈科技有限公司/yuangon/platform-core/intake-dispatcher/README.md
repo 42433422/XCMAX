@@ -6,13 +6,13 @@
 
 ## 输入源（订阅事件）
 
-| 事件 | 来源 |
-|------|------|
-| `ops.intake.user_request` | Admin「下达任务」UI 调 `opsOrchestrateAsync` 时同时投递一份 |
-| `ops.intake.customer_ticket` | `AdminCustomerServiceView.vue` 工单创建/更新 |
-| `employee.task.done:wechat-contacts-ai-employee` | 微信联系人员工抓到的会话/消息 |
-| `ops.intake.candidate_pack` | `mianshi/` 目录新增 `.xcemp` |
-| `ops.intake.email` | （预留）邮件桥接器投递 |
+| 事件                                             | 来源                                                        |
+| ------------------------------------------------ | ----------------------------------------------------------- |
+| `ops.intake.user_request`                        | Admin「下达任务」UI 调 `opsOrchestrateAsync` 时同时投递一份 |
+| `ops.intake.customer_ticket`                     | `AdminCustomerServiceView.vue` 工单创建/更新                |
+| `employee.task.done:wechat-contacts-ai-employee` | 微信联系人员工抓到的会话/消息                               |
+| `ops.intake.candidate_pack`                      | `mianshi/` 目录新增 `.xcemp`                                |
+| `ops.intake.email`                               | （预留）邮件桥接器投递                                      |
 
 ## 产出（写入「待派发」队列）
 
@@ -44,12 +44,12 @@
 
 ## KPI
 
-| 指标 | 目标 |
-|------|------|
+| 指标                            | 目标  |
+| ------------------------------- | ----- |
 | 自然语言 → 结构化 task 的成功率 | ≥ 90% |
-| `intent=unknown` 占比 | ≤ 10% |
-| 平均归一化耗时 | < 5s |
-| 误伤（把高风险归类成 low）次数 | 0 |
+| `intent=unknown` 占比           | ≤ 10% |
+| 平均归一化耗时                  | < 5s  |
+| 误伤（把高风险归类成 low）次数  | 0     |
 
 ## 禁区
 

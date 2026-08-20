@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.real_absorption_run_proof import per_run_code_graph_proof_missing
 
@@ -18,8 +18,11 @@ def build_absorption_continuity_probe(
     ]
     ready_runs = [item for item in inspected if item["checks"]["ready"]]
     latest_closed_loop = _latest_closed_loop(root, inspected[0] if inspected else {})
-    timestamps = [_run_time(item["run_id"]) for item in inspected]
-    timestamps = [item for item in timestamps if item is not None]
+    timestamps = [
+        timestamp
+        for item in inspected
+        if (timestamp := _run_time(item["run_id"])) is not None
+    ]
     span_minutes = (
         int((max(timestamps) - min(timestamps)).total_seconds() // 60)
         if len(timestamps) >= 2
@@ -133,18 +136,22 @@ def _inspect_run(root: Path, run: dict[str, Any], *, latest: bool) -> dict[str, 
     ]
     employee_path = Path(str(run.get("employee_results_path") or ""))
     employee_payload = _read_json(employee_path)
-    employee_results = (
+    employee_results = cast(
+        list[Any],
         employee_payload.get("results")
         if isinstance(employee_payload.get("results"), list)
-        else []
+        else [],
     )
-    proof = (
+    proof = cast(
+        dict[str, Any],
         run.get("code_graph_proof")
         if isinstance(run.get("code_graph_proof"), dict)
-        else {}
+        else {},
     )
     proof_missing = per_run_code_graph_proof_missing(proof, run_id=run_id)
-    gates = run.get("gates") if isinstance(run.get("gates"), list) else []
+    gates = cast(
+        list[Any], run.get("gates") if isinstance(run.get("gates"), list) else []
+    )
     checks = {
         "gates_passed": bool(run.get("gates_passed"))
         and (
@@ -180,15 +187,17 @@ def _inspect_run(root: Path, run: dict[str, Any], *, latest: bool) -> dict[str, 
 
 def _latest_closed_loop(root: Path, latest_run: dict[str, Any]) -> dict[str, Any]:
     state = _read_json(root / ".retort" / "absorption_state.json")
-    proof = (
+    proof = cast(
+        dict[str, Any],
         state.get("closed_loop_proof")
         if isinstance(state.get("closed_loop_proof"), dict)
-        else {}
+        else {},
     )
     evidence = [str(item) for item in proof.get("evidence") or []]
     run_id = str(latest_run.get("run_id") or "")
-    checks = (
-        latest_run.get("checks") if isinstance(latest_run.get("checks"), dict) else {}
+    checks = cast(
+        dict[str, Any],
+        latest_run.get("checks") if isinstance(latest_run.get("checks"), dict) else {},
     )
     hardening_merge_commit = _hardening_merge_commit(
         str(latest_run.get("source") or "")

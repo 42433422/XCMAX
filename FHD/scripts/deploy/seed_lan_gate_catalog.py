@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="truthy-function"
 """将 lan-gate-ai-employee 登记到 MODstore catalog（material_category=ai_employee）。"""
 
 from __future__ import annotations
@@ -11,6 +12,8 @@ import tempfile
 import zipfile
 from pathlib import Path
 from typing import Any
+
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 PACK_ID = "lan-gate-ai-employee"
 
@@ -122,7 +125,7 @@ def main() -> int:
                 db.commit()
                 try:
                     mirror_catalog_file_to_market_files(row.stored_filename)
-                except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
+                except BOUNDARY_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
                     pass
         print(f"[SEED] {PACK_ID} ok")
         return 0

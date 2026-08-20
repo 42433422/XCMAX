@@ -6,13 +6,13 @@
 
 返回 JSON（**不满足上游探测时隔 HTTP 503**），顶层字段稳定便于告警：
 
-| 字段 | 含义 |
-|------|------|
-| `ok` | `upstream.reachable` 且上游 HTTP 状态非 5xx |
-| `service` | 固定 `portal-flask` |
-| `version` | `PORTAL_VERSION`，否则 `MODSTORE_VERSION`，否则 `unknown` |
-| `timestamp` | UTC ISO8601 |
-| `upstream` | 对象：`url`、`reachable`、`latency_ms`、`status`、`http_status`、`detail` |
+| 字段        | 含义                                                                      |
+| ----------- | ------------------------------------------------------------------------- |
+| `ok`        | `upstream.reachable` 且上游 HTTP 状态非 5xx                               |
+| `service`   | 固定 `portal-flask`                                                       |
+| `version`   | `PORTAL_VERSION`，否则 `MODSTORE_VERSION`，否则 `unknown`                 |
+| `timestamp` | UTC ISO8601                                                               |
+| `upstream`  | 对象：`url`、`reachable`、`latency_ms`、`status`、`http_status`、`detail` |
 
 探测目标：`MODSTORE_BACKEND_URL`（默认 `http://127.0.0.1:8000`）下的 **`GET /api/health`**。超时：`PORTAL_HEALTH_UPSTREAM_TIMEOUT`（默认秒 `2`）。
 
@@ -24,12 +24,12 @@
 
 单行 JSON，`logging.basicConfig` 默认启用（可用 `PORTAL_CONFIGURE_LOGGING=0` 关闭；级别 `PORTAL_LOG_LEVEL`，默认 `INFO`）。
 
-| `event` | 何时 |
-|---------|------|
-| `portal_request` | 每条请求（**跳过** `/assets/`、`/uploads/`、`/styles.css`、`/main.js`），字段：`method`、`path`、`status`、`duration_ms` |
-| `portal_proxy_upstream_unreachable` | 代理上游抛出 `requests.RequestException`（502 给用户），字段：`method`、`path`、`upstream_url`、`detail` |
-| `portal_proxy_upstream_5xx` | 上游响应 HTTP ≥ 500 |
-| `portal_config_warning` | 例如仍在使用默认 `PORTAL_SECRET_KEY` |
+| `event`                             | 何时                                                                                                                     |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `portal_request`                    | 每条请求（**跳过** `/assets/`、`/uploads/`、`/styles.css`、`/main.js`），字段：`method`、`path`、`status`、`duration_ms` |
+| `portal_proxy_upstream_unreachable` | 代理上游抛出 `requests.RequestException`（502 给用户），字段：`method`、`path`、`upstream_url`、`detail`                 |
+| `portal_proxy_upstream_5xx`         | 上游响应 HTTP ≥ 500                                                                                                      |
+| `portal_config_warning`             | 例如仍在使用默认 `PORTAL_SECRET_KEY`                                                                                     |
 
 关联运维关键字 **`Event loop is closed`** 通常出在 **Uvicorn/asyncio** 进程日志；Flask 侧重点对齐 **`upstream unreachable`**、**`upstream_5xx`**、**`/health` 503**。
 

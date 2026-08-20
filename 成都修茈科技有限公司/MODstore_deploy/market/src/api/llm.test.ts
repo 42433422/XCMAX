@@ -12,7 +12,6 @@ beforeEach(() => {
 })
 
 describe('llm api', () => {
-
   it('llmStatus calls req', async () => {
     vi.mocked(req).mockResolvedValue({ providers: [] })
     const res = await llm.llmStatus()
@@ -130,7 +129,11 @@ describe('llm api', () => {
 
   it('llmAdminModelCapabilityReview calls req with PUT', async () => {
     vi.mocked(req).mockResolvedValue({})
-    await llm.llmAdminModelCapabilityReview({ provider: 'openai', model: 'gpt-4', l3_status: 'approved' })
+    await llm.llmAdminModelCapabilityReview({
+      provider: 'openai',
+      model: 'gpt-4',
+      l3_status: 'approved',
+    })
     expect(req).toHaveBeenCalledWith('/api/llm/admin/model-capabilities/review', expect.objectContaining({ method: 'PUT' }))
   })
 
@@ -160,9 +163,12 @@ describe('llm api', () => {
     const mockFetch = vi.fn().mockResolvedValue(new Response())
     vi.stubGlobal('fetch', mockFetch)
     await llm.llmChatStream('openai', 'gpt-4', [{ role: 'user', content: 'hi' }])
-    expect(mockFetch).toHaveBeenCalledWith('/api/llm/chat/stream', expect.objectContaining({
-      method: 'POST',
-    }))
+    expect(mockFetch).toHaveBeenCalledWith(
+      '/api/llm/chat/stream',
+      expect.objectContaining({
+        method: 'POST',
+      }),
+    )
     vi.unstubAllGlobals()
   })
 

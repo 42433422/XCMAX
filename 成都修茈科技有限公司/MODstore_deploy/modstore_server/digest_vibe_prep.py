@@ -10,16 +10,16 @@ from modstore_server import digest_vibe_synthesis as _synthesis
 from modstore_server import digest_vibe_templates as _templates
 from modstore_server.all_hands_report import (
     _load_yuangon_employee_meta as _load_yuangon_employee_meta,
-    _manifest_signals as _manifest_signals,
-    _recent_failures as _recent_failures,
-    _report_one_employee as _report_one_employee,
-    _resolve_employee_pairs as _resolve_employee_pairs,
+)
+from modstore_server.all_hands_report import _manifest_signals as _manifest_signals
+from modstore_server.all_hands_report import _recent_failures as _recent_failures
+from modstore_server.all_hands_report import _report_one_employee as _report_one_employee
+from modstore_server.all_hands_report import _resolve_employee_pairs as _resolve_employee_pairs
+from modstore_server.all_hands_report import (
     clamp_all_hands_max_employees as clamp_all_hands_max_employees,
 )
 from modstore_server.duty_roster import yuangon_area_for_pkg as yuangon_area_for_pkg
-from modstore_server.services.llm import (
-    resolve_platform_bench_llm as resolve_platform_bench_llm,
-)
+from modstore_server.services.llm import resolve_platform_bench_llm as resolve_platform_bench_llm
 
 logger = logging.getLogger(__name__)
 

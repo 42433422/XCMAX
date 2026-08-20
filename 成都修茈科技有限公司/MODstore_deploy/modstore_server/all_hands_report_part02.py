@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -14,7 +18,7 @@ def _craft_workshop_pkg_ids() -> frozenset[str]:
 
         ids = YUANGON_AREAS.get("craft-workshop", {}).get("ids") or []
         return frozenset((str(x).strip() for x in ids if str(x).strip()))
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return frozenset(
             {
                 "intent-analyst",

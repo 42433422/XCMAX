@@ -22,11 +22,7 @@ export function formatHistoryTime(raw: unknown, now = Date.now()): string {
   const date = new Date(ts)
   const today = new Date(now)
   const clock = date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-  if (
-    date.getFullYear() === today.getFullYear()
-    && date.getMonth() === today.getMonth()
-    && date.getDate() === today.getDate()
-  ) {
+  if (date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth() && date.getDate() === today.getDate()) {
     return `今天 ${clock}`
   }
   if (date.getFullYear() === today.getFullYear()) {

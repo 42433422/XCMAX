@@ -32,7 +32,8 @@ class TestLoadLegacyShipmentDocumentGenerator:
         """No AI助手 directory anywhere → ImportError raised."""
         with (
             patch(
-                "app.utils.path_io.path_utils.get_resource_path", return_value=str(tmp_path / "nonexistent")
+                "app.utils.path_io.path_utils.get_resource_path",
+                return_value=str(tmp_path / "nonexistent"),
             ),
             patch("os.path.isdir", return_value=False),
             patch("os.path.exists", return_value=False),
@@ -44,7 +45,8 @@ class TestLoadLegacyShipmentDocumentGenerator:
         """get_resource_path raises → fallback dirs used, still no dir → ImportError."""
         with (
             patch(
-                "app.utils.path_io.path_utils.get_resource_path", side_effect=RuntimeError("no resource")
+                "app.utils.path_io.path_utils.get_resource_path",
+                side_effect=RuntimeError("no resource"),
             ),
             patch("os.path.isdir", return_value=False),
             patch("os.path.exists", return_value=False),

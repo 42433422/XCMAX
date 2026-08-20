@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.architecture_refactor import build_core_refactor_plan
 from retort_engine.codebase_graph import build_codebase_graph
@@ -16,10 +16,11 @@ def build_evolution_map(project: str | Path, *, max_files: int = 140) -> dict[st
     refactor_plan = build_core_refactor_plan(memory, project_root=root, max_tasks=8)
     state = _read_json(root / ".retort" / "absorption_state.json")
     latest_run = _latest_real_absorption_run(root)
-    latest_code_graph_proof = (
+    latest_code_graph_proof = cast(
+        dict[str, Any],
         latest_run.get("code_graph_proof")
         if isinstance(latest_run.get("code_graph_proof"), dict)
-        else {}
+        else {},
     )
     return {
         "status": "ready" if code_graph.get("status") != "empty" else "empty",

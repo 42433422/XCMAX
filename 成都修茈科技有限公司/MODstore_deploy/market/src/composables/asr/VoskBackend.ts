@@ -112,7 +112,9 @@ export class VoskBackend implements ASRBackend {
           if (this.recognizer && !this._stopped) {
             try {
               this.recognizer.acceptWaveformFloat(pcm, 16000)
-            } catch { /* */ }
+            } catch {
+              /* */
+            }
           }
         },
         onAudioLevel: onAudioLevel ?? undefined,
@@ -131,8 +133,14 @@ export class VoskBackend implements ASRBackend {
         if (final?.result?.text) {
           this._finalText = final.result.text.trim()
         }
-      } catch { /* */ }
-      try { this.recognizer.remove?.() } catch { /* */ }
+      } catch {
+        /* */
+      }
+      try {
+        this.recognizer.remove?.()
+      } catch {
+        /* */
+      }
       this.recognizer = null
     }
     this.capture?.stop()
@@ -142,7 +150,11 @@ export class VoskBackend implements ASRBackend {
 
   abort(): void {
     this._stopped = true
-    try { this.recognizer?.remove?.() } catch { /* */ }
+    try {
+      this.recognizer?.remove?.()
+    } catch {
+      /* */
+    }
     this.recognizer = null
     this.capture?.stop()
     this.capture = null

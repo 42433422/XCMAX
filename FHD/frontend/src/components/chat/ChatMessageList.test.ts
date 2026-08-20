@@ -5,20 +5,24 @@ import ChatMessageList from './ChatMessageList.vue'
 function mountList(showDiagnosticMetadata = false) {
   return mount(ChatMessageList, {
     props: {
-      messages: [{
-        role: 'ai' as const,
-        content: '系统显示 &amp;quot;正常&amp;quot;。',
-        time: '07:25',
-        contextSummary: '已关联上下文：最近对话 2 条（共 2）',
-        thinkingSteps: 'internal chain',
-        workflowAction: 'planner_action',
-        nodeResults: [{
-          node_id: 'internal_node',
-          success: true,
-          tool_id: 'secret_tool',
-          action: 'execute',
-        }],
-      }],
+      messages: [
+        {
+          role: 'ai' as const,
+          content: '系统显示 &amp;quot;正常&amp;quot;。',
+          time: '07:25',
+          contextSummary: '已关联上下文：最近对话 2 条（共 2）',
+          thinkingSteps: 'internal chain',
+          workflowAction: 'planner_action',
+          nodeResults: [
+            {
+              node_id: 'internal_node',
+              success: true,
+              tool_id: 'secret_tool',
+              action: 'execute',
+            },
+          ],
+        },
+      ],
       isLoading: false,
       isStreamingReply: false,
       loadingProgressText: '',

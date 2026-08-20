@@ -1,6 +1,6 @@
         # 工作区归档管理员 (`legacy-archive-curator`)
 
-        **area**：`server-and-ops`  
+        **area**：`server-and-ops`
         **yuangon 路径**：`成都修茈科技有限公司/yuangon/server-and-ops/legacy-archive-curator/`
 
         ## 职责
@@ -14,11 +14,13 @@
         ## 支持的 Handlers
 
         - `llm_md`：接收 Markdown 任务描述，调用 LLM 输出结构化结果
+
 - `echo`：调试用：原样返回输入，用于 smoke 测试
 
         ## Scope（核心文件范围）
 
         - `_archive/**`
+
 - `FHD/.archive/**`
 - `FHD/docs/reports/LEGACY_CLEANUP_TRACKING.md`
 - `scripts/cleanup_archive_secrets.py`

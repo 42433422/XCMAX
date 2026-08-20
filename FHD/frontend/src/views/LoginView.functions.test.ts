@@ -75,14 +75,11 @@ vi.mock('@/stores/accountProfile', () => ({
 }))
 
 const mockIsAdminConsoleSpa = vi.fn(() => false)
-const mockResolveAdminConsoleLoginUrl = vi.fn(
-  (redirect: string) => `/admin/login?redirect=${redirect}`,
-)
+const mockResolveAdminConsoleLoginUrl = vi.fn((redirect: string) => `/admin/login?redirect=${redirect}`)
 
 vi.mock('@/utils/adminConsoleUrl', () => ({
   isAdminConsoleSpa: () => mockIsAdminConsoleSpa(),
-  resolveAdminConsoleLoginUrl: (redirect: string) =>
-    mockResolveAdminConsoleLoginUrl(redirect),
+  resolveAdminConsoleLoginUrl: (redirect: string) => mockResolveAdminConsoleLoginUrl(redirect),
 }))
 
 vi.mock('@/constants/adminOperatorNav', () => ({
@@ -99,8 +96,7 @@ const mockSaveLoginPreferences = vi.fn()
 
 vi.mock('@/utils/loginPreferences', () => ({
   loadLoginPreferences: () => mockLoadLoginPreferences(),
-  saveLoginPreferences: (...args: unknown[]) =>
-    mockSaveLoginPreferences(...args),
+  saveLoginPreferences: (...args: unknown[]) => mockSaveLoginPreferences(...args),
 }))
 
 vi.mock('@/utils/hostPackOnboardingGate', () => ({
@@ -109,14 +105,10 @@ vi.mock('@/utils/hostPackOnboardingGate', () => ({
 
 const mockHasRecentEnterpriseSessionHint = vi.fn(() => false)
 const mockConsumeDesktopSessionBootstrapHint = vi.fn(async () => false)
-const mockCanResumeRecentDesktopSession = vi.fn(async (
-  isDesktop: boolean,
-  isEnterprise: boolean,
-  query: Record<string, unknown>,
-) => {
+const mockCanResumeRecentDesktopSession = vi.fn(async (isDesktop: boolean, isEnterprise: boolean, query: Record<string, unknown>) => {
   const error = query.error
   if (!isDesktop || !isEnterprise || query.oidc || query.oidc_error || (typeof error === 'string' && error.trim())) return false
-  return mockHasRecentEnterpriseSessionHint() || await mockConsumeDesktopSessionBootstrapHint()
+  return mockHasRecentEnterpriseSessionHint() || (await mockConsumeDesktopSessionBootstrapHint())
 })
 
 vi.mock('@/utils/authSessionCache', () => ({
@@ -148,7 +140,7 @@ vi.mock('@/components/OtpCells.vue', () => ({
 
 // ── helpers ────────────────────────────────────────────────
 
-function makeRouter(query: Record<string, string> = {}) {
+function makeRouter() {
   return createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -180,26 +172,23 @@ function makeRouter(query: Record<string, string> = {}) {
 }
 
 async function mountLoginView(query: Record<string, string> = {}) {
-  const router = makeRouter(query)
+  const router = makeRouter()
   await router.push({ path: '/login', query })
   await router.isReady()
 
   const pinia = createPinia()
   setActivePinia(pinia)
 
-  const wrapper = mount(
-    (await import('./LoginView.vue')).default,
-    {
-      global: {
-        plugins: [router, pinia],
-        stubs: {
-          RouterLink: { template: '<a><slot /></a>' },
-          RouterView: { template: '<div />' },
-          OtpCells: { template: '<div class="otp-cells-stub" />' },
-        },
+  const wrapper = mount((await import('./LoginView.vue')).default, {
+    global: {
+      plugins: [router, pinia],
+      stubs: {
+        RouterLink: { template: '<a><slot /></a>' },
+        RouterView: { template: '<div />' },
+        OtpCells: { template: '<div class="otp-cells-stub" />' },
       },
     },
-  )
+  })
   return { wrapper, router }
 }
 
@@ -253,6 +242,7 @@ describe('LoginView functions – selectEnterpriseLogin / selectAdminLogin', () 
     })
     vm.selectAdminLogin()
     expect(mockResolveAdminConsoleLoginUrl).toHaveBeenCalled()
+    expect(capturedHref).toContain('/admin/login')
     // Restore
     Object.defineProperty(window, 'location', {
       writable: true,
@@ -355,7 +345,7 @@ describe('LoginView functions – pollQrStatus', () => {
     mockAuthApiPollAuthQr.mockResolvedValue({
       data: { status: 'confirmed', username: 'testuser' },
     })
-    const { wrapper, router } = await mountLoginView()
+    const { wrapper } = await mountLoginView()
     const vm = wrapper.vm as any
     // Start QR login first to set up state
     await vm.startQrLogin()
@@ -476,13 +466,9 @@ describe('LoginView functions – tryAutoLogin', () => {
       password: 'autopass',
     })
     mockAuthApiLogin.mockResolvedValue({ success: true })
-    const { wrapper } = await mountLoginView()
+    await mountLoginView()
     await flushPromises()
-    expect(mockAuthApiLogin).toHaveBeenCalledWith(
-      'autouser',
-      'autopass',
-      'enterprise',
-    )
+    expect(mockAuthApiLogin).toHaveBeenCalledWith('autouser', 'autopass', 'enterprise')
   })
 
   it('tryAutoLogin does not trigger when autoLogin is false', async () => {
@@ -492,7 +478,7 @@ describe('LoginView functions – tryAutoLogin', () => {
       username: 'autouser',
       password: 'autopass',
     })
-    const { wrapper } = await mountLoginView()
+    await mountLoginView()
     await flushPromises()
     expect(mockAuthApiLogin).not.toHaveBeenCalled()
   })
@@ -537,7 +523,7 @@ describe('LoginView desktop session restore', () => {
     expect(mockAuthApiGetOidcStatus).toHaveBeenCalled()
   })
 
-  it('uses Electron\'s one-shot persisted-cookie hint when localStorage is unavailable', async () => {
+  it("uses Electron's one-shot persisted-cookie hint when localStorage is unavailable", async () => {
     mockHasRecentEnterpriseSessionHint.mockReturnValue(false)
     mockConsumeDesktopSessionBootstrapHint.mockResolvedValue(true)
 
@@ -769,10 +755,9 @@ describe('LoginView functions – OIDC callback handling', () => {
 
   it('oidc=ok query param triggers completeLoginSuccess', async () => {
     mockAuthApiLogin.mockResolvedValue({ success: true })
-    const { wrapper } = await mountLoginView({ oidc: 'ok' })
+    const { router } = await mountLoginView({ oidc: 'ok' })
     await flushPromises()
-    // Should have attempted to navigate away from login
-    // (completeLoginSuccess calls router.replace)
+    expect(router.currentRoute.value.path).not.toBe('/login')
   })
 
   it('oidc_error query param sets errorMessage', async () => {

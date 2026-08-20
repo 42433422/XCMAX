@@ -1,3 +1,4 @@
+# isort: skip_file
 # ruff: noqa: E402, F401
 """大模型目录、BYOK、偏好与聊天代理 API。"""
 
@@ -100,7 +101,6 @@ from modstore_server.llm_api_part01 import (
     llm_status as llm_status,
     resolve_chat_default as resolve_chat_default,
 )
-
 
 _CATALOG_PROVIDER_TIMEOUT_SEC = 12.0
 

@@ -5,12 +5,8 @@
   "android_version": "1.0.0.0",
   "android_git_sha": "a6af956c70e5c4ced49859240455fc9ba8e42e5c",
   "release_ready": true,
-  "active_skus": [
-    "enterprise"
-  ],
-  "frozen_skus": [
-    "personal"
-  ],
+  "active_skus": ["enterprise"],
+  "frozen_skus": ["personal"],
   "primary_sku": "enterprise",
   "git_sha": "656db7b7506a0bd0a63ad68acf1a82dc486f365f",
   "generated_at": "2026-07-19T07:33:56+00:00",
@@ -26,11 +22,7 @@
         "Windows、macOS Apple Silicon 与 Android 企业版安装包均公开文件大小及 SHA-256 校验信息。",
         "桌面端接入 stable 自动更新通道，产品四段版本与 Electron/Apple 三段工具链版本分开管理。"
       ],
-      "platforms": [
-        "Windows 64 位",
-        "macOS Apple Silicon",
-        "Android"
-      ]
+      "platforms": ["Windows 64 位", "macOS Apple Silicon", "Android"]
     },
     {
       "version": "10.0.0",
@@ -160,11 +152,7 @@
         "Windows、macOS Apple Silicon 与 Android 企业版安装包均公开文件大小及 SHA-256 校验信息。",
         "桌面端接入 stable 自动更新通道，产品四段版本与 Electron/Apple 三段工具链版本分开管理。"
       ],
-      "platforms": [
-        "Windows 64 位",
-        "macOS Apple Silicon",
-        "Android"
-      ]
+      "platforms": ["Windows 64 位", "macOS Apple Silicon", "Android"]
     },
     {
       "version": "10.0.0",

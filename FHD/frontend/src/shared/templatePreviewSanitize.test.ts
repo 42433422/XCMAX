@@ -1,8 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  stripSampleRowsKeepTemplateShape,
-  stripGridPreviewData,
-} from './templatePreviewSanitize'
+import { stripSampleRowsKeepTemplateShape, stripGridPreviewData } from './templatePreviewSanitize'
 
 describe('templatePreviewSanitize', () => {
   describe('stripSampleRowsKeepTemplateShape', () => {
@@ -11,18 +8,12 @@ describe('templatePreviewSanitize', () => {
     })
 
     it('returns shape from fallback fields when no sample rows', () => {
-      const result = stripSampleRowsKeepTemplateShape([], [
-        { label: 'Name' },
-        { label: 'Age' },
-      ])
+      const result = stripSampleRowsKeepTemplateShape([], [{ label: 'Name' }, { label: 'Age' }])
       expect(result).toEqual([{ Name: '', Age: '' }])
     })
 
     it('returns shape from first row keys', () => {
-      const result = stripSampleRowsKeepTemplateShape(
-        [{ Name: 'Alice', Age: 30 }],
-        [],
-      )
+      const result = stripSampleRowsKeepTemplateShape([{ Name: 'Alice', Age: 30 }], [])
       expect(result).toEqual([{ Name: '', Age: '' }])
     })
 
@@ -37,11 +28,7 @@ describe('templatePreviewSanitize', () => {
     })
 
     it('filters empty labels from fallback fields', () => {
-      const result = stripSampleRowsKeepTemplateShape([], [
-        { label: 'Name' },
-        { label: '' },
-        { label: '  ' },
-      ])
+      const result = stripSampleRowsKeepTemplateShape([], [{ label: 'Name' }, { label: '' }, { label: '  ' }])
       expect(result).toEqual([{ Name: '' }])
     })
   })
@@ -80,9 +67,7 @@ describe('templatePreviewSanitize', () => {
 
     it('preserves header-like text in first rows', () => {
       const grid = {
-        rows: [
-          [{ text: 'Name' }, { text: 'Amount' }],
-        ],
+        rows: [[{ text: 'Name' }, { text: 'Amount' }]],
       }
       const result = stripGridPreviewData(grid, [])
       expect(result.rows[0][0].text).toBe('Name')
@@ -99,9 +84,7 @@ describe('templatePreviewSanitize', () => {
 
     it('handles cell objects with text property', () => {
       const grid = {
-        rows: [
-          [{ text: 'Date' }, { text: '2024-01-15' }],
-        ],
+        rows: [[{ text: 'Date' }, { text: '2024-01-15' }]],
       }
       const result = stripGridPreviewData(grid, [])
       // Date-like pattern in row index 0 should not be stripped
@@ -110,11 +93,7 @@ describe('templatePreviewSanitize', () => {
 
     it('strips date-like values in later rows', () => {
       const grid = {
-        rows: [
-          [{ text: 'Date' }],
-          [{ text: 'SubHeader' }],
-          [{ text: '2024-01-15' }],
-        ],
+        rows: [[{ text: 'Date' }], [{ text: 'SubHeader' }], [{ text: '2024-01-15' }]],
       }
       const result = stripGridPreviewData(grid, [])
       expect(result.rows[2][0].text).toBe('')
@@ -122,11 +101,7 @@ describe('templatePreviewSanitize', () => {
 
     it('strips long numeric strings', () => {
       const grid = {
-        rows: [
-          [{ text: 'ID' }],
-          [{ text: 'SubHeader' }],
-          [{ text: '123456' }],
-        ],
+        rows: [[{ text: 'ID' }], [{ text: 'SubHeader' }], [{ text: '123456' }]],
       }
       const result = stripGridPreviewData(grid, [])
       expect(result.rows[2][0].text).toBe('')
@@ -134,11 +109,7 @@ describe('templatePreviewSanitize', () => {
 
     it('handles plain string cells', () => {
       const grid = {
-        rows: [
-          ['Header'],
-          ['SubHeader'],
-          ['123.45'],
-        ],
+        rows: [['Header'], ['SubHeader'], ['123.45']],
       }
       const result = stripGridPreviewData(grid, [])
       expect(result.rows[0][0]).toBe('Header')

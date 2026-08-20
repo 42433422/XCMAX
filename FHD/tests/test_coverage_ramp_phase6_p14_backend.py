@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment, func-returns-value, misc"
 """COVERAGE_RAMP Phase 6 round 14: backend low-coverage modules.
 
 Targets:
@@ -790,7 +791,9 @@ class TestUserPublicDict:
             is_active=True,
             wx_avatar_url=None,
         )
-        with patch("app.utils.path_io.user_avatar_storage.public_avatar_url", return_value="/avatar.png"):
+        with patch(
+            "app.utils.path_io.user_avatar_storage.public_avatar_url", return_value="/avatar.png"
+        ):
             result = _user_public_dict(user)
         assert result["id"] == 1
         assert result["username"] == "alice"

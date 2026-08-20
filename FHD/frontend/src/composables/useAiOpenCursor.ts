@@ -83,7 +83,8 @@ function buildSelector(el: Element): string {
 }
 
 function elementText(el: Element): string {
-  const raw = (el as HTMLElement).innerText || (el as HTMLInputElement).value || el.getAttribute('aria-label') || el.getAttribute('placeholder') || ''
+  const raw =
+    (el as HTMLElement).innerText || (el as HTMLInputElement).value || el.getAttribute('aria-label') || el.getAttribute('placeholder') || ''
   return raw.replace(/\s+/g, ' ').trim().slice(0, 80)
 }
 
@@ -132,7 +133,12 @@ async function execSnapshot(): Promise<Record<string, unknown>> {
       selector: buildSelector(el),
       tag: el.tagName.toLowerCase(),
       text: elementText(el),
-      rect: { x: Math.round(rect.x), y: Math.round(rect.y), w: Math.round(rect.width), h: Math.round(rect.height) },
+      rect: {
+        x: Math.round(rect.x),
+        y: Math.round(rect.y),
+        w: Math.round(rect.width),
+        h: Math.round(rect.height),
+      },
     })
     if (elements.length >= SNAPSHOT_MAX_ELEMENTS) break
   }

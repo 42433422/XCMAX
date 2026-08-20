@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.devour_session import assessment_score, assessment_score_status
 
@@ -27,15 +27,17 @@ def build_absorption_run_proof(
     llm_review: dict[str, Any],
 ) -> dict[str, Any]:
     run_id = str(execution.get("run_id") or "")
-    metadata = (
+    metadata = cast(
+        dict[str, Any],
         own_assessment.get("metadata")
         if isinstance(own_assessment.get("metadata"), dict)
-        else {}
+        else {},
     )
-    audit = (
+    audit = cast(
+        dict[str, Any],
         metadata.get("capability_absorption_audit")
         if isinstance(metadata.get("capability_absorption_audit"), dict)
-        else {}
+        else {},
     )
     changed_files = [str(item) for item in execution.get("changed_files") or []]
     gates = [item for item in execution.get("gates") or [] if isinstance(item, dict)]
@@ -44,15 +46,21 @@ def build_absorption_run_proof(
         or audit.get("latest_code_graph_proof_path")
         or ""
     )
-    code_graph = _read_json(Path(code_graph_path)) if code_graph_path else {}
+    code_graph = cast(
+        dict[str, Any], _read_json(Path(code_graph_path)) if code_graph_path else {}
+    )
     before_score = assessment_score(pre_assessment)
     after_score = assessment_score(own_assessment)
-    proof = (
+    proof = cast(
+        dict[str, Any],
         absorption_state.get("closed_loop_proof")
         if isinstance(absorption_state.get("closed_loop_proof"), dict)
-        else {}
+        else {},
     )
-    flags = proof.get("flags") if isinstance(proof.get("flags"), dict) else {}
+    flags = cast(
+        dict[str, Any],
+        proof.get("flags") if isinstance(proof.get("flags"), dict) else {},
+    )
     final_llm = _final_llm_verdict(own_assessment, llm_review)
     core_change = _core_change_binding(changed_files, audit)
     test_increment = _test_increment_binding(audit)
@@ -219,15 +227,17 @@ def _test_increment_binding(audit: dict[str, Any]) -> dict[str, Any]:
 def _final_llm_verdict(
     own_assessment: dict[str, Any], llm_review: dict[str, Any]
 ) -> dict[str, Any]:
-    metadata = (
+    metadata = cast(
+        dict[str, Any],
         own_assessment.get("metadata")
         if isinstance(own_assessment.get("metadata"), dict)
-        else {}
+        else {},
     )
-    dispatch = (
+    dispatch = cast(
+        dict[str, Any],
         llm_review.get("dispatch")
         if isinstance(llm_review.get("dispatch"), dict)
-        else {}
+        else {},
     )
     scores = [
         item for item in own_assessment.get("scores") or [] if isinstance(item, dict)

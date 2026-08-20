@@ -69,7 +69,8 @@ function isRetiredCustomerServiceMenuItem(item: ResolvedSidebarMenuItem): boolea
     key === 'internal-customer-service' ||
     key === 'mod-enterprise-customer-service' ||
     key === 'mod-internal-customer-service'
-  ) return true
+  )
+    return true
   const path = String(item.path || '').trim()
   const pathOnly = path.split('?')[0].split('#')[0]
   return pathOnly.includes('/enterprise-customer-service') || pathOnly.includes('/internal-customer-service')
@@ -78,7 +79,10 @@ function isRetiredCustomerServiceMenuItem(item: ResolvedSidebarMenuItem): boolea
 function isRetiredMaterialsListMenuItem(item: ResolvedSidebarMenuItem): boolean {
   const key = normalizeModSidebarNavKey(String(item.key || '').trim())
   if (key === 'materials-list' || key === 'mod-erp-materials-list') return true
-  const path = String(item.path || '').trim().split('?')[0].split('#')[0]
+  const path = String(item.path || '')
+    .trim()
+    .split('?')[0]
+    .split('#')[0]
   return path === '/materials-list' || path.endsWith('/materials-list')
 }
 
@@ -88,14 +92,13 @@ function isRetiredMaterialsListMenuItem(item: ResolvedSidebarMenuItem): boolean 
  */
 function isConsolidatedCapabilityMenuItem(item: ResolvedSidebarMenuItem): boolean {
   const key = normalizeModSidebarNavKey(String(item.key || '').trim())
-  if (
-    key === 'model-payment' ||
-    key === 'mod-model-payment' ||
-    key === 'mod-erp-business-docking'
-  ) {
+  if (key === 'model-payment' || key === 'mod-model-payment' || key === 'mod-erp-business-docking') {
     return true
   }
-  const path = String(item.path || '').trim().split('?')[0].split('#')[0]
+  const path = String(item.path || '')
+    .trim()
+    .split('?')[0]
+    .split('#')[0]
   return (
     path === '/model-payment' ||
     path.endsWith('/model-payment') ||
@@ -149,10 +152,7 @@ export function mergeSidebarMenuItems(
     return _lastCache!.result
   }
 
-  const occupiedHostSlots = new Set<string>([
-    ...collectNavKeys(coreItems),
-    ...collectNavKeys(trailingItems),
-  ])
+  const occupiedHostSlots = new Set<string>([...collectNavKeys(coreItems), ...collectNavKeys(trailingItems)])
   const seen = new Set<string>()
   const out: ResolvedSidebarMenuItem[] = []
   const hideHostBridgeMods = isClientErpSidebarContext(installedModIds, activeModId)
@@ -160,11 +160,7 @@ export function mergeSidebarMenuItems(
   const push = (item: ResolvedSidebarMenuItem) => {
     const key = String(item.key || '').trim()
     if (!key || seen.has(key)) return
-    if (
-      isRetiredCustomerServiceMenuItem(item) ||
-      isRetiredMaterialsListMenuItem(item) ||
-      isConsolidatedCapabilityMenuItem(item)
-    ) return
+    if (isRetiredCustomerServiceMenuItem(item) || isRetiredMaterialsListMenuItem(item) || isConsolidatedCapabilityMenuItem(item)) return
 
     const modId = String(item.modId || '').trim()
     const navKey = normalizeModSidebarNavKey(key)

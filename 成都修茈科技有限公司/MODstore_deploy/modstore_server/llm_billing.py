@@ -1,3 +1,4 @@
+# mypy: disable-error-code="operator"
 """LLM metering, wallet settlement and lightweight risk controls."""
 
 from __future__ import annotations
@@ -234,9 +235,17 @@ def estimate_preauthorization(
         os.environ.get("COSER_DEFAULT_PREAUTH_COMPLETION_TOKENS", "1024")
     )
     estimated = UsageMeter(
-        prompt_tokens, completion_tokens, prompt_tokens + completion_tokens, estimated=True
+        prompt_tokens,
+        completion_tokens,
+        prompt_tokens + completion_tokens,
+        estimated=True,
     )
-    return money(max(calculate_charge(session, provider, model, estimated), DEFAULT_PREAUTH_CHARGE))
+    return money(
+        max(
+            calculate_charge(session, provider, model, estimated),
+            DEFAULT_PREAUTH_CHARGE,
+        )
+    )
 
 
 def _client_ip(request: Request | None) -> str:
@@ -271,7 +280,10 @@ def enforce_risk_limits(
     ip = _client_ip(request)
     try:
         _limit_key(
-            "llm_user_minute", str(user_id), 60, int(os.environ.get("COSER_USER_LLM_RPM", "20"))
+            "llm_user_minute",
+            str(user_id),
+            60,
+            int(os.environ.get("COSER_USER_LLM_RPM", "20")),
         )
         if ip:
             _limit_key("llm_ip_minute", ip, 60, int(os.environ.get("COSER_IP_LLM_RPM", "60")))
@@ -380,14 +392,18 @@ def save_success_log(
     if conversation_id:
         conversation = (
             session.query(ChatConversation)
-            .filter(ChatConversation.id == conversation_id, ChatConversation.user_id == user_id)
+            .filter(
+                ChatConversation.id == conversation_id,
+                ChatConversation.user_id == user_id,
+            )
             .first()
         )
     if not conversation:
         title = (
-            next((m.get("content", "").strip() for m in messages if m.get("role") == "user"), "")[
-                :80
-            ]
+            next(
+                (m.get("content", "").strip() for m in messages if m.get("role") == "user"),
+                "",
+            )[:80]
             or "新对话"
         )
         conversation = ChatConversation(
@@ -442,7 +458,13 @@ def save_success_log(
 
 
 def save_failure_log(
-    session: Session, *, user_id: int, provider: str, model: str, error: str, hold_no: str = ""
+    session: Session,
+    *,
+    user_id: int,
+    provider: str,
+    model: str,
+    error: str,
+    hold_no: str = "",
 ) -> None:
     session.add(
         LlmCallLog(

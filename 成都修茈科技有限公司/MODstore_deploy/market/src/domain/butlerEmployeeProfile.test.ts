@@ -97,9 +97,7 @@ describe('extractEmployeeCapabilityView', () => {
     const manifest = {
       employee_config_v2: {
         cognition: {
-          skills: [
-            { name: 'Navigate', brief: 'Navigate pages', kind: 'action', how: 'vue-router push' },
-          ],
+          skills: [{ name: 'Navigate', brief: 'Navigate pages', kind: 'action', how: 'vue-router push' }],
         },
       },
     }
@@ -111,9 +109,7 @@ describe('extractEmployeeCapabilityView', () => {
     const manifest = {
       employee_config_v2: {
         cognition: {
-          skills: [
-            { name: 'Navigate', brief: 'Navigate pages', kind: 'action' },
-          ],
+          skills: [{ name: 'Navigate', brief: 'Navigate pages', kind: 'action' }],
         },
       },
     }

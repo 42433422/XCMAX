@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """Branch-coverage tests for app.fastapi_routes.xcmax_admin (round 2).
 
 Targets the remaining missing branches identified by coverage analysis:

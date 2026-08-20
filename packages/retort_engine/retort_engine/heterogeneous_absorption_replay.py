@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.pr_review import review_diff
 
@@ -220,11 +220,15 @@ def _post_absorption_review(case: dict[str, Any]) -> dict[str, Any]:
         issue_context=str(case.get("absorbed_signal") or ""),
     )
     comments = [item for item in review.get("comments") or [] if isinstance(item, dict)]
-    summary = review.get("summary") if isinstance(review.get("summary"), dict) else {}
-    extension_policy = (
+    summary = cast(
+        dict[str, Any],
+        review.get("summary") if isinstance(review.get("summary"), dict) else {},
+    )
+    extension_policy = cast(
+        dict[str, Any],
         summary.get("extension_policy")
         if isinstance(summary.get("extension_policy"), dict)
-        else {}
+        else {},
     )
     expected_context = str(case.get("expected_context") or "")
     expected_severity = str(case.get("expected_severity") or "")

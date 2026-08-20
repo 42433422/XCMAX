@@ -1,6 +1,9 @@
+# mypy: disable-error-code="attr-defined, import-not-found"
 import logging
 import os
 import sys
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -44,7 +47,7 @@ with get_db() as db:
                     f"decompress result type={type(result)}, result={repr(result[:50]) if result else None}"
                 )
             conn.close()
-        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             print(f"Error: {e}")
             import traceback
 

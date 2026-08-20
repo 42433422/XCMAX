@@ -68,11 +68,7 @@
           <div v-for="rating in ratings" :key="rating.id" class="rating-item">
             <div class="rating-header">
               <div class="rating-stars">
-                <i
-                  v-for="n in 5"
-                  :key="n"
-                  :class="['fa', n <= rating.rating ? 'fa-star' : 'fa-star-o']"
-                ></i>
+                <i v-for="n in 5" :key="n" :class="['fa', n <= rating.rating ? 'fa-star' : 'fa-star-o']"></i>
               </div>
               <span class="rating-date">{{ formatDate(rating.created_at) }}</span>
             </div>
@@ -95,22 +91,10 @@
       <div class="rating-form" v-if="!mod.is_installed">
         <h4>评价此 MOD</h4>
         <div class="star-rating">
-          <i
-            v-for="n in 5"
-            :key="n"
-            :class="['fa', n <= userRating ? 'fa-star' : 'fa-star-o']"
-            @click="userRating = n"
-          ></i>
+          <i v-for="n in 5" :key="n" :class="['fa', n <= userRating ? 'fa-star' : 'fa-star-o']" @click="userRating = n"></i>
         </div>
-        <textarea
-          v-model="userComment"
-          placeholder="写下您的评价..."
-          rows="3"
-          class="comment-input"
-        ></textarea>
-        <button class="btn btn-primary" @click="submitRating" :disabled="userRating === 0">
-          提交评价
-        </button>
+        <textarea v-model="userComment" placeholder="写下您的评价..." rows="3" class="comment-input"></textarea>
+        <button class="btn btn-primary" @click="submitRating" :disabled="userRating === 0">提交评价</button>
       </div>
 
       <div class="action-buttons">
@@ -123,23 +107,13 @@
           <i class="fa fa-download"></i>
           {{ mod.installationInProgress ? '安装中...' : '安装 MOD' }}
         </button>
-        
-        <button
-          v-else
-          class="btn btn-lg btn-secondary"
-          @click="$emit('uninstall', mod)"
-          :disabled="mod.uninstallationInProgress"
-        >
+
+        <button v-else class="btn btn-lg btn-secondary" @click="$emit('uninstall', mod)" :disabled="mod.uninstallationInProgress">
           <i class="fa fa-trash"></i>
           {{ mod.uninstallationInProgress ? '卸载中...' : '卸载 MOD' }}
         </button>
 
-        <button
-          v-if="hasUpdate"
-          class="btn btn-lg btn-warning"
-          @click="$emit('update', mod)"
-          :disabled="mod.updateInProgress"
-        >
+        <button v-if="hasUpdate" class="btn btn-lg btn-warning" @click="$emit('update', mod)" :disabled="mod.updateInProgress">
           <i class="fa fa-refresh"></i>
           {{ mod.updateInProgress ? '更新中...' : '更新 MOD' }}
         </button>
@@ -149,9 +123,9 @@
 </template>
 
 <script>
-import { ref, computed } from 'vue';
-import { apiFetch } from '@/utils/apiBase';
-import { appAlert } from '@/utils/appDialog';
+import { ref, computed } from 'vue'
+import { apiFetch } from '@/utils/apiBase'
+import { appAlert } from '@/utils/appDialog'
 
 export default {
   name: 'ModDetails',
@@ -163,76 +137,74 @@ export default {
   },
   emits: ['install', 'uninstall', 'update'],
   setup(props) {
-    const userRating = ref(0);
-    const userComment = ref('');
-    const statistics = ref(null);
-    const ratings = ref([]);
+    const userRating = ref(0)
+    const userComment = ref('')
+    const statistics = ref(null)
+    const ratings = ref([])
 
     const isDependencySatisfied = (depId) => {
-      if (depId === 'xcagi') return true;
-      return true;
-    };
+      if (depId === 'xcagi') return true
+      return true
+    }
 
     const hasUpdate = computed(() => {
-      return props.mod.is_installed && 
-             props.mod.new_version && 
-             props.mod.new_version !== props.mod.version;
-    });
+      return props.mod.is_installed && props.mod.new_version && props.mod.new_version !== props.mod.version
+    })
 
     const formatDate = (dateStr) => {
-      if (!dateStr) return '';
-      const date = new Date(dateStr);
-      return date.toLocaleDateString('zh-CN');
-    };
+      if (!dateStr) return ''
+      const date = new Date(dateStr)
+      return date.toLocaleDateString('zh-CN')
+    }
 
     const submitRating = async () => {
       if (userRating.value === 0) {
-        await appAlert('请选择评分');
-        return;
+        await appAlert('请选择评分')
+        return
       }
 
       try {
-        const formData = new FormData();
-        formData.append('rating', userRating.value);
-        formData.append('comment', userComment.value);
-        formData.append('user_id', 'current_user');
+        const formData = new FormData()
+        formData.append('rating', userRating.value)
+        formData.append('comment', userComment.value)
+        formData.append('user_id', 'current_user')
 
         const response = await apiFetch(`/api/mod-store/mod/${props.mod.id}/rate`, {
           method: 'POST',
           body: formData,
-        });
+        })
 
-        const data = await response.json();
+        const data = await response.json()
 
         if (data.success) {
-          await appAlert('评价成功！');
-          userRating.value = 0;
-          userComment.value = '';
-          loadDetails();
+          await appAlert('评价成功！')
+          userRating.value = 0
+          userComment.value = ''
+          loadDetails()
         } else {
-          await appAlert(`评价失败：${data.error || data.detail}`);
+          await appAlert(`评价失败：${data.error || data.detail}`)
         }
       } catch (error) {
-        console.error('Rating submission failed:', error);
-        await appAlert('评价失败，请重试');
+        console.error('Rating submission failed:', error)
+        await appAlert('评价失败，请重试')
       }
-    };
+    }
 
     const loadDetails = async () => {
       try {
-        const response = await apiFetch(`/api/mod-store/mod/${props.mod.id}/details`);
-        const data = await response.json();
+        const response = await apiFetch(`/api/mod-store/mod/${props.mod.id}/details`)
+        const data = await response.json()
 
         if (data.success) {
-          statistics.value = data.data.statistics;
-          ratings.value = data.data.ratings || [];
+          statistics.value = data.data.statistics
+          ratings.value = data.data.ratings || []
         }
       } catch (error) {
-        console.error('Failed to load mod details:', error);
+        console.error('Failed to load mod details:', error)
       }
-    };
+    }
 
-    loadDetails();
+    loadDetails()
 
     return {
       userRating,
@@ -243,9 +215,9 @@ export default {
       hasUpdate,
       formatDate,
       submitRating,
-    };
+    }
   },
-};
+}
 </script>
 
 <style scoped>

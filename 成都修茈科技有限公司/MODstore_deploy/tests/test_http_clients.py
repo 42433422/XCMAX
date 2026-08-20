@@ -25,7 +25,9 @@ class _SyncClient:
 
 
 @pytest.mark.asyncio
-async def test_close_all_ignores_closed_event_loop_and_detaches_all_clients(monkeypatch):
+async def test_close_all_ignores_closed_event_loop_and_detaches_all_clients(
+    monkeypatch,
+):
     java_client = _AsyncClient(RuntimeError("Event loop is closed"))
     external_client = _AsyncClient()
     sync_client = _SyncClient()

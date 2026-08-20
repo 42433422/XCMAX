@@ -38,10 +38,17 @@ def test_modstore_employee_manifest_passes_fhd_validator_when_fhd_present():
             "name": "冒烟员工包",
             "version": "1.0.0",
             "description": "联调用",
-            "employee": {"id": "smoke-worker", "label": "冒烟工位", "capabilities": ["echo"]},
+            "employee": {
+                "id": "smoke-worker",
+                "label": "冒烟工位",
+                "capabilities": ["echo"],
+            },
             "xcagi_host_profile": {
                 "panel_kind": "mod_http",
-                "workflow_employee_row": {"panel_title": "冒烟", "workflow_placeholder": True},
+                "workflow_employee_row": {
+                    "panel_title": "冒烟",
+                    "workflow_placeholder": True,
+                },
             },
         },
         ensure_ascii=False,

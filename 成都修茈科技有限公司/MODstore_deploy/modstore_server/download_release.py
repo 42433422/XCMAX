@@ -1,3 +1,4 @@
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """官网下载版本 SSOT 读写 + installer 日推送回写。
 
 单一真相源：``FHD/config/download_release.json``（可用 ``MODSTORE_DOWNLOAD_RELEASE_JSON`` 覆盖）。
@@ -13,9 +14,11 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +44,7 @@ def _repo_root() -> Path:
         from modstore_server.integrations.ops_action_handlers import repo_root
 
         return repo_root()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         # modstore_server/ → MODstore_deploy/ → 成都修茈.../ → XCMAX/
         return Path(__file__).resolve().parents[3]
 
@@ -67,7 +70,7 @@ def load_release(*, path: Optional[Path] = None) -> Dict[str, Any]:
     p = path or ssot_path()
     try:
         return json.loads(p.read_text(encoding="utf-8"))
-    except Exception:
+    except RECOVERABLE_ERRORS:
         # 兜底：与稳定版本 SSOT 默认一致
         return {
             "schema": "xcagi.download_release/v1",
@@ -108,7 +111,7 @@ def public_subset(rel: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         "win_installer_mb": r.get("win_installer_mb") or 212,
         "cos_base_url": base,
         "release_root": f"{base}/xcagi-v{dv}",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "manifest_url": f"{base}/xcagi-v{dv}/manifest.json",
         "auto_update_base": "https://xiu-ci.com/releases/stable",
     }
@@ -150,7 +153,7 @@ def write_public_manifests(rel: Optional[Dict[str, Any]] = None) -> List[str]:
                 continue
             tgt.write_text(json.dumps(pub, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
             written.append(str(tgt))
-        except Exception:  # noqa: BLE001
+        except BOUNDARY_ERRORS:  # noqa: BLE001
             logger.exception("download_release: write public manifest failed %s", tgt)
     return written
 
@@ -170,7 +173,7 @@ def record_installer_push(
     """
     rel = load_release(path=path)
     rel["last_push"] = {
-        "at": datetime.now(timezone.utc).isoformat(),
+        "at": datetime.now(UTC).isoformat(),
         "release_train": str(release_train or ""),
         "release_kind": str(release_kind or ""),
         "git_sha": str(git_sha or "") or None,

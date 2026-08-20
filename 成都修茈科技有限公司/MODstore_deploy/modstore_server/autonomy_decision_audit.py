@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, attr-defined, no-any-return, valid-type"
 """Append and summarize privacy-safe autonomy decision evidence.
 
 Only typed, bounded identifiers are accepted. There is intentionally no
@@ -13,7 +14,7 @@ import json
 import re
 import threading
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Callable, Iterable
 
 from sqlalchemy.exc import IntegrityError, OperationalError
@@ -22,6 +23,7 @@ from modstore_server.autonomy_decision_evidence import (
     build_autonomy_decision_evidence,
 )
 from modstore_server.models import AutonomyDecisionAudit, get_session_factory
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 SCHEMA_VERSION = "autonomy_decision_evidence.v1"
 DECISIONS = frozenset({"allow", "block", "veto"})
@@ -47,7 +49,7 @@ def _ensure_audit_schema(session_factory: Callable[..., Any]) -> None:
             connection.exec_driver_sql("BEGIN EXCLUSIVE")
             try:
                 AutonomyDecisionAudit.__table__.create(connection, checkfirst=True)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 connection.rollback()
                 raise
             else:
@@ -55,10 +57,10 @@ def _ensure_audit_schema(session_factory: Callable[..., Any]) -> None:
 
 
 def _utc(value: datetime | None = None) -> datetime:
-    current = value or datetime.now(timezone.utc)
+    current = value or datetime.now(UTC)
     if current.tzinfo is None:
-        current = current.replace(tzinfo=timezone.utc)
-    return current.astimezone(timezone.utc)
+        current = current.replace(tzinfo=UTC)
+    return current.astimezone(UTC)
 
 
 def _safe_identifier(

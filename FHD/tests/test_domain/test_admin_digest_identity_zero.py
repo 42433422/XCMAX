@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, index, operator"
 """Tests for app.domain.admin_digest_identity."""
 
 from __future__ import annotations

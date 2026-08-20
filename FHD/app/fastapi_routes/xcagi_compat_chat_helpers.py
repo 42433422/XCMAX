@@ -47,7 +47,7 @@ from app.domain.context.session_context import (
 from app.infrastructure.auth.db_token import effective_db_read_token
 from app.infrastructure.llm.client import set_mode as set_llm_mode  # noqa: F401
 from app.legacy.chat.legacy_chat_adapter import chat_stream_sse_events
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 _CHAT_DB_READ_GRACE_SEC = 5 * 60
@@ -362,7 +362,7 @@ def _xcagi_guarded_planner_stream_events(
                 client=client,
             ):
                 event_queue.put(ev)
-        except BaseException as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:
             event_queue.put(exc)
         finally:
             event_queue.put(done_marker)
@@ -402,7 +402,7 @@ def _xcagi_guarded_planner_stream_events(
 
         if item is done_marker:
             return
-        if isinstance(item, BaseException):
+        if isinstance(item, Exception):
             exc = _xcagi_chat_http_exc(item)
             detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
             yield {"type": "error", "message": detail, "status_code": exc.status_code}
@@ -465,7 +465,7 @@ async def _xcagi_planner_stream_bytes_async(
         try:
             for chunk in _xcagi_planner_stream_bytes(request, body, ai_tier=ai_tier):
                 asyncio.run_coroutine_threadsafe(async_q.put(chunk), loop).result(timeout=120)
-        except BaseException as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:
             err_msg = str(exc).strip() or exc.__class__.__name__
             err_line = _sse_event_line({"type": "error", "message": err_msg})
             try:

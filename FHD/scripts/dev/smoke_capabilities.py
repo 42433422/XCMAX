@@ -29,6 +29,8 @@ import os
 import sys
 from pathlib import Path
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -112,7 +114,7 @@ def _probe_pgvector() -> dict:
             "ivfflat_index_count": int(idx),
             "vector_tables": tables,
         }
-    except Exception as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures
         return {"status": "unhealthy", "error": str(exc)}
 
 

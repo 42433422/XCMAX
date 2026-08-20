@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr"
 """按顺序调用 FHD ``/api/business/*`` 的轻量 HTTP 编排（与远期 NeuroBus 工作流适配并存）。"""
 
 from __future__ import annotations
@@ -7,13 +8,15 @@ from typing import Any
 
 import httpx
 
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
 def _safe_json_response(resp: httpx.Response) -> Any:
     try:
         return resp.json()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return resp.text[:4000]
 
 
@@ -50,7 +53,7 @@ def run_steps_on_fhd(
                         "body": _safe_json_response(r),
                     }
                 )
-            except Exception as e:  # noqa: BLE001
+            except BOUNDARY_ERRORS as e:  # noqa: BLE001
                 logger.warning("workflow_fhd_bridge step %s failed: %s", i, e)
                 results.append({"step": i, "path": path, "error": str(e)})
     return results

@@ -16,8 +16,10 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any, Dict
+
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +47,7 @@ def check_evolution_signal(
         "evolution_api": str,        # 调用的 API endpoint
       }
     """
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=int(lookback_hours))
+    cutoff = datetime.now(UTC) - timedelta(hours=int(lookback_hours))
     try:
         from modstore_server.models_user import EmployeeExecutionMetric
     except ImportError:
@@ -66,7 +68,7 @@ def check_evolution_signal(
             .limit(20)
             .all()
         )
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.debug("evolution_signal query failed employee_id=%s err=%s", employee_id, exc)
         return {
             "needed": False,

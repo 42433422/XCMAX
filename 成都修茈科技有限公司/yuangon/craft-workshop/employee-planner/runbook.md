@@ -7,21 +7,23 @@
         ## 上游 Handoff 契约
 
         ### handoff: intent-analyst → 本岗
+
 - **触发条件**：`employee.task.done:intent-analyst`
 - **输入**：待补充（参见 `yuangon/**/intent-analyst/runbook.md`）
 - **门禁**：依赖完成前本岗不得继续
 
+          ## Handlers
 
-        ## Handlers
+          | Handler | 说明 |
+          |---------|------|
+          | `llm_md` | 接收 Markdown 任务描述，调用 LLM 输出结构化结果 |
 
-        | Handler | 说明 |
-        |---------|------|
-        | `llm_md` | 接收 Markdown 任务描述，调用 LLM 输出结构化结果 |
-| `echo` | 调试用：原样返回输入，用于 smoke 测试 |
+  | `echo` | 调试用：原样返回输入，用于 smoke 测试 |
 
-        ## 核心 Scope
+          ## 核心 Scope
 
-        - `workbench/sessions/*`
+          - `workbench/sessions/*`
+
 - `workbench/plans/*`
 - `yuangon/craft-workshop/employee-planner/**`
 

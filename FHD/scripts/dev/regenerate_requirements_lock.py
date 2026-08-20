@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """从本机已安装的 server-api 依赖重新生成 deploy/requirements-server-api.lock.txt。"""
+
 from __future__ import annotations
 
 import re

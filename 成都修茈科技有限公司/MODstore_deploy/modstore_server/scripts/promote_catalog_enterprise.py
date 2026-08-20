@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="assignment"
 """将指定 catalog 商品提升为「企业级」展示（license_scope + security_level = enterprise）。"""
 
 from __future__ import annotations

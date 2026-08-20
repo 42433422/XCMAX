@@ -17,10 +17,7 @@ export function workflowProgressIsIdle(payload: Record<string, unknown>): boolea
 }
 
 /** 任务列表圆点：四名核心工作流员工 */
-export function coreWorkflowTaskDotStatusClass(
-  empId: string,
-  payload: Record<string, unknown>,
-): string | null {
+export function coreWorkflowTaskDotStatusClass(empId: string, payload: Record<string, unknown>): string | null {
   if (!isCoreWorkflowEmployeeId(empId)) return null
   const mon = payload.monitor as { pollOk?: boolean } | undefined
   if (mon && mon.pollOk === false) return 'failed'
@@ -42,9 +39,7 @@ export function coreWorkflowTaskDotTitle(empId: string, payload: Record<string, 
 
   if (empId === 'wechat_msg') {
     if (workflowProgressIsIdle(payload)) {
-      return starredRefreshOnFromStorage()
-        ? '状态：待命，等待新消息后再计进度（灰）'
-        : '状态：未开主动意识，监控未就绪（橙）'
+      return starredRefreshOnFromStorage() ? '状态：待命，等待新消息后再计进度（灰）' : '状态：未开主动意识，监控未就绪（橙）'
     }
     const pct = Number(payload.workflowProgressPct)
     if (pct >= 100) return '状态：本轮流程已跑通，仍持续监控（绿）'
@@ -52,9 +47,7 @@ export function coreWorkflowTaskDotTitle(empId: string, payload: Record<string, 
   }
   if (empId === 'label_print') {
     if (workflowProgressIsIdle(payload)) {
-      return starredRefreshOnFromStorage()
-        ? '状态：等待微信侧标签/打印信号，未计进度（灰）'
-        : '状态：未开主动意识，无法收微信信号（橙）'
+      return starredRefreshOnFromStorage() ? '状态：等待微信侧标签/打印信号，未计进度（灰）' : '状态：未开主动意识，无法收微信信号（橙）'
     }
     const pctLp = Number(payload.workflowProgressPct)
     if (pctLp >= 100) return '状态：流程已推进，可在对话中完成打印（绿）'
@@ -68,9 +61,7 @@ export function coreWorkflowTaskDotTitle(empId: string, payload: Record<string, 
   }
   if (empId === 'receipt_confirm') {
     if (workflowProgressIsIdle(payload)) {
-      return starredRefreshOnFromStorage()
-        ? '状态：等待微信侧收货/对账类客户反馈（灰）'
-        : '状态：未开主动意识，无法收客户进程（橙）'
+      return starredRefreshOnFromStorage() ? '状态：等待微信侧收货/对账类客户反馈（灰）' : '状态：未开主动意识，无法收客户进程（橙）'
     }
     const pctRc = Number(payload.workflowProgressPct)
     if (pctRc >= 100) return '状态：已捕获客户业务进程，可对话跟进（绿）'

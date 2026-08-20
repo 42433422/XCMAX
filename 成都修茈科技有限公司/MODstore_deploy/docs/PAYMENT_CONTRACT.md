@@ -14,34 +14,34 @@
 
 ## 2. 路由清单与归属
 
-| Method | 路径 | 归属(java=true 表示已能由 Java 承接) | 鉴权 | 错误码 | 说明 |
-| --- | --- | --- | --- | --- | --- |
-| GET | `/api/payment/plans` | both | 公开（缓存 5 分钟） | 200 | `{plans: PlanItem[]}` |
-| GET | `/api/payment/account-plans` | both | 公开 | 200 | `{plans: AccountLicensePlan[]}` |
-| GET | `/api/payment/my-plan` | both | Bearer JWT | 200 | 返回 `plan` 与 `quotas` |
-| POST | `/api/payment/sign-checkout` | both | Bearer JWT | 200 / 400 / 403 / 404 | 服务端用 `PAYMENT_SECRET_KEY` 生成 `request_id`/`timestamp`/`signature` |
-| POST | `/api/payment/checkout` | both | Bearer JWT | 200 / 400 / 403 / 503 | 验签 + 防重放 + 创建订单 + 发起支付。Python 收到时若 `PAYMENT_BACKEND=java` 会再次转发到 Java |
-| POST | `/api/payment/notify/alipay` | java（生产） | 仅支付宝签名 | 200 文本 `success`/`fail` | 异步通知，**`ALIPAY_NOTIFY_URL` 必须指向当前持有订单的服务** |
-| POST | `/api/payment/notify/wechat` | java | 微信支付签名 | 200 | 仅 Java 支持，Python 无对应实现 |
-| GET | `/api/payment/query/{out_trade_no}` | both | Bearer JWT（Java 强制 owner/admin；Python 当前未鉴权——P0 已知风险） | 200 / 404 | 查询本地订单；Python 端在 pending 时回查支付宝并触发履约 |
-| GET | `/api/payment/orders` | both | Bearer JWT | 200 | 列出当前用户订单，分页字段 `limit`/`offset`/`status` |
-| POST | `/api/payment/cancel/{out_trade_no}` | both | Bearer JWT | 200 / 400 / 404 | 仅 `pending` 可取消 |
-| GET | `/api/payment/diagnostics` | both | Bearer JWT + admin | 200 / 403 | 支付宝/微信连通性、Redis 等运行时诊断 |
-| GET | `/api/payment/entitlements` | both | Bearer JWT | 200 | 当前用户权益 |
-| GET | `/api/payment/usage-metrics` | both | Bearer JWT | 200 | 员工/AI 使用统计 |
-| POST | `/api/payment/refund` | python only（已 deprecate） | Bearer JWT + admin | 400 | Java 直接返回 400，**新代码必须走 `/api/refunds/admin/{id}/review`** |
-| GET | `/api/wallet/balance` | both | Bearer JWT | 200 | `{balance, updated_at}` |
-| GET | `/api/wallet/overview` | java | Bearer JWT | 200 | `{wallet, transactions, orders, refunds, ...}` |
-| POST | `/api/wallet/recharge` | java（需 `MODSTORE_ADMIN_RECHARGE_TOKEN`） | Bearer JWT + token | 200 / 403 / 503 | Python 同名路由也存在，但生产应让 Java 接管 |
-| GET | `/api/wallet/transactions` | both | Bearer JWT | 200 | 分页交易流水 |
-| POST | `/api/wallet/ai/preauthorize` `…/ai/settle` `…/ai/release` | java only | Bearer JWT | 200 | LLM 用量预授权资金钩子 |
-| POST | `/api/refunds/apply` | python | Bearer JWT | 200 / 400 / 404 | 用户提交退款申请 |
-| GET | `/api/refunds/my` | python | Bearer JWT | 200 | 当前用户退款申请 |
-| GET | `/api/refunds/admin/pending` | python | Bearer JWT + admin | 200 / 403 | 待审核退款列表 |
-| POST | `/api/refunds/admin/{refund_id}/review` | python | Bearer JWT + admin | 200 / 400 / 403 / 404 | 审核：approve/reject；approve 调用支付宝退款并发布 `refund.approved` |
-| POST | `/api/webhooks/admin/replay` | both | Bearer JWT + admin | 200 / 400 / 404 / 502 | 当 `PAYMENT_BACKEND=java` 且 `event_type` 不以 `refund.` 开头时由 Python 转发到 Java |
-| GET | `/api/internal/payment/summary` | both（BFF 聚合） | `X-Internal-Api-Key` | 200 / 403 / 503 | FHD 客服到款核对；`market_user_id` + 可选 `min_amount_cents` / `expected_out_trade_no` |
-| GET | `/api/internal/payment/user-orders` | java | `X-Internal-Api-Key` | 200 / 403 / 404 | Java 直查 PostgreSQL 订单；Python `PAYMENT_BACKEND=java` 时由 `payment_cs_internal` 调用 |
+| Method | 路径                                                       | 归属(java=true 表示已能由 Java 承接)       | 鉴权                                                                | 错误码                    | 说明                                                                                          |
+| ------ | ---------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------- | ------------------------- | --------------------------------------------------------------------------------------------- |
+| GET    | `/api/payment/plans`                                       | both                                       | 公开（缓存 5 分钟）                                                 | 200                       | `{plans: PlanItem[]}`                                                                         |
+| GET    | `/api/payment/account-plans`                               | both                                       | 公开                                                                | 200                       | `{plans: AccountLicensePlan[]}`                                                               |
+| GET    | `/api/payment/my-plan`                                     | both                                       | Bearer JWT                                                          | 200                       | 返回 `plan` 与 `quotas`                                                                       |
+| POST   | `/api/payment/sign-checkout`                               | both                                       | Bearer JWT                                                          | 200 / 400 / 403 / 404     | 服务端用 `PAYMENT_SECRET_KEY` 生成 `request_id`/`timestamp`/`signature`                       |
+| POST   | `/api/payment/checkout`                                    | both                                       | Bearer JWT                                                          | 200 / 400 / 403 / 503     | 验签 + 防重放 + 创建订单 + 发起支付。Python 收到时若 `PAYMENT_BACKEND=java` 会再次转发到 Java |
+| POST   | `/api/payment/notify/alipay`                               | java（生产）                               | 仅支付宝签名                                                        | 200 文本 `success`/`fail` | 异步通知，**`ALIPAY_NOTIFY_URL` 必须指向当前持有订单的服务**                                  |
+| POST   | `/api/payment/notify/wechat`                               | java                                       | 微信支付签名                                                        | 200                       | 仅 Java 支持，Python 无对应实现                                                               |
+| GET    | `/api/payment/query/{out_trade_no}`                        | both                                       | Bearer JWT（Java 强制 owner/admin；Python 当前未鉴权——P0 已知风险） | 200 / 404                 | 查询本地订单；Python 端在 pending 时回查支付宝并触发履约                                      |
+| GET    | `/api/payment/orders`                                      | both                                       | Bearer JWT                                                          | 200                       | 列出当前用户订单，分页字段 `limit`/`offset`/`status`                                          |
+| POST   | `/api/payment/cancel/{out_trade_no}`                       | both                                       | Bearer JWT                                                          | 200 / 400 / 404           | 仅 `pending` 可取消                                                                           |
+| GET    | `/api/payment/diagnostics`                                 | both                                       | Bearer JWT + admin                                                  | 200 / 403                 | 支付宝/微信连通性、Redis 等运行时诊断                                                         |
+| GET    | `/api/payment/entitlements`                                | both                                       | Bearer JWT                                                          | 200                       | 当前用户权益                                                                                  |
+| GET    | `/api/payment/usage-metrics`                               | both                                       | Bearer JWT                                                          | 200                       | 员工/AI 使用统计                                                                              |
+| POST   | `/api/payment/refund`                                      | python only（已 deprecate）                | Bearer JWT + admin                                                  | 400                       | Java 直接返回 400，**新代码必须走 `/api/refunds/admin/{id}/review`**                          |
+| GET    | `/api/wallet/balance`                                      | both                                       | Bearer JWT                                                          | 200                       | `{balance, updated_at}`                                                                       |
+| GET    | `/api/wallet/overview`                                     | java                                       | Bearer JWT                                                          | 200                       | `{wallet, transactions, orders, refunds, ...}`                                                |
+| POST   | `/api/wallet/recharge`                                     | java（需 `MODSTORE_ADMIN_RECHARGE_TOKEN`） | Bearer JWT + token                                                  | 200 / 403 / 503           | Python 同名路由也存在，但生产应让 Java 接管                                                   |
+| GET    | `/api/wallet/transactions`                                 | both                                       | Bearer JWT                                                          | 200                       | 分页交易流水                                                                                  |
+| POST   | `/api/wallet/ai/preauthorize` `…/ai/settle` `…/ai/release` | java only                                  | Bearer JWT                                                          | 200                       | LLM 用量预授权资金钩子                                                                        |
+| POST   | `/api/refunds/apply`                                       | python                                     | Bearer JWT                                                          | 200 / 400 / 404           | 用户提交退款申请                                                                              |
+| GET    | `/api/refunds/my`                                          | python                                     | Bearer JWT                                                          | 200                       | 当前用户退款申请                                                                              |
+| GET    | `/api/refunds/admin/pending`                               | python                                     | Bearer JWT + admin                                                  | 200 / 403                 | 待审核退款列表                                                                                |
+| POST   | `/api/refunds/admin/{refund_id}/review`                    | python                                     | Bearer JWT + admin                                                  | 200 / 400 / 403 / 404     | 审核：approve/reject；approve 调用支付宝退款并发布 `refund.approved`                          |
+| POST   | `/api/webhooks/admin/replay`                               | both                                       | Bearer JWT + admin                                                  | 200 / 400 / 404 / 502     | 当 `PAYMENT_BACKEND=java` 且 `event_type` 不以 `refund.` 开头时由 Python 转发到 Java          |
+| GET    | `/api/internal/payment/summary`                            | both（BFF 聚合）                           | `X-Internal-Api-Key`                                                | 200 / 403 / 503           | FHD 客服到款核对；`market_user_id` + 可选 `min_amount_cents` / `expected_out_trade_no`        |
+| GET    | `/api/internal/payment/user-orders`                        | java                                       | `X-Internal-Api-Key`                                                | 200 / 403 / 404           | Java 直查 PostgreSQL 订单；Python `PAYMENT_BACKEND=java` 时由 `payment_cs_internal` 调用      |
 
 > **错误响应格式：** Python 路由抛出 `HTTPException`，序列化为 `{"detail": str}`，状态码即业务码；Java 控制器返回 `{"ok": false, "message": str}`（HTTP 200）或 `ResponseStatusException`（HTTP 4xx）。前端两种都需要兼容；新增字段时必须保留 `detail` 兼容。
 
@@ -70,13 +70,13 @@
 
 请求体（Python `SignCheckoutBody` / Java `Map<String, Object>`）：
 
-| 字段 | 类型 | 默认 |
-| --- | --- | --- |
-| `plan_id` | string | `""` |
-| `item_id` | int | `0` |
-| `total_amount` | number | `0` |
-| `subject` | string | `""` |
-| `wallet_recharge` | bool | `false` |
+| 字段              | 类型   | 默认    |
+| ----------------- | ------ | ------- |
+| `plan_id`         | string | `""`    |
+| `item_id`         | int    | `0`     |
+| `total_amount`    | number | `0`     |
+| `subject`         | string | `""`    |
+| `wallet_recharge` | bool   | `false` |
 
 校验：
 
@@ -104,13 +104,13 @@
 
 请求体（`CheckoutDTO`）：在 sign-checkout 字段基础上增加：
 
-| 字段 | 类型 | 必填 |
-| --- | --- | --- |
-| `request_id` | string | yes |
-| `timestamp` | int (秒) | yes |
-| `signature` | string | yes |
-| `pay_channel` | string | no（默认 `alipay`，可选 `wechat`） |
-| `pay_type` | string | no（仅 Java 接受：`page`/`wap`/`precreate`） |
+| 字段          | 类型     | 必填                                         |
+| ------------- | -------- | -------------------------------------------- |
+| `request_id`  | string   | yes                                          |
+| `timestamp`   | int (秒) | yes                                          |
+| `signature`   | string   | yes                                          |
+| `pay_channel` | string   | no（默认 `alipay`，可选 `wechat`）           |
+| `pay_type`    | string   | no（仅 Java 接受：`page`/`wap`/`precreate`） |
 
 防重放：`request_id` 在 Redis（Java）或进程内集合（Python，仅供测试/单机）中加锁，`timestamp` 必须在 ±300 秒内。
 
@@ -134,15 +134,15 @@
 
 Python `canonical_checkout_sign_data` 与 Java `SecurityService.canonicalCheckoutData` 必须产出同一组字符串字段，按 key 字典序拼成 `k=v&k=v...`，再追加 `PAYMENT_SECRET_KEY` 后做 SHA-256：
 
-| 字段 | 字符串化规则 |
-| --- | --- |
-| `item_id` | `str(int(item_id or 0))` |
-| `plan_id` | `(plan_id or "").strip()` |
-| `request_id` | `str(request_id)` |
-| `subject` | `(subject or "").strip()` |
-| `timestamp` | `str(int(timestamp))` |
-| `total_amount` | 整数无小数；非整数小数最多 6 位且去除末尾 0 与 `.`（例：`9` → `"9"`，`9.9` → `"9.9"`，`9.99` → `"9.99"`） |
-| `wallet_recharge` | `"true"` / `"false"` |
+| 字段              | 字符串化规则                                                                                              |
+| ----------------- | --------------------------------------------------------------------------------------------------------- |
+| `item_id`         | `str(int(item_id or 0))`                                                                                  |
+| `plan_id`         | `(plan_id or "").strip()`                                                                                 |
+| `request_id`      | `str(request_id)`                                                                                         |
+| `subject`         | `(subject or "").strip()`                                                                                 |
+| `timestamp`       | `str(int(timestamp))`                                                                                     |
+| `total_amount`    | 整数无小数；非整数小数最多 6 位且去除末尾 0 与 `.`（例：`9` → `"9"`，`9.9` → `"9.9"`，`9.99` → `"9.99"`） |
+| `wallet_recharge` | `"true"` / `"false"`                                                                                      |
 
 前端 `api.ts.paymentCheckout` 不应自行计算签名，只能透传 sign-checkout 返回的 `signature/request_id/timestamp` 与解析后字段。
 
@@ -178,11 +178,11 @@ Python `canonical_checkout_sign_data` 与 Java `SecurityService.canonicalCheckou
 - Python: `modstore_server.eventing.contracts`
 - Java: `com.modstore.event.EventContracts`
 
-| 事件 type | version | 必填 payload 字段 |
-| --- | --- | --- |
-| `payment.paid` (canonical of `payment.order_paid`) | 1 | `out_trade_no`, `user_id`, `subject`, `total_amount`, `order_kind` |
-| `wallet.balance_changed` | 1 | `user_id`, `amount`, `source_order_id`, `transaction_type` |
-| `refund.approved` / `refund.rejected` / `refund.failed` | 1 | `refund_id`, `order_no`, `user_id`, `amount`, `status` |
+| 事件 type                                               | version | 必填 payload 字段                                                  |
+| ------------------------------------------------------- | ------- | ------------------------------------------------------------------ |
+| `payment.paid` (canonical of `payment.order_paid`)      | 1       | `out_trade_no`, `user_id`, `subject`, `total_amount`, `order_kind` |
+| `wallet.balance_changed`                                | 1       | `user_id`, `amount`, `source_order_id`, `transaction_type`         |
+| `refund.approved` / `refund.rejected` / `refund.failed` | 1       | `refund_id`, `order_no`, `user_id`, `amount`, `status`             |
 
 Envelope（HTTP body 与 NeuroBus 内部统一）：
 
@@ -194,7 +194,9 @@ Envelope（HTTP body 与 NeuroBus 内部统一）：
   "source": "modstore-python|modstore-java",
   "aggregate_id": "MOD123",
   "created_at": 1710000000,
-  "data": { /* contract.required_payload + 可选扩展 */ }
+  "data": {
+    /* contract.required_payload + 可选扩展 */
+  }
 }
 ```
 

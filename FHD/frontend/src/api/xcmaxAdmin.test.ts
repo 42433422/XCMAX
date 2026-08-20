@@ -85,10 +85,7 @@ describe('xcmaxAdminApi', () => {
     }
     await xcmaxAdminApi.forcePushUserEntitlements(5, payload)
     const api = (await import('./core')).default
-    expect(api.post).toHaveBeenCalledWith(
-      '/api/xcmax/admin/market/users/5/entitlements/push',
-      payload,
-    )
+    expect(api.post).toHaveBeenCalledWith('/api/xcmax/admin/market/users/5/entitlements/push', payload)
   })
 
   it('pullSync calls POST /api/xcmax/sync/pull', async () => {

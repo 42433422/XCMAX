@@ -1,12 +1,7 @@
 /**
  * 客户交付 Mod — 全量解耦时禁止删除或破坏（见平台 mods/PROTECTED_MODS.md）
  */
-export const PROTECTED_CLIENT_MOD_IDS = [
-  'attendance-industry',
-  'coating-industry',
-  'taiyangniao-pro',
-  'sz-qsm-pro',
-] as const
+export const PROTECTED_CLIENT_MOD_IDS = ['attendance-industry', 'coating-industry', 'taiyangniao-pro', 'sz-qsm-pro'] as const
 
 export type ProtectedClientModId = (typeof PROTECTED_CLIENT_MOD_IDS)[number]
 

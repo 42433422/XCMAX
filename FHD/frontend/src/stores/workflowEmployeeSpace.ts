@@ -3,10 +3,7 @@ import { ref } from 'vue'
 import type { CoreWorkflowEmployeeId } from '@/constants/coreWorkflowMod'
 import { shortNameFromPanelTitle } from '@/utils/workflowEmployeeDisplayName'
 import { useWorkflowAiEmployeesStore } from '@/stores/workflowAiEmployees'
-import {
-  buildTenantScopedStorageKey,
-  resolveTenantStorageScopeFromRuntime,
-} from '@/utils/tenantStorageScope'
+import { buildTenantScopedStorageKey, resolveTenantStorageScopeFromRuntime } from '@/utils/tenantStorageScope'
 
 export const WORKFLOW_EMPLOYEE_SPACE_STORAGE_KEY = 'xcagi_workflow_employee_space_v1'
 export const WORKFLOW_EMPLOYEE_SESSIONS_STORAGE_KEY = 'xcagi_workflow_employee_sessions_v1'
@@ -25,10 +22,7 @@ function workflowEmployeeSpaceStorageKey(scope?: string): string {
 }
 
 function workflowEmployeeSessionsStorageKey(scope?: string): string {
-  return buildTenantScopedStorageKey(
-    WORKFLOW_EMPLOYEE_SESSIONS_STORAGE_KEY,
-    scope ?? ensureActiveTenantScope(),
-  )
+  return buildTenantScopedStorageKey(WORKFLOW_EMPLOYEE_SESSIONS_STORAGE_KEY, scope ?? ensureActiveTenantScope())
 }
 
 export type WorkflowEmployeeSpaceSnapshot = {
@@ -165,9 +159,7 @@ export const useWorkflowEmployeeSpaceStore = defineStore('workflowEmployeeSpace'
   function hydrateFromSessionStorage(scope?: string) {
     if (typeof sessionStorage === 'undefined') return
     try {
-      const parsed = safeParsePersisted(
-        sessionStorage.getItem(workflowEmployeeSpaceStorageKey(scope)),
-      )
+      const parsed = safeParsePersisted(sessionStorage.getItem(workflowEmployeeSpaceStorageKey(scope)))
       if (parsed?.snapshots) {
         snapshots.value = { ...parsed.snapshots }
       } else {
@@ -181,9 +173,7 @@ export const useWorkflowEmployeeSpaceStore = defineStore('workflowEmployeeSpace'
   function hydrateSessionsFromLocalStorage(scope?: string) {
     if (typeof localStorage === 'undefined') return
     try {
-      const parsed = safeParseSessions(
-        localStorage.getItem(workflowEmployeeSessionsStorageKey(scope)),
-      )
+      const parsed = safeParseSessions(localStorage.getItem(workflowEmployeeSessionsStorageKey(scope)))
       if (parsed?.sessions) {
         sessions.value = { ...parsed.sessions }
       } else {
@@ -258,7 +248,7 @@ export const useWorkflowEmployeeSpaceStore = defineStore('workflowEmployeeSpace'
   function applyFromWorkflowPayload(
     panelTitle: string,
     payload: Record<string, unknown> | null | undefined,
-    options: { isHeartbeat?: boolean } = {}
+    options: { isHeartbeat?: boolean } = {},
   ) {
     const empId = String(payload?.employeeId ?? '').trim()
     if (!empId) return
@@ -326,13 +316,7 @@ export const useWorkflowEmployeeSpaceStore = defineStore('workflowEmployeeSpace'
   }
 
   /** 副窗事件桥：收货确认 */
-  function applyReceiptBridge(detail: {
-    at?: number
-    line?: string
-    intentLabel?: string
-    messageText?: string
-    contactName?: string
-  }) {
+  function applyReceiptBridge(detail: { at?: number; line?: string; intentLabel?: string; messageText?: string; contactName?: string }) {
     const wf = useWorkflowAiEmployeesStore()
     if (!wf.enabled.receipt_confirm) return
     const line = String(detail?.line || '').trim() || '客户反馈'
@@ -401,7 +385,7 @@ export const useWorkflowEmployeeSpaceStore = defineStore('workflowEmployeeSpace'
         workflowProgressIdle: prev ? prev.idle : true,
         workflowProgressStarted: prev ? prev.visuallyBusy : false,
       },
-      { isHeartbeat: true }
+      { isHeartbeat: true },
     )
   }
 

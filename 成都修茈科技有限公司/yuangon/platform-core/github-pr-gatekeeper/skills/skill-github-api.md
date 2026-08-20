@@ -11,14 +11,14 @@ GitHub API 调用：review/approve/merge/comment，统一封装鉴权、限流�
 
 ## 输入
 
-| 字段 | 类型 | 必需 | 说明 |
-|------|------|------|------|
-| `method` | string | 是 | HTTP method: `GET/POST/PUT/PATCH/DELETE` |
-| `path` | string | 是 | API path（如 `/repos/{owner}/{repo}/pulls/{n}`），不含 base URL |
-| `body` | object | 否 | JSON body |
-| `graphql_query` | string | 否 | GraphQL query（与 `method/path` 互斥） |
-| `graphql_variables` | object | 否 | GraphQL variables |
-| `dry_run` | bool | 否 | true 时只返回"会调用什么"，不发请求 |
+| 字段                | 类型   | 必需 | 说明                                                            |
+| ------------------- | ------ | ---- | --------------------------------------------------------------- |
+| `method`            | string | 是   | HTTP method: `GET/POST/PUT/PATCH/DELETE`                        |
+| `path`              | string | 是   | API path（如 `/repos/{owner}/{repo}/pulls/{n}`），不含 base URL |
+| `body`              | object | 否   | JSON body                                                       |
+| `graphql_query`     | string | 否   | GraphQL query（与 `method/path` 互斥）                          |
+| `graphql_variables` | object | 否   | GraphQL variables                                               |
+| `dry_run`           | bool   | 否   | true 时只返回"会调用什么"，不发请求                             |
 
 ## 鉴权
 
@@ -37,17 +37,17 @@ GitHub API 调用：review/approve/merge/comment，统一封装鉴权、限流�
 
 ## 主要端点
 
-| 操作 | Method | Path |
-|------|--------|------|
-| 拉 PR 详情 | GET | `/repos/{owner}/{repo}/pulls/{pull_number}` |
-| 拉变更文件 | GET | `/repos/{owner}/{repo}/pulls/{pull_number}/files` |
-| 拉 CI 状态 | GET | `/repos/{owner}/{repo}/commits/{sha}/check-runs` |
-| 提交 review | POST | `/repos/{owner}/{repo}/pulls/{pull_number}/reviews` |
-| Approve PR | POST | `/repos/{owner}/{repo}/pulls/{pull_number}/reviews` (event=APPROVE) |
-| Request changes | POST | `/repos/{owner}/{repo}/pulls/{pull_number}/reviews` (event=REQUEST_CHANGES) |
-| 评论 | POST | `/repos/{owner}/{repo}/issues/{pull_number}/comments` |
-| Merge | PUT | `/repos/{owner}/{repo}/pulls/{pull_number}/merge` |
-| 删分支 | DELETE | `/repos/{owner}/{repo}/git/refs/heads/{branch}` |
+| 操作            | Method | Path                                                                        |
+| --------------- | ------ | --------------------------------------------------------------------------- |
+| 拉 PR 详情      | GET    | `/repos/{owner}/{repo}/pulls/{pull_number}`                                 |
+| 拉变更文件      | GET    | `/repos/{owner}/{repo}/pulls/{pull_number}/files`                           |
+| 拉 CI 状态      | GET    | `/repos/{owner}/{repo}/commits/{sha}/check-runs`                            |
+| 提交 review     | POST   | `/repos/{owner}/{repo}/pulls/{pull_number}/reviews`                         |
+| Approve PR      | POST   | `/repos/{owner}/{repo}/pulls/{pull_number}/reviews` (event=APPROVE)         |
+| Request changes | POST   | `/repos/{owner}/{repo}/pulls/{pull_number}/reviews` (event=REQUEST_CHANGES) |
+| 评论            | POST   | `/repos/{owner}/{repo}/issues/{pull_number}/comments`                       |
+| Merge           | PUT    | `/repos/{owner}/{repo}/pulls/{pull_number}/merge`                           |
+| 删分支          | DELETE | `/repos/{owner}/{repo}/git/refs/heads/{branch}`                             |
 
 ## 输出
 
@@ -66,15 +66,15 @@ GitHub API 调用：review/approve/merge/comment，统一封装鉴权、限流�
 
 ## 失败处置
 
-| HTTP | 含义 | 处置 |
-|------|------|------|
-| 401 | Token 失效 | 上报 `security-secrets-guard` 旋转，不重试 |
-| 403 | 权限不足 | 检查 token scope；上报 admin |
-| 404 | 资源不存在 | 不重试，返回 `ok=false` |
-| 409 | 冲突 | 等 5s 重试 1 次 |
-| 422 | 校验失败 | 检查 body，不重试 |
-| 429 | 限流 | 指数退避重试 1 次 |
-| 5xx | 服务端 | 指数退避重试 1 次 |
+| HTTP | 含义       | 处置                                       |
+| ---- | ---------- | ------------------------------------------ |
+| 401  | Token 失效 | 上报 `security-secrets-guard` 旋转，不重试 |
+| 403  | 权限不足   | 检查 token scope；上报 admin               |
+| 404  | 资源不存在 | 不重试，返回 `ok=false`                    |
+| 409  | 冲突       | 等 5s 重试 1 次                            |
+| 422  | 校验失败   | 检查 body，不重试                          |
+| 429  | 限流       | 指数退避重试 1 次                          |
+| 5xx  | 服务端     | 指数退避重试 1 次                          |
 
 ## 安全
 

@@ -85,9 +85,7 @@ const hintLine = computed(() => {
   return props.row.snapshot?.hintLine || ''
 })
 
-const dbLink = computed(() =>
-  databaseLinkForEmployee(props.row?.empId ?? '')
-)
+const dbLink = computed(() => databaseLinkForEmployee(props.row?.empId ?? ''))
 
 const isCurrentlyBusy = computed(() => (props.row ? isBusy(props.row) : false))
 
@@ -100,11 +98,7 @@ function openDatabase() {
 </script>
 
 <template>
-  <aside
-    class="edp"
-    role="complementary"
-    :aria-label="row ? `${row.shortName} 工位详情` : '工位详情'"
-  >
+  <aside class="edp" role="complementary" :aria-label="row ? `${row.shortName} 工位详情` : '工位详情'">
     <header class="edp-head">
       <p class="edp-kicker">工位特写</p>
       <p class="edp-name">{{ row?.shortName ?? '—' }}</p>
@@ -133,11 +127,7 @@ function openDatabase() {
         <p class="edp-stat-k">当前阶段</p>
         <p class="edp-stat-v edp-stat-v--text">{{ stageLabel }}</p>
         <span class="edp-stat-bar" aria-hidden="true">
-          <span
-            class="edp-stat-bar-fill"
-            :class="{ 'edp-stat-bar-fill--busy': isCurrentlyBusy }"
-            :style="{ width: progressPct + '%' }"
-          />
+          <span class="edp-stat-bar-fill" :class="{ 'edp-stat-bar-fill--busy': isCurrentlyBusy }" :style="{ width: progressPct + '%' }" />
         </span>
       </div>
     </div>
@@ -147,9 +137,7 @@ function openDatabase() {
     <section class="edp-section" aria-labelledby="edp-flow-h">
       <h5 id="edp-flow-h" class="edp-section-h">工作流程步骤</h5>
       <p v-if="!docsLoaded" class="edp-section-empty">说明加载中…</p>
-      <p v-else-if="!steps.length" class="edp-section-empty">
-        此员工由扩展提供专属流程，详情见对应扩展副窗。
-      </p>
+      <p v-else-if="!steps.length" class="edp-section-empty">此员工由扩展提供专属流程，详情见对应扩展副窗。</p>
       <ol v-else class="edp-flow">
         <li v-for="(s, i) in steps" :key="i" class="edp-flow-step">
           <span class="edp-flow-idx">{{ i + 1 }}</span>
@@ -282,7 +270,14 @@ function openDatabase() {
 }
 
 .edp-stat-v--text {
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
   font-size: 14px;
   font-weight: 600;
   white-space: nowrap;
@@ -428,7 +423,10 @@ function openDatabase() {
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s ease, transform 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    transform 0.15s ease,
+    color 0.15s ease;
 }
 
 .edp-db-btn:hover:not(:disabled) {

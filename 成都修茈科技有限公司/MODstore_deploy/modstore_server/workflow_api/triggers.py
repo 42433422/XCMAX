@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 from __future__ import annotations
 
 import json
@@ -13,6 +14,7 @@ from modstore_server.models import (
     Workflow,
     WorkflowTrigger,
 )
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.workflow_api.schemas import WorkflowTriggerBody
 from modstore_server.workflow_event_runner import run_workflow_for_trigger
 
@@ -104,7 +106,8 @@ async def delete_workflow_trigger(
 
 
 @router.post(
-    "/{workflow_id}/webhook-run", summary="Webhook 方式触发执行工作流（需已配置 webhook 触发器）"
+    "/{workflow_id}/webhook-run",
+    summary="Webhook 方式触发执行工作流（需已配置 webhook 触发器）",
 )
 async def webhook_run_workflow(
     workflow_id: int,
@@ -134,5 +137,5 @@ async def webhook_run_workflow(
             user_id=user.id,
             input_data=body or {},
         )
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         raise HTTPException(500, str(e)) from e

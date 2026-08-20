@@ -1,3 +1,4 @@
+# mypy: disable-error-code="var-annotated"
 """测试 ai_chat_app_service 的分支覆盖（第二轮，聚焦未覆盖方法与边界分支）。
 
 覆盖目标（与 _branch_cov.py 互补）：

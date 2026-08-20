@@ -4,13 +4,14 @@ BERT 意图识别引擎
 使用 BERT 模型进行意图识别
 """
 
-from typing import Dict, Any, List, Tuple
 from dataclasses import dataclass
+from typing import Any, Dict, List
 
 
 @dataclass
 class IntentResult:
     """意图识别结果"""
+
     intent: str
     confidence: float
     entities: Dict[str, Any]
@@ -48,11 +49,7 @@ class BertIntentRecognizer:
         """
         self.initialize()
 
-        return IntentResult(
-            intent="unknown",
-            confidence=0.0,
-            entities={}
-        )
+        return IntentResult(intent="unknown", confidence=0.0, entities={})
 
     def batch_recognize(self, texts: List[str]) -> List[IntentResult]:
         """

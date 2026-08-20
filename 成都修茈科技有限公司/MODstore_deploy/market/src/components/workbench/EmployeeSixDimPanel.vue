@@ -24,7 +24,9 @@ const GRADE_BADGE_CLASS: Record<string, string> = {
 }
 
 function gradeBadgeClass(code: string | undefined): string {
-  const c = String(code || 'G').trim().toUpperCase()
+  const c = String(code || 'G')
+    .trim()
+    .toUpperCase()
   return GRADE_BADGE_CLASS[c] || 'wb-six-dim-grade--g'
 }
 
@@ -47,9 +49,7 @@ const props = withDefaults(
 )
 
 const chartGeom = computed(() =>
-  props.compact
-    ? { cx: 200, cy: 200, rMax: 100, labelRadius: 0 }
-    : { cx: 200, cy: 200, rMax: 118, labelRadius: 36 },
+  props.compact ? { cx: 200, cy: 200, rMax: 100, labelRadius: 0 } : { cx: 200, cy: 200, rMax: 118, labelRadius: 36 },
 )
 
 const CX = computed(() => chartGeom.value.cx)
@@ -93,9 +93,7 @@ const scores = computed(() => {
   })
 })
 
-const dataPolygon = computed(() =>
-  scores.value.map((s) => `${s.onChart.x.toFixed(1)},${s.onChart.y.toFixed(1)}`).join(' '),
-)
+const dataPolygon = computed(() => scores.value.map((s) => `${s.onChart.x.toFixed(1)},${s.onChart.y.toFixed(1)}`).join(' '))
 
 const gridPolygons = computed(() => {
   const cx = CX.value
@@ -115,7 +113,11 @@ const showPanelTitle = computed(() => Boolean(props.title?.trim()))
 
 const overall = computed(() => Number(props.report?.overall_score ?? 0))
 const passed = computed(() => Boolean(props.report?.passed))
-const overallGrade = computed(() => String(props.report?.overall_grade || '').trim().toUpperCase())
+const overallGrade = computed(() =>
+  String(props.report?.overall_grade || '')
+    .trim()
+    .toUpperCase(),
+)
 const overallGradeLabel = computed(() => String(props.report?.overall_grade_label || '').trim())
 const gradeScale = computed(() => props.report?.grade_scale || null)
 const hasReport = computed(() => Boolean(props.report?.dimensions))
@@ -124,15 +126,12 @@ const hasReport = computed(() => Boolean(props.report?.dimensions))
 <template>
   <div class="wb-six-dim-panel" :class="{ 'wb-six-dim-panel--compact': compact }">
     <div v-if="loading" class="wb-six-dim-panel-state">正在计算六维评估…</div>
-    <div v-else-if="error" class="wb-six-dim-panel-state wb-six-dim-panel-state--err">{{ error }}</div>
+    <div v-else-if="error" class="wb-six-dim-panel-state wb-six-dim-panel-state--err">
+      {{ error }}
+    </div>
     <template v-else-if="hasReport">
       <header class="wb-six-dim-panel-head">
-        <div
-          v-if="overallGrade"
-          class="wb-six-dim-grade-badge"
-          :class="gradeBadgeClass(overallGrade)"
-          :title="overallGradeLabel"
-        >
+        <div v-if="overallGrade" class="wb-six-dim-grade-badge" :class="gradeBadgeClass(overallGrade)" :title="overallGradeLabel">
           <span class="wb-six-dim-grade-code">{{ overallGrade }}</span>
           <span class="wb-six-dim-grade-tier">级</span>
         </div>
@@ -153,38 +152,15 @@ const hasReport = computed(() => Boolean(props.report?.dimensions))
       <div class="wb-six-dim-body">
         <div class="wb-six-dim-chart-wrap">
           <svg class="wb-six-dim-chart" viewBox="0 0 400 400" aria-hidden="true">
-            <polygon
-              v-for="(pts, gi) in gridPolygons"
-              :key="gi"
-              :points="pts"
-              class="wb-six-dim-grid"
-            />
+            <polygon v-for="(pts, gi) in gridPolygons" :key="gi" :points="pts" class="wb-six-dim-grid" />
             <g v-for="s in scores" :key="s.key">
-              <line
-                :x1="CX"
-                :y1="CY"
-                :x2="s.onRing.x"
-                :y2="s.onRing.y"
-                class="wb-six-dim-axis"
-              />
+              <line :x1="CX" :y1="CY" :x2="s.onRing.x" :y2="s.onRing.y" class="wb-six-dim-axis" />
               <circle :cx="s.onChart.x" :cy="s.onChart.y" r="4" class="wb-six-dim-vertex" />
               <template v-if="showChartLabels">
-                <text
-                  :x="s.labelPt.x"
-                  :y="s.labelPt.y"
-                  class="wb-six-dim-label"
-                  text-anchor="middle"
-                  dominant-baseline="middle"
-                >
+                <text :x="s.labelPt.x" :y="s.labelPt.y" class="wb-six-dim-label" text-anchor="middle" dominant-baseline="middle">
                   {{ s.label }}
                 </text>
-                <text
-                  :x="s.labelPt.x"
-                  :y="s.labelPt.y + 14"
-                  class="wb-six-dim-score"
-                  text-anchor="middle"
-                  dominant-baseline="middle"
-                >
+                <text :x="s.labelPt.x" :y="s.labelPt.y + 14" class="wb-six-dim-score" text-anchor="middle" dominant-baseline="middle">
                   {{ s.grade || s.score }}
                 </text>
               </template>
@@ -195,12 +171,7 @@ const hasReport = computed(() => Boolean(props.report?.dimensions))
         </div>
 
         <ul v-if="compact" class="wb-six-dim-chips" aria-label="六维等级">
-          <li
-            v-for="s in scores"
-            :key="'chip-' + s.key"
-            class="wb-six-dim-chip"
-            :class="{ 'wb-six-dim-chip--low': s.score < 50 }"
-          >
+          <li v-for="s in scores" :key="'chip-' + s.key" class="wb-six-dim-chip" :class="{ 'wb-six-dim-chip--low': s.score < 50 }">
             <span class="wb-six-dim-chip-label">{{ s.label }}</span>
             <span class="wb-six-dim-chip-grade" :class="gradeBadgeClass(s.grade)">{{ s.grade || '-' }}</span>
             <span class="wb-six-dim-chip-score">{{ s.score }}</span>
@@ -208,20 +179,11 @@ const hasReport = computed(() => Boolean(props.report?.dimensions))
         </ul>
 
         <ul class="wb-six-dim-list" :class="{ 'wb-six-dim-list--compact': compact }">
-          <li
-            v-for="s in scores"
-            :key="s.key"
-            class="wb-six-dim-item"
-            :class="{ 'wb-six-dim-item--low': s.score < 50 }"
-          >
+          <li v-for="s in scores" :key="s.key" class="wb-six-dim-item" :class="{ 'wb-six-dim-item--low': s.score < 50 }">
             <div class="wb-six-dim-item-head">
               <span class="wb-six-dim-item-label">{{ s.label }}</span>
               <span class="wb-six-dim-item-meta">
-                <span
-                  v-if="s.grade"
-                  class="wb-six-dim-item-grade"
-                  :class="gradeBadgeClass(s.grade)"
-                >{{ s.grade }}级</span>
+                <span v-if="s.grade" class="wb-six-dim-item-grade" :class="gradeBadgeClass(s.grade)">{{ s.grade }}级</span>
                 <span class="wb-six-dim-item-score">{{ s.score }} 分</span>
               </span>
             </div>
@@ -234,15 +196,14 @@ const hasReport = computed(() => Boolean(props.report?.dimensions))
       </div>
 
       <footer v-if="!compact || !passed" class="wb-six-dim-panel-foot">
-        <p v-if="!passed" class="wb-six-dim-warn">
-          未达通过线（综合 ≥70、各维 ≥50、关键维 ≥60）。
-        </p>
+        <p v-if="!passed" class="wb-six-dim-warn">未达通过线（综合 ≥70、各维 ≥50、关键维 ≥60）。</p>
         <p v-else-if="!compact" class="wb-six-dim-ok">六维评估达标。</p>
         <details v-if="!compact && showGradeScale && gradeScale" class="wb-six-dim-scale">
           <summary>等级说明</summary>
           <ul>
             <li v-for="(desc, code) in gradeScale" :key="code">
-              <strong>{{ code }}</strong>：{{ desc }}
+              <strong>{{ code }}</strong
+              >：{{ desc }}
             </li>
           </ul>
         </details>

@@ -9,6 +9,8 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import quote, urlparse
 from urllib.request import Request, urlopen
 
+from modstore_server.operational_errors import BOUNDARY_ERRORS
+
 
 def _github_repository_identity(repo_url: str) -> Optional[Tuple[str, str]]:
     """Return the owner/repository pair for a GitHub transport URL."""
@@ -94,7 +96,7 @@ def resolve_retort_change_evidence(
         try:
             changed_files = changed_files_for_branch(workspace)
             source = "git_diff"
-        except Exception as exc:  # noqa: BLE001 - fall back to GitHub/memory evidence
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001 - fall back to GitHub/memory evidence
             errors.append(f"git_diff:{type(exc).__name__}")
         finally:
             cleanup_workspace(workspace)
@@ -106,7 +108,7 @@ def resolve_retort_change_evidence(
                     branch=target,
                 )
                 source = "github_compare"
-            except Exception as exc:  # noqa: BLE001 - fall back to memory hints
+            except BOUNDARY_ERRORS as exc:  # noqa: BLE001 - fall back to memory hints
                 source = "unavailable"
                 errors.append(f"github_compare:{type(exc).__name__}")
     elif target:

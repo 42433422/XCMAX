@@ -120,7 +120,11 @@ function inlineFormat(raw: string, ph: PlaceholderTable): string {
 function renderTable(rows: string[], ph: PlaceholderTable): string {
   if (rows.length < 2) return ''
   const split = (line: string) =>
-    line.replace(/^\|/, '').replace(/\|\s*$/, '').split('|').map((c) => c.trim())
+    line
+      .replace(/^\|/, '')
+      .replace(/\|\s*$/, '')
+      .split('|')
+      .map((c) => c.trim())
   const header = split(rows[0])
   const align = split(rows[1]).map((c) => {
     const left = c.startsWith(':')
@@ -131,17 +135,23 @@ function renderTable(rows: string[], ph: PlaceholderTable): string {
     return ''
   })
   const body = rows.slice(2).map(split)
-  const th = header.map((c, i) => {
-    const a = align[i] ? ` style="text-align:${align[i]}"` : ''
-    return `<th${a}>${inlineFormat(c, ph)}</th>`
-  }).join('')
-  const tr = body.map((row) => {
-    const tds = row.map((c, i) => {
+  const th = header
+    .map((c, i) => {
       const a = align[i] ? ` style="text-align:${align[i]}"` : ''
-      return `<td${a}>${inlineFormat(c, ph)}</td>`
-    }).join('')
-    return `<tr>${tds}</tr>`
-  }).join('')
+      return `<th${a}>${inlineFormat(c, ph)}</th>`
+    })
+    .join('')
+  const tr = body
+    .map((row) => {
+      const tds = row
+        .map((c, i) => {
+          const a = align[i] ? ` style="text-align:${align[i]}"` : ''
+          return `<td${a}>${inlineFormat(c, ph)}</td>`
+        })
+        .join('')
+      return `<tr>${tds}</tr>`
+    })
+    .join('')
   return `<div class="md-table-wrap"><table class="md-table"><thead><tr>${th}</tr></thead><tbody>${tr}</tbody></table></div>`
 }
 
@@ -159,13 +169,13 @@ export function normalizeModelLineBreaks(src: string): string {
 /** 主入口：把 markdown 字符串渲染为安全 HTML 字符串。*/
 export function renderMarkdown(src: string): string {
   const ph = new PlaceholderTable()
-  const text = normalizePackedMarkdownTables(
-    normalizeModelLineBreaks(String(src ?? '').replace(/\r\n?/g, '\n')),
-  )
+  const text = normalizePackedMarkdownTables(normalizeModelLineBreaks(String(src ?? '').replace(/\r\n?/g, '\n')))
 
   const fenceMatcher = /(^|\n)```([\w+-]*)\s*\n([\s\S]*?)\n?```(?=\n|$)/g
   const tokenized = text.replace(fenceMatcher, (_m, lead, lang, code) => {
-    const langSafe = String(lang || '').toLowerCase().slice(0, 24)
+    const langSafe = String(lang || '')
+      .toLowerCase()
+      .slice(0, 24)
     if (langSafe === 'mermaid') {
       return `${lead}${ph.push(`<div class="md-mermaid" data-source="${escapeHtml(code)}"></div>`)}`
     }

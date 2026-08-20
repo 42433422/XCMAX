@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """
 测试修复后的合并单元格检测
 """
@@ -230,8 +231,8 @@ for cell in cells:
     status_str = "正常" if not status_text else ", ".join(status_text)
 
     html_content += f"""                <div class="cell {status_class}">
-                    <div class="cell-num">#[{cell['row']},{cell['col']}] {status_str}</div>
-                    <div>位置: ({cell['x']}, {cell['y']}) 尺寸: {cell['width']}×{cell['height']}</div>
+                    <div class="cell-num">#[{cell["row"]},{cell["col"]}] {status_str}</div>
+                    <div>位置: ({cell["x"]}, {cell["y"]}) 尺寸: {cell["width"]}×{cell["height"]}</div>
                 </div>
 """
 

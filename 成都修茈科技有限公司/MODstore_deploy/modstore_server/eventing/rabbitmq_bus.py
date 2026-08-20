@@ -1,3 +1,4 @@
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """RabbitMQ-backed :class:`~modstore_server.eventing.bus.NeuroBus` implementation.
 
 Uses ``pika`` (synchronous) so that ``publish()`` remains compatible with the
@@ -37,6 +38,7 @@ from typing import Any
 
 from modstore_server.eventing.bus import InMemoryNeuroBus
 from modstore_server.eventing.events import DomainEvent
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -131,9 +133,9 @@ class RabbitMqNeuroBus(InMemoryNeuroBus):
             )
             self._rebind_all()
             self._start_consumer()
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.exception(
-                "RabbitMqNeuroBus connection failed; falling back to in-memory mode. " "URL=%s",
+                "RabbitMqNeuroBus connection failed; falling back to in-memory mode. URL=%s",
                 self._amqp_url.split("@")[-1] if "@" in self._amqp_url else "(unset)",
             )
             self._connected = False
@@ -152,7 +154,7 @@ class RabbitMqNeuroBus(InMemoryNeuroBus):
                     exchange=_EXCHANGE,
                     routing_key=routing_key,
                 )
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 logger.debug("queue_bind failed for %s during rebind", event_name, exc_info=True)
 
     def _start_consumer(self) -> None:
@@ -180,7 +182,7 @@ class RabbitMqNeuroBus(InMemoryNeuroBus):
             while not self._stop_event.is_set():
                 try:
                     self._connection.process_data_events(time_limit=1.0)
-                except Exception:
+                except RECOVERABLE_ERRORS:
                     if self._stop_event.is_set():
                         break
                     logger.debug("RabbitMQ consumer loop error, reconnecting", exc_info=True)
@@ -189,7 +191,7 @@ class RabbitMqNeuroBus(InMemoryNeuroBus):
                     if self._connected:
                         continue
                     break
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.exception("RabbitMQ consumer thread exiting")
 
     def _on_message(self, channel, method, properties, body: bytes) -> None:
@@ -212,7 +214,7 @@ class RabbitMqNeuroBus(InMemoryNeuroBus):
                 span_id=data.get("span_id", ""),
             )
             InMemoryNeuroBus.publish(self, event)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.exception(
                 "RabbitMQ message handler failed for routing_key=%s", method.routing_key
             )
@@ -261,7 +263,7 @@ class RabbitMqNeuroBus(InMemoryNeuroBus):
             self._connected = True
             self._rebind_all()
             self._start_consumer()
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.debug("RabbitMQ reconnect attempt failed", exc_info=True)
             self._connected = False
 
@@ -269,13 +271,13 @@ class RabbitMqNeuroBus(InMemoryNeuroBus):
         try:
             if self._consumer_tag and self._channel:
                 self._channel.basic_cancel(self._consumer_tag)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
         self._consumer_tag = None
         try:
             if self._connection and self._connection.is_open:
                 self._connection.close()
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
         self._connection = None
         self._channel = None
@@ -303,7 +305,7 @@ class RabbitMqNeuroBus(InMemoryNeuroBus):
                             exchange=_EXCHANGE,
                             routing_key=routing_key,
                         )
-                    except Exception:
+                    except RECOVERABLE_ERRORS:
                         logger.debug("queue_bind failed for %s", event_name, exc_info=True)
         return sub
 
@@ -331,7 +333,7 @@ class RabbitMqNeuroBus(InMemoryNeuroBus):
                         message_id=event.event_id,
                     ),
                 )
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 logger.exception(
                     "RabbitMQ publish failed for event=%s; event still dispatched locally",
                     event.event_name,

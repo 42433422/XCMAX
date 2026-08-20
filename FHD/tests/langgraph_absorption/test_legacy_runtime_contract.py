@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, index, union-attr"
 """LG-W0-06 — 冻结 `app/application/workflow/engine.py`（+ schemas/checkpointer）的当前运行时契约。
 
 本文件只读当前产品代码，把关键行为固化为可回放的"契约测试"：

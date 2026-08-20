@@ -9,7 +9,11 @@ from typing import Any, Callable, Dict, List
 import httpx
 
 from modman.blueprint_scan import scan_fastapi_router_routes
-from modman.manifest_util import folder_name_must_match_id, read_manifest, validate_manifest_dict
+from modman.manifest_util import (
+    folder_name_must_match_id,
+    read_manifest,
+    validate_manifest_dict,
+)
 from modman.surface_bundle import load_bundled_extension_surface
 from modstore_server.authoring import slim_openapi_paths
 from modstore_server.infrastructure import library_paths
@@ -40,10 +44,10 @@ def extension_surface(merge_host: bool = False) -> Dict[str, Any]:
                 "route_count": len(routes),
                 "routes": routes,
             }
-    except httpx.RequestError as error:
-        result["host_openapi_error"] = f"{type(error).__name__}: {error} ({url})"
-    except json.JSONDecodeError as error:
-        result["host_openapi_error"] = f"openapi.json 非 JSON: {error}"
+    except httpx.RequestError:
+        result["host_openapi_error"] = "宿主 OpenAPI 暂时不可用"
+    except json.JSONDecodeError:
+        result["host_openapi_error"] = "宿主 openapi.json 不是有效 JSON"
     return result
 
 
@@ -51,7 +55,11 @@ def blueprint_routes(mod_dir: Path) -> Dict[str, Any]:
     for relative in ("backend/blueprints.py", "blueprints.py"):
         path = mod_dir / relative
         if path.is_file():
-            return {"ok": True, "file": relative, "routes": scan_fastapi_router_routes(path)}
+            return {
+                "ok": True,
+                "file": relative,
+                "routes": scan_fastapi_router_routes(path),
+            }
     return {
         "ok": True,
         "file": None,

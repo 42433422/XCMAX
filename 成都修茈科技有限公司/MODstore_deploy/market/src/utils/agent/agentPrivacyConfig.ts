@@ -6,12 +6,7 @@ export function getRiskConfirmStrategy(risk: ActionRisk): ConfirmStrategy {
   return 'explicit'
 }
 
-export function buildActionPermission(
-  action: string,
-  risk: ActionRisk,
-  label: string,
-  args?: Record<string, unknown>,
-): ActionPermission {
+export function buildActionPermission(action: string, risk: ActionRisk, label: string, args?: Record<string, unknown>): ActionPermission {
   const strategy = getRiskConfirmStrategy(risk)
   let confirmMessage = `即将执行：${label}`
   if (strategy === 'explicit') {

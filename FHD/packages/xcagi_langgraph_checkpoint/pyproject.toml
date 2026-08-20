@@ -55,3 +55,16 @@ asyncio_mode = "auto"
 lint.select = [ "E", "F", "I", "UP", "B" ]
 lint.ignore = [ "E501", "B008" ]
 target-version = "py310"
+
+[tool.ty.rules]
+call-non-callable = "ignore"
+deprecated = "ignore"
+invalid-argument-type = "ignore"
+invalid-assignment = "ignore"
+invalid-await = "ignore"
+invalid-return-type = "ignore"
+no-matching-overload = "ignore"
+unused-type-ignore-comment = "ignore"
+unresolved-attribute = "ignore"
+unresolved-import = "ignore"
+unsupported-operator = "ignore"

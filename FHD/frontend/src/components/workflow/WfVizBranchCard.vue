@@ -1,44 +1,30 @@
 <template>
-  <div 
-    class="wf-viz-branch-card" 
-    :class="{ 'wf-viz-branch-card--fixed': isFixed }"
-  >
-    <span 
-      class="wf-viz-kind-badge" 
-      :class="{ 'wf-viz-kind-badge--sm': size === 'sm' }"
-    >
+  <div class="wf-viz-branch-card" :class="{ 'wf-viz-branch-card--fixed': isFixed }">
+    <span class="wf-viz-kind-badge" :class="{ 'wf-viz-kind-badge--sm': size === 'sm' }">
       {{ badgeText }}
     </span>
-    
+
     <div class="wf-viz-branch-title">
       {{ title }}
     </div>
-    
+
     <div class="wf-viz-branch-triggers">
       <slot name="triggers">
         {{ triggersText }}
       </slot>
     </div>
-    
+
     <div v-if="showActions" class="wf-viz-branch-actions">
       <slot name="actions">
-        <button 
-          class="wf-viz-action-btn" 
-          @click="handleConfigure"
-          title="配置"
-        >
+        <button class="wf-viz-action-btn" @click="handleConfigure" title="配置">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M8 10a2 2 0 100-4 2 2 0 000 4z"/>
-            <path fill-rule="evenodd" d="M8 1a7 7 0 100 14A7 7 0 008 1zM0 8a8 8 0 1116 0A8 8 0 010 8z"/>
+            <path d="M8 10a2 2 0 100-4 2 2 0 000 4z" />
+            <path fill-rule="evenodd" d="M8 1a7 7 0 100 14A7 7 0 008 1zM0 8a8 8 0 1116 0A8 8 0 010 8z" />
           </svg>
         </button>
-        <button 
-          class="wf-viz-action-btn" 
-          @click="handleViewDetails"
-          title="查看详情"
-        >
+        <button class="wf-viz-action-btn" @click="handleViewDetails" title="查看详情">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M8 4a.5.5 0 01.5.5v3h3a.5.5 0 010 1h-3v3a.5.5 0 01-1 0v-3h-3a.5.5 0 010-1h3v-3A.5.5 0 018 4z"/>
+            <path d="M8 4a.5.5 0 01.5.5v3h3a.5.5 0 010 1h-3v3a.5.5 0 01-1 0v-3h-3a.5.5 0 010-1h3v-3A.5.5 0 018 4z" />
           </svg>
         </button>
       </slot>
@@ -61,39 +47,39 @@ export default defineComponent({
   props: {
     title: {
       type: String,
-      default: '真实电话业务员'
+      default: '真实电话业务员',
     },
     badgeText: {
       type: String,
-      default: '固定扩展'
+      default: '固定扩展',
     },
     size: {
       type: String,
       default: 'sm',
-      validator: (value: string) => ['sm', 'md', 'lg'].includes(value)
+      validator: (value: string) => ['sm', 'md', 'lg'].includes(value),
     },
     isFixed: {
       type: Boolean,
-      default: true
+      default: true,
     },
     branchId: {
       type: String,
-      default: 'real_phone'
+      default: 'real_phone',
     },
     triggers: {
       type: Array as () => BranchTrigger[],
-      default: () => []
+      default: () => [],
     },
     showActions: {
       type: Boolean,
-      default: true
-    }
+      default: true,
+    },
   },
   emits: ['configure', 'view-details', 'click'],
   setup(props, { emit }) {
     const triggersText = computed(() => {
       if (props.triggers.length > 0) {
-        return props.triggers.map(t => t.name).join(' → ')
+        return props.triggers.map((t) => t.name).join(' → ')
       }
       return '固定行 id=real_phone；副窗启用 → ADB 设备连通检查 → 来电检测/接听 → 语音转写与回复（与状态轮询同步）'
     })
@@ -114,9 +100,9 @@ export default defineComponent({
       triggersText,
       handleConfigure,
       handleViewDetails,
-      handleClick
+      handleClick,
     }
-  }
+  },
 })
 </script>
 

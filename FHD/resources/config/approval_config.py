@@ -6,6 +6,8 @@ from typing import Any, Dict, List, Optional
 
 import yaml
 
+from app.utils.operational_errors import BOUNDARY_ERRORS
+
 # 钉钉→太阳鸟明细：与 ``taiyangniao_attendance.rules`` 默认值对齐；在太阳鸟 Mod「考勤设置」页修改。
 DEFAULT_ATTENDANCE_POLICY: Dict[str, Any] = {
     "company_factory_group_keywords": [
@@ -61,24 +63,24 @@ class ApprovalConfig:
         return os.path.join(base_dir, "resources", "config", "approval_config.yaml")
 
     @classmethod
-    def load(cls) -> "ApprovalConfig":
+    def load(cls) -> ApprovalConfig:
         config_path = cls._get_config_path()
         if not os.path.exists(config_path):
             return cls._default_config()
 
         try:
-            with open(config_path, "r", encoding="utf-8") as f:
+            with open(config_path, encoding="utf-8") as f:
                 data = yaml.safe_load(f) or {}
             return cls(
                 rules=data.get("approval_rules", []),
                 enabled=data.get("enabled", True),
                 attendance_policy=data.get("attendance_policy"),
             )
-        except Exception:
+        except BOUNDARY_ERRORS:
             return cls._default_config()
 
     @classmethod
-    def _default_config(cls) -> "ApprovalConfig":
+    def _default_config(cls) -> ApprovalConfig:
         return cls(
             enabled=True,
             attendance_policy=copy.deepcopy(DEFAULT_ATTENDANCE_POLICY),

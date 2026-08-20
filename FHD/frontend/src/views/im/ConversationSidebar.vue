@@ -3,13 +3,7 @@
     <div class="im-sidebar-head">
       <h2 class="im-title">信息</h2>
       <div class="im-sidebar-actions">
-        <button
-          type="button"
-          class="im-icon-btn"
-          title="发起会话"
-          :disabled="busy"
-          @click="emit('open-contact-picker')"
-        >
+        <button type="button" class="im-icon-btn" title="发起会话" :disabled="busy" @click="emit('open-contact-picker')">
           <i class="fa fa-pencil-square-o" aria-hidden="true"></i>
         </button>
       </div>
@@ -38,12 +32,7 @@
     </div>
 
     <ul v-if="sidebarListItems.length" class="im-conv-list">
-      <li
-        v-for="item in sidebarListItems"
-        :key="item.key"
-        :class="sidebarItemClasses(item)"
-        @click="emit('select-sidebar-item', item)"
-      >
+      <li v-for="item in sidebarListItems" :key="item.key" :class="sidebarItemClasses(item)" @click="emit('select-sidebar-item', item)">
         <span :class="sidebarItemAvatarClasses(item)" aria-hidden="true">
           <img
             v-if="sidebarItemSuperAvatarSrc(item)"
@@ -59,11 +48,7 @@
           <div class="im-conv-title">{{ sidebarItemTitle(item) }}</div>
           <div class="im-conv-preview">{{ sidebarItemPreview(item) }}</div>
         </div>
-        <i
-          v-if="sidebarItemShowsPin(item)"
-          :class="sidebarItemPinClasses(item)"
-          aria-hidden="true"
-        ></i>
+        <i v-if="sidebarItemShowsPin(item)" :class="sidebarItemPinClasses(item)" aria-hidden="true"></i>
         <span v-else-if="sidebarItemUnread(item) > 0" class="im-badge">
           {{ sidebarItemUnread(item) }}
         </span>
@@ -73,44 +58,38 @@
       <i class="fa fa-comments-o" aria-hidden="true"></i>
       <p>还没有会话</p>
       <p class="im-empty-hint">这里联系已安装的 AI 同事和专属客服；找小C办事请用侧栏「智能对话」</p>
-      <button type="button" class="im-btn im-btn--primary" :disabled="busy" @click="emit('open-contact-picker')">
-        发起会话
-      </button>
+      <button type="button" class="im-btn im-btn--primary" :disabled="busy" @click="emit('open-contact-picker')">发起会话</button>
     </div>
   </aside>
 </template>
 
 <script setup lang="ts">
-import {
-  type ExternalAppEntry,
-  type ImSidebarListItem,
-  type PinnedImEntry,
-} from '@/composables/messenger/useMessengerEntries';
+import { type ExternalAppEntry, type ImSidebarListItem, type PinnedImEntry } from '@/composables/messenger/useMessengerEntries'
 
 defineProps<{
-  isAdminCustomerServiceConsole: boolean;
-  busy: boolean;
-  imConnectionClass: string;
-  imConnectionLabel: string;
-  externalChannelEntries: ExternalAppEntry[];
-  activeExternalEntry: ExternalAppEntry | null;
-  sidebarListItems: ImSidebarListItem[];
-  sidebarItemClasses: (item: ImSidebarListItem) => unknown[];
-  sidebarItemAvatarClasses: (item: ImSidebarListItem) => unknown[];
-  sidebarItemPinClasses: (item: ImSidebarListItem) => unknown[];
-  sidebarItemShowsPin: (item: ImSidebarListItem) => boolean;
-  sidebarItemTitle: (item: ImSidebarListItem) => string;
-  sidebarItemPreview: (item: ImSidebarListItem) => string;
-  sidebarItemAvatarText: (item: ImSidebarListItem) => string;
-  sidebarItemSuperAvatarSrc: (item: ImSidebarListItem) => string | null;
-  sidebarItemUnread: (item: ImSidebarListItem) => number;
-}>();
+  isAdminCustomerServiceConsole: boolean
+  busy: boolean
+  imConnectionClass: string
+  imConnectionLabel: string
+  externalChannelEntries: ExternalAppEntry[]
+  activeExternalEntry: ExternalAppEntry | null
+  sidebarListItems: ImSidebarListItem[]
+  sidebarItemClasses: (item: ImSidebarListItem) => unknown[]
+  sidebarItemAvatarClasses: (item: ImSidebarListItem) => unknown[]
+  sidebarItemPinClasses: (item: ImSidebarListItem) => unknown[]
+  sidebarItemShowsPin: (item: ImSidebarListItem) => boolean
+  sidebarItemTitle: (item: ImSidebarListItem) => string
+  sidebarItemPreview: (item: ImSidebarListItem) => string
+  sidebarItemAvatarText: (item: ImSidebarListItem) => string
+  sidebarItemSuperAvatarSrc: (item: ImSidebarListItem) => string | null
+  sidebarItemUnread: (item: ImSidebarListItem) => number
+}>()
 
 const emit = defineEmits<{
-  (e: 'open-contact-picker'): void;
-  (e: 'activate-pinned', entry: PinnedImEntry): void;
-  (e: 'select-sidebar-item', item: ImSidebarListItem): void;
-}>();
+  (e: 'open-contact-picker'): void
+  (e: 'activate-pinned', entry: PinnedImEntry): void
+  (e: 'select-sidebar-item', item: ImSidebarListItem): void
+}>()
 </script>
 
 <style scoped>
@@ -155,7 +134,9 @@ const emit = defineEmits<{
   align-items: center;
   justify-content: center;
   font-size: 15px;
-  transition: background 150ms ease, color 150ms ease;
+  transition:
+    background 150ms ease,
+    color 150ms ease;
 }
 .im-icon-btn:hover {
   background: rgba(0, 82, 217, 0.08);
@@ -203,7 +184,9 @@ const emit = defineEmits<{
   color: inherit;
   text-align: left;
   cursor: pointer;
-  transition: background 150ms ease, border-color 150ms ease;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease;
 }
 .im-channel-entry:hover,
 .im-channel-entry.active {

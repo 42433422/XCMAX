@@ -82,19 +82,14 @@ describe('streamLLMChat', () => {
   })
 
   it('handles done event with charge_amount', async () => {
-    const frames = [
-      'event: delta\ndata: {"delta":"text"}\n\n',
-      'event: done\ndata: {"charge_amount":10}\n\n',
-    ]
+    const frames = ['event: delta\ndata: {"delta":"text"}\n\n', 'event: done\ndata: {"charge_amount":10}\n\n']
     llmChatStreamMock.mockResolvedValueOnce(makeSseResponse(frames))
     const result = await streamLLMChat(makeOpts()).done
     expect(result.content).toBe('text')
   })
 
   it('falls back to llmChat when SSE response is not ok', async () => {
-    llmChatStreamMock.mockResolvedValueOnce(
-      new Response('{"detail":"server error"}', { status: 500 }),
-    )
+    llmChatStreamMock.mockResolvedValueOnce(new Response('{"detail":"server error"}', { status: 500 }))
     llmChatMock.mockResolvedValueOnce({ content: 'fallback reply' })
 
     const result = await streamLLMChat(makeOpts()).done
@@ -137,9 +132,7 @@ describe('streamLLMChat', () => {
 
   it('returns aborted=true when abort is called before fallback completes', async () => {
     llmChatStreamMock.mockRejectedValueOnce(new Error('sse fail'))
-    llmChatMock.mockImplementation(
-      () => new Promise(() => {}),
-    )
+    llmChatMock.mockImplementation(() => new Promise(() => {}))
     const onDone = vi.fn()
 
     const handle = streamLLMChat({ ...makeOpts(), onDone })
@@ -150,9 +143,7 @@ describe('streamLLMChat', () => {
   })
 
   it('parses 401 error as login expired message', async () => {
-    llmChatStreamMock.mockResolvedValueOnce(
-      new Response('{"detail":"登录已过期"}', { status: 401 }),
-    )
+    llmChatStreamMock.mockResolvedValueOnce(new Response('{"detail":"登录已过期"}', { status: 401 }))
     llmChatMock.mockRejectedValueOnce(new Error('also fail'))
     const onError = vi.fn()
 

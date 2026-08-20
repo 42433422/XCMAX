@@ -7,11 +7,7 @@
         <strong>付款已确认</strong>
         <span class="confirm-banner-sub">支付状态已更新，你购买的方案已经生效。</span>
       </div>
-      <div
-        v-else-if="burstSyncActive && order?.status === 'pending'"
-        role="status"
-        class="confirm-banner confirm-banner--sync"
-      >
+      <div v-else-if="burstSyncActive && order?.status === 'pending'" role="status" class="confirm-banner confirm-banner--sync">
         <strong>正在确认支付结果…</strong>
         <span class="confirm-banner-sub">通常几秒即可完成，请稍候。</span>
       </div>
@@ -66,44 +62,21 @@
         <!-- 浏览器跳转支付（alipay page/wap）：无二维码，需提示回站后自动对账 / 手动刷新 -->
         <div v-if="order.status === 'pending' && !qrCode" class="pending-redirect-section">
           <p class="pending-redirect-title">等待付款</p>
-          <p class="pending-redirect-desc">
-            请在支付宝完成付款后返回本页，我们会自动更新结果。如果状态没有变化，请点击“更新支付结果”。
-          </p>
+          <p class="pending-redirect-desc">请在支付宝完成付款后返回本页，我们会自动更新结果。如果状态没有变化，请点击“更新支付结果”。</p>
           <div class="pending-redirect-actions">
-            <button
-              type="button"
-              class="btn btn-primary"
-              :disabled="refreshing"
-              @click="manualRefreshStatus"
-            >
+            <button type="button" class="btn btn-primary" :disabled="refreshing" @click="manualRefreshStatus">
               {{ refreshing ? '正在更新…' : '更新支付结果' }}
             </button>
-            <button
-              type="button"
-              class="btn btn-ghost"
-              :disabled="refreshing"
-              @click="retryPayment"
-            >
-              重新打开支付宝
-            </button>
+            <button type="button" class="btn btn-ghost" :disabled="refreshing" @click="retryPayment">重新打开支付宝</button>
           </div>
-          <p class="pending-redirect-foot">
-            长时间未更新？请确认当前登录账号与下单账号一致，或凭订单号联系客服。
-          </p>
+          <p class="pending-redirect-foot">长时间未更新？请确认当前登录账号与下单账号一致，或凭订单号联系客服。</p>
         </div>
 
         <!-- 二维码展示（precreate 模式） -->
         <div v-if="qrCode && order.status === 'pending'" class="qr-section">
           <p class="qr-hint">使用支付宝扫码付款</p>
           <div class="qr-wrapper">
-            <img
-              v-if="qrImageUrl"
-              class="qr-img"
-              :src="qrImageUrl"
-              width="280"
-              height="280"
-              alt="支付宝支付二维码"
-            />
+            <img v-if="qrImageUrl" class="qr-img" :src="qrImageUrl" width="280" height="280" alt="支付宝支付二维码" />
           </div>
           <p v-if="isExpired" class="qr-expired-hint">
             订单已超时未支付。
@@ -117,28 +90,17 @@
         <div v-if="order.status === 'paid'" class="success-section">
           <div class="success-icon">✓</div>
           <h2 class="success-title">支付成功</h2>
-          <p v-if="isAccountLicenseOrder" class="success-desc">
-            你的 XCAGI 方案已生效，现在可以回到桌面端登录使用。
-          </p>
+          <p v-if="isAccountLicenseOrder" class="success-desc">你的 XCAGI 方案已生效，现在可以回到桌面端登录使用。</p>
           <p v-else class="success-desc">你购买的内容已到账，可以开始使用。</p>
-          <p v-if="isAccountLicenseOrder" class="success-desc success-desc--desktop">
-            现在可以回到 XCAGI 桌面端，使用这个账号登录。
-          </p>
+          <p v-if="isAccountLicenseOrder" class="success-desc success-desc--desktop">现在可以回到 XCAGI 桌面端，使用这个账号登录。</p>
           <div class="success-actions">
             <router-link to="/wallet" class="btn btn-primary">查看订单与账户</router-link>
-            <router-link :to="{ name: 'wallet-purchased' }" class="btn btn-ghost"
-              >查看已购内容</router-link
-            >
+            <router-link :to="{ name: 'wallet-purchased' }" class="btn btn-ghost">查看已购内容</router-link>
             <router-link :to="planSelectionRoute" class="btn btn-ghost">继续选购</router-link>
           </div>
           <p class="refund-hint">
             如需退款，可
-            <router-link
-              :to="{ name: 'refunds', query: { order_no: order.out_trade_no } }"
-              class="refund-link"
-            >
-              提交退款申请
-            </router-link>
+            <router-link :to="{ name: 'refunds', query: { order_no: order.out_trade_no } }" class="refund-link"> 提交退款申请 </router-link>
             ，处理进度会显示在钱包资金账户中。
           </p>
         </div>
@@ -211,9 +173,7 @@ const paidConfirmedFlash = ref(false)
 const pollingTimer = ref<ReturnType<typeof setInterval> | null>(null)
 
 const isAccountLicenseOrder = computed(() => String(order.value?.plan_id || '').startsWith('saas-'))
-const planSelectionRoute = computed(() =>
-  isAccountLicenseOrder.value ? '/account-plans' : '/plans',
-)
+const planSelectionRoute = computed(() => (isAccountLicenseOrder.value ? '/account-plans' : '/plans'))
 
 const qrImageUrl = computed(() => {
   if (!qrCode.value) return ''
@@ -341,8 +301,7 @@ async function fetchOrder() {
     transientWarning.value = ''
     const res = await api.paymentQuery(orderParamId.value, { reconcile: true })
     if (isPaymentQueryFailedEnvelope(res)) {
-      const msg =
-        typeof res.message === 'string' && res.message.trim() ? res.message.trim() : '加载订单失败'
+      const msg = typeof res.message === 'string' && res.message.trim() ? res.message.trim() : '加载订单失败'
       if (order.value) {
         transientWarning.value = msg
       } else {
@@ -371,9 +330,7 @@ async function pollOrder() {
     const res = await api.paymentQuery(orderParamId.value, { reconcile: true })
     if (isPaymentQueryFailedEnvelope(res)) {
       transientWarning.value =
-        typeof res.message === 'string' && res.message.trim()
-          ? res.message.trim()
-          : '订单状态暂时无法确认，正在继续重试'
+        typeof res.message === 'string' && res.message.trim() ? res.message.trim() : '订单状态暂时无法确认，正在继续重试'
       return
     }
     transientWarning.value = ''

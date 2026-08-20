@@ -52,14 +52,12 @@ describe('utils/index — coverage ramp', () => {
       expect(escapeHtml('a"b')).toBe('a&quot;b')
     })
 
-    it('转义 \' 符号', () => {
+    it("转义 ' 符号", () => {
       expect(escapeHtml("a'b")).toBe('a&#39;b')
     })
 
     it('同时转义所有特殊字符', () => {
-      expect(escapeHtml('<div class="a">&\'test\'</div>')).toBe(
-        '&lt;div class=&quot;a&quot;&gt;&amp;&#39;test&#39;&lt;/div&gt;',
-      )
+      expect(escapeHtml('<div class="a">&\'test\'</div>')).toBe('&lt;div class=&quot;a&quot;&gt;&amp;&#39;test&#39;&lt;/div&gt;')
     })
 
     it('数字被 String 转换后返回', () => {
@@ -184,9 +182,7 @@ describe('utils/index — coverage ramp', () => {
           writable: true,
         })
       }
-      createObjectURLSpy = vi
-        .spyOn(URL, 'createObjectURL')
-        .mockReturnValue('blob:mock-url')
+      createObjectURLSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock-url')
       revokeObjectURLSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
       clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
       removeSpy = vi.spyOn(Element.prototype, 'remove').mockImplementation(() => undefined)
@@ -341,6 +337,7 @@ describe('utils/index — coverage ramp', () => {
       const debounced = debounce(func, 100)
 
       vi.advanceTimersByTime(500)
+      expect(typeof debounced).toBe('function')
       expect(func).not.toHaveBeenCalled()
     })
   })

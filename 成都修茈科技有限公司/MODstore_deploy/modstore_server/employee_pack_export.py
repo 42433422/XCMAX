@@ -1,3 +1,4 @@
+# mypy: disable-error-code="index, operator, union-attr"
 """从已入库 Mod + workflow_employees 条目生成 employee_pack manifest 与最小 zip。
 
 manifest 会带上 ``employee_config_v2``，让运行时（``execute_employee_task``）
@@ -223,7 +224,9 @@ def _render_employee_py_for_manifest(
     actions = v2.get("actions") if isinstance(v2.get("actions"), dict) else {}
     handlers = actions.get("handlers") if isinstance(actions.get("handlers"), list) else []
     if "direct_python" in handlers:
-        from modstore_server.employee_asset_pipeline import render_direct_python_asset_worker
+        from modstore_server.employee_asset_pipeline import (
+            render_direct_python_asset_worker,
+        )
 
         runtime_mod = re.sub(r"[^a-z0-9_]+", "_", employee_id.lower()).strip("_")
         if runtime_mod.endswith("_employee"):
@@ -371,7 +374,8 @@ def _build_employee_pack_zip_with_source(
             render_standalone_runner_py(pack_id, zip_standalone_prefix),
         )
         zf.writestr(
-            f"{zip_standalone_prefix}/standalone/llm_adapter.py", render_standalone_llm_adapter_py()
+            f"{zip_standalone_prefix}/standalone/llm_adapter.py",
+            render_standalone_llm_adapter_py(),
         )
         zf.writestr(f"{zip_standalone_prefix}/standalone/handlers/__init__.py", "")
         zf.writestr(

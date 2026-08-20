@@ -36,23 +36,17 @@ describe('industryStore (readonly SSOT)', () => {
 
   it('does not have mergeModIndustriesInto action', () => {
     const store = useIndustryStore()
-    expect(
-      (store as unknown as { mergeModIndustriesInto?: unknown }).mergeModIndustriesInto,
-    ).toBeUndefined()
+    expect((store as unknown as { mergeModIndustriesInto?: unknown }).mergeModIndustriesInto).toBeUndefined()
   })
 
   it('has loadFromServer action', () => {
     const store = useIndustryStore()
-    expect(typeof (store as unknown as { loadFromServer?: unknown }).loadFromServer).toBe(
-      'function',
-    )
+    expect(typeof (store as unknown as { loadFromServer?: unknown }).loadFromServer).toBe('function')
   })
 
   it('has termRules state', () => {
     const store = useIndustryStore()
-    expect(
-      (store as unknown as { termRules?: unknown }).termRules,
-    ).toBeDefined()
+    expect((store as unknown as { termRules?: unknown }).termRules).toBeDefined()
   })
 
   it('currentIndustryId defaults to 通用', () => {

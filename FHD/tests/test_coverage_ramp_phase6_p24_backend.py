@@ -1,3 +1,4 @@
+# mypy: disable-error-code="call-arg, misc"
 """COVERAGE_RAMP Phase 6 round 24: backend medium-coverage modules.
 
 Substitutions for modules whose literal path does not exist:

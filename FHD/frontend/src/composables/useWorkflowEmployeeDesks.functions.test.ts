@@ -9,10 +9,7 @@ import {
   useWorkflowEmployeeDesks,
   type WorkflowEmployeeDeskRow,
 } from './useWorkflowEmployeeDesks'
-import type {
-  WorkflowEmployeeSession,
-  WorkflowEmployeeSpaceSnapshot,
-} from '@/stores/workflowEmployeeSpace'
+import type { WorkflowEmployeeSession, WorkflowEmployeeSpaceSnapshot } from '@/stores/workflowEmployeeSpace'
 
 // Mock pinia 的 storeToRefs，使其直接返回 store（保留响应性）
 vi.mock('pinia', async () => {
@@ -127,45 +124,33 @@ describe('totalWorkMs - additional edge cases', () => {
   })
 
   it('enabledAt 为 null 时只返回 lifetimeMs', () => {
-    expect(
-      totalWorkMs({ lifetimeMs: 5000, enabledAt: null } as any, Date.now()),
-    ).toBe(5000)
+    expect(totalWorkMs({ lifetimeMs: 5000, enabledAt: null } as any, Date.now())).toBe(5000)
   })
 
   it('enabledAt 存在时累加实时时长', () => {
     const now = Date.now()
     const enabledAt = now - 10000
-    expect(
-      totalWorkMs({ lifetimeMs: 5000, enabledAt } as any, now),
-    ).toBe(15000)
+    expect(totalWorkMs({ lifetimeMs: 5000, enabledAt } as any, now)).toBe(15000)
   })
 
   it('enabledAt 在未来时 live 为 0', () => {
     const now = Date.now()
     const enabledAt = now + 10000
-    expect(
-      totalWorkMs({ lifetimeMs: 5000, enabledAt } as any, now),
-    ).toBe(5000)
+    expect(totalWorkMs({ lifetimeMs: 5000, enabledAt } as any, now)).toBe(5000)
   })
 
   it('lifetimeMs 为负数时被 clamp 到 0', () => {
-    expect(
-      totalWorkMs({ lifetimeMs: -100, enabledAt: null } as any, Date.now()),
-    ).toBe(0)
+    expect(totalWorkMs({ lifetimeMs: -100, enabledAt: null } as any, Date.now())).toBe(0)
   })
 
   it('lifetimeMs 为 0 且 enabledAt 为 null 时返回 0', () => {
-    expect(
-      totalWorkMs({ lifetimeMs: 0, enabledAt: null } as any, Date.now()),
-    ).toBe(0)
+    expect(totalWorkMs({ lifetimeMs: 0, enabledAt: null } as any, Date.now())).toBe(0)
   })
 
   it('lifetimeMs 为 0 但 enabledAt 存在时返回 live 时长', () => {
     const now = Date.now()
     const enabledAt = now - 5000
-    expect(
-      totalWorkMs({ lifetimeMs: 0, enabledAt } as any, now),
-    ).toBe(5000)
+    expect(totalWorkMs({ lifetimeMs: 0, enabledAt } as any, now)).toBe(5000)
   })
 })
 
@@ -347,9 +332,7 @@ describe('useWorkflowEmployeeDesks', () => {
     })
 
     it('返回每个员工的工位信息', async () => {
-      registryEntriesRef.value = [
-        { id: 'emp1', label: '员工1', hostModId: 'mod1', carrierModId: 'mod2' },
-      ]
+      registryEntriesRef.value = [{ id: 'emp1', label: '员工1', hostModId: 'mod1', carrierModId: 'mod2' }]
       workflowEnabledRef.value = { emp1: true }
       const { captured, wrapper } = setupComposable()
       await nextTick()

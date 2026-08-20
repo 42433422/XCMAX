@@ -1,7 +1,10 @@
-# ruff: noqa
 """Workbench mod pipeline branch."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -27,7 +30,13 @@ async def _run_workbench_mod_pipeline(
             return
         await _facade()._set_step(sid, "manifest", "done", "manifest 已生成")
         await _facade()._set_step(sid, "repo", "done", f"Mod 仓库：{res.get('id')}")
-        for skipped in ("industry", "employees", "workflows", "api", "workflow_sandbox"):
+        for skipped in (
+            "industry",
+            "employees",
+            "workflows",
+            "api",
+            "workflow_sandbox",
+        ):
             await _facade()._set_step(sid, skipped, "skipped", "最小 Mod 模式跳过")
         await _facade()._set_step(sid, "mod_sandbox", "running", "正在做轻量 Mod 校验")
         mod_dir = _facade().Path(res["path"])
@@ -83,7 +92,11 @@ async def _run_workbench_mod_pipeline(
     try:
         await _facade()._set_step(sid, "repo", "running", "正在新建或覆盖 Mod 仓库")
         imported = _facade().import_mod_suite_repository(
-            db, user, parsed=parsed, replace=replace, generate_frontend=generate_frontend
+            db,
+            user,
+            parsed=parsed,
+            replace=replace,
+            generate_frontend=generate_frontend,
         )
         if not imported.get("ok"):
             await _facade()._fail_session(sid, "repo", imported.get("error") or "Mod 仓库创建失败")
@@ -103,7 +116,7 @@ async def _run_workbench_mod_pipeline(
         try:
             industry_card = _facade().write_mod_suite_industry_card(mod_dir, blueprint)
             ui_shell = _facade().write_mod_suite_ui_shell(mod_dir, blueprint)
-        except Exception as e:
+        except RECOVERABLE_ERRORS as e:
             await _abort_mod_pipeline("industry", f"行业/UI 配置生成失败: {e}")
             return
         await _facade()._set_step(
@@ -158,10 +171,11 @@ async def _run_workbench_mod_pipeline(
                 model=gen.get("model"),
                 status_hook=_emp_impl_step_msg,
             )
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             _facade()._LOG.exception("workbench mod employee_impls failed session=%s", sid)
             await _abort_mod_pipeline(
-                "employee_impls", f"生成员工脚本异常（可查看服务端日志）: {exc!s}"[:1000]
+                "employee_impls",
+                f"生成员工脚本异常（可查看服务端日志）: {exc!s}"[:1000],
             )
             return
         impl_errs = impl_result.get("errors") or []
@@ -240,7 +254,10 @@ async def _run_workbench_mod_pipeline(
         )
         await _facade()._set_step(sid, "register_packs", "done", reg_done_msg)
         await _facade()._set_step(sid, "api", "running", "正在汇总 OpenAPI 节点")
-        api_summary = {"nodes": wf.get("api_nodes") or [], "warnings": wf.get("api_warnings") or []}
+        api_summary = {
+            "nodes": wf.get("api_nodes") or [],
+            "warnings": wf.get("api_warnings") or [],
+        }
         api_msg = f"发现 {len(api_summary['nodes'])} 个 API 节点" + (
             f"，{len(api_summary['warnings'])} 个待配置" if api_summary["warnings"] else ""
         )
@@ -308,7 +325,10 @@ async def _run_workbench_mod_pipeline(
                 sess["validate_warnings"] = (
                     api_summary["warnings"] + validation_summary["workflow_warnings"]
                 )
-                sess["sandbox_report"] = {"workflow": workflow_sandbox, "mod": mod_sandbox}
+                sess["sandbox_report"] = {
+                    "workflow": workflow_sandbox,
+                    "mod": mod_sandbox,
+                }
                 _facade()._persist_workbench_session_unlocked(sid)
         await _facade()._finalize_session_done(
             sid,
@@ -328,7 +348,7 @@ async def _run_workbench_mod_pipeline(
                 "pack_register": register_result,
             },
         )
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         _facade()._LOG.exception("workbench mod full suite failed session=%s", sid)
         await _abort_mod_pipeline("complete", str(e)[:2000])
         return

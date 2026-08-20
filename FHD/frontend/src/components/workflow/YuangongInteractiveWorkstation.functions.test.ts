@@ -21,8 +21,25 @@ vi.mock('@/constants/yuangongAssets', () => ({
 
 vi.mock('@/constants/yuangongEmployeeHotspots', () => ({
   YUANGONG_EMPLOYEE_HOTSPOTS: [
-    { id: 'hs1', label: '数据库', routeName: 'database', leftPct: 10, topPct: 20, widthPct: 30, heightPct: 40 },
-    { id: 'hs2', label: '订单', routeName: 'orders', leftPct: 50, topPct: 50, widthPct: 20, heightPct: 20, ariaLabel: '进入订单' },
+    {
+      id: 'hs1',
+      label: '数据库',
+      routeName: 'database',
+      leftPct: 10,
+      topPct: 20,
+      widthPct: 30,
+      heightPct: 40,
+    },
+    {
+      id: 'hs2',
+      label: '订单',
+      routeName: 'orders',
+      leftPct: 50,
+      topPct: 50,
+      widthPct: 20,
+      heightPct: 20,
+      ariaLabel: '进入订单',
+    },
   ],
 }))
 

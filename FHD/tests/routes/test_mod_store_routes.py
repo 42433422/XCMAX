@@ -1,3 +1,4 @@
+# mypy: disable-error-code="misc, union-attr"
 """Tests for app.fastapi_routes.mod_store_routes — coverage ramp.
 
 Covers helper functions, route endpoints, catalog operations, and error paths.

@@ -18,7 +18,7 @@ def get_env_var(name: str, default: str | None = None) -> str:
     """获取环境变量，确保敏感数据不被硬编码"""
     value = os.environ.get(name)
     if value is None:
-        return default
+        return default or ""
     return value
 
 

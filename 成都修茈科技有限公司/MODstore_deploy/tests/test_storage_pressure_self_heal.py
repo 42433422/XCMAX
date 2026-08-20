@@ -230,7 +230,9 @@ def test_recent_action_enforces_cooldown_and_is_idempotent(
     assert calls == []
 
 
-def test_operator_veto_blocks_cleanup_and_is_audited(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_operator_veto_blocks_cleanup_and_is_audited(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("MODSTORE_STORAGE_SELF_HEAL_ENABLED", "0")
     decisions: list[dict] = []
     monkeypatch.setattr(
@@ -258,7 +260,9 @@ def test_unresolved_result_fails_scheduler_contract() -> None:
         self_heal.require_successful_storage_self_heal({"ok": False, "status": "pressure_persists"})
 
 
-def test_scheduler_registration_tracks_startup_probe(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_scheduler_registration_tracks_startup_probe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     registered: list[dict] = []
     tracked: list[str] = []
     probed: list[str] = []

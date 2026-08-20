@@ -2,6 +2,8 @@ import os
 
 from openpyxl import load_workbook
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 folder = r"e:\FHD\424"
 
 # 方法：直接使用 os.listdir 找到的文件名，不重新构建路径
@@ -32,7 +34,7 @@ if target_file:
         # 验证
         wb2 = load_workbook("测试直接加载.xlsx")
         print(f"验证 - 工作表：{wb2.sheetnames}")
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"✗ 失败：{e}")
         import traceback
 

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="call-arg"
 """Target discovery and default edit scope for Butler orchestration."""
 
 from __future__ import annotations
@@ -5,6 +6,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Dict, List
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def default_mod_focus(scope: str) -> List[str]:
@@ -55,6 +58,6 @@ def locate_employee_mod(employee_id: str, scope: str) -> tuple[Path | None, list
                         f"backend/employees/{declared_id}",
                     ]
                     return mod_dir, focus
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     return None, []

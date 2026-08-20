@@ -48,10 +48,7 @@ export class StreamingTtsPlayer {
   constructor(private getConfig: () => StreamingTtsConfig) {}
 
   private markEdgeRateLimited(retryAfterSec?: number) {
-    const backoffMs =
-      typeof retryAfterSec === 'number' && retryAfterSec > 0
-        ? retryAfterSec * 1000
-        : 60_000
+    const backoffMs = typeof retryAfterSec === 'number' && retryAfterSec > 0 ? retryAfterSec * 1000 : 60_000
     this.edgeBlockedUntil = Date.now() + backoffMs
   }
 
@@ -92,7 +89,9 @@ export class StreamingTtsPlayer {
     const path = this.preferUnified() ? TTS_UNIFIED_PATH : TTS_STREAM_PATH
     this.warmInFlight = requestStreamBlob(path, { method: 'POST', body: payload })
       .then(() => {})
-      .catch((e) => { this.noteEdgeError(e) })
+      .catch((e) => {
+        this.noteEdgeError(e)
+      })
       .finally(() => {
         this.warmInFlight = null
       })
@@ -302,11 +301,7 @@ export class StreamingTtsPlayer {
     if (gen === this.generation) this.state.value = 'idle'
   }
 
-  private async prefetchBlob(
-    sentence: string,
-    signal: AbortSignal,
-    gen: number,
-  ): Promise<Blob | null> {
+  private async prefetchBlob(sentence: string, signal: AbortSignal, gen: number): Promise<Blob | null> {
     if (gen !== this.generation) return null
     try {
       if (this.preferUnified()) {
@@ -330,11 +325,7 @@ export class StreamingTtsPlayer {
   }
 
   private canUseMse(): boolean {
-    return (
-      typeof window !== 'undefined' &&
-      typeof MediaSource !== 'undefined' &&
-      MediaSource.isTypeSupported(MSE_MIME)
-    )
+    return typeof window !== 'undefined' && typeof MediaSource !== 'undefined' && MediaSource.isTypeSupported(MSE_MIME)
   }
 
   /** MSE 边下边播；失败时读完整流后 playBlob。 */
@@ -400,12 +391,7 @@ export class StreamingTtsPlayer {
     })
   }
 
-  private async pumpMse(
-    body: ReadableStream<Uint8Array>,
-    ms: MediaSource,
-    audio: HTMLAudioElement,
-    gen: number,
-  ): Promise<void> {
+  private async pumpMse(body: ReadableStream<Uint8Array>, ms: MediaSource, audio: HTMLAudioElement, gen: number): Promise<void> {
     const reader = body.getReader()
     const sb = ms.addSourceBuffer(MSE_MIME)
     sb.mode = 'sequence'
@@ -504,7 +490,6 @@ export class StreamingTtsPlayer {
       void audio.play().catch(done)
     })
   }
-
 }
 
 export function useStreamingTts(getConfig: () => StreamingTtsConfig) {
@@ -529,8 +514,7 @@ export function ttsConfigFromPersonalSettings(ps: {
   ttsRate: number
 }): StreamingTtsConfig {
   const raw = ps.ttsEngine
-  const engine: StreamingTtsConfig['engine'] =
-    raw === 'edge-online' ? 'edge-online' : 'auto'
+  const engine: StreamingTtsConfig['engine'] = raw === 'edge-online' ? 'edge-online' : 'auto'
   return {
     engine,
     edgeVoice: ps.ttsEdgeVoice || 'zh-CN-XiaoxiaoNeural',

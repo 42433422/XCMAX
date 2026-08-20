@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """
 测试空白网格模板 - 验证网格检测逻辑
 """

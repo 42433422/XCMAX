@@ -46,7 +46,7 @@ const CHAT_BUBBLE_CONFIG: Config = {
     'kbd',
     'mark',
     'small',
-    'time'
+    'time',
   ],
   ALLOWED_ATTR: [
     'href',
@@ -65,9 +65,9 @@ const CHAT_BUBBLE_CONFIG: Config = {
     'height',
     'lang',
     'dir',
-    'style'
+    'style',
   ],
-  ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i
+  ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
 }
 
 /** AI 气泡：Markdown → HTML 后再消毒；允许代码块复制按钮与图片等 Markdown 产物 */
@@ -84,8 +84,8 @@ const CHAT_MARKDOWN_CONFIG: Config = {
     'data-source',
     'data-tex',
     'aria-label',
-    'role'
-  ]
+    'role',
+  ],
 }
 
 const SALES_CONTRACT_SANITIZE_CONFIG: Config = {
@@ -104,15 +104,11 @@ const SALES_CONTRACT_SANITIZE_CONFIG: Config = {
     'data-row-id',
     'data-field',
     'data-index',
-    'data-task-id'
-  ]
+    'data-task-id',
+  ],
 }
 
-function salesContractInteractiveAttrHook(
-  currentNode: Element,
-  hookEvent: UponSanitizeAttributeHookEvent,
-  _config: Config
-) {
+function salesContractInteractiveAttrHook(currentNode: Element, hookEvent: UponSanitizeAttributeHookEvent, _config: Config) {
   const name = String(hookEvent.attrName || '')
   if (!name.startsWith('on')) return
   const tag = currentNode.tagName

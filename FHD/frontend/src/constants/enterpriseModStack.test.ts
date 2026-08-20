@@ -1,9 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  buildEnterpriseModStack,
-  modBelongsToEnterpriseStack,
-  isWorkflowCarrierModId,
-} from './enterpriseModStack'
+import { buildEnterpriseModStack, modBelongsToEnterpriseStack, isWorkflowCarrierModId } from './enterpriseModStack'
 import type { IndustryBaselinePlan } from '@/constants/platformShell'
 
 describe('enterpriseModStack', () => {

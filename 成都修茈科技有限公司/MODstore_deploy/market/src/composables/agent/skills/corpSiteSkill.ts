@@ -1,10 +1,5 @@
 import type { AgentContext, SkillExecuteResult } from '../../../types/agent'
-import {
-  CORP_LINKS,
-  getCorpPageKnowledge,
-  linkForCorpPage,
-  resolveCorpPageId,
-} from '../../../content/siteKnowledge'
+import { CORP_LINKS, getCorpPageKnowledge, linkForCorpPage, resolveCorpPageId } from '../../../content/siteKnowledge'
 
 function reply(text: string): SkillExecuteResult {
   return { success: true, message: text, assistantReply: text }
@@ -41,9 +36,7 @@ export function matchCorpSiteIntent(ctx: AgentContext): SkillExecuteResult | nul
     const page = getCorpPageKnowledge(pageId)
     const pageHint = pageHintForPath(path)
     const summary = ctx.pageSummary?.trim() || page.summary
-    return reply(
-      `${pageHint}\n\n${summary.slice(0, 320)}${summary.length > 320 ? '…' : ''}\n\n相关链接：${linkForCorpPage(pageId)}`,
-    )
+    return reply(`${pageHint}\n\n${summary.slice(0, 320)}${summary.length > 320 ? '…' : ''}\n\n相关链接：${linkForCorpPage(pageId)}`)
   }
   if (/联系|咨询|预约|电话|微信|销售|合作|填表|表单/.test(q)) {
     return reply(
@@ -51,9 +44,7 @@ export function matchCorpSiteIntent(ctx: AgentContext): SkillExecuteResult | nul
     )
   }
   if (/excel|上传|识别.*工具|试.*识别/.test(q)) {
-    return reply(
-      `可在此体验 Excel 上传识别：${CORP_LINKS.excelToAi}\n\n完整产品线见：${CORP_LINKS.services}`,
-    )
+    return reply(`可在此体验 Excel 上传识别：${CORP_LINKS.excelToAi}\n\n完整产品线见：${CORP_LINKS.services}`)
   }
   if (/下载|安装包|安装|xcagi|桌面端|macos|windows|android|安卓/.test(q)) {
     const page = getCorpPageKnowledge('download')
@@ -66,9 +57,7 @@ export function matchCorpSiteIntent(ctx: AgentContext): SkillExecuteResult | nul
   }
   if (/产品|服务|功能|单据|标签|打印|modstore|市场/.test(q) && !/案例|下载/.test(q)) {
     const page = getCorpPageKnowledge('services')
-    return reply(
-      `${page.summary}\n\n详见产品中心：${CORP_LINKS.services}\n\n想深入某一场景可看解决方案：${CORP_LINKS.solutions}`,
-    )
+    return reply(`${page.summary}\n\n详见产品中心：${CORP_LINKS.services}\n\n想深入某一场景可看解决方案：${CORP_LINKS.solutions}`)
   }
   if (/方案|制造|贸易|园区|教育|行业|场景/.test(q) && !/案例|详情/.test(q)) {
     return reply(
@@ -78,9 +67,7 @@ export function matchCorpSiteIntent(ctx: AgentContext): SkillExecuteResult | nul
   }
   if (/制造|生产|库存/.test(q) && /案例|详情/.test(q)) {
     const page = getCorpPageKnowledge('case-manufacture')
-    return reply(
-      `${page.summary}\n\n详情页：${CORP_LINKS.caseManufacture}\n更多案例：${CORP_LINKS.cases}`,
-    )
+    return reply(`${page.summary}\n\n详情页：${CORP_LINKS.caseManufacture}\n更多案例：${CORP_LINKS.cases}`)
   }
   if (/园区/.test(q) && /案例|详情/.test(q)) {
     const page = getCorpPageKnowledge('case-park')
@@ -104,9 +91,7 @@ export function matchCorpSiteIntent(ctx: AgentContext): SkillExecuteResult | nul
     return reply(`${page.summary}\n\n详见：${CORP_LINKS.honors}（具体资质以实际公示为准）`)
   }
   if (/市场|登录|注册|会员|工作台|试用/.test(q)) {
-    return reply(
-      `登录 AI 市场可体验完整工作台与数字管家能力：${CORP_LINKS.market}\n\n若尚未注册，可先预约方案沟通：${CORP_LINKS.contact}`,
-    )
+    return reply(`登录 AI 市场可体验完整工作台与数字管家能力：${CORP_LINKS.market}\n\n若尚未注册，可先预约方案沟通：${CORP_LINKS.contact}`)
   }
   if (/购买|怎么买|如何买|下单|开通|买会员|买套餐|授权/.test(q) || /价格|报价|费用|多少钱|收费|会员.*价/.test(q)) {
     const plans = `${CORP_LINKS.market.replace(/\/$/, '')}/plans`

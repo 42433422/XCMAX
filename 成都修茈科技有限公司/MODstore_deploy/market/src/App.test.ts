@@ -173,7 +173,10 @@ describe('App shell', () => {
 
   it('drives shell modals, admin unlock, sidebar mode, and conversation gestures', async () => {
     vi.mocked(api.walletAdminSelfCredit).mockResolvedValue({ ok: true })
-    vi.mocked(api.verifyAdminDigestCode).mockResolvedValue({ ok: true, expires_at: new Date(Date.now() + 60_000).toISOString() })
+    vi.mocked(api.verifyAdminDigestCode).mockResolvedValue({
+      ok: true,
+      expires_at: new Date(Date.now() + 60_000).toISOString(),
+    })
 
     const router = createTestRouter()
     const pinia = createPinia()
@@ -192,8 +195,22 @@ describe('App shell', () => {
     const { useWorkbenchSidebarStore } = await import('./stores/workbenchSidebar')
     const wbSidebar = useWorkbenchSidebarStore()
     wbSidebar.setConversations([
-      { id: 'c1', title: '第一轮', createdAt: Date.now(), updatedAt: Date.now(), pinned: false, messages: [] },
-      { id: 'c2', title: '第二轮', createdAt: Date.now(), updatedAt: Date.now() - 120_000, pinned: false, messages: [] },
+      {
+        id: 'c1',
+        title: '第一轮',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        pinned: false,
+        messages: [],
+      },
+      {
+        id: 'c2',
+        title: '第二轮',
+        createdAt: Date.now(),
+        updatedAt: Date.now() - 120_000,
+        pinned: false,
+        messages: [],
+      },
     ])
     wbSidebar.setActiveConversationId('c1')
     await wrapper.vm.$nextTick()
@@ -231,7 +248,10 @@ describe('App shell', () => {
     expect(vm.adminUnlockCode).toBe('A506E7')
     await vm.submitAdminUnlock()
     expect(vm.adminUnlockErr).toContain('校验失败')
-    vi.mocked(api.verifyAdminDigestCode).mockResolvedValueOnce({ ok: true, expires_at: new Date(Date.now() + 60_000).toISOString() })
+    vi.mocked(api.verifyAdminDigestCode).mockResolvedValueOnce({
+      ok: true,
+      expires_at: new Date(Date.now() + 60_000).toISOString(),
+    })
     vm.adminUnlockCode = 'A506E7'
     await vm.submitAdminUnlock()
     await flushPromises()
@@ -302,8 +322,22 @@ describe('App shell', () => {
     const wbSidebar = useWorkbenchSidebarStore()
     authStore.setAdminDigestUnlock(new Date(Date.now() + 60_000).toISOString())
     wbSidebar.setConversations([
-      { id: 'c1', title: '第一轮', createdAt: Date.now(), updatedAt: Date.now(), pinned: false, messages: [] },
-      { id: 'c2', title: '', createdAt: Date.now(), updatedAt: Date.now() - 10_000, pinned: false, messages: [] },
+      {
+        id: 'c1',
+        title: '第一轮',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        pinned: false,
+        messages: [],
+      },
+      {
+        id: 'c2',
+        title: '',
+        createdAt: Date.now(),
+        updatedAt: Date.now() - 10_000,
+        pinned: false,
+        messages: [],
+      },
     ])
     wbSidebar.setActiveConversationId('c1')
     await wrapper.vm.$nextTick()
@@ -463,9 +497,7 @@ describe('App shell', () => {
     failingDispatch.mockRestore()
     createEventSpy.mockRestore()
 
-    const connectCallback = vi.mocked(connectRealtime).mock.calls.find(([cb]) => typeof cb === 'function')?.[0] as
-      | (() => void)
-      | undefined
+    const connectCallback = vi.mocked(connectRealtime).mock.calls.find(([cb]) => typeof cb === 'function')?.[0] as (() => void) | undefined
     connectCallback?.()
     vi.mocked(confirmDanger).mockResolvedValueOnce(false)
     await vm.doLogout()

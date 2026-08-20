@@ -110,9 +110,7 @@ const CLIENT_WORKSHOPS_SEED: ClientWorkshop[] = [
   },
 ]
 
-export const CLIENT_WORKSHOPS: readonly ClientWorkshop[] = Object.freeze(
-  CLIENT_WORKSHOPS_SEED.map((w) => Object.freeze({ ...w })),
-)
+export const CLIENT_WORKSHOPS: readonly ClientWorkshop[] = Object.freeze(CLIENT_WORKSHOPS_SEED.map((w) => Object.freeze({ ...w })))
 
 export function listClientWorkshops(opts?: { includeDisabled?: boolean }): ClientWorkshop[] {
   const all = [...CLIENT_WORKSHOPS]
@@ -147,7 +145,9 @@ export function linkedRosterEmployeeIds(workshop: ClientWorkshop): string[] {
 export type WbGear = 'direct' | 'make' | 'voice'
 
 export function parseWbGearQuery(raw: unknown): WbGear | null {
-  const v = String(raw ?? '').trim().toLowerCase()
+  const v = String(raw ?? '')
+    .trim()
+    .toLowerCase()
   if (v === 'direct' || v === 'make' || v === 'voice') return v
   return null
 }

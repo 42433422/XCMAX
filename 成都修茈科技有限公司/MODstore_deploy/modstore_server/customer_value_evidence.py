@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, union-attr"
 """Strict, read-only customer value evidence aggregation.
 
 Payment status alone is intentionally insufficient. Production value requires
@@ -21,15 +22,17 @@ import httpx
 from sqlalchemy.exc import SQLAlchemyError
 
 from modstore_server import payment_orders
+from modstore_server.customer_value_classification import amount_cents as _amount_cents
 from modstore_server.customer_value_classification import (
-    amount_cents as _amount_cents,
     classify_payment_order,
-    parse_datetime as _parse_datetime,
-    payment_amount_cents,
-    sanitize_evidence as _sanitize_evidence,
-    text as _text,
-    truthy as _truthy,
 )
+from modstore_server.customer_value_classification import parse_datetime as _parse_datetime
+from modstore_server.customer_value_classification import (
+    payment_amount_cents,
+)
+from modstore_server.customer_value_classification import sanitize_evidence as _sanitize_evidence
+from modstore_server.customer_value_classification import text as _text
+from modstore_server.customer_value_classification import truthy as _truthy
 from modstore_server.models import CustomerValueReceipt, get_session_factory
 
 UTC = timezone.utc  # noqa: UP017 - MODstore CI and production still support Python 3.10

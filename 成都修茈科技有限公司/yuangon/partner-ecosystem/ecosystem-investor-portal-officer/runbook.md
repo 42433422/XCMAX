@@ -7,26 +7,29 @@
         ## 上游 Handoff 契约
 
         ### handoff: market-frontend-dev → 本岗
+
 - **触发条件**：`employee.task.done:market-frontend-dev`
 - **输入**：待补充（参见 `yuangon/**/market-frontend-dev/runbook.md`）
 - **门禁**：依赖完成前本岗不得继续
 
 ### handoff: ecosystem-delivery-reporter → 本岗
+
 - **触发条件**：`employee.task.done:ecosystem-delivery-reporter`
 - **输入**：待补充（参见 `yuangon/**/ecosystem-delivery-reporter/runbook.md`）
 - **门禁**：依赖完成前本岗不得继续
 
+          ## Handlers
 
-        ## Handlers
+          | Handler | 说明 |
+          |---------|------|
+          | `llm_md` | 接收 Markdown 任务描述，调用 LLM 输出结构化结果 |
 
-        | Handler | 说明 |
-        |---------|------|
-        | `llm_md` | 接收 Markdown 任务描述，调用 LLM 输出结构化结果 |
-| `echo` | 调试用：原样返回输入，用于 smoke 测试 |
+  | `echo` | 调试用：原样返回输入，用于 smoke 测试 |
 
-        ## 核心 Scope
+          ## 核心 Scope
 
-        - `MODstore_deploy/market/src/**/admin/**`
+          - `MODstore_deploy/market/src/**/admin/**`
+
 - `MODstore_deploy/market/src/views/**/Investor*`
 - `MODstore_deploy/modstore_server/**/investor*`
 - `yuangon/partner-ecosystem/ecosystem-investor-portal-officer/**`

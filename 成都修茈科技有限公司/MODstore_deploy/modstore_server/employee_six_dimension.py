@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr"
 """员工制作流水线六维质量评估（确定性汇总，不重复跑沙箱）。"""
 
 from __future__ import annotations
@@ -9,11 +10,14 @@ from typing import Any, Dict, List, Optional, Tuple
 from modstore_server.employee_brief_utils import compact_routing_brief
 from modstore_server.employee_six_dimension_report import (
     SIX_DIMENSION_KEYS,
-    clamp_score as _clamp_score,
-    dim_entry as _dim_entry,
-    finalize_dimension_report as _finalize_dimension_report,
-    score_to_grade as score_to_grade,
 )
+from modstore_server.employee_six_dimension_report import clamp_score as _clamp_score
+from modstore_server.employee_six_dimension_report import dim_entry as _dim_entry
+from modstore_server.employee_six_dimension_report import (
+    finalize_dimension_report as _finalize_dimension_report,
+)
+from modstore_server.employee_six_dimension_report import score_to_grade as score_to_grade
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 
 def build_six_dimension_report_from_llm_dimensions(
@@ -299,7 +303,9 @@ def _score_domain_delivery(
                 reasons.append(f"黄金未达标 parity={parity}")
         if isinstance(runtime_generation, dict):
             try:
-                from modstore_server.vibecoding_convert_loop import is_llm_codegen_source
+                from modstore_server.vibecoding_convert_loop import (
+                    is_llm_codegen_source,
+                )
 
                 if is_llm_codegen_source(runtime_generation):
                     reasons.append("convert 为 LLM 生成")
@@ -371,7 +377,7 @@ def compute_six_dimension_report(
             from modstore_server.workbench_api import _employee_handlers_contract_ok
 
             handlers_ok, handlers_msg = _employee_handlers_contract_ok(pack_dir)
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
             handlers_ok, handlers_msg = False, str(exc)[:120]
 
     wf = workflow_sandbox if isinstance(workflow_sandbox, dict) else {}

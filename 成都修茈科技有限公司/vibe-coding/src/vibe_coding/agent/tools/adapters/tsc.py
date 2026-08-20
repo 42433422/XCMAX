@@ -44,9 +44,7 @@ class TSCAdapter:
             return shutil.which(self._binary) is not None
         if shutil.which("tsc") is not None:
             return True
-        if self._npx_fallback and shutil.which("npx") is not None:
-            return True
-        return False
+        return bool(self._npx_fallback and shutil.which("npx") is not None)
 
     def run(
         self,

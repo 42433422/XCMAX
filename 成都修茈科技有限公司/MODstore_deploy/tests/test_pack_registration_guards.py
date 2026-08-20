@@ -23,7 +23,14 @@ def test_workflow_automation_blocks_incomplete_upstream():
 def test_workflow_automation_allows_complete():
     assert (
         workflow_automation_block_reason(
-            [{"workflow_index": 0, "ok": True, "workflow_id": 12, "automation_complete": True}],
+            [
+                {
+                    "workflow_index": 0,
+                    "ok": True,
+                    "workflow_id": 12,
+                    "automation_complete": True,
+                }
+            ],
             workflow_index=0,
             wf_entry={"id": "emp-a"},
         )
@@ -105,7 +112,12 @@ def test_registration_metadata_mismatch_version():
     mismatches = registration_metadata_mismatches(
         wf_entry={"id": "m-emp", "label": "Label A"},
         mod_manifest={"version": "2.0.0", "author": "alice"},
-        audit_manifest={"id": "m-emp", "name": "Label A", "version": "1.0.0", "author": "alice"},
+        audit_manifest={
+            "id": "m-emp",
+            "name": "Label A",
+            "version": "1.0.0",
+            "author": "alice",
+        },
         catalog_rec={"id": "m-emp", "name": "Label A", "version": "2.0.0"},
     )
     assert any("version" in m for m in mismatches)

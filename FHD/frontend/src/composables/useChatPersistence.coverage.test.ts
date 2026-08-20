@@ -40,29 +40,22 @@ import {
 
 // 仅 mock 外部边界：chatStorageKeys 的 build*Key / extractSessionIdForActiveMod
 // 真实调用被测 composable 本身。
-const mockBuildChatMessagesKey = vi.fn(
-  (sid: string, _modId?: string) => `xcagi_chat_messages_${sid}`,
-)
-const mockBuildChatSessionMetaKey = vi.fn(
-  (sid: string, _modId?: string) => `xcagi_chat_session_meta_${sid}`,
-)
-const mockExtractSessionIdForActiveMod = vi.fn(
-  (prefix: string, key: string, _modId?: string) => {
-    // Mimic real behavior: only return sessionId when key starts with prefix
-    const raw = String(key || '')
-    if (!raw.startsWith(prefix)) return null
-    const rest = raw.slice(prefix.length)
-    return rest || null
-  },
-)
+const mockBuildChatMessagesKey = vi.fn((sid: string, _modId?: string) => `xcagi_chat_messages_${sid}`)
+const mockBuildChatSessionMetaKey = vi.fn((sid: string, _modId?: string) => `xcagi_chat_session_meta_${sid}`)
+const mockExtractSessionIdForActiveMod = vi.fn((prefix: string, key: string, _modId?: string) => {
+  // Mimic real behavior: only return sessionId when key starts with prefix
+  const raw = String(key || '')
+  if (!raw.startsWith(prefix)) return null
+  const rest = raw.slice(prefix.length)
+  return rest || null
+})
 
 vi.mock('@/utils/chatStorageKeys', () => ({
   CHAT_MESSAGES_STORAGE_PREFIX: 'xcagi_chat_messages_',
   CHAT_SESSION_META_PREFIX: 'xcagi_chat_session_meta_',
   buildChatMessagesKey: (...args: unknown[]) => mockBuildChatMessagesKey(...args),
   buildChatSessionMetaKey: (...args: unknown[]) => mockBuildChatSessionMetaKey(...args),
-  extractSessionIdForActiveMod: (...args: unknown[]) =>
-    mockExtractSessionIdForActiveMod(...args),
+  extractSessionIdForActiveMod: (...args: unknown[]) => mockExtractSessionIdForActiveMod(...args),
 }))
 
 // isIndustryWelcomePlainText 真实模块依赖 hostConfig；用 stub 隔离以避免拉起整个 store
@@ -82,20 +75,14 @@ describe('useChatPersistence — coverage ramp', () => {
     mockBuildChatMessagesKey.mockClear()
     mockBuildChatSessionMetaKey.mockClear()
     mockExtractSessionIdForActiveMod.mockClear()
-    mockBuildChatMessagesKey.mockImplementation(
-      (sid: string, _modId?: string) => `xcagi_chat_messages_${sid}`,
-    )
-    mockBuildChatSessionMetaKey.mockImplementation(
-      (sid: string, _modId?: string) => `xcagi_chat_session_meta_${sid}`,
-    )
-    mockExtractSessionIdForActiveMod.mockImplementation(
-      (prefix: string, key: string, _modId?: string) => {
-        const raw = String(key || '')
-        if (!raw.startsWith(prefix)) return null
-        const rest = raw.slice(prefix.length)
-        return rest || null
-      },
-    )
+    mockBuildChatMessagesKey.mockImplementation((sid: string, _modId?: string) => `xcagi_chat_messages_${sid}`)
+    mockBuildChatSessionMetaKey.mockImplementation((sid: string, _modId?: string) => `xcagi_chat_session_meta_${sid}`)
+    mockExtractSessionIdForActiveMod.mockImplementation((prefix: string, key: string, _modId?: string) => {
+      const raw = String(key || '')
+      if (!raw.startsWith(prefix)) return null
+      const rest = raw.slice(prefix.length)
+      return rest || null
+    })
   })
 
   afterEach(() => {
@@ -128,10 +115,7 @@ describe('useChatPersistence — coverage ramp', () => {
     })
 
     it('returns object when stored value is a valid object', () => {
-      sessionStorage.setItem(
-        EXCEL_ANALYSIS_STORAGE_PREFIX + 's1',
-        JSON.stringify({ a: 1, nested: { b: 2 } }),
-      )
+      sessionStorage.setItem(EXCEL_ANALYSIS_STORAGE_PREFIX + 's1', JSON.stringify({ a: 1, nested: { b: 2 } }))
       expect(readPersistedExcelAnalysisContext('s1')).toEqual({ a: 1, nested: { b: 2 } })
     })
 
@@ -148,9 +132,7 @@ describe('useChatPersistence — coverage ramp', () => {
     it('stores with empty key prefix when sessionKey is empty (no early return)', () => {
       // Source does not early-return on empty sessionKey; it just uses '' as the key
       persistExcelAnalysisContext('', { a: 1 })
-      expect(sessionStorage.getItem(EXCEL_ANALYSIS_STORAGE_PREFIX)).toBe(
-        JSON.stringify({ a: 1 }),
-      )
+      expect(sessionStorage.getItem(EXCEL_ANALYSIS_STORAGE_PREFIX)).toBe(JSON.stringify({ a: 1 }))
     })
 
     it('removes key when ctx is null', () => {
@@ -161,9 +143,7 @@ describe('useChatPersistence — coverage ramp', () => {
 
     it('stores stringified object when ctx is provided', () => {
       persistExcelAnalysisContext('s1', { file_path: '/x.xlsx' })
-      expect(sessionStorage.getItem(EXCEL_ANALYSIS_STORAGE_PREFIX + 's1')).toBe(
-        JSON.stringify({ file_path: '/x.xlsx' }),
-      )
+      expect(sessionStorage.getItem(EXCEL_ANALYSIS_STORAGE_PREFIX + 's1')).toBe(JSON.stringify({ file_path: '/x.xlsx' }))
     })
 
     it('swallows quota errors silently', () => {
@@ -209,21 +189,15 @@ describe('useChatPersistence — coverage ramp', () => {
     })
 
     it('returns file_path from upload.file_path', () => {
-      expect(resolveExcelFilePathFromAnalysis({ upload: { file_path: '/u.xlsx' } })).toBe(
-        '/u.xlsx',
-      )
+      expect(resolveExcelFilePathFromAnalysis({ upload: { file_path: '/u.xlsx' } })).toBe('/u.xlsx')
     })
 
     it('returns file_path from source.file_path', () => {
-      expect(resolveExcelFilePathFromAnalysis({ source: { file_path: '/s.xlsx' } })).toBe(
-        '/s.xlsx',
-      )
+      expect(resolveExcelFilePathFromAnalysis({ source: { file_path: '/s.xlsx' } })).toBe('/s.xlsx')
     })
 
     it('returns file_path from document.file_path (not filepath)', () => {
-      expect(
-        resolveExcelFilePathFromAnalysis({ document: { file_path: '/df.xlsx' } }),
-      ).toBe('/df.xlsx')
+      expect(resolveExcelFilePathFromAnalysis({ document: { file_path: '/df.xlsx' } })).toBe('/df.xlsx')
     })
 
     it('skips empty string candidates and returns first non-empty', () => {
@@ -254,9 +228,7 @@ describe('useChatPersistence — coverage ramp', () => {
     })
 
     it('returns empty array when all_sheets is empty', () => {
-      expect(resolveExcelSheetOptionsFromContext({ preview_data: { all_sheets: [] } })).toEqual(
-        [],
-      )
+      expect(resolveExcelSheetOptionsFromContext({ preview_data: { all_sheets: [] } })).toEqual([])
     })
 
     it('uses idx+1 when sheet_index missing or invalid', () => {
@@ -301,9 +273,7 @@ describe('useChatPersistence — coverage ramp', () => {
     })
 
     it('returns empty array when sheet_names is not array', () => {
-      expect(
-        resolveExcelSheetOptionsFromContext({ preview_data: { sheet_names: 'nope' } }),
-      ).toEqual([])
+      expect(resolveExcelSheetOptionsFromContext({ preview_data: { sheet_names: 'nope' } })).toEqual([])
     })
   })
 
@@ -312,9 +282,7 @@ describe('useChatPersistence — coverage ramp', () => {
   // -----------------------------------------------------------------------
   describe('resolveLinkedSheetGridPreview — edge cases', () => {
     it('returns null when linkedSheet has empty sheet_name', () => {
-      expect(
-        resolveLinkedSheetGridPreview({ preview_data: {} }, { sheet_name: '', sheet_index: 1 }),
-      ).toBeNull()
+      expect(resolveLinkedSheetGridPreview({ preview_data: {} }, { sheet_name: '', sheet_index: 1 })).toBeNull()
     })
 
     it('returns null when linkedSheet is null', () => {
@@ -322,17 +290,13 @@ describe('useChatPersistence — coverage ramp', () => {
     })
 
     it('returns null when ctx is a primitive', () => {
-      expect(
-        resolveLinkedSheetGridPreview('hello', { sheet_name: 'A', sheet_index: 1 }),
-      ).toBeNull()
+      expect(resolveLinkedSheetGridPreview('hello', { sheet_name: 'A', sheet_index: 1 })).toBeNull()
     })
 
     it('matches by sheet_index when sheet_name mismatch', () => {
       const ctx = {
         preview_data: {
-          all_sheets: [
-            { sheet_name: 'AAA', sheet_index: 5, fields: [{ label: 'F1' }] },
-          ],
+          all_sheets: [{ sheet_name: 'AAA', sheet_index: 5, fields: [{ label: 'F1' }] }],
         },
       }
       const result = resolveLinkedSheetGridPreview(ctx, { sheet_name: 'BBB', sheet_index: 5 })
@@ -597,9 +561,7 @@ describe('useChatPersistence — coverage ramp', () => {
     })
 
     it('returns true for ai role with welcome content', () => {
-      expect(isWelcomeMessage({ role: 'ai', content: '你好，我是业务助手。请说出需求。' })).toBe(
-        true,
-      )
+      expect(isWelcomeMessage({ role: 'ai', content: '你好，我是业务助手。请说出需求。' })).toBe(true)
     })
 
     it('returns true for ai role with 您好 prefix', () => {
@@ -615,9 +577,7 @@ describe('useChatPersistence — coverage ramp', () => {
     })
 
     it('handles HTML content by stripping tags first', () => {
-      expect(
-        isWelcomeMessage({ role: 'ai', content: '<p>你好，我是业务助手。</p>' }),
-      ).toBe(true)
+      expect(isWelcomeMessage({ role: 'ai', content: '<p>你好，我是业务助手。</p>' })).toBe(true)
     })
   })
 
@@ -678,10 +638,7 @@ describe('useChatPersistence — coverage ramp', () => {
     })
 
     it('returns null when parsed value is not an object (string)', () => {
-      sessionStorage.setItem(
-        CHAT_TASK_PANEL_STORAGE_PREFIX + 's1',
-        JSON.stringify('hello'),
-      )
+      sessionStorage.setItem(CHAT_TASK_PANEL_STORAGE_PREFIX + 's1', JSON.stringify('hello'))
       expect(readPersistedTaskPanelState('s1')).toBeNull()
     })
 
@@ -709,17 +666,24 @@ describe('useChatPersistence — coverage ramp', () => {
 
     it('returns full state when all fields present', () => {
       const state: PersistedTaskPanelState = {
-        taskList: [{ id: 't1', type: 'shipment', title: 'T1', source: 'shipment', status: 'success', startedAt: 1, updatedAt: 2 }],
+        taskList: [
+          {
+            id: 't1',
+            type: 'shipment',
+            title: 'T1',
+            source: 'shipment',
+            status: 'success',
+            startedAt: 1,
+            updatedAt: 2,
+          },
+        ],
         activeTaskId: 't1',
         expandedTaskIds: ['t1', 't2'],
         taskFilter: 'running',
         currentTask: { type: 'shipment_generate' },
         savedAt: 12345,
       }
-      sessionStorage.setItem(
-        CHAT_TASK_PANEL_STORAGE_PREFIX + 's1',
-        JSON.stringify(state),
-      )
+      sessionStorage.setItem(CHAT_TASK_PANEL_STORAGE_PREFIX + 's1', JSON.stringify(state))
       const result = readPersistedTaskPanelState('s1')
       expect(result).toEqual(state)
     })
@@ -736,37 +700,25 @@ describe('useChatPersistence — coverage ramp', () => {
     })
 
     it('falls back to "all" when taskFilter is invalid', () => {
-      sessionStorage.setItem(
-        CHAT_TASK_PANEL_STORAGE_PREFIX + 's1',
-        JSON.stringify({ taskFilter: 'invalid' }),
-      )
+      sessionStorage.setItem(CHAT_TASK_PANEL_STORAGE_PREFIX + 's1', JSON.stringify({ taskFilter: 'invalid' }))
       const result = readPersistedTaskPanelState('s1')
       expect(result!.taskFilter).toBe('all')
     })
 
     it('returns null currentTask when not an object', () => {
-      sessionStorage.setItem(
-        CHAT_TASK_PANEL_STORAGE_PREFIX + 's1',
-        JSON.stringify({ currentTask: 'not-object' }),
-      )
+      sessionStorage.setItem(CHAT_TASK_PANEL_STORAGE_PREFIX + 's1', JSON.stringify({ currentTask: 'not-object' }))
       const result = readPersistedTaskPanelState('s1')
       expect(result!.currentTask).toBeNull()
     })
 
     it('returns 0 savedAt when not finite', () => {
-      sessionStorage.setItem(
-        CHAT_TASK_PANEL_STORAGE_PREFIX + 's1',
-        JSON.stringify({ savedAt: 'NaN' }),
-      )
+      sessionStorage.setItem(CHAT_TASK_PANEL_STORAGE_PREFIX + 's1', JSON.stringify({ savedAt: 'NaN' }))
       const result = readPersistedTaskPanelState('s1')
       expect(result!.savedAt).toBe(0)
     })
 
     it('returns empty taskList when not an array', () => {
-      sessionStorage.setItem(
-        CHAT_TASK_PANEL_STORAGE_PREFIX + 's1',
-        JSON.stringify({ taskList: 'not-array' }),
-      )
+      sessionStorage.setItem(CHAT_TASK_PANEL_STORAGE_PREFIX + 's1', JSON.stringify({ taskList: 'not-array' }))
       const result = readPersistedTaskPanelState('s1')
       expect(result!.taskList).toEqual([])
     })
@@ -798,9 +750,7 @@ describe('useChatPersistence — coverage ramp', () => {
         savedAt: 99,
       }
       persistTaskPanelState('s1', state)
-      expect(sessionStorage.getItem(CHAT_TASK_PANEL_STORAGE_PREFIX + 's1')).toBe(
-        JSON.stringify(state),
-      )
+      expect(sessionStorage.getItem(CHAT_TASK_PANEL_STORAGE_PREFIX + 's1')).toBe(JSON.stringify(state))
     })
 
     it('swallows quota errors silently', () => {
@@ -874,12 +824,7 @@ describe('useChatPersistence — coverage ramp', () => {
 
       it('filters out sessions without session_id or id', () => {
         const { normalizeHistorySessions } = useChatHistoryPersistence(makeDeps())
-        const result = normalizeHistorySessions([
-          { session_id: 's1', title: 'T1' },
-          { id: 's2', title: 'T2' },
-          { title: 'no id' },
-          {},
-        ])
+        const result = normalizeHistorySessions([{ session_id: 's1', title: 'T1' }, { id: 's2', title: 'T2' }, { title: 'no id' }, {}])
         expect(result).toHaveLength(2)
         expect(result[0].session_id).toBe('s1')
         expect(result[1].session_id).toBe('s2')
@@ -900,41 +845,31 @@ describe('useChatPersistence — coverage ramp', () => {
 
       it('uses message_count when present', () => {
         const { normalizeHistorySessions } = useChatHistoryPersistence(makeDeps())
-        const result = normalizeHistorySessions([
-          { session_id: 's1', message_count: 5 },
-        ])
+        const result = normalizeHistorySessions([{ session_id: 's1', message_count: 5 }])
         expect(result[0].message_count).toBe(5)
       })
 
       it('falls back to messages.length when message_count missing', () => {
         const { normalizeHistorySessions } = useChatHistoryPersistence(makeDeps())
-        const result = normalizeHistorySessions([
-          { session_id: 's1', messages: [1, 2, 3] },
-        ])
+        const result = normalizeHistorySessions([{ session_id: 's1', messages: [1, 2, 3] }])
         expect(result[0].message_count).toBe(3)
       })
 
       it('falls back to 0 when message_count is not finite', () => {
         const { normalizeHistorySessions } = useChatHistoryPersistence(makeDeps())
-        const result = normalizeHistorySessions([
-          { session_id: 's1', message_count: 'NaN' },
-        ])
+        const result = normalizeHistorySessions([{ session_id: 's1', message_count: 'NaN' }])
         expect(result[0].message_count).toBe(0)
       })
 
       it('uses last_message_at when present', () => {
         const { normalizeHistorySessions } = useChatHistoryPersistence(makeDeps())
-        const result = normalizeHistorySessions([
-          { session_id: 's1', last_message_at: '2026-01-01' },
-        ])
+        const result = normalizeHistorySessions([{ session_id: 's1', last_message_at: '2026-01-01' }])
         expect(result[0].last_message_at).toBe('2026-01-01')
       })
 
       it('falls back to updated_at then created_at', () => {
         const { normalizeHistorySessions } = useChatHistoryPersistence(makeDeps())
-        const result = normalizeHistorySessions([
-          { session_id: 's1', updated_at: '2026-01-02', created_at: '2026-01-01' },
-        ])
+        const result = normalizeHistorySessions([{ session_id: 's1', updated_at: '2026-01-02', created_at: '2026-01-01' }])
         expect(result[0].last_message_at).toBe('2026-01-02')
       })
 
@@ -946,9 +881,7 @@ describe('useChatPersistence — coverage ramp', () => {
 
       it('preserves extra fields via spread', () => {
         const { normalizeHistorySessions } = useChatHistoryPersistence(makeDeps())
-        const result = normalizeHistorySessions([
-          { session_id: 's1', custom_field: 'hello' },
-        ])
+        const result = normalizeHistorySessions([{ session_id: 's1', custom_field: 'hello' }])
         expect((result[0] as Record<string, unknown>).custom_field).toBe('hello')
       })
     })
@@ -998,20 +931,14 @@ describe('useChatPersistence — coverage ramp', () => {
       })
 
       it('fills time when missing', () => {
-        localStorage.setItem(
-          'xcagi_chat_messages_s1',
-          JSON.stringify([{ role: 'ai', content: 'hello' }]),
-        )
+        localStorage.setItem('xcagi_chat_messages_s1', JSON.stringify([{ role: 'ai', content: 'hello' }]))
         const { readLocalMessagesBySession } = useChatHistoryPersistence(makeDeps())
         const result = readLocalMessagesBySession('s1')
         expect(result[0].time).toBeTruthy()
       })
 
       it('preserves time when present', () => {
-        localStorage.setItem(
-          'xcagi_chat_messages_s1',
-          JSON.stringify([{ role: 'ai', content: 'hello', time: '12:34' }]),
-        )
+        localStorage.setItem('xcagi_chat_messages_s1', JSON.stringify([{ role: 'ai', content: 'hello', time: '12:34' }]))
         const { readLocalMessagesBySession } = useChatHistoryPersistence(makeDeps())
         const result = readLocalMessagesBySession('s1')
         expect(result[0].time).toBe('12:34')
@@ -1034,10 +961,7 @@ describe('useChatPersistence — coverage ramp', () => {
       })
 
       it('uses content string when content is non-string', () => {
-        localStorage.setItem(
-          'xcagi_chat_messages_s1',
-          JSON.stringify([{ role: 'ai', content: 42 }]),
-        )
+        localStorage.setItem('xcagi_chat_messages_s1', JSON.stringify([{ role: 'ai', content: 42 }]))
         const { readLocalMessagesBySession } = useChatHistoryPersistence(makeDeps())
         const result = readLocalMessagesBySession('s1')
         expect(result[0].content).toBe('42')
@@ -1068,10 +992,7 @@ describe('useChatPersistence — coverage ramp', () => {
       })
 
       it('returns parsed object when valid', () => {
-        localStorage.setItem(
-          'xcagi_chat_session_meta_s1',
-          JSON.stringify({ title: 'T1', updated_at: '2026-01-01' }),
-        )
+        localStorage.setItem('xcagi_chat_session_meta_s1', JSON.stringify({ title: 'T1', updated_at: '2026-01-01' }))
         const { readLocalSessionMeta } = useChatHistoryPersistence(makeDeps())
         expect(readLocalSessionMeta('s1')).toEqual({
           title: 'T1',
@@ -1093,9 +1014,7 @@ describe('useChatPersistence — coverage ramp', () => {
 
       it('returns "新会话" when all messages are welcome messages', () => {
         const { deriveLocalSessionTitle } = useChatHistoryPersistence(makeDeps())
-        expect(
-          deriveLocalSessionTitle([{ role: 'ai', content: '你好，我是业务助手。' }], ''),
-        ).toBe('新会话')
+        expect(deriveLocalSessionTitle([{ role: 'ai', content: '你好，我是业务助手。' }], '')).toBe('新会话')
       })
 
       it('returns "新会话" when all messages have empty content', () => {
@@ -1118,10 +1037,7 @@ describe('useChatPersistence — coverage ramp', () => {
 
       it('falls back to first meaningful message when no user message', () => {
         const { deriveLocalSessionTitle } = useChatHistoryPersistence(makeDeps())
-        const result = deriveLocalSessionTitle(
-          [{ role: 'ai', content: 'AI 回复内容' }],
-          '',
-        )
+        const result = deriveLocalSessionTitle([{ role: 'ai', content: 'AI 回复内容' }], '')
         expect(result).toBe('AI 回复内容')
       })
 
@@ -1141,19 +1057,13 @@ describe('useChatPersistence — coverage ramp', () => {
 
       it('collapses whitespace in title', () => {
         const { deriveLocalSessionTitle } = useChatHistoryPersistence(makeDeps())
-        const result = deriveLocalSessionTitle(
-          [{ role: 'user', content: '  hello   world  ' }],
-          '',
-        )
+        const result = deriveLocalSessionTitle([{ role: 'user', content: '  hello   world  ' }], '')
         expect(result).toBe('hello world')
       })
 
       it('strips HTML tags from content before deriving title', () => {
         const { deriveLocalSessionTitle } = useChatHistoryPersistence(makeDeps())
-        const result = deriveLocalSessionTitle(
-          [{ role: 'user', content: '<p>hello</p>' }],
-          '',
-        )
+        const result = deriveLocalSessionTitle([{ role: 'user', content: '<p>hello</p>' }], '')
         expect(result).toBe('hello')
       })
     })
@@ -1165,10 +1075,7 @@ describe('useChatPersistence — coverage ramp', () => {
       })
 
       it('returns null when no meaningful messages', () => {
-        localStorage.setItem(
-          'xcagi_chat_messages_s1',
-          JSON.stringify([{ role: 'ai', content: '你好，我是业务助手。' }]),
-        )
+        localStorage.setItem('xcagi_chat_messages_s1', JSON.stringify([{ role: 'ai', content: '你好，我是业务助手。' }]))
         const { buildLocalHistorySession } = useChatHistoryPersistence(makeDeps())
         expect(buildLocalHistorySession('s1')).toBeNull()
       })
@@ -1195,14 +1102,8 @@ describe('useChatPersistence — coverage ramp', () => {
       })
 
       it('uses meta.title when present', () => {
-        localStorage.setItem(
-          'xcagi_chat_messages_s1',
-          JSON.stringify([{ role: 'user', content: '帮我查价' }]),
-        )
-        localStorage.setItem(
-          'xcagi_chat_session_meta_s1',
-          JSON.stringify({ title: 'Meta Title', updated_at: '2026-01-01' }),
-        )
+        localStorage.setItem('xcagi_chat_messages_s1', JSON.stringify([{ role: 'user', content: '帮我查价' }]))
+        localStorage.setItem('xcagi_chat_session_meta_s1', JSON.stringify({ title: 'Meta Title', updated_at: '2026-01-01' }))
         const { buildLocalHistorySession } = useChatHistoryPersistence(makeDeps())
         const result = buildLocalHistorySession('s1')
         expect(result!.title).toBe('Meta Title')
@@ -1223,10 +1124,7 @@ describe('useChatPersistence — coverage ramp', () => {
       })
 
       it('falls back to current ISO time when meta.updated_at missing', () => {
-        localStorage.setItem(
-          'xcagi_chat_messages_s1',
-          JSON.stringify([{ role: 'user', content: 'msg1' }]),
-        )
+        localStorage.setItem('xcagi_chat_messages_s1', JSON.stringify([{ role: 'user', content: 'msg1' }]))
         const { buildLocalHistorySession } = useChatHistoryPersistence(makeDeps())
         const result = buildLocalHistorySession('s1')
         expect(result!.last_message_at).toBeTruthy()
@@ -1242,22 +1140,10 @@ describe('useChatPersistence — coverage ramp', () => {
       })
 
       it('returns sessions sorted by last_message_at desc', () => {
-        localStorage.setItem(
-          'xcagi_chat_messages_old',
-          JSON.stringify([{ role: 'user', content: 'old' }]),
-        )
-        localStorage.setItem(
-          'xcagi_chat_messages_new',
-          JSON.stringify([{ role: 'user', content: 'new' }]),
-        )
-        localStorage.setItem(
-          'xcagi_chat_session_meta_old',
-          JSON.stringify({ updated_at: '2026-01-01' }),
-        )
-        localStorage.setItem(
-          'xcagi_chat_session_meta_new',
-          JSON.stringify({ updated_at: '2026-06-01' }),
-        )
+        localStorage.setItem('xcagi_chat_messages_old', JSON.stringify([{ role: 'user', content: 'old' }]))
+        localStorage.setItem('xcagi_chat_messages_new', JSON.stringify([{ role: 'user', content: 'new' }]))
+        localStorage.setItem('xcagi_chat_session_meta_old', JSON.stringify({ updated_at: '2026-01-01' }))
+        localStorage.setItem('xcagi_chat_session_meta_new', JSON.stringify({ updated_at: '2026-06-01' }))
         const { listLocalHistorySessions } = useChatHistoryPersistence(makeDeps())
         const result = listLocalHistorySessions()
         expect(result).toHaveLength(2)
@@ -1268,14 +1154,8 @@ describe('useChatPersistence — coverage ramp', () => {
 
       it('respects limit parameter', () => {
         for (let i = 0; i < 5; i++) {
-          localStorage.setItem(
-            `xcagi_chat_messages_s${i}`,
-            JSON.stringify([{ role: 'user', content: `msg${i}` }]),
-          )
-          localStorage.setItem(
-            `xcagi_chat_session_meta_s${i}`,
-            JSON.stringify({ updated_at: `2026-01-0${i + 1}` }),
-          )
+          localStorage.setItem(`xcagi_chat_messages_s${i}`, JSON.stringify([{ role: 'user', content: `msg${i}` }]))
+          localStorage.setItem(`xcagi_chat_session_meta_s${i}`, JSON.stringify({ updated_at: `2026-01-0${i + 1}` }))
         }
         const { listLocalHistorySessions } = useChatHistoryPersistence(makeDeps())
         const result = listLocalHistorySessions(3)
@@ -1283,24 +1163,15 @@ describe('useChatPersistence — coverage ramp', () => {
       })
 
       it('uses minimum limit of 1', () => {
-        localStorage.setItem(
-          'xcagi_chat_messages_s1',
-          JSON.stringify([{ role: 'user', content: 'msg1' }]),
-        )
+        localStorage.setItem('xcagi_chat_messages_s1', JSON.stringify([{ role: 'user', content: 'msg1' }]))
         const { listLocalHistorySessions } = useChatHistoryPersistence(makeDeps())
         const result = listLocalHistorySessions(0)
         expect(result).toHaveLength(1)
       })
 
       it('dedupes sessions found via both messages and meta keys', () => {
-        localStorage.setItem(
-          'xcagi_chat_messages_s1',
-          JSON.stringify([{ role: 'user', content: 'msg1' }]),
-        )
-        localStorage.setItem(
-          'xcagi_chat_session_meta_s1',
-          JSON.stringify({ updated_at: '2026-01-01' }),
-        )
+        localStorage.setItem('xcagi_chat_messages_s1', JSON.stringify([{ role: 'user', content: 'msg1' }]))
+        localStorage.setItem('xcagi_chat_session_meta_s1', JSON.stringify({ updated_at: '2026-01-01' }))
         const { listLocalHistorySessions } = useChatHistoryPersistence(makeDeps())
         const result = listLocalHistorySessions()
         expect(result).toHaveLength(1)
@@ -1308,10 +1179,7 @@ describe('useChatPersistence — coverage ramp', () => {
 
       it('skips localStorage entries that do not match prefix pattern', () => {
         localStorage.setItem('unrelated_key', 'value')
-        localStorage.setItem(
-          'xcagi_chat_messages_s1',
-          JSON.stringify([{ role: 'user', content: 'msg1' }]),
-        )
+        localStorage.setItem('xcagi_chat_messages_s1', JSON.stringify([{ role: 'user', content: 'msg1' }]))
         const { listLocalHistorySessions } = useChatHistoryPersistence(makeDeps())
         const result = listLocalHistorySessions()
         expect(result).toHaveLength(1)
@@ -1325,10 +1193,7 @@ describe('useChatPersistence — coverage ramp', () => {
       })
 
       it('returns local sessions when server provides none', () => {
-        localStorage.setItem(
-          'xcagi_chat_messages_s1',
-          JSON.stringify([{ role: 'user', content: 'msg1' }]),
-        )
+        localStorage.setItem('xcagi_chat_messages_s1', JSON.stringify([{ role: 'user', content: 'msg1' }]))
         const { mergeHistorySessions } = useChatHistoryPersistence(makeDeps())
         const result = mergeHistorySessions([])
         expect(result).toHaveLength(1)
@@ -1336,10 +1201,7 @@ describe('useChatPersistence — coverage ramp', () => {
       })
 
       it('merges server sessions with local sessions', () => {
-        localStorage.setItem(
-          'xcagi_chat_messages_local1',
-          JSON.stringify([{ role: 'user', content: 'local msg' }]),
-        )
+        localStorage.setItem('xcagi_chat_messages_local1', JSON.stringify([{ role: 'user', content: 'local msg' }]))
         const { mergeHistorySessions } = useChatHistoryPersistence(makeDeps())
         const result = mergeHistorySessions([
           { session_id: 'server1', title: 'Server 1' },
@@ -1367,10 +1229,7 @@ describe('useChatPersistence — coverage ramp', () => {
 
       it('includes active session when it has local messages', () => {
         const sessionId = ref('active-with-msgs')
-        localStorage.setItem(
-          'xcagi_chat_messages_active-with-msgs',
-          JSON.stringify([{ role: 'user', content: 'active msg' }]),
-        )
+        localStorage.setItem('xcagi_chat_messages_active-with-msgs', JSON.stringify([{ role: 'user', content: 'active msg' }]))
         const { mergeHistorySessions } = useChatHistoryPersistence({
           sessionId,
           getActiveModId: () => '',
@@ -1381,18 +1240,10 @@ describe('useChatPersistence — coverage ramp', () => {
       })
 
       it('sorts merged sessions by last_message_at desc', () => {
-        localStorage.setItem(
-          'xcagi_chat_messages_old',
-          JSON.stringify([{ role: 'user', content: 'old' }]),
-        )
-        localStorage.setItem(
-          'xcagi_chat_session_meta_old',
-          JSON.stringify({ updated_at: '2026-01-01' }),
-        )
+        localStorage.setItem('xcagi_chat_messages_old', JSON.stringify([{ role: 'user', content: 'old' }]))
+        localStorage.setItem('xcagi_chat_session_meta_old', JSON.stringify({ updated_at: '2026-01-01' }))
         const { mergeHistorySessions } = useChatHistoryPersistence(makeDeps())
-        const result = mergeHistorySessions([
-          { session_id: 'new', title: 'New', last_message_at: '2026-06-01' },
-        ])
+        const result = mergeHistorySessions([{ session_id: 'new', title: 'New', last_message_at: '2026-06-01' }])
         expect(String(result[0].session_id)).toBe('new')
         expect(String(result[1].session_id)).toBe('old')
       })
@@ -1440,21 +1291,21 @@ describe('useChatPersistence — coverage ramp', () => {
       }
     }
 
-    function makeDeps(overrides: Partial<{
-      sessionId: string
-      taskList: TaskItem[]
-      activeTaskId: string
-      expandedTaskIds: string[]
-      taskFilter: 'all' | 'running' | 'success' | 'failed'
-      currentTask: Record<string, unknown> | null
-    }> = {}) {
+    function makeDeps(
+      overrides: Partial<{
+        sessionId: string
+        taskList: TaskItem[]
+        activeTaskId: string
+        expandedTaskIds: string[]
+        taskFilter: 'all' | 'running' | 'success' | 'failed'
+        currentTask: Record<string, unknown> | null
+      }> = {},
+    ) {
       const sessionId = ref(overrides.sessionId ?? 's1')
       const taskList = ref<TaskItem[]>(overrides.taskList ?? [])
       const activeTaskId = ref(overrides.activeTaskId ?? '')
       const expandedTaskIds = ref<string[]>(overrides.expandedTaskIds ?? [])
-      const taskFilter = ref<'all' | 'running' | 'success' | 'failed'>(
-        overrides.taskFilter ?? 'all',
-      )
+      const taskFilter = ref<'all' | 'running' | 'success' | 'failed'>(overrides.taskFilter ?? 'all')
       const currentTask = ref<Record<string, unknown> | null>(overrides.currentTask ?? null)
       const sortTaskList = vi.fn()
       return {
@@ -1492,15 +1343,11 @@ describe('useChatPersistence — coverage ramp', () => {
       })
 
       it('truncates taskList to TASK_HISTORY_LIMIT', () => {
-        const longList = Array.from({ length: TASK_HISTORY_LIMIT + 10 }, (_, i) =>
-          makeTaskItem(`t${i}`),
-        )
+        const longList = Array.from({ length: TASK_HISTORY_LIMIT + 10 }, (_, i) => makeTaskItem(`t${i}`))
         const deps = makeDeps({ taskList: longList })
         const { persistTaskPanelStateForSession } = useChatTaskPanelPersistence(deps)
         persistTaskPanelStateForSession('s1')
-        const stored = JSON.parse(
-          sessionStorage.getItem(CHAT_TASK_PANEL_STORAGE_PREFIX + 's1')!,
-        )
+        const stored = JSON.parse(sessionStorage.getItem(CHAT_TASK_PANEL_STORAGE_PREFIX + 's1')!)
         expect(stored.taskList).toHaveLength(TASK_HISTORY_LIMIT)
       })
 
@@ -1509,9 +1356,7 @@ describe('useChatPersistence — coverage ramp', () => {
         const deps = makeDeps({ expandedTaskIds: longExpanded })
         const { persistTaskPanelStateForSession } = useChatTaskPanelPersistence(deps)
         persistTaskPanelStateForSession('s1')
-        const stored = JSON.parse(
-          sessionStorage.getItem(CHAT_TASK_PANEL_STORAGE_PREFIX + 's1')!,
-        )
+        const stored = JSON.parse(sessionStorage.getItem(CHAT_TASK_PANEL_STORAGE_PREFIX + 's1')!)
         expect(stored.expandedTaskIds).toHaveLength(80)
       })
 
@@ -1520,9 +1365,7 @@ describe('useChatPersistence — coverage ramp', () => {
         const deps = makeDeps({ currentTask: task })
         const { persistTaskPanelStateForSession } = useChatTaskPanelPersistence(deps)
         persistTaskPanelStateForSession('s1')
-        const stored = JSON.parse(
-          sessionStorage.getItem(CHAT_TASK_PANEL_STORAGE_PREFIX + 's1')!,
-        )
+        const stored = JSON.parse(sessionStorage.getItem(CHAT_TASK_PANEL_STORAGE_PREFIX + 's1')!)
         expect(stored.currentTask).toEqual(task)
         // Mutating original should not affect stored
         ;(task as Record<string, unknown>).custom = 'changed'
@@ -1533,9 +1376,7 @@ describe('useChatPersistence — coverage ramp', () => {
         const deps = makeDeps({ currentTask: null })
         const { persistTaskPanelStateForSession } = useChatTaskPanelPersistence(deps)
         persistTaskPanelStateForSession('s1')
-        const stored = JSON.parse(
-          sessionStorage.getItem(CHAT_TASK_PANEL_STORAGE_PREFIX + 's1')!,
-        )
+        const stored = JSON.parse(sessionStorage.getItem(CHAT_TASK_PANEL_STORAGE_PREFIX + 's1')!)
         expect(stored.currentTask).toBeNull()
       })
 
@@ -1543,9 +1384,7 @@ describe('useChatPersistence — coverage ramp', () => {
         const deps = makeDeps({ activeTaskId: '  t1  ' })
         const { persistTaskPanelStateForSession } = useChatTaskPanelPersistence(deps)
         persistTaskPanelStateForSession('s1')
-        const stored = JSON.parse(
-          sessionStorage.getItem(CHAT_TASK_PANEL_STORAGE_PREFIX + 's1')!,
-        )
+        const stored = JSON.parse(sessionStorage.getItem(CHAT_TASK_PANEL_STORAGE_PREFIX + 's1')!)
         expect(stored.activeTaskId).toBe('t1')
       })
 
@@ -1554,9 +1393,7 @@ describe('useChatPersistence — coverage ramp', () => {
         const { persistTaskPanelStateForSession } = useChatTaskPanelPersistence(deps)
         const before = Date.now()
         persistTaskPanelStateForSession('s1')
-        const stored = JSON.parse(
-          sessionStorage.getItem(CHAT_TASK_PANEL_STORAGE_PREFIX + 's1')!,
-        )
+        const stored = JSON.parse(sessionStorage.getItem(CHAT_TASK_PANEL_STORAGE_PREFIX + 's1')!)
         expect(stored.savedAt).toBeGreaterThanOrEqual(before)
         expect(typeof stored.savedAt).toBe('number')
       })
@@ -1591,10 +1428,7 @@ describe('useChatPersistence — coverage ramp', () => {
           currentTask: { type: 'shipment_generate' },
           savedAt: 1,
         }
-        sessionStorage.setItem(
-          CHAT_TASK_PANEL_STORAGE_PREFIX + 's1',
-          JSON.stringify(state),
-        )
+        sessionStorage.setItem(CHAT_TASK_PANEL_STORAGE_PREFIX + 's1', JSON.stringify(state))
         const deps = makeDeps()
         const { applyPersistedTaskPanelStateForSession } = useChatTaskPanelPersistence(deps)
         applyPersistedTaskPanelStateForSession('s1')
@@ -1617,16 +1451,21 @@ describe('useChatPersistence — coverage ramp', () => {
           ...makeTaskItem('agent_verified'),
           type: 'agent_run',
           source: 'agent' as const,
-          payload: { agentEvents: [{ event_type: 'tool.completed' }, { event_type: 'run.completed' }] },
+          payload: {
+            agentEvents: [{ event_type: 'tool.completed' }, { event_type: 'run.completed' }],
+          },
         }
-        sessionStorage.setItem(CHAT_TASK_PANEL_STORAGE_PREFIX + 's1', JSON.stringify({
-          taskList: [legacyAgent, verifiedAgent],
-          activeTaskId: 'agent_legacy',
-          expandedTaskIds: ['agent_legacy', 'agent_verified'],
-          taskFilter: 'all',
-          currentTask: null,
-          savedAt: 1,
-        }))
+        sessionStorage.setItem(
+          CHAT_TASK_PANEL_STORAGE_PREFIX + 's1',
+          JSON.stringify({
+            taskList: [legacyAgent, verifiedAgent],
+            activeTaskId: 'agent_legacy',
+            expandedTaskIds: ['agent_legacy', 'agent_verified'],
+            taskFilter: 'all',
+            currentTask: null,
+            savedAt: 1,
+          }),
+        )
         const deps = makeDeps()
         const { applyPersistedTaskPanelStateForSession } = useChatTaskPanelPersistence(deps)
         applyPersistedTaskPanelStateForSession('s1')
@@ -1635,9 +1474,7 @@ describe('useChatPersistence — coverage ramp', () => {
       })
 
       it('truncates taskList to TASK_HISTORY_LIMIT when applying', () => {
-        const longList = Array.from({ length: TASK_HISTORY_LIMIT + 5 }, (_, i) =>
-          makeTaskItem(`t${i}`),
-        )
+        const longList = Array.from({ length: TASK_HISTORY_LIMIT + 5 }, (_, i) => makeTaskItem(`t${i}`))
         const state: PersistedTaskPanelState = {
           taskList: longList,
           activeTaskId: '',
@@ -1646,10 +1483,7 @@ describe('useChatPersistence — coverage ramp', () => {
           currentTask: null,
           savedAt: 1,
         }
-        sessionStorage.setItem(
-          CHAT_TASK_PANEL_STORAGE_PREFIX + 's1',
-          JSON.stringify(state),
-        )
+        sessionStorage.setItem(CHAT_TASK_PANEL_STORAGE_PREFIX + 's1', JSON.stringify(state))
         const deps = makeDeps()
         const { applyPersistedTaskPanelStateForSession } = useChatTaskPanelPersistence(deps)
         applyPersistedTaskPanelStateForSession('s1')
@@ -1665,10 +1499,7 @@ describe('useChatPersistence — coverage ramp', () => {
           currentTask: null,
           savedAt: 1,
         }
-        sessionStorage.setItem(
-          CHAT_TASK_PANEL_STORAGE_PREFIX + 's1',
-          JSON.stringify(state),
-        )
+        sessionStorage.setItem(CHAT_TASK_PANEL_STORAGE_PREFIX + 's1', JSON.stringify(state))
         const deps = makeDeps()
         const { applyPersistedTaskPanelStateForSession } = useChatTaskPanelPersistence(deps)
         applyPersistedTaskPanelStateForSession('s1')
@@ -1688,19 +1519,14 @@ describe('useChatPersistence — coverage ramp', () => {
           currentTask: null,
           savedAt: 1,
         }
-        sessionStorage.setItem(
-          CHAT_TASK_PANEL_STORAGE_PREFIX + 's1',
-          JSON.stringify(state),
-        )
+        sessionStorage.setItem(CHAT_TASK_PANEL_STORAGE_PREFIX + 's1', JSON.stringify(state))
         const deps = makeDeps()
         const { applyPersistedTaskPanelStateForSession } = useChatTaskPanelPersistence(deps)
         applyPersistedTaskPanelStateForSession('s1')
         // taskList truncated to 20, so only first 20 expanded IDs match
         expect(deps.taskList.value).toHaveLength(TASK_HISTORY_LIMIT)
         expect(deps.expandedTaskIds.value).toHaveLength(TASK_HISTORY_LIMIT)
-        expect(deps.expandedTaskIds.value).toEqual(
-          Array.from({ length: TASK_HISTORY_LIMIT }, (_, i) => `t${i}`),
-        )
+        expect(deps.expandedTaskIds.value).toEqual(Array.from({ length: TASK_HISTORY_LIMIT }, (_, i) => `t${i}`))
       })
 
       it('resets activeTaskId to first task when persisted activeTaskId not in taskList', () => {
@@ -1712,10 +1538,7 @@ describe('useChatPersistence — coverage ramp', () => {
           currentTask: null,
           savedAt: 1,
         }
-        sessionStorage.setItem(
-          CHAT_TASK_PANEL_STORAGE_PREFIX + 's1',
-          JSON.stringify(state),
-        )
+        sessionStorage.setItem(CHAT_TASK_PANEL_STORAGE_PREFIX + 's1', JSON.stringify(state))
         const deps = makeDeps()
         const { applyPersistedTaskPanelStateForSession } = useChatTaskPanelPersistence(deps)
         applyPersistedTaskPanelStateForSession('s1')
@@ -1731,10 +1554,7 @@ describe('useChatPersistence — coverage ramp', () => {
           currentTask: null,
           savedAt: 1,
         }
-        sessionStorage.setItem(
-          CHAT_TASK_PANEL_STORAGE_PREFIX + 's1',
-          JSON.stringify(state),
-        )
+        sessionStorage.setItem(CHAT_TASK_PANEL_STORAGE_PREFIX + 's1', JSON.stringify(state))
         const deps = makeDeps()
         const { applyPersistedTaskPanelStateForSession } = useChatTaskPanelPersistence(deps)
         applyPersistedTaskPanelStateForSession('s1')
@@ -1750,10 +1570,7 @@ describe('useChatPersistence — coverage ramp', () => {
           currentTask: null,
           savedAt: 1,
         }
-        sessionStorage.setItem(
-          CHAT_TASK_PANEL_STORAGE_PREFIX + 'default',
-          JSON.stringify(state),
-        )
+        sessionStorage.setItem(CHAT_TASK_PANEL_STORAGE_PREFIX + 'default', JSON.stringify(state))
         const deps = makeDeps({ sessionId: '' })
         const { applyPersistedTaskPanelStateForSession } = useChatTaskPanelPersistence(deps)
         applyPersistedTaskPanelStateForSession()
@@ -1769,10 +1586,7 @@ describe('useChatPersistence — coverage ramp', () => {
           currentTask: null,
           savedAt: 1,
         }
-        sessionStorage.setItem(
-          CHAT_TASK_PANEL_STORAGE_PREFIX + 'from-ref',
-          JSON.stringify(state),
-        )
+        sessionStorage.setItem(CHAT_TASK_PANEL_STORAGE_PREFIX + 'from-ref', JSON.stringify(state))
         const deps = makeDeps({ sessionId: 'from-ref' })
         const { applyPersistedTaskPanelStateForSession } = useChatTaskPanelPersistence(deps)
         applyPersistedTaskPanelStateForSession()

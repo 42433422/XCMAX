@@ -10,6 +10,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
+
 class _RequiredSlotsProvider(Protocol):
     def _get_required_slots(self, intent: str) -> list[str]: ...
 
@@ -62,9 +63,7 @@ class ContextQuestionMixin:
         }
         return descriptions.get(intent, f"正在处理 {intent}")
 
-    def _notify_pending_preserved(
-        self, user_id: str, pending: PendingIntent, action: str
-    ) -> None:
+    def _notify_pending_preserved(self, user_id: str, pending: PendingIntent, action: str) -> None:
         try:
             notifier = self._get_notifier()
             if notifier and pending:

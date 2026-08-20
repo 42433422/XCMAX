@@ -15,9 +15,7 @@ defineEmits<{
   cancel: []
 }>()
 
-const hasPersistedApproval = computed(
-  () => Boolean(props.card.approval_path || props.card.approval_request_ids?.length),
-)
+const hasPersistedApproval = computed(() => Boolean(props.card.approval_path || props.card.approval_request_ids?.length))
 
 async function openApprovalWorkspace() {
   if (props.busy) return
@@ -40,9 +38,7 @@ async function openApprovalWorkspace() {
     <ul v-if="card.todo?.length" class="approval-todo">
       <li v-for="(step, idx) in card.todo" :key="idx">{{ step }}</li>
     </ul>
-    <div v-if="card.approval_request_ids?.length" class="approval-request-nos">
-      审批请求号：{{ card.approval_request_ids.join('、') }}
-    </div>
+    <div v-if="card.approval_request_ids?.length" class="approval-request-nos">审批请求号：{{ card.approval_request_ids.join('、') }}</div>
     <div class="approval-actions">
       <a
         v-if="hasPersistedApproval"

@@ -156,6 +156,7 @@ class RollingWindowCounter:
         with self._lock:
             self._buckets.clear()
 
+
 class CircuitBreakerOpen(Exception):
     """熔断器打开异常"""
 

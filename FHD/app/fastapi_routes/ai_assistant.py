@@ -155,7 +155,7 @@ def compat_ai_generate(payload: dict[str, Any] = Body(default_factory=dict)):
 
         parsed = _parse_order_text(order_text)
         if not parsed.get("success"):
-            return _fail(str(parsed.get("message") or "订单解析失败"), 400)
+            return _fail("订单解析失败，请检查输入内容", 400)
 
         unit_name = str(parsed.get("unit_name") or "").strip()
         products = parsed.get("products") or []
@@ -454,8 +454,8 @@ def compat_print_single_label(payload: dict[str, Any] = Body(default_factory=dic
                     str(product.get("specification") or product.get("spec") or "") or None
                 )
                 unit = str(product.get("unit") or "个")
-        except RECOVERABLE_ERRORS as e:
-            logger.warning("single_label: 查询产品失败，使用型号作为名称: %s", e)
+        except RECOVERABLE_ERRORS:
+            logger.warning("single_label: 查询产品失败，使用型号作为名称", exc_info=True)
 
     try:
         from app.application.print_app_service import get_print_application_service
@@ -475,14 +475,12 @@ def compat_print_single_label(payload: dict[str, Any] = Body(default_factory=dic
             body=payload,
         )
         return JSONResponse(traced, status_code=status)
-    except RECOVERABLE_ERRORS as e:
-        logger.error("single_label 打印失败: %s", e, exc_info=True)
+    except RECOVERABLE_ERRORS:
+        logger.exception("single_label 打印失败")
         traced = _trace_ai_assistant_route(
-            {"success": False, "message": f"打印失败: {e}"},
+            {"success": False, "message": "打印服务暂时不可用，请稍后重试"},
             route="/api/print/single_label",
             action="print_single_label",
             body=payload,
         )
         return JSONResponse(traced, status_code=500)
-
-

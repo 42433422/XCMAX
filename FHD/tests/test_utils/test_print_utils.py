@@ -403,6 +403,19 @@ class TestMacosCupsPrinterUtils:
         open_file.assert_not_called()
         run_cups.assert_not_called()
 
+    def test_print_file_rejects_file_outside_allowed_roots(self):
+        pu = PrinterUtils()
+        with (
+            patch.object(pu, "_is_print_backend_available", return_value=True),
+            patch.object(pu, "_resolve_allowed_print_path", return_value=None),
+            patch.object(pu, "_print_pdf") as print_pdf,
+        ):
+            output = pu.print_file("/etc/passwd", "printer1")
+
+        assert output["success"] is False
+        assert "允许的打印目录" in output["message"]
+        print_pdf.assert_not_called()
+
     def test_allowed_print_path_blocks_symlink_escape(self, tmp_path):
         allowed = tmp_path / "allowed"
         outside = tmp_path / "outside"

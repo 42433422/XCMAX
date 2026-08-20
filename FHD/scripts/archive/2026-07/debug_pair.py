@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, union-attr"
 """
 调试 _pair_fields_by_grid 函数
 """

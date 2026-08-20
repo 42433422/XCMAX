@@ -31,9 +31,11 @@ import os
 import re
 import sys
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 # 注入 modstore_server 包路径
 ROOT = Path(__file__).resolve().parents[1]
@@ -44,7 +46,7 @@ logger = logging.getLogger(__name__)
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _call_llm(prompt: str, api_key: str) -> dict[str, Any]:
@@ -96,7 +98,7 @@ def _call_llm(prompt: str, api_key: str) -> dict[str, Any]:
         manifest = json.loads(m.group(0))
         manifest["ok"] = True
         return manifest
-    except Exception as exc:  # noqa: BLE001
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
         return {"ok": False, "error": f"LLM 调用失败：{exc}"}
 
 

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """把每日 loops 的员工工作产出汇报进「员工交流圈」collab feed。
 
 设计要点（见计划 idempotent-dazzling-scroll）：
@@ -15,6 +16,8 @@ from __future__ import annotations
 import logging
 import os
 from typing import Any, Dict, List, Optional, Sequence
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +115,7 @@ def get_or_create_dept_thread(dept_key: str) -> Optional[int]:
                 tid = int(row.id)
                 _THREAD_CACHE[dept_key] = tid
                 return tid
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("collab reporter: lookup dept thread failed dept=%s", dept_key)
         return None
 
@@ -131,7 +134,7 @@ def get_or_create_dept_thread(dept_key: str) -> Optional[int]:
             if tid > 0:
                 _THREAD_CACHE[dept_key] = tid
                 return tid
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("collab reporter: create dept thread failed dept=%s", dept_key)
     return None
 
@@ -156,7 +159,7 @@ def _already_reported(thread_id: int, report_key: str) -> bool:
                 .first()
             )
             return hit is not None
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("collab reporter: dedupe check failed key=%s", report_key)
         return False
 
@@ -202,7 +205,7 @@ def _post_report(
             "message_id": out.get("message_id"),
             "error": out.get("error", ""),
         }
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("collab reporter: post failed key=%s dept=%s", report_key, dept_key)
         return {"ok": False, "skipped": False, "thread_id": tid, "error": "exception"}
 
@@ -216,7 +219,7 @@ def report_meeting_minutes(*, record_id: int, day: str, minutes_html: str) -> Di
         from modstore_server.daily_digest import _html_to_text_excerpt
 
         body = _html_to_text_excerpt(minutes_html or "")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         body = str(minutes_html or "")
     body = _excerpt(body, 4000)
     if not body.strip():
@@ -238,7 +241,7 @@ def report_action_items(*, day: str, record_id: int) -> Dict[str, Any]:
         from modstore_server.digest_action_items import list_action_items
 
         items = list_action_items(day=day, record_id=record_id, limit=2000)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("collab reporter: list_action_items failed day=%s rid=%s", day, record_id)
         return {"ok": False, "skipped": True, "error": "query_failed"}
 
@@ -300,7 +303,7 @@ def report_brief_task(*, task_id: int) -> Dict[str, Any]:
                 return {"ok": False, "skipped": True, "error": "not_terminal"}
             owner = str(row.owner_employee_id or "")
             brief = _excerpt(str(row.task_brief or ""), 600)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("collab reporter: load brief task failed id=%s", task_id)
         return {"ok": False, "skipped": True, "error": "query_failed"}
 
@@ -331,7 +334,7 @@ def report_suggestion_dispatched(*, suggestion_id: int) -> Dict[str, Any]:
             summary = _excerpt(str(row.summary or ""), 600)
             targets_raw = str(row.target_employee_ids_json or "[]")
             status = str(row.status or "")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("collab reporter: load suggestion failed id=%s", suggestion_id)
         return {"ok": False, "skipped": True, "error": "query_failed"}
 
@@ -339,7 +342,7 @@ def report_suggestion_dispatched(*, suggestion_id: int) -> Dict[str, Any]:
         import json
 
         targets: Sequence[str] = json.loads(targets_raw) or []
-    except Exception:
+    except RECOVERABLE_ERRORS:
         targets = []
     tgt = "、".join(str(t) for t in targets) if targets else "—"
     md = f"💡 **员工建议已派发** · {kind}（{status}）\n\n{summary}\n\n目标员工：{tgt}"
@@ -372,13 +375,12 @@ def report_evolution(*, evolution_record_id: int) -> Dict[str, Any]:
             hours = int(row.lookback_hours or 24)
             status = str(row.status or "")
             diff = _excerpt(str(row.diff_explanation or ""), 1500)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("collab reporter: load evolution failed id=%s", evolution_record_id)
         return {"ok": False, "skipped": True, "error": "query_failed"}
 
     md = (
-        f"🧬 **员工进化** · 近 {hours}h 失败 {fails} 次（{status}）\n\n"
-        f"{diff or '（无 diff 说明）'}"
+        f"🧬 **员工进化** · 近 {hours}h 失败 {fails} 次（{status}）\n\n{diff or '（无 diff 说明）'}"
     )
     return _post_report(
         dept_key=_dept_for_employee(emp),
@@ -410,7 +412,7 @@ def report_execution_metric(*, metric_id: int) -> Dict[str, Any]:
             llm_tokens = int(row.llm_tokens or 0)
             error = _excerpt(str(row.error or ""), 800)
             failure_kind = str(getattr(row, "failure_kind", "") or "").strip()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("collab reporter: load execution metric failed id=%s", metric_id)
         return {"ok": False, "skipped": True, "error": "query_failed"}
 
@@ -445,7 +447,7 @@ def report_staged_change(
     *, staged_id: int, branch: str, files: int, pr_url: str = ""
 ) -> Dict[str, Any]:
     """daily-orchestrator 的代码改动（staged change / PR）→ company 线程。"""
-    md = f"🛠️ **daily-orchestrator 自动改动**\n\n" f"分支：`{branch}`\n变更文件：{int(files)} 个"
+    md = f"🛠️ **daily-orchestrator 自动改动**\n\n分支：`{branch}`\n变更文件：{int(files)} 个"
     if pr_url:
         md += f"\nPR：{pr_url}"
     return _post_report(

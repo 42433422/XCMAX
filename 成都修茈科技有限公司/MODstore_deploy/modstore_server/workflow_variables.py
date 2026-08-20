@@ -6,6 +6,8 @@ import ast
 import re
 from typing import Any, Dict
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 _VAR_RE = re.compile(r"\{\{\s*([^}]+)\s*\}\}")
 
 
@@ -77,5 +79,5 @@ def eval_condition(expr: str, context: Dict[str, Any]) -> bool:
         tree = ast.parse(expr, mode="eval")
         _SafeExpr().visit(tree)
         return bool(eval(compile(tree, "<workflow>", "eval"), {"__builtins__": {}}, context))
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return False

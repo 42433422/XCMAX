@@ -135,8 +135,16 @@ async def test_stage_suggest_skills_parses_kind_field():
     )
     skills_json = json.dumps(
         [
-            {"name": "目录扫描", "brief": "递归扫描项目目录", "kind": "project_directory_scan"},
-            {"name": "README生成", "brief": "生成项目 README", "kind": "readme_generation"},
+            {
+                "name": "目录扫描",
+                "brief": "递归扫描项目目录",
+                "kind": "project_directory_scan",
+            },
+            {
+                "name": "README生成",
+                "brief": "生成项目 README",
+                "kind": "readme_generation",
+            },
         ]
     )
 
@@ -277,7 +285,12 @@ def test_action_agent_runner_missing_project_root_when_required():
             }
         },
     }
-    reasoning = {"input": {}, "provider": "deepseek", "model": "deepseek-chat", "system_prompt": ""}
+    reasoning = {
+        "input": {},
+        "provider": "deepseek",
+        "model": "deepseek-chat",
+        "system_prompt": "",
+    }
 
     result = _action_agent_runner(actions_cfg, reasoning, "analyze project", "emp1", 1)
     assert result["ok"] is False
@@ -303,7 +316,7 @@ def test_action_agent_runner_invalid_project_root(tmp_path):
     # We mock it to simulate the rejection without real filesystem checks.
     with patch(
         "modstore_server.integrations.vibe_adapter.ensure_within_workspace",
-        side_effect=Exception("路径越界: ../../etc/passwd"),
+        side_effect=ValueError("路径越界: ../../etc/passwd"),
     ):
         result = _action_agent_runner(actions_cfg, reasoning, "task", "emp1", 1)
     assert result["ok"] is False
@@ -414,7 +427,11 @@ def test_handlers_execution_ok_prefers_any_success():
     assert _handlers_execution_ok(
         {
             "outputs": [
-                {"handler": "para_delegate", "ok": False, "status": "para_api_rejected_outboxed"},
+                {
+                    "handler": "para_delegate",
+                    "ok": False,
+                    "status": "para_api_rejected_outboxed",
+                },
                 {"handler": "agent", "ok": True},
             ]
         }
@@ -422,7 +439,11 @@ def test_handlers_execution_ok_prefers_any_success():
     assert not _handlers_execution_ok(
         {
             "outputs": [
-                {"handler": "para_delegate", "ok": False, "status": "para_api_rejected_outboxed"}
+                {
+                    "handler": "para_delegate",
+                    "ok": False,
+                    "status": "para_api_rejected_outboxed",
+                }
             ]
         }
     )
@@ -433,7 +454,8 @@ def test_prefer_para_keeps_local_fallback(monkeypatch):
 
     monkeypatch.setattr("modstore_server.para_delegate_handler.para_delegate_enabled", lambda: True)
     monkeypatch.setattr(
-        "modstore_server.para_delegate_handler.para_delegate_ready_for_dispatch", lambda: True
+        "modstore_server.para_delegate_handler.para_delegate_ready_for_dispatch",
+        lambda: True,
     )
     out = ee._prefer_para_with_local_fallback(
         ["vibe_edit", "llm_md"],

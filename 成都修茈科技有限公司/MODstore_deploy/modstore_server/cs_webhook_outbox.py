@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """官网联系表单 → FHD 客服 webhook 出站队列（失败重试 + 人工重放）。"""
 
 from __future__ import annotations
@@ -7,11 +8,13 @@ import logging
 import os
 import sqlite3
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import httpx
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -65,8 +68,7 @@ def _connect() -> sqlite3.Connection:
 
 def ensure_outbox_schema() -> None:
     with _connect() as conn:
-        conn.executescript(
-            """
+        conn.executescript("""
             CREATE TABLE IF NOT EXISTS cs_webhook_outbox (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
               target_url TEXT NOT NULL,
@@ -89,8 +91,7 @@ def ensure_outbox_schema() -> None:
               migrated_at TEXT NOT NULL,
               migrated_row_count INTEGER NOT NULL DEFAULT 0
             );
-            """
-        )
+            """)
         conn.commit()
         _migrate_legacy_outbox(conn)
         conn.commit()
@@ -133,14 +134,12 @@ def _migrate_legacy_outbox(conn: sqlite3.Connection) -> None:
         ).fetchone()
         if not table:
             return
-        legacy_rows = legacy_conn.execute(
-            """
+        legacy_rows = legacy_conn.execute("""
             SELECT target_url, payload_json, headers_json, attempts, max_attempts,
                    last_error, status, landing_contact_id, market_user_id,
                    created_at, updated_at, next_retry_at
             FROM cs_webhook_outbox ORDER BY id ASC
-            """
-        )
+            """)
         migrated = 0
         while batch := legacy_rows.fetchmany(_LEGACY_MIGRATION_BATCH_SIZE):
             for row in batch:
@@ -243,7 +242,7 @@ def register_retry_job(scheduler: Any, *, track_job: Any | None = None) -> bool:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def enqueue_webhook(
@@ -299,7 +298,7 @@ def _deliver_row(row: sqlite3.Row) -> tuple[bool, str]:
         if isinstance(data, dict) and data.get("success") is False:
             return False, str(data.get("error") or "success=false")[:300]
         return True, ""
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         return False, str(exc)[:500]
 
 
@@ -327,7 +326,7 @@ def deliver_webhook_with_retry(
                 last_err = str(data.get("error") or "success=false")
             else:
                 last_err = f"HTTP {resp.status_code}"
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             last_err = str(exc)
         if i < inline_attempts - 1:
             time.sleep(0.5 * (2**i))
@@ -367,7 +366,7 @@ def process_pending_outbox(*, limit: int = 20) -> dict[str, int]:
                 stats["failed"] += 1
             else:
                 delay_sec = min(3600, 30 * (2 ** (attempts - 1)))
-                next_at = (datetime.now(timezone.utc) + timedelta(seconds=delay_sec)).isoformat()
+                next_at = (datetime.now(UTC) + timedelta(seconds=delay_sec)).isoformat()
                 conn.execute(
                     """
                     UPDATE cs_webhook_outbox SET attempts=?, last_error=?, updated_at=?,

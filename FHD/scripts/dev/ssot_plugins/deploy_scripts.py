@@ -10,6 +10,7 @@
 - 用上下文关键字（HOST/IP/curl/http/@127./DATABASE_URL 等）排除 IP 误报
 - fallback 版本号（如 1.0.0.0）仍会被报告，提醒开发者考虑动态读取
 """
+
 from __future__ import annotations
 
 import re
@@ -78,17 +79,22 @@ def check_drift() -> int:
                 warnings.append(f"{rel}:L{i}: 硬编码四段产品版本号")
 
     if warnings:
-        print(f"deploy-scripts: {len(warnings)} 条警告（硬编码版本号，可能是版本检查脚本）", flush=True)
+        print(
+            f"deploy-scripts: {len(warnings)} 条警告（硬编码版本号，可能是版本检查脚本）",
+            flush=True,
+        )
         for w in warnings:
             print(f"  ⚠ {w}", flush=True)
 
     if errors:
         print(f"deploy-scripts: {len(errors)} 个问题", flush=True)
-        for e in errors:
-            print(f"  - {e}", flush=True)
+        for error in errors:
+            print(f"  - {error}", flush=True)
         return 1
 
-    print(f"deploy-scripts: OK（{len(sh_files)} 个 .sh 脚本规范，{len(warnings)} 条警告）", flush=True)
+    print(
+        f"deploy-scripts: OK（{len(sh_files)} 个 .sh 脚本规范，{len(warnings)} 条警告）", flush=True
+    )
     return 0
 
 

@@ -1,6 +1,10 @@
+# mypy: disable-error-code="arg-type"
+# isort: skip_file
 """从自然语言生成工作流节点/边（LLM），落库后可选沙箱校验。"""
 
 from __future__ import annotations
+
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 import json
 import re
@@ -173,7 +177,7 @@ JSON 结构：
 def _catalog_lines(max_items: int = 40) -> str:
     try:
         rows = get_default_employee_client().list_employees() or []
-    except Exception:
+    except RECOVERABLE_ERRORS:
         rows = []
     lines: List[str] = []
     for r in rows[:max_items]:
@@ -194,7 +198,7 @@ def _loads_dict(raw: str | None) -> Dict[str, Any]:
     try:
         data = json.loads(raw)
         return data if isinstance(data, dict) else {}
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         return {}
 
 

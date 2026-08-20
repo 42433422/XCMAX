@@ -1,9 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
-const {
-  mockApiFetch,
-  mockInvalidateHostPackCompletionCache,
-} = vi.hoisted(() => ({
+const { mockApiFetch, mockInvalidateHostPackCompletionCache } = vi.hoisted(() => ({
   mockApiFetch: vi.fn(),
   mockInvalidateHostPackCompletionCache: vi.fn(),
 }))
@@ -97,17 +94,13 @@ describe('platformShellApi', () => {
     it('throws when response not ok', async () => {
       mockApiFetch.mockResolvedValueOnce(makeResponse(null, false, 500))
 
-      await expect(fetchPlatformShellCapabilities()).rejects.toThrow(
-        'platform-shell/capabilities HTTP 500',
-      )
+      await expect(fetchPlatformShellCapabilities()).rejects.toThrow('platform-shell/capabilities HTTP 500')
     })
 
     it('throws when response not ok with 401', async () => {
       mockApiFetch.mockResolvedValueOnce(makeResponse(null, false, 401))
 
-      await expect(fetchPlatformShellCapabilities()).rejects.toThrow(
-        'platform-shell/capabilities HTTP 401',
-      )
+      await expect(fetchPlatformShellCapabilities()).rejects.toThrow('platform-shell/capabilities HTTP 401')
     })
 
     it('caches even after error when retried successfully', async () => {
@@ -346,9 +339,7 @@ describe('platformShellApi', () => {
     it('throws when response not ok', async () => {
       mockApiFetch.mockResolvedValueOnce(makeResponse(null, false, 500))
 
-      await expect(fetchOnboardingIndustryCatalog()).rejects.toThrow(
-        'onboarding-industries HTTP 500',
-      )
+      await expect(fetchOnboardingIndustryCatalog()).rejects.toThrow('onboarding-industries HTTP 500')
     })
   })
 
@@ -364,10 +355,7 @@ describe('platformShellApi', () => {
 
       const result = await fetchIndustryBaseline('retail')
 
-      expect(mockApiFetch).toHaveBeenCalledWith(
-        '/api/platform-shell/industry-baseline?industry_id=retail',
-        { timeoutMs: 8000 },
-      )
+      expect(mockApiFetch).toHaveBeenCalledWith('/api/platform-shell/industry-baseline?industry_id=retail', { timeoutMs: 8000 })
       expect(result).toEqual(baseline)
     })
 
@@ -377,10 +365,9 @@ describe('platformShellApi', () => {
 
       await fetchIndustryBaseline('food & beverage')
 
-      expect(mockApiFetch).toHaveBeenCalledWith(
-        '/api/platform-shell/industry-baseline?industry_id=food%20%26%20beverage',
-        { timeoutMs: 8000 },
-      )
+      expect(mockApiFetch).toHaveBeenCalledWith('/api/platform-shell/industry-baseline?industry_id=food%20%26%20beverage', {
+        timeoutMs: 8000,
+      })
     })
 
     it('falls back to "通用" when industryId is empty', async () => {
@@ -389,10 +376,7 @@ describe('platformShellApi', () => {
 
       await fetchIndustryBaseline('')
 
-      expect(mockApiFetch).toHaveBeenCalledWith(
-        '/api/platform-shell/industry-baseline?industry_id=%E9%80%9A%E7%94%A8',
-        { timeoutMs: 8000 },
-      )
+      expect(mockApiFetch).toHaveBeenCalledWith('/api/platform-shell/industry-baseline?industry_id=%E9%80%9A%E7%94%A8', { timeoutMs: 8000 })
     })
 
     it('falls back to "通用" when industryId is whitespace', async () => {
@@ -401,10 +385,7 @@ describe('platformShellApi', () => {
 
       await fetchIndustryBaseline('   ')
 
-      expect(mockApiFetch).toHaveBeenCalledWith(
-        '/api/platform-shell/industry-baseline?industry_id=%E9%80%9A%E7%94%A8',
-        { timeoutMs: 8000 },
-      )
+      expect(mockApiFetch).toHaveBeenCalledWith('/api/platform-shell/industry-baseline?industry_id=%E9%80%9A%E7%94%A8', { timeoutMs: 8000 })
     })
 
     it('trims industryId before use', async () => {
@@ -413,10 +394,7 @@ describe('platformShellApi', () => {
 
       await fetchIndustryBaseline('  retail  ')
 
-      expect(mockApiFetch).toHaveBeenCalledWith(
-        '/api/platform-shell/industry-baseline?industry_id=retail',
-        { timeoutMs: 8000 },
-      )
+      expect(mockApiFetch).toHaveBeenCalledWith('/api/platform-shell/industry-baseline?industry_id=retail', { timeoutMs: 8000 })
     })
 
     it('unwraps body directly when no data field', async () => {
@@ -550,17 +528,13 @@ describe('platformShellApi', () => {
     it('throws when response not ok', async () => {
       mockApiFetch.mockResolvedValueOnce(makeResponse(null, false, 500))
 
-      await expect(fetchEmployeePlannerStatus()).rejects.toThrow(
-        'employee-planner-status HTTP 500',
-      )
+      await expect(fetchEmployeePlannerStatus()).rejects.toThrow('employee-planner-status HTTP 500')
     })
 
     it('throws with 403 status in message', async () => {
       mockApiFetch.mockResolvedValueOnce(makeResponse(null, false, 403))
 
-      await expect(fetchEmployeePlannerStatus()).rejects.toThrow(
-        'employee-planner-status HTTP 403',
-      )
+      await expect(fetchEmployeePlannerStatus()).rejects.toThrow('employee-planner-status HTTP 403')
     })
   })
 })

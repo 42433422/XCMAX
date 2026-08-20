@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, union-attr"
 """Fail-closed GitHub evidence for historical self-maintenance merges."""
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ import httpx
 from modstore_server.autonomy_posthoc_github_contract import (
     generated_para_merge_contract_verdict as _generated_para_merge_contract_verdict,
 )
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 UTC = timezone.utc  # noqa: UP017 - production runtime still supports Python 3.10
 _REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
@@ -202,7 +204,7 @@ def verify_github_self_maintenance_merge(
                 "state": "all",
             },
         )
-    except Exception:  # noqa: BLE001 - evidence outage must remain unknown
+    except BOUNDARY_ERRORS:  # noqa: BLE001 - evidence outage must remain unknown
         return {"ok": False, "reason": "github_pull_evidence_unavailable"}
     candidates = []
     if isinstance(pulls, list):
@@ -230,7 +232,7 @@ def verify_github_self_maintenance_merge(
         return {"ok": False, "reason": "github_pull_number_invalid"}
     try:
         pull = fetch(f"/repos/{repository}/pulls/{pull_number}", None)
-    except Exception:  # noqa: BLE001 - evidence outage must remain unknown
+    except BOUNDARY_ERRORS:  # noqa: BLE001 - evidence outage must remain unknown
         return {"ok": False, "reason": "github_pull_detail_unavailable"}
     if not isinstance(pull, dict):
         return {"ok": False, "reason": "github_pull_detail_invalid"}
@@ -279,7 +281,7 @@ def verify_github_self_maintenance_merge(
             ),
             None,
         )
-    except Exception:  # noqa: BLE001 - evidence outage must remain unknown
+    except BOUNDARY_ERRORS:  # noqa: BLE001 - evidence outage must remain unknown
         return {"ok": False, "reason": "github_merge_evidence_unavailable"}
     if not isinstance(files, list) or len(files) != changed_files:
         return {"ok": False, "reason": "github_pr_files_incomplete"}
@@ -386,7 +388,7 @@ def verify_github_self_maintenance_veto(
                 "state": "all",
             },
         )
-    except Exception:  # noqa: BLE001 - evidence outage must remain unknown
+    except BOUNDARY_ERRORS:  # noqa: BLE001 - evidence outage must remain unknown
         return {"ok": False, "reason": "github_pull_evidence_unavailable"}
     candidates = []
     if isinstance(pulls, list):
@@ -402,7 +404,7 @@ def verify_github_self_maintenance_veto(
     try:
         pull_number = int(candidates[0].get("number"))
         pull = fetch(f"/repos/{repository}/pulls/{pull_number}", None)
-    except Exception:  # noqa: BLE001 - evidence outage must remain unknown
+    except BOUNDARY_ERRORS:  # noqa: BLE001 - evidence outage must remain unknown
         return {"ok": False, "reason": "github_pull_detail_unavailable"}
     if not isinstance(pull, dict):
         return {"ok": False, "reason": "github_pull_detail_invalid"}

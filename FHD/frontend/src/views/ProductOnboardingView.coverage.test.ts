@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
-import { defineComponent, h, nextTick } from 'vue'
+import { defineComponent, h } from 'vue'
 
 // ===== Mock 容器：使用 vi.hoisted 让 vi.mock 工厂能访问 =====
 const mockContainer = vi.hoisted(() => ({
@@ -118,7 +118,7 @@ const EmptyComp = defineComponent({
 })
 
 // ===== 测试辅助 =====
-function createTestRouter(initialPath = '/product-onboarding') {
+function createTestRouter() {
   const routes = [
     { path: '/', name: 'home', component: EmptyComp },
     { path: '/product-onboarding', name: 'product-onboarding', component: EmptyComp },
@@ -137,7 +137,9 @@ function createFlowState(overrides: Record<string, unknown> = {}) {
     edition: vi.fn(() => 'generic'),
     needsProductFlow: vi.fn(() => false),
     resolveEntryStep: vi.fn((q?: unknown) => {
-      const s = String(q || '').trim().toLowerCase()
+      const s = String(q || '')
+        .trim()
+        .toLowerCase()
       if (s === 'host-pack' || s === 'host') return 'host-pack'
       if (s === 'industry' || s === 'mod') return 'industry'
       if (s === 'done' || s === 'finish') return 'done'
@@ -208,31 +210,33 @@ function createBaselinePlan(overrides: Record<string, unknown> = {}) {
 
 let currentWrapper: ReturnType<typeof mount> | null = null
 
-async function mountComponent(options: {
-  route?: { step?: string; from?: string; redirect?: string }
-  flow?: Record<string, unknown>
-  industry?: Record<string, unknown>
-  mods?: Record<string, unknown>
-  tutorial?: Record<string, unknown>
-  productSku?: string
-  isEnterprise?: boolean
-  buildEdition?: string
-  catalog?: unknown
-  baseline?: unknown
-  router?: ReturnType<typeof createTestRouter>
-  // 是否跳过默认 mock 设置（用于需要自定义 mock 行为的测试）
-  skipDefaultMocks?: boolean
-  // catalog 是否永远 pending
-  catalogPending?: boolean
-  // baseline 是否永远 pending
-  baselinePending?: boolean
-  // catalog 是否 reject
-  catalogReject?: boolean
-  // baseline 是否 reject
-  baselineReject?: boolean
-  // productSku 是否 reject
-  productSkuReject?: boolean
-} = {}) {
+async function mountComponent(
+  options: {
+    route?: { step?: string; from?: string; redirect?: string }
+    flow?: Record<string, unknown>
+    industry?: Record<string, unknown>
+    mods?: Record<string, unknown>
+    tutorial?: Record<string, unknown>
+    productSku?: string
+    isEnterprise?: boolean
+    buildEdition?: string
+    catalog?: unknown
+    baseline?: unknown
+    router?: ReturnType<typeof createTestRouter>
+    // 是否跳过默认 mock 设置（用于需要自定义 mock 行为的测试）
+    skipDefaultMocks?: boolean
+    // catalog 是否永远 pending
+    catalogPending?: boolean
+    // baseline 是否永远 pending
+    baselinePending?: boolean
+    // catalog 是否 reject
+    catalogReject?: boolean
+    // baseline 是否 reject
+    baselineReject?: boolean
+    // productSku 是否 reject
+    productSkuReject?: boolean
+  } = {},
+) {
   if (currentWrapper) {
     currentWrapper.unmount()
     currentWrapper = null
@@ -256,26 +260,18 @@ async function mountComponent(options: {
     mockContainer.isEnterpriseEdition.mockReturnValue(!!options.isEnterprise)
     mockContainer.readBuildEdition.mockReturnValue(options.buildEdition || 'full')
     if (options.baselinePending) {
-      mockContainer.fetchIndustryBaseline.mockImplementation(
-        () => new Promise(() => undefined),
-      )
+      mockContainer.fetchIndustryBaseline.mockImplementation(() => new Promise(() => undefined))
     } else if (options.baselineReject) {
       mockContainer.fetchIndustryBaseline.mockRejectedValue(new Error('baseline fail'))
     } else {
-      mockContainer.fetchIndustryBaseline.mockResolvedValue(
-        options.baseline === undefined ? createBaselinePlan() : options.baseline,
-      )
+      mockContainer.fetchIndustryBaseline.mockResolvedValue(options.baseline === undefined ? createBaselinePlan() : options.baseline)
     }
     if (options.catalogPending) {
-      mockContainer.fetchOnboardingIndustryCatalog.mockImplementation(
-        () => new Promise(() => undefined),
-      )
+      mockContainer.fetchOnboardingIndustryCatalog.mockImplementation(() => new Promise(() => undefined))
     } else if (options.catalogReject) {
       mockContainer.fetchOnboardingIndustryCatalog.mockRejectedValue(new Error('catalog fail'))
     } else {
-      mockContainer.fetchOnboardingIndustryCatalog.mockResolvedValue(
-        options.catalog === undefined ? null : options.catalog,
-      )
+      mockContainer.fetchOnboardingIndustryCatalog.mockResolvedValue(options.catalog === undefined ? null : options.catalog)
     }
     mockContainer.installHostFoundation.mockResolvedValue({ success: true, message: '' })
     mockContainer.installMod.mockResolvedValue({ success: true, message: '' })
@@ -312,13 +308,16 @@ async function mountComponent(options: {
 describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.stubGlobal('fetch', vi.fn(async () => ({
-      ok: true,
-      status: 200,
-      headers: { get: () => 'application/json' },
-      json: async () => ({ success: true, data: {} }),
-      text: async () => '',
-    })))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ success: true, data: {} }),
+        text: async () => '',
+      })),
+    )
   })
 
   afterEach(() => {
@@ -379,11 +378,14 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
   it('industry 步骤：catalog 提供 open_packages 时使用 catalog 数据', async () => {
     const catalog = {
       open_packages: [
-        { industry_id: '涂料', name: '涂料包', scenario: '涂料化工批发。', product_name: '涂料专业版' },
+        {
+          industry_id: '涂料',
+          name: '涂料包',
+          scenario: '涂料化工批发。',
+          product_name: '涂料专业版',
+        },
       ],
-      preview_packages: [
-        { industry_id: '餐饮', name: '餐饮包', scenario: '餐饮门店。', product_name: '餐饮专业版' },
-      ],
+      preview_packages: [{ industry_id: '餐饮', name: '餐饮包', scenario: '餐饮门店。', product_name: '餐饮专业版' }],
       open_industry_ids: ['涂料'],
       selected_industry_id: '涂料',
     }
@@ -420,9 +422,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
 
   it('industry 步骤：openIndustryLeadNames 单个时显示"行业方向"', async () => {
     const catalog = {
-      open_packages: [
-        { industry_id: '涂料', name: '涂料', scenario: '', product_name: '' },
-      ],
+      open_packages: [{ industry_id: '涂料', name: '涂料', scenario: '', product_name: '' }],
       open_industry_ids: ['涂料'],
     }
     const { wrapper } = await mountComponent({
@@ -502,9 +502,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     const nextBtn = wrapper.find('.actions .btn.primary')
     await nextBtn.trigger('click')
     await flushPromises()
-    expect(mockContainer.patchWorkspacePrefs).toHaveBeenCalledWith(
-      expect.objectContaining({ selected_industry_id: '涂料' }),
-    )
+    expect(mockContainer.patchWorkspacePrefs).toHaveBeenCalledWith(expect.objectContaining({ selected_industry_id: '涂料' }))
     expect(replaceSpy).toHaveBeenCalled()
     const callArg = replaceSpy.mock.calls[replaceSpy.mock.calls.length - 1][0]
     expect(callArg.query.step).toBe('host-pack')
@@ -693,9 +691,27 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
             title: '核心',
             hint: '核心提示',
             items: [
-              { mod_id: 'mod-1', label: '模块1', installed: true, required: true, show_mod_id: true },
-              { mod_id: 'mod-2', label: '模块2', installed: false, required: true, show_mod_id: true },
-              { mod_id: 'mod-3', label: '模块3', installed: false, required: false, show_mod_id: false },
+              {
+                mod_id: 'mod-1',
+                label: '模块1',
+                installed: true,
+                required: true,
+                show_mod_id: true,
+              },
+              {
+                mod_id: 'mod-2',
+                label: '模块2',
+                installed: false,
+                required: true,
+                show_mod_id: true,
+              },
+              {
+                mod_id: 'mod-3',
+                label: '模块3',
+                installed: false,
+                required: false,
+                show_mod_id: false,
+              },
             ],
           },
           {
@@ -703,7 +719,13 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
             title: '行业包',
             hint: '行业提示',
             items: [
-              { mod_id: 'mod-4', label: '行业模块', installed: false, required: false, show_mod_id: true },
+              {
+                mod_id: 'mod-4',
+                label: '行业模块',
+                installed: false,
+                required: false,
+                show_mod_id: true,
+              },
             ],
           },
         ],
@@ -739,7 +761,13 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
             title: '行业包',
             hint: '行业提示',
             items: [
-              { mod_id: 'mod-4', label: '行业模块', installed: false, required: false, show_mod_id: true },
+              {
+                mod_id: 'mod-4',
+                label: '行业模块',
+                installed: false,
+                required: false,
+                show_mod_id: true,
+              },
             ],
           },
         ],
@@ -889,7 +917,10 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     await flushPromises()
     await flushPromises()
     // 在 mountComponent 之后设置 mock，避免被默认 mock 覆盖
-    mockContainer.installHostFoundation.mockResolvedValue({ success: false, message: '宿主装包失败' })
+    mockContainer.installHostFoundation.mockResolvedValue({
+      success: false,
+      message: '宿主装包失败',
+    })
     mockContainer.fetchIndustryBaseline.mockResolvedValue(
       createBaselinePlan({
         baseline_ready: false,
@@ -954,10 +985,12 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     await flushPromises()
     await flushPromises()
     mockContainer.fetchIndustryBaseline
-      .mockResolvedValueOnce(createBaselinePlan({
-        baseline_ready: false,
-        missing_industry_mod_ids: ['ind-1'],
-      }))
+      .mockResolvedValueOnce(
+        createBaselinePlan({
+          baseline_ready: false,
+          missing_industry_mod_ids: ['ind-1'],
+        }),
+      )
       .mockResolvedValueOnce(createBaselinePlan({ baseline_ready: true }))
     mockContainer.installIndustrySeed.mockResolvedValue({ success: true, message: '' })
     mockContainer.installIndustrySeed.mockClear()
@@ -980,10 +1013,12 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     await flushPromises()
     await flushPromises()
     mockContainer.fetchIndustryBaseline
-      .mockResolvedValueOnce(createBaselinePlan({
-        baseline_ready: false,
-        missing_industry_mod_ids: ['ind-1'],
-      }))
+      .mockResolvedValueOnce(
+        createBaselinePlan({
+          baseline_ready: false,
+          missing_industry_mod_ids: ['ind-1'],
+        }),
+      )
       .mockResolvedValueOnce(createBaselinePlan({ baseline_ready: false }))
     mockContainer.installIndustrySeed.mockResolvedValue({ success: false, message: '行业包失败' })
     mockContainer.appAlert.mockClear()
@@ -1008,10 +1043,12 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     await flushPromises()
     await flushPromises()
     mockContainer.fetchIndustryBaseline
-      .mockResolvedValueOnce(createBaselinePlan({
-        baseline_ready: false,
-        missing_industry_mod_ids: ['ind-1'],
-      }))
+      .mockResolvedValueOnce(
+        createBaselinePlan({
+          baseline_ready: false,
+          missing_industry_mod_ids: ['ind-1'],
+        }),
+      )
       .mockResolvedValueOnce(createBaselinePlan({ baseline_ready: false }))
     mockContainer.installIndustrySeed.mockRejectedValue(new Error('行业包异常'))
     mockContainer.appAlert.mockClear()
@@ -1034,10 +1071,12 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     await flushPromises()
     await flushPromises()
     mockContainer.fetchIndustryBaseline
-      .mockResolvedValueOnce(createBaselinePlan({
-        baseline_ready: false,
-        missing_account_custom_mod_ids: ['custom-1'],
-      }))
+      .mockResolvedValueOnce(
+        createBaselinePlan({
+          baseline_ready: false,
+          missing_account_custom_mod_ids: ['custom-1'],
+        }),
+      )
       .mockResolvedValueOnce(createBaselinePlan({ baseline_ready: true }))
     mockContainer.installMod.mockClear()
     mockContainer.autoOnboardWorkflowEmployeesFromMods.mockClear()
@@ -1061,10 +1100,12 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     await flushPromises()
     await flushPromises()
     mockContainer.fetchIndustryBaseline
-      .mockResolvedValueOnce(createBaselinePlan({
-        baseline_ready: false,
-        missing_account_custom_mod_ids: ['custom-1'],
-      }))
+      .mockResolvedValueOnce(
+        createBaselinePlan({
+          baseline_ready: false,
+          missing_account_custom_mod_ids: ['custom-1'],
+        }),
+      )
       .mockResolvedValueOnce(createBaselinePlan({ baseline_ready: false }))
     mockContainer.installMod.mockResolvedValue({ success: false, message: 'mod 失败' })
     mockContainer.appAlert.mockClear()
@@ -1087,10 +1128,12 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     await flushPromises()
     await flushPromises()
     mockContainer.fetchIndustryBaseline
-      .mockResolvedValueOnce(createBaselinePlan({
-        baseline_ready: false,
-        missing_account_custom_mod_ids: ['custom-1'],
-      }))
+      .mockResolvedValueOnce(
+        createBaselinePlan({
+          baseline_ready: false,
+          missing_account_custom_mod_ids: ['custom-1'],
+        }),
+      )
       .mockResolvedValueOnce(createBaselinePlan({ baseline_ready: false }))
     mockContainer.installMod.mockRejectedValue(new Error('mod 异常'))
     mockContainer.appAlert.mockClear()
@@ -1124,10 +1167,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     await flushPromises()
     await flushPromises()
     expect(mockContainer.installCustomerDeliverySeed).toHaveBeenCalledWith('custom-1', expect.any(String))
-    expect(mockContainer.installCustomerDeliverySeed).not.toHaveBeenCalledWith(
-      'xcagi-core-workflow-employees',
-      expect.any(String),
-    )
+    expect(mockContainer.installCustomerDeliverySeed).not.toHaveBeenCalledWith('xcagi-core-workflow-employees', expect.any(String))
   })
 
   it('runBootstrap：installCustomerDeliverySeed 返回 success=false 时记录错误', async () => {
@@ -1145,7 +1185,10 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     mockContainer.fetchIndustryBaseline
       .mockResolvedValueOnce(seedBaseline)
       .mockResolvedValueOnce(createBaselinePlan({ baseline_ready: false }))
-    mockContainer.installCustomerDeliverySeed.mockResolvedValue({ success: false, message: '交付失败' })
+    mockContainer.installCustomerDeliverySeed.mockResolvedValue({
+      success: false,
+      message: '交付失败',
+    })
     mockContainer.appAlert.mockClear()
     const bootstrapBtn = wrapper.find('.btn.primary')
     await bootstrapBtn.trigger('click')
@@ -1191,10 +1234,12 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     await flushPromises()
     await flushPromises()
     mockContainer.fetchIndustryBaseline
-      .mockResolvedValueOnce(createBaselinePlan({
-        baseline_ready: false,
-        missing_account_custom_mod_ids: ['custom-1'],
-      }))
+      .mockResolvedValueOnce(
+        createBaselinePlan({
+          baseline_ready: false,
+          missing_account_custom_mod_ids: ['custom-1'],
+        }),
+      )
       .mockResolvedValueOnce(createBaselinePlan({ baseline_ready: true }))
     mockContainer.autoOnboardWorkflowEmployeesFromMods.mockRejectedValue(new Error('onboard 失败'))
     const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
@@ -1383,7 +1428,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
   })
 
   it('onMounted：industryStore 未加载时调用 initialize', async () => {
-    const { wrapper } = await mountComponent({
+    await mountComponent({
       industry: { isLoaded: false },
     })
     await flushPromises()
@@ -1431,7 +1476,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
 
   it('watcher：currentStep 变为 host-pack 时触发 refreshStatus', async () => {
     mockContainer.fetchIndustryBaseline.mockClear()
-    const { wrapper, router } = await mountComponent()
+    const { router } = await mountComponent()
     await flushPromises()
     mockContainer.fetchIndustryBaseline.mockClear()
     await router.push({ name: 'product-onboarding', query: { step: 'host-pack' } })
@@ -1525,9 +1570,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     const { wrapper } = await mountComponent({
       route: { step: 'industry' },
       catalog: {
-        open_packages: [
-          { industry_id: '涂料', name: '涂料', scenario: '', product_name: '涂料专业版' },
-        ],
+        open_packages: [{ industry_id: '涂料', name: '涂料', scenario: '', product_name: '涂料专业版' }],
         open_industry_ids: ['涂料'],
       },
     })
@@ -1550,9 +1593,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     const { wrapper } = await mountComponent({
       route: { step: 'industry' },
       catalog: {
-        open_packages: [
-          { industry_id: '涂料', name: '涂料', scenario: '涂料化工批发。', product_name: '' },
-        ],
+        open_packages: [{ industry_id: '涂料', name: '涂料', scenario: '涂料化工批发。', product_name: '' }],
         open_industry_ids: ['涂料'],
       },
     })
@@ -1579,12 +1620,8 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     const { wrapper } = await mountComponent({
       route: { step: 'industry' },
       catalog: {
-        open_packages: [
-          { industry_id: '涂料', name: '涂料', scenario: '', product_name: '' },
-        ],
-        preview_packages: [
-          { industry_id: '餐饮', name: '餐饮', scenario: '', product_name: '' },
-        ],
+        open_packages: [{ industry_id: '涂料', name: '涂料', scenario: '', product_name: '' }],
+        preview_packages: [{ industry_id: '餐饮', name: '餐饮', scenario: '', product_name: '' }],
         open_industry_ids: ['涂料'],
       },
     })
@@ -1856,9 +1893,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
       catalog: {
         open_industry_ids: ['涂料'],
         selected_industry_id: '考勤', // 不在 open_industry_ids 中
-        open_packages: [
-          { industry_id: '涂料', name: '涂料', scenario: '', product_name: '' },
-        ],
+        open_packages: [{ industry_id: '涂料', name: '涂料', scenario: '', product_name: '' }],
       },
     })
     await flushPromises()
@@ -1897,9 +1932,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     const { wrapper } = await mountComponent({
       route: { step: 'industry' },
       catalog: {
-        open_packages: [
-          { industry_id: '', name: '', scenario: '', product_name: '' },
-        ],
+        open_packages: [{ industry_id: '', name: '', scenario: '', product_name: '' }],
         open_industry_ids: [''],
       },
     })

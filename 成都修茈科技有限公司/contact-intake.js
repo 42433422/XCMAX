@@ -61,7 +61,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const reviewBody = document.getElementById('intake-review-body')
   const banner = document.getElementById('cs-intake-banner')
   function readCookie(name) {
-    const parts = (`; ${document.cookie}`).split(`; ${name}=`)
+    const parts = `; ${document.cookie}`.split(`; ${name}=`)
     if (parts.length === 2) return parts.pop().split(';').shift() || ''
     return ''
   }
@@ -314,10 +314,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   function renderReview() {
     if (!reviewBody) return
     syncStateFromFields()
-    const integration =
-      state.needIntegration === 'yes'
-        ? `需要 — ${state.integrationNote || '待补充'}`
-        : '不需要'
+    const integration = state.needIntegration === 'yes' ? `需要 — ${state.integrationNote || '待补充'}` : '不需要'
     const rows = [
       ['您的角色', state.userRole || '—'],
       ['行业/业务', state.industry || '—'],
@@ -337,17 +334,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       ['系统对接', integration],
       ['隐私同意', state.privacyAgreed ? '已同意' : '未同意'],
     ]
-    reviewBody.innerHTML = rows
-      .map(([k, v]) => `<dt>${k}</dt><dd>${escapeHtml(v)}</dd>`)
-      .join('')
+    reviewBody.innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${escapeHtml(v)}</dd>`).join('')
   }
 
   function escapeHtml(s) {
-    return String(s)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
   }
 
   /** 与 Modstore `_format_contact_audit_code` 一致；API 未带 audit_code 时用 id 兜底 */
@@ -506,10 +497,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       suggestions: [{ ...item, name: picked, exact: Boolean(exact) }],
     }
     setCompanyResolvedName(picked)
-    setCompanyMatchHint(
-      exact ? '已选定公司，请继续填写系统类型' : '已选定相近名称，请继续填写系统类型',
-      'ok',
-    )
+    setCompanyMatchHint(exact ? '已选定公司，请继续填写系统类型' : '已选定相近名称，请继续填写系统类型', 'ok')
     if (listEl) {
       listEl.hidden = true
       listEl.innerHTML = ''
@@ -517,24 +505,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     inputEl?.setAttribute('aria-expanded', 'false')
   }
 
-  const COMPANY_SOURCE_MARKERS = [
-    '爱企查',
-    '启信宝',
-    '企查查',
-    '天眼查',
-    '水滴信用',
-    '百度百科',
-    '百度知道',
-    '企查猫',
-    '利查查',
-  ]
+  const COMPANY_SOURCE_MARKERS = ['爱企查', '启信宝', '企查查', '天眼查', '水滴信用', '百度百科', '百度知道', '企查猫', '利查查']
 
   function formatCompanyDisplayName(name) {
     let s = (name || '').trim()
     if (!s) return ''
     s = s.split(/\s*[-_|｜]\s*/)[0].trim()
     for (const marker of COMPANY_SOURCE_MARKERS) {
-      if (s.endsWith(marker)) s = s.slice(0, -marker.length).replace(/[\s\-_|｜]+$/, '').trim()
+      if (s.endsWith(marker))
+        s = s
+          .slice(0, -marker.length)
+          .replace(/[\s\-_|｜]+$/, '')
+          .trim()
     }
     return s.replace(/\s+/g, '').slice(0, 80)
   }
@@ -574,9 +556,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const statusEl = document.getElementById('intake-ai-company-status')
     if (!statusEl) return
     statusEl.textContent = text || ''
-    statusEl.className = variant
-      ? `intake-company-status intake-company-status--${variant}`
-      : 'intake-company-status'
+    statusEl.className = variant ? `intake-company-status intake-company-status--${variant}` : 'intake-company-status'
   }
 
   function setCompanyMatchResult(mode, detail) {
@@ -640,9 +620,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (matched?.name && !multiPick) {
       setCompanyResolvedName(matched.name)
       setCompanyMatchHint(
-        payload?.web_used || matched.source === 'web'
-          ? '已通过联网检索核对，请继续填写系统类型'
-          : '已匹配，请继续填写系统类型',
+        payload?.web_used || matched.source === 'web' ? '已通过联网检索核对，请继续填写系统类型' : '已匹配，请继续填写系统类型',
         'ok',
       )
       listEl.hidden = true
@@ -690,10 +668,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     const ctrl = new AbortController()
     const timer = window.setTimeout(() => ctrl.abort(), timeoutMs)
     try {
-      return await fetch(
-        `/api/public/contact/companies/match?q=${encodeURIComponent(q)}&limit=8&web=${web ? 'true' : 'false'}`,
-        { credentials: 'same-origin', signal: ctrl.signal },
-      )
+      return await fetch(`/api/public/contact/companies/match?q=${encodeURIComponent(q)}&limit=8&web=${web ? 'true' : 'false'}`, {
+        credentials: 'same-origin',
+        signal: ctrl.signal,
+      })
     } finally {
       window.clearTimeout(timer)
     }
@@ -726,12 +704,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           return
         }
         setCompanyMatchResult('warn', { text: '匹配服务暂时不可用' })
-        setCompanyMatchHint(
-          res.status === 404
-            ? '当前页面未连上官网 API，请用 xiu-ci.com 打开联系页'
-            : '请稍后重试或继续手动填写',
-          'new',
-        )
+        setCompanyMatchHint(res.status === 404 ? '当前页面未连上官网 API，请用 xiu-ci.com 打开联系页' : '请稍后重试或继续手动填写', 'new')
         return
       }
       const data = normalizeCompanyMatchPayload(await res.json())
@@ -741,12 +714,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch {
       if (seq !== companyMatchSeq) return
       setCompanyMatchResult('warn', { text: '无法连接匹配服务' })
-      setCompanyMatchHint(
-        location.protocol === 'file:'
-          ? '本地预览无法匹配，请通过官网访问'
-          : '网络异常，请稍后重试',
-        'new',
-      )
+      setCompanyMatchHint(location.protocol === 'file:' ? '本地预览无法匹配，请通过官网访问' : '网络异常，请稍后重试', 'new')
     } finally {
       if (seq === companyMatchSeq) companyMatchInFlight = false
     }
@@ -880,11 +848,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   function pulseAiField(el) {
     if (!el) return
-    const wrap =
-      el.closest('.form-field') ||
-      el.closest('.intake-option-card') ||
-      el.closest('fieldset') ||
-      el.parentElement
+    const wrap = el.closest('.form-field') || el.closest('.intake-option-card') || el.closest('fieldset') || el.parentElement
     wrap?.classList.add('intake-field--ai-fill')
     el.classList.add('intake-field--highlight')
     window.setTimeout(() => {
@@ -1143,10 +1107,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function buildAiAssistPrompt(company, system) {
-    const lines = [
-      `公司：${company}`,
-      `主要系统/业务：${system}`,
-    ]
+    const lines = [`公司：${company}`, `主要系统/业务：${system}`]
     const matched = companyMatchCache?.matched
     const companyForPrompt = getAiAssistCompanyName() || company
     if (matched?.name && matched.name === companyForPrompt) {
@@ -1235,8 +1196,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     companyEl?.addEventListener('blur', (ev) => {
       const q = (companyEl.value || '').trim()
       const next = ev.relatedTarget
-      const towardSystem =
-        next === systemEl || (systemEl && typeof systemEl.contains === 'function' && systemEl.contains(next))
+      const towardSystem = next === systemEl || (systemEl && typeof systemEl.contains === 'function' && systemEl.contains(next))
       if (companyMatchUnlocked) return
       if (q.length >= 2 && q !== companyMatchQuerySynced && !towardSystem) {
         setCompanyMatchResult('hidden')
@@ -1314,8 +1274,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const INTAKE_SCROLL_OFFSET = 88
 
   function scrollIntakeWizardToTop() {
-    const target =
-      form.querySelector('.intake-progress') || form.querySelector('.intake-step-panel.is-active')
+    const target = form.querySelector('.intake-progress') || form.querySelector('.intake-step-panel.is-active')
     if (!target) return
     const top = target.getBoundingClientRect().top + window.scrollY - INTAKE_SCROLL_OFFSET
     window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' })
@@ -1393,7 +1352,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         phone: state.phone,
         company: state.company,
         message: buildMessage(),
-        source: csIntake.active ? 'cs_intake' : (tracking.source || 'contact'),
+        source: csIntake.active ? 'cs_intake' : tracking.source || 'contact',
         desktop_os: state.desktopOs,
         need_mobile: state.needMobile,
         privacy_agreed: true,
@@ -1430,7 +1389,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         form.querySelector('.intake-wizard-body')?.classList.add('is-submitted')
         form.querySelector('.intake-wizard-actions')?.setAttribute('hidden', '')
         syncAiAssistUi()
-        window.scrollTo({ top: success?.offsetTop ? success.offsetTop - 80 : 0, behavior: 'smooth' })
+        window.scrollTo({
+          top: success?.offsetTop ? success.offsetTop - 80 : 0,
+          behavior: 'smooth',
+        })
         return
       }
 

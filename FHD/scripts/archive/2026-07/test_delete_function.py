@@ -2,6 +2,8 @@ import json
 
 import requests
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 
 def test_delete_function():
     """测试删除功能"""
@@ -84,7 +86,7 @@ def test_delete_function():
         else:
             print(f"❌ 获取客户列表失败，状态码: {response.status_code}")
 
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 测试删除功能失败: {e}")
 
 
@@ -122,7 +124,7 @@ def check_database_after_delete():
 
         conn.close()
 
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 检查数据库失败: {e}")
 
 
@@ -151,7 +153,7 @@ def check_delete_implementation():
             if "软删除" in content:
                 print("💡 代码中包含软删除注释")
 
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 检查删除实现失败: {e}")
 
 

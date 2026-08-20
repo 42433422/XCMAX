@@ -32,7 +32,9 @@ def _char_column(line: str, byte_column: int) -> int:
 
 
 def _offset(lines: list[str], line_no: int, byte_column: int) -> int:
-    return sum(len(line) + 1 for line in lines[: line_no - 1]) + _char_column(lines[line_no - 1], byte_column)
+    return sum(len(line) + 1 for line in lines[: line_no - 1]) + _char_column(
+        lines[line_no - 1], byte_column
+    )
 
 
 def _find_argument(module: ast.Module, line: int, name: str) -> ast.arg | None:

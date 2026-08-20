@@ -1,10 +1,14 @@
-# ruff: noqa
+# mypy: disable-error-code="operator"
 """Vibe-coding implementation for the script-agent compatibility facade."""
+
 from __future__ import annotations
+
 import asyncio
 import importlib
 from typing import Any, AsyncIterator, Dict, List, Optional
-from modstore_server.script_agent.brief import AgentEvent, Brief, Verdict
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+from modstore_server.script_agent.brief import AgentEvent, Brief
 from modstore_server.script_agent.sandbox_runner import run_in_sandbox
 
 DEFAULT_MAX_ITERATIONS = 4
@@ -48,13 +52,18 @@ async def run_vibe_agent_loop(
     _facade()._merge_script_sandbox_policy_kwargs(brief, sandbox_kwargs)
     trace: List[Dict[str, Any]] = []
     try:
-        from modstore_server.integrations.vibe_adapter import VibeIntegrationError, get_vibe_coder
+        from modstore_server.integrations.vibe_adapter import (
+            VibeIntegrationError,
+            get_vibe_coder,
+        )
     except ImportError as exc:
         outcome = _facade().AgentLoopOutcome(
             ok=False, iterations=0, error=f"integrations 未导入: {exc}", trace=trace
         )
         yield _facade().AgentEvent(
-            "error", 0, {"reason": str(outcome.error), "outcome": _facade()._outcome_dict(outcome)}
+            "error",
+            0,
+            {"reason": str(outcome.error), "outcome": _facade()._outcome_dict(outcome)},
         )
         return
     ctx = await _facade().collect_context(brief, user_id=user_id, upload_items=files)
@@ -76,20 +85,27 @@ async def run_vibe_agent_loop(
     try:
         with sf() as session:
             coder = get_vibe_coder(
-                session=session, user_id=int(user_id or 0), provider=provider, model=model
+                session=session,
+                user_id=int(user_id or 0),
+                provider=provider,
+                model=model,
             )
     except VibeIntegrationError as exc:
         outcome = _facade().AgentLoopOutcome(ok=False, iterations=0, error=str(exc), trace=trace)
         yield _facade().AgentEvent(
-            "error", 0, {"reason": str(exc), "outcome": _facade()._outcome_dict(outcome)}
+            "error",
+            0,
+            {"reason": str(exc), "outcome": _facade()._outcome_dict(outcome)},
         )
         return
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         outcome = _facade().AgentLoopOutcome(
             ok=False, iterations=0, error=f"vibe coder 构造失败: {exc}", trace=trace
         )
         yield _facade().AgentEvent(
-            "error", 0, {"reason": str(outcome.error), "outcome": _facade()._outcome_dict(outcome)}
+            "error",
+            0,
+            {"reason": str(outcome.error), "outcome": _facade()._outcome_dict(outcome)},
         )
         return
     yield _facade().AgentEvent("plan", 0, {"plan_md": ctx.brief_md or brief.goal or ""})
@@ -117,10 +133,12 @@ async def run_vibe_agent_loop(
                     "verdict_suggestions": last_failure.get("verdict_suggestions") or [],
                 }
                 skill = await asyncio.to_thread(
-                    coder.code_factory.repair, skill_id_hint or last_skill.skill_id, failure_blob
+                    coder.code_factory.repair,
+                    skill_id_hint or last_skill.skill_id,
+                    failure_blob,
                 )
                 phase_label = "repair"
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             yield _facade().AgentEvent("error", i, {"reason": f"vibe {phase_label} failed: {exc}"})
             final_outcome.error = f"vibe {phase_label}: {exc}"
             yield _facade().AgentEvent(
@@ -133,7 +151,10 @@ async def run_vibe_agent_loop(
             yield _facade().AgentEvent(
                 "error",
                 i,
-                {"reason": final_outcome.error, "outcome": _facade()._outcome_dict(final_outcome)},
+                {
+                    "reason": final_outcome.error,
+                    "outcome": _facade()._outcome_dict(final_outcome),
+                },
             )
             return
         last_skill = skill
@@ -150,7 +171,14 @@ async def run_vibe_agent_loop(
         )
         static_errors = _facade().validate_script(code)
         yield _facade().AgentEvent("check", i, {"ok": not static_errors, "errors": static_errors})
-        trace.append({"phase": "check", "iteration": i, "engine": "vibe", "errors": static_errors})
+        trace.append(
+            {
+                "phase": "check",
+                "iteration": i,
+                "engine": "vibe",
+                "errors": static_errors,
+            }
+        )
         if static_errors:
             last_failure = {
                 "stderr": "\n".join(static_errors),
@@ -167,12 +195,15 @@ async def run_vibe_agent_loop(
                 files=files,
                 **sandbox_kwargs,
             )
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             final_outcome.error = f"sandbox: {exc}"
             yield _facade().AgentEvent(
                 "error",
                 i,
-                {"reason": final_outcome.error, "outcome": _facade()._outcome_dict(final_outcome)},
+                {
+                    "reason": final_outcome.error,
+                    "outcome": _facade()._outcome_dict(final_outcome),
+                },
             )
             return
         yield _facade().AgentEvent(
@@ -233,12 +264,16 @@ async def run_vibe_agent_loop(
                     judge_session, int(user_id or 0), provider, model
                 )
                 verdict = await _facade().judge(brief, plan_obj, result, llm=judge_llm)
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             verdict = _facade().Verdict(ok=False, reason=f"observer 调用失败: {exc}")
         yield _facade().AgentEvent(
             "observe",
             i,
-            {"ok": verdict.ok, "reason": verdict.reason, "suggestions": verdict.suggestions},
+            {
+                "ok": verdict.ok,
+                "reason": verdict.reason,
+                "suggestions": verdict.suggestions,
+            },
         )
         trace.append(
             {
@@ -280,5 +315,8 @@ async def run_vibe_agent_loop(
     yield _facade().AgentEvent(
         "error",
         max_iterations - 1,
-        {"reason": final_outcome.error, "outcome": _facade()._outcome_dict(final_outcome)},
+        {
+            "reason": final_outcome.error,
+            "outcome": _facade()._outcome_dict(final_outcome),
+        },
     )

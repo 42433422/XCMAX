@@ -1,11 +1,11 @@
 # Runbook — 数据库运维工程师
 
-| 字段 | 值 |
-|------|----|
-| 员工 ID | `dbops-engineer` |
+| 字段     | 值               |
+| -------- | ---------------- |
+| 员工 ID  | `dbops-engineer` |
 | 负责区域 | `server-and-ops` |
-| 最后更新 | 2026-05-08 |
-| 应急联系 | admin |
+| 最后更新 | 2026-05-08       |
+| 应急联系 | admin            |
 
 ---
 
@@ -49,7 +49,7 @@ ls -la MODstore_deploy/var/backups/ | tail -n 14
 python -c "from modstore_server.db import engine; print(engine.pool.status())"
 ```
 
-**预期**：checkedout < pool_size * 0.8。
+**预期**：checkedout < pool_size \* 0.8。
 
 ---
 
@@ -59,6 +59,7 @@ python -c "from modstore_server.db import engine; print(engine.pool.status())"
 
 **症状**：`alembic upgrade head` 报 `Multiple head revisions are present`。  
 **修复**：
+
 1. `alembic heads` 确认两个 head 编号。
 2. `alembic merge -m "merge xx and yy" <head1> <head2>`。
 3. 重新 `alembic upgrade head` 在 sandbox 验证。
@@ -67,6 +68,7 @@ python -c "from modstore_server.db import engine; print(engine.pool.status())"
 
 **排查**：巡检 2 报 diff。  
 **修复**：
+
 1. `alembic revision --autogenerate -m "add field X to Y"`
 2. 手工核对生成的 `op.add_column` / `op.alter_column`，**严格检查 NULL 默认值**。
 3. 提交到 change-request 队列，等待 `test-qa-runner` + `change-request-auditor` 通过。
@@ -74,6 +76,7 @@ python -c "from modstore_server.db import engine; print(engine.pool.status())"
 ### 异常 3：复制延迟告警
 
 **修复**：
+
 1. 在主从分别 `SHOW SLAVE STATUS\G` / `SELECT pg_last_wal_replay_lsn()`。
 2. 若延迟大于 60s，检查最近大事务/批量写。
 3. 给 `modstore-backend-api` 反馈："请把批量插入拆成 chunk_size=500"。
@@ -86,15 +89,15 @@ python -c "from modstore_server.db import engine; print(engine.pool.status())"
 
 ## 已知未决工单
 
-| # | 报告日 | 来源 | 现象 | 处置建议 |
-|---|--------|------|------|----------|
+| #      | 报告日     | 来源                           | 现象                                                                                                                                                                                                    | 处置建议                                                                                                                                                                                                       |
+| ------ | ---------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | DB-001 | 2026-05-08 | onboard_yuangon_employees 输出 | `sync_employee_trigger_bindings` 抛 `no such column: employee_trigger_bindings.priority`，说明 SQLite 中 `employee_trigger_bindings` 表缺 `priority` 列（与 ORM `EmployeeTriggerBinding` 模型不一致）。 | 生成一条 alembic revision：`op.add_column('employee_trigger_bindings', sa.Column('priority', sa.Integer(), nullable=False, server_default='0'))`，sandbox 双向通过后由 deploy-release-officer 在维护窗口执行。 |
 
 ## ESkill 动态阶段触发记录
 
 | 日期 | 触发原因 | patch_id | 结果 | 是否固化 |
-|------|----------|----------|------|----------|
-| — | — | — | — | — |
+| ---- | -------- | -------- | ---- | -------- |
+| —    | —        | —        | —    | —        |
 
 ---
 

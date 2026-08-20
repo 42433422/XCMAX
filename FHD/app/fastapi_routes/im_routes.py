@@ -459,11 +459,13 @@ async def im_mark_read(
             if int(member_id) != uid:
                 await im_ws_hub.send_to_user(int(member_id), read_payload)
         return {"success": True, **result}
-    except PermissionError as exc:
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=403)
-    except RECOVERABLE_ERRORS as exc:
+    except PermissionError:
+        return JSONResponse({"success": False, "message": "无权执行该操作"}, status_code=403)
+    except RECOVERABLE_ERRORS:
         logger.exception("im_mark_read")
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+        return JSONResponse(
+            {"success": False, "message": "消息服务暂时不可用，请稍后重试"}, status_code=500
+        )
     finally:
         db.close()
 
@@ -486,7 +488,6 @@ cursor_super_employee_messages = _super_employee_routes.cursor_super_employee_me
 cursor_super_employee_invoke = _super_employee_routes.cursor_super_employee_invoke
 trae_super_employee_messages = _super_employee_routes.trae_super_employee_messages
 trae_super_employee_invoke = _super_employee_routes.trae_super_employee_invoke
-
 _ai_group_guard = _ai_group_routes._ai_group_guard
 admin_ai_groups_list = _ai_group_routes.admin_ai_groups_list
 admin_ai_group_candidates = _ai_group_routes.admin_ai_group_candidates

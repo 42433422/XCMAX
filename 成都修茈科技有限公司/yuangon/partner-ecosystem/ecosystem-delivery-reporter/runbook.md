@@ -7,26 +7,29 @@
         ## 上游 Handoff 契约
 
         ### handoff: enterprise-adoption-officer → 本岗
+
 - **触发条件**：`employee.task.done:enterprise-adoption-officer`
 - **输入**：待补充（参见 `yuangon/**/enterprise-adoption-officer/runbook.md`）
 - **门禁**：依赖完成前本岗不得继续
 
 ### handoff: deploy-release-officer → 本岗
+
 - **触发条件**：`ops.change_request.approved` → deploy 执行完成
 - **输入**：部署 manifest、环境 URL、健康检查结果
 - **门禁**：deploy 失败时自动 rollback；本岗等待 `/healthz` 返回 200
 
+          ## Handlers
 
-        ## Handlers
+          | Handler | 说明 |
+          |---------|------|
+          | `llm_md` | 接收 Markdown 任务描述，调用 LLM 输出结构化结果 |
 
-        | Handler | 说明 |
-        |---------|------|
-        | `llm_md` | 接收 Markdown 任务描述，调用 LLM 输出结构化结果 |
-| `echo` | 调试用：原样返回输入，用于 smoke 测试 |
+  | `echo` | 调试用：原样返回输入，用于 smoke 测试 |
 
-        ## 核心 Scope
+          ## 核心 Scope
 
-        - `MODstore_deploy/modstore_server/**/production_line*`
+          - `MODstore_deploy/modstore_server/**/production_line*`
+
 - `MODstore_deploy/modstore_server/**/operations*`
 - `FHD/app/**/telemetry/**`
 - `yuangon/partner-ecosystem/ecosystem-delivery-reporter/**`

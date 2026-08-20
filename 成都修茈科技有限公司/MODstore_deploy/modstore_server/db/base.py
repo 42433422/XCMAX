@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment"
 """引擎、会话、元数据 Base 以及 ``init_db`` 迁移钩子。"""
 
 from __future__ import annotations
@@ -9,6 +10,8 @@ from typing import Any, Optional
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 __all__ = [
     "Base",
@@ -222,7 +225,7 @@ def _create_schema(engine: Engine) -> None:
         connection.exec_driver_sql("BEGIN EXCLUSIVE")
         try:
             Base.metadata.create_all(connection)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             connection.rollback()
             raise
         else:

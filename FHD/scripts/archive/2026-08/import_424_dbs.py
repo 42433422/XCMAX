@@ -3,10 +3,13 @@ r"""
 
 每个 .db 文件名代表一个购买单位，文件内的 products 表存储该单位的产品。
 """
+
 import os
 import sqlite3
 import sys
 from datetime import datetime
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 sys.path.insert(0, r"e:\FHD\XCAGI")
 
@@ -144,7 +147,7 @@ def add_products_to_main_db(session, unit_name, columns, rows):
             )
             session.add(product)
             added += 1
-        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             print(f"    [跳过产品] 错误: {e}")
     session.commit()
     return added

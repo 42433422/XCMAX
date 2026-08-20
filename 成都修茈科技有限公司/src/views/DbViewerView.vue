@@ -111,9 +111,7 @@
           <tr v-for="txn in transactions" :key="txn.id">
             <td>{{ txn.id }}</td>
             <td>{{ txn.user_id }}</td>
-            <td :class="['amount', txn.amount >= 0 ? 'pos' : 'neg']">
-              {{ txn.amount >= 0 ? '+' : '' }}¥{{ txn.amount.toFixed(2) }}
-            </td>
+            <td :class="['amount', txn.amount >= 0 ? 'pos' : 'neg']">{{ txn.amount >= 0 ? '+' : '' }}¥{{ txn.amount.toFixed(2) }}</td>
             <td class="type">{{ txn.txn_type }}</td>
             <td>
               <span :class="['badge', txn.status === 'completed' ? 'badge-ok' : 'badge-pending']">
@@ -166,8 +164,12 @@ function formatTime(iso) {
   if (!iso) return '—'
   const d = new Date(iso)
   return d.toLocaleString('zh-CN', {
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
   })
 }
 </script>
@@ -197,7 +199,7 @@ function formatTime(iso) {
 
 .db-count {
   font-size: 13px;
-  color: rgba(255,255,255,0.4);
+  color: rgba(255, 255, 255, 0.4);
   margin-bottom: 12px;
 }
 
@@ -208,23 +210,23 @@ function formatTime(iso) {
   background: #111111;
   border-radius: 8px;
   overflow: hidden;
-  border: 0.5px solid rgba(255,255,255,0.1);
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
 }
 
 .db-table th {
   text-align: left;
   padding: 10px 12px;
-  background: rgba(255,255,255,0.03);
-  color: rgba(255,255,255,0.5);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.5);
   font-weight: 600;
   font-size: 12px;
-  border-bottom: 0.5px solid rgba(255,255,255,0.1);
+  border-bottom: 0.5px solid rgba(255, 255, 255, 0.1);
 }
 
 .db-table td {
   padding: 10px 12px;
-  border-bottom: 0.5px solid rgba(255,255,255,0.06);
-  color: rgba(255,255,255,0.7);
+  border-bottom: 0.5px solid rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.7);
 }
 
 .db-table tr:last-child td {
@@ -244,15 +246,35 @@ function formatTime(iso) {
 .pkg {
   font-family: monospace;
   font-size: 12px;
-  color: rgba(255,255,255,0.4);
+  color: rgba(255, 255, 255, 0.4);
 }
 
-.balance.pos, .amount.pos { color: #4ade80; font-weight: 600; }
-.balance.neg, .amount.neg { color: #ff6b6b; font-weight: 600; }
-.price.free { color: #4ade80; }
-.price.paid { color: #ff6b6b; }
-.time { font-size: 12px; color: rgba(255,255,255,0.4); }
-.desc { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.balance.pos,
+.amount.pos {
+  color: #4ade80;
+  font-weight: 600;
+}
+.balance.neg,
+.amount.neg {
+  color: #ff6b6b;
+  font-weight: 600;
+}
+.price.free {
+  color: #4ade80;
+}
+.price.paid {
+  color: #ff6b6b;
+}
+.time {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.4);
+}
+.desc {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .badge {
   display: inline-block;
@@ -262,22 +284,34 @@ function formatTime(iso) {
   font-weight: 600;
 }
 
-.badge-yes { background: rgba(96,165,250,0.15); color: #60a5fa; }
-.badge-no { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.4); }
-.badge-ok { background: rgba(74,222,128,0.15); color: #4ade80; }
-.badge-pending { background: rgba(255,165,0,0.15); color: #ffa500; }
+.badge-yes {
+  background: rgba(96, 165, 250, 0.15);
+  color: #60a5fa;
+}
+.badge-no {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.4);
+}
+.badge-ok {
+  background: rgba(74, 222, 128, 0.15);
+  color: #4ade80;
+}
+.badge-pending {
+  background: rgba(255, 165, 0, 0.15);
+  color: #ffa500;
+}
 
 .db-empty {
   text-align: center;
   padding: 24px;
-  color: rgba(255,255,255,0.3);
+  color: rgba(255, 255, 255, 0.3);
   font-size: 14px;
 }
 
 .loading {
   text-align: center;
   padding: 48px;
-  color: rgba(255,255,255,0.4);
+  color: rgba(255, 255, 255, 0.4);
 }
 
 @media (max-width: 768px) {

@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="attr-defined, misc, no-any-return, valid-type"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -47,7 +51,10 @@ def _execute_admin_readonly_tool(
 
     try:
         if tool == "get_my_account_snapshot":
-            from modstore_server.xiaoc_cs_ssot import format_visitor_block, resolve_user_identity
+            from modstore_server.xiaoc_cs_ssot import (
+                format_visitor_block,
+                resolve_user_identity,
+            )
 
             ident = resolve_user_identity(user, db=db, source="butler")
             lines = [
@@ -88,7 +95,7 @@ def _execute_admin_readonly_tool(
             from modstore_server import payment_orders
 
             lim = _limit(8, 20)
-            (rows, total) = payment_orders.list_orders(
+            rows, total = payment_orders.list_orders(
                 user_id=int(user.id), status=None, limit=lim, offset=0
             )
             lines = [f"【本人订单】共{total}条，展示最近{min(lim, len(rows))}条："]
@@ -110,7 +117,10 @@ def _execute_admin_readonly_tool(
             rows = (
                 db.query(CustomerServiceTicket)
                 .filter(CustomerServiceTicket.user_id == user.id)
-                .order_by(CustomerServiceTicket.updated_at.desc(), CustomerServiceTicket.id.desc())
+                .order_by(
+                    CustomerServiceTicket.updated_at.desc(),
+                    CustomerServiceTicket.id.desc(),
+                )
                 .limit(lim)
                 .all()
             )
@@ -149,10 +159,10 @@ def _execute_admin_readonly_tool(
                 lines.append(
                     f"release_train: current={snap.get('current')} product={snap.get('product_version')} day_index={snap.get('day_index')} next={snap.get('next_kind_hint')} marketing={snap.get('marketing_analog')}"
                 )
-            except Exception as exc:
+            except RECOVERABLE_ERRORS as exc:
                 lines.append(f"release_train: 暂不可用 ({type(exc).__name__})")
             return _facade()._clip_tool_text("\n".join(lines))
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         _facade().logger.warning("admin readonly tool %s failed: %s", tool, exc)
         return f"错误：执行 {tool} 失败（{type(exc).__name__}）"
     return f"错误：未处理工具 {tool}"

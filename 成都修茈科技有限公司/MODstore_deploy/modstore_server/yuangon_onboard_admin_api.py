@@ -8,7 +8,7 @@ import os
 import re
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Set
 
@@ -17,6 +17,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException
 from modstore_server.api.deps import require_admin
 from modstore_server.integrations.ops_action_handlers import repo_root
 from modstore_server.models import CatalogItem, User, get_session_factory
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.yuangon_paths import resolve_yuangon_repo_root
 
 logger = logging.getLogger(__name__)
@@ -85,7 +86,7 @@ def _discover_yuangon_ids(repo: Path) -> tuple[List[str], List[str]]:
                 pid = str(data.get("id") or "").strip()
                 if pid:
                     ids.add(pid)
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             errs.append(f"{f.relative_to(ydir)}: {exc}")
     return sorted(ids), errs
 
@@ -157,7 +158,7 @@ def yuangon_onboard_run(
         )
     except subprocess.TimeoutExpired:
         raise HTTPException(504, "onboard script timeout (900s)")
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("onboard subprocess failed")
         raise HTTPException(500, str(exc)) from exc
 
@@ -173,7 +174,7 @@ def yuangon_onboard_run(
         "onboard_summary": onboard_summary,
     }
     audit = {
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
         "action": "register_duty_employees",
         "status": "success" if proc.returncode == 0 else "failed",
         "ok": proc.returncode == 0,
@@ -190,7 +191,7 @@ def yuangon_onboard_run(
     try:
         _append_governance_audit(audit)
         result["governance_audit_path"] = str(_governance_audit_path())
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("failed to append governance audit")
         result["governance_audit_error"] = "append_failed"
     return result

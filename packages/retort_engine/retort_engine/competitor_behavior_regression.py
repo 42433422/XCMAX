@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.pr_review import review_diff
 
@@ -53,7 +53,7 @@ def build_competitor_behavior_regression(
     source_projects = sorted(
         {row["source_project"] for row in rows if row.get("source_project")}
     )
-    summary = {
+    summary: dict[str, Any] = {
         "case_count": len(rows),
         "min_case_count": min_cases,
         "ready_case_count": len(ready_rows),
@@ -106,11 +106,15 @@ def _run_case(case: dict[str, Any]) -> dict[str, Any]:
         str(case["diff"]), max_comments=8, issue_context=str(case["issue_context"])
     )
     comments = [item for item in review.get("comments") or [] if isinstance(item, dict)]
-    summary = review.get("summary") if isinstance(review.get("summary"), dict) else {}
-    extension_policy = (
+    summary = cast(
+        dict[str, Any],
+        review.get("summary") if isinstance(review.get("summary"), dict) else {},
+    )
+    extension_policy = cast(
+        dict[str, Any],
         summary.get("extension_policy")
         if isinstance(summary.get("extension_policy"), dict)
-        else {}
+        else {},
     )
     expected_context = str(case["expected_context"])
     expected_severity = str(case["expected_severity"])

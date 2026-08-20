@@ -14,19 +14,12 @@
  * Mock 最小化：仅 mock 外部边界（apiBase / modLoadingStatus / modLoadingStatusShared / mods store）。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import {
-  extractModNames,
-  useStartupSplash,
-  STARTUP_SPLASH_MS,
-  STARTUP_FAILSAFE_MS,
-  STARTUP_AUTH_TIMEOUT_MS,
-} from './useStartupSplash'
+import { extractModNames, useStartupSplash, STARTUP_SPLASH_MS, STARTUP_FAILSAFE_MS, STARTUP_AUTH_TIMEOUT_MS } from './useStartupSplash'
 
 // ── 外部依赖 mock ─────────────────────────────────────────
 
 vi.mock('@/utils/apiBase', () => ({
-  isApiFetchTimeoutError: (e: unknown) =>
-    e instanceof Error && e.message.includes('timeout'),
+  isApiFetchTimeoutError: (e: unknown) => e instanceof Error && e.message.includes('timeout'),
 }))
 
 vi.mock('@/utils/modLoadingStatusShared', () => ({
@@ -263,9 +256,7 @@ describe('useStartupSplash - coverage ramp', () => {
       const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {})
       const { fetchModLoadingStatusShared } = await import('@/utils/modLoadingStatusShared')
 
-      vi.mocked(fetchModLoadingStatusShared).mockRejectedValueOnce(
-        new Error('network timeout'),
-      )
+      vi.mocked(fetchModLoadingStatusShared).mockRejectedValueOnce(new Error('network timeout'))
       await splash.loadModsForStartup()
 
       expect(debugSpy).toHaveBeenCalled()
@@ -277,9 +268,7 @@ describe('useStartupSplash - coverage ramp', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
       const { fetchModLoadingStatusShared } = await import('@/utils/modLoadingStatusShared')
 
-      vi.mocked(fetchModLoadingStatusShared).mockRejectedValueOnce(
-        new Error('server error'),
-      )
+      vi.mocked(fetchModLoadingStatusShared).mockRejectedValueOnce(new Error('server error'))
       await splash.loadModsForStartup()
 
       expect(warnSpy).toHaveBeenCalled()
@@ -736,9 +725,7 @@ describe('useStartupSplash - coverage ramp', () => {
     })
 
     it('重复 name 被去重', () => {
-      expect(extractModNames([{ name: 'A' }, { name: 'A' }, { id: 'A' }])).toEqual([
-        'A',
-      ])
+      expect(extractModNames([{ name: 'A' }, { name: 'A' }, { id: 'A' }])).toEqual(['A'])
     })
   })
 })

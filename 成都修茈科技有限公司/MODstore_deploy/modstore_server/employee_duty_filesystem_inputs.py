@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr"
 """Build bounded scheduled-duty inputs from reviewed repository SSOTs."""
 
 from __future__ import annotations

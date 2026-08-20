@@ -2,16 +2,17 @@
 
 ## 元信息
 
-| 字段 | 值 |
-|------|----|
-| skill_id | `skill-eskill-solidify` |
-| 所属员工 | `employee-pack-curator` |
-| 业务域 | ESkill 动态阶段成功后的固化 |
-| 版本 | 1.0.0 |
+| 字段     | 值                          |
+| -------- | --------------------------- |
+| skill_id | `skill-eskill-solidify`     |
+| 所属员工 | `employee-pack-curator`     |
+| 业务域   | ESkill 动态阶段成功后的固化 |
+| 版本     | 1.0.0                       |
 
 ## 1. 静态阶段
 
 **执行逻辑**（参见 ESkill.md §3.4）：
+
 ```
 确认动态阶段验收通过 → 提取生效 delta（逻辑 diff + 参数）
 → 创建新版 skill-<name>-v<N+1>.md → 递增 employee.yaml 版本号
@@ -19,6 +20,7 @@
 ```
 
 **输出 schema**：
+
 ```json
 { "status": "ok | error", "new_version": "", "old_version": "", "registry_updated": true }
 ```

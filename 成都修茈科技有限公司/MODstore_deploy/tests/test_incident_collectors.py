@@ -20,8 +20,9 @@ def test_nginx_collector_ignores_existing_and_repeated_errors(tmp_path, monkeypa
     monkeypatch.setattr(
         collectors,
         "publish",
-        lambda event_type, payload, *, source: published.append((event_type, payload, source))
-        or True,
+        lambda event_type, payload, *, source: (
+            published.append((event_type, payload, source)) or True
+        ),
     )
 
     assert collectors.collect_nginx_error_tail() is False

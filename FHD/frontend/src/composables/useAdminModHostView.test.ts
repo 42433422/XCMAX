@@ -3,7 +3,6 @@
  * 覆盖：useAdminModHostView 主路径、loaderKey、load 成功/失败、无 loader 回退
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { nextTick } from 'vue'
 
 // Mock ModRequiredView to avoid importing the actual component
 vi.mock('@/components/ModRequiredView.vue', () => ({

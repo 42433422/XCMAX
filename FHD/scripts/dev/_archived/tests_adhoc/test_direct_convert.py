@@ -1,6 +1,9 @@
+# mypy: disable-error-code="import-not-found"
 """直接测试 convert_dingtalk_file 函数"""
 
 import sys
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 sys.path.insert(0, r"e:\FHD\backend")
 
@@ -26,7 +29,7 @@ try:
         template_path=template,
     )
     print(f"\n结果: {result}")
-except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     import traceback
 
     print(f"\n错误: {e}")

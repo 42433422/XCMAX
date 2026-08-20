@@ -49,9 +49,9 @@ def products_pg_update_row(
     if "model_number" in column_names:
         model_number = body.get("model_number")
         sets.append("model_number = :model_number")
-        params["model_number"] = (
-            str(model_number).strip() if model_number is not None else ""
-        )[:120]
+        params["model_number"] = (str(model_number).strip() if model_number is not None else "")[
+            :120
+        ]
     sets.append("name = :name")
     params["name"] = name[:500]
     if "specification" in column_names:
@@ -89,9 +89,7 @@ def products_pg_update_row(
         sets.append("updated_at = NOW()")
     if not sets:
         raise HTTPException(status_code=400, detail="没有可更新的列")
-    params["tenant_id"] = compat._require_tenant_id_or_raise(
-        column_names, table_name="products"
-    )
+    params["tenant_id"] = compat._require_tenant_id_or_raise(column_names, table_name="products")
     mod_and = compat.products_update_or_delete_mod_and(column_names, params)
     sql = (
         "UPDATE products SET "
@@ -206,9 +204,7 @@ def products_pg_batch_delete_rows(raw_ids: list) -> tuple[int, list[str]]:
                 continue
             delete_params: dict[str, object] = {
                 "pid": product_id,
-                "tenant_id": compat._require_tenant_id_or_raise(
-                    columns, table_name="products"
-                ),
+                "tenant_id": compat._require_tenant_id_or_raise(columns, table_name="products"),
             }
             mod_and = compat.products_update_or_delete_mod_and(columns, delete_params)
             sql = "DELETE FROM products WHERE id = :pid AND tenant_id = :tenant_id" + mod_and

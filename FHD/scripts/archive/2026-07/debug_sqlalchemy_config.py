@@ -3,6 +3,8 @@ import sqlite3
 
 import requests
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 
 def debug_sqlalchemy_config():
     """调试SQLAlchemy配置问题"""
@@ -57,14 +59,14 @@ def debug_sqlalchemy_config():
                             rows = cursor.fetchall()
                             print("    样本数据:")
                             for i, row in enumerate(rows):
-                                print(f"      {i+1}. {row}")
+                                print(f"      {i + 1}. {row}")
 
                 if not customer_tables:
                     print("  ❌ 没有找到客户相关表")
 
                 conn.close()
 
-            except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+            except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
                 print(f"  ❌ 无法连接: {e}")
 
     # 检查后端API返回的数据来源
@@ -133,7 +135,7 @@ def debug_sqlalchemy_config():
 
                 conn.close()
 
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"  ❌ 检查API失败: {e}")
 
     # 检查SQLAlchemy配置

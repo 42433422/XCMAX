@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -120,7 +124,9 @@ def api_admin_list_user_mods(
 
 @_facade().router.post("/admin/users/{user_id}/mods/{mod_id}")
 def api_admin_bind_user_mod(
-    user_id: int, mod_id: str, user: _facade().User = _facade().Depends(_facade()._require_admin)
+    user_id: int,
+    mod_id: str,
+    user: _facade().User = _facade().Depends(_facade()._require_admin),
 ):
     """将 Mod 绑定到用户 user_mods（企业版桌面 entitlement 数据源）。"""
     from modstore_server.models_db import add_user_mod
@@ -136,7 +142,9 @@ def api_admin_bind_user_mod(
 
 @_facade().router.delete("/admin/users/{user_id}/mods/{mod_id}")
 def api_admin_unbind_user_mod(
-    user_id: int, mod_id: str, user: _facade().User = _facade().Depends(_facade()._require_admin)
+    user_id: int,
+    mod_id: str,
+    user: _facade().User = _facade().Depends(_facade()._require_admin),
 ):
     from modstore_server.models_db import remove_user_mod
 
@@ -157,7 +165,12 @@ def api_enterprise_entitled_mod_ids(
     from modstore_server.models_db import get_user_mod_ids
 
     mod_ids = sorted(get_user_mod_ids(user.id))
-    return {"ok": True, "user_id": user.id, "username": user.username, "mod_ids": mod_ids}
+    return {
+        "ok": True,
+        "user_id": user.id,
+        "username": user.username,
+        "mod_ids": mod_ids,
+    }
 
 
 @_facade().router.get("/enterprise/customer-delivery-seeds/{pkg_id}/{version}/download")
@@ -169,6 +182,7 @@ def api_enterprise_customer_delivery_seed_download(
 ):
     """Download an account-scoped customer seed after enterprise entitlement checks."""
     from fastapi.responses import FileResponse
+
     from modstore_server.catalog_store import files_dir, get_package
     from modstore_server.models_db import get_user_mod_ids
 
@@ -283,8 +297,8 @@ def api_admin_list_orders(
     """
     from modstore_server import payment_orders
 
-    (rows, total) = payment_orders.list_orders(user_id=0, status=status, limit=limit, offset=offset)
-    (all_rows, _) = payment_orders.list_orders(user_id=0, status=None, limit=100000, offset=0)
+    rows, total = payment_orders.list_orders(user_id=0, status=status, limit=limit, offset=offset)
+    all_rows, _ = payment_orders.list_orders(user_id=0, status=None, limit=100000, offset=0)
     summary: dict[str, _facade().Any] = {
         "total_orders": len(all_rows),
         "paid_orders": 0,
@@ -299,7 +313,7 @@ def api_admin_list_orders(
             summary["paid_orders"] += 1
             try:
                 summary["paid_revenue"] += _facade().Decimal(str(o.get("total_amount") or "0"))
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 pass
         elif st == "pending":
             summary["pending_orders"] += 1
@@ -363,6 +377,7 @@ async def api_package_audit(
 ):
     """通用包审计接口（前端 auditPackage 消费此接口）。上传 .zip/.xcemp，返回五维审核结论。"""
     import json as _json
+
     from modstore_server.package_sandbox_audit import run_package_audit_async
 
     raw = await file.read()
@@ -370,7 +385,7 @@ async def api_package_audit(
     if metadata:
         try:
             meta = _json.loads(metadata)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
     result = await run_package_audit_async(raw, meta or None)
     return result

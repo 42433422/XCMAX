@@ -57,13 +57,9 @@ describe('LoginView.vue', () => {
     const actions = wrapper.findAll('.login-account-action')
     expect(actions).toHaveLength(2)
     expect(actions[0].text()).toContain('注册账号')
-    expect(actions[0].attributes('href')).toBe(
-      'https://xiu-ci.com/market/register?source=xcagi-desktop',
-    )
+    expect(actions[0].attributes('href')).toBe('https://xiu-ci.com/market/register?source=xcagi-desktop')
     expect(actions[1].text()).toContain('购买与授权')
-    expect(actions[1].attributes('href')).toBe(
-      'https://xiu-ci.com/market/account-plans?plan=saas-trial-30&source=xcagi-desktop',
-    )
+    expect(actions[1].attributes('href')).toBe('https://xiu-ci.com/market/account-plans?plan=saas-trial-30&source=xcagi-desktop')
     expect(wrapper.find('.login-subheading').text()).toContain('同步账号权益')
   })
 })

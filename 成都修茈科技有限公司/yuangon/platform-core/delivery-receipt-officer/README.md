@@ -1,6 +1,6 @@
         # 交付签收员 (`delivery-receipt-officer`)
 
-        **area**：`platform-core`  
+        **area**：`platform-core`
         **yuangon 路径**：`成都修茈科技有限公司/yuangon/platform-core/delivery-receipt-officer/`
 
         ## 职责
@@ -10,16 +10,19 @@
         ## 上游依赖 (`depends_on`)
 
         - `test-qa-runner`
+
 - `change-request-auditor`
 
         ## 支持的 Handlers
 
         - `llm_md`：接收 Markdown 任务描述，调用 LLM 输出结构化结果
+
 - `echo`：调试用：原样返回输入，用于 smoke 测试
 
         ## Scope（核心文件范围）
 
         - `FHD/app/**/ops_closure/**`
+
 - `FHD/mods/xcagi-workflow-employee-receipt-confirm/**`
 - `MODstore_deploy/modstore_server/**/delivery**`
 - `yuangon/platform-core/delivery-receipt-officer/**`

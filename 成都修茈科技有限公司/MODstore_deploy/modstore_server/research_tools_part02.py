@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -34,7 +38,7 @@ async def _searxng_search_at_base(
     r.raise_for_status()
     try:
         data = r.json()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return []
     raw = data.get("results") if isinstance(data, dict) else None
     if not isinstance(raw, list):
@@ -89,7 +93,7 @@ async def contact_searxng_search(
             if rows:
                 return rows
             errors.append(f"{base}: 无结果")
-        except Exception as e:
+        except RECOVERABLE_ERRORS as e:
             errors.append(f"{base}: {_facade()._request_error_fragment(e)}"[:100])
     if errors:
         raise RuntimeError(" ; ".join(errors)[:280])
@@ -100,7 +104,7 @@ def extract_github_pairs(text: str, limit: int = 24) -> _facade().List[_facade()
     seen: _facade().Set[_facade().Tuple[str, str]] = set()
     out: _facade().List[_facade().Tuple[str, str]] = []
     for m in _facade()._GH_URL_RE.finditer(text or ""):
-        (owner_l, repo_l) = (m.group(1).lower(), m.group(2).lower())
+        owner_l, repo_l = (m.group(1).lower(), m.group(2).lower())
         if owner_l in _facade()._SKIP_FIRST_SEG:
             continue
         repo_clean = m.group(2)
@@ -201,6 +205,11 @@ def strip_html(value: str) -> str:
     return _facade().re.sub("\\s+", " ", text).strip()
 
 
+def is_duckduckgo_host(hostname: str | None) -> bool:
+    host = (hostname or "").lower().rstrip(".")
+    return host == "duckduckgo.com" or host.endswith(".duckduckgo.com")
+
+
 def ddg_result_url(raw: str) -> str:
     url = _facade().unescape(raw or "").strip()
     if not url:
@@ -208,7 +217,7 @@ def ddg_result_url(raw: str) -> str:
     if url.startswith("//"):
         url = "https:" + url
     parsed = _facade().urlparse(url)
-    if "duckduckgo.com" in parsed.netloc and parsed.path.startswith("/l/"):
+    if is_duckduckgo_host(parsed.hostname) and parsed.path.startswith("/l/"):
         q = _facade().parse_qs(parsed.query)
         uddg = q.get("uddg", [""])[0]
         if uddg:
@@ -240,7 +249,7 @@ async def duckduckgo_html_search(
         parsed = _facade().urlparse(result_url)
         if parsed.scheme not in ("http", "https"):
             return
-        if "duckduckgo.com" in parsed.netloc.lower():
+        if is_duckduckgo_host(parsed.hostname):
             return
         title = _facade().strip_html(title_html)
         content = _facade().strip_html(content_html)
@@ -249,7 +258,9 @@ async def duckduckgo_html_search(
         seen.add(result_url)
         out.append({"title": title or result_url, "url": result_url, "content": content})
 
-    def _parse_ddg_html(html: str) -> _facade().List[_facade().Dict[str, _facade().Any]]:
+    def _parse_ddg_html(
+        html: str,
+    ) -> _facade().List[_facade().Dict[str, _facade().Any]]:
         out: _facade().List[_facade().Dict[str, _facade().Any]] = []
         seen: _facade().Set[str] = set()
         for m in _facade().re.finditer(
@@ -257,7 +268,7 @@ async def duckduckgo_html_search(
             html,
             flags=_facade().re.IGNORECASE,
         ):
-            (href, title_html) = (m.group(1), m.group(2))
+            href, title_html = (m.group(1), m.group(2))
             tail = html[m.end() : m.end() + 1800]
             snippet = _facade().re.search(
                 '<(?:a|div)[^>]+class="result__snippet"[^>]*>(.*?)</(?:a|div)>',
@@ -295,7 +306,7 @@ async def duckduckgo_html_search(
             if parsed_results:
                 return parsed_results
             errors.append(f"{_facade().urlparse(url).netloc} 无可解析结果")
-        except Exception as e:
+        except RECOVERABLE_ERRORS as e:
             errors.append(
                 f"{_facade().urlparse(url).netloc}: {_facade()._request_error_fragment(e)}"[:160]
             )
@@ -364,7 +375,9 @@ def merge_crawl_results(
 
 
 def format_web_results_combined(
-    results: _facade().List[_facade().Dict[str, _facade().Any]], *, per_content_cap: int = 380
+    results: _facade().List[_facade().Dict[str, _facade().Any]],
+    *,
+    per_content_cap: int = 380,
 ) -> str:
     """将并行爬取的网页结果按引擎分组，拼成综合摘要文本。"""
     if not results:
@@ -403,7 +416,7 @@ async def _crawl_one_engine(
 
         rows = await bing_html_search(query, max_results=per_engine, browser="http")
         return (engine, rows or [], None)
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         return (engine, [], _facade()._request_error_fragment(e)[:140])
 
 
@@ -433,7 +446,7 @@ async def web_search_crawl_parallel(
             chunks.append((engine, rows))
     if not chunks:
         return ([], "", err_parts)
-    (merged, via) = _facade().merge_crawl_results(chunks, total_cap=total_cap)
+    merged, via = _facade().merge_crawl_results(chunks, total_cap=total_cap)
     return (merged, via, err_parts)
 
 
@@ -448,7 +461,7 @@ async def web_search_with_fallback(
         return ([], "", "query 过短")
     rn = max(1, min(int(max_results), 50))
     err_parts: _facade().List[str] = []
-    (crawled, via, crawl_errors) = await _facade().web_search_crawl_parallel(q, max_results=rn)
+    crawled, via, crawl_errors = await _facade().web_search_crawl_parallel(q, max_results=rn)
     err_parts.extend(crawl_errors)
     if crawled:
         return (crawled, via, None)
@@ -461,9 +474,9 @@ async def web_search_with_fallback(
                     if isinstance(it, dict):
                         it["crawl_engine"] = "tavily"
                 return (tv, "tavily", None)
-        except Exception as e:
+        except RECOVERABLE_ERRORS as e:
             err_parts.append(f"tavily: {_facade()._request_error_fragment(e)}"[:140])
-    (free_results, free_err, free_via) = await _facade()._web_search_free_tier(q, per_engine)
+    free_results, free_err, free_via = await _facade()._web_search_free_tier(q, per_engine)
     if free_results:
         for it in free_results:
             if isinstance(it, dict):

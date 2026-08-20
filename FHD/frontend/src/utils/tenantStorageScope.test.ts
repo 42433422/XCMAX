@@ -45,8 +45,6 @@ describe('tenantStorageScope', () => {
 
   it('buildTenantScopedStorageKey appends scope suffix', () => {
     setTenantStorageScopeCache('tenant:3')
-    expect(buildTenantScopedStorageKey('xcagi_workflow_ai_employees')).toBe(
-      'xcagi_workflow_ai_employees:tenant:3',
-    )
+    expect(buildTenantScopedStorageKey('xcagi_workflow_ai_employees')).toBe('xcagi_workflow_ai_employees:tenant:3')
   })
 })

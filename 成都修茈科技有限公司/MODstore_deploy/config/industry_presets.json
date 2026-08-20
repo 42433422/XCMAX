@@ -1,24 +1,13 @@
 {
   "schema_version": 1,
-  "preset_ids": [
-    "通用",
-    "涂料",
-    "考勤",
-    "批发",
-    "电商",
-    "餐饮",
-    "物流"
-  ],
+  "preset_ids": ["通用", "涂料", "考勤", "批发", "电商", "餐饮", "物流"],
   "presets": {
     "通用": {
       "id": "通用",
       "name": "通用",
       "scenario": "多行业本地工作台。",
       "welcomeIntro": "你好，我是业务助手。",
-      "welcomeBullets": [
-        "查数据与单据",
-        "导出打印"
-      ],
+      "welcomeBullets": ["查数据与单据", "导出打印"],
       "quickButtons": [
         {
           "text": "帮我查一下常用数据",
@@ -56,10 +45,7 @@
       "name": "涂料/油漆",
       "scenario": "涂料化工批发。",
       "welcomeIntro": "你好，涂料助手。",
-      "welcomeBullets": [
-        "查价与客户",
-        "开单打印"
-      ],
+      "welcomeBullets": ["查价与客户", "开单打印"],
       "quickButtons": [
         {
           "text": "查一下A001的价格",
@@ -109,10 +95,7 @@
       "name": "考勤/排班",
       "scenario": "考勤排班。",
       "welcomeIntro": "你好，考勤助手。",
-      "welcomeBullets": [
-        "查员工出勤",
-        "考勤单"
-      ],
+      "welcomeBullets": ["查员工出勤", "考勤单"],
       "quickButtons": [
         {
           "text": "查询工号1001的员工信息",
@@ -162,10 +145,7 @@
       "name": "批发/分销",
       "scenario": "批发分销。",
       "welcomeIntro": "你好，批发助手。",
-      "welcomeBullets": [
-        "查价开单",
-        "库存"
-      ],
+      "welcomeBullets": ["查价开单", "库存"],
       "quickButtons": [
         {
           "text": "查一下畅销品库存",
@@ -207,10 +187,7 @@
       "name": "电商/零售",
       "scenario": "电商零售。",
       "welcomeIntro": "你好，电商助手。",
-      "welcomeBullets": [
-        "查SKU",
-        "待发货"
-      ],
+      "welcomeBullets": ["查SKU", "待发货"],
       "quickButtons": [
         {
           "text": "查 SKU 10001 库存",
@@ -244,10 +221,7 @@
       "name": "餐饮",
       "scenario": "餐饮门店。",
       "welcomeIntro": "你好，餐饮助手。",
-      "welcomeBullets": [
-        "查食材",
-        "订货"
-      ],
+      "welcomeBullets": ["查食材", "订货"],
       "quickButtons": [
         {
           "text": "查今日食材库存",
@@ -281,10 +255,7 @@
       "name": "物流",
       "scenario": "物流运单。",
       "welcomeIntro": "你好，物流助手。",
-      "welcomeBullets": [
-        "查运单",
-        "发运"
-      ],
+      "welcomeBullets": ["查运单", "发运"],
       "quickButtons": [
         {
           "text": "查在途运单",

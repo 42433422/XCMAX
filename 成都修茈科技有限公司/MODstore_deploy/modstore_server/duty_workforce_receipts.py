@@ -1,9 +1,10 @@
+# mypy: disable-error-code="union-attr"
 """Read identity-bound duty-workforce burn-in receipts from the audit ledger."""
 
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -35,8 +36,8 @@ def _recent_audit_rows(
         except ValueError:
             continue
         if recorded_at.tzinfo is None:
-            recorded_at = recorded_at.replace(tzinfo=timezone.utc)
-        if recorded_at.astimezone(timezone.utc) >= cutoff:
+            recorded_at = recorded_at.replace(tzinfo=UTC)
+        if recorded_at.astimezone(UTC) >= cutoff:
             yield row
 
 
@@ -53,8 +54,8 @@ def fresh_accepted_receipt_identities(
     contract that the planner is about to evaluate.
     """
 
-    observed_at = now if now.tzinfo is not None else now.replace(tzinfo=timezone.utc)
-    cutoff = observed_at.astimezone(timezone.utc) - timedelta(hours=max(1, window_hours))
+    observed_at = now if now.tzinfo is not None else now.replace(tzinfo=UTC)
+    cutoff = observed_at.astimezone(UTC) - timedelta(hours=max(1, window_hours))
     result: dict[str, set[tuple[str, str]]] = {}
     for row in _recent_audit_rows(audit_path, cutoff):
         if row.get("record_type") == "run_summary":
@@ -80,8 +81,8 @@ def recent_attempt_manifest_shas(
 ) -> dict[str, set[str]]:
     """Return manifest identities attempted during the cooldown window."""
 
-    observed_at = now if now.tzinfo is not None else now.replace(tzinfo=timezone.utc)
-    cutoff = observed_at.astimezone(timezone.utc) - timedelta(hours=max(1, cooldown_hours))
+    observed_at = now if now.tzinfo is not None else now.replace(tzinfo=UTC)
+    cutoff = observed_at.astimezone(UTC) - timedelta(hours=max(1, cooldown_hours))
     result: dict[str, set[str]] = {}
     for row in _recent_audit_rows(audit_path, cutoff):
         if row.get("record_type") == "run_summary":

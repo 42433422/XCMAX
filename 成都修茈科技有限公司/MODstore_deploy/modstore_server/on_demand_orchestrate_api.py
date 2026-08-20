@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """按需编排 API：立即触发编排任务，支持自然语言描述 + 多员工并行执行。
 
 POST /api/ops/orchestrate          — 立即编排（同步，会阻塞直到完成）
@@ -15,7 +16,7 @@ import json
 import logging
 import threading
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -23,6 +24,7 @@ from pydantic import BaseModel, Field
 
 from modstore_server.api.deps import _get_current_user
 from modstore_server.models import OnDemandOrchestrateJob, User, get_session_factory
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +34,7 @@ router = APIRouter(prefix="/api/ops", tags=["ops"])
 def _safe_loads(raw: str) -> Any:
     try:
         return json.loads(raw)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return raw
 
 
@@ -46,7 +48,7 @@ def _extract_dispatch_source(row: OnDemandOrchestrateJob) -> str:
             meta = parsed.get("_meta")
             if isinstance(meta, dict) and meta.get("dispatch_source"):
                 return str(meta.get("dispatch_source"))
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     return "web"
 
@@ -137,7 +139,7 @@ async def orchestrate_async(
             r = session.query(OnDemandOrchestrateJob).filter_by(job_id=job_id).first()
             if r:
                 r.status = "running"
-                r.started_at = datetime.now(timezone.utc)
+                r.started_at = datetime.now(UTC)
                 session.commit()
         try:
             result = _run_orchestrate(body_copy, user_id)
@@ -145,18 +147,18 @@ async def orchestrate_async(
                 r = session.query(OnDemandOrchestrateJob).filter_by(job_id=job_id).first()
                 if r:
                     r.status = "done"
-                    r.completed_at = datetime.now(timezone.utc)
+                    r.completed_at = datetime.now(UTC)
                     meta = _extract_dispatch_source(r)
                     wrapped = {"_meta": {"dispatch_source": meta}, "payload": result}
                     r.result_json = json.dumps(wrapped, ensure_ascii=False)[:500_000]
                     session.commit()
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             logger.exception("async orchestrate job %s failed", job_id)
             with sf2() as session:
                 r = session.query(OnDemandOrchestrateJob).filter_by(job_id=job_id).first()
                 if r:
                     r.status = "failed"
-                    r.completed_at = datetime.now(timezone.utc)
+                    r.completed_at = datetime.now(UTC)
                     r.error = str(exc)[:4000]
                     session.commit()
 

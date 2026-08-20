@@ -37,7 +37,6 @@ def reset_customers_engine() -> None:
     get_service_registry().invalidate_customer_application_service()
 
 
-
 from app.application.customer_crud_mixin import CustomerCrudMixin
 from app.application.customer_relationship_mixin import CustomerRelationshipMixin
 from app.application.customer_transfer_mixin import CustomerTransferMixin

@@ -1,3 +1,5 @@
+# mypy: disable-error-code="arg-type"
+# isort: skip_file
 """XC AGI 支付宝支付路由：下单、回调、查询、套餐、诊断。
 
 ⚠️ 兼容层：当 ``PAYMENT_BACKEND=java`` 时（生产推荐），FastAPI 中间件会将
@@ -13,8 +15,10 @@
 
 from __future__ import annotations
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from typing import Optional
 
 from fastapi import Depends, HTTPException, Query, Request
@@ -52,7 +56,7 @@ init_db()
 # 立刻清掉 /plans 的缓存，避免老旧 5 分钟缓存遮蔽新数据。
 try:
     cache.delete("modstore:plans:active")
-except Exception:
+except RECOVERABLE_ERRORS:
     pass
 
 
@@ -74,7 +78,7 @@ def _fulfill_paid_order(out_trade_no: str) -> None:
     if order.get("fulfilled"):
         return
 
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from modstore_server.models import get_session_factory
     from modstore_server.payment_fulfilment import FulfilContext, select_strategy
@@ -100,7 +104,7 @@ def _fulfill_paid_order(out_trade_no: str) -> None:
     )
     strategy = select_strategy(ctx)
     sf = get_session_factory()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     with sf() as session:
         if strategy.is_already_fulfilled(session, ctx):
             payment_orders.merge_fields(out_trade_no, fulfilled=True)
@@ -183,7 +187,6 @@ from modstore_server.api.payment_checkout_routes import (  # noqa: E402
     api_sign_checkout as api_sign_checkout,
 )
 
-
 # ── 支付宝异步通知回调 ────────────────────────────────────────
 
 
@@ -241,7 +244,7 @@ async def api_payment_notify_alipay(request: Request):
             return "fail"
 
         # 更新订单状态
-        paid_at = datetime.now(timezone.utc).isoformat()
+        paid_at = datetime.now(UTC).isoformat()
         payment_orders.update_status(
             out_trade_no=out_trade_no,
             status="paid",
@@ -253,7 +256,7 @@ async def api_payment_notify_alipay(request: Request):
         _fulfill_paid_order(out_trade_no)
         logger.info("订单支付成功并已发放权益: %s, 金额 %s", out_trade_no, total_amount)
         return "success"
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         logger.error("处理支付宝通知异常: %s", e)
         return "fail"
 
@@ -293,11 +296,11 @@ def api_payment_query(out_trade_no: str, user: User = Depends(_get_current_user)
                                 status="paid",
                                 trade_no=raw.get("trade_no"),
                                 buyer_id=raw.get("buyer_id"),
-                                paid_at=datetime.now(timezone.utc).isoformat(),
+                                paid_at=datetime.now(UTC).isoformat(),
                             )
                             _fulfill_paid_order(out_trade_no)
                             order = payment_orders.find(out_trade_no) or order
-            except Exception as e:
+            except RECOVERABLE_ERRORS as e:
                 logger.error("查询支付宝订单状态异常: %s", e)
                 # 继续返回本地订单状态，不影响查询
 
@@ -305,14 +308,14 @@ def api_payment_query(out_trade_no: str, user: User = Depends(_get_current_user)
             try:
                 _fulfill_paid_order(out_trade_no)
                 order = payment_orders.find(out_trade_no) or order
-            except Exception as e:
+            except RECOVERABLE_ERRORS as e:
                 logger.error("发放权益异常: %s", e)
                 # 继续返回订单状态
 
         return order
     except HTTPException:
         raise
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         logger.error("查询订单异常: %s", e)
         raise HTTPException(500, "系统内部错误，请稍后重试")
 
@@ -333,7 +336,7 @@ def api_payment_list_orders(
             offset=offset,
         )
         return {"orders": rows, "total": total}
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         logger.error("查询订单列表异常: %s", e)
         raise HTTPException(500, "系统内部错误，请稍后重试")
 
@@ -347,13 +350,18 @@ def api_payment_dismiss_non_active_orders(user: User = Depends(_get_current_user
         rows, _ = payment_orders.list_orders(user_id=user.id, status=None, limit=500, offset=0)
         dismissed = 0
         for o in rows:
-            if (o.get("status") or "").lower() in ("closed", "expired", "refunded", "cancelled"):
+            if (o.get("status") or "").lower() in (
+                "closed",
+                "expired",
+                "refunded",
+                "cancelled",
+            ):
                 ono = o.get("out_trade_no") or o.get("order_no") or ""
                 if ono:
                     payment_orders.merge_fields(ono, dismissed=True)
                     dismissed += 1
         return {"ok": True, "dismissed": dismissed}
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         logger.error("dismiss-non-active 异常: %s", e)
         raise HTTPException(500, "系统内部错误")
 

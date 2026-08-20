@@ -10,17 +10,8 @@
     "xcagi-workflow-employee-wechat-phone",
     "xcagi-workflow-employee-real-phone"
   ],
-  "excluded_from_bundle": [
-    "taiyangniao-pro",
-    "sz-qsm-pro",
-    "_employees",
-    "industry-solutions"
-  ],
-  "minimal_host_mod_ids": [
-    "xcagi-planner-bridge",
-    "xcagi-neuro-bus-bridge",
-    "xcagi-office-employee-pack-bridge"
-  ],
+  "excluded_from_bundle": ["taiyangniao-pro", "sz-qsm-pro", "_employees", "industry-solutions"],
+  "minimal_host_mod_ids": ["xcagi-planner-bridge", "xcagi-neuro-bus-bridge", "xcagi-office-employee-pack-bridge"],
   "generic_host_mod_ids": [
     "xcagi-planner-bridge",
     "xcagi-erp-domain-bridge",
@@ -33,18 +24,9 @@
     "xcagi-customer-service-bridge"
   ],
   "bridge_api_map": {
-    "xcagi-approval-bridge": [
-      "/api/mod/xcagi-approval-bridge/requests",
-      "/api/approval"
-    ],
-    "xcagi-lan-license-bridge": [
-      "/api/mod/xcagi-lan-license-bridge/lan",
-      "/api/lan"
-    ],
-    "xcagi-model-payment-bridge": [
-      "/api/mod/xcagi-model-payment-bridge/model-payment",
-      "/api/model-payment"
-    ],
+    "xcagi-approval-bridge": ["/api/mod/xcagi-approval-bridge/requests", "/api/approval"],
+    "xcagi-lan-license-bridge": ["/api/mod/xcagi-lan-license-bridge/lan", "/api/lan"],
+    "xcagi-model-payment-bridge": ["/api/mod/xcagi-model-payment-bridge/model-payment", "/api/model-payment"],
     "xcagi-planner-bridge": [
       "/api/mod/xcagi-planner-bridge/chat",
       "/mod/xcagi-planner-bridge/ai-ecosystem",
@@ -65,10 +47,7 @@
       "/api/mod/xcagi-erp-domain-bridge/wechat",
       "/api/mod/xcagi-erp-domain-bridge/wechat_contacts"
     ],
-    "xcagi-office-employee-pack-bridge": [
-      "/api/mod/xcagi-office-employee-pack-bridge/catalog",
-      "/api/mods/"
-    ],
+    "xcagi-office-employee-pack-bridge": ["/api/mod/xcagi-office-employee-pack-bridge/catalog", "/api/mods/"],
     "xcagi-customer-service-bridge": [
       "/api/mod/xcagi-customer-service-bridge/status",
       "/mod/xcagi-customer-service-bridge/enterprise-customer-service",
@@ -101,19 +80,13 @@
     "exclude_id_suffixes": ["-bridge"],
     "exclude_artifact_types": ["employee_pack"],
     "exclude_mod_ids": ["xcagi-host-foundation-employee"],
-    "non_workflow_desk_employee_patterns": [
-      "^host_foundation$",
-      "-(?:generate|full-read)-employee$"
-    ]
+    "non_workflow_desk_employee_patterns": ["^host_foundation$", "-(?:generate|full-read)-employee$"]
   },
   "editions": {
     "minimal": { "legacy_routes_enabled": false },
     "generic": { "legacy_routes_enabled": false },
     "full": { "legacy_routes_enabled": true }
   },
-  "sku_aux_mod_ids": [
-    "xcagi-planner-excel-tools",
-    "wechat-contacts-ai-employee"
-  ],
+  "sku_aux_mod_ids": ["xcagi-planner-excel-tools", "wechat-contacts-ai-employee"],
   "erp_domain_bridge_mod_id": "xcagi-erp-domain-bridge"
 }

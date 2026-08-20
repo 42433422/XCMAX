@@ -5,6 +5,7 @@ from typing import Any, Generic
 from typing_extensions import NotRequired, Required, Self
 
 from langgraph._internal._constants import OVERWRITE
+from langgraph._internal._exception_policy import BOUNDARY_ERRORS
 from langgraph._internal._typing import MISSING
 from langgraph.channels.base import BaseChannel, Value
 from langgraph.errors import (
@@ -88,7 +89,7 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
             typ = dict
         try:
             self.value = typ()
-        except Exception:
+        except BOUNDARY_ERRORS:
             self.value = MISSING
 
     def __eq__(self, value: object) -> bool:

@@ -1,9 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import {
-  publishButlerTask,
-  subscribeButlerTask,
-  buildButlerTaskPrompt,
-} from './butlerTaskBus'
+import { publishButlerTask, subscribeButlerTask, buildButlerTaskPrompt } from './butlerTaskBus'
 
 describe('butlerTaskBus', () => {
   it('publishButlerTask returns event with correct defaults', () => {
@@ -44,12 +40,22 @@ describe('butlerTaskBus', () => {
   })
 
   it('publishButlerTask handles non-object inputData', () => {
-    const event = publishButlerTask({ source: 's', employeeId: 'e', brief: 'b', inputData: 'bad' } as UnsafeTestValue)
+    const event = publishButlerTask({
+      source: 's',
+      employeeId: 'e',
+      brief: 'b',
+      inputData: 'bad',
+    } as UnsafeTestValue)
     expect(event.inputData).toEqual({})
   })
 
   it('publishButlerTask clamps maxConcurrency to 2 for invalid values', () => {
-    const event = publishButlerTask({ source: 's', employeeId: 'e', brief: 'b', maxConcurrency: 0 } as UnsafeTestValue)
+    const event = publishButlerTask({
+      source: 's',
+      employeeId: 'e',
+      brief: 'b',
+      maxConcurrency: 0,
+    } as UnsafeTestValue)
     expect(event.maxConcurrency).toBe(2)
   })
 
@@ -70,7 +76,12 @@ describe('butlerTaskBus', () => {
   })
 
   it('buildButlerTaskPrompt with employeeName', () => {
-    const event = publishButlerTask({ source: 's', employeeId: 'emp1', brief: 'task', employeeName: 'Bot' })
+    const event = publishButlerTask({
+      source: 's',
+      employeeId: 'emp1',
+      brief: 'task',
+      employeeName: 'Bot',
+    })
     const prompt = buildButlerTaskPrompt(event)
     expect(prompt).toContain('Bot (emp1)')
     expect(prompt).toContain('task')
@@ -83,7 +94,13 @@ describe('butlerTaskBus', () => {
   })
 
   it('buildButlerTaskPrompt includes risk and dependency info', () => {
-    const event = publishButlerTask({ source: 's', employeeId: 'e', brief: 'b', allowHighRisk: true, includeDependencies: false })
+    const event = publishButlerTask({
+      source: 's',
+      employeeId: 'e',
+      brief: 'b',
+      allowHighRisk: true,
+      includeDependencies: false,
+    })
     const prompt = buildButlerTaskPrompt(event)
     expect(prompt).toContain('include_dependencies=false')
     expect(prompt).toContain('allow_high_risk_real_run=true')
@@ -99,7 +116,12 @@ describe('butlerTaskBus', () => {
     const handler = vi.fn()
     const unsub = subscribeButlerTask(handler)
 
-    const empty = publishButlerTask({ source: 's', employeeId: '  ', brief: '  ', maxConcurrency: Number.NaN } as UnsafeTestValue)
+    const empty = publishButlerTask({
+      source: 's',
+      employeeId: '  ',
+      brief: '  ',
+      maxConcurrency: Number.NaN,
+    } as UnsafeTestValue)
     expect(empty.employeeId).toBe('')
     expect(empty.brief).toBe('')
     expect(empty.maxConcurrency).toBe(2)

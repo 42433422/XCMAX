@@ -23,6 +23,8 @@ import sys
 import time
 from pathlib import Path
 
+from app.utils.operational_errors import BOUNDARY_ERRORS
+
 _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
@@ -167,7 +169,7 @@ def main() -> int:
             print(line)
         print("完成。请重启后端再打开前端。")
         return 0
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except BOUNDARY_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"失败: {e}", file=sys.stderr)
         return 1
 

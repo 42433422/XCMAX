@@ -2,17 +2,18 @@
 
 ## 元信息
 
-| 字段 | 值 |
-|------|----|
-| skill_id | `skill-route-task` |
+| 字段     | 值                    |
+| -------- | --------------------- |
+| skill_id | `skill-route-task`    |
 | 所属员工 | `task-router-officer` |
-| 业务域 | task → employee 路由 |
-| 版本 | 1.0.0 |
+| 业务域   | task → employee 路由  |
+| 版本     | 1.0.0                 |
 
 ## 1. 静态阶段
 
 **输入**：`intake_tasks` 中一行 pending task。  
 **执行图**：
+
 ```
 1. 加载 routing-table.md（缓存 5 分钟）
 2. 对每条 files_hint 路径：
@@ -25,16 +26,16 @@
 
 ## 2. INTENT_TO_AREA 兜底表
 
-| intent | 兜底员工 |
-|--------|----------|
-| bugfix | daily-orchestrator |
-| feature | modstore-backend-api（后端类）/ market-frontend-dev（前端类） |
-| doc | doc-knowledge-curator |
-| ops | deploy-release-officer |
-| dba | dbops-engineer |
-| onboarding | employee-interview-assistant |
-| qa | test-qa-runner |
-| unknown | admin（升级） |
+| intent     | 兜底员工                                                      |
+| ---------- | ------------------------------------------------------------- |
+| bugfix     | daily-orchestrator                                            |
+| feature    | modstore-backend-api（后端类）/ market-frontend-dev（前端类） |
+| doc        | doc-knowledge-curator                                         |
+| ops        | deploy-release-officer                                        |
+| dba        | dbops-engineer                                                |
+| onboarding | employee-interview-assistant                                  |
+| qa         | test-qa-runner                                                |
+| unknown    | admin（升级）                                                 |
 
 ## 3. 动态触发
 

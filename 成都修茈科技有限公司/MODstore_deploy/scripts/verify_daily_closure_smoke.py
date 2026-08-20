@@ -8,6 +8,8 @@ import json
 import os
 from pathlib import Path
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 
 def _load_env() -> None:
     candidates = [Path.cwd(), Path(__file__).resolve().parents[1]]
@@ -19,7 +21,7 @@ def _load_env() -> None:
             if env.is_file():
                 load_dotenv(env)
                 break
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     os.environ.setdefault("PYTHONUTF8", "1")
 
@@ -59,7 +61,7 @@ def run_smoke(*, with_digest: bool = False) -> dict:
         try:
             run_daily_digest_email()
             out["digest"] = {"ok": True, "triggered": True}
-        except Exception as exc:  # noqa: BLE001
+        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
             out["digest"] = {"ok": False, "error": str(exc)[:500]}
 
     out["ok"] = bool(out["backup"].get("ok")) and bool(out["retention_dry_run"].get("ok"))

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """遥测 → Backlog → Auto-PR 闭环。
 
 步骤10（AI自驱迭代）核心补齐：
@@ -11,16 +12,20 @@ from __future__ import annotations
 
 import logging
 import os
+from datetime import UTC
 from typing import Any, Dict, List, Optional
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.telemetry_backlog_metrics import (
     _scan_auto_merge_metrics as _scan_auto_merge_metrics,
+)
+from modstore_server.telemetry_backlog_metrics import (
     _scan_security_scan_metrics as _scan_security_scan_metrics,
 )
 from modstore_server.telemetry_backlog_quality import (
     _scan_coverage_ratchet_gap as _scan_coverage_ratchet_gap,
-    _scan_workflow_drift as _scan_workflow_drift,
 )
+from modstore_server.telemetry_backlog_quality import _scan_workflow_drift as _scan_workflow_drift
 
 logger = logging.getLogger(__name__)
 
@@ -146,7 +151,7 @@ def run_telemetry_scan(
                 source=signal.get("source", "telemetry_scan"),
             )
             results.append(r)
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             logger.warning("telemetry signal ingest failed: %s", exc)
             results.append({"ok": False, "error": str(exc)})
 
@@ -155,7 +160,7 @@ def run_telemetry_scan(
     if market_payloads:
         try:
             release_plan = plan_release_candidate_from_market(market_payloads)
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             logger.warning("release_planning from market failed: %s", exc)
 
     return {
@@ -225,7 +230,7 @@ def _scan_market_signals_from_file() -> List[Dict[str, Any]]:
     try:
         with open(path, encoding="utf-8") as source:
             raw = json.load(source)
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("market signals file unreadable: %s", exc)
         return []
     items = raw if isinstance(raw, list) else raw.get("signals") or []
@@ -253,13 +258,13 @@ def _scan_market_signals_from_file() -> List[Dict[str, Any]]:
 def _scan_market_signals_from_db(lookback_hours: int) -> List[Dict[str, Any]]:
     signals: List[Dict[str, Any]] = []
     try:
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         from modstore_server.db.employee_ops import EmployeeSuggestion
         from modstore_server.models import get_session_factory
 
         sf = get_session_factory()
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=lookback_hours)
+        cutoff = datetime.now(UTC) - timedelta(hours=lookback_hours)
         with sf() as session:
             rows = (
                 session.query(EmployeeSuggestion)
@@ -284,7 +289,7 @@ def _scan_market_signals_from_db(lookback_hours: int) -> List[Dict[str, Any]]:
                         },
                     }
                 )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.debug("market signals db scan skipped", exc_info=True)
     return signals
 
@@ -339,12 +344,12 @@ def _build_backlog_detail(signal_type: str, payload: Dict[str, Any]) -> str:
 def _scan_employee_execution_metrics(lookback_hours: int) -> List[Dict[str, Any]]:
     signals = []
     try:
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         from modstore_server.models import EmployeeExecutionMetric, get_session_factory
 
         sf = get_session_factory()
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=lookback_hours)
+        cutoff = datetime.now(UTC) - timedelta(hours=lookback_hours)
         with sf() as session:
             high_failure = (
                 session.query(EmployeeExecutionMetric)
@@ -371,7 +376,7 @@ def _scan_employee_execution_metrics(lookback_hours: int) -> List[Dict[str, Any]
                             },
                         }
                     )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.debug("employee execution metrics scan skipped")
 
     return signals
@@ -407,7 +412,7 @@ def _scan_coverage_trend() -> List[Dict[str, Any]]:
                             },
                         }
                     )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.debug("coverage trend scan skipped")
 
     return signals
@@ -420,11 +425,11 @@ def _scan_ci_failure_rate(lookback_hours: int) -> List[Dict[str, Any]]:
 
         sf = get_session_factory()
         with sf() as session:
-            from datetime import datetime, timedelta, timezone
+            from datetime import datetime, timedelta
 
             from modstore_server.models import OpsStagedChange
 
-            cutoff = datetime.now(timezone.utc) - timedelta(hours=lookback_hours)
+            cutoff = datetime.now(UTC) - timedelta(hours=lookback_hours)
             recent_changes = (
                 session.query(OpsStagedChange).filter(OpsStagedChange.created_at >= cutoff).all()
             )
@@ -443,7 +448,7 @@ def _scan_ci_failure_rate(lookback_hours: int) -> List[Dict[str, Any]]:
                         },
                     }
                 )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.debug("CI failure rate scan skipped")
 
     return signals

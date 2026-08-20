@@ -17,8 +17,9 @@ for parsing JSON / handling retries.
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Protocol, Sequence
+from typing import Any, Protocol
 
 
 class LLMError(RuntimeError):
@@ -77,10 +78,7 @@ class MockLLM:
             try:
                 json.loads(response)
             except (TypeError, ValueError) as exc:
-                raise LLMError(
-                    f"MockLLM response is not valid JSON for user prompt "
-                    f"{user[:80]!r}: {exc}"
-                ) from exc
+                raise LLMError(f"MockLLM response is not valid JSON for user prompt {user[:80]!r}: {exc}") from exc
         return response
 
     def _pick(self, user: str) -> str:
@@ -100,9 +98,7 @@ class MockLLM:
                 return value
         if "default" in self._map:
             return self._map["default"]
-        raise LLMError(
-            f"MockLLM has no response keyed for prompt {user[:80]!r}"
-        )
+        raise LLMError(f"MockLLM has no response keyed for prompt {user[:80]!r}")
 
     def remaining(self) -> int:
         if self._mode == "queue":
@@ -139,10 +135,7 @@ class OpenAILLM:
         try:
             from openai import OpenAI  # type: ignore[import-not-found]
         except ImportError as exc:
-            raise ImportError(
-                "openai package is required for OpenAILLM. "
-                "Install with: pip install openai"
-            ) from exc
+            raise ImportError("openai package is required for OpenAILLM. Install with: pip install openai") from exc
 
         client_kwargs: dict[str, Any] = {"api_key": self.api_key}
         if self.base_url:

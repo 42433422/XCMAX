@@ -6,7 +6,6 @@ from __future__ import annotations
 import subprocess
 import sys
 
-
 WINDOWS_INVALID_CHARS = set('<>:"|?*')
 WINDOWS_RESERVED_NAMES = {
     "CON",
@@ -21,9 +20,7 @@ WINDOWS_RESERVED_NAMES = {
 def _tracked_paths() -> list[str]:
     output = subprocess.check_output(["git", "ls-files", "-z"])
     return [
-        raw.decode("utf-8", "surrogateescape")
-        for raw in output.split(b"\0")
-        if raw
+        raw.decode("utf-8", "surrogateescape") for raw in output.split(b"\0") if raw
     ]
 
 

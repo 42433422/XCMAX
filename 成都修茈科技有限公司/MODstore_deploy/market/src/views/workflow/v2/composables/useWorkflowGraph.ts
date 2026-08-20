@@ -23,13 +23,7 @@ import type {
   WorkflowFlowNodeData,
 } from '../../../../domain/workflow/types'
 
-export type {
-  BackendWorkflowEdge,
-  BackendWorkflowNode,
-  WorkflowFlowEdge,
-  WorkflowFlowNode,
-  WorkflowFlowNodeData,
-}
+export type { BackendWorkflowEdge, BackendWorkflowNode, WorkflowFlowEdge, WorkflowFlowNode, WorkflowFlowNodeData }
 
 /**
  * 历史代码用 `BackendNode` / `BackendEdge` 命名，保留别名以避免大范围 import 改动。
@@ -71,8 +65,7 @@ function backendNodeToFlow(n: BackendWorkflowNode): WorkflowFlowNode {
 
 function backendEdgeToFlow(e: BackendWorkflowEdge): WorkflowFlowEdge {
   const branch = (e.condition || '').trim()
-  const sourceHandle =
-    branch === 'true' ? 'true' : branch === 'false' ? 'false' : null
+  const sourceHandle = branch === 'true' ? 'true' : branch === 'false' ? 'false' : null
   return {
     id: String(e.id),
     source: String(e.source_node_id),
@@ -189,13 +182,7 @@ export function useWorkflowGraph(workflowId: number) {
     if (!n || !n.data?.backendId) return
     saving.value = true
     try {
-      await api.updateWorkflowNode(
-        n.data.backendId,
-        n.data.label,
-        n.data.config,
-        n.position.x,
-        n.position.y,
-      )
+      await api.updateWorkflowNode(n.data.backendId, n.data.label, n.data.config, n.position.x, n.position.y)
     } catch (e) {
       lastError.value = e
     } finally {
@@ -221,13 +208,7 @@ export function useWorkflowGraph(workflowId: number) {
     if (!n || !n.data?.backendId) return
     saving.value = true
     try {
-      await api.updateWorkflowNode(
-        n.data.backendId,
-        n.data.label,
-        n.data.config,
-        n.position.x,
-        n.position.y,
-      )
+      await api.updateWorkflowNode(n.data.backendId, n.data.label, n.data.config, n.position.x, n.position.y)
     } catch (e) {
       lastError.value = e
     } finally {
@@ -235,11 +216,7 @@ export function useWorkflowGraph(workflowId: number) {
     }
   }
 
-  async function addEdge(
-    source: string,
-    target: string,
-    sourceHandle?: string | null,
-  ) {
+  async function addEdge(source: string, target: string, sourceHandle?: string | null) {
     const sn = nodes.value.find((n) => n.id === source)
     const tn = nodes.value.find((n) => n.id === target)
     if (!sn?.data?.backendId || !tn?.data?.backendId) return
@@ -247,12 +224,7 @@ export function useWorkflowGraph(workflowId: number) {
     const condition = sourceHandle === 'true' || sourceHandle === 'false' ? sourceHandle : ''
     saving.value = true
     try {
-      const created = (await api.addWorkflowEdge(
-        workflowId,
-        sn.data.backendId,
-        tn.data.backendId,
-        condition,
-      )) as CreatedEntityResponse
+      const created = (await api.addWorkflowEdge(workflowId, sn.data.backendId, tn.data.backendId, condition)) as CreatedEntityResponse
       edges.value = [
         ...edges.value,
         {

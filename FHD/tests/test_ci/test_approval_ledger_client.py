@@ -1,3 +1,4 @@
+# mypy: disable-error-code="import-not-found"
 """_approval_ledger_client.py 单元测试。
 
 覆盖：

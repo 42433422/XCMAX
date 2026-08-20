@@ -6,10 +6,24 @@ import { createRouter, createMemoryHistory } from 'vue-router'
 // Mock heavy dependencies
 vi.mock('@/composables/useWorkflowEmployeeDesks', () => ({
   useWorkflowEmployeeDesks: () => ({
-    desks: { value: [
-      { empId: 'emp-001', shortName: '张三', panelTitle: '管理', enabled: true, snapshot: { visuallyBusy: false } },
-      { empId: 'emp-002', shortName: '李四', panelTitle: '工具', enabled: true, snapshot: { visuallyBusy: true } },
-    ] },
+    desks: {
+      value: [
+        {
+          empId: 'emp-001',
+          shortName: '张三',
+          panelTitle: '管理',
+          enabled: true,
+          snapshot: { visuallyBusy: false },
+        },
+        {
+          empId: 'emp-002',
+          shortName: '李四',
+          panelTitle: '工具',
+          enabled: true,
+          snapshot: { visuallyBusy: true },
+        },
+      ],
+    },
     isBusy: (row: any) => Boolean(row.snapshot?.visuallyBusy),
   }),
 }))
@@ -43,13 +57,25 @@ vi.mock('@/utils/officeToolDeskRows', () => ({
   resolveOfficeInstalledPackIds: () => [],
 }))
 vi.mock('@/components/workflow/EnterpriseEstablishmentGraph.vue', () => ({
-  default: { name: 'EnterpriseEstablishmentGraph', template: '<div class="mock-graph" />', props: ['desks', 'selectedEmpId', 'isBusy', 'enterpriseStackLabel'] },
+  default: {
+    name: 'EnterpriseEstablishmentGraph',
+    template: '<div class="mock-graph" />',
+    props: ['desks', 'selectedEmpId', 'isBusy', 'enterpriseStackLabel'],
+  },
 }))
 vi.mock('@/components/workflow/WorkflowEmployeeInspector.vue', () => ({
-  default: { name: 'WorkflowEmployeeInspector', template: '<div class="mock-inspector" />', props: ['selectedEmpId', 'desks'] },
+  default: {
+    name: 'WorkflowEmployeeInspector',
+    template: '<div class="mock-inspector" />',
+    props: ['selectedEmpId', 'desks'],
+  },
 }))
 vi.mock('@/components/PaneResizeHandle.vue', () => ({
-  default: { name: 'PaneResizeHandle', template: '<div class="mock-resize-handle" />', props: ['orientation', 'label'] },
+  default: {
+    name: 'PaneResizeHandle',
+    template: '<div class="mock-resize-handle" />',
+    props: ['orientation', 'label'],
+  },
 }))
 
 import YuangongStitchFullView from '@/views/YuangongStitchFullView.vue'
@@ -59,7 +85,11 @@ function mountComponent() {
     history: createMemoryHistory(),
     routes: [
       { path: '/', component: { template: '<div />' } },
-      { name: 'workflow-employee-space', path: '/workflow/employee-space', component: { template: '<div />' } },
+      {
+        name: 'workflow-employee-space',
+        path: '/workflow/employee-space',
+        component: { template: '<div />' },
+      },
     ],
   })
   return mount(YuangongStitchFullView, {

@@ -131,7 +131,7 @@ def recognize_intents_impl(message: str) -> dict[str, Any]:
 
     if result["tool_key"] in (None, "products", "shipments"):
         has_container_and_spec = "桶" in msg and "规格" in msg
-        has_number_like = re.search(r"(\d+|[一二三四五六七八九十零〇两]+)", msg) is not None
+        has_number_like = re.search(r"[\d一二三四五六七八九十零〇两]", msg) is not None
         if has_container_and_spec and has_number_like:
             negated = is_negation(
                 message,
@@ -146,9 +146,13 @@ def recognize_intents_impl(message: str) -> dict[str, Any]:
     if result["tool_key"] in (None, "products", "print_label"):
         has_print_kw = ("打印" in msg) or msg.startswith("打印")
         has_model_spec = (
-            re.search(r"(\d+)\s*规格\s*(\d+(?:\.\d+)?)", msg) is not None
-            or re.search(r"(\d+)\s*的\s*规格\s*(\d+(?:\.\d+)?)", msg) is not None
-            or re.search(r"(\d+)规格(\d+(?:\.\d+)?)", msg) is not None
+            re.search(r"\d{1,12}\s{0,20}规格\s{0,20}\d{1,12}(?:\.\d{1,6})?", msg) is not None
+            or re.search(
+                r"\d{1,12}\s{0,20}的\s{0,20}规格\s{0,20}\d{1,12}(?:\.\d{1,6})?",
+                msg,
+            )
+            is not None
+            or re.search(r"\d{1,12}规格\d{1,12}(?:\.\d{1,6})?", msg) is not None
         )
         has_container_qty = any(k in msg for k in ["桶", "箱", "件", "公斤", "kg"])
         if has_print_kw and has_model_spec and not has_container_qty and not result["is_negated"]:
@@ -169,10 +173,10 @@ def recognize_intents_impl(message: str) -> dict[str, Any]:
         signals = 0
         if ("编号" in msg or "型号" in msg) and re.search(r"\d{3,6}", msg):
             signals += 1
-        if "规格" in msg and re.search(r"(\d+|[一二三四五六七八九十零〇两]+)", msg):
+        if "规格" in msg and re.search(r"[\d一二三四五六七八九十零〇两]", msg):
             signals += 1
         if "桶" in msg and re.search(
-            r"(\d+|[一二三四五六七八九十零〇两]+)\s*桶|桶\s*(\d+|[一二三四五六七八九十零〇两]+)",
+            r"[\d一二三四五六七八九十零〇两]\s{0,20}桶|桶\s{0,20}[\d一二三四五六七八九十零〇两]",
             msg,
         ):
             signals += 1
@@ -230,4 +234,3 @@ def recognize_intents_impl(message: str) -> dict[str, Any]:
 
     _intent_cache.set(cache_key, result)
     return result
-

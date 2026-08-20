@@ -427,7 +427,9 @@ def test_admin_evidence_endpoint_requires_admin_and_is_read_only(monkeypatch):
     assert router.routes[0].methods == {"GET"}
 
 
-def test_existing_redline_veto_routes_require_admin_and_bind_authenticated_actor(monkeypatch):
+def test_existing_redline_veto_routes_require_admin_and_bind_authenticated_actor(
+    monkeypatch,
+):
     app = FastAPI()
     app.include_router(redline_router)
     client = TestClient(app)

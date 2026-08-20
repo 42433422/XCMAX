@@ -3,9 +3,7 @@
     <header class="emp-head">
       <div>
         <h1 class="emp-title">我的员工</h1>
-        <p class="emp-sub">
-          管理你的 AI 员工包。点击员工进入制作画布，可删除或隐藏不需要的员工。
-        </p>
+        <p class="emp-sub">管理你的 AI 员工包。点击员工进入制作画布，可删除或隐藏不需要的员工。</p>
       </div>
       <button type="button" class="emp-refresh" :disabled="loadingList" @click="loadEmployees">
         {{ loadingList ? '刷新中…' : '↻ 刷新' }}
@@ -23,9 +21,7 @@
       <p v-else-if="!visibleEmployees.length" class="emp-empty">
         暂无可见员工。
         <template v-if="hiddenPkgIds.size">
-          <button type="button" class="emp-btn emp-btn--ghost" @click="clearHiddenPkgIds">
-            显示已隐藏（{{ hiddenPkgIds.size }}）
-          </button>
+          <button type="button" class="emp-btn emp-btn--ghost" @click="clearHiddenPkgIds">显示已隐藏（{{ hiddenPkgIds.size }}）</button>
         </template>
       </p>
 
@@ -39,14 +35,7 @@
           <p class="emp-id">{{ e.id }}</p>
           <div class="emp-card-actions">
             <button type="button" class="emp-btn emp-btn--ghost" @click="openEmployee(e.id)">进入制作</button>
-            <button
-              v-if="!isDutyRosterEmployee(e.id)"
-              type="button"
-              class="emp-btn emp-btn--ghost"
-              @click="hideLocally(e.id)"
-            >
-              隐藏
-            </button>
+            <button v-if="!isDutyRosterEmployee(e.id)" type="button" class="emp-btn emp-btn--ghost" @click="hideLocally(e.id)">隐藏</button>
             <button
               v-if="isAdmin && !isDutyRosterEmployee(e.id)"
               type="button"
@@ -103,9 +92,7 @@ const listError = ref('')
 const deletingId = ref('')
 const purgeBusy = ref(false)
 
-const visibleEmployees = computed(() =>
-  employees.value.filter((e) => !hiddenPkgIds.value.has(e.id) && !isDutyRosterEmployee(e.id)),
-)
+const visibleEmployees = computed(() => employees.value.filter((e) => !hiddenPkgIds.value.has(e.id) && !isDutyRosterEmployee(e.id)))
 const hasV1OnlyEmployees = computed(() => employees.value.some((e) => e.source === 'v1_catalog'))
 
 function persistHiddenPkgIds() {
@@ -374,14 +361,14 @@ html[data-workbench-theme='light'] .emp-refresh {
   background: #0071e3;
 }
 html[data-workbench-theme='light'] .emp-flash--err {
-  background: rgba(215,0,21,.08);
+  background: rgba(215, 0, 21, 0.08);
   color: #d70015;
-  border-color: rgba(215,0,21,.2);
+  border-color: rgba(215, 0, 21, 0.2);
 }
 html[data-workbench-theme='light'] .emp-flash--ok {
-  background: rgba(52,168,83,.08);
+  background: rgba(52, 168, 83, 0.08);
   color: #34a853;
-  border-color: rgba(52,168,83,.2);
+  border-color: rgba(52, 168, 83, 0.2);
 }
 html[data-workbench-theme='light'] .emp-section-title {
   color: #1d1d1f;
@@ -389,21 +376,21 @@ html[data-workbench-theme='light'] .emp-section-title {
 html[data-workbench-theme='light'] .emp-empty {
   color: #86868b;
   background: #ffffff;
-  border-color: rgba(0,0,0,.08);
+  border-color: rgba(0, 0, 0, 0.08);
 }
 html[data-workbench-theme='light'] .emp-card {
   background: #ffffff;
-  border-color: rgba(0,0,0,.08);
+  border-color: rgba(0, 0, 0, 0.08);
 }
 html[data-workbench-theme='light'] .emp-badge--duty {
-  background: rgba(52,168,83,.08);
+  background: rgba(52, 168, 83, 0.08);
   color: #34a853;
-  border-color: rgba(52,168,83,.2);
+  border-color: rgba(52, 168, 83, 0.2);
 }
 html[data-workbench-theme='light'] .emp-badge--v1 {
-  background: rgba(217,119,6,.08);
+  background: rgba(217, 119, 6, 0.08);
   color: #d97706;
-  border-color: rgba(217,119,6,.2);
+  border-color: rgba(217, 119, 6, 0.2);
 }
 html[data-workbench-theme='light'] .emp-name {
   color: #1d1d1f;
@@ -417,18 +404,18 @@ html[data-workbench-theme='light'] .emp-btn {
 }
 html[data-workbench-theme='light'] .emp-btn--ghost {
   color: #1d1d1f;
-  border-color: rgba(0,0,0,0.1);
-  background: rgba(0,0,0,0.03);
+  border-color: rgba(0, 0, 0, 0.1);
+  background: rgba(0, 0, 0, 0.03);
 }
 html[data-workbench-theme='light'] .emp-btn--ghost:hover {
-  background: rgba(0,0,0,0.06);
+  background: rgba(0, 0, 0, 0.06);
   color: #1d1d1f;
 }
 html[data-workbench-theme='light'] .emp-btn--danger {
   color: #d70015;
-  border-color: rgba(215,0,21,.2);
+  border-color: rgba(215, 0, 21, 0.2);
 }
 html[data-workbench-theme='light'] .emp-purge-row {
-  border-top-color: rgba(0,0,0,.08);
+  border-top-color: rgba(0, 0, 0, 0.08);
 }
 </style>

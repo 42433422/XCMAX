@@ -208,11 +208,7 @@
         "release_kind": "daily",
         "digest_mode": "primary",
         "shadow": false,
-        "step_ids": [
-          "P3",
-          "P7",
-          "P8"
-        ]
+        "step_ids": ["P3", "P7", "P8"]
       },
       "updated_at": "2026-07-15T00:02:21.933848+00:00"
     },
@@ -226,11 +222,7 @@
         "release_kind": "daily",
         "digest_mode": "primary",
         "shadow": false,
-        "step_ids": [
-          "P3",
-          "P7",
-          "P8"
-        ]
+        "step_ids": ["P3", "P7", "P8"]
       },
       "updated_at": "2026-07-15T00:02:21.934168+00:00"
     },
@@ -244,11 +236,7 @@
         "release_kind": "daily",
         "digest_mode": "primary",
         "shadow": false,
-        "step_ids": [
-          "P3",
-          "P7",
-          "P8"
-        ]
+        "step_ids": ["P3", "P7", "P8"]
       },
       "updated_at": "2026-07-15T00:02:21.934467+00:00"
     }

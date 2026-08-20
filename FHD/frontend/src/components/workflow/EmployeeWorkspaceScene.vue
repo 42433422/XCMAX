@@ -1,16 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import {
-  useNowMsTicker,
-  useWorkflowEmployeeDesks,
-} from '@/composables/useWorkflowEmployeeDesks'
+import { useNowMsTicker, useWorkflowEmployeeDesks } from '@/composables/useWorkflowEmployeeDesks'
 import YuangongStation from '@/components/workflow/YuangongStation.vue'
 import WorkflowEmployeeInspector from '@/components/workflow/WorkflowEmployeeInspector.vue'
-import {
-  YUANGONG_ENTRY_STITCH_PNG,
-  YUANGONG_ENTRY_WORKFLOW_PNG,
-  YUANGONG_ENTRY_WORKFLOW_SVG,
-} from '@/constants/yuangongAssets'
+import { YUANGONG_ENTRY_STITCH_PNG, YUANGONG_ENTRY_WORKFLOW_PNG, YUANGONG_ENTRY_WORKFLOW_SVG } from '@/constants/yuangongAssets'
 import DutyRosterWorkflowLoopView from '@/components/workflow/DutyRosterWorkflowLoopView.vue'
 import SelfEvolutionLoopRuntimePanel from '@/components/workflow/SelfEvolutionLoopRuntimePanel.vue'
 import EmployeeWorkspaceLoopConsole from '@/components/employeeWorkspace/EmployeeWorkspaceLoopConsole.vue'
@@ -31,7 +24,11 @@ const ENTRY_BG_WORKFLOW_SVG = YUANGONG_ENTRY_WORKFLOW_SVG
 const isAdminConsole = isAdminConsoleSpa()
 const showManagementLoopPanels = computed(() => isAdminConsole)
 // SSOT 派生：运行时从后端 /api/system/duty-roster 获取编制矩阵
-const { allPlannedIds: ALL_PLANNED_YUANGON_PKG_IDS, employeeLabels: YUANGON_PKG_ROLE_LABELS, ensureLoaded: ensureDutyRosterLoaded } = useDutyRoster()
+const {
+  allPlannedIds: ALL_PLANNED_YUANGON_PKG_IDS,
+  employeeLabels: YUANGON_PKG_ROLE_LABELS,
+  ensureLoaded: ensureDutyRosterLoaded,
+} = useDutyRoster()
 useWorkflowEmployeeRegistrySync()
 const { desks, statusLine, ariaLabel, isBusy } = useWorkflowEmployeeDesks()
 const nowMs = useNowMsTicker(30000)
@@ -78,9 +75,7 @@ const visualizedEmployeeCount = computed(() =>
 const enabledCount = computed(() => workspaceDesks.value.filter((d) => d.enabled).length)
 const busyCount = computed(() => workspaceDesks.value.filter((d) => isBusy(d)).length)
 const idleEnabledCount = computed(() => Math.max(0, enabledCount.value - busyCount.value))
-const selectedDesk = computed(() =>
-  workspaceDesks.value.find((d) => d.empId === selectedEmpId.value) || null,
-)
+const selectedDesk = computed(() => workspaceDesks.value.find((d) => d.empId === selectedEmpId.value) || null)
 
 const loop = useLoopRuntimeConsole({
   plannedIds: ALL_PLANNED_YUANGON_PKG_IDS,
@@ -89,45 +84,27 @@ const loop = useLoopRuntimeConsole({
   routeFocusedEmployeeId,
   showManagementLoopPanels,
 })
-const {
-  panoramaLocation,
-  dutyRosterLoopLocation,
-  dutyRosterEmployeeLocation,
-  loopParticipantRoleLabels,
-} = loop
+const { panoramaLocation, dutyRosterLoopLocation, dutyRosterEmployeeLocation, loopParticipantRoleLabels } = loop
 
-const {
-  progressWidth,
-  toggleDesk,
-  processedShort,
-  workShort,
-  isLoopParticipant,
-  deskLoopState,
-  selectedDeskLoopState,
-} = useWorkspaceDeskDisplay({
-  nowMs,
-  selectedDesk,
-  loopRuntime: loop.loopRuntime,
-  loopParticipantIds: loop.loopParticipantIds,
-  loopParticipantRoleLabels: loop.loopParticipantRoleLabels,
-})
-const entryKicker = computed(() =>
-  showManagementLoopPanels.value ? '管理端可视化 · 六部门' : '企业版全景 · 四部门'
-)
+const { progressWidth, toggleDesk, processedShort, workShort, isLoopParticipant, deskLoopState, selectedDeskLoopState } =
+  useWorkspaceDeskDisplay({
+    nowMs,
+    selectedDesk,
+    loopRuntime: loop.loopRuntime,
+    loopParticipantIds: loop.loopParticipantIds,
+    loopParticipantRoleLabels: loop.loopParticipantRoleLabels,
+  })
+const entryKicker = computed(() => (showManagementLoopPanels.value ? '管理端可视化 · 六部门' : '企业版全景 · 四部门'))
 const entryLead = computed(() =>
   showManagementLoopPanels.value
     ? `进入管理端六部门流程可视化，查看 ${rosterCount.value} 岗 AI 员工在编制图谱、流程派发和执行回写中的状态。`
-    : '进入企业端四部门节点图，查看企业 Mod 栈下工具、执行、服务、管理工位与任务快照。'
+    : '进入企业端四部门节点图，查看企业 Mod 栈下工具、执行、服务、管理工位与任务快照。',
 )
-const entryCtaText = computed(() =>
-  showManagementLoopPanels.value ? '进入六部门可视化' : '进入企业全景'
-)
+const entryCtaText = computed(() => (showManagementLoopPanels.value ? '进入六部门可视化' : '进入企业全景'))
 
 const workspaceStatSub = computed(() => {
   const label = enterpriseStack.value?.stackShortLabel
-  return label
-    ? `企业 Mod「${label}」栈内工位`
-    : '企业 Mod 栈内工位'
+  return label ? `企业 Mod「${label}」栈内工位` : '企业 Mod 栈内工位'
 })
 
 onMounted(() => {
@@ -145,21 +122,9 @@ onMounted(() => {
   <section class="ews" aria-labelledby="ews-heading" data-tour="employee-workspace-desks">
     <h3 id="ews-heading" class="ews-sr-only">员工工作流：入口与工位实况</h3>
 
-    <router-link
-      :to="panoramaLocation"
-      class="ews-entry"
-      role="link"
-      :aria-label="entryCtaText"
-    >
+    <router-link :to="panoramaLocation" class="ews-entry" role="link" :aria-label="entryCtaText">
       <div class="ews-entry-bg" aria-hidden="true">
-        <img
-          class="ews-entry-bg-img"
-          :src="entryBgUrl"
-          alt=""
-          decoding="async"
-          fetchpriority="low"
-          @error="onEntryBgError"
-        />
+        <img class="ews-entry-bg-img" :src="entryBgUrl" alt="" decoding="async" fetchpriority="low" @error="onEntryBgError" />
         <div class="ews-entry-vignette" />
       </div>
       <div class="ews-entry-ui">
@@ -208,13 +173,7 @@ onMounted(() => {
       </div>
     </div>
 
-    <div
-      id="ews-workflow-monitor"
-      class="ews-monitor"
-      role="region"
-      aria-labelledby="ews-monitor-h"
-      tabindex="-1"
-    >
+    <div id="ews-workflow-monitor" class="ews-monitor" role="region" aria-labelledby="ews-monitor-h" tabindex="-1">
       <div class="ews-monitor-head">
         <div>
           <h4 id="ews-monitor-h" class="ews-monitor-title">工位实况</h4>
@@ -232,7 +191,8 @@ onMounted(() => {
             </p>
             <p class="ews-empty-desc">
               <template v-if="showManagementLoopPanels">
-                编制员工已经由图谱对齐为 {{ rosterCount }} 岗；这里等待副窗托管或平台编制员工注册后显示实时工位卡片。
+                编制员工已经由图谱对齐为
+                {{ rosterCount }} 岗；这里等待副窗托管或平台编制员工注册后显示实时工位卡片。
               </template>
               <template v-else>
                 当前账号未同步到企业 Mod 员工工位；账号定制 Mod 开通并注册员工后，这里只显示本企业自己的工位卡片。
@@ -262,17 +222,8 @@ onMounted(() => {
               @click="selectDesk(row.empId)"
             >
               <span class="ews-desk-art" aria-hidden="true">
-                <YuangongStation
-                  :enabled="row.enabled"
-                  :busy="isBusy(row)"
-                  :ariaLabel="ariaLabel(row)"
-                />
-                <span
-                  v-if="row.enabled"
-                  class="ews-desk-rpg"
-                  :class="{ 'ews-desk-rpg--busy': isBusy(row) }"
-                  aria-hidden="true"
-                >
+                <YuangongStation :enabled="row.enabled" :busy="isBusy(row)" :ariaLabel="ariaLabel(row)" />
+                <span v-if="row.enabled" class="ews-desk-rpg" :class="{ 'ews-desk-rpg--busy': isBusy(row) }" aria-hidden="true">
                   <span class="ews-desk-rpg-row">
                     <span class="ews-desk-rpg-icon" aria-hidden="true">📄</span>
                     <span class="ews-desk-rpg-num">{{ processedShort(row) }}</span>
@@ -282,14 +233,8 @@ onMounted(() => {
                     <span class="ews-desk-rpg-num">{{ workShort(row) }}</span>
                   </span>
                 </span>
-                <span
-                  v-if="isBusy(row)"
-                  class="ews-desk-pill ews-desk-pill--busy"
-                >忙</span>
-                <span
-                  v-else-if="row.enabled"
-                  class="ews-desk-pill ews-desk-pill--idle"
-                >待命</span>
+                <span v-if="isBusy(row)" class="ews-desk-pill ews-desk-pill--busy">忙</span>
+                <span v-else-if="row.enabled" class="ews-desk-pill ews-desk-pill--idle">待命</span>
                 <span v-else class="ews-desk-pill ews-desk-pill--off">未启</span>
               </span>
 
@@ -344,11 +289,7 @@ onMounted(() => {
             </div>
           </div>
 
-          <WorkflowEmployeeInspector
-            v-model:selected-emp-id="selectedEmpId"
-            :desks="workspaceDesks"
-            hide-workspace-link
-          />
+          <WorkflowEmployeeInspector v-model:selected-emp-id="selectedEmpId" :desks="workspaceDesks" hide-workspace-link />
         </div>
       </div>
     </div>
@@ -389,7 +330,9 @@ onMounted(() => {
   text-decoration: none;
   color: inherit;
   isolation: isolate;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .ews-entry:hover {
@@ -646,7 +589,10 @@ onMounted(() => {
   border-radius: 12px;
   background: #fff;
   overflow: hidden;
-  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .ews-desk:hover {
@@ -671,7 +617,9 @@ onMounted(() => {
 
 .ews-desk--selected {
   border-color: #2563eb;
-  box-shadow: 0 0 0 1px #93c5fd inset, 0 8px 24px rgba(37, 99, 235, 0.18);
+  box-shadow:
+    0 0 0 1px #93c5fd inset,
+    0 8px 24px rgba(37, 99, 235, 0.18);
 }
 
 .ews-desk-hit {
@@ -706,8 +654,7 @@ onMounted(() => {
   border-radius: 10px;
   overflow: hidden;
   background:
-    radial-gradient(ellipse at 50% 90%, rgba(37, 99, 235, 0.08) 0%, transparent 65%),
-    linear-gradient(180deg, #eef2ff 0%, #ffffff 75%);
+    radial-gradient(ellipse at 50% 90%, rgba(37, 99, 235, 0.08) 0%, transparent 65%), linear-gradient(180deg, #eef2ff 0%, #ffffff 75%);
   display: block;
   border: 1px solid #e5e7eb;
 }
@@ -756,7 +703,9 @@ onMounted(() => {
   padding: 4px 6px;
   border-radius: 4px;
   background: rgba(11, 17, 32, 0.78);
-  box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.45), 0 1px 0 rgba(0, 0, 0, 0.45);
+  box-shadow:
+    inset 0 0 0 1px rgba(56, 189, 248, 0.45),
+    0 1px 0 rgba(0, 0, 0, 0.45);
   color: #f1f5f9;
   font-family: 'Press Start 2P', ui-monospace, monospace;
   font-size: 8px;
@@ -998,9 +947,7 @@ onMounted(() => {
   padding: 11px 12px;
   border: 1px solid rgba(20, 184, 166, 0.18);
   border-radius: 12px;
-  background:
-    radial-gradient(circle at 0% 0%, rgba(20, 184, 166, 0.12), transparent 36%),
-    #ffffff;
+  background: radial-gradient(circle at 0% 0%, rgba(20, 184, 166, 0.12), transparent 36%), #ffffff;
 }
 
 .ews-selected-loop span {
@@ -1043,11 +990,13 @@ onMounted(() => {
 .ews-desk--loop {
   position: relative;
   border-color: #14b8a6;
-  box-shadow: 0 0 0 2px rgba(20, 184, 166, 0.18), 0 10px 28px rgba(15, 118, 110, 0.13);
+  box-shadow:
+    0 0 0 2px rgba(20, 184, 166, 0.18),
+    0 10px 28px rgba(15, 118, 110, 0.13);
 }
 
 .ews-desk--loop::after {
-  content: "LOOP";
+  content: 'LOOP';
   position: absolute;
   top: 8px;
   right: 8px;

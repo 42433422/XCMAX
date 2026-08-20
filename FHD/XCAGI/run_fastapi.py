@@ -17,6 +17,22 @@ import socket
 import sys
 from pathlib import Path
 
+BOUNDARY_ERRORS: tuple[type[Exception], ...] = (Exception,)
+RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    OSError,
+    ValueError,
+    TypeError,
+    KeyError,
+    AttributeError,
+    RuntimeError,
+    ImportError,
+    LookupError,
+    ConnectionError,
+    TimeoutError,
+    ArithmeticError,
+    UnicodeError,
+)
+
 _XCAGI_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = _XCAGI_DIR.parent
 
@@ -153,10 +169,10 @@ def _verify_frozen_critical_runtime() -> None:
     import av
     import faster_whisper
     from pypdf import PdfReader
-    from reportlab.lib.pagesizes import A4
-    from reportlab.pdfbase import pdfmetrics
-    from reportlab.pdfbase.cidfonts import UnicodeCIDFont
-    from reportlab.pdfgen import canvas
+    from reportlab.lib.pagesizes import A4  # type: ignore[import-untyped]
+    from reportlab.pdfbase import pdfmetrics  # type: ignore[import-untyped]
+    from reportlab.pdfbase.cidfonts import UnicodeCIDFont  # type: ignore[import-untyped]
+    from reportlab.pdfgen import canvas  # type: ignore[import-untyped]
 
     with tempfile.TemporaryDirectory(prefix="xcagi-office-probe-") as tmp:
         output = Path(tmp) / "probe.pdf"
@@ -234,7 +250,7 @@ def _apply_desktop_bootstrap(args: argparse.Namespace) -> None:
 
         if is_desktop_mode():
             configure_desktop_environment(os.environ.get("XCAGI_DATA_DIR"))
-    except Exception as exc:  # noqa: BLE001 - desktop bootstrap must stay best-effort
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - desktop bootstrap must stay best-effort
         print(f"[run_fastapi] desktop bootstrap warning: {exc}", file=sys.stderr)
 
 
@@ -265,7 +281,7 @@ def main(argv: list[str] | None = None) -> None:
         from app.utils.security.proxy_env import sanitize_socks_all_proxy
 
         sanitize_socks_all_proxy()
-    except Exception:
+    except BOUNDARY_ERRORS:
         pass
 
     if args.desktop or args.data_dir or args.migrate_only:

@@ -5,7 +5,7 @@
 ## 职责
 
 1. 调用白名单命令 `git-repo-context`（或使用服务端 `/api/health` 返回的 `deploy_tier`、`git_sha`、`hostname`）归纳事实。
-2. 输出简短检查清单：分支是否为目标分支、是否与远端同步、工作区是否干净、是否与 ``MODSTORE_DEPLOY_TIER`` 预期一致。
+2. 输出简短检查清单：分支是否为目标分支、是否与远端同步、工作区是否干净、是否与 `MODSTORE_DEPLOY_TIER` 预期一致。
 3. **禁止编造**分支名或提交号 —— 一律以命令/API 输出为准。
 
 ## 边界

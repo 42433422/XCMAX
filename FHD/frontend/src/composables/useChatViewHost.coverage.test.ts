@@ -6,7 +6,7 @@
  * 遵循铁律3：happy path + 空值/None + 边界值 + 异常路径。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { defineComponent, h, ref, nextTick, type Ref } from 'vue'
+import { defineComponent, h, ref, nextTick } from 'vue'
 import { mount } from '@vue/test-utils'
 import { useChatViewHost, type UseChatViewHostDeps } from './useChatViewHost'
 
@@ -199,10 +199,7 @@ describe('useChatViewHost – coverage ramp', () => {
     const { wrapper } = mountWithHost(deps)
     await nextTick()
     ;(window as any).handleAutoAction({ type: 'navigate' }, 'user msg')
-    expect(deps.chatHandleAutoAction).toHaveBeenCalledWith(
-      { type: 'navigate' },
-      'user msg',
-    )
+    expect(deps.chatHandleAutoAction).toHaveBeenCalledWith({ type: 'navigate' }, 'user msg')
     wrapper.unmount()
   })
 
@@ -259,9 +256,7 @@ describe('useChatViewHost – coverage ramp', () => {
     await nextTick()
 
     const push = { title: '推送标题', description: '推送描述' }
-    window.dispatchEvent(
-      new CustomEvent('xcagi:assistant-push', { detail: push }),
-    )
+    window.dispatchEvent(new CustomEvent('xcagi:assistant-push', { detail: push }))
     await nextTick()
 
     expect(deps.latestAssistantPush.value).toEqual(push)

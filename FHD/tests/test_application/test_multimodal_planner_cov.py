@@ -1,3 +1,4 @@
+# mypy: disable-error-code="attr-defined"
 from __future__ import annotations
 
 """Coverage ramp tests for app.application.agent_orchestrator.multimodal_planner."""

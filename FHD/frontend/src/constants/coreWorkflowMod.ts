@@ -14,9 +14,7 @@ export {
   LEGACY_CORE_WORKFLOW_MOD_ID,
 } from '@/constants/workflowEmployeeMods'
 
-export function isCoreWorkflowModInstalled(
-  mods: Array<{ id?: string }> | undefined | null,
-): boolean {
+export function isCoreWorkflowModInstalled(mods: Array<{ id?: string }> | undefined | null): boolean {
   if (!mods?.length) return false
   return mods.some((m) => {
     const id = String(m?.id || '').trim()

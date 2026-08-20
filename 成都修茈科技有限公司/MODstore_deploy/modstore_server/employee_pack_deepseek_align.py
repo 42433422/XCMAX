@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr"
 """管理员：将仍为 deepseek 默认厂商的员工包对齐到当前环境下可用的平台/BYOK LLM（与 resolve_llm_provider_model_auto 一致）。"""
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ from modstore_server.employee_executor import list_employees
 from modstore_server.employee_runtime import load_employee_pack
 from modstore_server.mod_scaffold_runner import resolve_llm_provider_model_auto
 from modstore_server.models import CatalogItem, User, get_session_factory
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +114,7 @@ async def align_catalog_employee_packs_llm_from_deepseek(
         except HTTPException as he:
             errors.append({"pack_id": pack_id, "error": he.detail or str(he)})
             continue
-        except Exception as e:  # noqa: BLE001
+        except BOUNDARY_ERRORS as e:  # noqa: BLE001
             logger.exception("align deepseek pack=%s", pack_id)
             errors.append({"pack_id": pack_id, "error": str(e)[:500]})
             continue
@@ -223,7 +225,7 @@ async def align_single_employee_pack_llm_to_auto(
         await employee_save_impl(body, eff_user)
     except HTTPException as he:
         return {"ok": False, "error": he.detail or str(he), "pack_id": pack_id}
-    except Exception as e:  # noqa: BLE001
+    except BOUNDARY_ERRORS as e:  # noqa: BLE001
         logger.exception("align single auto sentinel pack=%s", pack_id)
         return {"ok": False, "error": str(e)[:500], "pack_id": pack_id}
 
@@ -335,7 +337,7 @@ async def align_catalog_employee_packs_llm_to_auto_sentinel(
         except HTTPException as he:
             errors.append({"pack_id": pack_id, "error": he.detail or str(he)})
             continue
-        except Exception as e:  # noqa: BLE001
+        except BOUNDARY_ERRORS as e:  # noqa: BLE001
             logger.exception("align auto sentinel pack=%s", pack_id)
             errors.append({"pack_id": pack_id, "error": str(e)[:500]})
             continue

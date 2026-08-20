@@ -9,7 +9,9 @@ def run(payload: dict[str, Any], _ctx: dict[str, Any]) -> dict[str, Any]:
     snapshot = payload.get("database_snapshot")
     issues: list[dict[str, str]] = []
     if not isinstance(snapshot, dict):
-        issues.append({"code": "missing_database_snapshot", "detail": "database_snapshot is required"})
+        issues.append(
+            {"code": "missing_database_snapshot", "detail": "database_snapshot is required"}
+        )
         snapshot = {}
     checks = {
         "connection_unreachable": snapshot.get("connection_ok") is not True,
@@ -20,12 +22,16 @@ def run(payload: dict[str, Any], _ctx: dict[str, Any]) -> dict[str, Any]:
     }
     for code, failed in checks.items():
         if failed:
-            issues.append({"code": code, "detail": "supplied snapshot did not satisfy the reviewed threshold"})
+            issues.append(
+                {"code": code, "detail": "supplied snapshot did not satisfy the reviewed threshold"}
+            )
     approved = not issues
     return {
         "ok": True,
         "status": "approved" if approved else "needs_review",
-        "summary": "supplied database health snapshot is within thresholds" if approved else "database snapshot needs review",
+        "summary": "supplied database health snapshot is within thresholds"
+        if approved
+        else "database snapshot needs review",
         "issues": issues,
         "evidence": ["fixture_only", "no_database_connection", "no_sql_execution", "no_migration"],
         "read_only": True,

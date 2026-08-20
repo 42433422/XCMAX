@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="assignment"
 """AI Agent V1 — 写链路 demo：创建客户+订单+审批门控。
 
 三种策略（由 --strategy 控制）:
@@ -14,6 +15,7 @@
     python3 scripts/ai_agent_v1/run_demo_create_order.py --strategy interactive
     python3 scripts/ai_agent_v1/run_demo_create_order.py --strategy reject
 """
+
 from __future__ import annotations
 
 import argparse
@@ -23,6 +25,8 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 ROOT = Path(__file__).resolve().parents[2]
 EVIDENCE_DIR = ROOT / "docs" / "evidence" / "ai-agent-v1"
@@ -60,9 +64,7 @@ def _stub_planner_rag() -> None:
     app_pkg.get_user_memory_rag_app_service = _factory  # type: ignore[attr-defined]
 
 
-def _dispatch_workflow_tool(
-    tool_id: str, action: str, params: dict[str, Any]
-) -> dict[str, Any]:
+def _dispatch_workflow_tool(tool_id: str, action: str, params: dict[str, Any]) -> dict[str, Any]:
     from app.application.facades.tools_facade import execute_registered_workflow_tool
 
     return execute_registered_workflow_tool(tool_id=tool_id, action=action, params=params)
@@ -79,13 +81,11 @@ def _database_reachable() -> bool:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         return True
-    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
         return False
 
 
-def _mock_tool_dispatcher(
-    tool_id: str, action: str, params: dict[str, Any]
-) -> dict[str, Any]:
+def _mock_tool_dispatcher(tool_id: str, action: str, params: dict[str, Any]) -> dict[str, Any]:
     """无 DB 时的工具桩：仍经 WorkflowEngine 调度。"""
     if tool_id == "customers" and action == "ensure_exists":
         unit = str(params.get("unit_name") or "上海宏达公司").strip() or "上海宏达公司"
@@ -107,9 +107,7 @@ def _mock_tool_dispatcher(
     return {"success": False, "message": f"mock 未实现: {tool_id}.{action}"}
 
 
-def _build_create_order_plan(
-    plan_id: str, message: str, params: dict[str, Any]
-) -> Any:
+def _build_create_order_plan(plan_id: str, message: str, params: dict[str, Any]) -> Any:
     """
     手工构造 1 张写链路 PlanGraph（不依赖 LLM，确保 demo 稳定可重复）。
 
@@ -180,10 +178,14 @@ def run_create_order_demo(
     _stub_planner_rag()
 
     force_live = str(os.environ.get("AI_AGENT_V1_LIVE_TOOLS", "")).strip().lower() in {
-        "1", "true", "yes",
+        "1",
+        "true",
+        "yes",
     }
     force_mock = str(os.environ.get("AI_AGENT_V1_MOCK_TOOLS", "")).strip().lower() in {
-        "1", "true", "yes",
+        "1",
+        "true",
+        "yes",
     }
     if force_mock:
         dispatcher = _mock_tool_dispatcher
@@ -203,9 +205,7 @@ def run_create_order_demo(
 
     runtime_ctx: dict[str, Any] = {"user_id": user_id, "message": message}
 
-    decision, run_result = gated.run(
-        plan=plan, runtime_context=runtime_ctx, strategy=strategy
-    )
+    decision, run_result = gated.run(plan=plan, runtime_context=runtime_ctx, strategy=strategy)
 
     evidence = build_gated_evidence(
         input_message=message,

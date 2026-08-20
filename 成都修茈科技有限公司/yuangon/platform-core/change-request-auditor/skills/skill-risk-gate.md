@@ -2,17 +2,18 @@
 
 ## 元信息
 
-| 字段 | 值 |
-|------|----|
-| skill_id | `skill-risk-gate` |
+| 字段     | 值                       |
+| -------- | ------------------------ |
+| skill_id | `skill-risk-gate`        |
 | 所属员工 | `change-request-auditor` |
-| 业务域 | 风险打分 → 放行/升级 |
-| 版本 | 1.0.0 |
+| 业务域   | 风险打分 → 放行/升级     |
+| 版本     | 1.0.0                    |
 
 ## 1. 静态阶段
 
 **输入**：`audit_report.json` + `test_report.json`（来自 test-qa-runner）。  
 **执行图**：
+
 ```
 risk = 0
 + 行数 > 500 → +0.4； > 100 → +0.1

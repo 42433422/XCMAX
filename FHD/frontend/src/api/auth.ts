@@ -1,106 +1,99 @@
-import { api, primeCsrfCookie } from './core';
-import { LS_MARKET_ACCESS_TOKEN, LS_MARKET_USER_JSON } from './marketAccount';
-import {
-  invalidateEnterpriseSessionCache,
-  markEnterpriseSessionValid,
-} from '@/utils/authSessionCache';
-import { clearAutoLoginPreference } from '@/utils/loginPreferences';
-import type { ApiResponse } from '@/types/api';
+import { api, primeCsrfCookie } from './core'
+import { LS_MARKET_ACCESS_TOKEN, LS_MARKET_USER_JSON } from './marketAccount'
+import { invalidateEnterpriseSessionCache, markEnterpriseSessionValid } from '@/utils/authSessionCache'
+import { clearAutoLoginPreference } from '@/utils/loginPreferences'
+import type { ApiResponse } from '@/types/api'
 
-export type AccountKind = 'personal' | 'enterprise' | 'admin';
+export type AccountKind = 'personal' | 'enterprise' | 'admin'
 // 账号体系：等级（仅企业有意义）/ 预算区间 / 修茈市场会员等级
-export type AccountTier = 'normal' | 'pro' | 'max' | 'ultra';
-export type BudgetRange = '1–5 万' | '5–10 万' | '10–50 万' | '50–100 万';
-export type MarketMembershipTier = string; // free | vip | vip_plus | svip1..svip8
+export type AccountTier = 'normal' | 'pro' | 'max' | 'ultra'
+export type BudgetRange = '1–5 万' | '5–10 万' | '10–50 万' | '50–100 万'
+export type MarketMembershipTier = string // free | vip | vip_plus | svip1..svip8
 
 export interface LoginRequest {
-  username: string;
-  password: string;
-  account_kind?: AccountKind;
+  username: string
+  password: string
+  account_kind?: AccountKind
 }
 
 export interface User {
-  id: number;
-  username: string;
-  display_name: string;
-  email: string;
-  role: string;
-  is_active: boolean;
-  avatar_url?: string;
+  id: number
+  username: string
+  display_name: string
+  email: string
+  role: string
+  is_active: boolean
+  avatar_url?: string
 }
 
 export interface UserProfilePayload {
-  display_name?: string;
-  email?: string;
+  display_name?: string
+  email?: string
 }
 
 export interface LoginResponse {
-  success: boolean;
-  user?: User;
-  session_id?: string;
-  expires_at?: string;
-  message?: string;
-  error?: unknown;
-  market_access_token?: string;
-  market_refresh_token?: string;
-  registered?: boolean;
-  account_state?: string;
-  next_action?: string;
-  desktop_access?: boolean;
-  active_plan_id?: string;
-  account_tier?: string;
-  purchase_url?: string;
+  success: boolean
+  user?: User
+  session_id?: string
+  expires_at?: string
+  message?: string
+  error?: unknown
+  market_access_token?: string
+  market_refresh_token?: string
+  registered?: boolean
+  account_state?: string
+  next_action?: string
+  desktop_access?: boolean
+  active_plan_id?: string
+  account_tier?: string
+  purchase_url?: string
 }
 
 export interface RegisterRequest {
-  username: string;
-  password: string;
-  email?: string;
-  verification_code?: string;
-  display_name?: string;
+  username: string
+  password: string
+  email?: string
+  verification_code?: string
+  display_name?: string
   // 账号体系：预算区间（→ account_tier 派生）与行业
-  budget_range?: string;
-  industry_id?: string;
+  budget_range?: string
+  industry_id?: string
 }
 
-const LOGIN_RETRY_DELAYS_MS = [1_000, 2_000, 4_000] as const;
+const LOGIN_RETRY_DELAYS_MS = [1_000, 2_000, 4_000] as const
 
 function isTransientLoginError(error: unknown): boolean {
-  const status = Number((error as { status?: unknown } | null)?.status);
-  return status === 0 || status >= 500;
+  const status = Number((error as { status?: unknown } | null)?.status)
+  return status === 0 || status >= 500
 }
 
 async function withTransientLoginRetry<T>(operation: () => Promise<T>): Promise<T> {
   for (let attempt = 0; ; attempt += 1) {
     try {
-      return await operation();
+      return await operation()
     } catch (error) {
       if (!isTransientLoginError(error) || attempt >= LOGIN_RETRY_DELAYS_MS.length) {
-        throw error;
+        throw error
       }
-      await new Promise((resolve) => window.setTimeout(resolve, LOGIN_RETRY_DELAYS_MS[attempt]));
+      await new Promise((resolve) => window.setTimeout(resolve, LOGIN_RETRY_DELAYS_MS[attempt]))
     }
   }
 }
 
 async function invalidateSessionScopedUiCaches(): Promise<void> {
-  invalidateEnterpriseSessionCache();
+  invalidateEnterpriseSessionCache()
   try {
-    const { clearDeliverableStatusCache } = await import('@/utils/platformShellApi');
-    clearDeliverableStatusCache();
+    const { clearDeliverableStatusCache } = await import('@/utils/platformShellApi')
+    clearDeliverableStatusCache()
   } catch {
     /* ignore */
   }
 }
 
 export const authApi = {
-  async login(
-    username: string,
-    password: string,
-    accountKind: AccountKind = 'enterprise',
-  ): Promise<ApiResponse<LoginResponse>> {
-    await primeCsrfCookie();
-    invalidateEnterpriseSessionCache();
+  async login(username: string, password: string, accountKind: AccountKind = 'enterprise'): Promise<ApiResponse<LoginResponse>> {
+    await primeCsrfCookie()
+    invalidateEnterpriseSessionCache()
     const res = await withTransientLoginRetry(() =>
       api.post<ApiResponse<LoginResponse>>(
         '/api/auth/login',
@@ -113,21 +106,17 @@ export const authApi = {
           timeoutMs: 30_000,
         },
       ),
-    );
-    await invalidateSessionScopedUiCaches();
+    )
+    await invalidateSessionScopedUiCaches()
     if (res?.success === true || res?.data?.success === true) {
-      markEnterpriseSessionValid();
+      markEnterpriseSessionValid()
     }
-    return res;
+    return res
   },
 
-  async loginWithPhoneCode(
-    phone: string,
-    code: string,
-    accountKind: AccountKind = 'enterprise',
-  ): Promise<ApiResponse<LoginResponse>> {
-    await primeCsrfCookie();
-    invalidateEnterpriseSessionCache();
+  async loginWithPhoneCode(phone: string, code: string, accountKind: AccountKind = 'enterprise'): Promise<ApiResponse<LoginResponse>> {
+    await primeCsrfCookie()
+    invalidateEnterpriseSessionCache()
     const res = await withTransientLoginRetry(() =>
       api.post<ApiResponse<LoginResponse>>(
         '/api/auth/login-with-phone-code',
@@ -140,132 +129,132 @@ export const authApi = {
           timeoutMs: 30_000,
         },
       ),
-    );
-    await invalidateSessionScopedUiCaches();
+    )
+    await invalidateSessionScopedUiCaches()
     if (res?.success === true || res?.data?.success === true) {
-      markEnterpriseSessionValid();
+      markEnterpriseSessionValid()
     }
-    return res;
+    return res
   },
 
   async sendPhoneCode(phone: string): Promise<ApiResponse<{ message?: string }>> {
-    await primeCsrfCookie();
-    return api.post<ApiResponse<{ message?: string }>>('/api/market/send-phone-code', { phone });
+    await primeCsrfCookie()
+    return api.post<ApiResponse<{ message?: string }>>('/api/market/send-phone-code', { phone })
   },
 
   async getOidcStatus(): Promise<ApiResponse<{ enabled?: boolean }>> {
-    return api.get<ApiResponse<{ enabled?: boolean }>>('/api/auth/oidc/status', {}, { timeoutMs: 5_000 });
+    return api.get<ApiResponse<{ enabled?: boolean }>>('/api/auth/oidc/status', {}, { timeoutMs: 5_000 })
   },
 
-  async issueAuthQr(clientHint = '', accountKind = 'enterprise'): Promise<
-    ApiResponse<{ qr_id?: string; poll_secret?: string; expires_at?: number; account_kind?: string }>
+  async issueAuthQr(
+    clientHint = '',
+    accountKind = 'enterprise',
+  ): Promise<
+    ApiResponse<{
+      qr_id?: string
+      poll_secret?: string
+      expires_at?: number
+      account_kind?: string
+    }>
   > {
-    await primeCsrfCookie();
-    return api.post('/api/auth/qr/issue', { client_hint: clientHint, account_kind: accountKind });
+    await primeCsrfCookie()
+    return api.post('/api/auth/qr/issue', { client_hint: clientHint, account_kind: accountKind })
   },
 
-  async pollAuthQr(
-    qrId: string,
-    pollSecret: string,
-  ): Promise<ApiResponse<{ status?: string; session_id?: string }>> {
+  async pollAuthQr(qrId: string, pollSecret: string): Promise<ApiResponse<{ status?: string; session_id?: string }>> {
     return api.get('/api/auth/qr/status', {
       qr_id: qrId,
       poll_secret: pollSecret,
-    });
+    })
   },
 
   async getSubscriptionStatus(): Promise<ApiResponse<Record<string, unknown>>> {
-    return api.get<ApiResponse<Record<string, unknown>>>('/api/auth/subscription/status');
+    return api.get<ApiResponse<Record<string, unknown>>>('/api/auth/subscription/status')
   },
 
   async updateCompanyBrand(companyBrand: string) {
-    return api.post('/api/auth/company-brand', { company_brand: companyBrand });
+    return api.post('/api/auth/company-brand', { company_brand: companyBrand })
   },
 
   async register(payload: RegisterRequest): Promise<ApiResponse<LoginResponse>> {
-    await primeCsrfCookie();
-    invalidateEnterpriseSessionCache();
-    const res = await api.post<ApiResponse<LoginResponse>>('/api/auth/register', payload);
-    await invalidateSessionScopedUiCaches();
+    await primeCsrfCookie()
+    invalidateEnterpriseSessionCache()
+    const res = await api.post<ApiResponse<LoginResponse>>('/api/auth/register', payload)
+    await invalidateSessionScopedUiCaches()
     if (res?.success === true || res?.data?.success === true) {
-      markEnterpriseSessionValid();
+      markEnterpriseSessionValid()
     }
-    return res;
+    return res
   },
 
   async sendRegisterVerificationCode(email: string): Promise<ApiResponse<{ message?: string }>> {
-    await primeCsrfCookie();
-    return api.post<ApiResponse<{ message?: string }>>('/api/market/send-register-code', { email });
+    await primeCsrfCookie()
+    return api.post<ApiResponse<{ message?: string }>>('/api/market/send-register-code', { email })
   },
 
   async logout(): Promise<ApiResponse<void>> {
-    clearAutoLoginPreference();
-    await invalidateSessionScopedUiCaches();
+    clearAutoLoginPreference()
+    await invalidateSessionScopedUiCaches()
     try {
-      const { useAccountProfileStore } = await import('@/stores/accountProfile');
-      useAccountProfileStore().clear();
+      const { useAccountProfileStore } = await import('@/stores/accountProfile')
+      useAccountProfileStore().clear()
     } catch {
       /* ignore */
     }
     try {
-      window.localStorage.removeItem(LS_MARKET_ACCESS_TOKEN);
-      window.localStorage.removeItem(LS_MARKET_USER_JSON);
+      window.localStorage.removeItem(LS_MARKET_ACCESS_TOKEN)
+      window.localStorage.removeItem(LS_MARKET_USER_JSON)
     } catch {
       /* ignore */
     }
-    await primeCsrfCookie();
-    return api.post<ApiResponse<void>>('/api/auth/logout', {}, { timeoutMs: 10_000 });
+    await primeCsrfCookie()
+    return api.post<ApiResponse<void>>('/api/auth/logout', {}, { timeoutMs: 10_000 })
   },
 
   async getCurrentUser(): Promise<ApiResponse<{ user: User; permissions: string[] }>> {
-    return api.get<ApiResponse<{ user: User; permissions: string[] }>>('/api/auth/me', {}, { timeoutMs: 8_000 });
+    return api.get<ApiResponse<{ user: User; permissions: string[] }>>('/api/auth/me', {}, { timeoutMs: 8_000 })
   },
 
   async getProfile(): Promise<ApiResponse<{ user: User }>> {
-    return api.get<ApiResponse<{ user: User }>>('/api/auth/profile', {}, { timeoutMs: 8_000 });
+    return api.get<ApiResponse<{ user: User }>>('/api/auth/profile', {}, { timeoutMs: 8_000 })
   },
 
   async updateProfile(payload: UserProfilePayload): Promise<ApiResponse<{ user: User }>> {
-    await primeCsrfCookie();
-    return api.patch<ApiResponse<{ user: User }>>('/api/auth/profile', payload);
+    await primeCsrfCookie()
+    return api.patch<ApiResponse<{ user: User }>>('/api/auth/profile', payload)
   },
 
   async uploadAvatar(file: File): Promise<ApiResponse<{ avatar_url: string }>> {
-    await primeCsrfCookie();
-    const form = new FormData();
-    form.append('file', file);
-    return api.post<ApiResponse<{ avatar_url: string }>>('/api/auth/profile/avatar', form);
+    await primeCsrfCookie()
+    const form = new FormData()
+    form.append('file', file)
+    return api.post<ApiResponse<{ avatar_url: string }>>('/api/auth/profile/avatar', form)
   },
 
   async validateSession(): Promise<ApiResponse<unknown>> {
-    return api.get<ApiResponse<unknown>>('/api/auth/session/validate', {}, { timeoutMs: 8_000 });
+    return api.get<ApiResponse<unknown>>('/api/auth/session/validate', {}, { timeoutMs: 8_000 })
   },
 
-  async forgotAccount(email: string): Promise<
-    ApiResponse<{ usernames: string[]; found: boolean }>
-  > {
-    await primeCsrfCookie();
+  async forgotAccount(email: string): Promise<ApiResponse<{ usernames: string[]; found: boolean }>> {
+    await primeCsrfCookie()
     return api.post<ApiResponse<{ usernames: string[]; found: boolean }>>('/api/auth/forgot-account', {
       email,
-    });
+    })
   },
 
   async sendForgotPasswordCode(email: string): Promise<ApiResponse<unknown>> {
-    await primeCsrfCookie();
-    return api.post<ApiResponse<unknown>>('/api/auth/forgot-password/send-code', { email });
+    await primeCsrfCookie()
+    return api.post<ApiResponse<unknown>>('/api/auth/forgot-password/send-code', { email })
   },
 
-  async resetForgotPassword(
-    email: string,
-    code: string,
-    newPassword: string,
-  ): Promise<ApiResponse<{ local_users_updated?: number }>> {
-    await primeCsrfCookie();
-    return api.post<ApiResponse<{ local_users_updated?: number }>>(
-      '/api/auth/forgot-password/reset',
-      { email, code, new_password: newPassword },
-    );
+  async resetForgotPassword(email: string, code: string, newPassword: string): Promise<ApiResponse<{ local_users_updated?: number }>> {
+    await primeCsrfCookie()
+    return api.post<ApiResponse<{ local_users_updated?: number }>>('/api/auth/forgot-password/reset', {
+      email,
+      code,
+      new_password: newPassword,
+    })
   },
-};
+}
 
-export default authApi;
+export default authApi

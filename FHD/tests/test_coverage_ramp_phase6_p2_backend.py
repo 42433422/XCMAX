@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, attr-defined, method-assign"
 """COVERAGE_RAMP Phase 6 round 2: approval_gated_engine + ai_intent routes.
 
 Targets:

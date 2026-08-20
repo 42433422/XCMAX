@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """LG-W0-08｜上游持久化 / HITL（Human-in-the-loop）探针.
 
 任务：在 FHD 侧验证 vendored 上游 `langgraph`（tag 1.2.10、锁定 commit

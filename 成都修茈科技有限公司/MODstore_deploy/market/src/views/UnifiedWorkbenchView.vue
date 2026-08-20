@@ -17,11 +17,7 @@
       </div>
       <label class="mode-tabs-mobile" aria-label="当前视图">
         <span class="mode-tabs-mobile-label">当前视图</span>
-        <select
-          class="mode-tabs-mobile-select input"
-          :value="viewMode"
-          @change="onMobileViewChange"
-        >
+        <select class="mode-tabs-mobile-select input" :value="viewMode" @change="onMobileViewChange">
           <option v-for="tab in modeTabs" :key="'m-' + tab.mode" :value="tab.mode">
             {{ tab.shortLabel }}
           </option>
@@ -64,7 +60,9 @@ const modeTabs = [
 ]
 
 const routeFocus = computed(() => {
-  const raw = String(route.query.focus || '').trim().toLowerCase()
+  const raw = String(route.query.focus || '')
+    .trim()
+    .toLowerCase()
   if (raw === 'hybrid') return 'employee'
   if (raw === 'skill') return 'workflow'
   return allowed.has(raw) ? raw : 'repository'
@@ -75,9 +73,14 @@ const viewMode = ref(routeFocus.value)
 watch(
   () => route.query.focus,
   (focus) => {
-    const f = String(focus || '').trim().toLowerCase()
+    const f = String(focus || '')
+      .trim()
+      .toLowerCase()
     if (f === 'hybrid') {
-      void router.replace({ name: 'workbench-unified', query: { ...route.query, focus: 'employee' } })
+      void router.replace({
+        name: 'workbench-unified',
+        query: { ...route.query, focus: 'employee' },
+      })
       return
     }
     if (f === 'workflow') {

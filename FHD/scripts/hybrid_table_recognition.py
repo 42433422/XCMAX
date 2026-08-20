@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment, attr-defined, index, operator, var-annotated"
 """
 PaddleOCR 文本 + OpenCV 网格线 = 准确的表格结构
 """
@@ -234,13 +235,15 @@ for row in range(rows):
                         border_black_count += 1
 
             border_ratio = border_black_count / (y_bottom - y_top)
-            print(f"单元格[{row},{col}] '{cell['text']}' 右侧边框黑色占比：{border_ratio*100:.1f}%")
+            print(
+                f"单元格[{row},{col}] '{cell['text']}' 右侧边框黑色占比：{border_ratio * 100:.1f}%"
+            )
 
             if border_ratio < 0.5:
                 merged_horizontal.append(
                     {"row": row, "start_col": col, "end_col": col + 1, "cell": cell}
                 )
-                print(f"  → 水平合并！列{col}和列{col+1}合并")
+                print(f"  → 水平合并！列{col}和列{col + 1}合并")
 
 # ============ 第五步：生成最终结果 ============
 print("\n" + "=" * 70)

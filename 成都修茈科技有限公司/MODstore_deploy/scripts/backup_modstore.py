@@ -8,8 +8,10 @@ import json
 import os
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -119,7 +121,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     output_dir = Path(args.output_dir) if args.output_dir else ROOT / "backups" / timestamp
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -163,6 +165,6 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         print(f"backup failed: {exc}", file=sys.stderr)
         raise SystemExit(1)

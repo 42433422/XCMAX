@@ -1,3 +1,4 @@
+# isort: skip_file
 # ruff: noqa: E402, F401
 """ReAct agent loop + tool infrastructure for employee_pack.
 
@@ -67,7 +68,6 @@ from modstore_server.mod_employee_agent_runner_part01 import (
     _default_max_rounds as _default_max_rounds,
     _llm_timeout_seconds as _llm_timeout_seconds,
 )
-
 
 # ── Protocol constants ────────────────────────────────────────────────────────
 
@@ -232,7 +232,6 @@ from modstore_server.mod_employee_agent_runner_part02 import (
     tool_identify_file_types as tool_identify_file_types,
     tool_analyze_project_summary as tool_analyze_project_summary,
 )
-
 
 # ── EmployeeAgentRunner ───────────────────────────────────────────────────────
 

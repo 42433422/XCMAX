@@ -477,7 +477,7 @@ def build_models_detailed(
 
 def media_counts_from_detailed(models_detailed: List[Dict[str, Any]]) -> Dict[str, int]:
     """按 taxonomy 分类统计，供钱包磁贴展示生图/生视频能力。"""
-    counts: Dict[str, int] = {c: 0 for c in CATEGORY_ORDER}
+    counts: Dict[str, int] = dict.fromkeys(CATEGORY_ORDER, 0)
     for md in models_detailed or []:
         cat = str(md.get("category") or "other")
         if cat not in counts:

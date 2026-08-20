@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """验证 XCAGI_MOD_ISOLATED_DATABASES 开启后，不同 mod 会被路由到不同 PG 库且能读到各自数据。"""
+
 from __future__ import annotations
 
 import os
 import sys
 from pathlib import Path
+
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
@@ -64,7 +67,7 @@ def main() -> int:
         try:
             info = _probe(url)
             print(f"  probe    -> {info}")
-        except Exception as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures
             ok = False
             print(f"  probe FAILED: {exc}")
     return 0 if ok else 2

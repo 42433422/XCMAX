@@ -9,14 +9,16 @@ from copy import deepcopy
 from typing import Any, Protocol
 from uuid import uuid4
 
-from .._internals import quality as static_executor
+from vibe_coding.operational_errors import BOUNDARY_ERRORS
+
 from .._internals import EvolutionEvent, TriggerPolicy
-from .diagnostics import CodeDiagnostics
+from .._internals import quality as static_executor
 from .._internals.code_models import (
     CodeSkillRun,
     CodeSkillVersion,
     CodeTestResult,
 )
+from .diagnostics import CodeDiagnostics
 from .patch_generator import CodePatchGenerator, RuleBasedCodePatchGenerator
 from .sandbox import CodeSandbox
 from .store import JsonCodeSkillStore
@@ -121,7 +123,7 @@ class CodeSkillRuntime:
             exc_cls = getattr(builtins, et, RuntimeError) if et else RuntimeError
             try:
                 err = exc_cls(msg)
-            except Exception:
+            except BOUNDARY_ERRORS:
                 err = RuntimeError(msg)
             diagnosis = self.diagnostics.diagnose(
                 version.source_code,

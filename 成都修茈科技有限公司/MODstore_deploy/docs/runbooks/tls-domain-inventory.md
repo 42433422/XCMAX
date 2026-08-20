@@ -4,10 +4,10 @@
 
 ## 当前站点（仓库内可见配置）
 
-| 域名 | 用途 | 证书路径示例（宿主机） | 备注 |
-|------|------|-------------------------|------|
-| `xiu-ci.com` | 主站 HTTPS | `/etc/nginx/ssl/xiu-ci.com_bundle.crt` + `.key` | 参见 [`nginx-https-example.conf`](../nginx-https-example.conf) |
-| `www.xiu-ci.com` | 主站 WWW | 同上 bundle（SAN） | 与上行通常为同一证书 |
+| 域名             | 用途       | 证书路径示例（宿主机）                          | 备注                                                           |
+| ---------------- | ---------- | ----------------------------------------------- | -------------------------------------------------------------- |
+| `xiu-ci.com`     | 主站 HTTPS | `/etc/nginx/ssl/xiu-ci.com_bundle.crt` + `.key` | 参见 [`nginx-https-example.conf`](../nginx-https-example.conf) |
+| `www.xiu-ci.com` | 主站 WWW   | 同上 bundle（SAN）                              | 与上行通常为同一证书                                           |
 
 ## 运行时巡检配置
 

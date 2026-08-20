@@ -61,14 +61,16 @@ export function streamLLMChat(opts: StreamOptions): StreamHandle {
 
   const runFallback = async () => {
     let fullText = ''
-    const res = asUnknownRecord(await api.llmChat(
-      opts.provider,
-      opts.model,
-      opts.messages as unknown[],
-      opts.maxTokens ?? null,
-      opts.conversationId ?? null,
-      opts.allowFailover !== false,
-    ))
+    const res = asUnknownRecord(
+      await api.llmChat(
+        opts.provider,
+        opts.model,
+        opts.messages as unknown[],
+        opts.maxTokens ?? null,
+        opts.conversationId ?? null,
+        opts.allowFailover !== false,
+      ),
+    )
     if (ctrl.signal.aborted) {
       aborted = true
       opts.onDone?.('', true)

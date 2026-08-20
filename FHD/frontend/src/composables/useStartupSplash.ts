@@ -119,15 +119,9 @@ export function useStartupSplash() {
     } catch (error) {
       startupModPreview.value = []
       if (isApiFetchTimeoutError(error)) {
-        console.debug(
-          '[useStartupSplash] Mod loading-status 超时（后端可能仍在启动），开屏结束后将再试。',
-          error
-        )
+        console.debug('[useStartupSplash] Mod loading-status 超时（后端可能仍在启动），开屏结束后将再试。', error)
       } else {
-        console.warn(
-          '[useStartupSplash] Mod loading-status error:',
-          error instanceof Error ? error.message : error
-        )
+        console.warn('[useStartupSplash] Mod loading-status error:', error instanceof Error ? error.message : error)
       }
     } finally {
       modsLoading.value = false
@@ -204,7 +198,7 @@ export function useStartupSplash() {
       () => {
         startupAudio = null
       },
-      { once: true }
+      { once: true },
     )
     tryPlayStartupAudio()
     bindStartupAudioFallback()

@@ -1,6 +1,6 @@
-import { ref, reactive, type Ref } from 'vue';
-import { api } from '../api/index';
-import type { ApiResponse } from '@/types/api';
+import { ref, reactive, type Ref } from 'vue'
+import { api } from '../api/index'
+import type { ApiResponse } from '@/types/api'
 import { asString } from '@/utils/typeGuards'
 
 export const FILE_TYPES = {
@@ -8,239 +8,253 @@ export const FILE_TYPES = {
   CSV: ['text/csv'],
   IMAGE: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
   PDF: ['application/pdf'],
-  WORD: ['application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
-} as const;
+  WORD: ['application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+} as const
 
 export const FILE_EXTENSIONS = {
   EXCEL: ['.xlsx', '.xls'],
   CSV: ['.csv'],
   IMAGE: ['.jpg', '.jpeg', '.png', '.gif', '.webp'],
   PDF: ['.pdf'],
-  WORD: ['.doc', '.docx']
-} as const;
+  WORD: ['.doc', '.docx'],
+} as const
 
-export type FileType = 'excel' | 'csv' | 'image' | 'pdf' | 'word' | 'other';
+export type FileType = 'excel' | 'csv' | 'image' | 'pdf' | 'word' | 'other'
 
 export interface UploadStatus {
-  show: boolean;
-  type: string;
-  message: string;
+  show: boolean
+  type: string
+  message: string
 }
 
 export interface UploadResult {
-  file: string;
-  type: FileType;
-  success: boolean;
-  data: unknown;
+  file: string
+  type: FileType
+  success: boolean
+  data: unknown
 }
 
 export interface UseFileImportReturn {
-  uploading: Ref<boolean>;
-  progress: Ref<number>;
-  progressText: Ref<string>;
-  status: UploadStatus;
-  currentFile: Ref<File | null>;
-  error: Ref<Error | null>;
-  detectFileType: (file: File) => FileType;
-  resetState: () => void;
-  uploadFile: (file: File | null, purpose?: string, onProgress?: (percent: number, filename: string) => void) => Promise<ApiResponse<unknown> | null>;
-  uploadCustomersImport: (file: File | null, onProgress?: (percent: number, filename: string) => void) => Promise<ApiResponse<unknown> | null>;
-  uploadProductImport: (file: File | null, onProgress?: (percent: number, filename: string) => void) => Promise<ApiResponse<unknown> | null>;
-  uploadOrderParse: (file: File | null, onProgress?: (percent: number, filename: string) => void) => Promise<ApiResponse<unknown> | null>;
-  uploadMaterialsImport: (file: File | null, onProgress?: (percent: number, filename: string) => void) => Promise<ApiResponse<unknown> | null>;
-  uploadMultipleFiles: (files: File[] | null, purpose?: string, onFileComplete?: (result: UploadResult, current: number, total: number) => void) => Promise<UploadResult[]>;
+  uploading: Ref<boolean>
+  progress: Ref<number>
+  progressText: Ref<string>
+  status: UploadStatus
+  currentFile: Ref<File | null>
+  error: Ref<Error | null>
+  detectFileType: (file: File) => FileType
+  resetState: () => void
+  uploadFile: (
+    file: File | null,
+    purpose?: string,
+    onProgress?: (percent: number, filename: string) => void,
+  ) => Promise<ApiResponse<unknown> | null>
+  uploadCustomersImport: (
+    file: File | null,
+    onProgress?: (percent: number, filename: string) => void,
+  ) => Promise<ApiResponse<unknown> | null>
+  uploadProductImport: (file: File | null, onProgress?: (percent: number, filename: string) => void) => Promise<ApiResponse<unknown> | null>
+  uploadOrderParse: (file: File | null, onProgress?: (percent: number, filename: string) => void) => Promise<ApiResponse<unknown> | null>
+  uploadMaterialsImport: (
+    file: File | null,
+    onProgress?: (percent: number, filename: string) => void,
+  ) => Promise<ApiResponse<unknown> | null>
+  uploadMultipleFiles: (
+    files: File[] | null,
+    purpose?: string,
+    onFileComplete?: (result: UploadResult, current: number, total: number) => void,
+  ) => Promise<UploadResult[]>
 }
 
 export function useFileImport(): UseFileImportReturn {
-  const uploading = ref(false);
-  const progress = ref(0);
-  const progressText = ref('准备上传...');
+  const uploading = ref(false)
+  const progress = ref(0)
+  const progressText = ref('准备上传...')
   const status = reactive<UploadStatus>({
     show: false,
     type: '',
-    message: ''
-  });
-  const currentFile = ref<File | null>(null);
-  const error = ref<Error | null>(null);
+    message: '',
+  })
+  const currentFile = ref<File | null>(null)
+  const error = ref<Error | null>(null)
 
   const API_ENDPOINTS: Record<string, string> = {
     general: '/api/ai/file/analyze',
     product_import: '/api/ai/file/analyze',
     customers_import: '/api/customers/import',
     order_parse: '/api/ai/file/analyze',
-    materials_import: '/api/ai/file/analyze'
-  };
+    materials_import: '/api/ai/file/analyze',
+  }
 
   function detectFileType(file: File): FileType {
-    const fileName = file.name.toLowerCase();
+    const fileName = file.name.toLowerCase()
     const mimeType = asString(file.type)
 
-    if ((FILE_TYPES.EXCEL as readonly string[]).includes(mimeType) || FILE_EXTENSIONS.EXCEL.some(ext => fileName.endsWith(ext))) {
-      return 'excel';
+    if ((FILE_TYPES.EXCEL as readonly string[]).includes(mimeType) || FILE_EXTENSIONS.EXCEL.some((ext) => fileName.endsWith(ext))) {
+      return 'excel'
     }
-    if ((FILE_TYPES.CSV as readonly string[]).includes(mimeType) || FILE_EXTENSIONS.CSV.some(ext => fileName.endsWith(ext))) {
-      return 'csv';
+    if ((FILE_TYPES.CSV as readonly string[]).includes(mimeType) || FILE_EXTENSIONS.CSV.some((ext) => fileName.endsWith(ext))) {
+      return 'csv'
     }
-    if ((FILE_TYPES.IMAGE as readonly string[]).includes(mimeType) || FILE_EXTENSIONS.IMAGE.some(ext => fileName.endsWith(ext))) {
-      return 'image';
+    if ((FILE_TYPES.IMAGE as readonly string[]).includes(mimeType) || FILE_EXTENSIONS.IMAGE.some((ext) => fileName.endsWith(ext))) {
+      return 'image'
     }
-    if ((FILE_TYPES.PDF as readonly string[]).includes(mimeType) || FILE_EXTENSIONS.PDF.some(ext => fileName.endsWith(ext))) {
-      return 'pdf';
+    if ((FILE_TYPES.PDF as readonly string[]).includes(mimeType) || FILE_EXTENSIONS.PDF.some((ext) => fileName.endsWith(ext))) {
+      return 'pdf'
     }
-    if ((FILE_TYPES.WORD as readonly string[]).includes(mimeType) || FILE_EXTENSIONS.WORD.some(ext => fileName.endsWith(ext))) {
-      return 'word';
+    if ((FILE_TYPES.WORD as readonly string[]).includes(mimeType) || FILE_EXTENSIONS.WORD.some((ext) => fileName.endsWith(ext))) {
+      return 'word'
     }
-    return 'other';
+    return 'other'
   }
 
   function resetState(): void {
-    uploading.value = false;
-    progress.value = 0;
-    progressText.value = '准备上传...';
-    status.show = false;
-    status.type = '';
-    status.message = '';
-    currentFile.value = null;
-    error.value = null;
+    uploading.value = false
+    progress.value = 0
+    progressText.value = '准备上传...'
+    status.show = false
+    status.type = ''
+    status.message = ''
+    currentFile.value = null
+    error.value = null
   }
 
   function setStatus(type: string, message: string, show: boolean = true): void {
-    status.show = show;
-    status.type = type;
-    status.message = message;
+    status.show = show
+    status.type = type
+    status.message = message
   }
 
   function updateProgress(percent: number, text: string): void {
-    progress.value = percent;
-    progressText.value = text || `${percent}%`;
+    progress.value = percent
+    progressText.value = text || `${percent}%`
   }
 
   async function uploadFile(
     file: File | null,
     purpose: string = 'general',
-    _onProgress?: (percent: number, filename: string) => void
+    _onProgress?: (percent: number, filename: string) => void,
   ): Promise<ApiResponse<unknown> | null> {
     if (!file) {
-      setStatus('error', '请选择文件');
-      return null;
+      setStatus('error', '请选择文件')
+      return null
     }
 
-    resetState();
-    uploading.value = true;
-    currentFile.value = file;
-    error.value = null;
+    resetState()
+    uploading.value = true
+    currentFile.value = file
+    error.value = null
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('purpose', purpose);
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('purpose', purpose)
 
-      const endpoint = API_ENDPOINTS[purpose] || API_ENDPOINTS.general;
+      const endpoint = API_ENDPOINTS[purpose] || API_ENDPOINTS.general
 
       // 勿手动设置 multipart Content-Type：必须带 boundary，由浏览器在 FormData 请求中自动补全
-      const response = await api.post<ApiResponse<unknown>>(endpoint, formData);
+      const response = await api.post<ApiResponse<unknown>>(endpoint, formData)
 
-      updateProgress(100, '上传完成');
-      
+      updateProgress(100, '上传完成')
+
       if (response.success) {
-        setStatus('success', response.message || '导入成功');
-        return response;
+        setStatus('success', response.message || '导入成功')
+        return response
       } else {
-        setStatus('error', response.message || '导入失败');
-        return null;
+        setStatus('error', response.message || '导入失败')
+        return null
       }
     } catch (err) {
-      console.error('File upload error:', err);
-      const errorMessage = err instanceof Error ? err.message : '网络错误，请检查网络连接';
-      setStatus('error', errorMessage);
-      error.value = err instanceof Error ? err : new Error(String(err));
-      return null;
+      console.error('File upload error:', err)
+      const errorMessage = err instanceof Error ? err.message : '网络错误，请检查网络连接'
+      setStatus('error', errorMessage)
+      error.value = err instanceof Error ? err : new Error(String(err))
+      return null
     } finally {
-      uploading.value = false;
+      uploading.value = false
     }
   }
 
   async function uploadCustomersImport(
-    file: File | null, 
-    onProgress?: (percent: number, filename: string) => void
+    file: File | null,
+    onProgress?: (percent: number, filename: string) => void,
   ): Promise<ApiResponse<unknown> | null> {
-    return uploadFile(file, 'customers_import', onProgress);
+    return uploadFile(file, 'customers_import', onProgress)
   }
 
   async function uploadProductImport(
-    file: File | null, 
-    onProgress?: (percent: number, filename: string) => void
+    file: File | null,
+    onProgress?: (percent: number, filename: string) => void,
   ): Promise<ApiResponse<unknown> | null> {
-    return uploadFile(file, 'product_import', onProgress);
+    return uploadFile(file, 'product_import', onProgress)
   }
 
   async function uploadOrderParse(
-    file: File | null, 
-    onProgress?: (percent: number, filename: string) => void
+    file: File | null,
+    onProgress?: (percent: number, filename: string) => void,
   ): Promise<ApiResponse<unknown> | null> {
-    return uploadFile(file, 'order_parse', onProgress);
+    return uploadFile(file, 'order_parse', onProgress)
   }
 
   async function uploadMaterialsImport(
-    file: File | null, 
-    onProgress?: (percent: number, filename: string) => void
+    file: File | null,
+    onProgress?: (percent: number, filename: string) => void,
   ): Promise<ApiResponse<unknown> | null> {
-    return uploadFile(file, 'materials_import', onProgress);
+    return uploadFile(file, 'materials_import', onProgress)
   }
 
   async function uploadMultipleFiles(
-    files: File[] | null, 
-    purpose: string = 'general', 
-    onFileComplete?: (result: UploadResult, current: number, total: number) => void
+    files: File[] | null,
+    purpose: string = 'general',
+    onFileComplete?: (result: UploadResult, current: number, total: number) => void,
   ): Promise<UploadResult[]> {
     if (!files || files.length === 0) {
-      setStatus('error', '没有可处理的文件');
-      return [];
+      setStatus('error', '没有可处理的文件')
+      return []
     }
 
-    uploading.value = true;
-    error.value = null;
-    const results: UploadResult[] = [];
-    const totalFiles = files.length;
+    uploading.value = true
+    error.value = null
+    const results: UploadResult[] = []
+    const totalFiles = files.length
 
     try {
       for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        currentFile.value = file;
-        const startPercent = Math.round((i / totalFiles) * 100);
-        updateProgress(startPercent, `处理中：${file.name}`);
+        const file = files[i]
+        currentFile.value = file
+        const startPercent = Math.round((i / totalFiles) * 100)
+        updateProgress(startPercent, `处理中：${file.name}`)
 
-        const result = await uploadFile(file, purpose);
+        const result = await uploadFile(file, purpose)
         results.push({
           file: file.name,
           type: detectFileType(file),
           success: !!result,
-          data: result
-        });
+          data: result,
+        })
 
         if (onFileComplete) {
-          onFileComplete(results[results.length - 1], i + 1, totalFiles);
+          onFileComplete(results[results.length - 1], i + 1, totalFiles)
         }
       }
 
-      const successCount = results.filter(r => r.success).length;
+      const successCount = results.filter((r) => r.success).length
       if (successCount === totalFiles) {
-        setStatus('success', `已完成 ${totalFiles} 个文件导入`);
+        setStatus('success', `已完成 ${totalFiles} 个文件导入`)
       } else if (successCount > 0) {
-        setStatus('success', `成功 ${successCount}/${totalFiles} 个文件`);
+        setStatus('success', `成功 ${successCount}/${totalFiles} 个文件`)
       } else {
-        setStatus('error', '所有文件导入失败');
+        setStatus('error', '所有文件导入失败')
       }
 
-      updateProgress(100, '全部完成');
-      return results;
+      updateProgress(100, '全部完成')
+      return results
     } catch (err) {
-      console.error('Batch upload error:', err);
-      setStatus('error', err instanceof Error ? err.message : '批量上传失败');
-      error.value = err instanceof Error ? err : new Error(String(err));
-      return results;
+      console.error('Batch upload error:', err)
+      setStatus('error', err instanceof Error ? err.message : '批量上传失败')
+      error.value = err instanceof Error ? err : new Error(String(err))
+      return results
     } finally {
-      uploading.value = false;
+      uploading.value = false
     }
   }
 
@@ -258,8 +272,8 @@ export function useFileImport(): UseFileImportReturn {
     uploadProductImport,
     uploadOrderParse,
     uploadMaterialsImport,
-    uploadMultipleFiles
-  };
+    uploadMultipleFiles,
+  }
 }
 
-export default useFileImport;
+export default useFileImport

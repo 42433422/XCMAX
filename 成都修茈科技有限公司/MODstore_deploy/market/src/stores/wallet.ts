@@ -35,7 +35,7 @@ export const useWalletStore = defineStore('wallet', () => {
       } catch (err) {
         console.warn(`[Wallet] 余额刷新失败 (尝试 ${attempt + 1}/${retryCount + 1}):`, err)
         if (attempt < retryCount) {
-          await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)))
+          await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)))
         } else {
           error.value = err instanceof Error ? err.message : String(err)
           console.error('[Wallet] 所有重试失败，余额设为 null')
@@ -72,6 +72,6 @@ export const useWalletStore = defineStore('wallet', () => {
     refreshBalance,
     setBalance,
     setMembershipReferenceYuan,
-    clear
+    clear,
   }
 })

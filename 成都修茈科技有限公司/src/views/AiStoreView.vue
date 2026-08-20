@@ -4,9 +4,7 @@
       <div class="store-hero-inner">
         <p class="store-eyebrow">XC AGI · AI 员工商店</p>
         <h1 class="store-title">按行业与类型挑选能力</h1>
-        <p class="store-sub">
-          浏览可购买的 MOD 与 AI 员工扩展；管理员上架时可填写「行业」便于归类。
-        </p>
+        <p class="store-sub">浏览可购买的 MOD 与 AI 员工扩展；管理员上架时可填写「行业」便于归类。</p>
       </div>
     </header>
 
@@ -28,14 +26,7 @@
       <div class="filter-block">
         <span class="filter-label">行业</span>
         <div class="chip-row">
-          <button
-            type="button"
-            class="chip"
-            :class="{ active: !filters.industry }"
-            @click="setIndustry('')"
-          >
-            全部
-          </button>
+          <button type="button" class="chip" :class="{ active: !filters.industry }" @click="setIndustry('')">全部</button>
           <button
             v-for="ind in facetIndustries"
             :key="'ind-' + ind"
@@ -52,14 +43,7 @@
       <div class="filter-block">
         <span class="filter-label">类型</span>
         <div class="chip-row">
-          <button
-            type="button"
-            class="chip"
-            :class="{ active: !filters.artifact }"
-            @click="setArtifact('')"
-          >
-            全部
-          </button>
+          <button type="button" class="chip" :class="{ active: !filters.artifact }" @click="setArtifact('')">全部</button>
           <button
             v-for="art in facetArtifacts"
             :key="'art-' + art"
@@ -77,9 +61,30 @@
         <span class="filter-label">保密级</span>
         <div class="chip-row">
           <button type="button" class="chip" :class="{ active: !filters.securityLevel }" @click="setSecurityLevel('')">全部</button>
-          <button type="button" class="chip" :class="{ active: filters.securityLevel === 'personal' }" @click="setSecurityLevel('personal')">个人级</button>
-          <button type="button" class="chip" :class="{ active: filters.securityLevel === 'enterprise' }" @click="setSecurityLevel('enterprise')">企业级</button>
-          <button type="button" class="chip" :class="{ active: filters.securityLevel === 'confidential' }" @click="setSecurityLevel('confidential')">保密级</button>
+          <button
+            type="button"
+            class="chip"
+            :class="{ active: filters.securityLevel === 'personal' }"
+            @click="setSecurityLevel('personal')"
+          >
+            个人级
+          </button>
+          <button
+            type="button"
+            class="chip"
+            :class="{ active: filters.securityLevel === 'enterprise' }"
+            @click="setSecurityLevel('enterprise')"
+          >
+            企业级
+          </button>
+          <button
+            type="button"
+            class="chip"
+            :class="{ active: filters.securityLevel === 'confidential' }"
+            @click="setSecurityLevel('confidential')"
+          >
+            保密级
+          </button>
         </div>
       </div>
     </div>
@@ -103,9 +108,7 @@
           <span class="price" :class="{ free: item.price <= 0 }">
             {{ item.price <= 0 ? '免费' : '¥' + item.price.toFixed(2) }}
           </span>
-          <router-link :to="{ name: 'catalog-detail', params: { id: item.id } }" class="btn btn-detail">
-            详情
-          </router-link>
+          <router-link :to="{ name: 'catalog-detail', params: { id: item.id } }" class="btn btn-detail"> 详情 </router-link>
         </div>
       </article>
     </div>
@@ -328,7 +331,10 @@ onMounted(async () => {
   padding: 6px 12px;
   border-radius: 999px;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s;
 }
 
 .chip:hover {
@@ -427,7 +433,9 @@ onMounted(async () => {
   background: rgba(255, 255, 255, 0.02);
   display: flex;
   flex-direction: column;
-  transition: border-color 0.2s, background 0.2s;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
 }
 
 .store-card:hover {
@@ -464,9 +472,18 @@ onMounted(async () => {
   color: #86efac;
 }
 
-.tag-personal { background: rgba(74, 222, 128, 0.12); color: #86efac; }
-.tag-enterprise { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
-.tag-confidential { background: rgba(248, 113, 113, 0.15); color: #f87171; }
+.tag-personal {
+  background: rgba(74, 222, 128, 0.12);
+  color: #86efac;
+}
+.tag-enterprise {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
+}
+.tag-confidential {
+  background: rgba(248, 113, 113, 0.15);
+  color: #f87171;
+}
 
 .card-title {
   font-size: 16px;

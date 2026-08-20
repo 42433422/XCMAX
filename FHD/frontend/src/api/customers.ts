@@ -1,48 +1,48 @@
-import { api } from './core';
-import type { ApiResponse } from '@/types/api';
-import type { Customer, CustomerCreateDTO, CustomerUpdateDTO } from '@/types/customer';
-import { resolveErpApiBase } from '@/utils/erpDomainPaths';
+import { api } from './core'
+import type { ApiResponse } from '@/types/api'
+import type { Customer, CustomerCreateDTO, CustomerUpdateDTO } from '@/types/customer'
+import { resolveErpApiBase } from '@/utils/erpDomainPaths'
 
 function erpBase(): string {
-  return resolveErpApiBase();
+  return resolveErpApiBase()
 }
 
 export const customersApi = {
   getCustomers(params: Record<string, unknown> = {}): Promise<ApiResponse<Customer[]>> {
-    return api.get<ApiResponse<Customer[]>>(`${erpBase()}/customers/list`, params);
+    return api.get<ApiResponse<Customer[]>>(`${erpBase()}/customers/list`, params)
   },
 
   getCustomer(id: number | string): Promise<ApiResponse<Customer>> {
-    return api.get<ApiResponse<Customer>>(`${erpBase()}/customers/${id}`);
+    return api.get<ApiResponse<Customer>>(`${erpBase()}/customers/${id}`)
   },
 
   createCustomer(data: CustomerCreateDTO): Promise<ApiResponse<Customer>> {
-    return api.post<ApiResponse<Customer>>(`${erpBase()}/customers`, data);
+    return api.post<ApiResponse<Customer>>(`${erpBase()}/customers`, data)
   },
 
   updateCustomer(id: number | string, data: CustomerUpdateDTO): Promise<ApiResponse<Customer>> {
-    return api.put<ApiResponse<Customer>>(`${erpBase()}/customers/${id}`, data);
+    return api.put<ApiResponse<Customer>>(`${erpBase()}/customers/${id}`, data)
   },
 
   deleteCustomer(id: number | string): Promise<ApiResponse<void>> {
-    return api.delete<ApiResponse<void>>(`${erpBase()}/customers/${id}`);
+    return api.delete<ApiResponse<void>>(`${erpBase()}/customers/${id}`)
   },
 
   batchDeleteCustomers(customerIds: (number | string)[]): Promise<ApiResponse<void>> {
-    return api.post<ApiResponse<void>>(`${erpBase()}/customers/batch-delete`, { ids: customerIds });
+    return api.post<ApiResponse<void>>(`${erpBase()}/customers/batch-delete`, { ids: customerIds })
   },
 
   exportCustomersXlsx(templateId?: string): Promise<Response> {
-    const params: Record<string, unknown> = {};
+    const params: Record<string, unknown> = {}
     if (templateId) {
-      params.template_id = templateId;
+      params.template_id = templateId
     }
-    return api.download(`${erpBase()}/customers/export`, params);
+    return api.download(`${erpBase()}/customers/export`, params)
   },
 
   importCustomersExcel(formData: FormData): Promise<ApiResponse<unknown>> {
-    return api.post<ApiResponse<unknown>>(`${erpBase()}/customers/import`, formData);
-  }
-};
+    return api.post<ApiResponse<unknown>>(`${erpBase()}/customers/import`, formData)
+  },
+}
 
-export default customersApi;
+export default customersApi

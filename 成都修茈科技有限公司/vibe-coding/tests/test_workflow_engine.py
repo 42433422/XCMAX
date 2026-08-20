@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import json
 
-from vibe_coding.runtime import CodeSkillRuntime, JsonCodeSkillStore
 from vibe_coding import MockLLM
 from vibe_coding.code_factory import NLCodeSkillFactory
+from vibe_coding.runtime import CodeSkillRuntime, JsonCodeSkillStore
 from vibe_coding.workflow_engine import VibeWorkflowEngine
 from vibe_coding.workflow_factory import NLWorkflowFactory
 
@@ -21,9 +21,7 @@ def _spec(skill_id: str, fn: str) -> str:
             "purpose": "demo",
             "signature": {"params": ["text"], "return_type": "dict", "required_params": ["text"]},
             "dependencies": [],
-            "test_cases": [
-                {"case_id": "happy", "input_data": {"text": "hi"}, "expected_output": {"text": "hi"}}
-            ],
+            "test_cases": [{"case_id": "happy", "input_data": {"text": "hi"}, "expected_output": {"text": "hi"}}],
             "quality_gate": {"required_keys": ["text"]},
             "domain_keywords": [],
         }
@@ -34,9 +32,7 @@ def _identity_code(fn: str) -> str:
     return json.dumps(
         {
             "source_code": (
-                f"def {fn}(text):\n"
-                "    \"\"\"Return text in the workflow payload.\"\"\"\n"
-                "    return {'text': str(text)}\n"
+                f'def {fn}(text):\n    """Return text in the workflow payload."""\n    return {{\'text\': str(text)}}\n'
             )
         }
     )

@@ -2,7 +2,6 @@
 测试实际标签图片的网格检测
 """
 
-
 import cv2
 import numpy as np
 from PIL import Image

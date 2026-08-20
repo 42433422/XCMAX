@@ -422,11 +422,13 @@ class TestCustomersSchemaHintIfEmpty:
     def test_returns_hint_on_engine_error(self):
         with patch(
             "app.infrastructure.persistence.compat_db.queries.get_sync_engine",
-            side_effect=OSError("no engine"),
+            side_effect=OSError("postgresql://admin:secret@internal-db/no engine"),
         ):
             result = _customers_schema_hint_if_empty()
         assert result is not None
         assert "无法连接" in result
+        assert "secret" not in result
+        assert "internal-db" not in result
 
 
 # ---------------------------------------------------------------------------

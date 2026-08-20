@@ -1,9 +1,6 @@
 import type { RouteLocationRaw } from 'vue-router'
 import { CORE_WORKFLOW_MOD_ID, readCoreWorkflowModPagesEnabled } from '@/constants/coreWorkflowMod'
-import {
-  OFFICE_EMPLOYEE_PACK_BRIDGE_MOD_ID,
-  readOfficeEmployeePackModPagesEnabled,
-} from '@/constants/officeEmployeePackMod'
+import { OFFICE_EMPLOYEE_PACK_BRIDGE_MOD_ID, readOfficeEmployeePackModPagesEnabled } from '@/constants/officeEmployeePackMod'
 
 const WORKFLOW_VIZ_MOD_PATH = `/mod/${CORE_WORKFLOW_MOD_ID}/workflow-visualization`
 const OTHER_TOOLS_MOD_PATH = `/mod/${OFFICE_EMPLOYEE_PACK_BRIDGE_MOD_ID}/other-tools`

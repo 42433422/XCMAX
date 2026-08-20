@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """brief → 员工实现规划器（Phase 3 第一步）。
 
 把用户自然语言 brief 拆成一个**可执行**的实现计划：
@@ -24,6 +25,8 @@ import json
 import re
 from dataclasses import asdict, dataclass, field
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
+
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 # ── 合法 handler 集合（与 employee_pack_blueprints_template._DISPATCH 一致）────
 LEGAL_HANDLERS = ("echo", "llm_md", "webhook", "vibe_edit", "vibe_heal", "vibe_code")
@@ -128,7 +131,7 @@ async def plan_employee_implementation(
                 {"role": "user", "content": brief[:6000]},
             ]
         )
-    except Exception as e:  # noqa: BLE001
+    except BOUNDARY_ERRORS as e:  # noqa: BLE001
         return _fallback_plan(fallback_handler, reason=f"LLM 不可用：{e}"), ""
 
     raw = _strip_fence(str(content or ""))

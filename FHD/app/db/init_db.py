@@ -26,6 +26,9 @@ from app.utils.path_io.external_sqlite import sqlite_conn
 if TYPE_CHECKING:
     from sqlalchemy import Table
     from sqlalchemy.engine import Engine
+else:
+    Engine = Any
+    Table = Any
 
 from app.utils.path_io.path_utils import get_app_data_dir, get_base_dir, get_resource_path
 

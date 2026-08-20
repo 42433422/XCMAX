@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr"
 """Read and normalize strict duty-workforce burn-in evidence."""
 
 from __future__ import annotations
@@ -7,7 +8,7 @@ import json
 import os
 import re
 from collections import deque
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
 
@@ -41,7 +42,7 @@ ALLOWED_REASON_CODES = frozenset(
 
 
 def iso_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def audit_path() -> Path:
@@ -93,8 +94,8 @@ def _safe_recorded_at(value: Any) -> str:
     except ValueError:
         return ""
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc).isoformat()
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC).isoformat()
 
 
 def _normalized_row(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:

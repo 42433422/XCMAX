@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from app.mod_sdk.errors import BOUNDARY_ERRORS
+
 EMPLOYEE_ID = "excel-qc-employee"
 EMPLOYEE_LABEL = "Excel 质检员"
 SYSTEM_PROMPT = "你是Excel 质检员。你必须按 direct_python 方式对回填结果做独立结构对账：计划符合性、保护区完整性、expected 自洽、公式健康、rules_ref 追溯、结构漂移，写出 qc_report.json 并给出 PASS/WARN/FAIL 与问责路由。你不复用映射员/写入员代码路径，从独立输入重算不变量。禁止在证据不足时给 PASS；缺输入的检查必须标记 skipped 并说明，不得假装通过。"
@@ -169,9 +171,11 @@ async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
             "error": normalized["error"],
             "meta": normalized["meta"],
         }
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         return _err(
             str(exc),
-            warnings=["请检查回填结果文件与 payload.plan/plan_path（必需）、rules/template（可选）是否齐备。"],
+            warnings=[
+                "请检查回填结果文件与 payload.plan/plan_path（必需）、rules/template（可选）是否齐备。"
+            ],
             meta={"handler": "direct_python", "action": "convert", "runtime": "generated_python"},
         )

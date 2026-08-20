@@ -17,7 +17,7 @@ wb = load_workbook(str(template_path))
 print(f"\n工作表：{wb.sheetnames}")
 
 for i, ws in enumerate(wb.worksheets):
-    print(f"\n工作表 {i+1}: {ws.title}")
+    print(f"\n工作表 {i + 1}: {ws.title}")
     print(f"  最大行：{ws.max_row}, 最大列：{ws.max_column}")
     merged = list(ws.merged_cells.ranges) if ws.merged_cells.ranges else []
     print(f"  合并单元格数量：{len(merged)}")

@@ -1,6 +1,6 @@
         # 生态伙伴接入员 (`ecosystem-partner-onboard-officer`)
 
-        **area**：`partner-ecosystem`  
+        **area**：`partner-ecosystem`
         **yuangon 路径**：`成都修茈科技有限公司/yuangon/partner-ecosystem/ecosystem-partner-onboard-officer/`
 
         ## 职责
@@ -14,11 +14,13 @@
         ## 支持的 Handlers
 
         - `llm_md`：接收 Markdown 任务描述，调用 LLM 输出结构化结果
+
 - `echo`：调试用：原样返回输入，用于 smoke 测试
 
         ## Scope（核心文件范围）
 
         - `MODstore_deploy/modstore_server/**/partner*`
+
 - `MODstore_deploy/modstore_server/**/tenant**`
 - `FHD/app/**/external_crm*`
 - `yuangon/partner-ecosystem/ecosystem-partner-onboard-officer/**`

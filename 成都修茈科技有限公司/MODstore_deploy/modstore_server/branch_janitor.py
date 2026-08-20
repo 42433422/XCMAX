@@ -20,6 +20,8 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 logger = logging.getLogger(__name__)
 
 _CLEAN_PREFIXES = ("cr/", "auto/daily-")
@@ -28,7 +30,12 @@ _PROTECTED = {"main", "master", "auto/daily", "HEAD"}
 
 def _git(root: str, args: List[str], *, timeout: float = 60.0) -> subprocess.CompletedProcess:
     return subprocess.run(
-        ["git", *args], cwd=root, capture_output=True, text=True, timeout=timeout, shell=False
+        ["git", *args],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        shell=False,
     )
 
 
@@ -57,13 +64,17 @@ def prune_stale_branches(
 ) -> Dict[str, Any]:
     """清理已合并/超期的 cr/* 与 auto/daily-* 分支。返回统计。"""
     if not _enabled():
-        return {"ok": True, "skipped": True, "reason": "MODSTORE_BRANCH_CLEANUP_ENABLED=0"}
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "MODSTORE_BRANCH_CLEANUP_ENABLED=0",
+        }
     try:
         from modstore_server.cr_git_pipeline import is_git_repo
 
         if not is_git_repo(Path(root)):
             return {"ok": True, "skipped": True, "reason": "not_git_repo"}
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
 
     remote = (
@@ -86,7 +97,12 @@ def prune_stale_branches(
         merged = {x.strip() for x in mres.stdout.splitlines() if x.strip()}
 
     listing = _git(
-        root, ["for-each-ref", "--format=%(refname:short) %(committerdate:unix)", "refs/heads/"]
+        root,
+        [
+            "for-each-ref",
+            "--format=%(refname:short) %(committerdate:unix)",
+            "refs/heads/",
+        ],
     )
     deleted_local: List[str] = []
     deleted_remote: List[str] = []
@@ -96,7 +112,7 @@ def prune_stale_branches(
         if len(parts) != 2:
             continue
         name, ts_raw = parts[0].strip(), parts[1].strip()
-        if name in _PROTECTED or name == current or name == base_ref:
+        if name in (current, base_ref) or name in _PROTECTED:
             continue
         if not any(name.startswith(p) for p in _CLEAN_PREFIXES):
             continue

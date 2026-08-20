@@ -1026,7 +1026,8 @@ class TestImportFromExcelLockedAdditional:
         with patch.object(svc, "_get_session", side_effect=RuntimeError("db error")):
             result = svc._import_from_excel_locked("nonexistent.xlsx")
         assert result["success"] is False
-        assert "db error" in result["message"]
+        assert result["message"] == "客户导入失败"
+        assert "db error" not in result["message"]
 
 
 # ---------------------------------------------------------------------------
@@ -1055,7 +1056,8 @@ class TestExportToExcelAdditional:
         with patch.object(svc, "_get_session", side_effect=RuntimeError("db error")):
             result = svc.export_to_excel()
         assert result["success"] is False
-        assert "db error" in result["message"]
+        assert result["message"] == "客户导出失败"
+        assert "db error" not in result["message"]
 
     def test_export_with_template_id_not_found(self, tmp_path):
         """Test export with template_id that doesn't match any template."""

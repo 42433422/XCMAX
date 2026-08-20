@@ -10,6 +10,8 @@ import logging
 import os
 from pathlib import Path
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -21,7 +23,11 @@ def _env_truthy(name: str) -> bool:
 def try_auto_deploy_after_purchase(*, item_id: int, order_kind: str) -> dict:
     """在 Python ``_fulfill_paid_order`` 成功后调用；幂等与失败均不打断主流程。"""
     if not _env_truthy("MODSTORE_AUTO_DEPLOY_XCAGI"):
-        return {"ok": True, "skipped": True, "reason": "MODSTORE_AUTO_DEPLOY_XCAGI disabled"}
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "MODSTORE_AUTO_DEPLOY_XCAGI disabled",
+        }
     kind = (order_kind or "").strip().lower()
     if kind != "item" or not item_id:
         return {"ok": True, "skipped": True, "reason": "not item order"}
@@ -59,6 +65,6 @@ def try_auto_deploy_after_purchase(*, item_id: int, order_kind: str) -> dict:
         deployed = deploy_to_xcagi([pkg_id], library, Path(xc), replace=True)
         logger.info("MODSTORE_AUTO_DEPLOY_XCAGI deployed %s -> %s", deployed, xc)
         return {"ok": True, "deployed": deployed, "xcagi_root": str(xc)}
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         logger.exception("MODSTORE_AUTO_DEPLOY_XCAGI failed")
         return {"ok": False, "error": str(e)}

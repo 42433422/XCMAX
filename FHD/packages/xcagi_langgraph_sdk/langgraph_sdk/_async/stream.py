@@ -24,6 +24,7 @@ from langchain_core.language_models.chat_model_stream import AsyncChatModelStrea
 from langchain_protocol import Event, SubscribeParams
 
 from langgraph_sdk._async.http import HttpClient
+from langgraph_sdk._exception_policy import BOUNDARY_ERRORS, TERMINATION_ERRORS
 from langgraph_sdk.schema import QueryParamTypes
 from langgraph_sdk.stream.controller import _SeenEventIds
 from langgraph_sdk.stream.decoders import (
@@ -190,7 +191,7 @@ class RunModule:
                 gate.set_result(None)
             self._owner._run_seen = True
             return result
-        except BaseException as err:
+        except TERMINATION_ERRORS as err:
             # Why: gate MUST reject on any exit type, including CancelledError,
             # so awaiters see the failure rather than hanging indefinitely.
             if not gate.done():
@@ -1264,7 +1265,7 @@ class AsyncThreadStream:
     async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
         try:
             await self.close()
-        except BaseException as close_err:
+        except TERMINATION_ERRORS as close_err:
             if exc is None:
                 raise
             # Original exception takes precedence; chain close error as context.
@@ -1639,7 +1640,7 @@ class AsyncThreadStream:
                     # queued before None.
                     if _is_root_terminal_lifecycle(event):
                         self._signal_paused()
-            except Exception:
+            except BOUNDARY_ERRORS:
                 # Pump errored — fall through to error-handling/reconnect.
                 pass
             if self._shared_stream is shared:
@@ -1698,7 +1699,7 @@ class AsyncThreadStream:
                 await new_stream.ready
             except asyncio.CancelledError:
                 raise
-            except Exception:
+            except BOUNDARY_ERRORS:
                 await self._reconnect_sleep(attempt)
                 continue
             self._shared_stream = new_stream
@@ -1881,7 +1882,7 @@ class AsyncThreadStream:
                 await asyncio.sleep(0.05)
             except asyncio.CancelledError:
                 raise
-            except Exception as exc:
+            except BOUNDARY_ERRORS as exc:
                 reconnect_attempts += 1
                 if reconnect_attempts <= self._lifecycle_max_reconnect_attempts:
                     await asyncio.sleep(0.05)

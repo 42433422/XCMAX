@@ -33,7 +33,10 @@ from app.application.etl.product_identity import (
 )
 
 _PARSER_FACADE_EXPORTS: tuple[Any, ...] = (
-    deque, Path, advise_workbook_regions, project_delivery_region
+    deque,
+    Path,
+    advise_workbook_regions,
+    project_delivery_region,
 )
 _PARSER_FACADE_EXPORTS += (region_source_features, customer_alias_key, parse_quote_rows)
 _PARSER_FACADE_EXPORTS += (parse_shipment_history_rows, parse_structured_shipment_history_rows)
@@ -466,8 +469,6 @@ def _unique_source_headers(source_by_col: dict[int, str]) -> dict[int, str]:
         seen[base] = seen.get(base, 0) + 1
         result[column] = base if seen[base] == 1 else f"{base}_{seen[base]}"
     return result
-
-
 
 
 def parse_customer_product_regions(

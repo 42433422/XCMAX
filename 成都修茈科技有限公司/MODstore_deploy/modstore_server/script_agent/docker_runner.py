@@ -34,6 +34,7 @@ import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.script_agent.sandbox_host import (
     SandboxHostContext,
     SandboxRpcServer,
@@ -96,7 +97,7 @@ async def run_in_docker(
     cpus = os.environ.get("MODSTORE_SANDBOX_DOCKER_CPUS") or DEFAULT_CPUS
     try:
         pids = int(os.environ.get("MODSTORE_SANDBOX_DOCKER_PIDS") or DEFAULT_PIDS)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pids = DEFAULT_PIDS
 
     root = script_root or SCRIPT_ROOT
@@ -125,7 +126,9 @@ async def run_in_docker(
     # NOTE: SandboxRpcServer 默认绑 127.0.0.1；docker 容器无法回连。
     # 这里通过 monkeypatch 起在 0.0.0.0 上：
     rpc._server = await asyncio.start_server(  # type: ignore[attr-defined]
-        rpc._handle_conn, host="0.0.0.0", port=0  # type: ignore[attr-defined]
+        rpc._handle_conn,
+        host="0.0.0.0",
+        port=0,  # type: ignore[attr-defined]
     )
     sock = rpc._server.sockets[0] if rpc._server.sockets else None  # type: ignore[attr-defined]
     if sock is None:
@@ -184,7 +187,7 @@ async def run_in_docker(
 
         try:
             rc = await asyncio.wait_for(proc.wait(), timeout=timeout_seconds)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             timed_out = True
             try:
                 proc.kill()
@@ -192,7 +195,7 @@ async def run_in_docker(
                 pass
             try:
                 rc = await proc.wait()
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 rc = -9
 
         stdout_bytes = await stdout_task
@@ -203,7 +206,7 @@ async def run_in_docker(
             try:
                 proc.kill()
                 await proc.wait()
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 pass
 
     stdout = stdout_bytes.decode("utf-8", errors="replace")

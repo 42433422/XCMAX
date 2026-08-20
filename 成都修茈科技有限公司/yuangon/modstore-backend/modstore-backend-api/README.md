@@ -6,18 +6,18 @@
 
 ## 负责文件
 
-| 文件 | 说明 |
-|------|------|
-| `workbench_api.py` | 工作台 API |
-| `market_api.py` | 市场 API |
-| `market_catalog_api.py` | 目录 API |
-| `script_workflow_api.py` | 脚本工作流 API |
-| `realtime_ws.py` | WebSocket 实时通道 |
-| `llm_api.py` / `llm_chat_proxy.py` / `llm_catalog.py` | LLM 接口层 |
-| `workflow_nl_graph.py` | 自然语言工作流图 |
-| `api/**` | API 工厂、中间件、XSS 过滤 |
-| `eventing/**` | 事件订阅 |
-| `models.py` | 数据模型 |
+| 文件                                                  | 说明                       |
+| ----------------------------------------------------- | -------------------------- |
+| `workbench_api.py`                                    | 工作台 API                 |
+| `market_api.py`                                       | 市场 API                   |
+| `market_catalog_api.py`                               | 目录 API                   |
+| `script_workflow_api.py`                              | 脚本工作流 API             |
+| `realtime_ws.py`                                      | WebSocket 实时通道         |
+| `llm_api.py` / `llm_chat_proxy.py` / `llm_catalog.py` | LLM 接口层                 |
+| `workflow_nl_graph.py`                                | 自然语言工作流图           |
+| `api/**`                                              | API 工厂、中间件、XSS 过滤 |
+| `eventing/**`                                         | 事件订阅                   |
+| `models.py`                                           | 数据模型                   |
 
 ## 典型任务
 
@@ -29,12 +29,12 @@
 
 ## KPI
 
-| 指标 | 目标 |
-|------|------|
-| API 可用率 | ≥ 99.9% |
-| P99 响应时间 | < 500ms（非 LLM） |
-| 测试覆盖率 | ≥ 80% |
-| 上线后 P0 事故数 | 0 |
+| 指标             | 目标              |
+| ---------------- | ----------------- |
+| API 可用率       | ≥ 99.9%           |
+| P99 响应时间     | < 500ms（非 LLM） |
+| 测试覆盖率       | ≥ 80%             |
+| 上线后 P0 事故数 | 0                 |
 
 ## 禁区
 

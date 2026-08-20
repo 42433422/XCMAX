@@ -4,14 +4,14 @@
 
 以下「GitHub Actions 作业显示名」（Settings → Branches → `main` → Required checks）与上表勾选项对齐；需在仓库 **Branch protection** 中勾选，合并到 `main` 才算满足「CI 全部通过」的自动化部分。
 
-| Checklist | 自动化来源 | Required check 名称（作业 `name`，以仓库 UI 为准） |
-|-----------|------------|---------------------------------------------------|
-| CI 全部通过（组件） | `.github/workflows` | `Marketing site (static pages)`、`Root project (Vue 3 + Vite)`、`Market subproject (MODstore_deploy/market)`、`MODstore (Python — lint + tests + coverage)`（内含 **`pip-audit`**）、`MODstore (Java payment service)`、`vibe-coding (Python package)`（内含 **`pip-audit`**）、`nginx-t-snippets`（仅当改动命中 nginx workflow 的路径时触发）；Root/Market 前端 job 内含 **`npm audit`** |
-| CI 全部通过（全仓提交门禁） | `ci-runtime-artifacts-guard.yml` | `Forbid committed runtime artifacts` |
-| 密钥泄露扫描（PR/main） | `secret-scan.yml` | `Secret scan (gitleaks)`（**建议 required**） |
-| 轻量压测（发布前可选用） | `performance-smoke.yml`（仅 `workflow_dispatch`） | `k6 full-link smoke`，**不设为 required**：按本清单在发布窗口手动跑一次或接入专用 gate URL（见 [.github/workflows/README.md](../../../.github/workflows/README.md) 中「可选部署前网关」） |
-| 支付相关变更 | `docs/PAYMENT_GRAY_RELEASE.md` | **人工 / 专有流程**，无单一 GitHub job |
-| DB 迁移、备份、预发冒烟、Grafana | 本清单其余条目 | **人工或外部系统**；可由 `DEPLOY_PREFLIGHT_GATE_URL` 聚合为一条机器门禁（同上 README） |
+| Checklist                        | 自动化来源                                        | Required check 名称（作业 `name`，以仓库 UI 为准）                                                                                                                                                                                                                                                                                                                                        |
+| -------------------------------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CI 全部通过（组件）              | `.github/workflows`                               | `Marketing site (static pages)`、`Root project (Vue 3 + Vite)`、`Market subproject (MODstore_deploy/market)`、`MODstore (Python — lint + tests + coverage)`（内含 **`pip-audit`**）、`MODstore (Java payment service)`、`vibe-coding (Python package)`（内含 **`pip-audit`**）、`nginx-t-snippets`（仅当改动命中 nginx workflow 的路径时触发）；Root/Market 前端 job 内含 **`npm audit`** |
+| CI 全部通过（全仓提交门禁）      | `ci-runtime-artifacts-guard.yml`                  | `Forbid committed runtime artifacts`                                                                                                                                                                                                                                                                                                                                                      |
+| 密钥泄露扫描（PR/main）          | `secret-scan.yml`                                 | `Secret scan (gitleaks)`（**建议 required**）                                                                                                                                                                                                                                                                                                                                             |
+| 轻量压测（发布前可选用）         | `performance-smoke.yml`（仅 `workflow_dispatch`） | `k6 full-link smoke`，**不设为 required**：按本清单在发布窗口手动跑一次或接入专用 gate URL（见 [.github/workflows/README.md](../../../.github/workflows/README.md) 中「可选部署前网关」）                                                                                                                                                                                                 |
+| 支付相关变更                     | `docs/PAYMENT_GRAY_RELEASE.md`                    | **人工 / 专有流程**，无单一 GitHub job                                                                                                                                                                                                                                                                                                                                                    |
+| DB 迁移、备份、预发冒烟、Grafana | 本清单其余条目                                    | **人工或外部系统**；可由 `DEPLOY_PREFLIGHT_GATE_URL` 聚合为一条机器门禁（同上 README）                                                                                                                                                                                                                                                                                                    |
 
 路径过滤：`paths` 未命中的 CI 对工作流会 **skipped**，通常不阻塞合并；**Runtime Artifacts Guard** 对 `main` 上所有 push/PR 生效，应始终 required。  
 完整工作流索引：[.github/workflows/README.md](../../../.github/workflows/README.md)。
@@ -23,7 +23,7 @@
 
 ## 可选 JSON 部署日志（排障）
 
-在服务器执行 `deploy.sh`、`scripts/python-release.sh`、`scripts/node-release.sh` 时，设置 **`MODSTORE_DEPLOY_LOG_JSON=1`** 可额外输出**单行 JSON**阶段事件（时间与 `deploy-release-officer` 的 pipeline  skill 对齐方向），便于日志采集与告警解析。
+在服务器执行 `deploy.sh`、`scripts/python-release.sh`、`scripts/node-release.sh` 时，设置 **`MODSTORE_DEPLOY_LOG_JSON=1`** 可额外输出**单行 JSON**阶段事件（时间与 `deploy-release-officer` 的 pipeline skill 对齐方向），便于日志采集与告警解析。
 
 ---
 

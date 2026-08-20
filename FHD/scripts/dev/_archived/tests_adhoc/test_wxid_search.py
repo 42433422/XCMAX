@@ -1,4 +1,7 @@
+# mypy: disable-error-code="import-not-found"
 import sys
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 sys.path.insert(0, r"E:\FHD\XCAGI\resources\wechat-decrypt")
 from mcp_server import _decompress_content
@@ -36,7 +39,7 @@ for tbl in tables:
                 found.append((tbl, row[2], content))
                 print(f"找到! 表: {tbl}, 时间: {row[2]}")
                 print(f"  内容: {repr(content[:100])}")
-    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
         continue
 
 print(f"\n总计找到 {len(found)} 条消息包含 wxid")

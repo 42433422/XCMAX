@@ -39,8 +39,8 @@ from .client import (
 from .packager import (
     PackagedArtifact,
     PackagingError,
-    SkillPackager,
     SkillPackageOptions,
+    SkillPackager,
 )
 from .publisher import PublishOptions, PublishResult, SkillPublisher
 
@@ -52,8 +52,8 @@ __all__ = [
     "PackagingError",
     "PublishOptions",
     "PublishResult",
-    "SkillPackager",
     "SkillPackageOptions",
+    "SkillPackager",
     "SkillPublisher",
     "UploadResult",
 ]

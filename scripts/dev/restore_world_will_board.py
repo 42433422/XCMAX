@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Restore public action board from git snapshot and rebuild real trajectory."""
+
 from __future__ import annotations
 
 import json
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -29,7 +30,7 @@ def main() -> None:
     traj = build_trajectory(patches, updates)
     payload = {
         "schema": "xcagi.public_action_board/v1",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "day": old.get("day") or "2026-07-16",
         "readonly": True,
         "note": old.get("note") or "公开只读进度看板；不含源码路径与内部标识。",

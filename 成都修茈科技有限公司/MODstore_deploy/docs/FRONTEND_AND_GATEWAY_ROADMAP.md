@@ -4,12 +4,12 @@
 
 ## 1. 当前事实源（已收敛）
 
-| 资产 | 唯一来源 | 备注 |
-| --- | --- | --- |
-| 市场前端源代码 | [`MODstore_deploy/market/src`](../market/src) | Vue 3 主应用 + 少量 React 19 auth islands |
-| Vite 构建配置 | [`MODstore_deploy/market/vite.config.ts`](../market/vite.config.ts) | **唯一**配置；旧的 `vite.config.js` 已删除 |
-| 构建产物 | [`MODstore_deploy/market/dist`](../market/dist) | FastAPI `_MARKET_DIST` 与 `/market` `/new` 静态前缀都指向此目录 |
-| 部署脚本 | `npm run build`（[`package.json`](../market/package.json)） | CI 中 `VITE_PUBLIC_BASE=/market/` |
+| 资产           | 唯一来源                                                            | 备注                                                            |
+| -------------- | ------------------------------------------------------------------- | --------------------------------------------------------------- |
+| 市场前端源代码 | [`MODstore_deploy/market/src`](../market/src)                       | Vue 3 主应用 + 少量 React 19 auth islands                       |
+| Vite 构建配置  | [`MODstore_deploy/market/vite.config.ts`](../market/vite.config.ts) | **唯一**配置；旧的 `vite.config.js` 已删除                      |
+| 构建产物       | [`MODstore_deploy/market/dist`](../market/dist)                     | FastAPI `_MARKET_DIST` 与 `/market` `/new` 静态前缀都指向此目录 |
+| 部署脚本       | `npm run build`（[`package.json`](../market/package.json)）         | CI 中 `VITE_PUBLIC_BASE=/market/`                               |
 
 历史上根目录还存在两份独立的 `index.html` / `dist/` / `node_modules/`，已经在当前分支批量删除（见 git status）。仓库根目录除了 `MODstore_deploy/market` 之外不再有 npm 项目。
 

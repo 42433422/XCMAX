@@ -5,6 +5,7 @@
 2. 禁止裸诊断脚本：_find_zero.py, _analyze_coverage.py
 3. 测试文件应匹配 test_*.py 或 *_test.py（仅警告，不阻断）
 """
+
 from __future__ import annotations
 
 import re

@@ -1,9 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  getCorpQuickActions,
-  getCorpWelcomeTitle,
-  resolveCorpPageId,
-} from './siteKnowledge'
+import { getCorpQuickActions, getCorpWelcomeTitle, resolveCorpPageId } from './siteKnowledge'
 
 describe('siteKnowledge corp welcome', () => {
   it('resolves services page and returns KiKi quick actions', () => {

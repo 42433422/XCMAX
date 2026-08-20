@@ -252,7 +252,11 @@ def test_incident_team_reserves_fix_role_for_code_owner(monkeypatch):
                 "code_ownership": {"match_count": 1},
             },
             {"employee_id": "test-qa-runner", "score": 80, "code_ownership": {}},
-            {"employee_id": "change-request-auditor", "score": 70, "code_ownership": {}},
+            {
+                "employee_id": "change-request-auditor",
+                "score": 70,
+                "code_ownership": {},
+            },
         ],
     )
 

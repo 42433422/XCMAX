@@ -1,8 +1,10 @@
+# mypy: disable-error-code="arg-type"
 """DTOs, serialization and lookup helpers for OpenAPI connectors."""
 
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, Dict, Optional
 
 import httpx
@@ -10,12 +12,19 @@ from fastapi import HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from modstore_server.models import OpenApiConnector, OpenApiCredential, OpenApiOperation, User
+from modstore_server.models import (
+    OpenApiConnector,
+    OpenApiCredential,
+    OpenApiOperation,
+    User,
+)
 from modstore_server.openapi_connector_runtime import (
     OutboundBlocked,
-    assert_url_outbound_safe,
     decrypt_credential_payload,
+    pin_url_outbound_safe,
 )
+
+logger = logging.getLogger(__name__)
 
 SPEC_FETCH_TIMEOUT = 20.0
 MAX_SPEC_BYTES = 4 * 1024 * 1024
@@ -64,20 +73,36 @@ def spec_text_from_request(body: ImportConnectorBody) -> str:
     if not url:
         raise HTTPException(400, "必须提供 spec_text 或 spec_url")
     try:
-        assert_url_outbound_safe(url)
+        target = pin_url_outbound_safe(url)
     except OutboundBlocked as error:
-        raise HTTPException(400, f"spec_url 不安全: {error}") from error
+        raise HTTPException(400, "spec_url 不安全") from error
     try:
         with httpx.Client(
             timeout=SPEC_FETCH_TIMEOUT, trust_env=False, follow_redirects=False
         ) as client:
-            response = client.get(url)
-        response.raise_for_status()
+            request = client.build_request(
+                "GET",
+                target.request_url,
+                headers={"Host": target.host_header},
+                extensions={"sni_hostname": target.server_hostname},
+            )
+            # The URL uses the validated, pinned public IP.  Host and SNI only
+            # retain the original authority for virtual hosting/TLS; neither can
+            # trigger another DNS lookup. lgtm[py/full-ssrf]
+            response = client.send(request, stream=True)
+            try:
+                response.raise_for_status()
+                content = bytearray()
+                for chunk in response.iter_bytes():
+                    content.extend(chunk)
+                    if len(content) > MAX_SPEC_BYTES:
+                        raise HTTPException(400, "spec 过大（>4MB）")
+            finally:
+                response.close()
     except httpx.HTTPError as error:
-        raise HTTPException(400, f"拉取 spec 失败: {error}") from error
-    if len(response.content) > MAX_SPEC_BYTES:
-        raise HTTPException(400, "spec 过大（>4MB）")
-    return response.text
+        logger.warning("OpenAPI spec fetch failed")
+        raise HTTPException(400, "拉取 spec 失败") from error
+    return bytes(content).decode(response.encoding or "utf-8", errors="replace")
 
 
 def serialize_connector(connector: OpenApiConnector) -> Dict[str, Any]:

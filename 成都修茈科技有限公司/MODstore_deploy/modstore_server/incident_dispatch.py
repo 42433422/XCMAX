@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """Employee binding and fallback dispatch implementation for incident events."""
 
 from __future__ import annotations
@@ -7,6 +8,7 @@ import os
 from typing import Any, Dict, List
 
 from modstore_server import incident_bus as facade
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 
 def _dispatch_intake_routing_plan(
@@ -57,13 +59,9 @@ def _dispatch_intake_routing_plan(
             )
             extra += 1
             skip_ids.add(owner)
-            logger.info(
-                "incident_bus: intake routing_plan dispatched owner=%s request_id=%s",
-                owner,
-                row.get("request_id"),
-            )
-        except Exception:  # noqa: BLE001
-            logger.exception("incident_bus: intake routing_plan dispatch failed owner=%s", owner)
+            logger.info("incident_bus: intake routing_plan dispatched")
+        except BOUNDARY_ERRORS:  # noqa: BLE001
+            logger.warning("incident_bus: intake routing_plan dispatch failed")
     return extra
 
 
@@ -109,14 +107,10 @@ def _dispatch_incident_body(event_id: int) -> None:
 
             orchestration = orchestrate_incident(event_id)
             if not orchestration.get("should_dispatch", True):
-                logger.info(
-                    "incident_bus: unified orchestrator parked event_id=%s reason=%s",
-                    event_id,
-                    orchestration.get("reason"),
-                )
+                logger.info("incident_bus: unified orchestrator parked event_id=%s", event_id)
                 return
-        except Exception:
-            logger.exception(
+        except RECOVERABLE_ERRORS:
+            logger.warning(
                 "unified incident orchestrator failed event_id=%s; fallback dispatch",
                 event_id,
             )
@@ -137,14 +131,9 @@ def _dispatch_incident_body(event_id: int) -> None:
             team = dispatch_incident_team(event_id)
             if team.get("claimed"):
                 logger.info(
-                    "incident_bus: team claimed event_id=%s ok=%s team=%s",
+                    "incident_bus: team claimed event_id=%s ok=%s",
                     event_id,
                     team.get("ok"),
-                    (
-                        (team.get("team") or {}).get("team")
-                        if isinstance(team.get("team"), dict)
-                        else None
-                    ),
                 )
                 # 客服工单：团队抢单后仍走 binding，让 intake-dispatcher /
                 # user-customer-service-officer 按既有订阅接单（跳过 market 防双派）。
@@ -154,12 +143,11 @@ def _dispatch_incident_body(event_id: int) -> None:
                     return
             else:
                 logger.info(
-                    "incident_bus: team did not claim event_id=%s reason=%s; fallback market",
+                    "incident_bus: team did not claim event_id=%s; fallback market",
                     event_id,
-                    team.get("reason"),
                 )
-        except Exception:
-            logger.exception("incident team failed event_id=%s; fallback market", event_id)
+        except RECOVERABLE_ERRORS:
+            logger.warning("incident team failed event_id=%s; fallback market", event_id)
 
     if not binding_only and (
         os.environ.get("MODSTORE_EMPLOYEE_TASK_MARKET_ENABLED", "1") or ""
@@ -177,9 +165,8 @@ def _dispatch_incident_body(event_id: int) -> None:
             market = dispatch_incident_via_market(event_id)
             if market.get("ok") and market.get("claimed"):
                 logger.info(
-                    "incident_bus: market claimed event_id=%s employee=%s score=%s",
+                    "incident_bus: market claimed event_id=%s score=%s",
                     event_id,
-                    market.get("employee_id"),
                     (
                         (market.get("winner") or {}).get("score")
                         if isinstance(market.get("winner"), dict)
@@ -188,12 +175,11 @@ def _dispatch_incident_body(event_id: int) -> None:
                 )
                 return
             logger.info(
-                "incident_bus: market did not claim event_id=%s reason=%s; fallback binding dispatch",
+                "incident_bus: market did not claim event_id=%s; fallback binding dispatch",
                 event_id,
-                market.get("reason"),
             )
-        except Exception:
-            logger.exception(
+        except RECOVERABLE_ERRORS:
+            logger.warning(
                 "incident task market failed event_id=%s; fallback binding dispatch",
                 event_id,
             )
@@ -249,7 +235,9 @@ def _dispatch_incident_body(event_id: int) -> None:
         if not eid_emp or eid_emp not in catalog_ids:
             continue
         try:
-            from modstore_server.duty_workforce_contracts import duty_event_execution_input
+            from modstore_server.duty_workforce_contracts import (
+                duty_event_execution_input,
+            )
 
             duty_input = duty_event_execution_input(
                 eid_emp,
@@ -284,8 +272,8 @@ def _dispatch_incident_body(event_id: int) -> None:
                 )
                 dispatched += int(extra)
                 already_ran.update(_routing_plan_owners(exec_result))
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("incident dispatch employee=%s: %s", eid_emp, exc)
+        except BOUNDARY_ERRORS:  # noqa: BLE001
+            logger.warning("incident dispatch employee execution failed")
 
     with sf() as session:
         ev2 = session.query(IncidentEvent).filter(IncidentEvent.id == event_id).first()

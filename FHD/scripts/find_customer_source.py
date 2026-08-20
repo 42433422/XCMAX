@@ -1,6 +1,8 @@
 import os
 import sqlite3
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 
 def find_customer_data_source():
     """查找客户数据的实际来源"""
@@ -61,14 +63,14 @@ def find_customer_data_source():
                         if sample_data:
                             print("    样本数据:")
                             for i, row in enumerate(sample_data[:2]):
-                                print(f"      {i+1}. {row}")
+                                print(f"      {i + 1}. {row}")
 
                 if not customer_tables:
                     print("  ❌ 未找到客户相关表")
 
                 conn.close()
 
-            except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+            except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
                 print(f"  ❌ 检查数据库时出错: {e}")
 
     # 检查前端可能使用的其他数据源
@@ -130,7 +132,7 @@ def check_frontend_customer_data():
 
             conn.close()
 
-        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             print(f"  ❌ 检查数据库时出错: {e}")
     else:
         print("  ❌ 数据库文件不存在")

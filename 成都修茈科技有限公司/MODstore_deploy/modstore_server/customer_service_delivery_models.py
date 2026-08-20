@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """Request models and evidence helpers for customer custom delivery."""
 
 from __future__ import annotations

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 RequestReview = Callable[..., dict[str, Any]]
 FetchStatus = Callable[[str], dict[str, Any]]
@@ -39,10 +39,11 @@ def attach_llm_scoring(
                 "PaiBi LLM scoring is required; local scoring has been removed"
             )
         return assessment
-    metadata = (
+    metadata = cast(
+        dict[str, Any],
         assessment.get("metadata", {})
         if isinstance(assessment.get("metadata"), dict)
-        else {}
+        else {},
     )
     external_source, external_path = llm_external_reference(
         metadata, external_source, external_path
@@ -134,10 +135,11 @@ def maybe_request_llm_review(
 def llm_external_reference(
     metadata: dict[str, Any], external_source: str, external_path: str
 ) -> tuple[str, str]:
-    state = (
+    state = cast(
+        dict[str, Any],
         metadata.get("absorption_state")
         if isinstance(metadata.get("absorption_state"), dict)
-        else {}
+        else {},
     )
     if not external_source:
         external_source = str(state.get("source") or "")

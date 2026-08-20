@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """将员工包 .py 脚本注册为 vibe-coding CodeSkill + ESkill 的全闭环工具。
 
 调用方：
@@ -22,15 +23,14 @@ from typing import Any, Callable, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
-from modstore_server.employee_skill_steps import (
-    brief_skill_steps as _brief_skill_steps,
-    extract_function_name as _extract_function_name,
-    fallback_step_script as _fallback_step_script,
-    make_vibe_skill_id as _make_vibe_skill_id,
-    manifest_skill_steps as _manifest_skill_steps,
-    sanitize_identifier as _sanitize_identifier,
-)
+from modstore_server.employee_skill_steps import brief_skill_steps as _brief_skill_steps
+from modstore_server.employee_skill_steps import extract_function_name as _extract_function_name
+from modstore_server.employee_skill_steps import fallback_step_script as _fallback_step_script
+from modstore_server.employee_skill_steps import make_vibe_skill_id as _make_vibe_skill_id
+from modstore_server.employee_skill_steps import manifest_skill_steps as _manifest_skill_steps
+from modstore_server.employee_skill_steps import sanitize_identifier as _sanitize_identifier
 from modstore_server.models import ESkill, ESkillVersion, User
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -202,7 +202,7 @@ _SPLIT_SYSTEM_PROMPT = """\
 def _strip_fence(text: str) -> str:
     s = (text or "").strip()
     if s.startswith("```"):
-        s = re.sub(r"^```(?:json)?\s*", "", s, re.I | re.S)
+        s = re.sub(r"^```(?:json)?\s*", "", s, flags=re.I | re.S)
         s = re.sub(r"\s*```\s*$", "", s)
     return s.strip()
 
@@ -229,10 +229,13 @@ async def _llm_split_steps(
             user.id,
             provider,
             model,
-            [{"role": "system", "content": sys_msg}, {"role": "user", "content": user_msg}],
+            [
+                {"role": "system", "content": sys_msg},
+                {"role": "user", "content": user_msg},
+            ],
             max_tokens=1500,
         )
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.warning("employee skill split LLM failed: %s", exc)
         return []
 
@@ -318,7 +321,7 @@ async def register_employee_pack_as_eskills(
 
     try:
         coder = get_vibe_coder(session=db, user_id=user.id, provider=provider, model=model)
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.warning("获取 vibe coder 失败: %s", exc)
         return []
 
@@ -327,7 +330,7 @@ async def register_employee_pack_as_eskills(
             r = status_hook("正在将员工脚本注册为真实 Skill…")
             if hasattr(r, "__await__"):
                 await r
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
 
     # ---------- 读取员工主脚本 ----------
@@ -378,7 +381,7 @@ async def register_employee_pack_as_eskills(
                     domain=step.get("domain") or brief[:120],
                     source_code=fallback_src,
                 )
-            except Exception as exc:  # noqa: BLE001
+            except BOUNDARY_ERRORS as exc:  # noqa: BLE001
                 logger.warning("Skill 兜底注册失败 step=%s: %s", step["name"], exc)
                 continue
 
@@ -388,7 +391,7 @@ async def register_employee_pack_as_eskills(
                 upgraded = coder.code(step["sub_brief"], mode="brief_first", skill_id=vibe_sid)
                 vibe_sid_v2 = getattr(upgraded, "skill_id", vibe_sid)
                 logger.info("Skill 升级成功 step=%s vibe_id=%s", step["name"], vibe_sid_v2)
-            except Exception as exc:  # noqa: BLE001
+            except BOUNDARY_ERRORS as exc:  # noqa: BLE001
                 logger.warning("Skill 升级失败（保留兜底）step=%s: %s", step["name"], exc)
 
             # 创建 / 更新 ESkill 行
@@ -410,7 +413,7 @@ async def register_employee_pack_as_eskills(
                         "output_var": step.get("output_var") or f"step_{idx}_result",
                     }
                 )
-            except Exception as exc:  # noqa: BLE001
+            except BOUNDARY_ERRORS as exc:  # noqa: BLE001
                 logger.warning("ESkill 行创建失败 step=%s: %s", step["name"], exc)
 
     else:
@@ -428,7 +431,7 @@ async def register_employee_pack_as_eskills(
                 domain=brief[:120],
                 source_code=source_code,
             )
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
             logger.warning("单 Skill 兜底注册失败: %s", exc)
             return []
 
@@ -438,7 +441,7 @@ async def register_employee_pack_as_eskills(
             upgraded = coder.code(brief[:800], mode="brief_first", skill_id=vibe_sid)
             vibe_sid_v2 = getattr(upgraded, "skill_id", vibe_sid)
             logger.info("单 Skill 升级成功 vibe_id=%s", vibe_sid_v2)
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
             logger.warning("单 Skill 升级失败（保留兜底）: %s", exc)
 
         try:
@@ -459,12 +462,12 @@ async def register_employee_pack_as_eskills(
                     "output_var": "emp_result",
                 }
             )
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
             logger.warning("单 Skill ESkill 行创建失败: %s", exc)
 
     try:
         db.commit()
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.warning("employee Skill 注册 commit 失败: %s", exc)
         db.rollback()
         return []
@@ -475,7 +478,7 @@ async def register_employee_pack_as_eskills(
             r = status_hook(f"已注册 {n} 个真脚本 Skill")
             if hasattr(r, "__await__"):
                 await r
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
 
     return eskill_specs

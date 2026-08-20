@@ -63,7 +63,9 @@ describe('kittenApi', () => {
 
   it('generateFinancialReport calls api.post with custom metadata', async () => {
     await kittenApi.generateFinancialReport({ period: 'Q1' })
-    expect(api.post).toHaveBeenCalledWith('/api/ai/kitten/financial/report', { metadata: { period: 'Q1' } })
+    expect(api.post).toHaveBeenCalledWith('/api/ai/kitten/financial/report', {
+      metadata: { period: 'Q1' },
+    })
   })
 
   it('exportReport calls api.post with blob responseType', async () => {
@@ -88,7 +90,9 @@ describe('kittenApi', () => {
 
   it('exportSavedAnalysis calls api.get with blob responseType', async () => {
     await kittenApi.exportSavedAnalysis('analysis-1')
-    expect(api.get).toHaveBeenCalledWith('/api/ai/kitten/saved/analysis-1/export', { responseType: 'blob' })
+    expect(api.get).toHaveBeenCalledWith('/api/ai/kitten/saved/analysis-1/export', {
+      responseType: 'blob',
+    })
   })
 
   it('deleteSavedAnalysis calls api.delete with id', async () => {

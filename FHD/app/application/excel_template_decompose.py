@@ -107,9 +107,7 @@ def decompose_from_grid(
         row_data: dict[str, Any] = {}
         non_empty = False
         for header in header_cells:
-            safe = json_safe_cell_value(
-                get_cell_value(row_index, header["column_index"])
-            )
+            safe = json_safe_cell_value(get_cell_value(row_index, header["column_index"]))
             if safe is not None and safe != "":
                 non_empty = True
             row_data[header["name"]] = safe

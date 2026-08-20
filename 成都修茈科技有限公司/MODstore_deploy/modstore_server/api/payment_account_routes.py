@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """Entitlement, usage, and refund routes for payment accounts."""
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from modstore_server.models import (
     Wallet,
     get_session_factory,
 )
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.payment_common import RefundDTO
 
 logger = logging.getLogger(__name__)
@@ -150,7 +152,7 @@ def api_payment_refund(body: RefundDTO, user: User = Depends(_get_current_user))
                     user_id,
                     body.out_trade_no,
                 )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.exception("管理员退款扣回经验失败: %s", body.out_trade_no)
         payment_orders.merge_fields(body.out_trade_no, refunded=True, refund_reason=body.reason)
         session.commit()

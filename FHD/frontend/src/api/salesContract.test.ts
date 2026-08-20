@@ -24,7 +24,9 @@ describe('salesContractApi', () => {
 
   it('resolveFromText calls POST /api/sales-contract/resolve-from-text', async () => {
     await salesContractApi.resolveFromText({ text: '订货话术' })
-    expect(api.post).toHaveBeenCalledWith('/api/sales-contract/resolve-from-text', { text: '订货话术' })
+    expect(api.post).toHaveBeenCalledWith('/api/sales-contract/resolve-from-text', {
+      text: '订货话术',
+    })
   })
 
   it('getTemplatePreview calls GET /api/sales-contract/template-preview', async () => {
@@ -34,13 +36,25 @@ describe('salesContractApi', () => {
 
   it('getTemplatePreview passes params', async () => {
     await salesContractApi.getTemplatePreview({ template_id: 'abc' })
-    expect(api.get).toHaveBeenCalledWith('/api/sales-contract/template-preview', { template_id: 'abc' })
+    expect(api.get).toHaveBeenCalledWith('/api/sales-contract/template-preview', {
+      template_id: 'abc',
+    })
   })
 
   it('generate calls POST /api/sales-contract/generate', async () => {
     const data = {
       customer_name: '测试客户',
-      products: [{ model_number: 'M1', name: '产品', spec: 'S', unit: '个', quantity: '10', unit_price: '100', amount: '1000' }],
+      products: [
+        {
+          model_number: 'M1',
+          name: '产品',
+          spec: 'S',
+          unit: '个',
+          quantity: '10',
+          unit_price: '100',
+          amount: '1000',
+        },
+      ],
     }
     await salesContractApi.generate(data)
     expect(api.post).toHaveBeenCalledWith('/api/sales-contract/generate', data)
@@ -48,7 +62,17 @@ describe('salesContractApi', () => {
 
   it('previewUpdate calls POST /api/sales-contract/preview-update', async () => {
     const body = {
-      products: [{ model_number: 'M1', name: '产品', spec: 'S', unit: '个', quantity: '10', unit_price: '100', amount: '1000' }],
+      products: [
+        {
+          model_number: 'M1',
+          name: '产品',
+          spec: 'S',
+          unit: '个',
+          quantity: '10',
+          unit_price: '100',
+          amount: '1000',
+        },
+      ],
       customer_name: '测试客户',
     }
     await salesContractApi.previewUpdate(body)

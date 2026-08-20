@@ -202,7 +202,9 @@ class TestGetPrinterConfig:
         mock_adapter.get_default_printer.return_value = "Printer1"
         with (
             patch.dict("sys.modules", {}),
-            patch("app.utils.device_system.system_service.SystemService.get_printer_config") as mock,
+            patch(
+                "app.utils.device_system.system_service.SystemService.get_printer_config"
+            ) as mock,
         ):
             # Test the import path
             pass

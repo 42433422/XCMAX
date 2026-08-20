@@ -101,8 +101,6 @@ def _unwrap(payload: Any) -> dict[str, Any]:
     return {}
 
 
-
-
 async def _local_surface_page(lane: str, index: int) -> dict[str, Any] | None:
     try:
         pages = await _local_lane_pages(lane)

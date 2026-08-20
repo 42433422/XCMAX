@@ -19,12 +19,7 @@ defineEmits<{
     <div v-for="card in cards" :key="card.label" class="selp-meta-card" role="listitem">
       <span>{{ card.label }}</span>
       <strong>{{ card.value }}</strong>
-      <button
-        v-if="card.label === 'Para 任务' && paraTaskId"
-        type="button"
-        class="selp-copy"
-        @click="$emit('copy')"
-      >
+      <button v-if="card.label === 'Para 任务' && paraTaskId" type="button" class="selp-copy" @click="$emit('copy')">
         {{ paraCopied ? '已复制' : '复制 ID' }}
       </button>
     </div>

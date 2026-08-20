@@ -20,4 +20,3 @@ def test_unverified_tls_is_confined_to_loopback_https() -> None:
     context = ssl_context_for_endpoint("https://127.0.0.1:8443", verify_ssl=False)
     assert isinstance(context, ssl.SSLContext)
     assert context.verify_mode == ssl.CERT_NONE
-

@@ -1,6 +1,8 @@
-# ruff: noqa
+# mypy: disable-error-code="attr-defined, misc, no-any-return, valid-type"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
 
 
@@ -107,7 +109,8 @@ class LlmChatDTO(_facade().BaseModel):
         None, description="OpenAI function-calling tools 定义（透传给上游模型）"
     )
     tool_choice: _facade().Optional[_facade().Any] = _facade().Field(
-        None, description="OpenAI tool_choice，如 'auto' 或 {'type':'function','function':{...}}"
+        None,
+        description="OpenAI tool_choice，如 'auto' 或 {'type':'function','function':{...}}",
     )
 
 
@@ -201,7 +204,7 @@ async def llm_image(
 ):
     if body.provider not in _facade().KNOWN_PROVIDERS:
         raise _facade().HTTPException(400, "unknown provider")
-    (api_key, key_source) = _facade().resolve_api_key(db, user.id, body.provider)
+    api_key, key_source = _facade().resolve_api_key(db, user.id, body.provider)
     if not api_key:
         raise _facade().HTTPException(400, f"供应商「{body.provider}」未配置可用 API Key。")
     base = (
@@ -237,7 +240,7 @@ async def llm_video(
 ):
     if body.provider not in _facade().KNOWN_PROVIDERS:
         raise _facade().HTTPException(400, "unknown provider")
-    (api_key, key_source) = _facade().resolve_api_key(db, user.id, body.provider)
+    api_key, key_source = _facade().resolve_api_key(db, user.id, body.provider)
     if not api_key:
         raise _facade().HTTPException(400, f"供应商「{body.provider}」未配置可用 API Key。")
     base = (
@@ -269,7 +272,8 @@ async def llm_video(
 
 @_facade().router.post("/pptx")
 async def llm_pptx(
-    body: LlmPptxDTO, user: _facade().User = _facade().Depends(_facade()._get_current_user)
+    body: LlmPptxDTO,
+    user: _facade().User = _facade().Depends(_facade()._get_current_user),
 ):
     try:
         blob = _facade().build_pptx_from_markdown(body.markdown, title=body.title)

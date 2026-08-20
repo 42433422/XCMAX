@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Add /admin/surface-audit/image — stream one PNG file (no base64 JSON)."""
+
 from __future__ import annotations
 
 import sys

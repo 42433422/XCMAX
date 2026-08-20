@@ -55,14 +55,7 @@ export default defineConfig(({ command }) => ({
       reporter: ['text', 'html', 'json-summary'],
       reportsDirectory: './coverage',
       include: ['src/**/*.{ts,vue}'],
-      exclude: [
-        'src/main.ts',
-        'src/**/*.d.ts',
-        'src/test/**',
-        'src/e2e/**',
-        'src/**/*.test.ts',
-        'src/**/*.spec.ts',
-      ],
+      exclude: ['src/main.ts', 'src/**/*.d.ts', 'src/test/**', 'src/e2e/**', 'src/**/*.test.ts', 'src/**/*.spec.ts'],
       // API、路由、状态仓库和所有视图均纳入行为测试；四项指标统一守住 80%。
       thresholds: {
         statements: 80,

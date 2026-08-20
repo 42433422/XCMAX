@@ -1,7 +1,6 @@
 /** 语音模式：移动端 / iOS 检测与播放解锁 */
 
-const MOBILE_UA =
-  /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i
+const MOBILE_UA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i
 
 export function isMobileVoiceDevice(): boolean {
   if (typeof navigator === 'undefined') return false
@@ -10,10 +9,7 @@ export function isMobileVoiceDevice(): boolean {
 
 export function isIOSVoiceDevice(): boolean {
   if (typeof navigator === 'undefined') return false
-  return (
-    /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
-    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
-  )
+  return /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
 }
 
 /** 移动端底部安全区 + 工作台底栏高度（与 WorkbenchView tabbar 对齐） */

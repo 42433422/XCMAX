@@ -17,12 +17,7 @@ function quoteLabel(label: string): string {
   return `"${escaped}"`
 }
 
-function quoteIfNeeded(
-  id: string,
-  open: string,
-  label: string,
-  close: string,
-): string | null {
+function quoteIfNeeded(id: string, open: string, label: string, close: string): string | null {
   const trimmed = label.trim()
   if (!trimmed) return null
   if (/^".*"$/.test(trimmed)) return null
@@ -43,39 +38,30 @@ function fixStructuralMermaidErrors(input: string): string {
   s = s.replace(/\]\s*(?=end\b)/gi, ']\n')
 
   // end 后同一行跟中文子图标题 + 下一节点：end 员工：xxx B[
-  s = s.replace(
-    /\bend\b\s+([^[\n\r\->|]+?)\s+([A-Za-z0-9_-]+\[)/gi,
-    (_match, title: string, nodeStart: string) => {
-      const t = title.trim()
-      if (!t || t.includes('-->')) return _match
-      const id = nextSubgraphId()
-      return `end\nsubgraph ${id}[${quoteLabel(t)}]\n${nodeStart}`
-    },
-  )
+  s = s.replace(/\bend\b\s+([^[\n\r\->|]+?)\s+([A-Za-z0-9_-]+\[)/gi, (_match, title: string, nodeStart: string) => {
+    const t = title.trim()
+    if (!t || t.includes('-->')) return _match
+    const id = nextSubgraphId()
+    return `end\nsubgraph ${id}[${quoteLabel(t)}]\n${nodeStart}`
+  })
 
   // 独立一行 subgraph 中文/冒号标题：`subgraph 员工：文档文本提取员`
-  s = s.replace(
-    /^(\s*)subgraph\s+([^[\n\r"]+)$/gm,
-    (match, indent: string, title: string) => {
-      const t = title.trim()
-      if (!t) return match
-      if (/^[A-Za-z0-9_-]+\[/.test(t)) return match
-      if (/^[A-Za-z0-9_-]+$/.test(t) && !CJK.test(t) && !t.includes(':')) return match
-      const id = nextSubgraphId()
-      return `${indent}subgraph ${id}[${quoteLabel(t)}]`
-    },
-  )
+  s = s.replace(/^(\s*)subgraph\s+([^[\n\r"]+)$/gm, (match, indent: string, title: string) => {
+    const t = title.trim()
+    if (!t) return match
+    if (/^[A-Za-z0-9_-]+\[/.test(t)) return match
+    if (/^[A-Za-z0-9_-]+$/.test(t) && !CJK.test(t) && !t.includes(':')) return match
+    const id = nextSubgraphId()
+    return `${indent}subgraph ${id}[${quoteLabel(t)}]`
+  })
 
   // end 后换行跟孤立的子图标题行
-  s = s.replace(
-    /^(\s*)end\s*\n\s*([^[\n\r\->|]+?)\s*$/gm,
-    (match, indent: string, title: string) => {
-      const t = title.trim()
-      if (!t || /^[A-Za-z0-9_-]+\s*\[/.test(t) || t.includes('-->')) return match
-      const id = nextSubgraphId()
-      return `${indent}end\n${indent}subgraph ${id}[${quoteLabel(t)}]`
-    },
-  )
+  s = s.replace(/^(\s*)end\s*\n\s*([^[\n\r\->|]+?)\s*$/gm, (match, indent: string, title: string) => {
+    const t = title.trim()
+    if (!t || /^[A-Za-z0-9_-]+\s*\[/.test(t) || t.includes('-->')) return match
+    const id = nextSubgraphId()
+    return `${indent}end\n${indent}subgraph ${id}[${quoteLabel(t)}]`
+  })
 
   return s
 }
@@ -91,22 +77,19 @@ export function sanitizeMermaidSource(input: string): string {
   // 方括号节点：A[label]
   s = s.replace(
     /([A-Za-z0-9_-]+)(\[)([^[\]\n]*?)(\])/g,
-    (match, id: string, open: string, label: string, close: string) =>
-      quoteIfNeeded(id, open, label, close) ?? match,
+    (match, id: string, open: string, label: string, close: string) => quoteIfNeeded(id, open, label, close) ?? match,
   )
 
   // 圆括号节点：A(label)
   s = s.replace(
     /([A-Za-z0-9_-]+)(\()([^()\n]*?)(\))/g,
-    (match, id: string, open: string, label: string, close: string) =>
-      quoteIfNeeded(id, open, label, close) ?? match,
+    (match, id: string, open: string, label: string, close: string) => quoteIfNeeded(id, open, label, close) ?? match,
   )
 
   // 花括号节点：A{label}
   s = s.replace(
     /([A-Za-z0-9_-]+)(\{)([^{}\n]*?)(\})/g,
-    (match, id: string, open: string, label: string, close: string) =>
-      quoteIfNeeded(id, open, label, close) ?? match,
+    (match, id: string, open: string, label: string, close: string) => quoteIfNeeded(id, open, label, close) ?? match,
   )
 
   return s
@@ -114,8 +97,7 @@ export function sanitizeMermaidSource(input: string): string {
 
 /** 将 Mermaid 词法错误转为用户可读的中文提示 */
 export function friendlyMermaidRenderError(raw: unknown): string {
-  const msg = String((raw && typeof raw === 'object' && 'message' in raw && raw.message) || raw || '')
-    .trim()
+  const msg = String((raw && typeof raw === 'object' && 'message' in raw && raw.message) || raw || '').trim()
   if (!msg) return '流程图解析失败，请查看右侧「详细」说明'
   if (/lexical error/i.test(msg)) {
     return '流程图语法有误，已无法自动修复；请查看右侧「详细」中的文字说明'

@@ -73,7 +73,10 @@ def _create_paid_order(tmp_path, monkeypatch, user_id: int, order_no: str | None
         plan_id="plan_basic",
     )
     payment_orders.update_status(
-        out_trade_no=order_no, status="paid", trade_no="TRADE1", paid_at="2026-01-01T00:00:00Z"
+        out_trade_no=order_no,
+        status="paid",
+        trade_no="TRADE1",
+        paid_at="2026-01-01T00:00:00Z",
     )
     return order_no
 
@@ -108,13 +111,16 @@ def test_admin_reject_refund_dispatches_webhook(client, tmp_path, monkeypatch, r
 
     events = []
     monkeypatch.setattr(
-        webhook_dispatcher, "dispatch_event", lambda event: events.append(event) or {"ok": True}
+        webhook_dispatcher,
+        "dispatch_event",
+        lambda event: events.append(event) or {"ok": True},
     )
     app.dependency_overrides[refund_api._get_current_user] = lambda: admin
     app.dependency_overrides[webhook_api._get_current_user] = lambda: admin
     try:
         r = client.post(
-            f"/api/refunds/admin/{refund_id}/review", json={"action": "reject", "admin_note": "no"}
+            f"/api/refunds/admin/{refund_id}/review",
+            json={"action": "reject", "admin_note": "no"},
         )
         assert r.status_code == 200, r.text
         assert r.json()["status"] == "rejected"
@@ -130,7 +136,12 @@ def test_admin_approve_refund_dispatches_webhook(client, tmp_path, monkeypatch, 
     order_no = _create_paid_order(
         tmp_path, monkeypatch, user.id, f"RF-PYTEST-APPROVE-{uuid.uuid4().hex[:8]}"
     )
-    from modstore_server import alipay_service, refund_api, webhook_api, webhook_dispatcher
+    from modstore_server import (
+        alipay_service,
+        refund_api,
+        webhook_api,
+        webhook_dispatcher,
+    )
     from modstore_server.app import app
 
     app.dependency_overrides[refund_api._get_current_user] = lambda: user
@@ -142,13 +153,16 @@ def test_admin_approve_refund_dispatches_webhook(client, tmp_path, monkeypatch, 
     events = []
     monkeypatch.setattr(alipay_service, "refund_order", lambda **_kw: {"ok": True})
     monkeypatch.setattr(
-        webhook_dispatcher, "dispatch_event", lambda event: events.append(event) or {"ok": True}
+        webhook_dispatcher,
+        "dispatch_event",
+        lambda event: events.append(event) or {"ok": True},
     )
     app.dependency_overrides[refund_api._get_current_user] = lambda: admin
     app.dependency_overrides[webhook_api._get_current_user] = lambda: admin
     try:
         r = client.post(
-            f"/api/refunds/admin/{refund_id}/review", json={"action": "approve", "admin_note": "ok"}
+            f"/api/refunds/admin/{refund_id}/review",
+            json={"action": "approve", "admin_note": "ok"},
         )
         assert r.status_code == 200, r.text
         assert r.json()["status"] == "refunded"
@@ -168,7 +182,9 @@ def test_webhook_replay_by_order_no(client, tmp_path, monkeypatch, refund_users)
 
     events = []
     monkeypatch.setattr(
-        webhook_dispatcher, "dispatch_event", lambda event: events.append(event) or {"ok": True}
+        webhook_dispatcher,
+        "dispatch_event",
+        lambda event: events.append(event) or {"ok": True},
     )
     app.dependency_overrides[webhook_api._get_current_user] = lambda: admin
     try:

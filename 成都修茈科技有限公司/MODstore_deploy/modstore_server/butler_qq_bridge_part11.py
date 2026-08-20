@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="attr-defined, import-not-found, no-any-return, valid-type"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -30,7 +34,7 @@ def _specific_app_secret(webhook_key: str) -> str:
             v = str(secret.get("app_secret") or "").strip()
             if v:
                 return v
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         _facade().logger.debug("_specific_app_secret 查账号池失败 key=%s: %s", webhook_key, exc)
     return ""
 
@@ -57,7 +61,7 @@ def _specific_bot_token(webhook_key: str) -> str:
             v = str(secret.get("bot_token") or "").strip()
             if v:
                 return v
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         _facade().logger.debug("_specific_bot_token 查账号池失败 key=%s: %s", webhook_key, exc)
     return ""
 
@@ -82,7 +86,7 @@ def _resolve_webhook_app_id(webhook_key: str) -> _facade().Tuple[str, str]:
         from modstore_server.ai_employee_account_api import lookup_active_account_for
 
         rec = lookup_active_account_for(webhook_key, "qq")
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         _facade().logger.debug(
             "_resolve_webhook_app_id 查 employee 失败 key=%s: %s", webhook_key, exc
         )
@@ -101,7 +105,7 @@ async def qq_specific_webhook_probe(webhook_key: str) -> _facade().JSONResponse:
     QQ's validation request is tied to one BotSecret. Dedicated URLs let us know
     which AppSecret to use even if QQ does not send X-Union-Appid during op=13.
     """
-    (app_id, employee_id) = _facade()._resolve_webhook_app_id(webhook_key)
+    app_id, employee_id = _facade()._resolve_webhook_app_id(webhook_key)
     if not app_id:
         raise _facade().HTTPException(404, "unknown webhook")
     return _facade().JSONResponse(
@@ -113,7 +117,7 @@ async def qq_specific_webhook_probe(webhook_key: str) -> _facade().JSONResponse:
 async def qq_specific_webhook(
     webhook_key: str, request: _facade().Request
 ) -> _facade().JSONResponse:
-    (app_id, employee_id) = _facade()._resolve_webhook_app_id(webhook_key)
+    app_id, employee_id = _facade()._resolve_webhook_app_id(webhook_key)
     if not app_id:
         raise _facade().HTTPException(404, "unknown webhook")
     return await _facade()._qq_webhook_impl(
@@ -129,7 +133,7 @@ async def qq_employee_webhook_probe(employee_id: str) -> _facade().JSONResponse:
         from modstore_server.ai_employee_account_api import lookup_active_account_for
 
         rec = lookup_active_account_for(employee_id, "qq")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         rec = None
     if not rec:
         raise _facade().HTTPException(404, "employee 未绑定 QQ 账号")
@@ -152,7 +156,7 @@ async def qq_employee_webhook(
         from modstore_server.ai_employee_account_api import lookup_active_account_for
 
         rec = lookup_active_account_for(employee_id, "qq")
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         _facade().logger.warning("by-employee webhook 查账号失败 employee=%s: %s", employee_id, exc)
         rec = None
     if not rec:
@@ -219,11 +223,13 @@ async def _qq_webhook_impl(
             sig_bytes = _facade()._sign_payload_for(
                 (event_ts + plain_token).encode("utf-8"), use_secret
             )
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             _facade().logger.exception("op=13 签名失败 app_id=%s", inbound_app_id_13)
             raise _facade().HTTPException(500, f"签名失败: {exc}")
         _facade().logger.info(
-            "op=13 握手成功 app_id=%s chosen_secret=%s", inbound_app_id_13 or "unknown", chosen_for
+            "op=13 握手成功 app_id=%s chosen_secret=%s",
+            inbound_app_id_13 or "unknown",
+            chosen_for,
         )
         return _facade().JSONResponse({"plain_token": plain_token, "signature": sig_bytes.hex()})
     secrets_map = _facade()._all_known_app_secrets()
@@ -266,12 +272,18 @@ async def qq_push(
 ) -> _facade().Dict[str, _facade().Any]:
     _facade()._check_admin(request)
     return await _facade()._send(
-        body.kind, body.target_id, body.content, msg_id=body.msg_id, msg_seq=body.msg_seq
+        body.kind,
+        body.target_id,
+        body.content,
+        msg_id=body.msg_id,
+        msg_seq=body.msg_seq,
     )
 
 
 @_facade().router.post("/cache/reload")
-async def qq_reload_cache(request: _facade().Request) -> _facade().Dict[str, _facade().Any]:
+async def qq_reload_cache(
+    request: _facade().Request,
+) -> _facade().Dict[str, _facade().Any]:
     """让凭证 / BotContext 缓存立刻失效；admin CRUD 之后会自动调，
     这里也提供手动触发（运维侧排障用）。"""
     _facade()._check_admin(request)
@@ -285,7 +297,7 @@ def _ensure_runtime_ready() -> bool:
         import nacl as _nacl
 
         _nacl
-    except Exception:
+    except RECOVERABLE_ERRORS:
         _facade().logger.warning(
             "未安装 pynacl，butler_qq_bridge 不挂载（pip install pynacl 后可启用）"
         )

@@ -1,12 +1,5 @@
 <template>
-  <div
-    ref="scrollEl"
-    class="chat-history"
-    :class="{ 'chat-history--corp': corpMode }"
-    role="log"
-    aria-label="对话历史"
-    aria-live="polite"
-  >
+  <div ref="scrollEl" class="chat-history" :class="{ 'chat-history--corp': corpMode }" role="log" aria-label="对话历史" aria-live="polite">
     <CorpWelcomeBoard
       v-if="showCorpWelcome"
       :title="welcomeTitle"
@@ -20,13 +13,7 @@
       <p class="chat-empty-title">需要我做什么？</p>
       <p class="chat-empty-desc">{{ emptyDesc }}</p>
       <p class="chat-empty-sub">
-        <button
-          v-for="(tip, i) in quickTips"
-          :key="i"
-          type="button"
-          class="quick-tip"
-          @click="onQuickTip(tip)"
-        >
+        <button v-for="(tip, i) in quickTips" :key="i" type="button" class="quick-tip" @click="onQuickTip(tip)">
           {{ tip.label }}
         </button>
       </p>
@@ -74,21 +61,15 @@ const { messages, pendingAction } = storeToRefs(agentStore)
 const route = useRoute()
 
 /** 仅工作台内嵌 market-about 落地页；官网独立 bundle 恒为 false */
-const isMarketPublicLanding = computed(
-  () => !props.corpMode && String(route.name || '') === 'about',
-)
+const isMarketPublicLanding = computed(() => !props.corpMode && String(route.name || '') === 'about')
 
-const corpPathname = computed(() =>
-  typeof window !== 'undefined' ? window.location.pathname : '/',
-)
+const corpPathname = computed(() => (typeof window !== 'undefined' ? window.location.pathname : '/'))
 
 const isContactPage = computed(() => isContactPagePath(corpPathname.value))
 
 const isMobileViewport = useCorpMobileViewport()
 
-const isMobileContact = computed(
-  () => props.corpMode && isContactPage.value && isMobileViewport.value,
-)
+const isMobileContact = computed(() => props.corpMode && isContactPage.value && isMobileViewport.value)
 
 const showCorpWelcome = computed(() => {
   if (!props.corpMode || isMarketPublicLanding.value) return false

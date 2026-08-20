@@ -151,8 +151,8 @@ print(f"{'单元格':<10} {'右侧边框':<15} {'底部边框':<15} {'状态'}")
 print("-" * 60)
 
 for cell in cells:
-    right_info = f"{cell['right_border_ratio']*100:.1f}%"
-    bottom_info = f"{cell['bottom_border_ratio']*100:.1f}%"
+    right_info = f"{cell['right_border_ratio'] * 100:.1f}%"
+    bottom_info = f"{cell['bottom_border_ratio'] * 100:.1f}%"
 
     status = []
     if cell["should_merge_right"]:

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="index, union-attr"
 """Excel 全量读取与 Excel 生成员工：检测、规则、兜底 convert 与包体验证（JSON 为中介）。"""
 
 from __future__ import annotations
@@ -294,7 +295,9 @@ def _validate_excel_backend(
     handlers: List[str] = []
     if mf_path.is_file():
         try:
-            from modstore_server.employee_asset_pipeline import manifest_actions_handlers
+            from modstore_server.employee_asset_pipeline import (
+                manifest_actions_handlers,
+            )
 
             mf = json.loads(mf_path.read_text(encoding="utf-8"))
             handlers = manifest_actions_handlers(mf)

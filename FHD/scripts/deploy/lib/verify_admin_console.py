@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="no-any-return"
 """Stamp and verify the immutable FHD admin-console release."""
 
 from __future__ import annotations

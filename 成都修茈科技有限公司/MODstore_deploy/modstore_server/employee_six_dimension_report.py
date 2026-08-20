@@ -95,7 +95,10 @@ def dim_entry(
 
 
 def finalize_dimension_report(
-    dims: Dict[str, Dict[str, Any]], pipeline_label: str, *, scoring_source: str = "deterministic"
+    dims: Dict[str, Dict[str, Any]],
+    pipeline_label: str,
+    *,
+    scoring_source: str = "deterministic",
 ) -> Dict[str, Any]:
     weighted_sum = 0.0
     weight_total = 0.0

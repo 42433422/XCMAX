@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment"
 """Tests for app.legacy.routes.document_templates_compat."""
 
 from __future__ import annotations

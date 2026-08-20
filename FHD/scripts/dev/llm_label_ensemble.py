@@ -41,6 +41,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 try:
     import httpx
 except ImportError:  # pragma: no cover
@@ -117,8 +119,8 @@ PROMPT_SYSTEM = (
     "- reflex：反射级（<1ms），简单问候/确认/紧急停止/纯命令式短输入\n"
     "- subconscious：潜意识级（<10ms），状态查询/帮助/常见 FAQ\n"
     "- conscious：显意识级（<200ms），复杂推理/多轮对话/需要 LLM 生成\n"
-    "只输出 JSON：{\"processor\": \"reflex|subconscious|conscious\", "
-    "\"reason\": \"<=50字\", \"confidence\": 0.0-1.0}"
+    '只输出 JSON：{"processor": "reflex|subconscious|conscious", '
+    '"reason": "<=50字", "confidence": 0.0-1.0}'
 )
 
 
@@ -200,9 +202,7 @@ async def _call_model(
         "Content-Type": "application/json",
     }
     try:
-        resp = await client.post(
-            cfg["base_url"], json=payload, headers=headers, timeout=timeout
-        )
+        resp = await client.post(cfg["base_url"], json=payload, headers=headers, timeout=timeout)
         resp.raise_for_status()
         data = resp.json()
     except (httpx.ConnectError, httpx.ReadError, httpx.ReadTimeout, httpx.RemoteProtocolError) as e:
@@ -215,10 +215,10 @@ async def _call_model(
             )
             resp.raise_for_status()
             data = resp.json()
-        except Exception as e2:  # noqa: BLE001
+        except RECOVERABLE_ERRORS as e2:  # noqa: BLE001
             logger.warning("模型 %s 重试仍失败：%s", cfg["display"], e2)
             return None
-    except Exception as e:  # noqa: BLE001
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001
         logger.warning("模型 %s 调用失败：%s", cfg["display"], e)
         return None
     content = ""
@@ -366,6 +366,7 @@ async def run_labeling(args: argparse.Namespace) -> int:
     sem = asyncio.Semaphore(max(1, args.concurrency))
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(args.timeout * 2, connect=30.0)) as client:
+
         async def _bounded(idx: int, row: dict[str, Any]) -> tuple[int, dict[str, Any]]:
             async with sem:
                 labeled = await label_row(client, providers, row, args.timeout)
@@ -379,7 +380,7 @@ async def run_labeling(args: argparse.Namespace) -> int:
             for fut in asyncio.as_completed(tasks):
                 try:
                     idx, labeled = await fut
-                except Exception as e:  # noqa: BLE001
+                except RECOVERABLE_ERRORS as e:  # noqa: BLE001
                     done += 1
                     logger.warning("样本标注失败：%s", e)
                     continue

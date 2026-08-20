@@ -14,29 +14,57 @@ const apiMock = vi.hoisted(() => ({
 
 vi.mock('@/api/tutorialV2', () => ({ tutorialV2Api: apiMock }))
 
-import {
-  activeTutorialRunAllowsRoute,
-  tutorialRunAllowsRoute,
-  useTutorialV2Store,
-} from './tutorialV2'
+import { activeTutorialRunAllowsRoute, tutorialRunAllowsRoute, useTutorialV2Store } from './tutorialV2'
 
 const step = {
-  id: 'create-customer', title: '创建客户B', goal: '建客户', instruction: '亲自创建',
-  success_criteria: '恰好一条', why: '主数据唯一', hint: '精确名称', route_name: 'customers',
-  target_selector: 'button', location_label: '组织管理', completion_cue: '看到客户B',
+  id: 'create-customer',
+  title: '创建客户B',
+  goal: '建客户',
+  instruction: '亲自创建',
+  success_criteria: '恰好一条',
+  why: '主数据唯一',
+  hint: '精确名称',
+  route_name: 'customers',
+  target_selector: 'button',
+  location_label: '组织管理',
+  completion_cue: '看到客户B',
   guide_actions: [{ instruction: '点击新建', target_selector: 'button', expected_input: '' }],
-  action_checklist: ['点击新建'], principle: '', required: true, status: 'pending' as const, evidence: null,
+  action_checklist: ['点击新建'],
+  principle: '',
+  required: true,
+  status: 'pending' as const,
+  evidence: null,
 }
 const activeRun = {
-  id: 'run-1', workspace_id: 'workspace-1', course_id: 'master-data', version: 2,
-  status: 'active' as const, current_step_id: step.id, attempt_count: 0, progress: 0,
-  completed_steps: 0, total_steps: 1, generation: 1, teaching_space: true as const,
-  steps: [step], started_at: '2026-08-13T00:00:00', completed_at: null,
+  id: 'run-1',
+  workspace_id: 'workspace-1',
+  course_id: 'master-data',
+  version: 2,
+  status: 'active' as const,
+  current_step_id: step.id,
+  attempt_count: 0,
+  progress: 0,
+  completed_steps: 0,
+  total_steps: 1,
+  generation: 1,
+  teaching_space: true as const,
+  steps: [step],
+  started_at: '2026-08-13T00:00:00',
+  completed_at: null,
 }
 const course = {
-  id: 'master-data', title: '客户与产品建档', summary: '真实建档', estimated_minutes: 10,
-  prerequisite_ids: [], version: 2, steps: [step], locked: false,
-  missing_prerequisite_ids: [], run: activeRun, status: 'active' as const, progress: 0,
+  id: 'master-data',
+  title: '客户与产品建档',
+  summary: '真实建档',
+  estimated_minutes: 10,
+  prerequisite_ids: [],
+  version: 2,
+  steps: [step],
+  locked: false,
+  missing_prerequisite_ids: [],
+  run: activeRun,
+  status: 'active' as const,
+  progress: 0,
 }
 
 describe('tutorial V2 store', () => {

@@ -14,7 +14,6 @@ from typing import Any
 import pytest
 
 from vibe_coding.agent.orchestration import (
-    AgentMessage,
     BestOfNOrchestrator,
     CoderAgent,
     MessageBus,
@@ -24,7 +23,6 @@ from vibe_coding.agent.orchestration import (
     ReviewerAgent,
 )
 from vibe_coding.nl.llm import MockLLM
-
 
 # ---------------------------------------------------- shared stubs
 
@@ -51,7 +49,7 @@ class _StubProjectCoder:
             raise RuntimeError("no patches scripted")
         return self.patches.pop(0)
 
-    def apply_patch(self, patch, dry_run: bool = False):  # noqa: ARG002
+    def apply_patch(self, patch, dry_run: bool = False):
         self.apply_calls.append(patch.patch_id)
 
         @dataclass
@@ -103,9 +101,7 @@ def test_orchestrator_completes_on_first_approval() -> None:
     project_coder = _StubProjectCoder()
     coder = CoderAgent(project_coder=project_coder)
     reviewer = ReviewerAgent(llm=_reviewer_llm("approve", score=92))
-    orch = MultiAgentOrchestrator(
-        planner=planner, coder=coder, reviewer=reviewer, max_rounds=2
-    )
+    orch = MultiAgentOrchestrator(planner=planner, coder=coder, reviewer=reviewer, max_rounds=2)
     result = orch.run("把 foo 改名成 bar")
     assert result.success is True
     assert result.rounds == 1
@@ -118,9 +114,7 @@ def test_orchestrator_completes_on_first_approval() -> None:
 def test_orchestrator_runs_revision_round_when_reviewer_rejects() -> None:
     plan_payload = {
         "plan_summary": "p",
-        "tasks": [
-            {"task_id": "t-1", "brief": "do thing", "rationale": "...", "focus_paths": []}
-        ],
+        "tasks": [{"task_id": "t-1", "brief": "do thing", "rationale": "...", "focus_paths": []}],
     }
     planner = PlannerAgent(llm=_planner_llm(plan_payload))
     project_coder = _StubProjectCoder(
@@ -150,9 +144,7 @@ def test_orchestrator_runs_revision_round_when_reviewer_rejects() -> None:
         ]
     )
     reviewer = ReviewerAgent(llm=reviewer_llm)
-    orch = MultiAgentOrchestrator(
-        planner=planner, coder=coder, reviewer=reviewer, max_rounds=3
-    )
+    orch = MultiAgentOrchestrator(planner=planner, coder=coder, reviewer=reviewer, max_rounds=3)
     result = orch.run("do something")
     assert result.success is True
     assert result.rounds == 2
@@ -164,19 +156,13 @@ def test_orchestrator_runs_revision_round_when_reviewer_rejects() -> None:
 def test_orchestrator_gives_up_after_max_rounds() -> None:
     plan_payload = {
         "plan_summary": "p",
-        "tasks": [
-            {"task_id": "t-1", "brief": "do thing", "rationale": "...", "focus_paths": []}
-        ],
+        "tasks": [{"task_id": "t-1", "brief": "do thing", "rationale": "...", "focus_paths": []}],
     }
     planner = PlannerAgent(llm=_planner_llm(plan_payload))
-    project_coder = _StubProjectCoder(
-        patches=[_StubPatch(patch_id=f"p-{i}") for i in range(5)]
-    )
+    project_coder = _StubProjectCoder(patches=[_StubPatch(patch_id=f"p-{i}") for i in range(5)])
     coder = CoderAgent(project_coder=project_coder)
     reviewer = ReviewerAgent(llm=_reviewer_llm("revise", score=40))
-    orch = MultiAgentOrchestrator(
-        planner=planner, coder=coder, reviewer=reviewer, max_rounds=2
-    )
+    orch = MultiAgentOrchestrator(planner=planner, coder=coder, reviewer=reviewer, max_rounds=2)
     result = orch.run("do something")
     assert result.success is False
     assert result.rounds == 2
@@ -206,9 +192,7 @@ def test_orchestrator_publishes_full_message_log() -> None:
     project_coder = _StubProjectCoder()
     coder = CoderAgent(project_coder=project_coder)
     reviewer = ReviewerAgent(llm=_reviewer_llm("approve"))
-    orch = MultiAgentOrchestrator(
-        planner=planner, coder=coder, reviewer=reviewer, bus=bus
-    )
+    orch = MultiAgentOrchestrator(planner=planner, coder=coder, reviewer=reviewer, bus=bus)
     orch.run("do")
     kinds = {m.kind for m in bus.snapshot()}
     assert {"kickoff", "plan", "patch", "approval"} <= kinds
@@ -236,9 +220,7 @@ def test_best_of_n_picks_highest_scoring_patch() -> None:
             json.dumps({"verdict": "revise", "score": 70, "reasons": [], "suggestions": []}),
         ]
     )
-    orch = BestOfNOrchestrator(
-        planner=planner, coders=coders, reviewer=ReviewerAgent(llm=reviewer_llm)
-    )
+    orch = BestOfNOrchestrator(planner=planner, coders=coders, reviewer=ReviewerAgent(llm=reviewer_llm))
     result = orch.run("anything")
     assert result.success is True
     assert result.final_patch == {"patch_id": "p-B", "summary": "stub patch", "edits": []}

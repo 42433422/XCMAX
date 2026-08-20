@@ -16,6 +16,7 @@ Usage:
   python scripts/dev/audit_workflows.py            # audit all workflows
   python scripts/dev/audit_workflows.py fhd-ci-cd  # filter by filename substring
 """
+
 from __future__ import annotations
 
 import os
@@ -33,7 +34,10 @@ BASE_DIRS = [
     ("FHD/frontend", os.path.join(REPO_ROOT, "FHD", "frontend")),
     ("FHD/mobile-flutter-poc", os.path.join(REPO_ROOT, "FHD", "mobile-flutter-poc")),
     ("成都修茈", os.path.join(REPO_ROOT, "成都修茈科技有限公司")),
-    ("成都修茈/MODstore_deploy", os.path.join(REPO_ROOT, "成都修茈科技有限公司", "MODstore_deploy")),
+    (
+        "成都修茈/MODstore_deploy",
+        os.path.join(REPO_ROOT, "成都修茈科技有限公司", "MODstore_deploy"),
+    ),
 ]
 
 # A token whose `scripts/` part is preceded by a var or remote-root is not a local link.
@@ -72,8 +76,13 @@ def extract_script_refs(path: str) -> list[tuple[str, str, str]]:
         if ref.startswith("FHD/") or ref.startswith("成都修茈"):
             base_label, base = BASE_DIRS[0]
             full = os.path.join(base, ref)
-            results.append((ref, "OK" if os.path.exists(full) else "MISSING",
-                            base_label if os.path.exists(full) else ""))
+            results.append(
+                (
+                    ref,
+                    "OK" if os.path.exists(full) else "MISSING",
+                    base_label if os.path.exists(full) else "",
+                )
+            )
             continue
 
         # 3) plain `scripts/...` -> try every base dir
@@ -93,8 +102,10 @@ def parse_triggers(path: str) -> list[tuple[str, str]]:
     with open(path, encoding="utf-8", errors="replace") as f:
         lines = f.read().splitlines()
 
-    on_idx = next((i for i, ln in enumerate(lines)
-                   if re.match(r"^\s*on\s*:\s*($|\[|\S)", ln)), None)
+    on_idx = next(
+        (i for i, ln in enumerate(lines) if re.match(r"^\s*on\s*:\s*($|\[|\S)", ln)),
+        None,
+    )
     if on_idx is None:
         return [("(none)", "")]
 
@@ -102,7 +113,7 @@ def parse_triggers(path: str) -> list[tuple[str, str]]:
 
     # on: push
     m = re.match(r"^on\s*:\s*(\S.*)$", line)
-    if m and not m.group(1).startswith(("[")):
+    if m and not m.group(1).startswith("["):
         return [(m.group(1).strip(), "")]
 
     # on: [push, pull_request, ...]
@@ -131,20 +142,33 @@ def parse_triggers(path: str) -> list[tuple[str, str]]:
         # collect child lines (filters / cron / types)
         child = []
         j = i + 1
-        while j < len(lines) and lines[j].strip() and \
-                (lines[j].strip().startswith("-") or (len(lines[j]) - len(lines[j].lstrip())) > base_indent):
+        while (
+            j < len(lines)
+            and lines[j].strip()
+            and (
+                lines[j].strip().startswith("-")
+                or (len(lines[j]) - len(lines[j].lstrip())) > base_indent
+            )
+        ):
             child.append(lines[j].strip())
             j += 1
         detail = ""
         if key == "schedule":
             # only schedule triggers carry cron entries
-            crons = [c.split("cron")[-1].strip(" :'\"")
-                     for c in child if c.startswith("cron")]
+            crons = [
+                c.split("cron")[-1].strip(" :'\"")
+                for c in child
+                if c.startswith("cron")
+            ]
             detail = "; ".join(crons)
         else:
             # summarize key filters concisely (avoid dumping huge path lists)
-            filters = [c for c in child if c.split(":")[0] in
-                       ("branches", "tags", "types", "workflows", "paths", "labels")]
+            filters = [
+                c
+                for c in child
+                if c.split(":")[0]
+                in ("branches", "tags", "types", "workflows", "paths", "labels")
+            ]
             detail = "; ".join(filters[:4])
         result.append((key, detail))
         i = j

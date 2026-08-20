@@ -82,7 +82,10 @@ describe('coreWorkflowMonitor', () => {
 
   it('buildCoreWorkflowMonitorLine covers all core employees', () => {
     for (const empId of ['wechat_msg', 'label_print', 'shipment_mgmt', 'receipt_confirm'] as const) {
-      const line = buildCoreWorkflowMonitorLine(empId, { lastPolledAt: Date.now(), pollIntervalMs: 60000 })
+      const line = buildCoreWorkflowMonitorLine(empId, {
+        lastPolledAt: Date.now(),
+        pollIntervalMs: 60000,
+      })
       expect(typeof line).toBe('string')
       expect(line.length).toBeGreaterThan(0)
     }
@@ -297,9 +300,13 @@ describe('coreWorkflowMonitor', () => {
 
   it('computeCoreWorkflowCurrentHint wechat with monitor polled', () => {
     withStarRefresh(true, () => {
-      const hint = computeCoreWorkflowCurrentHint('wechat_msg', {}, {
-        lastPolledAt: Date.now(),
-      })
+      const hint = computeCoreWorkflowCurrentHint(
+        'wechat_msg',
+        {},
+        {
+          lastPolledAt: Date.now(),
+        },
+      )
       expect(hint).toContain('轮询')
     })
   })

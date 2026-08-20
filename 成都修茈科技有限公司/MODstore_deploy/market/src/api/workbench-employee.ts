@@ -4,7 +4,11 @@ export const workbenchEmployee = {
   employeeBenchTest: (employeeId: string, provider?: string, model?: string) =>
     req('/api/workbench/employee-bench-test', {
       method: 'POST',
-      body: JSON.stringify({ employee_id: employeeId, provider: provider || null, model: model || null }),
+      body: JSON.stringify({
+        employee_id: employeeId,
+        provider: provider || null,
+        model: model || null,
+      }),
     }),
   employeePublish: (employeeId: string, opts?: { price?: number; industry?: string; release_channel?: string }) =>
     req('/api/workbench/employee-publish', {
@@ -28,10 +32,14 @@ export const workbenchEmployee = {
     const res = await fetch('/api/workbench/employee-export', {
       method: 'POST',
       headers,
-      body: JSON.stringify({ manifest, employee_id: employeeId || null, standalone: opts?.standalone === true }),
+      body: JSON.stringify({
+        manifest,
+        employee_id: employeeId || null,
+        standalone: opts?.standalone === true,
+      }),
     })
     if (!res.ok) {
-      const err = await res.json().catch(() => ({})) as Record<string, unknown>
+      const err = (await res.json().catch(() => ({}))) as Record<string, unknown>
       throw new Error(String(err?.detail || err?.error || `HTTP ${res.status}`))
     }
     return res.blob()
@@ -39,6 +47,11 @@ export const workbenchEmployee = {
   employeeSyncTest: (employeeId: string, fhdBaseUrl?: string, provider?: string, model?: string) =>
     req('/api/workbench/employee-sync-test', {
       method: 'POST',
-      body: JSON.stringify({ employee_id: employeeId, fhd_base_url: fhdBaseUrl || null, provider: provider || null, model: model || null }),
+      body: JSON.stringify({
+        employee_id: employeeId,
+        fhd_base_url: fhdBaseUrl || null,
+        provider: provider || null,
+        model: model || null,
+      }),
     }),
 }

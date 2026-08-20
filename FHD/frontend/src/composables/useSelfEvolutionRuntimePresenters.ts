@@ -78,57 +78,57 @@ export function useSelfEvolutionRuntimePresenters(state: SelfEvolutionRuntimePan
     const v2 = asRecord(md.safety_score_v2)
     const v3 = asRecord(md.safety_score_v3)
     const roster = asRecord(md.roster_gate)
-    const governance = Object.keys(asRecord(md.governance_gate)).length
-      ? asRecord(md.governance_gate)
-      : state.currentGovernanceGate
+    const governance = Object.keys(asRecord(md.governance_gate)).length ? asRecord(md.governance_gate) : state.currentGovernanceGate
     const evolution = asRecord(md.evolution_gate)
-    if (v1.score != null) cards.push({
-      key: 'v1',
-      label: 'V1 风险分',
-      value: String(v1.score),
-      sub: `最大 ${v1.max_allowed ?? '—'} · ${firstText(v1.reason, v1.source, '')}`,
-    })
-    if (v2.score != null) cards.push({
-      key: 'v2',
-      label: 'V2 安全分',
-      value: String(v2.score),
-      sub: `最小 ${v2.min_allowed ?? '—'} · ${firstText(v2.reason, v2.source, '')}`,
-    })
-    if (v3.score != null) cards.push({
-      key: 'v3',
-      label: 'V3 安全分',
-      value: String(v3.score),
-      sub: `最小 ${v3.min_allowed ?? '—'} · ${firstText(v3.reason, v3.source, '')}`,
-    })
-    if (md.qa_verdict || md.review_max_severity) cards.push({
-      key: 'qa',
-      label: 'QA / 审查',
-      value: firstText(md.qa_verdict, '—'),
-      sub: md.review_max_severity ? `审查 ${md.review_max_severity}` : '结构化检查',
-    })
-    if (Object.keys(roster).length) cards.push({
-      key: 'roster',
-      label: '排班检查',
-      value: firstText(roster.action, roster.ok === true ? '允许' : '异常'),
-      sub: firstText(roster.reason, roster.policy, '排班策略'),
-    })
-    if (Object.keys(governance).length) cards.push({
-      key: 'governance',
-      label: '管理检查',
-      value: firstText(governance.action, governance.ok === true ? '允许' : '异常'),
-      sub: firstText(
-        governance.reason,
-        asRecord(governance.summary).health,
-        governance.policy,
-        '审计策略',
-      ),
-    })
-    if (Object.keys(evolution).length) cards.push({
-      key: 'evolution',
-      label: '进化检查',
-      value: evolution.pause === true ? '暂停' : '允许',
-      sub: firstText(evolution.reason, `历史 ${evolution.history_count ?? 0}`, '进化策略'),
-    })
+    if (v1.score != null)
+      cards.push({
+        key: 'v1',
+        label: 'V1 风险分',
+        value: String(v1.score),
+        sub: `最大 ${v1.max_allowed ?? '—'} · ${firstText(v1.reason, v1.source, '')}`,
+      })
+    if (v2.score != null)
+      cards.push({
+        key: 'v2',
+        label: 'V2 安全分',
+        value: String(v2.score),
+        sub: `最小 ${v2.min_allowed ?? '—'} · ${firstText(v2.reason, v2.source, '')}`,
+      })
+    if (v3.score != null)
+      cards.push({
+        key: 'v3',
+        label: 'V3 安全分',
+        value: String(v3.score),
+        sub: `最小 ${v3.min_allowed ?? '—'} · ${firstText(v3.reason, v3.source, '')}`,
+      })
+    if (md.qa_verdict || md.review_max_severity)
+      cards.push({
+        key: 'qa',
+        label: 'QA / 审查',
+        value: firstText(md.qa_verdict, '—'),
+        sub: md.review_max_severity ? `审查 ${md.review_max_severity}` : '结构化检查',
+      })
+    if (Object.keys(roster).length)
+      cards.push({
+        key: 'roster',
+        label: '排班检查',
+        value: firstText(roster.action, roster.ok === true ? '允许' : '异常'),
+        sub: firstText(roster.reason, roster.policy, '排班策略'),
+      })
+    if (Object.keys(governance).length)
+      cards.push({
+        key: 'governance',
+        label: '管理检查',
+        value: firstText(governance.action, governance.ok === true ? '允许' : '异常'),
+        sub: firstText(governance.reason, asRecord(governance.summary).health, governance.policy, '审计策略'),
+      })
+    if (Object.keys(evolution).length)
+      cards.push({
+        key: 'evolution',
+        label: '进化检查',
+        value: evolution.pause === true ? '暂停' : '允许',
+        sub: firstText(evolution.reason, `历史 ${evolution.history_count ?? 0}`, '进化策略'),
+      })
     return cards
   })
 
@@ -206,23 +206,31 @@ export function useSelfEvolutionRuntimePresenters(state: SelfEvolutionRuntimePan
   })
 
   const kbHitLines = computed(() => {
-    const fixes = asArray(state.kbSummary.top_fix_hits).map((item) => {
-      const row = asRecord(item)
-      return firstText(row.symptom, row.root_cause, row.path)
-    }).filter(Boolean)
-    const patterns = asArray(state.kbSummary.top_pattern_hits).map((item) => {
-      const row = asRecord(item)
-      return firstText(row.summary, row.pattern, row.path)
-    }).filter(Boolean)
+    const fixes = asArray(state.kbSummary.top_fix_hits)
+      .map((item) => {
+        const row = asRecord(item)
+        return firstText(row.symptom, row.root_cause, row.path)
+      })
+      .filter(Boolean)
+    const patterns = asArray(state.kbSummary.top_pattern_hits)
+      .map((item) => {
+        const row = asRecord(item)
+        return firstText(row.summary, row.pattern, row.path)
+      })
+      .filter(Boolean)
     return [...fixes, ...patterns].slice(0, 5)
   })
 
   const kbFixHitDetails = computed(() =>
-    asArray(state.kbSummary.top_fix_hits).map((item) => asRecord(item)).slice(0, 3),
+    asArray(state.kbSummary.top_fix_hits)
+      .map((item) => asRecord(item))
+      .slice(0, 3),
   )
 
   const kbPatternHitDetails = computed(() =>
-    asArray(state.kbSummary.top_pattern_hits).map((item) => asRecord(item)).slice(0, 3),
+    asArray(state.kbSummary.top_pattern_hits)
+      .map((item) => asRecord(item))
+      .slice(0, 3),
   )
 
   const proactiveSignals = computed<AnyRecord>(() => asRecord(state.gate.proactive_signals))
@@ -235,9 +243,7 @@ export function useSelfEvolutionRuntimePresenters(state: SelfEvolutionRuntimePan
   const proactiveCards = computed(() => {
     const count = asNumber(state.gate.proactive_task_count, proactiveCandidates.value.length)
     const kinds = new Set(
-      proactiveCandidates.value
-        .map((item) => firstText(item.task_type, item.kind, item.category, item.signal_type))
-        .filter(Boolean),
+      proactiveCandidates.value.map((item) => firstText(item.task_type, item.kind, item.category, item.signal_type)).filter(Boolean),
     )
     return [
       {
@@ -265,7 +271,9 @@ export function useSelfEvolutionRuntimePresenters(state: SelfEvolutionRuntimePan
   })
 
   const metricWindows = computed(() =>
-    asArray(state.evolutionMetrics.windows).map((item) => asRecord(item)).slice(-2),
+    asArray(state.evolutionMetrics.windows)
+      .map((item) => asRecord(item))
+      .slice(-2),
   )
 
   const rosterCoverage = computed(() =>
@@ -305,14 +313,24 @@ export function useSelfEvolutionRuntimePresenters(state: SelfEvolutionRuntimePan
         key: 'outside',
         label: '非编制混入',
         value: `${roster.out_of_roster_count ?? 0}`,
-        sub: asArray(roster.out_of_roster_ids).map((id) => String(id)).filter(Boolean).slice(0, 3).join(' / ') || '未混入',
+        sub:
+          asArray(roster.out_of_roster_ids)
+            .map((id) => String(id))
+            .filter(Boolean)
+            .slice(0, 3)
+            .join(' / ') || '未混入',
         tone: Number(roster.out_of_roster_count || 0) > 0 ? 'bad' : 'ok',
       },
       {
         key: 'not-deployed',
         label: '未登记上岗',
         value: `${roster.not_deployed_count ?? 0}`,
-        sub: asArray(roster.not_deployed_ids).map((id) => String(id)).filter(Boolean).slice(0, 3).join(' / ') || '全部已登记',
+        sub:
+          asArray(roster.not_deployed_ids)
+            .map((id) => String(id))
+            .filter(Boolean)
+            .slice(0, 3)
+            .join(' / ') || '全部已登记',
         tone: Number(roster.not_deployed_count || 0) > 0 ? 'bad' : 'ok',
       },
       {
@@ -401,11 +419,31 @@ export function useSelfEvolutionRuntimePresenters(state: SelfEvolutionRuntimePan
   })
 
   return reactive({
-    statusTone, statusLabel, cronLine, signalCount, threshold, riskScore, qaVerdict,
-    evidenceCards, decisionCards, loopStages, kbCards, kbHitLines, kbFixHitDetails,
-    kbPatternHitDetails, proactiveSignals, proactiveCandidates, proactiveCards,
-    metricWindows, rosterCoverage, rosterGate, rosterRemediation, rosterAlignmentCards,
-    evolutionMetricCards, openApprovalItems, runTimeline,
+    statusTone,
+    statusLabel,
+    cronLine,
+    signalCount,
+    threshold,
+    riskScore,
+    qaVerdict,
+    evidenceCards,
+    decisionCards,
+    loopStages,
+    kbCards,
+    kbHitLines,
+    kbFixHitDetails,
+    kbPatternHitDetails,
+    proactiveSignals,
+    proactiveCandidates,
+    proactiveCards,
+    metricWindows,
+    rosterCoverage,
+    rosterGate,
+    rosterRemediation,
+    rosterAlignmentCards,
+    evolutionMetricCards,
+    openApprovalItems,
+    runTimeline,
   })
 }
 

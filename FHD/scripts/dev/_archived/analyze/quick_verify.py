@@ -1,9 +1,12 @@
+# mypy: disable-error-code="attr-defined, import-not-found"
 """
 快速验证脚本 - 检查所有组件是否正常
 """
 
 import os
 import sys
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 print("=" * 80)
 print("标签模板生成器 - 快速验证")
@@ -19,7 +22,7 @@ try:
 
     skill = get_label_template_generator_skill()
     print(f"   ✓ 技能加载成功：{skill.name}")
-except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"   ✗ 模块加载失败：{e}")
     sys.exit(1)
 
@@ -31,7 +34,7 @@ try:
     bc = BarcodeGenerator("code128")
     print("   ✓ BarcodeGenerator 加载成功")
     print(f"   ✓ 支持类型：{bc.get_supported_types()}")
-except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"   ✗ 条形码生成器加载失败：{e}")
 
 # 3. 检查依赖库
@@ -83,17 +86,20 @@ try:
         print("   ✓ skills FastAPI 路由已注册")
     else:
         print("   ✗ skills FastAPI 路由未找到")
-except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"   ✗ skills FastAPI 路由加载失败：{e}")
 
 try:
     from app.fastapi_routes.excel_templates import router as excel_templates_router
 
-    if any(getattr(route, "path", "") == "/api/excel/templates" for route in excel_templates_router.routes):
+    if any(
+        getattr(route, "path", "") == "/api/excel/templates"
+        for route in excel_templates_router.routes
+    ):
         print("   ✓ excel_templates FastAPI 路由已注册")
     else:
         print("   ✗ excel_templates FastAPI 路由未找到")
-except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"   ✗ excel_templates FastAPI 路由加载失败：{e}")
 
 # 6. 测试条形码生成
@@ -104,7 +110,7 @@ try:
         print(f"   ✓ 条形码生成成功 (尺寸：{img.size})")
     else:
         print("   ✗ 条形码生成失败")
-except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"   ✗ 条形码生成异常：{e}")
 
 print("\n" + "=" * 80)

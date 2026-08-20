@@ -1,12 +1,7 @@
 /** 官网小C：同意后主动介绍当前页（TTS + 中文字幕）。软件工作台不挂字幕。 */
 
 import { getCorpPageKnowledge, resolveCorpPageId } from '../content/siteKnowledge'
-import {
-  beginTtsSubtitles,
-  endTtsSubtitles,
-  isTtsSubtitleSession,
-  setTtsSubtitleIndex,
-} from '../composables/ttsSubtitleStore'
+import { beginTtsSubtitles, endTtsSubtitles, isTtsSubtitleSession, setTtsSubtitleIndex } from '../composables/ttsSubtitleStore'
 import { splitSentences } from '../utils/ttsSentenceSplit'
 import { cleanTextForTts } from '../utils/ttsTextClean'
 
@@ -63,9 +58,7 @@ export function buildCorpPageIntroScript(pathname: string): {
   const page = getCorpPageKnowledge(pageId, pathname)
   const body = clip(page.summary || page.welcomeDesc || '', 72)
   const text = clip(
-    body
-      ? `嗨，我是小C。${body}有需要直接问我，或点快捷问题。`
-      : '嗨，我是小C。想了解产品、案例或预约沟通，直接跟我说，或点快捷问题就行。',
+    body ? `嗨，我是小C。${body}有需要直接问我，或点快捷问题。` : '嗨，我是小C。想了解产品、案例或预约沟通，直接跟我说，或点快捷问题就行。',
     140,
   )
   return { pageId, text }

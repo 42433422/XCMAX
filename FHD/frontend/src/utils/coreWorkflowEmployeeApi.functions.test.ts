@@ -19,10 +19,7 @@ vi.mock('@/utils/modWorkflowEmployees', () => ({
   findWorkflowEmployeeEntry: mockFindWorkflowEmployeeEntry,
 }))
 
-import {
-  postCoreWorkflowEmployeeRun,
-  tryPostCoreWorkflowEmployeeRun,
-} from './coreWorkflowEmployeeApi'
+import { postCoreWorkflowEmployeeRun, tryPostCoreWorkflowEmployeeRun } from './coreWorkflowEmployeeApi'
 
 describe('coreWorkflowEmployeeApi', () => {
   beforeEach(() => {
@@ -32,17 +29,17 @@ describe('coreWorkflowEmployeeApi', () => {
   describe('postCoreWorkflowEmployeeRun', () => {
     it('throws when mod not installed (no mods provided)', async () => {
       mockFindWorkflowEmployeeEntry.mockReturnValue(null)
-      await expect(
-        postCoreWorkflowEmployeeRun('label_print' as never, { action: 'status' }, []),
-      ).rejects.toThrow('workflow employee mod not installed: label_print')
+      await expect(postCoreWorkflowEmployeeRun('label_print' as never, { action: 'status' }, [])).rejects.toThrow(
+        'workflow employee mod not installed: label_print',
+      )
       expect(mockApiFetch).not.toHaveBeenCalled()
     })
 
     it('throws when mod not installed (undefined mods)', async () => {
       mockFindWorkflowEmployeeEntry.mockReturnValue(null)
-      await expect(
-        postCoreWorkflowEmployeeRun('label_print' as never, { action: 'status' }, undefined),
-      ).rejects.toThrow('workflow employee mod not installed: label_print')
+      await expect(postCoreWorkflowEmployeeRun('label_print' as never, { action: 'status' }, undefined)).rejects.toThrow(
+        'workflow employee mod not installed: label_print',
+      )
     })
 
     it('throws when findWorkflowEmployeeEntry returns null entry', async () => {
@@ -56,9 +53,9 @@ describe('coreWorkflowEmployeeApi', () => {
 
     it('throws when modId is empty string', async () => {
       mockFindWorkflowEmployeeEntry.mockReturnValue({ id: 'label_print', modId: '', modName: '' })
-      await expect(
-        postCoreWorkflowEmployeeRun('label_print' as never, { action: 'status' }, []),
-      ).rejects.toThrow('workflow employee mod not installed: label_print')
+      await expect(postCoreWorkflowEmployeeRun('label_print' as never, { action: 'status' }, [])).rejects.toThrow(
+        'workflow employee mod not installed: label_print',
+      )
     })
 
     it('throws when modId is whitespace only', async () => {
@@ -67,9 +64,9 @@ describe('coreWorkflowEmployeeApi', () => {
         modId: '   ',
         modName: '',
       })
-      await expect(
-        postCoreWorkflowEmployeeRun('label_print' as never, { action: 'status' }, []),
-      ).rejects.toThrow('workflow employee mod not installed: label_print')
+      await expect(postCoreWorkflowEmployeeRun('label_print' as never, { action: 'status' }, [])).rejects.toThrow(
+        'workflow employee mod not installed: label_print',
+      )
     })
 
     it('calls apiFetch with correct path when mod installed', async () => {
@@ -84,16 +81,10 @@ describe('coreWorkflowEmployeeApi', () => {
         json: async () => ({ success: true, data: { ok: true } }),
       }
       mockApiFetch.mockResolvedValue(mockResponse)
-      const result = await postCoreWorkflowEmployeeRun(
-        'label_print' as never,
-        { action: 'status' },
-        [],
-      )
+      const result = await postCoreWorkflowEmployeeRun('label_print' as never, { action: 'status' }, [])
       expect(mockApiFetch).toHaveBeenCalledTimes(1)
       const [path, init] = mockApiFetch.mock.calls[0]
-      expect(path).toBe(
-        '/api/mod/xcagi-workflow-employee-label-print/employees/label_print/run',
-      )
+      expect(path).toBe('/api/mod/xcagi-workflow-employee-label-print/employees/label_print/run')
       expect(init.method).toBe('POST')
       expect(init.headers['Content-Type']).toBe('application/json')
       expect(init.body).toBe(JSON.stringify({ action: 'status' }))
@@ -132,17 +123,17 @@ describe('coreWorkflowEmployeeApi', () => {
     it('throws when HTTP response not ok', async () => {
       mockFindWorkflowEmployeeEntry.mockReturnValue({ id: 'e1', modId: 'm1', modName: '' })
       mockApiFetch.mockResolvedValue({ ok: false, status: 500 })
-      await expect(
-        postCoreWorkflowEmployeeRun('e1' as never, { action: 'status' }, []),
-      ).rejects.toThrow('workflow employee run e1: HTTP 500')
+      await expect(postCoreWorkflowEmployeeRun('e1' as never, { action: 'status' }, [])).rejects.toThrow(
+        'workflow employee run e1: HTTP 500',
+      )
     })
 
     it('throws on 404 response', async () => {
       mockFindWorkflowEmployeeEntry.mockReturnValue({ id: 'e1', modId: 'm1', modName: '' })
       mockApiFetch.mockResolvedValue({ ok: false, status: 404 })
-      await expect(
-        postCoreWorkflowEmployeeRun('e1' as never, { action: 'status' }, []),
-      ).rejects.toThrow('workflow employee run e1: HTTP 404')
+      await expect(postCoreWorkflowEmployeeRun('e1' as never, { action: 'status' }, [])).rejects.toThrow(
+        'workflow employee run e1: HTTP 404',
+      )
     })
 
     it('passes through custom payload with extra fields', async () => {
@@ -178,9 +169,7 @@ describe('coreWorkflowEmployeeApi', () => {
     it('propagates apiFetch network errors', async () => {
       mockFindWorkflowEmployeeEntry.mockReturnValue({ id: 'e1', modId: 'm1', modName: '' })
       mockApiFetch.mockRejectedValue(new TypeError('Failed to fetch'))
-      await expect(
-        postCoreWorkflowEmployeeRun('e1' as never, { action: 'status' }, []),
-      ).rejects.toThrow('Failed to fetch')
+      await expect(postCoreWorkflowEmployeeRun('e1' as never, { action: 'status' }, [])).rejects.toThrow('Failed to fetch')
     })
   })
 
@@ -275,11 +264,7 @@ describe('coreWorkflowEmployeeApi', () => {
       mockFindWorkflowEmployeeEntry.mockReturnValue(null)
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
       await tryPostCoreWorkflowEmployeeRun('special_emp', { action: 'status' }, [])
-      expect(warnSpy).toHaveBeenCalledWith(
-        '[coreWorkflowEmployeeApi]',
-        'special_emp',
-        expect.any(Error),
-      )
+      expect(warnSpy).toHaveBeenCalledWith('[coreWorkflowEmployeeApi]', 'special_emp', expect.any(Error))
       warnSpy.mockRestore()
     })
   })

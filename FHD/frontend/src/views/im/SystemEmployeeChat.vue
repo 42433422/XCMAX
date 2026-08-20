@@ -7,8 +7,7 @@
           'im-avatar--sm',
           {
             'im-avatar--super-tool': superEmployeeAvatarKey(activeSystemEntry),
-            [`im-avatar--${superEmployeeAvatarKey(activeSystemEntry)}`]:
-              superEmployeeAvatarKey(activeSystemEntry),
+            [`im-avatar--${superEmployeeAvatarKey(activeSystemEntry)}`]: superEmployeeAvatarKey(activeSystemEntry),
             'im-avatar--employee': isDutyEmployeeEntry(activeSystemEntry),
           },
         ]"
@@ -35,8 +34,7 @@
               'im-system-employee-avatar',
               {
                 'im-system-employee-avatar--super-tool': superEmployeeAvatarKey(activeSystemEntry),
-                [`im-system-employee-avatar--${superEmployeeAvatarKey(activeSystemEntry)}`]:
-                  superEmployeeAvatarKey(activeSystemEntry),
+                [`im-system-employee-avatar--${superEmployeeAvatarKey(activeSystemEntry)}`]: superEmployeeAvatarKey(activeSystemEntry),
                 'im-system-employee-avatar--duty': isDutyEmployeeEntry(activeSystemEntry),
               },
             ]"
@@ -78,11 +76,7 @@
             </div>
           </dl>
         </details>
-        <section
-          v-if="isSuperEmployeeEntry(activeSystemEntry)"
-          class="im-cli-model-switch"
-          aria-label="超级开发组 CLI 切换"
-        >
+        <section v-if="isSuperEmployeeEntry(activeSystemEntry)" class="im-cli-model-switch" aria-label="超级开发组 CLI 切换">
           <div class="im-cli-model-switch__label">超级开发组 · CLI</div>
           <div class="im-cli-model-switch__options" role="tablist">
             <button
@@ -90,10 +84,7 @@
               :key="tool.id"
               type="button"
               role="tab"
-              :class="[
-                'im-cli-model-switch__btn',
-                { active: activeSystemEntry?.id === tool.id },
-              ]"
+              :class="['im-cli-model-switch__btn', { active: activeSystemEntry?.id === tool.id }]"
               :aria-selected="activeSystemEntry?.id === tool.id"
               @click="emit('activate-pinned', tool)"
             >
@@ -102,11 +93,7 @@
           </div>
         </section>
       </div>
-      <div
-        v-if="isSuperEmployeeEntry(activeSystemEntry)"
-        :ref="codexScrollEl"
-        class="im-system-call-log"
-      >
+      <div v-if="isSuperEmployeeEntry(activeSystemEntry)" :ref="codexScrollEl" class="im-system-call-log">
         <div v-if="!codexVisibleMessages.length" class="im-system-call-empty">
           <i class="fa fa-terminal" aria-hidden="true"></i>
           <p>等待软件内调用</p>
@@ -114,11 +101,7 @@
         <div
           v-for="m in codexVisibleMessages"
           :key="m.id"
-          :class="[
-            'im-system-call-row',
-            m.role === 'user' ? 'mine' : 'theirs',
-            { 'is-streaming': isCodexStreamingMessage(m) },
-          ]"
+          :class="['im-system-call-row', m.role === 'user' ? 'mine' : 'theirs', { 'is-streaming': isCodexStreamingMessage(m) }]"
         >
           <div class="im-system-call-bubble">
             <span class="im-system-call-role">{{ codexMessageRoleLabel(m) }}</span>
@@ -135,11 +118,7 @@
           <i class="fa fa-id-badge" aria-hidden="true"></i>
           <p>向该员工发送任务后，这里会显示执行回复</p>
         </div>
-        <div
-          v-for="m in activeDutyEmployeeMessages"
-          :key="m.id"
-          :class="['im-system-call-row', m.role === 'user' ? 'mine' : 'theirs']"
-        >
+        <div v-for="m in activeDutyEmployeeMessages" :key="m.id" :class="['im-system-call-row', m.role === 'user' ? 'mine' : 'theirs']">
           <div class="im-system-call-bubble">
             <span class="im-system-call-role">
               {{ m.role === 'user' ? '管理端' : activeSystemEntry.display_name }}
@@ -150,11 +129,7 @@
         </div>
       </div>
     </div>
-    <form
-      v-if="isSuperEmployeeEntry(activeSystemEntry)"
-      class="im-compose im-compose--codex"
-      @submit.prevent="emit('codex-send')"
-    >
+    <form v-if="isSuperEmployeeEntry(activeSystemEntry)" class="im-compose im-compose--codex" @submit.prevent="emit('codex-send')">
       <input
         :ref="codexInputEl"
         :value="codexDraft"
@@ -166,20 +141,11 @@
         @input="onCodexDraftInput"
         @keydown.enter.prevent="emit('codex-send')"
       />
-      <button
-        type="button"
-        class="im-btn im-btn--primary"
-        :disabled="codexBusy || !codexDraft.trim()"
-        @click="emit('codex-send')"
-      >
+      <button type="button" class="im-btn im-btn--primary" :disabled="codexBusy || !codexDraft.trim()" @click="emit('codex-send')">
         调用
       </button>
     </form>
-    <form
-      v-else
-      class="im-compose im-compose--codex"
-      @submit.prevent="emit('duty-employee-send')"
-    >
+    <form v-else class="im-compose im-compose--codex" @submit.prevent="emit('duty-employee-send')">
       <input
         :value="dutyEmployeeDraft"
         type="text"
@@ -189,11 +155,7 @@
         :disabled="dutyEmployeeBusy"
         @input="onDutyEmployeeDraftInput"
       />
-      <button
-        type="submit"
-        class="im-btn im-btn--primary"
-        :disabled="dutyEmployeeBusy || !dutyEmployeeDraft.trim()"
-      >
+      <button type="submit" class="im-btn im-btn--primary" :disabled="dutyEmployeeBusy || !dutyEmployeeDraft.trim()">
         {{ dutyEmployeeBusy ? '执行中' : '发送' }}
       </button>
     </form>
@@ -201,55 +163,55 @@
 </template>
 
 <script setup lang="ts">
-import type { Ref } from 'vue';
+import type { Ref } from 'vue'
 import {
   type CodexDisplayMessage,
   type DutyEmployeeChatMessage,
   type SystemEmployeeEntry,
-} from '@/composables/messenger/useMessengerEntries';
-import './SystemEmployeeChat.css';
+} from '@/composables/messenger/useMessengerEntries'
+import './SystemEmployeeChat.css'
 
 defineProps<{
-  activeSystemEntry: SystemEmployeeEntry;
-  superCliTools: SystemEmployeeEntry[];
-  superCliToolLabel: (entry: SystemEmployeeEntry) => string;
-  systemEntryStatusLabel: (entry: SystemEmployeeEntry) => string;
-  systemEntryIdentity: (entry: SystemEmployeeEntry) => string;
-  systemEntryDispatch: (entry: SystemEmployeeEntry) => string;
-  systemEntryRuntimeStatus: (entry: SystemEmployeeEntry) => string;
-  systemEntryLastStatus: (entry: SystemEmployeeEntry) => string;
-  superEmployeeAvatarKey: (entry: SystemEmployeeEntry) => string | null;
-  superEmployeeAvatarSrc: (entry: SystemEmployeeEntry) => string | null;
-  pinnedAvatarText: (entry: SystemEmployeeEntry) => string;
-  isDutyEmployeeEntry: (entry: SystemEmployeeEntry | null) => boolean;
-  isSuperEmployeeEntry: (entry: SystemEmployeeEntry | null) => boolean;
-  codexMessageRoleLabel: (m: CodexDisplayMessage) => string;
-  isCodexStreamingMessage: (m: CodexDisplayMessage) => boolean;
-  formatTime: (iso: string | null) => string;
-  codexVisibleMessages: CodexDisplayMessage[];
-  activeDutyEmployeeMessages: DutyEmployeeChatMessage[];
-  codexDraft: string;
-  codexBusy: boolean;
-  dutyEmployeeDraft: string;
-  dutyEmployeeBusy: boolean;
-  codexScrollEl: Ref<HTMLElement | null>;
-  dutyEmployeeScrollEl: Ref<HTMLElement | null>;
-  codexInputEl: Ref<HTMLInputElement | null>;
-}>();
+  activeSystemEntry: SystemEmployeeEntry
+  superCliTools: SystemEmployeeEntry[]
+  superCliToolLabel: (entry: SystemEmployeeEntry) => string
+  systemEntryStatusLabel: (entry: SystemEmployeeEntry) => string
+  systemEntryIdentity: (entry: SystemEmployeeEntry) => string
+  systemEntryDispatch: (entry: SystemEmployeeEntry) => string
+  systemEntryRuntimeStatus: (entry: SystemEmployeeEntry) => string
+  systemEntryLastStatus: (entry: SystemEmployeeEntry) => string
+  superEmployeeAvatarKey: (entry: SystemEmployeeEntry) => string | null
+  superEmployeeAvatarSrc: (entry: SystemEmployeeEntry) => string | null
+  pinnedAvatarText: (entry: SystemEmployeeEntry) => string
+  isDutyEmployeeEntry: (entry: SystemEmployeeEntry | null) => boolean
+  isSuperEmployeeEntry: (entry: SystemEmployeeEntry | null) => boolean
+  codexMessageRoleLabel: (m: CodexDisplayMessage) => string
+  isCodexStreamingMessage: (m: CodexDisplayMessage) => boolean
+  formatTime: (iso: string | null) => string
+  codexVisibleMessages: CodexDisplayMessage[]
+  activeDutyEmployeeMessages: DutyEmployeeChatMessage[]
+  codexDraft: string
+  codexBusy: boolean
+  dutyEmployeeDraft: string
+  dutyEmployeeBusy: boolean
+  codexScrollEl: Ref<HTMLElement | null>
+  dutyEmployeeScrollEl: Ref<HTMLElement | null>
+  codexInputEl: Ref<HTMLInputElement | null>
+}>()
 
 const emit = defineEmits<{
-  (e: 'activate-pinned', entry: SystemEmployeeEntry): void;
-  (e: 'codex-send'): void;
-  (e: 'duty-employee-send'): void;
-  (e: 'update:codexDraft', value: string): void;
-  (e: 'update:dutyEmployeeDraft', value: string): void;
-}>();
+  (e: 'activate-pinned', entry: SystemEmployeeEntry): void
+  (e: 'codex-send'): void
+  (e: 'duty-employee-send'): void
+  (e: 'update:codexDraft', value: string): void
+  (e: 'update:dutyEmployeeDraft', value: string): void
+}>()
 
 function onCodexDraftInput(ev: Event): void {
-  emit('update:codexDraft', (ev.target as HTMLInputElement).value);
+  emit('update:codexDraft', (ev.target as HTMLInputElement).value)
 }
 
 function onDutyEmployeeDraftInput(ev: Event): void {
-  emit('update:dutyEmployeeDraft', (ev.target as HTMLInputElement).value);
+  emit('update:dutyEmployeeDraft', (ev.target as HTMLInputElement).value)
 }
 </script>

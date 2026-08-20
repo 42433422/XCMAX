@@ -146,9 +146,25 @@ def resolve_tool_to_pack_id(tool_name: str) -> str | None:
     name = str(tool_name or "").strip()
     if not name:
         return None
-    for row in _cached_tool_rows():
-        if name in (row.get("pack_id"), row.get("tool_name"), row.get("legacy_tool_name")):
-            return str(row.get("pack_id") or "")
+
+    def _resolve(rows: tuple[dict[str, Any], ...]) -> str | None:
+        for row in rows:
+            if name in (row.get("pack_id"), row.get("tool_name"), row.get("legacy_tool_name")):
+                return str(row.get("pack_id") or "")
+        return None
+
+    resolved = _resolve(_cached_tool_rows())
+    if resolved:
+        return resolved
+
+    # Employee packs can be installed, reloaded, or temporarily discovered from
+    # a scoped runtime after the registry cache was built.  A miss is rare, so
+    # rebuild once before declaring the tool unknown instead of trusting stale
+    # discovery state for the rest of the process lifetime.
+    _cached_tool_rows.cache_clear()
+    resolved = _resolve(_cached_tool_rows())
+    if resolved:
+        return resolved
     if name.startswith(_LEGACY_PREFIX) and name.endswith(_LEGACY_SUFFIX):
         core = name[len(_LEGACY_PREFIX) : -len(_LEGACY_SUFFIX)]
         return core.replace("_", "-") if core else None

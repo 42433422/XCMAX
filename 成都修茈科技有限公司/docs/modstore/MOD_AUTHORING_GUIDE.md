@@ -13,7 +13,7 @@
 3. [目录布局硬规则](#3-目录布局硬规则)
 4. `[manifest.json` 字段参考](#4-manifestjson-字段参考)
 5. [后端契约：路由、生命周期、动态加载](#5-后端契约路由生命周期动态加载)
-6. [SDK 层：`app.mod_sdk.`* 完整地图](#6-sdk-层appmod_sdk-完整地图)
+6. [SDK 层：`app.mod_sdk.`\* 完整地图](#6-sdk-层appmod_sdk-完整地图)
 7. [硬边界 Lint：什么不能 import](#7-硬边界-lint什么不能-import)
 8. [前端：routes / menu / menu_overrides](#8-前端routes--menu--menu_overrides)
 9. [Hook：订阅主程业务事件](#9-hook订阅主程业务事件)
@@ -37,7 +37,7 @@
 
 **Mod 不是** ——
 
-- 不是 Plugin 热补丁：禁止 monkey-patch 主程、禁止覆盖 `app.`* 任何符号。
+- 不是 Plugin 热补丁：禁止 monkey-patch 主程、禁止覆盖 `app.`\* 任何符号。
 - 不是共享库：`mods/` 下的模块**不应**被主程 `import`；关系始终是「主程暴露 SDK → Mod 消费 SDK」。
 - 不是 Flask 插件：Mod 后端**只出** FastAPI `APIRouter`，不再有 `Blueprint`。
 
@@ -45,18 +45,16 @@
 
 ## 2. 核心术语
 
-
-| 术语                                             | 定义                                                               | 物理位置                                   |
-| ---------------------------------------------- | ---------------------------------------------------------------- | -------------------------------------- |
-| **Mod**（`artifact: "mod"`，默认）                  | 可装可卸的业务扩展单元；带路由、菜单、生命周期钩子。                                       | `mods/<mod_id>/`                       |
-| **Employee Pack**（`artifact: "employee_pack"`） | 全局 AI 员工包，只声明 **一个** `workflow_employee`，不带路由也不带前端菜单。            | `mods/_employees/<pack_id>/`           |
-| **Bundle**（`artifact: "bundle"`）               | 元包：打包多个 Mod / Employee Pack 的组合安装，本体不含业务代码。                      | `mods/<bundle_id>/` 仅含 manifest        |
-| **Workflow Employee**（工作流员工）                   | 声明式 AI 员工；前端工作流面板按清单生成控制卡，Mod 后端提供轮询 / 启停接口。                     | 在 manifest 的 `workflow_employees[]` 声明 |
-| **Hook**                                       | 主程广播的业务事件（如 `shipment.created`、`product.imported`），多个订阅者，返回值被忽略。 | `app.infrastructure.mods.hooks`        |
-| **Comms**                                      | Mod 间点对点同步 RPC（指定目标 Mod + 通道），有返回值。                              | `app.mod_sdk.comms`                    |
-| **ModManager**                                 | 发现、解析、加载、卸载 Mod 的单例；扫根目录由 `XCAGI_MODS_ROOT` 或默认算法决定。             | `app.infrastructure.mods.mod_manager`  |
-| **SDK 层**                                      | Mod 对主程的**唯一合法 import 面**。                                       | `app/mod_sdk/`                         |
-
+| 术语                                             | 定义                                                                                        | 物理位置                                   |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| **Mod**（`artifact: "mod"`，默认）               | 可装可卸的业务扩展单元；带路由、菜单、生命周期钩子。                                        | `mods/<mod_id>/`                           |
+| **Employee Pack**（`artifact: "employee_pack"`） | 全局 AI 员工包，只声明 **一个** `workflow_employee`，不带路由也不带前端菜单。               | `mods/_employees/<pack_id>/`               |
+| **Bundle**（`artifact: "bundle"`）               | 元包：打包多个 Mod / Employee Pack 的组合安装，本体不含业务代码。                           | `mods/<bundle_id>/` 仅含 manifest          |
+| **Workflow Employee**（工作流员工）              | 声明式 AI 员工；前端工作流面板按清单生成控制卡，Mod 后端提供轮询 / 启停接口。               | 在 manifest 的 `workflow_employees[]` 声明 |
+| **Hook**                                         | 主程广播的业务事件（如 `shipment.created`、`product.imported`），多个订阅者，返回值被忽略。 | `app.infrastructure.mods.hooks`            |
+| **Comms**                                        | Mod 间点对点同步 RPC（指定目标 Mod + 通道），有返回值。                                     | `app.mod_sdk.comms`                        |
+| **ModManager**                                   | 发现、解析、加载、卸载 Mod 的单例；扫根目录由 `XCAGI_MODS_ROOT` 或默认算法决定。            | `app.infrastructure.mods.mod_manager`      |
+| **SDK 层**                                       | Mod 对主程的**唯一合法 import 面**。                                                        | `app/mod_sdk/`                             |
 
 ---
 
@@ -84,10 +82,12 @@ mods/<mod_id>/
 ### 硬规则
 
 1. **文件名 `manifest.json` 固定**，位于 Mod 根。未提供或 JSON 解析失败 → 加载跳过，不中断主程。
-2. `**backend/__init__.py` 必须存在**（可以为空）。否则 `import_mod_backend_py` 能绕过 Python 包机制工作，但同 Mod 内子模块相对 import 会失败。
-3. `**manifest.backend.entry`（默认 `"blueprints"`）指向 `backend/<entry>.py`**；该文件**必须**导出下列之一：
-  - 推荐：`register_fastapi_routes(app, mod_id: str) -> None`
-  - 废弃：`register_blueprints(app, mod_id: str)`（Flask 时代遗留，**禁止新 Mod 使用**）
+2. `**backend/__init__.py` 必须存在\*\*（可以为空）。否则 `import_mod_backend_py` 能绕过 Python 包机制工作，但同 Mod 内子模块相对 import 会失败。
+3. `**manifest.backend.entry`（默认 `"blueprints"`）指向 `backend/<entry>.py`**；该文件**必须\*\*导出下列之一：
+
+- 推荐：`register_fastapi_routes(app, mod_id: str) -> None`
+- 废弃：`register_blueprints(app, mod_id: str)`（Flask 时代遗留，**禁止新 Mod 使用**）
+
 4. **同名文件别怕冲突**：两个 Mod 都叫 `services.py` 不会相互覆盖，ModManager 用 `importlib` 按独立 spec name `_xcagi_mod_<mod_id>_<stem>` 加载；详见 §15。
 5. **文件夹内不允许再嵌套同级 Mod**。Bundle 有自己的组合方式（§14），不走嵌套目录。
 
@@ -97,25 +97,23 @@ mods/<mod_id>/
 
 以下字段表对齐 `app/infrastructure/mods/manifest.py::ModMetadata`。**所有顶层字段**：
 
-
-| 字段                   | 类型     | 必填  | 说明                                                                                                       |
-| -------------------- | ------ | --- | -------------------------------------------------------------------------------------------------------- |
-| `id`                 | string | ✅   | Mod 全局唯一 id；建议小写 kebab-case，与文件夹同名。                                                                      |
-| `name`               | string | ✅   | 显示名（中英文均可）。                                                                                              |
-| `version`            | string | ✅   | SemVer，如 `"1.0.0"`。                                                                                      |
-| `author`             | string | –   | 作者/团队。                                                                                                   |
-| `description`        | string | –   | 一句话描述。                                                                                                   |
-| `artifact`           | string | –   | `"mod"` / `"employee_pack"` / `"bundle"`；默认 `"mod"`。另见 `kind`（历史别名）。                                     |
-| `primary`            | bool   | –   | 是否为**主 Mod**。同时启用的主 Mod 数量应为 1；前端侧边栏会把主 Mod 的菜单置于第一位。                                                    |
-| `dependencies`       | object | –   | `{dep_id: version_spec}`；`xcagi` 为宿主版本约束；其它 id 代表必须同装的其它 Mod。                                            |
-| `backend`            | object | ✅   | 后端入口约定，见下表。                                                                                              |
-| `frontend`           | object | –   | 前端路由 + 菜单声明，见 §8。                                                                                        |
-| `config`             | object | –   | 见下表。                                                                                                     |
-| `hooks`              | object | –   | `{event_name: "relative.module.attr"}`；主程触发对应事件时同步回调。详见 §9。                                              |
-| `comms`              | object | –   | `{ "exports": ["<channel>", ...] }`；**仅作声明用途**，运行时通过 `mod_sdk.comms.get_mod_comms().register(...)` 真正注册。 |
-| `workflow_employees` | array  | –   | 声明的工作流员工清单，见 §11。                                                                                        |
-| `bundle`             | object | –   | 仅 `artifact=="bundle"` 时有意义；包装其它 Mod 的 id 列表。                                                            |
-
+| 字段                 | 类型   | 必填 | 说明                                                                                                                       |
+| -------------------- | ------ | ---- | -------------------------------------------------------------------------------------------------------------------------- |
+| `id`                 | string | ✅   | Mod 全局唯一 id；建议小写 kebab-case，与文件夹同名。                                                                       |
+| `name`               | string | ✅   | 显示名（中英文均可）。                                                                                                     |
+| `version`            | string | ✅   | SemVer，如 `"1.0.0"`。                                                                                                     |
+| `author`             | string | –    | 作者/团队。                                                                                                                |
+| `description`        | string | –    | 一句话描述。                                                                                                               |
+| `artifact`           | string | –    | `"mod"` / `"employee_pack"` / `"bundle"`；默认 `"mod"`。另见 `kind`（历史别名）。                                          |
+| `primary`            | bool   | –    | 是否为**主 Mod**。同时启用的主 Mod 数量应为 1；前端侧边栏会把主 Mod 的菜单置于第一位。                                     |
+| `dependencies`       | object | –    | `{dep_id: version_spec}`；`xcagi` 为宿主版本约束；其它 id 代表必须同装的其它 Mod。                                         |
+| `backend`            | object | ✅   | 后端入口约定，见下表。                                                                                                     |
+| `frontend`           | object | –    | 前端路由 + 菜单声明，见 §8。                                                                                               |
+| `config`             | object | –    | 见下表。                                                                                                                   |
+| `hooks`              | object | –    | `{event_name: "relative.module.attr"}`；主程触发对应事件时同步回调。详见 §9。                                              |
+| `comms`              | object | –    | `{ "exports": ["<channel>", ...] }`；**仅作声明用途**，运行时通过 `mod_sdk.comms.get_mod_comms().register(...)` 真正注册。 |
+| `workflow_employees` | array  | –    | 声明的工作流员工清单，见 §11。                                                                                             |
+| `bundle`             | object | –    | 仅 `artifact=="bundle"` 时有意义；包装其它 Mod 的 id 列表。                                                                |
 
 ### `backend`
 
@@ -128,13 +126,11 @@ mods/<mod_id>/
 
 `entry` 模块里的以下函数会被 ModManager 按顺序查找调用：
 
-
-| 函数名                                    | 时机                             | 必须？     |
-| -------------------------------------- | ------------------------------ | ------- |
-| `register_fastapi_routes(app, mod_id)` | 主应用启动、`load_mod_routes` 阶段     | **推荐**  |
+| 函数名                                 | 时机                                             | 必须？        |
+| -------------------------------------- | ------------------------------------------------ | ------------- |
+| `register_fastapi_routes(app, mod_id)` | 主应用启动、`load_mod_routes` 阶段               | **推荐**      |
 | `register_blueprints(app, mod_id)`     | 同上（仅为向下兼容保留的 no-op，Flask 时代遗留） | ❌ 新代码禁止 |
-| `<init>()`（默认叫 `mod_init`）             | `load_mod` 注册元数据完成后立即调用        | 可选      |
-
+| `<init>()`（默认叫 `mod_init`）        | `load_mod` 注册元数据完成后立即调用              | 可选          |
 
 ### `frontend`
 
@@ -183,9 +179,7 @@ mods/<mod_id>/
   "backend": { "entry": "blueprints", "init": "mod_init" },
   "frontend": {
     "routes": "frontend/routes",
-    "menu": [
-      { "id": "my-home", "label": "我的 Mod", "icon": "fa-cube", "path": "/my-mod" }
-    ]
+    "menu": [{ "id": "my-home", "label": "我的 Mod", "icon": "fa-cube", "path": "/my-mod" }]
   },
   "hooks": {},
   "comms": { "exports": [] }
@@ -231,7 +225,7 @@ def mod_init():
 **契约**：
 
 - **前缀必须是 `/api/mod/<mod_id>/...`**。不要占用主程业务前缀（`/api/products/...` 等），否则 OpenAPI 与权限中间件会把你算作主程。
-- `**register_fastapi_routes` 可以多次安全调用**（需要幂等：`APIRouter` 新建即可）；`load_mod_routes` 一次性注册，但 `ensure_mods_loaded` 存在补偿重试路径。
+- `**register_fastapi_routes` 可以多次安全调用\*\*（需要幂等：`APIRouter` 新建即可）；`load_mod_routes` 一次性注册，但 `ensure_mods_loaded` 存在补偿重试路径。
 - **不要在模块顶层做副作用**（连 DB、起线程）。副作用一律放进 `mod_init()` 或路由的 lazy init。模块顶层**只做 import + 函数定义**。
 
 ### 5.2 同 Mod 内动态加载
@@ -264,29 +258,27 @@ def mod_init():
 **禁止**：
 
 - ❌ 在 `mod_init` 里 `sys.exit` / 阻塞式等待外部服务
-- ❌ `import` 主程任何非 `app.mod_sdk.`* 的模块（§7 边界）
+- ❌ `import` 主程任何非 `app.mod_sdk.`\* 的模块（§7 边界）
 - ❌ 注册路由（路由统一走 `register_fastapi_routes`）
 
 ---
 
-## 6. SDK 层：`app.mod_sdk.`* 完整地图
+## 6. SDK 层：`app.mod_sdk.`\* 完整地图
 
-`app/mod_sdk/` 是主程对 Mod 的**唯一稳定契约层**。主程内部任何重构只要保 `mod_sdk.`* 的符号不变，Mod 不会被打爆。
+`app/mod_sdk/` 是主程对 Mod 的**唯一稳定契约层**。主程内部任何重构只要保 `mod_sdk.`\* 的符号不变，Mod 不会被打爆。
 
-
-| SDK 子模块                  | 导出符号                                                                               | 用途                                             |
-| ------------------------ | ---------------------------------------------------------------------------------- | ---------------------------------------------- |
-| `app.mod_sdk.comms`      | `get_caller_mod_id`, `get_mod_comms`                                               | Mod 间点对点 RPC，见 §10                             |
-| `app.mod_sdk.mods_bus`   | `import_mod_backend_py`                                                            | 动态加载同 Mod 内 `backend/<stem>.py`，见 §5.2         |
-| `app.mod_sdk.db`         | `SessionLocal`                                                                     | SQLAlchemy 会话工厂，`SessionLocal()` → ORM Session |
-| `app.mod_sdk.db_models`  | `PurchaseUnit`（渐次扩展）                                                               | 受限 ORM 直通，**优先**走 `mod_sdk.services` 高层方法      |
-| `app.mod_sdk.services`   | `get_products_service`, `get_ai_chat_app_service`, `get_unified_intent_recognizer` | 主程高层服务入口                                       |
-| `app.mod_sdk.tts`        | `synthesize_to_data_uri`                                                           | TTS 合成，返回 `data:audio/...;base64,...` URI      |
-| `app.mod_sdk.state`      | `read_client_mods_off_state`                                                       | 前端是否启用了「原版模式」（关闭所有 Mod 扩展）                     |
-| `app.mod_sdk.ai_helpers` | `format_money`, `safe_float`                                                       | 金额 / 数值格式化                                     |
-| `app.mod_sdk.workspace`  | `resolve_safe_workspace_relpath`                                                   | 工作区相对路径安全解析，防越狱                                |
-| `app.mod_sdk.attendance` | `convert_attendance_file`, `attendance_workspace_root`                             | 考勤转换（太阳鸟 PRO 专用，未来任务 B 会把实现归位回 mod）            |
-
+| SDK 子模块               | 导出符号                                                                           | 用途                                                       |
+| ------------------------ | ---------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `app.mod_sdk.comms`      | `get_caller_mod_id`, `get_mod_comms`                                               | Mod 间点对点 RPC，见 §10                                   |
+| `app.mod_sdk.mods_bus`   | `import_mod_backend_py`                                                            | 动态加载同 Mod 内 `backend/<stem>.py`，见 §5.2             |
+| `app.mod_sdk.db`         | `SessionLocal`                                                                     | SQLAlchemy 会话工厂，`SessionLocal()` → ORM Session        |
+| `app.mod_sdk.db_models`  | `PurchaseUnit`（渐次扩展）                                                         | 受限 ORM 直通，**优先**走 `mod_sdk.services` 高层方法      |
+| `app.mod_sdk.services`   | `get_products_service`, `get_ai_chat_app_service`, `get_unified_intent_recognizer` | 主程高层服务入口                                           |
+| `app.mod_sdk.tts`        | `synthesize_to_data_uri`                                                           | TTS 合成，返回 `data:audio/...;base64,...` URI             |
+| `app.mod_sdk.state`      | `read_client_mods_off_state`                                                       | 前端是否启用了「原版模式」（关闭所有 Mod 扩展）            |
+| `app.mod_sdk.ai_helpers` | `format_money`, `safe_float`                                                       | 金额 / 数值格式化                                          |
+| `app.mod_sdk.workspace`  | `resolve_safe_workspace_relpath`                                                   | 工作区相对路径安全解析，防越狱                             |
+| `app.mod_sdk.attendance` | `convert_attendance_file`, `attendance_workspace_root`                             | 考勤转换（太阳鸟 PRO 专用，未来任务 B 会把实现归位回 mod） |
 
 ### 使用模式
 
@@ -384,35 +376,31 @@ const myModRoutes = [
     path: '/my-mod',
     name: 'my-mod-home',
     component: () => import('./views/HomeView.vue'),
-    meta: { title: '我的 Mod', mod: 'my-mod' }   // meta.mod 必填，用于权限 / 路由归属
+    meta: { title: '我的 Mod', mod: 'my-mod' }, // meta.mod 必填，用于权限 / 路由归属
   },
   {
     path: '/my-mod/details/:id',
     name: 'my-mod-detail',
     component: () => import('./views/DetailView.vue'),
-    meta: { title: '详情', mod: 'my-mod' }
-  }
-];
+    meta: { title: '详情', mod: 'my-mod' },
+  },
+]
 
-const myModMenu = [
-  { id: 'my-mod-home', label: '我的 Mod', icon: 'fa-cube', path: '/my-mod' }
-];
+const myModMenu = [{ id: 'my-mod-home', label: '我的 Mod', icon: 'fa-cube', path: '/my-mod' }]
 
-export { myModRoutes, myModMenu };
+export { myModRoutes, myModMenu }
 ```
 
 ### 8.2 `manifest.frontend.menu[]`
 
 每条菜单项字段：
 
-
-| 字段      | 类型     | 必填  | 说明                                   |
-| ------- | ------ | --- | ------------------------------------ |
-| `id`    | string | ✅   | 菜单项唯一 id，前端用于 state 持久化。             |
-| `label` | string | ✅   | 显示名。                                 |
-| `icon`  | string | –   | FontAwesome class（不含 `fa-` 是错的，要写全）。 |
-| `path`  | string | ✅   | 与 routes.js 中的 `path` 一致，前端路由跳转目标。   |
-
+| 字段    | 类型   | 必填 | 说明                                              |
+| ------- | ------ | ---- | ------------------------------------------------- |
+| `id`    | string | ✅   | 菜单项唯一 id，前端用于 state 持久化。            |
+| `label` | string | ✅   | 显示名。                                          |
+| `icon`  | string | –    | FontAwesome class（不含 `fa-` 是错的，要写全）。  |
+| `path`  | string | ✅   | 与 routes.js 中的 `path` 一致，前端路由跳转目标。 |
 
 ### 8.3 `manifest.frontend.menu_overrides[]`
 
@@ -435,12 +423,10 @@ Hook 是主程→订阅者的**单向广播**：多订阅者，顺序同步调�
 
 ### 9.1 当前已触发的事件
 
-
-| 事件名                | 触发位置                                               | 参数（kwargs）                       |
-| ------------------ | -------------------------------------------------- | -------------------------------- |
-| `shipment.created` | `app/application/shipment_app_service.py` 成功创建发货单后 | `shipment=<Shipment>`            |
+| 事件名             | 触发位置                                                    | 参数（kwargs）                   |
+| ------------------ | ----------------------------------------------------------- | -------------------------------- |
+| `shipment.created` | `app/application/shipment_app_service.py` 成功创建发货单后  | `shipment=<Shipment>`            |
 | `product.imported` | `app/services/product_import_service.py` 批量导入产品成功后 | `count=<int>`, `products=<list>` |
-
 
 > 要触发自己的事件的主程工程师：`from app.infrastructure.mods.hooks import trigger; trigger("my.event", payload=...)`。
 > 当前端处于「原版模式」（`read_client_mods_off_state() == True`）时，**所有 hook 触发都会被短路**，不会回调订阅者。
@@ -534,16 +520,14 @@ def do():
 
 ### 10.3 API 契约
 
-
-| 方法                                                     | 行为                                                    |
-| ------------------------------------------------------ | ----------------------------------------------------- |
+| 方法                                                   | 行为                                                              |
+| ------------------------------------------------------ | ----------------------------------------------------------------- |
 | `register(mod_id, channel, handler, *, replace=False)` | 注册通道；已存在且 `replace=False` 时抛 `ModCommsConflictError`。 |
-| `unregister(mod_id, channel)`                          | 注销单个通道。                                               |
-| `unregister_all(mod_id)`                               | 清理某 Mod 所有通道（卸载时用）。                                   |
-| `call(source, target, channel, *args, **kwargs)`       | 同步调用并返回；未注册时抛 `ModCommsNotFoundError`。                |
-| `has_handler(target, channel)`                         | 不抛异常的存在性检查。                                           |
-| `list_endpoints()`                                     | 枚举所有已注册端点（管理/调试用）。                                    |
-
+| `unregister(mod_id, channel)`                          | 注销单个通道。                                                    |
+| `unregister_all(mod_id)`                               | 清理某 Mod 所有通道（卸载时用）。                                 |
+| `call(source, target, channel, *args, **kwargs)`       | 同步调用并返回；未注册时抛 `ModCommsNotFoundError`。              |
+| `has_handler(target, channel)`                         | 不抛异常的存在性检查。                                            |
+| `list_endpoints()`                                     | 枚举所有已注册端点（管理/调试用）。                               |
 
 **约定**：
 
@@ -578,29 +562,25 @@ Workflow Employee 是**前端工作流面板**生成控制卡的元数据。每�
 
 已知约定字段（将被前端 / `employee_registry` 消费）：
 
-
-| 字段                              | 语义                                                                                                                    |
-| ------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `id`                            | 员工 id。                                                                                                                |
-| `label`                         | 卡片标题。                                                                                                                 |
-| `panel_title` / `panel_summary` | 面板顶部文案。                                                                                                               |
+| 字段                            | 语义                                                                                                                                                 |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                            | 员工 id。                                                                                                                                            |
+| `label`                         | 卡片标题。                                                                                                                                           |
+| `panel_title` / `panel_summary` | 面板顶部文案。                                                                                                                                       |
 | `phone_agent_base_path`         | 若该员工是「电话业务员」类型，Mod 须在 `/api/mod/<mod_id>/<phone_agent_base_path>/{status,start,stop,statu}` 下提供 4 条路由（`statu` 为容错别名）。 |
-| `workflow_placeholder`          | `true` 时前端渲染卡片但不触发后端；常见于「待接入」状态。                                                                                      |
-| 任意自定义字段                         | 原样保留透传到前端；按 `id` 前缀约定使用。                                                                                              |
-
+| `workflow_placeholder`          | `true` 时前端渲染卡片但不触发后端；常见于「待接入」状态。                                                                                            |
+| 任意自定义字段                  | 原样保留透传到前端；按 `id` 前缀约定使用。                                                                                                           |
 
 ### 11.2 后端配套接口（电话业务员类）
 
 若 `phone_agent_base_path` 出现，推荐 Mod 在对应前缀下提供：
 
-
-| 方法     | 路径                                  | 行为                                                                          |
-| ------ | ----------------------------------- | --------------------------------------------------------------------------- |
-| `GET`  | `/phone-agent/status?channel=wechat | adb`                                                                        |
+| 方法   | 路径                                | 行为                                                                                           |
+| ------ | ----------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `GET`  | `/phone-agent/status?channel=wechat | adb`                                                                                           |
 | `POST` | `/phone-agent/start`                | 启动；失败返回 `{"success": false, "message": "..."}`（**HTTP 仍为 200**，业务失败不用 5xx）。 |
-| `POST` | `/phone-agent/stop`                 | 停止。                                                                         |
+| `POST` | `/phone-agent/stop`                 | 停止。                                                                                         |
 | `GET`  | `/phone-agent/statu`                | 对前端历史拼写错误（少写 `s`）的容错别名。                                                     |
-
 
 **参考实现**：`mods/sz-qsm-pro/backend/blueprints.py` 的 `register_fastapi_routes`。
 
@@ -610,16 +590,16 @@ Workflow Employee 是**前端工作流面板**生成控制卡的元数据。每�
 
 ```jsonc
 {
-  "id":       "accountant-ai",
-  "name":     "财务 AI 员工",
-  "version":  "1.0.0",
+  "id": "accountant-ai",
+  "name": "财务 AI 员工",
+  "version": "1.0.0",
   "artifact": "employee_pack",
-  "scope":    "global",
+  "scope": "global",
   "employee": {
-    "id":    "accountant",
+    "id": "accountant",
     "label": "AI 财务",
-    "capabilities": ["invoice.parse", "report.monthly"]
-  }
+    "capabilities": ["invoice.parse", "report.monthly"],
+  },
 }
 ```
 
@@ -629,13 +609,11 @@ Workflow Employee 是**前端工作流面板**生成控制卡的元数据。每�
 
 ## 12. 静态资源：data / config / resources
 
-
-| 目录                 | 用途                                                        | 如何读取                                                |
-| ------------------ | --------------------------------------------------------- | --------------------------------------------------- |
-| `<mod>/data/`      | 随包分发的只读数据。                                                | `Path(__file__).parent.parent / "data" / "...json"` |
-| `<mod>/config/`    | YAML / JSON 配置；`manifest.config.industry_overrides` 指向此处。 | 主程通过 `manifest.config_overrides` 路径加载。              |
-| `<mod>/resources/` | 静态资源（图标、示例文件、安装指南 md）。                                    | 同 data，Mod 自取。                                      |
-
+| 目录               | 用途                                                              | 如何读取                                            |
+| ------------------ | ----------------------------------------------------------------- | --------------------------------------------------- |
+| `<mod>/data/`      | 随包分发的只读数据。                                              | `Path(__file__).parent.parent / "data" / "...json"` |
+| `<mod>/config/`    | YAML / JSON 配置；`manifest.config.industry_overrides` 指向此处。 | 主程通过 `manifest.config_overrides` 路径加载。     |
+| `<mod>/resources/` | 静态资源（图标、示例文件、安装指南 md）。                         | 同 data，Mod 自取。                                 |
 
 **写入约定**：Mod **不应**向自身目录写入运行时产物。需要持久化 → 用 `app.mod_sdk.db` 写数据库；需要临时文件 → 用系统 temp dir（Python `tempfile`）。
 
@@ -678,28 +656,26 @@ Workflow Employee 是**前端工作流面板**生成控制卡的元数据。每�
 
 ## 14. Artifact 类型：mod / employee_pack / bundle
 
-
-| artifact        | 用途         | 安装目的地                   | 典型内容                                        |
-| --------------- | ---------- | ----------------------- | ------------------------------------------- |
-| `mod`           | 业务扩展（默认）。  | `mods/<id>/`            | backend + frontend + hooks + comms          |
-| `employee_pack` | 全局 AI 员工包。 | `mods/_employees/<id>/` | 只含 `manifest.json`（含 `employee` 子对象）        |
+| artifact        | 用途               | 安装目的地               | 典型内容                                        |
+| --------------- | ------------------ | ------------------------ | ----------------------------------------------- |
+| `mod`           | 业务扩展（默认）。 | `mods/<id>/`             | backend + frontend + hooks + comms              |
+| `employee_pack` | 全局 AI 员工包。   | `mods/_employees/<id>/`  | 只含 `manifest.json`（含 `employee` 子对象）    |
 | `bundle`        | 元包，组合安装。   | `mods/<id>/` 仅 manifest | `manifest.bundle.items[]` 列出子包 id + version |
-
 
 Bundle 示例：
 
 ```jsonc
 {
-  "id":       "retail-starter-bundle",
+  "id": "retail-starter-bundle",
   "artifact": "bundle",
-  "name":     "零售起步套件",
-  "version":  "1.0.0",
+  "name": "零售起步套件",
+  "version": "1.0.0",
   "bundle": {
     "items": [
       { "id": "common-kit-mod", "version": ">=1.0.0", "artifact": "mod" },
-      { "id": "accountant-ai",  "version": ">=1.0.0", "artifact": "employee_pack" }
-    ]
-  }
+      { "id": "accountant-ai", "version": ">=1.0.0", "artifact": "employee_pack" },
+    ],
+  },
 }
 ```
 
@@ -908,22 +884,20 @@ CI 强烈建议把前两步作为 blocking steps。
 
 ## 19. 常见反模式
 
-
-| 反模式                                                    | 正确做法                                              |
-| ------------------------------------------------------ | ------------------------------------------------- |
-| `from app.services.xxx import yyy`                     | 走 `app.mod_sdk.services`（没有就在 SDK 层加再 re-export）  |
-| `from flask import Blueprint`                          | 用 `fastapi.APIRouter` + `register_fastapi_routes` |
-| `from werkzeug.utils import secure_filename`           | `app.utils.secure_filename`（主程已用纯 stdlib 替代）      |
-| `from werkzeug.security import generate_password_hash` | `app.utils.password_hash`（同上）                     |
-| Mod 顶层做 `engine = create_engine(...)`                  | 放到 `mod_init()` 或路由 lazy getter 里                 |
-| 在 hook handler 里抛异常中断主程流程                              | `try/except`吞掉并 log；hook 不能反向否决主程业务               |
-| comms handler 里阻塞 30s 做大计算                             | 拆成任务队列，comms 只返回 task_id，后续通过 HTTP 轮询             |
-| `from app.db.models import *` 拉 ORM 全家桶                | 只从 `app.mod_sdk.db_models` 拿明确需要的模型；长期目标是走高层服务    |
-| 两个 Mod 都注册 `comms.register("X", "get")`                | 通道名加 mod 前缀或点分层（`mymod.get.snapshot`）             |
-| Mod 根目录里存 runtime 产物（cache、logs）                       | 写数据库或 `tempfile`；Mod 包是只读的                        |
-| 在 manifest 里声明 `hooks.shipment.created` 但没写 handler    | 启动日志会告警；要么补 handler，要么删声明                         |
-| 路由前缀写成 `/api/<mod_id>` 而不是 `/api/mod/<mod_id>`         | 严格走 `/api/mod/<mod_id>/...`，权限中间件依赖该前缀识别 Mod      |
-
+| 反模式                                                     | 正确做法                                                            |
+| ---------------------------------------------------------- | ------------------------------------------------------------------- |
+| `from app.services.xxx import yyy`                         | 走 `app.mod_sdk.services`（没有就在 SDK 层加再 re-export）          |
+| `from flask import Blueprint`                              | 用 `fastapi.APIRouter` + `register_fastapi_routes`                  |
+| `from werkzeug.utils import secure_filename`               | `app.utils.secure_filename`（主程已用纯 stdlib 替代）               |
+| `from werkzeug.security import generate_password_hash`     | `app.utils.password_hash`（同上）                                   |
+| Mod 顶层做 `engine = create_engine(...)`                   | 放到 `mod_init()` 或路由 lazy getter 里                             |
+| 在 hook handler 里抛异常中断主程流程                       | `try/except`吞掉并 log；hook 不能反向否决主程业务                   |
+| comms handler 里阻塞 30s 做大计算                          | 拆成任务队列，comms 只返回 task_id，后续通过 HTTP 轮询              |
+| `from app.db.models import *` 拉 ORM 全家桶                | 只从 `app.mod_sdk.db_models` 拿明确需要的模型；长期目标是走高层服务 |
+| 两个 Mod 都注册 `comms.register("X", "get")`               | 通道名加 mod 前缀或点分层（`mymod.get.snapshot`）                   |
+| Mod 根目录里存 runtime 产物（cache、logs）                 | 写数据库或 `tempfile`；Mod 包是只读的                               |
+| 在 manifest 里声明 `hooks.shipment.created` 但没写 handler | 启动日志会告警；要么补 handler，要么删声明                          |
+| 路由前缀写成 `/api/<mod_id>` 而不是 `/api/mod/<mod_id>`    | 严格走 `/api/mod/<mod_id>/...`，权限中间件依赖该前缀识别 Mod        |
 
 ---
 
@@ -931,15 +905,13 @@ CI 强烈建议把前两步作为 blocking steps。
 
 仓库内现成 Mod，按复杂度升序：
 
-
-| Mod                 | 路径                      | 展示点                                                                                                                                                                                          |
-| ------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **example-mod**     | `mods/example-mod/`     | 最小骨架：一条 hello 路由 + 一个 comms 通道（ping）。从这里起步。                                                                                                                                                  |
-| **taiyangniao-pro** | `mods/taiyangniao-pro/` | 中等：含考勤文件上传 / 转换、菜单覆盖、workflow_employee 占位。                                                                                                                                                   |
+| Mod                 | 路径                    | 展示点                                                                                                                                                                                                                              |
+| ------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **example-mod**     | `mods/example-mod/`     | 最小骨架：一条 hello 路由 + 一个 comms 通道（ping）。从这里起步。                                                                                                                                                                   |
+| **taiyangniao-pro** | `mods/taiyangniao-pro/` | 中等：含考勤文件上传 / 转换、菜单覆盖、workflow_employee 占位。                                                                                                                                                                     |
 | **sz-qsm-pro**      | `mods/sz-qsm-pro/`      | 完整形态：多路由（dashboard / advanced-settings / batch-process / smart-recommend / qa-packages / phone-agent）、hook、comms、workflow_employee（电话业务员）、同 Mod 内多模块动态加载、私有依赖（`faster-whisper`、`miniaudio`）。 |
 
-
-**模板脚手架**：`MODstore/templates/skeleton/`（变量：`__MOD_ID`_*、`__MOD_NAME_`*）。
+**模板脚手架**：`MODstore/templates/skeleton/`（变量：`__MOD_ID`_\*、`\_\_MOD_NAME_`\*）。
 
 **SDK 源码**：`app/mod_sdk/`；每个子模块都写了用途 docstring，这是权威真相。
 
@@ -954,7 +926,7 @@ CI 强烈建议把前两步作为 blocking steps。
 - `manifest.json` 有 `id` / `name` / `version` / `backend.entry`
 - `backend/blueprints.py` 有 `register_fastapi_routes(app, mod_id)`
 - 路由前缀严格是 `/api/mod/<mod_id>/...`
-- 所有 `from app.`* 走 `app.mod_sdk.`*；`check_mod_import_boundaries.py` 0 violation
+- 所有 `from app.`_ 走 `app.mod_sdk.`_；`check_mod_import_boundaries.py` 0 violation
 - 无 `from flask ...` / `from werkzeug ...`
 - `frontend/routes.js` 导出 `<modName>Routes` + `<modName>Menu`
 - manifest 里 `hooks` 声明的 handler 在 `backend/<module>.py` 里真的存在

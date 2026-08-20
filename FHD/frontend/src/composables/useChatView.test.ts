@@ -5,7 +5,7 @@ import { ref } from 'vue'
 vi.mock('./useChatMessages', async () => {
   const { ref } = await import('vue')
   return {
-    useChatMessages: (sessionId: unknown) => ({
+    useChatMessages: (_sessionId: unknown) => ({
       messages: ref([]),
       lastMessage: ref(null),
       addMessage: vi.fn(),
@@ -28,8 +28,12 @@ vi.mock('vue-router', () => ({
 }))
 
 vi.mock('@/stores/tutorial', () => ({ useTutorialStore: () => ({}) }))
-vi.mock('@/stores/mods', () => ({ useModsStore: () => ({ mods: [], modsForUi: [], setActiveModId: vi.fn() }) }))
-vi.mock('@/stores/workflowAiEmployees', () => ({ useWorkflowAiEmployeesStore: () => ({ enabled: {} }) }))
+vi.mock('@/stores/mods', () => ({
+  useModsStore: () => ({ mods: [], modsForUi: [], setActiveModId: vi.fn() }),
+}))
+vi.mock('@/stores/workflowAiEmployees', () => ({
+  useWorkflowAiEmployeesStore: () => ({ enabled: {} }),
+}))
 
 // Other heavy composables used by useChatView can be mocked as no-ops.
 vi.mock('./useShipmentTask', () => ({ useShipmentTask: () => ({}) }))

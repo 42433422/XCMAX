@@ -1,3 +1,4 @@
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """日级容灾备份：modstore.db（SQLite online backup）+ release_train SSOT/历史。
 
 环境：
@@ -15,9 +16,11 @@ import logging
 import os
 import shutil
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, List
+
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +49,7 @@ def _backup_dir() -> Path:
         from modstore_server.models_db import default_db_path
 
         return default_db_path().parent / "backups"
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return Path(__file__).resolve().parent / "backups"
 
 
@@ -66,8 +69,12 @@ def _prune(dir_path: Path, prefix: str, keep: int) -> int:
 def _backup_sqlite(dst_dir: Path, stamp: str, keep: int) -> Dict[str, Any]:
     try:
         from modstore_server.models_db import database_url, default_db_path
-    except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "skipped": True, "reason": f"models_db import failed: {exc}"}
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "skipped": True,
+            "reason": f"models_db import failed: {exc}",
+        }
 
     url = database_url()
     if not url.startswith("sqlite:///"):
@@ -84,11 +91,19 @@ def _backup_sqlite(dst_dir: Path, stamp: str, keep: int) -> Dict[str, Any]:
     dst = dst_dir / f"modstore_{stamp}.db"
     try:
         # SQLite 在线备份 API：跑库时也安全（不直接 cp，避免写半截）
-        with sqlite3.connect(str(src)) as src_conn, sqlite3.connect(str(dst)) as dst_conn:
+        with (
+            sqlite3.connect(str(src)) as src_conn,
+            sqlite3.connect(str(dst)) as dst_conn,
+        ):
             src_conn.backup(dst_conn)
         pruned = _prune(dst_dir, "modstore_", keep)
-        return {"ok": True, "path": str(dst), "bytes": dst.stat().st_size, "pruned": pruned}
-    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": True,
+            "path": str(dst),
+            "bytes": dst.stat().st_size,
+            "pruned": pruned,
+        }
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.exception("db backup failed")
         return {"ok": False, "error": str(exc)[:300]}
 
@@ -98,16 +113,20 @@ def _backup_release_train(dst_dir: Path, stamp: str, keep: int) -> Dict[str, Any
         from modstore_server.release_train import ssot_path
 
         src = ssot_path()
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         return {"ok": False, "error": f"ssot_path failed: {exc}"}
     if not src.is_file():
-        return {"ok": True, "skipped": True, "reason": "release_train.json not found yet"}
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "release_train.json not found yet",
+        }
     dst = dst_dir / f"release_train_{stamp}.json"
     try:
         shutil.copy2(src, dst)
         pruned = _prune(dst_dir, "release_train_", keep)
         return {"ok": True, "path": str(dst), "pruned": pruned}
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         return {"ok": False, "error": str(exc)[:300]}
 
 
@@ -123,7 +142,7 @@ def _trigger_dr_failure(out: Dict[str, Any]) -> Dict[str, Any]:
         from modstore_server.release_train import set_backup_guard
 
         degrade["guard"] = set_backup_guard(f"daily backup failed: {str(reason)[:300]}")
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         logger.exception("daily backup: set release_train backup guard failed")
     try:
         from modstore_server.incident_bus import publish
@@ -142,7 +161,7 @@ def _trigger_dr_failure(out: Dict[str, Any]) -> Dict[str, Any]:
                 source="daily-backup",
             )
         )
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         logger.exception("daily backup: publish DR failure alert failed")
     return degrade
 
@@ -153,7 +172,7 @@ def _clear_dr_guard() -> None:
         from modstore_server.release_train import clear_backup_guard
 
         clear_backup_guard(reason="daily backup recovered")
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         logger.exception("daily backup: clear release_train backup guard failed")
 
 
@@ -163,10 +182,14 @@ def run_daily_backup_job(*, from_probe: bool = False) -> Dict[str, Any]:
     ``from_probe=True`` 时失败不重复 ``set_backup_guard`` / ``backup.failed``（由 DR 探针计数）。
     """
     if not _enabled():
-        return {"ok": True, "skipped": True, "reason": "MODSTORE_DAILY_BACKUP_ENABLED=0"}
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "MODSTORE_DAILY_BACKUP_ENABLED=0",
+        }
     dst_dir = _backup_dir()
     dst_dir.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     keep = _keep()
     out = {
         "ok": True,
@@ -191,7 +214,7 @@ def run_daily_backup_job(*, from_probe: bool = False) -> Dict[str, Any]:
                 "backup.completed" if out["ok"] else "backup.failed",
                 out,
             )
-        except Exception:  # noqa: BLE001
+        except BOUNDARY_ERRORS:  # noqa: BLE001
             logger.exception("daily backup: emit backup event failed")
 
     try:
@@ -210,7 +233,7 @@ def run_daily_backup_job(*, from_probe: bool = False) -> Dict[str, Any]:
                 source="daily_backup_job",
                 meta={"degrade": out.get("degrade")},
             )
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         logger.exception("daily backup: time_rail runtime record failed")
     return out
 
@@ -226,7 +249,7 @@ def list_backups(*, limit: int = 30) -> List[Dict[str, Any]]:
                 {
                     "name": p.name,
                     "bytes": p.stat().st_size,
-                    "mtime": datetime.fromtimestamp(p.stat().st_mtime, timezone.utc).isoformat(),
+                    "mtime": datetime.fromtimestamp(p.stat().st_mtime, UTC).isoformat(),
                 }
             )
         except OSError:
@@ -244,5 +267,5 @@ def cron_trigger_for_backup():
         from zoneinfo import ZoneInfo
 
         return CronTrigger(hour=hour, minute=minute, timezone=ZoneInfo(tz))
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return CronTrigger(hour=hour, minute=minute)

@@ -3,6 +3,8 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 # 使用 Unicode 路径
 file_path = Path(r"e:\FHD\424\考勤转换输出.xlsx")
 
@@ -22,7 +24,7 @@ try:
     print(f"工作表：{wb.sheetnames}")
 
     for i, ws in enumerate(wb.worksheets):
-        print(f"\n工作表 {i+1}: {ws.title}")
+        print(f"\n工作表 {i + 1}: {ws.title}")
         print(f"  最大行：{ws.max_row}, 最大列：{ws.max_column}")
         merged = list(ws.merged_cells.ranges) if ws.merged_cells.ranges else []
         print(f"  合并单元格数量：{len(merged)}")
@@ -39,7 +41,7 @@ try:
             ]
             print(f"    行{row_idx}: {row_data}")
 
-except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"读取失败：{e}")
     import traceback
 

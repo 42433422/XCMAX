@@ -31,10 +31,7 @@
               <span class="info-chip">{{ item.license_scope_label || licenseScopeLabel(item.license_scope) }}</span>
               <span class="info-chip">来源：{{ originTypeLabel(item.origin_type) }}</span>
               <span class="info-chip">风险：{{ ipRiskLabel(item.ip_risk_level) }}</span>
-              <span
-                class="info-chip"
-                :class="{ warn: item.compliance_status && item.compliance_status !== 'approved' }"
-              >
+              <span class="info-chip" :class="{ warn: item.compliance_status && item.compliance_status !== 'approved' }">
                 {{ complianceStatusLabel(item.compliance_status) }}
               </span>
             </div>
@@ -54,13 +51,7 @@
                 {{ buying ? '购买中...' : '购买' }}
               </button>
             </template>
-            <button
-              v-if="authStore.isAdmin"
-              type="button"
-              class="btn btn-danger"
-              :disabled="delisting"
-              @click="delistItem"
-            >
+            <button v-if="authStore.isAdmin" type="button" class="btn btn-danger" :disabled="delisting" @click="delistItem">
               {{ delisting ? '下架中...' : '下架' }}
             </button>
           </div>
@@ -85,13 +76,9 @@
       <div v-if="complaintPanelOpen" class="detail-section complaint-panel">
         <div class="complaint-panel__head">
           <h2 class="section-title">投诉与申诉</h2>
-          <button type="button" class="btn btn-secondary complaint-panel__close" @click="complaintPanelOpen = false">
-            收起
-          </button>
+          <button type="button" class="btn btn-secondary complaint-panel__close" @click="complaintPanelOpen = false">收起</button>
         </div>
-        <p class="section-desc">
-          涉及抄袭、联动/IP 风险、授权争议、无法下载或权益异常时，可先提交记录，再进入 AI 客服补充证据材料。
-        </p>
+        <p class="section-desc">涉及抄袭、联动/IP 风险、授权争议、无法下载或权益异常时，可先提交记录，再进入 AI 客服补充证据材料。</p>
         <div class="complaint-form">
           <select v-model="complaintType" class="input">
             <option value="plagiarism">疑似抄袭</option>
@@ -182,19 +169,18 @@
               :show-grade-scale="false"
             />
             <div class="quality-actions">
-              <p v-if="qualityScoringLabel" class="quality-meta quality-meta--source">{{ qualityScoringLabel }}</p>
-              <p v-if="qualityLlmSummary" class="quality-meta quality-llm-summary">{{ qualityLlmSummary }}</p>
+              <p v-if="qualityScoringLabel" class="quality-meta quality-meta--source">
+                {{ qualityScoringLabel }}
+              </p>
+              <p v-if="qualityLlmSummary" class="quality-meta quality-llm-summary">
+                {{ qualityLlmSummary }}
+              </p>
               <p v-if="qualityAuditedAt" class="quality-meta">
                 检测时间：{{ qualityAuditedAt }}
                 <span v-if="qualityFromCache">（缓存）</span>
               </p>
               <div class="quality-action-buttons">
-                <button
-                  type="button"
-                  class="btn btn-secondary"
-                  :disabled="qualityLoading"
-                  @click="loadQuality({ llm: true })"
-                >
+                <button type="button" class="btn btn-secondary" :disabled="qualityLoading" @click="loadQuality({ llm: true })">
                   LLM 深度评估
                 </button>
                 <button
@@ -214,9 +200,7 @@
 
       <div v-if="item" class="detail-section reviews-section">
         <h2 class="section-title">评价</h2>
-        <p v-if="reviewsData.total > 0" class="reviews-summary">
-          平均 {{ reviewsData.average_rating }} 分 · 共 {{ reviewsData.total }} 条
-        </p>
+        <p v-if="reviewsData.total > 0" class="reviews-summary">平均 {{ reviewsData.average_rating }} 分 · 共 {{ reviewsData.total }} 条</p>
         <div v-if="reviewsLoading" class="loading">加载评价...</div>
         <div v-else-if="reviewsErr" class="flash flash-err">{{ reviewsErr }}</div>
         <ul v-else class="review-list">
@@ -229,10 +213,7 @@
             <p v-if="r.content" class="review-body">{{ r.content }}</p>
           </li>
         </ul>
-        <div
-          v-if="hasToken && item.purchased && !item.user_has_review"
-          class="review-form"
-        >
+        <div v-if="hasToken && item.purchased && !item.user_has_review" class="review-form">
           <h3 class="review-form-title">写评价</h3>
           <label class="label">评分（1–5）</label>
           <select v-model.number="reviewRating" class="input">
@@ -252,7 +233,9 @@
       <div v-if="item.artifact === 'employee_pack' && item.purchased" class="detail-section">
         <h2 class="section-title">员工状态</h2>
         <div v-if="employeeStatus.loading" class="loading">加载中...</div>
-        <div v-else-if="employeeStatus.error" class="flash flash-err">{{ employeeStatus.error }}</div>
+        <div v-else-if="employeeStatus.error" class="flash flash-err">
+          {{ employeeStatus.error }}
+        </div>
         <div v-else-if="employeeStatus.data" class="status-grid">
           <div class="status-item">
             <span class="status-label">状态</span>
@@ -290,10 +273,12 @@
         </div>
         <div v-else class="example-card">
           <h3>调用示例</h3>
-          <pre class="example-code">{
+          <pre class="example-code">
+{
   "action": "execute",
   "employee_id": "{{ item.pkg_id || 'employee' }}"
-}</pre>
+}</pre
+          >
         </div>
       </details>
     </template>
@@ -482,7 +467,9 @@ const qualityOverallScore = computed(() => {
 })
 
 const qualityOverallGrade = computed(() =>
-  String(qualityReport.value?.overall_grade || '').trim().toUpperCase(),
+  String(qualityReport.value?.overall_grade || '')
+    .trim()
+    .toUpperCase(),
 )
 
 // 员工状态
@@ -705,10 +692,10 @@ async function submitComplaint() {
 
 async function loadEmployeeStatus() {
   if (!item.value) return
-  
+
   employeeStatus.value.loading = true
   employeeStatus.value.error = ''
-  
+
   try {
     const status = await api.getEmployeeStatus(item.value.pkg_id || '')
     employeeStatus.value.data = status
@@ -1137,7 +1124,7 @@ defineExpose({ materialCategoryLabel })
 
 .desc {
   font-size: 14px;
-  color: rgba(255,255,255,0.5);
+  color: rgba(255, 255, 255, 0.5);
   max-width: 600px;
   line-height: 1.5;
 }
@@ -1151,17 +1138,17 @@ defineExpose({ materialCategoryLabel })
 
 .info-chip {
   font-size: 12px;
-  color: rgba(255,255,255,0.72);
-  background: rgba(255,255,255,0.07);
-  border: 0.5px solid rgba(255,255,255,0.12);
+  color: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.07);
+  border: 0.5px solid rgba(255, 255, 255, 0.12);
   border-radius: 999px;
   padding: 4px 10px;
 }
 
 .info-chip.warn {
   color: #fde68a;
-  border-color: rgba(251,191,36,0.35);
-  background: rgba(251,191,36,0.12);
+  border-color: rgba(251, 191, 36, 0.35);
+  background: rgba(251, 191, 36, 0.12);
 }
 
 .detail-actions {
@@ -1185,7 +1172,7 @@ defineExpose({ materialCategoryLabel })
 .owned-badge {
   font-size: 14px;
   color: #4ade80;
-  background: rgba(74,222,128,0.1);
+  background: rgba(74, 222, 128, 0.1);
   padding: 6px 14px;
   border-radius: 12px;
 }
@@ -1238,7 +1225,7 @@ defineExpose({ materialCategoryLabel })
 .loading {
   text-align: center;
   padding: 40px;
-  color: rgba(255,255,255,0.4);
+  color: rgba(255, 255, 255, 0.4);
 }
 
 .flash {
@@ -1249,16 +1236,16 @@ defineExpose({ materialCategoryLabel })
 }
 
 .flash-err {
-  background: rgba(255,80,80,0.1);
+  background: rgba(255, 80, 80, 0.1);
   color: #ff8a8a;
 }
 
 .btn {
   padding: 0.5rem 1rem;
-  border: 0.5px solid rgba(255,255,255,0.15);
+  border: 0.5px solid rgba(255, 255, 255, 0.15);
   border-radius: 6px;
   background: transparent;
-  color: rgba(255,255,255,0.7);
+  color: rgba(255, 255, 255, 0.7);
   font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
@@ -1266,7 +1253,7 @@ defineExpose({ materialCategoryLabel })
 }
 
 .btn:hover {
-  background: rgba(255,255,255,0.06);
+  background: rgba(255, 255, 255, 0.06);
   color: #ffffff;
 }
 
@@ -1293,13 +1280,13 @@ defineExpose({ materialCategoryLabel })
 }
 
 .btn-success {
-  background: rgba(74,222,128,0.1);
+  background: rgba(74, 222, 128, 0.1);
   color: #4ade80;
-  border-color: rgba(74,222,128,0.3);
+  border-color: rgba(74, 222, 128, 0.3);
 }
 
 .btn-success:hover {
-  background: rgba(74,222,128,0.2);
+  background: rgba(74, 222, 128, 0.2);
   color: #4ade80;
 }
 
@@ -1416,7 +1403,7 @@ defineExpose({ materialCategoryLabel })
 .detail-section {
   margin-bottom: 2rem;
   padding-bottom: 1.5rem;
-  border-bottom: 0.5px solid rgba(255,255,255,0.1);
+  border-bottom: 0.5px solid rgba(255, 255, 255, 0.1);
 }
 
 .section-title {
@@ -1428,7 +1415,7 @@ defineExpose({ materialCategoryLabel })
 
 .section-desc {
   font-size: 14px;
-  color: rgba(255,255,255,0.5);
+  color: rgba(255, 255, 255, 0.5);
   margin-bottom: 1rem;
 }
 
@@ -1440,7 +1427,7 @@ defineExpose({ materialCategoryLabel })
 
 .capability-card {
   background: #111111;
-  border: 0.5px solid rgba(255,255,255,0.1);
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
   padding: 1.25rem;
 }
@@ -1460,7 +1447,7 @@ defineExpose({ materialCategoryLabel })
 
 .capability-list li {
   font-size: 13px;
-  color: rgba(255,255,255,0.5);
+  color: rgba(255, 255, 255, 0.5);
   margin-bottom: 0.5rem;
   position: relative;
   padding-left: 1.25rem;
@@ -1474,14 +1461,14 @@ defineExpose({ materialCategoryLabel })
 }
 
 .cap-label {
-  color: rgba(255,255,255,0.85);
+  color: rgba(255, 255, 255, 0.85);
   font-weight: 500;
 }
 
 .cap-desc {
   display: block;
   font-size: 12px;
-  color: rgba(255,255,255,0.4);
+  color: rgba(255, 255, 255, 0.4);
   margin-top: 2px;
   padding-left: 0;
 }
@@ -1492,14 +1479,14 @@ defineExpose({ materialCategoryLabel })
 
 .example-desc {
   font-size: 13px;
-  color: rgba(255,255,255,0.45);
+  color: rgba(255, 255, 255, 0.45);
   margin: 0 0 0.75rem;
   line-height: 1.5;
 }
 
 .capability-card p {
   font-size: 13px;
-  color: rgba(255,255,255,0.5);
+  color: rgba(255, 255, 255, 0.5);
   margin: 0;
 }
 
@@ -1511,7 +1498,7 @@ defineExpose({ materialCategoryLabel })
 
 .status-item {
   background: #111111;
-  border: 0.5px solid rgba(255,255,255,0.1);
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
   padding: 1.25rem;
   display: flex;
@@ -1521,7 +1508,7 @@ defineExpose({ materialCategoryLabel })
 
 .status-label {
   font-size: 12px;
-  color: rgba(255,255,255,0.3);
+  color: rgba(255, 255, 255, 0.3);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -1534,7 +1521,7 @@ defineExpose({ materialCategoryLabel })
 
 .workflow-config {
   background: #111111;
-  border: 0.5px solid rgba(255,255,255,0.1);
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
   padding: 1.5rem;
   display: flex;
@@ -1544,13 +1531,13 @@ defineExpose({ materialCategoryLabel })
 
 .config-hint {
   font-size: 13px;
-  color: rgba(255,255,255,0.4);
+  color: rgba(255, 255, 255, 0.4);
   margin: 0;
 }
 
 .example-card {
   background: #111111;
-  border: 0.5px solid rgba(255,255,255,0.1);
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
   padding: 1.25rem;
   margin-bottom: 1rem;
@@ -1564,11 +1551,11 @@ defineExpose({ materialCategoryLabel })
 }
 
 .example-code {
-  background: rgba(0,0,0,0.3);
+  background: rgba(0, 0, 0, 0.3);
   border-radius: 8px;
   padding: 1rem;
   font-size: 13px;
-  color: rgba(255,255,255,0.8);
+  color: rgba(255, 255, 255, 0.8);
   overflow-x: auto;
   margin: 0;
 }
@@ -1578,7 +1565,7 @@ defineExpose({ materialCategoryLabel })
     flex-direction: column;
     align-items: flex-start;
   }
-  
+
   .capabilities-grid,
   .status-grid {
     grid-template-columns: 1fr;
@@ -1612,14 +1599,14 @@ html[data-workbench-theme='light'] .desc {
 
 html[data-workbench-theme='light'] .info-chip {
   color: #1d1d1f;
-  background: rgba(0,0,0,0.04);
-  border-color: rgba(0,0,0,0.08);
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.08);
 }
 
 html[data-workbench-theme='light'] .info-chip.warn {
   color: #92400e;
-  border-color: rgba(180,130,20,0.25);
-  background: rgba(251,191,36,0.1);
+  border-color: rgba(180, 130, 20, 0.25);
+  background: rgba(251, 191, 36, 0.1);
 }
 
 html[data-workbench-theme='light'] .price-tag {
@@ -1632,12 +1619,12 @@ html[data-workbench-theme='light'] .price-tag.free {
 
 html[data-workbench-theme='light'] .owned-badge {
   color: #16a34a;
-  background: rgba(22,163,74,0.08);
+  background: rgba(22, 163, 74, 0.08);
 }
 
 html[data-workbench-theme='light'] .complaint-section {
-  border-color: rgba(180,130,20,0.18);
-  background: rgba(251,191,36,0.06);
+  border-color: rgba(180, 130, 20, 0.18);
+  background: rgba(251, 191, 36, 0.06);
 }
 
 html[data-workbench-theme='light'] .loading {
@@ -1645,17 +1632,17 @@ html[data-workbench-theme='light'] .loading {
 }
 
 html[data-workbench-theme='light'] .flash-err {
-  background: rgba(220,50,50,0.06);
+  background: rgba(220, 50, 50, 0.06);
   color: #c53030;
 }
 
 html[data-workbench-theme='light'] .btn {
-  border-color: rgba(0,0,0,0.1);
+  border-color: rgba(0, 0, 0, 0.1);
   color: #1d1d1f;
 }
 
 html[data-workbench-theme='light'] .btn:hover {
-  background: rgba(0,0,0,0.04);
+  background: rgba(0, 0, 0, 0.04);
   color: #1d1d1f;
 }
 
@@ -1680,35 +1667,35 @@ html[data-workbench-theme='light'] .btn-primary-solid:hover {
 }
 
 html[data-workbench-theme='light'] .btn-success {
-  background: rgba(22,163,74,0.08);
+  background: rgba(22, 163, 74, 0.08);
   color: #16a34a;
-  border-color: rgba(22,163,74,0.2);
+  border-color: rgba(22, 163, 74, 0.2);
 }
 
 html[data-workbench-theme='light'] .btn-success:hover {
-  background: rgba(22,163,74,0.14);
+  background: rgba(22, 163, 74, 0.14);
   color: #16a34a;
 }
 
 html[data-workbench-theme='light'] .btn-danger {
   color: #c53030;
-  border-color: rgba(200,50,50,0.2);
-  background: rgba(220,50,50,0.06);
+  border-color: rgba(200, 50, 50, 0.2);
+  background: rgba(220, 50, 50, 0.06);
 }
 
 html[data-workbench-theme='light'] .btn-danger:hover {
   color: #9b2c2c;
-  background: rgba(220,50,50,0.1);
+  background: rgba(220, 50, 50, 0.1);
 }
 
 html[data-workbench-theme='light'] .btn-fav {
-  border-color: rgba(180,130,20,0.25);
+  border-color: rgba(180, 130, 20, 0.25);
   color: #a16207;
 }
 
 html[data-workbench-theme='light'] .btn-fav--on {
-  background: rgba(251,191,36,0.12);
-  border-color: rgba(180,130,20,0.35);
+  background: rgba(251, 191, 36, 0.12);
+  border-color: rgba(180, 130, 20, 0.35);
 }
 
 html[data-workbench-theme='light'] .reviews-section .reviews-summary {
@@ -1716,7 +1703,7 @@ html[data-workbench-theme='light'] .reviews-section .reviews-summary {
 }
 
 html[data-workbench-theme='light'] .review-item {
-  border-bottom-color: rgba(0,0,0,0.06);
+  border-bottom-color: rgba(0, 0, 0, 0.06);
 }
 
 html[data-workbench-theme='light'] .review-head {
@@ -1736,7 +1723,7 @@ html[data-workbench-theme='light'] .review-body {
 }
 
 html[data-workbench-theme='light'] .review-form {
-  border-top-color: rgba(0,0,0,0.08);
+  border-top-color: rgba(0, 0, 0, 0.08);
 }
 
 html[data-workbench-theme='light'] .review-form-title {
@@ -1748,7 +1735,7 @@ html[data-workbench-theme='light'] .review-form .label {
 }
 
 html[data-workbench-theme='light'] .review-form .input {
-  border-color: rgba(0,0,0,0.1);
+  border-color: rgba(0, 0, 0, 0.1);
   background: #ffffff;
   color: #1d1d1f;
 }
@@ -1758,7 +1745,7 @@ html[data-workbench-theme='light'] .review-note {
 }
 
 html[data-workbench-theme='light'] .detail-section {
-  border-bottom-color: rgba(0,0,0,0.08);
+  border-bottom-color: rgba(0, 0, 0, 0.08);
 }
 
 html[data-workbench-theme='light'] .section-title {
@@ -1771,7 +1758,7 @@ html[data-workbench-theme='light'] .section-desc {
 
 html[data-workbench-theme='light'] .capability-card {
   background: #ffffff;
-  border-color: rgba(0,0,0,0.06);
+  border-color: rgba(0, 0, 0, 0.06);
 }
 
 html[data-workbench-theme='light'] .capability-card h3 {
@@ -1804,7 +1791,7 @@ html[data-workbench-theme='light'] .capability-card p {
 
 html[data-workbench-theme='light'] .status-item {
   background: #ffffff;
-  border-color: rgba(0,0,0,0.06);
+  border-color: rgba(0, 0, 0, 0.06);
 }
 
 html[data-workbench-theme='light'] .status-label {
@@ -1817,7 +1804,7 @@ html[data-workbench-theme='light'] .status-value {
 
 html[data-workbench-theme='light'] .workflow-config {
   background: #ffffff;
-  border-color: rgba(0,0,0,0.06);
+  border-color: rgba(0, 0, 0, 0.06);
 }
 
 html[data-workbench-theme='light'] .config-hint {
@@ -1826,7 +1813,7 @@ html[data-workbench-theme='light'] .config-hint {
 
 html[data-workbench-theme='light'] .example-card {
   background: #ffffff;
-  border-color: rgba(0,0,0,0.06);
+  border-color: rgba(0, 0, 0, 0.06);
 }
 
 html[data-workbench-theme='light'] .example-card h3 {
@@ -1834,7 +1821,7 @@ html[data-workbench-theme='light'] .example-card h3 {
 }
 
 html[data-workbench-theme='light'] .example-code {
-  background: rgba(0,0,0,0.04);
+  background: rgba(0, 0, 0, 0.04);
   color: #1d1d1f;
 }
 </style>

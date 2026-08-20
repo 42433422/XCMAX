@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.pr_review import review_diff
 
@@ -54,8 +54,13 @@ def verify_external_advantage_rows(rows: list[dict[str, Any]]) -> dict[str, Any]
 
 
 def _verify_row(row: dict[str, Any]) -> dict[str, Any]:
-    baseline = row.get("baseline") if isinstance(row.get("baseline"), dict) else {}
-    retort = row.get("retort") if isinstance(row.get("retort"), dict) else {}
+    baseline = cast(
+        dict[str, Any],
+        row.get("baseline") if isinstance(row.get("baseline"), dict) else {},
+    )
+    retort = cast(
+        dict[str, Any], row.get("retort") if isinstance(row.get("retort"), dict) else {}
+    )
     expected_context = str(row.get("expected_context") or "")
     expected_severity = str(row.get("expected_severity") or "")
     observed_contexts = {
@@ -127,11 +132,15 @@ def _direct_review_assertions(
         max_comments=8,
     )
     comments = [item for item in review.get("comments") or [] if isinstance(item, dict)]
-    summary = review.get("summary") if isinstance(review.get("summary"), dict) else {}
-    extension_policy = (
+    summary = cast(
+        dict[str, Any],
+        review.get("summary") if isinstance(review.get("summary"), dict) else {},
+    )
+    extension_policy = cast(
+        dict[str, Any],
         summary.get("extension_policy")
         if isinstance(summary.get("extension_policy"), dict)
-        else {}
+        else {},
     )
     contexts = {
         str(item.get("review_context") or "")

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="var-annotated"
 """Tests for app.fastapi_routes.six_line_webhook_api."""
 
 from __future__ import annotations

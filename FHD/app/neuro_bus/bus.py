@@ -46,8 +46,6 @@ if TYPE_CHECKING:
     from app.neuro_bus.transports.redis_streams import RedisStreamsBridge
 
 
-
-
 class NeuroBus(NeuroBusSubscriptionsMixin):
     """
     神经总线 - 高性能事件总线实现
@@ -470,7 +468,6 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
                 except RECOVERABLE_ERRORS:
                     pass
         return success
-
 
 
 # 全局 NeuroBus 实例

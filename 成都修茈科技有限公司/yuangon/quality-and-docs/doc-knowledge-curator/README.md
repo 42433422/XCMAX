@@ -6,15 +6,15 @@
 
 ## 负责文件
 
-| 路径 | 说明 |
-|------|------|
-| `README.md` | 仓库根 README |
-| `ESkill.md` | ESkill 架构文档 |
-| `docs/**` | 文档目录 |
-| `*.md`（仓库级） | 需求/方案/报告 Markdown |
-| `yuangon/**/README.md` | 所有 AI 员工的 README |
-| `py-doc-generator.xcemp` | Python docstring 生成员工 |
-| `project-doc-generator.xcemp` | 项目文档生成员工 |
+| 路径                          | 说明                      |
+| ----------------------------- | ------------------------- |
+| `README.md`                   | 仓库根 README             |
+| `ESkill.md`                   | ESkill 架构文档           |
+| `docs/**`                     | 文档目录                  |
+| `*.md`（仓库级）              | 需求/方案/报告 Markdown   |
+| `yuangon/**/README.md`        | 所有 AI 员工的 README     |
+| `py-doc-generator.xcemp`      | Python docstring 生成员工 |
+| `project-doc-generator.xcemp` | 项目文档生成员工          |
 
 ## 典型任务
 
@@ -28,12 +28,12 @@
 
 ## KPI
 
-| 指标 | 目标 |
-|------|------|
-| 员工 README 与 employee.yaml 一致性 | 100% |
-| 文档发布延迟（代码上线后） | ≤ 3 天 |
-| ESkill.md 版本与实现同步 | 100% |
-| 文档 Markdown lint 无错误 | 100% |
+| 指标                                | 目标   |
+| ----------------------------------- | ------ |
+| 员工 README 与 employee.yaml 一致性 | 100%   |
+| 文档发布延迟（代码上线后）          | ≤ 3 天 |
+| ESkill.md 版本与实现同步            | 100%   |
+| 文档 Markdown lint 无错误           | 100%   |
 
 ## 禁区
 

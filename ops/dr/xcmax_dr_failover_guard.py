@@ -125,7 +125,11 @@ def tcp_probe(host: str, port: int) -> bool:
 def authoritative_addresses(domain: str) -> set[str]:
     ns_result = run(["dig", "+short", "NS", domain])
     nameservers = sorted(
-        {line.strip().rstrip(".") for line in ns_result.stdout.splitlines() if line.strip()}
+        {
+            line.strip().rstrip(".")
+            for line in ns_result.stdout.splitlines()
+            if line.strip()
+        }
     )
     if ns_result.returncode != 0 or not nameservers:
         return set()
@@ -200,9 +204,7 @@ def main() -> int:
         return 2
 
     env_path = Path(
-        os.environ.get(
-            "OPS_DR_AUTO_FAILOVER_ENV", "/etc/xcmax-dr-auto-failover.env"
-        )
+        os.environ.get("OPS_DR_AUTO_FAILOVER_ENV", "/etc/xcmax-dr-auto-failover.env")
     )
     values = load_env(env_path)
     state_path = Path(
@@ -229,9 +231,7 @@ def main() -> int:
     primary_ip = setting(values, "OPS_DR_PRIMARY_IP", "119.27.178.147")
     secondary_ip = setting(values, "OPS_DR_SECONDARY_IP", "43.138.211.142")
     domain = setting(values, "OPS_DR_DOMAIN", "xiu-ci.com")
-    health_path = setting(
-        values, "OPS_DR_PRIMARY_HEALTH_PATH", "/fhd-api/api/health"
-    )
+    health_path = setting(values, "OPS_DR_PRIMARY_HEALTH_PATH", "/fhd-api/api/health")
     threshold = int(setting(values, "OPS_DR_FAILOVER_THRESHOLD", "3"))
     status_command = setting(
         values, "OPS_DR_STATUS_COMMAND", "/usr/local/sbin/xcmax-dr-status"

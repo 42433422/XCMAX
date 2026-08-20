@@ -30,11 +30,7 @@ const STAGE_LABELS: Record<string, string> = {
   assemble: '组装 Manifest',
 }
 
-function applyEmployeeDraftEvent(
-  store: ReturnType<typeof useWorkbenchStore>,
-  runId: string,
-  ev: Record<string, unknown>,
-) {
+function applyEmployeeDraftEvent(store: ReturnType<typeof useWorkbenchStore>, runId: string, ev: Record<string, unknown>) {
   store.applyEmployeeDraftSseEvent(ev)
 
   const event = ev.event as string
@@ -87,15 +83,10 @@ const SCRIPT_STAGE_LABELS: Record<string, string> = {
   error: '错误',
 }
 
-function applyScriptWorkflowEvent(
-  store: ReturnType<typeof useWorkbenchStore>,
-  runId: string,
-  ev: Record<string, unknown>,
-) {
+function applyScriptWorkflowEvent(store: ReturnType<typeof useWorkbenchStore>, runId: string, ev: Record<string, unknown>) {
   const event = String(ev.event ?? ev.type ?? '')
   const label = SCRIPT_STAGE_LABELS[event] ?? event
-  const status: AgentEventStatus =
-    event === 'done' ? 'done' : event === 'error' ? 'error' : 'running'
+  const status: AgentEventStatus = event === 'done' ? 'done' : event === 'error' ? 'error' : 'running'
 
   if (event === 'done') {
     store.pushRunEvent(runId, nowEvent(event, label, ev, 'done'))
@@ -112,12 +103,7 @@ function applyScriptWorkflowEvent(
 
 // ─── Generic SSE reader ───────────────────────────────────────────────────────
 
-async function consumeSse(
-  url: string,
-  body: unknown,
-  signal: AbortSignal,
-  onEvent: (ev: Record<string, unknown>) => void,
-) {
+async function consumeSse(url: string, body: unknown, signal: AbortSignal, onEvent: (ev: Record<string, unknown>) => void) {
   const token = getAccessToken()
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (token) headers['Authorization'] = `Bearer ${token}`
@@ -134,7 +120,9 @@ async function consumeSse(
     try {
       const b = await response.json()
       msg = b?.detail || b?.error || msg
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     throw new Error(msg)
   }
 
@@ -155,7 +143,9 @@ async function consumeSse(
           try {
             const ev = JSON.parse(line.slice(6))
             onEvent(ev)
-          } catch { /* ignore malformed */ }
+          } catch {
+            /* ignore malformed */
+          }
         }
       }
     }
@@ -237,12 +227,7 @@ export function useAgentLoop() {
 
     const ctrl = new AbortController()
     try {
-      await consumeSse(
-        '/api/script-workflows/sessions',
-        payload,
-        ctrl.signal,
-        (ev) => applyScriptWorkflowEvent(store, runId, ev),
-      )
+      await consumeSse('/api/script-workflows/sessions', payload, ctrl.signal, (ev) => applyScriptWorkflowEvent(store, runId, ev))
     } catch (e: unknown) {
       if ((e as Error)?.name !== 'AbortError') {
         store.pushRunEvent(runId, nowEvent('network', '网络错误', { error: String(e) }, 'error'))

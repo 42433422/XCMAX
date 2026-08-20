@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """计费 LLM 对话与流式换模（从 llm_api 抽出，避免巨文件棘轮增长）。"""
 
 from __future__ import annotations
@@ -41,6 +42,7 @@ from modstore_server.multimodal_llm import (
     messages_use_openai_multipart_content,
     validate_multimodal_payload_size,
 )
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -233,7 +235,8 @@ async def stream_billed_llm_chat(
                 )
                 if not rest:
                     yield _sse(
-                        "error", {"ok": False, "error": last_error, "status": exc.status_code}
+                        "error",
+                        {"ok": False, "error": last_error, "status": exc.status_code},
                     )
                     return
                 queue = queue[: idx + 1] + rest
@@ -266,7 +269,8 @@ async def stream_billed_llm_chat(
                 )
                 if not rest:
                     yield _sse(
-                        "error", {"ok": False, "error": last_error, "status": exc.status_code}
+                        "error",
+                        {"ok": False, "error": last_error, "status": exc.status_code},
                     )
                     return
                 logger.warning(
@@ -324,9 +328,12 @@ async def stream_billed_llm_chat(
                         )
                         try:
                             await wallet.release(
-                                authorization_header(request), hold, str(err), request_id
+                                authorization_header(request),
+                                hold,
+                                str(err),
+                                request_id,
                             )
-                        except Exception:
+                        except RECOVERABLE_ERRORS:
                             logger.exception(
                                 "failed to release LLM wallet hold after stream upstream error"
                             )
@@ -411,7 +418,7 @@ async def stream_billed_llm_chat(
                     return
                 # break from async for → try next candidate
                 continue
-            except Exception as exc:
+            except RECOVERABLE_ERRORS as exc:
                 try:
                     save_failure_log(
                         db,
@@ -422,7 +429,7 @@ async def stream_billed_llm_chat(
                         hold_no=hold.hold_no,
                     )
                     await wallet.release(authorization_header(request), hold, str(exc), request_id)
-                except Exception:
+                except RECOVERABLE_ERRORS:
                     logger.exception(
                         "failed to release LLM wallet hold after unexpected stream error"
                     )

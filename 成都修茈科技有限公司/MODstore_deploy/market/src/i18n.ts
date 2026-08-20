@@ -50,9 +50,7 @@ export function createModstoreI18n(defaultLocale: Locale = storedLocale()) {
 
   function t(path: string, params: Record<string, string | number> = {}): string {
     const value = readPath(messages[state.locale], path) ?? readPath(messages['zh-CN'], path) ?? path
-    return String(value).replace(/\{(\w+)\}/g, (_, key: string) =>
-      params[key] === undefined ? `{${key}}` : String(params[key]),
-    )
+    return String(value).replace(/\{(\w+)\}/g, (_, key: string) => (params[key] === undefined ? `{${key}}` : String(params[key])))
   }
 
   return {

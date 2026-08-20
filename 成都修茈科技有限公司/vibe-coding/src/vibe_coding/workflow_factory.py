@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from .code_factory import (
@@ -21,6 +21,7 @@ from .code_factory import (
     VibeCodingError,
     _enrich_brief_with_project_analysis,
 )
+
 # removed: config-layer factory unavailable in standalone
 # from .config_factory import NLConfigSkillFactory
 from .nl.llm import LLMClient
@@ -134,9 +135,7 @@ class NLWorkflowFactory:
                     project_root=project_root,
                 )
             except VibeCodingError as exc:
-                raise VibeCodingError(
-                    f"failed to generate code skill {temp_id!r}: {exc}"
-                ) from exc
+                raise VibeCodingError(f"failed to generate code skill {temp_id!r}: {exc}") from exc
             temp_to_code_skill[temp_id] = skill.skill_id
             code_skills_created.append(skill.skill_id)
 
@@ -157,9 +156,8 @@ class NLWorkflowFactory:
                     if not sb:
                         warnings.append(f"config_skills[{temp_id}] empty, skipped")
                         continue
-                    skill = self.config_factory.generate(
-                        sb, skill_id=f"{workflow_id}-{temp_id}"
-                    )
+                    config_factory = cast(Any, self.config_factory)
+                    skill = config_factory.generate(sb, skill_id=f"{workflow_id}-{temp_id}")
                     temp_to_config_skill[temp_id] = skill.skill_id
                     config_skills_created.append(skill.skill_id)
 
@@ -197,9 +195,7 @@ class NLWorkflowFactory:
                         or ""
                     )
                     if not temp:
-                        raise VibeCodingError(
-                            f"node {nid!r} layer=code has no code_skill_temp_id"
-                        )
+                        raise VibeCodingError(f"node {nid!r} layer=code has no code_skill_temp_id")
                     if temp not in temp_to_code_skill:
                         raise VibeCodingError(
                             f"node {nid!r} references unknown code_skill temp_id {temp!r}; "
@@ -208,15 +204,10 @@ class NLWorkflowFactory:
                     code_skill_ref = temp_to_code_skill[temp]
                 else:
                     temp = str(
-                        raw_node.get("skill_temp_id")
-                        or raw_node.get("temp_id")
-                        or raw_node.get("skill_ref")
-                        or ""
+                        raw_node.get("skill_temp_id") or raw_node.get("temp_id") or raw_node.get("skill_ref") or ""
                     )
                     if not temp:
-                        raise VibeCodingError(
-                            f"node {nid!r} layer=config has no skill_temp_id"
-                        )
+                        raise VibeCodingError(f"node {nid!r} layer=config has no skill_temp_id")
                     if temp not in temp_to_config_skill:
                         raise VibeCodingError(
                             f"node {nid!r} references unknown config skill temp_id {temp!r}; "

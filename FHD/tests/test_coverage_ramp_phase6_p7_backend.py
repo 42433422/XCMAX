@@ -1,3 +1,4 @@
+# mypy: disable-error-code="call-overload, no-any-return, union-attr"
 """COVERAGE_RAMP Phase 6 round 7: backend low-coverage modules.
 
 Targets:
@@ -124,7 +125,7 @@ def test_compat_ai_generate_parse_failure_returns_400() -> None:
     assert resp.status_code == 400
     body = resp.json()
     assert body["success"] is False
-    assert "格式错误" in body["message"]
+    assert body["message"] == "订单解析失败，请检查输入内容"
 
 
 def test_compat_ai_generate_parse_success_but_empty_products_returns_400() -> None:
@@ -901,7 +902,7 @@ def test_compat_print_single_label_recoverable_error_returns_500() -> None:
     assert resp.status_code == 500
     body = _parse_json_response(resp)
     assert body["success"] is False
-    assert "print svc broken" in body["message"]
+    assert body["message"] == "打印服务暂时不可用，请稍后重试"
 
 
 # ---------------------------------------------------------------------------

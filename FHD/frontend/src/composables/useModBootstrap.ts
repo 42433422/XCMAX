@@ -24,7 +24,7 @@ export function useModBootstrap() {
       isLoaded.value = mods.value.length > 0
       loadError.value = null
       return { ok: true }
-    } catch (e) {
+    } catch {
       loadError.value = '网络错误'
       return { ok: false }
     }
@@ -44,4 +44,3 @@ export function useModBootstrap() {
     fetchModRoutes,
   }
 }
-

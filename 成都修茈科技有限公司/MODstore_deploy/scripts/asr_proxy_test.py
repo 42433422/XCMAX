@@ -91,7 +91,7 @@ async def main() -> int:
         while asyncio.get_event_loop().time() < deadline:
             try:
                 raw = await asyncio.wait_for(ws.recv(), timeout=2)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 continue
             if isinstance(raw, bytes):
                 continue

@@ -11,6 +11,7 @@ import orjson
 from langchain_protocol import Event
 from websockets.sync.client import connect as websocket_connect
 
+from langgraph_sdk._exception_policy import TERMINATION_ERRORS
 from langgraph_sdk._shared.utilities import _quote_path_param
 from langgraph_sdk.stream.transport.base import (
     SyncEventStreamHandle,
@@ -107,7 +108,7 @@ class SyncProtocolWebSocketTransport:
                     payload = _decode_frame(raw)
                     if isinstance(payload, dict):
                         yield cast("Event", payload)
-            except BaseException as exc:
+            except TERMINATION_ERRORS as exc:
                 if not closed:
                     stream_error = exc
                 raise

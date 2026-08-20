@@ -39,7 +39,9 @@ def main() -> int:
     OUT_JSON.write_text(payload, encoding="utf-8")
     DASHBOARD_COPY.write_text(payload, encoding="utf-8")
 
-    print(f"[ok] wrote {OUT_JSON} ({len(doc.get('nodes') or [])} nodes, {len(doc.get('edges') or [])} edges)")
+    print(
+        f"[ok] wrote {OUT_JSON} ({len(doc.get('nodes') or [])} nodes, {len(doc.get('edges') or [])} edges)"
+    )
     print(f"[ok] mirrored {DASHBOARD_COPY}")
     return 0
 

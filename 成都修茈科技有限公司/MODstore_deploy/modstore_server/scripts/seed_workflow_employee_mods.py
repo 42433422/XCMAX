@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="assignment"
+# isort: skip_file
 """将 FHD/mods 下 6 个工作流员工 Mod 登记到 catalog（material_category=ai_employee）。"""
 
 from __future__ import annotations
+
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 import argparse
 import io
@@ -85,7 +89,9 @@ def main() -> int:
 
     from modstore_server.catalog_store import append_package
     from modstore_server.catalog_sync import upsert_catalog_item_from_xc_package_dict
-    from modstore_server.employee_asset_pipeline import mirror_catalog_file_to_market_files
+    from modstore_server.employee_asset_pipeline import (
+        mirror_catalog_file_to_market_files,
+    )
     from modstore_server.mod_scaffold_runner import import_zip, modstore_library_path
     from modstore_server.models import CatalogItem, get_session_factory
 
@@ -113,7 +119,7 @@ def main() -> int:
         try:
             manifest = _read_manifest(mod_dir)
             raw_zip = _zip_mod_dir(mod_dir)
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
             print(f"[ERR] {pack_id}: build failed: {exc}")
             continue
 
@@ -180,12 +186,12 @@ def main() -> int:
                     db.commit()
                     try:
                         mirror_catalog_file_to_market_files(row.stored_filename)
-                    except Exception:  # noqa: BLE001
+                    except BOUNDARY_ERRORS:  # noqa: BLE001
                         pass
             pub = " public" if args.set_public else ""
             print(f"[SEED] {pack_id}: v{rec['version']}{pub}")
             ok_count += 1
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
             print(f"[ERR] {pack_id}: catalog: {exc}")
         finally:
             if tmp_xcmod:

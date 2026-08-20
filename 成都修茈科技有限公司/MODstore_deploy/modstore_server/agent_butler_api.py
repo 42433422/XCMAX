@@ -1,3 +1,4 @@
+# isort: skip_file
 # ruff: noqa: E402, F401
 """AI 数字管家 Butler — 专用后端 API。
 
@@ -31,7 +32,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy import Column, DateTime, Float, Integer, String, Text
 from sqlalchemy.orm import Session
 
-from modstore_server.all_hands_report import MAX_ALL_HANDS_EMPLOYEES, clamp_all_hands_max_employees
+from modstore_server.all_hands_report import (
+    MAX_ALL_HANDS_EMPLOYEES,
+    clamp_all_hands_max_employees,
+)
 from modstore_server.api.deps import _get_current_user
 from modstore_server.infrastructure.db import get_db
 from modstore_server.llm_billing import (
@@ -79,7 +83,6 @@ from modstore_server.agent_butler_api_part01 import (
     _dd_list_dir as _dd_list_dir,
     butler_daily_digest_artifacts as butler_daily_digest_artifacts,
 )
-
 
 # ─── Butler system prompt + tool schemas ─────────────────────────────
 
@@ -129,7 +132,10 @@ BUTLER_TOOLS = [
                         "type": "string",
                         "description": "路由名称或路径，如 plans/ai-store/wallet/recharge/account/workbench-shell",
                     },
-                    "query": {"type": "object", "description": "URL query 参数（可选）"},
+                    "query": {
+                        "type": "object",
+                        "description": "URL query 参数（可选）",
+                    },
                 },
                 "required": ["route"],
             },
@@ -158,7 +164,10 @@ BUTLER_TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "label": {"type": "string", "description": "输入框的 label 或 placeholder"},
+                    "label": {
+                        "type": "string",
+                        "description": "输入框的 label 或 placeholder",
+                    },
                     "value": {"type": "string", "description": "要填入的值"},
                 },
                 "required": ["label", "value"],
@@ -173,7 +182,10 @@ BUTLER_TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "direction": {"type": "string", "enum": ["up", "down", "top", "bottom"]},
+                    "direction": {
+                        "type": "string",
+                        "enum": ["up", "down", "top", "bottom"],
+                    },
                     "px": {"type": "integer", "description": "滚动像素（可选）"},
                 },
                 "required": ["direction"],
@@ -322,7 +334,6 @@ from modstore_server.agent_butler_api_part02 import (
     CorpTranslateDTO as CorpTranslateDTO,
 )
 
-
 CORP_BUTLER_SYSTEM_PROMPT = """你是成都修茈科技有限公司官网的「AI 管家」，叫小C，平时在这边帮忙接待访客。
 
 你的性格和说话方式：
@@ -364,7 +375,6 @@ from modstore_server.agent_butler_api_part03 import (
     butler_corp_translate as butler_corp_translate,
     butler_corp_tts as butler_corp_tts,
 )
-
 
 # ─── 联系页问卷智能预填 ─────────────────────────────────────────────────
 
@@ -409,7 +419,6 @@ from modstore_server.agent_butler_api_part04 import (
     CorpIntakeFillDTO as CorpIntakeFillDTO,
 )
 
-
 CORP_INTAKE_FILL_SYSTEM_PROMPT = """你是成都修茈科技官网联系页「需求小问卷」填表助手。
 
 根据用户自然语言描述，输出 JSON（不要 markdown 代码块），格式严格为：
@@ -444,7 +453,6 @@ from modstore_server.agent_butler_api_part05 import (
     update_butler_skill_active as update_butler_skill_active,
 )
 
-
 # ─── Butler Orchestrate ────────────────────────────────────────────────
 
 from modstore_server.agent_butler_orchestrate import (  # noqa: E402
@@ -471,7 +479,6 @@ from modstore_server.agent_butler_api_part06 import (
     butler_digest_line_execute as butler_digest_line_execute,
     butler_digest_vibe_prep_session_start as butler_digest_vibe_prep_session_start,
 )
-
 
 # Phase 5 TODO: evolution endpoint
 # def butler_evolution_detect(): ...

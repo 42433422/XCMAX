@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr"
 """文档同步 Action Handler：doc-knowledge-curator 专属的文档读写与同步处理器。
 
 安全约束：
@@ -18,6 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Sequence
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.tools.doc_consistency_checker import run_full_consistency_check
 from modstore_server.tools.markdown_lint import lint_file
 
@@ -108,7 +110,11 @@ def read_doc(filepath: str) -> Dict[str, Any]:
 
 
 def write_doc(
-    filepath: str, content: str, *, scope_globs: Sequence[str], forbidden_globs: Sequence[str]
+    filepath: str,
+    content: str,
+    *,
+    scope_globs: Sequence[str],
+    forbidden_globs: Sequence[str],
 ) -> Dict[str, Any]:
     ok, msg = validate_scope(filepath, scope_globs, forbidden_globs)
     if not ok:
@@ -244,7 +250,7 @@ def dispatch_doc_sync_handler(
                 if isinstance(yaml_data, dict):
                     scope_globs = yaml_data.get("scope_globs") or scope_globs
                     forbidden_globs = yaml_data.get("forbidden_globs") or forbidden_globs
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
 
     result = DocSyncResult()
@@ -284,7 +290,10 @@ def dispatch_doc_sync_handler(
         elif op_type == "write":
             content = str(op.get("content") or "")
             write_result = write_doc(
-                full_path, content, scope_globs=scope_globs, forbidden_globs=forbidden_globs
+                full_path,
+                content,
+                scope_globs=scope_globs,
+                forbidden_globs=forbidden_globs,
             )
             if write_result.get("ok"):
                 result.changed_docs.append(filepath)
@@ -304,7 +313,7 @@ def dispatch_doc_sync_handler(
             result.consistency_check = consistency
             if consistency.get("total_errors", 0) > 0:
                 result.status = "has_errors"
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             result.errors.append(f"consistency check failed: {exc}")
 
     if result.markdown_lint_errors > 0:
@@ -357,5 +366,5 @@ def _write_doc_sync_audit(
             )
             session.add(row)
             session.commit()
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("doc_sync audit write failed: %s", exc)

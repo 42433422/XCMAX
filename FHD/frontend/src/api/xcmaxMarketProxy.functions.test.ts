@@ -23,16 +23,16 @@ describe('xcmaxMarketProxy functions', () => {
   describe('assertDutyGraphHealth', () => {
     it('accepts only an explicit healthy response', () => {
       expect(() => xcmaxMarketProxy.assertDutyGraphHealth({ success: true })).not.toThrow()
-      expect(() => xcmaxMarketProxy.assertDutyGraphHealth({})).toThrow(
-        '编制健康接口未返回可信健康状态',
-      )
+      expect(() => xcmaxMarketProxy.assertDutyGraphHealth({})).toThrow('编制健康接口未返回可信健康状态')
     })
 
     it('preserves a server staffing error even when success is true', () => {
-      expect(() => xcmaxMarketProxy.assertDutyGraphHealth({
-        success: true,
-        staffing: { error: 'Catalog 连接失败' },
-      })).toThrow('Catalog 连接失败')
+      expect(() =>
+        xcmaxMarketProxy.assertDutyGraphHealth({
+          success: true,
+          staffing: { error: 'Catalog 连接失败' },
+        }),
+      ).toThrow('Catalog 连接失败')
     })
   })
 
@@ -74,10 +74,7 @@ describe('xcmaxMarketProxy functions', () => {
     it('encodes package id', async () => {
       mockApi.post.mockResolvedValue({ success: true })
       await xcmaxMarketProxy.adminAlignSingleEmployeeLlmToAuto('pkg/with/slash')
-      expect(mockApi.post).toHaveBeenCalledWith(
-        expect.stringContaining('pkg%2Fwith%2Fslash'),
-        undefined,
-      )
+      expect(mockApi.post).toHaveBeenCalledWith(expect.stringContaining('pkg%2Fwith%2Fslash'), undefined)
     })
   })
 
@@ -86,10 +83,7 @@ describe('xcmaxMarketProxy functions', () => {
       mockApi.post.mockResolvedValue({ success: true })
       const payload = { employee_id: 'emp1' }
       await xcmaxMarketProxy.adminDutyGraphRunStart(payload)
-      expect(mockApi.post).toHaveBeenCalledWith(
-        '/api/xcmax/market-proxy/admin/duty-graph/runs',
-        payload,
-      )
+      expect(mockApi.post).toHaveBeenCalledWith('/api/xcmax/market-proxy/admin/duty-graph/runs', payload)
     })
   })
 
@@ -103,9 +97,7 @@ describe('xcmaxMarketProxy functions', () => {
     it('encodes string run id', async () => {
       mockApi.get.mockResolvedValue({ data: {} })
       await xcmaxMarketProxy.adminDutyGraphRunDetail('run/123')
-      expect(mockApi.get).toHaveBeenCalledWith(
-        expect.stringContaining('run%2F123'),
-      )
+      expect(mockApi.get).toHaveBeenCalledWith(expect.stringContaining('run%2F123'))
     })
   })
 
@@ -113,19 +105,15 @@ describe('xcmaxMarketProxy functions', () => {
     it('calls POST with employee ids', async () => {
       mockApi.post.mockResolvedValue({ data: {} })
       await xcmaxMarketProxy.adminEmployeeExecutionCapabilities(['emp1', 'emp2'])
-      expect(mockApi.post).toHaveBeenCalledWith(
-        '/api/xcmax/market-proxy/admin/employees/execution-capabilities',
-        { employee_ids: ['emp1', 'emp2'] },
-      )
+      expect(mockApi.post).toHaveBeenCalledWith('/api/xcmax/market-proxy/admin/employees/execution-capabilities', {
+        employee_ids: ['emp1', 'emp2'],
+      })
     })
 
     it('handles undefined employee ids', async () => {
       mockApi.post.mockResolvedValue({ data: {} })
       await xcmaxMarketProxy.adminEmployeeExecutionCapabilities()
-      expect(mockApi.post).toHaveBeenCalledWith(
-        '/api/xcmax/market-proxy/admin/employees/execution-capabilities',
-        { employee_ids: [] },
-      )
+      expect(mockApi.post).toHaveBeenCalledWith('/api/xcmax/market-proxy/admin/employees/execution-capabilities', { employee_ids: [] })
     })
   })
 
@@ -133,14 +121,16 @@ describe('xcmaxMarketProxy functions', () => {
     it('calls GET with employee id', async () => {
       mockApi.get.mockResolvedValue({ data: {} })
       await xcmaxMarketProxy.adminEmployeeExecutionMetrics('emp1')
-      expect(mockApi.get).toHaveBeenCalledWith(
-        '/api/xcmax/market-proxy/admin/employees/emp1/execution-metrics',
-      )
+      expect(mockApi.get).toHaveBeenCalledWith('/api/xcmax/market-proxy/admin/employees/emp1/execution-metrics')
     })
 
     it('appends query params when provided', async () => {
       mockApi.get.mockResolvedValue({ data: {} })
-      await xcmaxMarketProxy.adminEmployeeExecutionMetrics('emp1', { limit: 10, offset: 5, user_id: 42 })
+      await xcmaxMarketProxy.adminEmployeeExecutionMetrics('emp1', {
+        limit: 10,
+        offset: 5,
+        user_id: 42,
+      })
       const call = mockApi.get.mock.calls[0][0] as string
       expect(call).toContain('limit=10')
       expect(call).toContain('offset=5')
@@ -150,9 +140,7 @@ describe('xcmaxMarketProxy functions', () => {
     it('encodes employee id', async () => {
       mockApi.get.mockResolvedValue({ data: {} })
       await xcmaxMarketProxy.adminEmployeeExecutionMetrics('emp/1')
-      expect(mockApi.get).toHaveBeenCalledWith(
-        expect.stringContaining('emp%2F1'),
-      )
+      expect(mockApi.get).toHaveBeenCalledWith(expect.stringContaining('emp%2F1'))
     })
   })
 
@@ -176,19 +164,18 @@ describe('xcmaxMarketProxy functions', () => {
     it('calls POST with provider, model, messages, maxTokens', async () => {
       mockApi.post.mockResolvedValue({ reply: 'ok' })
       await xcmaxMarketProxy.llmChat('openai', 'gpt-4', [{ role: 'user', content: 'hi' }])
-      expect(mockApi.post).toHaveBeenCalledWith(
-        '/api/xcmax/market-proxy/llm/chat',
-        { provider: 'openai', model: 'gpt-4', messages: [{ role: 'user', content: 'hi' }], max_tokens: 1024 },
-      )
+      expect(mockApi.post).toHaveBeenCalledWith('/api/xcmax/market-proxy/llm/chat', {
+        provider: 'openai',
+        model: 'gpt-4',
+        messages: [{ role: 'user', content: 'hi' }],
+        max_tokens: 1024,
+      })
     })
 
     it('uses custom maxTokens when provided', async () => {
       mockApi.post.mockResolvedValue({ reply: 'ok' })
       await xcmaxMarketProxy.llmChat('openai', 'gpt-4', [], 2048)
-      expect(mockApi.post).toHaveBeenCalledWith(
-        '/api/xcmax/market-proxy/llm/chat',
-        expect.objectContaining({ max_tokens: 2048 }),
-      )
+      expect(mockApi.post).toHaveBeenCalledWith('/api/xcmax/market-proxy/llm/chat', expect.objectContaining({ max_tokens: 2048 }))
     })
   })
 
@@ -204,28 +191,21 @@ describe('xcmaxMarketProxy functions', () => {
     it('calls POST with job id and payload', async () => {
       mockApi.post.mockResolvedValue({ success: true })
       await xcmaxMarketProxy.localRunEmployeeCronJob('job1', { task: 'sync' })
-      expect(mockApi.post).toHaveBeenCalledWith(
-        '/api/xcmax/local/employee-cron/jobs/job1/run',
-        { task: 'sync' },
-      )
+      expect(mockApi.post).toHaveBeenCalledWith('/api/xcmax/local/employee-cron/jobs/job1/run', {
+        task: 'sync',
+      })
     })
 
     it('uses empty object as default payload', async () => {
       mockApi.post.mockResolvedValue({ success: true })
       await xcmaxMarketProxy.localRunEmployeeCronJob('job1')
-      expect(mockApi.post).toHaveBeenCalledWith(
-        '/api/xcmax/local/employee-cron/jobs/job1/run',
-        {},
-      )
+      expect(mockApi.post).toHaveBeenCalledWith('/api/xcmax/local/employee-cron/jobs/job1/run', {})
     })
 
     it('encodes job id', async () => {
       mockApi.post.mockResolvedValue({ success: true })
       await xcmaxMarketProxy.localRunEmployeeCronJob('job/1')
-      expect(mockApi.post).toHaveBeenCalledWith(
-        expect.stringContaining('job%2F1'),
-        {},
-      )
+      expect(mockApi.post).toHaveBeenCalledWith(expect.stringContaining('job%2F1'), {})
     })
   })
 
@@ -239,9 +219,7 @@ describe('xcmaxMarketProxy functions', () => {
     it('encodes session id', async () => {
       mockApi.get.mockResolvedValue({})
       await xcmaxMarketProxy.workbenchGetSession('sess/1')
-      expect(mockApi.get).toHaveBeenCalledWith(
-        expect.stringContaining('sess%2F1'),
-      )
+      expect(mockApi.get).toHaveBeenCalledWith(expect.stringContaining('sess%2F1'))
     })
   })
 
@@ -267,7 +245,10 @@ describe('xcmaxMarketProxy functions', () => {
   describe('getEmployeeStatus', () => {
     it('returns status from local API when available', async () => {
       mockApi.get.mockResolvedValue({ employee_id: 'emp1', deployed: true })
-      const result = await xcmaxMarketProxy.getEmployeeStatus('emp1') as { employee_id: string; deployed: boolean }
+      const result = (await xcmaxMarketProxy.getEmployeeStatus('emp1')) as {
+        employee_id: string
+        deployed: boolean
+      }
       expect(result.employee_id).toBe('emp1')
       expect(result.deployed).toBe(true)
     })
@@ -275,8 +256,15 @@ describe('xcmaxMarketProxy functions', () => {
 
   describe('getEmployeeManifest', () => {
     it('returns manifest from local API when available', async () => {
-      mockApi.get.mockResolvedValue({ employee_id: 'emp1', name: 'Emp1', handlers: [{ name: 'h1' }] })
-      const result = await xcmaxMarketProxy.getEmployeeManifest('emp1') as { employee_id: string; handlers: unknown[] }
+      mockApi.get.mockResolvedValue({
+        employee_id: 'emp1',
+        name: 'Emp1',
+        handlers: [{ name: 'h1' }],
+      })
+      const result = (await xcmaxMarketProxy.getEmployeeManifest('emp1')) as {
+        employee_id: string
+        handlers: unknown[]
+      }
       expect(result.employee_id).toBe('emp1')
       expect(result.handlers.length).toBe(1)
     })
@@ -311,10 +299,7 @@ describe('xcmaxMarketProxy functions', () => {
       mockApi.get.mockResolvedValue({ ok: true })
       mockApi.post.mockResolvedValue({ success: true })
       await xcmaxMarketProxy.selfMaintenanceGovernanceReview()
-      expect(mockApi.post).toHaveBeenCalledWith(
-        expect.any(String),
-        {},
-      )
+      expect(mockApi.post).toHaveBeenCalledWith(expect.any(String), {})
     })
   })
 })

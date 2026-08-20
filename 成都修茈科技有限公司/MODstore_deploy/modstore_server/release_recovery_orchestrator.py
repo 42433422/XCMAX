@@ -9,6 +9,8 @@ import time
 from pathlib import Path
 from typing import Any, Dict
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 
 def _runtime_dir() -> Path:
     return Path(os.environ.get("MODSTORE_RUNTIME_DIR") or Path.home() / ".xcmax" / "modstore-daily")
@@ -36,10 +38,12 @@ def _looks_release_related(event_type: str, payload: Dict[str, Any]) -> bool:
 
 def build_recovery_plan(*, event_type: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     try:
-        from modstore_server.adaptive_release_controller import build_adaptive_release_plan
+        from modstore_server.adaptive_release_controller import (
+            build_adaptive_release_plan,
+        )
 
         adaptive = build_adaptive_release_plan(event_type=event_type, payload=payload)
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         adaptive = {"error": str(exc)[:300], "action": "observe", "strategy": "observe"}
     release_related = _looks_release_related(event_type, payload)
     priority = payload.get("priority")
@@ -92,7 +96,12 @@ def maybe_execute_recovery(
 ) -> Dict[str, Any]:
     plan = build_recovery_plan(event_type=event_type, payload=payload)
     if plan["action"] == "observe":
-        return {"executed": False, "ok": True, "plan": plan, "reason": "not_release_related"}
+        return {
+            "executed": False,
+            "ok": True,
+            "plan": plan,
+            "reason": "not_release_related",
+        }
     if plan["action"] == "rollback":
         command = (os.environ.get("MODSTORE_AUTO_ROLLBACK_COMMAND") or "").strip()
     elif plan["action"] == "autoscale":
@@ -105,14 +114,22 @@ def maybe_execute_recovery(
         "plan": plan,
     }
     if not command:
-        out = {"executed": False, "ok": True, "plan": plan, "reason": "command_not_configured"}
+        out = {
+            "executed": False,
+            "ok": True,
+            "plan": plan,
+            "reason": "command_not_configured",
+        }
     else:
         out = {"executed": True, "plan": plan, **_run_command(command, audit)}
     path = _runtime_dir() / "release_recovery_audit.jsonl"
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as fh:
         fh.write(
-            json.dumps({**out, "event_id": int(event_id), "ts": time.time()}, ensure_ascii=False)
+            json.dumps(
+                {**out, "event_id": int(event_id), "ts": time.time()},
+                ensure_ascii=False,
+            )
             + "\n"
         )
     return out

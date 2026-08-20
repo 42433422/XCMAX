@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -84,9 +88,14 @@ async def synthesize_all_hands_answer(
         sf = _facade().get_session_factory()
         with sf() as db:
             result = await chat_dispatch_via_session(
-                db, int(user_id or 0), bench_provider, bench_model, messages, max_tokens=2048
+                db,
+                int(user_id or 0),
+                bench_provider,
+                bench_model,
+                messages,
+                max_tokens=2048,
             )
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         _facade().logger.exception("synthesize_all_hands_answer dispatch failed")
         return {
             "question": user_question,

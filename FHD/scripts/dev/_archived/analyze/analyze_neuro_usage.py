@@ -8,6 +8,8 @@ import os
 import re
 from collections import defaultdict
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 # 定义 Neuro-DDD 核心标识
 NEURO_PATTERNS = [
     r"get_neuro_bus\(\)",
@@ -58,7 +60,7 @@ def analyze_file(file_path):
             "neuro_patterns": list(set(neuro_matches)),
             "traditional_patterns": list(set(traditional_matches)),
         }
-    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
         return None
 
 

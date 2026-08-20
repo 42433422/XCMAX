@@ -99,23 +99,23 @@ def collect_runtime_provenance(
             or os.environ.get("COMMIT_SHA")
             or ""
         ).strip()
-        reasons = []
+        manifest_reasons: list[str] = []
         manifest_path, manifest = _runtime_manifest()
         manifest_sha = str(manifest.get("git_sha") or "").strip()
         verified_files: list[str] = []
         if not built_sha:
-            reasons.append("missing_build_git_sha")
+            manifest_reasons.append("missing_build_git_sha")
         if not expected:
-            reasons.append("missing_expected_git_sha")
+            manifest_reasons.append("missing_expected_git_sha")
         if built_sha and expected and built_sha != expected:
-            reasons.append("build_sha_mismatch")
+            manifest_reasons.append("build_sha_mismatch")
         if manifest_path is not None:
             if not manifest:
-                reasons.append("release_manifest_unavailable")
+                manifest_reasons.append("release_manifest_unavailable")
             elif not manifest_sha:
-                reasons.append("release_manifest_missing_git_sha")
+                manifest_reasons.append("release_manifest_missing_git_sha")
             elif manifest_sha not in {built_sha, expected}:
-                reasons.append("release_manifest_sha_mismatch")
+                manifest_reasons.append("release_manifest_sha_mismatch")
         file_hashes = manifest.get("files") if isinstance(manifest, dict) else None
         if isinstance(file_hashes, dict) and manifest_path is not None:
             manifest_root = (
@@ -128,22 +128,22 @@ def collect_runtime_provenance(
                 try:
                     candidate.relative_to(manifest_root)
                 except ValueError:
-                    reasons.append("release_manifest_path_escape")
+                    manifest_reasons.append("release_manifest_path_escape")
                     continue
                 try:
                     actual = _sha256(candidate)
                 except OSError:
-                    reasons.append(f"runtime_file_unavailable:{relative}")
+                    manifest_reasons.append(f"runtime_file_unavailable:{relative}")
                     continue
                 if actual != str(wanted):
-                    reasons.append(f"runtime_file_hash_mismatch:{relative}")
+                    manifest_reasons.append(f"runtime_file_hash_mismatch:{relative}")
                     continue
                 verified_files.append(str(relative))
         if os.environ.get("MODSTORE_DAILY_ENV_CLEANROOM") == "1":
             if not manifest:
-                reasons.append("cleanroom_manifest_required")
+                manifest_reasons.append("cleanroom_manifest_required")
             elif not isinstance(file_hashes, dict) or not file_hashes:
-                reasons.append("cleanroom_file_hashes_required")
+                manifest_reasons.append("cleanroom_file_hashes_required")
         return {
             "branch": target,
             "clean": None,
@@ -152,8 +152,8 @@ def collect_runtime_provenance(
             "head_sha": built_sha,
             "manifest_path": str(manifest_path or ""),
             "manifest_sha": manifest_sha,
-            "ok": not reasons,
-            "reasons": reasons,
+            "ok": not manifest_reasons,
+            "reasons": manifest_reasons,
             "repo_root": "",
             "source": "immutable_manifest" if manifest else "immutable_environment",
             "target_sha": expected,

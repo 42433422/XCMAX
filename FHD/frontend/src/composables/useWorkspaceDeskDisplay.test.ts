@@ -37,7 +37,14 @@ describe('useWorkspaceDeskDisplay', () => {
     const d = useWorkspaceDeskDisplay(makeDeps())
     expect(d.progressPct(makeRow({ snapshot: { progressPct: 120 } as WorkflowEmployeeDeskRow['snapshot'] }))).toBe(100)
     expect(d.progressPct(makeRow({ snapshot: { progressPct: -5 } as WorkflowEmployeeDeskRow['snapshot'] }))).toBe(0)
-    expect(d.progressPct(makeRow({ enabled: false, snapshot: { progressPct: 80 } as WorkflowEmployeeDeskRow['snapshot'] }))).toBe(0)
+    expect(
+      d.progressPct(
+        makeRow({
+          enabled: false,
+          snapshot: { progressPct: 80 } as WorkflowEmployeeDeskRow['snapshot'],
+        }),
+      ),
+    ).toBe(0)
     expect(d.progressPct(makeRow())).toBe(0)
     expect(d.progressWidth(makeRow({ snapshot: { progressPct: 75 } as WorkflowEmployeeDeskRow['snapshot'] }))).toBe('75%')
   })
@@ -51,10 +58,12 @@ describe('useWorkspaceDeskDisplay', () => {
   })
 
   it('deskLoopState：参与者 → run', () => {
-    const d = useWorkspaceDeskDisplay(makeDeps({
-      loopParticipantIds: ['emp-001'],
-      loopParticipantRoleLabels: { 'emp-001': '侦察' },
-    }))
+    const d = useWorkspaceDeskDisplay(
+      makeDeps({
+        loopParticipantIds: ['emp-001'],
+        loopParticipantRoleLabels: { 'emp-001': '侦察' },
+      }),
+    )
     const state = d.deskLoopState(makeRow())
     expect(state.tone).toBe('run')
     expect(state.label).toBe('参与 Loop')

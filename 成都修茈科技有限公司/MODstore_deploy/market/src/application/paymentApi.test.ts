@@ -1,11 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  listEntitlements,
-  listPlans,
-  queryOrder,
-  walletBalance,
-  walletTransactions,
-} from './paymentApi'
+import { listEntitlements, listPlans, queryOrder, walletBalance, walletTransactions } from './paymentApi'
 import { requestJson } from '../infrastructure/http/client'
 
 vi.mock('../infrastructure/http/client', () => ({
@@ -39,10 +33,7 @@ describe('paymentApi', () => {
     await walletTransactions()
 
     expect(requestJsonMock).toHaveBeenNthCalledWith(1, '/api/wallet/balance')
-    expect(requestJsonMock).toHaveBeenNthCalledWith(
-      2,
-      '/api/wallet/transactions?limit=50&offset=0',
-    )
+    expect(requestJsonMock).toHaveBeenNthCalledWith(2, '/api/wallet/transactions?limit=50&offset=0')
   })
 
   it('passes explicit wallet transaction pagination', async () => {

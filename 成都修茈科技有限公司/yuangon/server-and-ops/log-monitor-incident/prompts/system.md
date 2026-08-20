@@ -41,17 +41,17 @@
 - **`report_md`**：首个代码块须为 ` ```json modstore-report-meta`，内含 `schema`、`report_id`、`generated_at`、`employee_id`、`employee_version`、`data_sources`、`data_sources_hash`、`error_code_map_version`、`summary_counts`。
 
 其中 `doc_sync` 结构：
+
 ```json
 {
   "checked_docs": ["..."],
   "inconsistencies_found": 0,
-  "sync_suggestions": [
-    { "doc_path": "", "section": "", "current_text": "", "suggested_text": "", "reason": "" }
-  ]
+  "sync_suggestions": [{ "doc_path": "", "section": "", "current_text": "", "suggested_text": "", "reason": "" }]
 }
 ```
 
 其中 `alert_rule_validation`（文档巡检涉及 Prometheus 规则时由 `skill-doc-ownership` 填充，否则可为 `{}`）：
+
 ```json
 {
   "syntax_ok": true,

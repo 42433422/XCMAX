@@ -136,7 +136,8 @@ describe('requestJson', () => {
   it('attaches csrf headers and formats structured or html errors', async () => {
     vi.mocked(getAccessToken).mockReturnValue('')
     document.cookie = 'csrf_token=csrf%20value'
-    const mockFetch = vi.fn()
+    const mockFetch = vi
+      .fn()
       .mockResolvedValueOnce({
         ok: true,
         text: () => Promise.resolve('{"ok":true}'),
@@ -165,11 +166,14 @@ describe('requestJson', () => {
 
   it('reports timeout aborts as ApiError 408', async () => {
     vi.useFakeTimers()
-    const mockFetch = vi.fn((_url: string, init: RequestInit) => new Promise((_resolve, reject) => {
-      init.signal?.addEventListener('abort', () => {
-        reject(Object.assign(new Error('aborted'), { name: 'AbortError' }))
-      })
-    }))
+    const mockFetch = vi.fn(
+      (_url: string, init: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () => {
+            reject(Object.assign(new Error('aborted'), { name: 'AbortError' }))
+          })
+        }),
+    )
     vi.stubGlobal('fetch', mockFetch)
 
     const pending = requestJson('/api/slow', { timeoutMs: 25 })
@@ -282,7 +286,8 @@ describe('requestBlob and stream blobs', () => {
     vi.mocked(getAccessToken).mockReturnValue('expired-token')
     vi.mocked(getRefreshToken).mockReturnValue('refresh-token')
     const blob = new Blob(['ok'], { type: 'text/plain' })
-    const mockFetch = vi.fn()
+    const mockFetch = vi
+      .fn()
       .mockResolvedValueOnce({
         ok: false,
         status: 401,
@@ -309,14 +314,16 @@ describe('requestBlob and stream blobs', () => {
   it('merges streamed chunks and falls back to response blob without reader', async () => {
     const chunks = [new Uint8Array([1, 2]), new Uint8Array([3])]
     const reader = {
-      read: vi.fn()
+      read: vi
+        .fn()
         .mockResolvedValueOnce({ done: false, value: chunks[0] })
         .mockResolvedValueOnce({ done: false, value: chunks[1] })
         .mockResolvedValueOnce({ done: true }),
       releaseLock: vi.fn(),
     }
     const fallback = new Blob(['fallback'], { type: 'audio/wav' })
-    const mockFetch = vi.fn()
+    const mockFetch = vi
+      .fn()
       .mockResolvedValueOnce({
         ok: true,
         headers: new Headers({ 'content-type': 'audio/ogg' }),

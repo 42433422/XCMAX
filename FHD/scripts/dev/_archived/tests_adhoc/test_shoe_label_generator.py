@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, return-value"
 """
 TestShoeLabelGenerator - 标签模板生成器
 
@@ -10,6 +11,8 @@ import os
 from typing import Any, Dict, Optional
 
 from PIL import Image, ImageDraw, ImageFont
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +89,7 @@ class TestShoeLabelGenerator:
             logger.info(f"标签已生成：{output_path}")
             return filename
 
-        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             logger.error(f"生成标签失败：{e}")
             return None
 

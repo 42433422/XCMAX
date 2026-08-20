@@ -18,13 +18,13 @@
    - `assets.cli_assets`：Codex/Claude/Cursor/Trae 安装与可用性；看 `product_capabilities_not_wired`
 3. 分类说明调用面：
 
-   | 资产类型 | 主接口 | 员工主路由？ |
-   |---|---|---|
-   | llm / vlm（runtime_selectable） | `/api/llm/chat`、runtime-route | 是 |
-   | image | `/api/llm/image` | 否 |
-   | video | `/api/llm/video` | 否 |
-   | audio / embedding / rerank | 目录发现为主 | 否 |
-   | CLI 文本兜底 | `cli.chat_fallback` | 仅本岗 API 失败时 |
+   | 资产类型                        | 主接口                         | 员工主路由？      |
+   | ------------------------------- | ------------------------------ | ----------------- |
+   | llm / vlm（runtime_selectable） | `/api/llm/chat`、runtime-route | 是                |
+   | image                           | `/api/llm/image`               | 否                |
+   | video                           | `/api/llm/video`               | 否                |
+   | audio / embedding / rerank      | 目录发现为主                   | 否                |
+   | CLI 文本兜底                    | `cli.chat_fallback`            | 仅本岗 API 失败时 |
 
 4. 明确未接线事实：Codex 产品有 `image_generation`，但 XCAGI CLI 兜底未接入，须写在 risks/next_actions。
 

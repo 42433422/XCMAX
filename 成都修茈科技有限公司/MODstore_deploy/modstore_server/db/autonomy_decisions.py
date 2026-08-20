@@ -7,7 +7,7 @@ cannot leak into the audit trail by accident.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import DDL, Column, DateTime, Index, Integer, String, Text, event
 
@@ -41,60 +41,52 @@ class AutonomyDecisionAudit(Base):
     recorded_at = Column(
         DateTime,
         nullable=False,
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
     )
 
 
 event.listen(
     AutonomyDecisionAudit.__table__,
     "after_create",
-    DDL(
-        """
+    DDL("""
         CREATE TRIGGER IF NOT EXISTS autonomy_decision_audit_no_update
         BEFORE UPDATE ON autonomy_decision_audit
         BEGIN
           SELECT RAISE(ABORT, 'autonomy_decision_audit is append-only');
         END
-        """
-    ).execute_if(dialect="sqlite"),
+        """).execute_if(dialect="sqlite"),
 )
 event.listen(
     AutonomyDecisionAudit.__table__,
     "after_create",
-    DDL(
-        """
+    DDL("""
         CREATE OR REPLACE FUNCTION reject_autonomy_decision_audit_mutation()
         RETURNS trigger AS $$
         BEGIN
           RAISE EXCEPTION 'autonomy_decision_audit is append-only';
         END;
         $$ LANGUAGE plpgsql
-        """
-    ).execute_if(dialect="postgresql"),
+        """).execute_if(dialect="postgresql"),
 )
 event.listen(
     AutonomyDecisionAudit.__table__,
     "after_create",
-    DDL(
-        """
+    DDL("""
         CREATE TRIGGER autonomy_decision_audit_no_mutation
         BEFORE UPDATE OR DELETE ON autonomy_decision_audit
         FOR EACH ROW EXECUTE FUNCTION reject_autonomy_decision_audit_mutation()
-        """
-    ).execute_if(dialect="postgresql"),
+        """).execute_if(dialect="postgresql"),
 )
 event.listen(
     AutonomyDecisionAudit.__table__,
     "after_create",
-    DDL(
-        """
+    DDL("""
         CREATE TRIGGER IF NOT EXISTS autonomy_decision_audit_no_delete
         BEFORE DELETE ON autonomy_decision_audit
         BEGIN
           SELECT RAISE(ABORT, 'autonomy_decision_audit is append-only');
         END
-        """
-    ).execute_if(dialect="sqlite"),
+        """).execute_if(dialect="sqlite"),
 )
 
 

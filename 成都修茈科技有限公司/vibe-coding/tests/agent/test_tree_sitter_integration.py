@@ -24,7 +24,6 @@ from vibe_coding.agent.repo_index._tree_sitter import (
     register_language_resolver,
 )
 
-
 # ----------------------------------------------------- loader robustness
 
 
@@ -65,9 +64,7 @@ def test_adapter_falls_back_to_regex_when_treesitter_missing(
         lambda: False,
     )
     adapter = TypeScriptLanguageAdapter(use_treesitter=True)
-    pf = adapter.parse(
-        path="x.ts", source="export function foo() { return 1; }\n"
-    )
+    pf = adapter.parse(path="x.ts", source="export function foo() { return 1; }\n")
     # Even with tree-sitter forcibly disabled we still get the regex output.
     assert any(s.name == "foo" for s in pf.symbols)
 

@@ -13,6 +13,8 @@ from contextlib import ExitStack
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, cast
 
+from app.utils.operational_errors import BOUNDARY_ERRORS
+
 # LG-W1-T9-A 组合根：下划线是唯一合法的标识符分隔符。所有涉及 workflow 运行时
 # 装配的精确标识符都必须用 ``sep``（即 ``chr(95)`` == ``_``）机械拼装，避免任何
 # 依赖下划线显示缺失的脆弱写法。
@@ -403,7 +405,7 @@ class ServiceContainer:
             self._workflow_checkpointer = serving_bridge
             self._workflow_shadow_checkpointer = shadow_bridge
             self._workflow_runtime = runtime
-        except BaseException:
+        except BOUNDARY_ERRORS:
             # 槽位发布前任何异常：关闭本地 stack（释放已进入的 SQLite 上下文句柄）后重抛，
             # 避免泄漏 SQLite 句柄。槽位尚未发布仍为 None，后续访问会重新构建。
             stack.close()

@@ -528,7 +528,7 @@ def _hotspots(
             scores[source]["outgoing"] += 1
         if target in scores:
             scores[target]["incoming"] += 1
-    rows = []
+    rows: list[dict[str, Any]] = []
     for node_id, counts in scores.items():
         degree = counts["incoming"] + counts["outgoing"]
         if degree:

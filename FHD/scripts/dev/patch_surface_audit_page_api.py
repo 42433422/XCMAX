@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Add /admin/surface-audit/page — return one PNG b64 by lane index."""
+
 from __future__ import annotations
 
 import sys

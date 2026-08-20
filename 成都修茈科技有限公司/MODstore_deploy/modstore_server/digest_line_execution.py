@@ -1,13 +1,15 @@
+# mypy: disable-error-code="arg-type, index"
 """Execution workflow for parsed daily-digest production-line work units."""
 
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Dict, Optional, Sequence
 
 from modstore_server import digest_line_executor as facade
 from modstore_server.digest_vibe_line_dispatch import DISPATCH_PS
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def execute_digest_line_work_units(
@@ -47,7 +49,11 @@ def execute_digest_line_work_units(
     logger = facade.logger
 
     if not _env_bool("MODSTORE_DAILY_VIBE_EXECUTE_ENABLED", "1"):
-        return {"ok": False, "skipped": True, "reason": "MODSTORE_DAILY_VIBE_EXECUTE_ENABLED=0"}
+        return {
+            "ok": False,
+            "skipped": True,
+            "reason": "MODSTORE_DAILY_VIBE_EXECUTE_ENABLED=0",
+        }
 
     line = (dispatch_line or DISPATCH_PS).strip()
     run_phase = (phase or "A").strip().upper() or "A"
@@ -66,7 +72,11 @@ def execute_digest_line_work_units(
 
         ctx = _load_digest_execute_context(int(record_id))
         if ctx is None:
-            return {"ok": False, "error": "digest record not found", "record_id": record_id}
+            return {
+                "ok": False,
+                "error": "digest record not found",
+                "record_id": record_id,
+            }
 
         base_version = ctx["base_version"]
         meta_prev = _read_execute_meta(int(record_id))
@@ -84,12 +94,12 @@ def execute_digest_line_work_units(
                         "budget": budget,
                         "dispatch_line": line,
                         "phase": run_phase,
-                        "completed_at": datetime.now(timezone.utc).isoformat(),
+                        "completed_at": datetime.now(UTC).isoformat(),
                     }
                     merged = _merge_run_meta(meta_prev, line, run_payload)
                     persist_line_execute_on_digest_record(record_id, merged)
                     return {"ok": True, "record_id": record_id, **run_payload}
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 logger.debug("cr budget check skipped", exc_info=True)
 
         if (
@@ -120,7 +130,7 @@ def execute_digest_line_work_units(
                 "base_version": base_version,
                 "phase": run_phase,
                 "mode": line_mode,
-                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "completed_at": datetime.now(UTC).isoformat(),
             }
             merged = _merge_run_meta(meta_prev, line, run_payload)
             persist_line_execute_on_digest_record(record_id, merged)
@@ -141,7 +151,7 @@ def execute_digest_line_work_units(
         if cap and len(units) > cap:
             units = units[:cap]
 
-        started_at = datetime.now(timezone.utc).isoformat()
+        started_at = datetime.now(UTC).isoformat()
         root = str(repo_root())
 
         if not units:
@@ -159,14 +169,14 @@ def execute_digest_line_work_units(
                 "rollout_policy": rollout_policy,
                 "unit_count": 0,
                 "started_at": started_at,
-                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "completed_at": datetime.now(UTC).isoformat(),
             }
             merged = _merge_run_meta(meta_prev, line, run_payload)
             persist_line_execute_on_digest_record(record_id, merged)
             return {"ok": True, "record_id": record_id, **run_payload}
 
         if dry_run:
-            completed_at = datetime.now(timezone.utc).isoformat()
+            completed_at = datetime.now(UTC).isoformat()
             run_payload = {
                 "ok": True,
                 "dry_run": True,
@@ -239,7 +249,7 @@ def execute_digest_line_work_units(
             "remote_dispatched_count": len(remote_units),
         }
 
-        completed_at = datetime.now(timezone.utc).isoformat()
+        completed_at = datetime.now(UTC).isoformat()
         run_payload = {
             "ok": bool(dispatch_out.get("ok")),
             "dispatch_line": line,
@@ -267,7 +277,9 @@ def execute_digest_line_work_units(
 
         if run_payload.get("ok") and not dry_run:
             try:
-                from modstore_server.digest_action_items import sync_dispatched_for_work_units
+                from modstore_server.digest_action_items import (
+                    sync_dispatched_for_work_units,
+                )
 
                 run_payload["action_items_writeback"] = sync_dispatched_for_work_units(
                     int(record_id), units
@@ -277,15 +289,17 @@ def execute_digest_line_work_units(
                         _mark_local_verified_action_items_merged(local_results)
                     )
                 try:
-                    from modstore_server.public_action_board import write_public_action_board
+                    from modstore_server.public_action_board import (
+                        write_public_action_board,
+                    )
 
                     write_public_action_board()
-                except Exception:
+                except RECOVERABLE_ERRORS:
                     logger.exception(
                         "public action board after dispatch writeback failed record_id=%s",
                         record_id,
                     )
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 logger.exception("action_items dispatch writeback failed record_id=%s", record_id)
             try:
                 from modstore_server.strategic_layer.digest_strategic_bridge import (
@@ -295,18 +309,21 @@ def execute_digest_line_work_units(
                 run_payload["strategic_action_bridge"] = sync_record_after_status_writeback(
                     record_id=int(record_id)
                 )
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 logger.exception(
-                    "strategic action bridge after line-execute failed record_id=%s", record_id
+                    "strategic action bridge after line-execute failed record_id=%s",
+                    record_id,
                 )
 
         merged = _merge_run_meta(meta_prev, line, run_payload)
         persist_line_execute_on_digest_record(record_id, merged)
         return {"ok": run_payload["ok"], "record_id": record_id, **run_payload}
 
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception(
-            "execute_digest_line_work_units failed record_id=%s line=%s", record_id, line
+            "execute_digest_line_work_units failed record_id=%s line=%s",
+            record_id,
+            line,
         )
         err_payload = {
             "ok": False,
@@ -314,13 +331,13 @@ def execute_digest_line_work_units(
             "dispatch_line": line,
             "phase": run_phase,
             "mode": mode,
-            "completed_at": datetime.now(timezone.utc).isoformat(),
+            "completed_at": datetime.now(UTC).isoformat(),
         }
         try:
             persist_line_execute_on_digest_record(
                 record_id,
                 _merge_run_meta(_read_execute_meta(int(record_id)), line, err_payload),
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
         return {"ok": False, "record_id": record_id, **err_payload}

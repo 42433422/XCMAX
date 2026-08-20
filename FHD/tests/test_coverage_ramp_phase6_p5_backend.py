@@ -346,12 +346,28 @@ class TestModEmployeeComplete:
         monkeypatch.delenv("DEEPSEEK_MODEL", raising=False)
         monkeypatch.delenv("XCAGI_EMPLOYEE_LLM_MODEL", raising=False)
 
-        with patch.object(
-            mod_employee_llm, "_call_openai_compatible_chat", new=AsyncMock(return_value=None)
+        mock_svc = MagicMock()
+        mock_svc.api_key = "sk-host"
+        mock_svc.call_deepseek_api = AsyncMock(return_value=None)
+        with (
+            patch.object(
+                mod_employee_llm,
+                "_call_openai_compatible_chat",
+                new=AsyncMock(return_value=None),
+            ),
+            patch(
+                "app.services.ai_conversation_service.get_ai_conversation_service",
+                return_value=mock_svc,
+            ),
+            patch(
+                "app.infrastructure.llm.providers.registry.get_active_provider",
+                return_value=object(),
+            ),
         ):
             out = await mod_employee_llm.mod_employee_complete([{"role": "user", "content": "hi"}])
         assert out["success"] is False
         assert "LLM 返回空" in out["error"]
+        mock_svc.call_deepseek_api.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_direct_path_success(self, monkeypatch: pytest.MonkeyPatch) -> None:

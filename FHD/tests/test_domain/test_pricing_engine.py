@@ -1,3 +1,4 @@
+# mypy: disable-error-code="var-annotated"
 """app/domain/services/pricing_engine 单测：定价/折扣/阶梯纯逻辑。
 
 无外部边界（铁律4）；逐档覆盖 VIP/经销商/批发/零售折扣与批量/阶梯分支（铁律3）。

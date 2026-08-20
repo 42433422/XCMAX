@@ -14,6 +14,8 @@ import json
 import re
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
+from app.mod_sdk.errors import BOUNDARY_ERRORS
+
 CallLLM = Callable[..., Awaitable[Dict[str, Any]]]
 
 _MAX_HEADER_ROWS = 8
@@ -43,12 +45,20 @@ def _cells_grid_text(sheet: Dict[str, Any], row_lo: int, row_hi: int, col_hi: in
 def build_refine_prompt(sheet: Dict[str, Any], rules: Dict[str, Any]) -> List[Dict[str, str]]:
     tm = rules["template_map"]
     block = tm["block"]
-    header_grid = _cells_grid_text(sheet, 1, min(tm["header_rows"], _MAX_HEADER_ROWS), min(int(sheet.get("max_column") or 0), _MAX_COLS))
+    header_grid = _cells_grid_text(
+        sheet,
+        1,
+        min(tm["header_rows"], _MAX_HEADER_ROWS),
+        min(int(sheet.get("max_column") or 0), _MAX_COLS),
+    )
     tops = [b["top"] for b in tm["blocks"][:_MAX_BLOCK_SAMPLE]]
     block_grids = []
     for t in tops:
         block_grids.append(
-            f"[块 top={t}]\n" + _cells_grid_text(sheet, t, t + block["rows"] - 1, min(int(sheet.get("max_column") or 0), _MAX_COLS))
+            f"[块 top={t}]\n"
+            + _cells_grid_text(
+                sheet, t, t + block["rows"] - 1, min(int(sheet.get("max_column") or 0), _MAX_COLS)
+            )
         )
     detection = {
         "block": block,
@@ -126,9 +136,7 @@ def _validate_key_col(
     if col < 1 or col > max_col:
         return None, f"key_col={col} 超出列范围"
     index = {(int(c["row"]), int(c["col"])): c for c in sheet.get("cells") or [] if c.get("row")}
-    non_empty = sum(
-        1 for t in tops if str((index.get((t, col)) or {}).get("value") or "").strip()
-    )
+    non_empty = sum(1 for t in tops if str((index.get((t, col)) or {}).get("value") or "").strip())
     if not tops or non_empty / len(tops) < 0.3:
         return None, f"key_col={col} 块首行文本覆盖率过低（{non_empty}/{len(tops)}）"
     return col, ""
@@ -171,7 +179,7 @@ async def llm_refine_rules(
             temperature=0.1,
             response_format={"type": "json_object"},
         )
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         evidence["rejected"].append({"field": "*", "reason": f"LLM 调用异常：{exc}"})
         return rules
     if not resp or not resp.get("ok"):
@@ -203,9 +211,13 @@ async def llm_refine_rules(
         key_col, why = _validate_key_col(proposal.get("key_col"), sheet, tops, max_col)
         if key_col is not None:
             tm["key_col"] = key_col
-            index = {(int(c["row"]), int(c["col"])): c for c in sheet.get("cells") or [] if c.get("row")}
+            index = {
+                (int(c["row"]), int(c["col"])): c for c in sheet.get("cells") or [] if c.get("row")
+            }
             for i, b in enumerate(tm["blocks"]):
-                b["key"] = str((index.get((int(b["top"]), key_col)) or {}).get("value") or "").strip()
+                b["key"] = str(
+                    (index.get((int(b["top"]), key_col)) or {}).get("value") or ""
+                ).strip()
             evidence["adopted"].append({"field": "key_col", "value": key_col})
             resolved.append("键列")
         else:

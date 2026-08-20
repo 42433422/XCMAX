@@ -1,3 +1,4 @@
+# mypy: disable-error-code="var-annotated"
 """测试 app.services.mobile_relay_service 的辅助函数分支覆盖。
 
 覆盖目标：

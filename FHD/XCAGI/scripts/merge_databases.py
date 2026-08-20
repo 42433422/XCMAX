@@ -22,6 +22,21 @@ import sqlite3
 import sys
 from datetime import datetime
 
+RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    OSError,
+    ValueError,
+    TypeError,
+    KeyError,
+    AttributeError,
+    RuntimeError,
+    ImportError,
+    LookupError,
+    ConnectionError,
+    TimeoutError,
+    ArithmeticError,
+    UnicodeError,
+)
+
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
@@ -66,12 +81,7 @@ def merge_purchase_units(dry_run: bool = True) -> dict:
     print("数据库合并 - purchase_units 表")
     print("=" * 60)
 
-    results = {
-        "dry_run": dry_run,
-        "backup_created": [],
-        "records_copied": 0,
-        "errors": []
-    }
+    results = {"dry_run": dry_run, "backup_created": [], "records_copied": 0, "errors": []}
 
     if not os.path.exists(customers_db):
         print(f"\n⚠️ customers.db 不存在: {customers_db}")
@@ -94,7 +104,7 @@ def merge_purchase_units(dry_run: bool = True) -> dict:
     to_merge = [r for r in customers_data if r.get("unit_name") not in existing_names]
     to_update = [r for r in customers_data if r.get("unit_name") in existing_names]
 
-    print(f"\n📋 合并计划:")
+    print("\n📋 合并计划:")
     print(f"  - 新增: {len(to_merge)} 条")
     print(f"  - 更新: {len(to_update)} 条")
 
@@ -120,38 +130,44 @@ def merge_purchase_units(dry_run: bool = True) -> dict:
 
     try:
         for record in to_merge:
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO purchase_units (unit_name, contact_person, contact_phone, address, is_active, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (
-                record.get("unit_name"),
-                record.get("contact_person", ""),
-                record.get("contact_phone", ""),
-                record.get("address", ""),
-                record.get("is_active", 1),
-                record.get("created_at"),
-                record.get("updated_at")
-            ))
+            """,
+                (
+                    record.get("unit_name"),
+                    record.get("contact_person", ""),
+                    record.get("contact_phone", ""),
+                    record.get("address", ""),
+                    record.get("is_active", 1),
+                    record.get("created_at"),
+                    record.get("updated_at"),
+                ),
+            )
             results["records_copied"] += 1
 
         for record in to_update:
-            cursor.execute("""
+            cursor.execute(
+                """
                 UPDATE purchase_units
                 SET contact_person = ?, contact_phone = ?, address = ?, is_active = ?, updated_at = ?
                 WHERE unit_name = ?
-            """, (
-                record.get("contact_person", ""),
-                record.get("contact_phone", ""),
-                record.get("address", ""),
-                record.get("is_active", 1),
-                datetime.now().isoformat(),
-                record.get("unit_name")
-            ))
+            """,
+                (
+                    record.get("contact_person", ""),
+                    record.get("contact_phone", ""),
+                    record.get("address", ""),
+                    record.get("is_active", 1),
+                    datetime.now().isoformat(),
+                    record.get("unit_name"),
+                ),
+            )
 
         conn.commit()
         print(f"\n✅ 成功合并 {results['records_copied']} 条记录")
 
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         conn.rollback()
         results["errors"].append(str(e))
         print(f"\n❌ 合并失败: {e}")
@@ -172,7 +188,7 @@ def verify_merge() -> dict:
         "customers_db_exists": os.path.exists(customers_db),
         "products_purchase_units_count": 0,
         "customers_purchase_units_count": 0,
-        "is_consistent": False
+        "is_consistent": False,
     }
 
     if os.path.exists(products_db):
@@ -190,9 +206,8 @@ def verify_merge() -> dict:
         conn.close()
 
     results["is_consistent"] = (
-        results["customers_purchase_units_count"] == 0 or
-        results["products_purchase_units_count"] >=
-        results["customers_purchase_units_count"]
+        results["customers_purchase_units_count"] == 0
+        or results["products_purchase_units_count"] >= results["customers_purchase_units_count"]
     )
 
     return results
@@ -210,7 +225,7 @@ def main():
     if args.verify:
         print("\n🔍 验证合并结果...")
         result = verify_merge()
-        print(f"\n📊 验证结果:")
+        print("\n📊 验证结果:")
         print(f"  products.db 存在: {result['products_db_exists']}")
         print(f"  products.db.purchase_units: {result['products_purchase_units_count']} 条")
         print(f"  customers.db 存在: {result['customers_db_exists']}")
@@ -232,7 +247,7 @@ def main():
 
     if args.cleanup and os.path.exists(_legacy_customers_sqlite_path()):
         legacy_c = _legacy_customers_sqlite_path()
-        print(f"\n🗑️  准备删除 customers.db...")
+        print("\n🗑️  准备删除 customers.db...")
         backup_path = backup_database(legacy_c)
         if backup_path:
             os.remove(legacy_c)

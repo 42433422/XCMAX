@@ -7,13 +7,9 @@
       <span class="action-preview__title">即将执行操作</span>
     </div>
     <p class="action-preview__label">{{ action.label }}</p>
-    <p v-if="action.risk === 'high'" class="action-preview__warn">
-      ⚠️ 此操作无法撤销，请确认后继续
-    </p>
+    <p v-if="action.risk === 'high'" class="action-preview__warn">⚠️ 此操作无法撤销，请确认后继续</p>
     <div class="action-preview__btns">
-      <button type="button" class="action-btn action-btn--cancel" @click="$emit('cancel')">
-        取消
-      </button>
+      <button type="button" class="action-btn action-btn--cancel" @click="$emit('cancel')">取消</button>
       <button type="button" class="action-btn action-btn--confirm" :class="`action-btn--${action.risk}`" @click="$emit('confirm')">
         {{ action.risk === 'high' ? `确认执行` : '确认' }}
       </button>
@@ -46,9 +42,18 @@ const riskLabel = computed(() => {
   border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
-.action-preview--high { background: rgba(248, 113, 113, 0.08); border-color: rgba(248, 113, 113, 0.3); }
-.action-preview--medium { background: rgba(251, 191, 36, 0.07); border-color: rgba(251, 191, 36, 0.25); }
-.action-preview--low { background: rgba(74, 222, 128, 0.07); border-color: rgba(74, 222, 128, 0.2); }
+.action-preview--high {
+  background: rgba(248, 113, 113, 0.08);
+  border-color: rgba(248, 113, 113, 0.3);
+}
+.action-preview--medium {
+  background: rgba(251, 191, 36, 0.07);
+  border-color: rgba(251, 191, 36, 0.25);
+}
+.action-preview--low {
+  background: rgba(74, 222, 128, 0.07);
+  border-color: rgba(74, 222, 128, 0.2);
+}
 
 .action-preview__header {
   display: flex;
@@ -64,9 +69,18 @@ const riskLabel = computed(() => {
   border-radius: 999px;
 }
 
-.action-risk-badge--high { background: rgba(248, 113, 113, 0.2); color: #f87171; }
-.action-risk-badge--medium { background: rgba(251, 191, 36, 0.2); color: #fbbf24; }
-.action-risk-badge--low { background: rgba(74, 222, 128, 0.2); color: #4ade80; }
+.action-risk-badge--high {
+  background: rgba(248, 113, 113, 0.2);
+  color: #f87171;
+}
+.action-risk-badge--medium {
+  background: rgba(251, 191, 36, 0.2);
+  color: #fbbf24;
+}
+.action-risk-badge--low {
+  background: rgba(74, 222, 128, 0.2);
+  color: #4ade80;
+}
 
 .action-preview__title {
   font-size: 0.78rem;
@@ -108,10 +122,23 @@ const riskLabel = computed(() => {
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.action-btn--cancel:hover { background: rgba(255, 255, 255, 0.1); }
+.action-btn--cancel:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
 
-.action-btn--confirm { background: rgba(96, 165, 250, 0.2); color: #93c5fd; }
-.action-btn--confirm.action-btn--high { background: rgba(248, 113, 113, 0.2); color: #f87171; }
-.action-btn--confirm.action-btn--medium { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
-.action-btn--confirm:hover { filter: brightness(1.15); }
+.action-btn--confirm {
+  background: rgba(96, 165, 250, 0.2);
+  color: #93c5fd;
+}
+.action-btn--confirm.action-btn--high {
+  background: rgba(248, 113, 113, 0.2);
+  color: #f87171;
+}
+.action-btn--confirm.action-btn--medium {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
+}
+.action-btn--confirm:hover {
+  filter: brightness(1.15);
+}
 </style>

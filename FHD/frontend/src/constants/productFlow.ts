@@ -19,7 +19,11 @@ export const LS_PRODUCT_FLOW_LAST_STEP = 'xcagi_product_flow_last_step'
 export const DEFAULT_TUTORIAL_TRACK_ID = 'basic'
 
 export function isTutorialReplayQuery(raw: unknown): boolean {
-  return String(raw || '').trim().toLowerCase() === 'tutorial'
+  return (
+    String(raw || '')
+      .trim()
+      .toLowerCase() === 'tutorial'
+  )
 }
 
 export function readOnboardingReturnPath(raw: unknown): string {
@@ -29,13 +33,7 @@ export function readOnboardingReturnPath(raw: unknown): string {
 }
 
 /** 宿主入门仅三步；seed/first-ai 仅为旧 URL 兼容别名，会映射回 host-pack。 */
-export type ProductFlowStepId =
-  | 'welcome'
-  | 'host-pack'
-  | 'industry'
-  | 'seed-demo'
-  | 'first-ai-task'
-  | 'done'
+export type ProductFlowStepId = 'welcome' | 'host-pack' | 'industry' | 'seed-demo' | 'first-ai-task' | 'done'
 
 export interface ProductFlowStepMeta {
   id: Exclude<ProductFlowStepId, 'seed-demo' | 'first-ai-task'>
@@ -100,12 +98,10 @@ export function defaultOnboardingIndustryId(): OnboardingOpenIndustryId {
 export function industryBaselineHint(industryId: string): string {
   const id = String(industryId || '').trim() || '通用'
   const hints: Record<string, string> = {
-    通用:
-      '通用场景：工作流员工、Planner 工具、企微与局域网入口等基础线，用到哪补哪即可。',
+    通用: '通用场景：工作流员工、Planner 工具、企微与局域网入口等基础线，用到哪补哪即可。',
     涂料: '涂料/批发类：在通用基础线上，出货、客户、标签打印等行业 Mod 可按需从扩展市场安装。',
     批发: '批发分销：基础线装齐后，库存与客户相关 Mod 建议从扩展市场按需加载。',
-    考勤:
-      '考勤排班：先补 ERP 门面与表格工具侧栏，再装行业包；部门/人员与 AI 员工在账号定制 Mod。',
+    考勤: '考勤排班：先补 ERP 门面与表格工具侧栏，再装行业包；部门/人员与 AI 员工在账号定制 Mod。',
     电商: '电商零售：基础线装齐后，订单与 SKU 相关 Mod 可按需安装。',
     餐饮: '餐饮门店：基础线装齐后，食材与订货 Mod 可按需安装。',
     物流: '物流运单：基础线装齐后，运单与客户 Mod 可按需安装。',
@@ -136,9 +132,11 @@ export function markProductFlowCompleted(): void {
   } catch {
     /* ignore */
   }
-  void import('@/utils/workspacePrefsApi').then(({ queueWorkspacePrefsSync }) => {
-    queueWorkspacePrefsSync({ product_flow_completed: true })
-  }).catch(() => {})
+  void import('@/utils/workspacePrefsApi')
+    .then(({ queueWorkspacePrefsSync }) => {
+      queueWorkspacePrefsSync({ product_flow_completed: true })
+    })
+    .catch(() => {})
 }
 
 export function readHostPackAcknowledged(): boolean {
@@ -161,10 +159,7 @@ const hostPackAckRef: Ref<boolean> = ref(readHostPackAcknowledged())
 
 if (typeof window !== 'undefined') {
   window.addEventListener('storage', (e) => {
-    if (
-      e.key === LS_PRODUCT_FLOW_HOST_ACK ||
-      e.key === buildTenantScopedStorageKey(LS_PRODUCT_FLOW_HOST_ACK)
-    ) {
+    if (e.key === LS_PRODUCT_FLOW_HOST_ACK || e.key === buildTenantScopedStorageKey(LS_PRODUCT_FLOW_HOST_ACK)) {
       hostPackAckRef.value = readHostPackAcknowledged()
     }
   })
@@ -196,9 +191,11 @@ export function markHostPackAcknowledged(): void {
   } catch {
     /* ignore */
   }
-  void import('@/utils/workspacePrefsApi').then(({ queueWorkspacePrefsSync }) => {
-    queueWorkspacePrefsSync({ host_pack_acknowledged: true })
-  }).catch(() => {})
+  void import('@/utils/workspacePrefsApi')
+    .then(({ queueWorkspacePrefsSync }) => {
+      queueWorkspacePrefsSync({ host_pack_acknowledged: true })
+    })
+    .catch(() => {})
 }
 
 export function resetProductFlowState(): void {
@@ -218,7 +215,9 @@ export function resetProductFlowState(): void {
 }
 
 export function parseFlowStepQuery(raw: unknown): ProductFlowStepId {
-  const s = String(raw || '').trim().toLowerCase()
+  const s = String(raw || '')
+    .trim()
+    .toLowerCase()
   if (s === 'host-pack' || s === 'host') return 'host-pack'
   if (s === 'industry' || s === 'mod') return 'industry'
   // 旧四/五步链接：种子与 AI 验收已移出宿主入门，落到第 3 步

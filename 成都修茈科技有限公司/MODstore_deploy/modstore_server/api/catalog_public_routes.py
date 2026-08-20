@@ -20,15 +20,23 @@ from fastapi import (
 )
 from pydantic import BaseModel, Field
 
+from modstore_server.api.catalog_public_helpers import authorize_upload as _authorize_upload
+from modstore_server.api.catalog_public_helpers import catalog_cache_scope as _catalog_cache_scope
 from modstore_server.api.catalog_public_helpers import (
-    authorize_upload as _authorize_upload,
-    catalog_cache_scope as _catalog_cache_scope,
     invalidate_catalog_list_caches as _invalidate_catalog_list_caches,
+)
+from modstore_server.api.catalog_public_helpers import (
     is_customer_delivery_seed as _is_customer_delivery_seed,
-    params_hash as _params_hash,
-    require_upload as _require_upload,
+)
+from modstore_server.api.catalog_public_helpers import params_hash as _params_hash
+from modstore_server.api.catalog_public_helpers import require_upload as _require_upload
+from modstore_server.api.catalog_public_helpers import (
     try_index_catalog_item as _try_index_catalog_item,
+)
+from modstore_server.api.catalog_public_helpers import (
     upsert_market_listing as _upsert_market_listing,
+)
+from modstore_server.api.catalog_public_helpers import (
     validated_automation_provenance as _validated_automation_provenance,
 )
 from modstore_server.catalog_store import (
@@ -39,6 +47,7 @@ from modstore_server.catalog_store import (
     packages_path,
     promote_draft_to_stable,
 )
+from modstore_server.catalog_sync import upsert_catalog_item_from_xc_package_dict
 from modstore_server.duty_roster import is_planned_duty_employee_pack
 from modstore_server.employee_config_v2 import (
     extract_or_upgrade_v2_config,
@@ -46,9 +55,8 @@ from modstore_server.employee_config_v2 import (
 )
 from modstore_server.industry_taxonomy import get_industry_tree
 from modstore_server.models import get_session_factory
-from modstore_server.catalog_sync import upsert_catalog_item_from_xc_package_dict
+from modstore_server.vector_store import insert_embedding as insert_embedding
 from modstore_server.vector_store import (
-    insert_embedding as insert_embedding,
     query_similar,
 )
 

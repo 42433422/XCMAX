@@ -22,11 +22,7 @@ vi.mock('@/utils/officeEmployeeReadApi', () => ({
   uploadChatOfficeFile: mocks.uploadFile,
 }))
 
-import {
-  CSV_FULL_READ_EMPLOYEE_ID,
-  EXCEL_FULL_READ_EMPLOYEE_ID,
-  PPT_FULL_READ_EMPLOYEE_ID,
-} from '@/constants/officeEmployeePack'
+import { CSV_FULL_READ_EMPLOYEE_ID, EXCEL_FULL_READ_EMPLOYEE_ID, PPT_FULL_READ_EMPLOYEE_ID } from '@/constants/officeEmployeePack'
 import { useChatOfficeDocking } from './useChatOfficeDocking'
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -84,9 +80,7 @@ describe('useChatOfficeDocking', () => {
         path: 'outputs/workbook.json',
         kind: 'json',
         json: {
-          sheets: [
-            { sheet_name: '送货单', row_count: 12 },
-          ],
+          sheets: [{ sheet_name: '送货单', row_count: 12 }],
         },
       },
     ])
@@ -96,9 +90,7 @@ describe('useChatOfficeDocking', () => {
         sheet_names: ['送货单'],
         sample_rows: [{ 购货单位: '甲公司', 型号: 'A1', 品名: '底漆', 数量: 2, 单价: 10 }],
       },
-      sheets: [
-        { sheet_name: '送货单', fields: ['购货单位', '型号', '品名', '数量', '单价'] },
-      ],
+      sheets: [{ sheet_name: '送货单', fields: ['购货单位', '型号', '品名', '数量', '单价'] }],
     })
     mocks.apiFetch.mockImplementation(async (url: string) => {
       if (String(url).includes('/shipment-etl/preview')) {
@@ -106,13 +98,15 @@ describe('useChatOfficeDocking', () => {
           success: true,
           note_count: 1,
           message: '识别到 1 张送货单',
-          notes: [{
-            sheet_name: '送货单',
-            unit_name: '甲公司',
-            item_count: 2,
-            total_amount: 20,
-            items: [{ model_number: 'A1', product_name: '底漆', quantity: 2 }],
-          }],
+          notes: [
+            {
+              sheet_name: '送货单',
+              unit_name: '甲公司',
+              item_count: 2,
+              total_amount: 20,
+              items: [{ model_number: 'A1', product_name: '底漆', quantity: 2 }],
+            },
+          ],
         })
       }
       if (String(url).includes('/shipment-etl/execute')) {
@@ -139,10 +133,7 @@ describe('useChatOfficeDocking', () => {
     docking.toggleOfficeDockingTarget(item.id, 'knowledge', false)
     await docking.confirmOfficeDockingReview()
 
-    expect(mocks.apiFetch).toHaveBeenCalledWith(
-      '/api/excel/data/shipment-etl/execute',
-      expect.objectContaining({ method: 'POST' }),
-    )
+    expect(mocks.apiFetch).toHaveBeenCalledWith('/api/excel/data/shipment-etl/execute', expect.objectContaining({ method: 'POST' }))
     expect(deps.stageExcelAnalysisContext).not.toHaveBeenCalled()
     expect(deps.sendDatabaseImportMessage).not.toHaveBeenCalled()
     expect(item.commitStatus).toBe('committed')
@@ -202,10 +193,7 @@ describe('useChatOfficeDocking', () => {
     expect(deps.stageExcelAnalysisContext).toHaveBeenCalledWith(item.excelAnalysis)
     expect(deps.sendDatabaseImportMessage).toHaveBeenCalledWith('导入数据库，确认导入：客户产品.csv')
     expect(item.commitStatus).toBe('committed')
-    expect(deps.addAndSaveMessage).toHaveBeenLastCalledWith(
-      '[对接] 审核提交完成：成功 1 个。',
-      'ai',
-    )
+    expect(deps.addAndSaveMessage).toHaveBeenLastCalledWith('[对接] 审核提交完成：成功 1 个。', 'ai')
 
     docking.clearOfficeDockingReview()
     expect(docking.officeDockingPanelOpen.value).toBe(false)
@@ -241,9 +229,7 @@ describe('useChatOfficeDocking', () => {
         { sheet_name: '月度统计', fields: ['部门', '姓名'] },
       ],
     })
-    mocks.apiFetch.mockResolvedValue(
-      jsonResponse({ success: true, data: { employee_rows: 3, department_rows: 1 } }),
-    )
+    mocks.apiFetch.mockResolvedValue(jsonResponse({ success: true, data: { employee_rows: 3, department_rows: 1 } }))
 
     const { docking } = createHarness()
     await docking.onOfficeDockingFileChange(fileEvent(new File(['xlsx'], '考勤转换结果.xlsx')))
@@ -307,9 +293,6 @@ describe('useChatOfficeDocking', () => {
     await docking.confirmOfficeDockingReview()
     expect(item.commitStatus).toBe('failed')
     expect(item.error).toBe('向量库不可用')
-    expect(deps.addAndSaveMessage).toHaveBeenLastCalledWith(
-      '[对接] 审核提交完成：成功 0 个，失败 1 个。',
-      'ai',
-    )
+    expect(deps.addAndSaveMessage).toHaveBeenLastCalledWith('[对接] 审核提交完成：成功 0 个，失败 1 个。', 'ai')
   })
 })

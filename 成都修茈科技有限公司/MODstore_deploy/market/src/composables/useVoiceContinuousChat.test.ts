@@ -11,14 +11,16 @@ import {
 
 type ResultCallback = (result: UnsafeTestValue) => void
 
-function mountVoiceHarness(options: {
-  autoSend?: boolean
-  backend?: string
-  phone?: boolean
-  busy?: boolean
-  tts?: boolean
-  flushText?: string
-} = {}) {
+function mountVoiceHarness(
+  options: {
+    autoSend?: boolean
+    backend?: string
+    phone?: boolean
+    busy?: boolean
+    tts?: boolean
+    flushText?: string
+  } = {},
+) {
   let onResult: ResultCallback = () => undefined
   let onError: (message: string) => unknown = () => undefined
   let onLevel: (level: number) => void = () => undefined
@@ -52,8 +54,12 @@ function mountVoiceHarness(options: {
         voiceState: ref('idle'),
         voiceChatPhase: ref('idle'),
         isVoiceTargetActive: () => targetActive,
-        setVoiceTarget: () => { targetActive = true },
-        clearVoiceTarget: () => { targetActive = false },
+        setVoiceTarget: () => {
+          targetActive = true
+        },
+        clearVoiceTarget: () => {
+          targetActive = false
+        },
         beforeStartListening: vi.fn(),
         onUtteranceReady: ready,
         onSpeculativeStart: speculativeStart,

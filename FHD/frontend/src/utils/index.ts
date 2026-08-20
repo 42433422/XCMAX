@@ -7,118 +7,109 @@ export function escapeHtml(value: unknown): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+    .replace(/'/g, '&#39;')
 }
 
 /**
  * 生成会话 ID
  */
 export function generateSessionId(): string {
-  return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+  return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
 }
 
 /**
  * 从 Content-Disposition 获取文件名
  */
-export function getFilenameFromDisposition(
-  disposition: string | null,
-  fallback: string = '下载文件.xlsx'
-): string {
-  if (!disposition) return fallback;
-  
-  const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+export function getFilenameFromDisposition(disposition: string | null, fallback: string = '下载文件.xlsx'): string {
+  if (!disposition) return fallback
+
+  const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i)
   if (utf8Match && utf8Match[1]) {
     try {
-      return decodeURIComponent(utf8Match[1]);
-    } catch (_) {}
+      return decodeURIComponent(utf8Match[1])
+    } catch {
+      // Keep the server-provided fallback when the RFC 5987 value is malformed.
+    }
   }
-  
-  const plainMatch = disposition.match(/filename="?([^"]+)"?/i);
+
+  const plainMatch = disposition.match(/filename="?([^"]+)"?/i)
   if (plainMatch && plainMatch[1]) {
-    return plainMatch[1];
+    return plainMatch[1]
   }
-  
-  return fallback;
+
+  return fallback
 }
 
 /**
  * 下载 Blob 文件
  */
 export function downloadBlob(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.style.display = 'none';
-  document.body.appendChild(link);
-  link.click();
-  
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.style.display = 'none'
+  document.body.appendChild(link)
+  link.click()
+
   setTimeout(() => {
-    link.remove();
-    URL.revokeObjectURL(url);
-  }, 0);
+    link.remove()
+    URL.revokeObjectURL(url)
+  }, 0)
 }
 
 /**
  * 格式化日期
  */
 export function formatDate(date: string | number | Date): string {
-  const dateOnly = typeof date === 'string' && /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
-  const d = dateOnly
-    ? new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]))
-    : new Date(date);
+  const dateOnly = typeof date === 'string' && /^(\d{4})-(\d{2})-(\d{2})$/.exec(date)
+  const d = dateOnly ? new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3])) : new Date(date)
   return d.toLocaleDateString('zh-CN', {
     year: 'numeric',
     month: '2-digit',
-    day: '2-digit'
-  });
+    day: '2-digit',
+  })
 }
 
 /**
  * 格式化时间
  */
 export function formatTime(date: string | number | Date): string {
-  const d = new Date(date);
+  const d = new Date(date)
   return d.toLocaleTimeString('zh-CN', {
     hour: '2-digit',
-    minute: '2-digit'
-  });
+    minute: '2-digit',
+  })
 }
 
 /**
  * 防抖函数
  */
-export function debounce<T extends (...args: unknown[]) => unknown>(
-  func: T,
-  wait: number
-): (...args: Parameters<T>) => void {
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  
+export function debounce<T extends (...args: unknown[]) => unknown>(func: T, wait: number): (...args: Parameters<T>) => void {
+  let timeout: ReturnType<typeof setTimeout> | undefined
+
   return function executedFunction(...args: Parameters<T>) {
     const later = () => {
-      clearTimeout(timeout);
-      func(...args);
-    };
-    
-    clearTimeout(timeout);
-    timeout = setTimeout(later, wait);
-  };
+      clearTimeout(timeout)
+      func(...args)
+    }
+
+    clearTimeout(timeout)
+    timeout = setTimeout(later, wait)
+  }
 }
 
 /**
  * 节流函数
  */
-export function throttle<T extends (...args: unknown[]) => unknown>(
-  func: T,
-  limit: number
-): (...args: Parameters<T>) => void {
-  let inThrottle: boolean = false;
-  
-  return function(this: unknown, ...args: Parameters<T>) {
+export function throttle<T extends (...args: unknown[]) => unknown>(func: T, limit: number): (...args: Parameters<T>) => void {
+  let inThrottle: boolean = false
+
+  return function (this: unknown, ...args: Parameters<T>) {
     if (!inThrottle) {
-      func.apply(this, args);
-      inThrottle = true;
-      setTimeout(() => (inThrottle = false), limit);
+      func.apply(this, args)
+      inThrottle = true
+      setTimeout(() => (inThrottle = false), limit)
     }
-  };
+  }
 }

@@ -5,6 +5,7 @@
 2. 常量名 == 常量值（当前模式：UNAUTHORIZED = "UNAUTHORIZED"）
 3. 全部 UPPER_SNAKE_CASE
 """
+
 from __future__ import annotations
 
 import ast

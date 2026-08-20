@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="arg-type, attr-defined, no-any-return, union-attr, valid-type"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -92,19 +96,21 @@ def _auto_wrap_execution_result_to_change_requests(
             from modstore_server.employee_change_request_service import (
                 defer_write_as_change_request,
             )
-            from modstore_server.employee_scope_policy import workspace_policy_from_manifest
+            from modstore_server.employee_scope_policy import (
+                workspace_policy_from_manifest,
+            )
 
             sf = _facade().get_session_factory()
             with sf() as session:
                 try:
                     pack = _facade().load_employee_pack_resolved(session, employee_id)
-                except Exception:
+                except RECOVERABLE_ERRORS:
                     pack = {}
             manifest = pack.get("manifest") if isinstance(pack.get("manifest"), dict) else {}
-            (scope_globs, forbidden_globs, approval_required_globs) = (
-                workspace_policy_from_manifest(manifest)
+            scope_globs, forbidden_globs, approval_required_globs = workspace_policy_from_manifest(
+                manifest
             )
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             return {
                 "ok": False,
                 "error": f"prepare CR bridge failed: {str(exc)[:300]}",
@@ -118,7 +124,7 @@ def _auto_wrap_execution_result_to_change_requests(
             from modstore_server.employee_workspace_manager import get_workspace_path
 
             default_workspace = str(get_workspace_path(employee_id))
-        except Exception:
+        except RECOVERABLE_ERRORS:
             default_workspace = ""
         dedup_keys: set[str] = set()
         for item in file_candidates:
@@ -149,7 +155,7 @@ def _auto_wrap_execution_result_to_change_requests(
                     approval_required_globs=approval_required_globs,
                 )
                 created_ids.append(int(cid))
-            except Exception as exc:
+            except RECOVERABLE_ERRORS as exc:
                 skipped.append({"path": path[:500], "reason": str(exc)[:300]})
     all_ids = sorted(existing_ids.union(created_ids))
     return {
@@ -210,7 +216,7 @@ def _evaluate_employee_risk_gate(
         from modstore_server.employee_risk_middleware import gate_action_or_block
 
         return gate_action_or_block(employee_id, manifest, handler_list, payload)
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         _facade().logger.exception("risk middleware unavailable; blocking employee execution")
         return {
             "ok": False,

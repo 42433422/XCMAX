@@ -21,7 +21,10 @@ export function createWalletRechargeSkill(router: ReturnType<typeof import('vue-
           assistantReply: '好的，已为您打开充值页面，请选择充值金额。',
         }
       } catch (e: unknown) {
-        return { success: false, message: `跳转失败：${e instanceof Error ? e.message : String(e)}` }
+        return {
+          success: false,
+          message: `跳转失败：${e instanceof Error ? e.message : String(e)}`,
+        }
       }
     },
   }

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """测试 app.mod_sdk.aux_employee_store 的分支覆盖。
 
 覆盖目标：

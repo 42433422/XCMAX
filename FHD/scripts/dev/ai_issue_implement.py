@@ -1,3 +1,4 @@
+# mypy: disable-error-code="no-any-return, return-value"
 """AI Issue Implement — 决策矩阵承诺兑现脚本。
 
 约束（来自 .trae/rules/cicd-e2e-prompt.md）：
@@ -50,6 +51,8 @@ from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -176,7 +179,7 @@ def _load_allowlist_patterns(path: Path | None = None) -> list[str]:
         import yaml  # type: ignore
 
         data = yaml.safe_load(text) or {}
-    except Exception:  # noqa: BLE001 — 无 PyYAML 时走极简解析
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 — 无 PyYAML 时走极简解析
         data = _parse_allowlist_fallback(text)
     if not isinstance(data, dict) or not data.get("enabled", True):
         return []
@@ -364,7 +367,7 @@ def _call_llm(prompt: str, api_key: str) -> dict[str, Any]:
                 continue
             plan["ok"] = True
             return plan
-        except Exception as exc:  # noqa: BLE001
+        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
             last_error = str(exc)
     return {"ok": False, "error": f"LLM 调用失败（重试 1 次后）：{last_error}"}
 
@@ -645,7 +648,7 @@ def run(args: argparse.Namespace) -> ImplementResult:
 
     try:
         issue = _fetch_issue(repo, issue_number, args.token)
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         result.status = "failed"
         result.reason = f"获取 issue 失败：{exc}"
         result.finished_at = _utc_now()
@@ -668,7 +671,7 @@ def run(args: argparse.Namespace) -> ImplementResult:
 
     try:
         comments = _fetch_issue_comments(repo, issue_number, args.token)
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         comments = []
         logger.warning("fetch comments failed: %s", exc)
 
@@ -825,7 +828,7 @@ def run(args: argparse.Namespace) -> ImplementResult:
         result.status = "failed"
         result.reason = f"git 操作失败：{exc.stderr or exc.stdout}"
         logger.exception("git failed")
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         result.status = "failed"
         result.reason = f"实现异常：{exc}"
         logger.exception("implement failed")

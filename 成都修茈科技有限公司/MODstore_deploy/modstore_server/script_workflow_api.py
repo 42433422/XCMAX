@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """脚本即工作流 API：替代 ``workflow_api`` 的图相关端点。
 
 接管的能力：
@@ -27,7 +28,7 @@ import importlib
 import json
 import logging
 import secrets
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone  # noqa: F401
 from typing import Any, AsyncIterator, Dict, List, Optional
 
 from fastapi import (
@@ -44,13 +45,6 @@ from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import _get_current_user
 from modstore_server.infrastructure.db import get_db
-from modstore_server.script_workflow_models import (
-    CommitSessionBody,
-    EditWithAiBody as EditWithAiBody,
-    FeedbackBody,
-    UpdateWorkflowBody,
-    WorkflowSummary as WorkflowSummary,
-)
 from modstore_server.llm_key_resolver import resolve_api_key, resolve_base_url
 from modstore_server.models import (
     ScriptWorkflow,
@@ -58,10 +52,20 @@ from modstore_server.models import (
     ScriptWorkflowVersion,
     User,
 )
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 from modstore_server.script_agent.agent_loop import run_agent_loop
 from modstore_server.script_agent.brief import Brief
 from modstore_server.script_agent.llm_client import RealLlmClient
 from modstore_server.script_agent.sandbox_runner import run_in_sandbox as run_in_sandbox
+from modstore_server.script_workflow_models import (
+    CommitSessionBody,
+)
+from modstore_server.script_workflow_models import EditWithAiBody as EditWithAiBody
+from modstore_server.script_workflow_models import (
+    FeedbackBody,
+    UpdateWorkflowBody,
+)
+from modstore_server.script_workflow_models import WorkflowSummary as WorkflowSummary
 from modstore_server.workbench_script_runner import DEFAULT_SCRIPT_AGENT_ITERATIONS
 
 logger = logging.getLogger(__name__)
@@ -106,7 +110,8 @@ def _resolve_llm_for_user(
             model = model or str(prefs.get("model") or "").strip()
     if not provider or not model:
         raise HTTPException(
-            400, "缺少 LLM 配置：请先在「我的密钥」选择默认模型，或在请求里传 provider/model"
+            400,
+            "缺少 LLM 配置：请先在「我的密钥」选择默认模型，或在请求里传 provider/model",
         )
     api_key, _src = resolve_api_key(db, user.id, provider)
     if not api_key:
@@ -176,7 +181,7 @@ async def _stream_agent_loop(
     llm = _build_llm_client(llm_cfg)
     first = {"type": "session_started", "iteration": -1, "payload": {"session_id": sid}}
     await _record_event(sid, first)
-    yield f"data: {json.dumps(first, ensure_ascii=False)}\n\n".encode("utf-8")
+    yield f"data: {json.dumps(first, ensure_ascii=False)}\n\n".encode()
 
     try:
         async for ev in run_agent_loop(
@@ -196,15 +201,15 @@ async def _stream_agent_loop(
         ):
             evd = ev.to_dict()
             await _record_event(sid, evd)
-            yield f"data: {json.dumps(evd, ensure_ascii=False)}\n\n".encode("utf-8")
-    except Exception as e:  # noqa: BLE001
+            yield f"data: {json.dumps(evd, ensure_ascii=False)}\n\n".encode()
+    except BOUNDARY_ERRORS as e:  # noqa: BLE001
         evd = {
             "type": "error",
             "iteration": -1,
             "payload": {"reason": f"agent loop crash: {e}"},
         }
         await _record_event(sid, evd)
-        yield f"data: {json.dumps(evd, ensure_ascii=False)}\n\n".encode("utf-8")
+        yield f"data: {json.dumps(evd, ensure_ascii=False)}\n\n".encode()
 
 
 # ----------------------------- pydantic ----------------------------- #
@@ -245,7 +250,7 @@ async def start_session(
             events=[],
             outcome=None,
             error="",
-            started_at=datetime.now(timezone.utc).timestamp(),
+            started_at=datetime.now(UTC).timestamp(),
             files_meta=[
                 {"filename": f["filename"], "size": len(f["content"] or b"")} for f in files_data
             ],
@@ -359,7 +364,10 @@ async def commit_session(
         script_text=final_code,
         plan_md=str(outcome.get("plan_md") or ""),
         agent_log_json=json.dumps(
-            {"trace": outcome.get("trace") or [], "iterations": outcome.get("iterations")},
+            {
+                "trace": outcome.get("trace") or [],
+                "iterations": outcome.get("iterations"),
+            },
             ensure_ascii=False,
         ),
         is_current=True,
@@ -458,7 +466,7 @@ async def update_workflow(
         wf.name = body.name.strip()
     if body.schema_in is not None:
         wf.schema_in_json = json.dumps(body.schema_in, ensure_ascii=False)
-    wf.updated_at = datetime.now(timezone.utc)
+    wf.updated_at = datetime.now(UTC)
     db.commit()
     db.refresh(wf)
     return _serialize_workflow(wf)

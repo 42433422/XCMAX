@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Callable, TypeVar
+from typing import Callable, TypeVar, cast
+
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +27,8 @@ def call_with_circuit(
         import pybreaker  # type: ignore[import-not-found]
 
         br = pybreaker.CircuitBreaker(fail_max=fm, name=f"modstore:{name}")
-        return br.call(fn)
-    except Exception:  # noqa: BLE001
+        return cast(T, br.call(fn))
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         return fn()
 
 

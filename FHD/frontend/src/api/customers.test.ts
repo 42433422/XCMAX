@@ -61,7 +61,9 @@ describe('customersApi', () => {
   it('exportCustomersXlsx calls download with template_id when provided', async () => {
     await customersApi.exportCustomersXlsx('tmpl-1')
     const { api } = await import('./core')
-    expect(api.download).toHaveBeenCalledWith('/api/erp/customers/export', { template_id: 'tmpl-1' })
+    expect(api.download).toHaveBeenCalledWith('/api/erp/customers/export', {
+      template_id: 'tmpl-1',
+    })
   })
 
   it('exportCustomersXlsx calls download without template_id', async () => {

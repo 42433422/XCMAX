@@ -13,8 +13,26 @@ const mockGetApiBase = vi.fn(() => 'http://localhost:5100')
 const mockBuildAiopenOneLiner = vi.fn(() => 'one-liner-text')
 const mockBuildAiAssistantSetupPrompt = vi.fn(() => 'assistant-prompt')
 const mockBuildAiopenClientInstalls = vi.fn(() => [
-  { id: 'cursor', name: 'Cursor', icon: '🎯', installLabel: '安装', installMode: 'copy', configPath: '~/.cursor/mcp.json', mcpJson: '{"mcpServers":{}}', hint: '配置 MCP' },
-  { id: 'claude', name: 'Claude', icon: '🤖', installLabel: '安装', installMode: 'copy', configPath: '~/.claude/config.json', mcpJson: '{"mcpServers":{}}', hint: '配置 MCP' },
+  {
+    id: 'cursor',
+    name: 'Cursor',
+    icon: '🎯',
+    installLabel: '安装',
+    installMode: 'copy',
+    configPath: '~/.cursor/mcp.json',
+    mcpJson: '{"mcpServers":{}}',
+    hint: '配置 MCP',
+  },
+  {
+    id: 'claude',
+    name: 'Claude',
+    icon: '🤖',
+    installLabel: '安装',
+    installMode: 'copy',
+    configPath: '~/.claude/config.json',
+    mcpJson: '{"mcpServers":{}}',
+    hint: '配置 MCP',
+  },
 ])
 const mockMarkAiopenClientInstalled = vi.fn()
 const mockUnmarkAiopenClientInstalled = vi.fn()
@@ -67,7 +85,18 @@ async function mountAIOpenPanel() {
 describe('AIOpenPanel.vue – component structure', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockSafeJsonRequest.mockResolvedValue({ ok: true, data: { success: true, wechat_open: false, routes: [], openclaw_base: 'http://localhost:28789', remote_control_enabled: false, keys: [] }, status: 200 })
+    mockSafeJsonRequest.mockResolvedValue({
+      ok: true,
+      data: {
+        success: true,
+        wechat_open: false,
+        routes: [],
+        openclaw_base: 'http://localhost:28789',
+        remote_control_enabled: false,
+        keys: [],
+      },
+      status: 200,
+    })
   })
 
   it('renders AIOPEN shell', async () => {
@@ -127,7 +156,18 @@ describe('AIOpenPanel.vue – component structure', () => {
 describe('AIOpenPanel.vue – readyStatus computed', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockSafeJsonRequest.mockResolvedValue({ ok: true, data: { success: true, wechat_open: false, routes: [], openclaw_base: '', remote_control_enabled: false, keys: [] }, status: 200 })
+    mockSafeJsonRequest.mockResolvedValue({
+      ok: true,
+      data: {
+        success: true,
+        wechat_open: false,
+        routes: [],
+        openclaw_base: '',
+        remote_control_enabled: false,
+        keys: [],
+      },
+      status: 200,
+    })
   })
 
   it('readyStatus is off when nothing enabled', async () => {
@@ -146,7 +186,18 @@ describe('AIOpenPanel.vue – readyStatus computed', () => {
 describe('AIOpenPanel.vue – primary action button', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockSafeJsonRequest.mockResolvedValue({ ok: true, data: { success: true, wechat_open: false, routes: [], openclaw_base: '', remote_control_enabled: false, keys: [] }, status: 200 })
+    mockSafeJsonRequest.mockResolvedValue({
+      ok: true,
+      data: {
+        success: true,
+        wechat_open: false,
+        routes: [],
+        openclaw_base: '',
+        remote_control_enabled: false,
+        keys: [],
+      },
+      status: 200,
+    })
   })
 
   it('shows "一键开启" when not active', async () => {
@@ -184,7 +235,18 @@ describe('AIOpenPanel.vue – primary action button', () => {
 describe('AIOpenPanel.vue – client handling', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockSafeJsonRequest.mockResolvedValue({ ok: true, data: { success: true, wechat_open: false, routes: [], openclaw_base: '', remote_control_enabled: false, keys: [] }, status: 200 })
+    mockSafeJsonRequest.mockResolvedValue({
+      ok: true,
+      data: {
+        success: true,
+        wechat_open: false,
+        routes: [],
+        openclaw_base: '',
+        remote_control_enabled: false,
+        keys: [],
+      },
+      status: 200,
+    })
     mockReadAiopenInstalledClients.mockReturnValue([])
   })
 
@@ -220,8 +282,17 @@ describe('AIOpenPanel.vue – client handling', () => {
 
   it('installs client on click when not installed', async () => {
     const wrapper = await mountAIOpenPanel()
-    mockSafeJsonRequest.mockResolvedValue({ ok: true, data: { success: true, key: 'test-key' }, status: 200 })
-    await wrapper.vm.handleClientClick({ id: 'claude', name: 'Claude', installMode: 'copy', mcpJson: '{}' })
+    mockSafeJsonRequest.mockResolvedValue({
+      ok: true,
+      data: { success: true, key: 'test-key' },
+      status: 200,
+    })
+    await wrapper.vm.handleClientClick({
+      id: 'claude',
+      name: 'Claude',
+      installMode: 'copy',
+      mcpJson: '{}',
+    })
     expect(mockMarkAiopenClientInstalled).toHaveBeenCalled()
     wrapper.unmount()
   })
@@ -230,7 +301,18 @@ describe('AIOpenPanel.vue – client handling', () => {
 describe('AIOpenPanel.vue – copy functions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockSafeJsonRequest.mockResolvedValue({ ok: true, data: { success: true, wechat_open: false, routes: [], openclaw_base: '', remote_control_enabled: false, keys: [] }, status: 200 })
+    mockSafeJsonRequest.mockResolvedValue({
+      ok: true,
+      data: {
+        success: true,
+        wechat_open: false,
+        routes: [],
+        openclaw_base: '',
+        remote_control_enabled: false,
+        keys: [],
+      },
+      status: 200,
+    })
   })
 
   it('copyOneLiner copies text and marks as installed', async () => {
@@ -348,15 +430,41 @@ describe('AIOpenPanel.vue – formatPanelError', () => {
 describe('AIOpenPanel.vue – createKey', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockSafeJsonRequest.mockResolvedValue({ ok: true, data: { success: true, wechat_open: false, routes: [], openclaw_base: '', remote_control_enabled: false, keys: [] }, status: 200 })
+    mockSafeJsonRequest.mockResolvedValue({
+      ok: true,
+      data: {
+        success: true,
+        wechat_open: false,
+        routes: [],
+        openclaw_base: '',
+        remote_control_enabled: false,
+        keys: [],
+      },
+      status: 200,
+    })
   })
 
   it('creates key successfully', async () => {
     mockSafeJsonRequest.mockImplementation((url: string) => {
       if (url.includes('/keys')) {
-        return Promise.resolve({ ok: true, data: { success: true, key: 'new-api-key' }, status: 200 })
+        return Promise.resolve({
+          ok: true,
+          data: { success: true, key: 'new-api-key' },
+          status: 200,
+        })
       }
-      return Promise.resolve({ ok: true, data: { success: true, wechat_open: false, routes: [], openclaw_base: '', remote_control_enabled: false, keys: [] }, status: 200 })
+      return Promise.resolve({
+        ok: true,
+        data: {
+          success: true,
+          wechat_open: false,
+          routes: [],
+          openclaw_base: '',
+          remote_control_enabled: false,
+          keys: [],
+        },
+        status: 200,
+      })
     })
     const wrapper = await mountAIOpenPanel()
     await wrapper.vm.createKey()
@@ -369,7 +477,18 @@ describe('AIOpenPanel.vue – createKey', () => {
       if (url.includes('/keys')) {
         return Promise.resolve({ ok: false, message: '生成失败' })
       }
-      return Promise.resolve({ ok: true, data: { success: true, wechat_open: false, routes: [], openclaw_base: '', remote_control_enabled: false, keys: [] }, status: 200 })
+      return Promise.resolve({
+        ok: true,
+        data: {
+          success: true,
+          wechat_open: false,
+          routes: [],
+          openclaw_base: '',
+          remote_control_enabled: false,
+          keys: [],
+        },
+        status: 200,
+      })
     })
     const wrapper = await mountAIOpenPanel()
     await wrapper.vm.createKey()
@@ -421,7 +540,18 @@ describe('AIOpenPanel.vue – toggle controls', () => {
 describe('AIOpenPanel.vue – OpenClaw', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockSafeJsonRequest.mockResolvedValue({ ok: true, data: { success: true, wechat_open: false, routes: [], openclaw_base: '', remote_control_enabled: false, keys: [] }, status: 200 })
+    mockSafeJsonRequest.mockResolvedValue({
+      ok: true,
+      data: {
+        success: true,
+        wechat_open: false,
+        routes: [],
+        openclaw_base: '',
+        remote_control_enabled: false,
+        keys: [],
+      },
+      status: 200,
+    })
   })
 
   it('saveOpenclawBase saves when panel available', async () => {
@@ -471,7 +601,18 @@ describe('AIOpenPanel.vue – OpenClaw', () => {
 describe('AIOpenPanel.vue – computed properties', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockSafeJsonRequest.mockResolvedValue({ ok: true, data: { success: true, wechat_open: false, routes: [], openclaw_base: '', remote_control_enabled: false, keys: [] }, status: 200 })
+    mockSafeJsonRequest.mockResolvedValue({
+      ok: true,
+      data: {
+        success: true,
+        wechat_open: false,
+        routes: [],
+        openclaw_base: '',
+        remote_control_enabled: false,
+        keys: [],
+      },
+      status: 200,
+    })
   })
 
   it('mcpUrl is computed from backendOrigin', async () => {
@@ -537,7 +678,10 @@ describe('AIOpenPanel.vue – computed properties', () => {
 
   it('friendlyTools maps manifestTools with labels', async () => {
     const wrapper = await mountAIOpenPanel()
-    wrapper.vm.manifestTools = [{ name: 'api_call', description: '调用接口' }, { name: 'unknown_tool', description: '未知工具' }]
+    wrapper.vm.manifestTools = [
+      { name: 'api_call', description: '调用接口' },
+      { name: 'unknown_tool', description: '未知工具' },
+    ]
     const tools = wrapper.vm.friendlyTools
     expect(tools[0].label).toBe('调用接口')
     expect(tools[1].label).toBe('unknown_tool')
@@ -554,7 +698,18 @@ describe('AIOpenPanel.vue – computed properties', () => {
 describe('AIOpenPanel.vue – back emit', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockSafeJsonRequest.mockResolvedValue({ ok: true, data: { success: true, wechat_open: false, routes: [], openclaw_base: '', remote_control_enabled: false, keys: [] }, status: 200 })
+    mockSafeJsonRequest.mockResolvedValue({
+      ok: true,
+      data: {
+        success: true,
+        wechat_open: false,
+        routes: [],
+        openclaw_base: '',
+        remote_control_enabled: false,
+        keys: [],
+      },
+      status: 200,
+    })
   })
 
   it('emits back on header click', async () => {
@@ -573,9 +728,24 @@ describe('AIOpenPanel.vue – MCP health probe', () => {
   it('sets mcpHealthy when manifest is valid', async () => {
     mockSafeJsonRequest.mockImplementation((url: string) => {
       if (url.includes('/manifest')) {
-        return Promise.resolve({ ok: true, data: { success: true, name: 'AIOPEN', tools: [{ name: 'api_call' }] }, status: 200 })
+        return Promise.resolve({
+          ok: true,
+          data: { success: true, name: 'AIOPEN', tools: [{ name: 'api_call' }] },
+          status: 200,
+        })
       }
-      return Promise.resolve({ ok: true, data: { success: true, wechat_open: false, routes: [], openclaw_base: '', remote_control_enabled: false, keys: [] }, status: 200 })
+      return Promise.resolve({
+        ok: true,
+        data: {
+          success: true,
+          wechat_open: false,
+          routes: [],
+          openclaw_base: '',
+          remote_control_enabled: false,
+          keys: [],
+        },
+        status: 200,
+      })
     })
     const wrapper = await mountAIOpenPanel()
     await vi.waitFor(() => expect(wrapper.vm.mcpHealthy).toBe(true), { timeout: 3000 })
@@ -589,9 +759,24 @@ describe('AIOpenPanel.vue – MCP health probe', () => {
         return Promise.resolve({ ok: false, status: 404 })
       }
       if (url.includes('/mcp')) {
-        return Promise.resolve({ ok: true, data: { success: true, server: 'AIOPEN', tool_count: 5 }, status: 200 })
+        return Promise.resolve({
+          ok: true,
+          data: { success: true, server: 'AIOPEN', tool_count: 5 },
+          status: 200,
+        })
       }
-      return Promise.resolve({ ok: true, data: { success: true, wechat_open: false, routes: [], openclaw_base: '', remote_control_enabled: false, keys: [] }, status: 200 })
+      return Promise.resolve({
+        ok: true,
+        data: {
+          success: true,
+          wechat_open: false,
+          routes: [],
+          openclaw_base: '',
+          remote_control_enabled: false,
+          keys: [],
+        },
+        status: 200,
+      })
     })
     const wrapper = await mountAIOpenPanel()
     await vi.waitFor(() => expect(wrapper.vm.mcpHealthy).toBe(true), { timeout: 3000 })
@@ -603,7 +788,18 @@ describe('AIOpenPanel.vue – MCP health probe', () => {
       if (url.includes('/manifest') || url.includes('/mcp')) {
         return Promise.resolve({ ok: false, status: 403 })
       }
-      return Promise.resolve({ ok: true, data: { success: true, wechat_open: false, routes: [], openclaw_base: '', remote_control_enabled: false, keys: [] }, status: 200 })
+      return Promise.resolve({
+        ok: true,
+        data: {
+          success: true,
+          wechat_open: false,
+          routes: [],
+          openclaw_base: '',
+          remote_control_enabled: false,
+          keys: [],
+        },
+        status: 200,
+      })
     })
     const wrapper = await mountAIOpenPanel()
     await vi.waitFor(() => expect(wrapper.vm.mcpHealthText).toContain('403'), { timeout: 3000 })
@@ -619,10 +815,25 @@ describe('AIOpenPanel.vue – loadPanel refresh', () => {
   it('loadPanel refreshes all data', async () => {
     mockSafeJsonRequest.mockImplementation((url: string) => {
       if (url.includes('/panel')) {
-        return Promise.resolve({ ok: true, data: { success: true, wechat_open: true, routes: [], openclaw_base: '', remote_control_enabled: true, keys: [] }, status: 200 })
+        return Promise.resolve({
+          ok: true,
+          data: {
+            success: true,
+            wechat_open: true,
+            routes: [],
+            openclaw_base: '',
+            remote_control_enabled: true,
+            keys: [],
+          },
+          status: 200,
+        })
       }
       if (url.includes('/manifest')) {
-        return Promise.resolve({ ok: true, data: { success: true, name: 'AIOPEN', tools: [] }, status: 200 })
+        return Promise.resolve({
+          ok: true,
+          data: { success: true, name: 'AIOPEN', tools: [] },
+          status: 200,
+        })
       }
       if (url.includes('/install')) {
         return Promise.resolve({ ok: true, data: { success: true }, status: 200 })

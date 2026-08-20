@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """为旧版 mod_store_routes 注入 aux_employee_store（生产增量部署用）。"""
+
 from __future__ import annotations
 
 from pathlib import Path

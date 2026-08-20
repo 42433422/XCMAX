@@ -10,6 +10,7 @@ Create Date: 2026-06-22
 """
 
 from __future__ import annotations
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 from typing import Sequence
 
@@ -44,14 +45,14 @@ _TABLES = (
 def _has_table(conn, table: str) -> bool:
     try:
         return table in set(inspect(conn).get_table_names() or [])
-    except Exception:
+    except BOUNDARY_ERRORS:
         return False
 
 
 def _column_exists(conn, table: str, column: str) -> bool:
     try:
         cols = {c["name"] for c in inspect(conn).get_columns(table)}
-    except Exception:
+    except BOUNDARY_ERRORS:
         return False
     return column in cols
 
@@ -66,7 +67,7 @@ def upgrade() -> None:
         op.add_column(table, sa.Column("tenant_id", sa.Integer(), nullable=True))
         try:
             op.create_index(f"ix_{table}_tenant_id", table, ["tenant_id"])
-        except Exception:
+        except BOUNDARY_ERRORS:
             pass
 
 
@@ -77,6 +78,6 @@ def downgrade() -> None:
             continue
         try:
             op.drop_index(f"ix_{table}_tenant_id", table_name=table)
-        except Exception:
+        except BOUNDARY_ERRORS:
             pass
         op.drop_column(table, "tenant_id")

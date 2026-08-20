@@ -15,9 +15,7 @@ describe('enterpriseWorkflowEstablishment', () => {
   it('accepts manifest enterprise_layer aliases', () => {
     expect(normalizeEnterpriseOrgLayerId('工具层')).toBe('tools')
     expect(normalizeEnterpriseOrgLayerId('management_layer')).toBe('management')
-    expect(
-      resolveEnterpriseOrgLayer('custom_emp', '测试', '', '服务层'),
-    ).toBe('service')
+    expect(resolveEnterpriseOrgLayer('custom_emp', '测试', '', '服务层')).toBe('service')
   })
 
   it('infers catalog item layer from workflow_employees', () => {

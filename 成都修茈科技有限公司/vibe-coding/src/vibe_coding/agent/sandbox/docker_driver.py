@@ -37,6 +37,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from vibe_coding.operational_errors import BOUNDARY_ERRORS
+
 from .driver import SandboxJob, SandboxPolicy, SandboxResult, docker_available, resolve_workspace
 
 DEFAULT_IMAGE = "python:3.11-slim"
@@ -214,9 +216,7 @@ class DockerSandboxDriver:
             stderr=_truncate(proc.stderr, pol.max_output_size),
             exit_code=proc.exit_code,
             error_type="TimeoutError" if proc.timed_out else "",
-            error_message=(
-                f"docker job timed out after {pol.timeout_s}s" if proc.timed_out else ""
-            ),
+            error_message=(f"docker job timed out after {pol.timeout_s}s" if proc.timed_out else ""),
             duration_ms=elapsed,
         )
 
@@ -289,7 +289,7 @@ class DockerSandboxDriver:
         timeout: float,
         env: dict[str, str] | None,
         stdin: str | None = None,
-    ) -> "_RawProc":
+    ) -> _RawProc:
         merged_env = os.environ.copy()
         if env:
             merged_env.update({k: str(v) for k, v in env.items()})
@@ -329,7 +329,7 @@ class DockerSandboxDriver:
 
 
 class _RawProc:
-    __slots__ = ("stdout", "stderr", "exit_code", "timed_out")
+    __slots__ = ("exit_code", "stderr", "stdout", "timed_out")
 
     def __init__(self, *, stdout: str, stderr: str, exit_code: int, timed_out: bool) -> None:
         self.stdout = stdout
@@ -396,7 +396,7 @@ def _extract_json(stdout: str) -> dict[str, Any] | None:
         from ...nl.parsing import safe_parse_json_object
 
         return safe_parse_json_object(text)
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:
         return None
 
 
@@ -472,7 +472,7 @@ _BOOTSTRAP_TEMPLATE = textwrap.dedent(
             raise ValueError(f"output too large: {{len(raw)}} > {max_output_size}")
         out["success"] = True
         out["output"] = result_dict
-    except Exception as exc:
+    except BOUNDARY_ERRORS as exc:
         out["error_type"] = type(exc).__name__
         out["error_message"] = str(exc)
         out["traceback_str"] = traceback.format_exc()
@@ -488,4 +488,4 @@ __all__ = ["DEFAULT_IMAGE", "DockerSandboxDriver"]
 
 
 # --- Trivial references for type-checkers --------------------------------
-_ = (shutil, Any)  # noqa: F841
+_ = (shutil, Any)

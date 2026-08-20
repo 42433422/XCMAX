@@ -24,11 +24,7 @@ export function isSafeMediaUrl(raw: unknown): raw is string {
 }
 
 export function normalizeReleaseMedia(input: unknown): ReleaseMediaSlide[] {
-  const items: unknown[] = Array.isArray(input)
-    ? input
-    : input && typeof input === 'object'
-      ? [input]
-      : []
+  const items: unknown[] = Array.isArray(input) ? input : input && typeof input === 'object' ? [input] : []
   const slides: ReleaseMediaSlide[] = []
   for (const item of items) {
     if (!item || typeof item !== 'object') continue

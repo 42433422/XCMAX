@@ -27,6 +27,8 @@ from typing import Any, Dict, Optional
 
 import httpx
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
@@ -224,7 +226,7 @@ def main() -> int:
 def _safe_json(r: httpx.Response) -> Any:
     try:
         return r.json()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return {"text": r.text[:4000]}
 
 

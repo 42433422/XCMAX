@@ -5,14 +5,14 @@
 
 ## 组件一览
 
-| 组件 | 路径 | 语言/框架 | 独立 CI | 独立部署 |
-| --- | --- | --- | --- | --- |
-| 营销官网静态页 | `*.html`、`styles.css`、`main.js`、`assets/`、`site/`、`new/` | 原生 HTML/CSS/JS | [`ci-marketing-site.yml`](.github/workflows/ci-marketing-site.yml) | — |
-| 根 Vue 3 项目（modstore-market） | `src/`、`package.json`、`vite.config.ts` | Vue 3 + Vite | [`ci-root-frontend.yml`](.github/workflows/ci-root-frontend.yml) | — |
-| MODstore market 前端 | `MODstore_deploy/market/` | Vue 3 + Vite | [`ci-market.yml`](.github/workflows/ci-market.yml) | [`market-live-deploy.yml`](.github/workflows/market-live-deploy.yml) |
-| MODstore Python 后端 | `MODstore_deploy/modstore_server/` 等 | FastAPI / Python 3.11 | [`ci-backend-python.yml`](.github/workflows/ci-backend-python.yml) | [`deploy.yml`](.github/workflows/deploy.yml) |
-| Java 支付子服务 | `MODstore_deploy/java_payment_service/` | Spring Boot 17 | [`ci-payment-java.yml`](.github/workflows/ci-payment-java.yml) | [`deploy-payment-java.yml`](.github/workflows/deploy-payment-java.yml) |
-| vibe-coding 独立 Python 包 | `vibe-coding/` | Python | [`ci-vibe-coding.yml`](.github/workflows/ci-vibe-coding.yml) | — |
+| 组件                             | 路径                                                          | 语言/框架             | 独立 CI                                                            | 独立部署                                                               |
+| -------------------------------- | ------------------------------------------------------------- | --------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| 营销官网静态页                   | `*.html`、`styles.css`、`main.js`、`assets/`、`site/`、`new/` | 原生 HTML/CSS/JS      | [`ci-marketing-site.yml`](.github/workflows/ci-marketing-site.yml) | —                                                                      |
+| 根 Vue 3 项目（modstore-market） | `src/`、`package.json`、`vite.config.ts`                      | Vue 3 + Vite          | [`ci-root-frontend.yml`](.github/workflows/ci-root-frontend.yml)   | —                                                                      |
+| MODstore market 前端             | `MODstore_deploy/market/`                                     | Vue 3 + Vite          | [`ci-market.yml`](.github/workflows/ci-market.yml)                 | [`market-live-deploy.yml`](.github/workflows/market-live-deploy.yml)   |
+| MODstore Python 后端             | `MODstore_deploy/modstore_server/` 等                         | FastAPI / Python 3.11 | [`ci-backend-python.yml`](.github/workflows/ci-backend-python.yml) | [`deploy.yml`](.github/workflows/deploy.yml)                           |
+| Java 支付子服务                  | `MODstore_deploy/java_payment_service/`                       | Spring Boot 17        | [`ci-payment-java.yml`](.github/workflows/ci-payment-java.yml)     | [`deploy-payment-java.yml`](.github/workflows/deploy-payment-java.yml) |
+| vibe-coding 独立 Python 包       | `vibe-coding/`                                                | Python                | [`ci-vibe-coding.yml`](.github/workflows/ci-vibe-coding.yml)       | —                                                                      |
 
 ## 站点结构（营销站 vs Vue 应用）
 

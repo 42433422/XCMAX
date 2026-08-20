@@ -4,7 +4,7 @@ import xcmaxMarketProxy from '@/api/xcmaxMarketProxy'
 export type AnyRecord = Record<string, unknown>
 
 export function asRecord(v: unknown): AnyRecord {
-  return v && typeof v === 'object' && !Array.isArray(v) ? v as AnyRecord : {}
+  return v && typeof v === 'object' && !Array.isArray(v) ? (v as AnyRecord) : {}
 }
 
 export function asArray(v: unknown): unknown[] {
@@ -44,7 +44,7 @@ export function useLoopRuntimePanel(getLimit: () => number) {
     loading.value = true
     error.value = ''
     try {
-      raw.value = await xcmaxMarketProxy.selfMaintenanceRuntimeStatus(getLimit()) as AnyRecord
+      raw.value = (await xcmaxMarketProxy.selfMaintenanceRuntimeStatus(getLimit())) as AnyRecord
     } catch (e: unknown) {
       error.value = e instanceof Error ? e.message : String(e)
     } finally {

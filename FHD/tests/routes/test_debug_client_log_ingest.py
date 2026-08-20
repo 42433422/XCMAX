@@ -1,3 +1,4 @@
+# mypy: disable-error-code="misc"
 """Tests for app.fastapi_routes.debug_client_log — coverage ramp C3.3-a.
 
 Covers ``POST /api/debug/client-log`` happy / missing util / exception.

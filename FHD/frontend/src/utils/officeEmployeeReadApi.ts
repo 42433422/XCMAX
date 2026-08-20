@@ -19,17 +19,7 @@ const WORKSPACE_ROOT_PATH = '/api/platform-shell/workspace-root'
 const WORKSPACE_READ_FILES = '/api/platform-shell/workspace-read-files'
 const EXTRACT_GRID_UPLOAD_PATH = '/api/templates/extract-grid'
 
-const OFFICE_DOCKING_EXTENSIONS = new Set([
-  '.xlsx',
-  '.xlsm',
-  '.xls',
-  '.csv',
-  '.docx',
-  '.doc',
-  '.pdf',
-  '.pptx',
-  '.ppt',
-])
+const OFFICE_DOCKING_EXTENSIONS = new Set(['.xlsx', '.xlsm', '.xls', '.csv', '.docx', '.doc', '.pdf', '.pptx', '.ppt'])
 
 const EMPLOYEE_BY_EXTENSION: Record<string, string> = {
   '.xlsx': EXCEL_FULL_READ_EMPLOYEE_ID,
@@ -170,10 +160,7 @@ export function resolveOfficeReadEmployeeForFile(fileName: string): string {
   return EMPLOYEE_BY_EXTENSION[ext] || ''
 }
 
-export async function readOfficeEmployeeOutputs(
-  workspaceRoot: string,
-  paths: string[],
-): Promise<OfficeEmployeeOutputFile[]> {
+export async function readOfficeEmployeeOutputs(workspaceRoot: string, paths: string[]): Promise<OfficeEmployeeOutputFile[]> {
   const relPaths = paths.map((p) => asString(p).trim()).filter(Boolean)
   if (!relPaths.length) return []
   await ensureCsrf()
@@ -279,12 +266,7 @@ function workbookPayloadFromEmployeeData(data: Record<string, unknown>): Record<
 }
 
 function toExcelCellValue(value: unknown): JsonValue {
-  if (
-    value === null ||
-    typeof value === 'string' ||
-    typeof value === 'number' ||
-    typeof value === 'boolean'
-  ) {
+  if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
     return value
   }
   if (Array.isArray(value)) {
@@ -315,9 +297,7 @@ export function mapOfficeExcelReadToAnalysisResult(
     const sample_rows = asArray<Record<string, unknown>>(sheet.rows).map((row) => {
       const cells = asRecord(row.cells)
       const source = Object.keys(cells).length ? cells : row
-      return Object.fromEntries(
-        Object.entries(source).map(([key, value]) => [key, toExcelCellValue(value)]),
-      )
+      return Object.fromEntries(Object.entries(source).map(([key, value]) => [key, toExcelCellValue(value)]))
     })
     const gridRows = [
       fields.map((f) => f.label || f.name || ''),
@@ -380,11 +360,7 @@ export async function readExcelViaOfficePack(file: File): Promise<{
   summary: string
 }> {
   const upload = await uploadChatOfficeFile(file)
-  const employeeData = await runOfficeEmployeeRead(
-    EXCEL_FULL_READ_EMPLOYEE_ID,
-    upload.file_path,
-    upload.workspace_root,
-  )
+  const employeeData = await runOfficeEmployeeRead(EXCEL_FULL_READ_EMPLOYEE_ID, upload.file_path, upload.workspace_root)
   if (employeeData.ok === false) {
     throw new Error(asString(employeeData.error || employeeData.summary) || 'Excel 读取员执行失败')
   }
@@ -393,20 +369,13 @@ export async function readExcelViaOfficePack(file: File): Promise<{
   return { upload, employeeData, result, summary }
 }
 
-export async function readWordViaOfficePack(
-  file: File,
-  uploaded?: OfficeFileUploadResult,
-): Promise<{ ok: boolean; summary: string }> {
+export async function readWordViaOfficePack(file: File, uploaded?: OfficeFileUploadResult): Promise<{ ok: boolean; summary: string }> {
   const upload = uploaded || (await uploadTutorialOfficeFile(file))
   const workspaceRoot = upload.workspace_root
   if (!workspaceRoot) {
     throw new Error('办公样本上传未返回 workspace_root')
   }
-  const employeeData = await runOfficeEmployeeRead(
-    WORD_FULL_READ_EMPLOYEE_ID,
-    upload.file_path,
-    workspaceRoot,
-  )
+  const employeeData = await runOfficeEmployeeRead(WORD_FULL_READ_EMPLOYEE_ID, upload.file_path, workspaceRoot)
   const ok = employeeData.ok !== false
   const summary = asString(employeeData.summary || employeeData.error).trim()
   return { ok, summary: summary || (ok ? 'Word 读取完成' : 'Word 读取失败') }

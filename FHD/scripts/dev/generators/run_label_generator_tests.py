@@ -1,9 +1,12 @@
+# mypy: disable-error-code="import-not-found"
 """
 标签模板生成器 - 功能演示脚本
 """
 
 import os
 import sys
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 # 添加项目路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -37,7 +40,7 @@ def test_barcode_generator():
             print("✗ 条形码生成失败")
 
         print()
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"✗ 测试失败：{e}")
         print()
 
@@ -82,7 +85,7 @@ def test_label_template_generator():
                 print("-" * 80)
                 code_lines = result["code"].split("\n")
                 for i, line in enumerate(code_lines[:100]):
-                    print(f"{i+1:3d}: {line}")
+                    print(f"{i + 1:3d}: {line}")
                 print("-" * 80)
             else:
                 print(f"✗ 生成失败：{result.get('error', '未知错误')}")
@@ -90,7 +93,7 @@ def test_label_template_generator():
             print(f"⚠ 测试图片不存在：{test_image}")
 
         print()
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"✗ 测试失败：{e}")
         import traceback
 
@@ -149,7 +152,7 @@ def test_generated_template():
             print("⚠ 生成的模板文件不存在，请先运行测试 2")
 
         print()
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"✗ 测试失败：{e}")
         import traceback
 

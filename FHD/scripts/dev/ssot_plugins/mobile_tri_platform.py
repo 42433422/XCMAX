@@ -170,7 +170,10 @@ def _check_unified_stack(errors: list[str]) -> None:
 
     fastapi_mobile = _read_text(FASTAPI_MOBILE, errors)
     if fastapi_mobile:
-        for snippet in ('APIRouter(prefix="/api/mobile/v1"', "router.include_router(extension_router)"):
+        for snippet in (
+            'APIRouter(prefix="/api/mobile/v1"',
+            "router.include_router(extension_router)",
+        ):
             if snippet not in fastapi_mobile:
                 errors.append(f"mobile_api.py 缺少 FastAPI mobile 片段: {snippet}")
     fastapi_ext = _read_text(FASTAPI_MOBILE_EXT, errors)
@@ -183,12 +186,13 @@ def _check_unified_stack(errors: list[str]) -> None:
             # /admin/home 允许以主文件直接写法或 part03 拆分写法存在。
             if snippet not in fastapi_ext and (
                 snippet != '@extension_router.get("/admin/home")'
-                or "@_facade().extension_router.get('/admin/home')" not in (fastapi_ext_part03 or "")
+                or "@_facade().extension_router.get('/admin/home')"
+                not in (fastapi_ext_part03 or "")
             ):
                 errors.append(f"mobile_api_extensions.py 缺少移动业务路由片段: {snippet}")
     fastapi_ai_groups = _read_text(FASTAPI_MOBILE_AI_GROUPS, errors)
     if fastapi_ai_groups and '@router.get("/ai-groups")' not in fastapi_ai_groups:
-        errors.append("routes_ai_groups.py 缺少移动 AI 群组路由片段: " '@router.get("/ai-groups")')
+        errors.append('routes_ai_groups.py 缺少移动 AI 群组路由片段: @router.get("/ai-groups")')
 
 
 def _check_tokens(errors: list[str]) -> None:
@@ -210,7 +214,11 @@ def _check_tokens(errors: list[str]) -> None:
         errors.append(f"mobile_design_tokens.json radius={radius!r}，应为 {EXPECTED_RADIUS!r}")
 
     typography = data.get("typography")
-    if not isinstance(typography, dict) or "display_large" not in typography or "label_small" not in typography:
+    if (
+        not isinstance(typography, dict)
+        or "display_large" not in typography
+        or "label_small" not in typography
+    ):
         errors.append("mobile_design_tokens.json typography 缺少 display_large/label_small")
 
 
@@ -228,7 +236,10 @@ def check_drift() -> int:
         if len(errors) > 50:
             print(f"  ... 还有 {len(errors) - 50} 条", flush=True)
         return 1
-    print("mobile-tri-platform: OK（Flutter 前端 / OpenAPI 契约 / FastAPI 后端 / 移动 token / 性能监控入口一致）", flush=True)
+    print(
+        "mobile-tri-platform: OK（Flutter 前端 / OpenAPI 契约 / FastAPI 后端 / 移动 token / 性能监控入口一致）",
+        flush=True,
+    )
     return 0
 
 

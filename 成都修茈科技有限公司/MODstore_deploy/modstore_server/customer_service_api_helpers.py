@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """Ownership checks and response serializers for the customer-service API."""
 
 from __future__ import annotations
@@ -21,7 +22,10 @@ from modstore_server.models_cs import (
 def own_session_or_404(db: Session, user: User, session_id: int) -> CustomerServiceSession:
     row = (
         db.query(CustomerServiceSession)
-        .filter(CustomerServiceSession.id == session_id, CustomerServiceSession.user_id == user.id)
+        .filter(
+            CustomerServiceSession.id == session_id,
+            CustomerServiceSession.user_id == user.id,
+        )
         .first()
     )
     if not row:

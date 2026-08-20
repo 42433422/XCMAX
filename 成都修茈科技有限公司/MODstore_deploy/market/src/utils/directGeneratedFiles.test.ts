@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  employeeDownloadsToGeneratedFiles,
-  filterUserFacingOfficeDownloads,
-  softenSandboxDownloadLinks,
-} from './directGeneratedFiles'
+import { employeeDownloadsToGeneratedFiles, filterUserFacingOfficeDownloads, softenSandboxDownloadLinks } from './directGeneratedFiles'
 
 describe('directGeneratedFiles', () => {
   it('filters internal document_full.json from footer cards', () => {
@@ -29,9 +25,7 @@ describe('directGeneratedFiles', () => {
   })
 
   it('maps downloads to generated file cards', () => {
-    const cards = employeeDownloadsToGeneratedFiles([
-      { jobId: 'j2', filename: 'report.xlsx', label: '销售表' },
-    ])
+    const cards = employeeDownloadsToGeneratedFiles([{ jobId: 'j2', filename: 'report.xlsx', label: '销售表' }])
     expect(cards[0].name).toBe('销售表')
     expect(cards[0].status).toBe('ready')
     expect(cards[0].role).toBe('generated')
@@ -46,8 +40,7 @@ describe('directGeneratedFiles', () => {
   })
 
   it('softens sandbox markdown download links', () => {
-    const raw =
-      '已完成。\n\n[下载：简化版合同模板.docx](sandbox:/mnt/data/simplified_contract.docx)'
+    const raw = '已完成。\n\n[下载：简化版合同模板.docx](sandbox:/mnt/data/simplified_contract.docx)'
     const out = softenSandboxDownloadLinks(raw)
     expect(out).not.toMatch(/sandbox:/i)
     expect(out).toContain('见下方文件卡片')

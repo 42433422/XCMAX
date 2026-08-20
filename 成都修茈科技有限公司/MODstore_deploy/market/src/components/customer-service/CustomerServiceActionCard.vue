@@ -108,7 +108,9 @@ const decisionLabel = computed(() => {
 const humanRationale = computed(() => humanizeUserText(String(props.card.rationale || '')))
 
 const statusKey = computed(() => {
-  const raw = String(props.card.status || props.card.decision || '').toLowerCase().replace(/\s+/g, '_')
+  const raw = String(props.card.status || props.card.decision || '')
+    .toLowerCase()
+    .replace(/\s+/g, '_')
   return raw || 'pending'
 })
 

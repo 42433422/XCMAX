@@ -372,7 +372,7 @@ def build_human_report(
             tid = ho.get("thread_id") or 0
             mid = ho.get("message_id") or 0
             remainders.append(
-                f"- ✅ 已 @{tgt} 转交任务（协作线程 #{tid}，消息 #{mid}），" "等对方判断是否接手"
+                f"- ✅ 已 @{tgt} 转交任务（协作线程 #{tid}，消息 #{mid}），等对方判断是否接手"
             )
         else:
             remainders.append(f"- ❌ 转交 @{tgt} 失败：{_safe_str(ho.get('skip_reason'), 100)}")

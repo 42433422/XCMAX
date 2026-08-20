@@ -1,3 +1,4 @@
+# mypy: disable-error-code="misc"
 """COVERAGE_RAMP Phase 1 round 2: ai_chat_app_service deep paths (mocked LLM/workflow/deps)."""
 
 from __future__ import annotations

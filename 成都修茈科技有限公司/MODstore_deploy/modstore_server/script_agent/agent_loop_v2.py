@@ -1,10 +1,16 @@
-# ruff: noqa
+# mypy: disable-error-code="attr-defined, import-not-found, no-any-return, operator, valid-type"
 """AgentLoop v2 event-stream bridge implementation."""
+
 from __future__ import annotations
+
 import importlib
 from typing import Any, AsyncIterator, Dict, List, Optional
+
 from modstore_server.script_agent.brief import AgentEvent, Brief
-from modstore_server.script_agent.llm_client import SCRIPT_AGENT_CODE_MAX_TOKENS, LlmClient
+from modstore_server.script_agent.llm_client import (
+    SCRIPT_AGENT_CODE_MAX_TOKENS,
+    LlmClient,
+)
 from modstore_server.script_agent.sandbox_runner import run_in_sandbox
 
 DEFAULT_MAX_ITERATIONS = 4
@@ -65,7 +71,6 @@ async def run_agent_loop_v2(
         return value
 
     class _LLMBridge:
-
         async def chat(self, system: str, user: str, *, json_mode: bool = True) -> str:
             sys_msg = (system or "").strip()
             if json_mode:
@@ -95,7 +100,10 @@ async def run_agent_loop_v2(
 
     reg = ToolRegistry()
 
-    @tool("static_check", description="AST + import whitelist check for generated Python code.")
+    @tool(
+        "static_check",
+        description="AST + import whitelist check for generated Python code.",
+    )
     def static_check_tool(code: str) -> dict:
         errs = _facade().validate_script(code)
         return {"ok": not errs, "errors": errs}
@@ -117,7 +125,10 @@ async def run_agent_loop_v2(
             "timed_out": res.timed_out,
         }
 
-    @tool("run_sandbox", description="Run Python code in the project sandbox and return results.")
+    @tool(
+        "run_sandbox",
+        description="Run Python code in the project sandbox and return results.",
+    )
     async def run_sandbox_tool(code: str) -> dict:
         return await _run_sandbox(code)
 

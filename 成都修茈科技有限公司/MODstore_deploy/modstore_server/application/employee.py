@@ -14,7 +14,11 @@ from modstore_server.eventing.contracts import (
 )
 from modstore_server.eventing.events import new_event
 from modstore_server.eventing.global_bus import neuro_bus as default_neuro_bus
-from modstore_server.services.employee import EmployeeRuntimeClient, get_default_employee_client
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+from modstore_server.services.employee import (
+    EmployeeRuntimeClient,
+    get_default_employee_client,
+)
 
 
 class EmployeeApplicationService:
@@ -66,7 +70,7 @@ class EmployeeApplicationService:
                 )
             )
             return out
-        except Exception:
+        except RECOVERABLE_ERRORS:
             self._bus.publish(
                 new_event(
                     EMPLOYEE_EXECUTION_COMPLETED,
@@ -113,7 +117,9 @@ def get_default_employee_application_service() -> EmployeeApplicationService:
         return _default_employee_application
 
 
-def set_default_employee_application_service(svc: EmployeeApplicationService | None) -> None:
+def set_default_employee_application_service(
+    svc: EmployeeApplicationService | None,
+) -> None:
     global _default_employee_application
     with _EMP_APP_LOCK:
         _default_employee_application = svc

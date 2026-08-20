@@ -1,9 +1,12 @@
+# mypy: disable-error-code="attr-defined"
 """测试恢复后的完整功能"""
 
 import os
 from pathlib import Path
 
 from openpyxl import load_workbook
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 # 设置 WORKSPACE_ROOT
 os.environ["WORKSPACE_ROOT"] = r"e:\FHD"
@@ -56,7 +59,7 @@ try:
 
     print("\n✓ 测试完成！")
 
-except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"✗ 转换失败：{e}")
     import traceback
 

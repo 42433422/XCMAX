@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  buildLevelProfileDict,
-  isMeAdminPayload,
-  normalizeMeResponse,
-  LEVEL_THRESHOLDS,
-} from './accountLevel'
+import { buildLevelProfileDict, isMeAdminPayload, normalizeMeResponse, LEVEL_THRESHOLDS } from './accountLevel'
 
 describe('accountLevel', () => {
   it('buildLevelProfileDict matches low tiers', () => {

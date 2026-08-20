@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="attr-defined, misc, no-any-return, valid-type"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -30,13 +34,13 @@ def _resolve_butler_credentials(db: _facade().Session, user_id: int):
     if raw.strip():
         try:
             prefs = _facade().json.loads(raw)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
     provider = str(prefs.get("provider") or "").strip()
     model = str(prefs.get("model") or "").strip()
     if not provider or provider not in _facade().KNOWN_PROVIDERS:
         for p in _facade().KNOWN_PROVIDERS:
-            (key, _) = _facade().resolve_api_key(db, user_id, p)
+            key, _ = _facade().resolve_api_key(db, user_id, p)
             if key:
                 provider = p
                 break
@@ -47,7 +51,7 @@ def _resolve_butler_credentials(db: _facade().Session, user_id: int):
             )
     if not model:
         model = "gpt-4o-mini"
-    (api_key, key_source) = _facade().resolve_api_key(db, user_id, provider)
+    api_key, key_source = _facade().resolve_api_key(db, user_id, provider)
     if not api_key:
         raise _facade().HTTPException(
             400, f"供应商「{provider}」未配置可用 API Key。请在账户页面绑定 API Key。"
@@ -150,23 +154,28 @@ def _resolve_corp_credentials(db: _facade().Session):
         from modstore_server.llm_key_resolver import platform_api_key, platform_base_url
         from modstore_server.services.llm import resolve_platform_bench_llm
 
-        (route_provider, route_model) = resolve_platform_bench_llm()
+        route_provider, route_model = resolve_platform_bench_llm()
         if route_provider and route_model:
             route_key = platform_api_key(route_provider)
             if route_key:
-                return (route_provider, route_model, route_key, platform_base_url(route_provider))
-    except Exception:
+                return (
+                    route_provider,
+                    route_model,
+                    route_key,
+                    platform_base_url(route_provider),
+                )
+    except RECOVERABLE_ERRORS:
         _facade().logger.debug("corp-chat: platform runtime route unavailable", exc_info=True)
     if not api_key and user_id_raw.isdigit():
         uid = int(user_id_raw)
         if not provider:
             for p in _facade().KNOWN_PROVIDERS:
-                (key, _) = _facade().resolve_api_key(db, uid, p)
+                key, _ = _facade().resolve_api_key(db, uid, p)
                 if key:
                     provider = p
                     break
         if provider:
-            (api_key, _) = _facade().resolve_api_key(db, uid, provider)
+            api_key, _ = _facade().resolve_api_key(db, uid, provider)
             if provider in _facade().OAI_COMPAT_OPENAI_STYLE_PROVIDERS:
                 base_url = _facade().resolve_base_url(db, uid, provider)
     if not provider:
@@ -229,7 +238,9 @@ def _build_corp_messages(
         )
     else:
         identity = identity_from_guest(
-            visitor_id=body.visitor_id or "", visitor_label=body.visitor_label or "", source="corp"
+            visitor_id=body.visitor_id or "",
+            visitor_label=body.visitor_label or "",
+            source="corp",
         )
     vb = format_visitor_block(identity)
     if vb:
@@ -253,7 +264,11 @@ def _build_corp_messages(
 
 
 def _get_or_create_conversation(
-    db: _facade().Session, user_id: int, conversation_id: int | None, provider: str, model: str
+    db: _facade().Session,
+    user_id: int,
+    conversation_id: int | None,
+    provider: str,
+    model: str,
 ) -> _facade().ChatConversation:
     if conversation_id:
         conv = (
@@ -289,15 +304,23 @@ async def butler_cs_ssot_policy(mode: str = "admin"):
         key = "external"
     if key not in XIAOC_PERMISSIONS:
         key = "admin"
-    return {"ok": True, "policy": permission_policy(mode=key), "modes": list(XIAOC_PERMISSIONS)}
+    return {
+        "ok": True,
+        "policy": permission_policy(mode=key),
+        "modes": list(XIAOC_PERMISSIONS),
+    }
 
 
 @_facade().router.post("/cs-ssot/retrieve")
 async def butler_cs_ssot_retrieve(
-    body: CsSsotRetrieveDTO, user: _facade().User = _facade().Depends(_facade()._get_current_user)
+    body: CsSsotRetrieveDTO,
+    user: _facade().User = _facade().Depends(_facade()._get_current_user),
 ):
     """已登录市场/管理端：按身份检索公开库（管理员另含内部库）。"""
-    from modstore_server.xiaoc_cs_ssot import PUBLIC_DATASET_ID, retrieve_knowledge_for_mode
+    from modstore_server.xiaoc_cs_ssot import (
+        PUBLIC_DATASET_ID,
+        retrieve_knowledge_for_mode,
+    )
 
     mode = "admin" if bool(getattr(user, "is_admin", False)) else "market_cs"
     chunks = retrieve_knowledge_for_mode(body.query, mode=mode, top_k=body.top_k)
@@ -320,13 +343,13 @@ async def butler_corp_chat(
 ):
     """官网公开咨询（无登录、无钱包扣费、无工具调用）。"""
     _facade()._corp_chat_rate_allow(_facade()._public_contact_client_key(request))
-    (provider, model, api_key, base_url) = _facade()._resolve_corp_credentials(db)
+    provider, model, api_key, base_url = _facade()._resolve_corp_credentials(db)
     optional_user: _facade().User | None = None
     try:
         from modstore_server.api.auth_deps import get_optional_user
 
         optional_user = get_optional_user(authorization)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         optional_user = None
     msgs = _facade()._build_corp_messages(body, user=optional_user, db=db)
     if not any((m.get("role") == "user" for m in msgs)):
@@ -343,7 +366,7 @@ async def butler_corp_chat(
         if not raw_response.get("ok"):
             raise RuntimeError(raw_response.get("error") or "corp-chat failed")
         text = (raw_response.get("content") or "").strip()
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         _facade().logger.warning("corp-chat LLM failed: %s", exc)
         raise _facade().HTTPException(503, "暂时无法回答，请通过联系我们页留言。") from exc
     if not text:
@@ -367,7 +390,7 @@ async def butler_corp_translate(
     target = (body.target or "en").strip().lower()
     if target != "en":
         raise _facade().HTTPException(400, "仅支持 target=en")
-    (provider, model, api_key, base_url) = _facade()._resolve_corp_credentials(db)
+    provider, model, api_key, base_url = _facade()._resolve_corp_credentials(db)
     if not api_key:
         raise _facade().HTTPException(503, "翻译暂不可用")
     msgs = [
@@ -379,12 +402,17 @@ async def butler_corp_translate(
     ]
     try:
         raw_response = await _facade().chat_dispatch(
-            provider, api_key=api_key, base_url=base_url, model=model, messages=msgs, max_tokens=180
+            provider,
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
+            messages=msgs,
+            max_tokens=180,
         )
         if not raw_response.get("ok"):
             raise RuntimeError(raw_response.get("error") or "translate failed")
         en = (raw_response.get("content") or "").strip().strip('"').strip("'")
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         _facade().logger.warning("corp-translate failed: %s", exc)
         raise _facade().HTTPException(503, "翻译暂不可用") from exc
     if not en:
@@ -406,7 +434,7 @@ async def butler_corp_tts(request: _facade().Request, body: _facade().CorpTtsDTO
         from modstore_server.mimo_tts_service import synthesize_mimo_tts_async
 
         voice = (body.voice or "").strip() or MIMO_VOICE
-        (audio, err, meta) = await synthesize_mimo_tts_async(text, voice=voice)
+        audio, err, meta = await synthesize_mimo_tts_async(text, voice=voice)
         if audio and (not err):
             mime = str(meta.get("mime") or "audio/wav")
             b64 = base64.b64encode(audio).decode("ascii")
@@ -420,7 +448,7 @@ async def butler_corp_tts(request: _facade().Request, body: _facade().CorpTtsDTO
             }
         if err:
             _facade().logger.info("corp-tts MiMo unavailable, fallback Edge: %s", err)
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         _facade().logger.warning("corp-tts MiMo failed, fallback Edge: %s", exc)
     try:
         from modstore_server.edge_tts_service import DEFAULT_VOICE as EDGE_VOICE
@@ -443,6 +471,6 @@ async def butler_corp_tts(request: _facade().Request, body: _facade().CorpTtsDTO
                 "voice": edge_voice,
             },
         }
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         _facade().logger.warning("corp-tts Edge failed: %s", exc)
         raise _facade().HTTPException(503, "语音合成暂不可用") from exc

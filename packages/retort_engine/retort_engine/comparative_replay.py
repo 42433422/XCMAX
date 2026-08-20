@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 
 def build_cross_project_replay(project: str | Path) -> dict[str, Any]:
@@ -89,15 +89,17 @@ def _project_entry(source: str, payload: dict[str, Any]) -> dict[str, Any]:
     behavior_test_changed = any(
         "/tests/" in path or path.endswith("_test.py") for path in changed_files
     )
-    profile = (
+    profile = cast(
+        dict[str, Any],
         payload.get("external_profile")
         if isinstance(payload.get("external_profile"), dict)
-        else {}
+        else {},
     )
-    semantic = (
+    semantic = cast(
+        dict[str, Any],
         payload.get("semantic_review")
         if isinstance(payload.get("semantic_review"), dict)
-        else {}
+        else {},
     )
     return {
         "source": source,

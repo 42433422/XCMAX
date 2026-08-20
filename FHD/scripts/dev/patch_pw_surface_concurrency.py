@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """MODstore surface-audit：有限并发（默认 4），缩短 P-W 全量截图时间。"""
+
 from __future__ import annotations
 
 import sys
@@ -13,7 +14,7 @@ TARGET = Path(
 
 MARKER = "_capture_surface_target_async"
 
-HELPER = '''
+HELPER = """
 
 async def _capture_surface_target_async(
     browser: Any,
@@ -69,9 +70,9 @@ async def _capture_surface_target_async(
         row["admin"] = True
         row["digest_unlock_ok"] = bool(not row.get("error") and int(row.get("status") or 0) < 400)
     return row
-'''
+"""
 
-OLD_LOOP = '''            for idx, target in enumerate(default_surface_targets()):
+OLD_LOOP = """            for idx, target in enumerate(default_surface_targets()):
                 url = f"{base}{target.path}"
                 save_path: Optional[Path] = None
                 if save_root is not None:
@@ -113,9 +114,9 @@ OLD_LOOP = '''            for idx, target in enumerate(default_surface_targets()
                     row["digest_unlock_ok"] = bool(
                         not row.get("error") and int(row.get("status") or 0) < 400
                     )
-                results.append(row)'''
+                results.append(row)"""
 
-NEW_LOOP = '''            import asyncio as _asyncio
+NEW_LOOP = """            import asyncio as _asyncio
 
             try:
                 _conc = max(1, min(12, int(os.environ.get("MODSTORE_SURFACE_AUDIT_CONCURRENCY", "4"))))
@@ -138,7 +139,7 @@ NEW_LOOP = '''            import asyncio as _asyncio
 
             results = list(
                 await _asyncio.gather(*[_run_one(i, t) for i, t in enumerate(_targets)])
-            )'''
+            )"""
 
 if __name__ == "__main__":
     text = TARGET.read_text(encoding="utf-8")

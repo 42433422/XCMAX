@@ -22,8 +22,11 @@ import threading
 import time
 import uuid
 from collections import deque
+from collections.abc import Iterator
 from dataclasses import asdict, dataclass, field
-from typing import Any, Iterator, Protocol
+from typing import Any, Protocol
+
+from vibe_coding.operational_errors import BOUNDARY_ERRORS
 
 
 @dataclass(slots=True)
@@ -147,12 +150,10 @@ class OTelTraceExporter:
                 for k, v in span.attributes.items():
                     otel_span.set_attribute(k, v)
                 for evt in span.events:
-                    otel_span.add_event(
-                        evt.get("name", ""), attributes=dict(evt.get("attributes") or {})
-                    )
+                    otel_span.add_event(evt.get("name", ""), attributes=dict(evt.get("attributes") or {}))
                 if span.status == "error":
                     otel_span.set_status(Status(StatusCode.ERROR, span.status_message))
-        except Exception:  # noqa: BLE001
+        except BOUNDARY_ERRORS:
             pass
 
     def shutdown(self) -> None:
@@ -214,7 +215,7 @@ class Tracer:
             yield span
             if span.status == "unset":
                 span.set_status("ok")
-        except Exception as exc:
+        except BOUNDARY_ERRORS as exc:
             span.set_status("error", f"{type(exc).__name__}: {exc}")
             span.set_attribute("exception.type", type(exc).__name__)
             span.set_attribute("exception.message", str(exc))
@@ -222,10 +223,8 @@ class Tracer:
         finally:
             span.end_ns = time.monotonic_ns()
             for exporter in self._exporters:
-                try:
+                with contextlib.suppress(*BOUNDARY_ERRORS):
                     exporter.export(span)
-                except Exception:  # noqa: BLE001
-                    pass
             self._local.current = prev
 
     def current_context(self) -> SpanContext | None:
@@ -233,10 +232,8 @@ class Tracer:
 
     def shutdown(self) -> None:
         for exporter in self._exporters:
-            try:
+            with contextlib.suppress(*BOUNDARY_ERRORS):
                 exporter.shutdown()
-            except Exception:  # noqa: BLE001
-                pass
 
     # ----------------------------------------------------------- internals
 

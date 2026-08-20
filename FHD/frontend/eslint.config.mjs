@@ -7,12 +7,7 @@ import globals from 'globals'
 
 export default [
   {
-    ignores: [
-      'dist/**',
-      'node_modules/**',
-      'coverage/**',
-      'src/views/temp2.vue',
-    ],
+    ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'src/views/temp2.vue'],
   },
   {
     files: ['**/*.{js,mjs,cjs}', '**/*.{ts,mts,cts}', '**/*.vue'],
@@ -58,7 +53,11 @@ export default [
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-unused-vars': [
         'warn',
-        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+        {
+          argsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+        },
       ],
       '@typescript-eslint/no-empty-object-type': 'off',
       '@typescript-eslint/ban-ts-comment': [
@@ -96,14 +95,12 @@ export default [
         {
           selector:
             "CallExpression[callee.object.callee.name='expect'][callee.object.arguments.0.value=true][callee.property.name='toBe'][arguments.0.value=true]",
-          message:
-            '禁止空断言 expect(true).toBe(true)：请断言真实行为/状态，或删除该占位测试。',
+          message: '禁止空断言 expect(true).toBe(true)：请断言真实行为/状态，或删除该占位测试。',
         },
         {
           selector:
             "CallExpression[callee.object.callee.name='expect'][callee.object.arguments.0.value=true][callee.property.name='toBeTruthy']",
-          message:
-            '禁止空断言 expect(true).toBeTruthy()：请断言真实行为/状态，或删除该占位测试。',
+          message: '禁止空断言 expect(true).toBeTruthy()：请断言真实行为/状态，或删除该占位测试。',
         },
       ],
     },

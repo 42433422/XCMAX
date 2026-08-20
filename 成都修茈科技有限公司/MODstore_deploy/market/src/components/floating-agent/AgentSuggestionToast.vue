@@ -6,17 +6,10 @@
         <p>{{ suggestion.message }}</p>
       </div>
       <div class="suggestion-actions">
-        <button
-          v-if="suggestion.actionLabel"
-          type="button"
-          class="suggestion-btn suggestion-btn--primary"
-          @click="onAction"
-        >
+        <button v-if="suggestion.actionLabel" type="button" class="suggestion-btn suggestion-btn--primary" @click="onAction">
           {{ suggestion.actionLabel }}
         </button>
-        <button type="button" class="suggestion-btn suggestion-btn--ghost" @click="$emit('dismiss', suggestion.id)">
-          忽略
-        </button>
+        <button type="button" class="suggestion-btn suggestion-btn--ghost" @click="$emit('dismiss', suggestion.id)">忽略</button>
       </div>
     </div>
   </Transition>

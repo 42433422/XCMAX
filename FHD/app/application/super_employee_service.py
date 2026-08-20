@@ -376,27 +376,17 @@ from app.application.super_employee_service_superemployeeservice_mixin04 import 
 )
 
 
-class SuperEmployeeService(_SuperEmployeeServicePart01Mixin, _SuperEmployeeServicePart02Mixin, _SuperEmployeeServicePart03Mixin, _SuperEmployeeServicePart04Mixin):
+class SuperEmployeeService(
+    _SuperEmployeeServicePart01Mixin,
+    _SuperEmployeeServicePart02Mixin,
+    _SuperEmployeeServicePart03Mixin,
+    _SuperEmployeeServicePart04Mixin,
+):
     """Persist software-internal tool calls and optionally dispatch them out."""
-
 
     # ── 公开 API ──
 
-
-
     # ── LAN SSE 流式直答 ──
-
-
-
-
-
-
-
-
-
-
-
-
 
     # ── Para 分级派工：一级=本机单设备，二级=多设备协同 ──
     #
@@ -406,77 +396,9 @@ class SuperEmployeeService(_SuperEmployeeServicePart01Mixin, _SuperEmployeeServi
     # 设备、或调用方显式要求时升二级。设备的配对(bind_code)与 e2e-agent 拉起属于
     # DevFleet/运维侧，FHD 只消费已在线的设备、不伪造设备行。
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     # ===== 口袋 Claude Code：持久会话续接 + 隔离工作区 =====
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     # ===== coding → view → push 闭环（开发任务）=====
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 __all__ = [

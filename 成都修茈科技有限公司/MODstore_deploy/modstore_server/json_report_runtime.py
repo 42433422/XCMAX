@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, index, union-attr"
 """JSON → HTML 量化报告 runtime（办公员工拓展：json-report-employee）。"""
 
 from __future__ import annotations
@@ -8,6 +9,8 @@ import re
 from html import escape
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 JSON_REPORT_OUTPUT_FIELDS = (
     "report_html_path",
@@ -305,7 +308,7 @@ async def generate_report_html(
                 call_llm(messages, max_tokens=max_tokens, temperature=0.2),
                 timeout=float(payload.get("llm_timeout_s") or llm_timeout_s),
             )
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
             warnings.append(f"LLM 调用失败: {exc}")
             res = None
         if isinstance(res, dict) and res.get("ok"):

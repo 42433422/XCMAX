@@ -241,7 +241,6 @@ class ShipmentApplicationService(ShipmentDocumentWorkflowMixin):
             return {"success": False, "message": "record_command 未配置"}
         return self._record_command.delete_record(record_id)
 
-
     def set_order_sequence(self, sequence: int) -> dict[str, Any]:
         """设置订单序号（兼容旧接口，无状态实现）。"""
         return {"success": True, "message": "序号已设置", "sequence": int(sequence)}
@@ -360,7 +359,6 @@ class ShipmentApplicationService(ShipmentDocumentWorkflowMixin):
         if not matched:
             return []
         return list(matched[0]["products"])
-
 
 
 from app.neuro_bus.neuro_application_instrumentation import instrument_application_service_class

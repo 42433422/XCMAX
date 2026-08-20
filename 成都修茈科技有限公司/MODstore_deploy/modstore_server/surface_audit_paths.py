@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import List, Optional
 from urllib.parse import urlparse
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 
 def auto_start_enabled() -> bool:
     return (os.environ.get("MODSTORE_SURFACE_AUDIT_AUTO_START", "1") or "").strip().lower() not in (
@@ -30,7 +32,7 @@ def repo_root() -> Path:
         from modstore_server.daily_digest import _repo_root as root_fn
 
         return Path(root_fn())
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return Path(__file__).resolve().parents[3]
 
 

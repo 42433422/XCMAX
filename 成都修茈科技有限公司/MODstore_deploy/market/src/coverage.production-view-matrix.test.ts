@@ -9,34 +9,47 @@ const apiState = vi.hoisted(() => ({
 }))
 
 vi.mock('./api', () => ({
-  api: new Proxy({}, {
-    get: (_target, property) => vi.fn(async (...args: unknown[]) => {
-      if (apiState.fail) throw new Error(`${String(property)} unavailable`)
-      const key = String(property)
-      if (Object.prototype.hasOwnProperty.call(apiState.responses, key)) {
-        const override = apiState.responses[key]
-        return typeof override === 'function'
-          ? (override as (...params: unknown[]) => unknown)(...args)
-          : override
-      }
-      switch (key) {
-        case 'me': return { id: 1, username: 'tester', is_admin: true }
-        case 'llmStatus': return { providers: [], fernet_configured: false }
-        case 'llmCatalog': return { providers: [], models: [] }
-        case 'knowledgeStatus': return { ok: true }
-        case 'knowledgeListDocuments': return { documents: [] }
-        case 'listWorkflows':
-        case 'listEmployees': return []
-        case 'getScriptWorkflow': return { id: 1, name: 'Workflow', status: 'draft' }
-        case 'listScriptWorkflowRuns':
-        case 'listScriptWorkflowVersions': return []
-        case 'adminOpsAuditList':
-        case 'adminOrchestrateJobs': return { items: [], total: 0 }
-        case 'catalog': return { items: [], total: 0 }
-        default: return { ok: true, success: true, data: [], items: [], total: 0 }
-      }
-    }),
-  }),
+  api: new Proxy(
+    {},
+    {
+      get: (_target, property) =>
+        vi.fn(async (...args: unknown[]) => {
+          if (apiState.fail) throw new Error(`${String(property)} unavailable`)
+          const key = String(property)
+          if (Object.prototype.hasOwnProperty.call(apiState.responses, key)) {
+            const override = apiState.responses[key]
+            return typeof override === 'function' ? (override as (...params: unknown[]) => unknown)(...args) : override
+          }
+          switch (key) {
+            case 'me':
+              return { id: 1, username: 'tester', is_admin: true }
+            case 'llmStatus':
+              return { providers: [], fernet_configured: false }
+            case 'llmCatalog':
+              return { providers: [], models: [] }
+            case 'knowledgeStatus':
+              return { ok: true }
+            case 'knowledgeListDocuments':
+              return { documents: [] }
+            case 'listWorkflows':
+            case 'listEmployees':
+              return []
+            case 'getScriptWorkflow':
+              return { id: 1, name: 'Workflow', status: 'draft' }
+            case 'listScriptWorkflowRuns':
+            case 'listScriptWorkflowVersions':
+              return []
+            case 'adminOpsAuditList':
+            case 'adminOrchestrateJobs':
+              return { items: [], total: 0 }
+            case 'catalog':
+              return { items: [], total: 0 }
+            default:
+              return { ok: true, success: true, data: [], items: [], total: 0 }
+          }
+        }),
+    },
+  ),
 }))
 
 vi.mock('./utils/llmStream', () => ({
@@ -131,12 +144,22 @@ const surfaces = [
   ['personal settings', PersonalSettings, { open: true, modelValue: defaultPersonalSettings() }],
   ['orchestration jobs', AdminOrchestrateJobsView, {}],
   ['butler progress', ButlerProgressOverlay, {}],
-  ['customer action card', CustomerServiceActionCard, {
-    card: {
-      type: 'ticket', intent: 'refund', lifecycle: 'processing', subject_type: 'order',
-      subject_id: 'ORD-1', title: '退款处理', summary: '正在审核', actions: [],
+  [
+    'customer action card',
+    CustomerServiceActionCard,
+    {
+      card: {
+        type: 'ticket',
+        intent: 'refund',
+        lifecycle: 'processing',
+        subject_type: 'order',
+        subject_id: 'ORD-1',
+        title: '退款处理',
+        summary: '正在审核',
+        actions: [],
+      },
     },
-  }],
+  ],
   ['vibe skill panel', VibeCodeSkillPanel, {}],
   ['floating agent ball', FloatingAgentBall, { isSpeaking: false }],
   ['consumption tier', ConsumptionTierControl, { modelValue: 5 }],
@@ -155,21 +178,36 @@ describe('reachable production view matrix', () => {
     apiState.fail = false
     apiState.responses = {}
     localStorage.setItem('modstore_token', 'test-token')
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    })))
-    vi.stubGlobal('matchMedia', vi.fn(() => ({
-      matches: false,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-    })))
-    vi.stubGlobal('ResizeObserver', class {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    })
-    vi.stubGlobal('confirm', vi.fn(() => true))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response('{}', {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+      ),
+    )
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({
+        matches: false,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    )
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    )
+    vi.stubGlobal(
+      'confirm',
+      vi.fn(() => true),
+    )
     Object.defineProperty(navigator, 'mediaDevices', {
       configurable: true,
       value: { getUserMedia: vi.fn(async () => ({ getTracks: () => [] })) },
@@ -188,9 +226,9 @@ describe('reachable production view matrix', () => {
     await flushPromises()
     expect(wrapper.exists()).toBe(true)
 
-    const vm = (wrapper.vm as unknown as { $?: { setupState?: Record<string, unknown> } })
-      .$?.setupState ?? {}
-    const safe = /^(format|is|has|can|should|resolve|build|compute|normalize|label|status|parse|find|detect|infer|looks|friendly|strip|clean|filter|sort)/i
+    const vm = (wrapper.vm as unknown as { $?: { setupState?: Record<string, unknown> } }).$?.setupState ?? {}
+    const safe =
+      /^(format|is|has|can|should|resolve|build|compute|normalize|label|status|parse|find|detect|infer|looks|friendly|strip|clean|filter|sort)/i
     let exercised = 0
     for (const [name, candidate] of Object.entries(vm)) {
       if (typeof candidate !== 'function' || !safe.test(name)) continue
@@ -340,10 +378,20 @@ describe('reachable production view matrix', () => {
       created_at: 1_776_556_800,
       updated_at: 1_776_556_900,
     }
-    const shared = { ...mine, id: 12, owner_kind: 'employee', owner_id: 'emp-1', visibility: 'shared' }
+    const shared = {
+      ...mine,
+      id: 12,
+      owner_kind: 'employee',
+      owner_id: 'emp-1',
+      visibility: 'shared',
+    }
     const publicCollection = { ...mine, id: 13, owner_id: '2', visibility: 'public' }
     const document = {
-      doc_id: 'doc-1', filename: 'orders.csv', size_bytes: 2048, chunk_count: 3, created_at: 1_776_556_800,
+      doc_id: 'doc-1',
+      filename: 'orders.csv',
+      size_bytes: 2048,
+      chunk_count: 3,
+      created_at: 1_776_556_800,
     }
     apiState.responses = {
       knowledgeV2Status: { ok: true, collections: 3, chunks: 3 },
@@ -383,9 +431,12 @@ describe('reachable production view matrix', () => {
     vm.openShareModal(mine)
     vm.closeShareModal()
     await vm.deleteDoc(mine, document)
-    await vm.onPickFile({
-      target: { files: [new File(['order,total\nA,10'], 'orders.csv')], value: 'orders.csv' },
-    } as unknown as Event, mine)
+    await vm.onPickFile(
+      {
+        target: { files: [new File(['order,total\nA,10'], 'orders.csv')], value: 'orders.csv' },
+      } as unknown as Event,
+      mine,
+    )
     await vm.deleteCollection(mine)
 
     apiState.responses.knowledgeV2ListDocuments = () => Promise.reject(new Error('documents unavailable'))
@@ -463,11 +514,17 @@ describe('reachable production view matrix', () => {
     account.pw = { current: 'current', new1: 'new-password', new2: 'new-password' }
     await account.changePw()
     await account.onAvatarSelected({
-      target: { files: [new File(['bad'], 'avatar.txt', { type: 'text/plain' })], value: 'avatar.txt' },
+      target: {
+        files: [new File(['bad'], 'avatar.txt', { type: 'text/plain' })],
+        value: 'avatar.txt',
+      },
     } as unknown as Event)
     expect(account.err).toContain('请选择')
     await account.onAvatarSelected({
-      target: { files: [new File(['avatar'], 'avatar.png', { type: 'image/png' })], value: 'avatar.png' },
+      target: {
+        files: [new File(['avatar'], 'avatar.png', { type: 'image/png' })],
+        value: 'avatar.png',
+      },
     } as unknown as Event)
     account.avatarPreviewUrl = 'blob:coverage-avatar'
     await account.removeAvatar()
@@ -475,7 +532,11 @@ describe('reachable production view matrix', () => {
 
     const handleInput = vi.fn(async () => undefined)
     const runIntakeTask = vi.fn(async () => undefined)
-    const panelWrapper = await mountSurface(FloatingAgentPanel, '/', { handleInput, runIntakeTask, corpMode: true })
+    const panelWrapper = await mountSurface(FloatingAgentPanel, '/', {
+      handleInput,
+      runIntakeTask,
+      corpMode: true,
+    })
     const panel = setupState(panelWrapper)
     panel.toggleProactiveIntro()
     await panel.handleQuick('Summarize the page')
@@ -483,7 +544,10 @@ describe('reachable production view matrix', () => {
     panel.draft = 'Send this message'
     await panel.sendText()
     panel.onHeaderPointerDown({
-      button: 0, clientX: 10, clientY: 10, pointerId: 1,
+      button: 0,
+      clientX: 10,
+      clientY: 10,
+      pointerId: 1,
       currentTarget: { setPointerCapture: vi.fn() },
     })
     panel.onHeaderPointerMove({ clientX: 30, clientY: 40 })

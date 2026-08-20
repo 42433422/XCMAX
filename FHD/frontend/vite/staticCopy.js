@@ -19,10 +19,7 @@ export function copyDir(src, dest) {
 /** SSOT: FHD/mods；导出副本 FHD/XCAGI/mods（见 scripts/dev/mods_ssot.py）。 */
 export function modViewsDir(__dirname, modId) {
   const rel = path.join(modId, 'frontend', 'views')
-  const candidates = [
-    path.resolve(__dirname, '../mods', rel),
-    path.resolve(__dirname, '../XCAGI/mods', rel),
-  ]
+  const candidates = [path.resolve(__dirname, '../mods', rel), path.resolve(__dirname, '../XCAGI/mods', rel)]
   for (const p of candidates) {
     if (fs.existsSync(p)) return p
   }

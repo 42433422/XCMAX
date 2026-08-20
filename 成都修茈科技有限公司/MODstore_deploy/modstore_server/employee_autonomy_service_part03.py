@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="arg-type, attr-defined, no-any-return, union-attr, valid-type"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -119,7 +123,10 @@ def run_employee_evolution_scan(
             "quota_failures": quota_fail_total,
         }
     from modstore_server.employee_ai_pipeline import refine_system_prompt
-    from modstore_server.employee_runtime import load_employee_pack, parse_employee_config_v2
+    from modstore_server.employee_runtime import (
+        load_employee_pack,
+        parse_employee_config_v2,
+    )
     from modstore_server.runtime_async import run_coro_sync
 
     created = 0
@@ -127,7 +134,9 @@ def run_employee_evolution_scan(
     for employee_id, fail_count in candidates:
         processed += 1
         try:
-            from modstore_server.employee_runtime_policy import record_employee_degradation
+            from modstore_server.employee_runtime_policy import (
+                record_employee_degradation,
+            )
 
             record_employee_degradation(
                 employee_id=employee_id,
@@ -136,7 +145,7 @@ def run_employee_evolution_scan(
                 reason="employee_evolution_signal_failure_rate",
                 severity="warn",
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.debug(
                 "employee evolution runtime policy update failed employee=%s",
                 employee_id,
@@ -146,7 +155,7 @@ def run_employee_evolution_scan(
         with sf2() as session:
             try:
                 pack = load_employee_pack(session, employee_id)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 continue
             manifest = pack.get("manifest") if isinstance(pack.get("manifest"), dict) else {}
             cfg = parse_employee_config_v2(manifest)
@@ -158,7 +167,7 @@ def run_employee_evolution_scan(
         instruction = f"该员工在最近 {lookback_hours} 小时失败 {fail_count} 次。请优化 prompt：减少歧义，强化失败降级、工具调用顺序、边界约束与自检。"
         role_context = f"employee_id={employee_id}"
         try:
-            (result, err) = run_coro_sync(
+            result, err = run_coro_sync(
                 refine_system_prompt(
                     current_prompt=current_prompt,
                     instruction=instruction,
@@ -166,7 +175,7 @@ def run_employee_evolution_scan(
                     llm=_facade()._PlatformBenchLlmClient(),
                 )
             )
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             result = None
             err = str(exc)
         improved = ""
@@ -221,7 +230,9 @@ def run_employee_evolution_scan(
             evolution_record_id = int(rec.id or 0)
         if status == "suggested" and improved:
             try:
-                from modstore_server.prompt_evolution_ab import maybe_auto_apply_prompt_evolution
+                from modstore_server.prompt_evolution_ab import (
+                    maybe_auto_apply_prompt_evolution,
+                )
 
                 apply_meta = maybe_auto_apply_prompt_evolution(
                     employee_id=employee_id,
@@ -247,7 +258,7 @@ def run_employee_evolution_scan(
                             row.status = "ab_rejected"
                             row.error = str(revert)[:2000]
                             session.commit()
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 _facade().logger.exception(
                     "prompt evolution A/B apply failed employee=%s", employee_id
                 )
@@ -268,7 +279,7 @@ def run_employee_evolution_scan(
                 from modstore_server.employee_collab_reporter import report_evolution
 
                 report_evolution(evolution_record_id=evolution_record_id)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 _facade().logger.exception(
                     "collab report (evolution) failed id=%s", evolution_record_id
                 )

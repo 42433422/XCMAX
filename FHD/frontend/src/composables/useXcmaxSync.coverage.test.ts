@@ -201,9 +201,7 @@ describe('useXcmaxSync - coverage ramp', () => {
       const es = TestEventSource.instances[0]
       es.onmessage!({
         data: JSON.stringify({
-          changes: [
-            { entity_type: 'other', entity_id: '1', operation: 'create', payload: {} },
-          ],
+          changes: [{ entity_type: 'other', entity_id: '1', operation: 'create', payload: {} }],
         }),
       } as MessageEvent)
 

@@ -13,12 +13,13 @@ swap in :class:`MockLLM` and replay deterministic responses.
 from __future__ import annotations
 
 import textwrap
-from dataclasses import dataclass, field
-from pathlib import Path
+from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
+from vibe_coding.operational_errors import BOUNDARY_ERRORS
+
 from ...nl.llm import LLMClient
-from ...nl.parsing import JSONParseError, safe_parse_json_object
+from ...nl.parsing import safe_parse_json_object
 from .messages import AgentMessage, AgentTask
 
 
@@ -121,7 +122,7 @@ class PlannerAgent:
         try:
             raw = self.llm.chat(_PLANNER_SYSTEM, brief, json_mode=True)
             payload = safe_parse_json_object(raw)
-        except (JSONParseError, Exception) as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:
             return [
                 _failure(
                     sender=self.name,
@@ -179,10 +180,8 @@ class CoderAgent:
             if task is None or not task.brief:
                 continue
             try:
-                patch = self.project_coder.edit_project(
-                    task.brief, focus_paths=task.focus_paths or None
-                )
-            except Exception as exc:  # noqa: BLE001
+                patch = self.project_coder.edit_project(task.brief, focus_paths=task.focus_paths or None)
+            except BOUNDARY_ERRORS as exc:
                 out.append(
                     AgentMessage(
                         sender=self.name,
@@ -211,9 +210,7 @@ class CoderAgent:
                     content={
                         "task": task.to_dict(),
                         "patch": patch.to_dict(),
-                        "apply_result": (
-                            apply_result.to_dict() if apply_result is not None else None
-                        ),
+                        "apply_result": (apply_result.to_dict() if apply_result is not None else None),
                     },
                 )
             )
@@ -237,15 +234,12 @@ class ReviewerAgent:
         patch = message.content.get("patch")
         task = message.content.get("task") or {}
         prompt = (
-            "## 任务\n"
-            + str(task.get("brief") or "")
-            + "\n\n## Patch\n"
-            + (str(patch)[:6_000] if patch else "(empty)")
+            "## 任务\n" + str(task.get("brief") or "") + "\n\n## Patch\n" + (str(patch)[:6_000] if patch else "(empty)")
         )
         try:
             raw = self.llm.chat(_REVIEWER_SYSTEM, prompt, json_mode=True)
             payload = safe_parse_json_object(raw)
-        except (JSONParseError, Exception) as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:
             return [
                 _failure(
                     sender=self.name,
@@ -302,7 +296,7 @@ class ResearcherAgent:
         try:
             raw = self.llm.chat(_RESEARCHER_SYSTEM, question, json_mode=True)
             payload = safe_parse_json_object(raw)
-        except (JSONParseError, Exception):  # noqa: BLE001
+        except BOUNDARY_ERRORS:
             payload = {}
         return [
             AgentMessage(
@@ -332,15 +326,12 @@ class TesterAgent:
         patch = message.content.get("patch")
         task = message.content.get("task") or {}
         body = (
-            "## 任务\n"
-            + str(task.get("brief") or "")
-            + "\n\n## Patch\n"
-            + (str(patch)[:6_000] if patch else "(empty)")
+            "## 任务\n" + str(task.get("brief") or "") + "\n\n## Patch\n" + (str(patch)[:6_000] if patch else "(empty)")
         )
         try:
             raw = self.llm.chat(_TESTER_SYSTEM, body, json_mode=True)
             payload = safe_parse_json_object(raw)
-        except (JSONParseError, Exception):  # noqa: BLE001
+        except BOUNDARY_ERRORS:
             payload = {"tests": []}
         return [
             AgentMessage(

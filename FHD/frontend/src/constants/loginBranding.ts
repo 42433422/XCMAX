@@ -1,89 +1,90 @@
-import packageJson from '../../package.json';
+import packageJson from '../../package.json'
 
 /** 主版本号展示，如 8.0.0 → V8 */
-export const XCAGI_VERSION_LABEL = `V${String(packageJson.version || '8.0.0').split('.')[0]}`;
+export const XCAGI_VERSION_LABEL = `V${String(packageJson.version || '8.0.0').split('.')[0]}`
 
-export type LoginSku = 'enterprise' | 'personal' | 'generic' | string;
+export type LoginSku = 'enterprise' | 'personal' | 'generic' | string
 
 export function normalizeLoginSku(raw: string | null | undefined): LoginSku {
-  const s = String(raw || 'generic').trim().toLowerCase();
-  if (s === 'enterprise' || s === 'personal') return s;
-  return 'generic';
+  const s = String(raw || 'generic')
+    .trim()
+    .toLowerCase()
+  if (s === 'enterprise' || s === 'personal') return s
+  return 'generic'
 }
 
 export function loginEyebrow(sku: LoginSku): string {
   switch (normalizeLoginSku(sku)) {
     case 'enterprise':
-      return `XCAGI 企业版 · ${XCAGI_VERSION_LABEL}`;
+      return `XCAGI 企业版 · ${XCAGI_VERSION_LABEL}`
     case 'personal':
-      return `XCAGI 个人版 · ${XCAGI_VERSION_LABEL}`;
+      return `XCAGI 个人版 · ${XCAGI_VERSION_LABEL}`
     default:
-      return `XCAGI · ${XCAGI_VERSION_LABEL}`;
+      return `XCAGI · ${XCAGI_VERSION_LABEL}`
   }
 }
 
 export function loginSubtitle(sku: LoginSku): string {
   switch (normalizeLoginSku(sku)) {
     case 'enterprise':
-      return '使用 XCAGI 账号登录';
+      return '使用 XCAGI 账号登录'
     case 'personal':
-      return '本地账号登录';
+      return '本地账号登录'
     default:
-      return '登录进入工作台';
+      return '登录进入工作台'
   }
 }
 
 export function loginUsernamePlaceholder(sku: LoginSku): string {
-  return normalizeLoginSku(sku) === 'enterprise' ? 'XCAGI 账号' : '账号';
+  return normalizeLoginSku(sku) === 'enterprise' ? 'XCAGI 账号' : '账号'
 }
 
 export function loginAccountInputPlaceholder(sku: LoginSku): string {
   switch (normalizeLoginSku(sku)) {
     case 'enterprise':
-      return 'XCAGI 账号或邮箱';
+      return 'XCAGI 账号或邮箱'
     case 'personal':
-      return '本地账号';
+      return '本地账号'
     default:
-      return '账号';
+      return '账号'
   }
 }
 
 export function loginPasswordInputPlaceholder(): string {
-  return '密码';
+  return '密码'
 }
 
 export function marketBaseUrl(): string {
-  return String(import.meta.env.VITE_MARKET_BASE || 'https://xiu-ci.com/market').replace(/\/$/, '');
+  return String(import.meta.env.VITE_MARKET_BASE || 'https://xiu-ci.com/market').replace(/\/$/, '')
 }
 
 export function marketRegisterUrl(): string {
-  return `${marketBaseUrl()}/register?source=xcagi-desktop`;
+  return `${marketBaseUrl()}/register?source=xcagi-desktop`
 }
 
 export function purchaseAuthorizationUrl(): string {
   return String(
-    import.meta.env.VITE_XCAGI_PURCHASE_URL
-      || `${marketBaseUrl()}/account-plans?plan=saas-trial-30&source=xcagi-desktop`,
-  ).trim();
+    import.meta.env.VITE_XCAGI_PURCHASE_URL || `${marketBaseUrl()}/account-plans?plan=saas-trial-30&source=xcagi-desktop`,
+  ).trim()
 }
 
 export function marketForgotPasswordUrl(): string {
-  return `${marketBaseUrl()}/forgot-password`;
+  return `${marketBaseUrl()}/forgot-password`
 }
 
 export function loginHelpDocUrl(): string {
-  return String(import.meta.env.VITE_LOGIN_HELP_URL || '');
+  return String(import.meta.env.VITE_LOGIN_HELP_URL || '')
 }
 
 export type LoginHelpSection = {
-  title: string;
-  items: string[];
-};
+  title: string
+  items: string[]
+}
 
-export const LOGIN_HELP_PAGE_TITLE = '登录帮助';
+export const LOGIN_HELP_PAGE_TITLE = '登录帮助'
 
 export function loginPageTitle(sku: LoginSku): string {
-  return `${loginEyebrow(sku)} · 登录`;
+  return `${loginEyebrow(sku)} · 登录`
 }
 
 export const LOGIN_HELP_SECTIONS: LoginHelpSection[] = [
@@ -103,4 +104,4 @@ export const LOGIN_HELP_SECTIONS: LoginHelpSection[] = [
     title: '注册与购买',
     items: ['企业版请使用登录页的“注册账号”入口', '完成支付后返回桌面重新登录即可使用'],
   },
-];
+]

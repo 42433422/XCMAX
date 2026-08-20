@@ -15,10 +15,7 @@
  * Mock 最小化：仅 mock 外部边界（API、xlsx 动态 import）。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  useKittenAnalyzer,
-  extractKittenDocumentPickupUrl,
-} from './useKittenAnalyzer'
+import { useKittenAnalyzer, extractKittenDocumentPickupUrl } from './useKittenAnalyzer'
 
 // ── Mock 配置 ──────────────────────────────────────────────────────────
 
@@ -99,8 +96,7 @@ import { openDocumentPreviewFromBlob } from '@/state/documentPreviewPip'
  * jsdom 的 Blob 可能不实现 text()/arrayBuffer()，需手动补上。
  */
 function makeMockBlob(content: string | Uint8Array): Blob {
-  const data =
-    typeof content === 'string' ? new TextEncoder().encode(content) : content
+  const data = typeof content === 'string' ? new TextEncoder().encode(content) : content
   const text = typeof content === 'string' ? content : ''
 
   const blob = new Blob([data]) as Blob & {
@@ -246,21 +242,17 @@ describe('useKittenAnalyzer - coverage ramp', () => {
 
     it('流式成功：token 事件 + done 事件，最终使用 done.response 作为回复', async () => {
       vi.mocked(chatApi.sendChatStream).mockResolvedValue(makeResponse({ ok: true }) as never)
-      vi.mocked(readPlannerSseResponse).mockImplementation(
-        async (_res: Response, onEvent: (ev: unknown) => void) => {
-          onEvent({ type: 'token', text: 'Hello' })
-          onEvent({ type: 'token', text: ' World' })
-          onEvent({ type: 'done', result: { response: '最终回复', success: true } })
-        }
-      )
+      vi.mocked(readPlannerSseResponse).mockImplementation(async (_res: Response, onEvent: (ev: unknown) => void) => {
+        onEvent({ type: 'token', text: 'Hello' })
+        onEvent({ type: 'token', text: ' World' })
+        onEvent({ type: 'done', result: { response: '最终回复', success: true } })
+      })
 
       analyzer.inputText.value = '你好'
       await analyzer.sendMessage()
 
       // 验证 AI 消息包含最终回复
-      const aiMsg = analyzer.messages.value.find(
-        (m) => m.role === 'ai' && m.content.includes('最终回复')
-      )
+      const aiMsg = analyzer.messages.value.find((m) => m.role === 'ai' && m.content.includes('最终回复'))
       expect(aiMsg).toBeDefined()
       expect(analyzer.kittenPhase.value).toBe('delivered')
       expect(analyzer.isKittenStreaming.value).toBe(false)
@@ -268,18 +260,14 @@ describe('useKittenAnalyzer - coverage ramp', () => {
 
     it('流式成功：无 done 事件时使用 streamPlain 作为回复', async () => {
       vi.mocked(chatApi.sendChatStream).mockResolvedValue(makeResponse({ ok: true }) as never)
-      vi.mocked(readPlannerSseResponse).mockImplementation(
-        async (_res: Response, onEvent: (ev: unknown) => void) => {
-          onEvent({ type: 'token', text: '流式文本内容' })
-        }
-      )
+      vi.mocked(readPlannerSseResponse).mockImplementation(async (_res: Response, onEvent: (ev: unknown) => void) => {
+        onEvent({ type: 'token', text: '流式文本内容' })
+      })
 
       analyzer.inputText.value = '你好'
       await analyzer.sendMessage()
 
-      const aiMsg = analyzer.messages.value.find(
-        (m) => m.role === 'ai' && m.content.includes('流式文本内容')
-      )
+      const aiMsg = analyzer.messages.value.find((m) => m.role === 'ai' && m.content.includes('流式文本内容'))
       expect(aiMsg).toBeDefined()
       expect(analyzer.kittenPhase.value).toBe('delivered')
     })
@@ -291,19 +279,15 @@ describe('useKittenAnalyzer - coverage ramp', () => {
       analyzer.inputText.value = '你好'
       await analyzer.sendMessage()
 
-      const aiMsg = analyzer.messages.value.find(
-        (m) => m.role === 'ai' && m.content.includes('（无内容）')
-      )
+      const aiMsg = analyzer.messages.value.find((m) => m.role === 'ai' && m.content.includes('（无内容）'))
       expect(aiMsg).toBeDefined()
     })
 
     it('流式 done 事件 success=false 标记为失败', async () => {
       vi.mocked(chatApi.sendChatStream).mockResolvedValue(makeResponse({ ok: true }) as never)
-      vi.mocked(readPlannerSseResponse).mockImplementation(
-        async (_res: Response, onEvent: (ev: unknown) => void) => {
-          onEvent({ type: 'done', result: { response: '失败回复', success: false } })
-        }
-      )
+      vi.mocked(readPlannerSseResponse).mockImplementation(async (_res: Response, onEvent: (ev: unknown) => void) => {
+        onEvent({ type: 'done', result: { response: '失败回复', success: false } })
+      })
 
       analyzer.inputText.value = '你好'
       await analyzer.sendMessage()
@@ -315,11 +299,9 @@ describe('useKittenAnalyzer - coverage ramp', () => {
 
     it('流式 error 事件触发回退到 JSON 路径', async () => {
       vi.mocked(chatApi.sendChatStream).mockResolvedValue(makeResponse({ ok: true }) as never)
-      vi.mocked(readPlannerSseResponse).mockImplementation(
-        async (_res: Response, onEvent: (ev: unknown) => void) => {
-          onEvent({ type: 'error', message: '流式接口错误' })
-        }
-      )
+      vi.mocked(readPlannerSseResponse).mockImplementation(async (_res: Response, onEvent: (ev: unknown) => void) => {
+        onEvent({ type: 'error', message: '流式接口错误' })
+      })
       // JSON 回退的 mock
       vi.mocked(safeJsonRequest).mockResolvedValueOnce({
         ok: true,
@@ -332,16 +314,12 @@ describe('useKittenAnalyzer - coverage ramp', () => {
       await analyzer.sendMessage()
 
       // 应该走 JSON 回退路径
-      const aiMsg = analyzer.messages.value.find(
-        (m) => m.role === 'ai' && m.content.includes('JSON 回退回复')
-      )
+      const aiMsg = analyzer.messages.value.find((m) => m.role === 'ai' && m.content.includes('JSON 回退回复'))
       expect(aiMsg).toBeDefined()
     })
 
     it('流式 sendChatStream 返回 ok=false 触发回退到 JSON 路径', async () => {
-      vi.mocked(chatApi.sendChatStream).mockResolvedValue(
-        makeResponse({ ok: false, status: 500 }) as never
-      )
+      vi.mocked(chatApi.sendChatStream).mockResolvedValue(makeResponse({ ok: false, status: 500 }) as never)
       vi.mocked(safeJsonRequest).mockResolvedValueOnce({
         ok: true,
         data: { success: true, response: 'JSON 回退' },
@@ -352,9 +330,7 @@ describe('useKittenAnalyzer - coverage ramp', () => {
       analyzer.inputText.value = '你好'
       await analyzer.sendMessage()
 
-      const aiMsg = analyzer.messages.value.find(
-        (m) => m.role === 'ai' && m.content.includes('JSON 回退')
-      )
+      const aiMsg = analyzer.messages.value.find((m) => m.role === 'ai' && m.content.includes('JSON 回退'))
       expect(aiMsg).toBeDefined()
     })
 
@@ -370,87 +346,83 @@ describe('useKittenAnalyzer - coverage ramp', () => {
       analyzer.inputText.value = '你好'
       await analyzer.sendMessage()
 
-      const aiMsg = analyzer.messages.value.find(
-        (m) => m.role === 'ai' && m.content.includes('JSON 回退')
-      )
+      const aiMsg = analyzer.messages.value.find((m) => m.role === 'ai' && m.content.includes('JSON 回退'))
       expect(aiMsg).toBeDefined()
     })
 
     it('requires_token 事件：非 DB 令牌追加授权提示', async () => {
       vi.mocked(chatApi.sendChatStream).mockResolvedValue(makeResponse({ ok: true }) as never)
-      vi.mocked(readPlannerSseResponse).mockImplementation(
-        async (_res: Response, onEvent: (ev: unknown) => void) => {
-          onEvent({ type: 'token', text: '内容' })
-          onEvent({ type: 'requires_token', token_name: 'API_KEY', token_description: 'API Key' })
-          onEvent({ type: 'done', result: { response: '内容\n[需要授权：API Key]\n', success: true } })
-        }
-      )
+      vi.mocked(readPlannerSseResponse).mockImplementation(async (_res: Response, onEvent: (ev: unknown) => void) => {
+        onEvent({ type: 'token', text: '内容' })
+        onEvent({ type: 'requires_token', token_name: 'API_KEY', token_description: 'API Key' })
+        onEvent({
+          type: 'done',
+          result: { response: '内容\n[需要授权：API Key]\n', success: true },
+        })
+      })
 
       analyzer.inputText.value = '你好'
       await analyzer.sendMessage()
 
       // 授权提示应出现在消息中
-      const aiMsg = analyzer.messages.value.find(
-        (m) => m.role === 'ai' && m.content.includes('需要授权')
-      )
+      const aiMsg = analyzer.messages.value.find((m) => m.role === 'ai' && m.content.includes('需要授权'))
       expect(aiMsg).toBeDefined()
     })
 
     it('requires_token 事件：DB_READ_TOKEN 被跳过（不追加授权提示）', async () => {
       vi.mocked(chatApi.sendChatStream).mockResolvedValue(makeResponse({ ok: true }) as never)
-      vi.mocked(readPlannerSseResponse).mockImplementation(
-        async (_res: Response, onEvent: (ev: unknown) => void) => {
-          onEvent({ type: 'token', text: '内容' })
-          onEvent({ type: 'requires_token', token_name: 'DB_READ_TOKEN', token_description: '数据库读令牌' })
-          onEvent({ type: 'done', result: { response: '内容', success: true } })
-        }
-      )
+      vi.mocked(readPlannerSseResponse).mockImplementation(async (_res: Response, onEvent: (ev: unknown) => void) => {
+        onEvent({ type: 'token', text: '内容' })
+        onEvent({
+          type: 'requires_token',
+          token_name: 'DB_READ_TOKEN',
+          token_description: '数据库读令牌',
+        })
+        onEvent({ type: 'done', result: { response: '内容', success: true } })
+      })
 
       analyzer.inputText.value = '你好'
       await analyzer.sendMessage()
 
       // DB 令牌应被跳过，不应出现授权提示
-      const aiMsg = analyzer.messages.value.find(
-        (m) => m.role === 'ai' && m.content.includes('需要授权')
-      )
+      const aiMsg = analyzer.messages.value.find((m) => m.role === 'ai' && m.content.includes('需要授权'))
       expect(aiMsg).toBeUndefined()
     })
 
     it('requires_token 事件：DB_WRITE_TOKEN 被跳过', async () => {
       vi.mocked(chatApi.sendChatStream).mockResolvedValue(makeResponse({ ok: true }) as never)
-      vi.mocked(readPlannerSseResponse).mockImplementation(
-        async (_res: Response, onEvent: (ev: unknown) => void) => {
-          onEvent({ type: 'token', text: '内容' })
-          onEvent({ type: 'requires_token', token_name: 'DB_WRITE_TOKEN', token_description: '写入令牌' })
-          onEvent({ type: 'done', result: { response: '内容', success: true } })
-        }
-      )
+      vi.mocked(readPlannerSseResponse).mockImplementation(async (_res: Response, onEvent: (ev: unknown) => void) => {
+        onEvent({ type: 'token', text: '内容' })
+        onEvent({
+          type: 'requires_token',
+          token_name: 'DB_WRITE_TOKEN',
+          token_description: '写入令牌',
+        })
+        onEvent({ type: 'done', result: { response: '内容', success: true } })
+      })
 
       analyzer.inputText.value = '你好'
       await analyzer.sendMessage()
 
-      const aiMsg = analyzer.messages.value.find(
-        (m) => m.role === 'ai' && m.content.includes('需要授权')
-      )
+      const aiMsg = analyzer.messages.value.find((m) => m.role === 'ai' && m.content.includes('需要授权'))
       expect(aiMsg).toBeUndefined()
     })
 
     it('requires_token 事件：空 token_name 和 token_description 使用"授权信息"占位', async () => {
       vi.mocked(chatApi.sendChatStream).mockResolvedValue(makeResponse({ ok: true }) as never)
-      vi.mocked(readPlannerSseResponse).mockImplementation(
-        async (_res: Response, onEvent: (ev: unknown) => void) => {
-          onEvent({ type: 'token', text: '内容' })
-          onEvent({ type: 'requires_token', token_name: '', token_description: '' })
-          onEvent({ type: 'done', result: { response: '内容\n[需要授权：授权信息]\n', success: true } })
-        }
-      )
+      vi.mocked(readPlannerSseResponse).mockImplementation(async (_res: Response, onEvent: (ev: unknown) => void) => {
+        onEvent({ type: 'token', text: '内容' })
+        onEvent({ type: 'requires_token', token_name: '', token_description: '' })
+        onEvent({
+          type: 'done',
+          result: { response: '内容\n[需要授权：授权信息]\n', success: true },
+        })
+      })
 
       analyzer.inputText.value = '你好'
       await analyzer.sendMessage()
 
-      const aiMsg = analyzer.messages.value.find(
-        (m) => m.role === 'ai' && m.content.includes('授权信息')
-      )
+      const aiMsg = analyzer.messages.value.find((m) => m.role === 'ai' && m.content.includes('授权信息'))
       expect(aiMsg).toBeDefined()
     })
   })
@@ -466,7 +438,7 @@ describe('useKittenAnalyzer - coverage ramp', () => {
           ok: true,
           contentType: 'application/json',
           blob: makeTextBlob('{"message":"未登录"}'),
-        })
+        }),
       )
       analyzer.currentResult.value = {
         id: 1,
@@ -488,7 +460,7 @@ describe('useKittenAnalyzer - coverage ramp', () => {
           ok: true,
           contentType: 'application/json',
           blob: makeTextBlob('{"detail":"详情错误"}'),
-        })
+        }),
       )
       analyzer.currentResult.value = {
         id: 1,
@@ -509,7 +481,7 @@ describe('useKittenAnalyzer - coverage ramp', () => {
           ok: true,
           contentType: 'application/json',
           blob: makeTextBlob('not a json text'),
-        })
+        }),
       )
       analyzer.currentResult.value = {
         id: 1,
@@ -530,7 +502,7 @@ describe('useKittenAnalyzer - coverage ramp', () => {
           ok: true,
           contentType: 'text/html',
           blob: makeTextBlob('   '),
-        })
+        }),
       )
       analyzer.currentResult.value = {
         id: 1,
@@ -551,7 +523,7 @@ describe('useKittenAnalyzer - coverage ramp', () => {
           ok: true,
           contentType: 'application/octet-stream',
           blob: makeTextBlob('{"message":"API 基址错误"}'),
-        })
+        }),
       )
       analyzer.currentResult.value = {
         id: 1,
@@ -572,7 +544,7 @@ describe('useKittenAnalyzer - coverage ramp', () => {
           ok: true,
           contentType: 'application/octet-stream',
           blob: makeTextBlob('{invalid json'),
-        })
+        }),
       )
       analyzer.currentResult.value = {
         id: 1,
@@ -593,7 +565,7 @@ describe('useKittenAnalyzer - coverage ramp', () => {
           ok: true,
           contentType: 'application/octet-stream',
           blob: makeTextBlob('[1, 2, 3]'),
-        })
+        }),
       )
       analyzer.currentResult.value = {
         id: 1,
@@ -614,13 +586,11 @@ describe('useKittenAnalyzer - coverage ramp', () => {
           ok: true,
           contentType: 'application/json',
           blob: makeTextBlob('{"message":"生成失败原因"}'),
-        }) as never
+        }) as never,
       )
 
       await analyzer.generateAiOfficeDocument('写一份合同', 'docx')
-      expect(appAlert).toHaveBeenCalledWith(
-        expect.stringContaining('生成失败原因')
-      )
+      expect(appAlert).toHaveBeenCalledWith(expect.stringContaining('生成失败原因'))
     })
   })
 
@@ -630,9 +600,7 @@ describe('useKittenAnalyzer - coverage ramp', () => {
 
   describe('exportResult 本地回退 + buildReportWorkbook', () => {
     it('后端导出失败后回退到本地 xlsx 导出（含数据集和图表配置）', async () => {
-      global.fetch = vi.fn().mockResolvedValueOnce(
-        makeResponse({ ok: false, status: 500, text: 'Server error' })
-      )
+      global.fetch = vi.fn().mockResolvedValueOnce(makeResponse({ ok: false, status: 500, text: 'Server error' }))
       analyzer.currentResult.value = {
         id: 1,
         title: '测试报告',
@@ -662,9 +630,7 @@ describe('useKittenAnalyzer - coverage ramp', () => {
     })
 
     it('本地 xlsx 导出也失败时调用 appAlert', async () => {
-      global.fetch = vi.fn().mockResolvedValueOnce(
-        makeResponse({ ok: false, status: 500, text: 'Server error' })
-      )
+      global.fetch = vi.fn().mockResolvedValueOnce(makeResponse({ ok: false, status: 500, text: 'Server error' }))
       // 让 xlsx write 抛错
       const xlsxModule = await import('xlsx')
       vi.mocked(xlsxModule.write).mockImplementationOnce(() => {
@@ -680,15 +646,11 @@ describe('useKittenAnalyzer - coverage ramp', () => {
       }
 
       await analyzer.exportResult()
-      expect(appAlert).toHaveBeenCalledWith(
-        expect.stringContaining('导出失败')
-      )
+      expect(appAlert).toHaveBeenCalledWith(expect.stringContaining('导出失败'))
     })
 
     it('后端导出失败且 resp.text() 抛异常：回退到本地导出', async () => {
-      global.fetch = vi.fn().mockResolvedValueOnce(
-        makeResponse({ ok: false, status: 500, textThrows: true })
-      )
+      global.fetch = vi.fn().mockResolvedValueOnce(makeResponse({ ok: false, status: 500, textThrows: true }))
       analyzer.currentResult.value = {
         id: 1,
         title: 'test',
@@ -735,9 +697,7 @@ describe('useKittenAnalyzer - coverage ramp', () => {
     })
 
     it('仅分类字段：生成 count 和 pie 推荐（无 metric 时 pie 用 count 聚合）', () => {
-      analyzer.fieldProfiles.value = [
-        { name: '城市', type: 'category' },
-      ]
+      analyzer.fieldProfiles.value = [{ name: '城市', type: 'category' }]
       const charts = analyzer.recommendedCharts.value
       expect(charts.length).toBe(2)
       const pie = charts.find((c) => c.config.type === 'pie')
@@ -857,9 +817,7 @@ describe('useKittenAnalyzer - coverage ramp', () => {
       const input = { files: [{ name: 'wide.csv' }], value: '' } as unknown as HTMLInputElement
       await analyzer.handleFileSelect({ target: input } as unknown as Event)
       // AI 消息应包含省略号
-      const aiMsg = analyzer.messages.value.find(
-        (m) => m.role === 'ai' && m.content.includes('...')
-      )
+      const aiMsg = analyzer.messages.value.find((m) => m.role === 'ai' && m.content.includes('...'))
       expect(aiMsg).toBeDefined()
     })
   })
@@ -954,16 +912,12 @@ describe('useKittenAnalyzer - coverage ramp', () => {
       expect(analyzer.kittenDbStatsHint.value).toContain('原材料 10 条')
 
       // 记录调用次数
-      const callsAfterFirst = vi.mocked(safeJsonRequest).mock.calls.filter(
-        (c) => String(c[0]).includes('business-snapshot')
-      ).length
+      const callsAfterFirst = vi.mocked(safeJsonRequest).mock.calls.filter((c) => String(c[0]).includes('business-snapshot')).length
 
       // 第二次调用：缓存命中，不应请求 API
       analyzer.onKittenBusinessDbToggle()
       await flushAsync()
-      const callsAfterSecond = vi.mocked(safeJsonRequest).mock.calls.filter(
-        (c) => String(c[0]).includes('business-snapshot')
-      ).length
+      const callsAfterSecond = vi.mocked(safeJsonRequest).mock.calls.filter((c) => String(c[0]).includes('business-snapshot')).length
 
       expect(callsAfterSecond).toBe(callsAfterFirst)
       expect(analyzer.kittenDbStatsHint.value).toContain('原材料 10 条')
@@ -1033,9 +987,7 @@ describe('useKittenAnalyzer - coverage ramp', () => {
       })
       analyzer.inputText.value = '你好'
       await analyzer.sendMessage()
-      const aiMsg = analyzer.messages.value.find(
-        (m) => m.role === 'ai' && m.content.includes('内部文本回复')
-      )
+      const aiMsg = analyzer.messages.value.find((m) => m.role === 'ai' && m.content.includes('内部文本回复'))
       expect(aiMsg).toBeDefined()
     })
 
@@ -1048,9 +1000,7 @@ describe('useKittenAnalyzer - coverage ramp', () => {
       })
       analyzer.inputText.value = '你好'
       await analyzer.sendMessage()
-      const aiMsg = analyzer.messages.value.find(
-        (m) => m.role === 'ai' && m.content.includes('服务器未返回有效回复')
-      )
+      const aiMsg = analyzer.messages.value.find((m) => m.role === 'ai' && m.content.includes('服务器未返回有效回复'))
       expect(aiMsg).toBeDefined()
     })
   })
@@ -1105,11 +1055,7 @@ describe('useKittenAnalyzer - coverage ramp', () => {
           success: true,
           response: '回复',
           data: {
-            web_search_results: [
-              null,
-              { title: '有效', url: 'https://example.com', snippet: '片段' },
-              undefined,
-            ],
+            web_search_results: [null, { title: '有效', url: 'https://example.com', snippet: '片段' }, undefined],
           },
         },
         status: 200,
@@ -1147,9 +1093,7 @@ describe('useKittenAnalyzer - coverage ramp', () => {
       })
       analyzer.inputText.value = '你好'
       await analyzer.sendMessage()
-      const aiMsg = analyzer.messages.value.find(
-        (m) => m.role === 'ai' && m.content.includes('请求失败')
-      )
+      const aiMsg = analyzer.messages.value.find((m) => m.role === 'ai' && m.content.includes('请求失败'))
       expect(aiMsg).toBeDefined()
       expect(analyzer.kittenPhase.value).toBe('error')
     })
@@ -1171,9 +1115,7 @@ describe('useKittenAnalyzer - coverage ramp', () => {
       analyzer.inputText.value = '你好'
       await analyzer.sendMessage()
       // 验证 safeJsonRequest 被调用时 payload 包含 has_dataset
-      const call = vi.mocked(safeJsonRequest).mock.calls.find(
-        (c) => String(c[0]).includes('/api/ai/chat')
-      )
+      const call = vi.mocked(safeJsonRequest).mock.calls.find((c) => String(c[0]).includes('/api/ai/chat'))
       expect(call).toBeDefined()
       const body = JSON.parse(call![1].body as string)
       expect(body.context.has_dataset).toBe(true)
@@ -1195,9 +1137,7 @@ describe('useKittenAnalyzer - coverage ramp', () => {
         message: '',
       })
       await analyzer.runFinancialBrief()
-      const aiMsg = analyzer.messages.value.find(
-        (m) => m.role === 'ai' && m.content.includes('财务简报已生成')
-      )
+      const aiMsg = analyzer.messages.value.find((m) => m.role === 'ai' && m.content.includes('财务简报已生成'))
       expect(aiMsg).toBeDefined()
       expect(analyzer.kittenPhase.value).toBe('delivered')
     })
@@ -1210,9 +1150,7 @@ describe('useKittenAnalyzer - coverage ramp', () => {
         message: '',
       })
       await analyzer.runFinancialBrief()
-      const aiMsg = analyzer.messages.value.find(
-        (m) => m.role === 'ai' && m.content.includes('自定义消息')
-      )
+      const aiMsg = analyzer.messages.value.find((m) => m.role === 'ai' && m.content.includes('自定义消息'))
       expect(aiMsg).toBeDefined()
     })
 
@@ -1225,9 +1163,7 @@ describe('useKittenAnalyzer - coverage ramp', () => {
         message: '',
       })
       await analyzer.runFinancialBrief()
-      const aiMsg = analyzer.messages.value.find(
-        (m) => m.role === 'ai' && m.content.includes('财务简报')
-      )
+      const aiMsg = analyzer.messages.value.find((m) => m.role === 'ai' && m.content.includes('财务简报'))
       expect(aiMsg).toBeDefined()
       // 截断后的内容应包含省略号
       expect(aiMsg?.content).toContain('…')
@@ -1242,17 +1178,13 @@ describe('useKittenAnalyzer - coverage ramp', () => {
     it('generateDocument 抛异常：回退到 appAlert 错误消息', async () => {
       vi.mocked(kittenApi.generateDocument).mockRejectedValueOnce(new Error('plain text error'))
       await analyzer.generateAiOfficeDocument('写合同', 'docx')
-      expect(appAlert).toHaveBeenCalledWith(
-        expect.stringContaining('plain text error')
-      )
+      expect(appAlert).toHaveBeenCalledWith(expect.stringContaining('plain text error'))
     })
 
     it('generateDocument 抛状态码错误消息', async () => {
       vi.mocked(kittenApi.generateDocument).mockRejectedValueOnce(new Error('生成失败（500）'))
       await analyzer.generateAiOfficeDocument('写合同', 'xlsx')
-      expect(appAlert).toHaveBeenCalledWith(
-        expect.stringContaining('生成失败（500）')
-      )
+      expect(appAlert).toHaveBeenCalledWith(expect.stringContaining('生成失败（500）'))
     })
 
     it('xlsx 格式成功生成：打开预览并调用 downloadBlob', async () => {
@@ -1261,7 +1193,7 @@ describe('useKittenAnalyzer - coverage ramp', () => {
           ok: true,
           contentType: 'application/octet-stream',
           blob: makePkBlob(),
-        }) as never
+        }) as never,
       )
       await analyzer.generateAiOfficeDocument('生成表格', 'xlsx')
       expect(openDocumentPreviewFromBlob).toHaveBeenCalled()
@@ -1274,14 +1206,12 @@ describe('useKittenAnalyzer - coverage ramp', () => {
           ok: true,
           contentType: 'application/octet-stream',
           blob: makePkBlob(),
-        }) as never
+        }) as never,
       )
       await analyzer.generateAiOfficeDocument('生成文档', 'docx')
       expect(openDocumentPreviewFromBlob).toHaveBeenCalled()
       expect(downloadBlob).toHaveBeenCalled()
-      const aiMsg = analyzer.messages.value.find(
-        (m) => m.role === 'ai' && m.content.includes('已生成并下载')
-      )
+      const aiMsg = analyzer.messages.value.find((m) => m.role === 'ai' && m.content.includes('已生成并下载'))
       expect(aiMsg).toBeDefined()
     })
   })
@@ -1298,7 +1228,7 @@ describe('useKittenAnalyzer - coverage ramp', () => {
           contentType: 'application/octet-stream',
           disposition: 'attachment; filename="report.docx"',
           blob: makePkBlob(),
-        }) as never
+        }) as never,
       )
       analyzer.currentResult.value = {
         id: 1,
@@ -1318,7 +1248,7 @@ describe('useKittenAnalyzer - coverage ramp', () => {
           ok: false,
           status: 500,
           textThrows: true,
-        })
+        }),
       )
       analyzer.currentResult.value = {
         id: 1,
@@ -1329,9 +1259,7 @@ describe('useKittenAnalyzer - coverage ramp', () => {
         kind: 'k',
       }
       await analyzer.exportDocx()
-      expect(appAlert).toHaveBeenCalledWith(
-        expect.stringContaining('Word 导出失败')
-      )
+      expect(appAlert).toHaveBeenCalledWith(expect.stringContaining('Word 导出失败'))
     })
 
     it('后端 Word 导出遇 JSON content-type：调用 appAlert', async () => {
@@ -1340,7 +1268,7 @@ describe('useKittenAnalyzer - coverage ramp', () => {
           ok: true,
           contentType: 'application/json',
           blob: makeTextBlob('{"message":"未登录"}'),
-        })
+        }),
       )
       analyzer.currentResult.value = {
         id: 1,
@@ -1351,9 +1279,7 @@ describe('useKittenAnalyzer - coverage ramp', () => {
         kind: 'k',
       }
       await analyzer.exportDocx()
-      expect(appAlert).toHaveBeenCalledWith(
-        expect.stringContaining('Word 导出失败')
-      )
+      expect(appAlert).toHaveBeenCalledWith(expect.stringContaining('Word 导出失败'))
     })
   })
 
@@ -1369,7 +1295,7 @@ describe('useKittenAnalyzer - coverage ramp', () => {
           contentType: 'application/octet-stream',
           disposition: 'attachment; filename="report.xlsx"',
           blob: makePkBlob(),
-        })
+        }),
       )
       analyzer.currentResult.value = {
         id: 1,
@@ -1425,9 +1351,7 @@ describe('useKittenAnalyzer - coverage ramp', () => {
         content: '<div>请下载：/api/ai/kitten/document/pickup/txt123</div>',
         time: '10:00',
       })
-      expect(analyzer.lastDocumentPickupUrl.value).toContain(
-        '/api/ai/kitten/document/pickup/txt123'
-      )
+      expect(analyzer.lastDocumentPickupUrl.value).toContain('/api/ai/kitten/document/pickup/txt123')
     })
 
     it('跳过 user 消息只查找 ai 消息', () => {
@@ -1477,9 +1401,7 @@ describe('useKittenAnalyzer - coverage ramp', () => {
         message: '',
       })
       await analyzer.resetSession()
-      const clearCalls = vi.mocked(safeJsonRequest).mock.calls.filter(
-        (c) => String(c[0]).includes('/api/ai/context/clear')
-      )
+      const clearCalls = vi.mocked(safeJsonRequest).mock.calls.filter((c) => String(c[0]).includes('/api/ai/context/clear'))
       expect(clearCalls.length).toBeGreaterThanOrEqual(1)
     })
   })

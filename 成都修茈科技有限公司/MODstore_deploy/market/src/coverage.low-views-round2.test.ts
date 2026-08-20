@@ -338,10 +338,7 @@ describe('low coverage admin and developer views, round 2', () => {
     vm.openEdit(row)
     vm.editForm.display_name = 'Updated'
     await vm.submitEdit()
-    expect(apiMock.adminUpdateAiAccount).toHaveBeenCalledWith(
-      7,
-      expect.objectContaining({ display_name: 'Updated' }),
-    )
+    expect(apiMock.adminUpdateAiAccount).toHaveBeenCalledWith(7, expect.objectContaining({ display_name: 'Updated' }))
 
     vm.openRotate(row)
     await vm.submitRotate()
@@ -533,10 +530,7 @@ describe('low coverage admin and developer views, round 2', () => {
     vm.editIntegration(vm.integrations[0])
     vm.integrationConfigText = '{"operation_id":"sync"}'
     await vm.saveIntegration()
-    expect(apiMock.customerServiceUpdateIntegration).toHaveBeenCalledWith(
-      2,
-      expect.objectContaining({ config: { operation_id: 'sync' } }),
-    )
+    expect(apiMock.customerServiceUpdateIntegration).toHaveBeenCalledWith(2, expect.objectContaining({ config: { operation_id: 'sync' } }))
 
     vm.integrationConfigText = '{bad json'
     await vm.saveIntegration()
@@ -565,9 +559,7 @@ describe('low coverage admin and developer views, round 2', () => {
 
     vm.copyDownloadPath(5)
     await flushPromises()
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
-      '/api/workbench/studio-assets/5/file',
-    )
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('/api/workbench/studio-assets/5/file')
 
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
@@ -718,10 +710,7 @@ describe('low coverage admin and developer views, round 2', () => {
     vm.dialog.secret = 'new-secret'
     vm.toggleEvent('payment.succeeded')
     await vm.submitDialog()
-    expect(apiMock.developerUpdateWebhook).toHaveBeenCalledWith(
-      11,
-      expect.objectContaining({ secret: 'new-secret' }),
-    )
+    expect(apiMock.developerUpdateWebhook).toHaveBeenCalledWith(11, expect.objectContaining({ secret: 'new-secret' }))
 
     await vm.toggleActive(sub)
     expect(apiMock.developerUpdateWebhook).toHaveBeenCalledWith(11, { is_active: false })
@@ -813,12 +802,7 @@ describe('low coverage public auth views, round 2', () => {
     vm.password = 'secret123'
     vm.verificationCode = '123456'
     await vm.doRegister()
-    expect(apiMock.register).toHaveBeenCalledWith(
-      'tester',
-      'secret123',
-      'new@example.test',
-      '123456',
-    )
+    expect(apiMock.register).toHaveBeenCalledWith('tester', 'secret123', 'new@example.test', '123456')
     expect(routerMock.replace).toHaveBeenCalledWith({
       name: 'plans',
       query: { plan: 'plan_enterprise' },

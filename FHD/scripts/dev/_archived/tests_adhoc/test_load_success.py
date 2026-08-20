@@ -2,6 +2,8 @@ import os
 
 from openpyxl import load_workbook
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 folder = r"e:\FHD\424"
 # 直接使用 os.listdir 返回的文件名
 file_name = "考勤 -2026-3 月份考勤统计表.xlsx"
@@ -23,7 +25,7 @@ try:
     # 验证
     wb2 = load_workbook(output_path)
     print(f"输出文件工作表：{wb2.sheetnames}")
-except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"✗ 失败：{e}")
     import traceback
 

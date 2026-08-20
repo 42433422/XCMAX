@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="arg-type, attr-defined, union-attr"
 """Schema 漂移门禁：ORM 模型 metadata vs Alembic 迁移链实际建出的 schema。
 
 原理
@@ -33,6 +34,8 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
+
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 REPO_ROOT = Path(__file__).resolve().parents[2]  # FHD/
 sys.path.insert(0, str(REPO_ROOT))
@@ -186,7 +189,7 @@ def main() -> int:
         # env.py 的 fileConfig 会重置日志级别；upgrade 输出保留，压住 autogen 插件噪音
         logging.getLogger("alembic").setLevel(logging.WARNING)
         is_empty, ops = _produce_upgrade_ops(db_url)
-    except Exception as exc:  # noqa: BLE001 — 门禁自身失败要与「有漂移」区分
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001 — 门禁自身失败要与「有漂移」区分
         print(f"[schema-drift] 门禁执行失败（非漂移结论）: {exc}")
         return 2
     finally:

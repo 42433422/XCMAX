@@ -116,39 +116,35 @@ export function apiUrl(path: string): string {
 
 export function getClientModsUiOffHeader(): Record<string, string> {
   try {
-    const off = localStorage.getItem('xcagi_client_mods_ui_off') === '1';
-    return off ? { 'X-Client-Mods-Off': '1' } : {};
+    const off = localStorage.getItem('xcagi_client_mods_ui_off') === '1'
+    return off ? { 'X-Client-Mods-Off': '1' } : {}
   } catch {
-    return {};
+    return {}
   }
 }
 
-const ACTIVE_MOD_HEADER_SKIP_PREFIXES = [
-  '/api/auth/',
-  '/api/platform-shell/',
-  '/api/debug/',
-] as const
+const ACTIVE_MOD_HEADER_SKIP_PREFIXES = ['/api/auth/', '/api/platform-shell/', '/api/debug/'] as const
 
 function shouldAttachActiveModHeader(rawUrl = ''): boolean {
-  const value = String(rawUrl || '').trim();
-  if (!value) return true;
+  const value = String(rawUrl || '').trim()
+  if (!value) return true
   try {
-    const pathname = /^https?:\/\//i.test(value) ? new URL(value).pathname : value.split('?')[0] || '';
-    return !ACTIVE_MOD_HEADER_SKIP_PREFIXES.some((p) => pathname.startsWith(p));
+    const pathname = /^https?:\/\//i.test(value) ? new URL(value).pathname : value.split('?')[0] || ''
+    return !ACTIVE_MOD_HEADER_SKIP_PREFIXES.some((p) => pathname.startsWith(p))
   } catch {
-    return true;
+    return true
   }
 }
 
 /** 与 ``installFetchDbReadToken`` / 业务库按 Mod 分表一致；签名由服务端 dev 模式放宽校验。 */
 export function getActiveExtensionModHeaders(rawUrl = ''): Record<string, string> {
-  if (!shouldAttachActiveModHeader(rawUrl)) return {};
+  if (!shouldAttachActiveModHeader(rawUrl)) return {}
   try {
-    const id = readActiveExtensionModIdFromStorage();
-    if (!id) return {};
-    return { 'X-XCAGI-Active-Mod-Id': id };
+    const id = readActiveExtensionModIdFromStorage()
+    if (!id) return {}
+    return { 'X-XCAGI-Active-Mod-Id': id }
   } catch {
-    return {};
+    return {}
   }
 }
 
@@ -171,21 +167,14 @@ const CLIENT_MODS_OFF_SYNC_TIMEOUT_MS = 25_000
 
 export function apiFetch(input: string, init?: ApiFetchInit): Promise<Response> {
   const url = input.startsWith('http') ? input : apiUrl(input)
-  const {
-    timeoutMs,
-    signal: userSignal,
-    headers: userHeaders,
-    ...rest
-  } = init || {}
+  const { timeoutMs, signal: userSignal, headers: userHeaders, ...rest } = init || {}
 
   const modsOffHeaders = getClientModsUiOffHeader()
   const modScopeHeaders = getActiveExtensionModHeaders(url)
   const headers: Record<string, string> = {
     ...modsOffHeaders,
     ...modScopeHeaders,
-    ...(typeof userHeaders === 'object' &&
-    userHeaders !== null &&
-    typeof (userHeaders as Headers).forEach === 'function'
+    ...(typeof userHeaders === 'object' && userHeaders !== null && typeof (userHeaders as Headers).forEach === 'function'
       ? Object.fromEntries((userHeaders as Headers).entries())
       : ((userHeaders || {}) as Record<string, string>)),
   }
@@ -254,23 +243,22 @@ export function syncClientModsStateToBackend(): Promise<void> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ client_mods_off: isOff }),
     timeoutMs: CLIENT_MODS_OFF_SYNC_TIMEOUT_MS,
-  }).then(res => {
-    if (!res.ok) {
-      console.warn('[apiBase] 同步原版模式状态到后端失败:', res.status)
-    }
-  }).catch(err => {
-    // 启动阶段后端 / 代理未就绪时易触发限时中止；此为后台同步，避免 console.warn 刷屏并经 clientDebugLog 镜像到服务端
-    if (isApiFetchTimeoutError(err)) {
-      if (import.meta.env.DEV) {
-        console.debug(
-          '[apiBase] 同步原版模式状态超时（后端或代理可能仍在启动）；可刷新页面或在设置中再次切换原版模式',
-          err
-        )
-      }
-      return
-    }
-    console.warn('[apiBase] 同步原版模式状态到后端失败:', err)
   })
+    .then((res) => {
+      if (!res.ok) {
+        console.warn('[apiBase] 同步原版模式状态到后端失败:', res.status)
+      }
+    })
+    .catch((err) => {
+      // 启动阶段后端 / 代理未就绪时易触发限时中止；此为后台同步，避免 console.warn 刷屏并经 clientDebugLog 镜像到服务端
+      if (isApiFetchTimeoutError(err)) {
+        if (import.meta.env.DEV) {
+          console.debug('[apiBase] 同步原版模式状态超时（后端或代理可能仍在启动）；可刷新页面或在设置中再次切换原版模式', err)
+        }
+        return
+      }
+      console.warn('[apiBase] 同步原版模式状态到后端失败:', err)
+    })
 }
 
 export function readClientModsOffState(): boolean {

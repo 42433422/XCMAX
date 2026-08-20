@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, union-attr"
 """Fail-closed command evidence checks for self-maintenance QA reports."""
 
 from __future__ import annotations

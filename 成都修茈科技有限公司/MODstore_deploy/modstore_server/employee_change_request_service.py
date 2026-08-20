@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment, union-attr"
 """员工变更申请：暂存 Agent 写入，批准后落盘。"""
 
 from __future__ import annotations
@@ -5,9 +6,10 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict
+
 from modstore_server.employee_change_request_submission import (
     defer_write_as_change_request as defer_write_as_change_request,
 )
@@ -29,6 +31,7 @@ from modstore_server.employee_change_request_verification import (
 from modstore_server.employee_change_request_verification import (
     _run_post_apply_verification as _run_post_apply_verification,
 )
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +102,7 @@ def apply_employee_change_request(
                     for x in json.loads(row.approval_required_globs_json or "[]")
                     if str(x).strip()
                 ]
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 ag = []
         rel_repo = relative_path_under_repo(Path(resolved))
         if sg or fg:
@@ -119,7 +122,10 @@ def apply_employee_change_request(
         merge_strategy = os.environ.get("MODSTORE_CR_MERGE_STRATEGY", "overwrite").strip().lower()
         if merge_strategy in ("fail_on_conflict", "llm_merge"):
             try:
-                from modstore_server.change_merge import detect_conflict, resolve_conflict
+                from modstore_server.change_merge import (
+                    detect_conflict,
+                    resolve_conflict,
+                )
 
                 has_conflict, conflicting_ids = detect_conflict(int(change_request_id), rel)
                 if has_conflict:
@@ -145,7 +151,7 @@ def apply_employee_change_request(
                     merged = cr_result.get("merged_content")
                     if merged is not None:
                         content = merged
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 logger.exception("conflict detection failed for CR %d", change_request_id)
 
         try:
@@ -156,13 +162,16 @@ def apply_employee_change_request(
             row.error = str(exc)[:2000]
             session.commit()
             _publish_cr_result(
-                int(change_request_id), str(row.source_employee_id or ""), False, str(exc)[:500]
+                int(change_request_id),
+                str(row.source_employee_id or ""),
+                False,
+                str(exc)[:500],
             )
             return {"ok": False, "error": str(exc)[:500]}
 
         row.status = "applied"
         row.approved_by_user_id = int(approved_by_user_id)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         row.approved_at = now
         row.applied_at = now
         session.commit()
@@ -180,7 +189,7 @@ def apply_employee_change_request(
             },
             source=src or "system",
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("publish change_request.applied failed")
 
     repo = mod_repo_root()
@@ -208,7 +217,7 @@ def apply_employee_change_request(
             },
             source=src or "system",
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("publish change_request.ci_complete failed")
 
     verify_ok = bool(verify_out.get("ok"))
@@ -239,7 +248,7 @@ def apply_employee_change_request(
             source=src or "system",
             fingerprint=None,
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("publish change_request.verify_complete failed")
 
     self_repair_out: Dict[str, Any] = {"ok": False, "reason": "not_required"}
@@ -250,7 +259,7 @@ def apply_employee_change_request(
             if rv:
                 rv.error = "" if verify_ok else verify_reason[:2000]
                 session.commit()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("update CR verify status failed for CR %d", change_request_id)
 
     if verify_ok:
@@ -275,13 +284,16 @@ def apply_employee_change_request(
             if r3:
                 git_branch = str(r3.git_branch or "")
                 staged_commit = str(r3.staged_commit_sha or "")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
 
     apply_commit_out: Dict[str, Any] = {"ok": False, "reason": "skipped"}
     pr_out: Dict[str, Any] = {"ok": False, "reason": "skipped"}
     try:
-        from modstore_server.cr_git_pipeline import commit_cr_apply, maybe_open_pr_for_cr
+        from modstore_server.cr_git_pipeline import (
+            commit_cr_apply,
+            maybe_open_pr_for_cr,
+        )
 
         apply_commit_out = commit_cr_apply(
             int(change_request_id), src or "unknown", rel_repo or rel
@@ -293,7 +305,7 @@ def apply_employee_change_request(
                 summary=f"path={rel_repo or rel}\nsummary={diff_summary_snapshot[:1000]}",
                 risk_level=str(risk_level_snapshot or ""),
             )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("cr_git_pipeline post-apply hooks failed for CR %d", change_request_id)
 
     gs = _git_suggestions(
@@ -321,9 +333,10 @@ def apply_employee_change_request(
                 fingerprint=None,
             )
             deploy_event_out = {"ok": True}
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             logger.exception(
-                "publish ops.change_request.approved failed for CR %d", change_request_id
+                "publish ops.change_request.approved failed for CR %d",
+                change_request_id,
             )
             deploy_event_out = {"ok": False, "error": str(exc)[:300]}
     return {
@@ -358,7 +371,7 @@ def _publish_cr_result(cr_id: int, source_employee_id: str, ok: bool, reason: st
             source=source_employee_id or "system",
             fingerprint=None,
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("_publish_cr_result failed for CR %d", cr_id)
 
 
@@ -383,7 +396,7 @@ def reject_employee_change_request(
         row.rejected_reason = (rejected_reason or "")[:4000]
         actor_id = int(rejected_by_user_id or 0)
         row.approved_by_user_id = actor_id if actor_id > 0 and session.get(User, actor_id) else None
-        row.approved_at = datetime.now(timezone.utc)
+        row.approved_at = datetime.now(UTC)
         session.commit()
 
     _publish_cr_result(int(change_request_id), src, False, rejected_reason or "rejected")

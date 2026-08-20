@@ -1,15 +1,6 @@
 import { computed, ref, type Ref } from 'vue'
-import {
-  knowledgeBaseApi,
-  type KnowledgeGraphNode,
-  type PersyMemoryRecord,
-  type PersyMemoryValue,
-} from '@/api/knowledgeBase'
-import {
-  buildMemoryStatement,
-  errorText,
-  memoryValue,
-} from '@/composables/persyKnowledgeFormatters'
+import { knowledgeBaseApi, type KnowledgeGraphNode, type PersyMemoryRecord, type PersyMemoryValue } from '@/api/knowledgeBase'
+import { buildMemoryStatement, errorText, memoryValue } from '@/composables/persyKnowledgeFormatters'
 
 export function usePersyMemoryGovernance(options: {
   activeDatasetId: Ref<string>
@@ -20,15 +11,7 @@ export function usePersyMemoryGovernance(options: {
   selectMemory: (memory: PersyMemoryRecord) => void
   setIngestMessage: (message: string) => void
 }) {
-  const {
-    activeDatasetId,
-    memories,
-    selectedNode,
-    refreshMemories,
-    refreshGraph,
-    selectMemory,
-    setIngestMessage,
-  } = options
+  const { activeDatasetId, memories, selectedNode, refreshMemories, refreshGraph, selectMemory, setIngestMessage } = options
 
   const mutatingMemory = ref(false)
   const memoryEditing = ref(false)
@@ -47,12 +30,8 @@ export function usePersyMemoryGovernance(options: {
       return Number(right.strength || 0) - Number(left.strength || 0)
     }),
   )
-  const pendingMemoryCount = computed(
-    () => memories.value.filter((memory) => memory.status === 'pending').length,
-  )
-  const activeMemoryCount = computed(
-    () => memories.value.filter((memory) => memory.status === 'active').length,
-  )
+  const pendingMemoryCount = computed(() => memories.value.filter((memory) => memory.status === 'pending').length)
+  const activeMemoryCount = computed(() => memories.value.filter((memory) => memory.status === 'active').length)
 
   function startMemoryEdit(memory: PersyMemoryRecord): void {
     const value = memoryValue(memory)
@@ -96,11 +75,7 @@ export function usePersyMemoryGovernance(options: {
     mutatingMemory.value = true
     memoryMessage.value = ''
     try {
-      const result = await knowledgeBaseApi.rejectMemory(
-        activeDatasetId.value,
-        memory.memory_id,
-        'user_rejected_from_persy',
-      )
+      const result = await knowledgeBaseApi.rejectMemory(activeDatasetId.value, memory.memory_id, 'user_rejected_from_persy')
       if (!result.success) throw new Error(result.message || '忽略记忆失败')
       await refreshAfterMemoryMutation(memory.memory_id, '候选记忆已忽略')
     } catch (error) {
@@ -127,7 +102,11 @@ export function usePersyMemoryGovernance(options: {
         object,
         statement: buildMemoryStatement(subject, predicate, object),
         entities: [
-          { name: subject, type: String(previous.entities?.[0]?.type || 'concept'), role: 'subject' },
+          {
+            name: subject,
+            type: String(previous.entities?.[0]?.type || 'concept'),
+            role: 'subject',
+          },
           { name: object, type: String(previous.entities?.[1]?.type || 'concept'), role: 'object' },
         ],
       }
@@ -150,11 +129,7 @@ export function usePersyMemoryGovernance(options: {
     mutatingMemory.value = true
     memoryMessage.value = ''
     try {
-      const result = await knowledgeBaseApi.deleteMemory(
-        activeDatasetId.value,
-        memory.memory_id,
-        'user_deleted_from_persy',
-      )
+      const result = await knowledgeBaseApi.deleteMemory(activeDatasetId.value, memory.memory_id, 'user_deleted_from_persy')
       if (!result.success) throw new Error(result.message || '删除记忆失败')
       await refreshAfterMemoryMutation(memory.memory_id, '记忆已删除')
     } catch (error) {

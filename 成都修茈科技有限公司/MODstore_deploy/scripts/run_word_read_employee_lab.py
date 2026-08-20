@@ -11,6 +11,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -168,7 +170,7 @@ def main() -> int:
         from modstore_server.employee_pack_cleanup import cleanup_experimental_pack
 
         cleanup_result = cleanup_experimental_pack(PACK_ID, metadata={"experimental_pack": True})
-    except Exception as exc:  # noqa: BLE001
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
         cleanup_result = {"error": str(exc)[:300]}
 
     report = {

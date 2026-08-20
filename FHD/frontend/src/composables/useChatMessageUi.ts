@@ -22,9 +22,7 @@ export function useChatMessageUi(deps: UseChatMessageUiDeps) {
     if (cached) return cached
     const role = messages.value[index]?.role
     const plainSource =
-      role === 'ai'
-        ? sanitizeChatBubbleMarkdown(content).replace(/<[^>]*>/g, '')
-        : String(content || '').replace(/<[^>]*>/g, '')
+      role === 'ai' ? sanitizeChatBubbleMarkdown(content).replace(/<[^>]*>/g, '') : String(content || '').replace(/<[^>]*>/g, '')
     const height = estimateMessageHeight(plainSource, chatContainerWidth.value - 32, 14)
     messageHeights.value.set(index, height)
     return height
@@ -49,7 +47,10 @@ export function useChatMessageUi(deps: UseChatMessageUiDeps) {
       el.innerHTML = sanitizeChatBubbleMarkdown(s)
       return (el.textContent || el.innerText || '').replace(/\s+/g, ' ').trim()
     } catch {
-      return s.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+      return s
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
     }
   }
 
@@ -69,14 +70,16 @@ export function useChatMessageUi(deps: UseChatMessageUiDeps) {
     const myIdx = idx
     playingMsgIdx.value = myIdx
     try {
-      void Promise.resolve(speakText(text, {
-        onEnd: () => {
-          if (playingMsgIdx.value === myIdx) playingMsgIdx.value = -1
-        },
-        onError: () => {
-          if (playingMsgIdx.value === myIdx) playingMsgIdx.value = -1
-        },
-      })).catch(() => {
+      void Promise.resolve(
+        speakText(text, {
+          onEnd: () => {
+            if (playingMsgIdx.value === myIdx) playingMsgIdx.value = -1
+          },
+          onError: () => {
+            if (playingMsgIdx.value === myIdx) playingMsgIdx.value = -1
+          },
+        }),
+      ).catch(() => {
         if (playingMsgIdx.value === myIdx) playingMsgIdx.value = -1
       })
     } catch {
@@ -123,9 +126,7 @@ export function useChatMessageUi(deps: UseChatMessageUiDeps) {
   watch(
     () => messages.value.length,
     () => {
-      expandedMessageIndexes.value = expandedMessageIndexes.value.filter(
-        (idx) => idx >= 0 && idx < messages.value.length,
-      )
+      expandedMessageIndexes.value = expandedMessageIndexes.value.filter((idx) => idx >= 0 && idx < messages.value.length)
     },
   )
 

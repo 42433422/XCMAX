@@ -31,7 +31,11 @@ class CodeDiagnostics:
                 local_variables={},
                 suggested_fix_type="unknown",
             )
-        tb = traceback_str if traceback_str is not None else traceback.format_exception(type(error), error, error.__traceback__)
+        tb = (
+            traceback_str
+            if traceback_str is not None
+            else traceback.format_exception(type(error), error, error.__traceback__)
+        )
         tb_str = "".join(tb) if isinstance(tb, list) else str(tb)
         failing_line = self._extract_failing_line(source_code, tb_str)
         return CodeDiagnosis(

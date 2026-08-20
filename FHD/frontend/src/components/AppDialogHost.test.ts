@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import AppDialogHost from './AppDialogHost.vue'
@@ -28,7 +28,7 @@ describe('AppDialogHost', () => {
   })
 
   it('does not render overlay when not visible', () => {
-    const wrapper = mountComponent(pinia)
+    mountComponent(pinia)
     expect(document.querySelector('.app-dialog-host-overlay')).toBeNull()
   })
 
@@ -209,9 +209,9 @@ describe('AppDialogHost', () => {
     // Ensure no dialog is currently visible
     if (store.visible) return // Skip if store is dirty from previous test
     // First show a confirm (which stays open)
-    const promise1 = store.showConfirm('排队消息一')
+    void store.showConfirm('排队消息一')
     // Then queue an alert
-    const promise2 = store.showAlert('排队消息二')
+    void store.showAlert('排队消息二')
     await flushPromises()
     // First dialog should be visible
     const message = document.querySelector('.app-dialog-host-message')

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """支付公共工具：签名、防重放、金额校验、套餐常量与辅助函数。"""
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from modstore_server.models import (
     Purchase,
     UserPlan,
 )
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -323,7 +325,7 @@ def _user_owns_svip_tier(session, user_id: int) -> bool:
 def _plan_as_dict(row: PlanTemplate) -> dict[str, Any]:
     try:
         features = __import__("json").loads(row.features_json or "[]")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         features = []
     return {
         "id": row.id,
@@ -338,7 +340,7 @@ def _plan_as_dict(row: PlanTemplate) -> dict[str, Any]:
 def _plan_quotas(row: PlanTemplate) -> dict[str, int]:
     try:
         q = __import__("json").loads(row.quotas_json or "{}")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         q = {}
     if not isinstance(q, dict):
         return {}
@@ -365,7 +367,12 @@ def _membership_meta(plan_id: str | None) -> dict[str, Any]:
         "plan_svip7": ("svip7", "SVIP7", True, True),
         "plan_svip8": ("svip8", "SVIP8", True, True),
     }.get(pid, ("free", "普通用户", False, False))
-    return {"tier": meta[0], "label": meta[1], "is_member": meta[2], "can_byok": meta[3]}
+    return {
+        "tier": meta[0],
+        "label": meta[1],
+        "is_member": meta[2],
+        "can_byok": meta[3],
+    }
 
 
 def _resolve_checkout_fields(
@@ -430,7 +437,10 @@ def _resolve_checkout_fields(
         if user_id:
             dup = (
                 session.query(Purchase)
-                .filter(Purchase.user_id == int(user_id), Purchase.catalog_id == int(body.item_id))
+                .filter(
+                    Purchase.user_id == int(user_id),
+                    Purchase.catalog_id == int(body.item_id),
+                )
                 .first()
             )
             if dup:

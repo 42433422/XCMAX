@@ -12,7 +12,9 @@
         <router-link to="/" class="btn btn-back">← 返回首页</router-link>
       </div>
 
-      <div v-if="message" :class="['message', messageOk ? 'message-ok' : 'message-err']">{{ message }}</div>
+      <div v-if="message" :class="['message', messageOk ? 'message-ok' : 'message-err']">
+        {{ message }}
+      </div>
 
       <div class="db-refresh">
         <button class="btn btn-refresh" @click="loadDatabase" :disabled="loadingDb">
@@ -28,14 +30,22 @@
           <p class="db-count">共 {{ dbUsers.length }} 个用户</p>
           <table class="db-table">
             <thead>
-              <tr><th>ID</th><th>用户名</th><th>邮箱</th><th>管理员</th><th>注册时间</th></tr>
+              <tr>
+                <th>ID</th>
+                <th>用户名</th>
+                <th>邮箱</th>
+                <th>管理员</th>
+                <th>注册时间</th>
+              </tr>
             </thead>
             <tbody>
               <tr v-for="u in dbUsers" :key="u.id">
                 <td>{{ u.id }}</td>
                 <td class="username">{{ u.username }}</td>
                 <td>{{ u.email || '—' }}</td>
-                <td><span :class="['badge', u.is_admin ? 'badge-admin' : 'badge-user']">{{ u.is_admin ? '是' : '否' }}</span></td>
+                <td>
+                  <span :class="['badge', u.is_admin ? 'badge-admin' : 'badge-user']">{{ u.is_admin ? '是' : '否' }}</span>
+                </td>
                 <td class="time">{{ formatTime(u.created_at) }}</td>
               </tr>
             </tbody>
@@ -49,7 +59,12 @@
           <p class="db-count">共 {{ dbWallets.length }} 个钱包</p>
           <table class="db-table">
             <thead>
-              <tr><th>ID</th><th>用户ID</th><th>余额</th><th>更新时间</th></tr>
+              <tr>
+                <th>ID</th>
+                <th>用户ID</th>
+                <th>余额</th>
+                <th>更新时间</th>
+              </tr>
             </thead>
             <tbody>
               <tr v-for="w in dbWallets" :key="w.id">
@@ -69,7 +84,15 @@
           <p class="db-count">共 {{ dbCatalog.length }} 个商品</p>
           <table class="db-table">
             <thead>
-              <tr><th>ID</th><th>名称</th><th>包ID</th><th>版本</th><th>价格</th><th>下载量</th><th>创建时间</th></tr>
+              <tr>
+                <th>ID</th>
+                <th>名称</th>
+                <th>包ID</th>
+                <th>版本</th>
+                <th>价格</th>
+                <th>下载量</th>
+                <th>创建时间</th>
+              </tr>
             </thead>
             <tbody>
               <tr v-for="item in dbCatalog" :key="item.id">
@@ -77,7 +100,9 @@
                 <td class="name">{{ item.name }}</td>
                 <td class="pkg">{{ item.pkg_id }}</td>
                 <td>{{ item.version }}</td>
-                <td :class="['price', item.price <= 0 ? 'free' : 'paid']">{{ item.price <= 0 ? '免费' : '¥' + item.price.toFixed(2) }}</td>
+                <td :class="['price', item.price <= 0 ? 'free' : 'paid']">
+                  {{ item.price <= 0 ? '免费' : '¥' + item.price.toFixed(2) }}
+                </td>
                 <td>{{ item.downloads || 0 }}</td>
                 <td class="time">{{ formatTime(item.created_at) }}</td>
               </tr>
@@ -92,7 +117,15 @@
           <p class="db-count">共 {{ dbTransactions.length }} 条记录</p>
           <table class="db-table">
             <thead>
-              <tr><th>ID</th><th>用户ID</th><th>金额</th><th>类型</th><th>状态</th><th>描述</th><th>时间</th></tr>
+              <tr>
+                <th>ID</th>
+                <th>用户ID</th>
+                <th>金额</th>
+                <th>类型</th>
+                <th>状态</th>
+                <th>描述</th>
+                <th>时间</th>
+              </tr>
             </thead>
             <tbody>
               <tr v-for="t in dbTransactions" :key="t.id">
@@ -100,7 +133,9 @@
                 <td>{{ t.user_id }}</td>
                 <td :class="['amount', t.amount >= 0 ? 'pos' : 'neg']">{{ t.amount >= 0 ? '+' : '' }}¥{{ t.amount.toFixed(2) }}</td>
                 <td class="type">{{ t.txn_type }}</td>
-                <td><span :class="['badge', t.status === 'completed' ? 'badge-ok' : 'badge-pending']">{{ t.status }}</span></td>
+                <td>
+                  <span :class="['badge', t.status === 'completed' ? 'badge-ok' : 'badge-pending']">{{ t.status }}</span>
+                </td>
                 <td class="desc">{{ t.description || '—' }}</td>
                 <td class="time">{{ formatTime(t.created_at) }}</td>
               </tr>
@@ -132,15 +167,21 @@ const dbTransactions = ref([])
 function flash(msg, ok = true) {
   message.value = msg
   messageOk.value = ok
-  setTimeout(() => { message.value = '' }, 5000)
+  setTimeout(() => {
+    message.value = ''
+  }, 5000)
 }
 
 function formatTime(iso) {
   if (!iso) return '—'
   const d = new Date(iso)
   return d.toLocaleString('zh-CN', {
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
   })
 }
 
@@ -194,7 +235,7 @@ onMounted(async () => {
   padding: 3rem;
   background: #111111;
   border-radius: 8px;
-  border: 0.5px solid rgba(255,255,255,0.1);
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
 }
 
 .nav-back {
@@ -203,17 +244,17 @@ onMounted(async () => {
 
 .btn-back {
   padding: 0.65rem 1.25rem;
-  border: 0.5px solid rgba(255,255,255,0.15);
+  border: 0.5px solid rgba(255, 255, 255, 0.15);
   border-radius: 6px;
   background: transparent;
-  color: rgba(255,255,255,0.7);
+  color: rgba(255, 255, 255, 0.7);
   font-size: 0.9rem;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .btn-back:hover {
-  background: rgba(255,255,255,0.06);
+  background: rgba(255, 255, 255, 0.06);
   color: #ffffff;
 }
 
@@ -248,12 +289,12 @@ onMounted(async () => {
 }
 
 .message-ok {
-  background: rgba(74,222,128,0.1);
+  background: rgba(74, 222, 128, 0.1);
   color: #4ade80;
 }
 
 .message-err {
-  background: rgba(255,80,80,0.1);
+  background: rgba(255, 80, 80, 0.1);
   color: #ff6b6b;
 }
 
@@ -269,7 +310,7 @@ onMounted(async () => {
 
 .db-count {
   font-size: 13px;
-  color: rgba(255,255,255,0.4);
+  color: rgba(255, 255, 255, 0.4);
   margin-bottom: 12px;
 }
 
@@ -280,30 +321,31 @@ onMounted(async () => {
   background: #111111;
   border-radius: 8px;
   overflow: hidden;
-  border: 0.5px solid rgba(255,255,255,0.1);
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
 }
 
 .db-table th {
   text-align: left;
   padding: 10px 12px;
-  background: rgba(255,255,255,0.03);
-  color: rgba(255,255,255,0.5);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.5);
   font-weight: 600;
   font-size: 12px;
-  border-bottom: 0.5px solid rgba(255,255,255,0.1);
+  border-bottom: 0.5px solid rgba(255, 255, 255, 0.1);
 }
 
 .db-table td {
   padding: 10px 12px;
-  border-bottom: 0.5px solid rgba(255,255,255,0.06);
-  color: rgba(255,255,255,0.7);
+  border-bottom: 0.5px solid rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.7);
 }
 
 .db-table tr:last-child td {
   border-bottom: none;
 }
 
-.username, .name {
+.username,
+.name {
   color: #ffffff;
   font-weight: 500;
 }
@@ -311,27 +353,45 @@ onMounted(async () => {
 .pkg {
   font-family: monospace;
   font-size: 12px;
-  color: rgba(255,255,255,0.4);
+  color: rgba(255, 255, 255, 0.4);
 }
 
-.amount.pos { color: #4ade80; font-weight: 600; }
-.amount.neg { color: #ff6b6b; font-weight: 600; }
-.price.free { color: #4ade80; }
-.price.paid { color: #ff6b6b; }
-.time { font-size: 12px; color: rgba(255,255,255,0.4); }
-.desc { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.amount.pos {
+  color: #4ade80;
+  font-weight: 600;
+}
+.amount.neg {
+  color: #ff6b6b;
+  font-weight: 600;
+}
+.price.free {
+  color: #4ade80;
+}
+.price.paid {
+  color: #ff6b6b;
+}
+.time {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.4);
+}
+.desc {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .db-empty {
   text-align: center;
   padding: 24px;
-  color: rgba(255,255,255,0.3);
+  color: rgba(255, 255, 255, 0.3);
   font-size: 14px;
 }
 
 .loading {
   text-align: center;
   padding: 2rem;
-  color: rgba(255,255,255,0.4);
+  color: rgba(255, 255, 255, 0.4);
 }
 
 @media (max-width: 768px) {

@@ -1,3 +1,4 @@
+# isort: skip_file
 # ruff: noqa: E402, F401
 """工作流 cron 触发：从 DB 加载 APScheduler 任务。"""
 
@@ -18,7 +19,9 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from modstore_server import autonomy_scheduler, payment_orders
 from modstore_server.models import WorkflowTrigger, get_session_factory
-from modstore_server.scheduler_extensions import register_extensions as _register_extensions
+from modstore_server.scheduler_extensions import (
+    register_extensions as _register_extensions,
+)
 from modstore_server.scheduler_timing import (
     cleanup_misfire_grace_time as _cleanup_misfire_grace_time,
 )
@@ -95,10 +98,18 @@ from modstore_server.workflow_scheduler_part01 import (
 )
 
 
-from modstore_server.workflow_scheduler_startup_phase01 import _register_scheduler_phase_01
-from modstore_server.workflow_scheduler_startup_phase02 import _register_scheduler_phase_02
-from modstore_server.workflow_scheduler_startup_phase03 import _register_scheduler_phase_03
-from modstore_server.workflow_scheduler_startup_phase04 import _register_scheduler_phase_04
+from modstore_server.workflow_scheduler_startup_phase01 import (
+    _register_scheduler_phase_01,
+)
+from modstore_server.workflow_scheduler_startup_phase02 import (
+    _register_scheduler_phase_02,
+)
+from modstore_server.workflow_scheduler_startup_phase03 import (
+    _register_scheduler_phase_03,
+)
+from modstore_server.workflow_scheduler_startup_phase04 import (
+    _register_scheduler_phase_04,
+)
 
 
 def start_scheduler() -> None:

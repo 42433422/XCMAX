@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -50,7 +54,11 @@ async def run_and_score_bench(
             if not task_desc:
                 continue
             run_result = await asyncio.to_thread(
-                _facade()._run_single_task, employee_id, task_desc, user.id, bench_llm_override
+                _facade()._run_single_task,
+                employee_id,
+                task_desc,
+                user.id,
+                bench_llm_override,
             )
             eff = _facade()._efficiency_factor(run_result["cost_tokens"])
             heuristic = 100.0 * (1.0 if run_result["ok"] else 0.0) * eff
@@ -69,7 +77,7 @@ async def run_and_score_bench(
             level_results[lv].append(run_result)
     scoring_meta: _facade().Dict[str, _facade().Any] = {"method": "heuristic_ok_token_efficiency"}
     if bench_llm_override:
-        (prov, mdl) = bench_llm_override
+        prov, mdl = bench_llm_override
         rubric_items = [
             {
                 "task_id": e["task_id"],
@@ -80,7 +88,7 @@ async def run_and_score_bench(
             }
             for e in tasks_result
         ]
-        (rubric_raw, rubric_err) = await _facade()._llm_rubric_scores_platform(
+        rubric_raw, rubric_err = await _facade()._llm_rubric_scores_platform(
             prov, mdl, rubric_items
         )
         expected_ids = {e["task_id"] for e in tasks_result}
@@ -136,7 +144,7 @@ async def run_and_score_bench(
         for (k, v) in (per_dimension_ids or {}).items()
         if k in _facade().AUDIT_DIMENSIONS and str(v or "").strip()
     }
-    (auto_dims, reviewer_sel_meta) = await _facade().resolve_auto_dimension_reviewers(
+    auto_dims, reviewer_sel_meta = await _facade().resolve_auto_dimension_reviewers(
         employee_id,
         *_facade()._read_employee_brief(employee_id),
         bench_llm_override,
@@ -167,8 +175,13 @@ async def run_and_score_bench(
     six_dimension_llm_meta: _facade().Optional[_facade().Dict[str, _facade().Any]] = None
     if bench_llm_override:
         try:
-            from modstore_server.catalog_quality import pipeline_label_from_pack, run_pack_validate
-            from modstore_server.employee_six_dimension import compute_six_dimension_report
+            from modstore_server.catalog_quality import (
+                pipeline_label_from_pack,
+                run_pack_validate,
+            )
+            from modstore_server.employee_six_dimension import (
+                compute_six_dimension_report,
+            )
             from modstore_server.employee_six_dimension_llm import (
                 enrich_six_dimension_report_with_llm,
             )
@@ -179,7 +192,7 @@ async def run_and_score_bench(
 
             materialize_employee_pack_if_missing(employee_id)
             pack_dir = modstore_library_path() / employee_id
-            (brief, _panel) = _facade()._read_employee_brief(employee_id)
+            brief, _panel = _facade()._read_employee_brief(employee_id)
             if pack_dir.is_dir():
                 pipeline_label = pipeline_label_from_pack(pack_dir, brief)
                 val = await run_pack_validate(pack_dir=pack_dir, brief=brief)
@@ -208,21 +221,22 @@ async def run_and_score_bench(
                         for e in tasks_result[:6]
                     ],
                 }
-                (six_dimension, six_dimension_llm_meta) = (
-                    await enrich_six_dimension_report_with_llm(
-                        baseline,
-                        pack_dir=pack_dir,
-                        target_employee_id=employee_id,
-                        pipeline_label=pipeline_label,
-                        routing_brief=brief,
-                        validate_errors=validate_errors,
-                        bench_summary=bench_summary,
-                        user_id=int(getattr(user, "id", 0) or 0),
-                        bench_llm_override=bench_llm_override,
-                        require_llm=True,
-                    )
+                (
+                    six_dimension,
+                    six_dimension_llm_meta,
+                ) = await enrich_six_dimension_report_with_llm(
+                    baseline,
+                    pack_dir=pack_dir,
+                    target_employee_id=employee_id,
+                    pipeline_label=pipeline_label,
+                    routing_brief=brief,
+                    validate_errors=validate_errors,
+                    bench_summary=bench_summary,
+                    user_id=int(getattr(user, "id", 0) or 0),
+                    bench_llm_override=bench_llm_override,
+                    require_llm=True,
                 )
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             _facade().logger.warning("bench six_dimension LLM failed for %s: %s", employee_id, exc)
             six_dimension_llm_meta = {"llm_error": str(exc)[:300]}
     out: _facade().Dict[str, _facade().Any] = {

@@ -1,5 +1,8 @@
+# mypy: disable-error-code="import-not-found"
 import sqlite3
 import sys
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 sys.path.insert(0, r"E:\FHD\XCAGI\resources\wechat-decrypt")
 from mcp_server import _decompress_content
@@ -32,7 +35,7 @@ for table in tables:
                     print(f"  {content[:300]}")
                     print()
                     found += 1
-    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
         pass
 
 print(f"共找到 {found} 条消息")

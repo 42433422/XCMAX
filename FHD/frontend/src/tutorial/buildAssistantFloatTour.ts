@@ -7,8 +7,7 @@ export function buildAssistantFloatSteps(): TutorialStep[] {
     createStep({
       id: 'page-chat-assistant-toggle',
       title: '智能对话 · 打开副窗',
-      description:
-        '右上角这个「副窗」随时能点开：推送通知、协助查资料、托管开关、新手教程都在里面。点一下打开试试。',
+      description: '右上角这个「副窗」随时能点开：推送通知、协助查资料、托管开关、新手教程都在里面。点一下打开试试。',
       targetSelector: '[data-tour="assistant-float-toggle"]',
       highlightSelector: '[data-tour="assistant-float-toggle"]',
       actionType: 'click',

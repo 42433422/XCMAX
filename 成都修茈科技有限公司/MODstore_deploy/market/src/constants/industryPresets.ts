@@ -19,15 +19,7 @@ export type IndustryPreset = {
   uiLabels: Record<string, string>
 }
 
-export const INDUSTRY_PRESET_IDS = [
-  '通用',
-  '涂料',
-  '考勤',
-  '批发',
-  '电商',
-  '餐饮',
-  '物流',
-] as const
+export const INDUSTRY_PRESET_IDS = ['通用', '涂料', '考勤', '批发', '电商', '餐饮', '物流'] as const
 
 export const INDUSTRY_PRESETS: Record<string, IndustryPreset> = {
   通用: {
@@ -46,19 +38,19 @@ export const INDUSTRY_PRESETS: Record<string, IndustryPreset> = {
     placeholderNormal: '普通版：输入查询或单步操作，例如「查数据」「看列表」',
     placeholderPro: '专业版：可直接下达复合任务，例如「生成单据并导出」',
     menuLabels: {},
-    uiLabels: { entity: '条目', model_label: '编号', shipment_order: '业务单', records: '业务记录' },
+    uiLabels: {
+      entity: '条目',
+      model_label: '编号',
+      shipment_order: '业务单',
+      records: '业务记录',
+    },
   },
   涂料: {
     id: '涂料',
     name: '涂料/油漆',
     scenario: '涂料、油漆、固化剂等化工批发与出货。',
     welcomeIntro: '您好！我是您的涂料行业智能助手。',
-    welcomeBullets: [
-      '查询产品型号与价格',
-      '管理客户与购买单位',
-      '生成与打印出货单、标签',
-      '原材料与库存预警',
-    ],
+    welcomeBullets: ['查询产品型号与价格', '管理客户与购买单位', '生成与打印出货单、标签', '原材料与库存预警'],
     quickButtons: [
       { text: '查一下A001的价格', label: '查产品' },
       { text: '有哪些客户？', label: '客户列表' },
@@ -78,19 +70,19 @@ export const INDUSTRY_PRESETS: Record<string, IndustryPreset> = {
       customers: '客户管理',
       print: '标签打印',
     },
-    uiLabels: { entity: '产品', model_label: '型号', shipment_order: '出货单', records: '出货记录' },
+    uiLabels: {
+      entity: '产品',
+      model_label: '型号',
+      shipment_order: '出货单',
+      records: '出货记录',
+    },
   },
   考勤: {
     id: '考勤',
     name: '考勤/排班',
     scenario: '员工考勤、排班、请假加班与考勤表打印。',
     welcomeIntro: '您好！我是您的智能考勤助手。',
-    welcomeBullets: [
-      '查询员工档案与排班',
-      '登记出勤、请假与加班',
-      '生成与导出考勤记录',
-      '打印考勤表与统计报表',
-    ],
+    welcomeBullets: ['查询员工档案与排班', '登记出勤、请假与加班', '生成与导出考勤记录', '打印考勤表与统计报表'],
     quickButtons: [
       { text: '查询工号1001的员工信息', label: '查员工' },
       { text: '研发部今天谁出勤', label: '今日出勤' },
@@ -110,7 +102,12 @@ export const INDUSTRY_PRESETS: Record<string, IndustryPreset> = {
       customers: '部门管理',
       print: '考勤表打印',
     },
-    uiLabels: { entity: '员工', model_label: '工号', shipment_order: '考勤单', records: '考勤记录' },
+    uiLabels: {
+      entity: '员工',
+      model_label: '工号',
+      shipment_order: '考勤单',
+      records: '考勤记录',
+    },
   },
   批发: {
     id: '批发',

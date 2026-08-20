@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """SLA 实测分析报告 — 读取 sla_measurements.jsonl，输出 P50/P99/P999 + 达标率。"""
+
 from __future__ import annotations
 
 import json
@@ -51,7 +52,9 @@ def main() -> int:
         return 1
 
     report = analyze(log_path)
-    print(f"{'Level@Operation':<40} {'Count':>6} {'P50ms':>8} {'P99ms':>8} {'P999ms':>8} {'HitRate':>8}")
+    print(
+        f"{'Level@Operation':<40} {'Count':>6} {'P50ms':>8} {'P99ms':>8} {'P999ms':>8} {'HitRate':>8}"
+    )
     print("-" * 80)
     for key, stats in sorted(report.items()):
         print(

@@ -107,7 +107,8 @@ class TestUserPublicDict:
         user.is_active = True
         user.wx_avatar_url = None
         with patch(
-            "app.utils.path_io.user_avatar_storage.public_avatar_url", return_value="/avatar/default.png"
+            "app.utils.path_io.user_avatar_storage.public_avatar_url",
+            return_value="/avatar/default.png",
         ):
             result = auth_mod._user_public_dict(user)
         assert result["id"] == 1

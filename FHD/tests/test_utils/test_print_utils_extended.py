@@ -259,6 +259,14 @@ class TestMonitorPrintJobWithBackend:
 
 
 class TestPrintFileWithBackend:
+    @pytest.fixture(autouse=True)
+    def _allow_test_paths(self, monkeypatch):
+        monkeypatch.setattr(
+            PrinterUtils,
+            "_resolve_allowed_print_path",
+            classmethod(lambda _cls, path: path),
+        )
+
     def test_print_file_xlsx(self):
         pu = PrinterUtils()
         with (
@@ -396,6 +404,14 @@ class TestPrintFileWithBackend:
 
 
 class TestPrintExcel:
+    @pytest.fixture(autouse=True)
+    def _allow_test_paths(self, monkeypatch):
+        monkeypatch.setattr(
+            PrinterUtils,
+            "_resolve_allowed_print_path",
+            classmethod(lambda _cls, path: path),
+        )
+
     def test_print_excel_unavailable(self):
         pu = PrinterUtils()
         with patch.object(pu, "_is_print_backend_available", return_value=False):
@@ -457,6 +473,14 @@ class TestPrintExcel:
 
 
 class TestPrintPdf:
+    @pytest.fixture(autouse=True)
+    def _allow_test_paths(self, monkeypatch):
+        monkeypatch.setattr(
+            PrinterUtils,
+            "_resolve_allowed_print_path",
+            classmethod(lambda _cls, path: path),
+        )
+
     def test_print_pdf_unavailable(self):
         pu = PrinterUtils()
         with patch.object(pu, "_is_print_backend_available", return_value=False):
@@ -514,6 +538,14 @@ class TestPrintPdf:
 
 
 class TestPrintDefault:
+    @pytest.fixture(autouse=True)
+    def _allow_test_paths(self, monkeypatch):
+        monkeypatch.setattr(
+            PrinterUtils,
+            "_resolve_allowed_print_path",
+            classmethod(lambda _cls, path: path),
+        )
+
     def test_print_default_unavailable(self):
         pu = PrinterUtils()
         with patch.object(pu, "_is_print_backend_available", return_value=False):

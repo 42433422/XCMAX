@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment, attr-defined, import-not-found"
 import glob
 import json
 import os

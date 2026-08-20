@@ -4,6 +4,8 @@ import logging
 import time
 from typing import Any, Callable, Coroutine, Dict, Optional
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 logger = logging.getLogger(__name__)
 
 CRAFT_STEP_EMPLOYEE_MAP: Dict[str, str] = {
@@ -74,7 +76,10 @@ async def dispatch_craft_step(
     step_id: str,
     **kwargs: Any,
 ) -> Any:
-    from modstore_server.craft_failure_signals import emit_craft_step_failure, resolve_craft_step_id
+    from modstore_server.craft_failure_signals import (
+        emit_craft_step_failure,
+        resolve_craft_step_id,
+    )
 
     resolved_step, employee_id = resolve_craft_step_id(step_id)
     fn = _step_registry.get(resolved_step)
@@ -129,7 +134,7 @@ async def dispatch_craft_step(
                     },
                 )
         return result
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         elapsed_ms = int((time.monotonic() - t0) * 1000)
         emit_craft_step_failure(
             step_id=resolved_step,
@@ -169,5 +174,5 @@ def _record_craft_execution(
                 )
             )
             session.commit()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.debug("craft execution record failed for %s", employee_id, exc_info=True)

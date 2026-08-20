@@ -131,7 +131,10 @@ describe('ChatOfficeDockingReview', () => {
 
   it('emits toggleTarget when database checkbox is toggled', async () => {
     const wrapper = mount(ChatOfficeDockingReview, {
-      props: { items: [excelItem({ selectedDatabase: false, databaseAction: 'insert' })], processing: false },
+      props: {
+        items: [excelItem({ selectedDatabase: false, databaseAction: 'insert' })],
+        processing: false,
+      },
     })
     const checkbox = wrapper.findAll('input[type="checkbox"]')[1]
     checkbox.element.checked = true
@@ -180,7 +183,10 @@ describe('ChatOfficeDockingReview', () => {
 
   it('shows committing label and disables buttons when commitStatus=committing', () => {
     const wrapper = mount(ChatOfficeDockingReview, {
-      props: { items: [excelItem({ commitStatus: 'committing', selectedDatabase: true })], processing: false },
+      props: {
+        items: [excelItem({ commitStatus: 'committing', selectedDatabase: true })],
+        processing: false,
+      },
     })
     expect(wrapper.get('button.btn-primary').text()).toBe('正在提交...')
     expect(wrapper.get('button.btn-primary').attributes('disabled')).toBeDefined()
@@ -226,14 +232,20 @@ describe('ChatOfficeDockingReview', () => {
 
   it('shows confirm label with database target when only database selected', () => {
     const wrapper = mount(ChatOfficeDockingReview, {
-      props: { items: [excelItem({ selectedKnowledge: false, selectedDatabase: true })], processing: false },
+      props: {
+        items: [excelItem({ selectedKnowledge: false, selectedDatabase: true })],
+        processing: false,
+      },
     })
     expect(wrapper.get('button.btn-primary').text()).toBe('确认写入考勤数据库')
   })
 
   it('shows generic confirm label when both targets selected', () => {
     const wrapper = mount(ChatOfficeDockingReview, {
-      props: { items: [excelItem({ selectedKnowledge: true, selectedDatabase: true })], processing: false },
+      props: {
+        items: [excelItem({ selectedKnowledge: true, selectedDatabase: true })],
+        processing: false,
+      },
     })
     expect(wrapper.get('button.btn-primary').text()).toBe('确认按所选方式写入')
   })
@@ -303,25 +315,29 @@ describe('ChatOfficeDockingReview', () => {
   it('renders shipment ETL note preview and confirm target', () => {
     const wrapper = mount(ChatOfficeDockingReview, {
       props: {
-        items: [excelItem({
-          fileName: '国圣送货单.xlsx',
-          intentId: 'shipment_delivery',
-          intentLabel: '送货单/发货单',
-          intentSummary: '识别到 1 张送货单',
-          databaseTargetLabel: '客户/产品/发货单',
-          databaseAction: 'shipment_etl_execute',
-          sampleRows: [],
-          fieldNames: ['购货单位', '型号'],
-          shipmentEtlPreview: {
-            note_count: 1,
-            notes: [{
-              sheet_name: '送货单',
-              unit_name: '甲公司',
-              item_count: 2,
-              total_amount: 20,
-            }],
-          },
-        })],
+        items: [
+          excelItem({
+            fileName: '国圣送货单.xlsx',
+            intentId: 'shipment_delivery',
+            intentLabel: '送货单/发货单',
+            intentSummary: '识别到 1 张送货单',
+            databaseTargetLabel: '客户/产品/发货单',
+            databaseAction: 'shipment_etl_execute',
+            sampleRows: [],
+            fieldNames: ['购货单位', '型号'],
+            shipmentEtlPreview: {
+              note_count: 1,
+              notes: [
+                {
+                  sheet_name: '送货单',
+                  unit_name: '甲公司',
+                  item_count: 2,
+                  total_amount: 20,
+                },
+              ],
+            },
+          }),
+        ],
         processing: false,
       },
     })

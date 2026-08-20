@@ -3,12 +3,7 @@
     <div class="sandbox-toolbar">
       <div class="toolbar-left">
         <span class="toolbar-label">自动匹配</span>
-        <input
-          v-model="hostUrl"
-          class="toolbar-input"
-          placeholder="可留空；将扫本机常见 API 端口"
-          @keydown.enter="discoverAndConnect"
-        />
+        <input v-model="hostUrl" class="toolbar-input" placeholder="可留空；将扫本机常见 API 端口" @keydown.enter="discoverAndConnect" />
         <button class="btn btn-connect" :disabled="connecting" @click="discoverAndConnect">
           {{ connecting ? '扫端口中…' : '重新扫描' }}
         </button>
@@ -29,9 +24,7 @@
         <p v-if="isMixedContentBlocked">
           当前市场页是 HTTPS，但匹配到的宿主是 HTTP：{{ iframeSrc }}。请改用 HTTPS 宿主地址，或从本地 HTTP 页面打开沙箱。
         </p>
-        <p v-else-if="!effectiveModId">
-          当前地址没有携带 modId，所以不能自动推送“当前 Mod”。输入一个测试 Mod ID 后可直接推送并跳转测试。
-        </p>
+        <p v-else-if="!effectiveModId">当前地址没有携带 modId，所以不能自动推送“当前 Mod”。输入一个测试 Mod ID 后可直接推送并跳转测试。</p>
         <p v-if="pushMessage" class="helper-message">{{ pushMessage }}</p>
       </div>
       <div class="helper-actions">
@@ -49,16 +42,20 @@
     </div>
 
     <div v-if="connected && !isMixedContentBlocked" class="sandbox-iframe-wrap">
-      <iframe
-        ref="iframeRef"
-        :src="iframeSrc"
-        class="sandbox-iframe"
-        allow="clipboard-read; clipboard-write"
-      />
+      <iframe ref="iframeRef" :src="iframeSrc" class="sandbox-iframe" allow="clipboard-read; clipboard-write" />
     </div>
     <div v-else-if="connected" class="sandbox-placeholder">
       <div class="placeholder-icon">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <svg
+          width="48"
+          height="48"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
           <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
           <line x1="8" y1="21" x2="16" y2="21" />
           <line x1="12" y1="17" x2="12" y2="21" />
@@ -69,7 +66,16 @@
     </div>
     <div v-else class="sandbox-placeholder">
       <div class="placeholder-icon">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <svg
+          width="48"
+          height="48"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
           <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
           <line x1="8" y1="21" x2="16" y2="21" />
           <line x1="12" y1="17" x2="12" y2="21" />
@@ -156,14 +162,17 @@ function normalizeHostOrigin(raw: unknown): string {
   try {
     const withProto = /^\w+:\/\//.test(t) ? t : `http://${t}`
     const u = new URL(withProto)
-    return `${u.protocol}//${u.host}${u.pathname === '/' ? '' : u.pathname}`.replace(/\/+$/, '')
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return ''
+    return `${u.protocol}//${u.host}${u.pathname === '/' ? '' : u.pathname}${u.search}${u.hash}`.replace(/\/+$/, '')
   } catch {
     return t.replace(/\/+$/, '')
   }
 }
 
 function isLoopbackHost(hostname: unknown): boolean {
-  const h = String(hostname || '').trim().toLowerCase()
+  const h = String(hostname || '')
+    .trim()
+    .toLowerCase()
   return h === 'localhost' || h === '127.0.0.1' || h === '[::1]' || h === '::1'
 }
 
@@ -211,12 +220,7 @@ function shouldProbeFromBrowser(url: string): boolean {
  * 本机 / 局域网常见 XCAGI FastAPI 与联调端口；线上 HTTPS 优先用 /sandbox，不再探测裸 HTTP 4173。
  * 每项为端口号，将拼成 http://127.0.0.1:{port} 与 http://localhost:{port}，并对当前页 hostname 复用。
  */
-const LOCAL_PROBE_PORTS = [
-  5000, 5001, 5002, 5003,
-  5173, 5174, 5175, 5176, 5177,
-  3000, 8080, 8888,
-  8000, 8001,
-]
+const LOCAL_PROBE_PORTS = [5000, 5001, 5002, 5003, 5173, 5174, 5175, 5176, 5177, 3000, 8080, 8888, 8000, 8001]
 
 function addHostPortVariants(
   add: (value: string) => void,
@@ -308,9 +312,7 @@ async function discoverAndConnect() {
     hostUrl.value = url
     probeProgress.value = `${i + 1}/${list.length}`
     try {
-      const result = shouldProbeFromBrowser(url)
-        ? await probeFromBrowser(url)
-        : await sandboxApi.connectHost(url)
+      const result = shouldProbeFromBrowser(url) ? await probeFromBrowser(url) : await sandboxApi.connectHost(url)
       if (result && result.ok === true) {
         connected.value = true
         hostInfo.value = result
@@ -332,8 +334,7 @@ async function discoverAndConnect() {
   if (lastApiError) {
     connectError.value = formatConnectFailure(lastApiError)
   } else {
-    connectError.value =
-      '未发现可连宿主（已试常用地址与当前页同机）。请确认 XCAGI 已启动后点「重新探测」，或手动填写 API 根地址。'
+    connectError.value = '未发现可连宿主（已试常用地址与当前页同机）。请确认 XCAGI 已启动后点「重新探测」，或手动填写 API 根地址。'
   }
   console.warn('[Sandbox] 探测结束，未找到可用宿主')
   connecting.value = false
@@ -352,10 +353,7 @@ async function pushAndTest() {
     const result = await sandboxApi.pushAndTest(hostUrl.value, String(modId))
     if (result.ok) {
       if (iframeRef.value) {
-        iframeRef.value.contentWindow?.postMessage(
-          { type: 'sandbox:navigate', path: `/mod/${modId}` },
-          '*'
-        )
+        iframeRef.value.contentWindow?.postMessage({ type: 'sandbox:navigate', path: `/mod/${modId}` }, '*')
       }
       pushMessage.value = `已推送 ${modId}，正在宿主中打开测试页`
     } else {
@@ -370,8 +368,8 @@ async function pushAndTest() {
 }
 
 function openHostInNewTab() {
-  if (!iframeSrc.value) return
-  window.open(iframeSrc.value, '_blank', 'noopener,noreferrer')
+  const target = normalizeHostOrigin(iframeSrc.value)
+  if (target) window.open(target, '_blank', 'noopener,noreferrer')
 }
 
 function openFullscreen() {
@@ -382,7 +380,9 @@ function openFullscreen() {
 }
 
 function shouldAutoPush() {
-  const raw = String(route.query.autoPush || '').trim().toLowerCase()
+  const raw = String(route.query.autoPush || '')
+    .trim()
+    .toLowerCase()
   return raw === '1' || raw === 'true' || raw === 'yes'
 }
 

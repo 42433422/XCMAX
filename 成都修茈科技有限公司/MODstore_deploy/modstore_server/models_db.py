@@ -1,13 +1,16 @@
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 from .models_base import Base
 from .models_catalog import UserMod
@@ -126,7 +129,7 @@ def _maybe_bootstrap_first_admin() -> None:
                 "MODSTORE_BOOTSTRAP_ADMIN ignored when MODSTORE_DEPLOY_TIER=production"
             )
             return
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     from modstore_server.auth_service import register_user
 
@@ -162,12 +165,12 @@ def _maybe_bootstrap_first_admin() -> None:
         if plan:
             expires_at = None
             if days > 0:
-                expires_at = datetime.now(timezone.utc) + timedelta(days=days)
+                expires_at = datetime.now(UTC) + timedelta(days=days)
             session.add(
                 UserPlan(
                     user_id=user.id,
                     plan_id=plan_id,
-                    started_at=datetime.now(timezone.utc),
+                    started_at=datetime.now(UTC),
                     expires_at=expires_at,
                     is_active=True,
                 )
@@ -185,15 +188,21 @@ def init_db(db_path: Optional[Path] = None):
     Base.metadata.create_all(engine)
     try:
         _add_column_if_missing(
-            engine, "knowledge_collections", "embedding_provider", "VARCHAR(64) DEFAULT ''"
+            engine,
+            "knowledge_collections",
+            "embedding_provider",
+            "VARCHAR(64) DEFAULT ''",
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     try:
         _add_column_if_missing(
-            engine, "knowledge_collections", "embedding_source", "VARCHAR(64) DEFAULT ''"
+            engine,
+            "knowledge_collections",
+            "embedding_source",
+            "VARCHAR(64) DEFAULT ''",
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     for column, ddl_type in (
         ("material_category", "VARCHAR(64) DEFAULT ''"),
@@ -206,7 +215,7 @@ def init_db(db_path: Optional[Path] = None):
     ):
         try:
             _add_column_if_missing(engine, "catalog_items", column, ddl_type)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
     if engine.dialect.name != "sqlite":
         for column, ddl_type in (
@@ -216,7 +225,7 @@ def init_db(db_path: Optional[Path] = None):
         ):
             try:
                 _add_column_if_missing(engine, "workflows", column, ddl_type)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 pass
         for column, ddl_type in (
             ("git_branch", "VARCHAR(256) DEFAULT ''"),
@@ -225,7 +234,7 @@ def init_db(db_path: Optional[Path] = None):
         ):
             try:
                 _add_column_if_missing(engine, "employee_change_requests", column, ddl_type)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 pass
         try:
             _add_column_if_missing(
@@ -234,7 +243,7 @@ def init_db(db_path: Optional[Path] = None):
                 "priority",
                 "INTEGER DEFAULT 5 NOT NULL",
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
         for column, ddl_type in (
             ("avatar_path", "VARCHAR(512) DEFAULT ''"),
@@ -242,7 +251,7 @@ def init_db(db_path: Optional[Path] = None):
         ):
             try:
                 _add_column_if_missing(engine, "users", column, ddl_type)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 pass
         # user_plans：续费字段（缺列会导致 ORM 查询失败并污染客服会话事务）
         for column, ddl_type in (
@@ -252,7 +261,7 @@ def init_db(db_path: Optional[Path] = None):
         ):
             try:
                 _add_column_if_missing(engine, "user_plans", column, ddl_type)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 pass
         init_default_plan_templates()
         init_default_customer_service_standards()
@@ -260,59 +269,59 @@ def init_db(db_path: Optional[Path] = None):
         return
     try:
         _sqlite_add_column_if_missing(engine, "catalog_items", "industry", "TEXT DEFAULT '通用'")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     try:
         _sqlite_add_column_if_missing(engine, "users", "default_llm_json", "TEXT DEFAULT ''")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     try:
         _sqlite_add_column_if_missing(engine, "users", "phone", "TEXT")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     try:
         _sqlite_add_column_if_missing(
             engine, "catalog_items", "security_level", "TEXT DEFAULT 'personal'"
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     try:
         _sqlite_add_column_if_missing(engine, "catalog_items", "industry_code", "TEXT DEFAULT ''")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     try:
         _sqlite_add_column_if_missing(
             engine, "catalog_items", "industry_secondary", "TEXT DEFAULT ''"
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     try:
         _sqlite_add_column_if_missing(
             engine, "catalog_items", "description_embedding", "TEXT DEFAULT ''"
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     try:
         _sqlite_add_column_if_missing(
             engine, "catalog_items", "template_category", "TEXT DEFAULT ''"
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     try:
         _sqlite_add_column_if_missing(
             engine, "catalog_items", "template_difficulty", "TEXT DEFAULT ''"
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     try:
         _sqlite_add_column_if_missing(
             engine, "catalog_items", "install_count", "INTEGER DEFAULT 0 NOT NULL"
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     try:
         _sqlite_add_column_if_missing(engine, "catalog_items", "graph_snapshot", "TEXT DEFAULT ''")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     for column, ddl_type in (
         ("material_category", "TEXT DEFAULT ''"),
@@ -325,33 +334,33 @@ def init_db(db_path: Optional[Path] = None):
     ):
         try:
             _sqlite_add_column_if_missing(engine, "catalog_items", column, ddl_type)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
     try:
         _sqlite_add_column_if_missing(engine, "users", "experience", "INTEGER DEFAULT 0 NOT NULL")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     try:
         _sqlite_add_column_if_missing(engine, "users", "avatar_path", "TEXT DEFAULT ''")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     try:
         _sqlite_add_column_if_missing(
             engine, "users", "avatar_version", "INTEGER DEFAULT 0 NOT NULL"
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     try:
         _sqlite_add_column_if_missing(engine, "workflows", "migration_status", "TEXT DEFAULT ''")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     try:
         _sqlite_add_column_if_missing(engine, "workflows", "migrated_to_id", "INTEGER")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     try:
         _sqlite_add_column_if_missing(engine, "workflows", "kind", "TEXT DEFAULT ''")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     for column, ddl_type in (
         ("git_branch", "TEXT DEFAULT ''"),
@@ -360,13 +369,16 @@ def init_db(db_path: Optional[Path] = None):
     ):
         try:
             _sqlite_add_column_if_missing(engine, "employee_change_requests", column, ddl_type)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
     try:
         _sqlite_add_column_if_missing(
-            engine, "employee_trigger_bindings", "priority", "INTEGER DEFAULT 5 NOT NULL"
+            engine,
+            "employee_trigger_bindings",
+            "priority",
+            "INTEGER DEFAULT 5 NOT NULL",
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     init_default_plan_templates()
     init_default_customer_service_standards()

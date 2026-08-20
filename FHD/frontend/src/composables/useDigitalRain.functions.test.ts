@@ -4,10 +4,8 @@ import { useDigitalRain } from './useDigitalRain'
 
 describe('useDigitalRain', () => {
   let canvasRef: ReturnType<typeof ref<HTMLCanvasElement | null>>
-  let mockCtx: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
-    mockCtx = vi.fn(() => null) as any
     canvasRef = ref(null)
   })
 

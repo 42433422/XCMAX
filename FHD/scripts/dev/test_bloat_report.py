@@ -116,12 +116,16 @@ def cmd_check(seed: bool = False, record: bool = False) -> int:
     print(f"[test-bloat] goals ratio<={RATIO_GOAL} stub<={STUB_LINES_GOAL} (documented)")
     failed = False
     if ratio > base_ratio + RATIO_TOLERANCE:
-        print(f"[test-bloat] FAIL: ratio {ratio} > baseline {base_ratio} + tol {RATIO_TOLERANCE}",
-              file=sys.stderr)
+        print(
+            f"[test-bloat] FAIL: ratio {ratio} > baseline {base_ratio} + tol {RATIO_TOLERANCE}",
+            file=sys.stderr,
+        )
         failed = True
     if stub_lines > base_stub + STUB_TOLERANCE:
-        print(f"[test-bloat] FAIL: stub_lines {stub_lines} > baseline {base_stub} + tol {STUB_TOLERANCE}",
-              file=sys.stderr)
+        print(
+            f"[test-bloat] FAIL: stub_lines {stub_lines} > baseline {base_stub} + tol {STUB_TOLERANCE}",
+            file=sys.stderr,
+        )
         failed = True
     if failed:
         stub_files = sorted(
@@ -130,8 +134,10 @@ def cmd_check(seed: bool = False, record: bool = False) -> int:
             reverse=True,
         )[:10]
         for p in stub_files:
-            print(f"  stub: {p.relative_to(FHD_ROOT).as_posix()} ({_line_count(p)} lines)",
-                  file=sys.stderr)
+            print(
+                f"  stub: {p.relative_to(FHD_ROOT).as_posix()} ({_line_count(p)} lines)",
+                file=sys.stderr,
+            )
         return 1
     if record:
         append_history(rec)

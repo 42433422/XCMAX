@@ -1,3 +1,4 @@
+# mypy: disable-error-code="return-value"
 """office_template_media_bridge 分支覆盖测试。
 
 覆盖 app/application/office_template_media_bridge.py 的全部公共函数与分支：

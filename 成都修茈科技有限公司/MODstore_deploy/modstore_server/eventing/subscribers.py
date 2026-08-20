@@ -14,6 +14,7 @@ import this module without auto-registering for the FastAPI process.
 from __future__ import annotations
 
 import logging
+from datetime import UTC
 from typing import Any
 
 from prometheus_client import Counter
@@ -25,6 +26,7 @@ from modstore_server.eventing.contracts import (
 )
 from modstore_server.eventing.events import DomainEvent
 from modstore_server.eventing.global_bus import neuro_bus
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +92,7 @@ def _on_payment_paid(event: DomainEvent) -> None:
             NotificationType,
             create_notification,
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("notification subscriber failed to import service")
         EVENT_PUBLISHED_TOTAL.labels(event.event_name, "subscriber_error").inc()
         return
@@ -112,7 +114,7 @@ def _on_payment_paid(event: DomainEvent) -> None:
             },
         )
         EVENT_PUBLISHED_TOTAL.labels(event.event_name, "notified").inc()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("payment.paid notification handler failed")
         EVENT_PUBLISHED_TOTAL.labels(event.event_name, "subscriber_error").inc()
 
@@ -129,7 +131,7 @@ def _on_payment_paid_entitlement(event: DomainEvent) -> None:
         from modstore_server import payment_orders
         from modstore_server.models import get_session_factory
         from modstore_server.payment_fulfilment import FulfilContext, select_strategy
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("payment.paid entitlement subscriber failed to import")
         EVENT_PUBLISHED_TOTAL.labels(event.event_name, "subscriber_error").inc()
         return
@@ -142,7 +144,8 @@ def _on_payment_paid_entitlement(event: DomainEvent) -> None:
         order_kind = str(payload.get("order_kind") or "").strip()
     except (TypeError, ValueError):
         logger.warning(
-            "payment.paid entitlement subscriber got malformed payload for %s", out_trade_no
+            "payment.paid entitlement subscriber got malformed payload for %s",
+            out_trade_no,
         )
         return
 
@@ -162,13 +165,13 @@ def _on_payment_paid_entitlement(event: DomainEvent) -> None:
             if strategy.is_already_fulfilled(session, ctx):
                 logger.debug("entitlement already fulfilled for %s, skipping", out_trade_no)
                 return
-            from datetime import datetime, timezone
+            from datetime import datetime
 
             description, txn_type = strategy.description_and_txn_type(ctx)
             strategy.fulfill(
                 session,
                 ctx,
-                now=datetime.now(timezone.utc),
+                now=datetime.now(UTC),
                 description=description,
                 txn_type=txn_type,
             )
@@ -177,7 +180,7 @@ def _on_payment_paid_entitlement(event: DomainEvent) -> None:
             session.commit()
         EVENT_PUBLISHED_TOTAL.labels(event.event_name, "entitlement_granted").inc()
         logger.info("Entitlement granted via NeuroBus subscriber for order %s", out_trade_no)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("payment.paid entitlement subscriber failed for %s", out_trade_no)
         EVENT_PUBLISHED_TOTAL.labels(event.event_name, "subscriber_error").inc()
 
@@ -199,7 +202,7 @@ def _on_payment_paid_invoice(event: DomainEvent) -> None:
         from modstore_server.invoice_api import create_invoice_for_order
     except ImportError:
         return
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("payment.paid invoice subscriber failed to import invoice_api")
         EVENT_PUBLISHED_TOTAL.labels(event.event_name, "subscriber_error").inc()
         return
@@ -211,7 +214,7 @@ def _on_payment_paid_invoice(event: DomainEvent) -> None:
             subject=str(payload.get("subject") or ""),
         )
         EVENT_PUBLISHED_TOTAL.labels(event.event_name, "invoice_created").inc()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("payment.paid invoice creation failed for %s", out_trade_no)
         EVENT_PUBLISHED_TOTAL.labels(event.event_name, "subscriber_error").inc()
 
@@ -256,7 +259,7 @@ def _on_workflow_event_trigger(event: DomainEvent) -> None:
 
         run_workflow_for_trigger(workflow_id=wf_id, user_id=uid, input_data=inp)
         EVENT_PUBLISHED_TOTAL.labels(event.event_name, "workflow_run").inc()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("workflow.event_trigger subscriber failed")
         EVENT_PUBLISHED_TOTAL.labels(event.event_name, "subscriber_error").inc()
 
@@ -277,7 +280,7 @@ def _on_refund_outcome(event: DomainEvent) -> None:
             NotificationType,
             create_notification,
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("refund subscriber failed to import notification service")
         EVENT_PUBLISHED_TOTAL.labels(event.event_name, "subscriber_error").inc()
         return
@@ -314,7 +317,7 @@ def _on_refund_outcome(event: DomainEvent) -> None:
             },
         )
         EVENT_PUBLISHED_TOTAL.labels(event.event_name, "notified").inc()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("refund notification handler failed")
         EVENT_PUBLISHED_TOTAL.labels(event.event_name, "subscriber_error").inc()
 

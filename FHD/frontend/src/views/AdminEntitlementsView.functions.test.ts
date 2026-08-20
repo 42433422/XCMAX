@@ -28,8 +28,7 @@ vi.mock('@/api/xcmaxAdmin', () => ({
     getUserProfiles: () => mockGetUserProfiles(),
     setUserProfile: (uid: number, payload: unknown) => mockSetUserProfile(uid, payload),
     listWallets: () => mockListWallets(),
-    forcePushUserEntitlements: (uid: number, payload: unknown) =>
-      mockForcePushUserEntitlements(uid, payload),
+    forcePushUserEntitlements: (uid: number, payload: unknown) => mockForcePushUserEntitlements(uid, payload),
   },
 }))
 
@@ -59,7 +58,12 @@ function setupDefaultMocks() {
       { id: 3, username: 'normal', mod_ids: [] },
     ],
   })
-  mockListAssignableMods.mockResolvedValue({ mods: [{ id: 'mod1', name: 'Mod 1' }, { id: 'mod2', name: 'Mod 2' }] })
+  mockListAssignableMods.mockResolvedValue({
+    mods: [
+      { id: 'mod1', name: 'Mod 1' },
+      { id: 'mod2', name: 'Mod 2' },
+    ],
+  })
   mockListUserMods.mockResolvedValue({ mod_ids: [] })
   mockGetUserProfiles.mockResolvedValue({ data: {} })
   mockListWallets.mockResolvedValue({ items: [{ user_id: 1, balance: 100.5 }] })
@@ -332,7 +336,10 @@ describe('AdminEntitlementsView functions', () => {
     const vm = wrapper.vm as any
     mockApiFetch.mockImplementation((url: string) => {
       if (url.includes('catalog')) return Promise.resolve({ ok: false, status: 500 })
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({ data: { last_sync_at: '' } }) })
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ data: { last_sync_at: '' } }),
+      })
     })
     await vm.refreshLocalStatus()
     expect(vm.localStatusError).toContain('本地安装状态读取失败')
@@ -342,7 +349,11 @@ describe('AdminEntitlementsView functions', () => {
     const wrapper = await mountComponent()
     const vm = wrapper.vm as any
     mockApiFetch.mockImplementation((url: string) => {
-      if (url.includes('catalog')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ data: { installed: [], available: [] } }) })
+      if (url.includes('catalog'))
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ data: { installed: [], available: [] } }),
+        })
       if (url.includes('sync')) return Promise.resolve({ ok: false, status: 404 })
       return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
     })
@@ -386,10 +397,19 @@ describe('AdminEntitlementsView functions', () => {
       if (url.includes('catalog')) {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({ data: { installed: [{ id: 'mod1', version: '2.0', is_installed: true }], available: [] } }),
+          json: () =>
+            Promise.resolve({
+              data: {
+                installed: [{ id: 'mod1', version: '2.0', is_installed: true }],
+                available: [],
+              },
+            }),
         })
       }
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({ data: { last_sync_at: '' } }) })
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ data: { last_sync_at: '' } }),
+      })
     })
     const wrapper = await mountComponent()
     const vm = wrapper.vm as any
@@ -412,7 +432,10 @@ describe('AdminEntitlementsView functions', () => {
           json: () => Promise.resolve({ data: { last_sync_at: '2026-06-25T10:00:00Z' } }),
         })
       }
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({ data: { installed: [], available: [] } }) })
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ data: { installed: [], available: [] } }),
+      })
     })
     const wrapper = await mountComponent()
     const vm = wrapper.vm as any

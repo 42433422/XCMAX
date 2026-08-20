@@ -60,7 +60,11 @@ def trigger_dependabot_autofix(
 
     sender_login = str(pr_event.get("sender", {}).get("login", ""))
     if "dependabot" not in sender_login:
-        return {"ok": True, "skipped": True, "reason": f"not dependabot PR: {sender_login}"}
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": f"not dependabot PR: {sender_login}",
+        }
 
     pr_number = int(pr_event.get("number", 0) or 0)
     pr_url = str(
@@ -151,8 +155,16 @@ def _classify_dependabot_update(pr_title: str) -> str:
     if not match:
         return "unknown"
 
-    from_major, from_minor, _ = int(match.group(1)), int(match.group(2)), int(match.group(3))
-    to_major, to_minor, _ = int(match.group(4)), int(match.group(5)), int(match.group(6))
+    from_major, from_minor, _ = (
+        int(match.group(1)),
+        int(match.group(2)),
+        int(match.group(3)),
+    )
+    to_major, to_minor, _ = (
+        int(match.group(4)),
+        int(match.group(5)),
+        int(match.group(6)),
+    )
 
     if to_major > from_major:
         return "major"

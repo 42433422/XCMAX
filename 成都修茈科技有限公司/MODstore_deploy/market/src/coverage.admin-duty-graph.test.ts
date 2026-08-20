@@ -7,88 +7,101 @@ const state = vi.hoisted(() => ({
   responses: {} as Record<string, unknown>,
 }))
 
-const api = vi.hoisted(() => new Proxy<Record<string, ReturnType<typeof vi.fn>>>({}, {
-  get(target, property: string) {
-    if (!target[property]) {
-      target[property] = vi.fn(async (...args: unknown[]) => {
-        if (state.fail) throw new Error(`${property} unavailable`)
-        if (Object.prototype.hasOwnProperty.call(state.responses, property)) {
-          const override = state.responses[property]
-          return typeof override === 'function'
-            ? (override as (...params: unknown[]) => unknown)(...args)
-            : override
-        }
-        switch (property) {
-          case 'llmStatus':
-            return {
-              fernet_configured: true,
-              providers: [{
-                provider: 'deepseek',
-                label: 'DeepSeek',
-                has_platform_key: true,
-                has_user_override: false,
-              }],
-            }
-          case 'adminDutyGraphHealth':
-            return { staffing: { missing_employees: [] } }
-          case 'getEmployeeStatus':
-            return {
-              execution_stats: { total_executions: 3, success_count: 2, success_rate: 0.67 },
-              last_execution: '2026-08-17T00:00:00Z',
-            }
-          case 'getEmployeeManifest':
-            return {
-              manifest: {
-                depends_on: [],
-                employee_config_v2: {
-                  cognition: { agent: { model: { provider: 'deepseek', model_name: 'deepseek-chat' } } },
-                  actions: { handlers: ['llm_md'] },
-                  collaboration: { depends_on: [] },
-                },
-              },
-            }
-          case 'adminEmployeeExecutionCapabilities':
-            return {
-              items: ((args[0] as string[]) || []).map((employeeId) => ({
-                employee_id: employeeId,
-                name: employeeId,
-                source: 'catalog',
-                deployed: true,
-                executable: true,
-                reasons: [],
-                handlers: ['llm_md'],
-                declared_dependencies: [],
-                llm: {
-                  provider: 'deepseek',
-                  model: 'deepseek-chat',
-                  needs_llm: true,
-                  activated: true,
-                  key_source: 'platform',
-                },
-                risk: { high_risk: false, requires_confirmation: false, details: [] },
-                recent_execution: null,
-                recent_ops_audits: [],
-              })),
-            }
-          case 'adminListNoKeyEmployees':
-            return { items: [], count: 0, fernet_configured: true, any_provider_has_key: true }
-          case 'adminEmployeeExecutionMetrics':
-            return { items: [], total: 0 }
-          case 'adminDutyGraphRunStart':
-          case 'adminDutyGraphRunDetail':
-            return { id: 1, status: 'success', nodes: [] }
-          case 'llmResolveChatDefault':
-            return { provider: 'deepseek', model: 'deepseek-chat' }
-          case 'llmChat':
-            return { content: 'ok' }
-          default:
-            return { ok: true, success: true, items: [], data: [] }
-        }
-      })
-    }
-    return target[property]
-  },
-}))
+const api = vi.hoisted(
+  () =>
+    new Proxy<Record<string, ReturnType<typeof vi.fn>>>(
+      {},
+      {
+        get(target, property: string) {
+          if (!target[property]) {
+            target[property] = vi.fn(async (...args: unknown[]) => {
+              if (state.fail) throw new Error(`${property} unavailable`)
+              if (Object.prototype.hasOwnProperty.call(state.responses, property)) {
+                const override = state.responses[property]
+                return typeof override === 'function' ? (override as (...params: unknown[]) => unknown)(...args) : override
+              }
+              switch (property) {
+                case 'llmStatus':
+                  return {
+                    fernet_configured: true,
+                    providers: [
+                      {
+                        provider: 'deepseek',
+                        label: 'DeepSeek',
+                        has_platform_key: true,
+                        has_user_override: false,
+                      },
+                    ],
+                  }
+                case 'adminDutyGraphHealth':
+                  return { staffing: { missing_employees: [] } }
+                case 'getEmployeeStatus':
+                  return {
+                    execution_stats: { total_executions: 3, success_count: 2, success_rate: 0.67 },
+                    last_execution: '2026-08-17T00:00:00Z',
+                  }
+                case 'getEmployeeManifest':
+                  return {
+                    manifest: {
+                      depends_on: [],
+                      employee_config_v2: {
+                        cognition: {
+                          agent: { model: { provider: 'deepseek', model_name: 'deepseek-chat' } },
+                        },
+                        actions: { handlers: ['llm_md'] },
+                        collaboration: { depends_on: [] },
+                      },
+                    },
+                  }
+                case 'adminEmployeeExecutionCapabilities':
+                  return {
+                    items: ((args[0] as string[]) || []).map((employeeId) => ({
+                      employee_id: employeeId,
+                      name: employeeId,
+                      source: 'catalog',
+                      deployed: true,
+                      executable: true,
+                      reasons: [],
+                      handlers: ['llm_md'],
+                      declared_dependencies: [],
+                      llm: {
+                        provider: 'deepseek',
+                        model: 'deepseek-chat',
+                        needs_llm: true,
+                        activated: true,
+                        key_source: 'platform',
+                      },
+                      risk: { high_risk: false, requires_confirmation: false, details: [] },
+                      recent_execution: null,
+                      recent_ops_audits: [],
+                    })),
+                  }
+                case 'adminListNoKeyEmployees':
+                  return {
+                    items: [],
+                    count: 0,
+                    fernet_configured: true,
+                    any_provider_has_key: true,
+                  }
+                case 'adminEmployeeExecutionMetrics':
+                  return { items: [], total: 0 }
+                case 'adminDutyGraphRunStart':
+                case 'adminDutyGraphRunDetail':
+                  return { id: 1, status: 'success', nodes: [] }
+                case 'llmResolveChatDefault':
+                  return { provider: 'deepseek', model: 'deepseek-chat' }
+                case 'llmChat':
+                  return { content: 'ok' }
+                default:
+                  return { ok: true, success: true, items: [], data: [] }
+              }
+            })
+          }
+          return target[property]
+        },
+      },
+    ),
+)
 
 const router = vi.hoisted(() => ({
   push: vi.fn(),
@@ -124,8 +137,14 @@ describe('admin duty employee graph production surface', () => {
     route.query = {}
     vi.clearAllMocks()
     vi.useFakeTimers()
-    vi.stubGlobal('confirm', vi.fn(() => true))
-    vi.stubGlobal('prompt', vi.fn(() => 'task'))
+    vi.stubGlobal(
+      'confirm',
+      vi.fn(() => true),
+    )
+    vi.stubGlobal(
+      'prompt',
+      vi.fn(() => 'task'),
+    )
     vi.stubGlobal('open', vi.fn())
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
@@ -152,7 +171,8 @@ describe('admin duty employee graph production surface', () => {
     expect(wrapper.exists()).toBe(true)
 
     const vm = setupState(wrapper)
-    const safeHandler = /^(format|is|has|can|resolve|build|compute|normalize|label|state|status|describe|extract|parse|selected|health|llm|gap|client|craft|employee|open|close|toggle|focus|copy|apply|load)/i
+    const safeHandler =
+      /^(format|is|has|can|resolve|build|compute|normalize|label|state|status|describe|extract|parse|selected|health|llm|gap|client|craft|employee|open|close|toggle|focus|copy|apply|load)/i
     const skip = /(poll|timer|interval|autoRefresh|allHands|dispatch|execute|chat)/i
     let exercised = 0
     for (const [name, candidate] of Object.entries(vm)) {
@@ -192,8 +212,13 @@ describe('admin duty employee graph production surface', () => {
       cognition_error: '',
       warnings: [],
       manifest_signals: {
-        name: 'Intent analyst', persona: 'analyst', expertise: ['intent'],
-        handlers: ['llm_md'], depends_on: [], skills: [], workflow_id: 0,
+        name: 'Intent analyst',
+        persona: 'analyst',
+        expertise: ['intent'],
+        handlers: ['llm_md'],
+        depends_on: [],
+        skills: [],
+        workflow_id: 0,
       },
       recent_failures: [],
       research_sources: [],
@@ -207,11 +232,17 @@ describe('admin duty employee graph production surface', () => {
     }
     state.responses = {
       adminListNoKeyEmployees: {
-        items: [{
-          pkg_id: 'intent-analyst', name: 'Intent analyst', current_provider: 'deepseek',
-          current_model: 'deepseek-chat', key_source: 'none', suggested_action: 'align_to_auto',
-          reasons: ['missing key'],
-        }],
+        items: [
+          {
+            pkg_id: 'intent-analyst',
+            name: 'Intent analyst',
+            current_provider: 'deepseek',
+            current_model: 'deepseek-chat',
+            key_source: 'none',
+            suggested_action: 'align_to_auto',
+            reasons: ['missing key'],
+          },
+        ],
         count: 1,
         fernet_configured: true,
         any_provider_has_key: true,
@@ -240,10 +271,18 @@ describe('admin duty employee graph production surface', () => {
       },
       executeEmployeeTask: { summary: 'completed' },
       adminEmployeeExecutionMetrics: {
-        items: [{
-          id: 61, user_id: 1, task: 'inspect', status: 'success', duration_ms: 120,
-          llm_tokens: 30, error: '', created_at: '2026-08-17T00:00:00Z',
-        }],
+        items: [
+          {
+            id: 61,
+            user_id: 1,
+            task: 'inspect',
+            status: 'success',
+            duration_ms: 120,
+            llm_tokens: 30,
+            error: '',
+            created_at: '2026-08-17T00:00:00Z',
+          },
+        ],
         total: 1,
       },
     }
@@ -292,7 +331,9 @@ describe('admin duty employee graph production surface', () => {
     for (const panel of ['gap', 'run', 'allhands', 'nokey']) vm.togglePanel(panel)
     await vm.openNoKeyPanel()
     await vm.loadNoKeyEmployees()
-    const noKeyResponse = state.responses.adminListNoKeyEmployees as { items: Array<Record<string, unknown>> }
+    const noKeyResponse = state.responses.adminListNoKeyEmployees as {
+      items: Array<Record<string, unknown>>
+    }
     await vm.alignSingleEmployeeToAuto(noKeyResponse.items[0])
     vm.gotoAddKey()
 

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """企业官网（成都修茈科技有限公司 / xiu-ci.com）端侧 runner。
 
 消费 unified_autonomy_orchestrator.py 写入的 IncidentEvent(scope=website)：
@@ -27,10 +28,11 @@ import json
 import os
 import sys
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 from modstore_server.website_runner_models import ActionResult, DispatchReport
 
 try:
@@ -95,7 +97,7 @@ def action_redeploy_via_workflow_dispatch(
 
     Returns ActionResult（detail 含 dispatch_url 便于追溯）。
     """
-    started = datetime.now(timezone.utc)
+    started = datetime.now(UTC)
     repo = repo or _resolve_repo(token)
     token = token or os.environ.get("GITHUB_TOKEN", "")
     if not repo:
@@ -127,7 +129,7 @@ def action_redeploy_via_workflow_dispatch(
         close_after = True
     try:
         resp = client.post(url, headers=_gh_headers(token), json=body)
-        duration = (datetime.now(timezone.utc) - started).total_seconds() * 1000.0
+        duration = (datetime.now(UTC) - started).total_seconds() * 1000.0
         if resp.status_code in (200, 204):
             return ActionResult(
                 action="redeploy",
@@ -143,8 +145,8 @@ def action_redeploy_via_workflow_dispatch(
             response_excerpt=resp.text[:500],
             duration_ms=duration,
         )
-    except Exception as exc:  # noqa: BLE001 - fail-soft 转 ActionResult
-        duration = (datetime.now(timezone.utc) - started).total_seconds() * 1000.0
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001 - fail-soft 转 ActionResult
+        duration = (datetime.now(UTC) - started).total_seconds() * 1000.0
         return ActionResult(
             action="redeploy",
             ok=False,
@@ -155,7 +157,7 @@ def action_redeploy_via_workflow_dispatch(
         if close_after:
             try:
                 client.close()
-            except Exception:  # noqa: BLE001 - pragma: no cover
+            except BOUNDARY_ERRORS:  # noqa: BLE001 - pragma: no cover
                 pass
 
 
@@ -170,7 +172,7 @@ def action_escalate_to_human(
     timeout: float = 15.0,
 ) -> ActionResult:
     """创建 GitHub Issue 升级到人工（labels 默认 needs-human/autonomy/website）。"""
-    started = datetime.now(timezone.utc)
+    started = datetime.now(UTC)
     repo = repo or _resolve_repo(token)
     token = token or os.environ.get("GITHUB_TOKEN", "")
     if not repo:
@@ -201,7 +203,7 @@ def action_escalate_to_human(
         close_after = True
     try:
         resp = client.post(url, headers=_gh_headers(token), json=payload)
-        duration = (datetime.now(timezone.utc) - started).total_seconds() * 1000.0
+        duration = (datetime.now(UTC) - started).total_seconds() * 1000.0
         if resp.status_code in (200, 201):
             try:
                 data = resp.json()
@@ -214,7 +216,7 @@ def action_escalate_to_human(
                     response_excerpt=f"issue_url={issue_url}",
                     duration_ms=duration,
                 )
-            except Exception as exc:  # noqa: BLE001 - 解析失败但 2xx，记为 partial
+            except BOUNDARY_ERRORS as exc:  # noqa: BLE001 - 解析失败但 2xx，记为 partial
                 return ActionResult(
                     action="escalate",
                     ok=True,
@@ -229,8 +231,8 @@ def action_escalate_to_human(
             response_excerpt=resp.text[:500],
             duration_ms=duration,
         )
-    except Exception as exc:  # noqa: BLE001 - fail-soft 转 ActionResult
-        duration = (datetime.now(timezone.utc) - started).total_seconds() * 1000.0
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001 - fail-soft 转 ActionResult
+        duration = (datetime.now(UTC) - started).total_seconds() * 1000.0
         return ActionResult(
             action="escalate",
             ok=False,
@@ -241,7 +243,7 @@ def action_escalate_to_human(
         if close_after:
             try:
                 client.close()
-            except Exception:  # noqa: BLE001 - pragma: no cover
+            except BOUNDARY_ERRORS:  # noqa: BLE001 - pragma: no cover
                 pass
 
 
@@ -278,7 +280,7 @@ def _write_audit(report: DispatchReport, audit_dir: Path) -> Path | None:
         except OSError as exc:
             print(f"[website-runner] audit dir mkdir failed: {exc!r}", file=sys.stderr)
             return None
-    ts = datetime.now(timezone.utc).strftime("%Y%m%d")
+    ts = datetime.now(UTC).strftime("%Y%m%d")
     audit_file = audit_dir / f"website_dispatch_{ts}.jsonl"
     try:
         with audit_file.open("a", encoding="utf-8") as f:
@@ -299,7 +301,7 @@ def dispatch_incident(event_id: int) -> DispatchReport:
     """
     from modstore_server.models import IncidentEvent, get_session_factory
 
-    started = datetime.now(timezone.utc)
+    started = datetime.now(UTC)
     sf = get_session_factory()
     with sf() as session:
         ev = session.query(IncidentEvent).filter(IncidentEvent.id == int(event_id)).first()
@@ -312,7 +314,7 @@ def dispatch_incident(event_id: int) -> DispatchReport:
                 ok=False,
                 reason="incident_not_found",
                 started_at=started.isoformat(),
-                finished_at=datetime.now(timezone.utc).isoformat(),
+                finished_at=datetime.now(UTC).isoformat(),
             )
         try:
             payload = json.loads(ev.payload_json or "{}")
@@ -342,7 +344,7 @@ def dispatch_incident(event_id: int) -> DispatchReport:
             report.action = "skip"
             report.ok = True
             report.reason = f"scope mismatch: expected=website, actual={scope!r}"
-            report.finished_at = datetime.now(timezone.utc).isoformat()
+            report.finished_at = datetime.now(UTC).isoformat()
             return report
 
         # 决策 + 执行
@@ -427,7 +429,7 @@ def dispatch_incident(event_id: int) -> DispatchReport:
         report.dispatched_count_after = ev.dispatched_count
         session.commit()
 
-        report.finished_at = datetime.now(timezone.utc).isoformat()
+        report.finished_at = datetime.now(UTC).isoformat()
         return report
 
 

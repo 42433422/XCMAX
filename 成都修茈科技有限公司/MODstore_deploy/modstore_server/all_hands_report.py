@@ -1,3 +1,4 @@
+# isort: skip_file
 # ruff: noqa: E402, F401
 """数字管家「全员汇报」编排。
 
@@ -52,7 +53,6 @@ from modstore_server.all_hands_report_part01 import (
     clamp_all_hands_max_employees as clamp_all_hands_max_employees,
     all_hands_employee_timeout_sec as all_hands_employee_timeout_sec,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -157,7 +157,6 @@ from modstore_server.all_hands_report_part02 import (
     _craft_workshop_pkg_ids as _craft_workshop_pkg_ids,
 )
 
-
 CRAFT_WORKSHOP_STANDBY_IDS = _craft_workshop_pkg_ids()
 
 
@@ -176,7 +175,6 @@ from modstore_server.all_hands_report_part03 import (
     _standby_manifest_report_via_bench as _standby_manifest_report_via_bench,
     _report_one_employee as _report_one_employee,
 )
-
 
 # ─── 综合答复（数字管家把 19 名员工的回答合并） ──────────────────────────────
 
@@ -201,7 +199,6 @@ from modstore_server.all_hands_report_part04 import (
     _employee_answer_excerpt as _employee_answer_excerpt,
     synthesize_all_hands_answer as synthesize_all_hands_answer,
 )
-
 
 _MEETING_MINUTES_SYSTEM_PROMPT = """你是 MODstore 的数字管家秘书，根据「员工大会」上各 AI 员工的汇报节选（及可能有的综合答复），写一份给**管理员**看的会议摘要。
 

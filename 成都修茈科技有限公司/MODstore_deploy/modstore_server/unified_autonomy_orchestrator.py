@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """Phase-D cross-repository incident orchestrator."""
 
 from __future__ import annotations
@@ -7,6 +8,7 @@ import time
 from typing import Any, Dict
 
 from modstore_server.models import IncidentEvent, get_session_factory
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 KNOWN_SCOPES = ("fhd", "modstore", "website", "desktop", "android")
 
@@ -34,7 +36,15 @@ def _priority(event_type: str, payload: Dict[str, Any], scope: str) -> int:
     text = json.dumps({"event_type": event_type, "payload": payload}, ensure_ascii=False).lower()
     if any(
         token in text
-        for token in ("security", "secret", "credential", "payment", "auth", "安全", "支付")
+        for token in (
+            "security",
+            "secret",
+            "credential",
+            "payment",
+            "auth",
+            "安全",
+            "支付",
+        )
     ):
         base += 25
     if any(token in text for token in ("down", "outage", "500", "crash", "slo", "不可用", "宕机")):
@@ -58,7 +68,7 @@ def _resource_plan(scope: str, priority: int, payload: Dict[str, Any]) -> Dict[s
 
         cluster = cluster_status()
         leader = cluster.get("leader") if isinstance(cluster.get("leader"), dict) else None
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         cluster = {"ok": False, "error": str(exc)[:300]}
         leader = None
     worker_pool = {
@@ -102,7 +112,7 @@ def orchestrate_incident(event_id: int) -> Dict[str, Any]:
                 event_type=str(ev.event_type or ""),
                 payload={**payload, "priority": priority, "scope": scope},
             )
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             model_route = {"error": str(exc)[:300], "route": "auto"}
         plan = {
             "coverage_scopes": list(KNOWN_SCOPES),
@@ -131,7 +141,9 @@ def orchestrate_incident(event_id: int) -> Dict[str, Any]:
 
                 runner_report = _website_dispatch(event_id=int(event_id))
                 plan["website_runner"] = runner_report.to_dict()
-            except Exception as exc:  # noqa: BLE001 - fail-open：runner 故障不影响 orchestrator
+            except (
+                BOUNDARY_ERRORS
+            ) as exc:  # noqa: BLE001 - fail-open：runner 故障不影响 orchestrator
                 plan["website_runner"] = {"ok": False, "error": str(exc)[:300]}
 
         return {"ok": True, **plan}

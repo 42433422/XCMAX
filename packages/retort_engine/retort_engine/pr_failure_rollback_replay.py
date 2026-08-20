@@ -1,4 +1,5 @@
 from __future__ import annotations
+from retort_engine.operational_errors import BOUNDARY_ERRORS
 
 import json
 import subprocess
@@ -6,7 +7,7 @@ import sys
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.pr_dry_run import review_pr_url
 
@@ -92,12 +93,16 @@ def build_pr_failure_rollback_replay(
 
 def _run_case(url: str, reviewer: Reviewer, runner: Runner) -> dict[str, Any]:
     review = _safe_review(url, reviewer)
-    summary = review.get("summary") if isinstance(review.get("summary"), dict) else {}
-    nested_summary = (
+    summary = cast(
+        dict[str, Any],
+        review.get("summary") if isinstance(review.get("summary"), dict) else {},
+    )
+    nested_summary = cast(
+        dict[str, Any],
         (review.get("review") or {}).get("summary")
         if isinstance(review.get("review"), dict)
         and isinstance((review.get("review") or {}).get("summary"), dict)
-        else {}
+        else {},
     )
     repo = _repo_slug(str(review.get("pr_url") or url))
     with tempfile.TemporaryDirectory(prefix="retort-failure-rollback-") as tmp:
@@ -161,7 +166,7 @@ def _run_case(url: str, reviewer: Reviewer, runner: Runner) -> dict[str, Any]:
 def _safe_review(url: str, reviewer: Reviewer) -> dict[str, Any]:
     try:
         return reviewer(url)
-    except Exception as exc:  # noqa: BLE001 - injected reviewers are untrusted adapters
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001 - injected reviewers are untrusted adapters
         return {
             "status": "failed",
             "pr_url": url,

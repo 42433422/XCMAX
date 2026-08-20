@@ -19,16 +19,7 @@ export type IndustryPreset = {
   uiLabels: Record<string, string>
 }
 
-export const INDUSTRY_PRESET_IDS = [
-  '通用',
-  '涂料',
-  '考勤',
-  '批发',
-  '电商',
-  '餐饮',
-  '物流',
-  '管理端',
-] as const
+export const INDUSTRY_PRESET_IDS = ['通用', '涂料', '考勤', '批发', '电商', '餐饮', '物流', '管理端'] as const
 
 export const INDUSTRY_PRESETS: Record<string, IndustryPreset> = {
   通用: {
@@ -46,7 +37,12 @@ export const INDUSTRY_PRESETS: Record<string, IndustryPreset> = {
     ],
     placeholderNormal: '输入需求',
     menuLabels: {},
-    uiLabels: { entity: '条目', model_label: '编号', shipment_order: '业务单', records: '业务记录' },
+    uiLabels: {
+      entity: '条目',
+      model_label: '编号',
+      shipment_order: '业务单',
+      records: '业务记录',
+    },
   },
   涂料: {
     id: '涂料',
@@ -72,7 +68,12 @@ export const INDUSTRY_PRESETS: Record<string, IndustryPreset> = {
       customers: '客户管理',
       print: '标签打印',
     },
-    uiLabels: { entity: '产品', model_label: '型号', shipment_order: '出货单', records: '出货记录' },
+    uiLabels: {
+      entity: '产品',
+      model_label: '型号',
+      shipment_order: '出货单',
+      records: '出货记录',
+    },
   },
   考勤: {
     id: '考勤',
@@ -101,7 +102,12 @@ export const INDUSTRY_PRESETS: Record<string, IndustryPreset> = {
       'printer-list': '考勤打印机',
       'template-preview': '考勤模板库',
     },
-    uiLabels: { entity: '员工', model_label: '工号', shipment_order: '考勤单', records: '考勤记录' },
+    uiLabels: {
+      entity: '员工',
+      model_label: '工号',
+      shipment_order: '考勤单',
+      records: '考勤记录',
+    },
   },
   批发: {
     id: '批发',
@@ -232,9 +238,7 @@ export function getIndustryPreset(industryId: string): IndustryPreset {
 }
 
 /** 从 Mod manifest.industry 构造可展示的预设（非 8 内置行业也可完整 UI） */
-export function industryPresetFromManifest(
-  ind: Record<string, unknown> | null | undefined,
-): IndustryPreset | null {
+export function industryPresetFromManifest(ind: Record<string, unknown> | null | undefined): IndustryPreset | null {
   if (!ind || typeof ind !== 'object') return null
   const id = String(ind.id || '').trim()
   if (!id) return null
@@ -264,9 +268,7 @@ export function industryPresetFromManifest(
     name,
     scenario: scenario || `${name}业务。`,
     welcomeIntro: String(ind.welcome_intro || ind.welcomeIntro || `你好，${name}助手。`),
-    welcomeBullets: Array.isArray(ind.welcome_bullets)
-      ? (ind.welcome_bullets as string[]).map(String).slice(0, 2)
-      : ['查数据', '处理单据'],
+    welcomeBullets: Array.isArray(ind.welcome_bullets) ? (ind.welcome_bullets as string[]).map(String).slice(0, 2) : ['查数据', '处理单据'],
     quickButtons: Array.isArray(ind.quick_buttons)
       ? (ind.quick_buttons as IndustryQuickButton[])
       : [{ text: '帮我查一下常用数据', label: '查数据' }],
@@ -297,7 +299,10 @@ export function isIndustryWelcomePlainText(plain: string): boolean {
 
 export function getIndustryWelcomeMarkdown(industryId: string): string {
   const p = getIndustryPreset(industryId)
-  const bullets = p.welcomeBullets.slice(0, 2).map((b) => `- ${b}`).join('\n')
+  const bullets = p.welcomeBullets
+    .slice(0, 2)
+    .map((b) => `- ${b}`)
+    .join('\n')
   return `${p.welcomeIntro}\n${bullets}\n请说出需求。`
 }
 

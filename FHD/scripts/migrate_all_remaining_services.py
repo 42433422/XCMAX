@@ -10,6 +10,8 @@
 
 from pathlib import Path
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 
 class BulkServiceMigrator:
     """批量 Service 迁移器"""
@@ -121,7 +123,7 @@ class BulkServiceMigrator:
 
             return True
 
-        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             self.log(f"迁移失败 {file_path.name}: {e}", "ERROR")
             return False
 

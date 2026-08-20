@@ -65,6 +65,7 @@ _WRITE_REQUIRED_FALLBACK: dict[tuple[str, str], list[str]] = {
     ("finance", "journal_entry_create"): ["lines"],
 }
 
+
 def _is_write_or_high_risk(node: WorkflowNode) -> bool:
     return node.risk == "high" or not node.idempotent
 

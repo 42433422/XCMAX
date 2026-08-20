@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Any, Dict, Iterable, Union
+from typing import Any, Dict, Iterable
 
 from modstore_server.multimodal_llm import VISION_IMAGE_TOKEN_ESTIMATE
 
@@ -36,7 +36,7 @@ def estimate_tokens_from_text(text: str) -> int:
     return max(1, int(len(text or "") / 4) + 1)
 
 
-def estimate_tokens_from_message_content(content: Union[str, list, Any]) -> int:
+def estimate_tokens_from_message_content(content: str | list | Any) -> int:
     if isinstance(content, str):
         return estimate_tokens_from_text(content)
     if isinstance(content, list):

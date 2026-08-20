@@ -9,6 +9,8 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict
 
+from modstore_server.operational_errors import BOUNDARY_ERRORS
+
 
 def _load_run_from_pack(pack_dir: Path, pack_id: str):
     backend = pack_dir / "backend" / "employees"
@@ -38,7 +40,12 @@ async def run_pack_domain_smoke(
     pack_dir = Path(pack_dir)
     pid = str(pack_id or pack_dir.name).strip()
     rk = (runtime_kind or "").strip()
-    out: Dict[str, Any] = {"ok": False, "runtime_kind": rk, "pack_id": pid, "skipped": False}
+    out: Dict[str, Any] = {
+        "ok": False,
+        "runtime_kind": rk,
+        "pack_id": pid,
+        "skipped": False,
+    }
 
     if rk not in (
         "word_full_extract",
@@ -123,7 +130,7 @@ async def run_pack_domain_smoke(
                 :500
             ]
         return out
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         out["error"] = str(exc)[:800]
         return out
     finally:

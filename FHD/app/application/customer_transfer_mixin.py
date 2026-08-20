@@ -6,6 +6,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
+
 class CustomerTransferMixin:
     if TYPE_CHECKING:
 
@@ -92,9 +93,10 @@ class CustomerTransferMixin:
 
                         imported += 1
 
-                    except RECOVERABLE_ERRORS as item_error:
+                    except RECOVERABLE_ERRORS:
+                        logger.exception("导入单条客户数据失败")
                         failed += 1
-                        failed_items.append({"reason": str(item_error), "item": item})
+                        failed_items.append({"reason": "customer_import_failed", "item": item})
 
                 session.commit()
 
@@ -196,9 +198,15 @@ class CustomerTransferMixin:
             finally:
                 session.close()
 
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("导入失败: %s", e)
-            return {"success": False, "message": str(e), "updated": 0, "inserted": 0, "skipped": 0}
+        except RECOVERABLE_ERRORS:
+            logger.exception("导入失败")
+            return {
+                "success": False,
+                "message": "客户导入失败",
+                "updated": 0,
+                "inserted": 0,
+                "skipped": 0,
+            }
 
     def export_to_excel(
         self, keyword: str | None = None, template_id: str | None = None
@@ -304,6 +312,6 @@ class CustomerTransferMixin:
             finally:
                 session.close()
 
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("导出失败: %s", e)
-            return {"success": False, "message": str(e)}
+        except RECOVERABLE_ERRORS:
+            logger.exception("导出失败")
+            return {"success": False, "message": "客户导出失败"}

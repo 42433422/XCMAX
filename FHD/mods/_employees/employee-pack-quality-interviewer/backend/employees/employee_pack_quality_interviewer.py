@@ -13,11 +13,7 @@ def run(payload: dict[str, Any], _ctx: dict[str, Any]) -> dict[str, Any]:
         return _failed("capability object is required", "missing_capability")
 
     input_contract = capability.get("input_contract")
-    handlers = (
-        capability.get("handlers")
-        if isinstance(capability.get("handlers"), list)
-        else []
-    )
+    handlers = capability.get("handlers") if isinstance(capability.get("handlers"), list) else []
     acceptance = capability.get("acceptance")
     gaps: list[str] = []
     if not isinstance(input_contract, dict) or not input_contract.get("required"):
@@ -25,9 +21,7 @@ def run(payload: dict[str, Any], _ctx: dict[str, Any]) -> dict[str, Any]:
     normalized_handlers = {str(item).strip() for item in handlers if str(item).strip()}
     if not normalized_handlers or normalized_handlers.issubset(_HOLLOW_HANDLERS):
         gaps.append("executable_handler_missing")
-    if not isinstance(acceptance, list) or not any(
-        str(item or "").strip() for item in acceptance
-    ):
+    if not isinstance(acceptance, list) or not any(str(item or "").strip() for item in acceptance):
         gaps.append("acceptance_contract_missing")
 
     approved = not gaps

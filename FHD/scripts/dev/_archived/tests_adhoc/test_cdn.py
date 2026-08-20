@@ -1,5 +1,6 @@
-
 import requests
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 # CDN URL from the image message
 cdn_url = "https://vweixinf.tc.qq.com/weixin-android/s/tmp/mmsns/3057020100044b304902010002041d3bf20d02032f53a3020433752d70020469bfaba5042464303638643365302d303934312d346166652d613632622d373536313739346564306164020405152a010201000405004c4d9b00"
@@ -9,7 +10,7 @@ try:
     resp = requests.head(cdn_url, timeout=5)
     print(f"Status: {resp.status_code}")
     print(f"Headers: {dict(resp.headers)}")
-except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"Error: {e}")
 
 # Also try the video CDN URL
@@ -18,5 +19,5 @@ print("\nTesting video CDN access...")
 try:
     resp = requests.head(video_url, timeout=5)
     print(f"Status: {resp.status_code}")
-except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"Error: {e}")

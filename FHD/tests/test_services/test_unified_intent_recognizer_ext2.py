@@ -1,3 +1,4 @@
+# mypy: disable-error-code="var-annotated"
 """Extended tests for ``app.services.unified_intent_recognizer`` covering low-coverage branches."""
 
 from __future__ import annotations

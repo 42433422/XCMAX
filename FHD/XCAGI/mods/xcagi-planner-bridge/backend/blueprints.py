@@ -8,6 +8,8 @@ import os
 from fastapi import APIRouter, Body, Request
 from fastapi.responses import StreamingResponse
 
+from app.mod_sdk.errors import BOUNDARY_ERRORS
+
 logger = logging.getLogger(__name__)
 
 HOST_PREFIXES = ["/api/ai/chat", "/api/ai/intent"]
@@ -114,7 +116,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
                 r = await client.get(f"{base}/api/platform-shell/capabilities")
                 if r.status_code < 400:
                     return r.json()
-        except Exception as exc:
+        except BOUNDARY_ERRORS as exc:
             logger.warning("host-capabilities proxy failed: %s", exc)
         return {"success": False, "error": "platform-shell unavailable"}
 

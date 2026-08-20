@@ -1,8 +1,11 @@
-# ruff: noqa
-# mypy: ignore-errors
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Persistence entry point for natural-language workflow graphs."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -42,7 +45,7 @@ async def apply_nl_workflow_graph(
         return {"ok": False, "error": "工作流不存在或无权访问"}
     from modstore_server.mod_scaffold_runner import resolve_llm_provider_model
 
-    (prov, mdl, err) = resolve_llm_provider_model(db, user, provider, model)
+    prov, mdl, err = resolve_llm_provider_model(db, user, provider, model)
     if err:
         return {"ok": False, "error": err}
     employee_pack_id = str(target_employee_pack_id or "").strip()
@@ -77,7 +80,7 @@ async def apply_nl_workflow_graph(
             maybe = status_hook(f"正在调用 {prov}/{mdl} 生成画布节点与边…")
             if hasattr(maybe, "__await__"):
                 await maybe
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
     result = await _facade().chat_dispatch_via_session(
         db, user.id, prov, mdl, msgs, max_tokens=4096
@@ -87,7 +90,7 @@ async def apply_nl_workflow_graph(
             maybe = status_hook("解析模型响应、组装节点与边…")
             if hasattr(maybe, "__await__"):
                 await maybe
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
     if not result.get("ok"):
         e = str(result.get("error") or "LLM 调用失败")
@@ -230,7 +233,11 @@ async def apply_nl_workflow_graph(
                 for tid in chain:
                     if not any((e["target_temp_id"] == tid for e in edges_in)):
                         edges_in.append(
-                            {"source_temp_id": prev, "target_temp_id": tid, "condition": ""}
+                            {
+                                "source_temp_id": prev,
+                                "target_temp_id": tid,
+                                "condition": "",
+                            }
                         )
                     prev = tid
                 if not any(
@@ -240,7 +247,11 @@ async def apply_nl_workflow_graph(
                     )
                 ):
                     edges_in.append(
-                        {"source_temp_id": prev, "target_temp_id": end_tid, "condition": ""}
+                        {
+                            "source_temp_id": prev,
+                            "target_temp_id": end_tid,
+                            "condition": "",
+                        }
                     )
     starts = [n for n in nodes_in if n["node_type"] == "start"]
     ends = [n for n in nodes_in if n["node_type"] == "end"]
@@ -336,7 +347,7 @@ async def apply_nl_workflow_graph(
             maybe = status_hook("正在创建 AI 生成的 Skill…")
             if hasattr(maybe, "__await__"):
                 await maybe
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
     id_map: _facade().Dict[str, int] = {}
     temp_to_skill: _facade().Dict[str, int] = {}
@@ -378,7 +389,7 @@ async def apply_nl_workflow_graph(
                 )
             )
         db.commit()
-    except Exception as ex:
+    except RECOVERABLE_ERRORS as ex:
         db.rollback()
         return {"ok": False, "error": f"写入节点/边失败: {ex}"}
     report = _facade().run_workflow_sandbox(

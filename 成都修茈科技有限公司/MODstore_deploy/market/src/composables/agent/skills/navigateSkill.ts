@@ -26,7 +26,10 @@ export function createNavigateSkill(router: ReturnType<typeof import('vue-router
       }
 
       if (!targetRouteName) {
-        return { success: false, message: '未能识别目标页面，请说出具体页面名（例如：去会员页、打开钱包）。' }
+        return {
+          success: false,
+          message: '未能识别目标页面，请说出具体页面名（例如：去会员页、打开钱包）。',
+        }
       }
 
       try {
@@ -37,7 +40,10 @@ export function createNavigateSkill(router: ReturnType<typeof import('vue-router
           assistantReply: `好的，已为您跳转到目标页面。`,
         }
       } catch (e: unknown) {
-        return { success: false, message: `导航失败：${e instanceof Error ? e.message : String(e)}` }
+        return {
+          success: false,
+          message: `导航失败：${e instanceof Error ? e.message : String(e)}`,
+        }
       }
     },
   }

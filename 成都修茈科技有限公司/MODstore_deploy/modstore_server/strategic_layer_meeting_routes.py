@@ -1,17 +1,20 @@
-# ruff: noqa
 """Meeting, action-item, and report routes for the strategic-layer API."""
+
 from __future__ import annotations
+
 import logging
 import sys
 from typing import Any, Dict, List, Optional
-from fastapi import Depends, HTTPException, Query
+
+from fastapi import Depends, Query
+
 from modstore_server.api.deps import get_current_user, require_admin
 from modstore_server.models import User
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.strategic_layer import (
     MeetingDecisionRef,
     MeetingParticipants,
     MeetingStatus,
-    MeetingType,
 )
 from modstore_server.strategic_layer_models import (
     CancelMeetingRequest,
@@ -45,7 +48,9 @@ def schedule_meeting(
     if scheduled_at is None:
         raise _facade().HTTPException(422, "scheduled_at required")
     participants = MeetingParticipants(
-        required=body.required_participants, optional=body.optional_participants, chair=body.chair
+        required=body.required_participants,
+        optional=body.optional_participants,
+        chair=body.chair,
     )
     svc = _facade()._meeting_service()
     try:
@@ -61,7 +66,7 @@ def schedule_meeting(
         return {"ok": True, "meeting": meeting}
     except ValueError as exc:
         raise _facade().HTTPException(422, str(exc)) from exc
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         _facade().logger.exception("schedule_meeting failed")
         raise _facade().HTTPException(500, f"schedule failed: {exc}") from exc
 
@@ -100,7 +105,7 @@ def start_meeting(meeting_id: str, _: User = Depends(require_admin)) -> Dict[str
         return {"ok": True, "meeting": meeting}
     except ValueError as exc:
         raise _facade().HTTPException(400, str(exc)) from exc
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         _facade().logger.exception("start_meeting failed")
         raise _facade().HTTPException(500, f"start failed: {exc}") from exc
 
@@ -120,7 +125,7 @@ def conclude_meeting(
                     vote_summary=dict(d.get("vote_summary") or {}),
                 )
             )
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             raise _facade().HTTPException(422, f"invalid decision ref {d}: {exc}") from exc
     try:
         meeting = (
@@ -137,7 +142,7 @@ def conclude_meeting(
         return {"ok": True, "meeting": meeting}
     except ValueError as exc:
         raise _facade().HTTPException(400, str(exc)) from exc
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         _facade().logger.exception("conclude_meeting failed")
         raise _facade().HTTPException(500, f"conclude failed: {exc}") from exc
 
@@ -152,7 +157,7 @@ def cancel_meeting(
         return {"ok": True, "meeting": meeting}
     except ValueError as exc:
         raise _facade().HTTPException(400, str(exc)) from exc
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         _facade().logger.exception("cancel_meeting failed")
         raise _facade().HTTPException(500, f"cancel failed: {exc}") from exc
 
@@ -195,7 +200,7 @@ def update_action_item(
         return {"ok": True, "action_item": item}
     except ValueError as exc:
         raise _facade().HTTPException(400, str(exc)) from exc
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         _facade().logger.exception("update_action_item failed")
         raise _facade().HTTPException(500, f"update failed: {exc}") from exc
 
@@ -224,7 +229,7 @@ def generate_weekly_report(
             .generate_weekly_report(target_date=target_date, actor=body.actor)
         )
         return {"ok": True, "report": report}
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         _facade().logger.exception("generate_weekly_report failed")
         raise _facade().HTTPException(500, f"weekly report failed: {exc}") from exc
 
@@ -241,7 +246,7 @@ def generate_monthly_report(
             .generate_monthly_report(year=body.year, month=body.month, actor=body.actor)
         )
         return {"ok": True, "report": report}
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         _facade().logger.exception("generate_monthly_report failed")
         raise _facade().HTTPException(500, f"monthly report failed: {exc}") from exc
 

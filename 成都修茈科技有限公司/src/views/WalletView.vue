@@ -13,14 +13,7 @@
       <div v-if="payErr" class="flash flash-err">{{ payErr }}</div>
       <div v-if="payHint" class="flash flash-ok">{{ payHint }}</div>
       <div class="recharge-form">
-        <input
-          class="input"
-          type="number"
-          v-model.number="payAmount"
-          placeholder="金额（元）"
-          min="0.01"
-          step="0.01"
-        />
+        <input class="input" type="number" v-model.number="payAmount" placeholder="金额（元）" min="0.01" step="0.01" />
         <input class="input" v-model="payNote" placeholder="备注（可选）" />
         <button class="btn btn-primary-solid" type="button" :disabled="paying" @click="startAlipayRecharge">
           {{ paying ? '正在拉起支付…' : '支付宝充值' }}
@@ -28,8 +21,7 @@
       </div>
       <p class="recharge-hint">
         若按钮无反应，请确认服务端已配置支付宝密钥与
-        <code>ALIPAY_NOTIFY_URL</code>。套餐购买请前往
-        <router-link to="/plans" class="inline-link">套餐页</router-link>。
+        <code>ALIPAY_NOTIFY_URL</code>。套餐购买请前往 <router-link to="/plans" class="inline-link">套餐页</router-link>。
       </p>
     </div>
 
@@ -49,9 +41,7 @@
           <tr v-for="t in transactions" :key="t.id">
             <td>{{ formatDate(t.created_at) }}</td>
             <td>{{ txnTypeLabel(t.type) }}</td>
-            <td :class="t.amount > 0 ? 'amount-pos' : 'amount-neg'">
-              {{ t.amount > 0 ? '+' : '' }}¥{{ t.amount.toFixed(2) }}
-            </td>
+            <td :class="t.amount > 0 ? 'amount-pos' : 'amount-neg'">{{ t.amount > 0 ? '+' : '' }}¥{{ t.amount.toFixed(2) }}</td>
             <td>{{ t.description }}</td>
           </tr>
         </tbody>
@@ -156,21 +146,92 @@ function formatDate(iso: string | null | undefined): string {
 </script>
 
 <style scoped>
-.page-title { font-size: 22px; margin-bottom: 20px; color: #ffffff; }
-.balance-card { background: #111111; border: 0.5px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 24px; margin-bottom: 20px; }
-.balance-label { font-size: 14px; color: rgba(255,255,255,0.5); }
-.balance-value { font-size: 36px; font-weight: 700; margin-top: 4px; color: #ffffff; }
-.recharge-intro { font-size: 13px; color: rgba(255,255,255,0.45); margin: 0 0 12px; line-height: 1.5; }
-.recharge-card .recharge-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-.recharge-form .input { flex: 1; min-width: 120px; }
-.recharge-hint { font-size: 12px; color: rgba(255,255,255,0.3); margin-top: 10px; line-height: 1.5; }
-.recharge-hint code { font-size: 11px; color: rgba(255,255,255,0.45); }
-.inline-link { color: #ffffff; font-weight: 500; text-decoration: underline; text-underline-offset: 2px; }
-.tx-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-.tx-table th { text-align: left; padding: 8px 12px; border-bottom: 0.5px solid rgba(255,255,255,0.1); color: rgba(255,255,255,0.4); font-weight: 600; }
-.tx-table td { padding: 8px 12px; border-bottom: 0.5px solid rgba(255,255,255,0.06); }
-.amount-pos { color: #4ade80; font-weight: 600; }
-.amount-neg { color: #ff6b6b; font-weight: 600; }
-.loading { text-align: center; padding: 20px; color: rgba(255,255,255,0.4); }
-.empty-state { text-align: center; padding: 20px; color: rgba(255,255,255,0.4); }
+.page-title {
+  font-size: 22px;
+  margin-bottom: 20px;
+  color: #ffffff;
+}
+.balance-card {
+  background: #111111;
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 20px;
+}
+.balance-label {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.5);
+}
+.balance-value {
+  font-size: 36px;
+  font-weight: 700;
+  margin-top: 4px;
+  color: #ffffff;
+}
+.recharge-intro {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.45);
+  margin: 0 0 12px;
+  line-height: 1.5;
+}
+.recharge-card .recharge-form {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.recharge-form .input {
+  flex: 1;
+  min-width: 120px;
+}
+.recharge-hint {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.3);
+  margin-top: 10px;
+  line-height: 1.5;
+}
+.recharge-hint code {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+}
+.inline-link {
+  color: #ffffff;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.tx-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.tx-table th {
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 0.5px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.4);
+  font-weight: 600;
+}
+.tx-table td {
+  padding: 8px 12px;
+  border-bottom: 0.5px solid rgba(255, 255, 255, 0.06);
+}
+.amount-pos {
+  color: #4ade80;
+  font-weight: 600;
+}
+.amount-neg {
+  color: #ff6b6b;
+  font-weight: 600;
+}
+.loading {
+  text-align: center;
+  padding: 20px;
+  color: rgba(255, 255, 255, 0.4);
+}
+.empty-state {
+  text-align: center;
+  padding: 20px;
+  color: rgba(255, 255, 255, 0.4);
+}
 </style>

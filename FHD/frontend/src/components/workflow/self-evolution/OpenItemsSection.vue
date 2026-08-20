@@ -19,16 +19,19 @@ defineProps<{
         </small>
       </div>
       <small v-if="asRecord(item.roster_gate).action || asRecord(item.roster_gate).reason" class="selp-open-item-gate">
-        排班 {{ asRecord(item.roster_gate).action || '检查' }} · {{ asRecord(item.roster_gate).reason || '策略' }}
+        排班 {{ asRecord(item.roster_gate).action || '检查' }} ·
+        {{ asRecord(item.roster_gate).reason || '策略' }}
       </small>
       <small v-if="asArray(asRecord(item.active_gates).blocking_keys).length" class="selp-open-item-gate">
         检查项未通过 · {{ asArray(asRecord(item.active_gates).blocking_keys).join(' / ') }}
       </small>
       <small v-if="asRecord(item.governance_gate).action || asRecord(item.governance_gate).reason" class="selp-open-item-gate">
-        管理 {{ asRecord(item.governance_gate).action || '检查' }} · {{ asRecord(item.governance_gate).reason || '策略' }}
+        管理 {{ asRecord(item.governance_gate).action || '检查' }} ·
+        {{ asRecord(item.governance_gate).reason || '策略' }}
       </small>
       <small v-if="asRecord(item.evolution_gate).pause === true || asRecord(item.evolution_gate).reason" class="selp-open-item-gate">
-        进化 {{ asRecord(item.evolution_gate).pause === true ? '暂停' : '允许' }} · {{ asRecord(item.evolution_gate).reason || '指标策略' }}
+        进化 {{ asRecord(item.evolution_gate).pause === true ? '暂停' : '允许' }} ·
+        {{ asRecord(item.evolution_gate).reason || '指标策略' }}
       </small>
       <small v-if="asArray(asRecord(item.roster_gate).out_of_roster_ids).length" class="selp-open-item-ids">
         {{ asArray(asRecord(item.roster_gate).out_of_roster_ids).slice(0, 4).join(' / ') }}

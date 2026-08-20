@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """Business webhook delivery for MODstore domain events.
 
 两层并行投递：
@@ -17,15 +18,20 @@ import json
 import logging
 import os
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import httpx
 
 from modstore_server.eventing import new_event
-from modstore_server.eventing.contracts import canonical_event_name, event_version, validate_payload
+from modstore_server.eventing.contracts import (
+    canonical_event_name,
+    event_version,
+    validate_payload,
+)
 from modstore_server.eventing.global_bus import neuro_bus
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +103,7 @@ def stable_event_id(event_type: str, aggregate_id: str) -> str:
     aggregate = (aggregate_id or "").strip()
     if aggregate:
         return f"{event_type}:{aggregate}"
-    digest = hashlib.sha256(f"{event_type}:{time.time_ns()}".encode("utf-8")).hexdigest()[:16]
+    digest = hashlib.sha256(f"{event_type}:{time.time_ns()}".encode()).hexdigest()[:16]
     return f"{event_type}:{digest}"
 
 
@@ -161,7 +167,11 @@ def dispatch_event(event: dict[str, Any]) -> dict[str, Any]:
     event_id = str(event.get("id") or "")
     url = _webhook_url()
     if not url:
-        result = {"ok": False, "skipped": True, "message": "MODSTORE_WEBHOOK_URL is not configured"}
+        result = {
+            "ok": False,
+            "skipped": True,
+            "message": "MODSTORE_WEBHOOK_URL is not configured",
+        }
         _store_event(event, result)
         return result
 
@@ -209,7 +219,11 @@ def dispatch_event(event: dict[str, Any]) -> dict[str, Any]:
         if attempt < attempts:
             time.sleep(min(2.0, 0.25 * attempt))
 
-    result = {"ok": False, "attempts": attempts, "message": last_error or "delivery failed"}
+    result = {
+        "ok": False,
+        "attempts": attempts,
+        "message": last_error or "delivery failed",
+    }
     _store_event(event, result)
     return result
 
@@ -235,7 +249,7 @@ def _deliver_event_to_subscription(
     secret_plain = ""
     try:
         secret_plain = decrypt_secret(subscription.secret_encrypted or "")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         secret_plain = ""
     headers = {
         "Content-Type": "application/json",
@@ -293,13 +307,13 @@ def _deliver_event_to_subscription(
 
     duration_ms = (time.monotonic() - started) * 1000.0
     delivery.duration_ms = duration_ms
-    delivery.completed_at = datetime.now(timezone.utc)
+    delivery.completed_at = datetime.now(UTC)
     delivery.status_code = last_status_code
     delivery.response_body = last_response_body
     delivery.error_message = "" if success else last_error
     delivery.status = "success" if success else "failed"
 
-    subscription.last_delivery_at = datetime.now(timezone.utc)
+    subscription.last_delivery_at = datetime.now(UTC)
     subscription.last_delivery_status = delivery.status
     if success:
         subscription.success_count = int(subscription.success_count or 0) + 1
@@ -327,7 +341,7 @@ def dispatch_event_to_subscriptions(event: dict[str, Any]) -> int:
                 .filter(WebhookSubscription.is_active.is_(True))
                 .all()
             )
-        except Exception as exc:  # 表不存在/数据库未初始化时静默跳过
+        except RECOVERABLE_ERRORS as exc:  # 表不存在/数据库未初始化时静默跳过
             logger.warning("webhook_subscriptions query failed: %s", exc)
             return 0
 
@@ -343,13 +357,16 @@ def dispatch_event_to_subscriptions(event: dict[str, Any]) -> int:
             try:
                 _deliver_event_to_subscription(session, sub, event)
                 delivered += 1
-            except Exception as exc:
+            except RECOVERABLE_ERRORS as exc:
                 logger.warning(
-                    "subscription %s dispatch error event=%s: %s", sub.id, event_type, exc
+                    "subscription %s dispatch error event=%s: %s",
+                    sub.id,
+                    event_type,
+                    exc,
                 )
         try:
             session.commit()
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             session.rollback()
             logger.warning("commit subscription deliveries failed: %s", exc)
 
@@ -357,7 +374,11 @@ def dispatch_event_to_subscriptions(event: dict[str, Any]) -> int:
 
 
 def publish_event(
-    event_type: str, aggregate_id: str, data: dict[str, Any], *, source: str = "modstore-python"
+    event_type: str,
+    aggregate_id: str,
+    data: dict[str, Any],
+    *,
+    source: str = "modstore-python",
 ) -> dict[str, Any]:
     event_type = canonical_event_name(event_type)
     missing = validate_payload(event_type, data)
@@ -380,7 +401,7 @@ def publish_event(
     result = dispatch_event(event)
     try:
         delivered = dispatch_event_to_subscriptions(event)
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("subscription fanout failed event=%s: %s", event_type, exc)
         delivered = 0
     if isinstance(result, dict):

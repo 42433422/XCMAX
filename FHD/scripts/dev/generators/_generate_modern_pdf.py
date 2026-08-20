@@ -1,6 +1,9 @@
+# mypy: disable-error-code="import-not-found, import-untyped"
 import markdown
 import weasyprint
 from weasyprint import CSS
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 md_path = r"e:\FHD\XCAGI\AI企业解决方案对比分析报告.md"
 pdf_path = r"e:\FHD\XCAGI\AI企业解决方案对比分析报告.pdf"
@@ -179,7 +182,7 @@ try:
         f.write(pdf)
 
     print(f"现代风格 PDF 生成成功: {pdf_path}")
-except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"WeasyPrint 生成失败，使用备用方案: {e}")
 
     # 备用方案：使用 ReportLab

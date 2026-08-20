@@ -3,9 +3,15 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
+import secrets
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
+_CACHE_KEY_SALT = secrets.token_bytes(32)
 
 
 def fallback_path() -> Path:
@@ -19,12 +25,13 @@ def load_fallback() -> Dict[str, List[Any]]:
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
         return {key: list(value) for key, value in raw.items() if isinstance(value, list)}
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return {}
 
 
 def cache_key(user_id: int, provider: str, api_key: str) -> str:
-    digest = hashlib.sha256(f"{user_id}:{provider}:{api_key}".encode()).hexdigest()[:20]
+    payload = f"{user_id}:{provider}:{api_key}".encode("utf-8")
+    digest = hmac.new(_CACHE_KEY_SALT, payload, hashlib.sha256).hexdigest()[:20]
     return f"{provider}:{digest}"
 
 

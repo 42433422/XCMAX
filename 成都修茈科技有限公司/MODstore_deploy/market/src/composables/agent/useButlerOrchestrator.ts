@@ -40,10 +40,7 @@ export function useButlerOrchestrator() {
    * 启动编排管线：POST /api/agent/butler/orchestrate → 轮询 /api/workbench/sessions/{id}
    * 调用前确保已拿到用户确认（requestAction high-risk）。
    */
-  async function start(
-    brief: string,
-    scope?: string,
-  ): Promise<{ ok: boolean; error?: string }> {
+  async function start(brief: string, scope?: string): Promise<{ ok: boolean; error?: string }> {
     const tgt = detectTarget()
     if (!tgt) {
       return {
@@ -56,12 +53,12 @@ export function useButlerOrchestrator() {
 
     let sessionId: string
     try {
-      const resp = await api.butlerOrchestrateStart({
+      const resp = (await api.butlerOrchestrateStart({
         target_type: tgt.type,
         target_id: tgt.id,
         brief,
         scope: scope || 'auto',
-      }) as { session_id: string; status: string }
+      })) as { session_id: string; status: string }
       sessionId = resp.session_id
     } catch (e: unknown) {
       agentStore.setMode('error')
@@ -83,7 +80,7 @@ export function useButlerOrchestrator() {
   async function _pollLoop(sid: string): Promise<void> {
     while (true) {
       try {
-        const s = await api.workbenchGetSession(sid) as {
+        const s = (await api.workbenchGetSession(sid)) as {
           status: string
           steps: OrchestrationSession['steps']
           error?: string | null

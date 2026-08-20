@@ -83,52 +83,21 @@ class SalesAppService(_SalesAppServicePart01Mixin, _SalesAppServicePart02Mixin):
 
     # ── 查询（保留在本门面，只读）──────────────────────────────
 
-
     # ── 报价创建（保留在本门面，单据创建）───────────────────────
-
 
     # ── 生命周期迁移（委托 SalesLifecycleService）──────────────
 
-
-
-
-
     # ── 履行（委托 FulfillmentService）──────────────────────────
-
 
     # ── 开票 / 贷项通知单（委托 invoicing_service）─────────────
 
-
-
     # ── 收款 / 退款（委托 snake_case payment_service）──────────
-
-
 
     # ── 组合闭环：销售→履行→开票→收款（W1-10，真实原子执行器）────
 
-
     # ── 闭环内部：结构/算数校验、实体解析、单事务编排 ──────────────
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     # ── 工具内部 ───────────────────────────────────────────────
-
 
 
 __all__ = ["SalesAppService", "SALES_ORDER_STATUS_FLOW"]

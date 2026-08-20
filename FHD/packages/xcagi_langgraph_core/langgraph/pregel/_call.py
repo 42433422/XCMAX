@@ -15,6 +15,7 @@ from langchain_core.runnables import Runnable
 from typing_extensions import ParamSpec
 
 from langgraph._internal._constants import CONF, CONFIG_KEY_CALL, RETURN
+from langgraph._internal._exception_policy import BOUNDARY_ERRORS
 from langgraph._internal._runnable import (
     RunnableCallable,
     RunnableSeq,
@@ -76,7 +77,7 @@ def _whichmodule(obj: Any, name: str) -> str | None:
         try:
             if _getattribute(module, name)[0] is obj:
                 return module_name
-        except Exception:
+        except BOUNDARY_ERRORS:
             pass
     return None
 

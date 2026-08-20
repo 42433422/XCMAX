@@ -52,7 +52,10 @@ vi.mock('./useChatPersistence', () => ({
   resolveExcelSheetOptionsFromContext: vi.fn(() => []),
   extractLikelyProductQueryKeyword: vi.fn(),
   clearPersistedTaskPanelState: vi.fn(),
-  useChatHistoryPersistence: () => ({ toPlainText: (s: string) => s, isWelcomeMessage: () => false }),
+  useChatHistoryPersistence: () => ({
+    toPlainText: (s: string) => s,
+    isWelcomeMessage: () => false,
+  }),
   useChatTaskPanelPersistence: () => ({
     persistTaskPanelStateForSession: vi.fn(),
     applyPersistedTaskPanelStateForSession: vi.fn(),

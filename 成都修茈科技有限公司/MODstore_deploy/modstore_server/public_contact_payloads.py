@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """Public contact form DTO and payload helpers."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, func-returns-value"
 from __future__ import annotations
 
 from pathlib import Path

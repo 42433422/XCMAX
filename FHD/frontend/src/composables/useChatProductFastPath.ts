@@ -12,20 +12,13 @@ export type ChatProductFastPathDeps = {
   clearCurrentTask: () => void
 }
 
-export async function runProductKeywordFastPath(
-  kw: string,
-  primaryText: string,
-  deps: ChatProductFastPathDeps,
-): Promise<boolean> {
+export async function runProductKeywordFastPath(kw: string, primaryText: string, deps: ChatProductFastPathDeps): Promise<boolean> {
   try {
     const resp = await productsApi.searchProducts(kw)
     if (resp && resp.success === false) {
       throw new Error(String(resp.message || '产品库查询失败'))
     }
-    const raw =
-      resp.data ??
-      (resp as unknown as Record<string, unknown>).products ??
-      (resp as unknown as Record<string, unknown>).items
+    const raw = resp.data ?? (resp as unknown as Record<string, unknown>).products ?? (resp as unknown as Record<string, unknown>).items
     const rows = Array.isArray(raw) ? (raw as Record<string, unknown>[]) : []
     const lines = rows.slice(0, 3).map((row) => {
       const m = String(row.model_number || '').trim()

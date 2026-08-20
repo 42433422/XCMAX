@@ -88,6 +88,7 @@ from langgraph._internal._constants import (
     PUSH,
     TASKS,
 )
+from langgraph._internal._exception_policy import TERMINATION_ERRORS
 from langgraph._internal._pydantic import create_model
 from langgraph._internal._queue import (  # type: ignore[attr-defined]
     AsyncQueue,
@@ -3015,7 +3016,7 @@ class Pregel(
                 raise GraphDrained(loop.control.drain_reason or "shutdown")
             # set final channel values as run output
             run_manager.on_chain_end(loop.output)
-        except BaseException as e:
+        except TERMINATION_ERRORS as e:
             if run_manager is not None:
                 run_manager.on_chain_error(e)
             raise
@@ -3496,7 +3497,7 @@ class Pregel(
                 raise GraphDrained(loop.control.drain_reason or "shutdown")
             # set final channel values as run output
             await run_manager.on_chain_end(loop.output)
-        except BaseException as e:
+        except TERMINATION_ERRORS as e:
             if run_manager is not None:
                 await asyncio.shield(run_manager.on_chain_error(e))
             raise
@@ -4137,10 +4138,9 @@ class Pregel(
         """Clear the cache for the given nodes."""
         if not self.cache:
             raise ValueError("No cache is set for this graph. Cannot clear cache.")
-        nodes = nodes or self.nodes.keys()
         # collect namespaces to clear
         namespaces: list[tuple[str, ...]] = []
-        for node in nodes:
+        for node in nodes or self.nodes:
             if node in self.nodes:
                 namespaces.append(
                     (
@@ -4156,10 +4156,9 @@ class Pregel(
         """Asynchronously clear the cache for the given nodes."""
         if not self.cache:
             raise ValueError("No cache is set for this graph. Cannot clear cache.")
-        nodes = nodes or self.nodes.keys()
         # collect namespaces to clear
         namespaces: list[tuple[str, ...]] = []
-        for node in nodes:
+        for node in nodes or self.nodes:
             if node in self.nodes:
                 namespaces.append(
                     (

@@ -176,7 +176,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         return orders_next_number_under_api(suffix=suffix)
 
     @router.get("/purchase_units")
-    @router.get("/purchase_units/")
+    @router.get("/purchase_units/", include_in_schema=False)
     def mod_purchase_units_list():
         from app.mod_sdk.host_services import purchase_units_list
 

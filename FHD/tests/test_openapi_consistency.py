@@ -22,6 +22,8 @@ import os
 import sys
 from pathlib import Path
 
+from app.utils.operational_errors import BOUNDARY_ERRORS
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = PROJECT_ROOT / "scripts"
 
@@ -46,7 +48,7 @@ def _load_checker_module():
     sys.modules[mod_name] = mod
     try:
         spec.loader.exec_module(mod)
-    except Exception:
+    except BOUNDARY_ERRORS:
         sys.modules.pop(mod_name, None)
         raise
     return mod

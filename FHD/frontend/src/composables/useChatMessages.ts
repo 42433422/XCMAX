@@ -5,10 +5,7 @@ import { speakText, stopSpeaking, cleanTextForSpeech } from '../utils/tts'
 import { useModsStore } from '@/stores/mods'
 import { useIndustryStore } from '@/stores/industry'
 import { getIndustryWelcomeMarkdown } from '@/constants/industryPresets'
-import {
-  buildChatMessagesKey,
-  buildChatSessionMetaKey,
-} from '@/utils/chatStorageKeys'
+import { buildChatMessagesKey, buildChatSessionMetaKey } from '@/utils/chatStorageKeys'
 import { asRecord, asArray, asString, asBoolean } from '@/utils/typeGuards'
 import { formatChatMessageTime } from '@/utils/chatTaskLabels'
 import { stripModelToolProtocol } from '@/utils/chatModelProtocol'
@@ -28,7 +25,10 @@ async function playNextVoice() {
 
   isPlayingVoice = true
   const text = voiceQueue.shift()
-  if (!text) { playNextVoice(); return }
+  if (!text) {
+    playNextVoice()
+    return
+  }
 
   try {
     let timeoutId: ReturnType<typeof setTimeout> | undefined
@@ -36,7 +36,7 @@ async function playNextVoice() {
       speakText(text),
       new Promise((_, reject) => {
         timeoutId = setTimeout(() => reject(new Error('TTS timeout')), VOICE_PLAY_TIMEOUT_MS)
-      })
+      }),
     ]).finally(() => {
       if (timeoutId) clearTimeout(timeoutId)
     })
@@ -55,7 +55,7 @@ export function queueVoice(text: string) {
       .replace(/<[^>]*>/g, ' ')
       .replace(/&nbsp;/gi, ' ')
       .replace(/\s+/g, ' ')
-      .trim()
+      .trim(),
   )
 
   if (!plainText) return
@@ -82,12 +82,8 @@ export function useChatMessages(sessionId: Ref<string>) {
   const modsStore = useModsStore()
   const industryStore = useIndustryStore()
   const { activeModId } = storeToRefs(modsStore)
-  const storageKey = computed(() =>
-    buildChatMessagesKey(String(sessionId.value || 'default'), String(activeModId.value || ''))
-  )
-  const sessionMetaKey = computed(() =>
-    buildChatSessionMetaKey(String(sessionId.value || 'default'), String(activeModId.value || ''))
-  )
+  const storageKey = computed(() => buildChatMessagesKey(String(sessionId.value || 'default'), String(activeModId.value || '')))
+  const sessionMetaKey = computed(() => buildChatSessionMetaKey(String(sessionId.value || 'default'), String(activeModId.value || '')))
 
   function getDefaultWelcome(): ChatMessage[] {
     const industryId = String(industryStore.currentIndustryId || '').trim() || '通用'
@@ -170,7 +166,10 @@ export function useChatMessages(sessionId: Ref<string>) {
           plain += source.slice(index)
           break
         }
-        const tagName = source.slice(index + 1, tagEnd).trim().toLowerCase()
+        const tagName = source
+          .slice(index + 1, tagEnd)
+          .trim()
+          .toLowerCase()
         if (tagName === 'br' || tagName === 'br/' || tagName.startsWith('br ')) {
           plain += '\n'
         }
@@ -202,96 +201,6 @@ export function useChatMessages(sessionId: Ref<string>) {
     return extractPlainText(raw).length > 0
   }
 
-  function hasRenderableSidecar(row: Record<string, unknown>): boolean {
-    if (asBoolean(row.streamingShell)) return true
-    if (asString(row.toolProgressLabel).trim()) return true
-    if (asArray(row.executionProgress).length) return true
-    if (asString(row.downloadUrl).trim()) return true
-    if (asString(row.shipmentDownloadUrl).trim()) return true
-    if (asString(row.thinkingSteps).trim()) return true
-    if (asString(row.workflowAction).trim()) return true
-    if (asArray(row.todoSteps).length) return true
-    if (asArray(row.nodeResults).length) return true
-    if (row.contextSummary != null && String(row.contextSummary).trim()) return true
-    return false
-  }
-
-  function sanitizeMessageExtras(row: Record<string, unknown>): ChatMessageExtras {
-    const extras: ChatMessageExtras = {}
-    if (asBoolean(row.streamingShell)) extras.streamingShell = true
-
-    const toolProgressLabel = asString(row.toolProgressLabel).trim()
-    if (toolProgressLabel) extras.toolProgressLabel = toolProgressLabel
-
-    const executionProgress = asArray(row.executionProgress)
-      .map((raw) => {
-        const item = asRecord(raw)
-        const label = asString(item.label).trim()
-        if (!label) return null
-        const rawStatus = asString(item.status).trim()
-        const allowedStatuses = new Set(['running', 'success', 'retrying', 'waiting', 'failed', 'cancelled'])
-        return {
-          phase: asString(item.phase).trim() || 'working',
-          label,
-          status: allowedStatuses.has(rawStatus) ? rawStatus : 'running',
-          at: asString(item.at).trim() || new Date().toISOString(),
-        }
-      })
-      .filter(Boolean) as NonNullable<ChatMessageExtras['executionProgress']>
-    if (executionProgress.length) {
-      extras.executionProgress = executionProgress as NonNullable<ChatMessageExtras['executionProgress']>
-    }
-
-    const downloadUrl = asString(row.downloadUrl).trim()
-    if (downloadUrl) extras.downloadUrl = downloadUrl
-
-    const shipmentDownloadUrl = asString(row.shipmentDownloadUrl).trim()
-    if (shipmentDownloadUrl) extras.shipmentDownloadUrl = shipmentDownloadUrl
-
-    const thinkingSteps = asString(row.thinkingSteps).trim()
-    if (thinkingSteps) extras.thinkingSteps = thinkingSteps
-
-    const workflowAction = asString(row.workflowAction).trim()
-    if (workflowAction) extras.workflowAction = workflowAction
-
-    const todoSteps = asArray(row.todoSteps)
-      .map((step) => asString(step).trim())
-      .filter(Boolean)
-    if (todoSteps.length) extras.todoSteps = todoSteps
-
-    const nodeResults = asArray(row.nodeResults)
-      .map((raw) => {
-        const node = asRecord(raw)
-        const nodeId = asString(node.node_id).trim()
-        const toolId = asString(node.tool_id).trim()
-        const action = asString(node.action).trim()
-        if (!nodeId && !toolId && !action) return null
-        const result: NonNullable<ChatMessageExtras['nodeResults']>[number] = {
-          node_id: nodeId,
-          tool_id: toolId,
-          action,
-          success: asBoolean(node.success),
-        }
-        const error = asString(node.error).trim()
-        if (error) result.error = error
-        return result
-      })
-      .filter((node): node is NonNullable<ChatMessageExtras['nodeResults']>[number] => !!node)
-    if (nodeResults.length) extras.nodeResults = nodeResults
-
-    const attachments = asArray(row.attachments)
-      .map((item) => asRecord(item))
-      .filter((item) => Object.keys(item).length > 0)
-    if (attachments.length) extras.attachments = attachments
-
-    const contextSummary = asString(row.contextSummary).trim()
-    if (contextSummary) {
-      extras.contextSummary = contextSummary
-    }
-
-    return extras
-  }
-
   function toPlainText(raw: unknown): string {
     return extractPlainText(raw)
   }
@@ -304,7 +213,9 @@ export function useChatMessages(sessionId: Ref<string>) {
   function deriveSessionTitle(list: ChatMessage[]): string {
     const meaningful = list.filter((msg) => hasMeaningfulContent(msg.content) && !isWelcomeMessage(msg))
     const preferred = meaningful.find((msg) => msg.role === 'user') || meaningful[0]
-    const plain = toPlainText(preferred?.content || '').replace(/\s+/g, ' ').trim()
+    const plain = toPlainText(preferred?.content || '')
+      .replace(/\s+/g, ' ')
+      .trim()
     if (!plain) return '新会话'
     return plain.length > 32 ? `${plain.slice(0, 32)}...` : plain
   }
@@ -322,8 +233,8 @@ export function useChatMessages(sessionId: Ref<string>) {
           session_id: String(sessionId.value || 'default'),
           title: deriveSessionTitle(list),
           message_count: meaningful.length,
-          updated_at: new Date().toISOString()
-        })
+          updated_at: new Date().toISOString(),
+        }),
       )
     } catch {
       // ignore storage errors
@@ -335,18 +246,15 @@ export function useChatMessages(sessionId: Ref<string>) {
       .map((msg: unknown) => {
         const row = asRecord(msg)
         const roleRaw = asString(row.role)
-        const role = (roleRaw === 'user' || roleRaw === 'task') ? roleRaw : 'ai'
-        const content = role === 'ai'
-          ? stripModelToolProtocol(row.content)
-          : asString(row.content)
+        const role = roleRaw === 'user' || roleRaw === 'task' ? roleRaw : 'ai'
+        const content = role === 'ai' ? stripModelToolProtocol(row.content) : asString(row.content)
         const streamingShell = asBoolean(row.streamingShell)
         const toolProgressLabel = asString(row.toolProgressLabel).trim()
         if (!hasMeaningfulContent(content) && !streamingShell && !toolProgressLabel) return null
         return {
           role,
           content,
-          time: asString(row.time).trim()
-            || new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+          time: asString(row.time).trim() || new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
           ...(streamingShell ? { streamingShell: true } : {}),
           ...(toolProgressLabel ? { toolProgressLabel } : {}),
         } as ChatMessage
@@ -361,12 +269,7 @@ export function useChatMessages(sessionId: Ref<string>) {
     return escapeHtml(text).replace(/\n/g, '<br>')
   }
 
-  function addMessage(
-    content: string,
-    role: 'user' | 'ai' | 'task' = 'ai',
-    extras?: ChatMessageExtras,
-    options?: { speak?: boolean }
-  ) {
+  function addMessage(content: string, role: 'user' | 'ai' | 'task' = 'ai', extras?: ChatMessageExtras, options?: { speak?: boolean }) {
     const visibleContent = role === 'ai' ? stripModelToolProtocol(content) : content
     if (!hasMeaningfulContent(visibleContent)) return
     const time = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
@@ -375,7 +278,7 @@ export function useChatMessages(sessionId: Ref<string>) {
       role,
       content: safeContent,
       time,
-      ...(extras || {})
+      ...(extras || {}),
     })
     persistMessagesCache()
 
@@ -393,7 +296,7 @@ export function useChatMessages(sessionId: Ref<string>) {
         session_id: targetSessionId || sessionId.value,
         user_id: 'default',
         role,
-        content: visibleContent
+        content: visibleContent,
       })
     } catch (e) {
       console.error('保存消息失败:', e)
@@ -404,7 +307,7 @@ export function useChatMessages(sessionId: Ref<string>) {
     content: string,
     role: 'user' | 'ai' | 'task' = 'ai',
     extras?: ChatMessageExtras,
-    options?: { speak?: boolean; sessionId?: string }
+    options?: { speak?: boolean; sessionId?: string },
   ): Promise<void> {
     if (!hasMeaningfulContent(content)) return
     if (!options?.sessionId || options.sessionId === sessionId.value) addMessage(content, role, extras, options)
@@ -460,15 +363,11 @@ export function useChatMessages(sessionId: Ref<string>) {
       const mapped: ChatMessage[] = serverMessages.map((msg: unknown) => {
         const row = asRecord(msg)
         const roleRaw = asString(row.role)
-        const role = (roleRaw === 'user' || roleRaw === 'task') ? roleRaw : 'ai'
+        const role = roleRaw === 'user' || roleRaw === 'task' ? roleRaw : 'ai'
         return {
           role,
-          content: normalizeServerContentToHtml(
-            role === 'ai' ? stripModelToolProtocol(row.content) : row.content,
-          ),
-          time: formatChatMessageTime(
-            row.time ?? row.timestamp ?? row.created_at ?? row.createdAt ?? row.updated_at,
-          ),
+          content: normalizeServerContentToHtml(role === 'ai' ? stripModelToolProtocol(row.content) : row.content),
+          time: formatChatMessageTime(row.time ?? row.timestamp ?? row.created_at ?? row.createdAt ?? row.updated_at),
         }
       })
       const sanitized = sanitizeMessagesList(mapped)
@@ -484,7 +383,7 @@ export function useChatMessages(sessionId: Ref<string>) {
     () => sessionId.value,
     () => {
       messages.value = readCachedMessages()
-    }
+    },
   )
 
   // 切换当前扩展（Mod）时：同一会话 ID 下不同 Mod 的消息缓存相互隔离，
@@ -493,7 +392,7 @@ export function useChatMessages(sessionId: Ref<string>) {
     () => String(activeModId.value || ''),
     () => {
       messages.value = readCachedMessages()
-    }
+    },
   )
 
   return {
@@ -508,6 +407,6 @@ export function useChatMessages(sessionId: Ref<string>) {
     loadMessages,
     syncFromServer,
     queueVoice,
-    clearVoiceQueue
+    clearVoiceQueue,
   }
 }

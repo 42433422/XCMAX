@@ -109,9 +109,7 @@ const props = defineProps({
 const hasChildren = computed(() => Boolean(props.item.children?.length))
 
 /** hover 提示：有 description 时显示「名称 · 一句说明」，帮用户分清相似入口（如智能对话/信息）。 */
-const itemTooltip = computed(() =>
-  props.item.description ? `${props.item.name} · ${props.item.description}` : props.item.name,
-)
+const itemTooltip = computed(() => (props.item.description ? `${props.item.name} · ${props.item.description}` : props.item.name))
 
 const emit = defineEmits(['parent-click', 'select-view', 'reorder-pointer-down', 'keydown'])
 
@@ -190,7 +188,9 @@ function activateChildFromPointer(key, event) {
   display: grid;
   grid-template-rows: 1fr;
   overflow: hidden;
-  transition: grid-template-rows 0.2s ease, opacity 0.2s ease;
+  transition:
+    grid-template-rows 0.2s ease,
+    opacity 0.2s ease;
 }
 
 .submenu-expand-enter-from,

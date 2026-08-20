@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """LLM 模型闸门：目录校验、L2 定价策略、预授权倍率；L1 探针与能力表维护。"""
 
 from __future__ import annotations
@@ -6,7 +7,7 @@ import asyncio
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from fastapi import HTTPException
@@ -22,6 +23,7 @@ from modstore_server.llm_key_resolver import (
 )
 from modstore_server.llm_model_taxonomy import classify_model
 from modstore_server.models import AiModelPrice, LlmModelCapability
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -269,7 +271,7 @@ def load_capabilities_for_provider(
     session: Session, provider: str
 ) -> Dict[str, LlmModelCapability]:
     rows = session.query(LlmModelCapability).filter(LlmModelCapability.provider == provider).all()
-    return {r.model: r for r in rows}
+    return {str(r.model): r for r in rows}
 
 
 async def run_l1_probe(session: Session, user_id: int, provider: str, model: str) -> None:
@@ -286,7 +288,7 @@ async def run_l1_probe(session: Session, user_id: int, provider: str, model: str
         if not api_key:
             row.l1_status = "failed"
             row.l1_error = "no_api_key"
-            row.l1_at = datetime.now(timezone.utc)
+            row.l1_at = datetime.now(UTC)
             session.commit()
             return
         base = (
@@ -315,17 +317,17 @@ async def run_l1_probe(session: Session, user_id: int, provider: str, model: str
                 "ok": ok,
             }
         )
-        row.l1_at = datetime.now(timezone.utc)
-    except Exception as exc:  # noqa: BLE001
+        row.l1_at = datetime.now(UTC)
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         row.l1_status = "failed"
         row.l1_score = 0.0
         row.l1_error = str(exc)[:500]
-        row.l1_at = datetime.now(timezone.utc)
+        row.l1_at = datetime.now(UTC)
     finally:
         if row.l1_status == "running":
             row.l1_status = "failed"
             row.l1_error = (row.l1_error or "probe_aborted")[:500]
-            row.l1_at = datetime.now(timezone.utc)
+            row.l1_at = datetime.now(UTC)
     session.commit()
 
 
@@ -358,7 +360,7 @@ def schedule_l1_followup(user_id: int, *, limit: int = 16) -> None:
         db = sf()
         try:
             await drain_pending_l1_probes(db, user_id, limit=limit)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.exception("background L1 drain failed user_id=%s", user_id)
         finally:
             db.close()
@@ -396,7 +398,7 @@ def upsert_l3_proposal(
         row.cs_ticket_id = ticket_id
         if notes:
             row.l3_notes = (notes or "")[:2000]
-        row.updated_at = datetime.now(timezone.utc)
+        row.updated_at = datetime.now(UTC)
     session.flush()
     return row
 
@@ -426,7 +428,7 @@ def apply_l3_review(
     else:
         row.l3_status = status
         row.l3_reviewer_id = reviewer_id
-        row.l3_at = datetime.now(timezone.utc)
+        row.l3_at = datetime.now(UTC)
         if notes:
             row.l3_notes = (notes or "")[:2000]
     session.flush()

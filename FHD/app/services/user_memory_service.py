@@ -206,7 +206,9 @@ from app.services.user_memory_service_usermemoryservice_mixin01 import _UserMemo
 from app.services.user_memory_service_usermemoryservice_mixin02 import _UserMemoryServicePart02Mixin
 
 
-class UserMemoryService(_UserMemoryServicePart01Mixin, _UserMemoryServicePart02Mixin, NeuroEventPublisherMixin):
+class UserMemoryService(
+    _UserMemoryServicePart01Mixin, _UserMemoryServicePart02Mixin, NeuroEventPublisherMixin
+):
     """
     用户记忆服务
 
@@ -221,40 +223,6 @@ class UserMemoryService(_UserMemoryServicePart01Mixin, _UserMemoryServicePart02M
 
     _instance: "UserMemoryService | None" = None
     _initialized: bool
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 _user_memory_service: UserMemoryService | None = None

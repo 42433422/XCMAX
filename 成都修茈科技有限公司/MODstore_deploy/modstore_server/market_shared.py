@@ -7,7 +7,7 @@ import os
 import re
 import time
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Dict, Optional
 
 from fastapi import Header, HTTPException, Request
@@ -42,7 +42,12 @@ LICENSE_SCOPE_LABELS = {
     "enterprise": "企业级",
 }
 
-RISKY_ORIGIN_TYPES = {"derivative", "collaboration", "fan_linkage", "suspected_plagiarism"}
+RISKY_ORIGIN_TYPES = {
+    "derivative",
+    "collaboration",
+    "fan_linkage",
+    "suspected_plagiarism",
+}
 RISKY_IP_LEVELS = {"medium", "high"}
 
 _CONTACT_EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
@@ -62,7 +67,9 @@ _WORKBENCH_MATCH_WINDOW_SEC = int(
 )
 
 
-def _optional_current_user(authorization: Optional[str] = Header(None)) -> Optional[User]:
+def _optional_current_user(
+    authorization: Optional[str] = Header(None),
+) -> Optional[User]:
     if not authorization:
         return None
     try:
@@ -222,7 +229,7 @@ def _grant_catalog_entitlement(
             entitlement_type=ent_type,
             source_order_id=source_order_id,
             metadata_json=_entitlement_metadata(item, source),
-            granted_at=datetime.now(timezone.utc),
+            granted_at=datetime.now(UTC),
             is_active=True,
         )
     )

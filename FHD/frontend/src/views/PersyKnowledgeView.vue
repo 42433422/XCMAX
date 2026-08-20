@@ -6,7 +6,9 @@
           <span></span>
         </span>
         <div>
-          <div class="brain-kicker">{{ adminOmniscient ? 'Omniscient Console' : 'Persy Cognitive Map' }}</div>
+          <div class="brain-kicker">
+            {{ adminOmniscient ? 'Omniscient Console' : 'Persy Cognitive Map' }}
+          </div>
           <strong>{{ adminOmniscient ? '全知知识网络' : '企业知识网络' }}</strong>
         </div>
       </div>
@@ -27,18 +29,10 @@
       </div>
 
       <div class="toolbar-actions">
-        <label
-          v-if="adminOmniscient && datasetOptions.length"
-          class="dataset-switch"
-          title="知识空间"
-        >
+        <label v-if="adminOmniscient && datasetOptions.length" class="dataset-switch" title="知识空间">
           <span>空间</span>
           <select v-model="datasetIdInput" @change="applyDataset">
-            <option
-              v-for="item in datasetOptions"
-              :key="item.id"
-              :value="item.id"
-            >
+            <option v-for="item in datasetOptions" :key="item.id" :value="item.id">
               {{ item.label }}
             </option>
           </select>
@@ -76,40 +70,20 @@
           :disabled="loadingStatus || loadingGraph"
           @click="refreshAll"
         >
-          <i
-            class="fa fa-refresh"
-            :class="{ spinning: loadingStatus || loadingGraph }"
-            aria-hidden="true"
-          ></i>
+          <i class="fa fa-refresh" :class="{ spinning: loadingStatus || loadingGraph }" aria-hidden="true"></i>
         </button>
-        <button
-          v-if="pendingMemoryCount"
-          type="button"
-          class="memory-review-button"
-          title="审核待确认记忆"
-          @click="openPendingMemories"
-        >
+        <button v-if="pendingMemoryCount" type="button" class="memory-review-button" title="审核待确认记忆" @click="openPendingMemories">
           <i class="fa fa-check-square-o" aria-hidden="true"></i>
           <span>{{ pendingMemoryCount }} 待确认</span>
         </button>
-        <button
-          type="button"
-          class="import-button"
-          aria-label="导入知识"
-          title="导入知识"
-          @click="openImport('file')"
-        >
+        <button type="button" class="import-button" aria-label="导入知识" title="导入知识" @click="openImport('file')">
           <i class="fa fa-plus" aria-hidden="true"></i>
           <span>导入</span>
         </button>
       </div>
     </header>
 
-    <section
-      v-if="adminOmniscient && omniscient"
-      class="omniscient-strip"
-      aria-label="全知总览"
-    >
+    <section v-if="adminOmniscient && omniscient" class="omniscient-strip" aria-label="全知总览">
       <div>
         <strong>{{ omniscient.document_count || 0 }}</strong>
         <span>全库文档</span>
@@ -237,13 +211,7 @@
               召回 <span v-if="resultChunks.length">{{ resultChunks.length }}</span>
             </button>
           </div>
-          <button
-            type="button"
-            class="inspector-mobile-close"
-            aria-label="关闭详情"
-            title="关闭详情"
-            @click="mobileInspectorOpen = false"
-          >
+          <button type="button" class="inspector-mobile-close" aria-label="关闭详情" title="关闭详情" @click="mobileInspectorOpen = false">
             <i class="fa fa-times" aria-hidden="true"></i>
           </button>
         </header>
@@ -328,12 +296,7 @@
               <p v-if="memoryMessage" class="memory-message" role="status">{{ memoryMessage }}</p>
             </template>
 
-            <button
-              v-if="selectedNode.type !== 'core'"
-              type="button"
-              class="node-question-button"
-              @click="askAboutSelectedNode"
-            >
+            <button v-if="selectedNode.type !== 'core'" type="button" class="node-question-button" @click="askAboutSelectedNode">
               <i class="fa fa-comment-o" aria-hidden="true"></i>
               围绕此节点提问
             </button>
@@ -354,9 +317,7 @@
             <div v-if="resultChunks.length" class="evidence-list">
               <article v-for="(chunk, index) in resultChunks" :key="evidenceKey(chunk, index)">
                 <header>
-                  <span :class="{ memory: isMemoryChunk(chunk) }">
-                    {{ isMemoryChunk(chunk) ? 'M' : 'K' }}{{ index + 1 }}
-                  </span>
+                  <span :class="{ memory: isMemoryChunk(chunk) }"> {{ isMemoryChunk(chunk) ? 'M' : 'K' }}{{ index + 1 }} </span>
                   <strong>{{ normalizeChunkSource(chunk) }}</strong>
                   <em>{{ formatScore(chunk.score) }}</em>
                 </header>
@@ -397,16 +358,8 @@ import PersyImportDrawer from '@/components/persy/PersyImportDrawer.vue'
 import PersyMemoryList from '@/components/persy/PersyMemoryList.vue'
 import PersyNodeCards from '@/components/persy/PersyNodeCards.vue'
 import PersySourceList from '@/components/persy/PersySourceList.vue'
-import {
-  knowledgeBaseApi,
-  type KnowledgeBaseDocument,
-  type KnowledgeGraphNode,
-  type PersyMemoryRecord,
-} from '@/api/knowledgeBase'
-import {
-  usePersyKnowledgeData,
-  type PersyKnowledgeViewMode,
-} from '@/composables/usePersyKnowledgeData'
+import { knowledgeBaseApi, type KnowledgeBaseDocument, type KnowledgeGraphNode, type PersyMemoryRecord } from '@/api/knowledgeBase'
+import { usePersyKnowledgeData, type PersyKnowledgeViewMode } from '@/composables/usePersyKnowledgeData'
 import { usePersyRecallQuery } from '@/composables/usePersyRecallQuery'
 import { usePersyMemoryGovernance } from '@/composables/usePersyMemoryGovernance'
 import {
@@ -430,21 +383,13 @@ type ImportMode = 'file' | 'text'
 type InspectorTab = 'node' | 'recall'
 
 const industryStore = useIndustryStore()
-const isAttendanceIndustry = computed(
-  () => String(industryStore.currentIndustryId || '').trim() === '考勤',
-)
+const isAttendanceIndustry = computed(() => String(industryStore.currentIndustryId || '').trim() === '考勤')
 const knowledgeQueryPlaceholder = computed(() =>
-  isAttendanceIndustry.value
-    ? '问 Persy：考勤异常处理规则是什么？'
-    : '问 Persy：客户续约需要谁审批？',
+  isAttendanceIndustry.value ? '问 Persy：考勤异常处理规则是什么？' : '问 Persy：客户续约需要谁审批？',
 )
-const knowledgeSourcePlaceholder = computed(() =>
-  isAttendanceIndustry.value ? '例如：考勤管理制度' : '例如：客户续约制度',
-)
+const knowledgeSourcePlaceholder = computed(() => (isAttendanceIndustry.value ? '例如：考勤管理制度' : '例如：客户续约制度'))
 const knowledgeTextPlaceholder = computed(() =>
-  isAttendanceIndustry.value
-    ? '粘贴考勤制度、排班规则、请假流程或常见问题'
-    : '粘贴制度、流程、客户资料、产品说明或 FAQ',
+  isAttendanceIndustry.value ? '粘贴考勤制度、排班规则、请假流程或常见问题' : '粘贴制度、流程、客户资料、产品说明或 FAQ',
 )
 
 const viewMode = ref<PersyKnowledgeViewMode>('graph')
@@ -490,29 +435,19 @@ const {
   rebuildActiveIndex,
 } = usePersyKnowledgeData({ viewMode })
 
-const {
-  queryText,
-  querying,
-  queryMessage,
-  queryError,
-  answerText,
-  lastQuery,
-  resultChunks,
-  recallState,
-  resetRecall,
-  queryKnowledge,
-} = usePersyRecallQuery({
-  activeDatasetId,
-  adminOmniscient,
-  omniscientQueryEnabled,
-  refreshMemories,
-  refreshGraph,
-  onRecallCommitted: () => {
-    inspectorTab.value = 'recall'
-    mobileInspectorOpen.value = true
-    viewMode.value = 'graph'
-  },
-})
+const { queryText, querying, queryMessage, queryError, answerText, lastQuery, resultChunks, recallState, resetRecall, queryKnowledge } =
+  usePersyRecallQuery({
+    activeDatasetId,
+    adminOmniscient,
+    omniscientQueryEnabled,
+    refreshMemories,
+    refreshGraph,
+    onRecallCommitted: () => {
+      inspectorTab.value = 'recall'
+      mobileInspectorOpen.value = true
+      viewMode.value = 'graph'
+    },
+  })
 
 const {
   mutatingMemory,
@@ -622,9 +557,7 @@ function selectNode(node: KnowledgeGraphNode): void {
 }
 
 function selectMemory(memory: PersyMemoryRecord): void {
-  const graphNode = graph.value?.nodes.find(
-    (node) => String(node.metadata?.memory_id || '') === memory.memory_id,
-  )
+  const graphNode = graph.value?.nodes.find((node) => String(node.metadata?.memory_id || '') === memory.memory_id)
   selectNode(
     graphNode || {
       id: `memory:${memory.memory_id}`,
@@ -648,19 +581,13 @@ function openPendingMemories(): void {
 }
 
 function selectDocument(doc: KnowledgeBaseDocument): void {
-  const node = graph.value?.nodes.find(
-    (candidate) => candidate.type === 'source' && candidate.document_id === doc.document_id,
-  )
+  const node = graph.value?.nodes.find((candidate) => candidate.type === 'source' && candidate.document_id === doc.document_id)
   if (node) selectNode(node)
 }
 
 async function deleteDocument(doc: KnowledgeBaseDocument): Promise<void> {
   const documentId = String(doc.document_id || '')
-  if (
-    !documentId ||
-    deletingDocumentId.value ||
-    !window.confirm(`删除资料“${doc.source || '未命名资料'}”及其全部知识节点？`)
-  ) {
+  if (!documentId || deletingDocumentId.value || !window.confirm(`删除资料“${doc.source || '未命名资料'}”及其全部知识节点？`)) {
     return
   }
   deletingDocumentId.value = documentId

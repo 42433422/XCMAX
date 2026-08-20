@@ -25,6 +25,8 @@ import threading
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Iterator
 
+from langgraph.graph.state import END, START, StateGraph
+
 from app.application.workflow.ports.events import StateEventPublisher
 from app.application.workflow.ports.runtime import WorkflowRuntime
 from app.application.workflow.types import (
@@ -39,6 +41,8 @@ logger = logging.getLogger(__name__)
 # packages with the package-specific pinned PROVENANCE, or this
 # runtime refuses to start instead of silently running on a PyPI distribution.
 assert_vendored_sources()
+
+__all__ = ["END", "START", "StateGraph", "XCAGILangGraphRuntime"]
 
 
 def _merge_dict(a: dict[str, Any] | None, b: dict[str, Any] | None) -> dict[str, Any]:

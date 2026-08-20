@@ -9,7 +9,9 @@ from modstore_server.integrations.doc_sync_handler import _match_glob
 from modstore_server.integrations.ops_action_handlers import repo_root
 
 
-def workspace_policy_from_manifest(manifest: Any) -> tuple[list[str], list[str], list[str]]:
+def workspace_policy_from_manifest(
+    manifest: Any,
+) -> tuple[list[str], list[str], list[str]]:
     """从员工包 manifest 读取 ``employee_config_v2.workspace_policy``。
 
     返回 ``(scope_globs, forbidden_globs, approval_required_globs)``。

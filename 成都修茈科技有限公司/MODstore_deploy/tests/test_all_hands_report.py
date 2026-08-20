@@ -30,12 +30,17 @@ def test_all_hands_template_mentions_empty_context_paths() -> None:
     assert "flowchart" in tpl
 
 
-def test_manifest_signals_extracts_behavior_rules(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_manifest_signals_extracts_behavior_rules(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     pack = {
         "manifest": {
             "name": "mods-and-eskill-curator",
             "employee_config_v2": {
-                "identity": {"name": "Mods/ESkill 策展员", "description": "负责策展与联动"},
+                "identity": {
+                    "name": "Mods/ESkill 策展员",
+                    "description": "负责策展与联动",
+                },
                 "cognition": {
                     "agent": {
                         "role": {
@@ -49,7 +54,11 @@ def test_manifest_signals_extracts_behavior_rules(monkeypatch: pytest.MonkeyPatc
                         ],
                     },
                     "skills": [
-                        {"name": "manifest-review", "brief": "审查配置", "kind": "analysis"}
+                        {
+                            "name": "manifest-review",
+                            "brief": "审查配置",
+                            "kind": "analysis",
+                        }
                     ],
                 },
                 "actions": {"handlers": ["llm_md", "echo"]},

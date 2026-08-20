@@ -51,10 +51,7 @@ def run(payload: dict[str, Any], _ctx: dict[str, Any]) -> dict[str, Any]:
     graph: dict[str, list[str]] = {}
     normalized: list[dict[str, Any]] = []
     for index, requirement in enumerate(requirements):
-        if (
-            not isinstance(requirement, dict)
-            or not str(requirement.get("id") or "").strip()
-        ):
+        if not isinstance(requirement, dict) or not str(requirement.get("id") or "").strip():
             blockers.append({"kind": "invalid_requirement", "index": index})
             continue
         requirement_id = str(requirement["id"]).strip()
@@ -84,9 +81,7 @@ def run(payload: dict[str, Any], _ctx: dict[str, Any]) -> dict[str, Any]:
     known_requirements = set(graph)
     for requirement in normalized:
         missing_dependencies = [
-            value
-            for value in requirement["depends_on"]
-            if value not in known_requirements
+            value for value in requirement["depends_on"] if value not in known_requirements
         ]
         if missing_dependencies:
             blockers.append(

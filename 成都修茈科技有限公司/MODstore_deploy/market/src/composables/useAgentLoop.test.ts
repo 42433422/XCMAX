@@ -8,9 +8,7 @@ vi.mock('../infrastructure/storage/tokenStore', () => ({
 }))
 
 function sseResponse(events: Array<Record<string, unknown> | string>, options: ResponseInit = {}) {
-  const body = events
-    .map((event) => typeof event === 'string' ? event : `data: ${JSON.stringify(event)}`)
-    .join('\n') + '\n'
+  const body = events.map((event) => (typeof event === 'string' ? event : `data: ${JSON.stringify(event)}`)).join('\n') + '\n'
   return new Response(body, { status: 200, ...options })
 }
 
@@ -21,19 +19,26 @@ describe('useAgentLoop', () => {
   })
 
   it('consumes every employee draft stage and finishes with a manifest', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => sseResponse([
-      { event: 'review_reply', message: 'ignored structural event' },
-      { event: 'clarification_question', message: 'question' },
-      { event: 'stage_start', stage: 'parse_intent' },
-      { event: 'stage_progress', stage: 'design_v2', message: 'working' },
-      { event: 'stage_done', stage: 'assemble', data: { ok: true } },
-      { event: 'stage_error', stage: 'suggest_skills', error: 'optional failure' },
-      { event: 'pipeline_done', manifest: { id: 'employee-a' } },
-      'data: malformed-json',
-    ])))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        sseResponse([
+          { event: 'review_reply', message: 'ignored structural event' },
+          { event: 'clarification_question', message: 'question' },
+          { event: 'stage_start', stage: 'parse_intent' },
+          { event: 'stage_progress', stage: 'design_v2', message: 'working' },
+          { event: 'stage_done', stage: 'assemble', data: { ok: true } },
+          { event: 'stage_error', stage: 'suggest_skills', error: 'optional failure' },
+          { event: 'pipeline_done', manifest: { id: 'employee-a' } },
+          'data: malformed-json',
+        ]),
+      ),
+    )
     const loop = useAgentLoop()
     const result = await loop.runEmployeeDraft('build employee', {
-      provider: 'deepseek', model: 'chat', suggestedId: 'employee-a',
+      provider: 'deepseek',
+      model: 'chat',
+      suggestedId: 'employee-a',
     })
     const store = useWorkbenchStore()
     const run = store.agentRuns.find((candidate) => candidate.id === result.runId)
@@ -57,16 +62,24 @@ describe('useAgentLoop', () => {
   })
 
   it('maps script workflow progress, completion and error events', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => sseResponse([
-      { event: 'context', message: 'context' },
-      { type: 'plan', message: 'plan' },
-      { event: 'done', result: { ok: true } },
-    ])))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        sseResponse([
+          { event: 'context', message: 'context' },
+          { type: 'plan', message: 'plan' },
+          { event: 'done', result: { ok: true } },
+        ]),
+      ),
+    )
     const loop = useAgentLoop()
     await loop.runScriptWorkflow({ description: 'script task' })
     expect(useWorkbenchStore().agentRuns[0]?.status).toBe('done')
 
-    vi.stubGlobal('fetch', vi.fn(async () => sseResponse([{ event: 'error', error: 'boom' }])))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => sseResponse([{ event: 'error', error: 'boom' }])),
+    )
     await loop.runScriptWorkflow({ brief: 'bad script' })
     expect(useWorkbenchStore().agentRuns[0]?.status).toBe('error')
   })
@@ -74,10 +87,12 @@ describe('useAgentLoop', () => {
   it('surfaces HTTP JSON errors, missing bodies and network failures', async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'denied' }), {
-        status: 403,
-        headers: { 'Content-Type': 'application/json' },
-      }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ detail: 'denied' }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
       .mockResolvedValueOnce({ ok: true, status: 200, body: null })
       .mockRejectedValueOnce(new Error('offline'))
     vi.stubGlobal('fetch', fetchMock)

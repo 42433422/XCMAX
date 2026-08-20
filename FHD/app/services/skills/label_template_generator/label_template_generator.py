@@ -18,6 +18,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
+
 # Public indirection retained for callers/tests that replace either this
 # module's writer or ``builtins.open`` without affecting PIL.Image.open.
 # Resolve ``builtins.open`` at call time so both established patch contracts

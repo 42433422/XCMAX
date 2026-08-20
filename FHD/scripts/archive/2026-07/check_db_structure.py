@@ -1,6 +1,8 @@
 import os
 import sqlite3
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 db_files = [
     r"e:\FHD\424\半岛风情.db",
     r"e:\FHD\424\博旺家私.db",
@@ -28,5 +30,5 @@ for db_file in db_files:
                 rows = cursor.fetchall()
                 print(f"  Sample: {rows}")
         conn.close()
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"Error: {e}")

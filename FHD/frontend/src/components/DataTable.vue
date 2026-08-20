@@ -4,7 +4,7 @@
       <thead>
         <tr>
           <th v-if="selectable">
-            <input type="checkbox" v-model="localSelectAll" @change.stop="handleSelectAll">
+            <input type="checkbox" v-model="localSelectAll" @change.stop="handleSelectAll" />
           </th>
           <th v-for="col in columns" :key="col.key">{{ col.label }}</th>
           <th v-if="$slots.actions">操作</th>
@@ -26,7 +26,7 @@
                 v-model="localSelectedIds"
                 @click.stop
                 @change="handleCheckboxChange(row, $event)"
-              >
+              />
             </td>
             <td v-for="col in columns" :key="col.key">
               <slot :name="`cell-${col.key}`" :row="row" :value="getCellValue(row, col)">
@@ -60,65 +60,63 @@ import { ref, computed, watch, nextTick, useSlots } from 'vue'
 const props = defineProps({
   columns: {
     type: Array,
-    required: true
+    required: true,
   },
   data: {
     type: Array,
-    default: () => []
+    default: () => [],
   },
   loading: {
     type: Boolean,
-    default: false
+    default: false,
   },
   selectable: {
     type: Boolean,
-    default: false
+    default: false,
   },
   selectedIds: {
     type: Array,
-    default: () => []
+    default: () => [],
   },
   rowKey: {
     type: String,
-    default: 'id'
+    default: 'id',
   },
   emptyText: {
     type: String,
-    default: '暂无数据'
+    default: '暂无数据',
   },
   hasMore: {
     type: Boolean,
-    default: true
+    default: true,
   },
   height: {
     type: String,
-    default: '500px'
-  }
+    default: '500px',
+  },
 })
 
-const emit = defineEmits([
-  'update:selectedIds',
-  'select-change',
-  'row-click',
-  'load-more'
-])
+const emit = defineEmits(['update:selectedIds', 'select-change', 'row-click', 'load-more'])
 
 const tableWrapper = ref(null)
 const slots = useSlots()
 
 const handleScroll = () => {
   if (!tableWrapper.value || props.loading || !props.hasMore) return
-  
+
   const { scrollTop, scrollHeight, clientHeight } = tableWrapper.value
   const threshold = 100
-  
+
   if (scrollHeight - scrollTop - clientHeight < threshold) {
     emit('load-more')
   }
 }
 
-watch(() => props.data, () => {
-}, { deep: true })
+watch(
+  () => props.data,
+  () => {},
+  { deep: true },
+)
 
 const localSelectedIds = ref([...props.selectedIds])
 const localSelectAll = ref(false)
@@ -133,20 +131,32 @@ const totalColumns = computed(() => {
 
 const localData = computed(() => props.data)
 
-watch(localSelectedIds, (newVal) => {
-  if (isSyncing) return
-  isSyncing = true
-  emit('update:selectedIds', [...newVal])
-  emit('select-change', [...newVal])
-  nextTick(() => { isSyncing = false })
-}, { deep: true })
+watch(
+  localSelectedIds,
+  (newVal) => {
+    if (isSyncing) return
+    isSyncing = true
+    emit('update:selectedIds', [...newVal])
+    emit('select-change', [...newVal])
+    nextTick(() => {
+      isSyncing = false
+    })
+  },
+  { deep: true },
+)
 
-watch(() => props.selectedIds, (newVal) => {
-  if (isSyncing) return
-  isSyncing = true
-  localSelectedIds.value = [...newVal]
-  nextTick(() => { isSyncing = false })
-}, { deep: true })
+watch(
+  () => props.selectedIds,
+  (newVal) => {
+    if (isSyncing) return
+    isSyncing = true
+    localSelectedIds.value = [...newVal]
+    nextTick(() => {
+      isSyncing = false
+    })
+  },
+  { deep: true },
+)
 
 const getRowId = (row) => {
   return row.id ?? row[props.rowKey] ?? row
@@ -193,7 +203,7 @@ defineExpose({
   selectAll: () => {
     localSelectAll.value = true
     localSelectedIds.value = localData.value.map((row, index) => getRowId(row))
-  }
+  },
 })
 </script>
 
@@ -261,9 +271,7 @@ defineExpose({
   color: #64748b;
   padding: 48px !important;
   font-weight: 650;
-  background:
-    radial-gradient(circle at 50% 0%, rgba(14, 116, 217, 0.08), transparent 35%),
-    rgba(248, 250, 252, 0.72);
+  background: radial-gradient(circle at 50% 0%, rgba(14, 116, 217, 0.08), transparent 35%), rgba(248, 250, 252, 0.72);
 }
 
 .loading-state,
@@ -284,7 +292,7 @@ defineExpose({
   color: #94a3b8;
 }
 
-.data-table input[type="checkbox"] {
+.data-table input[type='checkbox'] {
   width: 16px;
   height: 16px;
   min-height: 0;

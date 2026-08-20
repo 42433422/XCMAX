@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr"
 """Pure normalization helpers for post-execution autonomy verification."""
 
 from __future__ import annotations
@@ -47,7 +48,9 @@ def recorded_at_or_after(record: dict[str, Any], allowed_at: datetime) -> bool:
         return False
 
 
-def failed_merge_request_attempt(records: list[dict[str, Any]]) -> dict[str, Any] | None:
+def failed_merge_request_attempt(
+    records: list[dict[str, Any]],
+) -> dict[str, Any] | None:
     for record in reversed(records):
         policy = (
             record.get("policy_decision") if isinstance(record.get("policy_decision"), dict) else {}

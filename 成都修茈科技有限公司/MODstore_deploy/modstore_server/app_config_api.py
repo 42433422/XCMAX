@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from modstore_server.market_shared import _get_current_user
 from modstore_server.models import LandingContactSubmission, User, get_session_factory
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 router = APIRouter(tags=["app"])
 
@@ -84,7 +85,7 @@ def _apk_delta(sku: str, current_version_code: int) -> Dict[str, Any]:
     path = _delta_manifest_path(sku)
     try:
         manifest = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return _empty_delta()
     if manifest.get("target_version_code") != _ANDROID_LATEST_VERSION:
         return _empty_delta()
@@ -159,7 +160,7 @@ def _profile_page_config(sku: str) -> Dict[str, Any]:
     path = _profile_page_path(sku)
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+    except RECOVERABLE_ERRORS:
         raw = None
     if isinstance(raw, dict):
         for key, value in raw.items():

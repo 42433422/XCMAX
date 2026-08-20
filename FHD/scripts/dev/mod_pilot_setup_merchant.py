@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """创建 Mod 试点企业沙箱商家（非 admin）并同步 FHD 本地账号。"""
+
 from __future__ import annotations
 
 import json
@@ -14,8 +15,7 @@ FHD_ROOT = Path(__file__).resolve().parents[2]
 MODSTORE_DEPLOY = Path(
     os.environ.get(
         "MODSTORE_DEPLOY_ROOT",
-        Path.home()
-        / "XCMAX-archives/m0-fhd-bulk-20260605/成都修茈科技有限公司/MODstore_deploy",
+        Path.home() / "XCMAX-archives/m0-fhd-bulk-20260605/成都修茈科技有限公司/MODstore_deploy",
     )
 )
 MERCHANT_USER = os.environ.get("MOD_PILOT_MERCHANT_USER", "modpilot")

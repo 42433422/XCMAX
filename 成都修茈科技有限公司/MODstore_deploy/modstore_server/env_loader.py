@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment"
 """Shared dotenv loading for MODstore runtime processes."""
 
 from __future__ import annotations

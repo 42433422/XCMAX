@@ -147,7 +147,7 @@ from app.services.mobile_relay_desktop_client_part02 import (
 
 # ruff: noqa: F401
 
-_LEGACY_CONFIG_FILE = Path(get_app_data_dir()) / 'mobile_relay_desktop.json'
+_LEGACY_CONFIG_FILE = Path(get_app_data_dir()) / "mobile_relay_desktop.json"
 
 _LEGACY_MIGRATION_DONE = False
 
@@ -155,24 +155,130 @@ _INFLIGHT: set[str] = set()
 
 _INFLIGHT_LOCK = threading.Lock()
 
-_BRANCH_TOKEN_RE = re.compile('[A-Za-z0-9][A-Za-z0-9._/-]{0,179}')
+_BRANCH_TOKEN_RE = re.compile("[A-Za-z0-9][A-Za-z0-9._/-]{0,179}")
 
-_MERGE_TEXT_MARKERS = ('合并', 'merge')
+_MERGE_TEXT_MARKERS = ("合并", "merge")
 
-_DIFF_TEXT_MARKERS = ('diff', '查看改动', '看改动')
+_DIFF_TEXT_MARKERS = ("diff", "查看改动", "看改动")
 
-_DISCARD_TEXT_MARKERS = ('discard', '丢弃', '删除分支', '废弃')
+_DISCARD_TEXT_MARKERS = ("discard", "丢弃", "删除分支", "废弃")
 
-_FAILURE_BODY_MARKERS = ('BLOCKED', 'blocked', '未完成', '无法完成', '不能完成', '没有完成', '执行失败', '失败：', '验证未通过', '合并有冲突', 'merge conflict', '无改动可提交', '未产生可提交改动', '先不动代码', '只给出执行方案', '仅提供方案', '不能执行命令', '不能执行', '不能读工作区', '不能读取工作区', '不能跑测试', '未跑测试', '没有跑测试', '权限不足', '没有真实执行', '没有实际改动', '未修改文件', '无测试证据', '没有测试证据', '正在搜索', '正在实现', '正在处理', '正在执行', '搜索代码库', '我只出', '只出验收口径', '只出风险', '只出收口', '仅做验收', '仅做风险', '仅做收口', '仅做分析', '待回写', '等待回写', '❌')
+_FAILURE_BODY_MARKERS = (
+    "BLOCKED",
+    "blocked",
+    "未完成",
+    "无法完成",
+    "不能完成",
+    "没有完成",
+    "执行失败",
+    "失败：",
+    "验证未通过",
+    "合并有冲突",
+    "merge conflict",
+    "无改动可提交",
+    "未产生可提交改动",
+    "先不动代码",
+    "只给出执行方案",
+    "仅提供方案",
+    "不能执行命令",
+    "不能执行",
+    "不能读工作区",
+    "不能读取工作区",
+    "不能跑测试",
+    "未跑测试",
+    "没有跑测试",
+    "权限不足",
+    "没有真实执行",
+    "没有实际改动",
+    "未修改文件",
+    "无测试证据",
+    "没有测试证据",
+    "正在搜索",
+    "正在实现",
+    "正在处理",
+    "正在执行",
+    "搜索代码库",
+    "我只出",
+    "只出验收口径",
+    "只出风险",
+    "只出收口",
+    "仅做验收",
+    "仅做风险",
+    "仅做收口",
+    "仅做分析",
+    "待回写",
+    "等待回写",
+    "❌",
+)
 
-_EXECUTION_MESSAGE_MARKERS = ('修复', '实现', '开发', '添加', '新增', '更新', '删除', '改造', '优化', '测试', '验收', '构建', '编译', '安装', '合并', 'bug', '功能', '页面', '接口', '代码', 'apk', 'branch', 'merge')
+_EXECUTION_MESSAGE_MARKERS = (
+    "修复",
+    "实现",
+    "开发",
+    "添加",
+    "新增",
+    "更新",
+    "删除",
+    "改造",
+    "优化",
+    "测试",
+    "验收",
+    "构建",
+    "编译",
+    "安装",
+    "合并",
+    "bug",
+    "功能",
+    "页面",
+    "接口",
+    "代码",
+    "apk",
+    "branch",
+    "merge",
+)
 
-_EXECUTION_EVIDENCE_MARKERS = ('已修改', '修改了', '新增', '删除了', '更新了', '改动文件', '文件：', '测试通过', '验证通过', '编译通过', '构建通过', '安装成功', 'pytest', 'ruff', 'gradle', 'assemble', 'adb', 'git diff', 'commit', 'changed files', 'tests passed', 'test passed', 'command:', 'commands:', '命令：', '运行：', '验证：', '测试：', '构建：', '安装：', '手机复测', '真机复测', '群里复测')
+_EXECUTION_EVIDENCE_MARKERS = (
+    "已修改",
+    "修改了",
+    "新增",
+    "删除了",
+    "更新了",
+    "改动文件",
+    "文件：",
+    "测试通过",
+    "验证通过",
+    "编译通过",
+    "构建通过",
+    "安装成功",
+    "pytest",
+    "ruff",
+    "gradle",
+    "assemble",
+    "adb",
+    "git diff",
+    "commit",
+    "changed files",
+    "tests passed",
+    "test passed",
+    "command:",
+    "commands:",
+    "命令：",
+    "运行：",
+    "验证：",
+    "测试：",
+    "构建：",
+    "安装：",
+    "手机复测",
+    "真机复测",
+    "群里复测",
+)
 
-_EVIDENCE_FILE_RE = re.compile('(?i)\\b[\\w./-]+\\.(py|kt|java|ts|tsx|js|jsx|json|ya?ml|md|gradle|xml|sql|swift|go|rs)\\b')
+_EVIDENCE_FILE_RE = re.compile(
+    "(?i)\\b[\\w./-]+\\.(py|kt|java|ts|tsx|js|jsx|json|ya?ml|md|gradle|xml|sql|swift|go|rs)\\b"
+)
 
-_FAILED_STATUSES = {'failed', 'error', 'merge_conflict', 'cancelled'}
+_FAILED_STATUSES = {"failed", "error", "merge_conflict", "cancelled"}
 
-_BLOCKED_STATUSES = {'blocked', 'timeout'}
+_BLOCKED_STATUSES = {"blocked", "timeout"}
 
-_COMPLETED_STATUSES = {'completed', 'done', 'merged'}
+_COMPLETED_STATUSES = {"completed", "done", "merged"}

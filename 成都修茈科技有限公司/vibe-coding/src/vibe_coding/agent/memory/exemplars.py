@@ -20,8 +20,9 @@ P2 enhancements:
 from __future__ import annotations
 
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Literal
+from typing import Any, Literal
 from uuid import uuid4
 
 Outcome = Literal["success", "failure"]
@@ -65,7 +66,7 @@ class Exemplar:
         }
 
     @classmethod
-    def from_dict(cls, raw: dict[str, Any]) -> "Exemplar":
+    def from_dict(cls, raw: dict[str, Any]) -> Exemplar:
         outcome = str(raw.get("outcome") or "success")
         if outcome not in ("success", "failure"):
             outcome = "success"
@@ -129,7 +130,7 @@ class ExemplarStore:
         return [e.to_dict() for e in self._data]
 
     @classmethod
-    def from_list(cls, data: list[dict[str, Any]]) -> "ExemplarStore":
+    def from_list(cls, data: list[dict[str, Any]]) -> ExemplarStore:
         return cls([Exemplar.from_dict(d) for d in data if isinstance(d, dict)])
 
     def prune(

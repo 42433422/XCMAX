@@ -1,3 +1,4 @@
+# mypy: disable-error-code="misc"
 """production_line_event_api — 时间轨/事件轨 HTTP 路由烟测。"""
 
 from __future__ import annotations

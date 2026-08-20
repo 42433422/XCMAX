@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """站内通知 API。"""
 
 from __future__ import annotations

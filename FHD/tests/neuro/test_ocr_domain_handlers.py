@@ -1,3 +1,4 @@
+# mypy: disable-error-code="func-returns-value"
 """Tests for app.neuro_bus.domains.ocr_domain_handlers.
 
 Covers:

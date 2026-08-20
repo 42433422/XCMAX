@@ -17,6 +17,7 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.config import get_executor_for_config
 from typing_extensions import ParamSpec
 
+from langgraph._internal._exception_policy import TERMINATION_ERRORS
 from langgraph._internal._future import CONTEXT_NOT_SUPPORTED, run_coroutine_threadsafe
 from langgraph.errors import GraphBubbleUp
 
@@ -82,7 +83,7 @@ class BackgroundExecutor(AbstractContextManager):
             # This exception is an interruption signal, not an error
             # so we don't want to re-raise it on exit
             self.tasks.pop(task)
-        except BaseException:
+        except TERMINATION_ERRORS:
             pass
         else:
             self.tasks.pop(task)

@@ -6,10 +6,7 @@ vi.mock('@/utils/apiBase', () => ({
   DEFAULT_MOD_API_TIMEOUT_MS: 90_000,
 }))
 
-import {
-  postCoreWorkflowEmployeeRun,
-  tryPostCoreWorkflowEmployeeRun,
-} from './coreWorkflowEmployeeApi'
+import { postCoreWorkflowEmployeeRun, tryPostCoreWorkflowEmployeeRun } from './coreWorkflowEmployeeApi'
 
 describe('coreWorkflowEmployeeApi', () => {
   beforeEach(() => {
@@ -19,15 +16,15 @@ describe('coreWorkflowEmployeeApi', () => {
 
   describe('postCoreWorkflowEmployeeRun', () => {
     it('throws when mod not found for employee', async () => {
-      await expect(
-        postCoreWorkflowEmployeeRun('label_print', { action: 'status' }, []),
-      ).rejects.toThrow('workflow employee mod not installed: label_print')
+      await expect(postCoreWorkflowEmployeeRun('label_print', { action: 'status' }, [])).rejects.toThrow(
+        'workflow employee mod not installed: label_print',
+      )
     })
 
     it('throws when mods is undefined', async () => {
-      await expect(
-        postCoreWorkflowEmployeeRun('label_print', { action: 'status' }, undefined),
-      ).rejects.toThrow('workflow employee mod not installed: label_print')
+      await expect(postCoreWorkflowEmployeeRun('label_print', { action: 'status' }, undefined)).rejects.toThrow(
+        'workflow employee mod not installed: label_print',
+      )
     })
 
     it('posts to correct endpoint when mod found', async () => {
@@ -41,11 +38,7 @@ describe('coreWorkflowEmployeeApi', () => {
           workflow_employees: [{ id: 'label_print', label: '标签打印' }],
         },
       ]
-      const result = await postCoreWorkflowEmployeeRun(
-        'label_print',
-        { action: 'run' },
-        mods,
-      )
+      const result = await postCoreWorkflowEmployeeRun('label_print', { action: 'run' }, mods)
       expect(apiFetchMock).toHaveBeenCalledWith(
         '/api/mod/xcagi-workflow-employee-label-print/employees/label_print/run',
         expect.objectContaining({
@@ -92,10 +85,7 @@ describe('coreWorkflowEmployeeApi', () => {
         },
       ]
       await postCoreWorkflowEmployeeRun('label_print', {}, mods)
-      expect(apiFetchMock).toHaveBeenCalledWith(
-        '/api/mod/mod-with-special-chars/employees/label_print/run',
-        expect.any(Object),
-      )
+      expect(apiFetchMock).toHaveBeenCalledWith('/api/mod/mod-with-special-chars/employees/label_print/run', expect.any(Object))
     })
 
     it('throws when response is not ok', async () => {
@@ -106,9 +96,7 @@ describe('coreWorkflowEmployeeApi', () => {
           workflow_employees: [{ id: 'label_print', label: 'L' }],
         },
       ]
-      await expect(
-        postCoreWorkflowEmployeeRun('label_print', {}, mods),
-      ).rejects.toThrow('workflow employee run label_print: HTTP 500')
+      await expect(postCoreWorkflowEmployeeRun('label_print', {}, mods)).rejects.toThrow('workflow employee run label_print: HTTP 500')
     })
 
     it('throws on 404 response', async () => {
@@ -119,9 +107,7 @@ describe('coreWorkflowEmployeeApi', () => {
           workflow_employees: [{ id: 'label_print', label: 'L' }],
         },
       ]
-      await expect(
-        postCoreWorkflowEmployeeRun('label_print', {}, mods),
-      ).rejects.toThrow('workflow employee run label_print: HTTP 404')
+      await expect(postCoreWorkflowEmployeeRun('label_print', {}, mods)).rejects.toThrow('workflow employee run label_print: HTTP 404')
     })
 
     it('handles mod with empty id', async () => {
@@ -132,9 +118,7 @@ describe('coreWorkflowEmployeeApi', () => {
         },
       ]
       // modId is empty string → trim() returns '' → falsy → throws
-      await expect(
-        postCoreWorkflowEmployeeRun('label_print', {}, mods),
-      ).rejects.toThrow('workflow employee mod not installed: label_print')
+      await expect(postCoreWorkflowEmployeeRun('label_print', {}, mods)).rejects.toThrow('workflow employee mod not installed: label_print')
     })
 
     it('handles mod with whitespace id', async () => {
@@ -144,9 +128,7 @@ describe('coreWorkflowEmployeeApi', () => {
           workflow_employees: [{ id: 'label_print', label: 'L' }],
         },
       ]
-      await expect(
-        postCoreWorkflowEmployeeRun('label_print', {}, mods),
-      ).rejects.toThrow('workflow employee mod not installed: label_print')
+      await expect(postCoreWorkflowEmployeeRun('label_print', {}, mods)).rejects.toThrow('workflow employee mod not installed: label_print')
     })
   })
 

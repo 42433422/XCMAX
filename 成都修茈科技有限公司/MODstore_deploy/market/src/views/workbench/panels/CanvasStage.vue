@@ -1,25 +1,13 @@
 <script setup lang="ts">
 import { watch, onMounted, computed, ref } from 'vue'
-import {
-  VueFlow,
-  useVueFlow,
-  type NodeChange,
-  type EdgeChange,
-  type Connection,
-  type NodeTypesObject,
-} from '@vue-flow/core'
+import { VueFlow, useVueFlow, type NodeChange, type EdgeChange, type Connection, type NodeTypesObject } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
 import { MiniMap } from '@vue-flow/minimap'
 import EmployeeModuleNode from '../nodes/EmployeeModuleNode.vue'
 import WorkflowFlowEditor from '../../workflow/v2/WorkflowFlowEditor.vue'
 import { useWorkbenchStore } from '../../../stores/workbench'
-import {
-  manifestToNodes,
-  manifestToEdges,
-  addModuleToManifest,
-  removeModuleFromManifest,
-} from '../../../composables/useWorkbenchManifest'
+import { manifestToNodes, manifestToEdges, addModuleToManifest, removeModuleFromManifest } from '../../../composables/useWorkbenchManifest'
 import { computeAutoLayout } from '../../workflow/v2/composables/useAutoLayout'
 
 import '@vue-flow/core/dist/style.css'
@@ -51,8 +39,8 @@ const employeeCanvasMode = ref<'workflow' | 'modules'>('workflow')
 const isWorkflowFocusMode = computed(
   () => isEmployeeTarget.value && employeeWorkflowId.value > 0 && employeeCanvasMode.value === 'workflow',
 )
-const shouldShowWorkflowEditor = computed(() =>
-  isWorkflowTarget.value || (isEmployeeTarget.value && employeeCanvasMode.value === 'workflow' && employeeWorkflowId.value > 0),
+const shouldShowWorkflowEditor = computed(
+  () => isWorkflowTarget.value || (isEmployeeTarget.value && employeeCanvasMode.value === 'workflow' && employeeWorkflowId.value > 0),
 )
 const activeWorkflowId = computed(() => (isWorkflowTarget.value ? workflowId.value : employeeWorkflowId.value))
 
@@ -123,10 +111,7 @@ function onNodesChange(changes: NodeChange[]) {
       if (!node) continue
       const kind = node.data?.moduleKind
       if (kind) {
-        store.target.manifest = removeModuleFromManifest(
-          store.target.manifest as Record<string, unknown>,
-          kind,
-        ) as Record<string, unknown>
+        store.target.manifest = removeModuleFromManifest(store.target.manifest as Record<string, unknown>, kind) as Record<string, unknown>
       }
     }
   }
@@ -218,18 +203,25 @@ defineExpose({ fitView, autoLayout, syncManifestToCanvas })
 
     <div v-else-if="!isEmployeeTarget" class="canvas-empty">
       <div class="canvas-empty-card">
-        <p class="canvas-empty-title">{{ store.target.kind === 'mod' ? 'Mod 库仍在原统一工作台' : '技能工作台仍在原统一工作台' }}</p>
-        <p class="canvas-empty-copy">
-          新三栏 Shell 当前只承载员工制作画布；Mod 库、技能、连接器继续使用原统一工作台入口。
+        <p class="canvas-empty-title">
+          {{ store.target.kind === 'mod' ? 'Mod 库仍在原统一工作台' : '技能工作台仍在原统一工作台' }}
         </p>
-        <RouterLink class="canvas-empty-link" :to="{ name: 'workbench-unified', query: { focus: store.target.kind === 'mod' ? 'repository' : 'code_skill' } }">
+        <p class="canvas-empty-copy">新三栏 Shell 当前只承载员工制作画布；Mod 库、技能、连接器继续使用原统一工作台入口。</p>
+        <RouterLink
+          class="canvas-empty-link"
+          :to="{
+            name: 'workbench-unified',
+            query: { focus: store.target.kind === 'mod' ? 'repository' : 'code_skill' },
+          }"
+        >
           返回原统一工作台
         </RouterLink>
       </div>
     </div>
 
     <!-- Employee / Mod / Skill target: custom module canvas -->
-    <VueFlow v-else
+    <VueFlow
+      v-else
       :nodes="store.canvasNodes"
       :edges="store.canvasEdges"
       :node-types="nodeTypes"

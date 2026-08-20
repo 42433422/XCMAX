@@ -1,11 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { LS_PLANNER_MOD_FACADE_ENABLED } from '@/constants/plannerMod'
 import { invalidateTenantStorageScopeCache } from '@/utils/tenantStorageScope'
-import {
-  resolvePlannerToolsRegistryPath,
-  resolvePlannerToolsExecutePath,
-  usePlannerModToolsFacade,
-} from './plannerToolsPaths'
+import { resolvePlannerToolsRegistryPath, resolvePlannerToolsExecutePath, usePlannerModToolsFacade } from './plannerToolsPaths'
 
 describe('plannerToolsPaths', () => {
   beforeEach(() => {

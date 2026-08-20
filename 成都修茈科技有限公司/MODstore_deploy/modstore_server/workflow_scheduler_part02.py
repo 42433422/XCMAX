@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="attr-defined, no-any-return, union-attr, valid-type"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -62,7 +66,7 @@ def _employee_project_root() -> str:
         from modstore_server.integrations.ops_action_handlers import repo_root
 
         root = _facade().Path(repo_root()).resolve()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return ""
     if (root / "MODstore_deploy").is_dir():
         return str(root)
@@ -95,19 +99,21 @@ def _register_employee_cron_jobs() -> None:
             contract_schedule,
             workforce_contract_map,
         )
-        from modstore_server.employee_cron_registration import build_employee_cron_candidates
+        from modstore_server.employee_cron_registration import (
+            build_employee_cron_candidates,
+        )
         from modstore_server.employee_cron_registration_ledger import (
             defer_employee_cron_if_approval_required,
             reconcile_employee_cron_registrations,
             record_employee_cron_registration,
         )
         from modstore_server.models import get_session_factory
-    except Exception:
+    except RECOVERABLE_ERRORS:
         _facade().logger.exception("employee cron: import failed")
         return
     try:
         work_contracts = workforce_contract_map()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         _facade().logger.exception("employee cron: duty work contracts unavailable")
         work_contracts = {}
     candidates = build_employee_cron_candidates(
@@ -143,7 +149,7 @@ def _register_employee_cron_jobs() -> None:
                 trigger = _facade().CronTrigger.from_crontab(cron_expr)
             elif isinstance(interval_seconds, (int, float)) and interval_seconds >= 60:
                 trigger = _facade().IntervalTrigger(seconds=int(interval_seconds))
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             _facade().logger.warning("employee cron: invalid trigger for %s: %s", emp_id, exc)
             skipped += 1
             continue
@@ -163,7 +169,9 @@ def _register_employee_cron_jobs() -> None:
             schedule_source: str = schedule_source_local,
         ) -> None:
             try:
-                from modstore_server.employee_duty_cron_runtime import execute_employee_cron_duty
+                from modstore_server.employee_duty_cron_runtime import (
+                    execute_employee_cron_duty,
+                )
 
                 execute_employee_cron_duty(
                     employee_id=eid,
@@ -172,7 +180,7 @@ def _register_employee_cron_jobs() -> None:
                     schedule_source=schedule_source,
                     project_root=_facade()._employee_project_root(),
                 )
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 _facade().logger.exception("employee cron job failed: %s", eid)
 
         try:
@@ -185,7 +193,7 @@ def _register_employee_cron_jobs() -> None:
                 emp_id,
                 cron_expr or f"interval {interval_seconds}s",
             )
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             record_employee_cron_registration(
                 emp_id, status="failed", error=f"registration failed: {exc!r}"
             )
@@ -193,7 +201,7 @@ def _register_employee_cron_jobs() -> None:
             skipped += 1
     try:
         reconcile_employee_cron_registrations(represented_ids)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         _facade().logger.exception("employee cron: registration ledger reconciliation failed")
     _facade().logger.info("employee cron: registered=%d skipped=%d", registered, skipped)
 
@@ -206,7 +214,7 @@ def list_employee_cron_jobs() -> list:
         from modstore_server.duty_workforce_contracts import workforce_contract_map
 
         work_contracts = workforce_contract_map()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         work_contracts = {}
     out = []
     for job in _facade()._scheduler.get_jobs():
@@ -236,7 +244,7 @@ def reload_employee_cron_jobs() -> dict:
         if (job.id or "").startswith(_facade()._EMPLOYEE_CRON_JOB_PREFIX):
             try:
                 _facade()._scheduler.remove_job(job.id)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 pass
     _facade()._register_employee_cron_jobs()
     return {"ok": True, "active_jobs": _facade().list_employee_cron_jobs()}
@@ -292,13 +300,13 @@ def _register_cron_trigger(
     def job_wrapper() -> None:
         try:
             _facade().run_workflow_for_trigger(workflow_id=wf_id, user_id=uid, input_data={})
-        except Exception as e:
+        except RECOVERABLE_ERRORS as e:
             _facade().logger.exception("cron workflow failed workflow_id=%s: %s", wf_id, e)
 
     jid = _facade()._job_id(trigger_id)
     try:
         _facade()._scheduler.remove_job(jid)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     try:
         _facade()._scheduler.add_job(
@@ -308,9 +316,12 @@ def _register_cron_trigger(
             replace_existing=True,
         )
         _facade().logger.info(
-            "registered cron trigger id=%s workflow=%s expr=%s", trigger_id, wf_id, cron_expr
+            "registered cron trigger id=%s workflow=%s expr=%s",
+            trigger_id,
+            wf_id,
+            cron_expr,
         )
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         _facade().logger.warning("invalid cron for trigger id=%s: %s", trigger_id, e)
 
 
@@ -320,7 +331,7 @@ def unregister_cron_trigger(trigger_id: int) -> None:
         return
     try:
         _facade()._scheduler.remove_job(_facade()._job_id(trigger_id))
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
 
 
@@ -347,6 +358,6 @@ def reload_all_cron_triggers() -> None:
         if jid.startswith(_facade()._JOB_PREFIX):
             try:
                 _facade()._scheduler.remove_job(jid)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 pass
     _facade()._load_triggers()

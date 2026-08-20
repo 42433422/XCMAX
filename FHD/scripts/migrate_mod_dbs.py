@@ -14,6 +14,7 @@
 已有与基库一致的版本号，upgrade head 天然 no-op。
 可以用 --skip sz-qsm-pro 跳过，或 --stamp-only sz-qsm-pro 只做 stamp。
 """
+
 from __future__ import annotations
 
 import argparse

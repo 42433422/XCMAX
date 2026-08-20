@@ -1,3 +1,4 @@
+# mypy: disable-error-code="attr-defined, import-not-found"
 import os
 import sys
 

@@ -1,15 +1,7 @@
 <template>
   <div class="main-container">
-    <div
-      class="sidebar-shell"
-      :class="{ collapsed: sidebarCollapsed }"
-      :style="sidebarShellStyle"
-      @mouseenter="onSidebarMouseEnter"
-    >
-      <Sidebar
-        :active-view="currentRouteName"
-        @change-view="handleViewChange"
-      />
+    <div class="sidebar-shell" :class="{ collapsed: sidebarCollapsed }" :style="sidebarShellStyle" @mouseenter="onSidebarMouseEnter">
+      <Sidebar :active-view="currentRouteName" @change-view="handleViewChange" />
       <PaneResizeHandle
         v-if="isSidebarFeatureEnabled && !sidebarCollapsed"
         orientation="vertical"
@@ -24,31 +16,14 @@
       @mouseenter="onHoverTriggerEnter"
       @mouseleave="onHoverTriggerLeave"
     >
-      <button
-        class="sidebar-peek-button"
-        type="button"
-        aria-label="展开侧边栏"
-        title="展开侧边栏"
-        @click="onHoverTriggerClick"
-      >
-        ▶
-      </button>
+      <button class="sidebar-peek-button" type="button" aria-label="展开侧边栏" title="展开侧边栏" @click="onHoverTriggerClick">▶</button>
     </div>
     <div class="main-content">
-      <div
-        v-if="isImpersonating"
-        class="impersonate-bar"
-        role="status"
-      >
+      <div v-if="isImpersonating" class="impersonate-bar" role="status">
         <span class="impersonate-bar__text">
           正在代管：<strong>{{ impersonationLabel }}</strong>
         </span>
-        <button
-          type="button"
-          class="impersonate-bar__end"
-          :disabled="endingImpersonation"
-          @click="endImpersonation"
-        >
+        <button type="button" class="impersonate-bar__end" :disabled="endingImpersonation" @click="endImpersonation">
           {{ endingImpersonation ? '结束中…' : '结束代管' }}
         </button>
       </div>
@@ -126,19 +101,12 @@ const onboardingTutorialStore = useOnboardingTutorialStore()
 const tutorialStore = useTutorialStore()
 const { active: onboardingTutorialActive } = storeToRefs(onboardingTutorialStore)
 const { isActive: legacyTutorialActive } = storeToRefs(tutorialStore)
-const isAnyTutorialActive = computed(
-  () => onboardingTutorialActive.value || legacyTutorialActive.value,
-)
+const isAnyTutorialActive = computed(() => onboardingTutorialActive.value || legacyTutorialActive.value)
 const industryStore = useIndustryStore()
 const modsStore = useModsStore()
 const accountProfileStore = useAccountProfileStore()
 const { modsForUi } = storeToRefs(modsStore)
-const {
-  displayBrand,
-  isImpersonating,
-  impersonatingUsername,
-  companyBrand,
-} = storeToRefs(accountProfileStore)
+const { displayBrand, isImpersonating, impersonatingUsername, companyBrand } = storeToRefs(accountProfileStore)
 const endingImpersonation = ref(false)
 const { modMenuItems } = useModRoutes()
 const SIDEBAR_INACTIVITY_MS = 15000
@@ -277,9 +245,7 @@ const currentRouteName = computed(() => {
 })
 
 /** 侧栏选中「智能对话」时隐藏悬浮入口（含 Mod 门面 /mod/.../chat） */
-const shouldShowFloatingChatAssistant = computed(
-  () => !isChatSidebarActive(currentRouteName.value, route) && !documentPreviewPip.visible,
-)
+const shouldShowFloatingChatAssistant = computed(() => !isChatSidebarActive(currentRouteName.value, route) && !documentPreviewPip.visible)
 
 const {
   paneStyle: sidebarShellStyle,
@@ -308,8 +274,7 @@ const {
 /** 顶栏与页面标题：仅核心 + 行业（与侧栏 resolveCoreNavLabel / INDUSTRY_MENU_LABELS 同源），不含 Mod menu_overrides */
 const viewTitles = computed(() => {
   const industryId = String(industryStore.currentIndustryId || DEFAULT_INDUSTRY_ID)
-  const byIndustry =
-    INDUSTRY_MENU_LABELS[industryId] || INDUSTRY_MENU_LABELS[DEFAULT_INDUSTRY_ID]
+  const byIndustry = INDUSTRY_MENU_LABELS[industryId] || INDUSTRY_MENU_LABELS[DEFAULT_INDUSTRY_ID]
   return {
     ...viewTitlesBase,
     ...byIndustry,
@@ -432,9 +397,7 @@ const onMobileNavViewportChange = (event) => {
   showMobileBottomNav.value = Boolean(event?.matches)
 }
 
-const mobileBottomNavVisible = computed(
-  () => showMobileBottomNav.value && !adminConsoleSpa && route.meta?.hideChrome !== true,
-)
+const mobileBottomNavVisible = computed(() => showMobileBottomNav.value && !adminConsoleSpa && route.meta?.hideChrome !== true)
 
 onMounted(async () => {
   if (!accountProfileStore.loaded) {
@@ -661,5 +624,4 @@ onBeforeUnmount(() => {
   border-color: rgba(11, 114, 217, 0.35);
   background: rgba(239, 246, 255, 0.96);
 }
-
 </style>

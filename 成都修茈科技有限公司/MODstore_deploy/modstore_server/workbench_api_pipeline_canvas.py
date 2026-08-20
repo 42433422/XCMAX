@@ -1,7 +1,10 @@
-# ruff: noqa
 """Workbench canvas pipeline branch."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -23,7 +26,11 @@ async def _run_workbench_canvas_pipeline(
     try:
         await _facade()._set_step(sid, "generate", "running")
         wf = _facade().Workflow(
-            user_id=user.id, name=name, description=full_desc, is_active=True, kind="skill_group"
+            user_id=user.id,
+            name=name,
+            description=full_desc,
+            is_active=True,
+            kind="skill_group",
         )
         db.add(wf)
         db.commit()
@@ -63,7 +70,7 @@ async def _run_workbench_canvas_pipeline(
                         synchronize_session=False
                     )
                     db.commit()
-                except Exception:
+                except RECOVERABLE_ERRORS:
                     db.rollback()
                 await _facade()._fail_session(
                     sid, "generate", nl.get("error") or "工作流图生成失败"
@@ -147,9 +154,11 @@ async def _run_workbench_canvas_pipeline(
                 {"workflow_id": wid, "workflow_name": name, **nl_meta}
             ),
         )
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         _facade()._LOG.exception(
-            "workbench skill pipeline failed session=%s step=%s", sid, _skill_current_step
+            "workbench skill pipeline failed session=%s step=%s",
+            sid,
+            _skill_current_step,
         )
         await _facade()._fail_session(sid, _skill_current_step, str(e)[:2000])
     return

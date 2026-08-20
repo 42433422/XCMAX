@@ -7,9 +7,11 @@ import os
 import time
 import uuid
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, Iterator, Optional
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 try:
     import fcntl
@@ -37,7 +39,7 @@ def scheduler_heartbeat_path() -> Path:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _env_bool(name: str, default: str = "1") -> bool:
@@ -85,8 +87,13 @@ def scheduler_heartbeat_status(*, max_age_seconds: int = 600) -> Dict[str, Any]:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
         return {"ok": False, "path": str(path), "reason": "heartbeat_missing"}
-    except Exception as exc:
-        return {"ok": False, "error": str(exc), "path": str(path), "reason": "heartbeat_unreadable"}
+    except RECOVERABLE_ERRORS as exc:
+        return {
+            "ok": False,
+            "error": str(exc),
+            "path": str(path),
+            "reason": "heartbeat_unreadable",
+        }
     try:
         age_seconds = max(0.0, time.time() - float(payload.get("timestamp_epoch") or 0))
     except (TypeError, ValueError):
@@ -158,7 +165,7 @@ def acquire_daily_pipeline_lock(
         if acquired:
             try:
                 fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 pass
         fh.close()
 

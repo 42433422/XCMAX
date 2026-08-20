@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment"
 """incident-bus：事件入队并按 EmployeeTriggerBinding 派发员工任务。"""
 
 from __future__ import annotations
@@ -7,14 +8,12 @@ import json
 import logging
 import os
 import threading
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List
 
 from modstore_server.employee_executor import execute_employee_task as execute_employee_task
-from modstore_server.incident_dispatch import (
-    _dispatch_incident_body as _dispatch_incident_body,
-)
+from modstore_server.incident_dispatch import _dispatch_incident_body as _dispatch_incident_body
 from modstore_server.incident_dispatch import (
     _dispatch_intake_routing_plan as _dispatch_intake_routing_plan,
 )
@@ -26,6 +25,7 @@ from modstore_server.models import (
     User,
     get_session_factory,
 )
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 from modstore_server.platform_llm_scope import platform_llm_scoped
 
 logger = logging.getLogger(__name__)
@@ -107,7 +107,7 @@ def _publish_stream_shadow(
                     incident_id,
                     reason[:200],
                 )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception(
             "incident_bus: redis stream shadow publish crashed event=%s incident_id=%s",
             event_type,
@@ -139,7 +139,7 @@ def publish(
     fp = fingerprint or _fingerprint(payload, source)
     sf = get_session_factory()
     with sf() as session:
-        cutoff = datetime.now(timezone.utc) - timedelta(minutes=10)
+        cutoff = datetime.now(UTC) - timedelta(minutes=10)
         old = (
             session.query(IncidentEvent)
             .filter(
@@ -179,7 +179,7 @@ def publish(
                 payload=payload if isinstance(payload, dict) else {},
                 auto_dispatch=True,
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.exception("employee suggestion ingest failed")
     if event_type == "consistency_check.completed":
         try:
@@ -196,7 +196,7 @@ def publish(
                     source=source or "consistency_checker",
                     source_ref=str((payload or {}).get("source_ref") or "")[:128],
                 )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.exception("consistency_check.completed autofix trigger failed")
     # 默认异步派发：同步跑员工编排/LLM 会拖死 HTTP（如 AI 客服 /chat → 处理中卡住）。
     # 测试或显式需要可设 MODSTORE_INCIDENT_SYNC_DISPATCH=1。
@@ -210,7 +210,7 @@ def publish(
     def _run_dispatch() -> None:
         try:
             _dispatch_incident(eid)
-        except Exception:  # noqa: BLE001
+        except BOUNDARY_ERRORS:  # noqa: BLE001
             logger.exception("dispatch incident id=%s failed", eid)
 
     if sync_dispatch:
@@ -328,7 +328,7 @@ def _dispatch_incident(event_id: int) -> None:
             )
             return
         claimed_here = True
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.debug("incident cluster claim skipped event_id=%s", event_id, exc_info=True)
 
     try:
@@ -339,7 +339,7 @@ def _dispatch_incident(event_id: int) -> None:
                 from modstore_server.node_coordinator import release_incident_claim
 
                 release_incident_claim(event_id)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 logger.debug(
                     "incident cluster claim release failed event_id=%s",
                     event_id,
@@ -394,7 +394,7 @@ def sync_employee_trigger_bindings_from_yuangon(yuangon_dir: Path) -> int:
         for f in sorted(ydir.glob("**/employee.yaml")):
             try:
                 data = yaml.safe_load(f.read_text(encoding="utf-8"))
-            except Exception:  # noqa: BLE001
+            except BOUNDARY_ERRORS:  # noqa: BLE001
                 continue
             if not isinstance(data, dict):
                 continue

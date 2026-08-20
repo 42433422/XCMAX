@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="no-any-return"
 """LLM 实现 employee_pack。
 
 输入：LLM 提议 JSON（含 employee_pack 字段）。
@@ -13,6 +14,8 @@ import json
 import sys
 from pathlib import Path
 from typing import Any, Dict, List
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 # 让脚本可访问 modstore_server
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
@@ -38,7 +41,7 @@ def _call_llm(proposal: Dict[str, Any]) -> Dict[str, Any]:
         if isinstance(resp, dict):
             return resp
         return json.loads(resp)
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         raise RuntimeError(f"LLM call failed: {e}") from e
 
 

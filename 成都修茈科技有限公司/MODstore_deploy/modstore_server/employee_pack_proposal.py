@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr"
 """Lightweight, bounded employee-pack proposal generation.
 
 This module intentionally has no database or SQLAlchemy imports so the
@@ -12,6 +13,8 @@ import logging
 import os
 import re
 from typing import Any, Callable, Dict, Optional
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +112,7 @@ def _call_llm(prompt: str) -> Dict[str, Any]:
             response_text = str(message.get("content") or "")
         match = re.search(r"\{[\s\S]*\}", response_text)
         return json.loads(match.group(0)) if match else {}
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("LLM proposal call failed: %s", exc)
         return {}
 
@@ -140,8 +143,7 @@ def validate_proposal(proposal: Dict[str, Any]) -> None:
         )
     if int(proposal.get("estimated_tokens", 999999)) > MAX_TOKENS_PER_PROPOSAL:
         raise ProposalValidationError(
-            "estimated_tokens "
-            f"{proposal.get('estimated_tokens')} exceeds {MAX_TOKENS_PER_PROPOSAL}"
+            f"estimated_tokens {proposal.get('estimated_tokens')} exceeds {MAX_TOKENS_PER_PROPOSAL}"
         )
 
 

@@ -31,6 +31,9 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["ai-kitten"])
 
+_KITTEN_UNAVAILABLE = "小猫分析服务暂时不可用，请稍后重试"
+_DOCUMENT_UNAVAILABLE = "文档生成服务暂时不可用，请稍后重试"
+
 
 def _trace_kitten_route(
     payload: dict[str, Any],
@@ -96,9 +99,9 @@ def kitten_business_snapshot():
 
         snap = build_kitten_business_snapshot()
         return {"success": True, "data": snap}
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("kitten business-snapshot: %s", e)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("kitten business-snapshot failed")
+        return JSONResponse({"success": False, "message": _KITTEN_UNAVAILABLE}, status_code=500)
 
 
 @router.get("/api/ai/kitten/charts/all")
@@ -107,9 +110,9 @@ def kitten_charts_all():
         from app.application.facades.kitten_facade import chart_service
 
         return {"success": True, "data": chart_service.get_all_charts_data()}
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("kitten charts all: %s", e)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("kitten charts all failed")
+        return JSONResponse({"success": False, "message": _KITTEN_UNAVAILABLE}, status_code=500)
 
 
 @router.get("/api/ai/kitten/charts/revenue")
@@ -118,9 +121,9 @@ def kitten_charts_revenue(months: int = Query(default=6)):
         from app.application.facades.kitten_facade import chart_service
 
         return chart_service.get_revenue_chart_data(months)
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("kitten revenue: %s", e)
-        return {"success": False, "error": str(e)}
+    except RECOVERABLE_ERRORS:
+        logger.exception("kitten revenue failed")
+        return {"success": False, "error": _KITTEN_UNAVAILABLE}
 
 
 @router.get("/api/ai/kitten/charts/products")
@@ -129,9 +132,9 @@ def kitten_charts_products():
         from app.application.facades.kitten_facade import chart_service
 
         return chart_service.get_product_pie_chart_data()
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("kitten products: %s", e)
-        return {"success": False, "error": str(e)}
+    except RECOVERABLE_ERRORS:
+        logger.exception("kitten products failed")
+        return {"success": False, "error": _KITTEN_UNAVAILABLE}
 
 
 @router.get("/api/ai/kitten/charts/customers")
@@ -140,9 +143,9 @@ def kitten_charts_customers():
         from app.application.facades.kitten_facade import chart_service
 
         return chart_service.get_customer_bar_chart_data()
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("kitten customers: %s", e)
-        return {"success": False, "error": str(e)}
+    except RECOVERABLE_ERRORS:
+        logger.exception("kitten customers failed")
+        return {"success": False, "error": _KITTEN_UNAVAILABLE}
 
 
 @router.get("/api/ai/kitten/charts/profit")
@@ -151,9 +154,9 @@ def kitten_charts_profit(months: int = Query(default=6)):
         from app.application.facades.kitten_facade import chart_service
 
         return chart_service.get_profit_trend_chart_data(months)
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("kitten profit: %s", e)
-        return {"success": False, "error": str(e)}
+    except RECOVERABLE_ERRORS:
+        logger.exception("kitten profit failed")
+        return {"success": False, "error": _KITTEN_UNAVAILABLE}
 
 
 @router.get("/api/ai/kitten/charts/inventory")
@@ -162,9 +165,9 @@ def kitten_charts_inventory():
         from app.application.facades.kitten_facade import chart_service
 
         return chart_service.get_inventory_chart_data()
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("kitten inventory chart: %s", e)
-        return {"success": False, "error": str(e)}
+    except RECOVERABLE_ERRORS:
+        logger.exception("kitten inventory chart failed")
+        return {"success": False, "error": _KITTEN_UNAVAILABLE}
 
 
 @router.get("/api/ai/kitten/saved/list")
@@ -175,9 +178,9 @@ def kitten_saved_list(type: str | None = Query(default=None)):
         analyses = analysis_save_service.list_saved_analyses(type)
         stats = analysis_save_service.get_statistics_summary()
         return {"success": True, "analyses": analyses, "statistics": stats}
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("kitten saved list: %s", e)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("kitten saved list failed")
+        return JSONResponse({"success": False, "message": _KITTEN_UNAVAILABLE}, status_code=500)
 
 
 @router.get("/api/ai/kitten/saved/{analysis_id}")
@@ -189,9 +192,9 @@ def kitten_saved_get(analysis_id: str):
         if not analysis:
             return JSONResponse({"success": False, "message": "未找到该分析记录"}, status_code=404)
         return {"success": True, "data": analysis}
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("kitten saved get: %s", e)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("kitten saved get failed")
+        return JSONResponse({"success": False, "message": _KITTEN_UNAVAILABLE}, status_code=500)
 
 
 @router.get("/api/ai/kitten/saved/{analysis_id}/export")
@@ -209,9 +212,9 @@ def kitten_saved_export(analysis_id: str):
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={"Content-Disposition": f'attachment; filename="{file_name}"'},
         )
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("kitten export: %s", e)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("kitten saved export failed")
+        return JSONResponse({"success": False, "message": _KITTEN_UNAVAILABLE}, status_code=500)
 
 
 @router.delete("/api/ai/kitten/saved/{analysis_id}")
@@ -229,9 +232,9 @@ def kitten_saved_delete(analysis_id: str):
         if result.get("success"):
             return {"success": True, "message": "删除成功"}
         return JSONResponse(result, status_code=400)
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("kitten delete: %s", e)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("kitten saved delete failed")
+        return JSONResponse({"success": False, "message": _KITTEN_UNAVAILABLE}, status_code=500)
 
 
 @router.post("/api/ai/kitten/financial/report")
@@ -295,11 +298,9 @@ def ai_kitten_financial_report(body: dict = Body(default_factory=dict)):
             body=payload,
             intent="kitten_financial_report",
         )
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("kitten financial: %s", e)
-        return JSONResponse(
-            {"success": False, "message": f"财务报表生成失败：{str(e)}"}, status_code=500
-        )
+    except RECOVERABLE_ERRORS:
+        logger.exception("kitten financial report failed")
+        return JSONResponse({"success": False, "message": _KITTEN_UNAVAILABLE}, status_code=500)
 
 
 @router.post("/api/ai/kitten/report/export")
@@ -340,9 +341,9 @@ def ai_kitten_report_export(body: dict = Body(default_factory=dict)):
                 {"Content-Disposition": f'attachment; filename="{file_name}"'},
             ),
         )
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("kitten export: %s", e)
-        return JSONResponse({"success": False, "message": f"导出失败：{str(e)}"}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("kitten report export failed")
+        return JSONResponse({"success": False, "message": _KITTEN_UNAVAILABLE}, status_code=500)
 
 
 @router.post("/api/ai/kitten/report/export-docx")
@@ -382,11 +383,9 @@ def ai_kitten_report_export_docx(body: dict = Body(default_factory=dict)):
                 {"Content-Disposition": f'attachment; filename="{file_name}"'},
             ),
         )
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("kitten docx export: %s", e)
-        return JSONResponse(
-            {"success": False, "message": f"Word 导出失败：{str(e)}"}, status_code=500
-        )
+    except RECOVERABLE_ERRORS:
+        logger.exception("kitten docx export failed")
+        return JSONResponse({"success": False, "message": _KITTEN_UNAVAILABLE}, status_code=500)
 
 
 @router.post("/api/ai/kitten/document/generate")
@@ -438,13 +437,12 @@ def kitten_document_generate(body: dict = Body(default_factory=dict)):
             media_type=mime,
             headers=_agent_run_headers(trace_payload, {"Content-Disposition": disp}),
         )
-    except RuntimeError as e:
-        return JSONResponse({"success": False, "message": str(e)}, status_code=503)
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("kitten document generate: %s", e)
-        return JSONResponse(
-            {"success": False, "message": f"文档生成失败：{str(e)}"}, status_code=500
-        )
+    except RuntimeError:
+        logger.exception("kitten document service unavailable")
+        return JSONResponse({"success": False, "message": _DOCUMENT_UNAVAILABLE}, status_code=503)
+    except RECOVERABLE_ERRORS:
+        logger.exception("kitten document generation failed")
+        return JSONResponse({"success": False, "message": _DOCUMENT_UNAVAILABLE}, status_code=500)
 
 
 @router.get("/api/ai/kitten/document/pickup/{token}")

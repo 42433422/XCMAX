@@ -1,10 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
-import {
-  StreamingTtsPlayer,
-  ttsConfigFromPersonalSettings,
-  useStreamingTts,
-  type StreamingTtsConfig,
-} from './useStreamingTts'
+import { StreamingTtsPlayer, ttsConfigFromPersonalSettings, useStreamingTts, type StreamingTtsConfig } from './useStreamingTts'
 
 const cfg = (): StreamingTtsConfig => ({
   engine: 'edge-online',
@@ -15,17 +10,20 @@ const cfg = (): StreamingTtsConfig => ({
 
 describe('StreamingTtsPlayer', () => {
   beforeEach(() => {
-    vi.stubGlobal('fetch', vi.fn(async () => ({
-      ok: true,
-      headers: { get: () => 'audio/mpeg' },
-      body: {
-        getReader: () => ({
-          read: async () => ({ done: true, value: new Uint8Array([1, 2, 3]) }),
-          releaseLock: () => {},
-        }),
-      },
-      blob: async () => new Blob([new Uint8Array([1, 2, 3])], { type: 'audio/mpeg' }),
-    })))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        headers: { get: () => 'audio/mpeg' },
+        body: {
+          getReader: () => ({
+            read: async () => ({ done: true, value: new Uint8Array([1, 2, 3]) }),
+            releaseLock: () => {},
+          }),
+        },
+        blob: async () => new Blob([new Uint8Array([1, 2, 3])], { type: 'audio/mpeg' }),
+      })),
+    )
     vi.stubGlobal('URL', {
       createObjectURL: vi.fn(() => 'blob:test'),
       revokeObjectURL: vi.fn(),
@@ -109,13 +107,28 @@ describe('StreamingTtsPlayer', () => {
   })
 
   it('normalizes saved personal settings into supported runtime configuration', () => {
-    expect(ttsConfigFromPersonalSettings({
-      ttsEngine: 'browser', ttsEdgeVoice: '', ttsVoiceName: 'legacy', ttsRate: 1.2,
-    })).toEqual(expect.objectContaining({
-      engine: 'auto', edgeVoice: 'zh-CN-XiaoxiaoNeural', browserVoiceName: '', rate: 1.2,
-    }))
-    expect(ttsConfigFromPersonalSettings({
-      ttsEngine: 'edge-online', ttsEdgeVoice: 'custom-voice', ttsVoiceName: '', ttsRate: 0.8,
-    }).engine).toBe('edge-online')
+    expect(
+      ttsConfigFromPersonalSettings({
+        ttsEngine: 'browser',
+        ttsEdgeVoice: '',
+        ttsVoiceName: 'legacy',
+        ttsRate: 1.2,
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        engine: 'auto',
+        edgeVoice: 'zh-CN-XiaoxiaoNeural',
+        browserVoiceName: '',
+        rate: 1.2,
+      }),
+    )
+    expect(
+      ttsConfigFromPersonalSettings({
+        ttsEngine: 'edge-online',
+        ttsEdgeVoice: 'custom-voice',
+        ttsVoiceName: '',
+        ttsRate: 0.8,
+      }).engine,
+    ).toBe('edge-online')
   })
 })

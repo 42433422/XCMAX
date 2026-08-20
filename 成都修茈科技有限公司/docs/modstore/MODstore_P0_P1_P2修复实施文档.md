@@ -21,27 +21,27 @@
 
 ### 1.1 已存在的基础设施（无需重复建设）
 
-| 模块 | 文件 | 状态 |
-|------|------|------|
-| LLM 聊天代理 | `llm_chat_proxy.py` | ✅ 完整，支持 OpenAI/Anthropic/Google |
-| LLM 密钥解析 | `llm_key_resolver.py` | ✅ 完整，支持平台密钥 + 用户 BYOK |
-| 员工运行时 | `employee_runtime.py` | ✅ 完整，包加载 + 配置解析 |
-| 支付系统 | `payment_api.py` | ✅ 完整，支付宝 + 权益发放 |
-| 工作流引擎 | `workflow_engine.py` | ✅ 完整，但员工节点调用的是旧版 mock 执行器 |
-| 工作台首页 | `WorkbenchHomeView.vue` | ✅ 已存在（AI 编排会话页面） |
+| 模块         | 文件                    | 状态                                        |
+| ------------ | ----------------------- | ------------------------------------------- |
+| LLM 聊天代理 | `llm_chat_proxy.py`     | ✅ 完整，支持 OpenAI/Anthropic/Google       |
+| LLM 密钥解析 | `llm_key_resolver.py`   | ✅ 完整，支持平台密钥 + 用户 BYOK           |
+| 员工运行时   | `employee_runtime.py`   | ✅ 完整，包加载 + 配置解析                  |
+| 支付系统     | `payment_api.py`        | ✅ 完整，支付宝 + 权益发放                  |
+| 工作流引擎   | `workflow_engine.py`    | ✅ 完整，但员工节点调用的是旧版 mock 执行器 |
+| 工作台首页   | `WorkbenchHomeView.vue` | ✅ 已存在（AI 编排会话页面）                |
 
 ### 1.2 核心缺口（需要修复）
 
-| 缺口 | 影响 | 优先级 |
-|------|------|--------|
-| `employee_executor.py` 是模拟执行 | 员工无法真正运行 | P0 |
-| 工作流引擎未传递 `user_id` 到员工执行器 | 员工节点无法调用 LLM | P0 |
-| 无工作流触发器调度器 | 工作流只能手动执行 | P1 |
-| 无消息通知系统 | 用户无感知 | P1 |
-| 无退款/售后流程 | 商业闭环不完整 | P1 |
-| 无配额检查接入 | 无法限制使用 | P1 |
-| 无统计面板 | 运营数据不可见 | P2 |
-| 无健康检查 | 运维困难 | P2 |
+| 缺口                                    | 影响                 | 优先级 |
+| --------------------------------------- | -------------------- | ------ |
+| `employee_executor.py` 是模拟执行       | 员工无法真正运行     | P0     |
+| 工作流引擎未传递 `user_id` 到员工执行器 | 员工节点无法调用 LLM | P0     |
+| 无工作流触发器调度器                    | 工作流只能手动执行   | P1     |
+| 无消息通知系统                          | 用户无感知           | P1     |
+| 无退款/售后流程                         | 商业闭环不完整       | P1     |
+| 无配额检查接入                          | 无法限制使用         | P1     |
+| 无统计面板                              | 运营数据不可见       | P2     |
+| 无健康检查                              | 运维困难             | P2     |
 
 ---
 
@@ -857,36 +857,33 @@ if __name__ == "__main__":
 
 ### 6.1 新增页面/组件
 
-| 文件 | 说明 |
-|------|------|
-| `market/src/views/AnalyticsView.vue` | 使用统计面板 |
+| 文件                                      | 说明         |
+| ----------------------------------------- | ------------ |
+| `market/src/views/AnalyticsView.vue`      | 使用统计面板 |
 | `market/src/views/NotificationCenter.vue` | 消息通知中心 |
-| `market/src/views/RefundApplyView.vue` | 退款申请页面 |
+| `market/src/views/RefundApplyView.vue`    | 退款申请页面 |
 
 ### 6.2 修改现有页面
 
-| 文件 | 修改内容 |
-|------|----------|
-| `market/src/views/WalletView.vue` | 添加「我的套餐」配额实时展示 |
+| 文件                                | 修改内容                           |
+| ----------------------------------- | ---------------------------------- |
+| `market/src/views/WalletView.vue`   | 添加「我的套餐」配额实时展示       |
 | `market/src/views/WorkflowView.vue` | 添加触发器配置面板（cron/webhook） |
-| `market/src/App.vue` | 添加通知中心入口（右上角铃铛图标） |
-| `market/src/router/index.js` | 添加新路由 |
+| `market/src/App.vue`                | 添加通知中心入口（右上角铃铛图标） |
+| `market/src/router/index.js`        | 添加新路由                         |
 
 ### 6.3 API 调用封装
 
 **新增 `market/src/api/notifications.js`**：
 
 ```javascript
-import axios from 'axios';
+import axios from 'axios'
 
-export const fetchNotifications = (unreadOnly = false) =>
-  axios.get('/api/notifications', { params: { unread_only: unreadOnly } });
+export const fetchNotifications = (unreadOnly = false) => axios.get('/api/notifications', { params: { unread_only: unreadOnly } })
 
-export const markNotificationRead = (id) =>
-  axios.post(`/api/notifications/${id}/read`);
+export const markNotificationRead = (id) => axios.post(`/api/notifications/${id}/read`)
 
-export const markAllNotificationsRead = () =>
-  axios.post('/api/notifications/read-all');
+export const markAllNotificationsRead = () => axios.post('/api/notifications/read-all')
 ```
 
 ---
@@ -934,18 +931,21 @@ echo "apscheduler>=3.10.0" >> requirements.txt
 ## 九、实施建议
 
 ### 阶段一（1-2 天）：P0 核心修复
+
 1. 确认 `employee_executor.py` 已使用真实函数
 2. 确认 `workflow_engine.py` 传递了 `user_id`
 3. 确认 `workflow_api.py` 和 `employee_api.py` 传递了 `user_id`
 4. 运行 P0 验证清单
 
 ### 阶段二（2-3 天）：P1 体验完善
+
 1. 实现工作流触发器调度器
 2. 实现消息通知系统
 3. 接入配额检查中间件
 4. 实现退款申请流程
 
 ### 阶段三（1-2 天）：P2 运营优化
+
 1. 实现使用统计面板
 2. 实现健康检查 API
 3. 改造前端通知中心

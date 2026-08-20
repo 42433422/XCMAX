@@ -1,9 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  resolveCorpPageId,
-  getCorpQuickActions,
-  getMarketQuickActions,
-} from './siteKnowledge'
+import { resolveCorpPageId, getCorpQuickActions, getMarketQuickActions } from './siteKnowledge'
 
 describe('siteKnowledge', () => {
   it('resolves corp page ids from pathname', () => {

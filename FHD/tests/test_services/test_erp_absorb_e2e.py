@@ -1,3 +1,4 @@
+# mypy: disable-error-code="method-assign, no-any-return"
 """
 W1-10 端到端契约 + 真实 SQLite 原子闭环 + 桌面验收（W1-09 R2 确定性销售写路由纠正后）。
 

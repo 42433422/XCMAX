@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """
 生成实际标签图片的 HTML 预览 - 使用实际检测数据
 """
@@ -203,7 +204,7 @@ html_content = f"""<!DOCTYPE html>
     <div class="container">
         <h1>📋 实际标签图片预览</h1>
         <div class="info">
-            <strong>图片尺寸：{width} × {height}</strong> | 比例 {width/height:.2f}:1
+            <strong>图片尺寸：{width} × {height}</strong> | 比例 {width / height:.2f}:1
         </div>
 
         <div class="preview-container">
@@ -223,7 +224,7 @@ html_content = f"""<!DOCTYPE html>
                 </div>
                 <div class="info-item">
                     <div class="info-label">网格结构</div>
-                    <div class="info-value">{len(horizontal_lines)-1}行 × {len(vertical_lines)-1}列</div>
+                    <div class="info-value">{len(horizontal_lines) - 1}行 × {len(vertical_lines) - 1}列</div>
                 </div>
 
                 <h3 style="margin-top: 20px;">📏 水平线 Y 坐标</h3>

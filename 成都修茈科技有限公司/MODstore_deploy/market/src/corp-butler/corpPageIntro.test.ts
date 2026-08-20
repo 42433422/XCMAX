@@ -15,11 +15,14 @@ describe('corpPageIntro', () => {
   beforeEach(() => {
     localStorage.clear()
     sessionStorage.clear()
-    vi.stubGlobal('matchMedia', vi.fn(() => ({
-      matches: false,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-    })))
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({
+        matches: false,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    )
   })
 
   afterEach(() => {
@@ -69,11 +72,14 @@ describe('corpPageIntro', () => {
     markPageIntroduced('home')
     expect(hasIntroducedPageThisSession('home')).toBe(true)
     expect(prefersReducedMotion()).toBe(false)
-    vi.stubGlobal('matchMedia', vi.fn(() => ({
-      matches: true,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-    })))
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({
+        matches: true,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    )
     expect(prefersReducedMotion()).toBe(true)
   })
 
@@ -92,11 +98,20 @@ describe('corpPageIntro', () => {
       constructor(public src: string) {}
     }
     vi.stubGlobal('Audio', FakeAudio)
-    vi.stubGlobal('fetch', vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        data: { audioBase64: 'data:audio/mpeg;base64,QQ==' },
-      }), { status: 200 }))
-      .mockResolvedValueOnce(new Response('not-json', { status: 200 })))
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              data: { audioBase64: 'data:audio/mpeg;base64,QQ==' },
+            }),
+            { status: 200 },
+          ),
+        )
+        .mockResolvedValueOnce(new Response('not-json', { status: 200 })),
+    )
 
     await speakCorpIntro('第一句介绍内容较长。第二句介绍内容也较长。')
     expect(fetch).toHaveBeenCalledTimes(2)
@@ -105,21 +120,30 @@ describe('corpPageIntro', () => {
   })
 
   it('short-circuits empty, reduced-motion and failed TTS responses', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 503 })))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{}', { status: 503 })),
+    )
     await speakCorpIntro('')
-    vi.stubGlobal('matchMedia', vi.fn(() => ({
-      matches: true,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-    })))
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({
+        matches: true,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    )
     await speakCorpIntro('不会朗读')
     expect(fetch).not.toHaveBeenCalled()
 
-    vi.stubGlobal('matchMedia', vi.fn(() => ({
-      matches: false,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-    })))
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({
+        matches: false,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    )
     await speakCorpIntro('服务失败也不阻断页面')
     expect(fetch).toHaveBeenCalledOnce()
   })

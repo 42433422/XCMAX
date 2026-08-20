@@ -1,11 +1,5 @@
 import type { ModInfo } from '@/types/modInfo'
-import type {
-  ModTutorialContribution,
-  TutorialBuildContext,
-  TutorialPageHighlight,
-  TutorialStep,
-  TutorialTrackMeta,
-} from './types'
+import type { ModTutorialContribution, TutorialBuildContext, TutorialPageHighlight, TutorialStep, TutorialTrackMeta } from './types'
 
 function readModTutorial(mod: ModInfo): ModTutorialContribution | null {
   const raw = mod?.tutorial
@@ -13,10 +7,7 @@ function readModTutorial(mod: ModInfo): ModTutorialContribution | null {
   return raw as ModTutorialContribution
 }
 
-export function collectModTutorialTracks(
-  mods: ModInfo[],
-  modMenuKeys: Set<string>,
-): TutorialTrackMeta[] {
+export function collectModTutorialTracks(mods: ModInfo[], modMenuKeys: Set<string>): TutorialTrackMeta[] {
   const out: TutorialTrackMeta[] = []
   for (const mod of mods || []) {
     const t = readModTutorial(mod)
@@ -55,10 +46,7 @@ export function collectModPageHighlights(ctx: TutorialBuildContext): Record<stri
   return out
 }
 
-export function collectModStepsForTrack(
-  trackId: string,
-  mods: ModInfo[],
-): TutorialStep[] {
+export function collectModStepsForTrack(trackId: string, mods: ModInfo[]): TutorialStep[] {
   const steps: TutorialStep[] = []
   for (const mod of mods || []) {
     const t = readModTutorial(mod)

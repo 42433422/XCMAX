@@ -33,11 +33,24 @@ def _suite_payload() -> dict:
         },
         "ui_shell": {
             "sidebar_menu": [
-                {"key": "products", "label": "物料管理", "path": "/materials", "order": 20},
-                {"key": "shipments", "label": "发货单记录", "path": "/shipments", "order": 40},
+                {
+                    "key": "products",
+                    "label": "物料管理",
+                    "path": "/materials",
+                    "order": 20,
+                },
+                {
+                    "key": "shipments",
+                    "label": "发货单记录",
+                    "path": "/shipments",
+                    "order": 40,
+                },
             ],
             "settings": {"industry_options": ["制造业"]},
-            "make_scene": {"title": "制作制造协同", "description": "按制造流程生成可运行工作流。"},
+            "make_scene": {
+                "title": "制作制造协同",
+                "description": "按制造流程生成可运行工作流。",
+            },
         },
         "employees": [
             {
@@ -64,7 +77,10 @@ def test_parse_mod_suite_json_extracts_wrapped_json():
     assert parsed["manifest"]["id"] == "manufacture-flow"
     assert parsed["blueprint"]["industry"]["name"] == "制造业"
     assert parsed["manifest"]["industry"]["product_fields"]["name"] == "物料名称"
-    assert parsed["manifest"]["frontend"]["menu_overrides"][0]["key"] in {"products", "shipments"}
+    assert parsed["manifest"]["frontend"]["menu_overrides"][0]["key"] in {
+        "products",
+        "shipments",
+    }
     assert len(parsed["manifest"]["frontend"]["shell"]["sidebar_menu"]) >= 18
     assert parsed["blueprint"]["ui_shell"]["settings"]["industry_options"] == ["制造业"]
     assert parsed["employees"][0]["id"] == "inventory_planner"
@@ -175,7 +191,9 @@ async def test_workbench_employee_multipart_session_keeps_uploaded_files(monkeyp
 
 
 @pytest.mark.asyncio
-async def test_workbench_json_session_body_parses_without_fastapi_body_injection(monkeypatch):
+async def test_workbench_json_session_body_parses_without_fastapi_body_injection(
+    monkeypatch,
+):
     """JSON 启动会话也必须由 request 手动解析，避免 Optional body 触发 Pydantic 英文错误。"""
     from types import SimpleNamespace
 
@@ -311,7 +329,12 @@ def test_export_workflow_bundle_round_trip(tmp_path):
     db.add(wf)
     db.flush()
     n1 = WorkflowNode(
-        workflow_id=wf.id, node_type="start", name="开始", config="{}", position_x=0, position_y=0
+        workflow_id=wf.id,
+        node_type="start",
+        name="开始",
+        config="{}",
+        position_x=0,
+        position_y=0,
     )
     n2 = WorkflowNode(
         workflow_id=wf.id,
@@ -322,7 +345,12 @@ def test_export_workflow_bundle_round_trip(tmp_path):
         position_y=0,
     )
     n3 = WorkflowNode(
-        workflow_id=wf.id, node_type="end", name="结束", config="{}", position_x=400, position_y=0
+        workflow_id=wf.id,
+        node_type="end",
+        name="结束",
+        config="{}",
+        position_x=400,
+        position_y=0,
     )
     db.add_all([n1, n2, n3])
     db.flush()
@@ -404,7 +432,10 @@ def test_export_script_workflow_bundle_round_trip():
     assert bundle["status"] == "sandbox_testing"
 
     manifest = {
-        "script_workflow_attachment": {"script_workflow_id": swf.id, "name": "SEO 脚本工作流"},
+        "script_workflow_attachment": {
+            "script_workflow_id": swf.id,
+            "name": "SEO 脚本工作流",
+        },
         "employee_config_v2": {
             "collaboration": {
                 "script_workflows": [{"script_workflow_id": swf.id, "role": "primary_program"}],
@@ -588,7 +619,12 @@ def test_shell_ui_api_exposes_mod_sidebar_and_industries(client, library):
         "frontend": {
             "routes": "frontend/routes",
             "menu": [
-                {"id": "paint-home", "label": "涂料工坊", "icon": "fa-cube", "path": "/paint-mod"}
+                {
+                    "id": "paint-home",
+                    "label": "涂料工坊",
+                    "icon": "fa-cube",
+                    "path": "/paint-mod",
+                }
             ],
             "menu_overrides": [{"key": "products", "label": "配方管理"}],
         },
@@ -611,8 +647,14 @@ def test_shell_ui_api_exposes_mod_sidebar_and_industries(client, library):
             }
         ],
         "menu_overrides": [{"key": "products", "label": "配方管理"}],
-        "settings": {"default_industry": "涂料/油漆行业", "industry_options": ["涂料/油漆行业"]},
-        "make_scene": {"title": "制作涂料工坊", "description": "生成配方和出货工作流。"},
+        "settings": {
+            "default_industry": "涂料/油漆行业",
+            "industry_options": ["涂料/油漆行业"],
+        },
+        "make_scene": {
+            "title": "制作涂料工坊",
+            "description": "生成配方和出货工作流。",
+        },
     }
     (mod_dir / "manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False), encoding="utf-8"

@@ -31,11 +31,7 @@ def execute_employee(employee_id: str, task: str, input_data: dict) -> dict:
 const PAT = process.env.MODSTORE_PAT!
 const BASE = process.env.MODSTORE_BASE ?? 'https://your-host'
 
-export async function executeEmployee(
-  employeeId: string,
-  task: string,
-  inputData: Record<string, unknown>,
-) {
+export async function executeEmployee(employeeId: string, task: string, inputData: Record<string, unknown>) {
   const url = new URL(`${BASE}/api/employees/${encodeURIComponent(employeeId)}/execute`)
   url.searchParams.set('task', task)
   const r = await fetch(url, {
@@ -100,30 +96,23 @@ import express from 'express'
 const SECRET = process.env.MODSTORE_WEBHOOK_SECRET!
 const app = express()
 
-app.post(
-  '/hooks/modstore',
-  express.raw({ type: 'application/json', limit: '1mb' }),
-  (req, res) => {
-    const sig = String(req.header('x-modstore-webhook-signature') ?? '')
-    const expected = sig.replace(/^sha256=/, '')
-    const ts = String(req.header('x-modstore-webhook-timestamp') ?? '')
-    const id = String(req.header('x-modstore-webhook-id') ?? '')
-    const msg = Buffer.concat([
-      Buffer.from(ts + '.' + id + '.'),
-      req.body as Buffer,
-    ])
-    const actual = crypto.createHmac('sha256', SECRET).update(msg).digest('hex')
-    if (!crypto.timingSafeEqual(Buffer.from(actual), Buffer.from(expected))) {
-      return res.status(401).send('bad signature')
-    }
+app.post('/hooks/modstore', express.raw({ type: 'application/json', limit: '1mb' }), (req, res) => {
+  const sig = String(req.header('x-modstore-webhook-signature') ?? '')
+  const expected = sig.replace(/^sha256=/, '')
+  const ts = String(req.header('x-modstore-webhook-timestamp') ?? '')
+  const id = String(req.header('x-modstore-webhook-id') ?? '')
+  const msg = Buffer.concat([Buffer.from(ts + '.' + id + '.'), req.body as Buffer])
+  const actual = crypto.createHmac('sha256', SECRET).update(msg).digest('hex')
+  if (!crypto.timingSafeEqual(Buffer.from(actual), Buffer.from(expected))) {
+    return res.status(401).send('bad signature')
+  }
 
-    const event = JSON.parse((req.body as Buffer).toString('utf8'))
-    if (event.type === 'workflow.execution_completed') {
-      // 你的处理逻辑
-    }
-    res.json({ ok: true })
-  },
-)
+  const event = JSON.parse((req.body as Buffer).toString('utf8'))
+  if (event.type === 'workflow.execution_completed') {
+    // 你的处理逻辑
+  }
+  res.json({ ok: true })
+})
 
 app.listen(4000)
 ```

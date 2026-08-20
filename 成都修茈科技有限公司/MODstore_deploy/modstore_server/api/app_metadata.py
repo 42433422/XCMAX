@@ -9,13 +9,19 @@ OPENAPI_TAGS = [
     {"name": "mods", "description": "Mod 列表、详情、manifest、文件读写、导入导出"},
     {"name": "sync", "description": "与 XCAGI/mods 推送与拉回"},
     {"name": "debug", "description": "沙箱目录、primary 批量标记、XCAGI 状态代理"},
-    {"name": "authoring", "description": "扩展面文档、蓝图路由静态扫描、宿主 OpenAPI 合并"},
+    {
+        "name": "authoring",
+        "description": "扩展面文档、蓝图路由静态扫描、宿主 OpenAPI 合并",
+    },
     {"name": "payment", "description": "支付、订单与会员计划"},
     {
         "name": "workflow",
         "description": "工作流编排、执行、自然语言生成与沙箱（见 workflow_api / workflow_nl_graph）",
     },
-    {"name": "workflow-hooks", "description": "工作流 Webhook 触发入口（/api/workflow-hooks）"},
+    {
+        "name": "workflow-hooks",
+        "description": "工作流 Webhook 触发入口（/api/workflow-hooks）",
+    },
     {"name": "webhooks", "description": "业务 Webhook 投递与重放"},
     {"name": "inbound-webhooks", "description": "入站 Webhook 接收"},
     {"name": "refunds", "description": "退款申请与审核"},
@@ -24,8 +30,14 @@ OPENAPI_TAGS = [
         "name": "catalog-mod-sync",
         "description": "公网机器令牌：库与 XCAGI/mods 推送/拉回（/v1/mod-sync）",
     },
-    {"name": "market", "description": "市场展示、目录与匿名公开接口（如落地页联系表单）"},
-    {"name": "auth", "description": "注册、登录、JWT、个人资料；与 Java 支付侧用户叠加信息"},
+    {
+        "name": "market",
+        "description": "市场展示、目录与匿名公开接口（如落地页联系表单）",
+    },
+    {
+        "name": "auth",
+        "description": "注册、登录、JWT、个人资料；与 Java 支付侧用户叠加信息",
+    },
     {
         "name": "admin",
         "description": "需管理员权限的账户与运维辅助入口（与 /api/admin/* 部分重叠）",
@@ -68,7 +80,10 @@ OPENAPI_TAGS = [
     {"name": "admin-employee-autonomy", "description": "员工自主度策略"},
     {"name": "admin-ops", "description": "运维审计与操作记录"},
     {"name": "admin-duty-graph", "description": "值班员工关系图（管理）"},
-    {"name": "admin-production-line", "description": "制作线全流程管理（10步端到端编排与审批）"},
+    {
+        "name": "admin-production-line",
+        "description": "制作线全流程管理（10步端到端编排与审批）",
+    },
     {
         "name": "admin-redline",
         "description": "红线审批门控（支付/安全/DB/发布/删除 AI执行+人工审批）",

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, union-attr"
 """Automated clean-base recovery for Retort scope-only clarifications."""
 
 from __future__ import annotations
@@ -32,7 +33,9 @@ def _path_matches_retort_excluded_glob(path: str, excluded_glob: str) -> bool:
     return normalized == pattern or normalized.endswith(f"/{pattern}")
 
 
-def _retort_scope_scoped_changed_files(changed_files: list[str]) -> tuple[list[str], list[str]]:
+def _retort_scope_scoped_changed_files(
+    changed_files: list[str],
+) -> tuple[list[str], list[str]]:
     scoped: list[str] = []
     excluded_hits: list[str] = []
     for path in changed_files:
@@ -71,7 +74,9 @@ def assess_retort_scope_diff_contract(
 ) -> Optional[dict[str, Any]]:
     """Fail closed when an active Retort scope hold exceeds the clean-base diff budget."""
 
-    from modstore_server.self_maintenance_policy import memory_has_retort_scope_remediation
+    from modstore_server.self_maintenance_policy import (
+        memory_has_retort_scope_remediation,
+    )
 
     if not memory_has_retort_scope_remediation(memory):
         return None

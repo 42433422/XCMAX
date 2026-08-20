@@ -53,9 +53,7 @@ class FailoverDecisionTest(unittest.TestCase):
             authoritative_addresses={"119.27.178.147", "43.138.211.142"}
         )
         self.assertFalse(decision.promote)
-        self.assertEqual(
-            decision.reason, "authoritative_dns_has_not_fenced_primary"
-        )
+        self.assertEqual(decision.reason, "authoritative_dns_has_not_fenced_primary")
 
     def test_fence_proof_remains_mandatory(self) -> None:
         decision = self.base(fence_ready=False)
@@ -75,9 +73,7 @@ class FailoverDecisionTest(unittest.TestCase):
                 GUARD.valid_fence_proof(path, "119.27.178.147", 100),
                 expected,
             )
-            self.assertFalse(
-                GUARD.valid_fence_proof(path, "119.27.178.147", 201)
-            )
+            self.assertFalse(GUARD.valid_fence_proof(path, "119.27.178.147", 201))
 
     def test_fence_command_must_be_root_owned_and_not_group_writable(self) -> None:
         with tempfile.TemporaryDirectory() as tempdir:

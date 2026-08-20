@@ -21,9 +21,7 @@ const {
   patchWorkflowEmployeeNodesRetry,
 } = useModAuthoringContext()
 
-const readinessBadgeOk = computed(
-  () => workflowEmployeesRows.value.length > 0 && Boolean(employeeReadiness.value?.ok),
-)
+const readinessBadgeOk = computed(() => workflowEmployeesRows.value.length > 0 && Boolean(employeeReadiness.value?.ok))
 </script>
 
 <template>
@@ -49,13 +47,7 @@ const readinessBadgeOk = computed(
           {{ patchWorkflowBusy ? '对齐中…' : '对齐画布' }}
         </button>
         <span :class="['readiness-badge', readinessBadgeOk ? 'readiness-badge-ok' : 'readiness-badge-warn']">
-          {{
-            workflowEmployeesRows.length === 0
-              ? '待添加'
-              : readinessBadgeOk
-                ? '就绪'
-                : readinessSummaryLabel
-          }}
+          {{ workflowEmployeesRows.length === 0 ? '待添加' : readinessBadgeOk ? '就绪' : readinessSummaryLabel }}
         </span>
       </div>
     </div>

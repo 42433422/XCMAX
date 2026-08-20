@@ -1,14 +1,6 @@
-import type {
-  WorkflowBranchDoc,
-  WorkflowEmployeeDocsV1,
-  WorkflowEmployeeKind,
-  WorkflowFlowDoc,
-} from '@/types/workflowEmployeeDocs'
+import type { WorkflowBranchDoc, WorkflowEmployeeDocsV1, WorkflowEmployeeKind, WorkflowFlowDoc } from '@/types/workflowEmployeeDocs'
 import bundledDocs from '@/data/workflow-employee-docs.json'
-import {
-  isWorkflowDocCoreEmployeeId,
-  isWorkflowDocFixedModServiceId,
-} from '@/constants/workflowEmployeeDocIds'
+import { isWorkflowDocCoreEmployeeId, isWorkflowDocFixedModServiceId } from '@/constants/workflowEmployeeDocIds'
 import {
   countManifestWorkflowEmployeeRows,
   resolvePhoneAgentApiBase,
@@ -36,11 +28,7 @@ function isValidV1(data: unknown): data is WorkflowEmployeeDocsV1 {
 function resolveKindForId(id: string, fromJson?: WorkflowEmployeeKind): WorkflowEmployeeKind {
   if (isWorkflowDocFixedModServiceId(id)) return 'fixed_extension'
   if (isWorkflowDocCoreEmployeeId(id)) return 'core'
-  if (
-    fromJson === 'core' ||
-    fromJson === 'fixed_extension' ||
-    fromJson === 'mod_extension'
-  ) {
+  if (fromJson === 'core' || fromJson === 'fixed_extension' || fromJson === 'mod_extension') {
     return fromJson
   }
   return 'core'
@@ -61,22 +49,14 @@ function oneLineSummary(text: string, maxLen = 220): string {
 }
 
 /** 由 manifest 条目生成流程全景过程段（与副窗 panel_summary 一致） */
-export function buildSyntheticManifestWorkflowFlow(
-  e: WorkflowEmployeeManifestEntry,
-  modId: string,
-  modName: string,
-): WorkflowFlowDoc {
+export function buildSyntheticManifestWorkflowFlow(e: WorkflowEmployeeManifestEntry, modId: string, modName: string): WorkflowFlowDoc {
   const id = String(e.id || '').trim()
   const label = String(e.label || id).trim() || id
-  const summary =
-    e.panel_summary?.trim() ||
-    `由扩展「${modName}」在 manifest 中声明的工作流员工「${label}」。`
+  const summary = e.panel_summary?.trim() || `由扩展「${modName}」在 manifest 中声明的工作流员工「${label}」。`
   const phoneBase = resolvePhoneAgentApiBase(e, modId)
   const placeholder = isPlaceholderManifestEntry(e)
 
-  const steps: WorkflowFlowDoc['steps'] = [
-    { label: '启用员工', detail: '在副窗打开对应工作流员工开关（xcagi_workflow_ai_employees）。' },
-  ]
+  const steps: WorkflowFlowDoc['steps'] = [{ label: '启用员工', detail: '在副窗打开对应工作流员工开关（xcagi_workflow_ai_employees）。' }]
 
   if (phoneBase) {
     steps.push(
@@ -92,8 +72,7 @@ export function buildSyntheticManifestWorkflowFlow(
   } else if (placeholder) {
     steps.push({
       label: '使用宿主业务页',
-      detail:
-        '本条为触点/占位型扩展：执行业务在宿主页或侧栏入口完成，与智能对话、星标刷新等配合；无独立 phone-agent 自动化。',
+      detail: '本条为触点/占位型扩展：执行业务在宿主页或侧栏入口完成，与智能对话、星标刷新等配合；无独立 phone-agent 自动化。',
     })
   } else {
     steps.push({
@@ -106,9 +85,7 @@ export function buildSyntheticManifestWorkflowFlow(
   if (phoneBase) {
     notes.push(`电话 API 根：${phoneBase}`)
   } else if (e.phone_agent_base_path?.trim()) {
-    notes.push(
-      `相对 API 前缀：/api/mod/${modId}/${e.phone_agent_base_path.replace(/^\/+|\/+$/g, '')}`,
-    )
+    notes.push(`相对 API 前缀：/api/mod/${modId}/${e.phone_agent_base_path.replace(/^\/+|\/+$/g, '')}`)
   }
 
   return {
@@ -121,15 +98,10 @@ export function buildSyntheticManifestWorkflowFlow(
   }
 }
 
-function buildSyntheticManifestBranch(
-  e: WorkflowEmployeeManifestEntry,
-  modName: string,
-): WorkflowBranchDoc {
+function buildSyntheticManifestBranch(e: WorkflowEmployeeManifestEntry, modName: string): WorkflowBranchDoc {
   const id = String(e.id || '').trim()
   const label = String(e.label || id).trim() || id
-  const summary =
-    e.panel_summary?.trim() ||
-    `由扩展「${modName}」声明的工作流员工「${label}」。`
+  const summary = e.panel_summary?.trim() || `由扩展「${modName}」声明的工作流员工「${label}」。`
   return {
     id,
     kind: 'mod_extension',
@@ -139,18 +111,12 @@ function buildSyntheticManifestBranch(
 }
 
 /** 将 manifest workflow_employees 并入 branches/flows（id 去重，跳过 JSON 已有 id） */
-export function mergeManifestWorkflowEmployeesIntoDocs(
-  d: WorkflowEmployeeDocsV1,
-  ctx: WorkflowDocsRuntimeContext,
-): WorkflowEmployeeDocsV1 {
+export function mergeManifestWorkflowEmployeesIntoDocs(d: WorkflowEmployeeDocsV1, ctx: WorkflowDocsRuntimeContext): WorkflowEmployeeDocsV1 {
   if (!isModWorkflowEmployeesActive(ctx)) {
     return d
   }
 
-  const existingIds = new Set<string>([
-    ...d.branches.map((b) => b.id),
-    ...d.flows.map((f) => f.id),
-  ])
+  const existingIds = new Set<string>([...d.branches.map((b) => b.id), ...d.flows.map((f) => f.id)])
   const extraBranches: WorkflowBranchDoc[] = []
   const extraFlows: WorkflowFlowDoc[] = []
   const seen = new Set<string>()
@@ -258,10 +224,7 @@ export function isModWorkflowEmployeesActive(ctx: WorkflowDocsRuntimeContext): b
 /**
  * 流程全景：页头 / 管道 / 紫条随运行时变化。核心包不承载 Mod 专段与蓝图说明（由各扩展包文档自行提供）。
  */
-export function applyWorkflowEmployeeDocsRuntime(
-  d: WorkflowEmployeeDocsV1,
-  ctx: WorkflowDocsRuntimeContext
-): WorkflowEmployeeDocsV1 {
+export function applyWorkflowEmployeeDocsRuntime(d: WorkflowEmployeeDocsV1, ctx: WorkflowDocsRuntimeContext): WorkflowEmployeeDocsV1 {
   const modPkgs = ctx.modsForUi.length
   const modRows = countManifestWorkflowEmployeeRows(ctx.modsForUi)
   const modActive = isModWorkflowEmployeesActive(ctx)
@@ -281,14 +244,12 @@ export function applyWorkflowEmployeeDocsRuntime(
     overviewNote = '共 0 条；后端未加载扩展包。'
   } else if (!ctx.isModsListLoaded) {
     pipelineBranchLabel = '同步扩展列表中'
-    pageSubtitle =
-      '正在与后端同步可用扩展列表。若环境中已安装带 workflow_employees 的工作流员工 Mod，同步完成后本页与副窗将自动更新。'
+    pageSubtitle = '正在与后端同步可用扩展列表。若环境中已安装带 workflow_employees 的工作流员工 Mod，同步完成后本页与副窗将自动更新。'
     overviewNote = '当前共 0 条；扩展蓝图与注册失败原因以各扩展包及后端日志为准。'
   } else if (!modActive) {
     pipelineBranchLabel = '未安装工作流员工'
     if (modPkgs === 0) {
-      pageSubtitle =
-        '扩展列表已就绪：当前未加载任何扩展包。请从 MOD 商店「AI 员工 → 工作流员工」安装 6 类工作流员工 Mod。'
+      pageSubtitle = '扩展列表已就绪：当前未加载任何扩展包。请从 MOD 商店「AI 员工 → 工作流员工」安装 6 类工作流员工 Mod。'
       overviewNote = '共 0 条；无已加载扩展包。'
     } else {
       pageSubtitle = `已加载 ${modPkgs} 个扩展包，均未声明 workflow_employees。请安装工作流员工 Mod（manifest 含 workflow_employees）。`

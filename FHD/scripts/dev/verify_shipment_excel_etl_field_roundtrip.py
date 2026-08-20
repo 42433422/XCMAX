@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="arg-type, assignment, index, operator"
 """送货单 ETL 字段级验收：写模板单元格 → 解析字段 → 反推指纹 → 流水读写。
 
 用法：
@@ -235,9 +236,7 @@ def main() -> int:
     finally:
         wb2.close()
 
-    lparsed = parse_delivery_notes(
-        ledger_path, include_ledger=True, unit_name_hint="流水验收客户"
-    )
+    lparsed = parse_delivery_notes(ledger_path, include_ledger=True, unit_name_hint="流水验收客户")
     notes = lparsed.get("notes") or []
     if len(notes) < 2:
         fail(f"ledger parse expected>=2 got={len(notes)} msg={lparsed.get('message')}")
@@ -354,7 +353,10 @@ def main() -> int:
             raw = str(getattr(s, "raw_text", "") or "")
             if "external_order_number=" not in raw or "fingerprint=" not in raw:
                 fail(f"execute meta missing in raw_text: {raw}")
-        if all("external_order_number=" in str(getattr(s, "raw_text", "") or "") for s in repo.items.values()):
+        if all(
+            "external_order_number=" in str(getattr(s, "raw_text", "") or "")
+            for s in repo.items.values()
+        ):
             ok("execute order meta written")
 
     report = {

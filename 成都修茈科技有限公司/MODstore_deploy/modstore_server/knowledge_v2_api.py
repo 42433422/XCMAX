@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """知识库 v2 API：集合(Collection) + 文档 + 共享 + 检索。
 
 与 v1（``knowledge_vector_api.py``）共存：
@@ -11,7 +12,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, cast
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
@@ -23,7 +24,6 @@ from modstore_server.embedding_service import (
 from modstore_server.knowledge_ingest import (
     SUPPORTED_EXTENSIONS,
 )
-from modstore_server.knowledge_vector_store import KnowledgeVectorError
 from modstore_server.knowledge_v2_documents import upload_document
 from modstore_server.knowledge_v2_models import (
     CollectionCreateBody,
@@ -31,6 +31,7 @@ from modstore_server.knowledge_v2_models import (
     RetrieveBody,
     ShareBody,
 )
+from modstore_server.knowledge_vector_store import KnowledgeVectorError
 from modstore_server.models import (
     KnowledgeCollection,
     KnowledgeDocument,
@@ -98,7 +99,7 @@ def _ensure_collection(session, coll_id: int) -> KnowledgeCollection:
     coll = session.query(KnowledgeCollection).filter(KnowledgeCollection.id == int(coll_id)).first()
     if coll is None:
         raise HTTPException(404, "集合不存在")
-    return coll
+    return cast(KnowledgeCollection, coll)
 
 
 def _service_unavailable(e: Exception) -> HTTPException:

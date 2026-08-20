@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from modstore_server import payment_orders
-from modstore_server.payment_cs_internal import find_matching_paid_order, payment_summary_for_cs
+from modstore_server.payment_cs_internal import (
+    find_matching_paid_order,
+    payment_summary_for_cs,
+)
 
 
 def test_payment_summary_python_mode(tmp_path, monkeypatch):

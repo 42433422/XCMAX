@@ -113,7 +113,11 @@ def test_customer_value_ledger_is_append_only_and_links_paid_delivery(tmp_path, 
 
     assert goal["created"] is True
     assert delivery["created"] is True
-    assert duplicate == {"ok": True, "created": False, "receipt_id": delivery["receipt_id"]}
+    assert duplicate == {
+        "ok": True,
+        "created": False,
+        "receipt_id": delivery["receipt_id"],
+    }
 
     evidence = build_customer_value_evidence(
         orders=[order],
@@ -214,7 +218,9 @@ def test_evidence_excludes_test_internal_refund_and_unproved_orders(tmp_path, mo
     models._SessionFactory = None
 
 
-def test_admin_customer_value_endpoint_requires_admin_and_returns_aggregate(monkeypatch):
+def test_admin_customer_value_endpoint_requires_admin_and_returns_aggregate(
+    monkeypatch,
+):
     app = FastAPI()
     app.include_router(router)
     client = TestClient(app)

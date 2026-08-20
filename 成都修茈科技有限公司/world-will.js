@@ -18,13 +18,11 @@
 
   /** 前端二次脱敏：避免接口/回退板仍带出角色提示词 */
   function sanitizePublicFeedText(raw) {
-    var s = String(raw == null ? '' : raw).replace(/\s+/g, ' ').trim()
+    var s = String(raw == null ? '' : raw)
+      .replace(/\s+/g, ' ')
+      .trim()
     if (!s) return '（暂无公开摘要）'
-    if (
-      /你是|回复必须说人话|SYSTEM\s*PROMPT|事故处理小组的\s*scout|不要直接倾倒|你的任务是|内部字段或英文模板/i.test(
-        s,
-      )
-    ) {
+    if (/你是|回复必须说人话|SYSTEM\s*PROMPT|事故处理小组的\s*scout|不要直接倾倒|你的任务是|内部字段或英文模板/i.test(s)) {
       var m = s.match(/事件类型[:：]\s*([a-z][a-z0-9_.-]{2,64})/i)
       if (m) return '事故巡检：处理事件 ' + m[1]
       return '岗位任务执行摘要（内部提示词已隐藏）'
@@ -79,17 +77,7 @@
             day: dayLabel,
             clock: value.hour + ':' + value.minute,
             datetime: String(raw),
-            title:
-              value.year +
-              '-' +
-              value.month +
-              '-' +
-              value.day +
-              ' ' +
-              value.hour +
-              ':' +
-              value.minute +
-              '（北京时间）',
+            title: value.year + '-' + value.month + '-' + value.day + ' ' + value.hour + ':' + value.minute + '（北京时间）',
           }
         }
       } catch {
@@ -139,9 +127,7 @@
     }
     if (grid) {
       clearElement(grid)
-      grid.appendChild(
-        element('p', 'autonomy-empty', '等待管理端发布脱敏后的真实进度。')
-      )
+      grid.appendChild(element('p', 'autonomy-empty', '等待管理端发布脱敏后的真实进度。'))
     }
     clearElement(proof)
   }
@@ -157,22 +143,12 @@
       return
     }
     if (meta) {
-      meta.textContent =
-        autonomyFreshness(data.generated_at) +
-        ' · 与创始人管理端使用同一评分结果 · 内部审批和故障细节不公开'
+      meta.textContent = autonomyFreshness(data.generated_at) + ' · 与创始人管理端使用同一评分结果 · 内部审批和故障细节不公开'
     }
     if (overall) {
       clearElement(overall)
       overall.appendChild(element('strong', '', (data.overall_progress || 0) + '%'))
-      overall.appendChild(
-        element(
-          'span',
-          '',
-          '距离目标还差 ' +
-            (data.overall_remaining == null ? '—' : data.overall_remaining) +
-            '%'
-        )
-      )
+      overall.appendChild(element('span', '', '距离目标还差 ' + (data.overall_remaining == null ? '—' : data.overall_remaining) + '%'))
     }
     if (grid) {
       clearElement(grid)
@@ -190,9 +166,7 @@
         fill.style.width = progress + '%'
         track.appendChild(fill)
         card.appendChild(track)
-        card.appendChild(
-          element('p', '', '下一门槛：' + (item.next_gap || '继续积累运行证据'))
-        )
+        card.appendChild(element('p', '', '下一门槛：' + (item.next_gap || '继续积累运行证据')))
         grid.appendChild(card)
       })
     }
@@ -210,9 +184,7 @@
       clearElement(proof)
       Object.keys(labels).forEach(function (key) {
         var ok = Boolean((data.proof || {})[key])
-        proof.appendChild(
-          element('span', ok ? 'is-ok' : '', (ok ? '✓ ' : '待证明 · ') + labels[key])
-        )
+        proof.appendChild(element('span', ok ? 'is-ok' : '', (ok ? '✓ ' : '待证明 · ') + labels[key]))
       })
     }
   }
@@ -368,11 +340,7 @@
     var list = feed || []
     if (STATE.filter === 'alert') {
       return list.filter(function (f) {
-        return (
-          f.presence === 'alert' ||
-          f.status === 'open' ||
-          /P0|失败|告警/.test(String(f.status_label || f.text || ''))
-        )
+        return f.presence === 'alert' || f.status === 'open' || /P0|失败|告警/.test(String(f.status_label || f.text || ''))
       })
     }
     if (STATE.filter === 'working') {
@@ -417,10 +385,7 @@
       }
       if (STATE.filter !== 'all') {
         var filterNames = { working: '工作中', alert: '告警', idle: '编制待命' }
-        lines[0] =
-          '当前筛选「' +
-          esc(filterNames[STATE.filter] || STATE.filter) +
-          '」下暂无条目（未造假填充）'
+        lines[0] = '当前筛选「' + esc(filterNames[STATE.filter] || STATE.filter) + '」下暂无条目（未造假填充）'
       }
       el.innerHTML = emptyBox(lines)
       return
@@ -488,16 +453,10 @@
     var stamp = fmtFeedStamp(item)
     var body = sanitizePublicFeedText(item.detail || item.text || '（暂无公开摘要）')
     var href = String(item.href || '').trim()
-    var truncated =
-      item.detail_truncated === true ||
-      /…$/.test(body) ||
-      String(item.source || '') === 'execution_metric'
+    var truncated = item.detail_truncated === true || /…$/.test(body) || String(item.source || '') === 'execution_metric'
     var linkHtml = ''
     if (href && href !== '/world-will' && href !== '/world-will.html') {
-      linkHtml =
-        '<p class="hall-feed-detail-link"><a href="' +
-        esc(href) +
-        '">打开关联看板 →</a></p>'
+      linkHtml = '<p class="hall-feed-detail-link"><a href="' + esc(href) + '">打开关联看板 →</a></p>'
     }
     var noteHtml = truncated
       ? '<p class="hall-feed-detail-note">这不是完整任务原文。公开执行指标仅保留约 128 字任务摘要；内部提示词与完整执行日志不在官网展示。</p>'
@@ -764,106 +723,110 @@
   }
 
   function fetchHall(url, wrapped) {
-    return fetch(url, { cache: 'no-store' }).then(function (res) {
-      if (!res.ok) throw new Error('hall ' + res.status)
-      return res.json()
-    }).then(function (payload) {
-      if (!wrapped) return payload
-      if (!payload || payload.ok !== true || !payload.data) throw new Error('live hall unavailable')
-      return payload.data
-    })
+    return fetch(url, { cache: 'no-store' })
+      .then(function (res) {
+        if (!res.ok) throw new Error('hall ' + res.status)
+        return res.json()
+      })
+      .then(function (payload) {
+        if (!wrapped) return payload
+        if (!payload || payload.ok !== true || !payload.data) throw new Error('live hall unavailable')
+        return payload.data
+      })
   }
 
   function fetchBoard(url, wrapped) {
-    return fetch(url, { cache: 'no-store' }).then(function (res) {
-      if (!res.ok) throw new Error('board ' + res.status)
-      return res.json()
-    }).then(function (payload) {
-      if (!wrapped) return payload
-      if (!payload || payload.ok !== true || !payload.data) throw new Error('live board unavailable')
-      return payload.data
-    })
+    return fetch(url, { cache: 'no-store' })
+      .then(function (res) {
+        if (!res.ok) throw new Error('board ' + res.status)
+        return res.json()
+      })
+      .then(function (payload) {
+        if (!wrapped) return payload
+        if (!payload || payload.ok !== true || !payload.data) throw new Error('live board unavailable')
+        return payload.data
+      })
   }
 
   function loadHall() {
     return fetchHall('/api/public/company-hall', true)
-    .catch(function () {
-      return fetchHall('/download-company-hall.json', false)
-    })
-    .then(render)
-    .catch(function () {
-      return fetchBoard('/api/public/action-board', true)
-        .catch(function () {
-          return fetchBoard('/download-action-board.json', false)
-        })
-        .then(function (board) {
-          var traj = board.trajectory || []
-          render({
-            day: board.day,
-            generated_at: board.generated_at,
-            schema: 'fallback-action-board',
-            cadence: {
-              label: '大厅投影暂不可用，已回退行动板',
-              next_window: '通常每日 08:00–08:30 晨报编排窗口',
-            },
-            counts: {
-              roster: '—',
-              working: traj.filter(function (t) {
-                return t.status !== 'merged' && t.status !== 'closed'
-              }).length,
-              alert: traj.filter(function (t) {
-                return t.status === 'open'
-              }).length,
-              idle: 0,
-            },
-            departments: [],
-            ai_driver: {
-              employee_id: 'llm-ops-engineer',
-              name: 'LLM 运维工程师',
-              state: 'standby',
-              state_label: '状态未知',
-              last_action_label: '大厅投影回退到行动板，不推测驾驶状态',
-              quota: {},
-            },
-            feed: traj.map(function (t) {
-              return {
-                ts: t.ts,
-                day: t.day || board.day,
-                occurred_at: t.updated_at,
-                employee_name: t.owner,
-                dept_label: t.line_label,
-                dept_color: '#facc15',
-                status_label: t.status_label,
-                text: t.title || t.text,
-                href: t.href,
-                presence: t.status === 'open' ? 'alert' : 'working',
-                status: t.status,
-              }
-            }),
-            last_activity: traj[0]
-              ? {
-                  ts: traj[0].ts,
-                  day: board.day,
-                  employee_name: traj[0].owner,
-                  text: traj[0].title || traj[0].text,
-                }
-              : null,
-            board: {
-              breakpoints_total: ((board.breakpoints || {}).summary || {}).total || 0,
-              goals_total: ((board.goals || {}).summary || {}).total || 0,
-              breakpoints: ((board.breakpoints || {}).items || []).slice(0, 12),
-              goals: ((board.goals || {}).items || []).slice(0, 12),
-            },
-            report: {},
-            presence_model: {
-              idle: '编制待命说明见大厅完整投影',
-            },
+      .catch(function () {
+        return fetchHall('/download-company-hall.json', false)
+      })
+      .then(render)
+      .catch(function () {
+        return fetchBoard('/api/public/action-board', true)
+          .catch(function () {
+            return fetchBoard('/download-action-board.json', false)
           })
-        })
-        .catch(function () {
-          bootEmpty('公开大厅暂不可用（未造假数据）。')
-        })
-    })
+          .then(function (board) {
+            var traj = board.trajectory || []
+            render({
+              day: board.day,
+              generated_at: board.generated_at,
+              schema: 'fallback-action-board',
+              cadence: {
+                label: '大厅投影暂不可用，已回退行动板',
+                next_window: '通常每日 08:00–08:30 晨报编排窗口',
+              },
+              counts: {
+                roster: '—',
+                working: traj.filter(function (t) {
+                  return t.status !== 'merged' && t.status !== 'closed'
+                }).length,
+                alert: traj.filter(function (t) {
+                  return t.status === 'open'
+                }).length,
+                idle: 0,
+              },
+              departments: [],
+              ai_driver: {
+                employee_id: 'llm-ops-engineer',
+                name: 'LLM 运维工程师',
+                state: 'standby',
+                state_label: '状态未知',
+                last_action_label: '大厅投影回退到行动板，不推测驾驶状态',
+                quota: {},
+              },
+              feed: traj.map(function (t) {
+                return {
+                  ts: t.ts,
+                  day: t.day || board.day,
+                  occurred_at: t.updated_at,
+                  employee_name: t.owner,
+                  dept_label: t.line_label,
+                  dept_color: '#facc15',
+                  status_label: t.status_label,
+                  text: t.title || t.text,
+                  href: t.href,
+                  presence: t.status === 'open' ? 'alert' : 'working',
+                  status: t.status,
+                }
+              }),
+              last_activity: traj[0]
+                ? {
+                    ts: traj[0].ts,
+                    day: board.day,
+                    employee_name: traj[0].owner,
+                    text: traj[0].title || traj[0].text,
+                  }
+                : null,
+              board: {
+                breakpoints_total: ((board.breakpoints || {}).summary || {}).total || 0,
+                goals_total: ((board.goals || {}).summary || {}).total || 0,
+                breakpoints: ((board.breakpoints || {}).items || []).slice(0, 12),
+                goals: ((board.goals || {}).items || []).slice(0, 12),
+              },
+              report: {},
+              presence_model: {
+                idle: '编制待命说明见大厅完整投影',
+              },
+            })
+          })
+          .catch(function () {
+            bootEmpty('公开大厅暂不可用（未造假数据）。')
+          })
+      })
   }
 
   loadHall()

@@ -21,10 +21,7 @@ describe('roleMenuProfile', () => {
   })
 
   it('allows industry business slots only when an industry mod is active', () => {
-    const profile = buildRoleMenuProfile(
-      { accountKind: 'enterprise', marketIsEnterprise: true },
-      true,
-    )
+    const profile = buildRoleMenuProfile({ accountKind: 'enterprise', marketIsEnterprise: true }, true)
 
     expect(canShowCoreMenuKey(profile, 'products')).toBe(true)
     expect(canShowCoreMenuKey(profile, 'orders')).toBe(true)

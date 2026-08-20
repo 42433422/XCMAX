@@ -166,9 +166,7 @@ def test_workflow_label_dispatch_route_executes_through_agent_orchestrator(
         )
 
     assert response.status_code == 200
-    product_service.search_products.assert_called_once_with(
-        keyword="M-1", filters={"per_page": 1}
-    )
+    product_service.search_products.assert_called_once_with(keyword="M-1", filters={"per_page": 1})
     print_app.print_single_label.assert_called_once_with(
         product_name="产品M1",
         model_number="M-1",

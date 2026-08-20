@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="arg-type, assignment"
 """Generate docs/reports/services_import_matrix.md from app import graph."""
 
 from __future__ import annotations
@@ -102,7 +103,14 @@ def main() -> int:
             lines.append(f"- `{mod}` — {len(refs)} importer(s)")
         lines.append("")
 
-    lines.extend(["## Importer → services（Wave 3 迁移优先级）", "", "| domain | importer | services |", "|--------|----------|----------|"])
+    lines.extend(
+        [
+            "## Importer → services（Wave 3 迁移优先级）",
+            "",
+            "| domain | importer | services |",
+            "|--------|----------|----------|",
+        ]
+    )
     rows: list[tuple[str, str, str]] = []
     for svc, paths in sorted(importers.items()):
         for p in sorted(set(paths))[:5]:

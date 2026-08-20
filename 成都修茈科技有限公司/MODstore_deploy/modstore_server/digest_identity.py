@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """每日摘要「身份校验码」：解析 HTML、规范化输入、与修茈市场管理端解锁同一套校验口径。
 
 XCmax 前端应优先调用 ``GET /api/xcmax/admin/digest-identity`` 展示身份码，避免与
@@ -9,7 +10,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -37,8 +38,8 @@ def _as_utc_aware(dt: datetime | None) -> datetime | None:
     if dt is None:
         return None
     if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
+        return dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
 
 
 def verify_digest_identity(session: Session, raw_code: str, *, now: datetime | None = None) -> str:
@@ -52,7 +53,7 @@ def verify_digest_identity(session: Session, raw_code: str, *, now: datetime | N
 
     th = hashlib.sha256(code.encode("utf-8")).hexdigest()
     ttl_hours = int(os.environ.get("MODSTORE_APPROVAL_TOKEN_TTL_HOURS", "36"))
-    now_ = now or datetime.now(timezone.utc)
+    now_ = now or datetime.now(UTC)
 
     tok = (
         session.query(OpsApprovalToken)

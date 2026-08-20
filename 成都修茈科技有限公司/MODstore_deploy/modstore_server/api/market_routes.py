@@ -1,3 +1,4 @@
+# isort: skip_file
 # ruff: noqa: E402, F401
 """XC AGI 在线市场 API：认证、钱包、购买、个人商店。"""
 
@@ -197,7 +198,6 @@ from modstore_server.api.market_routes_part04 import (
     api_wallet_overview as api_wallet_overview,
     api_package_audit as api_package_audit,
 )
-
 
 # ── Init on import ──────────────────────────────────────────
 

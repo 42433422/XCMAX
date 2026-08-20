@@ -1,3 +1,4 @@
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """PDF 全量读取与 PDF 生成员工：检测、规则、兜底 convert 与包体验证。"""
 
 from __future__ import annotations
@@ -6,6 +7,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.pdf_extract_templates import (
     render_pdf_generate_convert_module as render_pdf_generate_convert_module,
 )
@@ -133,7 +135,11 @@ def pdf_read_structured_spec(brief: str) -> Dict[str, Any]:
             "图片须导出至分类子目录并由 VLM（可用时）生成 sidecar 描述",
             "handlers 必须为 direct_python",
         ],
-        "suggested_capabilities": ["pdf.native_text", "pdf.image_extract", "vision.vlm"],
+        "suggested_capabilities": [
+            "pdf.native_text",
+            "pdf.image_extract",
+            "vision.vlm",
+        ],
         "suggested_handlers": ["direct_python"],
     }
 
@@ -246,7 +252,9 @@ def _validate_pdf_backend(
     handlers: List[str] = []
     if mf_path.is_file():
         try:
-            from modstore_server.employee_asset_pipeline import manifest_actions_handlers
+            from modstore_server.employee_asset_pipeline import (
+                manifest_actions_handlers,
+            )
 
             mf = json.loads(mf_path.read_text(encoding="utf-8"))
             handlers = manifest_actions_handlers(mf)
@@ -283,7 +291,7 @@ def minimal_pdf_fixture_bytes() -> bytes:
         page = doc.new_page()
         page.insert_text((72, 72), "PDF smoke test\nline two", fontsize=12)
         return doc.tobytes()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"
 
 

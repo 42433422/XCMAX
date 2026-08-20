@@ -1,10 +1,5 @@
 <template>
-  <div
-    class="industry-selector is-readonly"
-    :title="readonlyTooltip"
-    role="status"
-    aria-live="polite"
-  >
+  <div class="industry-selector is-readonly" :title="readonlyTooltip" role="status" aria-live="polite">
     <div class="selector-trigger" :aria-label="`当前行业：${currentIndustryName}`">
       <span class="industry-icon"><i class="fa fa-industry" aria-hidden="true"></i></span>
       <span class="industry-name">{{ currentIndustryName }}</span>

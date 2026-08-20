@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """测试 :mod:`app.infrastructure.llm.token_estimator` 的单元测试。
 
 覆盖场景（遵循 ``.trae/rules/test-coverage-90-prompt.md`` 铁律 3）：

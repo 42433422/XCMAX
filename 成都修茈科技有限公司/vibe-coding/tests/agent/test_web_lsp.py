@@ -14,10 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import pytest
-
 from vibe_coding.agent.web.lsp import LSPMessage, LSPServer, handle_lsp_request
-
 
 # ----------------------------------------------------- stubs
 
@@ -142,9 +139,7 @@ def test_dispatch_code_routes_to_coder() -> None:
 
 def test_dispatch_edit_routes_to_coder() -> None:
     coder = _StubCoder()
-    req = LSPMessage(
-        id=2, method="vibe.edit", params={"brief": "rename", "root": "/tmp/proj"}
-    )
+    req = LSPMessage(id=2, method="vibe.edit", params={"brief": "rename", "root": "/tmp/proj"})
     resp = handle_lsp_request(coder, req)
     assert resp.result == {"patch_id": "p-1", "edits": []}
     assert coder.calls[0][1]["root"] == "/tmp/proj"
@@ -216,7 +211,7 @@ def test_unknown_method_returns_method_not_found() -> None:
 
 def test_handler_exception_becomes_internal_error() -> None:
     class _Boom:
-        def code(self, *args, **kwargs):  # noqa: D401
+        def code(self, *args, **kwargs):
             raise RuntimeError("kaboom")
 
     req = LSPMessage(id=1, method="vibe.code", params={"brief": "x"})
@@ -234,9 +229,7 @@ def test_framing_round_trip() -> None:
 
     request = LSPMessage(id=10, method="vibe.code", params={"brief": "ping"})
     body = json.dumps(request.to_dict()).encode("utf-8")
-    raw = (
-        f"Content-Length: {len(body)}\r\n\r\n".encode("ascii") + body
-    )
+    raw = f"Content-Length: {len(body)}\r\n\r\n".encode("ascii") + body
 
     in_stream = io.BytesIO(raw)
     out_stream = io.BytesIO()
@@ -253,8 +246,6 @@ def test_framing_round_trip() -> None:
 def test_handle_one_dict_in_dict_out() -> None:
     coder = _StubCoder()
     server = LSPServer(coder)
-    out = server.handle_one(
-        {"jsonrpc": "2.0", "id": 7, "method": "vibe.index", "params": {"root": "."}}
-    )
+    out = server.handle_one({"jsonrpc": "2.0", "id": 7, "method": "vibe.index", "params": {"root": "."}})
     assert out["id"] == 7
     assert out["result"] == {"files": 5}

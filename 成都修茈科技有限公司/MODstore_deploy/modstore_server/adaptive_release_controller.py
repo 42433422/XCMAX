@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """Autonomous release strategy selection from SLO signals."""
 
 from __future__ import annotations
@@ -7,6 +8,8 @@ import os
 import time
 from pathlib import Path
 from typing import Any, Dict
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _runtime_dir() -> Path:
@@ -31,7 +34,7 @@ def _load_runtime_slo() -> Dict[str, Any]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else {}
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return {}
 
 

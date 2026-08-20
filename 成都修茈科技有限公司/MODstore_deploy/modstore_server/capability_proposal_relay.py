@@ -14,9 +14,11 @@ import shutil
 import subprocess
 import sys
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -239,7 +241,7 @@ def _record_configuration_block(result: dict[str, Any]) -> None:
             result["audit_event_written"] = False
             result["audit_event_reason"] = "duplicate_within_24h"
             return
-    except Exception:
+    except RECOVERABLE_ERRORS:
         # Failure to query the audit ledger must not conceal the original
         # configuration blocker from scheduler health.
         logger.warning("capability proposal relay audit dedupe unavailable", exc_info=True)
@@ -247,7 +249,7 @@ def _record_configuration_block(result: dict[str, Any]) -> None:
     try:
         _append_evolution_event(result)
         result["audit_event_written"] = True
-    except Exception:
+    except RECOVERABLE_ERRORS:
         # The caller still receives ``configuration_blocked`` and the
         # scheduler records it as a failed job; audit storage is extra
         # evidence, not a reason to rewrite the original failure.
@@ -408,7 +410,7 @@ def register_capability_proposal_relay_job(
                 result.get("ignored_count", 0),
                 result.get("pending_after", 0),
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.exception("capability proposal relay failed")
 
     interval = max(
@@ -420,7 +422,7 @@ def register_capability_proposal_relay_job(
         IntervalTrigger(minutes=interval),
         id="capability_proposal_relay",
         replace_existing=True,
-        next_run_time=datetime.now(timezone.utc) + timedelta(seconds=35),
+        next_run_time=datetime.now(UTC) + timedelta(seconds=35),
         misfire_grace_time=max(
             60,
             _env_int("MODSTORE_SCHEDULER_BUSINESS_MISFIRE_GRACE_SECONDS", 3600),

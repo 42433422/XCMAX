@@ -91,7 +91,10 @@ print(json.dumps({"user_id": user.id, "username": user.username, "token": token}
     )
     if proc.returncode != 0:
         raise RuntimeError(f"market setup failed\nSTDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}")
-    return json.loads(proc.stdout.strip().splitlines()[-1])
+    payload = json.loads(proc.stdout.strip().splitlines()[-1])
+    if not isinstance(payload, dict):
+        raise RuntimeError("market setup returned a non-object payload")
+    return payload
 
 
 def _start_market_server(env: dict[str, str], port: int) -> subprocess.Popen[str]:

@@ -6,12 +6,24 @@ export function stripSampleRowsKeepTemplateShape(sampleRows, fallbackFields) {
   const rows = Array.isArray(sampleRows) ? sampleRows : []
   if (!rows.length) {
     const keys = (fallbackFields || []).map((f) => String(f?.label || '').trim()).filter(Boolean)
-    return keys.length ? [keys.reduce((acc, k) => { acc[k] = ''; return acc }, {})] : []
+    return keys.length
+      ? [
+          keys.reduce((acc, k) => {
+            acc[k] = ''
+            return acc
+          }, {}),
+        ]
+      : []
   }
   const first = rows[0] || {}
   const keys = Object.keys(first)
   if (!keys.length) return []
-  return [keys.reduce((acc, k) => { acc[k] = ''; return acc }, {})]
+  return [
+    keys.reduce((acc, k) => {
+      acc[k] = ''
+      return acc
+    }, {}),
+  ]
 }
 
 export function stripGridPreviewData(gridPreview, sampleRows) {

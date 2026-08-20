@@ -11,10 +11,16 @@ vi.mock('./asr/FunASRBackend', () => ({
   FunASRBackend: class {
     id = 'funasr'
     label = 'FunASR'
-    isAvailable() { return true }
-    isLoading() { return false }
+    isAvailable() {
+      return true
+    }
+    isLoading() {
+      return false
+    }
     start = funasrStart
-    async stop() { return '' }
+    async stop() {
+      return ''
+    }
     abort() {}
     signalEndOfSpeech = signalEndOfSpeech
   },
@@ -24,11 +30,19 @@ vi.mock('./asr/WebSpeechBackend', () => ({
   WebSpeechBackend: class {
     id = 'webspeech'
     label = 'WebSpeech'
-    isAvailable() { return true }
-    isLoading() { return false }
+    isAvailable() {
+      return true
+    }
+    isLoading() {
+      return false
+    }
     start = webspeechStart
-    async flushUtterance() { return '浏览器识别' }
-    async stop() { return '浏览器识别' }
+    async flushUtterance() {
+      return '浏览器识别'
+    }
+    async stop() {
+      return '浏览器识别'
+    }
     abort() {}
     signalEndOfSpeech = signalEndOfSpeech
   },
@@ -38,10 +52,16 @@ vi.mock('./asr/WhisperWebBackend', () => ({
   WhisperWebBackend: class {
     id = 'whisper-web'
     label = 'Whisper'
-    isAvailable() { return true }
-    isLoading() { return false }
+    isAvailable() {
+      return true
+    }
+    isLoading() {
+      return false
+    }
     start = whisperStart
-    async stop() { return '' }
+    async stop() {
+      return ''
+    }
     abort() {}
   },
 }))
@@ -56,27 +76,26 @@ describe('useSpeechRecognition', () => {
     webspeechStart.mockReset()
     whisperStart.mockReset()
     signalEndOfSpeech.mockReset()
-    funasrStart.mockImplementation(async (
-      _onResult: (r: ASRResult) => void,
-      onError: (msg: string) => void,
-    ) => {
+    funasrStart.mockImplementation(async (_onResult: (r: ASRResult) => void, onError: (msg: string) => void) => {
       onError('FunASR 服务未启动')
     })
-    webspeechStart.mockImplementation(async (
-      _onResult: (r: ASRResult) => void,
-      _onError: (msg: string) => void,
-      _lvl?: (n: number) => void,
-      onReady?: () => void,
-    ) => {
-      onReady?.()
-    })
+    webspeechStart.mockImplementation(
+      async (_onResult: (r: ASRResult) => void, _onError: (msg: string) => void, _lvl?: (n: number) => void, onReady?: () => void) => {
+        onReady?.()
+      },
+    )
   })
 
   it('continuous mode does not fall back to webspeech when funasr fails', async () => {
     vi.useFakeTimers()
     const { startListening, activeBackendId, error } = useSpeechRecognition()
 
-    const task = startListening(() => {}, () => {}, undefined, { continuous: true })
+    const task = startListening(
+      () => {},
+      () => {},
+      undefined,
+      { continuous: true },
+    )
     await vi.runAllTimersAsync()
     await task
 
@@ -88,17 +107,19 @@ describe('useSpeechRecognition', () => {
 
   it('keeps funasr active after connect in continuous mode', async () => {
     vi.useFakeTimers()
-    funasrStart.mockImplementation(async (
-      _onResult: (r: ASRResult) => void,
-      _onError: (msg: string) => void,
-      _lvl?: (n: number) => void,
-      onReady?: () => void,
-    ) => {
-      onReady?.()
-    })
+    funasrStart.mockImplementation(
+      async (_onResult: (r: ASRResult) => void, _onError: (msg: string) => void, _lvl?: (n: number) => void, onReady?: () => void) => {
+        onReady?.()
+      },
+    )
 
     const { startListening, activeBackendId, sessionReady } = useSpeechRecognition()
-    await startListening(() => {}, () => {}, undefined, { continuous: true })
+    await startListening(
+      () => {},
+      () => {},
+      undefined,
+      { continuous: true },
+    )
     expect(activeBackendId.value).toBe('funasr')
     expect(sessionReady.value).toBe(true)
 
@@ -108,20 +129,16 @@ describe('useSpeechRecognition', () => {
   })
 
   it('falls back to WebSpeech, forwards result/audio callbacks and flushes/stops', async () => {
-    funasrStart.mockImplementation(async (
-      _onResult: (r: ASRResult) => void,
-      onError: (msg: string) => void,
-    ) => onError('FunASR startup failed'))
-    webspeechStart.mockImplementation(async (
-      onResult: (r: ASRResult) => void,
-      _onError: (msg: string) => void,
-      onLevel?: (n: number) => void,
-      onReady?: () => void,
-    ) => {
-      onReady?.()
-      onLevel?.(0.42)
-      onResult({ text: '浏览器部分结果', isFinal: false })
-    })
+    funasrStart.mockImplementation(async (_onResult: (r: ASRResult) => void, onError: (msg: string) => void) =>
+      onError('FunASR startup failed'),
+    )
+    webspeechStart.mockImplementation(
+      async (onResult: (r: ASRResult) => void, _onError: (msg: string) => void, onLevel?: (n: number) => void, onReady?: () => void) => {
+        onReady?.()
+        onLevel?.(0.42)
+        onResult({ text: '浏览器部分结果', isFinal: false })
+      },
+    )
     const onResult = vi.fn()
     const onError = vi.fn()
     const onLevel = vi.fn()
@@ -141,16 +158,13 @@ describe('useSpeechRecognition', () => {
   })
 
   it('uses FunASR results, accepts a prefetched stream and clears state on abort', async () => {
-    funasrStart.mockImplementation(async (
-      onResult: (r: ASRResult) => void,
-      _onError: (msg: string) => void,
-      onLevel?: (n: number) => void,
-      onReady?: () => void,
-    ) => {
-      onReady?.()
-      onLevel?.(0.7)
-      onResult({ text: '服务端识别结果', isFinal: true })
-    })
+    funasrStart.mockImplementation(
+      async (onResult: (r: ASRResult) => void, _onError: (msg: string) => void, onLevel?: (n: number) => void, onReady?: () => void) => {
+        onReady?.()
+        onLevel?.(0.7)
+        onResult({ text: '服务端识别结果', isFinal: true })
+      },
+    )
     const speech = useSpeechRecognition()
     await speech.startListening(vi.fn(), vi.fn(), vi.fn(), {
       mediaStream: Promise.reject(new Error('prefetch unavailable')),
@@ -164,18 +178,11 @@ describe('useSpeechRecognition', () => {
   })
 
   it('exhausts every non-continuous backend and reports startup failure', async () => {
-    funasrStart.mockImplementation(async (
-      _onResult: (r: ASRResult) => void,
-      onError: (msg: string) => void,
-    ) => onError('funasr failed'))
-    webspeechStart.mockImplementation(async (
-      _onResult: (r: ASRResult) => void,
-      onError: (msg: string) => void,
-    ) => onError('webspeech failed'))
-    whisperStart.mockImplementation(async (
-      _onResult: (r: ASRResult) => void,
-      onError: (msg: string) => void,
-    ) => onError('whisper failed'))
+    funasrStart.mockImplementation(async (_onResult: (r: ASRResult) => void, onError: (msg: string) => void) => onError('funasr failed'))
+    webspeechStart.mockImplementation(async (_onResult: (r: ASRResult) => void, onError: (msg: string) => void) =>
+      onError('webspeech failed'),
+    )
+    whisperStart.mockImplementation(async (_onResult: (r: ASRResult) => void, onError: (msg: string) => void) => onError('whisper failed'))
     const onError = vi.fn()
     const speech = useSpeechRecognition()
     await speech.startListening(vi.fn(), onError)

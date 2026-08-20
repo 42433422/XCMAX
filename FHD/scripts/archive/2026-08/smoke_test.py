@@ -1,10 +1,12 @@
+# mypy: disable-error-code="arg-type, union-attr"
 """
 冒烟测试：验证后端 OCR 提取功能
 """
 
-
 # 直接导入模块文件
 import importlib.util
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 spec = importlib.util.spec_from_file_location(
     "label_template_generator",
@@ -40,11 +42,11 @@ for image_path in test_images:
 
             fields = result.get("fields", [])
             for i, field in enumerate(fields[:5]):
-                print(f"    字段{i+1}: {field.get('label')} = {field.get('value')}")
+                print(f"    字段{i + 1}: {field.get('label')} = {field.get('value')}")
         else:
             print(f"✗ 失败：{result.get('error')}")
 
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"✗ 异常：{e}")
         import traceback
 

@@ -1,12 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import {
-  getModCatalog,
-  fetchMarketCatalog,
-  searchMods,
-  getPopularMods,
-  getRecentMods,
-  getModDetails,
-} from './modStore'
+import { getModCatalog, fetchMarketCatalog, searchMods, getPopularMods, getRecentMods, getModDetails } from './modStore'
 
 vi.mock('@/utils/apiBase', () => ({
   apiFetch: vi.fn(),
@@ -38,9 +31,7 @@ describe('modStore api', () => {
   })
 
   it('fetchMarketCatalog builds query params', async () => {
-    vi.mocked(apiFetch).mockResolvedValue(
-      mockJson({ success: true, data: { items: [], total: 0, collection: 'all' } }),
-    )
+    vi.mocked(apiFetch).mockResolvedValue(mockJson({ success: true, data: { items: [], total: 0, collection: 'all' } }))
     await fetchMarketCatalog({ q: 'test', limit: 10 })
     const url = vi.mocked(apiFetch).mock.calls[0][0] as string
     expect(url).toContain('q=test')
@@ -48,9 +39,7 @@ describe('modStore api', () => {
   })
 
   it('searchMods forwards filters', async () => {
-    vi.mocked(apiFetch).mockResolvedValue(
-      mockJson({ success: true, data: { data: [], count: 0 } }),
-    )
+    vi.mocked(apiFetch).mockResolvedValue(mockJson({ success: true, data: { data: [], count: 0 } }))
     await searchMods('abc', 'author', true, 5)
     const url = vi.mocked(apiFetch).mock.calls[0][0] as string
     expect(url).toContain('q=abc')
@@ -65,9 +54,7 @@ describe('modStore api', () => {
   })
 
   it('getModDetails fetches by id', async () => {
-    vi.mocked(apiFetch).mockResolvedValue(
-      mockJson({ success: true, data: { id: 'x', name: 'X' } }),
-    )
+    vi.mocked(apiFetch).mockResolvedValue(mockJson({ success: true, data: { id: 'x', name: 'X' } }))
     const d = await getModDetails('x')
     expect(d.id).toBe('x')
     expect(apiFetch).toHaveBeenCalledWith('/api/mod-store/mod/x/details')

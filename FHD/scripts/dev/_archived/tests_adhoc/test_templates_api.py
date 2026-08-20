@@ -6,6 +6,8 @@ import sys
 
 import requests
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 # 测试 API
 url = "http://localhost:5000/api/templates/list"
 
@@ -37,7 +39,7 @@ except requests.exceptions.ConnectionError:
 except requests.exceptions.Timeout:
     print("✗ 请求超时")
     sys.exit(1)
-except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"✗ 测试失败：{e}")
     sys.exit(1)
 

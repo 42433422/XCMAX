@@ -1,13 +1,13 @@
-# ruff: noqa
+# mypy: disable-error-code="arg-type, union-attr"
 """Execution implementation for controlled operational actions."""
+
 from __future__ import annotations
+
 import importlib
-import json
-import os
 import subprocess
-import time
-from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -34,7 +34,11 @@ def dispatch_ops_handler(
     cfg = actions_cfg.get(cfg_key) if isinstance(actions_cfg.get(cfg_key), dict) else {}
     command_id = str(cfg.get("command_id") or "").strip()
     if not command_id:
-        return {"handler": handler, "ok": False, "error": f"missing actions.{cfg_key}.command_id"}
+        return {
+            "handler": handler,
+            "ok": False,
+            "error": f"missing actions.{cfg_key}.command_id",
+        }
     spec = _facade().OPS_COMMAND_REGISTRY.get(command_id)
     if not spec:
         aid = _facade()._write_audit(
@@ -145,10 +149,12 @@ def dispatch_ops_handler(
             args["branch"] = _facade()._sanitize_branch(str(args.get("branch") or ""))
         if command_id == "git-commit-msg":
             args.setdefault(
-                "git_name", _facade().os.environ.get("MODSTORE_GIT_AUTHOR_NAME", "MODstore Bot")
+                "git_name",
+                _facade().os.environ.get("MODSTORE_GIT_AUTHOR_NAME", "MODstore Bot"),
             )
             args.setdefault(
-                "git_email", _facade().os.environ.get("MODSTORE_GIT_AUTHOR_EMAIL", "bot@localhost")
+                "git_email",
+                _facade().os.environ.get("MODSTORE_GIT_AUTHOR_EMAIL", "bot@localhost"),
             )
             msg = str(args.get("message") or "").strip()
             if len(msg) > 500:
@@ -209,7 +215,12 @@ def dispatch_ops_handler(
                 dry_run=False,
                 error=str(e),
             )
-            return {"handler": handler, "ok": False, "error": str(e), "audit_log_id": aid}
+            return {
+                "handler": handler,
+                "ok": False,
+                "error": str(e),
+                "audit_log_id": aid,
+            }
     t0 = _facade().time.perf_counter()
     stdout_s = stderr_s = ""
     exit_code: Optional[int] = -1
@@ -235,7 +246,7 @@ def dispatch_ops_handler(
             return {"handler": handler, "ok": False, "error": err}
         try:
             host_cfg = _facade()._load_host(hid)
-        except Exception as e:
+        except RECOVERABLE_ERRORS as e:
             _facade()._write_audit(
                 user_id=user_id,
                 employee_id=employee_id,
@@ -252,7 +263,7 @@ def dispatch_ops_handler(
                 error=str(e),
             )
             return {"handler": handler, "ok": False, "error": str(e)}
-        (code, stdout_s, stderr_s) = _facade()._run_ssh(
+        code, stdout_s, stderr_s = _facade()._run_ssh(
             host_cfg, argv, timeout=timeout, capture_max=capture_max
         )
         exit_code = code

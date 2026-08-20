@@ -27,8 +27,11 @@ P1 improvements over the initial release:
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
+
+from vibe_coding.operational_errors import BOUNDARY_ERRORS, TERMINATION_ERRORS
 
 from ._internals import TriggerPolicy
 from .runtime import CodeSkillRuntime
@@ -143,9 +146,7 @@ class VibeWorkflowEngine:
         try:
             order = graph.topological_order()
         except ValueError as exc:
-            return WorkflowRunResult(
-                workflow_id=graph.workflow_id, success=False, error=str(exc)
-            )
+            return WorkflowRunResult(workflow_id=graph.workflow_id, success=False, error=str(exc))
 
         # Track which nodes successfully executed (any outcome but skipped+error
         # counts) so condition evaluation knows which incoming edges are alive.
@@ -207,11 +208,7 @@ class VibeWorkflowEngine:
             success=run_failed_node is None,
             context=context,
             outcomes=outcomes,
-            error=(
-                f"node {run_failed_node!r} failed (continued past)"
-                if run_failed_node is not None
-                else ""
-            ),
+            error=(f"node {run_failed_node!r} failed (continued past)" if run_failed_node is not None else ""),
             duration_ms=round((time.perf_counter() - t0) * 1000, 3),
         )
 
@@ -296,10 +293,7 @@ class VibeWorkflowEngine:
                 stage="invalid",
                 output={},
                 duration_ms=0.0,
-                error=(
-                    f"unsupported node layer {node.layer!r} — standalone vibe_coding "
-                    "supports layer='code' only"
-                ),
+                error=(f"unsupported node layer {node.layer!r} — standalone vibe_coding supports layer='code' only"),
             )
         skill_id = node.code_skill_ref or ""
         if not skill_id:
@@ -336,7 +330,7 @@ class VibeWorkflowEngine:
                 duration_ms=round((time.perf_counter() - t0) * 1000, 3),
                 error=str(exc),
             )
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:
             return NodeRunOutcome(
                 node_id=node.node_id,
                 layer="code",
@@ -369,7 +363,7 @@ def _resolve_ref(ref: Any, context: dict[str, Any]) -> Any:
     if not isinstance(ref, str):
         return ref
     if "." not in ref:
-        return context[ref] if ref in context else ref
+        return context.get(ref, ref)
     parts = ref.split(".")
     head = parts[0]
     if head not in context:
@@ -414,7 +408,7 @@ def _call_with_timeout(fn: Callable[[], Any], *, timeout_s: float | None) -> Any
     def target() -> None:
         try:
             box["result"] = fn()
-        except BaseException as exc:  # noqa: BLE001
+        except TERMINATION_ERRORS as exc:
             box["error"] = exc
 
     thread = threading.Thread(target=target, daemon=True)

@@ -1,27 +1,27 @@
-import { api } from './core';
-import type { ApiResponse } from '@/types/api';
+import { api } from './core'
+import type { ApiResponse } from '@/types/api'
 
 export interface IntentPackage {
-  id: number;
-  name: string;
-  description?: string;
-  enabled: boolean;
-  intents?: string[];
-  [key: string]: unknown;
+  id: number
+  name: string
+  description?: string
+  enabled: boolean
+  intents?: string[]
+  [key: string]: unknown
 }
 
 export const intentPackagesApi = {
   getPackages(): Promise<ApiResponse<IntentPackage[]>> {
-    return api.get<ApiResponse<IntentPackage[]>>('/api/intent-packages');
+    return api.get<ApiResponse<IntentPackage[]>>('/api/intent-packages')
   },
 
   updatePackages(packages: IntentPackage[]): Promise<ApiResponse<IntentPackage[]>> {
-    return api.post<ApiResponse<IntentPackage[]>>('/api/intent-packages', packages);
+    return api.post<ApiResponse<IntentPackage[]>>('/api/intent-packages', packages)
   },
 
   updatePackage(packageId: number | string, enabled: boolean): Promise<ApiResponse<IntentPackage>> {
-    return api.put<ApiResponse<IntentPackage>>(`/api/intent-packages/${packageId}`, { enabled });
-  }
-};
+    return api.put<ApiResponse<IntentPackage>>(`/api/intent-packages/${packageId}`, { enabled })
+  },
+}
 
-export default intentPackagesApi;
+export default intentPackagesApi

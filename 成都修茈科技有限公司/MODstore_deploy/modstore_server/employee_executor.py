@@ -1,3 +1,4 @@
+# isort: skip_file
 # ruff: noqa: E402, F401
 """AI员工执行器：基于 employee_config_v2 的真实执行管道。"""
 
@@ -36,7 +37,10 @@ from modstore_server.employee_runtime import (
     load_employee_pack_resolved,
     parse_employee_config_v2,
 )
-from modstore_server.llm_failure_classifier import FAILURE_KIND_QUOTA, classify_failure_kind
+from modstore_server.llm_failure_classifier import (
+    FAILURE_KIND_QUOTA,
+    classify_failure_kind,
+)
 from modstore_server.models import EmployeeExecutionMetric, User, get_session_factory
 from modstore_server.runtime_async import run_coro_sync as _run_coro_sync
 from modstore_server.services.llm import chat_dispatch_via_session
@@ -49,7 +53,6 @@ _METRIC_TASK_MAX_LEN = 128
 from modstore_server.employee_executor_part01 import (
     _emp_im_notify_boss as _emp_im_notify_boss,
 )
-
 
 # 员工大会待机：manifest system_prompt 常要求「输出 JSON」，与四段 Markdown 汇报冲突。
 _ALL_HANDS_COGNITION_SYSTEM_APPEND = """\
@@ -114,7 +117,6 @@ from modstore_server.employee_executor_part02 import (
     _flag_enabled as _flag_enabled,
     _resolve_metric_user_id as _resolve_metric_user_id,
 )
-
 
 _executor_sem: threading.Semaphore | None = None
 _executor_sem_n: int = 0

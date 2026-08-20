@@ -123,9 +123,7 @@ export class WebSpeechBackend implements ASRBackend {
       if (this._stopped) return
       const code = event?.error
       if (code === 'no-speech' || code === 'aborted') return
-      const msg = code
-        ? ERR_MAP[code] || `语音识别失败：${code}`
-        : '语音识别失败'
+      const msg = code ? ERR_MAP[code] || `语音识别失败：${code}` : '语音识别失败'
       onError(msg)
     }
     rec.onend = () => {
@@ -207,7 +205,9 @@ export class WebSpeechBackend implements ASRBackend {
     this.levelCapture = null
     try {
       this.rec?.stop?.()
-    } catch { /* */ }
+    } catch {
+      /* */
+    }
     const text = this._finalText || this._lastInterim
     this.rec = null
     this._onAudioLevel = null
@@ -221,7 +221,9 @@ export class WebSpeechBackend implements ASRBackend {
     this.levelCapture = null
     try {
       this.rec?.abort?.()
-    } catch { /* */ }
+    } catch {
+      /* */
+    }
     this.rec = null
     this._onAudioLevel = null
   }

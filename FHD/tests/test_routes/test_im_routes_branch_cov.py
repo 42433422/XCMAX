@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment"
 """Branch-coverage tests for app.fastapi_routes.im_routes.
 
 Targets branches not covered by existing test_im_routes.py / test_im_routes_ext2.py:
@@ -34,6 +35,7 @@ from app.fastapi_routes.im_routes import (
     _uid,
     router,
 )
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 # ---------------------------------------------------------------------------
 # autouse fixture: reset schema state
@@ -1636,7 +1638,7 @@ class TestImWebSocket:
             try:
                 with client.websocket_connect("/ws/im") as websocket:
                     pass
-            except Exception:
+            except BOUNDARY_ERRORS:
                 # WebSocket close may raise in test client
                 pass
 
@@ -1653,7 +1655,7 @@ class TestImWebSocket:
                     websocket.send_text("ping")
                     data = websocket.receive_text()
                     assert data == '{"type":"pong"}'
-            except Exception:
+            except BOUNDARY_ERRORS:
                 pass
 
     def test_ping_json_pong(self, client: TestClient) -> None:
@@ -1669,5 +1671,5 @@ class TestImWebSocket:
                     websocket.send_text('{"type":"ping"}')
                     data = websocket.receive_text()
                     assert data == '{"type":"pong"}'
-            except Exception:
+            except BOUNDARY_ERRORS:
                 pass

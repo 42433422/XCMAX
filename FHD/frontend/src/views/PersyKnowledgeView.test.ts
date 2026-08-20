@@ -146,9 +146,7 @@ describe('PersyKnowledgeView', () => {
     const wrapper = mount(PersyKnowledgeView, { global: { plugins: [createPinia()] } })
     await flushPromises()
 
-    const memoryTab = wrapper.findAll('.view-switch button').find((button) =>
-      button.text().includes('记忆'),
-    )
+    const memoryTab = wrapper.findAll('.view-switch button').find((button) => button.text().includes('记忆'))
     expect(memoryTab).toBeTruthy()
     await memoryTab!.trigger('click')
 

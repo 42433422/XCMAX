@@ -128,7 +128,7 @@ class ChatDispatchLLMClient:
         model: str,
         *,
         default_max_tokens: int = 8192,
-    ) -> "ChatDispatchLLMClient":
+    ) -> ChatDispatchLLMClient:
         """走 ``llm_key_resolver`` 解析 BYOK / 平台 Key,使用 session 路径调用。"""
         from modstore_server.llm_key_resolver import (
             OAI_COMPAT_OPENAI_STYLE_PROVIDERS,

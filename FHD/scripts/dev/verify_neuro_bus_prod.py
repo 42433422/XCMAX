@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="return-value"
 """生产环境 Neuro Bus 开关验证脚本。
 
 通过 SSH 到 CVM 读取 /root/fhd-full.env,校验 Neuro Bus 7 个可靠性开关全部启用。
@@ -39,12 +40,14 @@ def ssh_read_env(host: str, user: str, env_file: str) -> Dict[str, str]:
     """通过 SSH 读取远程 env 文件并解析为 dict。"""
     cmd = [
         "ssh",
-        "-o", "StrictHostKeyChecking=no",
-        "-o", "ConnectTimeout=10",
+        "-o",
+        "StrictHostKeyChecking=no",
+        "-o",
+        "ConnectTimeout=10",
         f"{user}@{host}",
         f"cat {env_file}",
     ]
-    
+
     try:
         result = subprocess.run(
             cmd,
@@ -58,7 +61,7 @@ def ssh_read_env(host: str, user: str, env_file: str) -> Dict[str, str]:
         raise RuntimeError("SSH 超时(15s)")
     except FileNotFoundError:
         raise RuntimeError("ssh 命令不存在,请确保已安装 OpenSSH 客户端")
-    
+
     # 解析 env 文件(只取简单的 KEY=VALUE 行)
     env_dict = {}
     for line in result.stdout.splitlines():
@@ -68,8 +71,8 @@ def ssh_read_env(host: str, user: str, env_file: str) -> Dict[str, str]:
         if "=" not in line:
             continue
         key, _, value = line.partition("=")
-        env_dict[key.strip()] = value.strip().strip('"\'')
-    
+        env_dict[key.strip()] = value.strip().strip("\"'")
+
     return env_dict
 
 
@@ -84,12 +87,14 @@ def verify_neuro_bus(env_dict: Dict[str, str]) -> List[Dict[str, str]]:
     for var in NEURO_BUS_VARS:
         value = env_dict.get(var, "")
         ok = value == "1"
-        results.append({
-            "var": var,
-            "value": value,
-            "ok": ok,
-            "expected": "1",
-        })
+        results.append(
+            {
+                "var": var,
+                "value": value,
+                "ok": ok,
+                "expected": "1",
+            }
+        )
     return results
 
 
@@ -124,7 +129,7 @@ def main(argv: List[str] | None = None) -> int:
         help="输出 JSON 格式",
     )
     args = parser.parse_args(argv)
-    
+
     # 读取 env
     try:
         if args.dry_run:
@@ -137,11 +142,11 @@ def main(argv: List[str] | None = None) -> int:
         else:
             print(f"ERROR: {e}", file=sys.stderr)
         return 1
-    
+
     # 验证
     results = verify_neuro_bus(env_dict)
     all_ok = all(r["ok"] for r in results)
-    
+
     # 输出
     if args.json:
         output = {
@@ -156,13 +161,13 @@ def main(argv: List[str] | None = None) -> int:
         for r in results:
             status = "✅" if r["ok"] else "❌"
             print(f"  {status} {r['var']}: {r['value']} (期望: {r['expected']})")
-        
+
         print()
         if all_ok:
             print("✅ 所有 Neuro Bus 开关已正确启用")
         else:
             print("❌ 部分开关未启用,请检查 /root/fhd-full.env")
-    
+
     return 0 if all_ok else 1
 
 

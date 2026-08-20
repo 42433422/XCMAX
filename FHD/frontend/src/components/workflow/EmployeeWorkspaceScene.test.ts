@@ -25,7 +25,7 @@ vi.mock('@/stores/workflowAiEmployees', () => ({
 
 // composables
 const desksRef = ref<any[]>([])
-const statusLineSpy = vi.fn((row: any) => row.enabled ? '运行中' : '副窗未启用')
+const statusLineSpy = vi.fn((row: any) => (row.enabled ? '运行中' : '副窗未启用'))
 const ariaLabelSpy = vi.fn((row: any) => `员工 ${row.shortName}`)
 const isBusySpy = vi.fn((row: any) => Boolean(row.snapshot?.visuallyBusy))
 const processedCountSpy = vi.fn((row: any) => row.session?.processedCount ?? 0)
@@ -44,7 +44,11 @@ vi.mock('@/composables/useWorkflowEmployeeDesks', () => ({
 
 const ensureLoadedSpy = vi.fn()
 const allPlannedIdsRef = computed(() => new Set<string>(['emp-001', 'emp-002', 'emp-003']))
-const employeeLabelsRef = computed(() => ({ 'emp-001': '侦察员', 'emp-002': '修复员', 'emp-003': 'QA员' }))
+const employeeLabelsRef = computed(() => ({
+  'emp-001': '侦察员',
+  'emp-002': '修复员',
+  'emp-003': 'QA员',
+}))
 vi.mock('@/composables/useDutyRoster', () => ({
   useDutyRoster: () => ({
     allPlannedIds: allPlannedIdsRef,
@@ -210,10 +214,7 @@ describe('EmployeeWorkspaceScene.vue', () => {
   })
 
   it('点击工位卡片选中并更新 selectedEmpId', async () => {
-    desksRef.value = [
-      makeDesk({ empId: 'emp-001', shortName: '侦察员' }),
-      makeDesk({ empId: 'emp-002', shortName: '修复员' }),
-    ]
+    desksRef.value = [makeDesk({ empId: 'emp-001', shortName: '侦察员' }), makeDesk({ empId: 'emp-002', shortName: '修复员' })]
     const wrapper = await mountComponent()
     await flushPromises()
     // 默认选中第一个
@@ -400,10 +401,7 @@ describe('EmployeeWorkspaceScene.vue', () => {
   })
 
   it('路由有 employee 参数且在工位中时选中该员工', async () => {
-    desksRef.value = [
-      makeDesk({ empId: 'emp-001', shortName: '侦察员' }),
-      makeDesk({ empId: 'emp-002', shortName: '修复员' }),
-    ]
+    desksRef.value = [makeDesk({ empId: 'emp-001', shortName: '侦察员' }), makeDesk({ empId: 'emp-002', shortName: '修复员' })]
     const wrapper = await mountComponent({ employee: 'emp-002' })
     await flushPromises()
     const desks = wrapper.findAll('.ews-desk')
@@ -430,9 +428,7 @@ describe('EmployeeWorkspaceScene.vue', () => {
   })
 
   it('工位 processedShort 处理大数字格式化', async () => {
-    desksRef.value = [
-      makeDesk({ empId: 'emp-001', session: { processedCount: 1500 } }),
-    ]
+    desksRef.value = [makeDesk({ empId: 'emp-001', session: { processedCount: 1500 } })]
     const wrapper = await mountComponent()
     await flushPromises()
     const num = wrapper.find('.ews-desk-rpg-num')
@@ -440,9 +436,7 @@ describe('EmployeeWorkspaceScene.vue', () => {
   })
 
   it('工位 processedShort 处理超大数字', async () => {
-    desksRef.value = [
-      makeDesk({ empId: 'emp-001', session: { processedCount: 15000 } }),
-    ]
+    desksRef.value = [makeDesk({ empId: 'emp-001', session: { processedCount: 15000 } })]
     const wrapper = await mountComponent()
     await flushPromises()
     const nums = wrapper.findAll('.ews-desk-rpg-num')
@@ -452,7 +446,11 @@ describe('EmployeeWorkspaceScene.vue', () => {
 
   it('工位 progressWidth 反映 progressPct', async () => {
     desksRef.value = [
-      makeDesk({ empId: 'emp-001', enabled: true, snapshot: { visuallyBusy: false, progressPct: 75 } }),
+      makeDesk({
+        empId: 'emp-001',
+        enabled: true,
+        snapshot: { visuallyBusy: false, progressPct: 75 },
+      }),
     ]
     const wrapper = await mountComponent()
     await flushPromises()
@@ -462,9 +460,7 @@ describe('EmployeeWorkspaceScene.vue', () => {
   })
 
   it('工位 disabled 时 progressWidth 为 0%', async () => {
-    desksRef.value = [
-      makeDesk({ empId: 'emp-001', enabled: false, snapshot: { progressPct: 75 } }),
-    ]
+    desksRef.value = [makeDesk({ empId: 'emp-001', enabled: false, snapshot: { progressPct: 75 } })]
     const wrapper = await mountComponent()
     await flushPromises()
     const bar = wrapper.find('.ews-desk-progress-bar')
@@ -535,9 +531,7 @@ describe('EmployeeWorkspaceScene.vue', () => {
       contract_validation: {
         ok: true,
         surface_readiness: { employee_space: { ok: true } },
-        surface_incidents: [
-          { id: 'inc-1', surface: 'employee_space', severity: 'bad', title: '断点A' },
-        ],
+        surface_incidents: [{ id: 'inc-1', surface: 'employee_space', severity: 'bad', title: '断点A' }],
       },
     })
     const wrapper = await mountManagementComponent()
@@ -555,9 +549,7 @@ describe('EmployeeWorkspaceScene.vue', () => {
       run_timelines: [
         {
           run_id: 'run-1',
-          items: [
-            { employee_id: 'emp-001', label: '扫描', status: 'done', stage: 'sense' },
-          ],
+          items: [{ employee_id: 'emp-001', label: '扫描', status: 'done', stage: 'sense' }],
         },
       ],
       contract: { required_top_level: ['evidence'] },
@@ -654,10 +646,12 @@ describe('EmployeeWorkspaceScene.vue', () => {
       current_gate: {},
       participants: [{ employee_id: 'emp-001', role_label: '侦察' }],
       ui_bridge: { primary_employee_id: 'emp-001' },
-      run_timelines: [{
-        run_id: 'r1',
-        items: [{ employee_id: 'emp-001', label: '扫描', status: 'done' }],
-      }],
+      run_timelines: [
+        {
+          run_id: 'r1',
+          items: [{ employee_id: 'emp-001', label: '扫描', status: 'done' }],
+        },
+      ],
       contract: { required_top_level: ['evidence'] },
       contract_validation: { ok: true, surface_readiness: { employee_space: { ok: true } } },
     })

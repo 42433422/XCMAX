@@ -31,7 +31,9 @@ class _StubRun:
 class _StubCoder:
     def __init__(self):
         self.code_store = SimpleNamespace(
-            get_code_skill=lambda sid: _stub_skill_with_run() if sid == "vc-test-publish" else None
+            get_code_skill=lambda sid: (
+                _stub_skill_with_run() if sid == "vc-test-publish" else None
+            )
         )
 
     def code(self, brief, *, mode="brief_first", skill_id=None, project_root=None, **kwargs):

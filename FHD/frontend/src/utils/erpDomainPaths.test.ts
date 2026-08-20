@@ -1,13 +1,6 @@
 import { describe, expect, it, afterEach, beforeEach } from 'vitest'
-import {
-  erpDomainModStatusPath,
-  resolveErpApiBase,
-  resolveErpApiPath,
-} from './erpDomainPaths'
-import {
-  scopedActiveExtensionModStorageKey,
-  writeActiveExtensionModIdToStorage,
-} from '@/utils/xcagiStorageKeys'
+import { erpDomainModStatusPath, resolveErpApiBase, resolveErpApiPath } from './erpDomainPaths'
+import { scopedActiveExtensionModStorageKey, writeActiveExtensionModIdToStorage } from '@/utils/xcagiStorageKeys'
 import { setTenantStorageScopeCache } from '@/utils/tenantStorageScope'
 
 const LS = 'xcagi_erp_domain_mod_facade_enabled'
@@ -33,22 +26,16 @@ describe('erpDomainPaths', () => {
   it('maps products and shipment paths when facade on', () => {
     localStorage.setItem(LS, '1')
     expect(resolveErpApiBase()).toBe('/api/mod/xcagi-erp-domain-bridge')
-    expect(resolveErpApiPath('/api/products/list')).toBe(
-      '/api/mod/xcagi-erp-domain-bridge/products/list',
-    )
+    expect(resolveErpApiPath('/api/products/list')).toBe('/api/mod/xcagi-erp-domain-bridge/products/list')
     expect(resolveErpApiPath('/api/shipment/shipment-records/units')).toBe(
       '/api/mod/xcagi-erp-domain-bridge/shipment/shipment-records/units',
     )
-    expect(resolveErpApiPath('/api/orders?limit=200')).toBe(
-      '/api/mod/xcagi-erp-domain-bridge/orders?limit=200',
-    )
+    expect(resolveErpApiPath('/api/orders?limit=200')).toBe('/api/mod/xcagi-erp-domain-bridge/orders?limit=200')
   })
 
   it('maps purchase_units legacy path', () => {
     localStorage.setItem(LS, '1')
-    expect(resolveErpApiPath('/api/purchase_units')).toBe(
-      '/api/mod/xcagi-erp-domain-bridge/purchase_units',
-    )
+    expect(resolveErpApiPath('/api/purchase_units')).toBe('/api/mod/xcagi-erp-domain-bridge/purchase_units')
   })
 
   it('keeps host-only prefixes on /api when facade on', () => {
@@ -60,9 +47,7 @@ describe('erpDomainPaths', () => {
 
   it('maps orders next_number when facade on', () => {
     localStorage.setItem(LS, '1')
-    expect(resolveErpApiPath('/api/orders/next_number?suffix=A')).toBe(
-      '/api/mod/xcagi-erp-domain-bridge/orders/next_number?suffix=A',
-    )
+    expect(resolveErpApiPath('/api/orders/next_number?suffix=A')).toBe('/api/mod/xcagi-erp-domain-bridge/orders/next_number?suffix=A')
   })
 
   it('exposes mod status probe path', () => {
@@ -74,18 +59,10 @@ describe('erpDomainPaths', () => {
     writeActiveExtensionModIdToStorage('taiyangniao-pro', TEST_SCOPE)
     const ids = ['taiyangniao-pro', 'xcagi-erp-domain-bridge']
     expect(resolveErpApiBase(ids)).toBe('/api/mod/taiyangniao-pro')
-    expect(resolveErpApiPath('/api/products/list', ids)).toBe(
-      '/api/mod/taiyangniao-pro/products/list',
-    )
-    expect(resolveErpApiPath('/api/orders?limit=200', ids)).toBe(
-      '/api/mod/xcagi-erp-domain-bridge/orders?limit=200',
-    )
-    expect(resolveErpApiPath('/api/shipment/shipment-records/units', ids)).toBe(
-      '/api/mod/taiyangniao-pro/shipment/shipment-records/units',
-    )
-    expect(resolveErpApiPath('/api/purchase_units', ids)).toBe(
-      '/api/mod/taiyangniao-pro/purchase_units',
-    )
+    expect(resolveErpApiPath('/api/products/list', ids)).toBe('/api/mod/taiyangniao-pro/products/list')
+    expect(resolveErpApiPath('/api/orders?limit=200', ids)).toBe('/api/mod/xcagi-erp-domain-bridge/orders?limit=200')
+    expect(resolveErpApiPath('/api/shipment/shipment-records/units', ids)).toBe('/api/mod/taiyangniao-pro/shipment/shipment-records/units')
+    expect(resolveErpApiPath('/api/purchase_units', ids)).toBe('/api/mod/taiyangniao-pro/purchase_units')
     expect(resolveErpApiPath('/api/shipment/shipment-records/records', ids)).toBe(
       '/api/mod/xcagi-erp-domain-bridge/shipment/shipment-records/records',
     )
@@ -94,24 +71,16 @@ describe('erpDomainPaths', () => {
   it('falls back to erp bridge when client mod not in installed list', () => {
     writeActiveExtensionModIdToStorage('taiyangniao-pro', TEST_SCOPE)
     const ids = ['xcagi-erp-domain-bridge']
-    expect(resolveErpApiPath('/api/customers/list', ids)).toBe(
-      '/api/mod/xcagi-erp-domain-bridge/customers/list',
-    )
+    expect(resolveErpApiPath('/api/customers/list', ids)).toBe('/api/mod/xcagi-erp-domain-bridge/customers/list')
   })
 
   it('routes ERP API via bridge when active mod is industry shell (attendance-industry)', () => {
     writeActiveExtensionModIdToStorage('attendance-industry', TEST_SCOPE)
     const ids = ['attendance-industry', 'xcagi-erp-domain-bridge']
     expect(resolveErpApiBase(ids)).toBe('/api/mod/xcagi-erp-domain-bridge')
-    expect(resolveErpApiPath('/api/customers/list', ids)).toBe(
-      '/api/mod/xcagi-erp-domain-bridge/customers/list',
-    )
-    expect(resolveErpApiPath('/api/products/list', ids)).toBe(
-      '/api/mod/xcagi-erp-domain-bridge/products/list',
-    )
-    expect(resolveErpApiPath('/api/purchase_units', ids)).toBe(
-      '/api/mod/xcagi-erp-domain-bridge/purchase_units',
-    )
+    expect(resolveErpApiPath('/api/customers/list', ids)).toBe('/api/mod/xcagi-erp-domain-bridge/customers/list')
+    expect(resolveErpApiPath('/api/products/list', ids)).toBe('/api/mod/xcagi-erp-domain-bridge/products/list')
+    expect(resolveErpApiPath('/api/purchase_units', ids)).toBe('/api/mod/xcagi-erp-domain-bridge/purchase_units')
   })
 
   it('routes ERP API via bridge when primary is industry shell without facade flag', () => {

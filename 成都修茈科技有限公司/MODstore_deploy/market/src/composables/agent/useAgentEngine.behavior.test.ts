@@ -5,8 +5,7 @@ import type { AgentSkill, LLMToolCall, SkillResult } from '../../types/agent'
 import { useAgentEngine } from './useAgentEngine'
 
 const mocks = vi.hoisted(() => {
-  const successful = (message: string): Promise<SkillResult> =>
-    Promise.resolve({ success: true, message })
+  const successful = (message: string): Promise<SkillResult> => Promise.resolve({ success: true, message })
   return {
     agentButlerChat: vi.fn(),
     matchByIntent: vi.fn(),
@@ -153,12 +152,18 @@ describe('useAgentEngine behavior', () => {
 
     expect(mocks.executor[executorName]).toHaveBeenCalledOnce()
     expect(latestReply()).toBe(
-      name === 'navigate' ? 'navigated'
-        : name === 'click' ? 'clicked'
-          : name === 'fill' ? 'filled'
-            : name === 'select' ? 'selected'
-              : name === 'scroll' ? 'scrolled'
-                : name === 'read' ? 'read page'
+      name === 'navigate'
+        ? 'navigated'
+        : name === 'click'
+          ? 'clicked'
+          : name === 'fill'
+            ? 'filled'
+            : name === 'select'
+              ? 'selected'
+              : name === 'scroll'
+                ? 'scrolled'
+                : name === 'read'
+                  ? 'read page'
                   : 'enhanced',
     )
     expect(useAgentStore().mode).toBe('idle')
@@ -173,10 +178,13 @@ describe('useAgentEngine behavior', () => {
     const engine = useAgentEngine()
 
     await engine.handleInput('custom operation')
-    expect(execute).toHaveBeenCalledWith(expect.objectContaining({
-      route: '/workbench/mod/testmod',
-      pageSummary: 'page context',
-    }), { value: 1 })
+    expect(execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        route: '/workbench/mod/testmod',
+        pageSummary: 'page context',
+      }),
+      { value: 1 },
+    )
     expect(latestReply()).toBe('skill result')
 
     await engine.handleInput('unknown operation')
@@ -203,7 +211,9 @@ describe('useAgentEngine behavior', () => {
   })
 
   it('surfaces preprocessing errors and resets loading state', async () => {
-    mocks.serializeVisibleDom.mockImplementationOnce(() => { throw new Error('DOM failed') })
+    mocks.serializeVisibleDom.mockImplementationOnce(() => {
+      throw new Error('DOM failed')
+    })
     const engine = useAgentEngine()
     await engine.handleInput('trigger preprocessing')
 

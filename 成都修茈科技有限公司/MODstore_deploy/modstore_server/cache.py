@@ -11,6 +11,8 @@ import os
 import time
 from typing import Any
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 _memory_cache: dict[str, tuple[float, Any]] = {}
 
 
@@ -22,7 +24,7 @@ def _redis_client():
         import redis
 
         return redis.Redis.from_url(url, decode_responses=True)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return None
 
 
@@ -32,7 +34,7 @@ def get_json(key: str) -> Any | None:
         try:
             raw = client.get(key)
             return json.loads(raw) if raw else None
-        except Exception:
+        except RECOVERABLE_ERRORS:
             return None
 
     ent = _memory_cache.get(key)
@@ -50,10 +52,12 @@ def set_json(key: str, value: Any, ttl_seconds: int = 300) -> None:
     if client is not None:
         try:
             client.setex(
-                key, max(1, int(ttl_seconds)), json.dumps(value, ensure_ascii=False, default=str)
+                key,
+                max(1, int(ttl_seconds)),
+                json.dumps(value, ensure_ascii=False, default=str),
             )
             return
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
 
     expires_at = time.time() + max(1, int(ttl_seconds)) if ttl_seconds else 0
@@ -65,6 +69,6 @@ def delete(key: str) -> None:
     if client is not None:
         try:
             client.delete(key)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
     _memory_cache.pop(key, None)

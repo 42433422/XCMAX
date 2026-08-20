@@ -33,6 +33,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from vibe_coding.operational_errors import BOUNDARY_ERRORS
+
 from ..index import Reference, Symbol
 from . import ParsedFile
 
@@ -182,11 +184,41 @@ _METHOD_RE = re.compile(
 # false positives like ``if (x) { … }``).
 _RESERVED = frozenset(
     {
-        "if", "else", "for", "while", "switch", "catch", "do", "try",
-        "return", "throw", "new", "typeof", "instanceof", "void", "case",
-        "default", "in", "of", "delete", "yield", "await", "this",
-        "import", "export", "from", "as", "function", "class", "interface",
-        "type", "enum", "extends", "implements", "readonly", "constructor",
+        "if",
+        "else",
+        "for",
+        "while",
+        "switch",
+        "catch",
+        "do",
+        "try",
+        "return",
+        "throw",
+        "new",
+        "typeof",
+        "instanceof",
+        "void",
+        "case",
+        "default",
+        "in",
+        "of",
+        "delete",
+        "yield",
+        "await",
+        "this",
+        "import",
+        "export",
+        "from",
+        "as",
+        "function",
+        "class",
+        "interface",
+        "type",
+        "enum",
+        "extends",
+        "implements",
+        "readonly",
+        "constructor",
     }
 )
 
@@ -225,13 +257,11 @@ class TypeScriptLanguageAdapter:
         if self._use_treesitter:
             try:
                 return self._parse_with_treesitter(path=path, source=source)
-            except Exception as exc:  # noqa: BLE001
+            except BOUNDARY_ERRORS as exc:
                 # Fall through to regex parser; record the failure.
                 ts_err = f"treesitter_failed:{type(exc).__name__}:{exc}"
                 pf = self._parse_with_regex(path=path, source=source)
-                pf.parse_error = (
-                    f"{pf.parse_error}|{ts_err}" if pf.parse_error else ts_err
-                )
+                pf.parse_error = f"{pf.parse_error}|{ts_err}" if pf.parse_error else ts_err
                 return pf
         return self._parse_with_regex(path=path, source=source)
 
@@ -267,7 +297,7 @@ class TypeScriptLanguageAdapter:
             imports = _extract_imports(source_no_comments)
             references = _extract_call_references(path, source_no_comments, lines)
             references.extend(_extract_decorators(path, source_no_comments, lines))
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:
             parse_error = f"regex_extract_error:{type(exc).__name__}:{exc}"
 
         return ParsedFile(
@@ -297,15 +327,12 @@ class TypeScriptLanguageAdapter:
             # ``tsx`` grammar may be packaged separately; fall back to
             # the plain ``typescript`` grammar before giving up.
             parser = get_parser("typescript")
-        if parser is None or load_language(grammar) is None and load_language("typescript") is None:
+        if parser is None or (load_language(grammar) is None and load_language("typescript") is None):
             raise RuntimeError(
-                "tree-sitter typescript grammar not available; "
-                "install with `pip install tree-sitter-typescript`"
+                "tree-sitter typescript grammar not available; install with `pip install tree-sitter-typescript`"
             )
         tree = parser.parse(source.encode("utf-8"))
-        symbols, imports, references = _extract_from_tree(
-            tree, source.encode("utf-8"), path=path, is_jsx=is_jsx
-        )
+        symbols, imports, references = _extract_from_tree(tree, source.encode("utf-8"), path=path, is_jsx=is_jsx)
         return ParsedFile(
             language=self.language,
             symbols=symbols,
@@ -341,7 +368,7 @@ def _strip_ts_comments(text: str) -> str:
             out.append(c)
             i += 1
             continue
-        if c in '"\'`':
+        if c in "\"'`":
             in_str = True
             quote = c
             out.append(c)
@@ -497,7 +524,7 @@ def _extract_class_methods(path: str, source: str, lines: list[str]) -> list[Sym
                     in_str = False
                 i += 1
                 continue
-            if c in '"\'`':
+            if c in "\"'`":
                 in_str = True
                 quote = c
                 i += 1
@@ -701,23 +728,21 @@ def _extract_from_tree(
 
     def text(node: Any) -> str:
         try:
-            return source_bytes[node.start_byte : node.end_byte].decode(
-                "utf-8", errors="replace"
-            )
-        except Exception:  # noqa: BLE001
+            return source_bytes[node.start_byte : node.end_byte].decode("utf-8", errors="replace")
+        except BOUNDARY_ERRORS:
             return ""
 
     def line_of(node: Any) -> int:
         try:
             return int(node.start_point[0]) + 1
-        except Exception:  # noqa: BLE001
+        except BOUNDARY_ERRORS:
             return 1
 
     def child_field(node: Any, field: str) -> Any | None:
         # tree-sitter exposes ``child_by_field_name`` on nodes.
         try:
             return node.child_by_field_name(field)
-        except Exception:  # noqa: BLE001
+        except BOUNDARY_ERRORS:
             return None
 
     def named_children(node: Any) -> list[Any]:
@@ -805,11 +830,16 @@ def _extract_from_tree(
                     continue
                 name_node = child_field(declarator, "name")
                 value = child_field(declarator, "value")
-                if name_node is not None and value is not None and value.type in {
-                    "arrow_function",
-                    "function_expression",
-                    "generator_function",
-                }:
+                if (
+                    name_node is not None
+                    and value is not None
+                    and value.type
+                    in {
+                        "arrow_function",
+                        "function_expression",
+                        "generator_function",
+                    }
+                ):
                     is_async = "async" in text(value)[:8]
                     emit_symbol(
                         declarator,
@@ -851,9 +881,7 @@ def _extract_from_tree(
                 if name and name.split(".")[0] not in _RESERVED:
                     emit_reference(node, name)
         elif ntype == "jsx_element" or ntype == "jsx_self_closing_element":
-            tag_node = (
-                child_field(node, "opening_element") or node
-            )
+            tag_node = child_field(node, "opening_element") or node
             name_node = child_field(tag_node, "name") or _first_named(tag_node)
             if name_node is not None:
                 tag_name = text(name_node)
@@ -893,7 +921,7 @@ def _decorator_name_node(node: Any) -> Any | None:
                 fn_field = None
                 try:
                     fn_field = child.child_by_field_name("function")
-                except Exception:  # noqa: BLE001
+                except BOUNDARY_ERRORS:
                     fn_field = None
                 return fn_field or child
             return child

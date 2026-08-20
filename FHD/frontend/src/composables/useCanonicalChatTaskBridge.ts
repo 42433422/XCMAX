@@ -17,15 +17,14 @@ export function useCanonicalChatTaskBridge(options: CanonicalChatTaskBridgeOptio
     paramsOverride?: Record<string, unknown>,
   ): { toolId: string; action: string; params: Record<string, unknown> } | null {
     const payload = asRecord(task.payload)
-    const requestedToolId = String(
-      payload.tool_id || asRecord(payload.params).tool_id || task.tool_id || '',
-    ).trim()
+    const requestedToolId = String(payload.tool_id || asRecord(payload.params).tool_id || task.tool_id || '').trim()
     const rawAction = String(payload.action || asRecord(payload.params).action || '').trim()
-    const toolId = requestedToolId === 'shipment_generate'
-      ? 'shipment_orders'
-      : requestedToolId === 'import_excel_to_database'
-        ? 'excel_import'
-        : requestedToolId
+    const toolId =
+      requestedToolId === 'shipment_generate'
+        ? 'shipment_orders'
+        : requestedToolId === 'import_excel_to_database'
+          ? 'excel_import'
+          : requestedToolId
     const action = requestedToolId === 'shipment_generate' ? 'generate' : rawAction
     if (!toolId || !action) return null
     const params = { ...(paramsOverride || asRecord(payload.params)) }
@@ -36,10 +35,7 @@ export function useCanonicalChatTaskBridge(options: CanonicalChatTaskBridgeOptio
     return { toolId, action, params }
   }
 
-  async function stageCanonicalTask(
-    task: ShipmentTask,
-    paramsOverride?: Record<string, unknown>,
-  ): Promise<AgentRunResponse | null> {
+  async function stageCanonicalTask(task: ShipmentTask, paramsOverride?: Record<string, unknown>): Promise<AgentRunResponse | null> {
     const request = canonicalTaskRequest(task, paramsOverride)
     if (!request) return null
     const mutableTask = task as DynamicShipmentTask
@@ -64,10 +60,7 @@ export function useCanonicalChatTaskBridge(options: CanonicalChatTaskBridgeOptio
     return created
   }
 
-  async function executeCanonicalTask(
-    task: ShipmentTask,
-    paramsOverride?: Record<string, unknown>,
-  ): Promise<Response | null> {
+  async function executeCanonicalTask(task: ShipmentTask, paramsOverride?: Record<string, unknown>): Promise<Response | null> {
     if (!canonicalTaskRequest(task, paramsOverride)) return null
     delete (task as DynamicShipmentTask).agentCancelRequested
     const created = await stageCanonicalTask(task, paramsOverride)
@@ -90,7 +83,7 @@ export function useCanonicalChatTaskBridge(options: CanonicalChatTaskBridgeOptio
       ? taskOutput
       : {
           success: run.status === 'completed',
-          message: run.status === 'completed' ? '任务执行成功' : (run.error || '任务执行失败'),
+          message: run.status === 'completed' ? '任务执行成功' : run.error || '任务执行失败',
         }
     await options.refreshTasks()
     return {

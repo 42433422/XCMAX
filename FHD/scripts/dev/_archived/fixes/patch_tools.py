@@ -1,3 +1,4 @@
+# mypy: disable-error-code="operator"
 from pathlib import Path
 
 p = Path("e:/FHD/XCAGI/app/services/tools_execution/order_parser.py")
@@ -13,7 +14,7 @@ for i, line in enumerate(lines):
         end = i
         break
 
-print(f"替换范围: {start+1} - {end+1}")
+print(f"替换范围: {start + 1} - {end + 1}")
 
 new_block = [
     '        # 规格支持阿拉伯数字与中文数字，并优先兼容"规格二十八三桶/规格28三桶"这类连续口语',

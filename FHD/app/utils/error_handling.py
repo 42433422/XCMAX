@@ -20,6 +20,7 @@ from app.errors import (
     ServiceUnavailableError,
     WorkflowError,
 )
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +132,7 @@ def with_error_handling(
                     "message": str(e),
                     "error_code": f"{error_code_prefix}workflow_error",
                 }
-            except Exception as e:
+            except BOUNDARY_ERRORS as e:
                 logger.exception("Unexpected error in %s: %s", func.__name__, e)
                 if fallback:
                     return fallback(*args, **kwargs)
@@ -185,9 +186,6 @@ def with_sqlite_retry(
                         raise DatabaseLockError(
                             f"Database locked after {max_attempts} attempts: {e}"
                         ) from e
-                except Exception:
-                    raise
-
             if last_exception:
                 raise last_exception
 

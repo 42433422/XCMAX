@@ -1,5 +1,6 @@
-
 import requests
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 def test_all_apis():
@@ -28,7 +29,7 @@ def test_all_apis():
         else:
             print(f"❌ 客户 API 失败，状态码：{response.status_code}")
 
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 客户 API 异常：{e}")
 
     # 测试 2: 原材料列表 API
@@ -54,7 +55,7 @@ def test_all_apis():
             print(f"❌ 原材料 API 失败，状态码：{response.status_code}")
             print(f"📄 响应内容：{response.text}")
 
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 原材料 API 异常：{e}")
 
     # 测试 3: 产品列表 API
@@ -78,7 +79,7 @@ def test_all_apis():
             print(f"❌ 产品 API 失败，状态码：{response.status_code}")
             print(f"📄 响应内容：{response.text}")
 
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 产品 API 异常：{e}")
 
     print("\n🎯 测试总结:")

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 ABSORPTION_STATE_RELATIVE_PATH = Path(".retort") / "absorption_state.json"
 SELF_EVOLUTION_ACTIONS_RELATIVE_PATH = Path(".retort") / "self_evolution_actions.jsonl"
@@ -78,7 +78,7 @@ def public_absorption_state(root: Path) -> dict[str, Any]:
     state = load_absorption_state(root)
     if not state:
         return {"active": False, "status": "empty"}
-    public = {
+    public: dict[str, Any] = {
         key: state.get(key)
         for key in (
             "active",
@@ -97,10 +97,11 @@ def public_absorption_state(root: Path) -> dict[str, Any]:
 
 def closed_loop_proof(root: Path) -> dict[str, Any]:
     state = load_absorption_state(root)
-    proof = (
+    proof = cast(
+        dict[str, Any],
         state.get("closed_loop_proof")
         if isinstance(state.get("closed_loop_proof"), dict)
-        else {}
+        else {},
     )
     flags = {name: bool(proof.get(name)) for name in CLOSED_LOOP_FLAGS}
     missing = _MissingFlags(key for key, value in flags.items() if not value)

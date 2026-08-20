@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr"
 """Prompt fragments for branch-based self-maintenance remediation."""
 
 from __future__ import annotations

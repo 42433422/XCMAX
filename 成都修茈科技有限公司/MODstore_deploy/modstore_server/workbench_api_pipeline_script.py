@@ -1,7 +1,10 @@
-# ruff: noqa
 """Workbench script pipeline branch."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -24,7 +27,7 @@ async def _run_workbench_script_pipeline(
             provider=prov,
             model=mdl,
         )
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         msg = str(e)[:800]
         await _facade()._set_step(sid, "generate", "error", msg)
         await _facade()._fail_session(sid, "generate", msg)
@@ -51,9 +54,14 @@ async def _run_workbench_script_pipeline(
     else:
         try:
             script_wf = _facade()._commit_script_workflow_from_result(
-                db, user_id=user_id, session_id=sid, payload=payload, files=files, result=result
+                db,
+                user_id=user_id,
+                session_id=sid,
+                payload=payload,
+                files=files,
+                result=result,
             )
-        except Exception as e:
+        except RECOVERABLE_ERRORS as e:
             msg = f"保存脚本工作流失败: {e}"
             await _facade()._set_step(sid, "run", "error", msg[:300])
             await _facade()._fail_session(sid, "run", msg[:1000])

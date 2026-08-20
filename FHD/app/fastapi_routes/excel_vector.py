@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import logging
-import os
-from datetime import datetime
+from pathlib import Path
 from typing import Any, cast
+from uuid import uuid4
 
 from fastapi import APIRouter, Body, Request, UploadFile
 from fastapi.responses import JSONResponse
@@ -113,7 +113,7 @@ def _excel_vector_status(payload: dict[str, Any]) -> int:
 async def ingest_excel_vector(request: Request):
     upload_file: UploadFile | None = None
     file_path = ""
-    should_cleanup = False
+    cleanup_path: Path | None = None
     try:
         payload: dict[str, Any] = {}
 
@@ -127,14 +127,12 @@ async def ingest_excel_vector(request: Request):
                     return JSONResponse(
                         {"success": False, "message": "只支持 .xlsx/.xls 文件"}, status_code=400
                     )
-                filename = (
-                    f"vector_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{upload_file.filename}"
-                )
-                file_path = os.path.join(get_upload_dir(), filename)
+                suffix = ".xls" if str(upload_file.filename).lower().endswith(".xls") else ".xlsx"
+                cleanup_path = Path(get_upload_dir()).resolve() / f"vector_{uuid4().hex}{suffix}"
+                file_path = str(cleanup_path)
                 body = await upload_file.read()
-                with open(file_path, "wb") as f:
+                with cleanup_path.open("wb") as f:
                     f.write(body)
-                should_cleanup = True
                 payload = {
                     k: v for k, v in form.items() if k != "excel_file" and isinstance(v, str)
                 }
@@ -171,15 +169,18 @@ async def ingest_excel_vector(request: Request):
         result = _agent_node_output(run, "excel_vector_ingest")
         status = _excel_vector_status(result)
         return JSONResponse(result, status_code=status)
-    except RECOVERABLE_ERRORS as err:
-        logger.exception("Excel 向量化 ingest 失败: %s", err)
-        return JSONResponse({"success": False, "message": str(err)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("Excel 向量化 ingest 失败")
+        return JSONResponse(
+            {"success": False, "message": "Excel 向量化服务暂时不可用，请稍后重试"},
+            status_code=500,
+        )
     finally:
-        if should_cleanup and file_path and os.path.exists(file_path):
+        if cleanup_path is not None:
             try:
-                os.remove(file_path)
+                cleanup_path.unlink(missing_ok=True)
             except OSError:
-                logger.warning("清理 Excel 向量上传临时文件失败: %s", file_path)
+                logger.warning("清理 Excel 向量上传临时文件失败")
         if upload_file is not None:
             try:
                 await upload_file.close()

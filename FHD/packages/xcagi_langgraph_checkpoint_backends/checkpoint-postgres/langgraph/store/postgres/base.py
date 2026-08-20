@@ -45,6 +45,7 @@ from typing_extensions import TypedDict
 
 from langgraph.checkpoint.postgres import _ainternal as _ainternal
 from langgraph.checkpoint.postgres import _internal as _pg_internal
+from langgraph.store.postgres._exception_policy import BOUNDARY_ERRORS
 
 if TYPE_CHECKING:
     from langchain_core.embeddings import Embeddings
@@ -188,17 +189,18 @@ class ANNIndexConfig(TypedDict, total=False):
     """
 
 
-class HNSWConfig(ANNIndexConfig, total=False):
+class HNSWConfig(TypedDict, total=False):
     """Configuration for HNSW (Hierarchical Navigable Small World) index."""
 
-    kind: Literal["hnsw"]  # type: ignore[misc]
+    kind: Literal["hnsw"]
+    vector_type: Literal["vector", "halfvec"]
     m: int
     """Maximum number of connections per layer. Default is 16."""
     ef_construction: int
     """Size of dynamic candidate list for index construction. Default is 64."""
 
 
-class IVFFlatConfig(ANNIndexConfig, total=False):
+class IVFFlatConfig(TypedDict, total=False):
     """IVFFlat index divides vectors into lists, and then searches a subset of those lists that are closest to the query vector. It has faster build times and uses less memory than HNSW, but has lower query performance (in terms of speed-recall tradeoff).
 
     Three keys to achieving good recall are:
@@ -207,7 +209,8 @@ class IVFFlatConfig(ANNIndexConfig, total=False):
     3. When querying, specify an appropriate number of probes (higher is better for recall, lower is better for speed) - a good place to start is sqrt(lists)
     """
 
-    kind: Literal["ivfflat"]  # type: ignore[misc]
+    kind: Literal["ivfflat"]
+    vector_type: Literal["vector", "halfvec"]
     nlist: int
     """Number of inverted lists (clusters) for IVF index.
     
@@ -888,12 +891,12 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
                         expired_items = self.sweep_ttl()
                         if expired_items > 0:
                             logger.info(f"Store swept {expired_items} expired items")
-                    except Exception as exc:
+                    except BOUNDARY_ERRORS as exc:
                         logger.exception(
                             "Store TTL sweep iteration failed", exc_info=exc
                         )
                 future.set_result(None)
-            except Exception as exc:
+            except BOUNDARY_ERRORS as exc:
                 future.set_exception(exc)
 
         thread = threading.Thread(target=_sweep_loop, daemon=True, name="ttl-sweeper")
@@ -1142,7 +1145,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
                 try:
                     cur.execute(sql)
                     cur.execute("INSERT INTO store_migrations (v) VALUES (%s)", (v,))
-                except Exception as e:
+                except BOUNDARY_ERRORS as e:
                     logger.error(
                         f"Failed to apply migration {v}.\nSql={sql}\nError={e}"
                     )
@@ -1164,7 +1167,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
                         if "dims" in params:
                             try:
                                 params["dims"] = int(params["dims"])
-                            except Exception as e:
+                            except BOUNDARY_ERRORS as e:
                                 raise ValueError(
                                     f"Invalid dims for vector index: {params['dims']}"
                                 ) from e
@@ -1266,7 +1269,7 @@ def _get_index_params(store: Any) -> tuple[str, dict[str, Any]]:
         key = "lists" if k == "nlist" else k
         try:
             ivalue = int(v)  # type: ignore[call-overload]
-        except Exception as e:
+        except BOUNDARY_ERRORS as e:
             raise ValueError(f"Invalid index parameter value for {k}: {v}") from e
         if ivalue <= 0:
             continue

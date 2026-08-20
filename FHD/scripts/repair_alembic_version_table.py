@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="union-attr"
 """
 Repair alembic_version when ancestor + descendant revisions are both stamped.
 
@@ -25,6 +26,8 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 sys.path.insert(0, _ROOT)
@@ -55,7 +58,7 @@ def _redundant_ancestor_ids(script: ScriptDirectory, stamped: list[str]) -> set[
     for vid in stamped:
         try:
             objs.append(rm.get_revision(vid))
-        except Exception as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures
             raise SystemExit(f"Unknown revision in alembic_version: {vid!r} ({exc})") from exc
 
     redundant: set[str] = set()

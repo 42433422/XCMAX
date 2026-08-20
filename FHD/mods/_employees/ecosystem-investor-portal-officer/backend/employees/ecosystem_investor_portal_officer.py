@@ -78,9 +78,7 @@ def run(payload: dict[str, Any], _ctx: dict[str, Any]) -> dict[str, Any]:
         "milestone_count": len(normalized_milestones),
         "milestones": normalized_milestones,
         "open_risk_count": sum(
-            1
-            for item in normalized_risks
-            if item["status"] not in {"closed", "resolved"}
+            1 for item in normalized_risks if item["status"] not in {"closed", "resolved"}
         ),
         "risks": normalized_risks,
     }

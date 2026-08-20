@@ -13,6 +13,8 @@ import logging
 import os
 from typing import Any
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -130,7 +132,7 @@ def notify_boss(
             body_text,
         )
         return True
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning(
             "employee_im_bridge 推送异常：employee=%s hook=%s err=%s",
             employee_id,

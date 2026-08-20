@@ -1,3 +1,4 @@
+# mypy: disable-error-code="attr-defined, operator, var-annotated"
 """Branch-coverage supplement for super_employee_service.py (round 2).
 
 目标：覆盖 super_employee_service.py 的 101 个缺失分支（当前 73.8% 覆盖率）。

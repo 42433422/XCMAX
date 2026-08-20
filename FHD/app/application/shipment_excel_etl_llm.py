@@ -220,7 +220,8 @@ def _cache_key(probe: SheetProbe) -> str:
         "candidate_headers": probe.candidate_headers,
     }
     raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha1(raw.encode("utf-8")).hexdigest()
+    # Compatibility fingerprint only; it is not used for authentication or integrity.
+    return hashlib.sha1(raw.encode("utf-8"), usedforsecurity=False).hexdigest()
 
 
 def _cache_get(key: str) -> AssistResult | None:
@@ -422,12 +423,12 @@ def assist_sheet_layout(probe: SheetProbe) -> AssistResult:
         if normalized.ok:
             _cache_put(key, normalized)
         return normalized
-    except StructuredOutputError as exc:
-        logger.info("shipment etl llm assist structured failure: %s", exc)
-        return AssistResult(used_llm=True, ok=False, error=str(exc))
-    except RECOVERABLE_ERRORS as exc:
-        logger.info("shipment etl llm assist failed: %s", exc)
-        return AssistResult(used_llm=True, ok=False, error=str(exc))
+    except StructuredOutputError:
+        logger.exception("shipment etl llm assist structured failure")
+        return AssistResult(used_llm=True, ok=False, error="structured_output_failed")
+    except RECOVERABLE_ERRORS:
+        logger.exception("shipment etl llm assist failed")
+        return AssistResult(used_llm=True, ok=False, error="llm_assist_failed")
 
 
 def needs_llm_assist(

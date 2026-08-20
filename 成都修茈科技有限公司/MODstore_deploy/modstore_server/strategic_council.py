@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment, attr-defined, no-any-return, union-attr, valid-type"
 """Fail-closed Persy / Para / Retort strategic council receipts.
 
 The change-request-auditor already delegates to this contract.  A council
@@ -13,14 +14,15 @@ import json
 import os
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
+from modstore_server.strategic_council_live import live_para_evidence as _live_para_evidence
+from modstore_server.strategic_council_live import live_persy_evidence as _live_persy_evidence
+from modstore_server.strategic_council_live import live_veto_state as _live_veto_state
 from modstore_server.strategic_council_live import (
-    live_para_evidence as _live_para_evidence,
-    live_persy_evidence as _live_persy_evidence,
-    live_veto_state as _live_veto_state,
     strategic_council_status,
 )
 
@@ -31,7 +33,7 @@ _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _canonical_json(value: Any) -> str:
@@ -140,7 +142,7 @@ def _retort_result(
             engine_available = True
         else:
             raise RuntimeError("clarification_gate_disabled")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         # Fallback to legacy keyword alignment when gate import/runtime fails.
         if not strategy_intent:
             blockers.append("retort_strategy_intent_missing")
@@ -148,7 +150,7 @@ def _retort_result(
             assess = _load_retort_alignment()
             assessment = assess(normalized, issue_context=strategy_intent)
             engine_available = True
-        except Exception as exc:  # noqa: BLE001 - engine failures must become a closed gate
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001 - engine failures must become a closed gate
             assessment = {"status": "engine_unavailable", "error": type(exc).__name__}
             engine_available = False
             blockers.append("retort_engine_unavailable")

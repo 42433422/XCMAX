@@ -149,12 +149,141 @@ from app.application.aiopen.service_part02 import (
 
 # ruff: noqa: F401
 
-AIOPEN_STATE: dict[str, Any] = {'wechat_open': True, 'openclaw_base': 'http://localhost:28789', 'whitelist': _default_capability_whitelist(), 'remote_control_enabled': True, 'runtime_keys': {}}
+AIOPEN_STATE: dict[str, Any] = {
+    "wechat_open": True,
+    "openclaw_base": "http://localhost:28789",
+    "whitelist": _default_capability_whitelist(),
+    "remote_control_enabled": True,
+    "runtime_keys": {},
+}
 
 _UI_TOOL_TIMEOUT_SECONDS = 10.0
 
-TOOL_DEFINITIONS: list[dict[str, Any]] = [{'name': 'api_catalog', 'description': '列出 AIOPEN 白名单内可调用的 XCAGI 业务 API 路由及其启用状态。', 'inputSchema': {'type': 'object', 'properties': {}, 'additionalProperties': False}}, {'name': 'api_call', 'description': '调用白名单内的 XCAGI 业务 API。path 支持精确匹配或已启用前缀的子路径（如启用 /api/products 则可调 /api/products/list）。method 支持 GET/POST/PUT/PATCH/DELETE。', 'inputSchema': {'type': 'object', 'properties': {'path': {'type': 'string', 'description': 'API 路径，如 /api/products/list；可带 query'}, 'method': {'type': 'string', 'enum': ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], 'default': 'GET'}, 'body': {'type': 'object', 'description': '请求体（JSON，非 GET/DELETE 时使用）'}}, 'required': ['path']}}, {'name': 'chat', 'description': '向 XCAGI AI 助手发送一条消息（unified_chat，source=aiopen），返回助手回复。', 'inputSchema': {'type': 'object', 'properties': {'message': {'type': 'string', 'description': '要发送的消息'}}, 'required': ['message']}}, {'name': 'capability_loop', 'description': '全调用闭环自检：api_catalog → 抽样 api_call(GET) → chat → ui_sessions，返回各步成败，供外部 Agent 确认 MCP 已打通。', 'inputSchema': {'type': 'object', 'properties': {'probe_path': {'type': 'string', 'description': '可选抽样 API，默认自动选已启用白名单路径'}, 'message': {'type': 'string', 'description': '可选 chat 探测文案'}}, 'additionalProperties': False}}, {'name': 'ui_sessions', 'description': '列出当前在线的虚拟光标 screen 会话（XCAGI 前端开启远程操控后出现）。', 'inputSchema': {'type': 'object', 'properties': {}, 'additionalProperties': False}}, {'name': 'ui_snapshot', 'description': '采集 XCAGI 前端当前页面快照：URL、标题与可见可交互元素（selector/文本/位置）。', 'inputSchema': {'type': 'object', 'properties': {'session_id': {'type': 'string', 'description': '目标会话，缺省取第一个在线会话'}}}}, {'name': 'ui_navigate', 'description': '让 XCAGI 前端跳转到指定路由路径（虚拟光标会话内 router.push）。', 'inputSchema': {'type': 'object', 'properties': {'path': {'type': 'string', 'description': '前端路由路径，如 /products'}, 'session_id': {'type': 'string'}}, 'required': ['path']}}, {'name': 'ui_click', 'description': '虚拟光标移动到指定元素并真实点击（带可视化动画）。selector 来自 ui_snapshot。', 'inputSchema': {'type': 'object', 'properties': {'selector': {'type': 'string', 'description': 'CSS 选择器（来自 ui_snapshot）'}, 'text': {'type': 'string', 'description': '可选：按可见文本匹配元素（selector 缺省时使用）'}, 'session_id': {'type': 'string'}}}}, {'name': 'ui_type', 'description': '在指定输入框中输入文本（聚焦 + 写值 + 派发 input/change 事件）。', 'inputSchema': {'type': 'object', 'properties': {'selector': {'type': 'string', 'description': '输入框 CSS 选择器'}, 'text': {'type': 'string', 'description': '要输入的文本'}, 'session_id': {'type': 'string'}}, 'required': ['selector', 'text']}}, {'name': 'ui_scroll', 'description': '滚动页面或将指定元素滚动到可见区域。', 'inputSchema': {'type': 'object', 'properties': {'selector': {'type': 'string', 'description': '可选：滚动到该元素'}, 'delta_y': {'type': 'number', 'description': '可选：垂直滚动像素（正值向下）'}, 'session_id': {'type': 'string'}}}}]
+TOOL_DEFINITIONS: list[dict[str, Any]] = [
+    {
+        "name": "api_catalog",
+        "description": "列出 AIOPEN 白名单内可调用的 XCAGI 业务 API 路由及其启用状态。",
+        "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+    },
+    {
+        "name": "api_call",
+        "description": "调用白名单内的 XCAGI 业务 API。path 支持精确匹配或已启用前缀的子路径（如启用 /api/products 则可调 /api/products/list）。method 支持 GET/POST/PUT/PATCH/DELETE。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "API 路径，如 /api/products/list；可带 query",
+                },
+                "method": {
+                    "type": "string",
+                    "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"],
+                    "default": "GET",
+                },
+                "body": {"type": "object", "description": "请求体（JSON，非 GET/DELETE 时使用）"},
+            },
+            "required": ["path"],
+        },
+    },
+    {
+        "name": "chat",
+        "description": "向 XCAGI AI 助手发送一条消息（unified_chat，source=aiopen），返回助手回复。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"message": {"type": "string", "description": "要发送的消息"}},
+            "required": ["message"],
+        },
+    },
+    {
+        "name": "capability_loop",
+        "description": "全调用闭环自检：api_catalog → 抽样 api_call(GET) → chat → ui_sessions，返回各步成败，供外部 Agent 确认 MCP 已打通。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "probe_path": {
+                    "type": "string",
+                    "description": "可选抽样 API，默认自动选已启用白名单路径",
+                },
+                "message": {"type": "string", "description": "可选 chat 探测文案"},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "ui_sessions",
+        "description": "列出当前在线的虚拟光标 screen 会话（XCAGI 前端开启远程操控后出现）。",
+        "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+    },
+    {
+        "name": "ui_snapshot",
+        "description": "采集 XCAGI 前端当前页面快照：URL、标题与可见可交互元素（selector/文本/位置）。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "session_id": {"type": "string", "description": "目标会话，缺省取第一个在线会话"}
+            },
+        },
+    },
+    {
+        "name": "ui_navigate",
+        "description": "让 XCAGI 前端跳转到指定路由路径（虚拟光标会话内 router.push）。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "前端路由路径，如 /products"},
+                "session_id": {"type": "string"},
+            },
+            "required": ["path"],
+        },
+    },
+    {
+        "name": "ui_click",
+        "description": "虚拟光标移动到指定元素并真实点击（带可视化动画）。selector 来自 ui_snapshot。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "selector": {"type": "string", "description": "CSS 选择器（来自 ui_snapshot）"},
+                "text": {
+                    "type": "string",
+                    "description": "可选：按可见文本匹配元素（selector 缺省时使用）",
+                },
+                "session_id": {"type": "string"},
+            },
+        },
+    },
+    {
+        "name": "ui_type",
+        "description": "在指定输入框中输入文本（聚焦 + 写值 + 派发 input/change 事件）。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "selector": {"type": "string", "description": "输入框 CSS 选择器"},
+                "text": {"type": "string", "description": "要输入的文本"},
+                "session_id": {"type": "string"},
+            },
+            "required": ["selector", "text"],
+        },
+    },
+    {
+        "name": "ui_scroll",
+        "description": "滚动页面或将指定元素滚动到可见区域。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "selector": {"type": "string", "description": "可选：滚动到该元素"},
+                "delta_y": {"type": "number", "description": "可选：垂直滚动像素（正值向下）"},
+                "session_id": {"type": "string"},
+            },
+        },
+    },
+]
 
-_UI_ACTIONS = {'ui_snapshot': 'snapshot', 'ui_navigate': 'navigate', 'ui_click': 'click', 'ui_type': 'type', 'ui_scroll': 'scroll'}
+_UI_ACTIONS = {
+    "ui_snapshot": "snapshot",
+    "ui_navigate": "navigate",
+    "ui_click": "click",
+    "ui_type": "type",
+    "ui_scroll": "scroll",
+}
 
-_API_CALL_METHODS = frozenset({'GET', 'POST', 'PUT', 'PATCH', 'DELETE'})
+_API_CALL_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE"})

@@ -33,9 +33,7 @@ def is_excluded_rel_path(rel_path: str, exclude_prefixes: tuple[str, ...]) -> bo
     normalized = rel_path.replace(os.sep, "/")
     for prefix in exclude_prefixes:
         normalized_prefix = prefix.replace(os.sep, "/")
-        if normalized == normalized_prefix.rstrip("/") or normalized.startswith(
-            normalized_prefix
-        ):
+        if normalized == normalized_prefix.rstrip("/") or normalized.startswith(normalized_prefix):
             return True
     return False
 

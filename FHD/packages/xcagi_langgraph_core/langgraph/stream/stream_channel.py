@@ -5,6 +5,8 @@ from collections import deque
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from typing import TYPE_CHECKING, Generic, TypeVar
 
+from langgraph._internal._exception_policy import BOUNDARY_ERRORS
+
 if TYPE_CHECKING:
     from langgraph.stream._mux import StreamMux
 
@@ -331,7 +333,7 @@ class StreamChannel(Generic[T]):
                     except StopAsyncIteration:
                         exhausted[0] = True
                         continue
-                    except Exception as e:
+                    except BOUNDARY_ERRORS as e:
                         error[0] = e
                         exhausted[0] = True
                         continue

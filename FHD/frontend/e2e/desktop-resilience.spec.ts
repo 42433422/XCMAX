@@ -16,25 +16,18 @@ test.describe('desktop resilience', () => {
       await page.setViewportSize(viewport)
       await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 30_000 })
       await expect(page.locator('.app-shell.is-ready')).toBeVisible({ timeout: 25_000 })
-      const overflow = await page.evaluate(() =>
-        Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth)
-      )
+      const overflow = await page.evaluate(() => Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth))
       expect(overflow, `horizontal overflow at ${viewport.width}x${viewport.height}`).toBeLessThanOrEqual(2)
     }
 
     const mainNav = page.locator('nav[aria-label="主导航"]')
     await expect(mainNav).toBeVisible()
-    const unlabeledButtons = await mainNav.locator('button:visible').evaluateAll((buttons) =>
-      buttons
-        .filter((button) => {
+    const unlabeledButtons = await mainNav.locator('button:visible').evaluateAll(
+      (buttons) =>
+        buttons.filter((button) => {
           const element = button as HTMLElement
-          return !(
-            element.getAttribute('aria-label') ||
-            element.getAttribute('title') ||
-            element.textContent?.trim()
-          )
-        })
-        .length
+          return !(element.getAttribute('aria-label') || element.getAttribute('title') || element.textContent?.trim())
+        }).length,
     )
     expect(unlabeledButtons).toBe(0)
   })
@@ -57,10 +50,9 @@ test.describe('desktop resilience', () => {
     await expect(page.locator('.app-shell.is-ready')).toBeVisible()
 
     await context.setOffline(false)
-    await expect.poll(
-      () => page.evaluate(async () => (await fetch('/api/health', { cache: 'no-store' })).status),
-      { timeout: 15_000 },
-    ).toBe(200)
+    await expect
+      .poll(() => page.evaluate(async () => (await fetch('/api/health', { cache: 'no-store' })).status), { timeout: 15_000 })
+      .toBe(200)
     await expect(page.locator('.app-shell.is-ready')).toBeVisible()
   })
 })

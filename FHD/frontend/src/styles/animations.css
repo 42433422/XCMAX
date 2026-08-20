@@ -105,7 +105,8 @@
 }
 
 @keyframes pulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
     transform: scale(1);
   }
@@ -116,7 +117,8 @@
 }
 
 @keyframes breathe {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(1);
     box-shadow: 0 0 20px var(--pro-primary-color);
   }
@@ -127,16 +129,20 @@
 }
 
 @keyframes glow {
-  0%, 100% {
+  0%,
+  100% {
     box-shadow: 0 0 10px var(--pro-primary-color);
   }
   50% {
-    box-shadow: 0 0 20px var(--pro-primary-color), 0 0 30px var(--pro-primary-color);
+    box-shadow:
+      0 0 20px var(--pro-primary-color),
+      0 0 30px var(--pro-primary-color);
   }
 }
 
 @keyframes float {
-  0%, 100% {
+  0%,
+  100% {
     transform: translateY(0);
   }
   50% {
@@ -145,19 +151,28 @@
 }
 
 @keyframes shake {
-  0%, 100% {
+  0%,
+  100% {
     transform: translateX(0);
   }
-  10%, 30%, 50%, 70%, 90% {
+  10%,
+  30%,
+  50%,
+  70%,
+  90% {
     transform: translateX(-5px);
   }
-  20%, 40%, 60%, 80% {
+  20%,
+  40%,
+  60%,
+  80% {
     transform: translateX(5px);
   }
 }
 
 @keyframes blink {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
   }
   50% {
@@ -217,7 +232,8 @@
 }
 
 @keyframes ringPulse {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(1);
     opacity: 0.8;
   }
@@ -310,7 +326,8 @@
 }
 
 @keyframes statusBlink {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
   }
   50% {
@@ -319,7 +336,8 @@
 }
 
 @keyframes codeCharFlicker {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
   }
   50% {
@@ -328,7 +346,8 @@
 }
 
 @keyframes iconRingBtnBreath {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(1);
     box-shadow: 0 0 10px var(--pro-primary-color);
   }
@@ -339,7 +358,8 @@
 }
 
 @keyframes monitorFloatBob {
-  0%, 100% {
+  0%,
+  100% {
     transform: translateY(0);
   }
   50% {
@@ -348,7 +368,8 @@
 }
 
 @keyframes proOrderFloatPulse {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(1);
     box-shadow: 0 0 20px var(--pro-primary-color);
   }

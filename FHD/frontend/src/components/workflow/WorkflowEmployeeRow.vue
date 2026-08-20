@@ -1,18 +1,10 @@
 <template>
-  <button
-    type="button"
-    class="workflow-employee-row"
-    :aria-pressed="isActive"
-    @click="toggleEmployee"
-  >
+  <button type="button" class="workflow-employee-row" :aria-pressed="isActive" @click="toggleEmployee">
     <span class="workflow-employee-label">
       <slot name="label">{{ label }}</slot>
     </span>
     <div class="toggle-switch workflow-employee-toggle">
-      <div 
-        class="toggle-slider" 
-        :class="{ 'toggle-slider-active': isActive }"
-      ></div>
+      <div class="toggle-slider" :class="{ 'toggle-slider-active': isActive }"></div>
     </div>
   </button>
 </template>
@@ -25,40 +17,43 @@ export default defineComponent({
   props: {
     label: {
       type: String,
-      default: '真实电话业务员'
+      default: '真实电话业务员',
     },
     modelValue: {
       type: Boolean,
-      default: false
+      default: false,
     },
     employeeId: {
       type: String,
-      default: 'real_phone'
-    }
+      default: 'real_phone',
+    },
   },
   emits: ['update:modelValue', 'change', 'toggle'],
   setup(props, { emit }) {
     const isActive = ref(props.modelValue)
 
-    watch(() => props.modelValue, (newValue) => {
-      isActive.value = newValue
-    })
+    watch(
+      () => props.modelValue,
+      (newValue) => {
+        isActive.value = newValue
+      },
+    )
 
     const toggleEmployee = () => {
       isActive.value = !isActive.value
       emit('update:modelValue', isActive.value)
       emit('change', isActive.value)
-      emit('toggle', { 
-        employeeId: props.employeeId, 
-        active: isActive.value 
+      emit('toggle', {
+        employeeId: props.employeeId,
+        active: isActive.value,
       })
     }
 
     return {
       isActive,
-      toggleEmployee
+      toggleEmployee,
     }
-  }
+  },
 })
 </script>
 
@@ -84,7 +79,7 @@ export default defineComponent({
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
-.workflow-employee-row[aria-pressed="true"] {
+.workflow-employee-row[aria-pressed='true'] {
   background: #eff6ff;
   border-color: #3b82f6;
 }

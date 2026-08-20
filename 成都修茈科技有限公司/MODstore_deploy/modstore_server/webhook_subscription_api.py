@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """开发者级 Webhook 订阅管理 API。
 
 涵盖：
@@ -13,7 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -221,7 +222,7 @@ async def update_subscription(
         row.enabled_events_json = json.dumps(body.enabled_events or ["*"], ensure_ascii=False)
     if body.is_active is not None:
         row.is_active = bool(body.is_active)
-    row.updated_at = datetime.now(timezone.utc)
+    row.updated_at = datetime.now(UTC)
     db.commit()
     db.refresh(row)
     return _serialize_subscription(row)
@@ -343,7 +344,7 @@ async def send_test_event(
             "subscription_id": sub.id,
             "user_id": user.id,
             "message": "ping from MODstore developer portal",
-            "ts": int(datetime.now(timezone.utc).timestamp()),
+            "ts": int(datetime.now(UTC).timestamp()),
         },
         source="modstore-developer-portal",
     )

@@ -12,15 +12,7 @@ export type ActionRisk = 'low' | 'medium' | 'high'
 export type ConfirmStrategy = 'auto' | 'preview' | 'explicit'
 
 /** 管家状态机 */
-export type ButlerMode =
-  | 'idle'
-  | 'listening'
-  | 'thinking'
-  | 'operating'
-  | 'awaiting_confirm'
-  | 'speaking'
-  | 'orchestrating'
-  | 'error'
+export type ButlerMode = 'idle' | 'listening' | 'thinking' | 'operating' | 'awaiting_confirm' | 'speaking' | 'orchestrating' | 'error'
 
 // ─── Orchestration ────────────────────────────────────────────────────
 export interface StructuredStepMessage {

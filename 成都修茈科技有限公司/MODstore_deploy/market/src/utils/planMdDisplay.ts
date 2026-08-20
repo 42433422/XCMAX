@@ -11,7 +11,9 @@ export function formatPlanMdForDisplay(md: string, max = 1200): string {
 }
 
 export function formatBriefGoalForDisplay(goal: string, max = 200): string {
-  const s = stripInternalMarkers(String(goal || '')).replace(/\s+/g, ' ').trim()
+  const s = stripInternalMarkers(String(goal || ''))
+    .replace(/\s+/g, ' ')
+    .trim()
   if (!s) return '(无任务描述)'
   return s.length > max ? `${s.slice(0, max)}…` : s
 }

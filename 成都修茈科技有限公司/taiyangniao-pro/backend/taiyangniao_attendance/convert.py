@@ -17,13 +17,19 @@ from .mapper import (
     write_detail_sheet,
     write_monthly_sheet,
 )
-from .parser import AttendanceDayRecord, dingtalk_work_hours_as_hours, parse_attendance_workbook
+from .parser import (
+    AttendanceDayRecord,
+    dingtalk_work_hours_as_hours,
+    parse_attendance_workbook,
+)
 from .rules import (
     TimeRange,
     is_company_factory_group,
     is_rest_shift,
     resolve_schedule_ranges,
 )
+
+BOUNDARY_ERRORS = (Exception,)
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +104,9 @@ def _time_plus_hours(t: time, hours: float) -> time:
     return (datetime.combine(date.min, t) + timedelta(hours=hours)).time()
 
 
-def _profile_blocks(profile: TemplateEmployeeProfile) -> list[tuple[str, time, time, float]]:
+def _profile_blocks(
+    profile: TemplateEmployeeProfile,
+) -> list[tuple[str, time, time, float]]:
     ms = profile.morning_work_start
     if ms is not None:
         t1 = _time_plus_hours(ms, 1.0)
@@ -194,13 +202,17 @@ def _saturday_factory_outside_regular_hours(
         return 0.0
     if not schedule_ranges:
         return 0.0
-    clipped = _clip_work_intervals_to_schedule(work_date, work_intervals, schedule_ranges)
+    clipped = _clip_work_intervals_to_schedule(
+        work_date, work_intervals, schedule_ranges
+    )
     total = sum(_hours_between(a, b) for a, b in work_intervals)
     inside = sum(_hours_between(a, b) for a, b in clipped)
     return max(0.0, total - inside)
 
 
-def _build_full_day_entries(profile: TemplateEmployeeProfile, symbol: str) -> tuple[list[DayBandEntry], list[DayBandEntry]]:
+def _build_full_day_entries(
+    profile: TemplateEmployeeProfile, symbol: str
+) -> tuple[list[DayBandEntry], list[DayBandEntry]]:
     morning: list[DayBandEntry] = []
     afternoon: list[DayBandEntry] = []
     blocks = _profile_blocks(profile)
@@ -280,7 +292,12 @@ def _regular_symbol(record: AttendanceDayRecord) -> str:
         or "工厂" in record.attendance_group
         or "工厂" in shift_text
     )
-    if "公司" in shift_text and is_factory_person and "远程" not in record.attendance_group and "公司-考勤" not in record.attendance_group:
+    if (
+        "公司" in shift_text
+        and is_factory_person
+        and "远程" not in record.attendance_group
+        and "公司-考勤" not in record.attendance_group
+    ):
         return "☆"
     return "√"
 
@@ -302,7 +319,7 @@ def _install_attendance_policy_from_host() -> None:
         from resources.config.approval_config import get_approval_config
 
         pol = getattr(get_approval_config(), "attendance_policy", None) or {}
-    except Exception:
+    except BOUNDARY_ERRORS:
         pol = {}
     from . import rules as _att_rules
 
@@ -334,7 +351,9 @@ def _build_day_template_data(
     absent_streak: int,
 ) -> tuple[EmployeeDayTemplateData, dict[str, float], list[str]]:
     punches = _unique_sorted(record.all_punch_times())
-    day_payload = EmployeeDayTemplateData(work_date=record.work_date, notes=list(record.notes))
+    day_payload = EmployeeDayTemplateData(
+        work_date=record.work_date, notes=list(record.notes)
+    )
     work_intervals = _work_intervals(punches)
     symbol = _resolved_day_symbol(record)
     dingtalk_hours = dingtalk_work_hours_as_hours(record.work_duration_raw)
@@ -381,7 +400,9 @@ def _build_day_template_data(
                 alternate_saturday_anchor=profile.size_week_anchor,
             )
             effective_intervals = (
-                _clip_work_intervals_to_schedule(record.work_date, work_intervals, schedule_ranges)
+                _clip_work_intervals_to_schedule(
+                    record.work_date, work_intervals, schedule_ranges
+                )
                 if schedule_ranges
                 else work_intervals
             )
@@ -415,23 +436,41 @@ def _build_day_template_data(
         if night_total > 0:
             if night_total < 1.0 and night_entry is not None and extra_sat_ot == 0.0:
                 night_total = 1.0
-            day_payload.night.append(DayBandEntry(symbol=night_symbol, value=night_total))
+            day_payload.night.append(
+                DayBandEntry(symbol=night_symbol, value=night_total)
+            )
 
     metrics = {
         "normal_hours": round(
-            sum(e.value for e in day_payload.morning + day_payload.afternoon if e.symbol == "√"),
+            sum(
+                e.value
+                for e in day_payload.morning + day_payload.afternoon
+                if e.symbol == "√"
+            ),
             2,
         ),
         "weekday_overtime_hours": round(
-            sum(e.value for e in day_payload.morning + day_payload.afternoon + day_payload.night if e.symbol == "☆"),
+            sum(
+                e.value
+                for e in day_payload.morning + day_payload.afternoon + day_payload.night
+                if e.symbol == "☆"
+            ),
             2,
         ),
         "sunday_overtime_hours": round(
-            sum(e.value for e in day_payload.morning + day_payload.afternoon + day_payload.night if e.symbol == "★"),
+            sum(
+                e.value
+                for e in day_payload.morning + day_payload.afternoon + day_payload.night
+                if e.symbol == "★"
+            ),
             2,
         ),
         "leave_hours": round(
-            sum(e.value for e in day_payload.morning + day_payload.afternoon if e.symbol == "〇"),
+            sum(
+                e.value
+                for e in day_payload.morning + day_payload.afternoon
+                if e.symbol == "〇"
+            ),
             2,
         ),
         "absent_hours": round(absent_hours, 2),
@@ -454,7 +493,9 @@ def _build_day_template_data(
     return day_payload, metrics, warning_notes
 
 
-def _employee_absent_streaks(records: list[AttendanceDayRecord]) -> dict[tuple[str, date], int]:
+def _employee_absent_streaks(
+    records: list[AttendanceDayRecord],
+) -> dict[tuple[str, date], int]:
     streaks: dict[tuple[str, date], int] = {}
     by_name: dict[str, list[AttendanceDayRecord]] = {}
     for record in records:
@@ -484,7 +525,9 @@ def _aggregate_employee_records(
     absent_streaks = _employee_absent_streaks(records)
 
     for record in sorted(records, key=lambda r: (r.employee_name, r.work_date)):
-        profile = template_profiles.get(record.employee_name) or _default_profile(record)
+        profile = template_profiles.get(record.employee_name) or _default_profile(
+            record
+        )
         punches = _unique_sorted(record.all_punch_times())
         month_payload = employees.setdefault(
             record.employee_name,
@@ -498,7 +541,9 @@ def _aggregate_employee_records(
         day_payload, metrics, warnings = _build_day_template_data(
             record,
             profile,
-            absent_streak=absent_streaks.get((record.employee_name, record.work_date), 0),
+            absent_streak=absent_streaks.get(
+                (record.employee_name, record.work_date), 0
+            ),
         )
         month_payload.days[record.work_date.day] = day_payload
         month_payload.normal_hours += metrics["normal_hours"]
@@ -566,12 +611,17 @@ def convert_attendance_records(
     _install_attendance_policy_from_host()
     try:
         workbook = open_output_workbook(out, template)
-        detail_ws = workbook["明细"] if "明细" in workbook.sheetnames else workbook.active
+        detail_ws = (
+            workbook["明细"] if "明细" in workbook.sheetnames else workbook.active
+        )
         if personnel_roster:
             rebuild_detail_sheet_person_blocks(detail_ws, personnel_roster)
         template_profiles = build_template_profiles(detail_ws)
         if not template_profiles:
-            return {"success": False, "error": "明细页未解析到任何员工块，请检查固定模板或人员管理名单"}
+            return {
+                "success": False,
+                "error": "明细页未解析到任何员工块，请检查固定模板或人员管理名单",
+            }
         filtered = _filter_records_to_template_roster(records, template_profiles)
         if not filtered and not personnel_roster:
             return {
@@ -611,7 +661,7 @@ def convert_attendance_records(
             "personnel_roster_count": len(personnel_roster) if personnel_roster else 0,
             "output_sheet_names": output_sheet_names,
         }
-    except Exception as exc:
+    except BOUNDARY_ERRORS as exc:
         logger.exception("Attendance conversion from record list failed")
         return {"success": False, "error": str(exc)}
     finally:
@@ -643,7 +693,11 @@ def convert_attendance_file(
     if not src.exists():
         return {"success": False, "error": "input file not found"}
 
-    out = Path(output_path) if output_path else src.with_name(src.stem + "_converted.xlsx")
+    out = (
+        Path(output_path)
+        if output_path
+        else src.with_name(src.stem + "_converted.xlsx")
+    )
     template = Path(template_path) if template_path else (out if out.exists() else None)
 
     try:
@@ -654,12 +708,17 @@ def convert_attendance_file(
             use_llm=bool(use_llm),
         )
         workbook = open_output_workbook(out, template)
-        detail_ws = workbook["明细"] if "明细" in workbook.sheetnames else workbook.active
+        detail_ws = (
+            workbook["明细"] if "明细" in workbook.sheetnames else workbook.active
+        )
         if personnel_roster:
             rebuild_detail_sheet_person_blocks(detail_ws, personnel_roster)
         template_profiles = build_template_profiles(detail_ws)
         if not template_profiles:
-            return {"success": False, "error": "明细页未解析到任何员工块，请检查固定模板或人员管理名单"}
+            return {
+                "success": False,
+                "error": "明细页未解析到任何员工块，请检查固定模板或人员管理名单",
+            }
         filtered = _filter_records_to_template_roster(parsed.records, template_profiles)
         if not filtered and not personnel_roster:
             return {
@@ -711,7 +770,7 @@ def convert_attendance_file(
             "personnel_roster_count": len(personnel_roster) if personnel_roster else 0,
             "output_sheet_names": output_sheet_names,
         }
-    except Exception as exc:
+    except BOUNDARY_ERRORS as exc:
         logger.exception("Attendance conversion failed")
         return {"success": False, "error": str(exc)}
     finally:

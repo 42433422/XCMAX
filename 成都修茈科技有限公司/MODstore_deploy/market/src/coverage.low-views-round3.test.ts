@@ -194,7 +194,16 @@ beforeEach(() => {
     graph: {
       name: 'Graph',
       description: 'graph desc',
-      nodes: [{ local_id: 1, node_type: 'employee', name: 'Employee', config: {}, position_x: 0, position_y: 0 }],
+      nodes: [
+        {
+          local_id: 1,
+          node_type: 'employee',
+          name: 'Employee',
+          config: {},
+          position_x: 0,
+          position_y: 0,
+        },
+      ],
       edges: [{ source_local_id: 1, target_local_id: 2, condition: 'ok' }],
       node_count: 1,
       edge_count: 1,
@@ -209,9 +218,18 @@ beforeEach(() => {
     parse_errors: ['bad manifest'],
     yuangon_pkg_ids: ['emp_a'],
   })
-  apiMock.adminYuangonOnboardRun.mockResolvedValue({ ok: true, exit_code: 0, stdout_tail: 'ok', stderr_tail: '' })
+  apiMock.adminYuangonOnboardRun.mockResolvedValue({
+    ok: true,
+    exit_code: 0,
+    stdout_tail: 'ok',
+    stderr_tail: '',
+  })
 
-  apiMock.adminAlignEmployeeLlmToAuto.mockResolvedValue({ updated_count: 2, skipped_count: 1, error_count: 0 })
+  apiMock.adminAlignEmployeeLlmToAuto.mockResolvedValue({
+    updated_count: 2,
+    skipped_count: 1,
+    error_count: 0,
+  })
   apiMock.adminDutyGraphHealth.mockResolvedValue({
     staffing: {
       planned_count: 3,
@@ -235,23 +253,71 @@ beforeEach(() => {
   apiMock.adminChangeRequestReject.mockResolvedValue({})
 
   apiMock.me.mockResolvedValue({ is_admin: true })
-  apiMock.adminEnterpriseAssignableMods.mockResolvedValue({ mods: [{ id: 'mod_new', name: 'New Mod' }, { id: 'mod_old', name: 'Old Mod' }] })
+  apiMock.adminEnterpriseAssignableMods.mockResolvedValue({
+    mods: [
+      { id: 'mod_new', name: 'New Mod' },
+      { id: 'mod_old', name: 'Old Mod' },
+    ],
+  })
   apiMock.adminListUserMods.mockResolvedValue({ mod_ids: ['mod_old'] })
   apiMock.adminBindUserMod.mockResolvedValue({})
   apiMock.adminUnbindUserMod.mockResolvedValue({})
   apiMock.adminSetUserEnterprise.mockResolvedValue({})
   apiMock.refundsAdminPending.mockResolvedValue({
-    refunds: [{ id: 9, user_id: 8, order_no: 'R1', amount: 12, reason: 'reason', created_at: '2026-01-02T03:04:05Z' }],
+    refunds: [
+      {
+        id: 9,
+        user_id: 8,
+        order_no: 'R1',
+        amount: 12,
+        reason: 'reason',
+        created_at: '2026-01-02T03:04:05Z',
+      },
+    ],
   })
-  apiMock.adminListUsers.mockResolvedValue({ users: [dbUser(), dbUser({ id: 9, username: 'bob', is_enterprise: false, mod_ids: [] })] })
-  apiMock.adminListWallets.mockResolvedValue({ items: [{ id: 1, user_id: 8, balance: 12, updated_at: '2026-01-02T03:04:05Z' }] })
-  apiMock.adminListCatalog.mockResolvedValue({ items: [{ id: 1, name: 'Pack', pkg_id: 'pkg', version: '1', price: 0, downloads: 3, created_at: '2026-01-02T03:04:05Z' }] })
-  apiMock.adminListTransactions.mockResolvedValue({ items: [{ id: 1, user_id: 8, amount: -3, txn_type: 'pay', status: 'completed', description: 'desc', created_at: '2026-01-02T03:04:05Z' }] })
+  apiMock.adminListUsers.mockResolvedValue({
+    users: [dbUser(), dbUser({ id: 9, username: 'bob', is_enterprise: false, mod_ids: [] })],
+  })
+  apiMock.adminListWallets.mockResolvedValue({
+    items: [{ id: 1, user_id: 8, balance: 12, updated_at: '2026-01-02T03:04:05Z' }],
+  })
+  apiMock.adminListCatalog.mockResolvedValue({
+    items: [
+      {
+        id: 1,
+        name: 'Pack',
+        pkg_id: 'pkg',
+        version: '1',
+        price: 0,
+        downloads: 3,
+        created_at: '2026-01-02T03:04:05Z',
+      },
+    ],
+  })
+  apiMock.adminListTransactions.mockResolvedValue({
+    items: [
+      {
+        id: 1,
+        user_id: 8,
+        amount: -3,
+        txn_type: 'pay',
+        status: 'completed',
+        description: 'desc',
+        created_at: '2026-01-02T03:04:05Z',
+      },
+    ],
+  })
   apiMock.refundsAdminReview.mockResolvedValue({})
 
-  vi.stubGlobal('confirm', vi.fn(() => true))
+  vi.stubGlobal(
+    'confirm',
+    vi.fn(() => true),
+  )
   vi.stubGlobal('alert', vi.fn())
-  vi.stubGlobal('prompt', vi.fn(() => 'note'))
+  vi.stubGlobal(
+    'prompt',
+    vi.fn(() => 'note'),
+  )
 })
 
 afterEach(() => {
@@ -295,7 +361,11 @@ describe('low coverage public and template views, round 3', () => {
     await vm.handleBuy({ id: 'plan_pro' })
     expect(vm.errorMsg).toContain('bad order')
 
-    apiMock.paymentCheckout.mockResolvedValueOnce({ ok: true, type: 'precreate', order_id: 'ord_2' })
+    apiMock.paymentCheckout.mockResolvedValueOnce({
+      ok: true,
+      type: 'precreate',
+      order_id: 'ord_2',
+    })
     await vm.handleBuy({ id: 'plan_pro' })
     expect(routerMock.push).toHaveBeenCalledWith({ name: 'checkout', params: { orderId: 'ord_2' } })
 
@@ -350,14 +420,15 @@ describe('low coverage public and template views, round 3', () => {
 
     vm.openDetail(item)
     expect(routerMock.push).toHaveBeenCalledWith({ name: 'template-detail', params: { id: '42' } })
-
     ;(window.confirm as UnsafeTestValue).mockReturnValueOnce(false)
     await vm.quickInstall(item)
     expect(apiMock.templateInstall).not.toHaveBeenCalled()
-
     ;(window.confirm as UnsafeTestValue).mockReturnValueOnce(true)
     await vm.quickInstall(item)
-    expect(routerMock.push).toHaveBeenCalledWith({ name: 'workflow-v2-editor', params: { id: '777' } })
+    expect(routerMock.push).toHaveBeenCalledWith({
+      name: 'workflow-v2-editor',
+      params: { id: '777' },
+    })
 
     apiMock.templateInstall.mockResolvedValueOnce({})
     await vm.quickInstall(item)
@@ -388,14 +459,15 @@ describe('low coverage public and template views, round 3', () => {
     expect(apiMock.templateDetail).toHaveBeenCalledWith(42)
     expect(vm.nodeKindLabel('employee')).toBe('AI 员工')
     expect(vm.nodeKindLabel('custom')).toBe('custom')
-
     ;(window.confirm as UnsafeTestValue).mockReturnValueOnce(false)
     await vm.install()
     expect(apiMock.templateInstall).not.toHaveBeenCalled()
-
     ;(window.confirm as UnsafeTestValue).mockReturnValueOnce(true)
     await vm.install()
-    expect(routerMock.push).toHaveBeenCalledWith({ name: 'workflow-v2-editor', params: { id: '777' } })
+    expect(routerMock.push).toHaveBeenCalledWith({
+      name: 'workflow-v2-editor',
+      params: { id: '777' },
+    })
 
     apiMock.templateInstall.mockRejectedValueOnce(new Error('install failed'))
     await vm.install()
@@ -603,14 +675,12 @@ describe('low coverage admin views, round 3', () => {
     await vm.saveModEditor()
     expect(apiMock.adminBindUserMod).toHaveBeenCalledWith(8, 'mod_new')
     expect(apiMock.adminUnbindUserMod).toHaveBeenCalledWith(8, 'mod_old')
-
     ;(window.confirm as UnsafeTestValue).mockReturnValueOnce(false)
     await vm.toggleEnterprise(dbUser({ id: 9, username: 'bob', is_enterprise: false }), true)
     expect(apiMock.adminSetUserEnterprise).not.toHaveBeenCalled()
     ;(window.confirm as UnsafeTestValue).mockReturnValueOnce(true)
     await vm.toggleEnterprise(dbUser({ id: 9, username: 'bob', is_enterprise: false }), true)
     expect(apiMock.adminSetUserEnterprise).toHaveBeenCalledWith(9, true)
-
     ;(window.prompt as UnsafeTestValue).mockReturnValueOnce(null)
     await vm.reviewRefund({ id: 9 }, 'approve')
     expect(apiMock.refundsAdminReview).not.toHaveBeenCalled()

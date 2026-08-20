@@ -5,10 +5,7 @@ vi.mock('@/utils/apiBase', () => ({
   apiFetch: (...args: unknown[]) => apiFetchMock(...args),
 }))
 
-import {
-  fetchCursorSuperEmployeeMessages,
-  sendCursorSuperEmployeeMessage,
-} from './cursorSuperEmployee'
+import { fetchCursorSuperEmployeeMessages, sendCursorSuperEmployeeMessage } from './cursorSuperEmployee'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return {
@@ -26,9 +23,7 @@ describe('cursorSuperEmployee API', () => {
 
   describe('fetchCursorSuperEmployeeMessages', () => {
     it('fetches messages from admin scope by default', async () => {
-      apiFetchMock.mockResolvedValue(
-        jsonResponse({ messages: [{ id: 'm1' }] }),
-      )
+      apiFetchMock.mockResolvedValue(jsonResponse({ messages: [{ id: 'm1' }] }))
       const result = await fetchCursorSuperEmployeeMessages()
       expect(apiFetchMock).toHaveBeenCalledWith(
         '/api/admin/cursor-super-employee/messages',
@@ -40,16 +35,11 @@ describe('cursorSuperEmployee API', () => {
     it('fetches messages from mobile scope', async () => {
       apiFetchMock.mockResolvedValue(jsonResponse({ messages: [] }))
       await fetchCursorSuperEmployeeMessages({ scope: 'mobile' })
-      expect(apiFetchMock).toHaveBeenCalledWith(
-        '/api/mobile/v1/admin/cursor-super-employee/messages',
-        expect.any(Object),
-      )
+      expect(apiFetchMock).toHaveBeenCalledWith('/api/mobile/v1/admin/cursor-super-employee/messages', expect.any(Object))
     })
 
     it('unwraps data.messages when nested', async () => {
-      apiFetchMock.mockResolvedValue(
-        jsonResponse({ data: { messages: [{ id: 'nested' }] } }),
-      )
+      apiFetchMock.mockResolvedValue(jsonResponse({ data: { messages: [{ id: 'nested' }] } }))
       const result = await fetchCursorSuperEmployeeMessages()
       expect(result).toEqual([{ id: 'nested' }])
     })
@@ -67,9 +57,7 @@ describe('cursorSuperEmployee API', () => {
         headers: new Headers({ 'content-type': 'text/plain' }),
         json: async () => ({}),
       } as Response)
-      await expect(fetchCursorSuperEmployeeMessages()).rejects.toThrow(
-        '请求失败（HTTP 200）',
-      )
+      await expect(fetchCursorSuperEmployeeMessages()).rejects.toThrow('请求失败（HTTP 200）')
     })
 
     it('throws 未登录 on 401 non-JSON', async () => {
@@ -83,17 +71,13 @@ describe('cursorSuperEmployee API', () => {
     })
 
     it('throws on success false', async () => {
-      apiFetchMock.mockResolvedValue(
-        jsonResponse({ success: false, message: '加载失败' }),
-      )
+      apiFetchMock.mockResolvedValue(jsonResponse({ success: false, message: '加载失败' }))
       await expect(fetchCursorSuperEmployeeMessages()).rejects.toThrow('加载失败')
     })
 
     it('throws default message on success false without message', async () => {
       apiFetchMock.mockResolvedValue(jsonResponse({ success: false }))
-      await expect(fetchCursorSuperEmployeeMessages()).rejects.toThrow(
-        '加载 Cursor 对话失败',
-      )
+      await expect(fetchCursorSuperEmployeeMessages()).rejects.toThrow('加载 Cursor 对话失败')
     })
 
     it('throws on nested data success false', async () => {
@@ -143,10 +127,7 @@ describe('cursorSuperEmployee API', () => {
     it('uses mobile scope', async () => {
       apiFetchMock.mockResolvedValue(jsonResponse({ messages: [] }))
       await sendCursorSuperEmployeeMessage('hi', undefined, { scope: 'mobile' })
-      expect(apiFetchMock).toHaveBeenCalledWith(
-        '/api/mobile/v1/admin/cursor-super-employee/messages',
-        expect.any(Object),
-      )
+      expect(apiFetchMock).toHaveBeenCalledWith('/api/mobile/v1/admin/cursor-super-employee/messages', expect.any(Object))
     })
 
     it('returns empty messages when no messages field', async () => {
@@ -158,9 +139,7 @@ describe('cursorSuperEmployee API', () => {
     })
 
     it('handles string message field (not object)', async () => {
-      apiFetchMock.mockResolvedValue(
-        jsonResponse({ message: 'string message' }),
-      )
+      apiFetchMock.mockResolvedValue(jsonResponse({ message: 'string message' }))
       const result = await sendCursorSuperEmployeeMessage('hi')
       expect(result.message).toBeUndefined()
     })
@@ -182,17 +161,13 @@ describe('cursorSuperEmployee API', () => {
     })
 
     it('throws on success false', async () => {
-      apiFetchMock.mockResolvedValue(
-        jsonResponse({ success: false, message: '调用失败' }),
-      )
+      apiFetchMock.mockResolvedValue(jsonResponse({ success: false, message: '调用失败' }))
       await expect(sendCursorSuperEmployeeMessage('hi')).rejects.toThrow('调用失败')
     })
 
     it('throws default message on success false', async () => {
       apiFetchMock.mockResolvedValue(jsonResponse({ success: false }))
-      await expect(sendCursorSuperEmployeeMessage('hi')).rejects.toThrow(
-        'Cursor 调用失败',
-      )
+      await expect(sendCursorSuperEmployeeMessage('hi')).rejects.toThrow('Cursor 调用失败')
     })
 
     it('throws on nested data success false', async () => {

@@ -41,8 +41,8 @@ from .knowledge_base import (
     auto_promote_to_kb,
 )
 from .retriever import Retriever
-from .style import StyleProfile
 from .store import ProjectMemory
+from .style import StyleProfile
 
 __all__ = [
     "DEFAULT_DIM",

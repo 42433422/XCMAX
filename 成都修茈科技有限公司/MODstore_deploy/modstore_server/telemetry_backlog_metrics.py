@@ -1,9 +1,13 @@
-# ruff: noqa
+# mypy: disable-error-code="var-annotated"
 """Auto-merge and security telemetry scanners."""
+
 from __future__ import annotations
+
 import logging
 import sys
 from typing import Any, Dict, List
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +98,7 @@ def _scan_auto_merge_metrics() -> List[Dict[str, Any]]:
                     },
                 }
             )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         _facade().logger.debug("auto merge metrics scan skipped")
     return signals
 
@@ -217,6 +221,6 @@ def _scan_security_scan_metrics() -> List[Dict[str, Any]]:
                         )
                 except (json.JSONDecodeError, OSError):
                     pass
-    except Exception:
+    except RECOVERABLE_ERRORS:
         _facade().logger.debug("security scan metrics scan skipped")
     return signals

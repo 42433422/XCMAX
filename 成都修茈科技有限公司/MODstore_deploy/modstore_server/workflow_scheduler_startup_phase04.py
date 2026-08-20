@@ -1,7 +1,10 @@
-# ruff: noqa
 """Scheduler startup registration phase."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -31,7 +34,7 @@ def _register_scheduler_phase_04():
                         out.get("accepted_receipt_count", 0),
                         out.get("execution_blocked", False),
                     )
-                except Exception:
+                except RECOVERABLE_ERRORS:
                     _facade().logger.exception("duty workforce burn-in failed")
 
             _facade()._scheduler.add_job(
@@ -51,12 +54,14 @@ def _register_scheduler_phase_04():
                 coalesce=True,
                 max_instances=1,
             )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         _facade().logger.exception("register duty workforce burn-in failed")
 
     def _duty_workforce_learning_job() -> None:
         try:
-            from modstore_server.duty_workforce_learning import run_duty_workforce_learning
+            from modstore_server.duty_workforce_learning import (
+                run_duty_workforce_learning,
+            )
 
             out = _facade()._run_tracked_scheduler_job(
                 "duty_workforce_learning", run_duty_workforce_learning
@@ -68,7 +73,7 @@ def _register_scheduler_phase_04():
                 out.get("resolved_pair_count", 0),
                 out.get("knowledge_written_count", 0),
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.exception("duty workforce learning failed")
 
     try:
@@ -83,7 +88,7 @@ def _register_scheduler_phase_04():
             coalesce=True,
             max_instances=1,
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         _facade().logger.exception("register duty workforce learning failed")
 
     def _self_evolution_metrics_job() -> None:
@@ -103,7 +108,7 @@ def _register_scheduler_phase_04():
                 out.get("pytest_passed"),
                 out.get("type_debt"),
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.exception("self evolution metrics job failed")
 
     try:
@@ -118,7 +123,7 @@ def _register_scheduler_phase_04():
             coalesce=True,
             max_instances=1,
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         _facade().logger.exception("register self evolution metrics job failed")
 
     def _auto_fix_loop_job() -> None:
@@ -126,7 +131,7 @@ def _register_scheduler_phase_04():
             from modstore_server.auto_fix_loop import register_auto_fix_event_bindings
 
             register_auto_fix_event_bindings()
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.debug("auto_fix event bindings registration skipped")
 
     _facade()._scheduler.add_job(
@@ -150,7 +155,7 @@ def _register_scheduler_phase_04():
                     out.get("new_version"),
                     out.get("anchors_synced"),
                 )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.exception("auto version bump job failed")
 
     _facade()._scheduler.add_job(
@@ -171,7 +176,7 @@ def _register_scheduler_phase_04():
                     out.get("signals_found"),
                     out.get("signals_ingested"),
                 )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.exception("telemetry backlog scan job failed")
 
     _facade()._scheduler.add_job(
@@ -183,7 +188,9 @@ def _register_scheduler_phase_04():
 
     def _predictive_maintenance_job() -> None:
         try:
-            from modstore_server.predictive_maintenance import run_predictive_maintenance_once
+            from modstore_server.predictive_maintenance import (
+                run_predictive_maintenance_once,
+            )
 
             out = run_predictive_maintenance_once()
             _facade().logger.info(
@@ -192,13 +199,16 @@ def _register_scheduler_phase_04():
                 out.get("emitted_incident"),
                 out.get("forecast_path"),
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.exception("predictive maintenance job failed")
 
     _facade()._scheduler.add_job(
         _predictive_maintenance_job,
         _facade().IntervalTrigger(
-            hours=max(1, _facade()._env_int("MODSTORE_PREDICTIVE_MAINTENANCE_INTERVAL_HOURS", 6))
+            hours=max(
+                1,
+                _facade()._env_int("MODSTORE_PREDICTIVE_MAINTENANCE_INTERVAL_HOURS", 6),
+            )
         ),
         id="predictive_maintenance_forecast",
         replace_existing=True,
@@ -217,7 +227,7 @@ def _register_scheduler_phase_04():
                 out.get("dry_run"),
                 out.get("audit_path"),
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.exception("kb self-maintenance job failed")
 
     _facade()._scheduler.add_job(
@@ -233,7 +243,9 @@ def _register_scheduler_phase_04():
 
     def _auto_merge_audit_sampling_job() -> None:
         try:
-            from modstore_server.auto_merge_audit_sampler import run_auto_merge_audit_sampling_once
+            from modstore_server.auto_merge_audit_sampler import (
+                run_auto_merge_audit_sampling_once,
+            )
 
             out = run_auto_merge_audit_sampling_once()
             _facade().logger.info(
@@ -242,7 +254,7 @@ def _register_scheduler_phase_04():
                 out.get("new_queue_items"),
                 out.get("latest_summary_path"),
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.exception("auto-merge audit sampling job failed")
 
     _facade()._scheduler.add_job(
@@ -269,5 +281,5 @@ def _register_scheduler_phase_04():
                 id="post_deploy_smoke_interval",
                 replace_existing=True,
             )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         _facade().logger.exception("register post_deploy_smoke cron failed")

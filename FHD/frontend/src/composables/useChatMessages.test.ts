@@ -182,7 +182,11 @@ describe('useChatMessages', () => {
 
   it('removes encoded legacy tool protocol from cached assistant messages', () => {
     messages.loadMessages([
-      { role: 'ai', content: '&amp;lt;tool_call&amp;gt;hidden&amp;lt;/tool_call&amp;gt;', time: '10:00' },
+      {
+        role: 'ai',
+        content: '&amp;lt;tool_call&amp;gt;hidden&amp;lt;/tool_call&amp;gt;',
+        time: '10:00',
+      },
     ])
     expect(messages.messages.value).toHaveLength(0)
   })
@@ -213,10 +217,12 @@ describe('useChatMessages', () => {
       sessionId: 'task-background',
     })
     expect(messages.messages.value).toHaveLength(1)
-    expect(chatApi.saveMessage).toHaveBeenCalledWith(expect.objectContaining({
-      session_id: 'task-background',
-      content: 'background reply',
-    }))
+    expect(chatApi.saveMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        session_id: 'task-background',
+        content: 'background reply',
+      }),
+    )
   })
 
   it('addAndSaveMessage ignores empty content', async () => {
@@ -246,16 +252,12 @@ describe('useChatMessages', () => {
 
   it('normalizeServerContentToHtml preserves existing HTML', () => {
     // Test indirectly via loadMessages
-    messages.loadMessages([
-      { role: 'ai', content: '<div>existing HTML</div>', time: '10:00' },
-    ])
+    messages.loadMessages([{ role: 'ai', content: '<div>existing HTML</div>', time: '10:00' }])
     expect(messages.messages.value[0].content).toContain('<div>existing HTML</div>')
   })
 
   it('normalizeServerContentToHtml escapes plain text', () => {
-    messages.loadMessages([
-      { role: 'ai', content: 'plain text with <br>', time: '10:00' },
-    ])
+    messages.loadMessages([{ role: 'ai', content: 'plain text with <br>', time: '10:00' }])
     // Content with <br> tag should be treated as HTML
     expect(messages.messages.value[0].content).toContain('<br>')
   })
@@ -297,17 +299,13 @@ describe('useChatMessages', () => {
   })
 
   it('sanitizeMessagesList keeps toolProgressLabel-only ai row', () => {
-    messages.loadMessages([
-      { role: 'ai', content: '', time: '10:00', toolProgressLabel: '正在调用 excel…' },
-    ] as any)
+    messages.loadMessages([{ role: 'ai', content: '', time: '10:00', toolProgressLabel: '正在调用 excel…' }] as any)
     expect(messages.messages.value.length).toBe(1)
     expect(messages.messages.value[0].toolProgressLabel).toContain('excel')
   })
 
   it('sanitizeMessagesList normalizes invalid roles to ai', () => {
-    messages.loadMessages([
-      { role: 'system', content: 'system message', time: '10:00' },
-    ] as any)
+    messages.loadMessages([{ role: 'system', content: 'system message', time: '10:00' }] as any)
     expect(messages.messages.value[0].role).toBe('ai')
   })
 

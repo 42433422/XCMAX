@@ -1,3 +1,4 @@
+# mypy: disable-error-code="misc"
 """Tests for app.fastapi_routes.print_routes — coverage ramp C3.3-a.
 
 Covers the helper functions and a few key endpoints:

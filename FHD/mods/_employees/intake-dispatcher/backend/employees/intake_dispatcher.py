@@ -60,8 +60,7 @@ def _normalize_requests(payload: dict[str, Any]) -> list[dict[str, Any]]:
         text = summary or f"客服工单 {ticket_no or '?'} 待归一化"
         return [
             {
-                "id": ticket_no
-                or f"intake-{hashlib.sha256(text.encode()).hexdigest()[:12]}",
+                "id": ticket_no or f"intake-{hashlib.sha256(text.encode()).hexdigest()[:12]}",
                 "text": text[:2000],
                 "route_hint": "user-customer-service-officer",
             }
@@ -84,9 +83,7 @@ def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         text = " ".join(str(item.get("text") or "").split())[:2000]
         owner = str(item.get("route_hint") or "task-router-officer").strip()[:160]
         if not request_id or not text:
-            issues.append(
-                {"code": "missing_request_context", "path": f"requests[{index}]"}
-            )
+            issues.append({"code": "missing_request_context", "path": f"requests[{index}]"})
             continue
         fingerprint = hashlib.sha256(text.lower().encode("utf-8")).hexdigest()[:16]
         if fingerprint in seen:

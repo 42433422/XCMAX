@@ -37,15 +37,23 @@ function listResponse(settings: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  apiMock.llmAdminOfficialSources.mockResolvedValue({ source_url: 'https://pricing.example/openai' })
-  apiMock.llmAdminListPricing.mockResolvedValue(listResponse({
-    service_fee_multiplier: '2',
-    default_input_price_per_1k: '0.01',
-    default_output_price_per_1k: '0.03',
-    default_min_charge: '0.02',
-  }))
+  apiMock.llmAdminOfficialSources.mockResolvedValue({
+    source_url: 'https://pricing.example/openai',
+  })
+  apiMock.llmAdminListPricing.mockResolvedValue(
+    listResponse({
+      service_fee_multiplier: '2',
+      default_input_price_per_1k: '0.01',
+      default_output_price_per_1k: '0.03',
+      default_min_charge: '0.02',
+    }),
+  )
   apiMock.llmAdminPricingSettings.mockResolvedValue({ settings: { official_markup_multiplier: 2 } })
-  apiMock.llmAdminSyncOfficialPrices.mockResolvedValue({ updated: 2, skipped: 1, apply_markup: { applied: 2 } })
+  apiMock.llmAdminSyncOfficialPrices.mockResolvedValue({
+    updated: 2,
+    skipped: 1,
+    apply_markup: { applied: 2 },
+  })
   apiMock.llmAdminApplyOfficialMarkup.mockResolvedValue({ applied: 3, skipped: 1 })
   apiMock.llmAdminBatchPricing.mockResolvedValue({ written: 4 })
   apiMock.llmAdminSavePrice.mockResolvedValue({ ok: true })
@@ -69,24 +77,31 @@ describe('LlmPricingAdminPanel', () => {
     expect(vm.fmtOfficial('0.12345')).toBe('0.1235')
 
     await vm.saveSettings()
-    expect(apiMock.llmAdminPricingSettings).toHaveBeenCalledWith(expect.objectContaining({
-      service_fee_multiplier: 2,
-      default_min_charge: 0.02,
-    }))
+    expect(apiMock.llmAdminPricingSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        service_fee_multiplier: 2,
+        default_min_charge: 0.02,
+      }),
+    )
     expect(vm.note).toBe('全局计费参数已保存')
 
     await vm.syncOfficial(false)
-    expect(apiMock.llmAdminSyncOfficialPrices).toHaveBeenCalledWith(expect.objectContaining({
-      provider: 'openai',
-      apply_markup: false,
-    }))
+    expect(apiMock.llmAdminSyncOfficialPrices).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'openai',
+        apply_markup: false,
+      }),
+    )
     expect(vm.note).toContain('已同步官网价 2 条')
 
     await vm.syncOfficial(true)
     expect(vm.note).toContain('已应用倍率 2 条')
 
     await vm.applyMarkup()
-    expect(apiMock.llmAdminApplyOfficialMarkup).toHaveBeenCalledWith({ provider: 'openai', multiplier: 2 })
+    expect(apiMock.llmAdminApplyOfficialMarkup).toHaveBeenCalledWith({
+      provider: 'openai',
+      multiplier: 2,
+    })
     expect(vm.note).toContain('写入售价 3 条')
 
     await vm.runBatch('unpriced_only')
@@ -95,11 +110,13 @@ describe('LlmPricingAdminPanel', () => {
 
     vm.priceRows[0]._edit.enabled = true
     await vm.saveRow(vm.priceRows[0])
-    expect(apiMock.llmAdminSavePrice).toHaveBeenCalledWith(expect.objectContaining({
-      provider: 'openai',
-      model: 'gpt-4o',
-      enabled: true,
-    }))
+    expect(apiMock.llmAdminSavePrice).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'openai',
+        model: 'gpt-4o',
+        enabled: true,
+      }),
+    )
 
     vm.newRow.model = 'gpt-new'
     vm.newRow.input_price_per_1k = 0.1

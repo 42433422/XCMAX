@@ -63,9 +63,7 @@ describe('agentRunsApi', () => {
     expect(apiMock.get).toHaveBeenCalledWith('/api/agent/runs/run%2F1/events', {
       after_event_id: 'evt_1',
     })
-    expect(agentRunsApi.eventStreamPath('run/1', 'evt/1')).toBe(
-      '/api/agent/runs/run%2F1/events/stream?after_event_id=evt%2F1',
-    )
+    expect(agentRunsApi.eventStreamPath('run/1', 'evt/1')).toBe('/api/agent/runs/run%2F1/events/stream?after_event_id=evt%2F1')
   })
 
   it('reads and archives durable tasks', async () => {

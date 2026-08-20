@@ -11,14 +11,7 @@ const { EXPERT_TABS, tab } = useModAuthoringContext()
 
 <template>
   <nav class="tabs">
-    <button
-      v-for="t in EXPERT_TABS"
-      :key="t.id"
-      type="button"
-      class="tab"
-      :class="{ active: tab === t.id }"
-      @click="tab = t.id"
-    >
+    <button v-for="t in EXPERT_TABS" :key="t.id" type="button" class="tab" :class="{ active: tab === t.id }" @click="tab = t.id">
       {{ t.label }}
     </button>
   </nav>

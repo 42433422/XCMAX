@@ -135,10 +135,14 @@ def test_debug_sandbox_copy(client, library: Path, project_home: Path, auth_head
 
 def test_focus_primary(client, library: Path, auth_headers: dict):
     client.post(
-        "/api/mods/create", json={"mod_id": "p-a", "display_name": "A"}, headers=auth_headers
+        "/api/mods/create",
+        json={"mod_id": "p-a", "display_name": "A"},
+        headers=auth_headers,
     )
     client.post(
-        "/api/mods/create", json={"mod_id": "p-b", "display_name": "B"}, headers=auth_headers
+        "/api/mods/create",
+        json={"mod_id": "p-b", "display_name": "B"},
+        headers=auth_headers,
     )
     r = client.post("/api/debug/focus-primary", json={"mod_id": "p-b"}, headers=auth_headers)
     assert r.status_code == 200, r.text
@@ -194,7 +198,8 @@ def test_sync_push_pull(tmp_path, monkeypatch):
     monkeypatch.setattr("modstore_server.app.project_root", lambda: tmp_path / "ph")
 
     monkeypatch.setattr(
-        "modstore_server.api.market_routes.assert_email_outbound_configured", lambda: None
+        "modstore_server.api.market_routes.assert_email_outbound_configured",
+        lambda: None,
     )
     monkeypatch.setattr(
         "modstore_server.api.market_routes.generate_verification_code", lambda: "999999"
@@ -255,7 +260,9 @@ def test_xcagi_loading_status_mocked(mock_client_cls, client):
 
 def test_delete_mod(client, auth_headers: dict):
     client.post(
-        "/api/mods/create", json={"mod_id": "del-me", "display_name": "D"}, headers=auth_headers
+        "/api/mods/create",
+        json={"mod_id": "del-me", "display_name": "D"},
+        headers=auth_headers,
     )
     r = client.delete("/api/mods/del-me", headers=auth_headers)
     assert r.status_code == 200
@@ -288,7 +295,8 @@ def test_admin_reset_user_password_then_login(client, monkeypatch):
     import uuid
 
     monkeypatch.setattr(
-        "modstore_server.api.market_routes.assert_email_outbound_configured", lambda: None
+        "modstore_server.api.market_routes.assert_email_outbound_configured",
+        lambda: None,
     )
     monkeypatch.setattr(
         "modstore_server.api.market_routes.generate_verification_code", lambda: "999999"

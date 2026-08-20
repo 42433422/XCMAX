@@ -1,3 +1,4 @@
+# mypy: disable-error-code="misc"
 """Tests for app.infrastructure.llm.model_router — ModelRouter 路由判定与 token 估算。
 
 覆盖路由规则的 7 条优先级路径 + 配置加载 + 向后兼容（enabled=False 时回退默认 tier）。

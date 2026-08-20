@@ -5,7 +5,11 @@ import uuid
 from pathlib import Path
 
 from modstore_server.llm_api import _membership_meta
-from modstore_server.llm_billing import UsageMeter, calculate_charge, usage_from_response
+from modstore_server.llm_billing import (
+    UsageMeter,
+    calculate_charge,
+    usage_from_response,
+)
 from modstore_server.models import AiModelPrice
 
 

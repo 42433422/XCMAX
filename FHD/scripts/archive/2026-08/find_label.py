@@ -1,8 +1,11 @@
 """
 使用 glob 找到文件
 """
+
 import glob
 import os
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 # 搜索所有类似文件
 files = glob.glob(r"e:\FHD\**\*PE*.png", recursive=True) + glob.glob(
@@ -20,5 +23,5 @@ try:
     for item in os.listdir(r"e:\FHD"):
         if "PE" in item or "封固" in item:
             print(f"  - {item}")
-except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"  错误: {e}")

@@ -20,7 +20,7 @@ async def analyze_audio():
             duration = chunk.get("duration", 0) / 10000000
             word_count += 1
             char_count += len(word)
-            print(f"  [{offset:.2f}s-{offset+duration:.2f}s] '{word}' ({len(word)}字符)")
+            print(f"  [{offset:.2f}s-{offset + duration:.2f}s] '{word}' ({len(word)}字符)")
         elif chunk.get("type") == "audio":
             len(chunk.get("data", b""))
 

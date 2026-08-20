@@ -9,6 +9,7 @@ import zipfile
 from pathlib import Path
 
 from modstore_server.employee_six_dimension import compute_six_dimension_report
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.workbench_api import _employee_handlers_contract_ok
 
 
@@ -114,7 +115,7 @@ def _py_compile_all(pack: Path) -> bool:
         for py in pack.rglob("*.py"):
             py_compile.compile(str(py), doraise=True)
         return True
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return False
 
 

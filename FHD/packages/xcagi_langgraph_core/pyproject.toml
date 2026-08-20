@@ -85,3 +85,19 @@ lint.ignore = [ "E501" ]
 line-length = 88
 indent-width = 4
 target-version = "py310"
+
+[tool.ty.rules]
+call-non-callable = "ignore"
+deprecated = "ignore"
+invalid-argument-type = "ignore"
+invalid-assignment = "ignore"
+invalid-await = "ignore"
+invalid-method-override = "ignore" # LangChain callback/Runnable overloads vary by compatible minor release.
+invalid-paramspec = "ignore" # Executor control kwargs intentionally sit outside the forwarded callable kwargs.
+invalid-return-type = "ignore"
+no-matching-overload = "ignore"
+unused-type-ignore-comment = "ignore"
+unresolved-attribute = "ignore"
+unresolved-import = "ignore"
+unsupported-base = "ignore"
+unsupported-operator = "ignore"

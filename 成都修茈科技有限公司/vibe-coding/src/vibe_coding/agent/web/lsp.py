@@ -32,8 +32,11 @@ from __future__ import annotations
 
 import json
 import sys
-from dataclasses import asdict, dataclass, field
-from typing import Any, Callable, Dict, IO, Optional
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from typing import IO, Any
+
+from vibe_coding.operational_errors import BOUNDARY_ERRORS
 
 from ...facade import VibeCoder
 
@@ -49,11 +52,11 @@ class LSPMessage:
     """
 
     jsonrpc: str = "2.0"
-    id: Optional[str | int] = None
+    id: str | int | None = None
     method: str = ""
     params: dict[str, Any] = field(default_factory=dict)
     result: Any = None
-    error: Optional[dict[str, Any]] = None
+    error: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {"jsonrpc": self.jsonrpc}
@@ -104,7 +107,7 @@ def handle_lsp_request(coder: VibeCoder, request: LSPMessage) -> LSPMessage:
         )
     try:
         result = handler(coder, params)
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:
         return LSPMessage(
             id=request.id,
             error={
@@ -220,7 +223,7 @@ class LSPServer:
 
     @staticmethod
     def _read_message(stream: IO[bytes]) -> LSPMessage | None:
-        headers: Dict[str, str] = {}
+        headers: dict[str, str] = {}
         while True:
             line = stream.readline()
             if not line:

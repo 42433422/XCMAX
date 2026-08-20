@@ -37,7 +37,10 @@ def test_csv_read_convert_writes_json():
             template_path=None,
             payload={},
             ctx={},
-            rule_spec={"default_output_relpath": "outputs/data.json", "output_schema": []},
+            rule_spec={
+                "default_output_relpath": "outputs/data.json",
+                "output_schema": [],
+            },
         )
         assert out.is_file()
         data = json.loads(out.read_text(encoding="utf-8"))
@@ -72,7 +75,10 @@ def test_csv_generate_convert_writes_csv():
                 template_path=None,
                 payload={},
                 ctx={},
-                rule_spec={"default_output_relpath": "outputs/output.csv", "output_schema": []},
+                rule_spec={
+                    "default_output_relpath": "outputs/output.csv",
+                    "output_schema": [],
+                },
             )
         )
         assert out.is_file()

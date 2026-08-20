@@ -34,7 +34,10 @@ function mermaidEscapeLabel(text: unknown): string {
     .slice(0, 80)
 }
 
-export function computeGraphSummary(nodes: unknown, edges: unknown): { counts: Record<string, number>; warnings: string[]; unreachableIds: unknown[] } {
+export function computeGraphSummary(
+  nodes: unknown,
+  edges: unknown,
+): { counts: Record<string, number>; warnings: string[]; unreachableIds: unknown[] } {
   const ns = asNodeList(nodes)
   const es = asEdgeList(edges)
   const counts: Record<string, number> = {}

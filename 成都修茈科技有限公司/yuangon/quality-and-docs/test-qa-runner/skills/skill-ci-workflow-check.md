@@ -2,16 +2,17 @@
 
 ## 元信息
 
-| 字段 | 值 |
-|------|----|
-| skill_id | `skill-ci-workflow-check` |
-| 所属员工 | `test-qa-runner` |
-| 业务域 | CI 工作流中测试步骤的完整性与正确性检查 |
-| 版本 | 1.0.0 |
+| 字段     | 值                                      |
+| -------- | --------------------------------------- |
+| skill_id | `skill-ci-workflow-check`               |
+| 所属员工 | `test-qa-runner`                        |
+| 业务域   | CI 工作流中测试步骤的完整性与正确性检查 |
+| 版本     | 1.0.0                                   |
 
 ## 1. 静态阶段
 
 **执行逻辑**：
+
 ```
 1. 读取 .github/workflows/ci-*.yml 中的测试步骤
 2. 检查是否覆盖以下测试框架：
@@ -26,6 +27,7 @@
 ```
 
 **输出 schema**：
+
 ```json
 {
   "status": "ok | fail",
@@ -41,11 +43,11 @@
 
 ## 2. 动态触发条件
 
-| 触发类型 | 规则 |
-|----------|------|
-| 框架缺失 | `frameworks_missing.length > 0` |
-| 门禁未启用 | `coverage_gate_enabled == false` |
-| CI 变更 | `.github/workflows/ci-*.yml` 文件发生变更 |
+| 触发类型   | 规则                                      |
+| ---------- | ----------------------------------------- |
+| 框架缺失   | `frameworks_missing.length > 0`           |
+| 门禁未启用 | `coverage_gate_enabled == false`          |
+| CI 变更    | `.github/workflows/ci-*.yml` 文件发生变更 |
 
 ## 3. 动态阶段
 

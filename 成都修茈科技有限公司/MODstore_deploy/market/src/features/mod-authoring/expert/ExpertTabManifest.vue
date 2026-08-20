@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { useModAuthoringContext } from '../composables/useModAuthoringContext'
 
-const { manifestText, manifestSaveWarnings, savingManifest, saveManifest, loading, reload } =
-  useModAuthoringContext()
+const { manifestText, manifestSaveWarnings, savingManifest, saveManifest, loading, reload } = useModAuthoringContext()
 </script>
 
 <template>

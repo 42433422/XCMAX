@@ -1,4 +1,5 @@
-import {readBuildEdition,
+import {
+  readBuildEdition,
   shouldAutoEnableMinimalPlatformShell,
   shouldAutoEnablePlatformShell,
   hasInstalledAccountCustomMod,
@@ -95,29 +96,19 @@ export const INDUSTRY_DELIVERY_ROUTE_NAMES = new Set<string>([
  * - 已安装账号定制 Mod（太阳鸟/奇士美等 entitlement 直发场景）。
  * 未走引导且无定制时保持初始化的 5 项核心壳菜单。
  */
-export function shouldExposeIndustrySidebar(
-  installedModIds: Iterable<string>,
-  hostPackAcknowledged = false,
-): boolean {
+export function shouldExposeIndustrySidebar(installedModIds: Iterable<string>, hostPackAcknowledged = false): boolean {
   if (hostPackAcknowledged) return true
   return hasInstalledAccountCustomMod(installedModIds)
 }
 
-export function resolvePlatformShellMenuKeys(
-  installedModIds: Iterable<string>,
-  hostPackAcknowledged = false,
-): Set<string> {
+export function resolvePlatformShellMenuKeys(installedModIds: Iterable<string>, hostPackAcknowledged = false): Set<string> {
   const keys = new Set(SHELL_CORE_MENU_KEYS)
   if (!shouldExposeIndustrySidebar(installedModIds, hostPackAcknowledged)) return keys
   for (const k of INDUSTRY_DELIVERY_ERP_MENU_KEYS) keys.add(k)
   return keys
 }
 
-export function isIndustryDeliveryRouteName(
-  routeName: string,
-  installedModIds: Iterable<string>,
-  hostPackAcknowledged = false,
-): boolean {
+export function isIndustryDeliveryRouteName(routeName: string, installedModIds: Iterable<string>, hostPackAcknowledged = false): boolean {
   const name = String(routeName || '').trim()
   if (!name || !INDUSTRY_DELIVERY_ROUTE_NAMES.has(name)) return false
   return shouldExposeIndustrySidebar(installedModIds, hostPackAcknowledged)
@@ -138,17 +129,14 @@ export function isMinimalEditionBuild(): boolean {
 
 export function isGenericEditionBuild(): boolean {
   if (readBuildEdition() === 'generic') return true
-  const def = String(import.meta.env.VITE_XCAGI_DEFAULT_PLATFORM_SHELL || '').trim().toLowerCase()
+  const def = String(import.meta.env.VITE_XCAGI_DEFAULT_PLATFORM_SHELL || '')
+    .trim()
+    .toLowerCase()
   return def === '1' || def === 'true' || def === 'yes'
 }
 
 export function isShellEditionBuild(): boolean {
   return isMinimalEditionBuild() || isGenericEditionBuild()
-}
-
-/** @deprecated 使用 isGenericEditionBuild */
-function isDefaultPlatformShellBuild(): boolean {
-  return isGenericEditionBuild()
 }
 
 /**
@@ -185,7 +173,9 @@ export function bootstrapEditionDefaults(): void {
 }
 
 export function isEnterpriseProductSkuBuild(): boolean {
-  const raw = String(import.meta.env.VITE_XCAGI_PRODUCT_SKU || '').trim().toLowerCase()
+  const raw = String(import.meta.env.VITE_XCAGI_PRODUCT_SKU || '')
+    .trim()
+    .toLowerCase()
   return raw === 'enterprise'
 }
 
@@ -233,7 +223,9 @@ export function isPlatformShellModeEnabled(): boolean {
       /* ignore */
     }
   }
-  const env = String(import.meta.env.VITE_XCAGI_PLATFORM_SHELL || '').trim().toLowerCase()
+  const env = String(import.meta.env.VITE_XCAGI_PLATFORM_SHELL || '')
+    .trim()
+    .toLowerCase()
   if (env === '1' || env === 'true' || env === 'yes') return true
   if (isShellEditionBuild()) return true
   return false

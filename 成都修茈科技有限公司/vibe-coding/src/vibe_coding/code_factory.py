@@ -28,20 +28,9 @@ from pathlib import Path
 from typing import Any, Literal
 from uuid import uuid4
 
-# Keywords that identify "project documentation / README generator" briefs.
-# When detected AND project_root is provided, richer "how-to-do-it" guidance
-# is injected into the prompt so the LLM generates a skill that actually uses
-# the project analysis data instead of outputting generic template boilerplate.
-_DOC_BRIEF_KEYWORDS = frozenset({
-    "readme", "文档", "documentation", "docs", "说明", "使用说明",
-    "项目分析", "项目介绍", "技术栈", "目录结构", "安装指南", "部署指南",
-    "生成文档", "generate readme", "generate docs", "project doc",
-})
+from vibe_coding.operational_errors import BOUNDARY_ERRORS
 
-from ._internals import CodeFunctionSignature, CodeSkill, CodeSkillVersion, CodeTestCase
-from .runtime import CodeSandbox, CodeValidator, JsonCodeSkillStore
-from .runtime.validator import ALLOWED_IMPORT_MODULES
-from ._internals import TriggerPolicy
+from ._internals import CodeFunctionSignature, CodeSkill, CodeSkillVersion, CodeTestCase, TriggerPolicy
 from .nl.llm import LLMClient
 from .nl.parsing import JSONParseError, safe_parse_json_object
 from .nl.prompts import (
@@ -50,6 +39,33 @@ from .nl.prompts import (
     CODE_DIRECT_PROMPT,
     CODE_HUNK_REPAIR_PROMPT,
     CODE_REPAIR_PROMPT,
+)
+from .runtime import CodeSandbox, CodeValidator, JsonCodeSkillStore
+from .runtime.validator import ALLOWED_IMPORT_MODULES
+
+# Keywords that identify "project documentation / README generator" briefs.
+# When detected AND project_root is provided, richer "how-to-do-it" guidance
+# is injected into the prompt so the LLM generates a skill that actually uses
+# the project analysis data instead of outputting generic template boilerplate.
+_DOC_BRIEF_KEYWORDS = frozenset(
+    {
+        "readme",
+        "文档",
+        "documentation",
+        "docs",
+        "说明",
+        "使用说明",
+        "项目分析",
+        "项目介绍",
+        "技术栈",
+        "目录结构",
+        "安装指南",
+        "部署指南",
+        "生成文档",
+        "generate readme",
+        "generate docs",
+        "project doc",
+    }
 )
 
 GenerationMode = Literal["direct", "brief_first"]
@@ -115,9 +131,7 @@ class ProjectAnalysis:
             payload["readme_snippet"] = self.readme_snippet[:800]
         if self.git_info:
             payload["git_info"] = self.git_info
-        return "## 项目结构分析（只读上下文）\n```json\n" + json.dumps(
-            payload, ensure_ascii=False, indent=2
-        ) + "\n```"
+        return "## 项目结构分析（只读上下文）\n```json\n" + json.dumps(payload, ensure_ascii=False, indent=2) + "\n```"
 
 
 def _slug(value: str, fallback: str = "skill") -> str:
@@ -156,9 +170,7 @@ def _apply_hunks_inline(source: str, raw_hunks: list[Any]) -> str:
     try:
         outcome = apply_hunks_to_source(source, raw_hunks, raise_on_failure=True)
     except HunkApplyError as exc:
-        raise VibeCodingError(
-            f"hunk[{exc.hunk_index}] could not be located: {exc.reason}"
-        ) from exc
+        raise VibeCodingError(f"hunk[{exc.hunk_index}] could not be located: {exc.reason}") from exc
     return outcome.source
 
 
@@ -254,7 +266,8 @@ def _read_text_head(path: Path, *, limit: int) -> str:
 
 
 def _summarise_package_json(raw: dict[str, Any]) -> dict[str, Any]:
-    scripts = raw.get("scripts") if isinstance(raw.get("scripts"), dict) else {}
+    scripts_value = raw.get("scripts")
+    scripts: dict[str, Any] = scripts_value if isinstance(scripts_value, dict) else {}
     deps: dict[str, Any] = {}
     for key in ("dependencies", "devDependencies"):
         value = raw.get(key)
@@ -373,9 +386,11 @@ def _infer_tech_stack(
         if name not in stack:
             stack.append(name)
 
-    pkg = manifests.get("package.json") or {}
-    deps = pkg.get("notable_dependencies") if isinstance(pkg.get("notable_dependencies"), dict) else {}
-    scripts = pkg.get("scripts") if isinstance(pkg.get("scripts"), dict) else {}
+    pkg: dict[str, Any] = manifests.get("package.json") or {}
+    deps_value = pkg.get("notable_dependencies")
+    deps: dict[str, Any] = deps_value if isinstance(deps_value, dict) else {}
+    scripts_value = pkg.get("scripts")
+    scripts: dict[str, Any] = scripts_value if isinstance(scripts_value, dict) else {}
     if pkg:
         add("Node.js")
     if "vue" in deps or languages.get("vue"):
@@ -408,11 +423,23 @@ def _infer_tech_stack(
 def _find_entry_points(root: Path, *, limit: int = 10) -> list[str]:
     """Return entry-point files actually present under *root*."""
     candidates = [
-        "main.py", "app.py", "server.py", "run.py", "manage.py",
-        "index.ts", "index.js", "main.ts", "main.js",
-        "src/main.ts", "src/main.js", "src/index.ts", "src/index.js",
-        "src/app.ts", "src/app.js",
-        "src/main.py", "src/app.py",
+        "main.py",
+        "app.py",
+        "server.py",
+        "run.py",
+        "manage.py",
+        "index.ts",
+        "index.js",
+        "main.ts",
+        "main.js",
+        "src/main.ts",
+        "src/main.js",
+        "src/index.ts",
+        "src/index.js",
+        "src/app.ts",
+        "src/app.js",
+        "src/main.py",
+        "src/app.py",
     ]
     found: list[str] = []
     for cand in candidates:
@@ -487,7 +514,7 @@ def _probe_git_info(root: Path) -> dict[str, Any]:
         if result.returncode == 0:
             lines = [ln.strip() for ln in result.stdout.strip().splitlines() if ln.strip()]
             return {"recent_commits": lines[:5]}
-    except Exception:  # noqa: BLE001 — git absent, timeout, or any OS error
+    except BOUNDARY_ERRORS:
         pass
     return {}
 
@@ -560,16 +587,13 @@ class NLCodeSkillFactory:
         except VibeCodingError as first_error:
             last_error = first_error
             for _ in range(max(0, int(retries))):
-                retry_user = (
-                    "下面是上一轮无法解析的原始输出，请只重发合法 JSON：\n\n"
-                    f"{raw[:12000]}"
-                )
+                retry_user = f"下面是上一轮无法解析的原始输出，请只重发合法 JSON：\n\n{raw[:12000]}"
                 raw = self.llm.chat(JSON_ONLY_RETRY_PROMPT, retry_user, json_mode=False)
                 try:
                     return _parse_json(raw)
                 except VibeCodingError as exc:
                     last_error = exc
-            raise last_error
+            raise last_error from first_error
 
     def generate(
         self,
@@ -641,10 +665,7 @@ class NLCodeSkillFactory:
         spec_payload = self._llm_json(BRIEF_FIRST_SPEC_PROMPT, brief)
         partial = self._payload_to_spec(spec_payload, default_deps=deps, allow_missing_code=True)
 
-        code_user = (
-            "规约如下，请严格按规约写函数体。\n\n"
-            f"{json.dumps(spec_payload, ensure_ascii=False, indent=2)}"
-        )
+        code_user = f"规约如下，请严格按规约写函数体。\n\n{json.dumps(spec_payload, ensure_ascii=False, indent=2)}"
         code_payload = self._llm_json(BRIEF_FIRST_CODE_PROMPT, code_user)
         partial.source_code = str(code_payload.get("source_code") or "").strip()
         if not partial.source_code:
@@ -664,8 +685,7 @@ class NLCodeSkillFactory:
                 break
             spec = self._repair_round(spec, issues)
         raise VibeCodingError(
-            f"Failed to produce safe code after {self.max_repair_rounds} repair rounds; "
-            f"last issues: {last_issues}"
+            f"Failed to produce safe code after {self.max_repair_rounds} repair rounds; last issues: {last_issues}"
         )
 
     # -------------------------------------------------------------- comparison helpers
@@ -686,20 +706,12 @@ class NLCodeSkillFactory:
         if actual == expected:
             return True
         # Rule 2: actual wraps expected under "result"
-        if (
-            isinstance(actual, dict)
-            and tuple(actual.keys()) == ("result",)
-            and actual["result"] == expected
-        ):
+        if isinstance(actual, dict) and tuple(actual.keys()) == ("result",) and actual["result"] == expected:
             return True
         # Rule 3: expected wraps actual under "result"
-        if (
-            isinstance(expected, dict)
-            and tuple(expected.keys()) == ("result",)
-            and expected["result"] == actual
-        ):
-            return True
-        return False
+        return bool(
+            isinstance(expected, dict) and tuple(expected.keys()) == ("result",) and expected["result"] == actual
+        )
 
     # -------------------------------------------------------------- issue collection
 
@@ -718,9 +730,7 @@ class NLCodeSkillFactory:
         for tc in spec.test_cases:
             result = self.sandbox.execute(spec.source_code, spec.function_name, tc.input_data)
             if not result.success:
-                issues.append(
-                    f"sandbox_failed:{tc.case_id}:{result.error_type}:{result.error_message}"
-                )
+                issues.append(f"sandbox_failed:{tc.case_id}:{result.error_type}:{result.error_message}")
                 continue
             if tc.expected_output is None:
                 continue
@@ -733,9 +743,7 @@ class NLCodeSkillFactory:
                 # a typo / stale value in the LLM-generated test expectation.
                 tc.expected_output = result.output
                 continue
-            issues.append(
-                f"sandbox_mismatch:{tc.case_id}:{result.output}!={tc.expected_output}"
-            )
+            issues.append(f"sandbox_mismatch:{tc.case_id}:{result.output}!={tc.expected_output}")
         return issues
 
     def _repair_round(self, spec: _Spec, issues: list[str]) -> _Spec:
@@ -871,7 +879,9 @@ class NLCodeSkillFactory:
     ) -> _Spec:
         function_name = str(payload.get("function_name") or "").strip()
         if not function_name and allow_missing_code:
-            function_name = _slug(str(payload.get("skill_id") or payload.get("name") or "run"), fallback="run").replace("-", "_")
+            function_name = _slug(str(payload.get("skill_id") or payload.get("name") or "run"), fallback="run").replace(
+                "-", "_"
+            )
         if not function_name:
             raise VibeCodingError("LLM payload missing function_name")
         if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", function_name):
@@ -915,12 +925,11 @@ class NLCodeSkillFactory:
             if isinstance(exp, str):
                 try:
                     import json as _json
+
                     exp = _json.loads(exp)
-                except Exception:
+                except BOUNDARY_ERRORS:
                     pass  # keep as string
-            test_cases.append(
-                CodeTestCase(case_id=cid, input_data=dict(inp), expected_output=exp)
-            )
+            test_cases.append(CodeTestCase(case_id=cid, input_data=dict(inp), expected_output=exp))
         if not test_cases:
             raise VibeCodingError("test_cases collapsed to empty after normalization")
 

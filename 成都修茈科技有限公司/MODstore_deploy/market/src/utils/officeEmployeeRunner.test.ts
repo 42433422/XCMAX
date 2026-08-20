@@ -12,12 +12,7 @@ vi.mock('../api', () => ({
   },
 }))
 
-import {
-  pickGenerateFormat,
-  runOfficeGeneratePhase,
-  runOfficeReadPhase,
-  type OfficeReadFileItem,
-} from './officeEmployeeRunner'
+import { pickGenerateFormat, runOfficeGeneratePhase, runOfficeReadPhase, type OfficeReadFileItem } from './officeEmployeeRunner'
 
 describe('pickGenerateFormat', () => {
   it('returns word for empty userText and empty attachments', () => {
@@ -244,11 +239,13 @@ describe('runOfficeGeneratePhase', () => {
       format: 'ppt',
       userText: '增强这份演示',
       templateFile: template,
-      readResults: [{
-        name: 'source.pptx',
-        employeeId: 'ppt-full-read-employee',
-        result: { llm_context_text: JSON.stringify({ slides: [{ title: 'Opening' }] }) },
-      }],
+      readResults: [
+        {
+          name: 'source.pptx',
+          employeeId: 'ppt-full-read-employee',
+          result: { llm_context_text: JSON.stringify({ slides: [{ title: 'Opening' }] }) },
+        },
+      ],
     })
     expect(result.downloads[0].filename).toBe('output.pptx')
     expect(employeeExecuteFileMock).toHaveBeenCalledWith(
@@ -269,19 +266,26 @@ describe('runOfficeGeneratePhase', () => {
     employeeExecuteFileMock
       .mockResolvedValueOnce({ ok: false, error: 'generator rejected input' })
       .mockRejectedValueOnce(new Error('generator offline'))
-    const readResults = [{
-      name: 'source.docx',
-      employeeId: 'word-full-read-employee',
-      result: {
-        output_downloads: [{
-          job_id: 'job-json', filename: 'document_full.json', label: 'Document JSON',
-        }],
+    const readResults = [
+      {
+        name: 'source.docx',
+        employeeId: 'word-full-read-employee',
+        result: {
+          output_downloads: [
+            {
+              job_id: 'job-json',
+              filename: 'document_full.json',
+              label: 'Document JSON',
+            },
+          ],
+        },
       },
-    }]
+    ]
     const rejected = await runOfficeGeneratePhase({ format: 'word', readResults })
     expect(rejected.errors).toContain('generator rejected input')
     const offline = await runOfficeGeneratePhase({
-      format: 'word', userText: 'Generate from this description',
+      format: 'word',
+      userText: 'Generate from this description',
     })
     expect(offline.errors).toEqual(['generator offline'])
   })

@@ -7,6 +7,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+BOUNDARY_ERRORS = (Exception,)
+
 # 兜底加载 .env（如果尚未加载）
 try:
     from dotenv import load_dotenv
@@ -15,7 +17,7 @@ try:
     for _env_file in (_repo_root / ".env", _repo_root / "XCAGI" / ".env"):
         if _env_file.is_file():
             load_dotenv(_env_file, override=False)
-except Exception:
+except BOUNDARY_ERRORS:
     pass
 
 logger = logging.getLogger(__name__)
@@ -125,7 +127,9 @@ def sdk_import_error() -> str | None:
     try:
         from alipay import AliPay  # noqa: F401
     except ImportError:
-        return "未安装 python-alipay-sdk，请在运行环境执行: pip install python-alipay-sdk"
+        return (
+            "未安装 python-alipay-sdk，请在运行环境执行: pip install python-alipay-sdk"
+        )
     return None
 
 
@@ -211,15 +215,30 @@ def _try_precreate(
 
     try:
         result = client.api_alipay_trade_precreate(**kwargs)
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         logger.exception("alipay.trade.precreate 请求异常")
-        return {"ok": False, "qr_code": None, "message": f"请求支付宝异常: {e}", "raw": None}
+        return {
+            "ok": False,
+            "qr_code": None,
+            "message": f"请求支付宝异常: {e}",
+            "raw": None,
+        }
 
     if not isinstance(result, dict):
-        return {"ok": False, "qr_code": None, "message": "支付宝返回格式异常", "raw": None}
+        return {
+            "ok": False,
+            "qr_code": None,
+            "message": "支付宝返回格式异常",
+            "raw": None,
+        }
 
     if result.get("code") == "10000" and result.get("qr_code"):
-        return {"ok": True, "qr_code": str(result["qr_code"]), "message": None, "raw": result}
+        return {
+            "ok": True,
+            "qr_code": str(result["qr_code"]),
+            "message": None,
+            "raw": result,
+        }
 
     msg = result.get("sub_msg") or result.get("msg") or "预下单失败"
     return {"ok": False, "qr_code": None, "message": str(msg), "raw": result}
@@ -267,7 +286,13 @@ def _try_page_pay(
     try:
         client = build_client()
     except RuntimeError as e:
-        return {"ok": False, "order_string": None, "gateway": "", "message": str(e), "raw": None}
+        return {
+            "ok": False,
+            "order_string": None,
+            "gateway": "",
+            "message": str(e),
+            "raw": None,
+        }
 
     kwargs = _build_common_kwargs(
         out_trade_no=out_trade_no,
@@ -281,9 +306,15 @@ def _try_page_pay(
     try:
         # python-alipay-sdk 3.x 的 page_pay 返回可直接拼在网关后的 order_string
         order_string = client.api_alipay_trade_page_pay(**kwargs)
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         logger.exception("alipay.trade.page.pay 请求异常")
-        return {"ok": False, "order_string": None, "gateway": "", "message": f"请求支付宝异常: {e}", "raw": None}
+        return {
+            "ok": False,
+            "order_string": None,
+            "gateway": "",
+            "message": f"请求支付宝异常: {e}",
+            "raw": None,
+        }
 
     gateway = "https://openapi.alipay.com/gateway.do"
     if alipay_debug():
@@ -322,7 +353,13 @@ def _try_wap_pay(
     try:
         client = build_client()
     except RuntimeError as e:
-        return {"ok": False, "order_string": None, "gateway": "", "message": str(e), "raw": None}
+        return {
+            "ok": False,
+            "order_string": None,
+            "gateway": "",
+            "message": str(e),
+            "raw": None,
+        }
 
     kwargs = _build_common_kwargs(
         out_trade_no=out_trade_no,
@@ -338,9 +375,15 @@ def _try_wap_pay(
 
     try:
         order_string = client.api_alipay_trade_wap_pay(**kwargs)
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         logger.exception("alipay.trade.wap.pay 请求异常")
-        return {"ok": False, "order_string": None, "gateway": "", "message": f"请求支付宝异常: {e}", "raw": None}
+        return {
+            "ok": False,
+            "order_string": None,
+            "gateway": "",
+            "message": f"请求支付宝异常: {e}",
+            "raw": None,
+        }
 
     gateway = "https://openapi.alipay.com/gateway.do"
     if alipay_debug():
@@ -382,7 +425,10 @@ def create_pay_order(
     }
     """
     ua = (user_agent or "").lower()
-    is_mobile = any(k in ua for k in ("mobile", "android", "iphone", "ipad", "ipod", "windows phone"))
+    is_mobile = any(
+        k in ua
+        for k in ("mobile", "android", "iphone", "ipad", "ipod", "windows phone")
+    )
 
     # 先尝试网站支付（page 或 wap）
     if is_mobile:
@@ -398,7 +444,9 @@ def create_pay_order(
         if res["ok"]:
             gateway = res.get("gateway", "")
             order_string = res.get("order_string", "")
-            redirect_url = f"{gateway}?{order_string}" if gateway and order_string else None
+            redirect_url = (
+                f"{gateway}?{order_string}" if gateway and order_string else None
+            )
             return {
                 "ok": True,
                 "type": "wap",
@@ -479,10 +527,16 @@ def _standard_api_result(
     return {"ok": False, "message": str(msg), "raw": result}
 
 
-def query_order(*, out_trade_no: str | None = None, trade_no: str | None = None) -> dict[str, Any]:
+def query_order(
+    *, out_trade_no: str | None = None, trade_no: str | None = None
+) -> dict[str, Any]:
     """alipay.trade.query：查询交易状态。out_trade_no / trade_no 至少一个。"""
     if not out_trade_no and not trade_no:
-        return {"ok": False, "message": "out_trade_no 与 trade_no 至少提供一个", "raw": None}
+        return {
+            "ok": False,
+            "message": "out_trade_no 与 trade_no 至少提供一个",
+            "raw": None,
+        }
     try:
         client = build_client()
     except RuntimeError as e:
@@ -494,7 +548,7 @@ def query_order(*, out_trade_no: str | None = None, trade_no: str | None = None)
         if trade_no:
             kwargs["trade_no"] = trade_no
         result = client.api_alipay_trade_query(**kwargs)
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         logger.exception("alipay.trade.query 请求异常")
         return {"ok": False, "message": f"请求支付宝异常: {e}", "raw": None}
     return _standard_api_result(result, "交易查询失败")
@@ -514,7 +568,11 @@ def refund_order(
     - out_request_no 未传则默认等于 out_trade_no（即全额退款时只退一次）。
     """
     if not out_trade_no and not trade_no:
-        return {"ok": False, "message": "out_trade_no 与 trade_no 至少提供一个", "raw": None}
+        return {
+            "ok": False,
+            "message": "out_trade_no 与 trade_no 至少提供一个",
+            "raw": None,
+        }
     try:
         client = build_client()
     except RuntimeError as e:
@@ -530,16 +588,22 @@ def refund_order(
         if refund_reason:
             kwargs["refund_reason"] = refund_reason
         result = client.api_alipay_trade_refund(**kwargs)
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         logger.exception("alipay.trade.refund 请求异常")
         return {"ok": False, "message": f"请求支付宝异常: {e}", "raw": None}
     return _standard_api_result(result, "退款失败")
 
 
-def close_order(*, out_trade_no: str | None = None, trade_no: str | None = None) -> dict[str, Any]:
+def close_order(
+    *, out_trade_no: str | None = None, trade_no: str | None = None
+) -> dict[str, Any]:
     """alipay.trade.close：关闭未付款交易。out_trade_no 与 trade_no 至少一个。"""
     if not out_trade_no and not trade_no:
-        return {"ok": False, "message": "out_trade_no 与 trade_no 至少提供一个", "raw": None}
+        return {
+            "ok": False,
+            "message": "out_trade_no 与 trade_no 至少提供一个",
+            "raw": None,
+        }
     try:
         client = build_client()
     except RuntimeError as e:
@@ -551,13 +615,15 @@ def close_order(*, out_trade_no: str | None = None, trade_no: str | None = None)
         if trade_no:
             kwargs["trade_no"] = trade_no
         result = client.api_alipay_trade_close(**kwargs)
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         logger.exception("alipay.trade.close 请求异常")
         return {"ok": False, "message": f"请求支付宝异常: {e}", "raw": None}
     return _standard_api_result(result, "关闭交易失败")
 
 
-def query_refund(*, out_trade_no: str, out_request_no: str | None = None) -> dict[str, Any]:
+def query_refund(
+    *, out_trade_no: str, out_request_no: str | None = None
+) -> dict[str, Any]:
     """alipay.trade.fastpay.refund.query：退款查询。out_request_no 默认等于 out_trade_no。"""
     if not out_trade_no:
         return {"ok": False, "message": "out_trade_no 必填", "raw": None}
@@ -571,7 +637,7 @@ def query_refund(*, out_trade_no: str, out_request_no: str | None = None) -> dic
         result = client.api_alipay_trade_fastpay_refund_query(
             req_no, out_trade_no=out_trade_no
         )
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         logger.exception("alipay.trade.fastpay.refund.query 请求异常")
         return {"ok": False, "message": f"请求支付宝异常: {e}", "raw": None}
     return _standard_api_result(result, "退款查询失败")
@@ -581,7 +647,9 @@ def _private_key_source() -> str:
     """返回私钥来源描述：env / path / missing。"""
     if _pem_from_env("ALIPAY_APP_PRIVATE_KEY"):
         return "env"
-    if _env("ALIPAY_APP_PRIVATE_KEY_PATH") and _read_file_from_env("ALIPAY_APP_PRIVATE_KEY_PATH"):
+    if _env("ALIPAY_APP_PRIVATE_KEY_PATH") and _read_file_from_env(
+        "ALIPAY_APP_PRIVATE_KEY_PATH"
+    ):
         return "path"
     return "missing"
 
@@ -590,7 +658,9 @@ def _public_key_source() -> str:
     """返回支付宝公钥来源描述：env / path / bundled / missing。"""
     if _pem_from_env("ALIPAY_ALIPAY_PUBLIC_KEY"):
         return "env"
-    if _env("ALIPAY_ALIPAY_PUBLIC_KEY_PATH") and _read_file_from_env("ALIPAY_ALIPAY_PUBLIC_KEY_PATH"):
+    if _env("ALIPAY_ALIPAY_PUBLIC_KEY_PATH") and _read_file_from_env(
+        "ALIPAY_ALIPAY_PUBLIC_KEY_PATH"
+    ):
         return "path"
     if _default_bundled_alipay_public_key():
         return "bundled"

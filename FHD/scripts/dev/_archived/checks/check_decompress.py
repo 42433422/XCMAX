@@ -1,3 +1,4 @@
+# mypy: disable-error-code="import-not-found, str-bytes-safe"
 import sys
 
 sys.path.insert(0, r"E:\FHD\XCAGI\resources\wechat-decrypt")
@@ -18,7 +19,7 @@ rows = cur.fetchall()
 for i, row in enumerate(rows):
     raw = row[0]
     ct = row[1]
-    print(f"=== 消息 {i+1} ===")
+    print(f"=== 消息 {i + 1} ===")
     print(f"ct (compression type): {ct}")
     print(f"raw bytes length: {len(raw) if raw else 0}")
     print(f"raw[:50]: {raw[:50] if raw else None}")

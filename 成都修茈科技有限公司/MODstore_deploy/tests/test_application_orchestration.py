@@ -7,7 +7,10 @@ from pathlib import Path
 from modstore_server.application.catalog import CatalogApplicationService
 from modstore_server.application.employee import EmployeeApplicationService
 from modstore_server.eventing.bus import InMemoryNeuroBus
-from modstore_server.eventing.contracts import CATALOG_PACKAGE_PUBLISHED, EMPLOYEE_PACK_REGISTERED
+from modstore_server.eventing.contracts import (
+    CATALOG_PACKAGE_PUBLISHED,
+    EMPLOYEE_PACK_REGISTERED,
+)
 from modstore_server.infrastructure.catalog_repository import (
     InMemoryCatalogPackageStorage,
     InMemoryCatalogRepository,
@@ -43,7 +46,12 @@ def test_catalog_register_publishes_event(tmp_path):
         author_id=1,
         mod_id="m1",
         pack_id="p1",
-        package_record={"id": "p1", "version": "1.0.0", "name": "N", "artifact": "employee_pack"},
+        package_record={
+            "id": "p1",
+            "version": "1.0.0",
+            "name": "N",
+            "artifact": "employee_pack",
+        },
         package_file=zf,
         price=0.0,
     )

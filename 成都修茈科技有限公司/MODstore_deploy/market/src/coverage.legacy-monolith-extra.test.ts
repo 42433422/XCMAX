@@ -49,27 +49,23 @@ describe('legacyMonolith focused branch coverage', () => {
     mocks.fetchZipBlob.mockResolvedValue(new Blob(['zip']))
     mocks.requestBlob.mockResolvedValue(new Blob(['blob']))
     mocks.requestStreamBlob.mockResolvedValue(new Blob(['stream']))
-    vi.stubGlobal('fetch', vi.fn(async () => ({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      json: async () => transportPayload,
-      blob: async () => new Blob(['download']),
-      arrayBuffer: async () => new TextEncoder().encode('payload').buffer,
-    })))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => transportPayload,
+        blob: async () => new Blob(['download']),
+        arrayBuffer: async () => new TextEncoder().encode('payload').buffer,
+      })),
+    )
 
     let invoked = 0
     for (const candidate of Object.values(legacyApi)) {
       if (typeof candidate !== 'function') continue
       try {
-        await candidate(
-          'coverage-id' as never,
-          'coverage-value' as never,
-          {} as never,
-          [] as never,
-          1 as never,
-          false as never,
-        )
+        await candidate('coverage-id' as never, 'coverage-value' as never, {} as never, [] as never, 1 as never, false as never)
       } catch {
         // Endpoint-specific validation is covered separately; this matrix
         // verifies that every exported compatibility adapter executes its
@@ -83,9 +79,7 @@ describe('legacyMonolith focused branch coverage', () => {
 
   it('falls back for employee pack export route variants and surfaces stale route hints', async () => {
     const zip = new Blob(['zip'], { type: 'application/zip' })
-    mocks.fetchZipBlob
-      .mockRejectedValueOnce(new Error(JSON.stringify({ detail: [{ msg: 'not found' }] })))
-      .mockResolvedValueOnce(zip)
+    mocks.fetchZipBlob.mockRejectedValueOnce(new Error(JSON.stringify({ detail: [{ msg: 'not found' }] }))).mockResolvedValueOnce(zip)
 
     await expect(legacyApi.exportEmployeePackZip('mod 1', -8)).resolves.toBe(zip)
     expect(mocks.fetchZipBlob.mock.calls[0][0]).toBe('/api/mods/mod%201/export-employee-pack?workflow_index=0')
@@ -134,7 +128,9 @@ describe('legacyMonolith focused branch coverage', () => {
 
   it('refreshes wallet after billed LLM chat and maps PPTX blob responses', async () => {
     mocks.requestJson.mockResolvedValueOnce({ billed: true, charge_amount: 0, content: 'ok' })
-    await expect(legacyApi.llmChat('deepseek', 'deepseek-chat', [{ role: 'user', content: 'hi' }])).resolves.toMatchObject({ content: 'ok' })
+    await expect(legacyApi.llmChat('deepseek', 'deepseek-chat', [{ role: 'user', content: 'hi' }])).resolves.toMatchObject({
+      content: 'ok',
+    })
 
     const jsonError = new TextEncoder().encode(JSON.stringify({ detail: 'ppt rejected' })).buffer
     const pptBytes = new TextEncoder().encode('pptx').buffer

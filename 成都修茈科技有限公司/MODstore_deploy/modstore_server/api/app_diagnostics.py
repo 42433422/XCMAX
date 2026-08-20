@@ -7,28 +7,34 @@ import os
 
 from fastapi import FastAPI
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
 def maybe_mount_vibe_subapp(app: FastAPI) -> None:
-    if (os.environ.get("MODSTORE_ENABLE_VIBE_WEB") or "").strip() not in ("1", "true", "yes"):
+    if (os.environ.get("MODSTORE_ENABLE_VIBE_WEB") or "").strip() not in (
+        "1",
+        "true",
+        "yes",
+    ):
         return
     try:
         from modstore_server.integrations.vibe_adapter import vibe_available
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return
     if not vibe_available():
         logger.info("MODSTORE_ENABLE_VIBE_WEB=1 但 vibe-coding 未安装,跳过挂载")
         return
     try:
         from vibe_coding.agent.web import create_app as create_vibe_app
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("vibe_coding.agent.web 加载失败,跳过 /api/vibe 挂载")
         return
     try:
         app.mount("/api/vibe", create_vibe_app())
         logger.info("已挂载 vibe-coding sub-app 到 /api/vibe")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("挂载 /api/vibe 失败")
 
 
@@ -51,5 +57,5 @@ def register_neurobus_diagnostics(app: FastAPI) -> None:
             }
 
         logger.info("Registered NeuroBus diagnostics (/api/neurobus/stats, /api/neurobus/health)")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.debug("NeuroBus diagnostics skipped", exc_info=True)

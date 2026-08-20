@@ -1,11 +1,7 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import type { DirectGeneratedFile } from '../utils/directGeneratedFiles'
-import {
-  planComposerAttachmentStrip,
-  planHeaderGeneratedStrip,
-  WB_HEADER_FILE_STRIP_MAX_VISIBLE,
-} from '../utils/workbenchFileStripPlan'
+import { planComposerAttachmentStrip, planHeaderGeneratedStrip, WB_HEADER_FILE_STRIP_MAX_VISIBLE } from '../utils/workbenchFileStripPlan'
 
 /** 工作台附件在管家收纳中的最小字段（与 WorkbenchHomeView 直传附件项兼容）。 */
 export type ButlerTrayAttachment = {
@@ -43,22 +39,12 @@ export const useButlerWorkbenchTrayStore = defineStore('butlerWorkbenchTray', ()
     }
   })
 
-  const stripAttachments = computed(() =>
-    attachments.value.slice(0, stripPlan.value.stripAttachmentCount),
-  )
-  const stripGenerated = computed(() =>
-    generated.value.slice(0, stripPlan.value.stripGeneratedCount),
-  )
-  const overflowAttachments = computed(() =>
-    attachments.value.slice(stripPlan.value.stripAttachmentCount),
-  )
-  const overflowGenerated = computed(() =>
-    generated.value.slice(stripPlan.value.stripGeneratedCount),
-  )
+  const stripAttachments = computed(() => attachments.value.slice(0, stripPlan.value.stripAttachmentCount))
+  const stripGenerated = computed(() => generated.value.slice(0, stripPlan.value.stripGeneratedCount))
+  const overflowAttachments = computed(() => attachments.value.slice(stripPlan.value.stripAttachmentCount))
+  const overflowGenerated = computed(() => generated.value.slice(stripPlan.value.stripGeneratedCount))
   const overflowCount = computed(() => stripPlan.value.overflowCount)
-  const hasTrayContent = computed(
-    () => overflowCount.value > 0 || generated.value.length > 0 || attachments.value.length > 0,
-  )
+  const hasTrayContent = computed(() => overflowCount.value > 0 || generated.value.length > 0 || attachments.value.length > 0)
 
   function setWorkbenchFiles(payload: {
     attachments?: ButlerTrayAttachment[]

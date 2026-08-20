@@ -7,7 +7,7 @@ import sys
 import tempfile
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 PatchProducer = Callable[[dict[str, Any]], str]
 PatchVerifier = Callable[[dict[str, Any], str], dict[str, Any]]
@@ -106,11 +106,15 @@ def pytest_node_verifier(project: Path) -> PatchVerifier:
     """Build a verifier that runs a pytest node before/after applying patch_files."""
 
     def _verify(instance: dict[str, Any], patch: str) -> dict[str, Any]:
-        files = instance.get("files") if isinstance(instance.get("files"), dict) else {}
-        patch_files = (
+        files = cast(
+            dict[str, Any],
+            instance.get("files") if isinstance(instance.get("files"), dict) else {},
+        )
+        patch_files = cast(
+            dict[str, Any],
             instance.get("patch_files")
             if isinstance(instance.get("patch_files"), dict)
-            else {}
+            else {},
         )
         test_id = str(instance.get("test_id") or "")
         if not files or not patch_files or not test_id or not patch:
@@ -156,7 +160,7 @@ def load_oracle_cases(project: str | Path) -> list[dict[str, Any]]:
         package_root = Path(__file__).resolve().parents[1]
         path = package_root / ORACLE_MANIFEST
     payload = json.loads(path.read_text(encoding="utf-8"))
-    cases = payload.get("cases") if isinstance(payload, dict) else []
+    cases = cast(list[Any], payload.get("cases") if isinstance(payload, dict) else [])
     return [dict(case) for case in cases if isinstance(case, dict)]
 
 

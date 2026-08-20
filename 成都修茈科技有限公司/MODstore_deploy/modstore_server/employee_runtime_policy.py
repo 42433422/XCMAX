@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, Tuple
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 DEFAULT_POLICY_NAME = "employee_runtime_policy.json"
 
@@ -26,7 +28,7 @@ def policy_path() -> Path:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def load_policy() -> Dict[str, Any]:
@@ -36,7 +38,7 @@ def load_policy() -> Dict[str, Any]:
         return data if isinstance(data, dict) else {"employees": {}, "schema_version": 1}
     except FileNotFoundError:
         return {"employees": {}, "schema_version": 1}
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return {"employees": {}, "schema_version": 1}
 
 
@@ -48,7 +50,8 @@ def save_policy(policy: Dict[str, Any]) -> Dict[str, Any]:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
     )
     tmp.replace(path)
     return {**payload, "path": str(path)}
@@ -129,7 +132,7 @@ def apply_policy_to_config(
         multiplier = float(policy.get("max_tokens_multiplier") or 1.0)
         if multiplier > 0 and model.get("max_tokens"):
             model["max_tokens"] = max(512, int(int(model.get("max_tokens") or 4000) * multiplier))
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     append = str(policy.get("system_prompt_append") or "").strip()
     if append:

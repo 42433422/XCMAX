@@ -9,25 +9,25 @@
 
 ## 主要业务模块（按 tags 分组）
 
-| 前缀 | 模块 | 主要能力 |
-| --- | --- | --- |
-| `/api/auth` | 认证 | 登录、注册、刷新、忘记密码 |
-| `/api/market` | 商品市场 | catalog 浏览、搜索、详情、收藏、购买、评价 |
-| `/api/templates` | **模板市场（M3）** | 浏览、安装、从工作流另存为模板 |
-| `/api/wallet` | 钱包 | 余额、流水、充值 |
-| `/api/payment` | 支付 | 支付宝/微信下单、回调（实际由 Java 服务承载） |
-| `/api/employees` | AI 员工 | 列表、状态、执行 |
-| `/api/workflow` | 工作流 | CRUD、节点/边、触发器、沙盒、执行、**版本管理（M1）** |
-| `/api/notifications` | 站内消息 | 列表、已读 |
-| `/api/knowledge`, `/api/knowledge/v2` | 知识库 | 文档/向量检索 |
-| `/api/llm` | 大模型 | 模型清单、BYOK 凭据 |
-| `/api/openapi-connectors` | OpenAPI 连接器 | 解析、调用第三方 API |
-| `/api/realtime/ws` | 实时 | WebSocket 事件流 |
-| `/api/developer/*` | **开发者门户（M2）** | PAT 管理、Webhook 订阅、投递日志、测试发送 |
-| `/v1/mod-sync/*` | **Mod 同步** | 使用账号 JWT 或带 `mod:sync` 的 PAT，将库与 XCAGI `mods/` 推送/拉回 |
-| `/api/webhooks` | Webhook 管理 | 历史投递重放（仅管理员） |
-| `/api/refunds` | 退款 | 申请、审批 |
-| `/api/analytics` | 数据 | 看板汇总 |
+| 前缀                                  | 模块                 | 主要能力                                                            |
+| ------------------------------------- | -------------------- | ------------------------------------------------------------------- |
+| `/api/auth`                           | 认证                 | 登录、注册、刷新、忘记密码                                          |
+| `/api/market`                         | 商品市场             | catalog 浏览、搜索、详情、收藏、购买、评价                          |
+| `/api/templates`                      | **模板市场（M3）**   | 浏览、安装、从工作流另存为模板                                      |
+| `/api/wallet`                         | 钱包                 | 余额、流水、充值                                                    |
+| `/api/payment`                        | 支付                 | 支付宝/微信下单、回调（实际由 Java 服务承载）                       |
+| `/api/employees`                      | AI 员工              | 列表、状态、执行                                                    |
+| `/api/workflow`                       | 工作流               | CRUD、节点/边、触发器、沙盒、执行、**版本管理（M1）**               |
+| `/api/notifications`                  | 站内消息             | 列表、已读                                                          |
+| `/api/knowledge`, `/api/knowledge/v2` | 知识库               | 文档/向量检索                                                       |
+| `/api/llm`                            | 大模型               | 模型清单、BYOK 凭据                                                 |
+| `/api/openapi-connectors`             | OpenAPI 连接器       | 解析、调用第三方 API                                                |
+| `/api/realtime/ws`                    | 实时                 | WebSocket 事件流                                                    |
+| `/api/developer/*`                    | **开发者门户（M2）** | PAT 管理、Webhook 订阅、投递日志、测试发送                          |
+| `/v1/mod-sync/*`                      | **Mod 同步**         | 使用账号 JWT 或带 `mod:sync` 的 PAT，将库与 XCAGI `mods/` 推送/拉回 |
+| `/api/webhooks`                       | Webhook 管理         | 历史投递重放（仅管理员）                                            |
+| `/api/refunds`                        | 退款                 | 申请、审批                                                          |
+| `/api/analytics`                      | 数据                 | 看板汇总                                                            |
 
 ## 工作流：从 0 到 1 的端到端
 

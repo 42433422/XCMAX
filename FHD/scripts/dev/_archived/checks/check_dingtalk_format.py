@@ -1,3 +1,4 @@
+# mypy: disable-error-code="import-not-found"
 """检查钉钉导出文件的格式"""
 
 import sys

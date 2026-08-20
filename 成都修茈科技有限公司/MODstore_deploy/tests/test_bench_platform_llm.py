@@ -51,7 +51,10 @@ def test_resolve_platform_bench_llm_no_env_falls_back_to_first_provider(monkeypa
     def _fake_platform_key(provider: str):
         return "sk-test" if provider == "deepseek" else None
 
-    with patch("modstore_server.llm_key_resolver.platform_api_key", side_effect=_fake_platform_key):
+    with patch(
+        "modstore_server.llm_key_resolver.platform_api_key",
+        side_effect=_fake_platform_key,
+    ):
         from modstore_server.services.llm import resolve_platform_bench_llm
 
         prov, mdl = resolve_platform_bench_llm()
@@ -81,7 +84,10 @@ def test_resolve_platform_bench_llm_xiaomi_uses_current_default_model(monkeypatc
     def _fake_platform_key(provider: str):
         return "sk-test" if provider == "xiaomi" else None
 
-    with patch("modstore_server.llm_key_resolver.platform_api_key", side_effect=_fake_platform_key):
+    with patch(
+        "modstore_server.llm_key_resolver.platform_api_key",
+        side_effect=_fake_platform_key,
+    ):
         from modstore_server.services.llm import resolve_platform_bench_llm
 
         prov, mdl = resolve_platform_bench_llm()
@@ -97,7 +103,10 @@ def test_resolve_platform_bench_llm_minimax_uses_current_default_model(monkeypat
     def _fake_platform_key(provider: str):
         return "sk-test" if provider == "minimax" else None
 
-    with patch("modstore_server.llm_key_resolver.platform_api_key", side_effect=_fake_platform_key):
+    with patch(
+        "modstore_server.llm_key_resolver.platform_api_key",
+        side_effect=_fake_platform_key,
+    ):
         from modstore_server.services.llm import resolve_platform_bench_llm
 
         prov, mdl = resolve_platform_bench_llm()
@@ -142,7 +151,10 @@ def test_parse_machine_score_from_text():
 
 
 def test_peer_review_gate_env(monkeypatch):
-    from modstore_server.employee_bench import _peer_review_gate_enabled, _peer_review_min_score
+    from modstore_server.employee_bench import (
+        _peer_review_gate_enabled,
+        _peer_review_min_score,
+    )
 
     monkeypatch.delenv("MODSTORE_BENCH_PEER_REVIEW_GATE", raising=False)
     assert _peer_review_gate_enabled() is False
@@ -192,19 +204,26 @@ async def test_chat_dispatch_via_platform_only_calls_dispatch_without_byok():
     fake_result = {"ok": True, "content": "hello"}
 
     with (
-        patch("modstore_server.llm_key_resolver.platform_api_key", return_value="sk-platform"),
+        patch(
+            "modstore_server.llm_key_resolver.platform_api_key",
+            return_value="sk-platform",
+        ),
         patch(
             "modstore_server.llm_key_resolver.platform_base_url",
             return_value="https://api.deepseek.com",
         ),
         patch(
-            "modstore_server.llm_chat_proxy.chat_dispatch", new=AsyncMock(return_value=fake_result)
+            "modstore_server.llm_chat_proxy.chat_dispatch",
+            new=AsyncMock(return_value=fake_result),
         ) as mock_dispatch,
     ):
         from modstore_server.services.llm import chat_dispatch_via_platform_only
 
         result = await chat_dispatch_via_platform_only(
-            "deepseek", "deepseek-chat", [{"role": "user", "content": "hi"}], max_tokens=100
+            "deepseek",
+            "deepseek-chat",
+            [{"role": "user", "content": "hi"}],
+            max_tokens=100,
         )
 
     assert result["ok"] is True
@@ -409,7 +428,10 @@ async def test_run_and_score_bench_passes_override_to_single_task():
     rubric_json = '[{"task_id":"1-1","score":85,"note":"符合任务"}]'
 
     with (
-        patch("modstore_server.employee_bench._run_single_task", side_effect=fake_run_single_task),
+        patch(
+            "modstore_server.employee_bench._run_single_task",
+            side_effect=fake_run_single_task,
+        ),
         patch("modstore_server.employee_bench._read_employee_brief", return_value=("", "")),
         patch(
             "modstore_server.employee_bench._run_five_dim_audit",

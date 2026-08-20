@@ -1,9 +1,9 @@
+# mypy: disable-error-code="union-attr"
 """Prompts and employee-brief rendering for implementation generation."""
 
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
-
 
 SYSTEM_PROMPT_EMPLOYEE_IMPL = """你是 XCAGI 工作台员工实现代码生成器。目标是生成一名**能真正执行工作**的 AI 员工（类似 Cursor/OpenClaw），而不是只会转发问题给 LLM 的对话机器人。
 

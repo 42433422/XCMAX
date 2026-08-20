@@ -43,7 +43,9 @@ def get_config():
 
 
 @router.post("/api/export/fhd-shell-mods")
-def api_export_fhd_shell_mods(body: ExportFhdShellDTO = Body(default_factory=ExportFhdShellDTO)):
+def api_export_fhd_shell_mods(
+    body: ExportFhdShellDTO = Body(default_factory=ExportFhdShellDTO),
+):
     fhd = library_paths.fhd_repo_root()
     if not fhd.is_dir():
         raise HTTPException(500, "无法定位 FHD 仓库根目录（预期 MODstore 位于 FHD/MODstore）")

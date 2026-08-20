@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """为 MODstore daily_digest_surface_audit 注入 AI 市场登录（modstore_token）。"""
+
 from __future__ import annotations
 
 import sys
@@ -13,7 +14,7 @@ TARGET = Path(
 
 MARKER = "_path_needs_market_auth"
 
-DOC_OLD = "- ``MODSTORE_DAILY_SURFACE_ANALYSIS_USER_ID``：分析调用 bench LLM 使用的用户 ID（默认同 ``MODSTORE_DAILY_BRIEF_USER_ID`` 或 ``0``）。\n\"\"\""
+DOC_OLD = '- ``MODSTORE_DAILY_SURFACE_ANALYSIS_USER_ID``：分析调用 bench LLM 使用的用户 ID（默认同 ``MODSTORE_DAILY_BRIEF_USER_ID`` 或 ``0``）。\n"""'
 DOC_NEW = """- ``MODSTORE_DAILY_SURFACE_ANALYSIS_USER_ID``：分析调用 bench LLM 使用的用户 ID（默认同 ``MODSTORE_DAILY_BRIEF_USER_ID`` 或 ``0``）。
 - ``MODSTORE_SURFACE_AUDIT_USER`` / ``MODSTORE_SURFACE_AUDIT_PASSWORD``：AI 市场 SPA 截图前登录（默认 ``admin`` / ``admin123``）。
 - ``MODSTORE_SURFACE_AUDIT_API_URL``：登录 API 根（默认 ``MODSTORE_INTERNAL_API_BASE`` 或站点 ``base_url``）。

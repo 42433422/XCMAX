@@ -155,7 +155,7 @@ def test_successful_task_event_only_dispatches_explicit_subscription(fresh_db, m
     )
     monkeypatch.setattr(
         "modstore_server.incident_bus.execute_employee_task",
-        lambda employee_id, *_args, **_kwargs: employee_calls.append(employee_id) or {"ok": True},
+        lambda employee_id, *_args, **_kwargs: (employee_calls.append(employee_id) or {"ok": True}),
     )
     monkeypatch.setattr(
         "modstore_server.node_coordinator.claim_incident_for_node",
@@ -189,7 +189,7 @@ def test_successful_task_event_without_subscription_is_record_only(fresh_db, mon
     calls: list[str] = []
     monkeypatch.setattr(
         "modstore_server.incident_bus.execute_employee_task",
-        lambda employee_id, *_args, **_kwargs: calls.append(employee_id) or {"ok": True},
+        lambda employee_id, *_args, **_kwargs: (calls.append(employee_id) or {"ok": True}),
     )
     monkeypatch.setattr(
         "modstore_server.node_coordinator.claim_incident_for_node",
@@ -258,7 +258,7 @@ def test_change_request_submission_only_dispatches_explicit_auditor(fresh_db, mo
     )
     monkeypatch.setattr(
         "modstore_server.incident_bus.execute_employee_task",
-        lambda employee_id, *_args, **_kwargs: employee_calls.append(employee_id) or {"ok": True},
+        lambda employee_id, *_args, **_kwargs: (employee_calls.append(employee_id) or {"ok": True}),
     )
     monkeypatch.setattr(
         "modstore_server.node_coordinator.claim_incident_for_node",
@@ -331,7 +331,7 @@ def test_binding_only_workflow_signal_skips_generic_incident_fanout(
     )
     monkeypatch.setattr(
         "modstore_server.incident_bus.execute_employee_task",
-        lambda employee_id, *_args, **_kwargs: employee_calls.append(employee_id) or {"ok": True},
+        lambda employee_id, *_args, **_kwargs: (employee_calls.append(employee_id) or {"ok": True}),
     )
     monkeypatch.setattr(
         "modstore_server.node_coordinator.claim_incident_for_node",

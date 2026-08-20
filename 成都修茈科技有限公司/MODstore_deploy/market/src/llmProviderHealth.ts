@@ -24,10 +24,7 @@ export function hasAnyLlmKey(row: LlmKeyRow | null | undefined): boolean {
  * 钱包磁贴「点亮」语义：仍以 BYOK 为主；仅小米允许仅凭服务端平台密钥视为磁贴「已配置」
  * （与钱包页文案一致）；其它厂商仅用平台密钥时磁贴 dim，避免误判为「我个人的密钥」已就位。
  */
-export function walletTileKeyConfigured(
-  provider: string,
-  row: LlmKeyRow | null | undefined,
-): boolean {
+export function walletTileKeyConfigured(provider: string, row: LlmKeyRow | null | undefined): boolean {
   if (!row) return false
   if (row.has_user_override) return true
   if (row.has_platform_key && provider === 'xiaomi') return true
@@ -108,10 +105,7 @@ const WARN_SUBSTR = [
 
 export type LlmCatalogIssue = 'warn' | 'danger' | 'expired' | null
 
-export function classifyLlmCatalogIssue(
-  error: string | null | undefined,
-  fetchSource: string | null | undefined,
-): LlmCatalogIssue {
+export function classifyLlmCatalogIssue(error: string | null | undefined, fetchSource: string | null | undefined): LlmCatalogIssue {
   const e = (error && String(error).toLowerCase()) || ''
   const src = fetchSource ? String(fetchSource) : ''
 

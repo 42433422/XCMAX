@@ -40,9 +40,7 @@
     {
       "path": "/api/mods/llm-status",
       "status": "",
-      "llm_keys": [
-        { "provider": "", "status": "", "quota_remaining": 0 }
-      ],
+      "llm_keys": [{ "provider": "", "status": "", "quota_remaining": 0 }],
       "response_time_ms": 0,
       "error": ""
     },

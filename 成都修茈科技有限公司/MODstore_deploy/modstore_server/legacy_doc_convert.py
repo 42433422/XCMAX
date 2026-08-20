@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 from modstore_server.legacy_doc_vendor import (
     ensure_docx_for_extract,
     is_ole_compound_file,

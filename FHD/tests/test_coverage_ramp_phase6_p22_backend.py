@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """COVERAGE_RAMP Phase 6 round 22: backend medium-coverage modules.
 
 补充覆盖以下模块的未覆盖分支（已有部分覆盖于 phase6_p7-p11）：

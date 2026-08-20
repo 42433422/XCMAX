@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -67,14 +71,14 @@ def _parse_intake_llm_json(text: str) -> _facade().Dict[str, _facade().Any]:
     try:
         data = _facade().json.loads(raw)
         return data if isinstance(data, dict) else {}
-    except Exception:
+    except RECOVERABLE_ERRORS:
         start = raw.find("{")
         end = raw.rfind("}")
         if start >= 0 and end > start:
             try:
                 data = _facade().json.loads(raw[start : end + 1])
                 return data if isinstance(data, dict) else {}
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 pass
     return {}
 
@@ -87,12 +91,12 @@ async def butler_corp_intake_fill(
 ):
     """联系页问卷：根据用户描述生成结构化草稿（公开、限流、无工具）。"""
     _facade()._corp_chat_rate_allow(_facade()._public_contact_client_key(request))
-    (provider, model, api_key, base_url) = _facade()._resolve_corp_credentials(db)
+    provider, model, api_key, base_url = _facade()._resolve_corp_credentials(db)
     draft_hint = ""
     if body.current_draft:
         try:
             draft_hint = _facade().json.dumps(body.current_draft, ensure_ascii=False)[:1500]
-        except Exception:
+        except RECOVERABLE_ERRORS:
             draft_hint = ""
     user_content = body.message.strip()
     if draft_hint:
@@ -117,7 +121,7 @@ async def butler_corp_intake_fill(
         if not raw_response.get("ok"):
             raise RuntimeError(raw_response.get("error") or "corp-intake-fill failed")
         text = (raw_response.get("content") or "").strip()
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         _facade().logger.warning("corp-intake-fill LLM failed: %s", exc)
         raise _facade().HTTPException(503, "智能预填暂不可用，请直接在左侧表单填写。") from exc
     parsed = _facade()._parse_intake_llm_json(text)
@@ -144,7 +148,7 @@ async def butler_chat(
     user: _facade().User = _facade().Depends(_facade()._get_current_user),
 ):
     """非流式 Butler 对话。"""
-    (provider, model, api_key, key_source, base_url) = _facade()._resolve_butler_credentials(
+    provider, model, api_key, key_source, base_url = _facade()._resolve_butler_credentials(
         db, user.id
     )
     is_byok = key_source == "user_override"
@@ -161,7 +165,11 @@ async def butler_chat(
     else:
         preauth = _facade().estimate_preauthorization(db, provider, model, msgs, body.max_tokens)
         hold = await wallet.preauthorize(
-            _facade().authorization_header(request), preauth, provider, model, request_id
+            _facade().authorization_header(request),
+            preauth,
+            provider,
+            model,
+            request_id,
         )
     conv = _facade()._get_or_create_conversation(db, user.id, body.conversation_id, provider, model)
     try:
@@ -193,7 +201,7 @@ async def butler_chat(
                 )
                 if r.status_code < 400:
                     tool_resp = r.json()
-            except Exception as e:
+            except RECOVERABLE_ERRORS as e:
                 _facade().logger.warning("butler tool call failed, fallback to plain: %s", e)
         if tool_resp:
             raw_response = tool_resp
@@ -224,13 +232,13 @@ async def butler_chat(
             text = raw_response.get("content", "")
             tool_calls = []
             usage = raw_response.get("usage") or {}
-        (page_tool_calls, readonly_brief) = _facade()._partition_butler_tool_calls(
+        page_tool_calls, readonly_brief = _facade()._partition_butler_tool_calls(
             tool_calls, user=user, db=db
         )
         tool_calls = page_tool_calls
         if readonly_brief:
             text = ((text or "").strip() + "\n\n" + readonly_brief).strip()
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         await wallet.release(hold)
         _facade().save_failure_log(db, user.id, provider, model, request_id, str(exc), conv.id)
         raise _facade().HTTPException(500, f"LLM 调用失败：{exc}")
@@ -238,7 +246,12 @@ async def butler_chat(
     charge = _facade().calculate_charge(db, provider, model, usage_obj)
     if not is_byok:
         await wallet.settle(
-            hold, _facade().authorization_header(request), charge, provider, model, request_id
+            hold,
+            _facade().authorization_header(request),
+            charge,
+            provider,
+            model,
+            request_id,
         )
     _facade().save_success_log(
         db, user.id, provider, model, request_id, usage_obj, float(charge), conv.id
@@ -282,7 +295,7 @@ async def butler_chat_stream(
             yield f"data: {_facade().json.dumps({'text': '', 'done': True, 'conversation_id': result.get('conversation_id'), 'charge_amount': result.get('charge_amount'), 'tool_calls': result.get('tool_calls') or []}, ensure_ascii=False)}\n\n"
 
         return _facade().StreamingResponse(admin_event_stream(), media_type="text/event-stream")
-    (provider, model, api_key, key_source, base_url) = _facade()._resolve_butler_credentials(
+    provider, model, api_key, key_source, base_url = _facade()._resolve_butler_credentials(
         db, user.id
     )
     msgs = _facade()._build_messages(body, body.page_context, user=user, db=db)
@@ -299,7 +312,11 @@ async def butler_chat_stream(
     else:
         preauth = _facade().estimate_preauthorization(db, provider, model, msgs, body.max_tokens)
         hold = await wallet.preauthorize(
-            _facade().authorization_header(request), preauth, provider, model, request_id
+            _facade().authorization_header(request),
+            preauth,
+            provider,
+            model,
+            request_id,
         )
     conv = _facade()._get_or_create_conversation(db, user.id, body.conversation_id, provider, model)
 
@@ -307,7 +324,12 @@ async def butler_chat_stream(
         collected = []
         try:
             async for chunk in _facade().chat_dispatch_stream(
-                provider, api_key, model, msgs, base_url=base_url, max_tokens=body.max_tokens
+                provider,
+                api_key,
+                model,
+                msgs,
+                base_url=base_url,
+                max_tokens=body.max_tokens,
             ):
                 if isinstance(chunk, str):
                     collected.append(chunk)
@@ -327,7 +349,14 @@ async def butler_chat_stream(
                         )
                     full_text = "".join(collected)
                     _facade().save_success_log(
-                        db, user.id, provider, model, request_id, usage_obj, float(charge), conv.id
+                        db,
+                        user.id,
+                        provider,
+                        model,
+                        request_id,
+                        usage_obj,
+                        float(charge),
+                        conv.id,
                     )
                     db.add(
                         _facade().ChatMessage(
@@ -342,7 +371,7 @@ async def butler_chat_stream(
                     )
                     db.commit()
                     yield f"data: {_facade().json.dumps({'text': '', 'done': True, 'conversation_id': conv.id, 'charge_amount': float(charge)}, ensure_ascii=False)}\n\n"
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             await wallet.release(hold)
             _facade().save_failure_log(db, user.id, provider, model, request_id, str(exc), conv.id)
             yield f"data: {_facade().json.dumps({'error': str(exc), 'done': True}, ensure_ascii=False)}\n\n"
@@ -369,7 +398,7 @@ async def record_butler_action(
             )
         )
         db.commit()
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         _facade().logger.warning("butler action log failed: %s", exc)
     return {"ok": True}
 
@@ -403,7 +432,7 @@ async def list_butler_skills(
                 for r in rows
             ]
         }
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         _facade().logger.warning("list butler skills failed: %s", exc)
         return {"items": []}
 
@@ -428,5 +457,5 @@ async def update_butler_skill_active(
         return {"ok": True, "id": skill_id, "is_active": body.is_active}
     except _facade().HTTPException:
         raise
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         raise _facade().HTTPException(500, str(exc)) from exc

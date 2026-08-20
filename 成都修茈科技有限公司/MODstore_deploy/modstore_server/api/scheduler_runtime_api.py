@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from modstore_server.employee_cron_registration_ledger import DEFERRED_STATUS, REGISTRATION_PREFIX
+from modstore_server.employee_cron_registration_ledger import (
+    DEFERRED_STATUS,
+    REGISTRATION_PREFIX,
+)
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.scheduler_runtime import get_runtime_status
 
 router = APIRouter(tags=["scheduler-runtime"])
@@ -104,10 +108,12 @@ def scheduler_runtime(stale_after_seconds: int | None = None) -> dict:
         "unregistered_observed_count": len(set(observed) - registered_ids - approval_required),
     }
     try:
-        from modstore_server.storage_pressure_self_heal import get_storage_pressure_status
+        from modstore_server.storage_pressure_self_heal import (
+            get_storage_pressure_status,
+        )
 
         runtime["storage_pressure"] = get_storage_pressure_status(limit=20)
-    except Exception as exc:  # pragma: no cover - observability must remain failure-safe.
+    except RECOVERABLE_ERRORS as exc:  # pragma: no cover - observability must remain failure-safe.
         runtime["storage_pressure"] = {
             "ok": False,
             "reason": "storage_pressure_status_unavailable",

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { mount } from '@vue/test-utils'
 import { ref } from 'vue'
 import { createRouter, createMemoryHistory } from 'vue-router'
 
@@ -52,9 +52,7 @@ vi.mock('@/composables/useDutyRosterLoopStatus', () => ({
 }))
 
 vi.mock('@/domain/yuangonDutyRoster', async () => {
-  const actual = await vi.importActual<typeof import('@/domain/yuangonDutyRoster')>(
-    '@/domain/yuangonDutyRoster',
-  )
+  const actual = await vi.importActual<typeof import('@/domain/yuangonDutyRoster')>('@/domain/yuangonDutyRoster')
   return { ...actual }
 })
 

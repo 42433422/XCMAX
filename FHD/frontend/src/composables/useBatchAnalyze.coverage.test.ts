@@ -779,9 +779,7 @@ describe('useBatchAnalyze - coverage ramp', () => {
       // '品名' 又是 '产品型号' 的别名，所以 products 的 产品型号 requiredTerm 匹配。
       // products (4/4=1.0) 与 materials (8/8=1.0) 同分，products 在 Object.entries
       // 顺序中先达到 1.0，所以 products 胜出。
-      const result = inferTemplateTypeByFields([
-        '原材料编码', '名称', '分类', '规格', '单位', '库存数量', '单价', '供应商',
-      ])
+      const result = inferTemplateTypeByFields(['原材料编码', '名称', '分类', '规格', '单位', '库存数量', '单价', '供应商'])
       expect(result.scopeKey).toBe('products')
       expect(result.templateType).toBe('产品目录')
       expect(result.matchScore).toBe(1)
@@ -905,10 +903,7 @@ describe('useBatchAnalyze - coverage ramp', () => {
 
     it('handles sheets with empty fields', () => {
       const { groupSheetsBySimilarity } = useBatchAnalyze()
-      const sheets = [
-        makeSheet({ sheetName: 'S1', fields: [] }),
-        makeSheet({ sheetName: 'S2', fields: [] }),
-      ]
+      const sheets = [makeSheet({ sheetName: 'S1', fields: [] }), makeSheet({ sheetName: 'S2', fields: [] })]
       const groups = groupSheetsBySimilarity(sheets)
       // 两个空字段表相似度为 1（both empty → 1）
       expect(groups.length).toBe(1)
@@ -945,18 +940,14 @@ describe('useBatchAnalyze - coverage ramp', () => {
 
     it('group name uses scope label', () => {
       const { groupSheetsBySimilarity } = useBatchAnalyze()
-      const sheets = [
-        makeSheet({ sheetName: 'S1', fields: ['产品型号', '产品名称', '数量', '单价', '金额'] }),
-      ]
+      const sheets = [makeSheet({ sheetName: 'S1', fields: ['产品型号', '产品名称', '数量', '单价', '金额'] })]
       const groups = groupSheetsBySimilarity(sheets)
       expect(groups[0].name).toContain('出货明细')
     })
 
     it('group name falls back to templateType when no scope label', () => {
       const { groupSheetsBySimilarity } = useBatchAnalyze()
-      const sheets = [
-        makeSheet({ sheetName: 'S1', fields: ['随便', '什么'] }),
-      ]
+      const sheets = [makeSheet({ sheetName: 'S1', fields: ['随便', '什么'] })]
       const groups = groupSheetsBySimilarity(sheets)
       // unknown scope → label 不存在 → 用 templateType '通用'
       expect(groups[0].name).toContain('通用')
@@ -964,9 +955,7 @@ describe('useBatchAnalyze - coverage ramp', () => {
 
     it('matchScore is rounded to integer percentage', () => {
       const { groupSheetsBySimilarity } = useBatchAnalyze()
-      const sheets = [
-        makeSheet({ sheetName: 'S1', fields: ['产品型号', '产品名称', '数量', '单价', '金额'] }),
-      ]
+      const sheets = [makeSheet({ sheetName: 'S1', fields: ['产品型号', '产品名称', '数量', '单价', '金额'] })]
       const groups = groupSheetsBySimilarity(sheets)
       expect(Number.isInteger(groups[0].matchScore)).toBe(true)
     })
@@ -1132,10 +1121,7 @@ describe('useBatchAnalyze - coverage ramp', () => {
       xlsxSheetToJsonMock.mockReturnValue([['型号', '价格']])
 
       const { extractAllSheets, store } = useBatchAnalyze()
-      const files = [
-        makeFile('a.xlsx'),
-        makeFile('b.xlsx'),
-      ]
+      const files = [makeFile('a.xlsx'), makeFile('b.xlsx')]
       const sheets = await extractAllSheets(files)
 
       expect(sheets.length).toBe(2)
@@ -1156,10 +1142,7 @@ describe('useBatchAnalyze - coverage ramp', () => {
       xlsxSheetToJsonMock.mockReturnValue([['型号']])
 
       const { extractAllSheets } = useBatchAnalyze()
-      const files = [
-        makeFile('bad.xlsx'),
-        makeFile('good.xlsx'),
-      ]
+      const files = [makeFile('bad.xlsx'), makeFile('good.xlsx')]
       const sheets = await extractAllSheets(files)
 
       expect(sheets.length).toBe(1)
@@ -1196,14 +1179,18 @@ describe('useBatchAnalyze - coverage ramp', () => {
       listTemplatesMock.mockResolvedValue({
         success: true,
         templates: [
-          { id: 't1', name: '出货明细模板', template_type: '出货明细', business_scope: 'orders', category: 'excel' },
+          {
+            id: 't1',
+            name: '出货明细模板',
+            template_type: '出货明细',
+            business_scope: 'orders',
+            category: 'excel',
+          },
         ],
       })
 
       const { analyzeAndGroup, store } = useBatchAnalyze()
-      store.addExtractedSheets([
-        makeSheet({ sheetName: 'S1', fields: ['产品型号', '产品名称', '数量', '单价', '金额'] }),
-      ])
+      store.addExtractedSheets([makeSheet({ sheetName: 'S1', fields: ['产品型号', '产品名称', '数量', '单价', '金额'] })])
 
       const groups = await analyzeAndGroup()
 
@@ -1225,14 +1212,18 @@ describe('useBatchAnalyze - coverage ramp', () => {
       listTemplatesMock.mockResolvedValue({
         success: true,
         templates: [
-          { id: 't1', name: 'PDF模板', template_type: '出货明细', business_scope: 'orders', category: 'pdf' },
+          {
+            id: 't1',
+            name: 'PDF模板',
+            template_type: '出货明细',
+            business_scope: 'orders',
+            category: 'pdf',
+          },
         ],
       })
 
       const { analyzeAndGroup, store } = useBatchAnalyze()
-      store.addExtractedSheets([
-        makeSheet({ sheetName: 'S1', fields: ['产品型号', '产品名称', '数量', '单价', '金额'] }),
-      ])
+      store.addExtractedSheets([makeSheet({ sheetName: 'S1', fields: ['产品型号', '产品名称', '数量', '单价', '金额'] })])
 
       const groups = await analyzeAndGroup()
       expect(groups[0].recommendedTemplateId).toBe('')
@@ -1242,9 +1233,7 @@ describe('useBatchAnalyze - coverage ramp', () => {
       listTemplatesMock.mockRejectedValue(new Error('network error'))
 
       const { analyzeAndGroup, store } = useBatchAnalyze()
-      store.addExtractedSheets([
-        makeSheet({ sheetName: 'S1', fields: ['产品型号', '产品名称', '数量', '单价', '金额'] }),
-      ])
+      store.addExtractedSheets([makeSheet({ sheetName: 'S1', fields: ['产品型号', '产品名称', '数量', '单价', '金额'] })])
 
       const groups = await analyzeAndGroup()
       expect(groups.length).toBe(1)
@@ -1272,14 +1261,18 @@ describe('useBatchAnalyze - coverage ramp', () => {
       listTemplatesMock.mockResolvedValue({
         success: true,
         templates: [
-          { id: 't1', name: 'T1', template_type: '其他', business_scope: 'orders', category: 'excel' },
+          {
+            id: 't1',
+            name: 'T1',
+            template_type: '其他',
+            business_scope: 'orders',
+            category: 'excel',
+          },
         ],
       })
 
       const { analyzeAndGroup, store } = useBatchAnalyze()
-      store.addExtractedSheets([
-        makeSheet({ sheetName: 'S1', fields: ['产品型号', '产品名称', '数量', '单价', '金额'] }),
-      ])
+      store.addExtractedSheets([makeSheet({ sheetName: 'S1', fields: ['产品型号', '产品名称', '数量', '单价', '金额'] })])
 
       const groups = await analyzeAndGroup()
       expect(groups[0].recommendedTemplateId).toBe('t1')
@@ -1289,14 +1282,18 @@ describe('useBatchAnalyze - coverage ramp', () => {
       listTemplatesMock.mockResolvedValue({
         success: true,
         templates: [
-          { id: 't2', name: 'T2', template_type: '出货明细', business_scope: '其他', category: 'excel' },
+          {
+            id: 't2',
+            name: 'T2',
+            template_type: '出货明细',
+            business_scope: '其他',
+            category: 'excel',
+          },
         ],
       })
 
       const { analyzeAndGroup, store } = useBatchAnalyze()
-      store.addExtractedSheets([
-        makeSheet({ sheetName: 'S1', fields: ['产品型号', '产品名称', '数量', '单价', '金额'] }),
-      ])
+      store.addExtractedSheets([makeSheet({ sheetName: 'S1', fields: ['产品型号', '产品名称', '数量', '单价', '金额'] })])
 
       const groups = await analyzeAndGroup()
       expect(groups[0].recommendedTemplateId).toBe('t2')
@@ -1305,15 +1302,11 @@ describe('useBatchAnalyze - coverage ramp', () => {
     it('uses fallback name when template name missing', async () => {
       listTemplatesMock.mockResolvedValue({
         success: true,
-        templates: [
-          { id: 't1', template_type: '出货明细', business_scope: 'orders', category: 'excel' },
-        ],
+        templates: [{ id: 't1', template_type: '出货明细', business_scope: 'orders', category: 'excel' }],
       })
 
       const { analyzeAndGroup, store } = useBatchAnalyze()
-      store.addExtractedSheets([
-        makeSheet({ sheetName: 'S1', fields: ['产品型号', '产品名称', '数量', '单价', '金额'] }),
-      ])
+      store.addExtractedSheets([makeSheet({ sheetName: 'S1', fields: ['产品型号', '产品名称', '数量', '单价', '金额'] })])
 
       const groups = await analyzeAndGroup()
       expect(groups[0].recommendedTemplateName).toBe('未命名模板')
@@ -1323,14 +1316,18 @@ describe('useBatchAnalyze - coverage ramp', () => {
       listTemplatesMock.mockResolvedValue({
         success: true,
         templates: [
-          { id: 't1', template_name: '模板A', template_type: '出货明细', business_scope: 'orders', category: 'excel' },
+          {
+            id: 't1',
+            template_name: '模板A',
+            template_type: '出货明细',
+            business_scope: 'orders',
+            category: 'excel',
+          },
         ],
       })
 
       const { analyzeAndGroup, store } = useBatchAnalyze()
-      store.addExtractedSheets([
-        makeSheet({ sheetName: 'S1', fields: ['产品型号', '产品名称', '数量', '单价', '金额'] }),
-      ])
+      store.addExtractedSheets([makeSheet({ sheetName: 'S1', fields: ['产品型号', '产品名称', '数量', '单价', '金额'] })])
 
       const groups = await analyzeAndGroup()
       expect(groups[0].recommendedTemplateName).toBe('模板A')
@@ -1344,10 +1341,7 @@ describe('useBatchAnalyze - coverage ramp', () => {
   describe('startBatchAnalyze', () => {
     it('filters non-excel files and sets error', async () => {
       const { startBatchAnalyze, store } = useBatchAnalyze()
-      const files = [
-        makeFile('a.txt'),
-        makeFile('b.csv'),
-      ]
+      const files = [makeFile('a.txt'), makeFile('b.csv')]
       const groups = await startBatchAnalyze(files)
       expect(groups).toEqual([])
       expect(store.errorMessage).toContain('Excel')
@@ -1363,10 +1357,7 @@ describe('useBatchAnalyze - coverage ramp', () => {
       listTemplatesMock.mockResolvedValue({ success: true, templates: [] })
 
       const { startBatchAnalyze, store } = useBatchAnalyze()
-      const files = [
-        makeFile('a.txt'),
-        makeFile('b.xlsx'),
-      ]
+      const files = [makeFile('a.txt'), makeFile('b.xlsx')]
       const groups = await startBatchAnalyze(files)
       expect(groups.length).toBe(1)
       expect(store.errorMessage).toBe('')
@@ -1433,11 +1424,21 @@ describe('useBatchAnalyze - coverage ramp', () => {
 
   describe('extractGridForSheet', () => {
     it('returns grid on success', async () => {
-      extractGridMock.mockResolvedValue({ grid: [[1, 2], [3, 4]] })
+      extractGridMock.mockResolvedValue({
+        grid: [
+          [1, 2],
+          [3, 4],
+        ],
+      })
       const { extractGridForSheet } = useBatchAnalyze()
       const file = makeFile('a.xlsx')
       const result = await extractGridForSheet(file, 'Sheet1')
-      expect(result).toEqual({ grid: [[1, 2], [3, 4]] })
+      expect(result).toEqual({
+        grid: [
+          [1, 2],
+          [3, 4],
+        ],
+      })
     })
 
     it('returns null on API failure', async () => {
@@ -1475,9 +1476,7 @@ describe('useBatchAnalyze - coverage ramp', () => {
       })
 
       const { analyzeAndGroup, store } = useBatchAnalyze()
-      store.addExtractedSheets([
-        makeSheet({ sheetName: 'S1', fields: ['产品型号', '产品名称', '数量', '单价', '金额'] }),
-      ])
+      store.addExtractedSheets([makeSheet({ sheetName: 'S1', fields: ['产品型号', '产品名称', '数量', '单价', '金额'] })])
 
       const groups = await analyzeAndGroup()
       // 模板字段缺失，businessScope='' / templateType='' 不匹配 group.category='orders'
@@ -1497,9 +1496,7 @@ describe('useBatchAnalyze - coverage ramp', () => {
       })
 
       const { analyzeAndGroup, store } = useBatchAnalyze()
-      store.addExtractedSheets([
-        makeSheet({ sheetName: 'S1', fields: ['产品型号', '产品名称', '数量', '单价', '金额'] }),
-      ])
+      store.addExtractedSheets([makeSheet({ sheetName: 'S1', fields: ['产品型号', '产品名称', '数量', '单价', '金额'] })])
 
       const groups = await analyzeAndGroup()
       // 模板 t1 的 businessScope='' / templateType='' 不匹配 group
@@ -1510,14 +1507,18 @@ describe('useBatchAnalyze - coverage ramp', () => {
       listTemplatesMock.mockResolvedValue({
         success: true,
         templates: [
-          { category: 'excel', id: 't1', name: 'T1', business_scope: 'orders', template_type: '出货明细' },
+          {
+            category: 'excel',
+            id: 't1',
+            name: 'T1',
+            business_scope: 'orders',
+            template_type: '出货明细',
+          },
         ],
       })
 
       const { analyzeAndGroup, store } = useBatchAnalyze()
-      store.addExtractedSheets([
-        makeSheet({ sheetName: 'S1', fields: ['产品型号', '产品名称', '数量', '单价', '金额'] }),
-      ])
+      store.addExtractedSheets([makeSheet({ sheetName: 'S1', fields: ['产品型号', '产品名称', '数量', '单价', '金额'] })])
 
       const groups = await analyzeAndGroup()
       expect(groups[0].recommendedTemplateId).toBe('t1')

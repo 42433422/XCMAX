@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="attr-defined"
 """OCR 单据结构化 evidence — 样例文本 + 审单决策。"""
+
 from __future__ import annotations
 
 import json

@@ -13,7 +13,7 @@ import threading
 from typing import Any
 
 from app.application.etl import llm_assist_runtime as _runtime
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +85,7 @@ def _bounded_structured_completion(
                 conversation_service=conversation_service,
                 provider=provider,
             )
-        except BaseException as exc:  # noqa: BLE001 - transported to preview fallback
+        except BOUNDARY_ERRORS as exc:
             box["error"] = exc
 
     worker = threading.Thread(

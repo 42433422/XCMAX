@@ -95,7 +95,9 @@ const summary = computed(() => {
     0 12px 24px -6px rgba(0, 0, 0, 0.5);
 }
 
-.emp-node:active { cursor: grabbing; }
+.emp-node:active {
+  cursor: grabbing;
+}
 
 .emp-node__head {
   display: flex;
@@ -176,5 +178,7 @@ const summary = computed(() => {
   transition: transform 0.15s ease;
 }
 
-.emp-handle:hover { transform: scale(1.35); }
+.emp-handle:hover {
+  transform: scale(1.35);
+}
 </style>

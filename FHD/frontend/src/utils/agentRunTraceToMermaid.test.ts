@@ -2,9 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { traceToMermaid } from './agentRunTraceToMermaid'
 import type { AgentRunTraceData, TraceToolPhase } from './agentRunTraceModel'
 
-function toolPhase(
-  overrides: Partial<TraceToolPhase> & Pick<TraceToolPhase, 'node_id' | 'tool_id'>,
-): TraceToolPhase {
+function toolPhase(overrides: Partial<TraceToolPhase> & Pick<TraceToolPhase, 'node_id' | 'tool_id'>): TraceToolPhase {
   return {
     kind: 'tool',
     status: 'success',
@@ -31,9 +29,7 @@ function makeTrace(overrides: Partial<AgentRunTraceData> = {}): AgentRunTraceDat
 }
 
 /** 多工具成功轨迹：才允许生成计划图 */
-function multiToolTrace(
-  extraPhases: AgentRunTraceData['phases'] = [],
-): AgentRunTraceData {
+function multiToolTrace(extraPhases: AgentRunTraceData['phases'] = []): AgentRunTraceData {
   return makeTrace({
     phases: [
       { kind: 'planner', status: 'success', started_event_id: 'e0', title: '执行计划' },
@@ -61,9 +57,7 @@ describe('traceToMermaid', () => {
     expect(
       traceToMermaid(
         makeTrace({
-          phases: [
-            { kind: 'planner', status: 'success', started_event_id: 'e1', title: '执行计划' },
-          ],
+          phases: [{ kind: 'planner', status: 'success', started_event_id: 'e1', title: '执行计划' }],
         }),
       ),
     ).toBe('')
@@ -92,20 +86,12 @@ describe('traceToMermaid', () => {
   })
 
   it('renders run phase as circle shape', () => {
-    const out = traceToMermaid(
-      multiToolTrace([
-        { kind: 'run', status: 'success', started_event_id: 'e9', title: '执行完成' },
-      ]),
-    )
+    const out = traceToMermaid(multiToolTrace([{ kind: 'run', status: 'success', started_event_id: 'e9', title: '执行完成' }]))
     expect(out).toContain('(((执行完成)))')
   })
 
   it('connects adjacent phases with arrows', () => {
-    const out = traceToMermaid(
-      multiToolTrace([
-        { kind: 'run', status: 'success', started_event_id: 'e3', title: 'done' },
-      ]),
-    )
+    const out = traceToMermaid(multiToolTrace([{ kind: 'run', status: 'success', started_event_id: 'e3', title: 'done' }]))
     expect(out).toContain('p0 --> p1')
     expect(out).toContain('p1 --> p2')
   })
@@ -156,10 +142,7 @@ describe('traceToMermaid', () => {
   it('escapes brackets in labels', () => {
     const out = traceToMermaid(
       makeTrace({
-        phases: [
-          toolPhase({ node_id: 'n1', tool_id: 'query[db]' }),
-          toolPhase({ node_id: 'n2', tool_id: 't2' }),
-        ],
+        phases: [toolPhase({ node_id: 'n1', tool_id: 'query[db]' }), toolPhase({ node_id: 'n2', tool_id: 't2' })],
       }),
     )
     expect(out).toContain('query(db)')

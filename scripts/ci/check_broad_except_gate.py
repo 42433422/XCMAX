@@ -1,67 +1,112 @@
 #!/usr/bin/env python3
-"""CI gate: forbid new broad ``except Exception`` outside boundary allowlist."""
+"""Forbid direct broad exception handlers in repository-owned Python code.
+
+Named boundary tuples (for example ``BOUNDARY_ERRORS``) remain available for
+real plugin, process, and lifecycle boundaries.  Direct ``Exception`` and
+``BaseException`` handlers are rejected so every catch-all remains explicit
+and searchable.  The locked upstream LangGraph mirror is measured separately:
+it may improve, but its pinned baseline may not grow unnoticed.
+"""
 
 from __future__ import annotations
 
 import ast
-import sys
+import os
+import subprocess
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-APP_ROOT = REPO_ROOT / "FHD" / "app"
-BASELINE_PATH = Path(__file__).resolve().parent / "broad_except_baseline.txt"
-
-ALLOWLIST_SUFFIXES = (
-    "middleware/error_handler.py",
-    "utils/error_handling.py",
-    "neuro_bus/bus.py",
-    "fastapi_app/lifespan.py",
-    "infrastructure/mods/mod_auth.py",
-)
+VENDOR_BASELINES = {"FHD/third_party/langgraph": 56}
 
 
-def _count_broad(root: Path) -> list[tuple[str, int]]:
+def _python_paths() -> list[Path]:
+    """Return tracked and non-ignored untracked Python files."""
+    proc = subprocess.run(
+        [
+            "git",
+            "ls-files",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+            "-z",
+            "--",
+            "*.py",
+        ],
+        cwd=REPO_ROOT,
+        check=True,
+        capture_output=True,
+    )
+    relpaths = {os.fsdecode(item) for item in proc.stdout.split(b"\0") if item}
+    return [path for rel in sorted(relpaths) if (path := REPO_ROOT / rel).is_file()]
+
+
+def _direct_broad_handler(node: ast.ExceptHandler) -> bool:
+    def direct(item: ast.expr) -> bool:
+        return isinstance(item, ast.Name) and item.id in {"Exception", "BaseException"}
+
+    if node.type is None:
+        return False
+    if direct(node.type):
+        return True
+    return isinstance(node.type, ast.Tuple) and any(direct(item) for item in node.type.elts)
+
+
+def _scan(paths: list[Path]) -> list[tuple[str, int]]:
     hits: list[tuple[str, int]] = []
-    for path in sorted(root.rglob("*.py")):
-        rel = path.relative_to(root).as_posix()
-        if any(rel.endswith(s) for s in ALLOWLIST_SUFFIXES):
+    for path in paths:
+        try:
+            source = path.read_text(encoding="utf-8", errors="replace")
+        except FileNotFoundError:
+            # A tracked file may disappear between ``git ls-files`` and this
+            # read (notably when a deletion is part of the current change).
             continue
-        source = path.read_text(encoding="utf-8", errors="replace")
-        lines = source.splitlines()
         try:
             tree = ast.parse(source, filename=str(path))
         except SyntaxError:
-            # Syntax validity is enforced by the compile gate; do not mistake
-            # template text containing ``except Exception`` for executable code.
+            # Syntax validity belongs to the compile gate; documentation may
+            # intentionally contain incomplete Python snippets.
             continue
-        count = 0
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.ExceptHandler):
-                continue
-            if not isinstance(node.type, ast.Name) or node.type.id != "Exception":
-                continue
-            line = lines[node.lineno - 1]
-            if "noqa: broad-except-boundary" not in line:
-                count += 1
+        count = sum(
+            1
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ExceptHandler) and _direct_broad_handler(node)
+        )
         if count:
-            hits.append((rel, count))
+            hits.append((path.relative_to(REPO_ROOT).as_posix(), count))
     return hits
 
 
+def _vendor_root(rel: str) -> str | None:
+    return next(
+        (root for root in VENDOR_BASELINES if rel == root or rel.startswith(f"{root}/")),
+        None,
+    )
+
+
 def main() -> int:
-    hits = _count_broad(APP_ROOT)
-    total = sum(c for _, c in hits)
-    baseline = 0
-    if BASELINE_PATH.is_file():
-        baseline = int(BASELINE_PATH.read_text(encoding="utf-8").strip() or "0")
-    if total > baseline:
-        print(f"broad except gate FAILED: {total} > baseline {baseline}")
-        for rel, count in hits[:40]:
+    hits = _scan(_python_paths())
+    owned = [(rel, count) for rel, count in hits if _vendor_root(rel) is None]
+    failed = False
+
+    if owned:
+        failed = True
+        print(f"broad except gate FAILED: {sum(count for _, count in owned)} owned handlers")
+        for rel, count in owned[:80]:
             print(f"  {rel}: {count}")
-        if len(hits) > 40:
-            print(f"  ... and {len(hits) - 40} more files")
+        if len(owned) > 80:
+            print(f"  ... and {len(owned) - 80} more files")
+
+    for root, baseline in VENDOR_BASELINES.items():
+        current = sum(count for rel, count in hits if _vendor_root(rel) == root)
+        if current > baseline:
+            failed = True
+            print(f"vendor broad except gate FAILED: {root}: {current} > {baseline}")
+        else:
+            print(f"vendor broad except gate OK: {root}: {current} <= {baseline}")
+
+    if failed:
         return 1
-    print(f"broad except gate OK: {total} (baseline {baseline})")
+    print("owned broad except gate OK: 0")
     return 0
 
 

@@ -1,19 +1,19 @@
-# ruff: noqa
 """Execution, lifecycle, artifact, and version routes for script workflows."""
+
 from __future__ import annotations
-import json
-import secrets
+
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from fastapi import Depends, File, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse, StreamingResponse
+
+from fastapi import Depends, File, Query, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
+
 from modstore_server.api.deps import _get_current_user
 from modstore_server.infrastructure.db import get_db
-from modstore_server.models import ScriptWorkflowRun, ScriptWorkflowVersion, User
-from modstore_server.script_agent.brief import Brief
+from modstore_server.models import ScriptWorkflowRun, User
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.script_workflow_models import EditWithAiBody
 
 
@@ -86,7 +86,9 @@ async def manual_sandbox_run(
     summary="启用脚本工作流（强校验：必须有过 successful manual_sandbox run）",
 )
 async def activate_workflow(
-    workflow_id: int, db: Session = Depends(get_db), user: User = Depends(_get_current_user)
+    workflow_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(_get_current_user),
 ):
     wf = _facade()._load_workflow(db, workflow_id, user)
     if wf.status == "active":
@@ -113,7 +115,9 @@ async def activate_workflow(
 
 @router.post("/{workflow_id}/deactivate", summary="停用脚本工作流（status=deprecated）")
 async def deactivate_workflow(
-    workflow_id: int, db: Session = Depends(get_db), user: User = Depends(_get_current_user)
+    workflow_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(_get_current_user),
 ):
     wf = _facade()._load_workflow(db, workflow_id, user)
     wf.status = "deprecated"
@@ -221,7 +225,10 @@ async def production_run(
 
 
 def _serialize_run(
-    run: ScriptWorkflowRun, *, with_artifacts: bool = False, result: Optional[Any] = None
+    run: ScriptWorkflowRun,
+    *,
+    with_artifacts: bool = False,
+    result: Optional[Any] = None,
 ) -> Dict[str, Any]:
     try:
         outputs = _facade().json.loads(run.outputs_meta_json or "[]")
@@ -271,7 +278,10 @@ async def list_runs(
     return [_facade()._serialize_run(r) for r in rows]
 
 
-@router.get("/{workflow_id}/runs/{run_id}/files/{filename}", summary="下载脚本工作流单次运行产物")
+@router.get(
+    "/{workflow_id}/runs/{run_id}/files/{filename}",
+    summary="下载脚本工作流单次运行产物",
+)
 async def download_run_file(
     workflow_id: int,
     run_id: int,
@@ -308,14 +318,16 @@ async def download_run_file(
                 and expected_parent.name.startswith(f"u{user.id}_")
             ):
                 return FileResponse(path, filename=filename)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
     raise _facade().HTTPException(404, "产物文件不存在")
 
 
 @router.get("/{workflow_id}/versions", summary="历史版本")
 async def list_versions(
-    workflow_id: int, db: Session = Depends(get_db), user: User = Depends(_get_current_user)
+    workflow_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(_get_current_user),
 ):
     _facade()._load_workflow(db, workflow_id, user)
     rows = (

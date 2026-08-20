@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="import-not-found"
 """按购买单位（products.unit）删除产品；需已配置 DATABASE_URL（PostgreSQL）。"""
+
 from __future__ import annotations
 
 import argparse

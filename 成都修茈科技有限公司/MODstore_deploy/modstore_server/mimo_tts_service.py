@@ -10,6 +10,8 @@ import logging
 import os
 from typing import Any, Dict, Optional, Tuple
 
+from modstore_server.operational_errors import BOUNDARY_ERRORS
+
 _LOG = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "mimo-v2.5-tts"
@@ -69,7 +71,10 @@ def synthesize_mimo_tts(
     payload: Dict[str, Any] = {
         "model": (model or DEFAULT_MODEL).strip() or DEFAULT_MODEL,
         "messages": [
-            {"role": "user", "content": (style or DEFAULT_STYLE).strip() or DEFAULT_STYLE},
+            {
+                "role": "user",
+                "content": (style or DEFAULT_STYLE).strip() or DEFAULT_STYLE,
+            },
             {"role": "assistant", "content": t[:4000]},
         ],
         "audio": {"format": fmt, "voice": voice_id},
@@ -91,7 +96,7 @@ def synthesize_mimo_tts(
             resp = client.post(url, headers=headers, json=payload)
             resp.raise_for_status()
             data = resp.json()
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         _LOG.warning("mimo-tts request failed: %s", exc)
         return None, str(exc), {"url": url, "voice": voice_id}
 
@@ -103,7 +108,7 @@ def synthesize_mimo_tts(
         if not isinstance(b64, str) or not b64.strip():
             return None, "mimo-tts response missing audio.data", {"voice": voice_id}
         raw = base64.b64decode(b64)
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         return None, f"mimo-tts decode failed: {exc}", {"voice": voice_id}
 
     if not raw:
@@ -146,7 +151,10 @@ async def synthesize_mimo_tts_async(
     payload: Dict[str, Any] = {
         "model": (model or DEFAULT_MODEL).strip() or DEFAULT_MODEL,
         "messages": [
-            {"role": "user", "content": (style or DEFAULT_STYLE).strip() or DEFAULT_STYLE},
+            {
+                "role": "user",
+                "content": (style or DEFAULT_STYLE).strip() or DEFAULT_STYLE,
+            },
             {"role": "assistant", "content": t[:4000]},
         ],
         "audio": {"format": fmt, "voice": voice_id},
@@ -168,7 +176,7 @@ async def synthesize_mimo_tts_async(
             resp = await client.post(url, headers=headers, json=payload)
             resp.raise_for_status()
             data = resp.json()
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         _LOG.warning("mimo-tts async request failed: %s", exc)
         return None, str(exc), {"url": url, "voice": voice_id}
 
@@ -180,7 +188,7 @@ async def synthesize_mimo_tts_async(
         if not isinstance(b64, str) or not b64.strip():
             return None, "mimo-tts response missing audio.data", {"voice": voice_id}
         raw = base64.b64decode(b64)
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         return None, f"mimo-tts decode failed: {exc}", {"voice": voice_id}
 
     if not raw:

@@ -23,6 +23,8 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -72,7 +74,11 @@ def cr_branch_name(cr_id: int, source_employee_id: str) -> str:
 
 
 def _run_git(
-    root: str, args: list[str], *, timeout: float = 30.0, env_extra: Optional[Dict[str, str]] = None
+    root: str,
+    args: list[str],
+    *,
+    timeout: float = 30.0,
+    env_extra: Optional[Dict[str, str]] = None,
 ) -> subprocess.CompletedProcess:
     env = os.environ.copy()
     if env_extra:
@@ -94,7 +100,7 @@ def is_git_repo(root: Path) -> bool:
     try:
         proc = _run_git(str(root), ["rev-parse", "--git-dir"], timeout=5)
         return proc.returncode == 0
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return False
 
 
@@ -114,7 +120,7 @@ def _hash_object_stdin(root: str, content: str) -> Optional[str]:
             logger.warning("hash-object failed: %s", proc.stderr[:300])
             return None
         return proc.stdout.strip() or None
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("hash-object error")
         return None
 
@@ -147,7 +153,7 @@ def stage_file_to_employee_branch(
         from modstore_server.integrations.ops_action_handlers import repo_root
 
         root = repo_root()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return {"ok": False, "reason": "repo_root() unavailable"}
 
     if not is_git_repo(Path(root)):
@@ -260,7 +266,7 @@ def commit_cr_apply(
         from modstore_server.integrations.ops_action_handlers import repo_root
 
         root = repo_root()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return {"ok": False, "reason": "repo_root() unavailable"}
 
     if not is_git_repo(Path(root)):
@@ -325,7 +331,7 @@ def maybe_open_pr_for_cr(
         from modstore_server.integrations.ops_action_handlers import repo_root
 
         root = repo_root()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return {"ok": False, "reason": "repo_root() unavailable"}
 
     base = os.environ.get("MODSTORE_AUTO_PR_BASE_BRANCH", "main").strip() or "main"
@@ -381,7 +387,7 @@ def maybe_open_pr_for_cr(
         }
     except FileNotFoundError:
         return {"ok": False, "reason": "gh CLI not installed"}
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         return {"ok": False, "reason": str(exc)[:300]}
 
 

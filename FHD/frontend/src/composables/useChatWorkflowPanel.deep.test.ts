@@ -28,7 +28,12 @@ vi.mock('@/utils/modWorkflowEmployees', () => ({
     emp1: { employeeId: 'emp1', label: '员工1', title: '员工1', summary: '摘要' },
     wechat_msg: { employeeId: 'wechat_msg', label: '微信', title: '微信', summary: '微信摘要' },
     label_print: { employeeId: 'label_print', label: '标签', title: '标签', summary: '标签摘要' },
-    receipt_confirm: { employeeId: 'receipt_confirm', label: '收货', title: '收货', summary: '收货摘要' },
+    receipt_confirm: {
+      employeeId: 'receipt_confirm',
+      label: '收货',
+      title: '收货',
+      summary: '收货摘要',
+    },
   })),
   findWorkflowEmployeeEntry: vi.fn(() => ({ id: 'emp1' })),
   resolvePhoneAgentApiBase: vi.fn(() => ''),
@@ -46,7 +51,11 @@ vi.mock('@/workflow/coreWorkflowMonitor', () => ({
   buildCoreWorkflowMonitorLine: vi.fn(() => 'monitor'),
   buildCoreWorkflowStepsForEmployee: vi.fn(() => [{ id: 's1', label: 'step', status: 'done' }]),
   computeCoreWorkflowCurrentHint: vi.fn(() => 'hint'),
-  computeCoreWorkflowProgressState: vi.fn(() => ({ progressPct: 50, progressLabel: '1/2', workflowProgressStarted: true })),
+  computeCoreWorkflowProgressState: vi.fn(() => ({
+    progressPct: 50,
+    progressLabel: '1/2',
+    workflowProgressStarted: true,
+  })),
   computeCoreWorkflowStageLine: vi.fn(() => 'stage'),
   computeWorkflowProgressFromSteps: vi.fn(() => ({ pct: 50, label: '1/2' })),
   mergeCorePayloadFromExisting: vi.fn((a) => a),
@@ -127,7 +136,10 @@ describe('useChatWorkflowPanel deep', () => {
       }),
     )
     expect(deps.upsertTask).toHaveBeenCalled()
-    const call = vi.mocked(deps.upsertTask).mock.calls.at(-1)?.[0] as { type?: string; title?: string }
+    const call = vi.mocked(deps.upsertTask).mock.calls.at(-1)?.[0] as {
+      type?: string
+      title?: string
+    }
     expect(call?.type).toBe('wechat_intent')
     expect(call?.title).toContain('甲公司')
   })
@@ -196,9 +208,7 @@ describe('useChatWorkflowPanel deep', () => {
     deps.taskList.value = [{ id: 'workflow_emp_label_print', type: 'workflow_employee', title: 'lp' }]
     const panel = useChatWorkflowPanel(deps)
     panel.mountWorkflowPanel()
-    window.dispatchEvent(
-      new CustomEvent('xcagi:workflow-label-print-signal', { detail: { line: '打印' } }),
-    )
+    window.dispatchEvent(new CustomEvent('xcagi:workflow-label-print-signal', { detail: { line: '打印' } }))
     await Promise.resolve()
     expect(runLabelPrintSideEffect).toHaveBeenCalled()
     panel.unmountWorkflowPanel()

@@ -1,8 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  formatWorkDurationShort,
-  totalWorkMs,
-} from './useWorkflowEmployeeDesks'
+import { formatWorkDurationShort, totalWorkMs } from './useWorkflowEmployeeDesks'
 
 describe('useWorkflowEmployeeDesks', () => {
   describe('formatWorkDurationShort', () => {

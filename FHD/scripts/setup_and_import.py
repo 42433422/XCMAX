@@ -2,6 +2,8 @@ import os
 import sqlite3
 from datetime import datetime
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 
 def setup_target_database():
     """设置目标数据库结构"""
@@ -50,7 +52,7 @@ def setup_target_database():
         conn.close()
         return True
 
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"设置数据库时出错: {e}")
         return False
 
@@ -179,7 +181,7 @@ def import_bandao_fengqing():
 
         return True
 
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"导入过程中出错: {e}")
         return False
 
@@ -224,7 +226,7 @@ def check_import_result():
 
         conn.close()
 
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"检查导入结果时出错: {e}")
 
 

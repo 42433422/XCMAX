@@ -38,9 +38,10 @@ import re
 import shutil
 import tempfile
 import zipfile
-from dataclasses import asdict, dataclass, field
+from collections.abc import Iterable
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from ..._internals import CodeSkill
 
@@ -161,15 +162,11 @@ class SkillPackager:
         if not opts.pkg_id:
             opts.pkg_id = _slugify(f"vc-{skill.skill_id}")
         if not _PKG_ID_RE.match(opts.pkg_id):
-            raise PackagingError(
-                f"pkg_id {opts.pkg_id!r} must match {_PKG_ID_RE.pattern}"
-            )
+            raise PackagingError(f"pkg_id {opts.pkg_id!r} must match {_PKG_ID_RE.pattern}")
         if not opts.version:
             opts.version = f"1.0.{skill.active_version or 0}"
         if not _VERSION_RE.match(opts.version):
-            raise PackagingError(
-                f"version {opts.version!r} must match {_VERSION_RE.pattern}"
-            )
+            raise PackagingError(f"version {opts.version!r} must match {_VERSION_RE.pattern}")
         if not opts.name:
             opts.name = getattr(skill, "name", "") or skill.skill_id
         if not opts.description:
@@ -212,10 +209,7 @@ class SkillPackager:
                         "id": skill.skill_id,
                         "function_name": skill.get_active_version().function_name,
                     },
-                    *[
-                        {"id": s.skill_id, "function_name": s.get_active_version().function_name}
-                        for s in siblings
-                    ],
+                    *[{"id": s.skill_id, "function_name": s.get_active_version().function_name} for s in siblings],
                 ]
             },
             "vibe_coding": {
@@ -455,5 +449,3 @@ __all__ = [
     "SkillPackageOptions",
     "SkillPackager",
 ]
-
-

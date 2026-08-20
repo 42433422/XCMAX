@@ -23,11 +23,19 @@ def _isolate_orders_dir(tmp_path, monkeypatch):
 
 def test_create_returns_existing_message_on_duplicate():
     res = payment_orders.create(
-        out_trade_no="DUP1", subject="x", total_amount="1.00", user_id=1, order_kind="wallet"
+        out_trade_no="DUP1",
+        subject="x",
+        total_amount="1.00",
+        user_id=1,
+        order_kind="wallet",
     )
     assert res["ok"] is True
     again = payment_orders.create(
-        out_trade_no="DUP1", subject="x", total_amount="1.00", user_id=1, order_kind="wallet"
+        out_trade_no="DUP1",
+        subject="x",
+        total_amount="1.00",
+        user_id=1,
+        order_kind="wallet",
     )
     assert again["ok"] is False
     assert "DUP1" in again["message"]
@@ -50,7 +58,11 @@ def test_merge_fields_returns_false_for_missing_order():
 
 def test_merge_fields_skips_none_values():
     payment_orders.create(
-        out_trade_no="MERGE-NONE", subject="x", total_amount="1.00", user_id=1, order_kind="wallet"
+        out_trade_no="MERGE-NONE",
+        subject="x",
+        total_amount="1.00",
+        user_id=1,
+        order_kind="wallet",
     )
     assert payment_orders.merge_fields("MERGE-NONE", refunded=True, qr_code=None) is True
     doc = payment_orders.find("MERGE-NONE")
@@ -61,11 +73,19 @@ def test_merge_fields_skips_none_values():
 
 def test_update_status_increments_notify_count_and_writes_metadata():
     payment_orders.create(
-        out_trade_no="USTAT-1", subject="x", total_amount="1.00", user_id=1, order_kind="wallet"
+        out_trade_no="USTAT-1",
+        subject="x",
+        total_amount="1.00",
+        user_id=1,
+        order_kind="wallet",
     )
     assert (
         payment_orders.update_status(
-            out_trade_no="USTAT-1", status="paid", trade_no="T", buyer_id="B", paid_at="2026"
+            out_trade_no="USTAT-1",
+            status="paid",
+            trade_no="T",
+            buyer_id="B",
+            paid_at="2026",
         )
         is True
     )
@@ -84,10 +104,18 @@ def test_update_status_returns_false_for_missing():
 def test_list_orders_filters_by_user_and_status():
     for n in range(3):
         payment_orders.create(
-            out_trade_no=f"L-{n}", subject="x", total_amount="1.00", user_id=42, order_kind="wallet"
+            out_trade_no=f"L-{n}",
+            subject="x",
+            total_amount="1.00",
+            user_id=42,
+            order_kind="wallet",
         )
     payment_orders.create(
-        out_trade_no="L-other", subject="x", total_amount="1.00", user_id=99, order_kind="wallet"
+        out_trade_no="L-other",
+        subject="x",
+        total_amount="1.00",
+        user_id=99,
+        order_kind="wallet",
     )
     payment_orders.update_status(out_trade_no="L-0", status="paid")
 
@@ -102,7 +130,11 @@ def test_list_orders_filters_by_user_and_status():
 
 def test_list_orders_skips_corrupt_files(tmp_path):
     payment_orders.create(
-        out_trade_no="GOOD", subject="x", total_amount="1.00", user_id=7, order_kind="wallet"
+        out_trade_no="GOOD",
+        subject="x",
+        total_amount="1.00",
+        user_id=7,
+        order_kind="wallet",
     )
     bad = payment_orders._path("BAD")
     bad.parent.mkdir(parents=True, exist_ok=True)
@@ -117,11 +149,19 @@ def test_close_pending_older_than_skips_active_status(tmp_path):
     import time
 
     payment_orders.create(
-        out_trade_no="ACT-PAID", subject="x", total_amount="1.00", user_id=1, order_kind="wallet"
+        out_trade_no="ACT-PAID",
+        subject="x",
+        total_amount="1.00",
+        user_id=1,
+        order_kind="wallet",
     )
     payment_orders.update_status(out_trade_no="ACT-PAID", status="paid")
     payment_orders.create(
-        out_trade_no="ACT-PEND", subject="x", total_amount="1.00", user_id=1, order_kind="wallet"
+        out_trade_no="ACT-PEND",
+        subject="x",
+        total_amount="1.00",
+        user_id=1,
+        order_kind="wallet",
     )
     time.sleep(0.01)
     closed = payment_orders.close_pending_older_than(minutes=0)

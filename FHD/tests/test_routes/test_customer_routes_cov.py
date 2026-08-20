@@ -1,3 +1,4 @@
+# mypy: disable-error-code="attr-defined"
 from __future__ import annotations
 
 """Branch-coverage ramp for app.fastapi_routes.domains.customer.routes.

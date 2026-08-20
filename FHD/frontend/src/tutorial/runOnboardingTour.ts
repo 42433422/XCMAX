@@ -1,11 +1,7 @@
 import { driver, type Driver } from 'driver.js'
 import 'driver.js/dist/driver.css'
 import type { Router } from 'vue-router'
-import {
-  demoGroupCleanup,
-  type DriverStepSchedule,
-  waitForSelector,
-} from '@/tutorial/buildDriverSchedule'
+import { demoGroupCleanup, type DriverStepSchedule, waitForSelector } from '@/tutorial/buildDriverSchedule'
 import { getVirtualCursor, makeTimerGroup, sleep, type TimerGroup } from '@/tutorial/demoHelpers'
 
 export type OnboardingTourStoreLike = {
@@ -50,9 +46,7 @@ export function runOnboardingTour(options: RunOnboardingTourOptions): () => void
   }
 
   const mountControls = (popoverEl: Element) => {
-    const footer =
-      popoverEl.querySelector('.driver-popover-footer') ||
-      popoverEl.querySelector('.driver-popover-navigation-btns')
+    const footer = popoverEl.querySelector('.driver-popover-footer') || popoverEl.querySelector('.driver-popover-navigation-btns')
     if (!footer || footer.querySelector('.xcagi-tour-extra-controls')) return
     const wrap = document.createElement('div')
     wrap.className = 'xcagi-tour-extra-controls'
@@ -98,9 +92,7 @@ export function runOnboardingTour(options: RunOnboardingTourOptions): () => void
     const current = String(router.currentRoute.value.name || '')
     const query = routeQuery || {}
     const sameRoute = current === name
-    const sameQuery = Object.entries(query).every(
-      ([k, v]) => String(router.currentRoute.value.query[k] || '') === String(v),
-    )
+    const sameQuery = Object.entries(query).every(([k, v]) => String(router.currentRoute.value.query[k] || '') === String(v))
     if (sameRoute && sameQuery) return
     try {
       await router.push({ name, query })

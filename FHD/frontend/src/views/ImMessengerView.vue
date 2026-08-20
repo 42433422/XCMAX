@@ -93,7 +93,7 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, ref } from 'vue';
+import { nextTick, onMounted, onUnmounted, ref } from 'vue'
 import {
   createDirectConversation,
   fetchCsInbox,
@@ -107,16 +107,16 @@ import {
   type ImContact,
   type ImConversationSummary,
   type ImMessage,
-} from '@/api/im';
-import { authApi } from '@/api/auth';
-import { useImSounds } from '@/composables/useImSounds';
-import { showAppToast } from '@/composables/useAppToast';
-import { useXcmaxSync } from '@/composables/useXcmaxSync';
-import { isDesktopShell } from '@/utils/desktopShell';
-import { useChatSession } from '@/composables/messenger/useChatSession';
-import { useContactPicker } from '@/composables/messenger/useContactPicker';
-import { useConversationList } from '@/composables/messenger/useConversationList';
-import { useSuperEmployeeDispatch } from '@/composables/messenger/useSuperEmployeeDispatch';
+} from '@/api/im'
+import { authApi } from '@/api/auth'
+import { useImSounds } from '@/composables/useImSounds'
+import { showAppToast } from '@/composables/useAppToast'
+import { useXcmaxSync } from '@/composables/useXcmaxSync'
+import { isDesktopShell } from '@/utils/desktopShell'
+import { useChatSession } from '@/composables/messenger/useChatSession'
+import { useContactPicker } from '@/composables/messenger/useContactPicker'
+import { useConversationList } from '@/composables/messenger/useConversationList'
+import { useSuperEmployeeDispatch } from '@/composables/messenger/useSuperEmployeeDispatch'
 import {
   CODEX_SUPER_EMPLOYEE_ENTRY,
   formatTime,
@@ -132,51 +132,51 @@ import {
   type DutyEmployeeEntry,
   type ExternalAppEntry,
   type SystemEmployeeEntry,
-} from '@/composables/messenger/useMessengerEntries';
-import KellaiCustomerInbox from '@/components/im/KellaiCustomerInbox.vue';
-import AiGroupChatView from '@/views/AiGroupChatView.vue';
-import MessengerContactPicker from '@/views/im/MessengerContactPicker.vue';
-import ConversationSidebar from '@/views/im/ConversationSidebar.vue';
-import SystemEmployeeChat from '@/views/im/SystemEmployeeChat.vue';
-import ConversationChat from '@/views/im/ConversationChat.vue';
+} from '@/composables/messenger/useMessengerEntries'
+import KellaiCustomerInbox from '@/components/im/KellaiCustomerInbox.vue'
+import AiGroupChatView from '@/views/AiGroupChatView.vue'
+import MessengerContactPicker from '@/views/im/MessengerContactPicker.vue'
+import ConversationSidebar from '@/views/im/ConversationSidebar.vue'
+import SystemEmployeeChat from '@/views/im/SystemEmployeeChat.vue'
+import ConversationChat from '@/views/im/ConversationChat.vue'
 
 type CurrentUserPayload = {
-  user?: { id?: number };
-  account_kind?: string;
-  market_is_admin?: boolean;
-};
+  user?: { id?: number }
+  account_kind?: string
+  market_is_admin?: boolean
+}
 
-const localUserId = ref<number | null>(null);
-const conversations = ref<ImConversationSummary[]>([]);
-const activeConversationId = ref<number | null>(null);
-const activeSystemEntry = ref<SystemEmployeeEntry | null>(null);
-const activeExternalEntry = ref<ExternalAppEntry | null>(null);
-const activeGroupChat = ref(false);
-const dutyEmployees = ref<DutyEmployeeEntry[]>([]);
-const messages = ref<ImMessage[]>([]);
-const draft = ref('');
-const busy = ref(false);
-const hasMoreHistory = ref(false);
-const scrollEl = ref<HTMLElement | null>(null);
-const isAdminCustomerServiceConsole = ref(false);
+const localUserId = ref<number | null>(null)
+const conversations = ref<ImConversationSummary[]>([])
+const activeConversationId = ref<number | null>(null)
+const activeSystemEntry = ref<SystemEmployeeEntry | null>(null)
+const activeExternalEntry = ref<ExternalAppEntry | null>(null)
+const activeGroupChat = ref(false)
+const dutyEmployees = ref<DutyEmployeeEntry[]>([])
+const messages = ref<ImMessage[]>([])
+const draft = ref('')
+const busy = ref(false)
+const hasMoreHistory = ref(false)
+const scrollEl = ref<HTMLElement | null>(null)
+const isAdminCustomerServiceConsole = ref(false)
 
-const { playIncoming, playOutgoing } = useImSounds();
-const { onImMessage, onImReadState } = useXcmaxSync();
+const { playIncoming, playOutgoing } = useImSounds()
+const { onImMessage, onImReadState } = useXcmaxSync()
 
 function closeOverlappingAssistantFloat(): void {
   const emitClose = () => {
     try {
-      window.dispatchEvent(new CustomEvent('xcagi:close-assistant-float'));
-      window.dispatchEvent(new CustomEvent('xcagi:close-floating-chat'));
-      window.dispatchEvent(new CustomEvent('xcagi:suppress-floating-chat'));
+      window.dispatchEvent(new CustomEvent('xcagi:close-assistant-float'))
+      window.dispatchEvent(new CustomEvent('xcagi:close-floating-chat'))
+      window.dispatchEvent(new CustomEvent('xcagi:suppress-floating-chat'))
     } catch {
       /* ignore non-browser / post-teardown environments */
     }
-  };
+  }
   try {
-    emitClose();
-    window.setTimeout(emitClose, 0);
-    window.setTimeout(emitClose, 250);
+    emitClose()
+    window.setTimeout(emitClose, 0)
+    window.setTimeout(emitClose, 250)
   } catch {
     /* ignore non-browser test environments */
   }
@@ -184,21 +184,17 @@ function closeOverlappingAssistantFloat(): void {
 
 function restoreOverlappingAssistantFloat(): void {
   try {
-    window.dispatchEvent(new CustomEvent('xcagi:restore-floating-chat'));
+    window.dispatchEvent(new CustomEvent('xcagi:restore-floating-chat'))
   } catch {
     /* ignore non-browser test environments */
   }
 }
 
-const {
-  wsConnected,
-  wsConnecting,
-  imApiReachable,
-  activeTitle,
-  isMyMessage,
-  imConnectionClass,
-  imConnectionLabel,
-} = useChatSession({ conversations, activeConversationId, localUserId });
+const { wsConnected, wsConnecting, imApiReachable, activeTitle, isMyMessage, imConnectionClass, imConnectionLabel } = useChatSession({
+  conversations,
+  activeConversationId,
+  localUserId,
+})
 
 const {
   contactPickerOpen,
@@ -209,7 +205,7 @@ const {
   loadContacts,
   openContactPicker,
   closeContactPicker,
-} = useContactPicker({ imApiReachable });
+} = useContactPicker({ imApiReachable })
 
 const {
   codexVisibleMessages,
@@ -246,7 +242,7 @@ const {
   startChatWith,
   closeOverlappingAssistantFloat,
   restoreOverlappingAssistantFloat,
-});
+})
 
 const {
   existingDedicatedConversation,
@@ -275,7 +271,7 @@ const {
   isAdminCustomerServiceConsole,
   selectConversation,
   activatePinnedEntry,
-});
+})
 
 // 以普通对象包装传给子组件的 DOM ref，避免模板顶层 ref 自动解包导致 `:scroll-el="scrollEl"`
 // 传入的是 scrollEl.value（null）而非 Ref 对象本身。子组件用 `:ref` 回填这些 Ref 对象。
@@ -284,304 +280,295 @@ const imChatDomRefs = {
   codexScrollEl,
   dutyEmployeeScrollEl,
   codexInputEl,
-};
+}
 
-let ws: WebSocket | null = null;
-let offSyncMessage: (() => void) | null = null;
-let offSyncRead: (() => void) | null = null;
-let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-let reconnectAttempt = 0;
+let ws: WebSocket | null = null
+let offSyncMessage: (() => void) | null = null
+let offSyncRead: (() => void) | null = null
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+let reconnectAttempt = 0
 
 async function startChatWith(contact: ImContact): Promise<void> {
-  const existing = contact.is_enterprise_dedicated_cs ? existingDedicatedConversation(contact) : undefined;
+  const existing = contact.is_enterprise_dedicated_cs ? existingDedicatedConversation(contact) : undefined
   if (existing) {
-    await selectConversation(existing.id);
-    closeContactPicker();
-    return;
+    await selectConversation(existing.id)
+    closeContactPicker()
+    return
   }
-  busy.value = true;
+  busy.value = true
   try {
-    const conv = await createDirectConversation(contact.id);
-    closeContactPicker();
-    await loadConversations();
-    await selectConversation(conv.id);
+    const conv = await createDirectConversation(contact.id)
+    closeContactPicker()
+    await loadConversations()
+    await selectConversation(conv.id)
   } catch (error) {
-    showAppToast(error instanceof Error ? error.message : '发起会话失败', 'error');
+    showAppToast(error instanceof Error ? error.message : '发起会话失败', 'error')
   } finally {
-    busy.value = false;
+    busy.value = false
   }
 }
 
 async function resolveLocalUserId(): Promise<number | null> {
   try {
-    const me = await authApi.getCurrentUser();
-    const data = me?.data as CurrentUserPayload | undefined;
-    isAdminCustomerServiceConsole.value = Boolean(
-      !isDesktopShell()
-      && data?.account_kind === 'admin'
-      && data?.market_is_admin,
-    );
-    const id = Number(data?.user?.id);
-    return Number.isFinite(id) && id > 0 ? id : null;
+    const me = await authApi.getCurrentUser()
+    const data = me?.data as CurrentUserPayload | undefined
+    isAdminCustomerServiceConsole.value = Boolean(!isDesktopShell() && data?.account_kind === 'admin' && data?.market_is_admin)
+    const id = Number(data?.user?.id)
+    return Number.isFinite(id) && id > 0 ? id : null
   } catch {
-    return null;
+    return null
   }
 }
 
 async function loadConversations(): Promise<void> {
-  if (!localUserId.value) return;
-  busy.value = true;
+  if (!localUserId.value) return
+  busy.value = true
   try {
-    const regular = await fetchImConversations();
+    const regular = await fetchImConversations()
     if (isAdminCustomerServiceConsole.value) {
       // 运营者:把「企业客户→专属客服」收件箱会话并进侧栏(置顶),按 id 去重。
-      let inbox: ImConversationSummary[] = [];
+      let inbox: ImConversationSummary[] = []
       try {
-        inbox = await fetchCsInbox();
+        inbox = await fetchCsInbox()
       } catch (e) {
-        console.warn('加载客服收件箱失败', e);
+        console.warn('加载客服收件箱失败', e)
       }
-      const seen = new Set(regular.map((c) => c.id));
-      conversations.value = [...inbox.filter((c) => !seen.has(c.id)), ...regular];
+      const seen = new Set(regular.map((c) => c.id))
+      conversations.value = [...inbox.filter((c) => !seen.has(c.id)), ...regular]
     } else {
-      conversations.value = regular;
+      conversations.value = regular
     }
-    imApiReachable.value = true;
+    imApiReachable.value = true
     if (window.xcagiDesktop?.setBadge) {
-      const total = conversations.value.reduce((sum, c) => sum + (c.unread_count || 0), 0);
-      await window.xcagiDesktop.setBadge(total);
+      const total = conversations.value.reduce((sum, c) => sum + (c.unread_count || 0), 0)
+      await window.xcagiDesktop.setBadge(total)
     }
   } catch (error) {
-    showAppToast(error instanceof Error ? error.message : '加载会话失败', 'error');
+    showAppToast(error instanceof Error ? error.message : '加载会话失败', 'error')
   } finally {
-    busy.value = false;
+    busy.value = false
   }
 }
 
 async function selectConversation(id: number): Promise<void> {
-  if (!localUserId.value) return;
-  restoreOverlappingAssistantFloat();
-  stopCodexPolling();
-  stopCodexTypewriter(true);
-  dutyEmployeeDraft.value = '';
-  activeExternalEntry.value = null;
-  activeSystemEntry.value = null;
-  activeGroupChat.value = false;
-  activeConversationId.value = id;
-  busy.value = true;
+  if (!localUserId.value) return
+  restoreOverlappingAssistantFloat()
+  stopCodexPolling()
+  stopCodexTypewriter(true)
+  dutyEmployeeDraft.value = ''
+  activeExternalEntry.value = null
+  activeSystemEntry.value = null
+  activeGroupChat.value = false
+  activeConversationId.value = id
+  busy.value = true
   try {
-    const conv = conversations.value.find((c) => c.id === id);
-    const isCs = Boolean(conv?.is_cs_inbox);
-    messages.value = isCs
-      ? await fetchCsInboxMessages(id)
-      : await fetchImMessages(id, { limit: 50 });
-    hasMoreHistory.value = !isCs && messages.value.length >= 50;
-    await nextTick();
-    scrollToBottom();
+    const conv = conversations.value.find((c) => c.id === id)
+    const isCs = Boolean(conv?.is_cs_inbox)
+    messages.value = isCs ? await fetchCsInboxMessages(id) : await fetchImMessages(id, { limit: 50 })
+    hasMoreHistory.value = !isCs && messages.value.length >= 50
+    await nextTick()
+    scrollToBottom()
     if (!isCs) {
-      const last = messages.value[messages.value.length - 1];
+      const last = messages.value[messages.value.length - 1]
       if (last) {
-        await markImRead(id, last.id);
+        await markImRead(id, last.id)
       }
     }
-    await loadConversations();
+    await loadConversations()
   } catch (error) {
-    showAppToast(error instanceof Error ? error.message : '加载消息失败', 'error');
+    showAppToast(error instanceof Error ? error.message : '加载消息失败', 'error')
   } finally {
-    busy.value = false;
+    busy.value = false
   }
 }
 
 async function loadOlderMessages(): Promise<void> {
-  const id = activeConversationId.value;
-  if (!id || !localUserId.value || !messages.value.length) return;
-  busy.value = true;
+  const id = activeConversationId.value
+  if (!id || !localUserId.value || !messages.value.length) return
+  busy.value = true
   try {
-    const beforeId = messages.value[0]?.id;
-    const older = await fetchImMessages(id, { limit: 50, beforeId });
-    hasMoreHistory.value = older.length >= 50;
+    const beforeId = messages.value[0]?.id
+    const older = await fetchImMessages(id, { limit: 50, beforeId })
+    hasMoreHistory.value = older.length >= 50
     if (older.length) {
-      messages.value = [...older, ...messages.value];
+      messages.value = [...older, ...messages.value]
     }
   } catch (error) {
-    showAppToast(error instanceof Error ? error.message : '加载历史失败', 'error');
+    showAppToast(error instanceof Error ? error.message : '加载历史失败', 'error')
   } finally {
-    busy.value = false;
+    busy.value = false
   }
 }
 
 function scrollToBottom(): void {
-  const el = scrollEl.value;
-  if (el) el.scrollTop = el.scrollHeight;
+  const el = scrollEl.value
+  if (el) el.scrollTop = el.scrollHeight
 }
 
 function applyIncomingMessage(msg: ImMessage, cid: number): void {
   if (cid === activeConversationId.value) {
     if (!messages.value.some((m) => m.id === msg.id)) {
-      messages.value.push(msg);
-      void nextTick().then(scrollToBottom);
-      void markImRead(cid, msg.id);
+      messages.value.push(msg)
+      void nextTick().then(scrollToBottom)
+      void markImRead(cid, msg.id)
     }
   }
   if (msg.sender_user_id !== localUserId.value) {
-    void playIncoming(msg.body);
+    void playIncoming(msg.body)
   }
-  void loadConversations();
+  void loadConversations()
 }
 
 function applyReadState(conversationId: number, userId: number, lastMessageId: number): void {
-  if (userId !== localUserId.value) return;
-  const conv = conversations.value.find((c) => c.id === conversationId);
+  if (userId !== localUserId.value) return
+  const conv = conversations.value.find((c) => c.id === conversationId)
   if (conv) {
-    conv.unread_count = 0;
+    conv.unread_count = 0
   }
   if (conversationId === activeConversationId.value && lastMessageId > 0) {
-    void markImRead(conversationId, lastMessageId).then(() => loadConversations());
+    void markImRead(conversationId, lastMessageId).then(() => loadConversations())
   } else {
-    void loadConversations();
+    void loadConversations()
   }
 }
 
 function handleWsPayload(payload: {
-  type?: string;
-  conversation_id?: number;
-  user_id?: number;
-  last_message_id?: number;
-  message?: ImMessage;
+  type?: string
+  conversation_id?: number
+  user_id?: number
+  last_message_id?: number
+  message?: ImMessage
 }): void {
-  if (payload.type === 'pong') return;
-  if (
-    (payload.type === 'im.message' || payload.type === 'message') &&
-    payload.message
-  ) {
-    const cid = payload.conversation_id ?? payload.message.conversation_id;
-    applyIncomingMessage(payload.message, cid);
-    return;
+  if (payload.type === 'pong') return
+  if ((payload.type === 'im.message' || payload.type === 'message') && payload.message) {
+    const cid = payload.conversation_id ?? payload.message.conversation_id
+    applyIncomingMessage(payload.message, cid)
+    return
   }
   if (payload.type === 'im.read') {
-    const cid = Number(payload.conversation_id);
-    const uid = Number(payload.user_id);
-    const lastId = Number(payload.last_message_id);
+    const cid = Number(payload.conversation_id)
+    const uid = Number(payload.user_id)
+    const lastId = Number(payload.last_message_id)
     if (Number.isFinite(cid) && Number.isFinite(uid) && Number.isFinite(lastId)) {
-      applyReadState(cid, uid, lastId);
+      applyReadState(cid, uid, lastId)
     }
   }
 }
 
 async function onSend(): Promise<void> {
-  const id = activeConversationId.value;
-  const text = draft.value.trim();
-  if (!id || !text || !localUserId.value) return;
-  const conv = conversations.value.find((c) => c.id === id);
-  const isCs = Boolean(conv?.is_cs_inbox);
-  busy.value = true;
+  const id = activeConversationId.value
+  const text = draft.value.trim()
+  if (!id || !text || !localUserId.value) return
+  const conv = conversations.value.find((c) => c.id === id)
+  const isCs = Boolean(conv?.is_cs_inbox)
+  busy.value = true
   try {
-    const msg = isCs ? await replyCsInbox(id, text) : await sendImMessage(id, text);
-    messages.value.push(msg);
-    draft.value = '';
-    playOutgoing();
-    await nextTick();
-    scrollToBottom();
-    await loadConversations();
+    const msg = isCs ? await replyCsInbox(id, text) : await sendImMessage(id, text)
+    messages.value.push(msg)
+    draft.value = ''
+    playOutgoing()
+    await nextTick()
+    scrollToBottom()
+    await loadConversations()
   } catch (error) {
-    showAppToast(error instanceof Error ? error.message : '发送失败', 'error');
+    showAppToast(error instanceof Error ? error.message : '发送失败', 'error')
   } finally {
-    busy.value = false;
+    busy.value = false
   }
 }
 
 function scheduleReconnect(): void {
-  if (reconnectTimer) clearTimeout(reconnectTimer);
-  const delay = Math.min(30_000, 1000 * 2 ** reconnectAttempt);
+  if (reconnectTimer) clearTimeout(reconnectTimer)
+  const delay = Math.min(30_000, 1000 * 2 ** reconnectAttempt)
   reconnectTimer = setTimeout(() => {
-    reconnectAttempt += 1;
-    connectWs();
-  }, delay);
+    reconnectAttempt += 1
+    connectWs()
+  }, delay)
 }
 
 function connectWs(): void {
-  if (!localUserId.value) return;
-  disconnectWs(false);
+  if (!localUserId.value) return
+  disconnectWs(false)
   try {
-    wsConnecting.value = true;
-    ws = new WebSocket(imWebSocketUrl());
+    wsConnecting.value = true
+    ws = new WebSocket(imWebSocketUrl())
     ws.onopen = () => {
-      wsConnected.value = true;
-      wsConnecting.value = false;
-      reconnectAttempt = 0;
-    };
+      wsConnected.value = true
+      wsConnecting.value = false
+      reconnectAttempt = 0
+    }
     ws.onclose = () => {
-      wsConnected.value = false;
-      wsConnecting.value = false;
-      scheduleReconnect();
-    };
+      wsConnected.value = false
+      wsConnecting.value = false
+      scheduleReconnect()
+    }
     ws.onerror = () => {
-      wsConnected.value = false;
-      wsConnecting.value = false;
-    };
+      wsConnected.value = false
+      wsConnecting.value = false
+    }
     ws.onmessage = (ev) => {
       try {
-        handleWsPayload(JSON.parse(String(ev.data)));
+        handleWsPayload(JSON.parse(String(ev.data)))
       } catch {
         /* ignore */
       }
-    };
+    }
   } catch {
-    wsConnected.value = false;
-    wsConnecting.value = false;
-    scheduleReconnect();
+    wsConnected.value = false
+    wsConnecting.value = false
+    scheduleReconnect()
   }
 }
 
 function disconnectWs(clearTimer = true): void {
   if (clearTimer && reconnectTimer) {
-    clearTimeout(reconnectTimer);
-    reconnectTimer = null;
+    clearTimeout(reconnectTimer)
+    reconnectTimer = null
   }
   if (ws) {
-    ws.onopen = null;
-    ws.onclose = null;
-    ws.onerror = null;
-    ws.onmessage = null;
-    ws.close();
-    ws = null;
+    ws.onopen = null
+    ws.onclose = null
+    ws.onerror = null
+    ws.onmessage = null
+    ws.close()
+    ws = null
   }
-  wsConnected.value = false;
-  wsConnecting.value = false;
+  wsConnected.value = false
+  wsConnecting.value = false
 }
 
 onMounted(async () => {
-  localUserId.value = await resolveLocalUserId();
+  localUserId.value = await resolveLocalUserId()
   if (!localUserId.value) {
-    showAppToast('请先登录后使用信息功能', 'warning');
-    return;
+    showAppToast('请先登录后使用信息功能', 'warning')
+    return
   }
   offSyncMessage = onImMessage(({ conversation_id, message }) => {
-    applyIncomingMessage(message, conversation_id);
-  });
+    applyIncomingMessage(message, conversation_id)
+  })
   offSyncRead = onImReadState(({ conversation_id, user_id, last_message_id }) => {
-    applyReadState(conversation_id, user_id, last_message_id);
-  });
-  connectWs();
-  const initialLoads = [loadContacts(), loadConversations(), loadDutyEmployees()];
+    applyReadState(conversation_id, user_id, last_message_id)
+  })
+  connectWs()
+  const initialLoads = [loadContacts(), loadConversations(), loadDutyEmployees()]
   if (isAdminCustomerServiceConsole.value) {
-    closeOverlappingAssistantFloat();
-    activeSystemEntry.value = CODEX_SUPER_EMPLOYEE_ENTRY;
-    initialLoads.push(loadCodexConversation());
+    closeOverlappingAssistantFloat()
+    activeSystemEntry.value = CODEX_SUPER_EMPLOYEE_ENTRY
+    initialLoads.push(loadCodexConversation())
   }
-  await Promise.all(initialLoads);
-});
+  await Promise.all(initialLoads)
+})
 
 onUnmounted(() => {
-  restoreOverlappingAssistantFloat();
-  stopCodexPolling();
-  stopCodexTypewriter(true);
-  offSyncMessage?.();
-  offSyncMessage = null;
-  offSyncRead?.();
-  offSyncRead = null;
-  disconnectWs();
-});
+  restoreOverlappingAssistantFloat()
+  stopCodexPolling()
+  stopCodexTypewriter(true)
+  offSyncMessage?.()
+  offSyncMessage = null
+  offSyncRead?.()
+  offSyncRead = null
+  disconnectWs()
+})
 </script>
 
 <style scoped>

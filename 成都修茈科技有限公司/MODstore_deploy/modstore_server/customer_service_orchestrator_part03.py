@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -113,7 +117,12 @@ def decide(
         rationale=rationale,
         extracted_json=_facade().json_dumps(extracted),
         criteria_json=_facade().json_dumps(
-            [{"name": standard.name if standard else "默认客服规则", "missing": missing}]
+            [
+                {
+                    "name": standard.name if standard else "默认客服规则",
+                    "missing": missing,
+                }
+            ]
         ),
     )
     db.add(row)
@@ -294,7 +303,7 @@ def _maybe_dispatch_employee_followup(
         action.error = "" if ok else str(out.get("error") or "")[:1000]
         db.flush()
         return action
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         action = _facade().build_action(
             db,
             ticket_id=ticket.id,

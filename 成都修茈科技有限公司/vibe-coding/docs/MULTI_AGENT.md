@@ -12,7 +12,7 @@ handle alone:
                               └── revise loop ◄──┘
   ```
 
-- **`BestOfNOrchestrator`** — fan out to *n* Coders in parallel, ask
+- **`BestOfNOrchestrator`** — fan out to _n_ Coders in parallel, ask
   the Reviewer to score each result, commit only the highest-scored
   one. Useful when the brief admits multiple plausible approaches.
 
@@ -73,13 +73,13 @@ Every role implements the `AgentRole` Protocol — one method, `handle`,
 that takes a message and returns the next message(s). You can subclass
 or replace any of them:
 
-| Role | Responsibility | Default Implementation |
-| --- | --- | --- |
-| `PlannerAgent` | NL brief → 1-5 concrete sub-tasks | LLM, JSON output |
-| `CoderAgent` | Sub-task → `ProjectPatch` | Wraps `project_coder.edit_project` |
-| `ReviewerAgent` | Patch → approve / revise / reject + score | LLM, JSON output |
-| `ResearcherAgent` | Question → ≤500-word findings | LLM, optional |
-| `TesterAgent` | Patch → suggested test cases | LLM, optional |
+| Role              | Responsibility                            | Default Implementation             |
+| ----------------- | ----------------------------------------- | ---------------------------------- |
+| `PlannerAgent`    | NL brief → 1-5 concrete sub-tasks         | LLM, JSON output                   |
+| `CoderAgent`      | Sub-task → `ProjectPatch`                 | Wraps `project_coder.edit_project` |
+| `ReviewerAgent`   | Patch → approve / revise / reject + score | LLM, JSON output                   |
+| `ResearcherAgent` | Question → ≤500-word findings             | LLM, optional                      |
+| `TesterAgent`     | Patch → suggested test cases              | LLM, optional                      |
 
 ## Message envelope
 

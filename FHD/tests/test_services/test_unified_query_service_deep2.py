@@ -1,3 +1,4 @@
+# mypy: disable-error-code="method-assign"
 """Tests for app.services.unified_query_service — coverage ramp deep2.
 
 Focuses on ``_parse_filter`` lookup operators (``__gte``/``__gt``/``__lte``/

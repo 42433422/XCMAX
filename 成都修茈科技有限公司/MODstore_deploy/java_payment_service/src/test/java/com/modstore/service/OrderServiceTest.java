@@ -54,6 +54,27 @@ class OrderServiceTest {
                 .thenReturn(new SimpleTransactionStatus(true));
     }
 
+    @Test
+    void updateOrderStatusHandlesMissingIdempotentAndCompleteProviderUpdates() {
+        when(orderRepository.findByOutTradeNoForUpdate("missing")).thenReturn(Optional.empty());
+        orderService.updateOrderStatus("missing", "failed", null, null, null);
+
+        Order pending = buildPendingOrder("OT-STATUS", "plan", new BigDecimal("19.90"));
+        LocalDateTime paidAt = LocalDateTime.now();
+        when(orderRepository.findByOutTradeNoForUpdate("OT-STATUS"))
+                .thenReturn(Optional.of(pending));
+        orderService.updateOrderStatus("OT-STATUS", "paid", "TRADE-1", "BUYER-1", paidAt);
+
+        assertThat(pending.getStatus()).isEqualTo("paid");
+        assertThat(pending.getTradeNo()).isEqualTo("TRADE-1");
+        assertThat(pending.getBuyerId()).isEqualTo("BUYER-1");
+        assertThat(pending.getPaidAt()).isEqualTo(paidAt);
+        verify(orderRepository).save(pending);
+
+        orderService.updateOrderStatus("OT-STATUS", "paid", null, null, null);
+        verify(orderRepository, times(1)).save(pending);
+    }
+
     private Order buildPendingOrder(String outTradeNo, String kind, BigDecimal amount) {
         Order order = new Order();
         order.setOutTradeNo(outTradeNo);

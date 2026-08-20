@@ -10,7 +10,7 @@ import urllib.request
 import uuid
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 Transport = Callable[[str, str, dict[str, Any] | None, str], tuple[int, dict[str, Any]]]
 
@@ -32,10 +32,11 @@ def run_live_pr_comment_probe(
         None,
         resolved_token,
     )
-    permission = (
+    permission = cast(
+        dict[str, Any],
         repo_payload.get("permissions")
         if isinstance(repo_payload.get("permissions"), dict)
-        else {}
+        else {},
     )
     marker = f"retort-live-probe:{uuid.uuid4().hex[:12]}"
     comment_body = (
@@ -373,7 +374,7 @@ def _github_request(
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
         try:
-            payload = json.loads(body) if body.strip() else {}
+            payload = cast(dict[str, Any], json.loads(body) if body.strip() else {})
         except json.JSONDecodeError:
             payload = {"message": body}
         return int(exc.code), payload
@@ -406,7 +407,7 @@ def _github_public_request(
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
         try:
-            payload = json.loads(body) if body.strip() else {}
+            payload = cast(dict[str, Any], json.loads(body) if body.strip() else {})
         except json.JSONDecodeError:
             payload = {"message": body}
         return int(exc.code), payload

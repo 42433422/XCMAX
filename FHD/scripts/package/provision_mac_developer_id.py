@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="no-any-return"
 """通过 App Store Connect API 签发 Developer ID Application 并导入本机钥匙串。
 
 依赖环境变量（可由 setup-mac-signing.sh 从 GitHub Secrets 注入）：
@@ -7,6 +8,7 @@
   APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64  或  APP_STORE_CONNECT_API_KEY_PATH
   APPLE_TEAM_ID（可选，默认从 IOS_TEAM_ID 读取）
 """
+
 from __future__ import annotations
 
 import base64
@@ -126,7 +128,13 @@ def create_certificate() -> str:
 
 def import_keychain() -> None:
     subprocess.run(
-        ["security", "import", str(CER_PATH), "-k", str(Path.home() / "Library/Keychains/login.keychain-db")],
+        [
+            "security",
+            "import",
+            str(CER_PATH),
+            "-k",
+            str(Path.home() / "Library/Keychains/login.keychain-db"),
+        ],
         check=True,
     )
     subprocess.run(
@@ -162,7 +170,11 @@ def main() -> int:
         return 0
 
     remote = list_remote_certificates()
-    active = [c for c in remote if not c.get("attributes", {}).get("expirationDate", "").startswith("1970")]
+    active = [
+        c
+        for c in remote
+        if not c.get("attributes", {}).get("expirationDate", "").startswith("1970")
+    ]
     if active:
         print(
             "[warn] Apple 账户已有 Developer ID Application 证书，但本机钥匙串缺失私钥。\n"

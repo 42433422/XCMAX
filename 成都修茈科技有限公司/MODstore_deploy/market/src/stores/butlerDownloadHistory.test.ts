@@ -140,10 +140,7 @@ describe('useButlerDownloadHistoryStore', () => {
     })
     const store = useButlerDownloadHistoryStore()
     store.loadFromStorage()
-    const downloads = Array.from(
-      { length: BUTLER_DOWNLOAD_NON_MEMBER_ACTIVE_LIMIT + 3 },
-      (_, i) => makeDownload(i + 1),
-    )
+    const downloads = Array.from({ length: BUTLER_DOWNLOAD_NON_MEMBER_ACTIVE_LIMIT + 3 }, (_, i) => makeDownload(i + 1))
     store.recordDownloads(downloads)
     expect(store.activeRecords).toHaveLength(BUTLER_DOWNLOAD_NON_MEMBER_ACTIVE_LIMIT)
     expect(store.expiredRecords.length).toBeGreaterThan(0)

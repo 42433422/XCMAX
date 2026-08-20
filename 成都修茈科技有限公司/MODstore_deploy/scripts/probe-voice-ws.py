@@ -8,13 +8,15 @@ import sys
 
 import websockets
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 
 async def probe(url: str) -> None:
     try:
         async with websockets.connect(url, open_timeout=8) as ws:
             msg = await asyncio.wait_for(ws.recv(), timeout=5)
             print(f"OK {url} -> {msg[:120]}")
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         print(f"FAIL {url} -> {exc}")
 
 

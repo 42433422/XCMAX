@@ -1,6 +1,6 @@
-import { CLIENT_PRIMARY_ERP_MOD_ID } from '@/constants/genericModPack';
-import type { ModInfo } from '@/types/modInfo';
-import { SUNBIRD_CLIENT_MOD_ID } from './accountModBinding';
+import { CLIENT_PRIMARY_ERP_MOD_ID } from '@/constants/genericModPack'
+import type { ModInfo } from '@/types/modInfo'
+import { SUNBIRD_CLIENT_MOD_ID } from './accountModBinding'
 
 /** 与 mods/attendance-industry/manifest.json frontend.menu 保持一致 */
 export const ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU: NonNullable<ModInfo['menu']> = [
@@ -10,9 +10,9 @@ export const ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU: NonNullable<ModInfo['menu']>
     icon: 'fa-file-excel-o',
     path: '/attendance-industry',
   },
-];
+]
 
-export const ATTENDANCE_INDUSTRY_MOD_FALLBACK_OVERRIDES: NonNullable<ModInfo['menu_overrides']> = [];
+export const ATTENDANCE_INDUSTRY_MOD_FALLBACK_OVERRIDES: NonNullable<ModInfo['menu_overrides']> = []
 
 /** 与 mods/sz-qsm-pro/manifest.json frontend.menu_overrides 保持一致 */
 export const COATING_CUSTOM_MOD_FALLBACK_OVERRIDES: NonNullable<ModInfo['menu_overrides']> = [
@@ -22,11 +22,11 @@ export const COATING_CUSTOM_MOD_FALLBACK_OVERRIDES: NonNullable<ModInfo['menu_ov
   { key: 'orders', label: '出货单管理' },
   { key: 'shipment-records', label: '出货记录' },
   { key: 'print', label: '标签打印' },
-];
+]
 
 /** @deprecated 使用 ATTENDANCE_INDUSTRY_* 命名 */
-export const SUNBIRD_CLIENT_MOD_FALLBACK_MENU = ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU;
-export const SUNBIRD_CLIENT_MOD_FALLBACK_OVERRIDES = ATTENDANCE_INDUSTRY_MOD_FALLBACK_OVERRIDES;
+export const SUNBIRD_CLIENT_MOD_FALLBACK_MENU = ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU
+export const SUNBIRD_CLIENT_MOD_FALLBACK_OVERRIDES = ATTENDANCE_INDUSTRY_MOD_FALLBACK_OVERRIDES
 
 /** API 尚未返回考勤行业包时，侧栏/设置页仍可展示考勤转换入口 */
 export function buildAttendanceIndustryModStub(): ModInfo {
@@ -44,7 +44,7 @@ export function buildAttendanceIndustryModStub(): ModInfo {
       id: '考勤',
       name: '考勤/人事行业',
     },
-  };
+  }
 }
 
 /** SUNBIRD 账号专属 fallback：真实定制页是 taiyangniao-pro。 */
@@ -73,7 +73,7 @@ export function buildSunbirdClientModStub(): ModInfo {
       id: '考勤',
       name: '考勤/人事行业',
     },
-  };
+  }
 }
 
 /** API 尚未返回奇士美定制 Mod 时，侧栏仍可展示涂料业务菜单覆盖 */
@@ -99,5 +99,5 @@ export function buildCoatingCustomModStub(): ModInfo {
       id: '涂料',
       name: '涂料/化工行业',
     },
-  };
+  }
 }

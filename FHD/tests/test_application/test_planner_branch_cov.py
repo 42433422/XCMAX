@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """Branch-coverage tests for app/application/workflow/planner.py.
 
 聚焦未覆盖分支：execute_tool 默认 action、_execute_import_excel_tool 异常路径、
@@ -22,6 +23,7 @@ from app.application.workflow.planner import (
     execute_tool,
 )
 from app.application.workflow.types import PlanGraph, WorkflowNode
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -2250,7 +2252,7 @@ class TestGetPlannerHttpClient:
                 # 清理创建的客户端
                 try:
                     client.close()  # type: ignore[possibly-undefined]
-                except Exception:
+                except BOUNDARY_ERRORS:
                     pass
                 planner_mod._planner_http_client = None
 
@@ -2270,7 +2272,7 @@ class TestGetPlannerHttpClient:
             else:
                 try:
                     client1.close()  # type: ignore[possibly-undefined]
-                except Exception:
+                except BOUNDARY_ERRORS:
                     pass
                 planner_mod._planner_http_client = None
 

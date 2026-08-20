@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     Boolean,
@@ -48,7 +48,7 @@ class CatalogItem(Base):
     compliance_status = Column(String(32), default="approved", index=True)
     rank_score = Column(Float, default=100.0, index=True)
     delist_reason = Column(Text, default="")
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
 
 class UserMod(Base):
@@ -59,7 +59,7 @@ class UserMod(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     mod_id = Column(String(128), nullable=False, index=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
 
 class Review(Base):
@@ -71,7 +71,7 @@ class Review(Base):
     catalog_id = Column(Integer, ForeignKey("catalog_items.id"), nullable=False, index=True)
     rating = Column(Integer, nullable=False)
     content = Column(Text, default="")
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
 
 class Favorite(Base):
@@ -81,7 +81,7 @@ class Favorite(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     catalog_id = Column(Integer, ForeignKey("catalog_items.id"), nullable=False, index=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
 
 class AiModelPrice(Base):
@@ -98,8 +98,8 @@ class AiModelPrice(Base):
     enabled = Column(Boolean, default=True, index=True)
     updated_at = Column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
 

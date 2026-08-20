@@ -15,10 +15,10 @@ df = df.iloc[1:].reset_index(drop=True)
 print(f"员工数量：{len(df)}")
 print("\n前 3 个员工的数据:")
 for i in range(min(3, len(df))):
-    print(f"\n员工 {i+1}:")
+    print(f"\n员工 {i + 1}:")
     row = df.iloc[i]
-    print(f'  姓名：{row["姓名"]}')
-    print(f'  部门：{row["部门"]}')
+    print(f"  姓名：{row['姓名']}")
+    print(f"  部门：{row['部门']}")
     print("  打卡时间数据 (前 10 天):")
     for j in range(7, min(17, len(row))):
         col_name = df.columns[j]

@@ -1,10 +1,11 @@
+# mypy: disable-error-code="arg-type, assignment, index, union-attr"
 """客户定制生产、验收、产物下载与安装回执 API。"""
 
 from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from io import BytesIO
 from typing import Any
 
@@ -17,17 +18,21 @@ from modstore_server.customer_service_api import (
     _schedule_customer_ticket_incident,
     _visible_ticket_or_404,
 )
-from modstore_server.customer_service_orchestrator import (
-    audit,
-    enqueue_customer_service_event,
-    ticket_payload,
-)
 from modstore_server.customer_service_delivery_models import (
     CustomDeliveryCreateBody,
     CustomDeliveryDecisionBody,
     CustomDeliveryInstallReceiptBody,
+)
+from modstore_server.customer_service_delivery_models import (
     custom_delivery_brief as _custom_delivery_brief,
+)
+from modstore_server.customer_service_delivery_models import (
     custom_delivery_evidence as _custom_delivery_evidence,
+)
+from modstore_server.customer_service_orchestrator import (
+    audit,
+    enqueue_customer_service_event,
+    ticket_payload,
 )
 from modstore_server.customer_service_tools import json_dumps
 from modstore_server.models import User
@@ -36,6 +41,7 @@ from modstore_server.models_cs import (
     CustomerServiceSession,
     CustomerServiceTicket,
 )
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -68,7 +74,7 @@ async def _start_custom_delivery_run(
         "attempt": int(attempt),
         "session_id": str(started.get("session_id") or ""),
         "status": str(started.get("status") or "running"),
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
     }
 
 
@@ -204,7 +210,7 @@ async def create_custom_delivery(
         session_id=int(session.id),
         user_id=int(user.id),
         ticket_no=(
-            f"CD{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
+            f"CD{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}"
             f"{int(user.id):04d}{uuid.uuid4().hex[:6].upper()}"
         ),
         title=body.title.strip(),
@@ -252,11 +258,11 @@ async def create_custom_delivery(
     try:
         run = await _start_custom_delivery_run(user_id=int(user.id), evidence=evidence, attempt=1)
         evidence["runs"] = [run]
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("custom delivery production start failed ticket=%s", ticket.ticket_no)
         evidence["start_error"] = str(exc)[:1000]
     ticket.evidence_json = json_dumps(evidence)
-    ticket.updated_at = datetime.now(timezone.utc)
+    ticket.updated_at = datetime.now(UTC)
     db.commit()
     db.refresh(ticket)
 
@@ -315,7 +321,7 @@ async def decide_custom_delivery(
         if custom.get("stage") != "acceptance" or custom.get("gate_ok") is not True:
             raise HTTPException(409, "产物尚未通过生产质量门，不能验收")
         evidence["acceptance_status"] = "accepted"
-        evidence["accepted_at"] = datetime.now(timezone.utc).isoformat()
+        evidence["accepted_at"] = datetime.now(UTC).isoformat()
         evidence["acceptance_note"] = body.note.strip()[:4000]
         ticket.decision_status = "approved"
         ticket.status = "processing"
@@ -333,14 +339,14 @@ async def decide_custom_delivery(
         evidence["runs"] = [*runs, run]
         evidence.pop("start_error", None)
         notes = [r for r in evidence.get("rework_notes", []) if isinstance(r, dict)]
-        notes.append({"note": note, "at": datetime.now(timezone.utc).isoformat()})
+        notes.append({"note": note, "at": datetime.now(UTC).isoformat()})
         evidence["rework_notes"] = notes[-20:]
         evidence["acceptance_status"] = "pending"
         ticket.decision_status = "pending"
         ticket.status = "processing"
         ticket.closed_at = None
     ticket.evidence_json = json_dumps(evidence)
-    ticket.updated_at = datetime.now(timezone.utc)
+    ticket.updated_at = datetime.now(UTC)
     db.commit()
     db.refresh(ticket)
     return await _custom_delivery_payload(ticket)
@@ -399,13 +405,13 @@ async def download_custom_delivery_artifact(
             "token": receipt_token,
             "kind": artifact_kind,
             "id": artifact_id,
-            "issued_at": datetime.now(timezone.utc).isoformat(),
+            "issued_at": datetime.now(UTC).isoformat(),
             "used": False,
         }
     )
     evidence["download_grants"] = grants[-20:]
     ticket.evidence_json = json_dumps(evidence)
-    ticket.updated_at = datetime.now(timezone.utc)
+    ticket.updated_at = datetime.now(UTC)
     db.commit()
     return StreamingResponse(
         stream,
@@ -451,7 +457,7 @@ async def record_custom_delivery_install(
     if not grant:
         raise HTTPException(409, "安装回执凭证无效或已使用，请重新下载定制产物")
     grant["used"] = True
-    grant["used_at"] = datetime.now(timezone.utc).isoformat()
+    grant["used_at"] = datetime.now(UTC).isoformat()
     evidence["download_grants"] = grants
     receipts = [r for r in evidence.get("install_receipts", []) if isinstance(r, dict)]
     if not any(
@@ -463,7 +469,7 @@ async def record_custom_delivery_install(
                 "id": body.artifact_id,
                 "version": body.installed_version,
                 "host": body.host,
-                "installed_at": datetime.now(timezone.utc).isoformat(),
+                "installed_at": datetime.now(UTC).isoformat(),
             }
         )
     evidence["install_receipts"] = receipts
@@ -472,10 +478,10 @@ async def record_custom_delivery_install(
     if required and required.issubset(installed):
         ticket.status = "resolved"
         ticket.decision_status = "approved"
-        ticket.closed_at = datetime.now(timezone.utc)
+        ticket.closed_at = datetime.now(UTC)
         evidence["delivered_at"] = ticket.closed_at.isoformat()
     ticket.evidence_json = json_dumps(evidence)
-    ticket.updated_at = datetime.now(timezone.utc)
+    ticket.updated_at = datetime.now(UTC)
     db.commit()
     db.refresh(ticket)
     return await _custom_delivery_payload(ticket)

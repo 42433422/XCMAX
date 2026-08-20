@@ -51,10 +51,7 @@ export const useButlerDownloadHistoryStore = defineStore('butlerDownloadHistory'
     persist()
   }
 
-  function recordDownloads(
-    downloads: EmployeeOutputDownload[],
-    opts?: { employeeId?: string },
-  ) {
+  function recordDownloads(downloads: EmployeeOutputDownload[], opts?: { employeeId?: string }) {
     if (!downloads?.length) return
     if (!hydrated.value) loadFromStorage()
     const base = downloadsToButlerRecords(downloads, { employeeId: opts?.employeeId })

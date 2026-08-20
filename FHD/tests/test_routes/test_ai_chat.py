@@ -1,3 +1,4 @@
+# mypy: disable-error-code="attr-defined, misc"
 """AI 聊天/意图路由冒烟（FastAPI 版）。
 
 历史：

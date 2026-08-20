@@ -1,57 +1,57 @@
-import { computed } from 'vue';
-import { useProductQueryStore } from '@/stores/productQuery';
+import { computed } from 'vue'
+import { useProductQueryStore } from '@/stores/productQuery'
 import type { Company, LocalProduct } from '@/stores/productQuery'
 export function useProductQuery(): unknown {
-  const store = useProductQueryStore();
+  const store = useProductQueryStore()
 
-  const loading = computed(() => store.loading);
-  const error = computed(() => store.error);
-  const companies = computed(() => store.companies);
-  const products = computed(() => store.products);
-  const selectedCompany = computed(() => store.selectedCompany);
-  const selectedProduct = computed(() => store.selectedProduct);
-  const searchQuery = computed(() => store.searchQuery);
-  const filteredProducts = computed(() => store.filteredProducts);
+  const loading = computed(() => store.loading)
+  const error = computed(() => store.error)
+  const companies = computed(() => store.companies)
+  const products = computed(() => store.products)
+  const selectedCompany = computed(() => store.selectedCompany)
+  const selectedProduct = computed(() => store.selectedProduct)
+  const searchQuery = computed(() => store.searchQuery)
+  const filteredProducts = computed(() => store.filteredProducts)
 
   const loadCompanies = async () => {
-    await store.loadCompanies();
-  };
+    await store.loadCompanies()
+  }
 
   const loadProducts = async (companyId: number | string) => {
-    await store.loadProducts(companyId);
-  };
+    await store.loadProducts(companyId)
+  }
 
   const loadAllProducts = async () => {
-    await store.loadAllProducts();
-  };
+    await store.loadAllProducts()
+  }
 
   const selectCompany = (company: Company) => {
-    store.selectCompany(company);
-  };
+    store.selectCompany(company)
+  }
 
   const selectProduct = (product: LocalProduct) => {
-    store.selectProduct(product);
-  };
+    store.selectProduct(product)
+  }
 
   const searchProducts = (query: string) => {
-    store.searchProducts(query);
-  };
+    store.searchProducts(query)
+  }
 
   const updateProduct = async (productId: number | string, data: Record<string, unknown>) => {
-    await store.updateProduct(productId, data);
-  };
+    await store.updateProduct(productId, data)
+  }
 
   const exportProducts = async (companyId: number | string | null = null) => {
-    await store.exportProducts(companyId);
-  };
+    await store.exportProducts(companyId)
+  }
 
   const getCompanyProducts = (companyId: number | string) => {
-    return store.companyProducts(companyId);
-  };
+    return store.companyProducts(companyId)
+  }
 
   const reset = () => {
-    store.reset();
-  };
+    store.reset()
+  }
 
   return {
     loading,
@@ -71,6 +71,6 @@ export function useProductQuery(): unknown {
     updateProduct,
     exportProducts,
     getCompanyProducts,
-    reset
-  };
+    reset,
+  }
 }

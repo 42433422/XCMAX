@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment"
 """XC ``packages.json``（Catalog API ``/v1``）与 SQLite ``catalog_items``（市场）的关系与同步。
 
 **市场展示与购买**以 ``catalog_items`` 为准（``market_api``）。**XC 包仓库**使用

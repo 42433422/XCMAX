@@ -1,3 +1,4 @@
+# mypy: disable-error-code="index"
 """
 从考勤 Excel 提取部门和人员，导入 taiyangniao_pro.db（考勤表 + products/customers，供前端列表）。
 
@@ -18,6 +19,8 @@ import sys
 from collections import OrderedDict
 from datetime import datetime
 from pathlib import Path
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -370,7 +373,7 @@ def import_departments_and_employees(
 
         conn.commit()
         return dept_rows, emp_rows, prod_rows, cust_rows
-    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
         conn.rollback()
         raise
     finally:

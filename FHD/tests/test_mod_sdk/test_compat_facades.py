@@ -1,3 +1,4 @@
+# mypy: disable-error-code="index, union-attr"
 """mod_sdk compat 门面（neuro_bus / approval / lan / planner）mock 单测。"""
 
 from __future__ import annotations

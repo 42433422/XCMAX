@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import { detectLocale, i18n, setAppLocale } from './index'
 
 describe('i18n/index', () => {
@@ -17,9 +17,7 @@ describe('i18n/index', () => {
 
     it('has fallback locale set to zh-CN', () => {
       const fallback = i18n.global.fallbackLocale
-      const value = typeof fallback === 'object' && fallback !== null && 'value' in fallback
-        ? fallback.value
-        : fallback
+      const value = typeof fallback === 'object' && fallback !== null && 'value' in fallback ? fallback.value : fallback
       expect(value).toBe('zh-CN')
     })
   })

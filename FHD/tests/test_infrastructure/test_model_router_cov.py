@@ -1,3 +1,4 @@
+# mypy: disable-error-code="misc"
 """Tests for app.infrastructure.llm.model_router — 覆盖率补齐。
 
 聚焦现有 test_model_router.py 未覆盖的路径：

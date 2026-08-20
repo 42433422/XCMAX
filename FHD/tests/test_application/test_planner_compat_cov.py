@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.utils.operational_errors import BOUNDARY_ERRORS
+
 """Branch-coverage tests for app.application.planner_compat_service.
 
 asyncio_mode=auto is declared in pytest.ini — all async tests run automatically.
@@ -140,7 +142,7 @@ for _k in _installed_stubs:
     sys.modules.pop(_k, None)  # must remove stub first; import_module returns cached value
     try:
         sys.modules[_k] = _importlib.import_module(_k)
-    except Exception:
+    except BOUNDARY_ERRORS:
         # Re-import failed (e.g. a transitive dep is still stubbed at this point).
         # Leave the module ABSENT — every stub we installed was for a module that
         # was absent beforehand, so removing it restores the pre-stub state and lets

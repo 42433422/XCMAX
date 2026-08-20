@@ -30,11 +30,7 @@ describe('buildCheckoutSignData', () => {
   })
 
   it('对小数金额裁剪尾随 0', () => {
-    const data = buildCheckoutSignData(
-      { item_id: 0, total_amount: 12.3, wallet_recharge: true },
-      'req_x',
-      1700000000.7,
-    )
+    const data = buildCheckoutSignData({ item_id: 0, total_amount: 12.3, wallet_recharge: true }, 'req_x', 1700000000.7)
     expect(data.total_amount).toBe('12.3')
     expect(data.timestamp).toBe('1700000000')
     expect(data.wallet_recharge).toBe('true')
@@ -51,11 +47,7 @@ describe('buildCheckoutSignData', () => {
   })
 
   it('subject / plan_id 自动 trim', () => {
-    const data = buildCheckoutSignData(
-      { plan_id: '  pro  ', subject: '  hi  ', total_amount: 1, wallet_recharge: false },
-      'r',
-      1,
-    )
+    const data = buildCheckoutSignData({ plan_id: '  pro  ', subject: '  hi  ', total_amount: 1, wallet_recharge: false }, 'r', 1)
     expect(data.plan_id).toBe('pro')
     expect(data.subject).toBe('hi')
   })
@@ -99,7 +91,10 @@ describe('api request contracts', () => {
   beforeEach(() => {
     localStorage.clear()
     document.cookie = 'csrf_token=; Max-Age=0; path=/'
-    vi.stubGlobal('fetch', vi.fn(async () => response({ ok: true, data: [] })))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => response({ ok: true, data: [] })),
+    )
   })
 
   afterEach(() => {
@@ -208,11 +203,13 @@ describe('api request contracts', () => {
   })
 
   it('keeps non-JSON server errors readable', async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(response('gateway failure', {
-      status: 502,
-      statusText: 'Bad Gateway',
-      headers: { 'Content-Type': 'text/plain' },
-    }))
+    vi.mocked(fetch).mockResolvedValueOnce(
+      response('gateway failure', {
+        status: 502,
+        statusText: 'Bad Gateway',
+        headers: { 'Content-Type': 'text/plain' },
+      }),
+    )
     await expect(api.me()).rejects.toThrow('gateway failure')
   })
 

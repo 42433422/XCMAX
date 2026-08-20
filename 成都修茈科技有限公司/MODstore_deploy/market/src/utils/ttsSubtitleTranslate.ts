@@ -43,10 +43,7 @@ export async function translateZhToEn(text: string, signal?: AbortSignal): Promi
     })
     if (!res.ok) return ''
     const json = (await res.json()) as Record<string, unknown>
-    const data =
-      json.data && typeof json.data === 'object'
-        ? (json.data as Record<string, unknown>)
-        : json
+    const data = json.data && typeof json.data === 'object' ? (json.data as Record<string, unknown>) : json
     const en = String(data.translation || data.text || data.en || '').trim()
     if (!en) return ''
     cacheSet(zh, en)

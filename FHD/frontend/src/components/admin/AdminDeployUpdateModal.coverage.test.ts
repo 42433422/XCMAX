@@ -32,18 +32,12 @@ vi.mock('@/api/xcmaxAdmin', () => ({
 }))
 
 import AdminDeployUpdateModal from './AdminDeployUpdateModal.vue'
-import {
-  xcmaxAdminApi,
-  type DeployCheckData,
-  type DeployJobData,
-} from '@/api/xcmaxAdmin'
+import { xcmaxAdminApi, type DeployCheckData, type DeployJobData } from '@/api/xcmaxAdmin'
 
 // ── 辅助函数 ──────────────────────────────────────────────────────────
 
 /** 创建 DeployCheckData */
-function makeCheckData(
-  flagOverrides: Partial<DeployCheckData['flags']> = {},
-): DeployCheckData {
+function makeCheckData(flagOverrides: Partial<DeployCheckData['flags']> = {}): DeployCheckData {
   return {
     admin_local: { version: '1.0.0', git_sha: 'abc123' },
     update_hub: { version: '1.0.0', git_sha: 'abc123' },
@@ -59,9 +53,7 @@ function makeCheckData(
 }
 
 /** 创建 DeployJobData */
-function makeJobData(
-  overrides: Partial<DeployJobData> = {},
-): DeployJobData {
+function makeJobData(overrides: Partial<DeployJobData> = {}): DeployJobData {
   return {
     job_id: 'job-1',
     status: 'running',
@@ -113,9 +105,7 @@ describe('AdminDeployUpdateModal - coverage ramp', () => {
 
   /** 获取最后一个 interval 回调（pollJob 的轮询回调） */
   function lastInterval(): (() => void) | null {
-    return intervalCallbacks.length > 0
-      ? intervalCallbacks[intervalCallbacks.length - 1]
-      : null
+    return intervalCallbacks.length > 0 ? intervalCallbacks[intervalCallbacks.length - 1] : null
   }
 
   // ── 基础渲染 ──────────────────────────────────────────────────────
@@ -151,9 +141,7 @@ describe('AdminDeployUpdateModal - coverage ramp', () => {
   describe('checkLoading 状态', () => {
     it('检测中显示"正在检测更新…"', async () => {
       // checkDeployUpdates 返回未决 promise，保持 checkLoading=true
-      vi.mocked(xcmaxAdminApi.checkDeployUpdates).mockReturnValue(
-        new Promise(() => {}),
-      )
+      vi.mocked(xcmaxAdminApi.checkDeployUpdates).mockReturnValue(new Promise(() => {}))
       const wrapper = mountModal(false)
       await wrapper.setProps({ modelValue: true })
       await nextTick()
@@ -163,9 +151,7 @@ describe('AdminDeployUpdateModal - coverage ramp', () => {
     })
 
     it('检测中时按钮禁用', async () => {
-      vi.mocked(xcmaxAdminApi.checkDeployUpdates).mockReturnValue(
-        new Promise(() => {}),
-      )
+      vi.mocked(xcmaxAdminApi.checkDeployUpdates).mockReturnValue(new Promise(() => {}))
       const wrapper = mountModal(false)
       await wrapper.setProps({ modelValue: true })
       await nextTick()
@@ -195,9 +181,7 @@ describe('AdminDeployUpdateModal - coverage ramp', () => {
     })
 
     it('检测抛异常时显示异常信息', async () => {
-      vi.mocked(xcmaxAdminApi.checkDeployUpdates).mockRejectedValue(
-        new Error('连接超时'),
-      )
+      vi.mocked(xcmaxAdminApi.checkDeployUpdates).mockRejectedValue(new Error('连接超时'))
       const wrapper = mountModal(false)
       await wrapper.setProps({ modelValue: true })
       await flushPromises()
@@ -206,9 +190,7 @@ describe('AdminDeployUpdateModal - coverage ramp', () => {
     })
 
     it('检测抛非 Error 异常时显示字符串', async () => {
-      vi.mocked(xcmaxAdminApi.checkDeployUpdates).mockRejectedValue(
-        'string error' as never,
-      )
+      vi.mocked(xcmaxAdminApi.checkDeployUpdates).mockRejectedValue('string error' as never)
       const wrapper = mountModal(false)
       await wrapper.setProps({ modelValue: true })
       await flushPromises()
@@ -217,9 +199,7 @@ describe('AdminDeployUpdateModal - coverage ramp', () => {
     })
 
     it('检测返回无 data 无 message 时显示默认错误', async () => {
-      vi.mocked(xcmaxAdminApi.checkDeployUpdates).mockResolvedValue(
-        {} as never,
-      )
+      vi.mocked(xcmaxAdminApi.checkDeployUpdates).mockResolvedValue({} as never)
       const wrapper = mountModal(false)
       await wrapper.setProps({ modelValue: true })
       await flushPromises()
@@ -483,9 +463,7 @@ describe('AdminDeployUpdateModal - coverage ramp', () => {
     })
 
     it('startPush 抛异常时显示异常信息', async () => {
-      vi.mocked(xcmaxAdminApi.startDeployPush).mockRejectedValue(
-        new Error('网络异常'),
-      )
+      vi.mocked(xcmaxAdminApi.startDeployPush).mockRejectedValue(new Error('网络异常'))
       const wrapper = mountModal(true)
       const pushBtn = wrapper.findAll('button')[2]
       await pushBtn.trigger('click')
@@ -495,9 +473,7 @@ describe('AdminDeployUpdateModal - coverage ramp', () => {
     })
 
     it('startPush 抛非 Error 异常时显示字符串', async () => {
-      vi.mocked(xcmaxAdminApi.startDeployPush).mockRejectedValue(
-        'push failed' as never,
-      )
+      vi.mocked(xcmaxAdminApi.startDeployPush).mockRejectedValue('push failed' as never)
       const wrapper = mountModal(true)
       const pushBtn = wrapper.findAll('button')[2]
       await pushBtn.trigger('click')
@@ -508,9 +484,7 @@ describe('AdminDeployUpdateModal - coverage ramp', () => {
 
     it('startPush 时推送中按钮文本变为"推送中…"', async () => {
       // startDeployPush 返回未决 promise，保持 pushing=true
-      vi.mocked(xcmaxAdminApi.startDeployPush).mockReturnValue(
-        new Promise(() => {}),
-      )
+      vi.mocked(xcmaxAdminApi.startDeployPush).mockReturnValue(new Promise(() => {}))
       const wrapper = mountModal(true)
       const pushBtn = wrapper.findAll('button')[2]
       await pushBtn.trigger('click')
@@ -592,9 +566,7 @@ describe('AdminDeployUpdateModal - coverage ramp', () => {
       vi.mocked(xcmaxAdminApi.startDeployPush).mockResolvedValue({
         data: makeJobData({ status: 'running' }),
       } as never)
-      vi.mocked(xcmaxAdminApi.getDeployJob).mockRejectedValue(
-        new Error('轮询异常'),
-      )
+      vi.mocked(xcmaxAdminApi.getDeployJob).mockRejectedValue(new Error('轮询异常'))
       const wrapper = mountModal(true)
       const pushBtn = wrapper.findAll('button')[2]
       await pushBtn.trigger('click')
@@ -624,7 +596,6 @@ describe('AdminDeployUpdateModal - coverage ramp', () => {
       await flushPromises()
 
       // 无错误显示
-      const alerts = wrapper.findAll('.deploy-update-alert')
       // 可能有之前的错误，但不应因无 data 而新增
       wrapper.unmount()
     })
@@ -747,17 +718,13 @@ describe('AdminDeployUpdateModal - coverage ramp', () => {
       vi.mocked(xcmaxAdminApi.startDeployPush).mockResolvedValue({
         data: makeJobData({
           status: 'running',
-          steps: [
-            { id: 's1', label: '步骤1', status: 'done', detail: '详情信息' },
-          ],
+          steps: [{ id: 's1', label: '步骤1', status: 'done', detail: '详情信息' }],
         }),
       } as never)
       const wrapper = mountModal(true)
       await wrapper.findAll('button')[2].trigger('click')
       await flushPromises()
-      expect(wrapper.find('.deploy-update-step__detail').text()).toContain(
-        '详情信息',
-      )
+      expect(wrapper.find('.deploy-update-step__detail').text()).toContain('详情信息')
       wrapper.unmount()
     })
   })
@@ -776,9 +743,7 @@ describe('AdminDeployUpdateModal - coverage ramp', () => {
 
     it('推送状态点击"关闭"不触发事件', async () => {
       // startDeployPush 返回未决 promise，保持 pushing=true
-      vi.mocked(xcmaxAdminApi.startDeployPush).mockReturnValue(
-        new Promise(() => {}),
-      )
+      vi.mocked(xcmaxAdminApi.startDeployPush).mockReturnValue(new Promise(() => {}))
       const wrapper = mountModal(true)
       const pushBtn = wrapper.findAll('button')[2]
       await pushBtn.trigger('click')
@@ -789,6 +754,7 @@ describe('AdminDeployUpdateModal - coverage ramp', () => {
       await closeBtn.trigger('click')
       // 不应触发 update:modelValue
       const emitted = wrapper.emitted('update:modelValue')
+      expect(emitted).toBeUndefined()
       // 如果有 emitted，最后一个不应是 false（可能是 Modal 转发的，但 close 函数不应触发）
       // close 函数在 pushing=true 时直接 return，不 emit
       // 但 closeBtn 的 click 可能触发 Modal 的 handleClose... 不，closeBtn 是在 footer slot 里
@@ -926,9 +892,7 @@ describe('AdminDeployUpdateModal - coverage ramp', () => {
     })
 
     it('推送中时所有复选框和选择框禁用', async () => {
-      vi.mocked(xcmaxAdminApi.startDeployPush).mockReturnValue(
-        new Promise(() => {}),
-      )
+      vi.mocked(xcmaxAdminApi.startDeployPush).mockReturnValue(new Promise(() => {}))
       const wrapper = mountModal(true)
       await wrapper.findAll('button')[2].trigger('click')
       await nextTick()

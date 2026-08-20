@@ -1,20 +1,20 @@
 # Runbook — GitHub PR 守门员 (`github-pr-gatekeeper`)
 
-| 字段 | 值 |
-|------|----|
-| 员工 ID | `github-pr-gatekeeper` |
+| 字段     | 值                                |
+| -------- | --------------------------------- |
+| 员工 ID  | `github-pr-gatekeeper`            |
 | 负责区域 | `platform-core` · `build-release` |
-| 最后更新 | 2026-06-28 |
-| 应急联系 | admin |
+| 最后更新 | 2026-06-28                        |
+| 应急联系 | admin                             |
 
 ## 触发条件
 
-| 事件 | 来源 | 动作 |
-|------|------|------|
-| `dependabot.pr.opened` | Dependabot webhook | 跑 `skill-pr-review` 决策矩阵 |
-| `dependabot.autofix.triggered` | 内部 `auto_fix_loop.py` | 跑 `skill-pr-review` 决策矩阵 |
-| 人工 PR 提交 | GitHub webhook / 人工派发 | 派发 `test-qa-runner` 验证后决策 |
-| major 升级 PR | Dependabot | 派发 `vibe-coding-maintainer` 兼容性验证 |
+| 事件                           | 来源                      | 动作                                     |
+| ------------------------------ | ------------------------- | ---------------------------------------- |
+| `dependabot.pr.opened`         | Dependabot webhook        | 跑 `skill-pr-review` 决策矩阵            |
+| `dependabot.autofix.triggered` | 内部 `auto_fix_loop.py`   | 跑 `skill-pr-review` 决策矩阵            |
+| 人工 PR 提交                   | GitHub webhook / 人工派发 | 派发 `test-qa-runner` 验证后决策         |
+| major 升级 PR                  | Dependabot                | 派发 `vibe-coding-maintainer` 兼容性验证 |
 
 ## 标准流程
 
@@ -81,14 +81,14 @@
 
 ## 故障处置
 
-| 场景 | 处置 |
-|------|------|
-| GitHub API 401 | Token 失效 → 上报 `security-secrets-guard` 轮换；本岗不直接改 `.env` |
-| GitHub API 403 | 权限不足 → 检查 Token scope 是否含 `repo` / `pull-requests:write`；上报 admin |
-| GitHub API 429 | Rate limit → 指数退避重试 1 次；仍失败则排队等下个窗口 |
-| CI 状态 fetching 失败 | 不 approve，等 CI 重跑或人工确认 |
-| `vibe-coding-maintainer` 验证超时 | 升级到 admin，不抢跑 merge |
-| 上游依赖未完成 | 等待 `employee.task.done:change-request-auditor` + `employee.task.done:test-qa-runner` 事件，不自行推进 |
+| 场景                              | 处置                                                                                                    |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| GitHub API 401                    | Token 失效 → 上报 `security-secrets-guard` 轮换；本岗不直接改 `.env`                                    |
+| GitHub API 403                    | 权限不足 → 检查 Token scope 是否含 `repo` / `pull-requests:write`；上报 admin                           |
+| GitHub API 429                    | Rate limit → 指数退避重试 1 次；仍失败则排队等下个窗口                                                  |
+| CI 状态 fetching 失败             | 不 approve，等 CI 重跑或人工确认                                                                        |
+| `vibe-coding-maintainer` 验证超时 | 升级到 admin，不抢跑 merge                                                                              |
+| 上游依赖未完成                    | 等待 `employee.task.done:change-request-auditor` + `employee.task.done:test-qa-runner` 事件，不自行推进 |
 
 ## 验收检查清单
 
@@ -105,4 +105,5 @@
 3. major 升级引发线上故障 → 立即 revert PR → 通知 `deploy-release-officer` 与 `change-request-auditor` 复盘。
 
 ---
-*本文件由 admin 在 2026-06-28 录入 yuangon 编制，与 change-request-auditor 分工（外部 PR vs 内部 CR）。*
+
+_本文件由 admin 在 2026-06-28 录入 yuangon 编制，与 change-request-auditor 分工（外部 PR vs 内部 CR）。_

@@ -149,6 +149,11 @@ def _prefix_fhd_paths(content: str, out_name: str) -> str:
         "working-directory: mobile-flutter-poc",
         "working-directory: FHD/mobile-flutter-poc",
     )
+    if out_name == "fhd-langgraph-packages.yml":
+        content = content.replace(
+            'path: "packages/xcagi_langgraph_',
+            'path: "FHD/packages/xcagi_langgraph_',
+        )
     content = content.replace(
         "path: mobile-flutter-poc/build/",
         "path: FHD/mobile-flutter-poc/build/",

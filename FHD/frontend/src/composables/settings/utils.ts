@@ -1,4 +1,4 @@
-import type { DeploymentMode } from '@/constants/deploymentModes.generated';
+import type { DeploymentMode } from '@/constants/deploymentModes.generated'
 
 export type ApiMessageResult = {
   success?: boolean

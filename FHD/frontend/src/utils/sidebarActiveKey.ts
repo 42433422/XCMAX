@@ -9,10 +9,11 @@ const CHAT_ROUTE_NAMES = new Set(['chat', 'mod-planner-chat'])
 
 /** Mod 菜单 path / 宿主 path 是否对应对话页 */
 export function isChatLikePath(path: string): boolean {
-  const p = String(path || '')
-    .split('?')[0]
-    .split('#')[0]
-    .replace(/\/$/, '') || '/'
+  const p =
+    String(path || '')
+      .split('?')[0]
+      .split('#')[0]
+      .replace(/\/$/, '') || '/'
   if (p === '/' || p === '/chat') return true
   return /\/chat$/i.test(p) && !/\/chat-debug/i.test(p)
 }
@@ -26,9 +27,6 @@ export function normalizeSidebarActiveKey(rawKey: string, route?: Pick<RouteLoca
   return key || routeName || SIDEBAR_CHAT_NAV_KEY
 }
 
-export function isChatSidebarActive(
-  sidebarKey: string,
-  route: Pick<RouteLocationNormalizedLoaded, 'name' | 'path'>,
-): boolean {
+export function isChatSidebarActive(sidebarKey: string, route: Pick<RouteLocationNormalizedLoaded, 'name' | 'path'>): boolean {
   return normalizeSidebarActiveKey(sidebarKey, route) === SIDEBAR_CHAT_NAV_KEY
 }

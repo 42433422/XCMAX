@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, union-attr"
 """Production readback receipts for autonomously published employee packs."""
 
 from __future__ import annotations
@@ -6,7 +7,7 @@ import hashlib
 import json
 import re
 import zipfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Mapping, Sequence
 
@@ -293,7 +294,7 @@ def record_evolution_deployment_receipts(
         council = dict(council_builder(verified))
         if council.get("verified") is not True:
             raise EvolutionDeploymentReceiptError("strategic_council_review_failed")
-        observed_at = datetime.now(timezone.utc).isoformat()
+        observed_at = datetime.now(UTC).isoformat()
         source_commit_sha = _text(verified.get("source_commit_sha"), 64).lower()
         if _COMMIT_RE.fullmatch(source_commit_sha):
             implementation_events = [

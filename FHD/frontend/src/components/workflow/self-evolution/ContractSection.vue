@@ -32,7 +32,8 @@ defineProps<{
       <span>系统状态检查</span>
       <strong>{{ ok ? '正常' : '异常' }} · {{ schemaVersion }}</strong>
       <small>
-        必需 {{ validation.required_count ?? requiredFields.length }} · 缺失 {{ missingFields.length + surfaceMissing.length }}
+        必需 {{ validation.required_count ?? requiredFields.length }} · 缺失
+        {{ missingFields.length + surfaceMissing.length }}
         <template v-if="missingFields.length"> · {{ missingFields.slice(0, 5).join(' / ') }}</template>
         <template v-else-if="surfaceMissing.length"> · {{ surfaceMissing.slice(0, 5).join(' / ') }}</template>
       </small>
@@ -41,20 +42,35 @@ defineProps<{
       <div class="selp-contract-primary">
         <span>当前状态</span>
         <strong>{{ firstText(contractStatus.state, surfaceIncidentSummary.status, ok ? '正常' : '异常') }}</strong>
-        <small>{{ firstText(primaryRoute.action, contractStatus.primary_action, surfaceIncidentSummary.primary_action, surfaceReadiness.action, ok ? '全部正常' : '检查问题') }} -> {{ firstText(primaryRoute.surface, contractStatus.primary_target_surface, '系统运行时') }}</small>
-        <small v-if="firstText(primaryRoute.employee_id, asArray(primaryRoute.target_employee_ids)[0])">目标员工 · {{ firstText(primaryRoute.employee_id, asArray(primaryRoute.target_employee_ids)[0]) }}</small>
-        <small>全局={{ contractStatus.global_ok === false ? '异常' : '正常' }} · 所有模块={{ contractStatus.all_surfaces_ok === false ? '异常' : '正常' }}</small>
-        <small>{{ primaryRoute.requires_admin ? '仅管理员' : '操作员' }} · {{ primaryRoute.executable ? '可执行' : '仅导航' }} · {{ firstText(primaryRoute.detail, '由后端提供') }}</small>
-        <router-link
-          v-if="primaryRoute.surface === 'duty_roster_graph' && dutyRosterLocation"
-          :to="dutyRosterLocation"
+        <small
+          >{{
+            firstText(
+              primaryRoute.action,
+              contractStatus.primary_action,
+              surfaceIncidentSummary.primary_action,
+              surfaceReadiness.action,
+              ok ? '全部正常' : '检查问题',
+            )
+          }}
+          ->
+          {{ firstText(primaryRoute.surface, contractStatus.primary_target_surface, '系统运行时') }}</small
         >
+        <small v-if="firstText(primaryRoute.employee_id, asArray(primaryRoute.target_employee_ids)[0])"
+          >目标员工 · {{ firstText(primaryRoute.employee_id, asArray(primaryRoute.target_employee_ids)[0]) }}</small
+        >
+        <small
+          >全局={{ contractStatus.global_ok === false ? '异常' : '正常' }} · 所有模块={{
+            contractStatus.all_surfaces_ok === false ? '异常' : '正常'
+          }}</small
+        >
+        <small
+          >{{ primaryRoute.requires_admin ? '仅管理员' : '操作员' }} · {{ primaryRoute.executable ? '可执行' : '仅导航' }} ·
+          {{ firstText(primaryRoute.detail, '由后端提供') }}</small
+        >
+        <router-link v-if="primaryRoute.surface === 'duty_roster_graph' && dutyRosterLocation" :to="dutyRosterLocation">
           {{ firstText(primaryRoute.label, '打开目标面') }}
         </router-link>
-        <router-link
-          v-else-if="primaryRoute.surface === 'employee_space' && employeeSpaceLocation"
-          :to="employeeSpaceLocation"
-        >
+        <router-link v-else-if="primaryRoute.surface === 'employee_space' && employeeSpaceLocation" :to="employeeSpaceLocation">
           {{ firstText(primaryRoute.label, '打开目标面') }}
         </router-link>
         <small v-else>默认路由 · {{ firstText(primaryRoute.view, '部门') }}</small>
@@ -77,22 +93,38 @@ defineProps<{
       <div>
         <span>模块就绪</span>
         <strong>{{ surfaceReadinessOk ? '就绪' : '异常' }}</strong>
-        <small>{{ surfaceMissing.length ? `${surfaceReadiness.action || '修复'} · ${surfaceMissing.slice(0, 3).join(' / ')}` : (surfaceReadiness.title || surfaceKey) }}</small>
+        <small>{{
+          surfaceMissing.length
+            ? `${surfaceReadiness.action || '修复'} · ${surfaceMissing.slice(0, 3).join(' / ')}`
+            : surfaceReadiness.title || surfaceKey
+        }}</small>
       </div>
       <div>
         <span>模块异常</span>
         <strong>{{ surfaceIncidents.length }} / {{ allSurfaceIncidents.length }}</strong>
-        <small>{{ surfaceIncidents.length ? `${firstText(surfaceIncident.action, surfaceIncident.title, '检查系统状态')} -> ${firstText(surfaceIncident.target_surface, surfaceKey)} · ${asArray(surfaceIncident.missing).slice(0, 3).join(' / ') || surfaceKey}` : '当前模块正常' }}</small>
+        <small>{{
+          surfaceIncidents.length
+            ? `${firstText(surfaceIncident.action, surfaceIncident.title, '检查系统状态')} -> ${firstText(surfaceIncident.target_surface, surfaceKey)} · ${asArray(surfaceIncident.missing).slice(0, 3).join(' / ') || surfaceKey}`
+            : '当前模块正常'
+        }}</small>
       </div>
       <div>
         <span>异常汇总</span>
         <strong>{{ firstText(surfaceIncidentSummary.status, surfaceIncidentSummary.total ?? 0) }}</strong>
-        <small>{{ firstText(surfaceIncidentSummary.primary_action) ? `${surfaceIncidentSummary.primary_action} -> ${firstText(surfaceIncidentSummary.primary_target_surface, surfaceIncidentSummary.primary_surface, '未知')} · 总计 ${surfaceIncidentSummary.total ?? 0}` : (asArray(surfaceIncidentSummary.actions).slice(0, 3).join(' / ') || '所有模块正常') }}</small>
+        <small>{{
+          firstText(surfaceIncidentSummary.primary_action)
+            ? `${surfaceIncidentSummary.primary_action} -> ${firstText(surfaceIncidentSummary.primary_target_surface, surfaceIncidentSummary.primary_surface, '未知')} · 总计 ${surfaceIncidentSummary.total ?? 0}`
+            : asArray(surfaceIncidentSummary.actions).slice(0, 3).join(' / ') || '所有模块正常'
+        }}</small>
       </div>
       <div>
         <span>审计记录</span>
         <strong>{{ missingNested.length ? `缺失 ${missingNested.length}` : '正常' }}</strong>
-        <small>{{ missingNested.length ? missingNested.slice(0, 4).join(' / ') : `全局=${validation.global_ok === false ? '异常' : '正常'} · 所有模块=${validation.all_surfaces_ok === false ? '异常' : '正常'}` }}</small>
+        <small>{{
+          missingNested.length
+            ? missingNested.slice(0, 4).join(' / ')
+            : `全局=${validation.global_ok === false ? '异常' : '正常'} · 所有模块=${validation.all_surfaces_ok === false ? '异常' : '正常'}`
+        }}</small>
       </div>
     </div>
   </div>
@@ -129,9 +161,7 @@ defineProps<{
 
 .selp-contract-grid > .selp-contract-primary {
   grid-column: span 2;
-  background:
-    radial-gradient(circle at 0% 0%, rgba(20, 184, 166, 0.12), transparent 34%),
-    rgba(255, 255, 255, 0.86);
+  background: radial-gradient(circle at 0% 0%, rgba(20, 184, 166, 0.12), transparent 34%), rgba(255, 255, 255, 0.86);
 }
 
 .selp-contract-head span,

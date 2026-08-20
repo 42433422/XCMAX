@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -72,7 +76,11 @@ def _tool_candidates(req: _facade().Dict[str, _facade().Any]) -> list[str]:
 
 
 def _is_cli_runtime_failure(
-    *, error: str = "", status: str = "", snapshot: _facade().Any = None, api_error: str = ""
+    *,
+    error: str = "",
+    status: str = "",
+    snapshot: _facade().Any = None,
+    api_error: str = "",
 ) -> bool:
     """True when the chosen CLI is missing/broken and another tool may succeed."""
     parts = [str(error or ""), str(status or ""), str(api_error or "")]
@@ -115,7 +123,7 @@ def _device_discovery_enabled() -> bool:
 def _safe_json(resp: _facade().httpx.Response) -> _facade().Any:
     try:
         return resp.json() if resp.content else {}
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return {"raw": resp.text[:4000]}
 
 
@@ -319,7 +327,7 @@ def _select_fleet_devices(
 def _fetch_devices(client: _facade().httpx.Client, base: str, token: str) -> list:
     try:
         resp = client.get(f"{base}/api/devices", headers={"Authorization": f"Bearer {token}"})
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return []
     if resp.status_code >= 400:
         return []
@@ -329,7 +337,10 @@ def _fetch_devices(client: _facade().httpx.Client, base: str, token: str) -> lis
 
 
 def _resolve_dispatch_devices(
-    client: _facade().httpx.Client, base: str, token: str, req: _facade().Dict[str, _facade().Any]
+    client: _facade().httpx.Client,
+    base: str,
+    token: str,
+    req: _facade().Dict[str, _facade().Any],
 ) -> tuple:
     """返回 (tier, [device dicts], reason)。显式 device_id → 零回归走一级单设备。"""
     explicit = str(req.get("device_id") or "").strip()
@@ -347,7 +358,11 @@ def _resolve_dispatch_devices(
             selected_tool = _facade()._selected_tool_for_device(target, req)
             if selected_tool:
                 return (1, [_facade()._with_selected_tool(target, selected_tool)], "")
-        return (1, [{"id": explicit, "_selected_tool": _facade()._tool_candidates(req)[0]}], "")
+        return (
+            1,
+            [{"id": explicit, "_selected_tool": _facade()._tool_candidates(req)[0]}],
+            "",
+        )
     if not _facade()._device_discovery_enabled():
         return (
             1,
@@ -424,7 +439,9 @@ def _attach_tool_fallback_meta(
     return result
 
 
-def _post_para_api(req: _facade().Dict[str, _facade().Any]) -> _facade().Dict[str, _facade().Any]:
+def _post_para_api(
+    req: _facade().Dict[str, _facade().Any],
+) -> _facade().Dict[str, _facade().Any]:
     attempts: list = []
     excluded: set[str] = set(_facade()._excluded_tools(req))
     result = _facade()._post_para_api_once(req)
@@ -475,7 +492,7 @@ def _post_para_api(req: _facade().Dict[str, _facade().Any]) -> _facade().Dict[st
             import logging
 
             logging.getLogger(__name__).warning(logger_msg)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
         result = _facade()._post_para_api_once(next_req)
     return _facade()._attach_tool_fallback_meta(result, attempts=attempts)

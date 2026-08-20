@@ -183,9 +183,7 @@ describe('useFileImport', () => {
   })
 
   it('uploadMultipleFiles reports partial success', async () => {
-    apiPost
-      .mockResolvedValueOnce({ success: true, data: {} })
-      .mockResolvedValueOnce({ success: false, message: 'fail' })
+    apiPost.mockResolvedValueOnce({ success: true, data: {} }).mockResolvedValueOnce({ success: false, message: 'fail' })
     const imp = useFileImport()
     const files = [makeFile('a.csv'), makeFile('b.xlsx')]
     const results = await imp.uploadMultipleFiles(files)

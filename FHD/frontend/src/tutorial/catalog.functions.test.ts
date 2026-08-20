@@ -107,21 +107,15 @@ describe('tutorial/catalog', () => {
     })
 
     it('does not describe the retired menu-tour behavior', () => {
-      expect(formatAdvancedTrackHint(['a', 'b', 'c'])).toBe(
-        '5 门真实业务实训 · 亲自操作 · 服务端验证',
-      )
+      expect(formatAdvancedTrackHint(['a', 'b', 'c'])).toBe('5 门真实业务实训 · 亲自操作 · 服务端验证')
     })
 
     it('keeps the V2 hint for a single visible item', () => {
-      expect(formatAdvancedTrackHint(['only'])).toBe(
-        '5 门真实业务实训 · 亲自操作 · 服务端验证',
-      )
+      expect(formatAdvancedTrackHint(['only'])).toBe('5 门真实业务实训 · 亲自操作 · 服务端验证')
     })
 
     it('accepts the legacy max parameter without changing the V2 hint', () => {
-      expect(formatAdvancedTrackHint(['a', 'b'], 1)).toBe(
-        '5 门真实业务实训 · 亲自操作 · 服务端验证',
-      )
+      expect(formatAdvancedTrackHint(['a', 'b'], 1)).toBe('5 门真实业务实训 · 亲自操作 · 服务端验证')
     })
   })
 })

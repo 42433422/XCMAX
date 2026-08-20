@@ -6,17 +6,17 @@
 
 ## 负责文件
 
-| 文件 | 说明 |
-|------|------|
-| `reconciliation.py` | 平台对账快照 + **只读预览** `POST /api/admin/reconciliation/preview`（RPA/skill 对齐） |
-| `payment_api.py` | 支付宝接口蓝图 |
-| `payment_orders.py` | 订单管理 |
-| `payment_common.py` | 公共工具 |
-| `llm_billing.py` | LLM token 计费 |
-| `subscription_renewer.py` | 订阅续费任务 |
-| `llm_key_resolver.py` | LLM API Key 解析 |
-| `alipay_package/**` | 支付宝 SDK 包 |
-| `setup-alipay.sh` | 支付宝环境初始化 |
+| 文件                      | 说明                                                                                   |
+| ------------------------- | -------------------------------------------------------------------------------------- |
+| `reconciliation.py`       | 平台对账快照 + **只读预览** `POST /api/admin/reconciliation/preview`（RPA/skill 对齐） |
+| `payment_api.py`          | 支付宝接口蓝图                                                                         |
+| `payment_orders.py`       | 订单管理                                                                               |
+| `payment_common.py`       | 公共工具                                                                               |
+| `llm_billing.py`          | LLM token 计费                                                                         |
+| `subscription_renewer.py` | 订阅续费任务                                                                           |
+| `llm_key_resolver.py`     | LLM API Key 解析                                                                       |
+| `alipay_package/**`       | 支付宝 SDK 包                                                                          |
+| `setup-alipay.sh`         | 支付宝环境初始化                                                                       |
 
 ## 典型任务
 
@@ -28,12 +28,12 @@
 
 ## KPI
 
-| 指标 | 目标 |
-|------|------|
-| 支付成功率 | ≥ 99.5% |
-| 对账差异率 | < 0.01% |
-| 高危支付 bug 修复时间 | < 4h |
-| 账单报告按时生成 | 每月 1 日 |
+| 指标                  | 目标      |
+| --------------------- | --------- |
+| 支付成功率            | ≥ 99.5%   |
+| 对账差异率            | < 0.01%   |
+| 高危支付 bug 修复时间 | < 4h      |
+| 账单报告按时生成      | 每月 1 日 |
 
 ## 禁区
 

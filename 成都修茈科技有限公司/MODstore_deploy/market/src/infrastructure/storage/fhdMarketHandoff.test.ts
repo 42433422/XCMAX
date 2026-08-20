@@ -1,10 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import {
-  extractFhdMarketTokenFromRoute,
-  fhdHandoffNeedsStrip,
-  applyFhdMarketToken,
-  FHD_MARKET_QUERY_KEY,
-} from './fhdMarketHandoff'
+import { extractFhdMarketTokenFromRoute, fhdHandoffNeedsStrip, applyFhdMarketToken, FHD_MARKET_QUERY_KEY } from './fhdMarketHandoff'
 import { setAuthTokens } from './tokenStore'
 
 vi.mock('./tokenStore', () => ({
@@ -34,7 +29,10 @@ describe('fhdMarketHandoff', () => {
     })
 
     it('prefers hash over query', () => {
-      const to = { hash: '#xcagi_mt=hashtoken', query: { xcagi_mt: 'querytoken' } } as UnsafeTestValue
+      const to = {
+        hash: '#xcagi_mt=hashtoken',
+        query: { xcagi_mt: 'querytoken' },
+      } as UnsafeTestValue
       expect(extractFhdMarketTokenFromRoute(to)).toBe('hashtoken')
     })
 

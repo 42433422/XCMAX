@@ -60,7 +60,11 @@ def test_vibe_skill_real_path_delegates_to_adapter(monkeypatch):
         captured["logic"] = logic
         captured["input_data"] = dict(input_data)
         captured["user_id"] = user_id
-        return {"eskill_logic_type": "vibe_code", "ok": True, "vibe_skill": {"skill_id": "vc-1"}}
+        return {
+            "eskill_logic_type": "vibe_code",
+            "ok": True,
+            "vibe_skill": {"skill_id": "vc-1"},
+        }
 
     monkeypatch.setattr(
         "modstore_server.integrations.vibe_eskill_adapter.execute_vibe_code_kind",

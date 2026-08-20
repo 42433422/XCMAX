@@ -12,11 +12,14 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from modstore_server.integrations.ops_action_specs import (
     APPROVAL_DISPATCHER_EMPLOYEE_ID as APPROVAL_DISPATCHER_EMPLOYEE_ID,
-    OPS_COMMAND_REGISTRY as OPS_COMMAND_REGISTRY,
-    OPS_EMPLOYEE_IDS as OPS_EMPLOYEE_IDS,
-    CommandSpec as CommandSpec,
 )
+from modstore_server.integrations.ops_action_specs import (
+    OPS_COMMAND_REGISTRY as OPS_COMMAND_REGISTRY,
+)
+from modstore_server.integrations.ops_action_specs import OPS_EMPLOYEE_IDS as OPS_EMPLOYEE_IDS
+from modstore_server.integrations.ops_action_specs import CommandSpec as CommandSpec
 from modstore_server.models import OpsActionAuditLog, get_session_factory
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -239,7 +242,7 @@ def _write_audit(
             rid = int(row.id)
             session.commit()
             return rid
-    except Exception as e:  # noqa: BLE001
+    except BOUNDARY_ERRORS as e:  # noqa: BLE001
         logger.exception("ops audit write failed: %s", e)
     return None
 
@@ -347,7 +350,7 @@ def _run_ssh(
     finally:
         try:
             client.close()
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
 
 
@@ -362,9 +365,7 @@ def dispatch_ops_handler(
     force_real_run: bool = False,
 ) -> Dict[str, Any]:
     """Execute a white-listed operation through the split dispatch implementation."""
-    from modstore_server.integrations.ops_action_dispatch import (
-        dispatch_ops_handler as _impl,
-    )
+    from modstore_server.integrations.ops_action_dispatch import dispatch_ops_handler as _impl
 
     return _impl(
         handler,

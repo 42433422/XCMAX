@@ -25,7 +25,7 @@ if os.path.exists(output_file):
             for col_idx in range(1, min(10, ws.max_column + 1)):
                 cell = ws.cell(row=row_idx, column=col_idx)
                 if cell.value:
-                    row_values.append(f"{chr(64+col_idx)}{row_idx}={cell.value}")
+                    row_values.append(f"{chr(64 + col_idx)}{row_idx}={cell.value}")
             if row_values:
                 print(f"  Row {row_idx}: {row_values}")
     else:

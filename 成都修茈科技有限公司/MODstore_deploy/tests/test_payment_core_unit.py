@@ -25,7 +25,12 @@ from modstore_server.payment_common import (
 
 class TestGenerateAndVerifySignature:
     def test_sign_and_verify_roundtrip(self):
-        data = {"item_id": "0", "plan_id": "pro", "total_amount": "199", "wallet_recharge": "false"}
+        data = {
+            "item_id": "0",
+            "plan_id": "pro",
+            "total_amount": "199",
+            "wallet_recharge": "false",
+        }
         secret = "test-secret"
         sig = generate_signature(data, secret)
         assert verify_signature(data, secret, sig)

@@ -11,11 +11,7 @@ export function createVoiceWorkbenchState() {
 
   const voiceWorkBusy = computed(() => voiceWorkPhase.value === 'orchestrating')
 
-  function syncWorkPhase(opts: {
-    planSession: unknown
-    pendingHandoff: unknown
-    orchPhase: string
-  }) {
+  function syncWorkPhase(opts: { planSession: unknown; pendingHandoff: unknown; orchPhase: string }) {
     if (opts.orchPhase === 'running' || opts.orchPhase === 'estimating') {
       voiceWorkPhase.value = 'orchestrating'
     } else if (opts.pendingHandoff) {
@@ -56,12 +52,7 @@ export function shouldBlockVoiceSubmit(chatBusy: Ref<boolean>, submitLock: boole
 }
 
 /** 是否允许连续听麦（执行中也可听） */
-export function canKeepVoiceListening(opts: {
-  continuous: boolean
-  chatBusy: boolean
-  submitLock: boolean
-  listening: boolean
-}): boolean {
+export function canKeepVoiceListening(opts: { continuous: boolean; chatBusy: boolean; submitLock: boolean; listening: boolean }): boolean {
   if (!opts.continuous) return false
   if (opts.submitLock) return false
   if (opts.listening) return false

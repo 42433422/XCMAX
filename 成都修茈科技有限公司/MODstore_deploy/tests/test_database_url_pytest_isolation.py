@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from modstore_server.db import base
 from modstore_server import models_db
+from modstore_server.db import base
 
 
 def test_pytest_sqlite_flag_wins_over_production_database_url(

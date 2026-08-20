@@ -7,6 +7,8 @@ import re
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
+
 logger = logging.getLogger(__name__)
 _VISITOR_ID_RE = re.compile(r"^v_[A-Za-z0-9_-]{8,64}$")
 
@@ -107,7 +109,7 @@ def _membership_label_for_plan(plan_id: str) -> str:
         label = str(meta.get("label") or "").strip()
         if label:
             return label
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         pass
     # llm_api 旧映射兜底
     try:
@@ -116,7 +118,7 @@ def _membership_label_for_plan(plan_id: str) -> str:
         label = str((_llm_meta(pid) or {}).get("label") or "").strip()
         if label:
             return label
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         pass
     return pid
 
@@ -142,11 +144,11 @@ def active_plan_id_for_user(db: Any, user_id: int) -> str:
             if nested is not None:
                 nested.commit()
             return plan_id
-        except Exception:
+        except RECOVERABLE_ERRORS:
             if nested is not None:
                 nested.rollback()
             raise
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         logger.debug("active_plan_id_for_user failed", exc_info=True)
         return ""
 

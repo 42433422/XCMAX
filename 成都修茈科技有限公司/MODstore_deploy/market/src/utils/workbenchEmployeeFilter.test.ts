@@ -31,10 +31,7 @@ describe('filterOutPlannedDutyEmployees', () => {
   })
 
   it('keeps rows without id', () => {
-    const rows = [
-      { name: 'No ID' },
-      { id: '', name: 'Empty ID' },
-    ]
+    const rows = [{ name: 'No ID' }, { id: '', name: 'Empty ID' }]
     const result = filterOutPlannedDutyEmployees(rows)
     expect(result).toHaveLength(2)
   })

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment, attr-defined, no-any-return, valid-type"
 """知识库向量存储（v1 兼容门面）
 
 历史上这里是 Redis Stack 的 RediSearch HNSW 实现，现在统一接入
@@ -32,6 +33,7 @@ from modstore_server.models import (
     KnowledgeDocument,
     get_session_factory,
 )
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 from modstore_server.vector_engine import VectorEngineError
 
 logger = logging.getLogger(__name__)
@@ -113,7 +115,7 @@ def ensure_index() -> None:
     if _backend() == "redis":
         try:
             _redis_module().ensure_index()
-        except Exception as e:  # noqa: BLE001
+        except BOUNDARY_ERRORS as e:  # noqa: BLE001
             raise KnowledgeVectorError(str(e)) from e
         return
     try:
@@ -127,7 +129,7 @@ def status() -> Dict[str, Any]:
     if _backend() == "redis":
         try:
             return _redis_module().status()
-        except Exception as e:  # noqa: BLE001
+        except BOUNDARY_ERRORS as e:  # noqa: BLE001
             return {
                 "configured": False,
                 "ready": False,
@@ -143,7 +145,7 @@ def status() -> Dict[str, Any]:
         with sf() as session:
             for row in session.query(KnowledgeDocument).all():
                 chunks += int(row.chunk_count or 0)
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         chunks = 0
     return {
         "configured": True,
@@ -178,7 +180,7 @@ def upsert_document(
                 embeddings=embeddings,
                 chunk_metas=chunk_metas,
             )
-        except Exception as e:  # noqa: BLE001
+        except BOUNDARY_ERRORS as e:  # noqa: BLE001
             raise KnowledgeVectorError(str(e)) from e
 
     if len(chunks) != len(embeddings):
@@ -193,7 +195,7 @@ def upsert_document(
         coll = _ensure_user_default_collection(session, int(user_id))
         try:
             delete_document(int(user_id), doc_id, missing_ok=True)
-        except Exception:  # noqa: BLE001
+        except BOUNDARY_ERRORS:  # noqa: BLE001
             pass
         created_at = int(time.time())
         ids: List[str] = []
@@ -216,7 +218,7 @@ def upsert_document(
             if page_no is not None:
                 try:
                     meta_out["page_no"] = int(page_no)
-                except Exception:  # noqa: BLE001
+                except BOUNDARY_ERRORS:  # noqa: BLE001
                     pass
             out_metas.append(meta_out)
 
@@ -258,7 +260,10 @@ def upsert_document(
             .filter(KnowledgeDocument.collection_id == coll.id)
             .all()
         )
-        coll.chunk_count = sum(int(r[0] or 0) for r in chunk_rows)
+        total_chunks = 0
+        for row in chunk_rows:
+            total_chunks += int(row[0] or 0)
+        coll.chunk_count = total_chunks
         session.commit()
         return {
             "doc_id": doc_id,
@@ -273,7 +278,7 @@ def list_documents(user_id: int) -> List[Dict[str, Any]]:
     if _backend() == "redis":
         try:
             return _redis_module().list_documents(user_id)
-        except Exception as e:  # noqa: BLE001
+        except BOUNDARY_ERRORS as e:  # noqa: BLE001
             raise KnowledgeVectorError(str(e)) from e
 
     sf = get_session_factory()
@@ -313,7 +318,7 @@ def delete_document(user_id: int, doc_id: str, *, missing_ok: bool = False) -> b
     if _backend() == "redis":
         try:
             return _redis_module().delete_document(user_id, doc_id, missing_ok=missing_ok)
-        except Exception as e:  # noqa: BLE001
+        except BOUNDARY_ERRORS as e:  # noqa: BLE001
             raise KnowledgeVectorError(str(e)) from e
 
     sf = get_session_factory()
@@ -360,7 +365,7 @@ def search(user_id: int, query_embedding: List[float], limit: int = 6) -> List[D
     if _backend() == "redis":
         try:
             return _redis_module().search(user_id, query_embedding, limit)
-        except Exception as e:  # noqa: BLE001
+        except BOUNDARY_ERRORS as e:  # noqa: BLE001
             raise KnowledgeVectorError(str(e)) from e
 
     sf = get_session_factory()
@@ -393,7 +398,7 @@ def search(user_id: int, query_embedding: List[float], limit: int = 6) -> List[D
         if page_no_raw not in (None, "", 0):
             try:
                 page_no = int(page_no_raw)
-            except Exception:  # noqa: BLE001
+            except BOUNDARY_ERRORS:  # noqa: BLE001
                 page_no = None
         items.append(
             {

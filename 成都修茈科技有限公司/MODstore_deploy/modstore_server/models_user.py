@@ -1,6 +1,7 @@
+# isort: skip_file
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 from sqlalchemy import (
     Boolean,
@@ -25,7 +26,7 @@ class VerificationCode(Base):
     code = Column(String(8), nullable=False)
     expires_at = Column(DateTime, nullable=False)
     used = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
 
 class User(Base):
@@ -38,7 +39,7 @@ class User(Base):
     password_hash = Column(String(256), nullable=False)
     is_admin = Column(Boolean, default=False)
     is_enterprise = Column(Boolean, default=False, nullable=False, index=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
     default_llm_json = Column(Text, default="")
     experience = Column(Integer, default=0, nullable=False)
     deleted_at = Column(DateTime, nullable=True, index=True)
@@ -59,8 +60,8 @@ class UserLlmCredential(Base):
     base_url_encrypted = Column(Text, nullable=True)
     updated_at = Column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
 
@@ -88,7 +89,7 @@ class DeveloperToken(Base):
     expires_at = Column(DateTime, nullable=True)
     last_used_at = Column(DateTime, nullable=True)
     revoked_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
 
 class DeveloperKeyExportEvent(Base):
@@ -98,7 +99,7 @@ class DeveloperKeyExportEvent(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
     client_ip = Column(String(64), nullable=False, default="")
     user_agent = Column(String(512), nullable=False, default="")
     action = Column(String(64), nullable=False, default="")
@@ -119,7 +120,7 @@ class Notification(Base):
     content = Column(Text, nullable=False)
     data_json = Column(Text, default="{}")
     is_read = Column(Boolean, default=False, index=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
 
 # 与 modstore_server.db.identity.LandingContactSubmission 同一表；请从 modstore_server.models 导入。
@@ -139,4 +140,4 @@ class EmployeeExecutionMetric(Base):
     error = Column(Text, default="")
     # 与 db/employee_ops.py 同表，保持 schema 一致（失败分类，见 llm_failure_classifier）。
     failure_kind = Column(String(32), default="", index=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))

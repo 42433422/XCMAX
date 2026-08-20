@@ -88,12 +88,7 @@ export const useAuthStore = defineStore('auth', () => {
       return null
     }
     const now = Date.now()
-    if (
-      !force &&
-      t === lastValidatedToken.value &&
-      user.value &&
-      now - lastMeFetchedAt.value < ME_STALE_MS
-    ) {
+    if (!force && t === lastValidatedToken.value && user.value && now - lastMeFetchedAt.value < ME_STALE_MS) {
       return user.value
     }
     try {

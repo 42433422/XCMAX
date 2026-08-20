@@ -21,6 +21,13 @@ import pytest
 
 from app.application import excel_template_http_app_service as svc
 
+
+def _assert_safe_service_error(response, internal_detail: str) -> None:
+    body = json.loads(response.body)
+    assert body["message"] == "模板服务暂时不可用，请稍后重试"
+    assert internal_detail not in body["message"]
+
+
 # ── _json_safe_cell_value ────────────────────────────────────────────────────
 
 
@@ -273,6 +280,7 @@ class TestDecomposeTemplate:
         assert status == 404
         assert out["success"] is False
         assert "不存在" in out["message"]
+        assert "/nonexistent/file.xlsx" not in out["message"]
 
     def test_xlsx_unreadable(self, tmp_path):
         f = tmp_path / "bad.xlsx"
@@ -294,6 +302,8 @@ class TestDecomposeTemplate:
             out, status = svc._decompose_template(str(f))
         assert status == 500
         assert out["success"] is False
+        assert out["message"] == "模板服务暂时不可用，请稍后重试"
+        assert "some other error" not in out["message"]
 
     def test_xls_path_calls_pandas(self, tmp_path):
         f = tmp_path / "test.xls"
@@ -390,6 +400,7 @@ class TestGetTemplateFile:
         with patch.object(svc, "_get_template_list", side_effect=RuntimeError("db down")):
             resp = svc.get_template_file("t1")
         assert resp.status_code == 500
+        _assert_safe_service_error(resp, "db down")
 
 
 # ── save_template ────────────────────────────────────────────────────────────
@@ -417,6 +428,7 @@ class TestSaveTemplate:
         ):
             resp = svc.save_template({})
         assert resp.status_code == 500
+        _assert_safe_service_error(resp, "db down")
 
     def test_default_overwrite_false(self):
         fake_svc = MagicMock()
@@ -479,6 +491,7 @@ class TestUploadExcel:
         mock_file.read = AsyncMock(side_effect=RuntimeError("io fail"))
         resp = await svc.upload_excel(mock_file)
         assert resp.status_code == 500
+        _assert_safe_service_error(resp, "io fail")
 
 
 # ── get_template (DB) ────────────────────────────────────────────────────────
@@ -544,6 +557,7 @@ class TestGetTemplateDb:
         with patch("app.db.session.get_db", fake_get_db):
             resp = svc.get_template(1)
         assert resp.status_code == 500
+        _assert_safe_service_error(resp, "db down")
 
 
 # ── update_template (DB) ─────────────────────────────────────────────────────
@@ -603,6 +617,7 @@ class TestUpdateTemplateDb:
         with patch("app.db.session.get_db", fake_get_db):
             resp = svc.update_template(1, {})
         assert resp.status_code == 500
+        _assert_safe_service_error(resp, "db down")
 
 
 # ── delete_template (DB) ─────────────────────────────────────────────────────
@@ -653,6 +668,7 @@ class TestDeleteTemplateDb:
         with patch("app.db.session.get_db", fake_get_db):
             resp = svc.delete_template(1)
         assert resp.status_code == 500
+        _assert_safe_service_error(resp, "db down")
 
 
 # ── list_templates_by_type / get_default_template ────────────────────────────
@@ -687,6 +703,7 @@ class TestListTemplatesByType:
             # Pass active_only as a string (Query object would fail .lower())
             resp = svc.list_templates_by_type(type="标签", active_only="true")
         assert resp.status_code == 500
+        _assert_safe_service_error(resp, "db down")
 
 
 class TestGetDefaultTemplate:
@@ -715,6 +732,7 @@ class TestGetDefaultTemplate:
         ):
             resp = svc.get_default_template()
         assert resp.status_code == 500
+        _assert_safe_service_error(resp, "db down")
 
 
 # ── list_templates_get / get_templates_list ──────────────────────────────────
@@ -734,6 +752,7 @@ class TestListTemplatesGet:
         with patch.object(svc, "_get_template_list", side_effect=RuntimeError("db down")):
             resp = svc.list_templates_get()
         assert resp.status_code == 500
+        _assert_safe_service_error(resp, "db down")
 
 
 class TestGetTemplatesList:
@@ -746,6 +765,7 @@ class TestGetTemplatesList:
         with patch.object(svc, "_get_template_list", side_effect=RuntimeError("db down")):
             resp = svc.get_templates_list()
         assert resp.status_code == 500
+        _assert_safe_service_error(resp, "db down")
 
 
 # ── decompose_template (HTTP) ────────────────────────────────────────────────
@@ -791,6 +811,7 @@ class TestDecomposeTemplateHttp:
         with patch.object(svc, "_decompose_template", side_effect=RuntimeError("boom")):
             resp = svc.decompose_template({"file_path": str(f)})
         assert resp.status_code == 500
+        _assert_safe_service_error(resp, "boom")
 
 
 # ── excel_templates_test ─────────────────────────────────────────────────────

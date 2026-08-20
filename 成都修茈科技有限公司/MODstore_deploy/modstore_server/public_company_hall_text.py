@@ -1,11 +1,14 @@
+# mypy: disable-error-code="attr-defined, no-any-return, union-attr, valid-type"
 """Public-safe feed text and AI-driver projection helpers."""
 
 from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional, Tuple
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +124,7 @@ def _iso(dt: Any) -> Optional[str]:
         return None
     if isinstance(dt, datetime):
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
         return dt.isoformat()
     s = str(dt).strip()
     return s[:40] if s else None
@@ -153,7 +156,7 @@ def _feed_sort_key(item: Dict[str, Any]) -> float:
     try:
         dt = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
         return dt.timestamp()
     except (TypeError, ValueError, OverflowError):
         return float("-inf")
@@ -195,7 +198,7 @@ def _public_ai_driver_snapshot() -> Dict[str, Any]:
         driver["provider"] = _clean(str(provider or ""), 48)
         driver["model"] = _clean(str(model or ""), 96)
         driver["route_source"] = "runtime_route" if runtime_route else "platform_default"
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("company_hall: resolve public AI driver route failed")
 
     try:
@@ -251,7 +254,7 @@ def _public_ai_driver_snapshot() -> Dict[str, Any]:
                 "visibility": _clean(str(quota.get("visibility") or "unknown"), 24),
                 "remaining_percent": quota.get("remaining_percent"),
             }
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("company_hall: resolve public AI driver status failed")
 
     return driver

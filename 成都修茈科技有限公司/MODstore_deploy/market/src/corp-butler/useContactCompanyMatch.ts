@@ -45,17 +45,7 @@ function companyMatchContinueHint(q: string, payload: CompanyMatchPayload | null
   return '可继续填写系统类型'
 }
 
-const COMPANY_SOURCE_MARKERS = [
-  '爱企查',
-  '启信宝',
-  '企查查',
-  '天眼查',
-  '水滴信用',
-  '百度百科',
-  '百度知道',
-  '企查猫',
-  '利查查',
-]
+const COMPANY_SOURCE_MARKERS = ['爱企查', '启信宝', '企查查', '天眼查', '水滴信用', '百度百科', '百度知道', '企查猫', '利查查']
 
 /** 与 contact-intake.js 一致：满 2 字后提示点行业，聚焦行业字段才开始联网匹配 */
 const HINT_FOCUS_INDUSTRY = '点选「行业 / 业务类型」开始匹配公司'
@@ -72,7 +62,11 @@ export function formatCompanyDisplayName(name: string): string {
   if (!s) return ''
   s = s.split(/\s*[-_|｜]\s*/)[0].trim()
   for (const marker of COMPANY_SOURCE_MARKERS) {
-    if (s.endsWith(marker)) s = s.slice(0, -marker.length).replace(/[\s\-_|｜]+$/, '').trim()
+    if (s.endsWith(marker))
+      s = s
+        .slice(0, -marker.length)
+        .replace(/[\s\-_|｜]+$/, '')
+        .trim()
   }
   return s.replace(/\s+/g, '').slice(0, 80)
 }
@@ -182,9 +176,7 @@ export function useContactCompanyMatch(context: ContactCompanyMatchContext = 'co
     if (matched?.name && multiPick) {
       resolvedName.value = ''
       resultMode.value = 'hidden'
-      hint.value = isWorkbench
-        ? '请从下方选择公司全称'
-        : '请从下方选择公司全称（搜索词仍保留在输入框）'
+      hint.value = isWorkbench ? '请从下方选择公司全称' : '请从下方选择公司全称（搜索词仍保留在输入框）'
       hintVariant.value = ''
       suggestions.value = list
       showSuggestions.value = list.length > 0
@@ -250,10 +242,7 @@ export function useContactCompanyMatch(context: ContactCompanyMatchContext = 'co
         }
         resultMode.value = 'warn'
         resultText.value = '匹配服务暂时不可用'
-        hint.value =
-          res.status === 404
-            ? '当前页面未连上官网 API，请用 xiu-ci.com 打开联系页'
-            : '请稍后重试或继续手动填写'
+        hint.value = res.status === 404 ? '当前页面未连上官网 API，请用 xiu-ci.com 打开联系页' : '请稍后重试或继续手动填写'
         hintVariant.value = 'new'
         return
       }
@@ -266,9 +255,7 @@ export function useContactCompanyMatch(context: ContactCompanyMatchContext = 'co
       resultMode.value = 'warn'
       resultText.value = '无法连接匹配服务'
       hint.value =
-        typeof location !== 'undefined' && location.protocol === 'file:'
-          ? '本地预览无法匹配，请通过官网访问'
-          : '网络异常，请稍后重试'
+        typeof location !== 'undefined' && location.protocol === 'file:' ? '本地预览无法匹配，请通过官网访问' : '网络异常，请稍后重试'
       hintVariant.value = 'new'
     } finally {
       if (seq === matchSeq) {

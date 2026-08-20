@@ -1,3 +1,4 @@
+# mypy: disable-error-code="abstract"
 """Tests for app.infrastructure.mods.base."""
 
 from __future__ import annotations

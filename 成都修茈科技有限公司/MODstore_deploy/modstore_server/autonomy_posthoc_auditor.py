@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """Independent post-execution verifier for supported autonomy actions.
 
 The auditor never infers safety from an allow decision itself.  It requires a
@@ -253,9 +254,9 @@ def run_autonomy_posthoc_audit(
         if not evidence_ref:
             incomplete.append({"action_id": action_id, "reason": "evidence_ref_missing"})
             continue
-        event_key = hashlib.sha256(
-            f"{action_id}|{verdict}|{evidence_ref}".encode("utf-8")
-        ).hexdigest()[:40]
+        event_key = hashlib.sha256(f"{action_id}|{verdict}|{evidence_ref}".encode()).hexdigest()[
+            :40
+        ]
         record_posthoc_anomaly_evidence(
             action_id=action_id,
             verdict=verdict,

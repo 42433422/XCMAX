@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, Mapping, Optional
 
+from modstore_server.operational_errors import BOUNDARY_ERRORS
+
 
 def execute_generated_operation(
     *,
@@ -60,11 +62,12 @@ def execute_generated_operation(
             full_url = runtime._resolve_full_url(
                 connector.base_url, applied_path, override=base_url_override
             )
-            runtime.assert_url_outbound_safe(full_url)
+            target = runtime.pin_url_outbound_safe(full_url)
 
             outgoing_headers: Dict[str, str] = dict(header_params)
             for key, value in (headers or {}).items():
-                outgoing_headers[str(key)] = str(value)
+                if str(key).lower() != "host":
+                    outgoing_headers[str(key)] = str(value)
 
             outgoing_query: Dict[str, Any] = dict(query_params)
             if credential is not None:
@@ -96,14 +99,20 @@ def execute_generated_operation(
                 follow_redirects=False,
                 trust_env=False,
             ) as client:
-                response = client.request(
+                outgoing_headers["Host"] = target.host_header
+                # The request URL is pinned to the public IP validated above;
+                # Host/SNI preserve the original TLS authority without a
+                # second DNS lookup. lgtm[py/full-ssrf]
+                request = client.build_request(
                     method,
-                    full_url,
+                    target.request_url,
                     params=outgoing_query or None,
                     headers=outgoing_headers or None,
                     json=json_body,
                     data=data_body,
+                    extensions={"sni_hostname": target.server_hostname},
                 )
+                response = client.send(request)
             status_code = response.status_code
             response_headers = {str(k): str(v) for k, v in response.headers.items()}
             raw_bytes = response.content[: runtime._MAX_RESPONSE_BYTES]
@@ -138,17 +147,17 @@ def execute_generated_operation(
                 source=safe_source,
                 ok=200 <= response.status_code < 400,
             )
-        except runtime.OutboundBlocked as exc:
-            error_text = f"outbound_blocked: {exc}"
-        except (LookupError, PermissionError) as exc:
-            error_text = f"unavailable: {exc}"
-        except ValueError as exc:
-            error_text = f"validation_error: {exc}"
-        except runtime.httpx.HTTPError as exc:
-            error_text = f"http_error: {exc}"
-        except Exception as exc:  # noqa: BLE001
-            runtime.logger.exception("openapi connector call crashed")
-            error_text = f"internal_error: {type(exc).__name__}: {exc}"
+        except runtime.OutboundBlocked:
+            error_text = "outbound_blocked"
+        except (LookupError, PermissionError):
+            error_text = "unavailable"
+        except ValueError:
+            error_text = "validation_error"
+        except runtime.httpx.HTTPError:
+            error_text = "http_error"
+        except BOUNDARY_ERRORS:  # noqa: BLE001
+            runtime.logger.warning("openapi connector call crashed")
+            error_text = "internal_error"
         response_summary = runtime._summarize_response(None, None, error_text)
         return _finalize(
             runtime,

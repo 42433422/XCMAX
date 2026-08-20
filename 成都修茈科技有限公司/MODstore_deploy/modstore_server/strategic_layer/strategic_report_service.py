@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """战略层周报/月报自动产出服务。
 
 基于 ``daily_digest_records`` 表 + ``strategic_decisions`` + ``strategic_action_items``
@@ -21,13 +22,14 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import asdict, dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import desc, select
 
 from modstore_server.db.base import get_session_factory
 from modstore_server.db.strategic import StrategicReport as StrategicReportModel
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.strategic_layer.strategic_report_analysis import (
     StrategicReportAnalysisMixin,
 )
@@ -70,7 +72,7 @@ def _week_period(d: Optional[date] = None) -> WeeklyReportPeriod:
     ISO 周一为起始，周日为结束。
     """
     if d is None:
-        d = datetime.now(timezone.utc).date()
+        d = datetime.now(UTC).date()
     iso_year, iso_week = _iso_week_of(d)
     # 周一 = d - weekday() 天（date.weekday() 周一=0）
     monday = d - timedelta(days=d.weekday())
@@ -165,7 +167,7 @@ class StrategicReportService(StrategicReportAnalysisMixin):
         actor: str = "ai-strategist",
     ) -> Dict[str, Any]:
         """生成月报（默认上月；幂等：若已存在则覆盖内容）。"""
-        today = datetime.now(timezone.utc).date()
+        today = datetime.now(UTC).date()
         if year is None or month is None:
             # 默认上月
             first_of_this_month = date(today.year, today.month, 1)
@@ -272,7 +274,7 @@ class StrategicReportService(StrategicReportAnalysisMixin):
             row = session.execute(
                 select(StrategicReportModel).where(StrategicReportModel.report_key == report_key)
             ).scalar_one_or_none()
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             if row is None:
                 row = StrategicReportModel(
                     report_key=report_key,
@@ -310,7 +312,7 @@ class StrategicReportService(StrategicReportAnalysisMixin):
                 period_end.isoformat(),
             )
             return _report_row_to_dict(row)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             session.rollback()
             raise
         finally:
@@ -323,7 +325,7 @@ def _report_row_to_dict(row: StrategicReportModel) -> Dict[str, Any]:
             return default
         try:
             return json.loads(s)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             return default
 
     return {

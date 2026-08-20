@@ -19,6 +19,8 @@ from app.utils.path_io.path_utils import get_app_data_dir
 
 logger = logging.getLogger(__name__)
 
+_TEMPLATE_SERVICE_UNAVAILABLE = "模板服务暂时不可用，请稍后重试"
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE_DIR = str(_REPO_ROOT / "templates")
 TEMP_EXCEL_DIR = os.path.join(get_app_data_dir(), "temp_excel")
@@ -78,10 +80,11 @@ _is_unreadable_workbook_error = _decompose.is_unreadable_workbook_error
 _json_safe_cell_value = _decompose.json_safe_cell_value
 _pick_sheet_name = _decompose.pick_sheet_name
 
+
 def _decompose_template(file_path, sheet_name=None, sample_rows=5) -> tuple[dict, int]:
     try:
         if not os.path.exists(file_path):
-            return {"success": False, "message": f"模板文件不存在: {file_path}"}, 404
+            return {"success": False, "message": "模板文件不存在"}, 404
 
         ext = os.path.splitext(file_path)[1].lower()
         if ext == ".xls":
@@ -98,14 +101,14 @@ def _decompose_template(file_path, sheet_name=None, sample_rows=5) -> tuple[dict
                 }, 200
             raise
     except RECOVERABLE_ERRORS as error:
-        logger.error("分解 Excel 模板失败: %s", error)
+        logger.exception("分解 Excel 模板失败")
         if _is_unreadable_workbook_error(str(error)):
             return {
                 "success": False,
                 "message": "模板文件损坏或格式异常，无法读取。请重新导出或另存为 .xlsx 后重试。",
                 "error_code": "UNREADABLE_WORKBOOK",
             }, 200
-        return {"success": False, "message": str(error)}, 500
+        return {"success": False, "message": _TEMPLATE_SERVICE_UNAVAILABLE}, 500
 
 
 def list_templates_get():
@@ -113,18 +116,22 @@ def list_templates_get():
     try:
         templates = [_normalize_template_dto(t) for t in _get_template_list()]
         return JSONResponse({"success": True, "templates": templates}, status_code=200)
-    except RECOVERABLE_ERRORS as e:
-        logger.error("获取模板列表失败: %s", e)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("获取模板列表失败")
+        return JSONResponse(
+            {"success": False, "message": _TEMPLATE_SERVICE_UNAVAILABLE}, status_code=500
+        )
 
 
 def get_templates_list():
     try:
         templates = _get_template_list()
         return JSONResponse({"success": True, "templates": templates})
-    except RECOVERABLE_ERRORS as e:
-        logger.error("获取模板列表失败：%s", e)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("获取模板列表失败")
+        return JSONResponse(
+            {"success": False, "message": _TEMPLATE_SERVICE_UNAVAILABLE}, status_code=500
+        )
 
 
 def list_templates_by_type(
@@ -140,9 +147,11 @@ def list_templates_by_type(
         return JSONResponse(
             {"success": True, "templates": templates, "count": len(templates)}, status_code=200
         )
-    except RECOVERABLE_ERRORS as e:
-        logger.error("按类型获取模板列表失败：%s", e)
-        return JSONResponse({"success": False, "message": f"获取失败：{str(e)}"}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("按类型获取模板列表失败")
+        return JSONResponse(
+            {"success": False, "message": _TEMPLATE_SERVICE_UNAVAILABLE}, status_code=500
+        )
 
 
 def get_default_template(type: str = Query(default="发货单")):
@@ -156,9 +165,11 @@ def get_default_template(type: str = Query(default="发货单")):
         return JSONResponse(
             {"success": True, "template": _normalize_template_dto(tpl)}, status_code=200
         )
-    except RECOVERABLE_ERRORS as e:
-        logger.error("获取默认模板失败：%s", e)
-        return JSONResponse({"success": False, "message": f"获取失败：{str(e)}"}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("获取默认模板失败")
+        return JSONResponse(
+            {"success": False, "message": _TEMPLATE_SERVICE_UNAVAILABLE}, status_code=500
+        )
 
 
 def get_template_file(template_id: str):
@@ -174,9 +185,11 @@ def get_template_file(template_id: str):
             filename=template["filename"],
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
-    except RECOVERABLE_ERRORS as e:
-        logger.error("获取模板文件失败: %s", e)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("获取模板文件失败")
+        return JSONResponse(
+            {"success": False, "message": _TEMPLATE_SERVICE_UNAVAILABLE}, status_code=500
+        )
 
 
 def save_template(data: dict[str, Any] = Body(default_factory=dict)):
@@ -189,9 +202,11 @@ def save_template(data: dict[str, Any] = Body(default_factory=dict)):
         result = get_template_app_service().save_template_file(source_name, target_name, overwrite)
         status = 200 if result.get("success") else 404
         return JSONResponse(result, status_code=status)
-    except RECOVERABLE_ERRORS as e:
-        logger.error("保存模板失败: %s", e)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("保存模板失败")
+        return JSONResponse(
+            {"success": False, "message": _TEMPLATE_SERVICE_UNAVAILABLE}, status_code=500
+        )
 
 
 def decompose_template(data: dict[str, Any] = Body(default_factory=dict)):
@@ -212,9 +227,11 @@ def decompose_template(data: dict[str, Any] = Body(default_factory=dict)):
             return JSONResponse({"success": False, "message": "模板文件不存在"}, status_code=404)
         result, status = _decompose_template(target_path, sheet_name, sample_rows)
         return JSONResponse(result, status_code=status)
-    except RECOVERABLE_ERRORS as e:
-        logger.error("分解模板失败: %s", e)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("分解模板失败")
+        return JSONResponse(
+            {"success": False, "message": _TEMPLATE_SERVICE_UNAVAILABLE}, status_code=500
+        )
 
 
 async def upload_excel(excel_file: UploadFile | None = File(default=None)):
@@ -240,9 +257,11 @@ async def upload_excel(excel_file: UploadFile | None = File(default=None)):
                 "message": "文件上传成功",
             }
         )
-    except RECOVERABLE_ERRORS as e:
-        logger.error("上传 Excel 文件失败: %s", e)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("上传 Excel 文件失败")
+        return JSONResponse(
+            {"success": False, "message": _TEMPLATE_SERVICE_UNAVAILABLE}, status_code=500
+        )
 
 
 def excel_templates_test():
@@ -289,9 +308,11 @@ def get_template(template_id: int):
                 "updated_at": row.updated_at,
             }
             return JSONResponse({"success": True, "template": template})
-    except RECOVERABLE_ERRORS as e:
-        logger.error("获取模板详情失败：%s", e)
-        return JSONResponse({"success": False, "message": f"获取失败：{str(e)}"}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("获取模板详情失败")
+        return JSONResponse(
+            {"success": False, "message": _TEMPLATE_SERVICE_UNAVAILABLE}, status_code=500
+        )
 
 
 def update_template(template_id: int, data: dict[str, Any] = Body(default_factory=dict)):
@@ -342,9 +363,11 @@ def update_template(template_id: int, data: dict[str, Any] = Body(default_factor
             )
             db.commit()
         return JSONResponse({"success": True, "message": "模板更新成功"})
-    except RECOVERABLE_ERRORS as e:
-        logger.error("更新模板失败：%s", e)
-        return JSONResponse({"success": False, "message": f"更新失败：{str(e)}"}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("更新模板失败")
+        return JSONResponse(
+            {"success": False, "message": _TEMPLATE_SERVICE_UNAVAILABLE}, status_code=500
+        )
 
 
 def delete_template(template_id: int):
@@ -378,6 +401,8 @@ def delete_template(template_id: int):
             )
             db.commit()
         return JSONResponse({"success": True, "message": "模板删除成功"})
-    except RECOVERABLE_ERRORS as e:
-        logger.error("删除模板失败：%s", e)
-        return JSONResponse({"success": False, "message": f"删除失败：{str(e)}"}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("删除模板失败")
+        return JSONResponse(
+            {"success": False, "message": _TEMPLATE_SERVICE_UNAVAILABLE}, status_code=500
+        )

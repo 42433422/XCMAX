@@ -15,9 +15,7 @@
     <div class="swd-actions">
       <button @click="editWithAi">用 AI 改进</button>
       <button v-if="wf.status === 'sandbox_testing'" @click="goSandbox">沙箱试用</button>
-      <button v-if="wf.status === 'sandbox_testing' && canActivate" class="swd-activate" @click="activate">
-        启用
-      </button>
+      <button v-if="wf.status === 'sandbox_testing' && canActivate" class="swd-activate" @click="activate">启用</button>
       <button v-if="wf.status === 'active'" @click="deactivate">停用</button>
       <button class="swd-danger" @click="del">删除</button>
     </div>
@@ -105,9 +103,7 @@ const runs = ref<ScriptWorkflowRun[]>([])
 const versions = ref<ScriptWorkflowVersion[]>([])
 const tab = ref<'code' | 'runs' | 'versions'>('code')
 
-const canActivate = computed(() =>
-  runs.value.some((r) => r.mode === 'manual_sandbox' && r.status === 'success'),
-)
+const canActivate = computed(() => runs.value.some((r) => r.mode === 'manual_sandbox' && r.status === 'success'))
 
 function goList() {
   router.push({ name: 'workbench-script-workflows' })
@@ -120,7 +116,11 @@ function editWithAi() {
 
 function goSandbox() {
   if (!wf.value) return
-  router.push({ name: 'workbench-script-workflow-edit', params: { id: wf.value.id }, query: { tab: 'sandbox' } })
+  router.push({
+    name: 'workbench-script-workflow-edit',
+    params: { id: wf.value.id },
+    query: { tab: 'sandbox' },
+  })
 }
 
 async function activate() {
@@ -156,11 +156,19 @@ async function del() {
 }
 
 function statusLabel(s: string) {
-  return ({ draft: '草稿', sandbox_testing: '沙箱试用', active: '已启用', deprecated: '已废弃', failed: '失败' }[s] || s)
+  return (
+    {
+      draft: '草稿',
+      sandbox_testing: '沙箱试用',
+      active: '已启用',
+      deprecated: '已废弃',
+      failed: '失败',
+    }[s] || s
+  )
 }
 
 function runModeLabel(m: string) {
-  return ({ auto: 'Agent 自动', manual_sandbox: '人工沙箱', production: '生产' }[m] || m)
+  return { auto: 'Agent 自动', manual_sandbox: '人工沙箱', production: '生产' }[m] || m
 }
 
 function formatTime(t: string) {
@@ -175,11 +183,7 @@ function formatTime(t: string) {
 async function load() {
   const id = String(route.params.id || '')
   if (!id) return
-  const [w, r, v] = await Promise.all([
-    api.getScriptWorkflow(id),
-    api.listScriptWorkflowRuns(id),
-    api.listScriptWorkflowVersions(id),
-  ])
+  const [w, r, v] = await Promise.all([api.getScriptWorkflow(id), api.listScriptWorkflowRuns(id), api.listScriptWorkflowVersions(id)])
   wf.value = w as ScriptWorkflowDetail
   runs.value = Array.isArray(r) ? (r as ScriptWorkflowRun[]) : []
   versions.value = Array.isArray(v) ? (v as ScriptWorkflowVersion[]) : []
@@ -189,75 +193,296 @@ onMounted(load)
 </script>
 
 <style scoped>
-.swd { max-width: 1100px; margin: 0 auto; padding: 24px 24px 80px; color: #d8dde6; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
-.swd-loading { color: #6b7280; padding: 60px; text-align: center; }
-.swd-head { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; flex-wrap: wrap; }
-.swd-head h1 { margin: 0; font-size: 22px; flex: 1; }
-.swd-back { background: transparent; color: #9aa3b2; border: 1px solid #2c333f; padding: 6px 12px; border-radius: 6px; cursor: pointer; }
-.swd-badge { font-size: 11px; padding: 4px 10px; border-radius: 999px; }
-.swd-badge.status-draft { background: #2c333f; color: #9aa3b2; }
-.swd-badge.status-sandbox_testing { background: #4d3f0c; color: #f5d870; }
-.swd-badge.status-active { background: #143b1f; color: #57c785; }
-.swd-badge.status-deprecated { background: #1a1c20; color: #6b7280; }
-.swd-badge.status-failed { background: #4a1a1a; color: #f57878; }
+.swd {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px 24px 80px;
+  color: #d8dde6;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+}
+.swd-loading {
+  color: #6b7280;
+  padding: 60px;
+  text-align: center;
+}
+.swd-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.swd-head h1 {
+  margin: 0;
+  font-size: 22px;
+  flex: 1;
+}
+.swd-back {
+  background: transparent;
+  color: #9aa3b2;
+  border: 1px solid #2c333f;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.swd-badge {
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+.swd-badge.status-draft {
+  background: #2c333f;
+  color: #9aa3b2;
+}
+.swd-badge.status-sandbox_testing {
+  background: #4d3f0c;
+  color: #f5d870;
+}
+.swd-badge.status-active {
+  background: #143b1f;
+  color: #57c785;
+}
+.swd-badge.status-deprecated {
+  background: #1a1c20;
+  color: #6b7280;
+}
+.swd-badge.status-failed {
+  background: #4a1a1a;
+  color: #f57878;
+}
 
-.swd-meta { background: #0f131a; border: 1px solid #2c333f; border-radius: 8px; padding: 14px 18px; margin-bottom: 16px; }
-.swd-meta p { margin: 4px 0; color: #c2c8d4; line-height: 1.7; }
-.swd-meta strong { color: #9aa3b2; font-weight: 500; margin-right: 6px; }
+.swd-meta {
+  background: #0f131a;
+  border: 1px solid #2c333f;
+  border-radius: 8px;
+  padding: 14px 18px;
+  margin-bottom: 16px;
+}
+.swd-meta p {
+  margin: 4px 0;
+  color: #c2c8d4;
+  line-height: 1.7;
+}
+.swd-meta strong {
+  color: #9aa3b2;
+  font-weight: 500;
+  margin-right: 6px;
+}
 
-.swd-actions { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
-.swd-actions button { padding: 7px 16px; background: #2c333f; color: #d8dde6; border: none; border-radius: 6px; cursor: pointer; }
-.swd-actions .swd-activate { background: #57c785; color: #0b0e14; font-weight: 600; }
-.swd-actions .swd-danger { background: transparent; color: #f57878; border: 1px solid #f57878; }
+.swd-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.swd-actions button {
+  padding: 7px 16px;
+  background: #2c333f;
+  color: #d8dde6;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.swd-actions .swd-activate {
+  background: #57c785;
+  color: #0b0e14;
+  font-weight: 600;
+}
+.swd-actions .swd-danger {
+  background: transparent;
+  color: #f57878;
+  border: 1px solid #f57878;
+}
 
-.swd-tabs { display: flex; gap: 0; border-bottom: 1px solid #2c333f; margin-bottom: 12px; }
-.swd-tabs button { padding: 10px 18px; background: transparent; border: none; color: #8b94a4; cursor: pointer; }
-.swd-tabs button.active { color: #f5d870; border-bottom: 2px solid #f5d870; }
+.swd-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid #2c333f;
+  margin-bottom: 12px;
+}
+.swd-tabs button {
+  padding: 10px 18px;
+  background: transparent;
+  border: none;
+  color: #8b94a4;
+  cursor: pointer;
+}
+.swd-tabs button.active {
+  color: #f5d870;
+  border-bottom: 2px solid #f5d870;
+}
 
-.swd-code pre { background: #0b0e14; color: #c2c8d4; padding: 16px; border-radius: 6px; font-size: 12px; line-height: 1.6; overflow-x: auto; max-height: 600px; }
+.swd-code pre {
+  background: #0b0e14;
+  color: #c2c8d4;
+  padding: 16px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-x: auto;
+  max-height: 600px;
+}
 
-.swd-runs table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.swd-runs th, .swd-runs td { padding: 8px 10px; border-bottom: 1px solid #2c333f; text-align: left; }
-.swd-runs th { color: #9aa3b2; font-weight: 500; }
-.run-success { color: #57c785; }
-.run-failed, .run-timeout { color: #f57878; }
-.run-running { color: #f5d870; }
+.swd-runs table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.swd-runs th,
+.swd-runs td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #2c333f;
+  text-align: left;
+}
+.swd-runs th {
+  color: #9aa3b2;
+  font-weight: 500;
+}
+.run-success {
+  color: #57c785;
+}
+.run-failed,
+.run-timeout {
+  color: #f57878;
+}
+.run-running {
+  color: #f5d870;
+}
 
-.swd-versions ul { list-style: none; padding: 0; margin: 0; }
-.swd-versions li { display: flex; gap: 12px; align-items: center; padding: 10px 12px; border-bottom: 1px solid #2c333f; }
-.swd-versions .cur { background: #143b1f; color: #57c785; padding: 2px 8px; border-radius: 999px; font-size: 11px; }
-.swd-versions small { margin-left: auto; color: #6b7280; }
+.swd-versions ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.swd-versions li {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid #2c333f;
+}
+.swd-versions .cur {
+  background: #143b1f;
+  color: #57c785;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+}
+.swd-versions small {
+  margin-left: auto;
+  color: #6b7280;
+}
 
-.swd-empty { color: #6b7280; padding: 30px; text-align: center; }
+.swd-empty {
+  color: #6b7280;
+  padding: 30px;
+  text-align: center;
+}
 
-html[data-workbench-theme='light'] .swd { color: #1d1d1f; }
-html[data-workbench-theme='light'] .swd-loading { color: #86868b; }
-html[data-workbench-theme='light'] .swd-head h1 { color: #1d1d1f; }
-html[data-workbench-theme='light'] .swd-back { color: #86868b; border-color: rgba(0,0,0,0.1); }
-html[data-workbench-theme='light'] .swd-back:hover { background: rgba(0,0,0,0.04); }
-html[data-workbench-theme='light'] .swd-badge.status-draft { background: rgba(0,0,0,0.05); color: #86868b; }
-html[data-workbench-theme='light'] .swd-badge.status-sandbox_testing { background: #fff8e1; color: #9a7b00; }
-html[data-workbench-theme='light'] .swd-badge.status-active { background: #e8f8ef; color: #1a7f37; }
-html[data-workbench-theme='light'] .swd-badge.status-deprecated { background: rgba(0,0,0,0.05); color: #86868b; }
-html[data-workbench-theme='light'] .swd-badge.status-failed { background: #ffe5e5; color: #d32f2f; }
-html[data-workbench-theme='light'] .swd-meta { background: #ffffff; border-color: rgba(0,0,0,0.06); }
-html[data-workbench-theme='light'] .swd-meta p { color: #1d1d1f; }
-html[data-workbench-theme='light'] .swd-meta strong { color: #86868b; }
-html[data-workbench-theme='light'] .swd-actions button { background: rgba(0,0,0,0.05); color: #1d1d1f; }
-html[data-workbench-theme='light'] .swd-actions button:hover { background: rgba(0,0,0,0.08); }
-html[data-workbench-theme='light'] .swd-actions .swd-activate { background: #34c759; color: #ffffff; }
-html[data-workbench-theme='light'] .swd-actions .swd-danger { background: transparent; color: #ff3b30; border-color: #ff3b30; }
-html[data-workbench-theme='light'] .swd-tabs { border-bottom-color: rgba(0,0,0,0.1); }
-html[data-workbench-theme='light'] .swd-tabs button { color: #86868b; }
-html[data-workbench-theme='light'] .swd-tabs button.active { color: #0071e3; border-bottom-color: #0071e3; }
-html[data-workbench-theme='light'] .swd-code pre { background: #f5f5f7; color: #1d1d1f; }
-html[data-workbench-theme='light'] .swd-runs th, html[data-workbench-theme='light'] .swd-runs td { border-bottom-color: rgba(0,0,0,0.06); }
-html[data-workbench-theme='light'] .swd-runs th { color: #86868b; }
-html[data-workbench-theme='light'] .run-success { color: #1a7f37; }
-html[data-workbench-theme='light'] .run-failed, html[data-workbench-theme='light'] .run-timeout { color: #d32f2f; }
-html[data-workbench-theme='light'] .run-running { color: #9a7b00; }
-html[data-workbench-theme='light'] .swd-versions li { border-bottom-color: rgba(0,0,0,0.06); }
-html[data-workbench-theme='light'] .swd-versions .cur { background: #e8f8ef; color: #1a7f37; }
-html[data-workbench-theme='light'] .swd-versions small { color: #86868b; }
-html[data-workbench-theme='light'] .swd-empty { color: #86868b; }
+html[data-workbench-theme='light'] .swd {
+  color: #1d1d1f;
+}
+html[data-workbench-theme='light'] .swd-loading {
+  color: #86868b;
+}
+html[data-workbench-theme='light'] .swd-head h1 {
+  color: #1d1d1f;
+}
+html[data-workbench-theme='light'] .swd-back {
+  color: #86868b;
+  border-color: rgba(0, 0, 0, 0.1);
+}
+html[data-workbench-theme='light'] .swd-back:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+html[data-workbench-theme='light'] .swd-badge.status-draft {
+  background: rgba(0, 0, 0, 0.05);
+  color: #86868b;
+}
+html[data-workbench-theme='light'] .swd-badge.status-sandbox_testing {
+  background: #fff8e1;
+  color: #9a7b00;
+}
+html[data-workbench-theme='light'] .swd-badge.status-active {
+  background: #e8f8ef;
+  color: #1a7f37;
+}
+html[data-workbench-theme='light'] .swd-badge.status-deprecated {
+  background: rgba(0, 0, 0, 0.05);
+  color: #86868b;
+}
+html[data-workbench-theme='light'] .swd-badge.status-failed {
+  background: #ffe5e5;
+  color: #d32f2f;
+}
+html[data-workbench-theme='light'] .swd-meta {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.06);
+}
+html[data-workbench-theme='light'] .swd-meta p {
+  color: #1d1d1f;
+}
+html[data-workbench-theme='light'] .swd-meta strong {
+  color: #86868b;
+}
+html[data-workbench-theme='light'] .swd-actions button {
+  background: rgba(0, 0, 0, 0.05);
+  color: #1d1d1f;
+}
+html[data-workbench-theme='light'] .swd-actions button:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+html[data-workbench-theme='light'] .swd-actions .swd-activate {
+  background: #34c759;
+  color: #ffffff;
+}
+html[data-workbench-theme='light'] .swd-actions .swd-danger {
+  background: transparent;
+  color: #ff3b30;
+  border-color: #ff3b30;
+}
+html[data-workbench-theme='light'] .swd-tabs {
+  border-bottom-color: rgba(0, 0, 0, 0.1);
+}
+html[data-workbench-theme='light'] .swd-tabs button {
+  color: #86868b;
+}
+html[data-workbench-theme='light'] .swd-tabs button.active {
+  color: #0071e3;
+  border-bottom-color: #0071e3;
+}
+html[data-workbench-theme='light'] .swd-code pre {
+  background: #f5f5f7;
+  color: #1d1d1f;
+}
+html[data-workbench-theme='light'] .swd-runs th,
+html[data-workbench-theme='light'] .swd-runs td {
+  border-bottom-color: rgba(0, 0, 0, 0.06);
+}
+html[data-workbench-theme='light'] .swd-runs th {
+  color: #86868b;
+}
+html[data-workbench-theme='light'] .run-success {
+  color: #1a7f37;
+}
+html[data-workbench-theme='light'] .run-failed,
+html[data-workbench-theme='light'] .run-timeout {
+  color: #d32f2f;
+}
+html[data-workbench-theme='light'] .run-running {
+  color: #9a7b00;
+}
+html[data-workbench-theme='light'] .swd-versions li {
+  border-bottom-color: rgba(0, 0, 0, 0.06);
+}
+html[data-workbench-theme='light'] .swd-versions .cur {
+  background: #e8f8ef;
+  color: #1a7f37;
+}
+html[data-workbench-theme='light'] .swd-versions small {
+  color: #86868b;
+}
+html[data-workbench-theme='light'] .swd-empty {
+  color: #86868b;
+}
 </style>

@@ -80,7 +80,12 @@ def _domain_for(module: str) -> str | None:
         # Pure data/constants module; treated as platform-shared.
         return None
     if name.startswith(
-        ("knowledge_vector_api", "knowledge_vector_store", "knowledge_ingest", "embedding_service")
+        (
+            "knowledge_vector_api",
+            "knowledge_vector_store",
+            "knowledge_ingest",
+            "embedding_service",
+        )
     ):
         return "llm"
     return None

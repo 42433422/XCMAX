@@ -1,8 +1,11 @@
+# mypy: disable-error-code="union-attr"
 """Live evidence resolvers and read-side status for the strategic council."""
 
 from __future__ import annotations
 
 from typing import Any, Mapping
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _council_module():
@@ -18,7 +21,7 @@ def live_persy_evidence(strategy_intent: str) -> dict[str, Any]:
         from modstore_server.xiaoc_cs_ssot import retrieve_persy_knowledge
 
         chunks = retrieve_persy_knowledge(strategy_intent, top_k=5)
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         return {
             "grounded": False,
             "dataset_id": "persy-knowledge",
@@ -32,7 +35,14 @@ def live_persy_evidence(strategy_intent: str) -> dict[str, Any]:
         if not isinstance(chunk, dict):
             continue
         reference = ""
-        for key in ("document_id", "source_id", "chunk_id", "id", "source_name", "source"):
+        for key in (
+            "document_id",
+            "source_id",
+            "chunk_id",
+            "id",
+            "source_name",
+            "source",
+        ):
             reference = council._text(chunk.get(key), 256)
             if reference:
                 break
@@ -66,7 +76,7 @@ def live_para_evidence(*, goal_id: str, loop_run_id: str, para_task_id: str) -> 
                 .first()
             )
             goal_status = council._text(getattr(goal, "status", ""), 64) if goal else ""
-    except Exception:
+    except RECOVERABLE_ERRORS:
         goal_status = ""
     loop_rows: list[dict[str, Any]] = []
     try:
@@ -77,7 +87,7 @@ def live_para_evidence(*, goal_id: str, loop_run_id: str, para_task_id: str) -> 
             for row in _read_ledger(limit=20_000)
             if council._text(row.get("run_id"), 128) == loop_run_id
         ]
-    except Exception:
+    except RECOVERABLE_ERRORS:
         loop_rows = []
     linked_rows = [
         row
@@ -103,7 +113,9 @@ def live_veto_state(*, run_id: str, loop_run_id: str) -> dict[str, Any]:
     """Read the existing redline channel and immutable autonomy audit."""
     council = _council_module()
     try:
-        from modstore_server.autonomy_decision_audit import build_autonomy_decision_evidence
+        from modstore_server.autonomy_decision_audit import (
+            build_autonomy_decision_evidence,
+        )
         from modstore_server.redline_approval_gate import get_pending_redline_requests
 
         pending = get_pending_redline_requests()
@@ -124,7 +136,7 @@ def live_veto_state(*, run_id: str, loop_run_id: str) -> dict[str, Any]:
             "audit_append_only_enforced": audit.get("append_only_enforced") is True,
             "correlated_veto_count": len(correlated_vetoes),
         }
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         return {
             "available": False,
             "vetoed": False,
@@ -168,8 +180,12 @@ def strategic_council_status(*, limit: int = 20) -> dict[str, Any]:
 
         sweep_expired_clarifications()
         clarification_summary = list_clarifications(include_terminal=False, limit=20)
-    except Exception as exc:
-        clarification_summary = {"ok": False, "error": type(exc).__name__, "open_count": 0}
+    except RECOVERABLE_ERRORS as exc:
+        clarification_summary = {
+            "ok": False,
+            "error": type(exc).__name__,
+            "open_count": 0,
+        }
     path = council.strategic_council_ledger_path()
     if not path.is_file():
         return {

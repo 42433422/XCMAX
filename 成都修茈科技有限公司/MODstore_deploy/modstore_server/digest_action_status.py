@@ -1,9 +1,12 @@
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Status matching, write-back, and metrics for digest action items."""
 
 from __future__ import annotations
 
 import logging
 from typing import Any, Dict, List, Optional, Sequence
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +95,10 @@ def set_status(item_id: int, status: str) -> Dict[str, Any]:
     action_items = _action_items_module()
     status = str(status or "").strip().lower()
     if status not in action_items.VALID_STATUS:
-        return {"ok": False, "error": f"invalid status; allowed={action_items.VALID_STATUS}"}
+        return {
+            "ok": False,
+            "error": f"invalid status; allowed={action_items.VALID_STATUS}",
+        }
     from sqlalchemy import text as sql_text
 
     engine = action_items._engine()
@@ -168,7 +174,7 @@ def stats(*, kind: Optional[str] = None, day: Optional[str] = None) -> Dict[str,
     action_items = _action_items_module()
     try:
         action_items.ensure_table()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return {
             "total": 0,
             "done": 0,

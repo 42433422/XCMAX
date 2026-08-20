@@ -36,7 +36,13 @@ function mockDetailsResponse(data = {}) {
             total_updates: 3,
           },
           ratings: [
-            { id: 'r1', rating: 5, comment: '很好', user_id: 'user1', created_at: '2024-01-01T00:00:00Z' },
+            {
+              id: 'r1',
+              rating: 5,
+              comment: '很好',
+              user_id: 'user1',
+              created_at: '2024-01-01T00:00:00Z',
+            },
             { id: 'r2', rating: 3, comment: '', user_id: '', created_at: '2024-02-01T00:00:00Z' },
           ],
           ...data,

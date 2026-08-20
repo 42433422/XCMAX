@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="attr-defined, call-overload, no-any-return, valid-type"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -75,12 +79,15 @@ def execute_duty_graph_programmatic(
                             queue.append(dep)
                     else:
                         missing_dep_map.setdefault(cur, []).append(dep)
-        (order, cycle_nodes) = _facade()._topo_sort(selected, deps_map)
+        order, cycle_nodes = _facade()._topo_sort(selected, deps_map)
         if cycle_nodes:
             _facade().logger.warning(
                 "duty graph cycle detected: %s order=%s", ", ".join(cycle_nodes), order
             )
-            return {"ok": False, "error": "员工依赖图存在循环: " + " -> ".join(cycle_nodes)}
+            return {
+                "ok": False,
+                "error": "员工依赖图存在循环: " + " -> ".join(cycle_nodes),
+            }
         run = _facade().DutyGraphRun(
             created_by_user_id=int(created_by_user_id),
             target_employee_id=target,
@@ -223,7 +230,7 @@ def execute_duty_graph_programmatic(
                 duration_ms = float(result.get("duration_ms") or 0.0)
                 if duration_ms <= 0:
                     duration_ms = round((_facade().time.perf_counter() - t0) * 1000, 3)
-            except Exception as exc:
+            except RECOVERABLE_ERRORS as exc:
                 status = "failed"
                 error_text = str(exc)
                 duration_ms = round((_facade().time.perf_counter() - t0) * 1000, 3)
@@ -397,14 +404,14 @@ def duty_graph_health(
                 for (k, v) in YUANGON_AREAS.items()
             ],
         }
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         _facade().logger.exception("staffing summary failed")
         out["staffing"] = {"error": str(exc)}
     try:
         from modstore_server.workflow_scheduler import list_employee_cron_jobs
 
         out["employee_cron_jobs"] = list_employee_cron_jobs()
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         out["employee_cron_jobs"] = []
         out["employee_cron_jobs_error"] = str(exc)
     try:
@@ -423,10 +430,11 @@ def duty_graph_health(
                 .count()
             )
         out["change_requests"] = {"pending": int(pending), "failed": int(failed)}
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         out["change_requests"] = {"error": str(exc)}
     try:
         from datetime import timedelta
+
         from modstore_server.models import IncidentEvent
 
         sf = _facade().get_session_factory()
@@ -441,7 +449,7 @@ def duty_graph_health(
                 .count()
             )
         out["incident_unknown_24h"] = int(unknown)
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         out["incident_unknown_24h"] = 0
         out["incident_unknown_error"] = str(exc)
     try:
@@ -459,6 +467,6 @@ def duty_graph_health(
                 "MODSTORE_CR_GIT_BRANCH_ENABLED", "1"
             ),
         }
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     return out

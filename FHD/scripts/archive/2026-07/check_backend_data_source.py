@@ -2,6 +2,8 @@ import sqlite3
 
 import requests
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 
 def check_backend_data_source():
     """检查后端实际使用的数据源"""
@@ -56,14 +58,14 @@ def check_backend_data_source():
                         rows = cursor.fetchall()
                         print("    样本数据:")
                         for i, row in enumerate(rows):
-                            print(f"      {i+1}. {row}")
+                            print(f"      {i + 1}. {row}")
 
             if not customer_tables:
                 print("  ❌ 没有找到客户相关表")
 
             conn.close()
 
-        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             print(f"\n📁 数据库: {db_path}")
             print(f"  ❌ 无法连接: {e}")
 
@@ -118,7 +120,7 @@ def check_backend_service_implementation():
                 lines = content.split("\n")
                 for i, line in enumerate(lines):
                     if "def get_customer_import_service" in line:
-                        print(f"  函数定义在行 {i+1}")
+                        print(f"  函数定义在行 {i + 1}")
                         # 显示函数实现
                         for j in range(i, min(i + 10, len(lines))):
                             print(f"    {lines[j]}")
@@ -130,7 +132,7 @@ def check_backend_service_implementation():
 
     except FileNotFoundError:
         print(f"❌ 文件不存在: {bootstrap_file}")
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 读取文件失败: {e}")
 
     # 检查customer_import_service.py
@@ -159,7 +161,7 @@ def check_backend_service_implementation():
 
     except FileNotFoundError:
         print(f"❌ 文件不存在: {service_file}")
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 读取文件失败: {e}")
 
 

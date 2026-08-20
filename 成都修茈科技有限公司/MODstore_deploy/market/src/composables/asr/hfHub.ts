@@ -29,13 +29,8 @@ export async function probeWhisperHubReady(): Promise<boolean> {
   try {
     const host = resolveHfRemoteHost()
     const base = (import.meta.env.BASE_URL || '/market/').replace(/\/?$/, '/')
-    const origin =
-      typeof window !== 'undefined' && window.location?.origin
-        ? window.location.origin
-        : ''
-    const checks = [
-      `${host}/onnx-community/whisper-base/resolve/main/config.json`,
-    ]
+    const origin = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : ''
+    const checks = [`${host}/onnx-community/whisper-base/resolve/main/config.json`]
     if (origin && origin !== 'null') {
       checks.push(`${origin}${base}asr-ort/ort-wasm-simd-threaded.asyncify.wasm`)
     }

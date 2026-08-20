@@ -39,21 +39,61 @@ from app.neuro_bus.routing.routing_log import append_routing_decision  # noqa: E
 
 # Reflex-level: simple intents (greetings/confirmations/negations/help/stop)
 REFLEX_SAMPLES = [
-    "你好", "您好", "嗨", "早上好", "下午好", "晚上好",
-    "好的", "嗯", "明白", "了解", "收到", "确认",
-    "不用了", "取消", "算了", "不需要", "停止", "停",
-    "帮助", "help", "怎么用", "能做什么", "功能介绍",
-    "紧急停止", "马上停", "立刻停止",
-    "是的", "对的", "没错", "不是", "不对",
-    "谢谢", "感谢", "多谢", "辛苦了",
+    "你好",
+    "您好",
+    "嗨",
+    "早上好",
+    "下午好",
+    "晚上好",
+    "好的",
+    "嗯",
+    "明白",
+    "了解",
+    "收到",
+    "确认",
+    "不用了",
+    "取消",
+    "算了",
+    "不需要",
+    "停止",
+    "停",
+    "帮助",
+    "help",
+    "怎么用",
+    "能做什么",
+    "功能介绍",
+    "紧急停止",
+    "马上停",
+    "立刻停止",
+    "是的",
+    "对的",
+    "没错",
+    "不是",
+    "不对",
+    "谢谢",
+    "感谢",
+    "多谢",
+    "辛苦了",
 ]
 
 # Subconscious-level: background tasks (low priority)
 SUBCONSCIOUS_SAMPLES = [
-    "记录日志", "更新缓存", "同步统计数据", "后台清理任务",
-    "定时备份", "数据归档", "索引重建", "日志轮转",
-    "会话过期清理", "临时文件删除", "报表生成", "指标采集",
-    "健康检查", "心跳上报", "状态同步", "配置刷新",
+    "记录日志",
+    "更新缓存",
+    "同步统计数据",
+    "后台清理任务",
+    "定时备份",
+    "数据归档",
+    "索引重建",
+    "日志轮转",
+    "会话过期清理",
+    "临时文件删除",
+    "报表生成",
+    "指标采集",
+    "健康检查",
+    "心跳上报",
+    "状态同步",
+    "配置刷新",
 ]
 
 # Conscious-level: core business (order/payment/inventory/customer)
@@ -219,7 +259,11 @@ async def generate(count: int) -> None:
     print(f"Output: {ROOT / 'resources' / 'routing_policies' / 'routing_decisions.jsonl'}")
 
     t0 = time.perf_counter()
-    processor_counts = {ProcessorType.REFLEX: 0, ProcessorType.SUBCONSCIOUS: 0, ProcessorType.CONSCIOUS: 0}
+    processor_counts = {
+        ProcessorType.REFLEX: 0,
+        ProcessorType.SUBCONSCIOUS: 0,
+        ProcessorType.CONSCIOUS: 0,
+    }
 
     for i in range(count):
         # Pick a random event type from catalog
@@ -236,10 +280,14 @@ async def generate(count: int) -> None:
         event = _make_event(event_type, text, priority)
 
         # Build real features
-        features = build_routing_features(text, event, extra={
-            "intent_confidence": random.uniform(0.5, 0.95),
-            "session_depth": random.randint(0, 30),
-        })
+        features = build_routing_features(
+            text,
+            event,
+            extra={
+                "intent_confidence": random.uniform(0.5, 0.95),
+                "session_depth": random.randint(0, 30),
+            },
+        )
 
         # Real routing decision (rule-based, no NN policy)
         decision = coordinator.route(text, event)
@@ -282,17 +330,25 @@ async def generate(count: int) -> None:
 
         if (i + 1) % 1000 == 0:
             elapsed = time.perf_counter() - t0
-            print(f"  [{i+1}/{count}] {elapsed:.1f}s | "
-                  f"R:{processor_counts[ProcessorType.REFLEX]} "
-                  f"S:{processor_counts[ProcessorType.SUBCONSCIOUS]} "
-                  f"C:{processor_counts[ProcessorType.CONSCIOUS]}")
+            print(
+                f"  [{i + 1}/{count}] {elapsed:.1f}s | "
+                f"R:{processor_counts[ProcessorType.REFLEX]} "
+                f"S:{processor_counts[ProcessorType.SUBCONSCIOUS]} "
+                f"C:{processor_counts[ProcessorType.CONSCIOUS]}"
+            )
 
     elapsed = time.perf_counter() - t0
     total = sum(processor_counts.values())
     print(f"\nDone: {total} decisions in {elapsed:.1f}s")
-    print(f"  Reflex:       {processor_counts[ProcessorType.REFLEX]:>5} ({processor_counts[ProcessorType.REFLEX]/total*100:.1f}%)")
-    print(f"  Subconscious: {processor_counts[ProcessorType.SUBCONSCIOUS]:>5} ({processor_counts[ProcessorType.SUBCONSCIOUS]/total*100:.1f}%)")
-    print(f"  Conscious:    {processor_counts[ProcessorType.CONSCIOUS]:>5} ({processor_counts[ProcessorType.CONSCIOUS]/total*100:.1f}%)")
+    print(
+        f"  Reflex:       {processor_counts[ProcessorType.REFLEX]:>5} ({processor_counts[ProcessorType.REFLEX] / total * 100:.1f}%)"
+    )
+    print(
+        f"  Subconscious: {processor_counts[ProcessorType.SUBCONSCIOUS]:>5} ({processor_counts[ProcessorType.SUBCONSCIOUS] / total * 100:.1f}%)"
+    )
+    print(
+        f"  Conscious:    {processor_counts[ProcessorType.CONSCIOUS]:>5} ({processor_counts[ProcessorType.CONSCIOUS] / total * 100:.1f}%)"
+    )
 
 
 def main() -> None:

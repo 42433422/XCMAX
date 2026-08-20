@@ -188,7 +188,10 @@ beforeEach(() => {
     configurable: true,
     value: { writeText: vi.fn(async () => undefined) },
   })
-  Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:bundle') })
+  Object.defineProperty(URL, 'createObjectURL', {
+    configurable: true,
+    value: vi.fn(() => 'blob:bundle'),
+  })
   Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
 })
 
@@ -207,8 +210,17 @@ describe('low coverage view business branches', () => {
       .mockResolvedValueOnce({ ...pendingOrder })
       .mockResolvedValueOnce({ ...pendingOrder, status: 'paid' })
       .mockResolvedValueOnce({ ...pendingOrder, status: 'closed' })
-      .mockResolvedValueOnce({ ...pendingOrder, out_trade_no: 'ord_2', qr_code: 'qr://new', pay_type: 'precreate' })
-    lowMocks.api.paymentCheckout.mockResolvedValueOnce({ ok: true, type: 'precreate', order_id: 'ord_2' })
+      .mockResolvedValueOnce({
+        ...pendingOrder,
+        out_trade_no: 'ord_2',
+        qr_code: 'qr://new',
+        pay_type: 'precreate',
+      })
+    lowMocks.api.paymentCheckout.mockResolvedValueOnce({
+      ok: true,
+      type: 'precreate',
+      order_id: 'ord_2',
+    })
     lowMocks.api.paymentCancelOrder.mockRejectedValueOnce(new Error('already closed'))
     const { default: PaymentCheckoutView } = await import('./views/PaymentCheckoutView.vue')
     const wrapper = mount(PaymentCheckoutView, { global: globalOptions })
@@ -232,7 +244,10 @@ describe('low coverage view business branches', () => {
     await (wrapper.vm as unknown as { retryPayment: () => Promise<void> }).retryPayment()
     await flushPromises()
     expect(lowMocks.api.paymentCancelOrder).toHaveBeenCalledWith('ord_1')
-    expect(lowMocks.router.replace).toHaveBeenCalledWith({ name: 'checkout', params: { orderId: 'ord_2' } })
+    expect(lowMocks.router.replace).toHaveBeenCalledWith({
+      name: 'checkout',
+      params: { orderId: 'ord_2' },
+    })
     expect(wrapper.text()).toContain('使用支付宝扫码付款')
     wrapper.unmount()
   })
@@ -251,14 +266,16 @@ describe('low coverage view business branches', () => {
     expect(wrapper.text()).toContain('你的 XCAGI 方案已生效')
     expect(wrapper.text()).toContain('回到桌面端')
     expect(wrapper.text()).not.toContain('账号授权')
-    expect((wrapper.vm as unknown as { planSelectionRoute: string }).planSelectionRoute).toBe(
-      '/account-plans',
-    )
+    expect((wrapper.vm as unknown as { planSelectionRoute: string }).planSelectionRoute).toBe('/account-plans')
     wrapper.unmount()
   })
 
   it('covers checkout failed envelopes, transient warnings, polling errors and labels', async () => {
-    lowMocks.route.query = { sign: 'x'.repeat(24), method: 'alipay.trade.page.pay', trade_no: '202606180000' }
+    lowMocks.route.query = {
+      sign: 'x'.repeat(24),
+      method: 'alipay.trade.page.pay',
+      trade_no: '202606180000',
+    }
     lowMocks.api.paymentQuery
       .mockResolvedValueOnce({ ok: false, message: '订单不存在' })
       .mockResolvedValueOnce({ ...pendingOrder, qr_code: '', pay_type: 'wap' })
@@ -321,10 +338,12 @@ describe('low coverage view business branches', () => {
     expect(vm.isExpired).toBe(true)
 
     await vm.retryPayment()
-    expect(lowMocks.api.paymentCheckout).toHaveBeenCalledWith(expect.objectContaining({
-      wallet_recharge: true,
-      total_amount: 25.5,
-    }))
+    expect(lowMocks.api.paymentCheckout).toHaveBeenCalledWith(
+      expect.objectContaining({
+        wallet_recharge: true,
+        total_amount: 25.5,
+      }),
+    )
     expect(vm.error).toContain('checkout denied')
 
     vm.order = { ...closedWalletOrder }
@@ -358,7 +377,12 @@ describe('low coverage view business branches', () => {
     lowMocks.api.paymentQuery
       .mockResolvedValueOnce({ ...pendingOrder, status: 'pending', qr_code: '' })
       .mockResolvedValueOnce({ ...pendingOrder, status: 'pending', qr_code: '' })
-      .mockResolvedValueOnce({ ...pendingOrder, status: 'paid', qr_code: 'qr://paid', plan_id: 'plan_enterprise' })
+      .mockResolvedValueOnce({
+        ...pendingOrder,
+        status: 'paid',
+        qr_code: 'qr://paid',
+        plan_id: 'plan_enterprise',
+      })
 
     const { default: PaymentCheckoutView } = await import('./views/PaymentCheckoutView.vue')
     const wrapper = mount(PaymentCheckoutView, { global: globalOptions })
@@ -391,26 +415,34 @@ describe('low coverage view business branches', () => {
     await vm.fetchOrder()
     expect(vm.error).toContain('cold fetch down')
 
-    lowMocks.api.paymentQuery.mockResolvedValueOnce({ ...pendingOrder, status: 'pending', qr_code: '' })
+    lowMocks.api.paymentQuery.mockResolvedValueOnce({
+      ...pendingOrder,
+      status: 'pending',
+      qr_code: '',
+    })
     await vm.pollOrder()
     expect(vm.qrCode).toBe('')
     wrapper.unmount()
   })
 
   it('covers developer token create, copy, revoke, encrypted export, and audit', async () => {
-    lowMocks.api.developerListTokens.mockResolvedValue([activeToken, {
-      ...activeToken,
-      id: 2,
-      name: 'Expired',
-      expires_at: '2000-01-01T00:00:00Z',
-      is_active: true,
-    }, {
-      ...activeToken,
-      id: 3,
-      name: 'Revoked',
-      revoked_at: '2026-01-01T00:00:00Z',
-      is_active: false,
-    }])
+    lowMocks.api.developerListTokens.mockResolvedValue([
+      activeToken,
+      {
+        ...activeToken,
+        id: 2,
+        name: 'Expired',
+        expires_at: '2000-01-01T00:00:00Z',
+        is_active: true,
+      },
+      {
+        ...activeToken,
+        id: 3,
+        name: 'Revoked',
+        revoked_at: '2026-01-01T00:00:00Z',
+        is_active: false,
+      },
+    ])
     lowMocks.api.developerCreateToken.mockResolvedValue({
       ...activeToken,
       id: 4,
@@ -422,7 +454,16 @@ describe('low coverage view business branches', () => {
       cipher_b64: Buffer.from('bundle').toString('base64'),
     })
     lowMocks.api.developerListKeyExportAudit.mockResolvedValue({
-      events: [{ id: 1, created_at: '2026-06-18T00:00:00Z', action: 'export', success: true, detail: 'ok', client_ip: '127.0.0.1' }],
+      events: [
+        {
+          id: 1,
+          created_at: '2026-06-18T00:00:00Z',
+          action: 'export',
+          success: true,
+          detail: 'ok',
+          client_ip: '127.0.0.1',
+        },
+      ],
     })
     const { default: DeveloperTokensPanel } = await import('./views/developer/DeveloperTokensPanel.vue')
     const wrapper = mount(DeveloperTokensPanel, { global: globalOptions })
@@ -469,10 +510,12 @@ describe('low coverage view business branches', () => {
     vm.exportPassword = 'pw'
     await vm.runExportBundle()
     await flushPromises()
-    expect(lowMocks.api.developerExportKeyBundle).toHaveBeenCalledWith(expect.objectContaining({
-      token_ids: [1, 2],
-      rotate_source_tokens: true,
-    }))
+    expect(lowMocks.api.developerExportKeyBundle).toHaveBeenCalledWith(
+      expect.objectContaining({
+        token_ids: [1, 2],
+        rotate_source_tokens: true,
+      }),
+    )
     expect(URL.createObjectURL).toHaveBeenCalled()
 
     await vm.toggleAudit()
@@ -494,15 +537,17 @@ describe('low coverage view business branches', () => {
       .mockResolvedValueOnce([activeToken])
       .mockResolvedValueOnce([activeToken])
     lowMocks.api.developerCreateToken.mockRejectedValueOnce(new Error('create failed'))
-    lowMocks.api.developerExportKeyBundle
-      .mockResolvedValueOnce({})
-      .mockRejectedValueOnce(new Error('export failed'))
+    lowMocks.api.developerExportKeyBundle.mockResolvedValueOnce({}).mockRejectedValueOnce(new Error('export failed'))
     lowMocks.api.developerListKeyExportAudit.mockRejectedValueOnce(new Error('audit failed'))
     lowMocks.api.developerRevokeToken.mockRejectedValueOnce(new Error('revoke failed'))
     lowMocks.confirmDanger.mockResolvedValueOnce(false).mockResolvedValue(true)
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
-      value: { writeText: vi.fn(async () => { throw new Error('clipboard denied') }) },
+      value: {
+        writeText: vi.fn(async () => {
+          throw new Error('clipboard denied')
+        }),
+      },
     })
     Object.defineProperty(document, 'execCommand', {
       configurable: true,
@@ -619,11 +664,17 @@ describe('low coverage view business branches', () => {
       status: 'pending',
       summary: '建议修复',
     }
-    lowMocks.api.adminEmployeeAutonomyDashboard.mockResolvedValue({ counts: { suggestions_pending: 1 } })
+    lowMocks.api.adminEmployeeAutonomyDashboard.mockResolvedValue({
+      counts: { suggestions_pending: 1 },
+    })
     lowMocks.api.adminEmployeeSuggestions.mockResolvedValue({ items: [suggestion] })
-    lowMocks.api.adminEmployeeBriefTasks.mockResolvedValue({ items: [{ id: 1, owner_employee_id: 'emp-a', task_brief: '写摘要' }] })
+    lowMocks.api.adminEmployeeBriefTasks.mockResolvedValue({
+      items: [{ id: 1, owner_employee_id: 'emp-a', task_brief: '写摘要' }],
+    })
     lowMocks.api.adminEmployeeCollabThreads.mockResolvedValue({ items: [{ id: 7, title: '协作' }] })
-    lowMocks.api.adminEmployeeCollabMessages.mockResolvedValue({ items: [{ id: 1, sender_employee_id: 'emp-a', content: 'hello' }] })
+    lowMocks.api.adminEmployeeCollabMessages.mockResolvedValue({
+      items: [{ id: 1, sender_employee_id: 'emp-a', content: 'hello' }],
+    })
     lowMocks.api.adminEmployeeEvolutionScan.mockResolvedValue({ processed: 2, created: 1 })
     lowMocks.api.adminEmployeeDispatchBriefTasks.mockResolvedValue({ queued: 1 })
     lowMocks.api.adminEmployeeDispatchSuggestions.mockResolvedValue({ queued: 2 })
@@ -664,11 +715,13 @@ describe('low coverage view business branches', () => {
     expect(vm.info).toContain('请先勾选')
     vm.selectedSuggestionIds = [10]
     await vm.batchReview('reject')
-    expect(lowMocks.api.adminEmployeeSuggestionBatchReview).toHaveBeenCalledWith(expect.objectContaining({
-      ids: [10],
-      action: 'reject',
-      dispatch_now: true,
-    }))
+    expect(lowMocks.api.adminEmployeeSuggestionBatchReview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ids: [10],
+        action: 'reject',
+        dispatch_now: true,
+      }),
+    )
     await vm.dispatchQueues()
     expect(lowMocks.api.adminEmployeeDispatchBriefTasks).toHaveBeenCalledWith(40)
     expect(lowMocks.api.adminEmployeeDispatchSuggestions).toHaveBeenCalledWith(40)
@@ -681,16 +734,21 @@ describe('low coverage view business branches', () => {
     vm.newThreadTitle = '新协作'
     vm.newThreadParticipants = 'emp-a, emp-b emp-c'
     await vm.createThread()
-    expect(lowMocks.api.adminEmployeeCreateCollabThread).toHaveBeenCalledWith(expect.objectContaining({
-      title: '新协作',
-      participants: ['emp-a', 'emp-b', 'emp-c'],
-    }))
+    expect(lowMocks.api.adminEmployeeCreateCollabThread).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: '新协作',
+        participants: ['emp-a', 'emp-b', 'emp-c'],
+      }),
+    )
     vm.selectedThreadId = 8
     vm.messageDraft = '请处理'
     await vm.sendMessage()
-    expect(lowMocks.api.adminEmployeePostCollabMessage).toHaveBeenCalledWith(8, expect.objectContaining({
-      content: '请处理',
-    }))
+    expect(lowMocks.api.adminEmployeePostCollabMessage).toHaveBeenCalledWith(
+      8,
+      expect.objectContaining({
+        content: '请处理',
+      }),
+    )
     vm.selectedThreadId = 0
     await vm.loadMessages()
     wrapper.unmount()
@@ -736,21 +794,24 @@ describe('low coverage view business branches', () => {
         { id: 2, email: 'corp@example.com', mod_ids: ['mod-a', 'bundle-b'] },
       ],
     })
-    lowMocks.api.registerWorkflowEmployeeCatalog.mockResolvedValue({ package: { id: 'pkg-a', version: '1.0.0' } })
+    lowMocks.api.registerWorkflowEmployeeCatalog.mockResolvedValue({
+      package: { id: 'pkg-a', version: '1.0.0' },
+    })
     lowMocks.api.deleteMod.mockResolvedValue({ ok: true })
-    lowMocks.api.adminPurgeAllMods.mockResolvedValue({ removed_dir_count: 2, removed_user_mod_rows: 3 })
+    lowMocks.api.adminPurgeAllMods.mockResolvedValue({
+      removed_dir_count: 2,
+      removed_user_mod_rows: 3,
+    })
     lowMocks.api.modAiScaffold.mockResolvedValue({ id: 'ai-mod' })
     lowMocks.api.importZIP.mockResolvedValue({ id: 'zip-mod' })
-    lowMocks.api.createMod
-      .mockRejectedValueOnce(new Error('已存在'))
-      .mockResolvedValueOnce({ id: 'new-mod-2' })
+    lowMocks.api.createMod.mockRejectedValueOnce(new Error('已存在')).mockResolvedValueOnce({ id: 'new-mod-2' })
     const { default: RepositoryView } = await import('./views/RepositoryView.vue')
     const wrapper = mount(RepositoryView, { global: globalOptions })
     await flushPromises()
 
     const vm = wrapper.vm as unknown as {
-      mods: typeof modA[]
-      filteredMods: typeof modA[]
+      mods: (typeof modA)[]
+      filteredMods: (typeof modA)[]
       versionOptions: string[]
       hasActiveShelfFilters: boolean
       shelfQ: string
@@ -867,8 +928,14 @@ describe('low coverage view business branches', () => {
     vm.viewMod('mod-a')
     vm.testModInSandbox('mod-a')
     vm.testModInSandbox('')
-    expect(lowMocks.router.push).toHaveBeenCalledWith({ name: 'mod-authoring', params: { modId: 'mod-a' } })
-    expect(lowMocks.router.push).toHaveBeenCalledWith({ name: 'sandbox', query: { modId: 'mod-a', host: '/sandbox', autoPush: '1' } })
+    expect(lowMocks.router.push).toHaveBeenCalledWith({
+      name: 'mod-authoring',
+      params: { modId: 'mod-a' },
+    })
+    expect(lowMocks.router.push).toHaveBeenCalledWith({
+      name: 'sandbox',
+      query: { modId: 'mod-a', host: '/sandbox', autoPush: '1' },
+    })
     expect(vm.registerKey('mod-a', 1)).toBe('mod-a:1')
     vm.goEmployeePrefill('mod-a', { id: 'emp-a', panel_summary: '负责咨询' }, 2)
     expect(sessionStorage.getItem('modstore_employee_prefill')).toContain('mod-a')
@@ -917,7 +984,10 @@ describe('low coverage view business branches', () => {
     vm.scaffoldIdHint = 'ai-mod'
     await vm.submitScaffold()
     expect(lowMocks.api.modAiScaffold).toHaveBeenCalledWith(expect.stringContaining('目标行业'), 'ai-mod', true, 'retail')
-    expect(lowMocks.router.push).toHaveBeenCalledWith({ name: 'mod-authoring', params: { modId: 'ai-mod' } })
+    expect(lowMocks.router.push).toHaveBeenCalledWith({
+      name: 'mod-authoring',
+      params: { modId: 'ai-mod' },
+    })
 
     vm.createName = ''
     await vm.submitCreate()
@@ -927,19 +997,28 @@ describe('low coverage view business branches', () => {
     await vm.submitCreate()
     expect(lowMocks.api.createMod).toHaveBeenNthCalledWith(1, expect.stringMatching(/^m-/), '123 New Mod', 'retail')
     expect(lowMocks.api.createMod).toHaveBeenNthCalledWith(2, expect.stringContaining('-2'), '123 New Mod', 'retail')
-    expect(lowMocks.router.push).toHaveBeenCalledWith({ name: 'mod-authoring', params: { modId: 'new-mod-2' } })
+    expect(lowMocks.router.push).toHaveBeenCalledWith({
+      name: 'mod-authoring',
+      params: { modId: 'new-mod-2' },
+    })
     lowMocks.api.createMod.mockRejectedValueOnce(new Error('create down'))
     vm.createName = 'Broken Mod'
     await vm.submitCreate()
     expect(vm.message).toContain('create down')
 
     await vm.onImport({ target: { files: [], value: 'x' } } as unknown as Event)
-    const fileInput = { files: [new File(['zip'], 'mod.zip', { type: 'application/zip' })], value: 'x' }
+    const fileInput = {
+      files: [new File(['zip'], 'mod.zip', { type: 'application/zip' })],
+      value: 'x',
+    }
     await vm.onImport({ target: fileInput } as unknown as Event)
     expect(fileInput.value).toBe('')
     expect(lowMocks.api.importZIP).toHaveBeenCalledWith(fileInput.files[0], true)
     lowMocks.api.importZIP.mockRejectedValueOnce(new Error('import down'))
-    const badImport = { files: [new File(['zip'], 'bad.zip', { type: 'application/zip' })], value: 'x' }
+    const badImport = {
+      files: [new File(['zip'], 'bad.zip', { type: 'application/zip' })],
+      value: 'x',
+    }
     await vm.onImport({ target: badImport } as unknown as Event)
     expect(vm.message).toContain('import down')
 
@@ -969,7 +1048,11 @@ describe('low coverage view business branches', () => {
             {
               id: 'gpt-4o',
               category: 'llm',
-              capability: { l3_status: 'approved', l1_status: 'pending', platform_billing_ok: false },
+              capability: {
+                l3_status: 'approved',
+                l1_status: 'pending',
+                platform_billing_ok: false,
+              },
               pricing: { input_per_million: 2, output_per_million: 8 },
             },
             { id: 'gpt-image-1', category: 'image', capability: {}, pricing: { image_per_1k: 40 } },
@@ -1006,8 +1089,20 @@ describe('low coverage view business branches', () => {
     lowMocks.api.walletOverview.mockResolvedValue({
       wallet: { balance: 88, membership_reference_yuan: 100 },
       transactions: [
-        { id: 1, type: 'recharge', amount: '10', created_at: '2026-06-18T00:00:00Z', description: '入账' },
-        { id: 2, type: 'llm_wallet_charge', amount: '-2.5', created_at: '2026-06-18T01:00:00Z', description: '扣费' },
+        {
+          id: 1,
+          type: 'recharge',
+          amount: '10',
+          created_at: '2026-06-18T00:00:00Z',
+          description: '入账',
+        },
+        {
+          id: 2,
+          type: 'llm_wallet_charge',
+          amount: '-2.5',
+          created_at: '2026-06-18T01:00:00Z',
+          description: '扣费',
+        },
       ],
       orders: [
         { out_trade_no: 'ord_1', subject: '订单', total_amount: '9.9', status: 'paid' },
@@ -1017,7 +1112,9 @@ describe('low coverage view business branches', () => {
       refunds: [{ id: 1, refund_no: 'rf_1', order_no: 'ord_1', amount: '1.2', status: 'approved' }],
     })
     lowMocks.api.paymentDismissNonActiveOrders.mockResolvedValue({ ok: true, dismissed: 2 })
-    lowMocks.api.transactions.mockResolvedValue({ transactions: [{ id: 3, type: 'purchase', amount: '3' }] })
+    lowMocks.api.transactions.mockResolvedValue({
+      transactions: [{ id: 3, type: 'purchase', amount: '3' }],
+    })
     lowMocks.api.paymentCheckout
       .mockResolvedValueOnce({ ok: false, message: '下单失败' })
       .mockResolvedValueOnce({ ok: true, type: 'precreate', order_id: 'recharge_1' })
@@ -1132,7 +1229,10 @@ describe('low coverage view business branches', () => {
     expect(vm.refundStatusText('rejected')).toBe('已拒绝')
     expect(vm.money('abc')).toBe('0.00')
     vm.goOrder({ out_trade_no: 'ord_1' })
-    expect(lowMocks.router.push).toHaveBeenCalledWith({ name: 'order-detail', params: { orderId: 'ord_1' } })
+    expect(lowMocks.router.push).toHaveBeenCalledWith({
+      name: 'order-detail',
+      params: { orderId: 'ord_1' },
+    })
     await vm.dismissNonActiveOrders()
     expect(lowMocks.api.paymentDismissNonActiveOrders).toHaveBeenCalled()
 
@@ -1146,7 +1246,10 @@ describe('low coverage view business branches', () => {
 
     localStorage.removeItem('modstore_token')
     await vm.startAlipayRecharge()
-    expect(lowMocks.router.push).toHaveBeenCalledWith({ name: 'login', query: { redirect: '/wallet' } })
+    expect(lowMocks.router.push).toHaveBeenCalledWith({
+      name: 'login',
+      query: { redirect: '/wallet' },
+    })
     localStorage.setItem('modstore_token', 'token')
     vm.payAmount = 0
     vm.validateAmount()
@@ -1159,7 +1262,10 @@ describe('low coverage view business branches', () => {
     await vm.startAlipayRecharge()
     expect(vm.payErr).toBe('下单失败')
     await vm.startAlipayRecharge()
-    expect(lowMocks.router.push).toHaveBeenCalledWith({ name: 'checkout', params: { orderId: 'recharge_1' } })
+    expect(lowMocks.router.push).toHaveBeenCalledWith({
+      name: 'checkout',
+      params: { orderId: 'recharge_1' },
+    })
     expect(vm.formatDate()).toBe('')
 
     const anyVm = vm as UnsafeTestValue
@@ -1180,15 +1286,54 @@ describe('low coverage view business branches', () => {
     anyVm.txListExpanded = true
     expect(anyVm.visibleTransactions.length).toBe(anyVm.transactions.length)
 
-    expect(vm.modelOptionLabel({ id: 'pending-model', capability: { l3_status: 'pending', l1_status: 'ok' } })).toContain('L3审核中')
+    expect(
+      vm.modelOptionLabel({
+        id: 'pending-model',
+        capability: { l3_status: 'pending', l1_status: 'ok' },
+      }),
+    ).toContain('L3审核中')
     expect(vm.modelOptionLabel({})).toBe('')
-    expect(vm.providerTileMediaTags({ media_counts: { image: 1, video: 1 }, models_detailed: [] }).map((t) => t.kind)).toEqual(['image', 'video'])
+    expect(vm.providerTileMediaTags({ media_counts: { image: 1, video: 1 }, models_detailed: [] }).map((t) => t.kind)).toEqual([
+      'image',
+      'video',
+    ])
     expect(vm.formatCatalogFetchedAt('2026-06-18T10:00:00Z')).toContain('18')
-    expect(vm.providerTileState({ provider: 'openai', error: 'invalid api key', fetch_source: 'live_error' })).toBe('danger')
-    expect(vm.providerTileState({ provider: 'openai', error: 'rate limit', fetch_source: 'static_fallback_merged' })).toBe('warn')
-    expect(vm.providerTileTitle({ provider: 'openai', label: 'OpenAI', error: 'quota exhausted', fetch_source: 'live_error' })).toContain('不可用')
-    expect(vm.providerTileTitle({ provider: 'openai', label: 'OpenAI', fetch_source: 'static_fallback_merged' })).toContain('静态兜底')
-    anyVm.catalog = { ...catalog, providers: [], preferences: { provider: '', model: '' }, fernet_configured: false, gate_hints: '需要配置 Fernet' }
+    expect(
+      vm.providerTileState({
+        provider: 'openai',
+        error: 'invalid api key',
+        fetch_source: 'live_error',
+      }),
+    ).toBe('danger')
+    expect(
+      vm.providerTileState({
+        provider: 'openai',
+        error: 'rate limit',
+        fetch_source: 'static_fallback_merged',
+      }),
+    ).toBe('warn')
+    expect(
+      vm.providerTileTitle({
+        provider: 'openai',
+        label: 'OpenAI',
+        error: 'quota exhausted',
+        fetch_source: 'live_error',
+      }),
+    ).toContain('不可用')
+    expect(
+      vm.providerTileTitle({
+        provider: 'openai',
+        label: 'OpenAI',
+        fetch_source: 'static_fallback_merged',
+      }),
+    ).toContain('静态兜底')
+    anyVm.catalog = {
+      ...catalog,
+      providers: [],
+      preferences: { provider: '', model: '' },
+      fernet_configured: false,
+      gate_hints: '需要配置 Fernet',
+    }
     expect(anyVm.currentProviderBlock).toBeNull()
     expect(anyVm.catalogProvidersSorted).toEqual([])
     anyVm.syncSelectionFromServerPrefs()
@@ -1230,7 +1375,10 @@ describe('low coverage view business branches', () => {
     anyVm.recentOrders = []
     await vm.dismissNonActiveOrders()
     anyVm.recentOrders = [{ out_trade_no: 'ord_closed', status: 'closed' }]
-    lowMocks.api.paymentDismissNonActiveOrders.mockResolvedValueOnce({ ok: false, message: 'dismiss failed' })
+    lowMocks.api.paymentDismissNonActiveOrders.mockResolvedValueOnce({
+      ok: false,
+      message: 'dismiss failed',
+    })
     await vm.dismissNonActiveOrders()
     expect(vm.payErr).toContain('dismiss failed')
     lowMocks.api.paymentDismissNonActiveOrders.mockRejectedValueOnce(new Error('dismiss down'))
@@ -1278,14 +1426,32 @@ describe('low coverage view business branches', () => {
     expect(vm.selectedModel).toBe('video-gen')
     expect(anyVm.selectedModelPricingDetail || '').toBeTruthy()
     expect(vm.providerTileMediaTags({ media_counts: { image: 0, video: 2 } }).map((t) => t.kind)).toEqual(['video'])
-    expect(vm.providerTileTitle({ provider: 'openai', label: 'OpenAI', fetch_source: 'static_fallback_merged' })).toContain('静态兜底')
-    expect(vm.providerTileTitle({ provider: 'openai', label: 'OpenAI', error: 'rate limit', fetch_source: 'live_error' })).toContain('降级')
-    expect(vm.providerTileTitle({ provider: 'openai', label: 'OpenAI', error: 'credit exhausted', fetch_source: 'live_error' })).toContain('不可用')
+    expect(
+      vm.providerTileTitle({
+        provider: 'openai',
+        label: 'OpenAI',
+        fetch_source: 'static_fallback_merged',
+      }),
+    ).toContain('静态兜底')
+    expect(
+      vm.providerTileTitle({
+        provider: 'openai',
+        label: 'OpenAI',
+        error: 'rate limit',
+        fetch_source: 'live_error',
+      }),
+    ).toContain('降级')
+    expect(
+      vm.providerTileTitle({
+        provider: 'openai',
+        label: 'OpenAI',
+        error: 'credit exhausted',
+        fetch_source: 'live_error',
+      }),
+    ).toContain('不可用')
 
     lowMocks.api.llmSaveCredentials.mockReset()
-    lowMocks.api.llmSaveCredentials
-      .mockResolvedValueOnce({ ok: true })
-      .mockRejectedValueOnce(new Error('bulk bad'))
+    lowMocks.api.llmSaveCredentials.mockResolvedValueOnce({ ok: true }).mockRejectedValueOnce(new Error('bulk bad'))
     vm.byokBulkPaste = 'OPENAI_API_KEY=sk-ok\nDEEPSEEK_API_KEY=sk-bad\nsk-bare-auto'
     const httpClient = await import('./infrastructure/http/client')
     vi.mocked(httpClient.requestJson).mockResolvedValueOnce({ provider: 'openai' })

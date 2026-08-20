@@ -24,7 +24,7 @@ import logging
 import os
 import threading
 from concurrent.futures import Future
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone  # noqa: F401
 from pathlib import Path
 from typing import Any, Dict
 
@@ -85,7 +85,7 @@ def burn_in_audit_path() -> Path:
 def _append_audit(payload: Dict[str, Any]) -> None:
     row = {
         "schema": "xcagi.duty_workforce_burnin.audit/v1",
-        "recorded_at": datetime.now(timezone.utc).isoformat(),
+        "recorded_at": datetime.now(UTC).isoformat(),
         **payload,
     }
     path = burn_in_audit_path()

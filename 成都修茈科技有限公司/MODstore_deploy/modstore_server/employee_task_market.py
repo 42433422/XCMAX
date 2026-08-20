@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """Employee task market for incident-driven autonomous claims.
 
 Phase B moves incident handling from "human/rule assigns a brief" to a market:
@@ -10,7 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any, Dict, List, Tuple
 
 from sqlalchemy import func
@@ -126,7 +127,7 @@ def _binding_candidates(session, event_type: str, source: str) -> Dict[str, int]
 
 
 def _recent_stats(session, employee_id: str, *, hours: int = 24) -> Dict[str, Any]:
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=max(1, int(hours or 24)))
+    cutoff = datetime.now(UTC) - timedelta(hours=max(1, int(hours or 24)))
     rows = (
         session.query(EmployeeExecutionMetric.status, func.count(EmployeeExecutionMetric.id))
         .filter(
@@ -146,7 +147,8 @@ def _recent_stats(session, employee_id: str, *, hours: int = 24) -> Dict[str, An
     running = (
         session.query(PendingBriefTask)
         .filter(
-            PendingBriefTask.owner_employee_id == employee_id, PendingBriefTask.status == "running"
+            PendingBriefTask.owner_employee_id == employee_id,
+            PendingBriefTask.status == "running",
         )
         .count()
     )
@@ -302,7 +304,11 @@ def dispatch_incident_via_market(event_id: int) -> Dict[str, Any]:
         if int(ev.dispatched_count or 0) > 0 and not _env_bool(
             "MODSTORE_EMPLOYEE_TASK_MARKET_REDISPATCH", False
         ):
-            return {"ok": True, "claimed": False, "reason": "incident_already_dispatched"}
+            return {
+                "ok": True,
+                "claimed": False,
+                "reason": "incident_already_dispatched",
+            }
         payload = _payload(ev)
         uid = _admin_user_id(session)
         summary = str(payload.get("summary") or ev.source or "incident")[:500]
@@ -350,7 +356,7 @@ def dispatch_incident_via_market(event_id: int) -> Dict[str, Any]:
         if ev2 is not None:
             updated_payload = _payload(ev2)
             updated_payload["_market_claim"] = {
-                "claimed_at": datetime.now(timezone.utc).isoformat(),
+                "claimed_at": datetime.now(UTC).isoformat(),
                 "employee_id": employee_id,
                 "score": chosen.get("score"),
                 "scope": ranked.get("scope"),
@@ -370,7 +376,7 @@ def dispatch_incident_via_market(event_id: int) -> Dict[str, Any]:
 
 
 def market_metrics(*, lookback_hours: int = 24) -> Dict[str, Any]:
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=max(1, int(lookback_hours or 24)))
+    cutoff = datetime.now(UTC) - timedelta(hours=max(1, int(lookback_hours or 24)))
     sf = get_session_factory()
     with sf() as session:
         rows = (

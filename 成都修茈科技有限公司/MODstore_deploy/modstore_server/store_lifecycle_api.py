@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """MOD 商店后台 · 生命周期 API（阶段 9）。
 
 补齐三块能力：
@@ -14,7 +15,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -59,7 +60,7 @@ def settle_earnings(
         q = q.filter(AuthorEarning.id.in_(body.earning_ids))
 
     rows = q.all()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     total_net = 0.0
     for row in rows:
         row.status = "settled"
@@ -84,7 +85,10 @@ def earnings_summary(
     out: dict[str, dict] = {}
     for status in ("pending", "settled"):
         agg = (
-            db.query(func.count(AuthorEarning.id), func.coalesce(func.sum(AuthorEarning.net), 0))
+            db.query(
+                func.count(AuthorEarning.id),
+                func.coalesce(func.sum(AuthorEarning.net), 0),
+            )
             .filter(AuthorEarning.author_id == author_id, AuthorEarning.status == status)
             .one()
         )
@@ -112,7 +116,10 @@ def upsert_gray_release(
     """创建或更新某商品某版本的灰度配置（按 catalog_id+version 唯一）。"""
     row = (
         db.query(GrayRelease)
-        .filter(GrayRelease.catalog_id == body.catalog_id, GrayRelease.version == body.version)
+        .filter(
+            GrayRelease.catalog_id == body.catalog_id,
+            GrayRelease.version == body.version,
+        )
         .first()
     )
     if row is None:

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr"
 """Resolve reviewed employee duties against real, read-only platform data.
 
 Scheduled employee contracts describe *what* a role must do, while deterministic
@@ -18,16 +19,14 @@ import hashlib
 import json
 import os
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
-from modstore_server.employee_duty_business_inputs import (
-    enterprise_input as _enterprise_input,
-    llm_ops_input as _llm_ops_input,
-    payment_input as _payment_input,
-)
+from modstore_server.employee_duty_business_inputs import enterprise_input as _enterprise_input
+from modstore_server.employee_duty_business_inputs import llm_ops_input as _llm_ops_input
+from modstore_server.employee_duty_business_inputs import payment_input as _payment_input
 
 DEFAULT_RECEIPT_NAME = "employee_duty_input_receipts.jsonl"
 _MAX_ROWS = 500
@@ -42,10 +41,10 @@ class ResolvedDutyInput:
 
 
 def _utc(value: datetime | None = None) -> datetime:
-    current = value or datetime.now(timezone.utc)
+    current = value or datetime.now(UTC)
     if current.tzinfo is None:
-        current = current.replace(tzinfo=timezone.utc)
-    return current.astimezone(timezone.utc)
+        current = current.replace(tzinfo=UTC)
+    return current.astimezone(UTC)
 
 
 def _runtime_dir() -> Path:
@@ -78,7 +77,7 @@ def _canonical_digest(value: Any) -> str:
 
 
 def _pseudonym(prefix: str, value: Any) -> str:
-    digest = hashlib.sha256(f"{prefix}:{value}".encode("utf-8")).hexdigest()[:16]
+    digest = hashlib.sha256(f"{prefix}:{value}".encode()).hexdigest()[:16]
     return f"{prefix}-{digest}"
 
 
@@ -141,8 +140,8 @@ def _as_datetime(value: Any) -> datetime | None:
         except ValueError:
             return None
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def _knowledge_input(_now: datetime) -> ResolvedDutyInput:
@@ -265,7 +264,7 @@ def _quality_input(now: datetime) -> ResolvedDutyInput:
     actions = config.get("actions") if isinstance(config.get("actions"), dict) else {}
     direct = actions.get("direct_python") if isinstance(actions.get("direct_python"), dict) else {}
     contract = contracts.get(employee_id) or {}
-    capability = {
+    capability: dict[str, Any] = {
         "employee_id": employee_id,
         "manifest_version": str(manifest.get("version") or ""),
         "input_contract": (
@@ -341,7 +340,7 @@ def _legacy_archive_input(now: datetime) -> ResolvedDutyInput:
     if len(git_sha) != 40 or any(char not in "0123456789abcdef" for char in git_sha):
         raise RuntimeError("immutable release manifest has no valid git_sha")
     try:
-        observed = datetime.fromtimestamp(manifest_path.stat().st_mtime, timezone.utc)
+        observed = datetime.fromtimestamp(manifest_path.stat().st_mtime, UTC)
     except OSError as exc:
         raise RuntimeError("immutable release manifest cannot be inspected") from exc
     last_used_days = max(0.0, (_utc(now) - observed).total_seconds() / 86400)

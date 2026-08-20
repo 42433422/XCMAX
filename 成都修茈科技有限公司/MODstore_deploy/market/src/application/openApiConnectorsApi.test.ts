@@ -75,7 +75,12 @@ describe('openApiConnectorsApi', () => {
 
   it('testOperation passes custom payload', async () => {
     vi.mocked(requestJson).mockResolvedValue({ ok: true })
-    await testOperation(1, 'op1', { params: { q: 'test' }, body: { data: 1 }, headers: { 'X-Custom': 'val' }, timeout: 60 })
+    await testOperation(1, 'op1', {
+      params: { q: 'test' },
+      body: { data: 1 },
+      headers: { 'X-Custom': 'val' },
+      timeout: 60,
+    })
     const call = vi.mocked(requestJson).mock.calls[0] as UnsafeTestValue[]
     const body = JSON.parse(call[1].body as string)
     expect(body.params).toEqual({ q: 'test' })

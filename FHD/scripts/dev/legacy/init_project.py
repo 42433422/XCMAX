@@ -8,6 +8,8 @@
 
 import os
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 BASE_DIR = SCRIPT_DIR
 
@@ -54,7 +56,7 @@ def init_db_tables():
         initialize_databases()
         init_distillation_tables(engine)
         print("数据库表初始化完成")
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"数据库初始化失败: {e}")
         print("注意: 如果数据库已存在此操作是安全的")
 

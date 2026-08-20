@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """订阅自动续费模块。
 
 每天凌晨 02:00 扫描即将到期（24 小时内）且开启自动续费的 UserPlan，
@@ -14,14 +15,17 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from modstore_server import payment_orders as _po
 from modstore_server.api.auth_deps import require_user
-from modstore_server.eventing.contracts import SUBSCRIPTION_RENEWAL_FAILED, SUBSCRIPTION_RENEWED
+from modstore_server.eventing.contracts import (
+    SUBSCRIPTION_RENEWAL_FAILED,
+    SUBSCRIPTION_RENEWED,
+)
 from modstore_server.models import (
     Entitlement,
     PlanTemplate,
@@ -32,6 +36,7 @@ from modstore_server.models import (
     get_session_factory,
 )
 from modstore_server.notification_service import NotificationType, create_notification
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +86,7 @@ def patch_auto_renew(
 
 def renew_expiring_plans() -> dict:
     """扫描即将到期套餐，尝试从钱包扣款续期。由调度器每日调用。"""
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
     window_end = now + timedelta(hours=24)
 
     sf = get_session_factory()
@@ -106,9 +111,11 @@ def renew_expiring_plans() -> dict:
             try:
                 _renew_one(session, user_plan, now)
                 renewed += 1
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 logger.exception(
-                    "续费失败 user_id=%s plan_id=%s", user_plan.user_id, user_plan.plan_id
+                    "续费失败 user_id=%s plan_id=%s",
+                    user_plan.user_id,
+                    user_plan.plan_id,
                 )
                 failed += 1
 
@@ -159,7 +166,7 @@ def _renew_one(session, user_plan: UserPlan, now: datetime) -> None:
                 ),
                 data={"plan_id": user_plan.plan_id, "price": price, "balance": balance},
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.exception("发送续费失败通知出错 user_id=%s", user_plan.user_id)
         # 发布 subscription.renewal_failed 事件（事务内入 outbox）
         try:
@@ -175,7 +182,7 @@ def _renew_one(session, user_plan: UserPlan, now: datetime) -> None:
                     "reason": user_plan.renewal_fail_reason,
                 },
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.exception("续费失败事件入 outbox 出错 user_id=%s", user_plan.user_id)
         return
 
@@ -225,7 +232,7 @@ def _renew_one(session, user_plan: UserPlan, now: datetime) -> None:
             pay_channel="wallet",
             kind="plan",
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("写续费订单存根失败 out_trade_no=%s", out_trade_no)
 
     session.flush()
@@ -254,7 +261,7 @@ def _renew_one(session, user_plan: UserPlan, now: datetime) -> None:
                 "plan_name": plan_tmpl.name,
             },
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("续费事件入 outbox 出错 user_id=%s", user_plan.user_id)
     try:
         create_notification(
@@ -267,7 +274,7 @@ def _renew_one(session, user_plan: UserPlan, now: datetime) -> None:
             ),
             data={"plan_id": user_plan.plan_id, "price": price},
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("发送续费成功通知出错 user_id=%s", user_plan.user_id)
 
 

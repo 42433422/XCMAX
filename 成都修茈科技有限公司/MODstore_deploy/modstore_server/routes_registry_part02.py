@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -16,14 +20,14 @@ def api_mod_frontend_regenerate(
 ):
     _facade()._assert_user_owns_mod(user, mod_id)
     mod_dir = _facade()._mod_dir(mod_id)
-    (manifest, err) = _facade().read_manifest(mod_dir)
+    manifest, err = _facade().read_manifest(mod_dir)
     if not manifest or err:
         raise _facade().HTTPException(400, err or "无法读取 manifest")
     try:
         snap = _facade().capture_manifest_snapshot(
             mod_dir, f"重新生成前端前 {_facade().time.strftime('%Y-%m-%d %H:%M:%S')}"
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         snap = None
     spec = _facade()._frontend_spec_for_existing_mod(mod_dir, manifest, body.brief)
     mod_name = str(manifest.get("name") or mod_id)
@@ -56,10 +60,12 @@ def api_mod_frontend_regenerate(
     (mod_dir / "config").mkdir(parents=True, exist_ok=True)
     (mod_dir / "frontend" / "views").mkdir(parents=True, exist_ok=True)
     (mod_dir / "config" / "frontend_spec.json").write_text(
-        _facade().json.dumps(spec, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        _facade().json.dumps(spec, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
     )
     (mod_dir / "frontend" / "routes.js").write_text(
-        _facade().render_frontend_routes_js(mod_id, mod_name, spec["entry_path"]), encoding="utf-8"
+        _facade().render_frontend_routes_js(mod_id, mod_name, spec["entry_path"]),
+        encoding="utf-8",
     )
     (mod_dir / "frontend" / "views" / "HomeView.vue").write_text(
         _facade().render_generated_home_vue(mod_id, mod_name, spec), encoding="utf-8"
@@ -70,7 +76,11 @@ def api_mod_frontend_regenerate(
         "entry_path": spec["entry_path"],
         "snapshot": snap,
         "manifest_warnings": warnings,
-        "files": ["config/frontend_spec.json", "frontend/routes.js", "frontend/views/HomeView.vue"],
+        "files": [
+            "config/frontend_spec.json",
+            "frontend/routes.js",
+            "frontend/views/HomeView.vue",
+        ],
     }
 
 
@@ -136,13 +146,15 @@ def api_export_mod(mod_id: str, user: _facade().User = _facade().Depends(_facade
 
 @_facade().api_router.post("/api/sync/push", tags=["sync"])
 def api_sync_push(
-    body: _facade().SyncDTO, user: _facade().User = _facade().Depends(_facade()._require_user)
+    body: _facade().SyncDTO,
+    user: _facade().User = _facade().Depends(_facade()._require_user),
 ):
     cfg = _facade()._cfg()
     xc = _facade().resolved_xcagi(cfg)
     if not xc:
         raise _facade().HTTPException(
-            400, "未配置有效的 XCAGI 根目录（Mod 源码库页「路径与同步」或环境变量 XCAGI_ROOT）"
+            400,
+            "未配置有效的 XCAGI 根目录（Mod 源码库页「路径与同步」或环境变量 XCAGI_ROOT）",
         )
     if not user.is_admin and body.mod_ids:
         for mod_id in body.mod_ids:
@@ -157,7 +169,8 @@ def api_sync_push(
 
 @_facade().api_router.post("/api/sync/pull", tags=["sync"])
 def api_sync_pull(
-    body: _facade().SyncDTO, user: _facade().User = _facade().Depends(_facade()._require_user)
+    body: _facade().SyncDTO,
+    user: _facade().User = _facade().Depends(_facade()._require_user),
 ):
     cfg = _facade()._cfg()
     xc = _facade().resolved_xcagi(cfg)
@@ -175,7 +188,8 @@ def api_sync_pull(
 
 @_facade().api_router.post("/api/debug/sandbox", tags=["debug"])
 def api_debug_sandbox(
-    body: _facade().SandboxDTO, user: _facade().User = _facade().Depends(_facade()._require_user)
+    body: _facade().SandboxDTO,
+    user: _facade().User = _facade().Depends(_facade()._require_user),
 ):
     _facade()._assert_user_owns_mod(user, body.mod_id)
     mod_id = body.mod_id.strip()
@@ -233,7 +247,7 @@ def api_debug_focus_primary(
     lib = _facade()._lib()
     updated: _facade().List[str] = []
     for d in _facade().iter_mod_dirs(lib):
-        (data, err) = _facade().read_manifest(d)
+        data, err = _facade().read_manifest(d)
         if err or not data:
             continue
         mid = (data.get("id") or d.name).strip()
@@ -314,7 +328,7 @@ def api_xcagi_installed_mods():
         }
     rows: _facade().List[_facade().Dict[str, _facade().Any]] = []
     for d in _facade().iter_mod_dirs(mods_dir):
-        (data, err) = _facade().read_manifest(d)
+        data, err = _facade().read_manifest(d)
         if err or not data:
             rows.append(
                 {
@@ -354,7 +368,7 @@ def _include_optional(app: _facade().FastAPI, module_path: str) -> None:
     except ImportError as exc:
         _facade().logging.getLogger(__name__).info("skip optional router %s: %s", module_path, exc)
         return
-    except Exception:
+    except RECOVERABLE_ERRORS:
         _facade().logging.getLogger(__name__).exception(
             "FATAL: router %s failed to load", module_path
         )

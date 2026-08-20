@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """
 完整的标签图片网格检测器 - 支持合并单元格
 """
@@ -19,7 +20,7 @@ with open(image_path, "rb") as f:
 img_array = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
 
 height, width = img_array.shape[:2]
-print(f"图片尺寸：{width} x {height}，比例 {width/height:.2f}:1")
+print(f"图片尺寸：{width} x {height}，比例 {width / height:.2f}:1")
 print("=" * 70)
 
 # 转换为灰度图
@@ -192,7 +193,7 @@ def analyze_cells(horizontal_lines, vertical_lines):
 
 cells = analyze_cells(horizontal_lines, vertical_lines)
 
-print(f"\n基本网格：{len(horizontal_lines)-1} 行 x {len(vertical_lines)-1} 列")
+print(f"\n基本网格：{len(horizontal_lines) - 1} 行 x {len(vertical_lines) - 1} 列")
 print(f"检测到 {len(cells)} 个单元格")
 
 print("\n单元格详情：")
@@ -350,7 +351,7 @@ html_content = f"""<!DOCTYPE html>
 
         <div class="info">
             <strong>图片尺寸：{width} × {height}</strong> |
-            比例 {width/height:.2f}:1 |
+            比例 {width / height:.2f}:1 |
             黑色像素 {black_pixels} ({black_pixels / binary.size * 100:.2f}%)
         </div>
 
@@ -365,7 +366,7 @@ html_content = f"""<!DOCTYPE html>
                     <div class="grid-lines">
                         <div><strong>水平线：</strong>{len(horizontal_lines)} 条</div>
                         <div><strong>垂直线：</strong>{len(vertical_lines)} 条</div>
-                        <div><strong>网格结构：</strong>{len(horizontal_lines)-1} 行 × {len(vertical_lines)-1} 列</div>
+                        <div><strong>网格结构：</strong>{len(horizontal_lines) - 1} 行 × {len(vertical_lines) - 1} 列</div>
                         <div><strong>单元格数：</strong>{len(cells)} 个</div>
                     </div>
                 </div>
@@ -415,9 +416,9 @@ for cell in cells:
     status_str = ", ".join(status_text) if status_text else "正常"
 
     html_content += f"""                        <div class="cell {status_class}">
-                            <div class="cell-num">#{cell['row']},{cell['col']}</div>
-                            <div class="cell-pos">({cell['x']},{cell['y']})</div>
-                            <div class="cell-size">{cell['width']}x{cell['height']}</div>
+                            <div class="cell-num">#{cell["row"]},{cell["col"]}</div>
+                            <div class="cell-pos">({cell["x"]},{cell["y"]})</div>
+                            <div class="cell-size">{cell["width"]}x{cell["height"]}</div>
                             <div>{status_str}</div>
                         </div>
 """

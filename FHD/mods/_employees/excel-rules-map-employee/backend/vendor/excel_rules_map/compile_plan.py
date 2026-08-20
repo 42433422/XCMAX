@@ -140,9 +140,7 @@ def compile_plan(
 
     zones = [z for z in (tm.get("formula_zones") or []) if isinstance(z, dict)]
     formula_zone_min = min((int(z["col_start"]) for z in zones), default=0)
-    templates = [
-        t for t in (rules.get("formula_templates") or []) if isinstance(t, dict)
-    ]
+    templates = [t for t in (rules.get("formula_templates") or []) if isinstance(t, dict)]
     template_cols = {
         _col_to_index(str(t.get("col") or "").strip().upper())
         for t in templates
@@ -178,7 +176,11 @@ def compile_plan(
                 row_offset = int(spec.get("row_offset") or 0)
                 if row_offset < 0 or row_offset >= block_rows:
                     dropped.append(
-                        {"index": idx, "key": key, "reason": f"cells[{cidx}] row_offset 越块：{row_offset}"}
+                        {
+                            "index": idx,
+                            "key": key,
+                            "reason": f"cells[{cidx}] row_offset 越块：{row_offset}",
+                        }
                     )
                     continue
                 write: Dict[str, Any] = {
@@ -211,18 +213,26 @@ def compile_plan(
         try:
             day = int(day)
         except (TypeError, ValueError):
-            dropped.append({"index": idx, "key": key, "reason": f"day 非整数：{record.get('day')!r}"})
+            dropped.append(
+                {"index": idx, "key": key, "reason": f"day 非整数：{record.get('day')!r}"}
+            )
             continue
         day_count = int(calendar.get("day_count") or 0)
         if day < 1 or day > day_count:
-            dropped.append({"index": idx, "key": key, "reason": f"day 越界：{day}（1..{day_count}）"})
+            dropped.append(
+                {"index": idx, "key": key, "reason": f"day 越界：{day}（1..{day_count}）"}
+            )
             continue
 
         band_name = _norm_key(record.get("band")) or "default"
         band = bands.get(band_name)
         if not isinstance(band, dict):
             dropped.append(
-                {"index": idx, "key": key, "reason": f"band 未定义：{band_name!r}（可用 {sorted(bands)}）"}
+                {
+                    "index": idx,
+                    "key": key,
+                    "reason": f"band 未定义：{band_name!r}（可用 {sorted(bands)}）",
+                }
             )
             continue
         row_offset = int(band.get("row_offset") or 0)
@@ -232,9 +242,16 @@ def compile_plan(
         slots = int(calendar.get("slots_per_day") or 1)
         layout = str(calendar.get("layout") or ("symbol_value" if slots >= 2 else "value"))
         symbol_col = anchor + (day - 1) * slots
-        if formula_zone_min and symbol_col + (1 if layout == "symbol_value" else 0) >= formula_zone_min:
+        if (
+            formula_zone_min
+            and symbol_col + (1 if layout == "symbol_value" else 0) >= formula_zone_min
+        ):
             dropped.append(
-                {"index": idx, "key": key, "reason": f"day={day} 槽列进入公式区（col≥{formula_zone_min}）"}
+                {
+                    "index": idx,
+                    "key": key,
+                    "reason": f"day={day} 槽列进入公式区（col≥{formula_zone_min}）",
+                }
             )
             continue
 
@@ -253,7 +270,11 @@ def compile_plan(
             row = top + row_offset + eidx
             if row >= top + block_rows:
                 dropped.append(
-                    {"index": idx, "key": key, "reason": f"entries[{eidx}] 行越块（band={band_name}）"}
+                    {
+                        "index": idx,
+                        "key": key,
+                        "reason": f"entries[{eidx}] 行越块（band={band_name}）",
+                    }
                 )
                 break
             value = entry.get("value")
@@ -295,10 +316,7 @@ def compile_plan(
                 {"sheet": sheet, "ref": f"{col_text}{int(b['top'])}", "formula": formula}
             )
 
-    protected_cols = [
-        (z["col_start"], z["col_end"])
-        for z in zones
-    ]
+    protected_cols = [(z["col_start"], z["col_end"]) for z in zones]
     protected_ranges: List[str] = []
     for col_start, col_end in protected_cols:
         cols = [c for c in range(int(col_start), int(col_end) + 1) if c not in template_cols]
@@ -309,9 +327,7 @@ def compile_plan(
                 prev = c
                 continue
             if run_start is not None and prev is not None:
-                protected_ranges.append(
-                    f"{sheet}!{_index_to_col(run_start)}:{_index_to_col(prev)}"
-                )
+                protected_ranges.append(f"{sheet}!{_index_to_col(run_start)}:{_index_to_col(prev)}")
             run_start, prev = c, c
 
     phases: List[Dict[str, Any]] = []
@@ -342,9 +358,7 @@ def compile_plan(
         }
         - {""}
     )
-    blocks_without_records = sorted(
-        k for k in key_to_block.keys() if k not in keys_seen
-    )
+    blocks_without_records = sorted(k for k in key_to_block.keys() if k not in keys_seen)
 
     return {
         "plan_version": PLAN_VERSION,

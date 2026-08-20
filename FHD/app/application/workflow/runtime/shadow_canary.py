@@ -43,7 +43,7 @@ from app.application.workflow.runtime.shadow_canary_diff import (
     deterministic_canary_selected,
     normalize_context,
 )
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -376,7 +376,7 @@ class ShadowCanaryRouter(WorkflowRuntime):
 
             try:
                 serving = serving_future.result()  # legacy 异常向上传播
-            except BaseException:
+            except BOUNDARY_ERRORS:
                 # 消费 shadow future 后再传播 legacy 异常，避免未取回异常告警。
                 shadow_future.result()
                 raise

@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -50,7 +54,8 @@ async def _get_bot_ctx(app_id: str) -> _facade().Optional[_facade()._BotContext]
                     rows = (
                         session.query(AIEmployeeAccount)
                         .filter(
-                            AIEmployeeAccount.platform == "qq", AIEmployeeAccount.status == "active"
+                            AIEmployeeAccount.platform == "qq",
+                            AIEmployeeAccount.status == "active",
                         )
                         .all()
                     )
@@ -70,7 +75,7 @@ async def _get_bot_ctx(app_id: str) -> _facade().Optional[_facade()._BotContext]
                 )
                 _facade()._bot_ctx_cache[app_id] = ctx
                 return ctx
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             _facade().logger.debug("_get_bot_ctx 失败 app_id=%s: %s", app_id, exc)
         for webhook_key, spec in _facade()._SPECIFIC_WEBHOOKS.items():
             if spec.get("app_id") == app_id:
@@ -89,7 +94,9 @@ async def _get_bot_ctx(app_id: str) -> _facade().Optional[_facade()._BotContext]
         return None
 
 
-def _specific_ctx_for_employee(employee_id: str) -> _facade().Optional[_facade()._BotContext]:
+def _specific_ctx_for_employee(
+    employee_id: str,
+) -> _facade().Optional[_facade()._BotContext]:
     """从 ``_SPECIFIC_WEBHOOKS`` 静态表里查一份兜底 ctx；DB 都没建好时也能跑。"""
     eid = (employee_id or "").strip()
     if not eid:
@@ -109,7 +116,9 @@ def _specific_ctx_for_employee(employee_id: str) -> _facade().Optional[_facade()
     return None
 
 
-async def _get_bot_ctx_by_employee(employee_id: str) -> _facade().Optional[_facade()._BotContext]:
+async def _get_bot_ctx_by_employee(
+    employee_id: str,
+) -> _facade().Optional[_facade()._BotContext]:
     """按 employee_id 找对应 QQ 机器人 ctx——给"按员工"的通用 webhook 使用。
 
     DB 上同一员工可能挂多个 QQ 账号，取最新一条 active；查不到再尝试
@@ -139,7 +148,7 @@ async def _get_bot_ctx_by_employee(employee_id: str) -> _facade().Optional[_faca
                 )
                 _facade()._bot_ctx_cache[app_id] = ctx
                 return ctx
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         _facade().logger.debug("_get_bot_ctx_by_employee 失败 employee_id=%s: %s", employee_id, exc)
     static_ctx = _facade()._specific_ctx_for_employee(eid)
     if static_ctx is not None:

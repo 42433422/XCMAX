@@ -114,9 +114,7 @@ def main() -> int:
         }
     )
 
-    regen = regenerate_delivery_notes_from_file(
-        delivery_path, regen_path, include_ledger=False
-    )
+    regen = regenerate_delivery_notes_from_file(delivery_path, regen_path, include_ledger=False)
     steps.append(
         {
             "step": "regenerate_roundtrip",

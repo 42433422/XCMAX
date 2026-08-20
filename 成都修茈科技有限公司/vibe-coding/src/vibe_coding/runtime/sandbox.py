@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import time
@@ -10,14 +11,16 @@ from multiprocessing import get_context
 from multiprocessing.connection import Connection
 from typing import Any
 
+from vibe_coding.operational_errors import BOUNDARY_ERRORS
+
+from .._internals.code_models import CodeSandboxResult
+
 # Why prefer ``fork`` on POSIX: Python 3.12 spawn workers occasionally hit
 # ``SystemError: <built-in function compile> returned NULL without setting an
 # exception`` when ``compile()`` is called on a fresh interpreter. The bug is
 # fixed in 3.12.7+ but production hosts often lag. ``fork`` doesn't touch
 # this code path. Windows has no fork so it falls back to ``spawn``.
 _DEFAULT_CTX_NAME = "fork" if os.name == "posix" else "spawn"
-
-from .._internals.code_models import CodeSandboxResult
 
 _SAFE_BUILTIN_NAMES: frozenset[str] = frozenset(
     {
@@ -144,7 +147,7 @@ def _limit_memory_mb(max_mb: int) -> None:
 
         max_bytes = max_mb * 1024 * 1024
         resource.setrlimit(resource.RLIMIT_AS, (max_bytes, max_bytes))
-    except Exception:
+    except BOUNDARY_ERRORS:
         pass
 
 
@@ -167,7 +170,7 @@ def _isolate_worker_process(max_mem_mb: int) -> None:
 
         sandbox_cwd = tempfile.mkdtemp(prefix="vibe-fnsbx-")
         os.chdir(sandbox_cwd)
-    except Exception:
+    except BOUNDARY_ERRORS:
         pass
     try:
         if hasattr(os, "devnull"):
@@ -176,7 +179,7 @@ def _isolate_worker_process(max_mem_mb: int) -> None:
                 os.dup2(devnull_fd, 0)
             finally:
                 os.close(devnull_fd)
-    except Exception:
+    except BOUNDARY_ERRORS:
         pass
     _limit_memory_mb(max_mem_mb)
 
@@ -236,7 +239,7 @@ def _sandbox_worker_entry(payload: dict[str, Any]) -> dict[str, Any]:
             "traceback_str": "",
             "duration_ms": round((time.perf_counter() - t0) * 1000, 3),
         }
-    except Exception as exc:
+    except BOUNDARY_ERRORS as exc:
         return {
             "success": False,
             "output": {},
@@ -259,8 +262,8 @@ def _process_target(conn: Connection, payload: dict[str, Any]) -> None:
     """
     try:
         conn.send(_sandbox_worker_entry(payload))
-    except Exception as exc:
-        try:
+    except BOUNDARY_ERRORS as exc:
+        with contextlib.suppress(*BOUNDARY_ERRORS):
             conn.send(
                 {
                     "success": False,
@@ -271,13 +274,9 @@ def _process_target(conn: Connection, payload: dict[str, Any]) -> None:
                     "duration_ms": 0.0,
                 }
             )
-        except Exception:
-            pass
     finally:
-        try:
+        with contextlib.suppress(*BOUNDARY_ERRORS):
             conn.close()
-        except Exception:
-            pass
 
 
 class CodeSandbox:
@@ -320,7 +319,7 @@ class CodeSandbox:
                 traceback_str="",
             )
 
-        ctx = get_context(_DEFAULT_CTX_NAME)
+        ctx: Any = get_context(_DEFAULT_CTX_NAME)
         parent_conn, child_conn = ctx.Pipe(duplex=False)
         payload: dict[str, Any] = {
             "source_code": source_code,
@@ -334,18 +333,14 @@ class CodeSandbox:
         # Close the child end on the parent side so EOF propagates if the
         # worker dies without sending. Pipe(duplex=False) returns
         # (reader, writer) where the parent reads what the child sends.
-        try:
+        with contextlib.suppress(*BOUNDARY_ERRORS):
             child_conn.close()
-        except Exception:
-            pass
         proc.join(timeout=timeout)
         if proc.is_alive():
             proc.terminate()
             proc.join(timeout=2)
-            try:
+            with contextlib.suppress(*BOUNDARY_ERRORS):
                 parent_conn.close()
-            except Exception:
-                pass
             return CodeSandboxResult(
                 success=False,
                 output={},
@@ -373,10 +368,8 @@ class CodeSandbox:
                 traceback_str="",
             )
         finally:
-            try:
+            with contextlib.suppress(*BOUNDARY_ERRORS):
                 parent_conn.close()
-            except Exception:
-                pass
         return CodeSandboxResult(
             success=bool(raw.get("success")),
             output=dict(raw.get("output") or {}),

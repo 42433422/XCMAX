@@ -1,14 +1,6 @@
 <template>
   <div class="global-search" @keydown.esc="closePanel">
-    <button
-      type="button"
-      class="global-search-trigger"
-      aria-label="智能搜索"
-      title="智能搜索 (⌘K)"
-      @click="openPanel"
-    >
-      🔍 搜索
-    </button>
+    <button type="button" class="global-search-trigger" aria-label="智能搜索" title="智能搜索 (⌘K)" @click="openPanel">🔍 搜索</button>
     <div v-if="open" class="global-search-panel">
       <div class="global-search-header">
         <input
@@ -20,14 +12,7 @@
           @keydown.enter="runSearch"
         />
         <div class="global-search-tabs">
-          <button
-            v-for="tab in tabs"
-            :key="tab.id"
-            type="button"
-            class="tab"
-            :class="{ active: scope === tab.id }"
-            @click="scope = tab.id"
-          >
+          <button v-for="tab in tabs" :key="tab.id" type="button" class="tab" :class="{ active: scope === tab.id }" @click="scope = tab.id">
             {{ tab.label }}
           </button>
         </div>
@@ -51,9 +36,7 @@
             </div>
           </div>
         </template>
-        <div v-if="!productRows.length && !customerRows.length && lastQuery" class="global-search-status">
-          无结果
-        </div>
+        <div v-if="!productRows.length && !customerRows.length && lastQuery" class="global-search-status">无结果</div>
       </div>
     </div>
   </div>

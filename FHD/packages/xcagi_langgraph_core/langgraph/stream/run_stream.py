@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from langchain_core._api import beta
 
+from langgraph._internal._exception_policy import BOUNDARY_ERRORS
 from langgraph.stream._convert import convert_to_protocol_event
 from langgraph.stream._mux import StreamMux
 from langgraph.stream._types import ProtocolEvent
@@ -140,7 +141,7 @@ class GraphRunStream:
             self._mux.close()
             self._exhausted = True
             return False
-        except Exception as e:
+        except BOUNDARY_ERRORS as e:
             self._mux.fail(e)
             self._exhausted = True
             return False
@@ -163,11 +164,11 @@ class GraphRunStream:
         ):
             try:
                 close()
-            except Exception:
+            except BOUNDARY_ERRORS:
                 pass
         try:
             self._mux.close()
-        except Exception:
+        except BOUNDARY_ERRORS:
             pass
 
     def __enter__(self) -> GraphRunStream:
@@ -472,7 +473,7 @@ class AsyncGraphRunStream:
                 self._exhausted = True
                 await self._mux.aclose()
                 return False
-            except Exception as e:
+            except BOUNDARY_ERRORS as e:
                 self._exhausted = True
                 await self._mux.afail(e)
                 return False
@@ -508,7 +509,7 @@ class AsyncGraphRunStream:
             anext_task.cancel()
             try:
                 await anext_task
-            except (asyncio.CancelledError, Exception):
+            except BOUNDARY_ERRORS + (asyncio.CancelledError,):
                 pass
         if (
             graph_aiter is not None
@@ -516,11 +517,11 @@ class AsyncGraphRunStream:
         ):
             try:
                 await aclose()
-            except Exception:
+            except BOUNDARY_ERRORS:
                 pass
         try:
             await self._mux.aclose()
-        except Exception:
+        except BOUNDARY_ERRORS:
             pass
 
     async def __aenter__(self) -> AsyncGraphRunStream:

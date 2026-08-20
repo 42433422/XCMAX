@@ -1,3 +1,4 @@
+# mypy: disable-error-code="index, union-attr"
 """COVERAGE_RAMP Phase 4 round 8: excel_template_analyzer (0%→) via a real xlsx.
 
 Builds a representative 送货单-style template and drives the full analyze()

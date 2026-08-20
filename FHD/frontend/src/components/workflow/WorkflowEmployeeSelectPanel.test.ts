@@ -39,8 +39,7 @@ vi.mock('@/utils/workflowEmployeeRegistry', () => ({
   loadWorkflowEmployeeRegistry: vi.fn(async () => ({ version: 1, employees: [] })),
   loadWorkflowEmployeeRegistryCached: vi.fn(async () => ({ version: 1, employees: [] })),
   mergeModManifestEntries: vi.fn((registry: { employees: unknown[] }) => registry.employees),
-  resolveLabel: (entry: { label_zh?: string; label_en?: string }, _fn: unknown) =>
-    entry.label_zh || entry.label_en || '未命名',
+  resolveLabel: (entry: { label_zh?: string; label_en?: string }, _fn: unknown) => entry.label_zh || entry.label_en || '未命名',
 }))
 
 vi.mock('@/utils/workflowNav', () => ({

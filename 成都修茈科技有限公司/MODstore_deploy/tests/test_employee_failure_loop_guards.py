@@ -33,7 +33,10 @@ def _add_user(session) -> int:
 
 def test_handler_failure_detail_preserves_para_error_for_classification():
     from modstore_server.employee_executor import _handler_failure_detail
-    from modstore_server.llm_failure_classifier import FAILURE_KIND_TRANSIENT, classify_failure_kind
+    from modstore_server.llm_failure_classifier import (
+        FAILURE_KIND_TRANSIENT,
+        classify_failure_kind,
+    )
 
     error = _handler_failure_detail(
         {
@@ -95,7 +98,8 @@ def test_health_scan_excludes_infra_and_lifecycle_failures(fresh_db, monkeypatch
     from modstore_server.llm_failure_classifier import FAILURE_KIND_TRANSIENT
 
     monkeypatch.setattr(
-        "modstore_server.employee_health_scan._record_runtime_policy", lambda **_kw: None
+        "modstore_server.employee_health_scan._record_runtime_policy",
+        lambda **_kw: None,
     )
     monkeypatch.setattr("modstore_server.employee_health_scan._notify_admins", lambda *a, **k: None)
 
@@ -162,7 +166,8 @@ def test_health_scan_evolution_records_are_cooled_down(fresh_db, monkeypatch):
     from modstore_server.employee_health_scan import run_health_scan
 
     monkeypatch.setattr(
-        "modstore_server.employee_health_scan._record_runtime_policy", lambda **_kw: None
+        "modstore_server.employee_health_scan._record_runtime_policy",
+        lambda **_kw: None,
     )
     monkeypatch.setattr(
         "modstore_server.employee_health_scan._deactivate_catalog_employee",

@@ -29,15 +29,18 @@ in via ``tracer=`` to ship spans to OpenTelemetry-compatible backends.
 
 from __future__ import annotations
 
+import contextlib
 import textwrap
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
+
+from vibe_coding.operational_errors import BOUNDARY_ERRORS
 
 from ...nl.llm import LLMClient, LLMError
 from ...nl.parsing import JSONParseError, safe_parse_json_object
 from .tools import ToolNotFoundError, ToolRegistry, ToolResult
-
 
 _REACT_SYSTEM_PROMPT = textwrap.dedent(
     """\
@@ -242,11 +245,7 @@ class ReActAgent:
     def _system_prompt(self) -> str:
         base = _REACT_SYSTEM_PROMPT.format(max_steps=self.max_steps)
         tools_block = "## Tools\n\n" + self.tools.to_prompt_schema()
-        addendum = (
-            "\n\n## Extra instructions\n\n" + self.system_addendum.strip()
-            if self.system_addendum
-            else ""
-        )
+        addendum = "\n\n## Extra instructions\n\n" + self.system_addendum.strip() if self.system_addendum else ""
         return base + "\n\n" + tools_block + addendum
 
     def _build_user_prompt(
@@ -262,9 +261,7 @@ class ReActAgent:
             sections.append(f"## Observation {idx}\n```\n{obs[:4_000]}\n```")
         return "\n\n".join(sections)
 
-    def _make_step(
-        self, idx: int, payload: dict[str, Any], started_at: float
-    ) -> AgentStep:
+    def _make_step(self, idx: int, payload: dict[str, Any], started_at: float) -> AgentStep:
         thought = str(payload.get("thought") or "")
         action = payload.get("action") or {}
         tool_name = ""
@@ -291,8 +288,7 @@ class ReActAgent:
             return ToolResult(
                 success=False,
                 observation=(
-                    f"[error] tool {name!r} is not in the registry. "
-                    f"Available: {', '.join(self.tools.names())}"
+                    f"[error] tool {name!r} is not in the registry. Available: {', '.join(self.tools.names())}"
                 ),
                 error=str(exc),
             )
@@ -300,19 +296,14 @@ class ReActAgent:
     def _notify(self, step: AgentStep) -> None:
         if self.on_step is None:
             return
-        try:
+        with contextlib.suppress(*BOUNDARY_ERRORS):
             self.on_step(step)
-        except Exception:  # noqa: BLE001
-            # User callbacks must never break the loop.
-            pass
 
     def _trace(self, step: AgentStep, phase: str) -> None:
         if self.tracer is None:
             return
-        try:
+        with contextlib.suppress(*BOUNDARY_ERRORS):
             self.tracer(step, phase)
-        except Exception:  # noqa: BLE001
-            pass
 
 
 __all__ = [

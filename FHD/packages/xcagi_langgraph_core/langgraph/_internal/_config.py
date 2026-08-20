@@ -185,7 +185,7 @@ def merge_configs(*configs: RunnableConfig | None) -> RunnableConfig:
                 if config["recursion_limit"] != DEFAULT_RECURSION_LIMIT:
                     base["recursion_limit"] = config["recursion_limit"]
             else:
-                base[key] = config[key]  # type: ignore[literal-required]
+                cast(dict[str, Any], base)[key] = cast(dict[str, Any], config)[key]
     if CONF not in base:
         base[CONF] = {}
     return base
@@ -403,7 +403,7 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
                         else list(cast(list, v))
                     )
                 else:
-                    empty[k] = v  # type: ignore[literal-required]
+                    cast(dict[str, Any], empty)[k] = v
         for k, v in config.items():
             if _is_not_empty(v) and k not in CONFIG_KEYS:
                 empty[CONF][k] = v

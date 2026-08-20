@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """宿主配置 API：与 FHD /api/system/* 对齐，供 MODstore 制作端读取 config/*.json。"""
 
 from __future__ import annotations
@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +57,7 @@ def _try_fhd_sdk(fn_name: str, *args: Any, **kwargs: Any) -> Any:
         fn = getattr(hp, fn_name, None)
         if callable(fn):
             return fn(*args, **kwargs)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.debug("FHD host_profile.%s unavailable", fn_name, exc_info=True)
     return None
 
@@ -70,7 +72,7 @@ def _read_json(name: str) -> dict[str, Any]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else {}
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 

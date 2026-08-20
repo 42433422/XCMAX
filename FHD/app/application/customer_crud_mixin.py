@@ -5,6 +5,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
+
 class CustomerCrudMixin:
     if TYPE_CHECKING:
 

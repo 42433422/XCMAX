@@ -13,7 +13,9 @@ side-steps that crash. It is a best-effort no-op when torch is not installed
 
 from __future__ import annotations
 
+from app.utils.operational_errors import BOUNDARY_ERRORS
+
 try:  # pragma: no cover - environment dependent
     import torch  # noqa: F401
-except Exception:  # noqa: BLE001 - torch absent or broken → tests degrade gracefully
+except BOUNDARY_ERRORS:  # noqa: BLE001 - torch absent or broken → tests degrade gracefully
     pass

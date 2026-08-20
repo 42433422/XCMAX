@@ -3,17 +3,17 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Dict
 
 GIB = 1024**3
 
 
 def utc(value: datetime | None = None) -> datetime:
-    current = value or datetime.now(timezone.utc)
+    current = value or datetime.now(UTC)
     if current.tzinfo is None:
-        current = current.replace(tzinfo=timezone.utc)
-    return current.astimezone(timezone.utc)
+        current = current.replace(tzinfo=UTC)
+    return current.astimezone(UTC)
 
 
 def env_bool(name: str, default: bool) -> bool:

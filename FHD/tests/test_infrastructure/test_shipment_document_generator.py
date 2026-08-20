@@ -23,7 +23,9 @@ class TestLegacyShipmentDocumentGenerator:
     @patch(
         "app.infrastructure.documents.shipment_document_generator_impl.load_legacy_shipment_document_generator"
     )
-    def test_generate_success(self, mock_loader, mock_resolve, _mock_prepare, _mock_products_db):
+    def test_generate_success(
+        self, mock_loader, mock_resolve, _mock_prepare, _mock_products_db, tmp_path
+    ):
         resolved = MagicMock()
         resolved.unit_name = "测试单位"
         resolved.contact_person = "张三"
@@ -49,7 +51,11 @@ class TestLegacyShipmentDocumentGenerator:
         mock_loader.return_value = loader_ns
 
         gen = LegacyShipmentDocumentGenerator()
-        result = gen.generate(unit_name="测试单位", products=[])
+        with patch(
+            "app.infrastructure.documents.shipment_document_generator_impl.get_resource_path",
+            return_value=str(tmp_path / "labels"),
+        ):
+            result = gen.generate(unit_name="测试单位", products=[])
 
         assert result["success"] is True
 

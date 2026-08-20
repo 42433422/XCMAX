@@ -179,8 +179,7 @@ def _format_report(drifts: list[Drift]) -> str:
     lines: list[str] = []
     lines.append(f"[FAIL] 发现 {len(drifts)} 个 XCAGI/ 下与 FHD/ 同路径但内容不同的代码副本。")
     lines.append(
-        "PYTHONPATH 把 XCAGI 排到 FHD 之前时，这些副本会"
-        "覆盖主版本，让代码改到 FHD 看起来不生效。"
+        "PYTHONPATH 把 XCAGI 排到 FHD 之前时，这些副本会覆盖主版本，让代码改到 FHD 看起来不生效。"
     )
     lines.append("")
     lines.append("处理建议：")

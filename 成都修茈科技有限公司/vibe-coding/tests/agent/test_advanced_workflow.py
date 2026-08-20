@@ -7,8 +7,6 @@ import threading
 import time
 from typing import Any
 
-import pytest
-
 from vibe_coding.agent.workflow_advanced import (
     AdvancedNode,
     AdvancedWorkflow,
@@ -20,9 +18,7 @@ from vibe_coding.agent.workflow_advanced import (
     ParallelGroup,
     TriggerSpec,
 )
-from vibe_coding.agent.workflow_advanced.executor import RunOptions
 from vibe_coding.agent.workflow_advanced.graph import AdvancedEdge
-
 
 # ---------------------------------------------------------------- linear DAG
 
@@ -31,7 +27,7 @@ def test_linear_workflow_runs_in_topological_order() -> None:
     order: list[str] = []
 
     def make(name: str):
-        def runner(kwargs, execution):  # noqa: ARG001
+        def runner(kwargs, execution):
             order.append(name)
             return {"name": name}
 
@@ -64,7 +60,7 @@ def test_parallel_group_all_runs_concurrently() -> None:
     lock = threading.Lock()
 
     def make(name: str, delay: float):
-        def runner(kwargs, execution):  # noqa: ARG001
+        def runner(kwargs, execution):
             with lock:
                 started.append(time.perf_counter())
             time.sleep(delay)
@@ -100,10 +96,10 @@ def test_parallel_group_all_runs_concurrently() -> None:
 
 
 def test_parallel_group_any_finishes_after_first_success() -> None:
-    def fast(kwargs, execution):  # noqa: ARG001
+    def fast(kwargs, execution):
         return {"v": "fast"}
 
-    def slow(kwargs, execution):  # noqa: ARG001
+    def slow(kwargs, execution):
         time.sleep(0.5)
         return {"v": "slow"}
 
@@ -134,10 +130,10 @@ def test_parallel_group_any_finishes_after_first_success() -> None:
 
 
 def test_parallel_group_at_least_threshold() -> None:
-    def good(kwargs, execution):  # noqa: ARG001
+    def good(kwargs, execution):
         return {"ok": True}
 
-    def bad(kwargs, execution):  # noqa: ARG001
+    def bad(kwargs, execution):
         raise RuntimeError("nope")
 
     wf = AdvancedWorkflow(
@@ -171,12 +167,12 @@ def test_parallel_group_at_least_threshold() -> None:
 def test_dynamic_spawn_inserts_followups() -> None:
     visited: list[str] = []
 
-    def planner(kwargs, execution):  # noqa: ARG001
+    def planner(kwargs, execution):
         # The planner's output carries new nodes via ``__spawn__``.
         children = [
             AdvancedNode(
                 id=f"task-{i}",
-                runner=(lambda i=i: lambda kw, ex: visited.append(f"task-{i}") or {})(),
+                runner=lambda kw, ex, task_index=i: visited.append(f"task-{task_index}") or {},
             )
             for i in range(3)
         ]
@@ -262,7 +258,7 @@ def test_event_node_timeout_records_failure() -> None:
 def test_retries_kick_in_on_failure() -> None:
     counts = {"n": 0}
 
-    def flaky(kwargs, execution):  # noqa: ARG001
+    def flaky(kwargs, execution):
         counts["n"] += 1
         if counts["n"] < 2:
             raise RuntimeError("flaky")
@@ -279,7 +275,7 @@ def test_retries_kick_in_on_failure() -> None:
 
 
 def test_node_timeout_marks_failure() -> None:
-    def hang(kwargs, execution):  # noqa: ARG001
+    def hang(kwargs, execution):
         time.sleep(0.5)
         return {}
 
@@ -296,10 +292,10 @@ def test_node_timeout_marks_failure() -> None:
 
 
 def test_conditional_edge_skips_downstream_when_false() -> None:
-    def upstream(kwargs, execution):  # noqa: ARG001
+    def upstream(kwargs, execution):
         return {"go": False}
 
-    def downstream(kwargs, execution):  # noqa: ARG001
+    def downstream(kwargs, execution):
         raise AssertionError("should not run")
 
     wf = AdvancedWorkflow(
@@ -319,7 +315,7 @@ def test_conditional_edge_skips_downstream_when_false() -> None:
 
 
 def test_async_executor_runs_to_completion() -> None:
-    def step(kwargs, execution):  # noqa: ARG001
+    def step(kwargs, execution):
         return {"v": kwargs.get("seed", 0) + 1}
 
     wf = AdvancedWorkflow(

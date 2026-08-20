@@ -23,7 +23,9 @@ def _patch_llm(monkeypatch, *, require_raises=False):
     calls = {"require": [], "consume": []}
 
     monkeypatch.setattr(
-        llm_key_resolver, "resolve_api_key", lambda *a, **k: ("platform-key", "platform")
+        llm_key_resolver,
+        "resolve_api_key",
+        lambda *a, **k: ("platform-key", "platform"),
     )
     monkeypatch.setattr(llm_key_resolver, "resolve_base_url", lambda *a, **k: None)
 

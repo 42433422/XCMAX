@@ -185,7 +185,9 @@ describe('useStartupSplash', () => {
 
   it('startupPreviewModNames computed extracts names', async () => {
     const { fetchModLoadingStatusShared } = await import('@/utils/modLoadingStatusShared')
-    vi.mocked(fetchModLoadingStatusShared).mockResolvedValueOnce({ mods: [{ name: 'Alpha' }, { name: 'Beta' }] })
+    vi.mocked(fetchModLoadingStatusShared).mockResolvedValueOnce({
+      mods: [{ name: 'Alpha' }, { name: 'Beta' }],
+    })
     await splash.loadModsForStartup()
     expect(splash.startupPreviewModNames.value).toEqual(['Alpha', 'Beta'])
   })

@@ -60,7 +60,11 @@ def test_operations_line_routes_to_backlog_and_incident(routes_file, monkeypatch
         fake_publish,
     )
     out = routes_file.handle_operations_line_event(
-        {"step_id": "O7", "status": "progress", "payload": {"summary": "用户反馈 UI 卡顿"}}
+        {
+            "step_id": "O7",
+            "status": "progress",
+            "payload": {"summary": "用户反馈 UI 卡顿"},
+        }
     )
     assert out["routed"] is True
     assert out["backlog"] is True

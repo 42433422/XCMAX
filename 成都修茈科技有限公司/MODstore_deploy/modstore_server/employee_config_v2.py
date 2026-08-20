@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr"
 """员工包 ``employee_config_v2`` 校验；可选 ``metadata.daily_brief_seed`` / ``daily_brief_research_focus`` 供每日摘要调研 brief。"""
 
 from __future__ import annotations
@@ -93,14 +94,14 @@ def validate_v2_config(
 ) -> List[str]:
     c = config if isinstance(config, dict) else {}
     errs: List[str] = []
-    if not _to_str(((c.get("identity") or {}).get("id"))):
+    if not _to_str((c.get("identity") or {}).get("id")):
         errs.append("缺少 identity.id")
-    if not _to_str(((c.get("identity") or {}).get("name"))):
+    if not _to_str((c.get("identity") or {}).get("name")):
         errs.append("缺少 identity.name")
-    if not _to_str(((c.get("identity") or {}).get("version"))):
+    if not _to_str((c.get("identity") or {}).get("version")):
         errs.append("缺少 identity.version")
     wf_id = _to_workflow_id(
-        (((c.get("collaboration") or {}).get("workflow") or {}).get("workflow_id"))
+        ((c.get("collaboration") or {}).get("workflow") or {}).get("workflow_id")
     )
     actions = c.get("actions") if isinstance(c.get("actions"), dict) else {}
     handlers = actions.get("handlers") if isinstance(actions.get("handlers"), list) else []
@@ -128,7 +129,7 @@ def validate_v2_config(
     actions = c.get("actions") or {}
     memory = c.get("memory") or {}
     cognition = c.get("cognition") or {}
-    asr_enabled = bool((((perception.get("audio") or {}).get("asr") or {}).get("enabled")))
+    asr_enabled = bool(((perception.get("audio") or {}).get("asr") or {}).get("enabled"))
     if asr_enabled and not isinstance(actions.get("voice_output"), dict):
         errs.append("启用 ASR 需要配置 actions.voice_output")
     long_term_enabled = bool((memory.get("long_term") or {}).get("enabled"))

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr"
 """Validation of the guarded Para-generated pull-request merge contract."""
 
 from __future__ import annotations

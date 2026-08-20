@@ -12,14 +12,12 @@ from vibe_coding.agent.memory import (
     Exemplar,
     GlobalKnowledgeBase,
     HashingEmbedder,
-    KnowledgeRecord,
     OpenAIEmbedder,
     ProjectMemory,
     SentenceTransformerEmbedder,
     auto_promote_to_kb,
     cosine_similarity,
 )
-
 
 # --------------------------------------------------------------- embedder
 
@@ -217,7 +215,9 @@ def test_project_memory_auto_promotes_to_kb(tmp_path: Path) -> None:
     class _Patch:
         patch_id = "p-1"
         summary = "demo"
-        edits = []
+
+        def __init__(self) -> None:
+            self.edits = []
 
     mem.record_success("rename foo", _Patch())
     assert len(kb) == 1
@@ -238,7 +238,9 @@ def test_project_memory_promotion_can_be_disabled(tmp_path: Path) -> None:
     class _Patch:
         patch_id = "p-1"
         summary = "demo"
-        edits = []
+
+        def __init__(self) -> None:
+            self.edits = []
 
     mem.record_success("anything", _Patch())
     assert len(kb) == 0

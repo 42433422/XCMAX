@@ -149,17 +149,12 @@ function modLabelOverride(menuKey: string, modsForUi: ModForNavLabel[] | null | 
   return ''
 }
 
-export function resolveCoreNavLabel(
-  menuKey: string,
-  industryId: string,
-  modsForUi: ModForNavLabel[] | null | undefined,
-): string {
+export function resolveCoreNavLabel(menuKey: string, industryId: string, modsForUi: ModForNavLabel[] | null | undefined): string {
   const key = String(menuKey || '').trim()
   if (!key) return ''
   const fromMod = modLabelOverride(key, modsForUi)
   if (fromMod) return fromMod
-  const byInd =
-    INDUSTRY_MENU_LABELS[industryId] || INDUSTRY_MENU_LABELS[DEFAULT_INDUSTRY_ID]
+  const byInd = INDUSTRY_MENU_LABELS[industryId] || INDUSTRY_MENU_LABELS[DEFAULT_INDUSTRY_ID]
   if (byInd[key]) return byInd[key]
   if (key === 'other-tools' && isAdminConsoleSpa()) return '编制图谱'
   return MENU_DEFAULT_NAMES[key] || ''

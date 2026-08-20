@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, index"
 """Read projection for append-only autonomy decision evidence."""
 
 from __future__ import annotations
@@ -80,7 +81,10 @@ def build_autonomy_decision_evidence(
         rows = (
             session.query(AutonomyDecisionAudit)
             .filter(AutonomyDecisionAudit.occurred_at >= cutoff)
-            .order_by(AutonomyDecisionAudit.occurred_at.desc(), AutonomyDecisionAudit.id.desc())
+            .order_by(
+                AutonomyDecisionAudit.occurred_at.desc(),
+                AutonomyDecisionAudit.id.desc(),
+            )
             .all()
         )
         append_only = _append_only_guard_status(session)

@@ -72,9 +72,7 @@ function clone<T>(v: T): T {
   return JSON.parse(JSON.stringify(v))
 }
 
-export function createEmptyEmployeeConfigV2(opts?: {
-  model?: Partial<{ provider: string; model_name: string }>
-}): EmployeeConfigRecord {
+export function createEmptyEmployeeConfigV2(opts?: { model?: Partial<{ provider: string; model_name: string }> }): EmployeeConfigRecord {
   const provider = String(opts?.model?.provider ?? '').trim() || 'auto'
   const model_name = String(opts?.model?.model_name ?? '').trim() || 'auto'
   return {
@@ -201,8 +199,7 @@ export function applyTemplateV2(templateId: string): EmployeeConfigRecord {
 }
 
 export function upgradeLegacyToV2(inputManifest: unknown = {}): EmployeeConfigRecord {
-  const legacy: EmployeeConfigRecord =
-    inputManifest && typeof inputManifest === 'object' ? (inputManifest as EmployeeConfigRecord) : {}
+  const legacy: EmployeeConfigRecord = inputManifest && typeof inputManifest === 'object' ? (inputManifest as EmployeeConfigRecord) : {}
   const c = createEmptyEmployeeConfigV2()
   c.identity = c.identity || {}
   c.identity.id = String(legacy.id || '').trim()
@@ -248,10 +245,7 @@ export function validateEmployeeConfigV2(config: unknown): { valid: boolean; err
     errs.push('role.tone 仅支持 formal/friendly/professional/casual')
   }
   const provider = String(c?.cognition?.agent?.model?.provider || '')
-  if (
-    provider &&
-    !['deepseek', 'openai', 'anthropic', 'local', 'auto'].includes(provider)
-  ) {
+  if (provider && !['deepseek', 'openai', 'anthropic', 'local', 'auto'].includes(provider)) {
     errs.push('model.provider 仅支持 deepseek/openai/anthropic/local/auto')
   }
   const model = c?.cognition?.agent?.model || {}

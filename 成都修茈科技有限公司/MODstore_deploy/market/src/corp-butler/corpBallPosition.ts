@@ -15,10 +15,7 @@ export function getCorpDefaultBallPosition(): { x: number; y: number } {
   const bottom = 24
   const y = Math.max(8, window.innerHeight - CORP_BALL_H - bottom)
   const mobile = isCorpMobileViewport()
-  const x =
-    isContactPagePath() || mobile
-      ? margin
-      : Math.max(8, window.innerWidth - CORP_BALL_W - margin)
+  const x = isContactPagePath() || mobile ? margin : Math.max(8, window.innerWidth - CORP_BALL_W - margin)
   return { x, y }
 }
 

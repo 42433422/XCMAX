@@ -17,9 +17,7 @@ describe('priceList', () => {
   it('generate calls api.post with params', async () => {
     const params: GeneratePriceListParams = {
       customer_name: 'Test Customer',
-      products: [
-        { model_number: 'M001', name: 'Product A', spec: '100ml', unit: '瓶', unit_price: '10.00' },
-      ],
+      products: [{ model_number: 'M001', name: 'Product A', spec: '100ml', unit: '瓶', unit_price: '10.00' }],
     }
     const result = await generate(params)
     expect(api.post).toHaveBeenCalledWith('/api/price-list/generate', params)

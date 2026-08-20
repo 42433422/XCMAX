@@ -55,18 +55,14 @@ def test_function_timeout(driver: SubprocessSandboxDriver) -> None:
 
 def test_function_blocks_unsafe_imports(driver: SubprocessSandboxDriver) -> None:
     code = "def run():\n    import os\n    return {}\n"
-    res = driver.execute(
-        SandboxJob(kind="function", source_code=code, function_name="run", input_data={})
-    )
+    res = driver.execute(SandboxJob(kind="function", source_code=code, function_name="run", input_data={}))
     assert not res.success
     assert "not allowed" in res.error_message
 
 
 def test_function_blocks_forbidden_builtin(driver: SubprocessSandboxDriver) -> None:
     code = "def run():\n    eval('1+1')\n    return {}\n"
-    res = driver.execute(
-        SandboxJob(kind="function", source_code=code, function_name="run", input_data={})
-    )
+    res = driver.execute(SandboxJob(kind="function", source_code=code, function_name="run", input_data={}))
     assert not res.success
 
 
@@ -107,9 +103,7 @@ def test_command_timeout(driver: SubprocessSandboxDriver, tmp_path: Path) -> Non
 
 
 def test_command_requires_workspace(driver: SubprocessSandboxDriver) -> None:
-    res = driver.execute(
-        SandboxJob(kind="command", command=[sys.executable, "-c", "print(1)"])
-    )
+    res = driver.execute(SandboxJob(kind="command", command=[sys.executable, "-c", "print(1)"]))
     assert not res.success
     assert "workspace_dir" in res.error_message
 

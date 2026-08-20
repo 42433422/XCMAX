@@ -1,3 +1,4 @@
+# mypy: disable-error-code="index"
 """Extended tests for ``app.mod_sdk.erp_products_facade`` covering low-coverage branches."""
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from app.mod_sdk import erp_products_facade as pf
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 
 @pytest.fixture()
@@ -83,9 +85,9 @@ def _patch_norm_model(monkeypatch: pytest.MonkeyPatch):
                     continue
                 try:
                     setattr(fake_module, attr, getattr(real_module, attr))
-                except Exception:
+                except BOUNDARY_ERRORS:
                     pass
-    except Exception:
+    except BOUNDARY_ERRORS:
         pass
     monkeypatch.setitem(sys.modules, "app.application.excel_imports", fake_module)
     return fake_module

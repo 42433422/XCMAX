@@ -18,6 +18,7 @@
 
 退出码: 0=全部通过; 1=校验失败。
 """
+
 from __future__ import annotations
 
 import argparse
@@ -116,7 +117,9 @@ def verify_manifest() -> bool:
     actual = collect_files()
     missing = [rel for rel in expected if rel not in actual]
     extra = [rel for rel in actual if rel not in expected]
-    changed = [rel for rel in actual if rel in expected and actual[rel] != expected[rel]]
+    changed = [
+        rel for rel in actual if rel in expected and actual[rel] != expected[rel]
+    ]
 
     ok = True
     for rel in sorted(missing):
@@ -154,19 +157,31 @@ def fetch_pinned(dst: Path) -> tuple[bool, str]:
     commands = (
         ["git", "init", "--quiet", str(dst)],
         ["git", "-C", str(dst), "remote", "add", "origin", UPSTREAM_REPO],
-        ["git", "-C", str(dst), "fetch", "--quiet", "--depth", "1", "origin", UPSTREAM_SHA],
+        [
+            "git",
+            "-C",
+            str(dst),
+            "fetch",
+            "--quiet",
+            "--depth",
+            "1",
+            "origin",
+            UPSTREAM_SHA,
+        ],
         ["git", "-C", str(dst), "checkout", "--quiet", "--detach", "FETCH_HEAD"],
     )
     for command in commands:
-        proc = subprocess.run(command, check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        proc = subprocess.run(command, check=False, capture_output=True)
         if proc.returncode != 0:
-            return False, f"{' '.join(command)} 失败: {proc.stderr.decode(errors='replace').strip()}"
+            return (
+                False,
+                f"{' '.join(command)} 失败: {proc.stderr.decode(errors='replace').strip()}",
+            )
 
     rev = subprocess.run(
         ["git", "-C", str(dst), "rev-parse", "HEAD"],
         check=False,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
     )
     if rev.returncode != 0:
         return False, "无法解析 clone 后的 HEAD"
@@ -207,7 +222,9 @@ def verify_upstream(prov: dict) -> bool:
 
     ok = not mismatches
     if ok:
-        print(f"[OK] 与上游 commit {UPSTREAM_SHA[:12]} 的 libs/checkpoint-sqlite 字节级一致")
+        print(
+            f"[OK] 与上游 commit {UPSTREAM_SHA[:12]} 的 libs/checkpoint-sqlite 字节级一致"
+        )
     else:
         for m in mismatches:
             print(f"[FAIL] 与上游不一致: {m}")

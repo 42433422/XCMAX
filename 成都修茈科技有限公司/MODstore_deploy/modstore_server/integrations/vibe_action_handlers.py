@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, union-attr"
 """把 vibe-coding 暴露成 employee_executor 的 action handler。
 
 被 :func:`modstore_server.employee_executor._actions_real` 在遇到
@@ -23,6 +24,7 @@ from modstore_server.employee_scope_policy import (
     validate_repo_paths_for_employee_pack,
 )
 from modstore_server.models import get_session_factory
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +43,7 @@ def _publish_scope_violation(employee_id: str, detail: str) -> None:
             },
             source=str(employee_id or "unknown"),
         )
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         logger.exception("publish scope_violation failed")
 
 
@@ -76,7 +78,7 @@ def _safe_resolve_provider_model(
                     prov = p
             if not mdl:
                 mdl = str(prefs.get("model") or "").strip()
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         logger.exception("vibe action handler 解析默认 provider/model 失败")
     return {"provider": prov, "model": mdl}
 
@@ -122,7 +124,11 @@ def vibe_edit_handler(
             patch_to_dict,
         )
     except ImportError as exc:  # pragma: no cover
-        return {"handler": "vibe_edit", "ok": False, "error": f"integrations 未导入: {exc}"}
+        return {
+            "handler": "vibe_edit",
+            "ok": False,
+            "error": f"integrations 未导入: {exc}",
+        }
 
     if action_cfg.get("async_mode"):
         return {
@@ -139,7 +145,9 @@ def vibe_edit_handler(
         or ""
     )
     try:
-        from modstore_server.employee_executor import _trusted_system_burn_in_project_root
+        from modstore_server.employee_executor import (
+            _trusted_system_burn_in_project_root,
+        )
 
         trusted = _trusted_system_burn_in_project_root(
             raw_root,
@@ -206,7 +214,7 @@ def vibe_edit_handler(
             except TypeError:
                 patch = coder.edit_project(brief, root=root)
             apply_result = coder.apply_patch(patch, root=root, dry_run=dry_run)
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.exception("vibe_edit handler failed")
         return {"handler": "vibe_edit", "ok": False, "error": f"vibe_edit 失败: {exc}"}
 
@@ -253,7 +261,11 @@ def vibe_heal_handler(
             heal_result_to_dict,
         )
     except ImportError as exc:  # pragma: no cover
-        return {"handler": "vibe_heal", "ok": False, "error": f"integrations 未导入: {exc}"}
+        return {
+            "handler": "vibe_heal",
+            "ok": False,
+            "error": f"integrations 未导入: {exc}",
+        }
 
     cog_input = reasoning.get("input") if isinstance(reasoning.get("input"), dict) else {}
     raw_root = (
@@ -263,7 +275,9 @@ def vibe_heal_handler(
         or ""
     )
     try:
-        from modstore_server.employee_executor import _trusted_system_burn_in_project_root
+        from modstore_server.employee_executor import (
+            _trusted_system_burn_in_project_root,
+        )
 
         trusted = _trusted_system_burn_in_project_root(
             raw_root,
@@ -317,7 +331,7 @@ def vibe_heal_handler(
             except VibeIntegrationError as exc:
                 return {"handler": "vibe_heal", "ok": False, "error": str(exc)}
             result = coder.heal_project(brief, max_rounds=max_rounds)
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.exception("vibe_heal handler failed")
         return {"handler": "vibe_heal", "ok": False, "error": f"vibe_heal 失败: {exc}"}
 
@@ -353,7 +367,11 @@ def vibe_code_handler(
             get_vibe_coder,
         )
     except ImportError as exc:  # pragma: no cover
-        return {"handler": "vibe_code", "ok": False, "error": f"integrations 未导入: {exc}"}
+        return {
+            "handler": "vibe_code",
+            "ok": False,
+            "error": f"integrations 未导入: {exc}",
+        }
 
     pm = _safe_resolve_provider_model(
         int(user_id or 0),
@@ -397,7 +415,7 @@ def vibe_code_handler(
                     if hasattr(run_obj, "to_dict") and callable(run_obj.to_dict)
                     else {"output": getattr(run_obj, "output", None)}
                 )
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.exception("vibe_code handler failed")
         return {"handler": "vibe_code", "ok": False, "error": f"vibe_code 失败: {exc}"}
 

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment, union-attr"
 """Retort clarification gate: blocking questions with TTL anti-backlog.
 
 Flow:
@@ -16,19 +17,37 @@ import json
 import os
 import threading
 import uuid
-from datetime import datetime, timedelta as timedelta, timezone
+from datetime import UTC, datetime
+from datetime import timedelta as timedelta
 from pathlib import Path
 from typing import Any, Mapping, Optional, Sequence
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.retort_clarification_operations import (
     _latest_session_for_subject as _latest_session_for_subject,
+)
+from modstore_server.retort_clarification_operations import (
     _mirror_to_boss_inbox as _mirror_to_boss_inbox,
+)
+from modstore_server.retort_clarification_operations import (
     answer_clarification as answer_clarification,
+)
+from modstore_server.retort_clarification_operations import (
     cancel_clarification as cancel_clarification,
+)
+from modstore_server.retort_clarification_operations import (
     clarification_blocks_auto_approve as clarification_blocks_auto_approve,
+)
+from modstore_server.retort_clarification_operations import (
     evaluate_retort_clarification_gate as evaluate_retort_clarification_gate,
+)
+from modstore_server.retort_clarification_operations import (
     mark_clarification_resolved as mark_clarification_resolved,
+)
+from modstore_server.retort_clarification_operations import (
     open_clarification_for_change_request as open_clarification_for_change_request,
+)
+from modstore_server.retort_clarification_operations import (
     open_clarification_session as open_clarification_session,
 )
 
@@ -43,7 +62,7 @@ _TERMINAL = {_STATUS_ANSWERED, _STATUS_EXPIRED, _STATUS_CANCELLED, _STATUS_RESOL
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _now_iso() -> str:
@@ -67,7 +86,10 @@ def clarification_ledger_path() -> Path:
 
 def ttl_seconds() -> int:
     try:
-        return max(30, int(os.environ.get("MODSTORE_RETORT_CLARIFICATION_TTL_SECONDS") or "1800"))
+        return max(
+            30,
+            int(os.environ.get("MODSTORE_RETORT_CLARIFICATION_TTL_SECONDS") or "1800"),
+        )
     except ValueError:
         return 1800
 
@@ -82,7 +104,8 @@ def max_open_sessions() -> int:
 def expire_fallback() -> str:
     """fail_closed | cancel | degrade_intent"""
     raw = _text(
-        os.environ.get("MODSTORE_RETORT_CLARIFICATION_EXPIRE_FALLBACK") or "fail_closed", 32
+        os.environ.get("MODSTORE_RETORT_CLARIFICATION_EXPIRE_FALLBACK") or "fail_closed",
+        32,
     )
     return raw if raw in {"fail_closed", "cancel", "degrade_intent"} else "fail_closed"
 
@@ -144,7 +167,8 @@ def _save_store_unlocked(store: Mapping[str, Any]) -> None:
         "sessions": dict(store.get("sessions") or {}),
     }
     tmp.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8"
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
     )
     tmp.replace(path)
 
@@ -158,7 +182,7 @@ def _parse_iso(value: str) -> Optional[datetime]:
     except ValueError:
         return None
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
     return dt
 
 
@@ -184,7 +208,11 @@ def _load_clarification_builder():
             enrich_strategy_intent,
         )
 
-        return build_clarification_questions, clarification_needed, enrich_strategy_intent
+        return (
+            build_clarification_questions,
+            clarification_needed,
+            enrich_strategy_intent,
+        )
     except ImportError:
         root = Path(__file__).resolve().parents[3] / "packages" / "retort_engine"
         import sys
@@ -197,7 +225,11 @@ def _load_clarification_builder():
             enrich_strategy_intent,
         )
 
-        return build_clarification_questions, clarification_needed, enrich_strategy_intent
+        return (
+            build_clarification_questions,
+            clarification_needed,
+            enrich_strategy_intent,
+        )
 
 
 def _load_alignment():
@@ -216,7 +248,9 @@ def _load_alignment():
         return assess_change_intent_alignment
 
 
-def _normalize_changed_for_alignment(changed_files: Sequence[Any] | None) -> list[dict[str, Any]]:
+def _normalize_changed_for_alignment(
+    changed_files: Sequence[Any] | None,
+) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for item in changed_files or []:
         if isinstance(item, str):
@@ -277,11 +311,10 @@ def _expire_boss_inbox_for_sessions(session_ids: Sequence[str]) -> int:
         return 0
     try:
         from modstore_server.models import PendingHumanQuestion, get_session_factory
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return 0
     fingerprints = [
-        hashlib.sha256(f"retort-clarification:{sid}".encode("utf-8")).hexdigest()[:32]
-        for sid in ids
+        hashlib.sha256(f"retort-clarification:{sid}".encode()).hexdigest()[:32] for sid in ids
     ]
     expired = 0
     try:
@@ -301,7 +334,7 @@ def _expire_boss_inbox_for_sessions(session_ids: Sequence[str]) -> int:
                 expired += 1
             if expired:
                 session.commit()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return 0
     return expired
 

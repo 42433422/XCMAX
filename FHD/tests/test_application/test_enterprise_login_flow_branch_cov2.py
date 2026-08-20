@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr"
 """测试 app.application.enterprise_login_flow 的辅助函数分支覆盖。
 
 覆盖目标：

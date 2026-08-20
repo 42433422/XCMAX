@@ -13,17 +13,17 @@
 
 ## 负责文件
 
-| 类型 | 路径 |
-|------|------|
-| 路由视图 | `market/src/views/*.vue`（不含 workbench/）|
-| 工作流视图 | `market/src/views/workflow/**` |
-| API 层 | `market/src/api.ts` |
-| HTTP Client | `market/src/infrastructure/http/client.ts` |
-| 根组件 | `market/src/App.vue` |
-| 通用组件 | `market/src/components/**`（不含 workbench/）|
-| Store | `market/src/stores/**` |
-| 路由配置 | `market/src/router/**` |
-| 构建配置 | `package.json`、`vite.config.*`、`tsconfig*.json` |
+| 类型        | 路径                                              |
+| ----------- | ------------------------------------------------- |
+| 路由视图    | `market/src/views/*.vue`（不含 workbench/）       |
+| 工作流视图  | `market/src/views/workflow/**`                    |
+| API 层      | `market/src/api.ts`                               |
+| HTTP Client | `market/src/infrastructure/http/client.ts`        |
+| 根组件      | `market/src/App.vue`                              |
+| 通用组件    | `market/src/components/**`（不含 workbench/）     |
+| Store       | `market/src/stores/**`                            |
+| 路由配置    | `market/src/router/**`                            |
+| 构建配置    | `package.json`、`vite.config.*`、`tsconfig*.json` |
 
 ## 典型任务
 
@@ -35,12 +35,12 @@
 
 ## KPI
 
-| 指标 | 目标 |
-|------|------|
-| TypeScript 编译零错误 | 100% |
+| 指标                   | 目标 |
+| ---------------------- | ---- |
+| TypeScript 编译零错误  | 100% |
 | `npm run build` 成功率 | 100% |
-| React 依赖引入事件 | 0 |
-| Lighthouse 性能分 | ≥ 80 |
+| React 依赖引入事件     | 0    |
+| Lighthouse 性能分      | ≥ 80 |
 
 ## 禁区
 

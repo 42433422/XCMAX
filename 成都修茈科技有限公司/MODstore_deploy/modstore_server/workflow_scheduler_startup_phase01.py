@@ -1,7 +1,10 @@
-# ruff: noqa
 """Scheduler startup registration phase."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -10,10 +13,12 @@ def _facade():
 
 def _register_scheduler_phase_01():
     try:
-        from modstore_server.backup_event_subscriber import register_backup_event_subscribers
+        from modstore_server.backup_event_subscriber import (
+            register_backup_event_subscribers,
+        )
 
         register_backup_event_subscribers()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         _facade().logger.exception("register backup event subscribers failed")
     _facade()._load_triggers()
 
@@ -30,9 +35,9 @@ def _register_scheduler_phase_01():
                 write_node_heartbeat(
                     job_count=len(_facade()._scheduler.get_jobs()) if _facade()._scheduler else None
                 )
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 _facade().logger.debug("node heartbeat failed", exc_info=True)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.exception("scheduler heartbeat failed")
 
     _facade()._scheduler.add_job(
@@ -66,7 +71,7 @@ def _register_scheduler_phase_01():
                     result.get("unresolved_count"),
                     bool((result.get("storage") or {}).get("ok")),
                 )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.exception("dead-letter reconciliation failed")
 
     _facade()._scheduler.add_job(
@@ -103,7 +108,7 @@ def _register_scheduler_phase_01():
                     result.get("existing"),
                     result.get("skipped"),
                 )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.exception("customer-value reconciliation failed")
             raise
 
@@ -127,7 +132,7 @@ def _register_scheduler_phase_01():
             n = _facade().payment_orders.close_pending_older_than(minutes=30)
             if n:
                 _facade().logger.info("closed %d expired pending payment orders", n)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.exception("close expired payment orders failed")
 
     _facade()._scheduler.add_job(
@@ -154,7 +159,7 @@ def _register_scheduler_phase_01():
                 r.get("released_bytes"),
                 float(r.get("duration_ms") or 0.0),
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.exception("retention janitor failed")
 
     _facade()._scheduler.add_job(
@@ -197,7 +202,7 @@ def _register_scheduler_phase_01():
             _facade().logger.error(
                 "incident_collect_pytest_cursor exceeded 240s timeout; orphan thread left running"
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.exception("incident_collect_pytest_cursor failed")
 
     def _incident_collect_nginx() -> None:
@@ -218,7 +223,7 @@ def _register_scheduler_phase_01():
             _facade().logger.error(
                 "incident_collect_nginx exceeded 240s timeout; orphan thread left running"
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.exception("incident_collect_nginx failed")
 
     _facade()._scheduler.add_job(
@@ -264,7 +269,7 @@ def _register_scheduler_phase_01():
             _facade().logger.error(
                 "incident_collect_extended exceeded 240s timeout; orphan thread left running"
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _facade().logger.exception("incident_collect_extended failed")
 
     _facade()._scheduler.add_job(

@@ -1,5 +1,6 @@
 # FHD/scripts/dev/tests/test_audit_evolution.py
 """audit_evolution.py CLI 单元测试。"""
+
 from __future__ import annotations
 
 import json
@@ -41,9 +42,7 @@ def test_audit_since_filter(tmp_path):
             {"event_id": "2", "timestamp": new_ts, "event_type": "new", "pack_id": "new@1.0"},
         ],
     )
-    result = _run_audit(
-        "--since", "7d", env={"MODSTORE_EVOLUTION_LEDGER_PATH": str(ledger)}
-    )
+    result = _run_audit("--since", "7d", env={"MODSTORE_EVOLUTION_LEDGER_PATH": str(ledger)})
     assert result.returncode == 0
     assert "new@1.0" in result.stdout
     assert "old@1.0" not in result.stdout

@@ -7,9 +7,11 @@
   </div>
 </template>
 
-<script setup>
-</script>
+<script setup></script>
 
 <style scoped>
-.mod-home .muted { color: #666; margin-top: 0.5rem; }
+.mod-home .muted {
+  color: #666;
+  margin-top: 0.5rem;
+}
 </style>

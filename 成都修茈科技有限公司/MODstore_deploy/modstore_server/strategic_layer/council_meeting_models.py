@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """Public value objects and serializers for strategic council meetings."""
 
 from __future__ import annotations

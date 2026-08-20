@@ -7,8 +7,7 @@ export default {
     database: 'Database',
     adminCustomerService: 'AI customer service admin',
     customerServiceAi: 'AI support',
-    customerServiceAiTitle:
-      'Standalone AI support: complaints, refunds, listing review, and account help',
+    customerServiceAiTitle: 'Standalone AI support: complaints, refunds, listing review, and account help',
     notificationsCenter: 'Notifications',
     levelBadgeTitle: '{title} · total XP {exp}',
     defaultLevelTitle: 'Account level',

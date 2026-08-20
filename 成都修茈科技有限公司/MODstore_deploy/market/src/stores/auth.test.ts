@@ -147,7 +147,9 @@ describe('auth store', () => {
 
     await expect(store.loginWithPassword('u', 'p')).resolves.toEqual({ access_token: 'token-7' })
     expect(api.login).toHaveBeenCalledWith('u', 'p')
-    await expect(store.loginWithCode('u@example.com', '123456')).resolves.toEqual({ access_token: 'token-8' })
+    await expect(store.loginWithCode('u@example.com', '123456')).resolves.toEqual({
+      access_token: 'token-8',
+    })
     expect(api.loginWithCode).toHaveBeenCalledWith('u@example.com', '123456')
   })
 })

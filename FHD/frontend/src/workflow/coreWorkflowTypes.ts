@@ -23,10 +23,7 @@ export type CoreWorkflowUpsertOpts = CoreWorkflowEmployeeCtx & {
   monitor?: WorkflowMonitorPayload | null
 }
 
-export const CORE_WORKFLOW_PAYLOAD_KEYS: Record<
-  CoreWorkflowEmployeeId,
-  keyof CoreWorkflowEmployeeCtx
-> = {
+export const CORE_WORKFLOW_PAYLOAD_KEYS: Record<CoreWorkflowEmployeeId, keyof CoreWorkflowEmployeeCtx> = {
   wechat_msg: 'lastWechat',
   label_print: 'lastLabelPrint',
   shipment_mgmt: 'lastShipmentAudit',

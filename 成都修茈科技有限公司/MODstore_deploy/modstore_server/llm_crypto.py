@@ -8,6 +8,8 @@ from typing import cast
 
 from cryptography.fernet import Fernet, InvalidToken
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 
 def _fernet() -> Fernet | None:
     raw = (os.environ.get("MODSTORE_LLM_MASTER_KEY") or "").strip()
@@ -15,7 +17,7 @@ def _fernet() -> Fernet | None:
         return None
     try:
         return Fernet(raw.encode("ascii"))
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return None
 
 

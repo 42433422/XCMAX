@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     Boolean,
@@ -33,7 +33,7 @@ class EmployeeExecutionMetric(Base):
     # 失败分类：quota（配额/计费/403，改 prompt 无效）/ transient / prompt / ""。
     # 自进化引擎据此排除配额类失败，避免 403 死亡螺旋。见 llm_failure_classifier。
     failure_kind = Column(String(32), default="", index=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
 
 class DutyGraphRun(Base):
@@ -53,7 +53,7 @@ class DutyGraphRun(Base):
     failed_count = Column(Integer, default=0)
     skipped_count = Column(Integer, default=0)
     error = Column(Text, default="")
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
 
@@ -97,7 +97,7 @@ class OpsActionAuditLog(Base):
     approval_required = Column(Boolean, default=False, index=True)
     dry_run = Column(Boolean, default=False)
     error = Column(Text, default="")
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
 
 
 class IncidentEvent(Base):
@@ -109,7 +109,7 @@ class IncidentEvent(Base):
     payload_json = Column(Text, default="{}")
     fingerprint = Column(String(128), default="", index=True)
     dispatched_count = Column(Integer, default=0)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
 
 
 class EmployeeTriggerBinding(Base):
@@ -123,7 +123,7 @@ class EmployeeTriggerBinding(Base):
     event_type = Column(String(64), nullable=False, index=True)
     is_active = Column(Boolean, default=True, index=True)
     priority = Column(Integer, default=5, nullable=False, index=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
 
 class OpsApprovalToken(Base):
@@ -138,7 +138,7 @@ class OpsApprovalToken(Base):
     used_at = Column(DateTime, nullable=True, index=True)
     consumed_message_id = Column(String(512), default="", index=True)
     dispatched_audit_ids_json = Column(Text, default="[]")
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
 
 
 class DailyDigestRecord(Base):
@@ -166,7 +166,7 @@ class DailyDigestRecord(Base):
     delivery_json = Column(Text, default="[]")
     delivered = Column(Boolean, default=False, index=True)
     source = Column(String(32), default="daily_digest", index=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
 
 
 class OpsStagedChange(Base):
@@ -188,7 +188,7 @@ class OpsStagedChange(Base):
     approval_token_id = Column(
         Integer, ForeignKey("ops_approval_tokens.id"), nullable=True, index=True
     )
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
     approved_at = Column(DateTime, nullable=True)
     deployed_at = Column(DateTime, nullable=True)
 
@@ -209,7 +209,7 @@ class OnDemandOrchestrateJob(Base):
     llm_model = Column(String(128), default="auto")
     result_json = Column(Text, default="")
     error = Column(Text, default="")
-    submitted_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    submitted_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
 
@@ -231,7 +231,7 @@ class EmployeeChangeRequest(Base):
     applied_at = Column(DateTime, nullable=True)
     rejected_reason = Column(Text, default="")
     error = Column(Text, default="")
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
     git_branch = Column(String(256), default="", index=True)
     base_commit_sha = Column(String(64), default="")
     staged_commit_sha = Column(String(64), default="")
@@ -252,7 +252,7 @@ class PendingBriefTask(Base):
     dispatched_run_id = Column(String(64), default="")
     dispatched_result_json = Column(Text, default="")
     error = Column(Text, default="")
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
     dispatched_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
 
@@ -266,11 +266,11 @@ class EmployeeCollabThread(Base):
     context_json = Column(Text, default="{}")
     status = Column(String(32), default="open", index=True)
     created_by_employee_id = Column(String(128), default="", index=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
     updated_at = Column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
 
@@ -285,7 +285,7 @@ class EmployeeCollabMessage(Base):
     content = Column(Text, default="")
     mentions_json = Column(Text, default="[]")
     payload_json = Column(Text, default="{}")
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
 
 
 class EmployeeSuggestion(Base):
@@ -306,11 +306,11 @@ class EmployeeSuggestion(Base):
     approved_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     approved_at = Column(DateTime, nullable=True)
     rejected_reason = Column(Text, default="")
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
     updated_at = Column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
 
@@ -335,10 +335,10 @@ class PendingHumanQuestion(Base):
     answer = Column(Text, default="")
     answered_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     answered_at = Column(DateTime, nullable=True)
-    asked_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    asked_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
     expires_at = Column(DateTime, nullable=True, index=True)
     fingerprint = Column(String(64), nullable=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
 
 class EmployeeEvolutionRecord(Base):
@@ -357,4 +357,4 @@ class EmployeeEvolutionRecord(Base):
         Integer, ForeignKey("employee_suggestions.id"), nullable=True, index=True
     )
     error = Column(Text, default="")
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)

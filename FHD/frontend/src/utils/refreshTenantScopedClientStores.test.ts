@@ -22,9 +22,7 @@ describe('refreshTenantScopedClientStores', () => {
   })
 
   it('runs and hydrates workspace preferences when pinia is ready', async () => {
-    await expect(
-      refreshTenantScopedClientStores({ tenantId: 't1', marketUserId: 'u1' }),
-    ).resolves.toBeUndefined()
+    await expect(refreshTenantScopedClientStores({ tenantId: 't1', marketUserId: 'u1' })).resolves.toBeUndefined()
     expect(mockRefreshHostPackAcknowledged).toHaveBeenCalledOnce()
   })
 })

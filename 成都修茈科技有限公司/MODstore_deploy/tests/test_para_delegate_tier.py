@@ -249,7 +249,11 @@ def test_local_empty_when_none_eligible():
 
 
 def test_fleet_prefers_non_primary_workers():
-    devices = [_online_codex("p1", isPrimary=True), _online_codex("w1"), _online_codex("w2")]
+    devices = [
+        _online_codex("p1", isPrimary=True),
+        _online_codex("w1"),
+        _online_codex("w2"),
+    ]
     out = h._select_fleet_devices(devices, {"raw_input": {"max_devices": 3}}, "codex")
     assert {d["id"] for d in out} == {"w1", "w2"}
 
@@ -327,7 +331,11 @@ def test_discovery_escalates_when_primary_lacks_tool(monkeypatch):
             "isPrimary": True,
             "tools": [{"toolName": "claude", "status": "not_installed"}],
         },
-        {"id": "w1", "status": "online", "tools": [{"toolName": "claude", "status": "idle"}]},
+        {
+            "id": "w1",
+            "status": "online",
+            "tools": [{"toolName": "claude", "status": "idle"}],
+        },
     ]
     monkeypatch.setenv("MODSTORE_PARA_DEV_TOOL", "claude")
     req = {"task": "修复", "raw_input": {}}
@@ -400,7 +408,10 @@ class _IntegClient:
             return _IntegResp(
                 {
                     "task": {"id": "task-1", "status": "running"},
-                    "subtask": {"id": f"sub-{len(self.posted_tasks)}", "device_name": "dev"},
+                    "subtask": {
+                        "id": f"sub-{len(self.posted_tasks)}",
+                        "device_name": "dev",
+                    },
                 }
             )
         return _IntegResp({}, status_code=404)

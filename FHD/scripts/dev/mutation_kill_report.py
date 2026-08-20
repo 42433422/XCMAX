@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="assignment, no-any-return"
 """变异测试杀死率报告生成器。
 
 解析 mutmut 输出，计算加权杀死率，记录到
@@ -225,9 +226,7 @@ def main() -> int:
         f"[mutation] killed={counts['killed']} survived={counts['survived']} "
         f"timeout={counts['timeout']} no_tests={counts['no_tests']}"
     )
-    print(
-        f"[mutation] kill_rate={kill_rate_pct:.2f}% (threshold {args.threshold}%)"
-    )
+    print(f"[mutation] kill_rate={kill_rate_pct:.2f}% (threshold {args.threshold}%)")
 
     if not args.dry_run:
         HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)

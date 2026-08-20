@@ -96,11 +96,7 @@ export function readTenantScopedStorageItem(baseKey: string, scope?: string): st
   }
 }
 
-export function writeTenantScopedStorageItem(
-  baseKey: string,
-  value: string,
-  scope?: string,
-): void {
+export function writeTenantScopedStorageItem(baseKey: string, value: string, scope?: string): void {
   if (typeof localStorage === 'undefined') return
   try {
     localStorage.setItem(buildTenantScopedStorageKey(baseKey, scope), value)

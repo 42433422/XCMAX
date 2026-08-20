@@ -27,6 +27,11 @@ after the Coder is done).
 
 from __future__ import annotations
 
+from .coordinator import (
+    BestOfNOrchestrator,
+    MultiAgentOrchestrator,
+    OrchestrationResult,
+)
 from .messages import AgentMessage, AgentTask, MessageBus
 from .roles import (
     AgentRole,
@@ -35,11 +40,6 @@ from .roles import (
     ResearcherAgent,
     ReviewerAgent,
     TesterAgent,
-)
-from .coordinator import (
-    BestOfNOrchestrator,
-    MultiAgentOrchestrator,
-    OrchestrationResult,
 )
 
 __all__ = [

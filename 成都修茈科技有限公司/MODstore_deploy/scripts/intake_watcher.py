@@ -25,8 +25,10 @@ import os
 import sys
 import time
 import zipfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MODSTORE_ROOT = REPO_ROOT / "MODstore_deploy"
@@ -40,7 +42,7 @@ def _load_state() -> dict[str, dict]:
         return {}
     try:
         return json.loads(STATE_FILE.read_text(encoding="utf-8"))
-    except Exception:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:  # noqa: BLE001
         return {}
 
 
@@ -69,7 +71,7 @@ def _peek_manifest(p: Path) -> dict[str, object]:
                         "name": ident.get("name") or data.get("name"),
                         "version": ident.get("version") or data.get("version"),
                     }
-    except Exception:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:  # noqa: BLE001
         return {}
     return {}
 
@@ -77,10 +79,10 @@ def _peek_manifest(p: Path) -> dict[str, object]:
 def _emit_event_fallback_jsonl(name: str, payload: dict) -> None:
     EVENT_OUTBOX.parent.mkdir(parents=True, exist_ok=True)
     record = {
-        "event_id": f"{name}:{payload.get('subject_id','?')}:{datetime.now(timezone.utc).isoformat()}",
+        "event_id": f"{name}:{payload.get('subject_id', '?')}:{datetime.now(UTC).isoformat()}",
         "event_name": name,
         "event_version": 1,
-        "occurred_at": datetime.now(timezone.utc).isoformat(),
+        "occurred_at": datetime.now(UTC).isoformat(),
         "producer": "intake-dispatcher",
         "subject_id": payload.get("subject_id", "?"),
         "payload": payload,
@@ -102,7 +104,7 @@ def _emit_event(name: str, payload: dict) -> None:
         ok = publish(name, payload if isinstance(payload, dict) else {}, source="intake-dispatcher")
         if ok:
             return
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     _emit_event_fallback_jsonl(name, payload)
 
@@ -113,7 +115,7 @@ def _stream_subscribe_loop(*, interval_seconds: int, filter_prefix: str = "ops.i
         sys.path.insert(0, modstore_path)
     try:
         from modstore_server.eventing.redis_stream_bus import ack, read_group, stream_enabled
-    except Exception as exc:  # noqa: BLE001
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
         print(f"[ERR] redis stream module unavailable: {exc}")
         return 2
 
@@ -174,7 +176,7 @@ def scan_once() -> list[dict]:
             "subject_id": manifest.get("id") or p.stem,
             "path": rel,
             "manifest": manifest,
-            "first_seen": prev.get("first_seen") or datetime.now(timezone.utc).isoformat(),
+            "first_seen": prev.get("first_seen") or datetime.now(UTC).isoformat(),
         }
         _emit_event("ops.intake.candidate_pack", payload)
         new_events.append(payload)
@@ -217,7 +219,7 @@ def main() -> int:
             from modstore_server.eventing.redis_stream_bus import stream_enabled
 
             stream_on = bool(stream_enabled())
-        except Exception:
+        except RECOVERABLE_ERRORS:
             stream_on = False
     if stream_on:
         return _stream_subscribe_loop(interval_seconds=max(1, int(args.interval)))

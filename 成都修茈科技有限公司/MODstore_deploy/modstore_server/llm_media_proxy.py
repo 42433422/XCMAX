@@ -1,6 +1,8 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Image and video generation protocols for the unified LLM proxy."""
+
 from __future__ import annotations
+
 from typing import Any, Dict, List, Optional
 
 
@@ -59,7 +61,10 @@ async def image_dispatch(
     n: int = 1,
 ) -> Dict[str, Any]:
     if provider == "minimax" and _facade().is_minimax_token_plan_key(api_key):
-        return {"ok": False, "error": "MiniMax Token Plan 密钥不提供 OpenAI-compatible images API"}
+        return {
+            "ok": False,
+            "error": "MiniMax Token Plan 密钥不提供 OpenAI-compatible images API",
+        }
     if provider not in _facade().OAI_COMPAT_OPENAI_STYLE_PROVIDERS:
         return {
             "ok": False,

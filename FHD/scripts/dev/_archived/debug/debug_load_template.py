@@ -2,6 +2,8 @@
 
 import sys
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 sys.path.insert(0, r"e:\FHD\backend\shell")
 
 import os
@@ -40,7 +42,7 @@ try:
     for f in dir_contents:
         if "考勤统计表" in f:
             print(f"找到匹配文件：{f}")
-except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"列出目录失败：{e}")
 
 # 尝试直接加载
@@ -50,7 +52,7 @@ try:
 
     wb = load_workbook(str(template_path))
     print(f"✓ 成功加载！工作表：{wb.sheetnames}")
-except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"✗ 加载失败：{e}")
     import traceback
 

@@ -13,7 +13,10 @@ const mReq = vi.mocked(req)
 const mBlob = vi.mocked(requestBlob)
 
 describe('workbench API', () => {
-  beforeEach(() => { mReq.mockClear(); mBlob.mockClear() })
+  beforeEach(() => {
+    mReq.mockClear()
+    mBlob.mockClear()
+  })
 
   it('workbenchResearchContext', async () => {
     await workbench.workbenchResearchContext({ q: 'test' })
@@ -43,7 +46,10 @@ describe('workbench API', () => {
   })
 
   it('streamEmployeeAiDraft', async () => {
-    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response())))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(new Response())),
+    )
     const res = await workbench.streamEmployeeAiDraft('brief text')
     expect(res).toBeDefined()
     expect(fetch).toHaveBeenCalledWith('/api/workbench/employee-ai/draft', expect.objectContaining({ method: 'POST' }))
@@ -87,7 +93,9 @@ describe('workbench API', () => {
 })
 
 describe('knowledge API', () => {
-  beforeEach(() => { mReq.mockClear() })
+  beforeEach(() => {
+    mReq.mockClear()
+  })
 
   it('knowledgeStatus', async () => {
     await knowledge.knowledgeStatus()
@@ -179,7 +187,9 @@ describe('knowledge API', () => {
 })
 
 describe('openApiConnectors API', () => {
-  beforeEach(() => { mReq.mockClear() })
+  beforeEach(() => {
+    mReq.mockClear()
+  })
 
   it('openApiListConnectors', async () => {
     await openApiConnectors.openApiListConnectors()
@@ -233,7 +243,9 @@ describe('openApiConnectors API', () => {
 })
 
 describe('customerService API', () => {
-  beforeEach(() => { mReq.mockClear() })
+  beforeEach(() => {
+    mReq.mockClear()
+  })
 
   it('customerServiceChat', async () => {
     await customerService.customerServiceChat({ message: 'hi' })
@@ -247,42 +259,27 @@ describe('customerService API', () => {
 
   it('customerServiceSessionDetail', async () => {
     await customerService.customerServiceSessionDetail(1)
-    expect(mReq).toHaveBeenCalledWith(
-      '/api/customer-service/sessions/1',
-      expect.objectContaining({ timeoutMs: 15_000 }),
-    )
+    expect(mReq).toHaveBeenCalledWith('/api/customer-service/sessions/1', expect.objectContaining({ timeoutMs: 15_000 }))
   })
 
   it('customerServiceTickets with status', async () => {
     await customerService.customerServiceTickets('open')
-    expect(mReq).toHaveBeenCalledWith(
-      expect.stringContaining('tickets?status=open'),
-      expect.objectContaining({ timeoutMs: 15_000 }),
-    )
+    expect(mReq).toHaveBeenCalledWith(expect.stringContaining('tickets?status=open'), expect.objectContaining({ timeoutMs: 15_000 }))
   })
 
   it('customerServiceTicketDetail', async () => {
     await customerService.customerServiceTicketDetail(1)
-    expect(mReq).toHaveBeenCalledWith(
-      '/api/customer-service/tickets/1',
-      expect.objectContaining({ timeoutMs: 15_000 }),
-    )
+    expect(mReq).toHaveBeenCalledWith('/api/customer-service/tickets/1', expect.objectContaining({ timeoutMs: 15_000 }))
   })
 
   it('customerServiceActions', async () => {
     await customerService.customerServiceActions(1)
-    expect(mReq).toHaveBeenCalledWith(
-      expect.stringContaining('actions'),
-      expect.objectContaining({ timeoutMs: 15_000 }),
-    )
+    expect(mReq).toHaveBeenCalledWith(expect.stringContaining('actions'), expect.objectContaining({ timeoutMs: 15_000 }))
   })
 
   it('customerServiceStandards', async () => {
     await customerService.customerServiceStandards()
-    expect(mReq).toHaveBeenCalledWith(
-      '/api/customer-service/standards',
-      expect.objectContaining({ timeoutMs: 15_000 }),
-    )
+    expect(mReq).toHaveBeenCalledWith('/api/customer-service/standards', expect.objectContaining({ timeoutMs: 15_000 }))
   })
 
   it('customerServiceCreateStandard', async () => {
@@ -312,7 +309,9 @@ describe('customerService API', () => {
 })
 
 describe('butler API', () => {
-  beforeEach(() => { mReq.mockClear() })
+  beforeEach(() => {
+    mReq.mockClear()
+  })
 
   it('agentButlerChat', async () => {
     await butler.agentButlerChat({ messages: [] })
@@ -320,7 +319,10 @@ describe('butler API', () => {
   })
 
   it('agentButlerChatStream', async () => {
-    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response())))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(new Response())),
+    )
     const res = await butler.agentButlerChatStream({ messages: [] })
     expect(res).toBeDefined()
     expect(fetch).toHaveBeenCalledWith('/api/agent/butler/chat/stream', expect.objectContaining({ method: 'POST' }))

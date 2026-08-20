@@ -16,11 +16,15 @@ the bus log via :meth:`MessageBus.snapshot`.
 
 from __future__ import annotations
 
+import contextlib
 import itertools
 import time
 import uuid
+from collections.abc import Callable, Iterable
 from dataclasses import asdict, dataclass, field
-from typing import Any, Callable, Iterable
+from typing import Any
+
+from vibe_coding.operational_errors import BOUNDARY_ERRORS
 
 _MESSAGE_ID = itertools.count(1)
 
@@ -118,22 +122,16 @@ class MessageBus:
     def publish(self, message: AgentMessage) -> AgentMessage:
         self._messages.append(message)
         for sub in list(self._subscribers):
-            try:
+            with contextlib.suppress(*BOUNDARY_ERRORS):
                 sub(message)
-            except Exception:  # noqa: BLE001
-                # Subscribers that raise must not break the producer; we
-                # swallow them so the orchestrator keeps making progress.
-                pass
         return message
 
     def subscribe(self, callback: SubscriberFn) -> None:
         self._subscribers.append(callback)
 
     def unsubscribe(self, callback: SubscriberFn) -> None:
-        try:
+        with contextlib.suppress(ValueError):
             self._subscribers.remove(callback)
-        except ValueError:
-            pass
 
     def snapshot(self) -> tuple[AgentMessage, ...]:
         return tuple(self._messages)

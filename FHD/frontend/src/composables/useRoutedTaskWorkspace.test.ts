@@ -46,37 +46,47 @@ describe('useRoutedTaskWorkspace', () => {
       currentSessionId.value = conversationId
     })
     const markTaskRead = vi.fn(async () => undefined)
-    const taskSummaries = ref([{
-      task_id: 'task-approval',
-      user_id: 'owner',
-      title: '客户B销售开票（服务端）',
-      source: 'agent',
-      task_type: 'agent',
-      status: 'waiting_user',
-      attention_state: 'approval_required',
-      approval_required: true,
-      unread_count: 0,
-      attempt: 2,
-      run_count: 3,
-      progress: {
-        percent: 45,
-        completed_units: 1,
-        settled_units: 1,
-        total_units: 2,
-        current_unit: 2,
-        stage: '等待审批',
-        detail: '确认开票',
+    const taskSummaries = ref([
+      {
+        task_id: 'task-approval',
+        user_id: 'owner',
+        title: '客户B销售开票（服务端）',
+        source: 'agent',
+        task_type: 'agent',
         status: 'waiting_user',
+        attention_state: 'approval_required',
+        approval_required: true,
+        unread_count: 0,
         attempt: 2,
-        indeterminate: false,
-        basis: 'steps' as const,
+        run_count: 3,
+        progress: {
+          percent: 45,
+          completed_units: 1,
+          settled_units: 1,
+          total_units: 2,
+          current_unit: 2,
+          stage: '等待审批',
+          detail: '确认开票',
+          status: 'waiting_user',
+          attempt: 2,
+          indeterminate: false,
+          basis: 'steps' as const,
+        },
       },
-    }])
+    ])
     const scope = effectScope()
-    const workspace = scope.run(() => useRoutedTaskWorkspace({
-      props, currentSessionId, taskList, filteredTaskList, activeTaskId, taskSummaries,
-      loadSession, markTaskRead,
-    }))!
+    const workspace = scope.run(() =>
+      useRoutedTaskWorkspace({
+        props,
+        currentSessionId,
+        taskList,
+        filteredTaskList,
+        activeTaskId,
+        taskSummaries,
+        loadSession,
+        markTaskRead,
+      }),
+    )!
     await nextTick()
 
     expect(resolveWorkspaceSessionId(props)).toBe('chat-approval')
@@ -114,14 +124,16 @@ describe('useRoutedTaskWorkspace', () => {
 
     const scope = effectScope()
     const taskList = ref([firstTask, secondTask])
-    const workspace = scope.run(() => useRoutedTaskWorkspace({
-      props: {},
-      currentSessionId: ref('normal-chat'),
-      taskList,
-      filteredTaskList: ref([secondTask]),
-      activeTaskId: ref('local-2'),
-      loadSession: vi.fn(),
-    }))!
+    const workspace = scope.run(() =>
+      useRoutedTaskWorkspace({
+        props: {},
+        currentSessionId: ref('normal-chat'),
+        taskList,
+        filteredTaskList: ref([secondTask]),
+        activeTaskId: ref('local-2'),
+        loadSession: vi.fn(),
+      }),
+    )!
 
     expect(workspace.workspaceMode.value).toBe(false)
     expect(workspace.visibleTaskList.value).toEqual(taskList.value)
@@ -134,15 +146,17 @@ describe('useRoutedTaskWorkspace', () => {
     const scope = effectScope()
     const loadSession = vi.fn(async () => undefined)
     const props = reactive<{ workspaceTaskId?: string }>({})
-    const workspace = scope.run(() => useRoutedTaskWorkspace({
-      props,
-      currentSessionId: ref('normal-chat'),
-      taskList: ref([]),
-      filteredTaskList: ref([]),
-      activeTaskId: ref(''),
-      taskSummaries: ref([]),
-      loadSession,
-    }))!
+    const workspace = scope.run(() =>
+      useRoutedTaskWorkspace({
+        props,
+        currentSessionId: ref('normal-chat'),
+        taskList: ref([]),
+        filteredTaskList: ref([]),
+        activeTaskId: ref(''),
+        taskSummaries: ref([]),
+        loadSession,
+      }),
+    )!
     props.workspaceTaskId = 'server-only-task'
     await nextTick()
 

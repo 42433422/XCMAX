@@ -57,7 +57,11 @@ def compat_tts_translate(payload: dict[str, Any] = Body(default_factory=dict)):
             raise RuntimeError("empty translation")
         return JSONResponse(
             _trace(
-                {"success": True, "message": "ok", "data": {"translation": translation, "target": "en"}},
+                {
+                    "success": True,
+                    "message": "ok",
+                    "data": {"translation": translation, "target": "en"},
+                },
                 route="/api/tts/translate",
                 action="tts_translate",
                 body=payload,

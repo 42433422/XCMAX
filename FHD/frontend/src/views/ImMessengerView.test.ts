@@ -169,10 +169,7 @@ describe('ImMessengerView.vue', () => {
   it('shows Codex super employee in admin information console without xiao c or enterprise cs', async () => {
     const { authApi } = await import('@/api/auth')
     const { createDirectConversation } = await import('@/api/im')
-    const {
-      fetchCodexSuperEmployeeMessages,
-      sendCodexSuperEmployeeMessage,
-    } = await import('@/api/codexSuperEmployee')
+    const { fetchCodexSuperEmployeeMessages, sendCodexSuperEmployeeMessage } = await import('@/api/codexSuperEmployee')
     vi.stubEnv('VITE_XCMAX_ADMIN_CONSOLE', '1')
     vi.mocked(authApi.getCurrentUser).mockResolvedValueOnce({
       data: {
@@ -245,10 +242,7 @@ describe('ImMessengerView.vue', () => {
 
   it('shows Codex super employee for mobile admin information and uses mobile API scope', async () => {
     const { authApi } = await import('@/api/auth')
-    const {
-      fetchCodexSuperEmployeeMessages,
-      sendCodexSuperEmployeeMessage,
-    } = await import('@/api/codexSuperEmployee')
+    const { fetchCodexSuperEmployeeMessages, sendCodexSuperEmployeeMessage } = await import('@/api/codexSuperEmployee')
     vi.mocked(authApi.getCurrentUser).mockResolvedValueOnce({
       data: {
         user: { id: 1 },
@@ -302,9 +296,7 @@ describe('ImMessengerView.vue', () => {
     await flushPromises()
 
     // 激活超级员工（Codex）后，SystemEmployeeChat 渲染 CLI 切换卡片
-    const codexItem = wrapper
-      .findAll('.im-conv-item--pinned')
-      .find((li) => li.text().includes('Codex'))
+    const codexItem = wrapper.findAll('.im-conv-item--pinned').find((li) => li.text().includes('Codex'))
     expect(codexItem).toBeTruthy()
     await codexItem!.trigger('click')
     await flushPromises()
@@ -312,9 +304,7 @@ describe('ImMessengerView.vue', () => {
     expect(wrapper.text()).toContain('超级开发组 · CLI')
     expect(wrapper.find('.im-cli-model-switch__btn.active').text()).toContain('Codex')
 
-    const cursorBtn = wrapper
-      .findAll('.im-cli-model-switch__btn')
-      .find((btn) => btn.text().includes('Cursor'))
+    const cursorBtn = wrapper.findAll('.im-cli-model-switch__btn').find((btn) => btn.text().includes('Cursor'))
     expect(cursorBtn).toBeTruthy()
     await cursorBtn!.trigger('click')
     await flushPromises()

@@ -154,9 +154,7 @@ export class S2sMseAudioPlayer {
           this.activeSources = Math.max(0, this.activeSources - 1)
           this.sentences.delete(sentenceId)
         }
-        const playPromise = startAt > 50
-          ? new Promise<void>((r) => setTimeout(r, startAt))
-          : Promise.resolve()
+        const playPromise = startAt > 50 ? new Promise<void>((r) => setTimeout(r, startAt)) : Promise.resolve()
         await playPromise
         if (gen !== this.generation) {
           URL.revokeObjectURL(url)

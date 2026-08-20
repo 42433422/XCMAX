@@ -75,9 +75,7 @@ describe('EmployeeExamView', () => {
       })
       .mockResolvedValueOnce({
         employee_id: 'json-report-employee',
-        output_downloads: [
-          { job_id: 'j2', filename: 'quantitative_report.html', label: 'quantitative_report.html' },
-        ],
+        output_downloads: [{ job_id: 'j2', filename: 'quantitative_report.html', label: 'quantitative_report.html' }],
         result: {
           outputs: [
             {
@@ -125,23 +123,17 @@ describe('EmployeeExamView', () => {
     expect(wrapper.text()).toContain('流程已完成')
     expect(wrapper.text()).toContain('3.docx')
     expect(wrapper.text()).toContain('Word 读取 + 报告生成')
-    expect((wrapper.find('#exam-employee-select').element as HTMLSelectElement).value).toBe(
-      'word-full-read-employee',
-    )
+    expect((wrapper.find('#exam-employee-select').element as HTMLSelectElement).value).toBe('word-full-read-employee')
     expect(wrapper.text()).not.toContain('更适合')
   })
 
   it('uses json-only pipeline when uploading json to json-report employee', async () => {
     vi.mocked(api.employeeExecuteFile).mockResolvedValue({
       employee_id: 'json-report-employee',
-      output_downloads: [
-        { job_id: 'j1', filename: 'quantitative_report.html', label: 'quantitative_report.html' },
-      ],
+      output_downloads: [{ job_id: 'j1', filename: 'quantitative_report.html', label: 'quantitative_report.html' }],
       result: { outputs: [{ handler: 'direct_python', ok: true, output: { ok: true } }] },
     })
-    vi.mocked(api.employeeOutputDownload).mockResolvedValue(
-      new Blob(['<html><body>x</body></html>'], { type: 'text/html' }),
-    )
+    vi.mocked(api.employeeOutputDownload).mockResolvedValue(new Blob(['<html><body>x</body></html>'], { type: 'text/html' }))
 
     const wrapper = mount(EmployeeExamView)
     await flushPromises()
@@ -240,20 +232,25 @@ describe('EmployeeExamView', () => {
     vi.mocked(api.employeeExecuteFile).mockResolvedValue({
       employee_id: 'json-report-employee',
       output_downloads: [
-        { job_id: 'j-html', filename: 'quantitative_report.html', label: 'quantitative_report.html' },
+        {
+          job_id: 'j-html',
+          filename: 'quantitative_report.html',
+          label: 'quantitative_report.html',
+        },
         { job_id: 'j-json', filename: 'document_full.json', label: 'document_full.json' },
       ],
       result: { outputs: [{ handler: 'direct_python', ok: true, output: { ok: true } }] },
     })
-    vi.mocked(api.employeeOutputDownload).mockResolvedValue(
-      new Blob(['<html><body>report</body></html>'], { type: 'text/html' }),
-    )
+    vi.mocked(api.employeeOutputDownload).mockResolvedValue(new Blob(['<html><body>report</body></html>'], { type: 'text/html' }))
 
     const wrapper = mount(EmployeeExamView)
     await flushPromises()
     await wrapper.find('#exam-employee-select').setValue('json-report-employee')
     const file = new File(['{}'], 'document_full.json', { type: 'application/json' })
-    Object.defineProperty(wrapper.find('.exam-file-input').element, 'files', { value: [file], configurable: true })
+    Object.defineProperty(wrapper.find('.exam-file-input').element, 'files', {
+      value: [file],
+      configurable: true,
+    })
     await wrapper.find('.exam-file-input').trigger('change')
     await wrapper.find('.btn-block').trigger('click')
     await flushPromises()
@@ -280,7 +277,10 @@ describe('EmployeeExamView', () => {
       await flushPromises()
       const file = new File(['{}'], 'document_full.json', { type: 'application/json' })
       await wrapper.find('#exam-employee-select').setValue('json-report-employee')
-      Object.defineProperty(wrapper.find('.exam-file-input').element, 'files', { value: [file], configurable: true })
+      Object.defineProperty(wrapper.find('.exam-file-input').element, 'files', {
+        value: [file],
+        configurable: true,
+      })
       await wrapper.find('.exam-file-input').trigger('change')
       await wrapper.find('.btn-action').trigger('click')
       await flushPromises()
@@ -315,15 +315,18 @@ describe('EmployeeExamView', () => {
   })
 
   it('covers drag-drop selection, mismatch without suggested employee, and plain string results', async () => {
-    vi.mocked(api.listEmployees).mockResolvedValue([
-      { id: 'json-report-employee', name: 'JSON 量化报告员' },
-    ])
+    vi.mocked(api.listEmployees).mockResolvedValue([{ id: 'json-report-employee', name: 'JSON 量化报告员' }])
     const mismatch = mount(EmployeeExamView)
     await flushPromises()
     await mismatch.find('#exam-employee-select').setValue('json-report-employee')
-
     ;(mismatch.vm as UnsafeTestValue).onDrop({
-      dataTransfer: { files: [new File(['doc'], 'paper.docx', { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })] },
+      dataTransfer: {
+        files: [
+          new File(['doc'], 'paper.docx', {
+            type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          }),
+        ],
+      },
     } as unknown as DragEvent)
     await flushPromises()
     expect(mismatch.text()).toContain('当前员工不接受 .docx')
@@ -339,7 +342,11 @@ describe('EmployeeExamView', () => {
     const plain = mount(EmployeeExamView)
     await flushPromises()
     Object.defineProperty(plain.find('.exam-file-input').element, 'files', {
-      value: [new File(['x'], 'plain.docx', { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })],
+      value: [
+        new File(['x'], 'plain.docx', {
+          type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        }),
+      ],
       configurable: true,
     })
     await plain.find('.exam-file-input').trigger('change')
@@ -398,7 +405,11 @@ describe('EmployeeExamView', () => {
       output_downloads: [],
     })
     Object.defineProperty(wrapper.find('.exam-file-input').element, 'files', {
-      value: [new File(['x'], 'no-document-full.docx', { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })],
+      value: [
+        new File(['x'], 'no-document-full.docx', {
+          type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        }),
+      ],
       configurable: true,
     })
     await wrapper.find('.exam-file-input').trigger('change')
@@ -416,7 +427,11 @@ describe('EmployeeExamView', () => {
     vi.mocked(api.employeeExecuteFile).mockResolvedValueOnce({
       employee_id: 'json-report-employee',
       output_downloads: [
-        { job_id: 'j-html', filename: 'quantitative_report.html', label: 'quantitative_report.html' },
+        {
+          job_id: 'j-html',
+          filename: 'quantitative_report.html',
+          label: 'quantitative_report.html',
+        },
       ],
       result: { outputs: [{ handler: 'direct_python', ok: true, output: { ok: true } }] },
     })
@@ -444,9 +459,7 @@ describe('EmployeeExamView', () => {
       configurable: true,
       value: vi.fn(),
     })
-    vi.mocked(api.employeeOutputDownload).mockResolvedValue(
-      new Blob(['{"document_full":true}'], { type: 'application/json' }),
-    )
+    vi.mocked(api.employeeOutputDownload).mockResolvedValue(new Blob(['{"document_full":true}'], { type: 'application/json' }))
     vi.mocked(api.employeeExecuteFile).mockResolvedValue({
       employee_id: 'json-report-employee',
       output_downloads: [],

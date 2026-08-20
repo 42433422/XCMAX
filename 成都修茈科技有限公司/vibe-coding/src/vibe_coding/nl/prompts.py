@@ -8,7 +8,6 @@ that fails validation on the first try.
 
 from __future__ import annotations
 
-
 CODE_DIRECT_PROMPT = """你是一个 Python Skill 工厂。根据用户的一句话需求，直接生成一个可在受限沙箱中运行的纯函数。
 
 只输出一个 JSON 对象（不要 markdown 围栏、不要解释）。结构如下：

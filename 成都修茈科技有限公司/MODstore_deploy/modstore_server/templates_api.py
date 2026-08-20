@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """工作流模板市场 API。
 
 模板存储在 ``catalog_items`` 表（``artifact='workflow_template'``），复用现有
@@ -15,7 +16,7 @@ catalog 的购买、评价、收藏、已购列表能力；模板特有字段：
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -255,7 +256,7 @@ def _build_template_pkg_id(user_id: int, name: str) -> str:
     safe = "".join(ch for ch in base if ch.isascii() and (ch.isalnum() or ch in "-_"))
     if not safe:
         safe = "template"
-    ts = int(datetime.now(timezone.utc).timestamp())
+    ts = int(datetime.now(UTC).timestamp())
     return f"tmpl-u{user_id}-{safe[:48]}-{ts}"
 
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """从 P-W 巡检移除「模板中心」（侧栏无入口，非官网+AI市场面）。"""
+
 from __future__ import annotations
 
 import sys
@@ -12,7 +13,7 @@ TARGET = Path(
 )
 
 OLD = '    ("模板中心", "/market/templates"),\n'
-NEW = ''
+NEW = ""
 
 
 if __name__ == "__main__":

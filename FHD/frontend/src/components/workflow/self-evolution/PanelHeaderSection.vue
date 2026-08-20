@@ -13,9 +13,7 @@ defineProps<{
       <div>
         <p class="selp-kicker">自进化循环</p>
         <h3 class="selp-title">系统自动维护状态</h3>
-        <p class="selp-desc">
-          展示系统自动维护的真实运行情况。
-        </p>
+        <p class="selp-desc">展示系统自动维护的真实运行情况。</p>
       </div>
       <div class="selp-state">
         <span class="selp-state-dot" aria-hidden="true" />

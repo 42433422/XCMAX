@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="attr-defined, misc, no-any-return, valid-type"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -20,14 +24,15 @@ class ButlerAction(_facade().Base):
     risk = _facade().Column(_facade().String(16), default="low")
     status = _facade().Column(_facade().String(16), default="success", index=True)
     created_at = _facade().Column(
-        _facade().DateTime, default=lambda: _facade().datetime.now(_facade().timezone.utc)
+        _facade().DateTime,
+        default=lambda: _facade().datetime.now(_facade().timezone.utc),
     )
 
 
 def _json_loads_default(raw: str, default: _facade().Any) -> _facade().Any:
     try:
         return _facade().json.loads(raw or "")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return default
 
 
@@ -41,19 +46,19 @@ def _daily_digest_record_to_dict(
         raw_meta = getattr(row, "vibe_prep_meta_json", "") or ""
         if raw_meta.strip().startswith("{"):
             vibe_meta = _facade().json.loads(raw_meta)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         vibe_meta = {}
     try:
         raw_dispatch = getattr(row, "vibe_prep_line_dispatch_json", "") or ""
         if raw_dispatch.strip().startswith("{"):
             line_dispatch = _facade().json.loads(raw_dispatch)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         line_dispatch = {}
     try:
         raw_exec = getattr(row, "vibe_line_execute_json", "") or ""
         if raw_exec.strip().startswith("{"):
             line_execute = _facade().json.loads(raw_exec)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         line_execute = {}
     data: _facade().Dict[str, _facade().Any] = {
         "id": row.id,
@@ -120,7 +125,10 @@ async def butler_daily_digest_record_detail(
     row = db.get(_facade().DailyDigestRecord, record_id)
     if row is None:
         raise _facade().HTTPException(404, "每日摘要记录不存在")
-    return {"success": True, "data": _facade()._daily_digest_record_to_dict(row, include_body=True)}
+    return {
+        "success": True,
+        "data": _facade()._daily_digest_record_to_dict(row, include_body=True),
+    }
 
 
 def _dd_repo_root():
@@ -146,11 +154,11 @@ def _dd_list_dir(d, exts):
     try:
         if not d.is_dir():
             return out
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return out
     try:
         entries = list(_os.scandir(str(d)))
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return out
     for ent in entries:
         try:
@@ -167,7 +175,7 @@ def _dd_list_dir(d, exts):
                     "mtime": _dt.fromtimestamp(st.st_mtime, _tz.utc).isoformat(),
                 }
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             continue
     out.sort(key=lambda x: x["name"])
     return out
@@ -202,7 +210,7 @@ async def butler_daily_digest_artifacts(
                 "files": pngs,
             }
         )
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         stages.append({"node": "SW/SS/SA", "label": "三端截图巡检", "error": str(exc)[:200]})
     try:
         from modstore_server.daily_digest_surface_ppt import _save_dir as _pp_save_dir
@@ -219,7 +227,7 @@ async def butler_daily_digest_artifacts(
                 "files": ppts,
             }
         )
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         stages.append({"node": "PPTX", "label": "三端→PPT 附件", "error": str(exc)[:200]})
     stages.append(
         {
@@ -261,7 +269,10 @@ async def butler_daily_digest_artifacts(
         }
     )
     try:
-        from modstore_server.release_train import list_release_train_history, snapshot_public
+        from modstore_server.release_train import (
+            list_release_train_history,
+            snapshot_public,
+        )
 
         stages.append(
             {
@@ -275,9 +286,13 @@ async def butler_daily_digest_artifacts(
                 "history": list_release_train_history(limit=20),
             }
         )
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         stages.append(
-            {"node": "RT", "label": "release_train 四段 + 历史快照", "error": str(exc)[:200]}
+            {
+                "node": "RT",
+                "label": "release_train 四段 + 历史快照",
+                "error": str(exc)[:200],
+            }
         )
     try:
         from modstore_server.daily_backup_job import list_backups
@@ -292,6 +307,9 @@ async def butler_daily_digest_artifacts(
                 "files": backups,
             }
         )
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         stages.append({"node": "DR", "label": "容灾备份", "error": str(exc)[:200]})
-    return {"success": True, "data": {"record_id": record_id, "day": day, "stages": stages}}
+    return {
+        "success": True,
+        "data": {"record_id": record_id, "day": day, "stages": stages},
+    }

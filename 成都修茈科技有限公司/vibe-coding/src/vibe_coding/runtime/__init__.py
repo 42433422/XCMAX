@@ -1,7 +1,5 @@
 """Code-layer self-healing package."""
 
-from .diagnostics import CodeDiagnostics
-from .hybrid import HybridSkillRuntime
 from .._internals.code_models import (
     CodeDiagnosis,
     CodeFunctionSignature,
@@ -14,6 +12,8 @@ from .._internals.code_models import (
     CodeTestResult,
     CodeValidationResult,
 )
+from .diagnostics import CodeDiagnostics
+from .hybrid import HybridSkillRuntime
 from .patch_generator import (
     CodePatchGenerator,
     OpenAICodePatchGenerator,

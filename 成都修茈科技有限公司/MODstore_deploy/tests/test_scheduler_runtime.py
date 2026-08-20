@@ -295,7 +295,11 @@ def test_runtime_status_aggregates_registered_employee_duty(monkeypatch):
                     "last_status": "deferred",
                     "state": "deferred",
                 },
-                {"job_id": "employee_cron:one", "last_status": "success", "state": "healthy"},
+                {
+                    "job_id": "employee_cron:one",
+                    "last_status": "success",
+                    "state": "healthy",
+                },
                 {
                     "job_id": "employee_cron:two",
                     "last_status": "failed",
@@ -313,7 +317,13 @@ def test_runtime_status_aggregates_registered_employee_duty(monkeypatch):
                     "state": "healthy",
                 },
             ],
-            "summary": {"total": 8, "healthy": 2, "failing": 3, "stale": 0, "deferred": 1},
+            "summary": {
+                "total": 8,
+                "healthy": 2,
+                "failing": 3,
+                "stale": 0,
+                "deferred": 1,
+            },
         },
     )
 
@@ -377,7 +387,13 @@ def test_runtime_status_excludes_policy_held_stale_execution(monkeypatch):
                     "state": "stale",
                 },
             ],
-            "summary": {"total": 3, "healthy": 0, "failing": 0, "stale": 2, "deferred": 1},
+            "summary": {
+                "total": 3,
+                "healthy": 0,
+                "failing": 0,
+                "stale": 2,
+                "deferred": 1,
+            },
         },
     )
 

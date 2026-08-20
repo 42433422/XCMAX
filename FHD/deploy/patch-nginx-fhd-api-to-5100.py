@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """将 ``location ^~ /fhd-api/`` 内的 ``proxy_pass`` 从 5099 改为 5100（仅改这一块，不动 /sandbox/、/api/xcmax/ 等）。"""
+
 from __future__ import annotations
 
 import argparse
@@ -47,7 +48,9 @@ def main() -> int:
         print("no changes needed")
         return 0
     if args.dry_run:
-        print(text3[text3.find("location ^~ /fhd-api/") : text3.find("location ^~ /fhd-api/") + 400])
+        print(
+            text3[text3.find("location ^~ /fhd-api/") : text3.find("location ^~ /fhd-api/") + 400]
+        )
         return 0
     bak = path.with_suffix(path.suffix + f".bak.fhd5100.{datetime.now():%Y%m%d_%H%M%S}")
     shutil.copy2(path, bak)

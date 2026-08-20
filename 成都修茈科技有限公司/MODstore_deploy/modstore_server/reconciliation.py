@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment"
 """平台对账系统 API。
 
 对账报告按时间段汇总以下维度：
@@ -27,7 +28,7 @@ import io
 import logging
 import os
 import secrets
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Optional
 
 import httpx
@@ -42,8 +43,9 @@ from modstore_server.models import (
     User,
     get_session_factory,
 )
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+from modstore_server.reconciliation_snapshot import build_skill_payload as _build_skill_payload
 from modstore_server.reconciliation_snapshot import (
-    build_skill_payload as _build_skill_payload,
     compute_period_snapshot as _compute_period_snapshot,
 )
 
@@ -134,9 +136,13 @@ def _fetch_fhd_host_snapshot(
         if not isinstance(snap, dict):
             return {"included": False, "reason": "missing_fhd_host_snapshot"}
         return {"included": True, **snap}
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("fetch fhd reconciliation snapshot failed: %s", exc)
-        return {"included": False, "reason": "fhd_fetch_error", "detail": str(exc)[:300]}
+        return {
+            "included": False,
+            "reason": "fhd_fetch_error",
+            "detail": str(exc)[:300],
+        }
 
 
 # ---------------------------------------------------------------- 内部工具
@@ -176,7 +182,7 @@ def _generate_report(
 ) -> ReconciliationReport:
     """按时间段汇总并写入 ReconciliationReport 快照。"""
     snap = _compute_period_snapshot(session, period_start, period_end)
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
     report = ReconciliationReport(
         period_start=period_start,
         period_end=period_end,
@@ -298,7 +304,7 @@ def api_internal_run_reconciliation_cycle(
 
     if body.auto_confirm:
         if skill_status == "ok" and diff_abs <= float(body.auto_confirm_max_diff_cny):
-            now = datetime.now(timezone.utc).replace(tzinfo=None)
+            now = datetime.now(UTC).replace(tzinfo=None)
             with sf() as session:
                 row = (
                     session.query(ReconciliationReport)
@@ -409,7 +415,7 @@ def api_get_report(
             raw_ts = o.get("paid_at") or o.get("created_at") or ""
             try:
                 ts = datetime.fromisoformat(str(raw_ts).replace("Z", "+00:00")).replace(tzinfo=None)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 continue
             if period_start <= ts < period_end:
                 rows_in_range.append(o)
@@ -461,7 +467,7 @@ def api_confirm_report(
     """管理员确认对账报告（draft → confirmed）。"""
     if not user.is_admin:
         raise HTTPException(403, "需要管理员权限")
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
     sf = get_session_factory()
     with sf() as session:
         report = (

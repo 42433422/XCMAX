@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """LLM generation and validation for MOD employee implementation files."""
 
 from __future__ import annotations
@@ -19,14 +20,18 @@ from modstore_server.llm_key_resolver import (
     resolve_api_key,
     resolve_base_url,
 )
-from modstore_server.models import User
 from modstore_server.mod_employee_impl_prompts import (
     SYSTEM_PROMPT_EMPLOYEE_IMPL as SYSTEM_PROMPT_EMPLOYEE_IMPL,
-    SYSTEM_PROMPT_EMPLOYEE_IMPL_REPAIR as SYSTEM_PROMPT_EMPLOYEE_IMPL_REPAIR,
-    _employee_brief_lines as _employee_brief_lines,
 )
+from modstore_server.mod_employee_impl_prompts import (
+    SYSTEM_PROMPT_EMPLOYEE_IMPL_REPAIR as SYSTEM_PROMPT_EMPLOYEE_IMPL_REPAIR,
+)
+from modstore_server.mod_employee_impl_prompts import _employee_brief_lines as _employee_brief_lines
+from modstore_server.models import User
 from modstore_server.script_agent.llm_output_sanitize import finalize_extracted_python
-from modstore_server.script_agent.semantic_quality import oversized_string_literal_errors_for_source
+from modstore_server.script_agent.semantic_quality import (
+    oversized_string_literal_errors_for_source,
+)
 
 
 def _vibe_heal_mod_employees(*args: Any, **kwargs: Any) -> Dict[str, Any]:

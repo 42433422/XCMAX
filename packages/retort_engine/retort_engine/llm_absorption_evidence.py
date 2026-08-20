@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.absorption_state import closed_loop_proof, load_absorption_state
 from retort_engine.capability_audit import (
@@ -64,10 +64,11 @@ def _capability_audit_evidence(
         f"behavior_test_file_count={len(audit.get('behavior_test_files') or [])}",
         f"test_to_source_ratio={audit.get('test_to_source_ratio', '')}",
     ]
-    hardening = (
+    hardening = cast(
+        dict[str, Any],
         audit.get("post_absorption_hardening")
         if isinstance(audit.get("post_absorption_hardening"), dict)
-        else {}
+        else {},
     )
     latest_source_count = len(audit.get("behavior_source_files") or [])
     latest_test_count = len(audit.get("behavior_test_files") or [])
@@ -95,10 +96,11 @@ def _capability_audit_evidence(
             f"employee_execution_mode={audit.get('employee_execution_mode', '')}",
         ]
     )
-    worker_review = (
+    worker_review = cast(
+        dict[str, Any],
         audit.get("employee_worker_review")
         if isinstance(audit.get("employee_worker_review"), dict)
-        else {}
+        else {},
     )
     evidence.extend(
         [
@@ -200,62 +202,73 @@ def _pr_runtime_evidence(project: Path) -> list[str]:
 
 def _report_evidence(project: Path) -> list[str]:
     publish_report = read_json(project / "docs" / "retort_pr_publish_dry_run.json")
-    publish_summary = (
+    publish_summary = cast(
+        dict[str, Any],
         publish_report.get("summary")
         if isinstance(publish_report.get("summary"), dict)
-        else {}
+        else {},
     )
     sandbox_report = read_json(project / "docs" / "retort_pr_publish_sandbox.json")
-    sandbox_summary = (
+    sandbox_summary = cast(
+        dict[str, Any],
         sandbox_report.get("summary")
         if isinstance(sandbox_report.get("summary"), dict)
-        else {}
+        else {},
     )
     live_probe = read_json(project / "docs" / "retort_pr_live_publish_probe.json")
-    live_summary = (
-        live_probe.get("summary") if isinstance(live_probe.get("summary"), dict) else {}
+    live_summary = cast(
+        dict[str, Any],
+        live_probe.get("summary")
+        if isinstance(live_probe.get("summary"), dict)
+        else {},
     )
     low_permission_probe = read_json(
         project / "docs" / "retort_pr_low_permission_probe.json"
     )
-    low_permission_summary = (
+    low_permission_summary = cast(
+        dict[str, Any],
         low_permission_probe.get("summary")
         if isinstance(low_permission_probe.get("summary"), dict)
-        else {}
+        else {},
     )
     readonly_probe = read_json(
         project / "docs" / "retort_pr_readonly_degradation_probe.json"
     )
-    readonly_summary = (
+    readonly_summary = cast(
+        dict[str, Any],
         readonly_probe.get("summary")
         if isinstance(readonly_probe.get("summary"), dict)
-        else {}
+        else {},
     )
     long_run_report = read_json(project / "docs" / "retort_pr_long_run_review.json")
-    long_run_summary = (
+    long_run_summary = cast(
+        dict[str, Any],
         long_run_report.get("summary")
         if isinstance(long_run_report.get("summary"), dict)
-        else {}
+        else {},
     )
     holdout_report = read_json(project / "docs" / "retort_pr_holdout_blind_eval.json")
-    holdout_summary = (
+    holdout_summary = cast(
+        dict[str, Any],
         holdout_report.get("summary")
         if isinstance(holdout_report.get("summary"), dict)
-        else {}
+        else {},
     )
     failure_rollback_report = read_json(
         project / "docs" / "retort_pr_failure_rollback_replay.json"
     )
-    failure_rollback_summary = (
+    failure_rollback_summary = cast(
+        dict[str, Any],
         failure_rollback_report.get("summary")
         if isinstance(failure_rollback_report.get("summary"), dict)
-        else {}
+        else {},
     )
     replay_report = read_json(project / "docs" / "retort_cross_project_replay.json")
-    replay_summary = (
+    replay_summary = cast(
+        dict[str, Any],
         replay_report.get("summary")
         if isinstance(replay_report.get("summary"), dict)
-        else {}
+        else {},
     )
     replay_checks = [
         item for item in replay_report.get("checks") or [] if isinstance(item, dict)
@@ -263,254 +276,287 @@ def _report_evidence(project: Path) -> list[str]:
     multi_absorption_report = read_json(
         project / "docs" / "retort_multi_project_absorption_replay.json"
     )
-    multi_absorption_summary = (
+    multi_absorption_summary = cast(
+        dict[str, Any],
         multi_absorption_report.get("summary")
         if isinstance(multi_absorption_report.get("summary"), dict)
-        else {}
+        else {},
     )
     continuity_report = read_json(
         project / "docs" / "retort_absorption_continuity_probe.json"
     )
-    continuity_summary = (
+    continuity_summary = cast(
+        dict[str, Any],
         continuity_report.get("summary")
         if isinstance(continuity_report.get("summary"), dict)
-        else {}
+        else {},
     )
     complex_pr_report = read_json(project / "docs" / "retort_complex_pr_replay.json")
-    complex_pr_summary = (
+    complex_pr_summary = cast(
+        dict[str, Any],
         complex_pr_report.get("summary")
         if isinstance(complex_pr_report.get("summary"), dict)
-        else {}
+        else {},
     )
     pipeline_replay_report = read_json(
         project / "docs" / "retort_review_pipeline_diff_replay.json"
     )
-    pipeline_replay_summary = (
+    pipeline_replay_summary = cast(
+        dict[str, Any],
         pipeline_replay_report.get("summary")
         if isinstance(pipeline_replay_report.get("summary"), dict)
-        else {}
+        else {},
     )
     task_report = read_json(project / "docs" / "retort_task_prioritization_report.json")
-    task_summary = (
+    task_summary = cast(
+        dict[str, Any],
         task_report.get("summary")
         if isinstance(task_report.get("summary"), dict)
-        else {}
+        else {},
     )
     dispatch_report = read_json(
         project / "docs" / "retort_employee_task_dispatch_plan.json"
     )
-    dispatch_summary = (
+    dispatch_summary = cast(
+        dict[str, Any],
         dispatch_report.get("summary")
         if isinstance(dispatch_report.get("summary"), dict)
-        else {}
+        else {},
     )
     benchmark_report = read_json(
         project / "docs" / "retort_review_quality_benchmark.json"
     )
-    benchmark_summary = (
+    benchmark_summary = cast(
+        dict[str, Any],
         benchmark_report.get("summary")
         if isinstance(benchmark_report.get("summary"), dict)
-        else {}
+        else {},
     )
     external_matrix = read_json(
         project / "docs" / "retort_external_advantage_matrix.json"
     )
-    external_matrix_summary = (
+    external_matrix_summary = cast(
+        dict[str, Any],
         external_matrix.get("summary")
         if isinstance(external_matrix.get("summary"), dict)
-        else {}
+        else {},
     )
     external_ci = read_json(
         project / "docs" / "retort_external_advantage_ci_regression.json"
     )
-    external_ci_summary = (
+    external_ci_summary = cast(
+        dict[str, Any],
         external_ci.get("summary")
         if isinstance(external_ci.get("summary"), dict)
-        else {}
+        else {},
     )
     external_process = read_json(
         project / "docs" / "retort_external_process_adjudication.json"
     )
-    external_process_summary = (
+    external_process_summary = cast(
+        dict[str, Any],
         external_process.get("summary")
         if isinstance(external_process.get("summary"), dict)
-        else {}
+        else {},
     )
     external_repeat = read_json(
         project / "docs" / "retort_external_advantage_repeat.json"
     )
-    external_repeat_summary = (
+    external_repeat_summary = cast(
+        dict[str, Any],
         external_repeat.get("summary")
         if isinstance(external_repeat.get("summary"), dict)
-        else {}
+        else {},
     )
     upstream_pr_ci = read_json(project / "docs" / "retort_upstream_pr_ci_probe.json")
-    upstream_pr_ci_summary = (
+    upstream_pr_ci_summary = cast(
+        dict[str, Any],
         upstream_pr_ci.get("summary")
         if isinstance(upstream_pr_ci.get("summary"), dict)
-        else {}
+        else {},
     )
     competitor_runtime = read_json(
         project / "docs" / "retort_competitor_runtime_comparison.json"
     )
-    competitor_runtime_summary = (
+    competitor_runtime_summary = cast(
+        dict[str, Any],
         competitor_runtime.get("summary")
         if isinstance(competitor_runtime.get("summary"), dict)
-        else {}
+        else {},
     )
     competitor_blind = read_json(
         project / "docs" / "retort_competitor_blind_adjudication.json"
     )
-    competitor_blind_summary = (
+    competitor_blind_summary = cast(
+        dict[str, Any],
         competitor_blind.get("summary")
         if isinstance(competitor_blind.get("summary"), dict)
-        else {}
+        else {},
     )
     competitor_behavior = read_json(
         project / "docs" / "retort_competitor_behavior_regression.json"
     )
-    competitor_behavior_summary = (
+    competitor_behavior_summary = cast(
+        dict[str, Any],
         competitor_behavior.get("summary")
         if isinstance(competitor_behavior.get("summary"), dict)
-        else {}
+        else {},
     )
     paibi_cli_cross = read_json(
         project / "docs" / "retort_paibi_cli_cross_adjudication.json"
     )
-    paibi_cli_cross_summary = (
+    paibi_cli_cross_summary = cast(
+        dict[str, Any],
         paibi_cli_cross.get("summary")
         if isinstance(paibi_cli_cross.get("summary"), dict)
-        else {}
+        else {},
     )
     heterogeneous_replay = read_json(
         project / "docs" / "retort_heterogeneous_absorption_replay.json"
     )
-    heterogeneous_summary = (
+    heterogeneous_summary = cast(
+        dict[str, Any],
         heterogeneous_replay.get("summary")
         if isinstance(heterogeneous_replay.get("summary"), dict)
-        else {}
+        else {},
     )
     cross_domain_replay = read_json(
         project / "docs" / "retort_cross_domain_absorption_replay.json"
     )
-    cross_domain_summary = (
+    cross_domain_summary = cast(
+        dict[str, Any],
         cross_domain_replay.get("summary")
         if isinstance(cross_domain_replay.get("summary"), dict)
-        else {}
+        else {},
     )
     cross_domain_e2e = read_json(
         project / "docs" / "retort_cross_domain_end_to_end.json"
     )
-    cross_domain_e2e_summary = (
+    cross_domain_e2e_summary = cast(
+        dict[str, Any],
         cross_domain_e2e.get("summary")
         if isinstance(cross_domain_e2e.get("summary"), dict)
-        else {}
+        else {},
     )
     cross_domain_ci = read_json(
         project / "docs" / "retort_cross_domain_ci_regression.json"
     )
-    cross_domain_ci_summary = (
+    cross_domain_ci_summary = cast(
+        dict[str, Any],
         cross_domain_ci.get("summary")
         if isinstance(cross_domain_ci.get("summary"), dict)
-        else {}
+        else {},
     )
     contract_runtime = read_json(
         project / "docs" / "retort_contract_runtime_rehearsal.json"
     )
-    contract_runtime_summary = (
+    contract_runtime_summary = cast(
+        dict[str, Any],
         contract_runtime.get("summary")
         if isinstance(contract_runtime.get("summary"), dict)
-        else {}
+        else {},
     )
     contract_stability = read_json(
         project / "docs" / "retort_contract_stability_stress.json"
     )
-    contract_stability_summary = (
+    contract_stability_summary = cast(
+        dict[str, Any],
         contract_stability.get("summary")
         if isinstance(contract_stability.get("summary"), dict)
-        else {}
+        else {},
     )
     review_family = read_json(
         project / "docs" / "retort_review_family_behavior_replay.json"
     )
-    review_family_summary = (
+    review_family_summary = cast(
+        dict[str, Any],
         review_family.get("summary")
         if isinstance(review_family.get("summary"), dict)
-        else {}
+        else {},
     )
     external_merge_landing = read_json(
         project / "docs" / "retort_external_merge_landing.json"
     )
-    external_merge_summary = (
+    external_merge_summary = cast(
+        dict[str, Any],
         external_merge_landing.get("summary")
         if isinstance(external_merge_landing.get("summary"), dict)
-        else {}
+        else {},
     )
     adjudication_report = read_json(
         project / "docs" / "retort_review_adjudication_calibration.json"
     )
-    adjudication_summary = (
+    adjudication_summary = cast(
+        dict[str, Any],
         adjudication_report.get("summary")
         if isinstance(adjudication_report.get("summary"), dict)
-        else {}
+        else {},
     )
     stress_report = read_json(
         project / "docs" / "retort_employee_scheduler_stress.json"
     )
-    stress_summary = (
+    stress_summary = cast(
+        dict[str, Any],
         stress_report.get("summary")
         if isinstance(stress_report.get("summary"), dict)
-        else {}
+        else {},
     )
     patch_report = read_json(project / "docs" / "retort_employee_patch_closure.json")
-    patch_summary = (
+    patch_summary = cast(
+        dict[str, Any],
         patch_report.get("summary")
         if isinstance(patch_report.get("summary"), dict)
-        else {}
+        else {},
     )
     patch_stress = read_json(project / "docs" / "retort_employee_patch_stress.json")
-    patch_stress_summary = (
+    patch_stress_summary = cast(
+        dict[str, Any],
         patch_stress.get("summary")
         if isinstance(patch_stress.get("summary"), dict)
-        else {}
+        else {},
     )
     quality_report = read_json(project / "docs" / "retort_quality_gate_bundle.json")
-    quality_summary = (
+    quality_summary = cast(
+        dict[str, Any],
         quality_report.get("summary")
         if isinstance(quality_report.get("summary"), dict)
-        else {}
+        else {},
     )
     recovery_report = read_json(
         project / "docs" / "retort_production_recovery_drill.json"
     )
-    recovery_summary = (
+    recovery_summary = cast(
+        dict[str, Any],
         recovery_report.get("summary")
         if isinstance(recovery_report.get("summary"), dict)
-        else {}
+        else {},
     )
     mainline_proof = read_json(
         project / "docs" / "retort_product_mainline_absorption_proof.json"
     )
-    mainline_summary = (
+    mainline_summary = cast(
+        dict[str, Any],
         mainline_proof.get("summary")
         if isinstance(mainline_proof.get("summary"), dict)
-        else {}
+        else {},
     )
     release_decision = read_json(
         project / "docs" / "retort_absorption_release_decision.json"
     )
-    release_summary = (
+    release_summary = cast(
+        dict[str, Any],
         release_decision.get("summary")
         if isinstance(release_decision.get("summary"), dict)
-        else {}
+        else {},
     )
     operator_journey = read_json(
         project / "docs" / "retort_operator_journey_replay.json"
     )
-    operator_summary = (
+    operator_summary = cast(
+        dict[str, Any],
         operator_journey.get("summary")
         if isinstance(operator_journey.get("summary"), dict)
-        else {}
+        else {},
     )
     return [
         f"quality_gate_bundle_status={quality_report.get('status', '')}",
@@ -1054,15 +1100,17 @@ def _external_review_evidence(project: Path) -> list[str]:
     if not report.is_file():
         return []
     payload = read_json(report)
-    license_review = (
+    license_review = cast(
+        dict[str, Any],
         payload.get("license_review")
         if isinstance(payload.get("license_review"), dict)
-        else {}
+        else {},
     )
-    pipeline = (
+    pipeline = cast(
+        dict[str, Any],
         payload.get("review_pipeline")
         if isinstance(payload.get("review_pipeline"), dict)
-        else {}
+        else {},
     )
     return [
         f"external_review_report={report}",
@@ -1081,33 +1129,39 @@ def _employee_result_evidence(project: Path) -> list[str]:
     if not latest:
         return []
     payload = read_json(latest)
-    runtime = (
+    runtime = cast(
+        dict[str, Any],
         payload.get("runtime_evidence")
         if isinstance(payload.get("runtime_evidence"), dict)
-        else {}
+        else {},
     )
-    review = (
+    review = cast(
+        dict[str, Any],
         runtime.get("worker_review")
         if isinstance(runtime.get("worker_review"), dict)
-        else {}
+        else {},
     )
-    multi_worker = (
+    multi_worker = cast(
+        dict[str, Any],
         runtime.get("multi_worker")
         if isinstance(runtime.get("multi_worker"), dict)
-        else {}
+        else {},
     )
-    process_isolation = (
+    process_isolation = cast(
+        dict[str, Any],
         multi_worker.get("process_isolation")
         if isinstance(multi_worker.get("process_isolation"), dict)
-        else {}
+        else {},
     )
-    patch = (
+    patch = cast(
+        dict[str, Any],
         runtime.get("employee_patch_closure")
         if isinstance(runtime.get("employee_patch_closure"), dict)
-        else {}
+        else {},
     )
-    patch_summary = (
-        patch.get("summary") if isinstance(patch.get("summary"), dict) else {}
+    patch_summary = cast(
+        dict[str, Any],
+        patch.get("summary") if isinstance(patch.get("summary"), dict) else {},
     )
     return [
         f"employee_results_file={latest}",
@@ -1153,10 +1207,11 @@ def _latest_run_evidence(project: Path) -> list[str]:
                 if "/retort_engine/" in item and "/tests/" not in item
             ]
             test_files = [item for item in changed_files if "/tests/" in item]
-            summary = (
+            summary = cast(
+                dict[str, Any],
                 payload.get("summary")
                 if isinstance(payload.get("summary"), dict)
-                else {}
+                else {},
             )
             return [
                 f"latest_absorption_run_id={payload.get('run_id', path.stem)}",

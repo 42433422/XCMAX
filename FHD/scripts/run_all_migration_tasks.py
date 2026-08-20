@@ -15,6 +15,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from app.utils.operational_errors import BOUNDARY_ERRORS
+
 
 class MigrationTaskRunner:
     """迁移任务执行器"""
@@ -25,7 +27,7 @@ class MigrationTaskRunner:
 
     async def run_task(self, name: str, command: list, description: str) -> bool:
         """运行单个任务"""
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"[TASK] {name}")
         print(f"[DESC] {description}")
         print("=" * 60)
@@ -53,7 +55,7 @@ class MigrationTaskRunner:
                 self.results[name] = False
                 return False
 
-        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except BOUNDARY_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             print(f"[ERROR] {name} 异常: {e}")
             self.results[name] = False
             return False

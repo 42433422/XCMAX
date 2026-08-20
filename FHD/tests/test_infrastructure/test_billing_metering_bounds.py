@@ -1,3 +1,4 @@
+# mypy: disable-error-code="import-not-found"
 """Tests for app.infrastructure.billing.metering — coverage ramp C3.3-b.
 
 Covers:

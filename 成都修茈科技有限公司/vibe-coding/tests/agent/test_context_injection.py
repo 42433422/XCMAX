@@ -73,8 +73,8 @@ def test_selection_invalid_coercion() -> None:
 
 def test_git_status_populates_recent_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Mock git subprocess to simulate a git repo with dirty files."""
-    import subprocess as _sp
     import shutil
+    import subprocess as _sp
 
     if shutil.which("git") is None:
         pytest.skip("git not on PATH")

@@ -62,6 +62,7 @@ from langgraph._internal._constants import (
     RETURN,
     TASKS,
 )
+from langgraph._internal._exception_policy import BOUNDARY_ERRORS
 from langgraph._internal._scratchpad import PregelScratchpad
 from langgraph._internal._typing import EMPTY_SEQ, MISSING
 from langgraph.channels.base import BaseChannel
@@ -644,7 +645,7 @@ def prepare_single_task(
                 )
                 if val is MISSING:
                     return
-            except Exception as exc:
+            except BOUNDARY_ERRORS as exc:
                 if SUPPORTS_EXC_NOTES:
                     exc.add_note(
                         f"Before task with name '{name}' and path '{task_path[:3]}'"

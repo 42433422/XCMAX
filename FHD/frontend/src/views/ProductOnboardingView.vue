@@ -26,19 +26,13 @@
       <section class="step-panel">
         <template v-if="currentStep === 'welcome'">
           <div class="welcome-hero">
-            <img
-              class="welcome-logo"
-              :src="welcomeLogoSrc"
-              height="56"
-              alt="XC"
-              decoding="async"
-              @error="onWelcomeLogoError"
-            />
+            <img class="welcome-logo" :src="welcomeLogoSrc" height="56" alt="XC" decoding="async" @error="onWelcomeLogoError" />
             <div>
               <h1>认识 XC</h1>
               <p class="welcome-tagline">专属于您的数字公司 · 默认干净，行业业务按需加载</p>
               <p class="lead">
-                日常界面默认有<strong>智能对话</strong>（找小C办事）、<strong>信息</strong>（联系AI同事）、<strong>智能生态</strong>和<strong>员工工作台</strong>；行业业务菜单、定制 AI 员工都按需加载。先把 XC 当成会长大的公司，用到哪再补哪。
+                日常界面默认有<strong>智能对话</strong>（找小C办事）、<strong>信息</strong>（联系AI同事）、<strong>智能生态</strong>和<strong>员工工作台</strong>；行业业务菜单、定制
+                AI 员工都按需加载。先把 XC 当成会长大的公司，用到哪再补哪。
               </p>
             </div>
           </div>
@@ -48,9 +42,12 @@
             <li><strong>AI 员工</strong>：从市场或定制 Mod 安装后上岗，不在本步基础线里批量装</li>
           </ul>
           <p class="lead muted pricing-anchor">
-            <strong>价格预期</strong>：99 元试用 30 天；满意后选购永久授权（1 万元起），一次购买永久使用。试用到期账户冻结，购买后即可继续使用。
+            <strong>价格预期</strong>：99 元试用 30 天；满意后选购永久授权（1
+            万元起），一次购买永久使用。试用到期账户冻结，购买后即可继续使用。
           </p>
-          <p v-if="trialStatusText" class="lead muted trial-status" role="status">{{ trialStatusText }}</p>
+          <p v-if="trialStatusText" class="lead muted trial-status" role="status">
+            {{ trialStatusText }}
+          </p>
           <div class="actions">
             <button type="button" class="btn primary" @click="goStep('industry')">下一步：行业定型</button>
           </div>
@@ -61,7 +58,8 @@
           <p v-if="openIndustryLeadNames.length" class="lead">
             当前开放
             <template v-for="(name, idx) in openIndustryLeadNames" :key="name">
-              <strong>{{ name }}</strong><template v-if="idx < openIndustryLeadNames.length - 1"> 与 </template>
+              <strong>{{ name }}</strong
+              ><template v-if="idx < openIndustryLeadNames.length - 1"> 与 </template>
             </template>
             {{ industryLeadKindText }}；选好后下一步会列出要补的基础线。
           </p>
@@ -83,16 +81,10 @@
               <span class="industry-chip-scenario">{{ chipScenarioText(preset.scenario) }}</span>
             </button>
           </div>
-          <p v-if="!openIndustryOptions.length" class="industry-loading-hint">
-            正在加载行业权限…
-          </p>
+          <p v-if="!openIndustryOptions.length" class="industry-loading-hint">正在加载行业权限…</p>
           <p v-if="previewIndustryOptions.length" class="industry-preview-hint">更多行业（即将开放，暂不可选）</p>
           <div v-if="previewIndustryOptions.length" class="industry-pick industry-pick--preview" aria-hidden="true">
-            <div
-              v-for="preset in previewIndustryOptions"
-              :key="preset.id"
-              class="industry-chip industry-chip--locked"
-            >
+            <div v-for="preset in previewIndustryOptions" :key="preset.id" class="industry-chip industry-chip--locked">
               <span class="industry-chip-name">{{ preset.name }}</span>
               <span class="industry-chip-product industry-chip-product--locked">即将开放</span>
               <span class="industry-chip-scenario">{{ chipScenarioText(preset.scenario) }}</span>
@@ -110,17 +102,12 @@
         <template v-else-if="currentStep === 'host-pack'">
           <h1>准备侧栏菜单</h1>
           <p class="lead">
-            已选 <strong>{{ pickedIndustryName }}</strong>。点一下装齐推荐菜单，就可以进对话。
-            AI 员工以后需要再装，不挡这一步。
+            已选 <strong>{{ pickedIndustryName }}</strong
+            >。点一下装齐推荐菜单，就可以进对话。 AI 员工以后需要再装，不挡这一步。
           </p>
           <p class="lead muted">行业 Mod 含在授权内，不单独收费；定制 AI 员工按需另行评估。</p>
-          <div
-            class="status-card"
-            :class="{ ok: baselineOk && !loading, warn: !baselineOk && !loading }"
-          >
-            <template v-if="loading">
-              <i class="fa fa-spinner fa-spin"></i> 正在检测…
-            </template>
+          <div class="status-card" :class="{ ok: baselineOk && !loading, warn: !baselineOk && !loading }">
+            <template v-if="loading"> <i class="fa fa-spinner fa-spin"></i> 正在检测… </template>
             <template v-else-if="baselineOk">
               <i class="fa fa-check-circle"></i>
               菜单已齐，可以进入智能对话。
@@ -130,30 +117,16 @@
               还差 {{ missingSidebarBaselineCount || missingRequiredCount || 1 }} 项推荐菜单
             </template>
           </div>
-          <div
-            v-if="industrySidebarPreviewLabels.length"
-            class="sidebar-preview"
-            aria-label="进入后补齐的侧栏菜单"
-          >
+          <div v-if="industrySidebarPreviewLabels.length" class="sidebar-preview" aria-label="进入后补齐的侧栏菜单">
             <p class="sidebar-preview-title">装好后侧栏会出现</p>
             <div class="sidebar-preview-list">
-              <span
-                v-for="label in industrySidebarPreviewLabels"
-                :key="label"
-                class="sidebar-preview-chip"
-              >
+              <span v-for="label in industrySidebarPreviewLabels" :key="label" class="sidebar-preview-chip">
                 {{ label }}
               </span>
             </div>
           </div>
           <div class="actions">
-            <button
-              v-if="!baselineOk"
-              type="button"
-              class="btn primary"
-              :disabled="bootstrapBusy || loading"
-              @click="runBootstrap"
-            >
+            <button v-if="!baselineOk" type="button" class="btn primary" :disabled="bootstrapBusy || loading" @click="runBootstrap">
               <i class="fa" :class="bootstrapBusy ? 'fa-spinner fa-spin' : 'fa-download'"></i>
               {{ bootstrapBusy ? '正在装齐…' : '一键装齐' }}
             </button>
@@ -167,23 +140,13 @@
           <details v-if="hostPackDetailGroups.length" class="host-pack-details">
             <summary>查看明细（可选）</summary>
             <p v-if="baselinePlan?.summary" class="lead muted">{{ baselinePlan.summary }}</p>
-            <p
-              v-if="showNoAccountCustomHint"
-              class="account-custom-empty-hint muted"
-            >
+            <p v-if="showNoAccountCustomHint" class="account-custom-empty-hint muted">
               当前账号未绑定定制能力；AI 员工可稍后在扩展市场安装。
             </p>
-            <p
-              v-else-if="missingAccountCustomCount > 0 || missingIndustryPackageCount > 0"
-              class="muted host-pack-details-note"
-            >
-              <template v-if="missingAccountCustomCount > 0">
-                另有 {{ missingAccountCustomCount }} 项定制/员工可稍后安装
-              </template>
+            <p v-else-if="missingAccountCustomCount > 0 || missingIndustryPackageCount > 0" class="muted host-pack-details-note">
+              <template v-if="missingAccountCustomCount > 0"> 另有 {{ missingAccountCustomCount }} 项定制/员工可稍后安装 </template>
               <template v-if="missingAccountCustomCount > 0 && missingIndustryPackageCount > 0">；</template>
-              <template v-if="missingIndustryPackageCount > 0">
-                另有 {{ missingIndustryPackageCount }} 项行业包可选
-              </template>
+              <template v-if="missingIndustryPackageCount > 0"> 另有 {{ missingIndustryPackageCount }} 项行业包可选 </template>
             </p>
             <div class="baseline-groups">
               <section v-for="group in hostPackDetailGroups" :key="group.id" class="baseline-group">
@@ -209,16 +172,8 @@
               </section>
             </div>
             <div class="actions host-pack-details-actions">
-              <button type="button" class="btn ghost" :disabled="loading" @click="refreshStatus">
-                重新检测
-              </button>
-              <button
-                v-if="!baselineOk"
-                type="button"
-                class="btn ghost"
-                :disabled="bootstrapBusy || loading"
-                @click="runBootstrap"
-              >
+              <button type="button" class="btn ghost" :disabled="loading" @click="refreshStatus">重新检测</button>
+              <button v-if="!baselineOk" type="button" class="btn ghost" :disabled="bootstrapBusy || loading" @click="runBootstrap">
                 再次一键装齐
               </button>
             </div>
@@ -235,9 +190,7 @@
       </section>
 
       <footer class="product-flow-footer">
-        <button v-if="fromTutorial" type="button" class="btn text" @click="returnFromTutorial">
-          返回上一页
-        </button>
+        <button v-if="fromTutorial" type="button" class="btn text" @click="returnFromTutorial">返回上一页</button>
         <button v-else type="button" class="btn text" @click="skipEntireFlow">跳过引导（高级用户）</button>
         <span class="doc-hint">{{ footerHint }}</span>
       </footer>
@@ -271,18 +224,10 @@ import {
 import { useProductFlow } from '@/composables/useProductFlow'
 import { useIndustryStore } from '@/stores/industry'
 import { authApi } from '@/api/auth'
-import {
-  clearDeliverableStatusCache,
-  fetchIndustryBaseline,
-  fetchOnboardingIndustryCatalog,
-} from '@/utils/platformShellApi'
-import {promptAdvancedTutorialAfterInstall,
-} from '@/tutorial/promptAdvancedTutorial'
+import { clearDeliverableStatusCache, fetchIndustryBaseline, fetchOnboardingIndustryCatalog } from '@/utils/platformShellApi'
+import { promptAdvancedTutorialAfterInstall } from '@/tutorial/promptAdvancedTutorial'
 import { useTutorialCatalog } from '@/composables/useTutorialCatalog'
-import {
-  invalidateHostPackCompletionCache,
-  markHostPackSkippedThisSession,
-} from '@/utils/hostPackOnboardingGate'
+import { invalidateHostPackCompletionCache, markHostPackSkippedThisSession } from '@/utils/hostPackOnboardingGate'
 import { resolveCoreNavLabel } from '@/utils/coreNavLabel'
 import { patchWorkspacePrefs } from '@/utils/workspacePrefsApi'
 import { appAlert } from '@/utils/appDialog'
@@ -334,9 +279,7 @@ const industryLeadKindText = computed(() => {
   return count > 1 ? `${count} 套行业方向` : '行业方向'
 })
 const pickedIndustryId = ref(resolveDefaultPickedIndustryId())
-const canConfirmIndustry = computed(
-  () => openIndustryOptions.value.length > 0 && isIndustrySelectable(pickedIndustryId.value),
-)
+const canConfirmIndustry = computed(() => openIndustryOptions.value.length > 0 && isIndustrySelectable(pickedIndustryId.value))
 function industryPackageLabel(industryId) {
   const id = String(industryId || '').trim()
   const row = onboardingCatalog.value?.open_packages?.find((p) => p.industry_id === id)
@@ -394,11 +337,7 @@ function startupAsset(fileName) {
 }
 
 /** 与侧栏 / 开屏同源：带 XC 字标；PNG 透明底 */
-const welcomeLogoCandidates = [
-  startupAsset('xc-logo-text.png'),
-  startupAsset('xc-logo-text.jpg'),
-  startupAsset('xc-logo-base.jpg'),
-]
+const welcomeLogoCandidates = [startupAsset('xc-logo-text.png'), startupAsset('xc-logo-text.jpg'), startupAsset('xc-logo-base.jpg')]
 const welcomeLogoSrc = ref(welcomeLogoCandidates[0])
 let welcomeLogoFallbackIndex = 0
 
@@ -410,7 +349,11 @@ function onWelcomeLogoError() {
 }
 
 function initialProductSku() {
-  return String(import.meta.env.VITE_XCAGI_PRODUCT_SKU || 'generic').trim().toLowerCase() || 'generic'
+  return (
+    String(import.meta.env.VITE_XCAGI_PRODUCT_SKU || 'generic')
+      .trim()
+      .toLowerCase() || 'generic'
+  )
 }
 
 const productSku = ref(initialProductSku())
@@ -435,9 +378,7 @@ const SIDEBAR_PREVIEW_MENU_KEYS = [
 ]
 const industrySidebarPreviewLabels = computed(() => {
   const id = String(pickedIndustryId.value || '').trim()
-  const labels = SIDEBAR_PREVIEW_MENU_KEYS
-    .map((key) => resolveCoreNavLabel(key, id, null))
-    .filter(Boolean)
+  const labels = SIDEBAR_PREVIEW_MENU_KEYS.map((key) => resolveCoreNavLabel(key, id, null)).filter(Boolean)
   if (id === '考勤') {
     labels.unshift('考勤表转换')
   }
@@ -445,12 +386,8 @@ const industrySidebarPreviewLabels = computed(() => {
 })
 const baselineGroups = computed(() => baselinePlan.value?.groups || [])
 const SIDEBAR_BASELINE_GROUP_IDS = new Set(['core', 'host'])
-const sidebarBaselineGroups = computed(() =>
-  baselineGroups.value.filter((g) => SIDEBAR_BASELINE_GROUP_IDS.has(String(g?.id || ''))),
-)
-const supplementBaselineGroups = computed(() =>
-  baselineGroups.value.filter((g) => !SIDEBAR_BASELINE_GROUP_IDS.has(String(g?.id || ''))),
-)
+const sidebarBaselineGroups = computed(() => baselineGroups.value.filter((g) => SIDEBAR_BASELINE_GROUP_IDS.has(String(g?.id || ''))))
+const supplementBaselineGroups = computed(() => baselineGroups.value.filter((g) => !SIDEBAR_BASELINE_GROUP_IDS.has(String(g?.id || ''))))
 /** 明细折叠区：优先侧栏+补充分组，否则回退全部 groups */
 const hostPackDetailGroups = computed(() => {
   if (sidebarBaselineGroups.value.length) {
@@ -467,25 +404,15 @@ const missingSidebarBaselineCount = computed(() => {
   }
   return ids.size
 })
-const missingRequiredCount = computed(
-  () => baselinePlan.value?.missing_required_mod_ids?.length || 0,
-)
-const missingAccountCustomCount = computed(
-  () => baselinePlan.value?.missing_account_custom_mod_ids?.length || 0,
-)
+const missingRequiredCount = computed(() => baselinePlan.value?.missing_required_mod_ids?.length || 0)
+const missingAccountCustomCount = computed(() => baselinePlan.value?.missing_account_custom_mod_ids?.length || 0)
 const missingIndustryPackageCount = computed(() => {
   const ids = new Set(baselinePlan.value?.industry_mod_ids || [])
   return (baselinePlan.value?.missing_industry_mod_ids || []).filter((id) => ids.has(id)).length
 })
-const hasAccountCustomEntitlement = computed(
-  () => (baselinePlan.value?.account_custom_mod_ids?.length || 0) > 0,
-)
+const hasAccountCustomEntitlement = computed(() => (baselinePlan.value?.account_custom_mod_ids?.length || 0) > 0)
 const showNoAccountCustomHint = computed(
-  () =>
-    isEnterpriseEdition(productSku.value) &&
-    currentStep.value === 'host-pack' &&
-    !loading.value &&
-    !hasAccountCustomEntitlement.value,
+  () => isEnterpriseEdition(productSku.value) && currentStep.value === 'host-pack' && !loading.value && !hasAccountCustomEntitlement.value,
 )
 const pickedIndustryName = computed(() => getIndustryPreset(pickedIndustryId.value).name)
 
@@ -497,7 +424,9 @@ const currentIndex = computed(() => {
 const currentStepMeta = computed(() => steps.find((s) => s.id === currentStep.value) || null)
 
 const editionLabel = computed(() => {
-  const sku = String(productSku.value || '').trim().toLowerCase()
+  const sku = String(productSku.value || '')
+    .trim()
+    .toLowerCase()
   if (sku === 'enterprise') return '企业版 enterprise'
   if (sku === 'personal') return '个人版 personal'
   const e = readBuildEdition()
@@ -509,9 +438,7 @@ const editionLabel = computed(() => {
 const fromTutorial = computed(() => isTutorialReplayQuery(route.query.from))
 const returnPath = computed(() => readOnboardingReturnPath(route.query.redirect))
 const footerHint = computed(() =>
-  fromTutorial.value
-    ? '来自新手教程 · 可随时返回继续日常使用'
-    : '完整流程见 docs/guides/PRODUCT_USER_FLOW.md',
+  fromTutorial.value ? '来自新手教程 · 可随时返回继续日常使用' : '完整流程见 docs/guides/PRODUCT_USER_FLOW.md',
 )
 
 watch(
@@ -569,9 +496,7 @@ async function runBootstrap() {
           installErrors.push(`行业包：${ir.message || '安装失败'}`)
         }
       } catch (err) {
-        installErrors.push(
-          `行业包：${err instanceof Error ? err.message : '安装失败'}`,
-        )
+        installErrors.push(`行业包：${err instanceof Error ? err.message : '安装失败'}`)
       }
     }
     for (const modId of customMissing) {
@@ -581,9 +506,7 @@ async function runBootstrap() {
           installErrors.push(`${modId}：${ir.message || '安装失败'}`)
         }
       } catch (err) {
-        installErrors.push(
-          `${modId}：${err instanceof Error ? err.message : '安装失败'}`,
-        )
+        installErrors.push(`${modId}：${err instanceof Error ? err.message : '安装失败'}`)
       }
     }
     const customSeedIds = deliverySeedModIds(baselinePlan.value)
@@ -594,9 +517,7 @@ async function runBootstrap() {
           installErrors.push(`${modId} 交付数据：${ir.message || '安装失败'}`)
         }
       } catch (err) {
-        installErrors.push(
-          `${modId} 交付数据：${err instanceof Error ? err.message : '安装失败'}`,
-        )
+        installErrors.push(`${modId} 交付数据：${err instanceof Error ? err.message : '安装失败'}`)
       }
     }
     await refreshBaseline(true)
@@ -620,8 +541,7 @@ async function runBootstrap() {
       const promptResult = await promptAdvancedTutorialAfterInstall({
         router,
         buildContext: tutorialBuildContext.value,
-        message:
-          '本行业推荐侧栏基础线已装齐，可以开始使用了。\n\n是否现在观看进阶教程，快速熟悉菜单与智能对话？',
+        message: '本行业推荐侧栏基础线已装齐，可以开始使用了。\n\n是否现在观看进阶教程，快速熟悉菜单与智能对话？',
         returnContext: { routeName: 'chat' },
       })
       if (promptResult === 'already_completed') {
@@ -794,9 +714,7 @@ onMounted(async () => {
     }
   }
   const cur = String(industryStore.currentIndustryId || DEFAULT_INDUSTRY_ID).trim()
-  pickedIndustryId.value = normalizePickedIndustryId(
-    onboardingCatalog.value?.selected_industry_id || cur,
-  )
+  pickedIndustryId.value = normalizePickedIndustryId(onboardingCatalog.value?.selected_industry_id || cur)
   const expectedQuery = { step: currentStep.value }
   if (fromTutorial.value) {
     expectedQuery.from = 'tutorial'
@@ -1072,7 +990,10 @@ onMounted(async () => {
   background: #f8fafc;
   cursor: pointer;
   text-align: left;
-  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease;
   min-height: 96px;
 }
 

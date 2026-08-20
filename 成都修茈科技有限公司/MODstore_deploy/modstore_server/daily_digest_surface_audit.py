@@ -1,3 +1,5 @@
+# mypy: disable-error-code="assignment"
+# isort: skip_file
 # ruff: noqa: E402, F401
 """每日摘要 · 三端页面截图巡检（P-W 网站 / P-S 软件 / P-App 移动 App 面）。
 
@@ -34,13 +36,14 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
 from modstore_server.daily_digest_surface_audit_part01 import (
     _internal_api_base as _internal_api_base,
 )
-
 
 _DESKTOP_VIEWPORT = {"width": 1280, "height": 720}
 _MOBILE_VIEWPORT = {"width": 390, "height": 844}
@@ -49,7 +52,6 @@ _MOBILE_VIEWPORT = {"width": 390, "height": 844}
 from modstore_server.daily_digest_surface_audit_part02 import (
     SurfaceTarget as SurfaceTarget,
 )
-
 
 _STATIC_PW_PAGES: Tuple[Tuple[str, str], ...] = (
     ("官网首页", "/"),
@@ -87,7 +89,10 @@ _PW_WB_MODE_PAGES: Tuple[Tuple[str, str], ...] = (
 
 _PW_SIDEBAR_PAGES: Tuple[Tuple[str, str], ...] = (
     ("AI 客服", "/market/customer-service"),
-    ("沙箱测试", "/market/ai-test/sandbox"),  # /market/sandbox 是客户端重定向，用规范路径
+    (
+        "沙箱测试",
+        "/market/ai-test/sandbox",
+    ),  # /market/sandbox 是客户端重定向，用规范路径
 )
 
 
@@ -192,7 +197,6 @@ from modstore_server.daily_digest_surface_audit_part03 import (
     _save_dir as _save_dir,
 )
 
-
 _MARKET_AUTH_SKIP_PREFIXES: Tuple[str, ...] = (
     "/market/login",
     "/market/register",
@@ -215,7 +219,6 @@ from modstore_server.daily_digest_surface_audit_part04 import (
     _goto_with_retry as _goto_with_retry,
 )
 
-
 _TRANSIENT_NAV_ERROR_MARKERS: Tuple[str, ...] = (
     "Timeout",
     "ERR_TIMED_OUT",
@@ -236,7 +239,6 @@ from modstore_server.daily_digest_surface_audit_part05 import (
     _apply_page_prepare_step as _apply_page_prepare_step,
     _capture_one as _capture_one,
 )
-
 
 # ─── 三端 lane → 对应在岗员工 ───────────────────────────────────────────────
 #
@@ -273,7 +275,6 @@ from modstore_server.daily_digest_surface_audit_part06 import (
     _surface_analysis_timeout_sec as _surface_analysis_timeout_sec,
     _build_lane_analysis_user_content as _build_lane_analysis_user_content,
 )
-
 
 _LANE_ANALYSIS_SYSTEM = """你是 MODstore「{lane}」产线在岗 AI 员工（{owners}）。
 数字管家把本产线今天的页面巡检结果交给你，请只用本产线视角，基于给出的 HTTP 状态、

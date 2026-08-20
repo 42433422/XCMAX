@@ -13,10 +13,12 @@
 import subprocess
 import sys
 
+from app.utils.operational_errors import BOUNDARY_ERRORS
+
 
 def run_command(cmd: list, description: str) -> bool:
     """运行命令并返回结果"""
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"[STEP] {description}")
     print("=" * 60)
 
@@ -36,7 +38,7 @@ def run_command(cmd: list, description: str) -> bool:
                 print(result.stderr[-500:])
             return False
 
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except BOUNDARY_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"[ERROR] {description} 异常: {e}")
         return False
 
@@ -76,7 +78,7 @@ def execute_migration():
     results["validate"] = run_command([sys.executable, "scripts/validate_migration.py"], "验证迁移")
 
     # 4. 更新路由（可选）
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("[STEP] 更新路由层")
     print("=" * 60)
     response = input("是否更新路由层到 V2? (yes/no): ")

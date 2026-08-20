@@ -25,8 +25,6 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 
-
-
 class MobileRelayService(MobileRelayPairingMixin, MobileRelayTaskMixin):
     """Small SQL-backed relay used by phones and desktop runtimes."""
 
@@ -89,7 +87,6 @@ class MobileRelayService(MobileRelayPairingMixin, MobileRelayTaskMixin):
             )
         )
 
-
     def list_desktops(self, *, user_id: int) -> list[dict[str, Any]]:
         with get_db() as db:
             self.ensure_tables(db)
@@ -108,7 +105,6 @@ class MobileRelayService(MobileRelayPairingMixin, MobileRelayTaskMixin):
                 .all()
             )
             return [self._public_desktop(_row_dict(row)) for row in rows]
-
 
     @staticmethod
     def _notify_task_creator(task: dict[str, Any]) -> None:

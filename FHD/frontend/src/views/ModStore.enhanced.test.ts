@@ -230,7 +230,7 @@ describe('ModStore.vue – rendering', () => {
 
   it('renders refresh button', async () => {
     const wrapper = await mountModStore()
-    const refreshBtn = wrapper.findAll('button').find(b => b.text().includes('刷新目录'))
+    const refreshBtn = wrapper.findAll('button').find((b) => b.text().includes('刷新目录'))
     expect(refreshBtn).toBeTruthy()
     wrapper.unmount()
   })
@@ -300,7 +300,16 @@ describe('ModStore.vue – catalog loading', () => {
 
   it('renders mod cards when catalog has items', async () => {
     const mods = [
-      { id: 'mod-a', name: 'Mod A', pkg_id: 'mod-a', version: '1.0', author: 'Test', description: 'Test mod', is_installed: false, source: 'local' },
+      {
+        id: 'mod-a',
+        name: 'Mod A',
+        pkg_id: 'mod-a',
+        version: '1.0',
+        author: 'Test',
+        description: 'Test mod',
+        is_installed: false,
+        source: 'local',
+      },
     ]
     mockApiFetch.mockResolvedValue({
       ok: true,
@@ -325,7 +334,10 @@ describe('ModStore.vue – onboarding banner', () => {
   })
 
   it('shows onboarding banner when deliverable is false', async () => {
-    mockFetchDeliverableStatus.mockResolvedValueOnce({ deliverable: false, missing_mod_ids: ['mod-x'] })
+    mockFetchDeliverableStatus.mockResolvedValueOnce({
+      deliverable: false,
+      missing_mod_ids: ['mod-x'],
+    })
     const wrapper = await mountModStore()
     await flushPromises()
     const banner = wrapper.find('.onboarding-banner')
@@ -438,7 +450,16 @@ describe('ModStore.vue – mod card display', () => {
 
   it('shows install button for uninstalled mod', async () => {
     const mods = [
-      { id: 'mod-a', name: 'Mod A', pkg_id: 'mod-a', version: '1.0', author: 'Test', description: 'Desc', is_installed: false, source: 'local' },
+      {
+        id: 'mod-a',
+        name: 'Mod A',
+        pkg_id: 'mod-a',
+        version: '1.0',
+        author: 'Test',
+        description: 'Desc',
+        is_installed: false,
+        source: 'local',
+      },
     ]
     mockApiFetch.mockResolvedValue({
       ok: true,
@@ -454,7 +475,16 @@ describe('ModStore.vue – mod card display', () => {
 
   it('shows uninstall button for installed mod', async () => {
     const mods = [
-      { id: 'mod-a', name: 'Mod A', pkg_id: 'mod-a', version: '1.0', author: 'Test', description: 'Desc', is_installed: true, source: 'local' },
+      {
+        id: 'mod-a',
+        name: 'Mod A',
+        pkg_id: 'mod-a',
+        version: '1.0',
+        author: 'Test',
+        description: 'Desc',
+        is_installed: true,
+        source: 'local',
+      },
     ]
     mockApiFetch.mockResolvedValue({
       ok: true,
@@ -469,7 +499,17 @@ describe('ModStore.vue – mod card display', () => {
 
   it('shows update button when new version available', async () => {
     const mods = [
-      { id: 'mod-a', name: 'Mod A', pkg_id: 'mod-a', version: '1.0', new_version: '2.0', author: 'Test', description: 'Desc', is_installed: true, source: 'local' },
+      {
+        id: 'mod-a',
+        name: 'Mod A',
+        pkg_id: 'mod-a',
+        version: '1.0',
+        new_version: '2.0',
+        author: 'Test',
+        description: 'Desc',
+        is_installed: true,
+        source: 'local',
+      },
     ]
     mockApiFetch.mockResolvedValue({
       ok: true,
@@ -484,7 +524,16 @@ describe('ModStore.vue – mod card display', () => {
 
   it('shows detail button for each mod', async () => {
     const mods = [
-      { id: 'mod-a', name: 'Mod A', pkg_id: 'mod-a', version: '1.0', author: 'Test', description: 'Desc', is_installed: false, source: 'local' },
+      {
+        id: 'mod-a',
+        name: 'Mod A',
+        pkg_id: 'mod-a',
+        version: '1.0',
+        author: 'Test',
+        description: 'Desc',
+        is_installed: false,
+        source: 'local',
+      },
     ]
     mockApiFetch.mockResolvedValue({
       ok: true,

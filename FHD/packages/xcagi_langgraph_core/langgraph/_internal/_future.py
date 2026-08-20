@@ -9,6 +9,8 @@ import types
 from collections.abc import Awaitable, Coroutine, Generator
 from typing import TypeVar, cast
 
+from langgraph._internal._exception_policy import TERMINATION_ERRORS
+
 T = TypeVar("T")
 AnyFuture = asyncio.Future | concurrent.futures.Future
 
@@ -131,7 +133,7 @@ def chain_future(source: AnyFuture, destination: AnyFuture) -> AnyFuture:
         return destination
     except (SystemExit, KeyboardInterrupt):
         raise
-    except BaseException as exc:
+    except TERMINATION_ERRORS as exc:
         if isinstance(destination, concurrent.futures.Future):
             if destination.set_running_or_notify_cancel():
                 destination.set_exception(exc)
@@ -212,7 +214,7 @@ def run_coroutine_threadsafe(
                 )
             except (SystemExit, KeyboardInterrupt):
                 raise
-            except BaseException as exc:
+            except TERMINATION_ERRORS as exc:
                 future.set_exception(exc)
                 raise
 

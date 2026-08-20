@@ -420,8 +420,6 @@ def _invoke_alert_hook(job_id: str, error: str, job_dict: dict[str, Any]) -> Non
         logger.warning("employee cron alert hook failed job_id=%s: %s", job_id, exc)
 
 
-
-
 __all__ = [
     "AlertHook",
     "get_employee_cron_jobs",

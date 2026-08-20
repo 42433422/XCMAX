@@ -33,6 +33,7 @@ os.environ.setdefault("XCAGI_SKIP_LEGACY_COMPAT_ROUTES", "1")
 import json
 import shutil
 import tempfile
+from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -70,12 +71,13 @@ def tmp_dir():
 
 
 @pytest.fixture
-def shipment_client() -> TestClient:
+def shipment_client() -> Iterator[TestClient]:
     from app.fastapi_routes.domains.shipment import routes as shipment_routes
 
     app = FastAPI()
     app.include_router(shipment_routes.router)
-    return TestClient(app, raise_server_exceptions=False)
+    with TestClient(app, raise_server_exceptions=False) as client:
+        yield client
 
 
 def _make_fake_vector_store(*, with_create: bool = True) -> MagicMock:
@@ -2742,6 +2744,20 @@ class TestMarkerPath:
         assert marker == (root / "config" / "sunbird-roster.applied").resolve()
 
 
+@pytest.fixture
+def isolated_sunbird_seed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep roster branch tests independent of repo seed files and real schemas."""
+    monkeypatch.setattr(
+        "app.desktop_runtime.sunbird_delivery_seed.sync_sunbird_delivery_files",
+        lambda _root: 0,
+    )
+    monkeypatch.setattr(
+        "app.db.init_db.ensure_sqlite_enterprise_business_bootstrap",
+        lambda **_kwargs: None,
+    )
+
+
+@pytest.mark.usefixtures("isolated_sunbird_seed")
 class TestApplySunbirdRosterSeedIfNeeded:
     def test_none_data_root_no_paths_module(self):
         from app.desktop_runtime.sunbird_delivery_seed import (
@@ -2773,7 +2789,11 @@ class TestApplySunbirdRosterSeedIfNeeded:
         )
 
         root = Path(tmp_dir)
-        result = apply_sunbird_roster_seed_if_needed(root)
+        with patch(
+            "app.desktop_runtime.sunbird_delivery_seed.sync_sunbird_delivery_files",
+            return_value=0,
+        ):
+            result = apply_sunbird_roster_seed_if_needed(root)
         assert result is False
 
     def test_invalid_json_roster(self, tmp_dir):

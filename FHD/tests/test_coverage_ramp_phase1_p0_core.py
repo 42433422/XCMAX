@@ -1,3 +1,4 @@
+# mypy: disable-error-code="misc, union-attr"
 """COVERAGE_RAMP Phase 1 (p0-core): auth, middleware, db, app_service helpers (mocked I/O)."""
 
 from __future__ import annotations

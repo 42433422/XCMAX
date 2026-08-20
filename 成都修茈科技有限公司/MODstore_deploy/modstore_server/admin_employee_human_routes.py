@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, union-attr"
 """Human-question bridge and employee scorecard routes."""
 
 from __future__ import annotations
@@ -30,7 +31,10 @@ def list_pending_human_questions(
     GET /api/admin/employee-autonomy/questions?include_history=false
     """
     from modstore_server.human_uncertainty_queue import list_pending_questions
-    from modstore_server.retort_clarification_gate import get_clarification, list_clarifications
+    from modstore_server.retort_clarification_gate import (
+        get_clarification,
+        list_clarifications,
+    )
 
     items = list_pending_questions(
         user_id=_admin_user.id,

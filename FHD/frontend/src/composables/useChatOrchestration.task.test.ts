@@ -67,7 +67,10 @@ vi.mock('./useChatPersistence', () => ({
   resolveExcelSheetOptionsFromContext: vi.fn(() => []),
   extractLikelyProductQueryKeyword: vi.fn(() => null),
   clearPersistedTaskPanelState: vi.fn(),
-  useChatHistoryPersistence: () => ({ toPlainText: (s: string) => s, isWelcomeMessage: () => false }),
+  useChatHistoryPersistence: () => ({
+    toPlainText: (s: string) => s,
+    isWelcomeMessage: () => false,
+  }),
   useChatTaskPanelPersistence: () => ({
     persistTaskPanelStateForSession: vi.fn(),
     applyPersistedTaskPanelStateForSession: vi.fn(),
@@ -230,12 +233,7 @@ describe('useChatOrchestration task/print', () => {
   it('sendMessage start print without context replies hint', async () => {
     const api = useChatOrchestration({ sessionId: ref('s') })
     await api.sendMessage('开始打印')
-    expect(addAndSaveMessage).toHaveBeenCalledWith(
-      expect.stringContaining('暂无可打印'),
-      'ai',
-      undefined,
-      expect.any(Object),
-    )
+    expect(addAndSaveMessage).toHaveBeenCalledWith(expect.stringContaining('暂无可打印'), 'ai', undefined, expect.any(Object))
     expect(executePrintTask).not.toHaveBeenCalled()
   })
 
@@ -255,12 +253,7 @@ describe('useChatOrchestration task/print', () => {
     const api = useChatOrchestration({ sessionId: ref('s') })
     api.showTaskConfirm({ type: 'custom', title: 't', api_url: '', payload: {} })
     await api.confirmTask()
-    expect(addAndSaveMessage).toHaveBeenCalledWith(
-      expect.stringContaining('缺少 API'),
-      'ai',
-      undefined,
-      expect.any(Object),
-    )
+    expect(addAndSaveMessage).toHaveBeenCalledWith(expect.stringContaining('缺少 API'), 'ai', undefined, expect.any(Object))
   })
 
   it('confirmTask POST success keeps completed task card', async () => {
@@ -330,7 +323,10 @@ describe('useChatOrchestration task/print', () => {
         },
       },
     })
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
+    const api = useChatOrchestration({
+      sessionId: ref('s'),
+      proIntentExperienceEnabled: ref(false),
+    })
     api.showTaskConfirm({
       type: 'shipment_generate',
       title: '发货单预览',
@@ -345,12 +341,14 @@ describe('useChatOrchestration task/print', () => {
 
     await api.confirmTask()
 
-    expect(agentRunsApiMock.createTask).toHaveBeenCalledWith(expect.objectContaining({
-      task_id: 'chat_task-1',
-      tool_id: 'shipment_orders',
-      action: 'generate',
-      params: expect.objectContaining({ order_number: 'ORD-001' }),
-    }))
+    expect(agentRunsApiMock.createTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        task_id: 'chat_task-1',
+        tool_id: 'shipment_orders',
+        action: 'generate',
+        params: expect.objectContaining({ order_number: 'ORD-001' }),
+      }),
+    )
     expect(agentRunsApiMock.continueRun).toHaveBeenCalledWith('run-1', {
       approval_grant: 'grant-1',
       runtime_context: { source: 'chat_task_card_approval' },

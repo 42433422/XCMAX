@@ -38,8 +38,7 @@ const FIELD_VALIDATORS: Record<string, (value: unknown, params: unknown) => stri
   },
   regex(value, params) {
     if (value === null || value === undefined || value === '') return null
-    const pattern =
-      typeof params === 'string' ? params : String((params as Record<string, unknown>)?.pattern || '')
+    const pattern = typeof params === 'string' ? params : String((params as Record<string, unknown>)?.pattern || '')
     if (!pattern) return null
     try {
       return new RegExp(pattern).test(String(value)) ? null : '格式不正确'
@@ -77,9 +76,7 @@ export function useIndustryFieldSchema(menuKey: string) {
   const subsystem = computed<Record<string, unknown>>(() => {
     const root = asRecord(industryStore.currentConfig)
     const inner = asRecord(root.config)
-    const subsystems = asRecord(
-      (inner.subsystems as unknown) ?? (root.subsystems as unknown),
-    )
+    const subsystems = asRecord((inner.subsystems as unknown) ?? (root.subsystems as unknown))
     return asRecord(subsystems[menuKey])
   })
 

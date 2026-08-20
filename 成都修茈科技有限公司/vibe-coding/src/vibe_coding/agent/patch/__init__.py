@@ -17,7 +17,7 @@ all files in one pass with a backup ledger ready for ``rollback``.
 from __future__ import annotations
 
 from .applier import ApplyResult, PatchApplier, PatchConflict
-from .differ import minimise_diff, hunks_from_full_rewrite
+from .differ import hunks_from_full_rewrite, minimise_diff
 from .file_edit import FileEdit, ProjectPatch
 from .hunk import Hunk
 

@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 _DOMAIN_REGISTRY: dict[str, list[str]] = {
     "catalog": [
         "modstore_server.api.catalog_public_routes",
@@ -117,5 +119,5 @@ def mount_domain_routes(app: FastAPI) -> None:
                 if router is not None:
                     app.include_router(router)
                     logger.debug("Mounted %s router from %s", domain, module_path)
-            except Exception as exc:
+            except RECOVERABLE_ERRORS as exc:
                 logger.warning("Failed to mount %s (%s): %s", domain, module_path, exc)

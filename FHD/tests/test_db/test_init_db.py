@@ -191,6 +191,33 @@ def test_ensure_users_tenant_id_column_adds_missing_sqlite_column():
         engine.dispose()
 
 
+def test_enterprise_sqlite_bootstrap_creates_product_uom_dependencies():
+    from sqlalchemy import create_engine, inspect
+    from sqlalchemy.pool import StaticPool
+
+    from app.db.init_db import ensure_sqlite_enterprise_business_bootstrap
+
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    try:
+        ensure_sqlite_enterprise_business_bootstrap(engine=engine, swallow_errors=False)
+
+        tables = set(inspect(engine).get_table_names())
+        assert {
+            "tenants",
+            "customers",
+            "uom_categories",
+            "uom_units",
+            "products",
+            "purchase_units",
+        } <= tables
+    finally:
+        engine.dispose()
+
+
 # ========================= build_mod_database_seed_plan ==================
 
 

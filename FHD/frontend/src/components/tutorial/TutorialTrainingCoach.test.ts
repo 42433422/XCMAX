@@ -36,8 +36,16 @@ const step = {
   location_label: '左侧菜单“组织管理”',
   completion_cue: '客户列表中出现“客户B”。',
   guide_actions: [
-    { instruction: '点击“+ 新建客户”。', target_selector: '#tutorial-customer-target', expected_input: '' },
-    { instruction: '输入客户名称。', target_selector: '#tutorial-customer-name', expected_input: '客户B' },
+    {
+      instruction: '点击“+ 新建客户”。',
+      target_selector: '#tutorial-customer-target',
+      expected_input: '',
+    },
+    {
+      instruction: '输入客户名称。',
+      target_selector: '#tutorial-customer-name',
+      expected_input: '客户B',
+    },
     { instruction: '点击“创建”。', target_selector: '#tutorial-customer-save', expected_input: '' },
   ],
   action_checklist: ['点击“+ 新建客户”。', '输入客户名称。', '点击“创建”。'],
@@ -127,7 +135,10 @@ describe('TutorialTrainingCoach', () => {
     })
     await flushPromises()
 
-    await wrapper.findAll('button').find((item) => item.text() === '打开操作页面')!.trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((item) => item.text() === '打开操作页面')!
+      .trigger('click')
     await vi.advanceTimersByTimeAsync(100)
 
     expect(routerPush).toHaveBeenCalledWith({ name: 'customers' })
@@ -164,7 +175,10 @@ describe('TutorialTrainingCoach', () => {
     })
     await flushPromises()
 
-    await wrapper.findAll('button').find((item) => item.text() === '打开操作页面')!.trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((item) => item.text() === '打开操作页面')!
+      .trigger('click')
     await vi.advanceTimersByTimeAsync(100)
 
     expect(target.classList.contains('xcagi-tutorial-target-highlight')).toBe(true)
@@ -180,7 +194,9 @@ describe('TutorialTrainingCoach', () => {
     const name = document.createElement('input')
     name.id = 'tutorial-customer-name'
     let createClicks = 0
-    create.addEventListener('click', () => { createClicks += 1 })
+    create.addEventListener('click', () => {
+      createClicks += 1
+    })
     document.body.append(create, name)
     const store = useTutorialV2Store()
     store.currentRun = activeRun
@@ -190,9 +206,15 @@ describe('TutorialTrainingCoach', () => {
     })
     await flushPromises()
 
-    await wrapper.findAll('button').find((item) => item.text() === '打开操作页面')!.trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((item) => item.text() === '打开操作页面')!
+      .trigger('click')
     await vi.advanceTimersByTimeAsync(100)
-    await wrapper.findAll('button').find((item) => item.text() === '我做完了，下一条')!.trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((item) => item.text() === '我做完了，下一条')!
+      .trigger('click')
     await vi.advanceTimersByTimeAsync(60)
 
     expect(createClicks).toBe(0)

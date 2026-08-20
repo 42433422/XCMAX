@@ -30,6 +30,8 @@ from langgraph.store.base import (
     tokenize_path,
 )
 
+from langgraph.store.sqlite._exception_policy import BOUNDARY_ERRORS
+
 _AIO_ERROR_MSG = (
     "The SqliteStore does not support async methods. "
     "Consider using AsyncSqliteStore instead.\n"
@@ -1183,12 +1185,12 @@ class SqliteStore(BaseSqliteStore, BaseStore):
                         expired_items = self.sweep_ttl()
                         if expired_items > 0:
                             logger.info(f"Store swept {expired_items} expired items")
-                    except Exception as exc:
+                    except BOUNDARY_ERRORS as exc:
                         logger.exception(
                             "Store TTL sweep iteration failed", exc_info=exc
                         )
                 future.set_result(None)
-            except Exception as exc:
+            except BOUNDARY_ERRORS as exc:
                 future.set_exception(exc)
 
         thread = threading.Thread(target=_sweep_loop, daemon=True, name="ttl-sweeper")
@@ -1292,7 +1294,7 @@ class SqliteStore(BaseSqliteStore, BaseStore):
                 if query.kind == "refresh":
                     try:
                         cur.execute(query.query, query.params)
-                    except Exception as e:
+                    except BOUNDARY_ERRORS as e:
                         raise ValueError(
                             f"Error executing TTL refresh: \n{query.query}\n{query.params}\n{e}"
                         ) from e
@@ -1302,7 +1304,7 @@ class SqliteStore(BaseSqliteStore, BaseStore):
                 if query.kind == "get":
                     try:
                         cur.execute(query.query, query.params)
-                    except Exception as e:
+                    except BOUNDARY_ERRORS as e:
                         raise ValueError(
                             f"Error executing GET query: \n{query.query}\n{query.params}\n{e}"
                         ) from e
@@ -1420,7 +1422,7 @@ class SqliteStore(BaseSqliteStore, BaseStore):
                         update_params = (prefix_text, *key_list)
                         try:
                             cur.execute(update_query, update_params)
-                        except Exception as e:
+                        except BOUNDARY_ERRORS as e:
                             logger.error(
                                 f"Error during TTL refresh update for search: {e}"
                             )

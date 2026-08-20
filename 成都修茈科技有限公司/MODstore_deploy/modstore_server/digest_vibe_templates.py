@@ -1,11 +1,15 @@
-# ruff: noqa
+# mypy: disable-error-code="index, union-attr"
 """Versioning and deterministic template generation for digest vibe prep."""
+
 from __future__ import annotations
+
 import importlib
 import logging
 import os
 import re
 from typing import Any, Awaitable, Callable, Dict, List, Tuple
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger("modstore_server.digest_vibe_prep")
 DigestVibeProgressCallback = Callable[[Dict[str, Any]], Awaitable[None]]
@@ -21,7 +25,7 @@ def resolve_vibe_prep_version_context(
     """解析与每日摘要/Git 基线绑定的清单版本号（更新与补丁共享基线，后缀区分类型）。"""
     from modstore_server.daily_digest import _digest_git_branch_and_head, _repo_root
 
-    (git_branch, git_commit) = _digest_git_branch_and_head(_repo_root())
+    git_branch, git_commit = _digest_git_branch_and_head(_repo_root())
     day = (digest_day or "").strip() or "unknown"
     rid = int(record_id or 0)
     branch = git_branch if git_branch and git_branch != "—" else "unknown"
@@ -45,7 +49,7 @@ def resolve_vibe_prep_version_context(
             from modstore_server.release_train import release_train_context_for_digest
 
             ctx.update(release_train_context_for_digest(rid))
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
     else:
         try:
@@ -61,7 +65,7 @@ def resolve_vibe_prep_version_context(
                     "release_kind": "daily",
                 }
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
     return ctx
 
@@ -141,7 +145,7 @@ def _employee_pack_version(pkg_id: str) -> str:
         ident = v2.get("identity") if isinstance(v2.get("identity"), dict) else {}
         ver = str(ident.get("version") or man.get("version") or "").strip()
         return ver or "—"
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return "—"
 
 
@@ -180,14 +184,14 @@ def _build_template_vibe_markdowns(
         return (name, pack_ver, scope_txt)
 
     def _add_update(pid: str, fallback_name: str, items: List[str]) -> None:
-        (name, pack_ver, scope_txt) = _emp_section(pid, fallback_name)
+        name, pack_ver, scope_txt = _emp_section(pid, fallback_name)
         update_lines.append(f"## [{pid}] {name} · v{pack_ver}\n")
         update_lines.append(f"- scope：{scope_txt}")
         update_lines.extend(items)
         update_lines.append("")
 
     def _add_patch(pid: str, fallback_name: str, items: List[str]) -> None:
-        (name, pack_ver, scope_txt) = _emp_section(pid, fallback_name)
+        name, pack_ver, scope_txt = _emp_section(pid, fallback_name)
         patch_lines.append(f"## [{pid}] {name} · v{pack_ver}\n")
         patch_lines.append(f"- scope：{scope_txt}")
         patch_lines.extend(items)
@@ -326,7 +330,7 @@ def _build_template_vibe_markdowns(
             pid = str(emp.get("employee_id") or "").strip()
             if not pid:
                 continue
-            (_name, pack_ver, _scope_txt) = _emp_section(pid)
+            _name, pack_ver, _scope_txt = _emp_section(pid)
             update_lines.append(f"| `{pid}` | v{pack_ver} |")
         update_lines.append("")
         update_lines.append("（无证据驱动更新；不生成派发任务）")

@@ -23,9 +23,7 @@ const summary = computed(() => {
     case 'condition':
       return cfg.expression ? String(cfg.expression).slice(0, 48) : '未配置表达式'
     case 'openapi_operation':
-      return cfg.connector_id && cfg.operation_id
-        ? `${cfg.connector_id}#${cfg.operation_id}`
-        : '未配置连接器'
+      return cfg.connector_id && cfg.operation_id ? `${cfg.connector_id}#${cfg.operation_id}` : '未配置连接器'
     case 'knowledge_search':
       return cfg.kb_id ? `KB ${cfg.kb_id}` : '未选择知识库'
     case 'webhook_trigger':
@@ -41,17 +39,8 @@ const summary = computed(() => {
 </script>
 
 <template>
-  <div
-    class="wf2-node"
-    :class="{ 'wf2-node--selected': selected }"
-    :style="{ '--accent': meta.accent }"
-  >
-    <Handle
-      v-if="meta.hasInput"
-      type="target"
-      :position="Position.Left"
-      class="wf2-handle wf2-handle--in"
-    />
+  <div class="wf2-node" :class="{ 'wf2-node--selected': selected }" :style="{ '--accent': meta.accent }">
+    <Handle v-if="meta.hasInput" type="target" :position="Position.Left" class="wf2-handle wf2-handle--in" />
 
     <header class="wf2-node__head">
       <span class="wf2-node__icon" :style="{ background: meta.accent }">{{ meta.icon }}</span>
@@ -64,27 +53,12 @@ const summary = computed(() => {
     <p class="wf2-node__summary" :title="String(summary)">{{ summary }}</p>
 
     <template v-if="meta.branchOutputs">
-      <Handle
-        type="source"
-        :position="Position.Right"
-        id="true"
-        class="wf2-handle wf2-handle--out wf2-handle--true"
-      />
-      <Handle
-        type="source"
-        :position="Position.Right"
-        id="false"
-        class="wf2-handle wf2-handle--out wf2-handle--false"
-      />
+      <Handle type="source" :position="Position.Right" id="true" class="wf2-handle wf2-handle--out wf2-handle--true" />
+      <Handle type="source" :position="Position.Right" id="false" class="wf2-handle wf2-handle--out wf2-handle--false" />
       <span class="wf2-branch-label wf2-branch-label--true">true</span>
       <span class="wf2-branch-label wf2-branch-label--false">false</span>
     </template>
-    <Handle
-      v-else-if="meta.hasOutput"
-      type="source"
-      :position="Position.Right"
-      class="wf2-handle wf2-handle--out"
-    />
+    <Handle v-else-if="meta.hasOutput" type="source" :position="Position.Right" class="wf2-handle wf2-handle--out" />
   </div>
 </template>
 
@@ -191,7 +165,9 @@ const summary = computed(() => {
   border: 2px solid rgba(30, 41, 59, 0.95);
   border-radius: 50%;
   box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 50%, transparent);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .wf2-handle:hover {

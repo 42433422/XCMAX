@@ -21,11 +21,7 @@
 
     <div class="chat-container">
       <div ref="chatMessagesRef" class="chat-messages">
-        <div
-          v-for="(msg, idx) in messages"
-          :key="idx"
-          :class="['message', msg.role]"
-        >
+        <div v-for="(msg, idx) in messages" :key="idx" :class="['message', msg.role]">
           <div v-html="sanitizeChatBubbleHtml(msg.content)"></div>
           <button
             v-if="extractKittenDocumentPickupUrl(msg.content)"
@@ -78,10 +74,7 @@
               </div>
             </template>
             <p v-else class="panel-hint">上传表格后可预览字段</p>
-            <label
-              class="panel-check"
-              title="可选：附带原材料 / 产品 / 出货的只读聚合摘要（非全库、非实时报表）"
-            >
+            <label class="panel-check" title="可选：附带原材料 / 产品 / 出货的只读聚合摘要（非全库、非实时报表）">
               <input type="checkbox" v-model="kittenIncludeBusinessDb" @change="onKittenBusinessDbToggle" />
               <span>业务库摘要</span>
             </label>
@@ -104,15 +97,9 @@
           <div class="panel-block">
             <div class="panel-label">导出</div>
             <div class="export-row">
-              <button class="btn btn-sm btn-primary" type="button" :disabled="!currentResult" @click="exportResult">
-                Excel
-              </button>
-              <button class="btn btn-sm btn-secondary" type="button" :disabled="!currentResult" @click="exportDocx">
-                Word
-              </button>
-              <button class="btn btn-sm btn-ghost" type="button" :disabled="!currentResult" @click="clearResult">
-                清除
-              </button>
+              <button class="btn btn-sm btn-primary" type="button" :disabled="!currentResult" @click="exportResult">Excel</button>
+              <button class="btn btn-sm btn-secondary" type="button" :disabled="!currentResult" @click="exportDocx">Word</button>
+              <button class="btn btn-sm btn-ghost" type="button" :disabled="!currentResult" @click="clearResult">清除</button>
             </div>
             <div v-if="lastDocumentPickupUrl" class="pickup-download-row">
               <button class="btn btn-sm btn-primary" type="button" @click="openDownloadLink(lastDocumentPickupUrl)">
@@ -137,18 +124,15 @@
         @change="onQuickPick"
       >
         <option value="">快捷…</option>
-        <option v-for="btn in kittenQuickActions" :key="btn.text" :value="btn.text">{{ btn.label }}</option>
+        <option v-for="btn in kittenQuickActions" :key="btn.text" :value="btn.text">
+          {{ btn.label }}
+        </option>
       </select>
 
       <details ref="moreMenuRef" class="more-menu">
         <summary class="more-summary">更多</summary>
         <div class="more-body">
-          <button
-            class="more-action"
-            type="button"
-            :disabled="isChatLoading || isDatasetParsing"
-            @click="runFinancialBriefAndClose"
-          >
+          <button class="more-action" type="button" :disabled="isChatLoading || isDatasetParsing" @click="runFinancialBriefAndClose">
             财务简报
           </button>
           <button class="more-action" type="button" @click="docGenExpanded = !docGenExpanded">
@@ -172,33 +156,16 @@
           <option value="docx">Word (.docx)</option>
           <option value="xlsx">Excel (.xlsx)</option>
         </select>
-        <button
-          class="toolbar-chip toolbar-chip-primary"
-          type="button"
-          :disabled="isDocGenLoading || isChatLoading"
-          @click="runDocGen"
-        >
+        <button class="toolbar-chip toolbar-chip-primary" type="button" :disabled="isDocGenLoading || isChatLoading" @click="runDocGen">
           {{ isDocGenLoading ? '生成中…' : '生成并下载' }}
         </button>
       </div>
     </div>
 
     <div class="input-area">
-      <input
-        ref="fileInput"
-        type="file"
-        accept=".xlsx,.xls,.csv,.txt,.json"
-        class="kitten-file-input"
-        @change="handleFileSelect"
-      />
+      <input ref="fileInput" type="file" accept=".xlsx,.xls,.csv,.txt,.json" class="kitten-file-input" @change="handleFileSelect" />
       <div class="input-wrapper">
-        <button
-          type="button"
-          class="attach-btn"
-          title="上传 Excel / CSV / JSON"
-          :disabled="isDatasetParsing"
-          @click="triggerFileUpload"
-        >
+        <button type="button" class="attach-btn" title="上传 Excel / CSV / JSON" :disabled="isDatasetParsing" @click="triggerFileUpload">
           <span class="attach-icon" aria-hidden="true">&#128206;</span>
           <span class="sr-only">上传文件</span>
         </button>
@@ -215,25 +182,15 @@
           @touchcancel.prevent="stopVoiceInput"
         >
           <span class="attach-icon" aria-hidden="true">
-            <i v-if="voiceState === 'recording'" class="fa fa-stop-circle" style="color:#ef4444"></i>
-            <i v-else-if="voiceState === 'transcribing'" class="fa fa-spinner fa-pulse" style="color:#3b82f6"></i>
-            <i v-else-if="voiceState === 'error'" class="fa fa-exclamation-circle" style="color:#ef4444"></i>
+            <i v-if="voiceState === 'recording'" class="fa fa-stop-circle" style="color: #ef4444"></i>
+            <i v-else-if="voiceState === 'transcribing'" class="fa fa-spinner fa-pulse" style="color: #3b82f6"></i>
+            <i v-else-if="voiceState === 'error'" class="fa fa-exclamation-circle" style="color: #ef4444"></i>
             <i v-else class="fa fa-microphone"></i>
           </span>
           <span class="sr-only">语音输入</span>
         </button>
-        <textarea
-          v-model="inputText"
-          rows="3"
-          placeholder="输入问题，Enter 发送；Shift+Enter 换行"
-          @keydown="handleInputKeydown"
-        />
-        <button
-          class="btn btn-primary send-btn"
-          type="button"
-          :disabled="isChatLoading || isDatasetParsing"
-          @click="sendMessage"
-        >
+        <textarea v-model="inputText" rows="3" placeholder="输入问题，Enter 发送；Shift+Enter 换行" @keydown="handleInputKeydown" />
+        <button class="btn btn-primary send-btn" type="button" :disabled="isChatLoading || isDatasetParsing" @click="sendMessage">
           发送
         </button>
       </div>
@@ -253,11 +210,7 @@ import KittenVizEmployeeStrip from '@/components/kitten/KittenVizEmployeeStrip.v
 import { useKittenVizEmployees } from '@/composables/useKittenVizEmployees'
 import type { KittenChartType } from '@/composables/useKittenAnalyzer'
 import { asRecord, asArray, asString } from '@/utils/typeGuards'
-import {
-  useKittenAnalyzer,
-  kittenQuickActions,
-  extractKittenDocumentPickupUrl,
-} from '@/composables/useKittenAnalyzer'
+import { useKittenAnalyzer, kittenQuickActions, extractKittenDocumentPickupUrl } from '@/composables/useKittenAnalyzer'
 
 const emit = defineEmits<{ back: [] }>()
 
@@ -303,7 +256,7 @@ const {
   generateAiOfficeDocument,
   runFinancialBrief,
   clearResult,
-  handleInputKeydown
+  handleInputKeydown,
 } = useKittenAnalyzer()
 
 const {
@@ -448,15 +401,8 @@ const openDownloadLink = async (link: string) => {
       throw new Error(j?.message || '下载失败：服务器返回了 JSON 而非文件')
     }
     const blob = await resp.blob()
-    const ext = blob.type.includes('spreadsheet')
-      ? 'xlsx'
-      : blob.type.includes('word') || blob.type.includes('msword')
-        ? 'docx'
-        : 'bin'
-    const filename = getFilenameFromDisposition(
-      resp.headers.get('content-disposition'),
-      `文档.${ext}`
-    )
+    const ext = blob.type.includes('spreadsheet') ? 'xlsx' : blob.type.includes('word') || blob.type.includes('msword') ? 'docx' : 'bin'
+    const filename = getFilenameFromDisposition(resp.headers.get('content-disposition'), `文档.${ext}`)
     downloadBlob(blob, filename)
   } catch (err) {
     console.error('Download failed:', err)

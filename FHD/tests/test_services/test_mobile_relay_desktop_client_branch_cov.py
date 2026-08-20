@@ -1,3 +1,4 @@
+# mypy: disable-error-code="var-annotated"
 """Branch-coverage tests for app.services.mobile_relay_desktop_client.
 
 Targets the helper functions and _execute_task branches not covered by

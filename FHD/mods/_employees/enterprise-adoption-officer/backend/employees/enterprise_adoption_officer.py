@@ -53,9 +53,7 @@ def run(payload: dict[str, Any], _ctx: dict[str, Any]) -> dict[str, Any]:
         features = tenant.get("adopted_features")
         blockers = tenant.get("blocked_reasons")
         milestones = tenant.get("value_milestones")
-        if not all(
-            isinstance(value, list) for value in (features, blockers, milestones)
-        ):
+        if not all(isinstance(value, list) for value in (features, blockers, milestones)):
             invalid.append(f"tenants[{index}]_list_fields")
             continue
         if tenant.get("activated") is True:
@@ -66,9 +64,7 @@ def run(payload: dict[str, Any], _ctx: dict[str, Any]) -> dict[str, Any]:
             adopted += 1
         if any(str(value).strip() for value in milestones):
             value_reached += 1
-        blocker_counts.update(
-            str(value).strip() for value in blockers if str(value).strip()
-        )
+        blocker_counts.update(str(value).strip() for value in blockers if str(value).strip())
 
     total = len(seen)
     funnel = {
@@ -83,9 +79,7 @@ def run(payload: dict[str, Any], _ctx: dict[str, Any]) -> dict[str, Any]:
     }
     blockers_out = [
         {"reason": reason, "tenant_count": count}
-        for reason, count in sorted(
-            blocker_counts.items(), key=lambda item: (-item[1], item[0])
-        )
+        for reason, count in sorted(blocker_counts.items(), key=lambda item: (-item[1], item[0]))
     ]
     approved = not invalid
     return {

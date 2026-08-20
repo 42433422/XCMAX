@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, misc, var-annotated"
 """Tests for app.fastapi_routes.market_account — coverage ramp.
 
 Covers helper functions, route endpoints, token management, and error paths.

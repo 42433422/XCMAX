@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -27,7 +31,7 @@ def _parse_set_cookie_headers(headers: _facade().Any) -> _facade().Dict[str, str
     if hasattr(headers, "get_all"):
         try:
             raw_lines = list(headers.get_all("Set-Cookie") or [])
-        except Exception:
+        except RECOVERABLE_ERRORS:
             raw_lines = []
     if not raw_lines:
         one = headers.get("Set-Cookie") if hasattr(headers, "get") else None
@@ -53,7 +57,7 @@ def _surface_demo_account_defaults() -> _facade().Tuple[str, str]:
         candidates.append(
             _facade()._repo_root() / "FHD" / "config" / "surface_audit_demo_account.json"
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     for path in candidates:
         try:
@@ -62,7 +66,7 @@ def _surface_demo_account_defaults() -> _facade().Tuple[str, str]:
             password = str(cfg.get("password") or fallback[1])
             if user and password:
                 return (user, password)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             continue
     return fallback
 
@@ -100,7 +104,7 @@ def _login_surface_audit_sync(
     ).strip()
     api_base = _facade()._surface_audit_login_api_base(account_kind)
     if account_kind == "enterprise":
-        (demo_user, demo_password) = _facade()._surface_demo_account_defaults()
+        demo_user, demo_password = _facade()._surface_demo_account_defaults()
         user = (
             user
             or _facade().os.environ.get("MODSTORE_SURFACE_AUDIT_ENTERPRISE_USER")
@@ -127,7 +131,10 @@ def _login_surface_audit_sync(
     def _req(
         url: str, payload: _facade().Optional[_facade().Dict[str, _facade().Any]] = None
     ) -> _facade().Tuple[_facade().Dict[str, _facade().Any], _facade().Dict[str, str]]:
-        headers = {"User-Agent": "MODstore-surface-audit/1.0", "Accept": "application/json"}
+        headers = {
+            "User-Agent": "MODstore-surface-audit/1.0",
+            "Accept": "application/json",
+        }
         if payload is not None:
             headers["Content-Type"] = "application/json"
             csrf = cookies.get("csrf_token") or ""
@@ -147,7 +154,7 @@ def _login_surface_audit_sync(
 
     try:
         _req(f"{api_base}/api/health")
-        (web, _) = _req(
+        web, _ = _req(
             f"{api_base}/api/auth/login",
             {"username": user, "password": password, "account_kind": account_kind},
         )
@@ -189,7 +196,7 @@ def _login_surface_audit_sync(
     csrf = str(cookies.get("csrf_token") or "").strip()
     if account_kind == "enterprise" and ok and session_id and (not access):
         try:
-            (handoff, _) = _req(f"{api_base}/api/market/session-handoff")
+            handoff, _ = _req(f"{api_base}/api/market/session-handoff")
             handoff_data = handoff.get("data") if isinstance(handoff.get("data"), dict) else {}
             access = str(
                 handoff_data.get("market_access_token") or handoff_data.get("token") or ""
@@ -199,9 +206,12 @@ def _login_surface_audit_sync(
                 or handoff_data.get("refresh_token")
                 or refresh
             ).strip()
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             _facade().logger.warning(
-                "surface audit: %s session-handoff failed base=%s err=%s", label, api_base, exc
+                "surface audit: %s session-handoff failed base=%s err=%s",
+                label,
+                api_base,
+                exc,
             )
     has_required_state = bool(access) or (account_kind == "enterprise" and bool(session_id))
     if not ok or not has_required_state:
@@ -252,7 +262,7 @@ def _fetch_admin_digest_code_sync(auth: _facade().Dict[str, str]) -> str:
         code = str(data.get("code") or "").strip().upper()
         if len(code) == 6:
             return code
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         _facade().logger.warning("surface audit: digest-identity fetch failed: %s", exc)
     return ""
 
@@ -295,7 +305,7 @@ async def _prepare_admin_digest(context: _facade().Any, auth: _facade().Dict[str
             )
             with _facade().urllib.request.urlopen(req, timeout=30):
                 pass
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             _facade().logger.warning("surface audit: verify-admin-digest-code failed: %s", exc)
     await _facade()._inject_admin_digest(context, code)
 
@@ -304,7 +314,7 @@ def _cookie_url_for_auth(target_url: str, auth: _facade().Dict[str, _facade().An
     for candidate in (target_url, str(auth.get("api_base") or "")):
         try:
             parsed = _facade().urllib.parse.urlsplit(candidate)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             continue
         if parsed.scheme and parsed.netloc:
             return f"{parsed.scheme}://{parsed.netloc}/"
@@ -312,21 +322,27 @@ def _cookie_url_for_auth(target_url: str, auth: _facade().Dict[str, _facade().An
 
 
 async def _inject_market_auth(
-    context: _facade().Any, auth: _facade().Dict[str, _facade().Any], target_url: str = ""
+    context: _facade().Any,
+    auth: _facade().Dict[str, _facade().Any],
+    target_url: str = "",
 ) -> None:
     cookies = auth.get("cookies") if isinstance(auth.get("cookies"), dict) else {}
     session_id = str(auth.get("session_id") or cookies.get("session_id") or "").strip()
     csrf = str(auth.get("csrf_token") or cookies.get("csrf_token") or "").strip()
     cookie_rows: _facade().List[_facade().Dict[str, str]] = []
     cookie_url = _facade()._cookie_url_for_auth(target_url, auth)
-    for name, value in {**cookies, "session_id": session_id, "csrf_token": csrf}.items():
+    for name, value in {
+        **cookies,
+        "session_id": session_id,
+        "csrf_token": csrf,
+    }.items():
         v = str(value or "").strip()
         if name and v:
             cookie_rows.append({"name": str(name), "value": v, "url": cookie_url})
     if cookie_rows:
         try:
             await context.add_cookies(cookie_rows)
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             _facade().logger.warning(
                 "surface audit: inject auth cookies failed url=%s err=%s",
                 cookie_url,
@@ -376,13 +392,13 @@ async def _goto_with_retry(page: _facade().Any, url: str, *, timeout_ms: int) ->
     """远程站点易抖动：domcontentloaded 失败后降级 commit 再试（对齐 run_surface_audit.mjs）。"""
     try:
         return await page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-    except Exception as first_exc:
+    except RECOVERABLE_ERRORS as first_exc:
         try:
             resp = await page.goto(url, wait_until="commit", timeout=timeout_ms)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             raise first_exc
         try:
             await page.wait_for_load_state("domcontentloaded", timeout=timeout_ms)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
         return resp

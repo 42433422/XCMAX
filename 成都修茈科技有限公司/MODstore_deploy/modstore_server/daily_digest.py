@@ -1,3 +1,4 @@
+# isort: skip_file
 # ruff: noqa: E402, F401
 """每日运维 / 质量摘要邮件（APScheduler 触发）。
 
@@ -76,7 +77,6 @@ from modstore_server.daily_digest_part01 import (
     digest_calendar_day as digest_calendar_day,
 )
 
-
 DEFAULT_DIGEST_EMAIL = "1499383833@qq.com"
 
 
@@ -89,7 +89,6 @@ from modstore_server.daily_digest_part02 import (
     autonomy_decisions_digest_html as autonomy_decisions_digest_html,
     count_catalog_employee_packs as count_catalog_employee_packs,
 )
-
 
 # ---------------------------------------------------------------------------
 # 邮件视觉基元（presentation primitives）

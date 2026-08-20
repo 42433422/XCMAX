@@ -1,7 +1,11 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Implementation extracted from the public facade module."""
+
 from __future__ import annotations
+
 import importlib
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -77,9 +81,14 @@ async def synthesize_meeting_minutes(
         sf = _facade().get_session_factory()
         with sf() as db:
             result = await chat_dispatch_via_session(
-                db, int(user_id or 0), bench_provider, bench_model, messages, max_tokens=2048
+                db,
+                int(user_id or 0),
+                bench_provider,
+                bench_model,
+                messages,
+                max_tokens=2048,
             )
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         _facade().logger.exception("synthesize_meeting_minutes dispatch failed")
         return {
             "text": "",
@@ -135,7 +144,7 @@ async def build_all_hands_report(
             return
         try:
             await progress_cb(payload)
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             _facade().logger.debug("all_hands progress callback failed: %s", exc)
 
     started_at = _facade().datetime.now(_facade().timezone.utc).isoformat()
@@ -159,7 +168,7 @@ async def build_all_hands_report(
             "employees": [],
             "summary": {},
         }
-    (bench_prov, bench_mdl) = _facade().resolve_platform_bench_llm()
+    bench_prov, bench_mdl = _facade().resolve_platform_bench_llm()
     if not bench_prov or not bench_mdl:
         return {
             "ok": False,

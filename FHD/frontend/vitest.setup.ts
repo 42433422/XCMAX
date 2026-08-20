@@ -60,9 +60,10 @@ function installEventSourceMock() {
 }
 
 function installAnimationFrameMock() {
-  const requestFrame = (callback: FrameRequestCallback) => window.setTimeout(() => {
-    callback(window.performance?.now?.() ?? Date.now())
-  }, 16)
+  const requestFrame = (callback: FrameRequestCallback) =>
+    window.setTimeout(() => {
+      callback(window.performance?.now?.() ?? Date.now())
+    }, 16)
   const cancelFrame = (handle: number) => window.clearTimeout(handle)
 
   if (typeof window.requestAnimationFrame !== 'function' || typeof globalThis.requestAnimationFrame !== 'function') {

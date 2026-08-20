@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 REGISTRATION_PREFIX = "employee_cron_registered:"
@@ -35,7 +35,7 @@ def record_employee_cron_registration(
     """Persist scheduler-process registration truth for API-process readers."""
     from modstore_server.scheduler_runtime import record_job_run
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     record_job_run(
         job_id=f"{REGISTRATION_PREFIX}{employee_id}",
         status=status,

@@ -7,12 +7,14 @@ function mountModal(props: Partial<InstanceType<typeof ChatHistoryModal>['$props
   return mount(ChatHistoryModal, {
     props: {
       show: true,
-      historySessions: [{
-        session_id: 'session-1',
-        title: '第一次使用',
-        message_count: 4,
-        last_message_at: '2026-07-12T08:30:00',
-      }],
+      historySessions: [
+        {
+          session_id: 'session-1',
+          title: '第一次使用',
+          message_count: 4,
+          last_message_at: '2026-07-12T08:30:00',
+        },
+      ],
       historyLoading: false,
       historyError: '',
       currentSessionId: 'session-1',
@@ -86,7 +88,12 @@ describe('ChatHistoryModal', () => {
     const wrapper = mountModal({
       currentSessionId: 'other-session',
       historySessions: [
-        { session_id: 'session-2', title: 'Session 2', message_count: 2, last_message_at: '2026-07-13T10:00:00' },
+        {
+          session_id: 'session-2',
+          title: 'Session 2',
+          message_count: 2,
+          last_message_at: '2026-07-13T10:00:00',
+        },
       ],
     })
     const sessionBtn = wrapper.get('button.history-session-item')
@@ -98,7 +105,13 @@ describe('ChatHistoryModal', () => {
     const wrapper = mountModal({
       currentSessionId: 'other-session',
       historySessions: [
-        { session_id: 'session-3', title: 'Local', message_count: 1, last_message_at: '', is_local_only: true },
+        {
+          session_id: 'session-3',
+          title: 'Local',
+          message_count: 1,
+          last_message_at: '',
+          is_local_only: true,
+        },
       ],
     })
     expect(wrapper.text()).toContain('本地')
@@ -112,9 +125,7 @@ describe('ChatHistoryModal', () => {
   it('uses fallback title for sessions without title', () => {
     const wrapper = mountModal({
       currentSessionId: 'other',
-      historySessions: [
-        { session_id: 's-no-title', title: '', message_count: 0, last_message_at: '' },
-      ],
+      historySessions: [{ session_id: 's-no-title', title: '', message_count: 0, last_message_at: '' }],
     })
     // Falls back to chat.newSession key — should not be empty
     expect(wrapper.get('.history-session-title span').text()).not.toBe('')

@@ -20,9 +20,7 @@ export function useChatVirtualScroll(options: {
 
   const enabled = computed(() => messages.value.length >= threshold)
 
-  const itemHeights = computed(() =>
-    messages.value.map((_, idx) => Math.max(48, estimateHeight(idx) || DEFAULT_ITEM_HEIGHT)),
-  )
+  const itemHeights = computed(() => messages.value.map((_, idx) => Math.max(48, estimateHeight(idx) || DEFAULT_ITEM_HEIGHT)))
 
   const offsets = computed(() => {
     const list: number[] = []

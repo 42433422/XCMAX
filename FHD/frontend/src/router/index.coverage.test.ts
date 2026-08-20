@@ -20,7 +20,6 @@
  * 4. afterEach document title
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { START_LOCATION } from 'vue-router'
 
 // ── 使用 vi.hoisted 提升在 mock 工厂中引用的 mock 函数 ────
 const {
@@ -171,11 +170,23 @@ vi.mock('@/constants/platformShellMode', () => ({
   isIndustryDeliveryRouteName: mockIsIndustryDeliveryRouteName,
   INDUSTRY_DELIVERY_ROUTE_NAMES: new Set<string>(),
   SHELL_CORE_ROUTE_NAMES: new Set<string>([
-    'chat', 'im', 'ai-ecosystem', 'employee-workflow',
-    'workflow-employee-space', 'settings', 'mod-store',
-    'desktop-runtime', 'login', 'product-onboarding',
-    'mod-landing', 'workflow-employee-stitch-full', 'lan-gate',
-    'login-help', 'login-register', 'login-forgot-account', 'login-forgot-password',
+    'chat',
+    'im',
+    'ai-ecosystem',
+    'employee-workflow',
+    'workflow-employee-space',
+    'settings',
+    'mod-store',
+    'desktop-runtime',
+    'login',
+    'product-onboarding',
+    'mod-landing',
+    'workflow-employee-stitch-full',
+    'lan-gate',
+    'login-help',
+    'login-register',
+    'login-forgot-account',
+    'login-forgot-password',
   ]),
 }))
 
@@ -323,7 +334,7 @@ describe('router/index 覆盖率补齐', () => {
       expect(router.currentRoute.value.name).toBe('materials')
     })
 
-it('/business-docking 进入 ETL 数据对接中心', async () => {
+    it('/business-docking 进入 ETL 数据对接中心', async () => {
       await router.push('/business-docking')
       expect(router.currentRoute.value.name).toBe('business-docking')
     })
@@ -1086,8 +1097,7 @@ it('/business-docking 进入 ETL 数据对接中心', async () => {
       const namedRoutes = routes.filter((r) => r.name && !r.redirect)
       for (const route of namedRoutes) {
         // Vue Router 4 将 component 存储在 components.default 中
-        const hasComponent = route.component !== undefined ||
-          (route.components && route.components.default !== undefined)
+        const hasComponent = route.component !== undefined || (route.components && route.components.default !== undefined)
         expect(hasComponent).toBe(true)
       }
     })

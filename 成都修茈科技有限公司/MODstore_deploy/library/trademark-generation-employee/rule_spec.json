@@ -1,10 +1,7 @@
 {
   "brief": "商标生成员：为公司、产品、App、AI 员工和店铺生成原创商标/Logo 方向、提示词、矢量交付建议和初步近似风险自检。",
   "mode": "direct_python_trademark_generation",
-  "accepted_extensions": [
-    ".json",
-    ".txt"
-  ],
+  "accepted_extensions": [".json", ".txt"],
   "default_action": "generate",
   "default_output_relpath": "outputs/trademark_profile.json",
   "default_template_relpath": "",

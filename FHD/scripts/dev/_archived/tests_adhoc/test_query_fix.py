@@ -1,4 +1,7 @@
+# mypy: disable-error-code="import-not-found, var-annotated"
 import sys
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 sys.path.insert(0, r"E:\FHD\XCAGI")
 sys.path.insert(0, r"E:\FHD\XCAGI\resources\wechat-decrypt")
@@ -50,7 +53,7 @@ for table in tables:
                 content = decompress(row[0], row[1]).strip()
                 if content:
                     print(f"    {repr(content[:60])}")
-    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
         continue
 if not found:
     print("  No messages found with numeric_id")
@@ -70,7 +73,7 @@ for table in tables:
                 found = True
                 print(f"  Found in {table}: {repr(content[:60])}")
                 break
-    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
         continue
 if not found:
     print("  No messages found with wxid in content")
@@ -97,7 +100,7 @@ for table in tables:
                 content = decompress(msg_row[0], msg_row[1]).strip()
                 if content:
                     print(f"    {repr(content[:60])}")
-    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"  Error in {table}: {e}")
 
 conn.close()

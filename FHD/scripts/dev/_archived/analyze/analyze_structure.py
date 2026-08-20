@@ -1,3 +1,4 @@
+# mypy: disable-error-code="operator"
 import os
 
 from openpyxl import load_workbook

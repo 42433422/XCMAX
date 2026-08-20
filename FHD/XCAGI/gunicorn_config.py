@@ -4,7 +4,6 @@
 """
 
 import multiprocessing
-import os
 
 bind = "0.0.0.0:5000"
 
@@ -31,6 +30,7 @@ accesslog = "-"
 errorlog = "-"
 
 loglevel = "info"
+
 
 def on_starting(server):
     """服务器启动时的回调"""

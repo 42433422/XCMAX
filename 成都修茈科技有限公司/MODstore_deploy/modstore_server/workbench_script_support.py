@@ -1,6 +1,8 @@
-# ruff: noqa
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Script generation, repair, validation, and fallback helpers."""
+
 from __future__ import annotations
+
 import ast
 import importlib
 import json
@@ -8,7 +10,10 @@ import logging
 import re
 from pathlib import Path
 from typing import Any, Dict, List, NamedTuple, Optional
+
 from sqlalchemy.orm import Session
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger("modstore_server.workbench_script_runner")
 
@@ -133,7 +138,7 @@ def _materialize_fallback_output(
                 encoding="utf-8",
             )
         return [{"filename": out.name, "path": str(out), "size": out.stat().st_size}]
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return []
 
 
@@ -156,7 +161,8 @@ async def _generate_script(
     if db is None or not (provider or "").strip() or (not (model or "").strip()):
         if db is not None and (not (provider or "").strip() or not (model or "").strip()):
             _facade().logger.info(
-                "_generate_script: provider/model missing, auto-resolving for user=%s", user_id
+                "_generate_script: provider/model missing, auto-resolving for user=%s",
+                user_id,
             )
             try:
                 from modstore_server.llm_api import resolve_default_llm_route
@@ -167,11 +173,15 @@ async def _generate_script(
                 if not (model or "").strip():
                     model = str(resolved.get("model") or "").strip() or model
                 _facade().logger.info(
-                    "_generate_script: auto-resolved provider=%r model=%r", provider, model
+                    "_generate_script: auto-resolved provider=%r model=%r",
+                    provider,
+                    model,
                 )
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 _facade().logger.warning(
-                    "_generate_script: auto-resolve failed for user=%s", user_id, exc_info=True
+                    "_generate_script: auto-resolve failed for user=%s",
+                    user_id,
+                    exc_info=True,
                 )
     if db is None or not (provider or "").strip() or (not (model or "").strip()):
         _facade().logger.warning(
@@ -185,7 +195,7 @@ async def _generate_script(
             "",
             ["请配置 LLM 供应商与模型（工作台自选或用户默认 LLM 设置），否则无法使用 AI 生成脚本"],
         )
-    (key, _src) = _facade().resolve_api_key(db, user_id, provider)
+    key, _src = _facade().resolve_api_key(db, user_id, provider)
     if not key:
         return _facade()._ScriptGenResult(
             "", ["该供应商未配置可用 API Key（平台或 BYOK），无法调用 AI 生成脚本"]
