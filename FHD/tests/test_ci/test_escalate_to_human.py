@@ -1,3 +1,4 @@
+# mypy: disable-error-code="import-not-found"
 """escalate_to_human.py 单元测试。
 
 覆盖：

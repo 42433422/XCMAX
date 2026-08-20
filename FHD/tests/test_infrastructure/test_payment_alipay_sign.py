@@ -246,7 +246,7 @@ class TestPrecreateOrderShortCircuit:
         with patch.object(builtins, "__import__", side_effect=fake_import):
             out = alipay_mod.precreate_order(out_trade_no="O1", subject="测试", total_amount="0.01")
         assert out["success"] is False
-        assert "python-alipay-sdk" in out["message"]
+        assert out["message"] == "支付宝服务暂时不可用"
 
 
 # ---------------------------------------------------------------------------
@@ -276,7 +276,7 @@ class TestQueryOrderValidation:
         with patch.object(alipay_mod, "build_client", side_effect=RuntimeError("no sdk")):
             out = alipay_mod.query_order(out_trade_no="O1")
         assert out["success"] is False
-        assert "no sdk" in out["message"]
+        assert out["message"] == "支付宝服务暂时不可用"
 
     def test_remote_exception_caught(self) -> None:
         fake_client = MagicMock()
@@ -284,7 +284,7 @@ class TestQueryOrderValidation:
         with patch.object(alipay_mod, "build_client", return_value=fake_client):
             out = alipay_mod.query_order(out_trade_no="O1")
         assert out["success"] is False
-        assert "net fail" in out["message"]
+        assert out["message"] == "支付宝服务暂时不可用"
 
     def test_non_dict_response(self) -> None:
         fake_client = MagicMock()

@@ -1,7 +1,7 @@
 <template>
   <div class="pretext-test-view">
     <h1>Pretext.js 性能测试</h1>
-    
+
     <div class="test-section">
       <h2>单条消息测试</h2>
       <div class="test-input">
@@ -13,22 +13,24 @@
       <div v-if="singleTestResult" class="test-result">
         <h3>测试结果</h3>
         <table>
-          <tr>
-            <td>DOM 测量耗时</td>
-            <td>{{ singleTestResult.domTime.toFixed(3) }} ms</td>
-          </tr>
-          <tr>
-            <td>Pretext.js 耗时</td>
-            <td>{{ singleTestResult.pretextTime.toFixed(3) }} ms</td>
-          </tr>
-          <tr>
-            <td>加速比</td>
-            <td class="highlight">{{ singleTestResult.speedup.toFixed(1) }}x</td>
-          </tr>
+          <tbody>
+            <tr>
+              <td>DOM 测量耗时</td>
+              <td>{{ singleTestResult.domTime.toFixed(3) }} ms</td>
+            </tr>
+            <tr>
+              <td>Pretext.js 耗时</td>
+              <td>{{ singleTestResult.pretextTime.toFixed(3) }} ms</td>
+            </tr>
+            <tr>
+              <td>加速比</td>
+              <td class="highlight">{{ singleTestResult.speedup.toFixed(1) }}x</td>
+            </tr>
+          </tbody>
         </table>
       </div>
     </div>
-    
+
     <div class="test-section">
       <h2>批量消息测试</h2>
       <button @click="runBatchTest" :disabled="isTesting">
@@ -37,26 +39,28 @@
       <div v-if="batchTestResult" class="test-result">
         <h3>测试结果</h3>
         <table>
-          <tr>
-            <td>消息数量</td>
-            <td>10 条</td>
-          </tr>
-          <tr>
-            <td>DOM 测量耗时</td>
-            <td>{{ batchTestResult.domTime.toFixed(3) }} ms</td>
-          </tr>
-          <tr>
-            <td>Pretext.js 耗时</td>
-            <td>{{ batchTestResult.pretextTime.toFixed(3) }} ms</td>
-          </tr>
-          <tr>
-            <td>加速比</td>
-            <td class="highlight">{{ batchTestResult.speedup.toFixed(1) }}x</td>
-          </tr>
+          <tbody>
+            <tr>
+              <td>消息数量</td>
+              <td>10 条</td>
+            </tr>
+            <tr>
+              <td>DOM 测量耗时</td>
+              <td>{{ batchTestResult.domTime.toFixed(3) }} ms</td>
+            </tr>
+            <tr>
+              <td>Pretext.js 耗时</td>
+              <td>{{ batchTestResult.pretextTime.toFixed(3) }} ms</td>
+            </tr>
+            <tr>
+              <td>加速比</td>
+              <td class="highlight">{{ batchTestResult.speedup.toFixed(1) }}x</td>
+            </tr>
+          </tbody>
         </table>
       </div>
     </div>
-    
+
     <div class="test-section">
       <h2>完整测试套件</h2>
       <button @click="runFullTest" :disabled="isTesting">
@@ -87,12 +91,12 @@
         </p>
       </div>
     </div>
-    
+
     <div class="info-section">
       <h2>使用说明</h2>
       <p>在浏览器控制台也可以运行测试：</p>
       <code>
-        import { runFullTestSuite } from '@/utils/pretext-performance-test'<br>
+        import { runFullTestSuite } from '@/utils/pretext-performance-test'<br />
         runFullTestSuite()
       </code>
     </div>
@@ -100,43 +104,39 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
-import { 
-  runSingleMessageTest, 
-  runBatchMessageTest, 
-  runFullTestSuite 
-} from '@/utils/pretext-performance-test';
+import { ref, computed } from 'vue'
+import { runSingleMessageTest, runBatchMessageTest, runFullTestSuite } from '@/utils/pretext-performance-test'
 
 interface TestResult {
-  name: string;
-  domTime: number;
-  pretextTime: number;
-  speedup: number;
-  iterations: number;
+  name: string
+  domTime: number
+  pretextTime: number
+  speedup: number
+  iterations: number
 }
 
-const testMessage = ref('这是一条测试消息，用于测试 Pretext.js 的性能。在实际应用中，消息可能会更长，包含更多的内容。');
-const isTesting = ref(false);
-const singleTestResult = ref<TestResult | null>(null);
-const batchTestResult = ref<TestResult | null>(null);
-const fullTestResults = ref<TestResult[]>([]);
+const testMessage = ref('这是一条测试消息，用于测试 Pretext.js 的性能。在实际应用中，消息可能会更长，包含更多的内容。')
+const isTesting = ref(false)
+const singleTestResult = ref<TestResult | null>(null)
+const batchTestResult = ref<TestResult | null>(null)
+const fullTestResults = ref<TestResult[]>([])
 
 const averageSpeedup = computed(() => {
-  if (fullTestResults.value.length === 0) return 0;
-  return fullTestResults.value.reduce((sum, r) => sum + r.speedup, 0) / fullTestResults.value.length;
-});
+  if (fullTestResults.value.length === 0) return 0
+  return fullTestResults.value.reduce((sum, r) => sum + r.speedup, 0) / fullTestResults.value.length
+})
 
 async function runSingleTest() {
-  isTesting.value = true;
+  isTesting.value = true
   try {
-    singleTestResult.value = runSingleMessageTest(testMessage.value, 600, 100);
+    singleTestResult.value = runSingleMessageTest(testMessage.value, 600, 100)
   } finally {
-    isTesting.value = false;
+    isTesting.value = false
   }
 }
 
 async function runBatchTest() {
-  isTesting.value = true;
+  isTesting.value = true
   try {
     const messages = [
       '你好！',
@@ -149,19 +149,19 @@ async function runBatchTest() {
       '它支持多行文本、不同字体、对齐方式等。',
       '并且完全在 JavaScript 中完成，不依赖浏览器布局引擎。',
       '这使得它可以在 Web Worker 中使用。',
-    ];
-    batchTestResult.value = runBatchMessageTest(messages, 600);
+    ]
+    batchTestResult.value = runBatchMessageTest(messages, 600)
   } finally {
-    isTesting.value = false;
+    isTesting.value = false
   }
 }
 
 async function runFullTest() {
-  isTesting.value = true;
+  isTesting.value = true
   try {
-    fullTestResults.value = runFullTestSuite();
+    fullTestResults.value = runFullTestSuite()
   } finally {
-    isTesting.value = false;
+    isTesting.value = false
   }
 }
 </script>
@@ -246,7 +246,8 @@ table {
   border-collapse: collapse;
 }
 
-th, td {
+th,
+td {
   padding: 10px 12px;
   text-align: left;
   border-bottom: 1px solid #e0e0e0;

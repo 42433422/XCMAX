@@ -4,14 +4,12 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.application import agent_task_context
-from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
-
-OPERATIONAL_ERRORS = RECOVERABLE_ERRORS
+_PUBLIC_WORKFLOW_FAILURE = "工作流执行失败，详细信息已记录"
 
 
 def normalize_product_float_query(raw: str) -> str:
@@ -32,6 +30,9 @@ def normalize_product_float_query(raw: str) -> str:
 
 
 class AIChatWorkflowResponseMixin:
+    if TYPE_CHECKING:
+        _workflow_products_float_query: Any
+
     @staticmethod
     def _attach_task_tenant(runtime_context: dict[str, Any]) -> None:
         agent_task_context.attach_scoped_tenant(runtime_context)
@@ -88,7 +89,7 @@ class AIChatWorkflowResponseMixin:
                     )
                 )
             else:
-                lines.append(f"- {step.node_id}: {step.status}（{step.error or '未完成'}）")
+                lines.append(f"- {step.node_id}: {step.status}（{_PUBLIC_WORKFLOW_FAILURE}）")
 
         success = agent_run.status == "completed"
         cost_units_total = int((agent_run.metadata or {}).get("cost_units_total") or 0)
@@ -144,8 +145,16 @@ class AIChatWorkflowResponseMixin:
                             "success": step.status == "completed",
                             "tool_id": step.tool_id,
                             "action": step.action,
-                            "message": step.error or self._workflow_output_message(step.output),
-                            "output_preview": self._workflow_output_preview(step.output),
+                            "message": (
+                                self._workflow_output_message(step.output)
+                                if step.status == "completed"
+                                else _PUBLIC_WORKFLOW_FAILURE
+                            ),
+                            "output_preview": (
+                                self._workflow_output_preview(step.output)
+                                if step.status == "completed"
+                                else ""
+                            ),
                             "duration_ms": step.duration_ms,
                         }
                         for step in getattr(agent_run, "steps", []) or []
@@ -197,7 +206,6 @@ class AIChatWorkflowResponseMixin:
                 in {
                     "success",
                     "message",
-                    "error",
                     "employee_id",
                     "exists",
                     "created",
@@ -218,7 +226,6 @@ class AIChatWorkflowResponseMixin:
                     in {
                         "summary",
                         "result",
-                        "error",
                         "success",
                         "registered_tool_count",
                         "available_employee_ids",
@@ -242,7 +249,7 @@ class AIChatWorkflowResponseMixin:
     def _workflow_output_message(output: Any) -> str:
         if not isinstance(output, dict):
             return ""
-        return str(output.get("message") or output.get("error") or "").strip()
+        return str(output.get("message") or "").strip()
 
     def _format_workflow_tool_success_line(
         self,
@@ -257,6 +264,8 @@ class AIChatWorkflowResponseMixin:
         if item.tool_id == "employee":
             if item.action in ("list", "query"):
                 data = out.get("data") if isinstance(out.get("data"), dict) else {}
+                if not isinstance(data, dict):
+                    data = {}
                 count = data.get("registered_tool_count", 0)
                 line = f"- {item.node_id}: 成功（发现 {count} 个可调用员工）"
             else:
@@ -325,7 +334,7 @@ class AIChatWorkflowResponseMixin:
                 node_params = node_params_by_id.get(str(item.node_id), {})
                 lines.extend(self._format_workflow_tool_success_line(item, node_params))
             else:
-                lines.append(f"- {item.node_id}: 失败（{item.error}）")
+                lines.append(f"- {item.node_id}: 失败（{_PUBLIC_WORKFLOW_FAILURE}）")
                 retryable = getattr(item, "retryable", True)
                 retryable = retryable if isinstance(retryable, bool) else True
                 try:
@@ -341,8 +350,8 @@ class AIChatWorkflowResponseMixin:
                     raw_recovery_hint.strip() if isinstance(raw_recovery_hint, str) else ""
                 )
                 if recovery_hint:
-                    lines.append(f"    · 恢复建议: {recovery_hint}")
-        if run_result.message:
+                    lines.append("    · 恢复建议: 请检查依赖服务后重试")
+        if run_result.success and run_result.message:
             lines.append(f"说明: {run_result.message}")
         response_text = "\n".join(lines)
         payload: dict[str, Any] = {
@@ -363,11 +372,17 @@ class AIChatWorkflowResponseMixin:
                             "success": r.success,
                             "tool_id": r.tool_id,
                             "action": r.action,
-                            "message": r.error or self._workflow_output_message(r.output),
-                            "output_preview": self._workflow_output_preview(r.output),
+                            "message": (
+                                self._workflow_output_message(r.output)
+                                if r.success
+                                else _PUBLIC_WORKFLOW_FAILURE
+                            ),
+                            "output_preview": self._workflow_output_preview(r.output)
+                            if r.success
+                            else "",
                             "retries": getattr(r, "retries", 0),
                             "retryable": getattr(r, "retryable", True),
-                            "recovery_hint": getattr(r, "recovery_hint", ""),
+                            "recovery_hint": ("" if r.success else "请检查依赖服务后重试"),
                             "duration_ms": getattr(r, "duration_ms", 0),
                         }
                         for r in run_result.node_results
@@ -375,14 +390,16 @@ class AIChatWorkflowResponseMixin:
                     "workflow_status": getattr(run_result, "final_context", {}).get(
                         "workflow_status", {}
                     )
-                    if isinstance(getattr(run_result, "final_context", {}), dict)
+                    if run_result.success
+                    and isinstance(getattr(run_result, "final_context", {}), dict)
                     else {},
                     "workflow_trace": getattr(run_result, "final_context", {}).get(
                         "workflow_trace", []
                     )
-                    if isinstance(getattr(run_result, "final_context", {}), dict)
+                    if run_result.success
+                    and isinstance(getattr(run_result, "final_context", {}), dict)
                     else [],
-                    "state_updates": state_updates or [],
+                    "state_updates": (state_updates or []) if run_result.success else [],
                 },
             },
         }

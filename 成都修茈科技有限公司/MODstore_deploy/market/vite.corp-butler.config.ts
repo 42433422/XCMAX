@@ -13,11 +13,7 @@ function copyCorpStaticAssets() {
     closeBundle() {
       mkdirSync(corpOutDir, { recursive: true })
       // emptyOutDir 会清掉产物目录；官网悬浮球头像必须随包落盘（/corp-butler/*.png）
-      const files = [
-        'brand-xc-logo.jpg',
-        'ai-butler-female-avatar-v1.png',
-        'ai-butler-male-avatar-v1.jpg',
-      ]
+      const files = ['brand-xc-logo.jpg', 'ai-butler-female-avatar-v1.png', 'ai-butler-male-avatar-v1.jpg']
       for (const name of files) {
         const src = path.resolve(__dirname, 'public', name)
         if (!existsSync(src)) continue

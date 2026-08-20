@@ -49,11 +49,21 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable
 
-from .types import Action, ActionResult, AuditEntry, RuntimeTruthSnapshot, Signal, ActionType
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
+
+from .types import (
+    Action,
+    ActionResult,
+    ActionType,
+    AuditEntry,
+    RiskLevel,
+    RuntimeTruthSnapshot,
+    Signal,
+)
 
 # 健康检查 URL（与 docs/CI_SSOT.md 中 cvm-autonomy-watcher 健康检查一致）
 DEFAULT_HEALTH_URL = "https://xiu-ci.com/fhd-api/api/health"
@@ -160,7 +170,7 @@ class CvmAutonomyAdapter:
         github_token: str | None = None,
         github_repo: str | None = None,
         incident_dedup_window_h: int = DEFAULT_INCIDENT_DEDUP_WINDOW_H,
-    ) -> "CvmAutonomyAdapter":
+    ) -> CvmAutonomyAdapter:
         """测试用：创建一个不依赖真实 docker / df / curl 的 adapter 实例。
 
         测试通过设置 ``_subprocess_runner`` / ``_health_probe`` /
@@ -236,7 +246,7 @@ class CvmAutonomyAdapter:
         if self._health_probe is not None:
             try:
                 return bool(self._health_probe(self.health_url))
-            except Exception:
+            except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
                 return False
         # 真实路径：subprocess 调用 curl
         try:
@@ -255,7 +265,7 @@ class CvmAutonomyAdapter:
                 timeout=10,
             )
             return result.returncode == 0 and result.stdout.strip() == "200"
-        except Exception:
+        except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
             return False
 
     def _probe_compose_status(self) -> tuple[str, bool]:
@@ -268,7 +278,7 @@ class CvmAutonomyAdapter:
             try:
                 status, running = self._compose_status_probe(self.deploy_root)
                 return status, running
-            except Exception:
+            except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
                 return "unknown", False
         compose_file = self._resolve_compose_file()
         if compose_file is None:
@@ -298,7 +308,7 @@ class CvmAutonomyAdapter:
                 except json.JSONDecodeError:
                     continue
             return status, service_running
-        except Exception:
+        except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
             return "unknown", False
 
     def _resolve_compose_file(self) -> str | None:
@@ -330,7 +340,7 @@ class CvmAutonomyAdapter:
             if total <= 0:
                 return 0.0
             return round((used / total) * 100, 2)
-        except Exception:
+        except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
             return 0.0
 
     def _probe_last_backup_ts(self, rollback_tarball: str) -> int | None:
@@ -378,7 +388,7 @@ class CvmAutonomyAdapter:
             return ActionResult(
                 action=action, ok=False, detail=f"not-implemented:{action.type.value}", ts=ts
             )
-        except Exception as e:
+        except BOUNDARY_ERRORS as e:  # adapter boundary records arbitrary integration failures
             return ActionResult(
                 action=action,
                 ok=False,
@@ -631,7 +641,9 @@ class CvmAutonomyAdapter:
           - truth_snapshot: dict — truth 摘要（issue body 证据，可选）
         """
         # 1. token / repo 缺失 → 跳过（不阻断主流程）
-        if not self.github_token or not self.github_repo:
+        github_token = self.github_token
+        github_repo = self.github_repo
+        if not github_token or not github_repo:
             return ActionResult(
                 action=action,
                 ok=False,
@@ -676,8 +688,8 @@ class CvmAutonomyAdapter:
         # 4. 创建 issue
         body = self._build_incident_body(action, params)
         resp = self._github_post(
-            f"https://api.github.com/repos/{self.github_repo}/issues",
-            self.github_token,
+            f"https://api.github.com/repos/{github_repo}/issues",
+            github_token,
             {
                 "title": title,
                 "body": body,
@@ -713,7 +725,7 @@ class CvmAutonomyAdapter:
         """
         try:
             entries = list_audit_entries(self.audit_path)
-        except Exception:
+        except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
             return False, "audit read failed"
         # 倒序找最近的同 key action（跳过 skipped / escalate / open_incident_issue 自身）
         for entry in reversed(entries):
@@ -757,7 +769,7 @@ class CvmAutonomyAdapter:
         previous_action_key = str(params.get("previous_action_key") or "")
         evidence = params.get("evidence") or {}
         truth_snapshot = params.get("truth_snapshot") or {}
-        audit_ts = datetime.now(timezone.utc).isoformat()
+        audit_ts = datetime.now(UTC).isoformat()
 
         evidence_json = (
             json.dumps(evidence, ensure_ascii=False, indent=2) if evidence else "(无附加证据)"
@@ -806,9 +818,9 @@ class CvmAutonomyAdapter:
         Returns:
             命中 issue 的 dict（含 number / html_url），无命中返回 None。
         """
-        since_iso = (
-            datetime.now(timezone.utc) - timedelta(hours=self.incident_dedup_window_h)
-        ).strftime("%Y-%m-%dT%H:%M:%SZ")
+        since_iso = (datetime.now(UTC) - timedelta(hours=self.incident_dedup_window_h)).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
         # title 中含 [incident:{type}] 前缀
         title_prefix = f"[incident:{incident_type}]"
         # GitHub search query 语法：双引号包裹精确短语
@@ -822,21 +834,25 @@ class CvmAutonomyAdapter:
         search_url = (
             "https://api.github.com/search/issues?q=" + urllib.parse.quote(query) + "&per_page=5"
         )
-        resp = self._github_get(search_url, self.github_token)
+        token = self.github_token
+        if not token:
+            return None
+        resp = self._github_get(search_url, token)
         if resp.get("_error"):
             return None
-        items = resp.get("items") or []
-        if not items:
+        items = resp.get("items")
+        if not isinstance(items, list) or not items:
             return None
         # 取第一个匹配项（search 已按 created desc 排序，最近的在最前）
-        return items[0]
+        first = items[0]
+        return first if isinstance(first, dict) else None
 
     def _github_get(self, url: str, token: str) -> dict[str, Any]:
         """GitHub API GET（与 ai_issue_implement._gh_get 同模式）。"""
         if self._github_api_get is not None:
             try:
                 return self._github_api_get(url, token)
-            except Exception as e:
+            except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
                 return {"_error": "mock_threw", "_body": str(e)}
         req = urllib.request.Request(
             url,
@@ -845,10 +861,11 @@ class CvmAutonomyAdapter:
         )
         try:
             with urllib.request.urlopen(req, timeout=GITHUB_API_TIMEOUT) as resp:
-                return json.loads(resp.read().decode("utf-8"))
+                payload = json.loads(resp.read().decode("utf-8"))
+                return payload if isinstance(payload, dict) else {"_error": "invalid_json_shape"}
         except urllib.error.HTTPError as exc:
             return {"_error": exc.code, "_body": exc.read().decode("utf-8", errors="replace")}
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures
             return {"_error": "request_threw", "_body": str(exc)}
 
     def _github_post(self, url: str, token: str, body: dict[str, Any]) -> dict[str, Any]:
@@ -856,7 +873,7 @@ class CvmAutonomyAdapter:
         if self._github_api_post is not None:
             try:
                 return self._github_api_post(url, token, body)
-            except Exception as e:
+            except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
                 return {"_error": "mock_threw", "_body": str(e)}
         data = json.dumps(body).encode("utf-8")
         req = urllib.request.Request(
@@ -867,10 +884,11 @@ class CvmAutonomyAdapter:
         )
         try:
             with urllib.request.urlopen(req, timeout=GITHUB_API_TIMEOUT) as resp:
-                return json.loads(resp.read().decode("utf-8"))
+                payload = json.loads(resp.read().decode("utf-8"))
+                return payload if isinstance(payload, dict) else {"_error": "invalid_json_shape"}
         except urllib.error.HTTPError as exc:
             return {"_error": exc.code, "_body": exc.read().decode("utf-8", errors="replace")}
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures
             return {"_error": "request_threw", "_body": str(exc)}
 
     # ------------------------------------------------------------------ #
@@ -884,7 +902,7 @@ class CvmAutonomyAdapter:
             os.makedirs(self.audit_dir, exist_ok=True)
             with open(self.audit_path, "a", encoding="utf-8") as f:
                 f.write(json.dumps(payload, ensure_ascii=False, default=str) + "\n")
-        except Exception:
+        except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
             # 审计失败不影响主流程
             pass
 
@@ -901,7 +919,7 @@ class CvmAutonomyAdapter:
                 return None
             if isinstance(obj, bool | int | float | str):
                 return obj
-            if isinstance(obj, ActionType | RiskLevelType):
+            if isinstance(obj, ActionType | RiskLevel):
                 return obj.value
             if isinstance(obj, dict):
                 return {k: _convert(v) for k, v in obj.items()}
@@ -950,7 +968,6 @@ class CvmAutonomyAdapter:
 
 
 # 类型别名：避免与 ActionType 冲突（仅用于 _serialize_audit_entry 内部）
-RiskLevelType = type  # 占位；实际枚举见 types.RiskLevel
 
 
 def list_audit_entries(audit_path: str) -> list[dict[str, Any]]:
@@ -987,7 +1004,7 @@ def cleanup_old_logs(deploy_root: str, days: int = 7) -> bool:
             check=False,
         )
         return result.returncode == 0
-    except Exception:
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
         return False
 
 

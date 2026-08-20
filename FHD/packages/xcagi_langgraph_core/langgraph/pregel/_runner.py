@@ -37,6 +37,7 @@ from langgraph._internal._constants import (
     RESUME,
     RETURN,
 )
+from langgraph._internal._exception_policy import BOUNDARY_ERRORS
 from langgraph._internal._future import chain_future, run_coroutine_threadsafe
 from langgraph._internal._scratchpad import PregelScratchpad
 from langgraph._internal._typing import MISSING
@@ -219,7 +220,7 @@ class PregelRunner:
                     },
                 )
                 self.commit(t, None)
-            except Exception as exc:
+            except BOUNDARY_ERRORS as exc:
                 self.commit(t, exc)
                 if (
                     not isinstance(exc, GraphBubbleUp)
@@ -347,7 +348,7 @@ class PregelRunner:
                 handled_exception_ids=self._handled_exception_ids,
                 handled_futures=handled_futures,
             )
-        except Exception as exc:
+        except BOUNDARY_ERRORS as exc:
             if tb := exc.__traceback__:
                 while tb.tb_next is not None and any(
                     tb.tb_frame.f_code.co_filename.endswith(name)
@@ -411,7 +412,7 @@ class PregelRunner:
                     },
                 )
                 self.commit(t, None)
-            except Exception as exc:
+            except BOUNDARY_ERRORS as exc:
                 self.commit(t, exc)
                 if (
                     not isinstance(exc, GraphBubbleUp)
@@ -561,7 +562,7 @@ class PregelRunner:
                 handled_exception_ids=self._handled_exception_ids,
                 handled_futures=handled_futures,
             )
-        except Exception as exc:
+        except BOUNDARY_ERRORS as exc:
             if tb := exc.__traceback__:
                 while tb.tb_next is not None and any(
                     tb.tb_frame.f_code.co_filename.endswith(name)
@@ -937,5 +938,5 @@ async def _acall_impl(
             chain_future(fut, destination)
         else:
             destination.set_exception(RuntimeError("Task not scheduled"))
-    except Exception as exc:
+    except BOUNDARY_ERRORS as exc:
         destination.set_exception(exc)

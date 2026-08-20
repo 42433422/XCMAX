@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 import json
 import os
-import shutil
 import subprocess
-import sys
 import zipfile
 
 BASE = "/root/成都修茈科技有限公司/MODstore_deploy"
@@ -116,7 +114,7 @@ def main():
             manifest = json.load(f)
 
         zip_filename = f"{emp_id}-v{manifest.get('version', '1.0.0')}.xcemp"
-        sql = f"INSERT INTO catalog_items (pkg_id, name, version, artifact, description, industry, stored_filename, author_id) VALUES ('{emp_id}', '{manifest.get('name', emp_id).replace(chr(39), chr(39)+chr(39))}', '{manifest.get('version', '1.0.0')}', 'employee_pack', '{manifest.get('description', '').replace(chr(39), chr(39)+chr(39))}', '{manifest.get('industry', '通用')}', '{zip_filename}', 2) ON CONFLICT (pkg_id) DO UPDATE SET name=EXCLUDED.name, version=EXCLUDED.version, description=EXCLUDED.description, stored_filename=EXCLUDED.stored_filename;"
+        sql = f"INSERT INTO catalog_items (pkg_id, name, version, artifact, description, industry, stored_filename, author_id) VALUES ('{emp_id}', '{manifest.get('name', emp_id).replace(chr(39), chr(39) + chr(39))}', '{manifest.get('version', '1.0.0')}', 'employee_pack', '{manifest.get('description', '').replace(chr(39), chr(39) + chr(39))}', '{manifest.get('industry', '通用')}', '{zip_filename}', 2) ON CONFLICT (pkg_id) DO UPDATE SET name=EXCLUDED.name, version=EXCLUDED.version, description=EXCLUDED.description, stored_filename=EXCLUDED.stored_filename;"
         r = subprocess.run(
             [
                 "psql",

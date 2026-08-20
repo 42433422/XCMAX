@@ -159,6 +159,8 @@ def parse_employee_config_v2(manifest: dict[str, Any]) -> dict[str, Any]:
 def manifest_actions_handlers(manifest: dict[str, Any]) -> list[str]:
     cfg = parse_employee_config_v2(manifest)
     actions = cfg.get("actions") if isinstance(cfg.get("actions"), dict) else {}
+    if not isinstance(actions, dict):
+        actions = {}
     inner = actions.get("actions") if isinstance(actions.get("actions"), dict) else actions
     raw = (inner or {}).get("handlers") or actions.get("handlers") or []
     return [str(x).strip() for x in raw if str(x).strip()]

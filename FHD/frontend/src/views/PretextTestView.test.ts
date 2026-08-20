@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import { createRouter, createMemoryHistory } from 'vue-router'
 
 vi.mock('@/utils/pretext-performance-test', () => ({
   runSingleMessageTest: vi.fn().mockReturnValue({

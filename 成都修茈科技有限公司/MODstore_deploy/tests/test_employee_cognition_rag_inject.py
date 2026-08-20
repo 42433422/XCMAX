@@ -9,11 +9,13 @@ from pathlib import Path
 
 import pytest
 
+BOUNDARY_ERRORS = (Exception,)
+
 
 def _bootstrap(tmp_path: Path, monkeypatch):
     try:
         import chromadb  # noqa: F401
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         pytest.skip("chromadb 未安装；跳过员工 RAG 注入测试")
 
     monkeypatch.setenv("MODSTORE_VECTOR_BACKEND", "chroma")
@@ -66,7 +68,12 @@ def test_cognition_injects_rag_context_into_system_prompt(tmp_path, monkeypatch)
     async def fake_chat_dispatch(_session, _user_id, provider, model, messages, *, max_tokens=None):
         captured["provider"] = provider
         captured["messages"] = messages
-        return {"ok": True, "content": "answered using knowledge", "raw": {}, "usage": {}}
+        return {
+            "ok": True,
+            "content": "answered using knowledge",
+            "raw": {},
+            "usage": {},
+        }
 
     async def fake_embed(texts):
         return [[1.0, 0.0, 0.0] for _ in texts]
@@ -81,7 +88,8 @@ def test_cognition_injects_rag_context_into_system_prompt(tmp_path, monkeypatch)
         lambda session, uid, prov: ("dummy-key", "test"),
     )
     monkeypatch.setattr(
-        "modstore_server.llm_key_resolver.resolve_base_url", lambda session, uid, prov: None
+        "modstore_server.llm_key_resolver.resolve_base_url",
+        lambda session, uid, prov: None,
     )
 
     config = {
@@ -136,12 +144,16 @@ def test_cognition_disabled_when_knowledge_off(tmp_path, monkeypatch):
         lambda session, uid, prov: ("dummy", "test"),
     )
     monkeypatch.setattr(
-        "modstore_server.llm_key_resolver.resolve_base_url", lambda session, uid, prov: None
+        "modstore_server.llm_key_resolver.resolve_base_url",
+        lambda session, uid, prov: None,
     )
 
     out = asyncio.run(
         ee._cognition_real(
-            {"system_prompt": "p", "model": {"provider": "openai", "model_name": "gpt-test"}},
+            {
+                "system_prompt": "p",
+                "model": {"provider": "openai", "model_name": "gpt-test"},
+            },
             {"normalized_input": {}},
             {"session": {}, "long_term": None},
             session=None,

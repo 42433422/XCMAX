@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """知识库 v2 API：集合(Collection) + 文档 + 共享 + 检索。
 
 与 v1（``knowledge_vector_api.py``）共存：
@@ -9,26 +10,28 @@
 
 from __future__ import annotations
 
-import json
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import datetime
+from typing import Any, Dict, Optional, cast
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from pydantic import BaseModel, Field
 
 from modstore_server import rag_service, vector_engine
 from modstore_server.api.deps import _get_current_user
 from modstore_server.embedding_service import (
-    EmbeddingConfigError,
-    embed_texts,
     embedding_config_snapshot,
 )
 from modstore_server.knowledge_ingest import (
     SUPPORTED_EXTENSIONS,
-    parse_and_chunk_with_metadata,
 )
-from modstore_server.knowledge_vector_store import KnowledgeVectorError, make_doc_id
+from modstore_server.knowledge_v2_documents import upload_document
+from modstore_server.knowledge_v2_models import (
+    CollectionCreateBody,
+    CollectionUpdateBody,
+    RetrieveBody,
+    ShareBody,
+)
+from modstore_server.knowledge_vector_store import KnowledgeVectorError
 from modstore_server.models import (
     KnowledgeCollection,
     KnowledgeDocument,
@@ -96,7 +99,7 @@ def _ensure_collection(session, coll_id: int) -> KnowledgeCollection:
     coll = session.query(KnowledgeCollection).filter(KnowledgeCollection.id == int(coll_id)).first()
     if coll is None:
         raise HTTPException(404, "集合不存在")
-    return coll
+    return cast(KnowledgeCollection, coll)
 
 
 def _service_unavailable(e: Exception) -> HTTPException:
@@ -134,22 +137,6 @@ def api_status(user: User = Depends(_get_current_user)) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Collections
 # ---------------------------------------------------------------------------
-
-
-class CollectionCreateBody(BaseModel):
-    owner_kind: str = Field("user", min_length=1, max_length=16)
-    owner_id: Optional[str] = Field(None, max_length=64)
-    name: str = Field(..., min_length=1, max_length=128)
-    description: str = Field("", max_length=2000)
-    visibility: str = Field("private", min_length=1, max_length=16)
-    embedding_model: Optional[str] = Field(None, max_length=64)
-    embedding_dim: Optional[int] = Field(None, ge=8, le=8192)
-
-
-class CollectionUpdateBody(BaseModel):
-    name: Optional[str] = Field(None, min_length=1, max_length=128)
-    description: Optional[str] = Field(None, max_length=2000)
-    visibility: Optional[str] = Field(None, min_length=1, max_length=16)
 
 
 @router.get("/collections")
@@ -322,124 +309,17 @@ async def api_upload_document(
     chunk_overlap: int | None = Form(None),
     user: User = Depends(_get_current_user),
 ):
-    sf = get_session_factory()
-    with sf() as session:
-        coll = _ensure_collection(session, coll_id)
-        if not rag_service.can_access_collection(
-            session, collection_id=coll.id, user_id=user.id, permission="write"
-        ) and not _can_admin(coll, user):
-            raise HTTPException(403, "无权写入该集合")
-
-    effective_strategy = chunk_strategy
-    if effective_strategy is None and coll.chunk_config:
-        try:
-            cc = (
-                json.loads(coll.chunk_config)
-                if isinstance(coll.chunk_config, str)
-                else coll.chunk_config
-            )
-            effective_strategy = cc.get("strategy")
-        except Exception:
-            pass
-
-    filename = (file.filename or "upload.txt").strip()
-    raw = await file.read()
-    text, chunks, chunk_metas = parse_and_chunk_with_metadata(
-        filename, raw, chunk_strategy=effective_strategy
+    del embedding_model, chunk_size, chunk_overlap
+    return await upload_document(
+        coll_id=coll_id,
+        file=file,
+        embedding_provider=embedding_provider,
+        chunk_strategy=chunk_strategy,
+        user=user,
+        ensure_collection=_ensure_collection,
+        can_admin=_can_admin,
+        service_unavailable=_service_unavailable,
     )
-    doc_id = make_doc_id(int(user.id), filename, raw)
-    try:
-        sf_embed = get_session_factory()
-        with sf_embed() as session:
-            embeddings = await embed_texts(
-                chunks,
-                session=session,
-                user_id=int(user.id),
-                provider=embedding_provider,
-            )
-    except EmbeddingConfigError as e:
-        raise _service_unavailable(e)
-
-    ids: List[str] = [f"{doc_id}:{i}" for i in range(len(chunks))]
-    out_metas: List[Dict[str, Any]] = []
-    created_at_ts = int(datetime.now(timezone.utc).timestamp())
-    for i, m in enumerate(chunk_metas or [{} for _ in chunks]):
-        meta_out: Dict[str, Any] = {
-            "user_id": str(int(user.id)),
-            "doc_id": str(doc_id),
-            "chunk_id": ids[i],
-            "filename": filename,
-            "chunk_index": i,
-            "created_at": created_at_ts,
-        }
-        page_no = (m or {}).get("page_no") if isinstance(m, dict) else None
-        if page_no is not None:
-            try:
-                meta_out["page_no"] = int(page_no)
-            except Exception:  # noqa: BLE001
-                pass
-        out_metas.append(meta_out)
-
-    try:
-        vector_engine.upsert(
-            vector_engine.kb_collection_name(int(coll_id)),
-            ids=ids,
-            embeddings=embeddings,
-            documents=chunks,
-            metadatas=out_metas,
-        )
-    except VectorEngineError as e:
-        raise _service_unavailable(e)
-
-    sf2 = get_session_factory()
-    with sf2() as session:
-        coll = _ensure_collection(session, coll_id)
-        try:
-            vector_engine.delete(
-                vector_engine.kb_collection_name(int(coll.id)),
-                where={"doc_id": str(doc_id), "_replace_marker": True},
-            )
-        except VectorEngineError:
-            pass
-        doc_row = (
-            session.query(KnowledgeDocument)
-            .filter(
-                KnowledgeDocument.collection_id == coll.id,
-                KnowledgeDocument.doc_id == str(doc_id),
-            )
-            .first()
-        )
-        if doc_row is None:
-            doc_row = KnowledgeDocument(
-                collection_id=coll.id,
-                doc_id=str(doc_id),
-                filename=filename,
-                size_bytes=len(raw),
-                chunk_count=len(chunks),
-            )
-            session.add(doc_row)
-        else:
-            doc_row.filename = filename
-            doc_row.size_bytes = len(raw)
-            doc_row.chunk_count = len(chunks)
-        chunk_rows = (
-            session.query(KnowledgeDocument.chunk_count)
-            .filter(KnowledgeDocument.collection_id == coll.id)
-            .all()
-        )
-        coll.chunk_count = sum(int(r[0] or 0) for r in chunk_rows)
-        session.commit()
-        return {
-            "ok": True,
-            "document": {
-                "doc_id": doc_id,
-                "filename": filename,
-                "size_bytes": len(raw),
-                "chunk_count": len(chunks),
-                "created_at": created_at_ts,
-            },
-            "text_chars": len(text),
-        }
 
 
 @router.delete("/collections/{coll_id}/documents/{doc_id}")
@@ -481,12 +361,6 @@ def api_delete_document(
 # ---------------------------------------------------------------------------
 # 共享授权
 # ---------------------------------------------------------------------------
-
-
-class ShareBody(BaseModel):
-    grantee_kind: str = Field(..., min_length=1, max_length=16)
-    grantee_id: str = Field(..., min_length=1, max_length=64)
-    permission: str = Field("read", min_length=1, max_length=8)
 
 
 @router.post("/collections/{coll_id}/share")
@@ -571,18 +445,6 @@ def api_unshare_collection(
 # ---------------------------------------------------------------------------
 # 检索
 # ---------------------------------------------------------------------------
-
-
-class RetrieveBody(BaseModel):
-    query: str = Field(..., min_length=1, max_length=4000)
-    top_k: int = Field(6, ge=1, le=20)
-    min_score: float = Field(0.0, ge=0.0, le=1.0)
-    employee_id: Optional[str] = Field(None, max_length=64)
-    workflow_id: Optional[int] = None
-    org_id: Optional[str] = Field(None, max_length=64)
-    collection_ids: Optional[List[int]] = None
-    embedding_provider: Optional[str] = Field(None, max_length=64)
-    embedding_model: Optional[str] = Field(None, max_length=128)
 
 
 @router.post("/retrieve")

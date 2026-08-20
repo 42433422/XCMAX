@@ -33,8 +33,10 @@ class TestPlatformShellUploadAuth:
 
         app = FastAPI()
         app.include_router(router)
-        client = TestClient(app, raise_server_exceptions=False)
-        with patch("app.infrastructure.auth.dependencies.resolve_session_user", return_value=None):
+        with (
+            TestClient(app, raise_server_exceptions=False) as client,
+            patch("app.infrastructure.auth.dependencies.resolve_session_user", return_value=None),
+        ):
             resp = client.post(
                 "/api/platform-shell/office-sample-upload",
                 files={"file": ("sample.xlsx", BytesIO(b"x"), "application/octet-stream")},
@@ -46,8 +48,10 @@ class TestPlatformShellUploadAuth:
 
         app = FastAPI()
         app.include_router(router)
-        client = TestClient(app, raise_server_exceptions=False)
-        with patch("app.infrastructure.auth.dependencies.resolve_session_user", return_value=None):
+        with (
+            TestClient(app, raise_server_exceptions=False) as client,
+            patch("app.infrastructure.auth.dependencies.resolve_session_user", return_value=None),
+        ):
             resp = client.post(
                 "/api/platform-shell/chat-office-file-upload",
                 files={"file": ("chat.xlsx", BytesIO(b"x"), "application/octet-stream")},
@@ -59,9 +63,9 @@ class TestPlatformShellUploadAuth:
 
         app = FastAPI()
         app.include_router(router)
-        client = TestClient(app, raise_server_exceptions=False)
         user = MagicMock(id=1, is_active=True)
         with (
+            TestClient(app, raise_server_exceptions=False) as client,
             patch("app.infrastructure.auth.dependencies.resolve_session_user", return_value=user),
             patch(
                 "app.fastapi_routes.platform_shell_routes._save_workspace_upload",

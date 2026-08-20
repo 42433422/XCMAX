@@ -7,7 +7,7 @@ cannot leak into the audit trail by accident.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import DDL, Column, DateTime, Index, Integer, String, Text, event
 
@@ -41,7 +41,7 @@ class AutonomyDecisionAudit(Base):
     recorded_at = Column(
         DateTime,
         nullable=False,
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
     )
 
 

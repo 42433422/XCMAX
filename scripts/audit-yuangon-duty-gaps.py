@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """输出 yuangon 编制 vs YAML 对齐及工作流 Mod 清单（不扫描全仓）。"""
+
 from __future__ import annotations
 
 import importlib.util

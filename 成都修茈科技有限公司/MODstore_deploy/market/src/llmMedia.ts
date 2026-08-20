@@ -126,7 +126,10 @@ export function pickVideoModel(provider: string, block: CatalogProviderBlock | n
 
 export function resolveMediaProviderModel(
   kind: 'image' | 'video',
-  catalog: { providers?: CatalogProviderBlock[]; preferences?: { provider?: string; model?: string } } | null,
+  catalog: {
+    providers?: CatalogProviderBlock[]
+    preferences?: { provider?: string; model?: string }
+  } | null,
 ): { provider: string; model: string } {
   const providers = catalog?.providers || []
   const prefP = String(catalog?.preferences?.provider || '').trim()

@@ -1,9 +1,19 @@
 from __future__ import annotations
 
-import uuid
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import Any, Literal, cast
+
+from app.application.agent_orchestrator.run_events import RunEvent, run_event_from_dict
+from app.application.agent_orchestrator.run_model_support import (
+    coerce_float as _coerce_float,
+)
+from app.application.agent_orchestrator.run_model_support import (
+    coerce_int as _coerce_int,
+)
+from app.application.agent_orchestrator.run_model_support import (
+    new_id,
+    utc_now_iso,
+)
 
 RunStatus = Literal[
     "queued",
@@ -32,59 +42,6 @@ ToolCallStatus = Literal["running", "completed", "failed"]
 LLMCallStatus = Literal["completed", "failed"]
 RetrievalCallStatus = Literal["completed", "failed"]
 MemoryReferenceStatus = Literal["completed", "failed"]
-
-
-def utc_now_iso() -> str:
-    return datetime.now(UTC).isoformat()
-
-
-def new_id(prefix: str) -> str:
-    return f"{prefix}_{uuid.uuid4().hex}"
-
-
-def _coerce_int(value: Any) -> int:
-    try:
-        return int(value or 0)
-    except (TypeError, ValueError):
-        return 0
-
-
-def _coerce_float(value: Any) -> float:
-    try:
-        return float(value or 0)
-    except (TypeError, ValueError):
-        return 0.0
-
-
-@dataclass
-class RunEvent:
-    run_id: str
-    event_type: str
-    message: str = ""
-    data: dict[str, Any] = field(default_factory=dict)
-    event_id: str = field(default_factory=lambda: new_id("evt"))
-    created_at: str = field(default_factory=utc_now_iso)
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "event_id": self.event_id,
-            "run_id": self.run_id,
-            "event_type": self.event_type,
-            "message": self.message,
-            "data": self.data,
-            "created_at": self.created_at,
-        }
-
-
-def run_event_from_dict(data: dict[str, Any]) -> RunEvent:
-    return RunEvent(
-        run_id=str(data.get("run_id") or ""),
-        event_type=str(data.get("event_type") or ""),
-        message=str(data.get("message") or ""),
-        data=dict(data.get("data") or {}),
-        event_id=str(data.get("event_id") or "") or new_id("evt"),
-        created_at=str(data.get("created_at") or "") or utc_now_iso(),
-    )
 
 
 @dataclass
@@ -268,7 +225,7 @@ def llm_call_from_dict(data: dict[str, Any]) -> LLMCall:
         cost_units=_coerce_int(data.get("cost_units")),
         billing_status=str(data.get("billing_status") or ""),
         billing_source=str(data.get("billing_source") or ""),
-        status=status if status in {"completed", "failed"} else "completed",
+        status=cast("LLMCallStatus", status if status in {"completed", "failed"} else "completed"),
         error=str(data.get("error") or ""),
         call_id=str(data.get("call_id") or "") or new_id("llm"),
         created_at=str(data.get("created_at") or "") or utc_now_iso(),
@@ -321,7 +278,9 @@ def retrieval_call_from_dict(data: dict[str, Any]) -> RetrievalCall:
         citations=[item for item in citations if isinstance(item, dict)]
         if isinstance(citations, list)
         else [],
-        status=status if status in {"completed", "failed"} else "completed",
+        status=cast(
+            "RetrievalCallStatus", status if status in {"completed", "failed"} else "completed"
+        ),
         error=str(data.get("error") or ""),
         call_id=str(data.get("call_id") or "") or new_id("ret"),
         created_at=str(data.get("created_at") or "") or utc_now_iso(),
@@ -366,7 +325,9 @@ def memory_reference_from_dict(data: dict[str, Any]) -> MemoryReference:
         source=str(data.get("source") or ""),
         hits=[item for item in hits if isinstance(item, dict)] if isinstance(hits, list) else [],
         summary=str(data.get("summary") or ""),
-        status=status if status in {"completed", "failed"} else "completed",
+        status=cast(
+            "MemoryReferenceStatus", status if status in {"completed", "failed"} else "completed"
+        ),
         error=str(data.get("error") or ""),
         reference_id=str(data.get("reference_id") or "") or new_id("mem"),
         created_at=str(data.get("created_at") or "") or utc_now_iso(),

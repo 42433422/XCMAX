@@ -91,7 +91,10 @@ print(json.dumps({"user_id": user.id, "username": user.username, "token": token}
     )
     if proc.returncode != 0:
         raise RuntimeError(f"market setup failed\nSTDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}")
-    return json.loads(proc.stdout.strip().splitlines()[-1])
+    payload = json.loads(proc.stdout.strip().splitlines()[-1])
+    if not isinstance(payload, dict):
+        raise RuntimeError("market setup returned a non-object payload")
+    return payload
 
 
 def _start_market_server(env: dict[str, str], port: int) -> subprocess.Popen[str]:
@@ -143,14 +146,17 @@ def _wait_for_market(base_url: str, proc: subprocess.Popen[str]) -> None:
 
 
 def _terminate(proc: subprocess.Popen[str]) -> None:
-    if proc.poll() is not None:
-        return
-    proc.terminate()
     try:
-        proc.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        proc.wait(timeout=5)
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=5)
+    finally:
+        if proc.stdout is not None:
+            proc.stdout.close()
 
 
 def _event_types(run: Any) -> list[str]:

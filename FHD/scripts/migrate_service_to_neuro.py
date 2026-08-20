@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="return-value"
 """
 服务迁移工具 - 自动将传统服务迁移到 Neuro-DDD
 
@@ -190,7 +191,7 @@ class ServiceMigrator:
         name_lower = method_name.lower()
         for prefix in prefixes:
             if name_lower.startswith(prefix):
-                return f"{prefix}.{name_lower[len(prefix):].strip('_')}"
+                return f"{prefix}.{name_lower[len(prefix) :].strip('_')}"
 
         return f"action.{name_lower}"
 

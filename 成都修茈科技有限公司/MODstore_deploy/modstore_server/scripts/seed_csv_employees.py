@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="arg-type, assignment, index"
 """Seed CSV 全量读取 + CSV 生成员工包到 catalog，可选设为公开市场可见。"""
 
 from __future__ import annotations
@@ -9,6 +10,8 @@ import sys
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, List
+
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 MODSTORE_ROOT = Path(__file__).resolve().parents[2]
 if str(MODSTORE_ROOT) not in sys.path:
@@ -41,7 +44,6 @@ def _build_pack(
     from modstore_server.csv_tabular_runtime import (
         build_csv_generate_rule_spec,
         build_csv_read_rule_spec,
-        is_csv_generate,
         render_csv_generate_convert_module,
         render_csv_read_convert_module,
     )
@@ -114,15 +116,15 @@ def main() -> int:
 
     from modstore_server.catalog_store import append_package
     from modstore_server.catalog_sync import upsert_catalog_item_from_xc_package_dict
-    from modstore_server.employee_asset_pipeline import mirror_catalog_file_to_market_files
+    from modstore_server.employee_asset_pipeline import (
+        mirror_catalog_file_to_market_files,
+    )
     from modstore_server.mod_scaffold_runner import import_zip, modstore_library_path
     from modstore_server.models import CatalogItem, User, get_session_factory
 
     session_factory = get_session_factory()
     with session_factory() as db:
-        author = (
-            db.query(User).filter(User.is_admin == True).order_by(User.id.asc()).first()
-        )  # noqa: E712
+        author = db.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).first()
         author = author or db.query(User).order_by(User.id.asc()).first()
         if not author:
             print("No user in DB", file=sys.stderr)
@@ -136,7 +138,7 @@ def main() -> int:
         brief = spec["brief"]
         try:
             manifest, rule_spec, raw_zip, pack_dir = _build_pack(pack_id, brief, spec=spec)
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
             print(f"[ERR] {pack_id}: build failed: {exc}")
             continue
 
@@ -199,12 +201,12 @@ def main() -> int:
                     db.commit()
                     try:
                         mirror_catalog_file_to_market_files(row.stored_filename)
-                    except Exception:  # noqa: BLE001
+                    except BOUNDARY_ERRORS:  # noqa: BLE001
                         pass
             pub = " public" if args.set_public else ""
             print(f"[SEED] {pack_id}: v{rec['version']}{pub}")
             ok_count += 1
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
             print(f"[ERR] {pack_id}: catalog: {exc}")
         finally:
             if tmp_xcemp:

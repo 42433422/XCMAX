@@ -1,9 +1,4 @@
-import {
-  employeePackIconKind,
-  employeePackRole,
-  OFFICE_EMPLOYEE_PKG_IDS,
-  OFFICE_GROUP_LABELS,
-} from '@/constants/officeEmployeePack'
+import { employeePackIconKind, employeePackRole, OFFICE_EMPLOYEE_PKG_IDS, OFFICE_GROUP_LABELS } from '@/constants/officeEmployeePack'
 import { OFFICE_EMPLOYEE_PACK_BRIDGE_MOD_ID } from '@/constants/officeEmployeePackMod'
 import type { WorkflowEmployeeDeskRow } from '@/composables/useWorkflowEmployeeDesks'
 import type { EmployeePlannerStatus } from '@/constants/platformShell'

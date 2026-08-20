@@ -39,6 +39,7 @@ from app.neuro_bus.event_store import (
     validate_event_schema,
 )
 from app.neuro_bus.events.base import EventMetadata, EventPriority, NeuroEvent
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 
 def _make_event(
@@ -770,7 +771,7 @@ class TestConcurrency:
             try:
                 for _ in range(20):
                     store.append(_make_event(), stream_id="shared")
-            except Exception as exc:  # noqa: BLE001 - record for assertion
+            except BOUNDARY_ERRORS as exc:  # noqa: BLE001 - record for assertion
                 errors.append(exc)
 
         threads = [threading.Thread(target=worker) for _ in range(4)]

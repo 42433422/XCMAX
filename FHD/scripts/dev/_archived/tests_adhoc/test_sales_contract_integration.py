@@ -4,7 +4,6 @@
 """
 
 import requests
-import json
 
 BASE_URL = "http://127.0.0.1:8000"
 
@@ -41,12 +40,12 @@ def test_sales_contract_generate():
             data = result.get("data", {})
             products = data.get("products", [])
 
-            print(f"\n合同信息:")
+            print("\n合同信息:")
             print(f"  客户：{data.get('customer_name')}")
             print(f"  文件：{data.get('filename')}")
             print(f"  路径：{data.get('file_path')}")
 
-            print(f"\n产品列表:")
+            print("\n产品列表:")
             total = 0
             for p in products:
                 qty = float(p.get("quantity", 0))
@@ -70,7 +69,7 @@ def test_sales_contract_generate():
             print(f"\n总计金额：{total:.2f}元")
 
             # 验证金额计算
-            print(f"\n验证金额计算:")
+            print("\n验证金额计算:")
             for p in products:
                 qty = float(p.get("quantity", 0))
                 spec = p.get("specification", "")
@@ -113,7 +112,7 @@ def test_ai_chat():
         result = response.json()
         text = result.get("text", "")
 
-        print(f"\nAI 响应:")
+        print("\nAI 响应:")
         print(text[:500] if len(text) > 500 else text)
 
         # 检查是否包含 HTML 表格

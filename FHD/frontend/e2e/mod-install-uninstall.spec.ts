@@ -64,7 +64,7 @@ test.describe('Mod install / uninstall @mod_io', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: 'E2E-MOD-001' }),
       })
-      const json = await r.json().catch(() => ({} as any))
+      const json = await r.json().catch(() => ({}) as any)
       return { status: r.status, body: json }
     })
     expect(installResult.status, `install status`).toBe(200)
@@ -74,7 +74,7 @@ test.describe('Mod install / uninstall @mod_io', () => {
     // installed badge check via fetch (UI selector would couple to internal CSS)
     const afterInstall = await page.evaluate(async () => {
       const r = await fetch('/api/mods/E2E-MOD-001')
-      const json = await r.json().catch(() => ({} as any))
+      const json = await r.json().catch(() => ({}) as any)
       return { status: r.status, body: json }
     })
     expect(afterInstall.body?.data?.installed, `after install body: ${JSON.stringify(afterInstall.body)}`).toBe(true)
@@ -85,7 +85,7 @@ test.describe('Mod install / uninstall @mod_io', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: 'E2E-MOD-001' }),
       })
-      const json = await r.json().catch(() => ({} as any))
+      const json = await r.json().catch(() => ({}) as any)
       return { status: r.status, body: json }
     })
     expect(uninstallResult.status, `uninstall status`).toBe(200)
@@ -94,7 +94,7 @@ test.describe('Mod install / uninstall @mod_io', () => {
 
     const afterUninstall = await page.evaluate(async () => {
       const r = await fetch('/api/mods/E2E-MOD-001')
-      const json = await r.json().catch(() => ({} as any))
+      const json = await r.json().catch(() => ({}) as any)
       return { status: r.status, body: json }
     })
     expect(afterUninstall.body?.data?.installed, `after uninstall body: ${JSON.stringify(afterUninstall.body)}`).toBe(false)

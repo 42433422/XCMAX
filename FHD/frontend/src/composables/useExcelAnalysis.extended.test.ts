@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { ref } from 'vue'
 import { useExcelAnalysis } from './useExcelAnalysis'
 
 const addMessage = vi.fn()
@@ -56,8 +55,12 @@ describe('useExcelAnalysis - extended', () => {
     let liveFiles: File[] = [file]
     let inputValue = '/fake/test.png'
     const input = {
-      get files() { return liveFiles },
-      get value() { return inputValue },
+      get files() {
+        return liveFiles
+      },
+      get value() {
+        return inputValue
+      },
       set value(next: string) {
         inputValue = next
         if (!next) liveFiles = []
@@ -92,11 +95,19 @@ describe('useExcelAnalysis - extended', () => {
       text: async () =>
         JSON.stringify({
           success: true,
-          fields: [{ name: '姓名', label: '姓名' }, { name: '年龄', label: '年龄' }],
+          fields: [
+            { name: '姓名', label: '姓名' },
+            { name: '年龄', label: '年龄' },
+          ],
           preview_data: {
             sheet_name: 'Sheet1',
             sample_rows: [{ 姓名: '张三', 年龄: 28 }],
-            grid_preview: { rows: [['姓名', '年龄'], ['张三', 28]] },
+            grid_preview: {
+              rows: [
+                ['姓名', '年龄'],
+                ['张三', 28],
+              ],
+            },
             grid_style_cache: { styles: {}, cell_style_refs: {} },
             tables: [],
           },
@@ -117,9 +128,7 @@ describe('useExcelAnalysis - extended', () => {
     await api.onExcelAnalyzeFileChange({ target: input } as unknown as Event)
 
     expect(onAnalyzeStart).toHaveBeenCalledWith({ fileName: 'test.xlsx' })
-    expect(onAnalyzed).toHaveBeenCalledWith(
-      expect.objectContaining({ fileName: 'test.xlsx' }),
-    )
+    expect(onAnalyzed).toHaveBeenCalledWith(expect.objectContaining({ fileName: 'test.xlsx' }))
     expect(onAnalyzeDone).toHaveBeenCalledWith({ fileName: 'test.xlsx', success: true })
     expect(api.excelAnalyzeUploading.value).toBe(false)
   })
@@ -140,9 +149,7 @@ describe('useExcelAnalysis - extended', () => {
     const input = { files: [file], value: '' } as unknown as HTMLInputElement
     await api.onExcelAnalyzeFileChange({ target: input } as unknown as Event)
 
-    expect(onAnalyzeDone).toHaveBeenCalledWith(
-      expect.objectContaining({ success: false }),
-    )
+    expect(onAnalyzeDone).toHaveBeenCalledWith(expect.objectContaining({ success: false }))
     expect(api.excelAnalyzeUploading.value).toBe(false)
   })
 
@@ -158,17 +165,13 @@ describe('useExcelAnalysis - extended', () => {
     const input = { files: [file], value: '' } as unknown as HTMLInputElement
     await api.onExcelAnalyzeFileChange({ target: input } as unknown as Event)
 
-    expect(onAnalyzeDone).toHaveBeenCalledWith(
-      expect.objectContaining({ success: false }),
-    )
+    expect(onAnalyzeDone).toHaveBeenCalledWith(expect.objectContaining({ success: false }))
   })
 
   it('onExcelAnalyzeFileChange handles abort/timeout', async () => {
     const onAnalyzeDone = vi.fn()
 
-    vi.mocked(global.fetch).mockRejectedValue(
-      Object.assign(new Error('Aborted'), { name: 'AbortError' }),
-    )
+    vi.mocked(global.fetch).mockRejectedValue(Object.assign(new Error('Aborted'), { name: 'AbortError' }))
 
     const api = useExcelAnalysis(makeMessages(), { onAnalyzeDone })
     const file = new File(['data'], 'test.xlsx', {
@@ -177,9 +180,7 @@ describe('useExcelAnalysis - extended', () => {
     const input = { files: [file], value: '' } as unknown as HTMLInputElement
     await api.onExcelAnalyzeFileChange({ target: input } as unknown as Event)
 
-    expect(onAnalyzeDone).toHaveBeenCalledWith(
-      expect.objectContaining({ success: false }),
-    )
+    expect(onAnalyzeDone).toHaveBeenCalledWith(expect.objectContaining({ success: false }))
   })
 
   it('onExcelAnalyzeFileChange calls onAnalyzeProgress during processing', async () => {
@@ -191,7 +192,12 @@ describe('useExcelAnalysis - extended', () => {
         JSON.stringify({
           success: true,
           fields: [],
-          preview_data: { sheet_name: 'Sheet1', grid_preview: { rows: [] }, grid_style_cache: { styles: {}, cell_style_refs: {} }, tables: [] },
+          preview_data: {
+            sheet_name: 'Sheet1',
+            grid_preview: { rows: [] },
+            grid_style_cache: { styles: {}, cell_style_refs: {} },
+            tables: [],
+          },
         }),
     } as unknown as Response)
 
@@ -202,15 +208,23 @@ describe('useExcelAnalysis - extended', () => {
     const input = { files: [file], value: '' } as unknown as HTMLInputElement
     await api.onExcelAnalyzeFileChange({ target: input } as unknown as Event)
 
-    expect(onAnalyzeProgress).toHaveBeenCalledWith(
-      expect.objectContaining({ fileName: 'test.xlsx', step: expect.any(String) }),
-    )
+    expect(onAnalyzeProgress).toHaveBeenCalledWith(expect.objectContaining({ fileName: 'test.xlsx', step: expect.any(String) }))
   })
 
   it('summarizeExcelAnalysisResult handles empty result via file upload', async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce({
       ok: true,
-      text: async () => JSON.stringify({ success: true, fields: [], preview_data: { sheet_name: 'Sheet1', grid_preview: { rows: [] }, grid_style_cache: { styles: {}, cell_style_refs: {} }, tables: [] } }),
+      text: async () =>
+        JSON.stringify({
+          success: true,
+          fields: [],
+          preview_data: {
+            sheet_name: 'Sheet1',
+            grid_preview: { rows: [] },
+            grid_style_cache: { styles: {}, cell_style_refs: {} },
+            tables: [],
+          },
+        }),
     } as unknown as Response)
 
     const api = useExcelAnalysis(makeMessages())
@@ -235,9 +249,17 @@ describe('useExcelAnalysis - extended', () => {
             {
               sheet_index: 1,
               sheet_name: '销售数据',
-              fields: [{ name: '产品', label: '产品' }, { name: '金额', label: '金额' }],
+              fields: [
+                { name: '产品', label: '产品' },
+                { name: '金额', label: '金额' },
+              ],
               sample_rows: [{ 产品: 'A', 金额: 100 }],
-              grid_preview: { rows: [['产品', '金额'], ['A', 100]] },
+              grid_preview: {
+                rows: [
+                  ['产品', '金额'],
+                  ['A', 100],
+                ],
+              },
               style_cache: { styles: {}, cell_style_refs: { '0_0': 1 } },
               tables: [{ table_index: 1, fields: [{ name: '产品' }], sample_rows: [] }],
             },
@@ -268,7 +290,17 @@ describe('useExcelAnalysis - extended', () => {
   it('onExcelAnalyzeFileChange processes xlsm file', async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce({
       ok: true,
-      text: async () => JSON.stringify({ success: true, fields: [], preview_data: { sheet_name: 'Sheet1', grid_preview: { rows: [] }, grid_style_cache: { styles: {}, cell_style_refs: {} }, tables: [] } }),
+      text: async () =>
+        JSON.stringify({
+          success: true,
+          fields: [],
+          preview_data: {
+            sheet_name: 'Sheet1',
+            grid_preview: { rows: [] },
+            grid_style_cache: { styles: {}, cell_style_refs: {} },
+            tables: [],
+          },
+        }),
     } as unknown as Response)
 
     const api = useExcelAnalysis(makeMessages())

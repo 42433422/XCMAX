@@ -98,11 +98,21 @@ def test_admin_duty_graph_capability_and_run(tmp_path, monkeypatch):
             self.calls: list[str] = []
 
         def execute_task(
-            self, *, employee_id, task, input_data=None, user_id=None, bench_llm_override=None
+            self,
+            *,
+            employee_id,
+            task,
+            input_data=None,
+            user_id=None,
+            bench_llm_override=None,
         ):
             _ = task, input_data, user_id, bench_llm_override
             self.calls.append(employee_id)
-            return {"duration_ms": 12.3, "llm_tokens": 8, "result": {"employee_id": employee_id}}
+            return {
+                "duration_ms": 12.3,
+                "llm_tokens": 8,
+                "result": {"employee_id": employee_id},
+            }
 
     fake_runtime = _FakeRuntime()
     monkeypatch.setattr(duty_api, "get_default_employee_client", lambda: fake_runtime)

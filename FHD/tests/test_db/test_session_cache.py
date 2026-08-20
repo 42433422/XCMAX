@@ -7,6 +7,7 @@ import time
 import pytest
 
 from app.db.session_cache import ThreadSafeLRUCache
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 
 @pytest.fixture
@@ -117,14 +118,14 @@ def test_concurrent_set_get() -> None:
         try:
             for i in range(start, start + 50):
                 c.set(str(i), i * 2)
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
             errors.append(exc)
 
     def reader() -> None:
         try:
             for i in range(100):
                 c.get(str(i))
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
             errors.append(exc)
 
     threads = [threading.Thread(target=writer, args=(i * 50,)) for i in range(4)]

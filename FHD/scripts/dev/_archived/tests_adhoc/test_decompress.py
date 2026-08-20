@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# mypy: disable-error-code="import-not-found"
 import sys
 
 sys.path.insert(0, r"E:\FHD\XCAGI\resources\wechat-decrypt")

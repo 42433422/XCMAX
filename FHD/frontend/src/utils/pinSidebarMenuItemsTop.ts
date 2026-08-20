@@ -6,9 +6,7 @@ export const SIDEBAR_PINNED_TOP_KEYS = ['chat'] as const
 
 export function pinSidebarMenuItemsTop<T extends { key: string }>(items: T[]): T[] {
   if (!items.length) return items
-  const pinKeys = isAdminConsoleSpa()
-    ? [...ADMIN_SIDEBAR_PINNED_TOP_KEYS]
-    : [...SIDEBAR_PINNED_TOP_KEYS]
+  const pinKeys = isAdminConsoleSpa() ? [...ADMIN_SIDEBAR_PINNED_TOP_KEYS] : [...SIDEBAR_PINNED_TOP_KEYS]
   const pinSet = new Set<string>(pinKeys)
   const pinned: T[] = []
   for (const key of pinKeys) {

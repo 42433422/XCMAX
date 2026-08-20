@@ -75,7 +75,12 @@ class TestButlerActions:
         client = TestClient(app)
         resp = client.post(
             "/api/agent/butler/actions",
-            json={"action": "navigate", "route": "/plans", "risk": "low", "status": "success"},
+            json={
+                "action": "navigate",
+                "route": "/plans",
+                "risk": "low",
+                "status": "success",
+            },
         )
         assert resp.status_code == 200
         assert resp.json().get("ok") is True
@@ -85,7 +90,12 @@ class TestButlerActions:
         client = TestClient(app)
         client.post(
             "/api/agent/butler/actions",
-            json={"action": "click", "route": "/wallet", "risk": "medium", "status": "success"},
+            json={
+                "action": "click",
+                "route": "/wallet",
+                "risk": "medium",
+                "status": "success",
+            },
         )
         # ButlerAction 应被添加
         mock_db.add.assert_called()
@@ -171,7 +181,12 @@ class TestAllHandsReportSession:
         fake_report = {
             "ok": True,
             "employees": [
-                {"employee_id": "p1", "name": "A", "status": "ok", "report_markdown": "汇报摘要"},
+                {
+                    "employee_id": "p1",
+                    "name": "A",
+                    "status": "ok",
+                    "report_markdown": "汇报摘要",
+                },
             ],
             "summary": {
                 "total": 1,
@@ -372,7 +387,11 @@ class TestButlerSystemPrompt:
 
         with patch(
             "modstore_server.release_train.snapshot_public",
-            return_value={"current": "1.0.0.0", "product_version": "1.0.0.0", "day_index": 1},
+            return_value={
+                "current": "1.0.0.0",
+                "product_version": "1.0.0.0",
+                "day_index": 1,
+            },
         ):
             brief = _execute_admin_readonly_tool(
                 "get_ops_update_brief", {"limit": 2}, user=admin, db=db

@@ -28,8 +28,9 @@ deployment behind ``base_url`` always have a path.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 from ..llm import LLMClient
 from .anthropic import AnthropicLLM

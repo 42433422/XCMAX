@@ -120,7 +120,7 @@
             :key="node.id"
             class="workflow-node"
             :class="{ 'workflow-node--focus': Number(node.id) === focusedNodeId }"
-            :data-node-id="String(node.id)"
+            :id="`workflow-node-${node.id}`"
                :style="{ left: node.position_x + 'px', top: node.position_y + 'px' }"
                @mousedown="startDrag($event, node)"
           >
@@ -432,10 +432,10 @@
           <div class="form-group">
             <label class="label">集合 ID 列表（逗号分隔；留空表示按身份自动可见）</label>
             <input
-              :value="(selectedNodeForTemplate.config.collection_ids || []).join(',')"
+              :value="formatCollectionIds(selectedNodeForTemplate.config.collection_ids)"
               class="input"
               placeholder="例如：12,18"
-              @input="(e: any) => selectedNodeForTemplate.config.collection_ids = String(e?.target?.value || '').split(',').map((x: string) => Number(x.trim())).filter((n: number) => !isNaN(n) && n > 0)"
+              @input="onCollectionIdsInput"
             />
           </div>
           <div class="form-group">
@@ -468,6 +468,7 @@ import { filterOutPlannedDutyEmployees } from '../utils/workbenchEmployeeFilter'
 import { computeGraphSummary, buildMermaidFlowchart } from '../workflowMermaid'
 import { WORKFLOW_SANDBOX_PRESETS } from '../workflowSandboxPresets'
 import { errMessage } from '../utils/errMessage'
+import type { WorkflowSandboxResponse } from '../types/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -492,7 +493,7 @@ interface WorkflowNodeRow {
   workflow_id?: number
   name?: string
   node_type?: string
-  config?: Record<string, any>
+  config?: Record<string, unknown>
   position_x: number
   position_y: number
 }
@@ -520,17 +521,7 @@ interface TriggerRow {
   trigger_type?: string
   trigger_key?: string
   is_active?: boolean
-  config?: Record<string, any>
-}
-
-interface WorkflowSandboxReport {
-  ok?: boolean
-  validate_only?: boolean
-  issues?: unknown[]
-  errors?: unknown[]
-  warnings?: unknown[]
-  steps?: Array<Record<string, any>>
-  output?: Record<string, unknown>
+  config?: Record<string, unknown>
 }
 
 interface RealPrecheck {
@@ -573,7 +564,7 @@ const sandboxWorkflowId = ref(0)
 const sandboxInputJson = ref('{\n  "topic": "示例主题"\n}')
 const sandboxLoading = ref(false)
 const sandboxAutoCreateBusy = ref(false)
-const sandboxReport = ref<WorkflowSandboxReport | null>(null)
+const sandboxReport = ref<WorkflowSandboxResponse | null>(null)
 const sandboxError = ref('')
 const lastRunMeta = ref<{ mode: string; startedAt: string; precheck: RealPrecheck | null }>({ mode: '', startedAt: '', precheck: null })
 /** 沙盒页展示用的服务端图快照（与画布未保存修改可能不一致） */
@@ -606,10 +597,10 @@ const selectedNodeForTemplate = computed(() => {
   const n = selectedNode.value
   if (n) {
     if (!n.config) n.config = {}
-    return n as WorkflowNodeRow & { config: Record<string, any> }
+    return n as WorkflowNodeRow & { config: Record<string, unknown> }
   }
   return { id: 0, name: '', node_type: '', config: {}, position_x: 0, position_y: 0 } as WorkflowNodeRow & {
-    config: Record<string, any>
+    config: Record<string, unknown>
   }
 })
 
@@ -633,7 +624,29 @@ const INTENT_FROM_HOME: Record<string, string> = {
 // 画布引用
 const canvas = ref<HTMLElement | null>(null)
 const connections = ref<HTMLElement | null>(null)
-const workflowDetailCache = new Map<number, any>()
+interface WorkflowDetailResponse {
+  nodes?: WorkflowNodeRow[]
+}
+
+const workflowDetailCache = new Map<number, WorkflowDetailResponse>()
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {}
+}
+
+function onCollectionIdsInput(event: Event) {
+  const target = event.target as HTMLInputElement | null
+  selectedNodeForTemplate.value.config.collection_ids = String(target?.value || '')
+    .split(',')
+    .map((value) => Number(value.trim()))
+    .filter((value) => Number.isFinite(value) && value > 0)
+}
+
+function formatCollectionIds(value: unknown): string {
+  return Array.isArray(value) ? value.map(String).join(',') : ''
+}
 
 const realRunDisabledReason = computed(() => {
   if (sandboxLoading.value) return '当前正在运行，请等待完成后再发起真实测试。'
@@ -837,18 +850,18 @@ function pickEmployeeNameById(empId: unknown): string {
   return typeof name === 'string' ? name.trim() : ''
 }
 
-function workflowEmployeesFromModRow(modRow: any): any[] {
-  const arr = modRow?.workflow_employees
+function workflowEmployeesFromModRow(modRow: unknown): unknown[] {
+  const arr = asRecord(modRow).workflow_employees
   return Array.isArray(arr) ? arr : []
 }
 
-function employeeMatchesManifestEntry(entry: any, employeeId: unknown, employeeName: string): boolean {
-  if (!entry || typeof entry !== 'object') return false
-  const eid = String(entry.id || '').trim()
+function employeeMatchesManifestEntry(entry: unknown, employeeId: unknown, employeeName: string): boolean {
+  const record = asRecord(entry)
+  const eid = String(record.id || '').trim()
   if (eid && employeeIdMatches(eid, employeeId)) return true
   if (!employeeName) return false
-  const label = String(entry.label || '').trim()
-  const title = String(entry.panel_title || '').trim()
+  const label = String(record.label || '').trim()
+  const title = String(record.panel_title || '').trim()
   return (
     label === employeeName ||
     title === employeeName ||
@@ -857,9 +870,10 @@ function employeeMatchesManifestEntry(entry: any, employeeId: unknown, employeeN
   )
 }
 
-async function getWorkflowDetailCached(workflowId: number): Promise<any> {
-  if (workflowDetailCache.has(workflowId)) return workflowDetailCache.get(workflowId)
-  const detail = await api.getWorkflow(workflowId)
+async function getWorkflowDetailCached(workflowId: number): Promise<WorkflowDetailResponse> {
+  const cached = workflowDetailCache.get(workflowId)
+  if (cached) return cached
+  const detail = (await api.getWorkflow(workflowId)) as WorkflowDetailResponse
   workflowDetailCache.set(workflowId, detail)
   return detail
 }
@@ -885,10 +899,9 @@ async function rebuildSandboxWorkflowCandidatesFallback(employeeId: string) {
       continue
     }
     const wsNodes = Array.isArray(detail?.nodes) ? detail.nodes : []
-    const hit = wsNodes.some((n: any) => {
-      if (!n || typeof n !== 'object') return false
+    const hit = wsNodes.some((n) => {
       if (n.node_type !== 'employee') return false
-      const cfg = n.config && typeof n.config === 'object' ? n.config : {}
+      const cfg = asRecord(n.config)
       return employeeIdMatches(String(cfg.employee_id || '').trim(), employeeId)
     })
     if (hit) {
@@ -904,7 +917,8 @@ async function rebuildSandboxWorkflowCandidatesFallback(employeeId: string) {
     for (const mod of mods) {
       for (const entry of workflowEmployeesFromModRow(mod)) {
         if (!employeeMatchesManifestEntry(entry, employeeId, employeeName)) continue
-        const wid = parsePositiveInt(entry.workflow_id ?? entry.workflowId)
+        const entryRecord = asRecord(entry)
+        const wid = parsePositiveInt(entryRecord.workflow_id ?? entryRecord.workflowId)
         if (!wid || nodeHitIds.has(wid) || manifestHitIds.has(wid)) continue
         const wf = (workflows.value || []).find((x) => x.id === wid)
         if (wf) {
@@ -942,11 +956,14 @@ async function rebuildSandboxWorkflowCandidates() {
       const res = await api.listWorkflowsByEmployee(employeeId)
       const allRows = Array.isArray(res?.workflows) ? res.workflows : []
       rows = allRows
-        .map((x: any) => ({
-          id: parsePositiveInt(x?.id),
-          name: String(x?.name || '').trim() || `工作流 ${x?.id}`,
-          source: String(x?.source || ''),
-        }))
+        .map((value: unknown) => {
+          const row = asRecord(value)
+          return {
+            id: parsePositiveInt(row.id),
+            name: String(row.name || '').trim() || `工作流 ${row.id}`,
+            source: String(row.source || ''),
+          }
+        })
         .filter((x: { id: number }) => x.id > 0)
       nodeHits = parsePositiveInt(res?.node_hits)
       manifestHits = parsePositiveInt(res?.manifest_hits)
@@ -1441,13 +1458,14 @@ async function runSandbox(mode: 'validate' | 'mock' | 'real') {
     const input = parseSandboxInput()
     const validateOnly = mode === 'validate'
     const mockEmployees = mode !== 'real'
-    sandboxReport.value = await api.workflowSandboxRun(sandboxWorkflowId.value, {
+    const report = await api.workflowSandboxRun(sandboxWorkflowId.value, {
       input_data: input,
       mock_employees: mockEmployees,
       validate_only: validateOnly,
     })
+    sandboxReport.value = report
     if (validateOnly) {
-      flash(sandboxReport.value.ok ? '校验通过' : '校验未通过', sandboxReport.value.ok)
+      flash(report.ok ? '校验通过' : '校验未通过', report.ok)
     } else if (mode === 'real') {
       flash('真实测试完成', true)
     } else {
@@ -1547,7 +1565,7 @@ async function autoLocateLikelyEmployeeNode(preferredNodeIds: number[] = []) {
   }
   await nextTick()
   focusedNodeId.value = targetNodeId
-  const el = document.querySelector(`.workflow-node[data-node-id="${targetNodeId}"]`)
+  const el = document.getElementById(`workflow-node-${targetNodeId}`)
   if (el && typeof el.scrollIntoView === 'function') {
     try {
       el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' })
@@ -1568,7 +1586,7 @@ async function createWorkflow() {
   }
 
   try {
-    const res = await api.createWorkflow(newWorkflow.value.name, newWorkflow.value.description)
+    const _res = await api.createWorkflow(newWorkflow.value.name, newWorkflow.value.description)
     flash('工作流创建成功')
     showCreateModal.value = false
     newWorkflow.value = { name: '', description: '' }
@@ -1834,13 +1852,11 @@ function getEdgePath(edge: WorkflowEdgeRow) {
   return `M ${sourceNode.position_x + 100} ${sourceNode.position_y + 25} L ${targetNode.position_x} ${targetNode.position_y + 25}`
 }
 
-// 选择边
+// 监听鼠标移动
 function selectEdge(edgeId: number) {
-  // 这里可以添加边的编辑逻辑
-  console.log('Selected edge:', edgeId)
+  void edgeId
 }
 
-// 监听鼠标移动
 function onMouseMove(event: MouseEvent) {
   if (!canvas.value) return
   if (dragging.value && dragNode.value) {

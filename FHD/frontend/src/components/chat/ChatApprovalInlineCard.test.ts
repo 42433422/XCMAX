@@ -48,9 +48,7 @@ describe('ChatApprovalInlineCard', () => {
     expect(wrapper.text()).toContain('req-crud-1')
     expect(wrapper.text()).toContain('前往审批')
     expect(wrapper.text()).not.toContain('取消')
-    expect(wrapper.find('.approval-btn--primary').attributes('href')).toBe(
-      persistedCard.approval_path,
-    )
+    expect(wrapper.find('.approval-btn--primary').attributes('href')).toBe(persistedCard.approval_path)
     await wrapper.find('.approval-btn--primary').trigger('click')
     expect(push).toHaveBeenCalledWith(persistedCard.approval_path)
     expect(wrapper.emitted('confirm')).toBeUndefined()

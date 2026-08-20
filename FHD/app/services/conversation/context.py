@@ -1,7 +1,7 @@
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from app.infrastructure.llm.token_estimator import estimate_messages_tokens
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -44,6 +44,12 @@ class ConversationContext:
 
 
 class ContextMixin:
+    if TYPE_CHECKING:
+        _sanitize_kitten_business_snapshot: Any
+        _sanitize_kitten_dataset: Any
+        _sanitize_web_search_results: Any
+        contexts: Any
+
     def get_context(self, user_id: str) -> ConversationContext | None:
         return cast("ConversationContext | None", self.contexts.get(user_id))
 

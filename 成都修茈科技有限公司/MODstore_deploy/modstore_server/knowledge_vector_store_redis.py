@@ -10,10 +10,13 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import os
 import time
 from array import array
 from typing import Any, Dict, Iterable, List, Optional
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 INDEX_NAME = "idx:modstore:kb:chunks"
 CHUNK_PREFIX = "modstore:kb:chunk:"
@@ -96,16 +99,27 @@ def ensure_index() -> None:
     try:
         r.ft(INDEX_NAME).info()
         return
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
 
     try:
-        from redis.commands.search.field import NumericField, TagField, TextField, VectorField
+        from redis.commands.search.field import (
+            NumericField,
+            TagField,
+            TextField,
+            VectorField,
+        )
 
         try:
-            from redis.commands.search.indexDefinition import IndexDefinition, IndexType
+            index_definition_module = importlib.import_module(
+                "redis.commands.search.indexDefinition"
+            )
         except ImportError:
-            from redis.commands.search.index_definition import IndexDefinition, IndexType
+            index_definition_module = importlib.import_module(
+                "redis.commands.search.index_definition"
+            )
+        SearchIndexDefinition = index_definition_module.IndexDefinition
+        SearchIndexType = index_definition_module.IndexType
     except ImportError as e:
         raise KnowledgeVectorError("redis-py Search 模块不可用") from e
 
@@ -129,10 +143,10 @@ def ensure_index() -> None:
             },
         ),
     ]
-    definition = IndexDefinition(prefix=[CHUNK_PREFIX], index_type=IndexType.HASH)
+    definition = SearchIndexDefinition(prefix=[CHUNK_PREFIX], index_type=SearchIndexType.HASH)
     try:
         r.ft(INDEX_NAME).create_index(schema, definition=definition)
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         msg = str(e).lower()
         if "unknown command" in msg or "no such index" in msg:
             raise KnowledgeVectorError(
@@ -162,7 +176,7 @@ def status() -> Dict[str, Any]:
         info = r.ft(INDEX_NAME).info()
         out["ready"] = True
         out["chunks"] = int(info.get(b"num_docs") or info.get("num_docs") or 0)
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         out["error"] = str(e)
     return out
 

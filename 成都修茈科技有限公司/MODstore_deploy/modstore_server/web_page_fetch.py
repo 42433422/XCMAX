@@ -10,6 +10,8 @@ from html import unescape
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 
 def _truncate(s: str, max_len: int) -> str:
     s = (s or "").strip()
@@ -117,7 +119,7 @@ async def fetch_page_text(
     try:
         r = await client.get(u, headers=headers, timeout=deadline, follow_redirects=True)
         r.raise_for_status()
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         return "", str(e)[:200]
 
     ctype = (r.headers.get("content-type") or "").lower()

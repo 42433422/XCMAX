@@ -1,5 +1,6 @@
 import requests
-import json
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 def test_all_apis():
@@ -20,7 +21,7 @@ def test_all_apis():
             data = response.json()
             customers = data.get("data", [])
 
-            print(f"✅ 客户 API 工作正常")
+            print("✅ 客户 API 工作正常")
             print(f"📊 客户数量：{len(customers)} 个")
             print("📋 客户列表:")
             for customer in customers:
@@ -28,7 +29,7 @@ def test_all_apis():
         else:
             print(f"❌ 客户 API 失败，状态码：{response.status_code}")
 
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 客户 API 异常：{e}")
 
     # 测试 2: 原材料列表 API
@@ -41,7 +42,7 @@ def test_all_apis():
             data = response.json()
             materials = data.get("data", [])
 
-            print(f"✅ 原材料 API 工作正常")
+            print("✅ 原材料 API 工作正常")
             print(f"📊 原材料数量：{len(materials)} 个")
 
             if materials:
@@ -54,7 +55,7 @@ def test_all_apis():
             print(f"❌ 原材料 API 失败，状态码：{response.status_code}")
             print(f"📄 响应内容：{response.text}")
 
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 原材料 API 异常：{e}")
 
     # 测试 3: 产品列表 API
@@ -67,7 +68,7 @@ def test_all_apis():
             data = response.json()
             products = data.get("data", [])
 
-            print(f"✅ 产品 API 工作正常")
+            print("✅ 产品 API 工作正常")
             print(f"📊 产品数量：{len(products)} 个")
 
             if products:
@@ -78,7 +79,7 @@ def test_all_apis():
             print(f"❌ 产品 API 失败，状态码：{response.status_code}")
             print(f"📄 响应内容：{response.text}")
 
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 产品 API 异常：{e}")
 
     print("\n🎯 测试总结:")

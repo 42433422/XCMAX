@@ -10,13 +10,7 @@
       </div>
 
       <div class="chat-sidebar__search">
-        <input
-          v-model="searchKw"
-          type="search"
-          class="chat-sidebar__search-input"
-          placeholder="搜索对话…"
-          aria-label="搜索对话"
-        />
+        <input v-model="searchKw" type="search" class="chat-sidebar__search-input" placeholder="搜索对话…" aria-label="搜索对话" />
       </div>
 
       <div class="chat-sidebar__list" role="list">
@@ -48,28 +42,22 @@
               :aria-label="c.pinned ? '取消置顶' : '置顶'"
               :title="c.pinned ? '取消置顶' : '置顶'"
               @click.stop="$emit('pin', c.id)"
-            >📌</button>
-            <button
-              type="button"
-              class="chat-sidebar__op"
-              aria-label="重命名"
-              title="重命名"
-              @click.stop="renameItem(c)"
-            >✎</button>
-            <button
-              type="button"
-              class="chat-sidebar__op"
-              aria-label="导出"
-              title="导出 Markdown"
-              @click.stop="$emit('export', c.id)"
-            >⬇</button>
+            >
+              📌
+            </button>
+            <button type="button" class="chat-sidebar__op" aria-label="重命名" title="重命名" @click.stop="renameItem(c)">✎</button>
+            <button type="button" class="chat-sidebar__op" aria-label="导出" title="导出 Markdown" @click.stop="$emit('export', c.id)">
+              ⬇
+            </button>
             <button
               type="button"
               class="chat-sidebar__op chat-sidebar__op--danger"
               aria-label="删除"
               title="删除"
               @click.stop="$emit('remove', c.id)"
-            >×</button>
+            >
+              ×
+            </button>
           </div>
         </button>
         <p v-if="!filtered.length" class="chat-sidebar__empty">
@@ -79,21 +67,10 @@
 
       <footer class="chat-sidebar__foot">
         <span class="chat-sidebar__foot-meta">本地保存 · {{ list.length }}/{{ maxConvs }}</span>
-        <button
-          type="button"
-          class="chat-sidebar__foot-clear"
-          :disabled="!list.length"
-          @click="$emit('clear-all')"
-        >清空全部</button>
+        <button type="button" class="chat-sidebar__foot-clear" :disabled="!list.length" @click="$emit('clear-all')">清空全部</button>
       </footer>
     </div>
-    <button
-      v-if="!open"
-      type="button"
-      class="chat-sidebar__handle"
-      aria-label="展开会话列表"
-      @click="$emit('toggle')"
-    >›</button>
+    <button v-if="!open" type="button" class="chat-sidebar__handle" aria-label="展开会话列表" @click="$emit('toggle')">›</button>
   </aside>
 </template>
 
@@ -168,7 +145,9 @@ function renameItem(c: Conversation) {
   border-right: 1px solid rgba(255, 255, 255, 0.07);
   backdrop-filter: blur(8px);
   overflow: hidden;
-  transition: transform 220ms ease, opacity 200ms ease;
+  transition:
+    transform 220ms ease,
+    opacity 200ms ease;
   transform: translateX(-100%);
   opacity: 0;
   z-index: 4;
@@ -267,7 +246,9 @@ function renameItem(c: Conversation) {
   color: rgba(226, 232, 240, 0.86);
   border: 1px solid transparent;
   cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease;
 }
 
 .chat-sidebar__item:hover {

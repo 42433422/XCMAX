@@ -8,12 +8,7 @@ vi.mock('@/constants/genericModPack', () => ({
   readBuildEdition: mockReadBuildEdition,
 }))
 
-import {
-  buildTimeEdition,
-  isMinimalBuild,
-  isGenericBuild,
-  MINIMAL_BUILD_MOD_IDS,
-} from './buildEdition'
+import { buildTimeEdition, isMinimalBuild, isGenericBuild, MINIMAL_BUILD_MOD_IDS } from './buildEdition'
 
 describe('buildEdition constants and functions', () => {
   describe('MINIMAL_BUILD_MOD_IDS', () => {

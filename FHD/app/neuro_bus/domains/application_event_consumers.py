@@ -23,7 +23,9 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
+
+from sqlalchemy import Table
 
 from app.neuro_bus.events.base import NeuroEvent
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -48,7 +50,7 @@ def _persist_event_log(event: NeuroEvent, *, side_effect: str = "") -> int | Non
         with SessionLocal() as db:
             bind = db.get_bind()
             if bind is not None and id(bind) not in _ensured_binds:
-                NeuroEventLog.__table__.create(bind=bind, checkfirst=True)
+                cast("Table", NeuroEventLog.__table__).create(bind=bind, checkfirst=True)
                 _ensured_binds.add(id(bind))
 
             row = NeuroEventLog(

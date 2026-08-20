@@ -22,6 +22,7 @@ from typing import Any, Literal, TypedDict, cast
 from langchain_core.language_models.chat_model_stream import ChatModelStream
 from langchain_protocol import Event, SubscribeParams
 
+from langgraph_sdk._exception_policy import BOUNDARY_ERRORS
 from langgraph_sdk._sync.http import SyncHttpClient
 from langgraph_sdk.schema import QueryParamTypes
 from langgraph_sdk.stream.decoders import (
@@ -592,7 +593,7 @@ class _SyncToolCallsProjection:
                 try:
                     terminal = run_done.result()
                     terminal_err = terminal.error
-                except Exception:
+                except BOUNDARY_ERRORS:
                     pass
             err: BaseException = (
                 terminal_err
@@ -897,7 +898,7 @@ class _SyncHandleSubgraphsProjection:
                             and result.status == "errored"
                         ):
                             terminal_status = "failed"
-                    except Exception:
+                    except BOUNDARY_ERRORS:
                         pass
                 for child in active.values():
                     if child.status == "started":
@@ -1000,7 +1001,7 @@ class _SyncSubgraphsProjection:
                     result = run_done.result(timeout=0)
                     if isinstance(result, _RunTerminal) and result.status == "errored":
                         terminal_status = "failed"
-                except Exception:
+                except BOUNDARY_ERRORS:
                     pass
             for handle in decoder._active.values():
                 if handle.status == "started":
@@ -1425,7 +1426,7 @@ class SyncThreadStream:
         if run_done is not None and run_done.done():
             try:
                 resolved = run_done.result(timeout=0)
-            except Exception:
+            except BOUNDARY_ERRORS:
                 resolved = None
         if isinstance(tool_calls, ToolCallsDecoder):
             err: BaseException = (
@@ -1532,7 +1533,7 @@ class SyncThreadStream:
                 reconnect_attempts += 1
                 if reconnect_attempts > self._lifecycle_max_reconnect_attempts:
                     raise err
-            except Exception as exc:
+            except BOUNDARY_ERRORS as exc:
                 reconnect_attempts += 1
                 if reconnect_attempts <= self._lifecycle_max_reconnect_attempts:
                     continue

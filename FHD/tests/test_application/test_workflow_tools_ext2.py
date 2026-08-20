@@ -110,7 +110,8 @@ class TestHandleExcelAnalysisDeep:
         ):
             result = handle_excel_analysis({"file_path": xlsx_path, "action": "read"})
         assert result["success"] is False
-        assert "read failed" in result["error"]
+        assert result["error"] == "read_excel_failed"
+        assert "bad excel" not in result["error"]
 
     def test_unsupported_action(self, tmp_path):
         import pandas as pd

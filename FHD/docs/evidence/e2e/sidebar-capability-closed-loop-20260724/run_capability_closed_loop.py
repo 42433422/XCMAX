@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """侧栏各页能力闭环探测（从智能对话起，读写闭环，非仅点导航）。"""
+
 from __future__ import annotations
 
 import json
@@ -8,6 +9,8 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 BASE = os.environ.get("XCAGI_API_BASE", "http://127.0.0.1:17500")
 SESSION = os.environ.get("XCAGI_SESSION_ID", "58f95427-7d27-4fe5-89de-5b2f39d98a44")
@@ -58,7 +61,7 @@ def req(path: str, method: str = "GET", body: dict | None = None) -> dict:
         except json.JSONDecodeError:
             payload = raw[:400]
         return {"ok": False, "status": exc.code, "data": payload}
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         return {"ok": False, "status": 0, "error": str(exc)}
 
 
@@ -105,7 +108,7 @@ def call(label: str, method: str, path: str, body: dict | None = None) -> dict:
 
 def page_result(name: str, checks: list[dict], loops: list[dict] | None = None) -> dict:
     ok_checks = [c for c in checks if c["ok"]]
-    ok_loops = [x for x in (loops or []) if x.get("ok")]
+    [x for x in (loops or []) if x.get("ok")]
     page_ok = len(ok_checks) > 0 and all(x.get("ok") for x in (loops or []) or [{"ok": True}])
     # soft: page ok if majority checks ok and all loops ok
     if loops:
@@ -232,7 +235,11 @@ def main() -> None:
     group_id = None
     gd = ag_create.get("data")
     if isinstance(gd, dict):
-        group = gd.get("group") or (gd.get("data") or {}).get("group") if isinstance(gd.get("data"), dict) else None
+        group = (
+            gd.get("group") or (gd.get("data") or {}).get("group")
+            if isinstance(gd.get("data"), dict)
+            else None
+        )
         if isinstance(group, dict):
             group_id = group.get("id")
         if group_id is None:
@@ -281,7 +288,11 @@ def main() -> None:
     kb_checks = [
         call("health", "GET", "/api/knowledge/v1/health"),
         call("datasets", "GET", "/api/knowledge/v1/datasets"),
-        call("persy状态", "GET", "/api/knowledge/v1/datasets/persy-knowledge/status?include_documents=false"),
+        call(
+            "persy状态",
+            "GET",
+            "/api/knowledge/v1/datasets/persy-knowledge/status?include_documents=false",
+        ),
         call("短路径", "GET", "/api/knowledge"),
         call("persy短路径", "GET", "/api/persy/knowledge"),
     ]
@@ -305,7 +316,7 @@ def main() -> None:
         {"query": f"闭环知识片段 {STAMP}", "top_k": 3},
     )
     kb_checks.append(query)
-    kb_loop_ok = ingest["ok"] and (query["ok"] or True)  # query may empty if rag off
+    ingest["ok"] and (query["ok"] or True)  # query may empty if rag off
     pages.append(
         page_result(
             "知识库",
@@ -344,7 +355,13 @@ def main() -> None:
         page_result(
             "业务对象",
             [before_p, add_p, after_p, call("宿主list", "GET", "/api/products/list")],
-            [{"name": "产品创建读回", "ok": bool(add_p["ok"] and found_p), "detail": f"found={found_p}"}],
+            [
+                {
+                    "name": "产品创建读回",
+                    "ok": bool(add_p["ok"] and found_p),
+                    "detail": f"found={found_p}",
+                }
+            ],
         )
     )
 
@@ -421,7 +438,13 @@ def main() -> None:
         page_result(
             "资源库",
             [before_m, create_m, after_m],
-            [{"name": "物料创建", "ok": bool(create_m["ok"]), "detail": f"found={found_m} status={create_m['status']}"}],
+            [
+                {
+                    "name": "物料创建",
+                    "ok": bool(create_m["ok"]),
+                    "detail": f"found={found_m} status={create_m['status']}",
+                }
+            ],
         )
     )
 
@@ -501,7 +524,11 @@ def main() -> None:
     }
     # fill username simply
     if isinstance(me.get("data"), dict):
-        user = (me["data"].get("data") or {}).get("user") if isinstance(me["data"].get("data"), dict) else me["data"].get("user")
+        user = (
+            (me["data"].get("data") or {}).get("user")
+            if isinstance(me["data"].get("data"), dict)
+            else me["data"].get("user")
+        )
         if isinstance(user, dict):
             summary["user"] = user.get("username")
 

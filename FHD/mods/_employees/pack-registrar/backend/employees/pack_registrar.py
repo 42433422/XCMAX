@@ -18,7 +18,9 @@ def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     pack_id = str(candidate.get("id") or "").strip()[:160]
     version = str(candidate.get("version") or "").strip()[:80]
     digest = str(checks.get("sha256") or "").strip().lower()
-    runtime_issues = checks.get("runtime_issues") if isinstance(checks.get("runtime_issues"), list) else []
+    runtime_issues = (
+        checks.get("runtime_issues") if isinstance(checks.get("runtime_issues"), list) else []
+    )
     quality_score = checks.get("quality_score")
     if not pack_id:
         issues.append({"code": "missing_id", "path": "candidate.id"})
@@ -40,11 +42,24 @@ def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         "version": version,
         "issues": issues,
         "ready_for_registration": not issues,
-        "evidence": ["input.candidate", "input.checks.runtime_issues", "input.checks.sha256", "input.checks.quality_score"],
+        "evidence": [
+            "input.candidate",
+            "input.checks.runtime_issues",
+            "input.checks.sha256",
+            "input.checks.quality_score",
+        ],
         "read_only": True,
         "side_effects": [],
     }
 
 
 def _failed(message: str, code: str) -> dict[str, Any]:
-    return {"ok": False, "status": "failed", "summary": message, "error_code": code, "evidence": [], "read_only": True, "side_effects": []}
+    return {
+        "ok": False,
+        "status": "failed",
+        "summary": message,
+        "error_code": code,
+        "evidence": [],
+        "read_only": True,
+        "side_effects": [],
+    }

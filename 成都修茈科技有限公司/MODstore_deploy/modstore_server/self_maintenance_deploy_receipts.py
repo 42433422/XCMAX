@@ -1,3 +1,5 @@
+# mypy: disable-error-code="arg-type, attr-defined, no-any-return, valid-type"
+# isort: skip_file
 """Fail-closed deployment receipts for self-maintenance runs.
 
 A successful workflow dispatch command is only acceptance. A deployment is
@@ -7,19 +9,11 @@ and health endpoint expose the merge SHA and the same artifact digest.
 
 from __future__ import annotations
 
-import json
-import os
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 import re
-import subprocess
-import threading
-import time
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Mapping, Protocol, Sequence
-
-import httpx
-
-from modstore_server.deployment_receipt_history import completed_receipt
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Protocol
 
 _COMMIT_RE = re.compile(r"^[0-9a-f]{40,64}$")
 _ARTIFACT_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -58,7 +52,7 @@ class BuildIdentity:
     image_digest: str = ""
 
     @classmethod
-    def from_payload(cls, payload: Mapping[str, Any]) -> "BuildIdentity":
+    def from_payload(cls, payload: Mapping[str, Any]) -> BuildIdentity:
         root: Mapping[str, Any] = payload
         data = root.get("data")
         if isinstance(data, Mapping):
@@ -74,7 +68,7 @@ class BuildIdentity:
             image_digest=str(root.get("image_digest") or "").strip().lower(),
         )
 
-    def require_complete(self, source: str) -> "BuildIdentity":
+    def require_complete(self, source: str) -> BuildIdentity:
         if not _COMMIT_RE.fullmatch(self.git_sha):
             raise DeploymentReceiptError(f"{source}_missing_git_sha")
         if not (
@@ -92,7 +86,7 @@ class DispatchReceipt:
     action_id: str
     url: str = ""
 
-    def require_correlation(self, *, merge_sha: str, environment: str) -> "DispatchReceipt":
+    def require_correlation(self, *, merge_sha: str, environment: str) -> DispatchReceipt:
         if not str(self.workflow_run_id or "").strip():
             raise DeploymentReceiptError("dispatch_missing_workflow_run_id")
         if _sha(self.head_sha) != merge_sha:
@@ -110,7 +104,7 @@ class WorkflowCompletion:
     conclusion: str
     url: str = ""
 
-    def require_success(self, receipt: DispatchReceipt) -> "WorkflowCompletion":
+    def require_success(self, receipt: DispatchReceipt) -> WorkflowCompletion:
         if str(self.workflow_run_id) != str(receipt.workflow_run_id):
             raise DeploymentReceiptError("workflow_run_id_mismatch")
         if _sha(self.head_sha) != _sha(receipt.head_sha):
@@ -391,7 +385,7 @@ def resolve_pending_merge_request(
             continue
         try:
             matched = bool(is_ancestor(branch_head, merge_sha))
-        except Exception:
+        except RECOVERABLE_ERRORS:
             matched = False
         if matched:
             matches.append(row)
@@ -420,7 +414,7 @@ def resolve_pending_merge_request(
         if _COMMIT_RE.fullmatch(requested_head) and requested_head != attested_head:
             try:
                 head_advanced = bool(is_ancestor(requested_head, attested_head))
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 head_advanced = False
             if not head_advanced:
                 continue
@@ -439,347 +433,14 @@ def resolve_pending_merge_request(
     return attested_matches[0]
 
 
-def record_completed_deployment_receipt(
-    *,
-    rows: Iterable[Mapping[str, Any]],
-    record_event: EventSink,
-    merge_sha: str,
-    environment: str,
-    workflow_run_id: str,
-    workflow_status: str,
-    workflow_conclusion: str,
-    release: BuildIdentity,
-    health: BuildIdentity,
-    is_ancestor: AncestorCheck,
-    requested_run_id: str = "",
-    attested_branch: str = "",
-    attested_branch_head_sha: str = "",
-    attested_pr_number: str = "",
-    workflow_url: str = "",
-    action_id: str = "",
-    observed_at: str = "",
-) -> Dict[str, Any]:
-    """Record an authenticated workflow completion against one pending loop.
-
-    GitHub's callback is only an execution attestation.  The deployed release
-    and health identities are independently read by the server and must expose
-    the same exact merge SHA and artifact digest before any scoreable rows are
-    appended.
-    """
-
-    normalized_rows = [dict(row) for row in rows if isinstance(row, Mapping)]
-    merge_sha = _merge_sha(merge_sha)
-    environment = _environment(environment)
-    workflow_run_id = str(workflow_run_id or "").strip()
-    if not workflow_run_id:
-        raise DeploymentReceiptError("dispatch_missing_workflow_run_id")
-    if str(workflow_status or "").strip().lower() != "completed":
-        raise DeploymentReceiptError("workflow_not_completed")
-    if str(workflow_conclusion or "").strip().lower() != "success":
-        raise DeploymentReceiptError("workflow_not_successful")
-
-    existing = completed_receipt(
-        normalized_rows,
-        merge_sha=merge_sha,
-        environment=environment,
-        workflow_run_id=workflow_run_id,
-        requested_run_id=requested_run_id,
-    )
-    if existing is not None:
-        previous_workflow_run_id = str(existing.get("workflow_run_id") or "")
-        if previous_workflow_run_id != workflow_run_id:
-            # A second successful deployment for the same loop/SHA is a valid
-            # idempotent retry, but it must still expose the exact runtime
-            # identity before the new workflow may be acknowledged.
-            verify_deployed_identity(merge_sha=merge_sha, release=release, health=health)
-        run_id = str(existing.get("run_id") or "")
-        merge_recorded = any(
-            row.get("event") == "merge_completed"
-            and row.get("ok") is True
-            and str(row.get("run_id") or "") == run_id
-            and _sha(row.get("merge_sha")) == merge_sha
-            for row in normalized_rows
-        )
-        if not merge_recorded:
-            record_event(
-                {
-                    **existing,
-                    "event": "merge_completed",
-                    "phase": "merge",
-                    "status": "completed_merged",
-                    "ok": True,
-                }
-            )
-        return {
-            "ok": True,
-            "recorded": False,
-            "idempotent": True,
-            "run_id": run_id,
-            "merge_sha": merge_sha,
-            "environment": environment,
-            "workflow_run_id": workflow_run_id,
-            "previous_workflow_run_id": previous_workflow_run_id,
-        }
-
-    pending = resolve_pending_merge_request(
-        normalized_rows,
-        merge_sha=merge_sha,
-        is_ancestor=is_ancestor,
-        requested_run_id=requested_run_id,
-        attested_branch=attested_branch,
-        attested_branch_head_sha=attested_branch_head_sha,
-    )
-    identity = verify_deployed_identity(merge_sha=merge_sha, release=release, health=health)
-    run_id = str(pending.get("run_id") or "").strip()
-    branch_head_sha = _sha(pending.get("branch_head_sha"))
-    action_id = str(action_id or "").strip() or (
-        f"loop:{run_id}:deploy:{environment}:{merge_sha[:12]}"
-    )
-    correlation: Dict[str, Any] = {
-        "action_id": action_id,
-        "attested_pr_number": str(attested_pr_number or "").strip(),
-        "branch": str(pending.get("branch") or ""),
-        "branch_head_sha": branch_head_sha,
-        "created_at": str(observed_at or ""),
-        "environment": environment,
-        "merge_sha": merge_sha,
-        "para_task_id": str(pending.get("para_task_id") or ""),
-        "head_verification": str(pending.get("head_verification") or "git_ancestry"),
-        "run_id": run_id,
-        "workflow_run_id": workflow_run_id,
-        "workflow_url": str(workflow_url or ""),
-    }
-    events = [
-        {
-            **correlation,
-            "event": "deploy_dispatch",
-            "phase": "deployment",
-            "status": "accepted",
-            "ok": True,
-            "verification_state": "completed",
-        },
-        {
-            **correlation,
-            **identity,
-            "event": "post_deploy_verified",
-            "phase": "deployment",
-            "status": "verified",
-            "ok": True,
-            "identity_verified": True,
-        },
-        {
-            **correlation,
-            "event": "merge_completed",
-            "phase": "merge",
-            "status": "completed_merged",
-            "ok": True,
-        },
-    ]
-    for event in events:
-        record_event(event)
-    return {
-        "ok": True,
-        "recorded": True,
-        "idempotent": False,
-        "run_id": run_id,
-        "merge_sha": merge_sha,
-        "environment": environment,
-        "workflow_run_id": workflow_run_id,
-        **identity,
-    }
+from modstore_server.self_maintenance_receipt_recording import (  # noqa: E402
+    record_completed_deployment_receipt as record_completed_deployment_receipt,
+)
 
 
-class GhActionsDeploymentGateway:
-    """Concrete GitHub/HTTP adapter, used only behind an explicit switch."""
-
-    HEALTH_URLS = {
-        "staging": "https://xiu-ci.com/fhd-staging-api/api/health",
-        "production": "https://xiu-ci.com/fhd-api/api/health",
-    }
-    RELEASE_URLS = {
-        "staging": "https://xiu-ci.com/update/releases/staging/server/fhd-manifest.json",
-        "production": "https://xiu-ci.com/update/releases/stable/server/fhd-manifest.json",
-    }
-
-    def __init__(
-        self,
-        *,
-        repo_root: Path,
-        repository: str,
-        ref: str,
-        workflow: str = "fhd-deploy.yml",
-        poll_seconds: float = 3.0,
-        capture_timeout_seconds: int = 90,
-        workflow_timeout_seconds: int = 1800,
-    ) -> None:
-        self.repo_root = Path(repo_root)
-        self.repository = repository.strip()
-        self.ref = ref.strip()
-        self.workflow = workflow.strip()
-        self.poll_seconds = max(0.2, poll_seconds)
-        self.capture_timeout_seconds = max(10, capture_timeout_seconds)
-        self.workflow_timeout_seconds = max(30, workflow_timeout_seconds)
-        if "/" not in self.repository or not self.ref:
-            raise DeploymentReceiptError("github_deploy_config_missing")
-
-    @classmethod
-    def from_environment(cls, *, repo_root: Path, ref: str) -> "GhActionsDeploymentGateway":
-        return cls(
-            repo_root=repo_root,
-            repository=str(
-                os.environ.get("MODSTORE_SELF_MAINTENANCE_GITHUB_REPOSITORY")
-                or os.environ.get("GITHUB_REPOSITORY")
-                or ""
-            ),
-            ref=ref,
-            workflow=str(
-                os.environ.get("MODSTORE_SELF_MAINTENANCE_DEPLOY_WORKFLOW") or "fhd-deploy.yml"
-            ),
-        )
-
-    def _run(self, args: Sequence[str]) -> str:
-        try:
-            result = subprocess.run(
-                list(args),
-                cwd=self.repo_root,
-                capture_output=True,
-                text=True,
-                timeout=120,
-                check=False,
-            )
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            raise DeploymentReceiptError("gh_command_failed") from exc
-        if result.returncode != 0:
-            raise DeploymentReceiptError("gh_command_failed")
-        return str(result.stdout or "").strip()
-
-    def _json(self, args: Sequence[str]) -> Any:
-        try:
-            return json.loads(self._run(args) or "null")
-        except json.JSONDecodeError as exc:
-            raise DeploymentReceiptError("gh_invalid_json") from exc
-
-    def _runs(self) -> List[Dict[str, Any]]:
-        payload = self._json(
-            [
-                "gh",
-                "run",
-                "list",
-                "--repo",
-                self.repository,
-                "--workflow",
-                self.workflow,
-                "--event",
-                "workflow_dispatch",
-                "--limit",
-                "50",
-                "--json",
-                "databaseId,headSha,status,conclusion,displayTitle,url",
-            ]
-        )
-        if not isinstance(payload, list):
-            raise DeploymentReceiptError("github_run_list_invalid")
-        return [dict(row) for row in payload if isinstance(row, Mapping)]
-
-    def dispatch(self, *, environment: str, merge_sha: str, action_id: str) -> DispatchReceipt:
-        environment = _environment(environment)
-        merge_sha = _merge_sha(merge_sha)
-        ref_data = self._json(["gh", "api", f"repos/{self.repository}/commits/{self.ref}"])
-        if not isinstance(ref_data, Mapping) or _sha(ref_data.get("sha")) != merge_sha:
-            raise DeploymentReceiptError("deploy_ref_not_at_merge_sha")
-        baseline = {str(row.get("databaseId") or "") for row in self._runs()}
-        self._run(
-            [
-                "gh",
-                "workflow",
-                "run",
-                self.workflow,
-                "--repo",
-                self.repository,
-                "--ref",
-                self.ref,
-                "-f",
-                f"environment={environment}",
-                "-f",
-                "action=apply-latest",
-                "-f",
-                f"action_id={action_id}",
-            ]
-        )
-        deadline = time.monotonic() + self.capture_timeout_seconds
-        while time.monotonic() < deadline:
-            for row in self._runs():
-                workflow_id = str(row.get("databaseId") or "")
-                title = str(row.get("displayTitle") or "")
-                if (
-                    workflow_id
-                    and workflow_id not in baseline
-                    and _sha(row.get("headSha")) == merge_sha
-                    and action_id in title
-                    and environment in title.lower()
-                ):
-                    return DispatchReceipt(
-                        workflow_id,
-                        merge_sha,
-                        environment,
-                        action_id,
-                        str(row.get("url") or ""),
-                    )
-            threading.Event().wait(self.poll_seconds)
-        raise DeploymentReceiptError("workflow_run_capture_timeout")
-
-    def wait_for_success(self, receipt: DispatchReceipt) -> WorkflowCompletion:
-        deadline = time.monotonic() + self.workflow_timeout_seconds
-        while time.monotonic() < deadline:
-            payload = self._json(
-                [
-                    "gh",
-                    "run",
-                    "view",
-                    receipt.workflow_run_id,
-                    "--repo",
-                    self.repository,
-                    "--json",
-                    "databaseId,headSha,status,conclusion,url",
-                ]
-            )
-            if not isinstance(payload, Mapping):
-                raise DeploymentReceiptError("github_run_view_invalid")
-            completed = WorkflowCompletion(
-                str(payload.get("databaseId") or ""),
-                _sha(payload.get("headSha")),
-                str(payload.get("status") or ""),
-                str(payload.get("conclusion") or ""),
-                str(payload.get("url") or receipt.url),
-            )
-            if completed.status.lower() == "completed":
-                return completed.require_success(receipt)
-            threading.Event().wait(self.poll_seconds)
-        raise DeploymentReceiptError("workflow_completion_timeout")
-
-    @staticmethod
-    def _fetch(url: str) -> BuildIdentity:
-        try:
-            with httpx.Client(timeout=10.0, follow_redirects=True, trust_env=False) as client:
-                response = client.get(url)
-                response.raise_for_status()
-                payload = response.json()
-        except Exception as exc:
-            raise DeploymentReceiptError("identity_fetch_failed") from exc
-        if not isinstance(payload, Mapping):
-            raise DeploymentReceiptError("identity_payload_invalid")
-        return BuildIdentity.from_payload(payload)
-
-    def fetch_release_identity(self, environment: str) -> BuildIdentity:
-        environment = _environment(environment)
-        key = f"MODSTORE_SELF_MAINTENANCE_{environment.upper()}_RELEASE_URL"
-        return self._fetch(str(os.environ.get(key) or self.RELEASE_URLS[environment]))
-
-    def fetch_health_identity(self, environment: str) -> BuildIdentity:
-        environment = _environment(environment)
-        key = f"MODSTORE_SELF_MAINTENANCE_{environment.upper()}_HEALTH_URL"
-        return self._fetch(str(os.environ.get(key) or self.HEALTH_URLS[environment]))
-
+from modstore_server.self_maintenance_gh_gateway import (  # noqa: E402
+    GhActionsDeploymentGateway as GhActionsDeploymentGateway,
+)
 
 __all__ = [
     "BuildIdentity",

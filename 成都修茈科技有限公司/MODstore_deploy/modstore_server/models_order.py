@@ -1,8 +1,17 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
+)
 
 from .models_base import Base
 
@@ -14,7 +23,7 @@ class Purchase(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     catalog_id = Column(Integer, ForeignKey("catalog_items.id"), nullable=False)
     amount = Column(Numeric(12, 2), nullable=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
 
 class RefundRequest(Base):
@@ -27,11 +36,11 @@ class RefundRequest(Base):
     reason = Column(Text, nullable=False)
     status = Column(String(16), default="pending", index=True)
     admin_note = Column(Text, default="")
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
     updated_at = Column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
 
@@ -45,11 +54,11 @@ class PlanTemplate(Base):
     features_json = Column(Text, default="[]")
     quotas_json = Column(Text, default="{}")
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
     updated_at = Column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
 
@@ -59,9 +68,9 @@ class UserPlan(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     plan_id = Column(String(64), ForeignKey("plan_templates.id"), nullable=False, index=True)
-    started_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    started_at = Column(DateTime, default=lambda: datetime.now(UTC))
     expires_at = Column(DateTime, nullable=True)
     is_active = Column(Boolean, default=True, index=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
     auto_renew = Column(Boolean, default=True, nullable=False)
     renewal_fail_reason = Column(Text, default="")

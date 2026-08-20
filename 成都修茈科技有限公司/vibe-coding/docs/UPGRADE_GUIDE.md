@@ -44,7 +44,7 @@ package stays self-contained. Re-run tests after syncing.
 
 These intentionally drop the config-layer (`ESkill` / `ESkillRuntime` /
 `JsonSkillStore` / `ESkillNodeWrapper`) hooks that exist upstream. If upstream
-adds a *new* code-layer concept that should propagate, edit these files
+adds a _new_ code-layer concept that should propagate, edit these files
 manually and bump the version.
 
 ## Investigating new ideas without breaking production

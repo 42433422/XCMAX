@@ -88,9 +88,7 @@ html[data-workbench-theme='light'] .wb-composer-panel .wb-direct-box-main {
   flex-direction: column;
   padding: 0 clamp(0.5rem, 2vw, 1rem) !important;
   /* composer 高度 + fixed bottom 偏移（与 .wb-direct-box bottom 一致），勿叠 scene padding-bottom */
-  --wb-composer-reserve: calc(
-    4.5rem + clamp(0.65rem, 1.5vw, 1.25rem) + env(safe-area-inset-bottom, 0px) + var(--wb-vv-bottom-offset, 0px)
-  );
+  --wb-composer-reserve: calc(4.5rem + clamp(0.65rem, 1.5vw, 1.25rem) + env(safe-area-inset-bottom, 0px) + var(--wb-vv-bottom-offset, 0px));
 }
 
 .wb-mode-scene--direct-empty .wb-direct-empty-body {
@@ -192,9 +190,7 @@ html[data-workbench-theme='light'] .wb-composer-panel .wb-direct-box-main {
 
 @media (max-width: 768px) {
   .wb-mode-scene--direct-empty {
-    --wb-composer-reserve: calc(
-      4.5rem + 56px + 0.75rem + env(safe-area-inset-bottom, 0px) + var(--wb-vv-bottom-offset, 0px)
-    );
+    --wb-composer-reserve: calc(4.5rem + 56px + 0.75rem + env(safe-area-inset-bottom, 0px) + var(--wb-vv-bottom-offset, 0px));
   }
 }
 
@@ -240,15 +236,11 @@ html[data-workbench-theme='light'] .wb-composer-panel .wb-direct-box-main {
 
 @media (max-width: 768px) {
   .wb-mode-scene--direct-flow {
-    --wb-direct-footer-reserve: calc(
-      4.75rem + 56px + 0.75rem + env(safe-area-inset-bottom, 0px) + var(--wb-vv-bottom-offset, 0px)
-    );
+    --wb-direct-footer-reserve: calc(4.75rem + 56px + 0.75rem + env(safe-area-inset-bottom, 0px) + var(--wb-vv-bottom-offset, 0px));
   }
 
   .wb-mode-scene--direct-flow:has(.wb-direct-attach-hint) {
-    --wb-direct-footer-reserve: calc(
-      7.25rem + 56px + 0.75rem + env(safe-area-inset-bottom, 0px) + var(--wb-vv-bottom-offset, 0px)
-    );
+    --wb-direct-footer-reserve: calc(7.25rem + 56px + 0.75rem + env(safe-area-inset-bottom, 0px) + var(--wb-vv-bottom-offset, 0px));
   }
 }
 
@@ -541,7 +533,9 @@ html[data-workbench-theme='light'] .wb-direct-upload-zone-label {
 
 .wb-file-chip-enter-active,
 .wb-file-chip-leave-active {
-  transition: opacity 0.18s ease, transform 0.18s ease;
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
 }
 
 .wb-file-chip-enter-from,
@@ -862,7 +856,9 @@ html[data-workbench-theme='light'] .wb-home-file-strip__butler-link {
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .wb-direct-composer-row:focus-within {
@@ -923,7 +919,9 @@ html[data-workbench-theme='light'] .wb-direct-composer-row {
 
 html[data-workbench-theme='light'] .wb-direct-composer-row:focus-within {
   border-color: rgba(0, 113, 227, 0.35);
-  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.08), 0 0 0 2px rgba(0, 113, 227, 0.12);
+  box-shadow:
+    0 2px 16px rgba(0, 0, 0, 0.08),
+    0 0 0 2px rgba(0, 113, 227, 0.12);
 }
 
 /* 覆盖 v7：html[light] .wb-direct-voice-btn 为 36×36 且特异性更高，会把行外麦克风压成 48×36 */
@@ -1282,7 +1280,6 @@ html[data-workbench-theme='light'] .wb-llm-mobile-sheet__close {
     line-height: 1.45;
     color: rgba(255, 255, 255, 0.55);
   }
-
 }
 
 /* Empty state starters */
@@ -1322,7 +1319,9 @@ html[data-workbench-theme='light'] .wb-llm-mobile-sheet__close {
   color: inherit;
   text-align: left;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .wb-direct-starter-card:hover {
@@ -1791,4 +1790,3 @@ html[data-workbench-theme='light'] .wb-direct-media-rail__input {
     min-height: 30px;
   }
 }
-

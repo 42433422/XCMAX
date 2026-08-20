@@ -21,6 +21,7 @@ import urllib.error
 import urllib.request
 from typing import Any
 
+from ..._internals.tls import ssl_context_for_endpoint
 from ..llm import LLMError
 
 
@@ -53,10 +54,7 @@ class AnthropicLLM:
     def chat(self, system: str, user: str, *, json_mode: bool = True) -> str:
         sys_prompt = system
         if json_mode:
-            sys_prompt = (
-                system.rstrip()
-                + "\n\nIMPORTANT: respond with **valid JSON only**, no Markdown fences."
-            )
+            sys_prompt = system.rstrip() + "\n\nIMPORTANT: respond with **valid JSON only**, no Markdown fences."
         body = {
             "model": self.model,
             "max_tokens": self.max_tokens,
@@ -119,14 +117,7 @@ class AnthropicLLM:
         return ""
 
     def _ssl_context(self):
-        if self.verify_ssl:
-            return None
-        import ssl
-
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-        return ctx
+        return ssl_context_for_endpoint(self.base_url, verify_ssl=self.verify_ssl)
 
 
 def _trim_to_first_json_block(text: str) -> str:
@@ -144,7 +135,7 @@ def _trim_to_first_json_block(text: str) -> str:
         if nl >= 0:
             s = s[nl + 1 :]
         if s.endswith("```"):
-            s = s[: -3]
+            s = s[:-3]
         s = s.strip()
     start = s.find("{")
     if start < 0:

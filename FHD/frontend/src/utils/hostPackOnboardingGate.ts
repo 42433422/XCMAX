@@ -1,6 +1,4 @@
-import {
-  defaultOnboardingIndustryId,
-} from '@/constants/productFlow'
+import { defaultOnboardingIndustryId } from '@/constants/productFlow'
 import { authApi } from '@/api/auth'
 import { fetchIndustryBaseline, fetchOnboardingIndustryCatalog } from '@/utils/platformShellApi'
 import { fetchProductSku, isEnterpriseEdition } from '@/utils/productSku'
@@ -56,9 +54,7 @@ function writeHostPackNeedsCache(needs: boolean, at: number): void {
   }
 }
 
-export function shouldRouteToHostPackOnboarding(
-  toName: string | symbol | null | undefined,
-): boolean {
+export function shouldRouteToHostPackOnboarding(toName: string | symbol | null | undefined): boolean {
   const name = String(toName || '').trim()
   if (!name) return false
   return !HOST_PACK_ONBOARDING_EXEMPT_ROUTE_NAMES.has(name)
@@ -105,10 +101,7 @@ export function invalidateHostPackCompletionCache(): void {
 
 function readSessionAdminFlag(payload: unknown): boolean {
   const root = (payload && typeof payload === 'object' ? payload : {}) as Record<string, unknown>
-  const data =
-    root.data && typeof root.data === 'object' && !Array.isArray(root.data)
-      ? (root.data as Record<string, unknown>)
-      : root
+  const data = root.data && typeof root.data === 'object' && !Array.isArray(root.data) ? (root.data as Record<string, unknown>) : root
   const kind = String(data.account_kind || '').trim()
   return kind === 'admin' && Boolean(data.market_is_admin)
 }
@@ -151,9 +144,7 @@ export async function needsHostPackCompletion(force = false): Promise<boolean> {
   const now = Date.now()
   if (!force) {
     const cached =
-      hostPackNeedsCache && now - hostPackNeedsCache.at < HOST_PACK_CACHE_TTL_MS
-        ? hostPackNeedsCache
-        : readPersistedHostPackNeedsCache()
+      hostPackNeedsCache && now - hostPackNeedsCache.at < HOST_PACK_CACHE_TTL_MS ? hostPackNeedsCache : readPersistedHostPackNeedsCache()
     if (cached) {
       hostPackNeedsCache = cached
       return cached.needs
@@ -178,8 +169,7 @@ export async function needsHostPackCompletion(force = false): Promise<boolean> {
 
   try {
     const catalog = await fetchOnboardingIndustryCatalog(force)
-    const industryId =
-      String(catalog?.selected_industry_id || '').trim() || defaultOnboardingIndustryId()
+    const industryId = String(catalog?.selected_industry_id || '').trim() || defaultOnboardingIndustryId()
     const plan = await fetchIndustryBaseline(industryId, force)
     const needs = plan?.baseline_ready !== true
     writeHostPackNeedsCache(needs, now)

@@ -12,12 +12,12 @@ GitHub PR 审查：CI 状态聚合、变更范围分析、自动 approve 低风�
 
 ## 输入
 
-| 字段 | 类型 | 必需 | 说明 |
-|------|------|------|------|
-| `pr_number` | int | 是 | PR 编号 |
-| `pr_url` | string | 是 | PR URL（用于审计回查） |
-| `repo` | string | 是 | `owner/repo` 格式 |
-| `dry_run` | bool | 否 | true 时只返回审查结论，不执行 approve/comment |
+| 字段        | 类型   | 必需 | 说明                                          |
+| ----------- | ------ | ---- | --------------------------------------------- |
+| `pr_number` | int    | 是   | PR 编号                                       |
+| `pr_url`    | string | 是   | PR URL（用于审计回查）                        |
+| `repo`      | string | 是   | `owner/repo` 格式                             |
+| `dry_run`   | bool   | 否   | true 时只返回审查结论，不执行 approve/comment |
 
 ## 处理步骤
 
@@ -33,13 +33,13 @@ GitHub PR 审查：CI 状态聚合、变更范围分析、自动 approve 低风�
 
 ## 决策矩阵
 
-| PR 类型 | CI 状态 | 变更范围 | 决策 |
-|---------|---------|---------|------|
-| Dependabot patch/minor | 通过 | 仅依赖文件 | 自动 approve + merge |
-| Dependabot major | 通过 | 仅依赖文件 | 派发 `vibe-coding-maintainer` 验证 |
-| Dependabot security | 通过 | 仅依赖文件 | 自动 approve + merge（跳过 major 限制）|
-| Dependabot any | 失败 | - | request_changes + 通知 |
-| 人工 PR | - | - | 跑 `test-qa-runner` 验证 |
+| PR 类型                | CI 状态 | 变更范围   | 决策                                    |
+| ---------------------- | ------- | ---------- | --------------------------------------- |
+| Dependabot patch/minor | 通过    | 仅依赖文件 | 自动 approve + merge                    |
+| Dependabot major       | 通过    | 仅依赖文件 | 派发 `vibe-coding-maintainer` 验证      |
+| Dependabot security    | 通过    | 仅依赖文件 | 自动 approve + merge（跳过 major 限制） |
+| Dependabot any         | 失败    | -          | request_changes + 通知                  |
+| 人工 PR                | -       | -          | 跑 `test-qa-runner` 验证                |
 
 ## 输出
 

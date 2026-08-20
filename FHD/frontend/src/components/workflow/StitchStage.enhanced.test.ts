@@ -3,7 +3,7 @@
  * 覆盖：tutorial 模式、composed 模式、缩放控制、中键平移、
  * hotspot 点击、station 选择、establishment 布局、视觉皮肤
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import StitchStage from './StitchStage.vue'
 
@@ -25,7 +25,7 @@ vi.mock('@/constants/enterpriseWorkflowEstablishment', () => ({
     { id: 'sales', code: 'S', label: '销售', desc: '销售部', color: '#10b981' },
   ],
   countEnterpriseEstablishmentMaxSlots: (desks: unknown[]) => Math.max(1, Math.ceil((desks as unknown[]).length / 2)),
-  resolveEnterpriseOrgLayer: (empId: string) => empId.startsWith('s') ? 'sales' : 'management',
+  resolveEnterpriseOrgLayer: (empId: string) => (empId.startsWith('s') ? 'sales' : 'management'),
 }))
 
 function makeHotspots(count = 2) {
@@ -173,14 +173,21 @@ describe('StitchStage.vue – tutorial mode', () => {
 
   it('uses resolveHotspotLabel for hotspot aria-labels when no label on hotspot', () => {
     const resolveFn = (empId: string) => `自定义-${empId}`
-    const wrapper = mountStitchStage({ mode: 'tutorial', resolveHotspotLabel: resolveFn, hotspots: [{ empId: 'emp-x', leftPct: 10, topPct: 10, widthPct: 5, heightPct: 5 }] })
+    const wrapper = mountStitchStage({
+      mode: 'tutorial',
+      resolveHotspotLabel: resolveFn,
+      hotspots: [{ empId: 'emp-x', leftPct: 10, topPct: 10, widthPct: 5, heightPct: 5 }],
+    })
     const hotspot = wrapper.find('.stitch-stage-hotspot')
     expect(hotspot.attributes('aria-label')).toBe('自定义-emp-x')
     wrapper.unmount()
   })
 
   it('falls back to default label when resolveHotspotLabel is not provided', () => {
-    const wrapper = mountStitchStage({ mode: 'tutorial', hotspots: [{ empId: 'emp-x', leftPct: 10, topPct: 10, widthPct: 5, heightPct: 5 }] })
+    const wrapper = mountStitchStage({
+      mode: 'tutorial',
+      hotspots: [{ empId: 'emp-x', leftPct: 10, topPct: 10, widthPct: 5, heightPct: 5 }],
+    })
     const hotspot = wrapper.find('.stitch-stage-hotspot')
     expect(hotspot.attributes('aria-label')).toBe('选择员工 emp-x')
     wrapper.unmount()
@@ -233,7 +240,11 @@ describe('StitchStage.vue – composed mode', () => {
 
   it('renders aisle between left and right groups when more than 4 desks', () => {
     const desks = makeDesks(6)
-    const wrapper = mountStitchStage({ mode: 'composed', desks, stationPlacements: makePlacements(desks) })
+    const wrapper = mountStitchStage({
+      mode: 'composed',
+      desks,
+      stationPlacements: makePlacements(desks),
+    })
     const aisle = wrapper.find('.stitch-composed-aisle')
     expect(aisle.exists()).toBe(true)
     wrapper.unmount()
@@ -241,7 +252,11 @@ describe('StitchStage.vue – composed mode', () => {
 
   it('does not render aisle when 4 or fewer desks', () => {
     const desks = makeDesks(3)
-    const wrapper = mountStitchStage({ mode: 'composed', desks, stationPlacements: makePlacements(desks) })
+    const wrapper = mountStitchStage({
+      mode: 'composed',
+      desks,
+      stationPlacements: makePlacements(desks),
+    })
     const aisle = wrapper.find('.stitch-composed-aisle')
     expect(aisle.exists()).toBe(false)
     wrapper.unmount()
@@ -263,7 +278,12 @@ describe('StitchStage.vue – establishment layout', () => {
   })
 
   it('shows empty message when no desks in establishment layout', async () => {
-    const wrapper = mountStitchStage({ mode: 'composed', composedLayout: 'establishment', desks: [], stationPlacements: [] })
+    const wrapper = mountStitchStage({
+      mode: 'composed',
+      composedLayout: 'establishment',
+      desks: [],
+      stationPlacements: [],
+    })
     // When no desks, composedSlots is empty, so the generic empty message appears
     expect(wrapper.find('.stitch-composed-empty').exists() || wrapper.findAll('.stitch-establishment-empty').length > 0).toBe(true)
     wrapper.unmount()
@@ -273,7 +293,7 @@ describe('StitchStage.vue – establishment layout', () => {
 describe('StitchStage.vue – zoom controls', () => {
   it('zoom in button increases zoom', async () => {
     const wrapper = mountStitchStage()
-    const zoomInBtn = wrapper.findAll('.stitch-stage-btn').find(b => b.text() === '放大')
+    const zoomInBtn = wrapper.findAll('.stitch-stage-btn').find((b) => b.text() === '放大')
     expect(zoomInBtn).toBeDefined()
     await zoomInBtn!.trigger('click')
     const range = wrapper.find('.stitch-stage-range')
@@ -285,9 +305,9 @@ describe('StitchStage.vue – zoom controls', () => {
   it('zoom out button decreases zoom', async () => {
     const wrapper = mountStitchStage()
     // First zoom in to have room to zoom out
-    const zoomInBtn = wrapper.findAll('.stitch-stage-btn').find(b => b.text() === '放大')
+    const zoomInBtn = wrapper.findAll('.stitch-stage-btn').find((b) => b.text() === '放大')
     await zoomInBtn!.trigger('click')
-    const zoomOutBtn = wrapper.findAll('.stitch-stage-btn').find(b => b.text() === '缩小')
+    const zoomOutBtn = wrapper.findAll('.stitch-stage-btn').find((b) => b.text() === '缩小')
     await zoomOutBtn!.trigger('click')
     const range = wrapper.find('.stitch-stage-range')
     const val = Number(range.attributes('value'))
@@ -297,7 +317,7 @@ describe('StitchStage.vue – zoom controls', () => {
 
   it('reset zoom button is present', () => {
     const wrapper = mountStitchStage()
-    const resetBtn = wrapper.findAll('.stitch-stage-btn').find(b => b.text() === '全图')
+    const resetBtn = wrapper.findAll('.stitch-stage-btn').find((b) => b.text() === '全图')
     expect(resetBtn).toBeDefined()
     wrapper.unmount()
   })
@@ -313,7 +333,7 @@ describe('StitchStage.vue – zoom controls', () => {
 
   it('zoom out is disabled at minimum zoom', () => {
     const wrapper = mountStitchStage()
-    const zoomOutBtn = wrapper.findAll('.stitch-stage-btn').find(b => b.text() === '缩小')
+    const zoomOutBtn = wrapper.findAll('.stitch-stage-btn').find((b) => b.text() === '缩小')
     // At default zoom (100%), minZoom is 25, so not disabled
     expect(zoomOutBtn!.attributes('disabled')).toBeUndefined()
     wrapper.unmount()
@@ -322,7 +342,7 @@ describe('StitchStage.vue – zoom controls', () => {
   it('zoom in is disabled at maximum zoom', async () => {
     const wrapper = mountStitchStage()
     // Zoom in multiple times to reach max
-    const zoomInBtn = wrapper.findAll('.stitch-stage-btn').find(b => b.text() === '放大')
+    const zoomInBtn = wrapper.findAll('.stitch-stage-btn').find((b) => b.text() === '放大')
     for (let i = 0; i < 20; i++) {
       await zoomInBtn!.trigger('click')
     }
@@ -435,7 +455,11 @@ describe('StitchStage.vue – computed properties', () => {
   it('stationAriaLabel uses resolveStationAriaLabel when provided', () => {
     const resolveFn = (empId: string) => `自定义-${empId}`
     const desks = makeDesks(1)
-    const wrapper = mountStitchStage({ mode: 'composed', desks, resolveStationAriaLabel: resolveFn })
+    const wrapper = mountStitchStage({
+      mode: 'composed',
+      desks,
+      resolveStationAriaLabel: resolveFn,
+    })
     expect(wrapper.vm.stationAriaLabel('emp-1', desks[0])).toBe('自定义-emp-1')
     wrapper.unmount()
   })
@@ -550,4 +574,3 @@ describe('StitchStage.vue – keyboard interaction', () => {
     wrapper.unmount()
   })
 })
-

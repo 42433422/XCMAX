@@ -23,6 +23,7 @@ from typing import Any
 
 from langchain_protocol import Event, SubscribeParams
 
+from langgraph_sdk._exception_policy import BOUNDARY_ERRORS
 from langgraph_sdk.stream.transport import AsyncProtocolTransport, EventStreamHandle
 
 # ---------------------------------------------------------------------------
@@ -251,7 +252,7 @@ class StreamController:
                     for sub in list(self._subscriptions.values()):
                         if matches_subscription(event, sub.params):
                             sub.queue.put_nowait(event)
-            except Exception as drop_err:
+            except BOUNDARY_ERRORS as drop_err:
                 _logger.debug("transport drop in fanout: %r", drop_err)
 
             if self._shared_stream is shared:
@@ -305,7 +306,7 @@ class StreamController:
                 await new_stream.ready
             except asyncio.CancelledError:
                 raise
-            except Exception:
+            except BOUNDARY_ERRORS:
                 await self._reconnect_sleep(attempt)
                 continue
             self._shared_stream = new_stream

@@ -65,15 +65,19 @@ function createMockMedia(matches = false, useLegacy = false) {
     matches,
     media: '(max-width: 960px)',
     onchange: null,
-    addEventListener: useLegacy ? undefined : vi.fn((event: string, cb: MediaListener) => {
-      listeners[event] = listeners[event] || []
-      listeners[event].push(cb)
-    }),
-    removeEventListener: useLegacy ? undefined : vi.fn((event: string, cb: MediaListener) => {
-      if (listeners[event]) {
-        listeners[event] = listeners[event].filter((l) => l !== cb)
-      }
-    }),
+    addEventListener: useLegacy
+      ? undefined
+      : vi.fn((event: string, cb: MediaListener) => {
+          listeners[event] = listeners[event] || []
+          listeners[event].push(cb)
+        }),
+    removeEventListener: useLegacy
+      ? undefined
+      : vi.fn((event: string, cb: MediaListener) => {
+          if (listeners[event]) {
+            listeners[event] = listeners[event].filter((l) => l !== cb)
+          }
+        }),
     addListener: vi.fn((cb: MediaListener) => {
       legacyListeners.push(cb)
     }),
@@ -322,10 +326,7 @@ describe('LabelVisualEditor.vue - 覆盖率补齐', () => {
     })
 
     it('绘制多个字段时调用 drawField', async () => {
-      const fields = [
-        makeField({ id: 'f1', type: 'fixed' }),
-        makeField({ id: 'f2', type: 'dynamic', value: '' }),
-      ]
+      const fields = [makeField({ id: 'f1', type: 'fixed' }), makeField({ id: 'f2', type: 'dynamic', value: '' })]
       const wrapper = mountEditor({ fields })
       await nextTick()
 
@@ -579,9 +580,7 @@ describe('LabelVisualEditor.vue - 覆盖率补齐', () => {
       expect(wrapper.vm.selectedField).toBeTruthy()
       expect(wrapper.vm.selectedFieldId).toBe('f1')
       expect(wrapper.emitted('field-selected')).toBeTruthy()
-      expect(wrapper.emitted('field-selected')[0][0]).toEqual(
-        expect.objectContaining({ id: 'f1' })
-      )
+      expect(wrapper.emitted('field-selected')[0][0]).toEqual(expect.objectContaining({ id: 'f1' }))
     })
 
     it('点击空白处取消选中', async () => {
@@ -850,9 +849,10 @@ describe('LabelVisualEditor.vue - 覆盖率补齐', () => {
       wrapper.vm.selectedField = { id: 'nonexistent' }
       wrapper.vm.selectedFieldId = 'nonexistent'
 
+      const eventCountBefore = wrapper.emitted('fields-update')?.length ?? 0
       wrapper.vm.deleteSelectedField()
       // findIndex 返回 -1，不进入 if 块，不 emit
-      const events = wrapper.emitted('fields-update')
+      expect(wrapper.emitted('fields-update')?.length ?? 0).toBe(eventCountBefore)
       // 可能有之前的 emit（watch 触发），但 deleteSelectedField 本身不应新增 emit
       // 这里验证 selectedField 仍为非 null（因为没进入 if 块）
       // 实际上 deleteSelectedField 在 index=-1 时不做任何事
@@ -963,7 +963,13 @@ describe('LabelVisualEditor.vue - 覆盖率补齐', () => {
 
     it('点击"固定"按钮切换字段类型', async () => {
       const wrapper = mountEditor({
-        fields: [makeField({ id: 'f1', position: { x: 50, y: 50, width: 100, height: 30 }, type: 'dynamic' })],
+        fields: [
+          makeField({
+            id: 'f1',
+            position: { x: 50, y: 50, width: 100, height: 30 },
+            type: 'dynamic',
+          }),
+        ],
       })
       await nextTick()
 
@@ -979,7 +985,13 @@ describe('LabelVisualEditor.vue - 覆盖率补齐', () => {
 
     it('点击"可变"按钮切换字段类型', async () => {
       const wrapper = mountEditor({
-        fields: [makeField({ id: 'f1', position: { x: 50, y: 50, width: 100, height: 30 }, type: 'fixed' })],
+        fields: [
+          makeField({
+            id: 'f1',
+            position: { x: 50, y: 50, width: 100, height: 30 },
+            type: 'fixed',
+          }),
+        ],
       })
       await nextTick()
 

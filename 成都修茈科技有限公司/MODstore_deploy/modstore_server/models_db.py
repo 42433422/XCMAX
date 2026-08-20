@@ -1,17 +1,24 @@
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 from .models_base import Base
-from .models_catalog import CatalogItem, UserMod
+from .models_catalog import UserMod
 from .models_cs import CustomerServiceStandard
+from .models_db_defaults import (
+    DEFAULT_CUSTOMER_SERVICE_STANDARDS,
+    DEFAULT_PLAN_TEMPLATES,
+)
 from .models_order import PlanTemplate, UserPlan
 from .models_user import User
 
@@ -24,6 +31,9 @@ def default_db_path() -> Path:
 
 
 def database_url(db_path: Optional[Path] = None) -> str:
+    if (os.environ.get("MODSTORE_PYTEST_USE_SQLITE") or "").strip() == "1":
+        p = db_path or default_db_path()
+        return f"sqlite:///{p}"
     raw = (os.environ.get("DATABASE_URL") or "").strip()
     if raw:
         if raw.startswith("postgres://"):
@@ -119,7 +129,7 @@ def _maybe_bootstrap_first_admin() -> None:
                 "MODSTORE_BOOTSTRAP_ADMIN ignored when MODSTORE_DEPLOY_TIER=production"
             )
             return
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     from modstore_server.auth_service import register_user
 
@@ -155,12 +165,12 @@ def _maybe_bootstrap_first_admin() -> None:
         if plan:
             expires_at = None
             if days > 0:
-                expires_at = datetime.now(timezone.utc) + timedelta(days=days)
+                expires_at = datetime.now(UTC) + timedelta(days=days)
             session.add(
                 UserPlan(
                     user_id=user.id,
                     plan_id=plan_id,
-                    started_at=datetime.now(timezone.utc),
+                    started_at=datetime.now(UTC),
                     expires_at=expires_at,
                     is_active=True,
                 )
@@ -178,15 +188,21 @@ def init_db(db_path: Optional[Path] = None):
     Base.metadata.create_all(engine)
     try:
         _add_column_if_missing(
-            engine, "knowledge_collections", "embedding_provider", "VARCHAR(64) DEFAULT ''"
+            engine,
+            "knowledge_collections",
+            "embedding_provider",
+            "VARCHAR(64) DEFAULT ''",
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     try:
         _add_column_if_missing(
-            engine, "knowledge_collections", "embedding_source", "VARCHAR(64) DEFAULT ''"
+            engine,
+            "knowledge_collections",
+            "embedding_source",
+            "VARCHAR(64) DEFAULT ''",
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     for column, ddl_type in (
         ("material_category", "VARCHAR(64) DEFAULT ''"),
@@ -199,7 +215,7 @@ def init_db(db_path: Optional[Path] = None):
     ):
         try:
             _add_column_if_missing(engine, "catalog_items", column, ddl_type)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
     if engine.dialect.name != "sqlite":
         for column, ddl_type in (
@@ -209,7 +225,7 @@ def init_db(db_path: Optional[Path] = None):
         ):
             try:
                 _add_column_if_missing(engine, "workflows", column, ddl_type)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 pass
         for column, ddl_type in (
             ("git_branch", "VARCHAR(256) DEFAULT ''"),
@@ -218,7 +234,7 @@ def init_db(db_path: Optional[Path] = None):
         ):
             try:
                 _add_column_if_missing(engine, "employee_change_requests", column, ddl_type)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 pass
         try:
             _add_column_if_missing(
@@ -227,7 +243,7 @@ def init_db(db_path: Optional[Path] = None):
                 "priority",
                 "INTEGER DEFAULT 5 NOT NULL",
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
         for column, ddl_type in (
             ("avatar_path", "VARCHAR(512) DEFAULT ''"),
@@ -235,7 +251,7 @@ def init_db(db_path: Optional[Path] = None):
         ):
             try:
                 _add_column_if_missing(engine, "users", column, ddl_type)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 pass
         # user_plans：续费字段（缺列会导致 ORM 查询失败并污染客服会话事务）
         for column, ddl_type in (
@@ -245,7 +261,7 @@ def init_db(db_path: Optional[Path] = None):
         ):
             try:
                 _add_column_if_missing(engine, "user_plans", column, ddl_type)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 pass
         init_default_plan_templates()
         init_default_customer_service_standards()
@@ -253,59 +269,59 @@ def init_db(db_path: Optional[Path] = None):
         return
     try:
         _sqlite_add_column_if_missing(engine, "catalog_items", "industry", "TEXT DEFAULT '通用'")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     try:
         _sqlite_add_column_if_missing(engine, "users", "default_llm_json", "TEXT DEFAULT ''")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     try:
         _sqlite_add_column_if_missing(engine, "users", "phone", "TEXT")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     try:
         _sqlite_add_column_if_missing(
             engine, "catalog_items", "security_level", "TEXT DEFAULT 'personal'"
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     try:
         _sqlite_add_column_if_missing(engine, "catalog_items", "industry_code", "TEXT DEFAULT ''")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     try:
         _sqlite_add_column_if_missing(
             engine, "catalog_items", "industry_secondary", "TEXT DEFAULT ''"
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     try:
         _sqlite_add_column_if_missing(
             engine, "catalog_items", "description_embedding", "TEXT DEFAULT ''"
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     try:
         _sqlite_add_column_if_missing(
             engine, "catalog_items", "template_category", "TEXT DEFAULT ''"
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     try:
         _sqlite_add_column_if_missing(
             engine, "catalog_items", "template_difficulty", "TEXT DEFAULT ''"
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     try:
         _sqlite_add_column_if_missing(
             engine, "catalog_items", "install_count", "INTEGER DEFAULT 0 NOT NULL"
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     try:
         _sqlite_add_column_if_missing(engine, "catalog_items", "graph_snapshot", "TEXT DEFAULT ''")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     for column, ddl_type in (
         ("material_category", "TEXT DEFAULT ''"),
@@ -318,33 +334,33 @@ def init_db(db_path: Optional[Path] = None):
     ):
         try:
             _sqlite_add_column_if_missing(engine, "catalog_items", column, ddl_type)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
     try:
         _sqlite_add_column_if_missing(engine, "users", "experience", "INTEGER DEFAULT 0 NOT NULL")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     try:
         _sqlite_add_column_if_missing(engine, "users", "avatar_path", "TEXT DEFAULT ''")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     try:
         _sqlite_add_column_if_missing(
             engine, "users", "avatar_version", "INTEGER DEFAULT 0 NOT NULL"
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     try:
         _sqlite_add_column_if_missing(engine, "workflows", "migration_status", "TEXT DEFAULT ''")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     try:
         _sqlite_add_column_if_missing(engine, "workflows", "migrated_to_id", "INTEGER")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     try:
         _sqlite_add_column_if_missing(engine, "workflows", "kind", "TEXT DEFAULT ''")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     for column, ddl_type in (
         ("git_branch", "TEXT DEFAULT ''"),
@@ -353,13 +369,16 @@ def init_db(db_path: Optional[Path] = None):
     ):
         try:
             _sqlite_add_column_if_missing(engine, "employee_change_requests", column, ddl_type)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
     try:
         _sqlite_add_column_if_missing(
-            engine, "employee_trigger_bindings", "priority", "INTEGER DEFAULT 5 NOT NULL"
+            engine,
+            "employee_trigger_bindings",
+            "priority",
+            "INTEGER DEFAULT 5 NOT NULL",
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     init_default_plan_templates()
     init_default_customer_service_standards()
@@ -375,88 +394,7 @@ def init_default_plan_templates() -> None:
       - SVIP2..8 = plan_svip2..plan_svip8 进阶 S 级，购买前需已拥有任一 SVIP 档
     旧 plan_id 不变，避免 user_plans / payment_orders 历史数据失效。
     """
-    defaults = [
-        {
-            "id": "plan_basic",
-            "name": "VIP",
-            "description": "入门会员，解锁基础 AI 调用与平台能力",
-            "price": 9.90,
-            "features_json": '["基础 AI 对话","基础模型额度","可购买更多余额","会员身份标识"]',
-            "quotas_json": '{"employee_count":1,"storage_mb":512}',
-        },
-        {
-            "id": "plan_pro",
-            "name": "VIP+",
-            "description": "进阶会员，更高额度 + BYOK + 用量明细",
-            "price": 29.90,
-            "features_json": '["更高 AI 调用额度","BYOK 自有密钥","优先模型接入","用量明细","高级功能优先体验"]',
-            "quotas_json": '{"employee_count":3,"storage_mb":2048}',
-        },
-        {
-            "id": "plan_enterprise",
-            "name": "svip",
-            "description": "企业级会员（svip），含大额度企业 AI 调用、团队/部署 与优先支持",
-            "price": 99.90,
-            "features_json": '["企业级 AI 调用额度","团队/企业支持","专属部署支持","优先技术支持"]',
-            "quotas_json": '{"employee_count":999999,"storage_mb":10240}',
-        },
-        {
-            "id": "plan_svip2",
-            "name": "SVIP2",
-            "description": "SVIP 进阶档（需已是 SVIP 用户）",
-            "price": 199.00,
-            "features_json": '["svip 全部权益","双倍 AI 调用额度","专属客服群组","新功能内测资格"]',
-            "quotas_json": '{"employee_count":999999,"storage_mb":20480}',
-        },
-        {
-            "id": "plan_svip3",
-            "name": "SVIP3",
-            "description": "SVIP 进阶档（需已是 SVIP 用户）",
-            "price": 299.00,
-            "features_json": '["SVIP2 全部权益","三倍 AI 调用额度","定制工作流模板"]',
-            "quotas_json": '{"employee_count":999999,"storage_mb":30720}',
-        },
-        {
-            "id": "plan_svip4",
-            "name": "SVIP4",
-            "description": "SVIP 进阶档（需已是 SVIP 用户）",
-            "price": 499.00,
-            "features_json": '["SVIP3 全部权益","五倍 AI 调用额度","专家咨询时长 2h/月"]',
-            "quotas_json": '{"employee_count":999999,"storage_mb":51200}',
-        },
-        {
-            "id": "plan_svip5",
-            "name": "SVIP5",
-            "description": "SVIP 进阶档（需已是 SVIP 用户）",
-            "price": 999.00,
-            "features_json": '["SVIP4 全部权益","十倍 AI 调用额度","专家咨询时长 5h/月"]',
-            "quotas_json": '{"employee_count":999999,"storage_mb":102400}',
-        },
-        {
-            "id": "plan_svip6",
-            "name": "SVIP6",
-            "description": "SVIP 进阶档（需已是 SVIP 用户）",
-            "price": 1999.00,
-            "features_json": '["SVIP5 全部权益","二十倍 AI 调用额度","驻场技术对接 1d/月"]',
-            "quotas_json": '{"employee_count":999999,"storage_mb":204800}',
-        },
-        {
-            "id": "plan_svip7",
-            "name": "SVIP7",
-            "description": "SVIP 进阶档（需已是 SVIP 用户）",
-            "price": 2999.00,
-            "features_json": '["SVIP6 全部权益","三十倍 AI 调用额度","驻场技术对接 2d/月","品牌联合露出"]',
-            "quotas_json": '{"employee_count":999999,"storage_mb":307200}',
-        },
-        {
-            "id": "plan_svip8",
-            "name": "SVIP8",
-            "description": "SVIP 顶级档（需已是 SVIP 用户）",
-            "price": 4999.00,
-            "features_json": '["SVIP7 全部权益","无限 AI 调用额度","驻场技术对接 5d/月","战略合作通道"]',
-            "quotas_json": '{"employee_count":999999,"storage_mb":1048576}',
-        },
-    ]
+    defaults = DEFAULT_PLAN_TEMPLATES
     sf = get_session_factory()
     with sf() as session:
         for row in defaults:
@@ -476,44 +414,7 @@ def init_default_plan_templates() -> None:
 def init_default_customer_service_standards() -> None:
     """初始化 AI 客服默认审核标准，管理员可在后台继续调整。"""
 
-    defaults = [
-        {
-            "name": "订单退款自动处理",
-            "scenario": "refund",
-            "description": "识别订单退款诉求，低风险且证据完整时自动创建退款工单。",
-            "rules_json": '{"required_fields":["order_no","reason"],"max_auto_amount":100,"deny_if":["order_not_paid","duplicate_refund"]}',
-            "action_policy_json": '{"auto_actions":["refund.apply"],"high_risk_actions":["refund.approve"],"requires_audit_log":true}',
-            "risk_level": "medium",
-            "priority": 10,
-        },
-        {
-            "name": "商品投诉与合规审核",
-            "scenario": "catalog_complaint",
-            "description": "处理抄袭、侵权、授权争议、无法下载等市场商品问题。",
-            "rules_json": '{"required_fields":["catalog_id","complaint_type","reason"],"evidence_recommended":true}',
-            "action_policy_json": '{"auto_actions":["catalog.complaint.create"],"high_risk_actions":["catalog.compliance.update"],"requires_audit_log":true}',
-            "risk_level": "medium",
-            "priority": 20,
-        },
-        {
-            "name": "上架合规审核",
-            "scenario": "catalog_review",
-            "description": "根据素材来源、授权范围、IP 风险与收费策略进行上架合规判断。",
-            "rules_json": '{"required_fields":["catalog_id"],"reject_if":["paid_without_commercial_license","high_ip_risk_paid"]}',
-            "action_policy_json": '{"auto_actions":["catalog.compliance.review"],"requires_audit_log":true}',
-            "risk_level": "high",
-            "priority": 30,
-        },
-        {
-            "name": "账号权益与使用咨询",
-            "scenario": "account_support",
-            "description": "回答账号、会员、下载、额度和权益问题，必要时生成客服工单。",
-            "rules_json": '{"required_fields":[],"knowledge_first":true}',
-            "action_policy_json": '{"auto_actions":["ticket.note"],"requires_audit_log":true}',
-            "risk_level": "low",
-            "priority": 40,
-        },
-    ]
+    defaults = DEFAULT_CUSTOMER_SERVICE_STANDARDS
     sf = get_session_factory()
     with sf() as session:
         for row in defaults:

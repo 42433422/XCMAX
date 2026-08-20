@@ -307,7 +307,10 @@ def _execute_body_plan(plan: Any, ctx: dict[str, Any]) -> dict[str, Any]:
     """执行 body_plan（V1 简化：单节点 PlanGraph）。"""
     if not isinstance(plan, dict) and not isinstance(plan, PlanGraph):
         return {"success": False, "error_code": "invalid_body_plan", "message": "body_plan 非法"}
-    nodes = getattr(plan, "nodes", None) or plan.get("nodes", [])
+    if isinstance(plan, PlanGraph):
+        nodes = plan.nodes
+    else:
+        nodes = plan.get("nodes", [])
     if not nodes:
         return {"success": False, "error_code": "empty_body_plan", "message": "body_plan 无节点"}
     first = nodes[0]
@@ -398,7 +401,10 @@ def execute_sub_workflow_node(
         }
 
     engine = WorkflowEngine(tool_dispatcher=parent_dispatcher)
-    return engine.run(plan=inline_plan, runtime_context=sub_ctx, agentic_loop=False).__dict__
+    return cast(
+        "dict[str, Any]",
+        engine.run(plan=inline_plan, runtime_context=sub_ctx, agentic_loop=False).__dict__,
+    )
 
 
 # ---------------------- 节点注册表 ----------------------

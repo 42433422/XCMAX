@@ -32,7 +32,7 @@ from app.application.workflow.ports.runtime import Callback, StateSchema, Workfl
 from app.application.workflow.ports.tools import ToolDispatcher
 from app.contexts.flags import lg_runtime_mode
 from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime
-from app.infrastructure.workflow.legacy_engine_adapter import LegacyEngineAdapter
+from app.legacy.workflow.legacy_engine_adapter import LegacyEngineAdapter
 
 
 class _UnwiredDispatcher:

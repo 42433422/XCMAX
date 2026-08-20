@@ -98,7 +98,11 @@ def test_quota_only_failures_circuit_break_and_no_rewrite(tmp_path, monkeypatch)
     """全部失败都是配额(403)时：不选任何重写候选、熔断本轮、refine_system_prompt 绝不被调用。"""
     models = _fresh_db(tmp_path, monkeypatch, "evo_quota.sqlite")
     _seed_failures(
-        models, employee_id="emp-quota", status="failed", failure_kind=FAILURE_KIND_QUOTA, count=8
+        models,
+        employee_id="emp-quota",
+        status="failed",
+        failure_kind=FAILURE_KIND_QUOTA,
+        count=8,
     )
 
     called = {"refine": 0}
@@ -127,10 +131,18 @@ def test_quota_failures_do_not_pad_threshold(tmp_path, monkeypatch):
     """配额失败不计入 min_failures 阈值：8 配额 + 1 真失败 仍不达标，不触发重写。"""
     models = _fresh_db(tmp_path, monkeypatch, "evo_mixed_low.sqlite")
     _seed_failures(
-        models, employee_id="emp-mix", status="failed", failure_kind=FAILURE_KIND_QUOTA, count=8
+        models,
+        employee_id="emp-mix",
+        status="failed",
+        failure_kind=FAILURE_KIND_QUOTA,
+        count=8,
     )
     _seed_failures(
-        models, employee_id="emp-mix", status="failed", failure_kind=FAILURE_KIND_PROMPT, count=1
+        models,
+        employee_id="emp-mix",
+        status="failed",
+        failure_kind=FAILURE_KIND_PROMPT,
+        count=1,
     )
 
     called = {"refine": 0}
@@ -159,10 +171,18 @@ def test_real_failures_still_trigger_rewrite(tmp_path, monkeypatch):
     models = _fresh_db(tmp_path, monkeypatch, "evo_real.sqlite")
     # 4 个 quota + 4 个 prompt：真失败已达阈值，配额噪声不应抑制对真问题的进化。
     _seed_failures(
-        models, employee_id="emp-real", status="failed", failure_kind=FAILURE_KIND_QUOTA, count=4
+        models,
+        employee_id="emp-real",
+        status="failed",
+        failure_kind=FAILURE_KIND_QUOTA,
+        count=4,
     )
     _seed_failures(
-        models, employee_id="emp-real", status="failed", failure_kind=FAILURE_KIND_PROMPT, count=4
+        models,
+        employee_id="emp-real",
+        status="failed",
+        failure_kind=FAILURE_KIND_PROMPT,
+        count=4,
     )
 
     seen = {"refine": 0, "prompt_in": ""}
@@ -206,7 +226,9 @@ def test_real_failures_still_trigger_rewrite(tmp_path, monkeypatch):
 
     monkeypatch.setattr(svc, "create_employee_suggestion", _fake_create_suggestion)
     monkeypatch.setattr(
-        ab, "maybe_auto_apply_prompt_evolution", lambda **_kw: {"applied": False, "ab": {}}
+        ab,
+        "maybe_auto_apply_prompt_evolution",
+        lambda **_kw: {"applied": False, "ab": {}},
     )
     monkeypatch.setattr(svc, "_publish_event", lambda *a, **k: None)
 

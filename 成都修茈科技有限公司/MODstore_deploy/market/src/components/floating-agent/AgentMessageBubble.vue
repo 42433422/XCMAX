@@ -1,8 +1,5 @@
 <template>
-  <article
-    class="bubble-wrap"
-    :class="[`bubble-wrap--${msg.role}`, { 'bubble-wrap--loading': msg.isLoading }]"
-  >
+  <article class="bubble-wrap" :class="[`bubble-wrap--${msg.role}`, { 'bubble-wrap--loading': msg.isLoading }]">
     <div v-if="msg.role === 'user'" class="bubble bubble--user">
       {{ msg.content }}
     </div>
@@ -73,10 +70,14 @@ function formatTime(ts: number): string {
   margin-bottom: 10px;
 }
 
-.bubble-wrap--user { align-items: flex-end; }
+.bubble-wrap--user {
+  align-items: flex-end;
+}
 .bubble-wrap--assistant,
 .bubble-wrap--tool,
-.bubble-wrap--action_preview { align-items: flex-start; }
+.bubble-wrap--action_preview {
+  align-items: flex-start;
+}
 
 .bubble {
   max-width: 88%;
@@ -132,9 +133,18 @@ function formatTime(ts: number): string {
   border-radius: 999px;
 }
 
-.preview-risk--high { background: rgba(248, 113, 113, 0.2); color: #f87171; }
-.preview-risk--medium { background: rgba(251, 191, 36, 0.2); color: #fbbf24; }
-.preview-risk--low { background: rgba(74, 222, 128, 0.2); color: #4ade80; }
+.preview-risk--high {
+  background: rgba(248, 113, 113, 0.2);
+  color: #f87171;
+}
+.preview-risk--medium {
+  background: rgba(251, 191, 36, 0.2);
+  color: #fbbf24;
+}
+.preview-risk--low {
+  background: rgba(74, 222, 128, 0.2);
+  color: #4ade80;
+}
 
 .bubble-time {
   font-size: 0.65rem;
@@ -158,15 +168,27 @@ function formatTime(ts: number): string {
   animation: dot-bounce 1.2s ease-in-out infinite;
 }
 
-.bubble-dots span:nth-child(2) { animation-delay: 0.2s; }
-.bubble-dots span:nth-child(3) { animation-delay: 0.4s; }
-
-@keyframes dot-bounce {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-4px); }
+.bubble-dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.bubble-dots span:nth-child(3) {
+  animation-delay: 0.4s;
 }
 
-.bubble-text :deep(strong) { font-weight: 700; color: #fff; }
+@keyframes dot-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.bubble-text :deep(strong) {
+  font-weight: 700;
+  color: #fff;
+}
 
 .bubble-text :deep(.bubble-link) {
   color: #60a5fa;

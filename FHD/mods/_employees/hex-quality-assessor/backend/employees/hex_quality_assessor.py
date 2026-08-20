@@ -23,7 +23,11 @@ def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
             normalized[dimension] = round(float(value), 2)
     if len(evidence) < len(_DIMENSIONS):
         issues.append({"code": "insufficient_evidence", "path": "assessment.evidence"})
-    overall = round(sum(normalized.values()) / len(_DIMENSIONS), 2) if len(normalized) == len(_DIMENSIONS) else 0.0
+    overall = (
+        round(sum(normalized.values()) / len(_DIMENSIONS), 2)
+        if len(normalized) == len(_DIMENSIONS)
+        else 0.0
+    )
     if overall < 80:
         issues.append({"code": "quality_below_gate", "path": "assessment.scores"})
     return {
@@ -41,4 +45,12 @@ def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
 
 
 def _failed(message: str, code: str) -> dict[str, Any]:
-    return {"ok": False, "status": "failed", "summary": message, "error_code": code, "evidence": [], "read_only": True, "side_effects": []}
+    return {
+        "ok": False,
+        "status": "failed",
+        "summary": message,
+        "error_code": code,
+        "evidence": [],
+        "read_only": True,
+        "side_effects": [],
+    }

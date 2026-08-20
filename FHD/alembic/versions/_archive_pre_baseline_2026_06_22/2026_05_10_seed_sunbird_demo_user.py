@@ -8,7 +8,7 @@ Create Date: 2026-05-10
 from alembic import op
 from sqlalchemy import text
 
-from app.utils.password_hash import generate_password_hash
+from app.utils.security.password_hash import generate_password_hash
 from app.utils.time import utc_now_naive
 
 revision = "2026_05_10_seed_sunbird_demo_user"

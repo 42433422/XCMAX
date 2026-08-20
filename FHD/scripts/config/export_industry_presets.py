@@ -1,5 +1,6 @@
-# -*- coding: utf-8 -*-
+# mypy: disable-error-code="no-any-return"
 """One-shot: export frontend industryPresets.ts → config/industry_presets.json"""
+
 from __future__ import annotations
 
 import json

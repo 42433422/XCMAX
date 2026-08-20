@@ -41,7 +41,9 @@ describe('hostPackOnboardingGate', () => {
     vi.mocked(fetchOnboardingIndustryCatalog).mockResolvedValue({
       selected_industry_id: '涂料',
     } as OnboardingIndustryCatalog)
-    vi.mocked(fetchIndustryBaseline).mockResolvedValue({ baseline_ready: false } as IndustryBaselinePlan)
+    vi.mocked(fetchIndustryBaseline).mockResolvedValue({
+      baseline_ready: false,
+    } as IndustryBaselinePlan)
     vi.mocked(authApi.validateSession).mockResolvedValue({
       success: true,
       data: { account_kind: 'enterprise', market_is_admin: false },
@@ -66,12 +68,16 @@ describe('hostPackOnboardingGate', () => {
   })
 
   it('does not require host pack when baseline ready', async () => {
-    vi.mocked(fetchIndustryBaseline).mockResolvedValue({ baseline_ready: true } as IndustryBaselinePlan)
+    vi.mocked(fetchIndustryBaseline).mockResolvedValue({
+      baseline_ready: true,
+    } as IndustryBaselinePlan)
     await expect(needsHostPackCompletion(true)).resolves.toBe(false)
   })
 
   it('reuses the short session cache for a deep-link reload', async () => {
-    vi.mocked(fetchIndustryBaseline).mockResolvedValue({ baseline_ready: true } as IndustryBaselinePlan)
+    vi.mocked(fetchIndustryBaseline).mockResolvedValue({
+      baseline_ready: true,
+    } as IndustryBaselinePlan)
     await expect(needsHostPackCompletion(false)).resolves.toBe(false)
     await expect(needsHostPackCompletion(false)).resolves.toBe(false)
     expect(fetchIndustryBaseline).toHaveBeenCalledTimes(1)
@@ -110,7 +116,9 @@ describe('hostPackOnboardingGate', () => {
   })
 
   it('returns null when baseline ready', async () => {
-    vi.mocked(fetchIndustryBaseline).mockResolvedValue({ baseline_ready: true } as IndustryBaselinePlan)
+    vi.mocked(fetchIndustryBaseline).mockResolvedValue({
+      baseline_ready: true,
+    } as IndustryBaselinePlan)
     await expect(resolveHostPackOnboardingStep(true)).resolves.toBe(null)
   })
 })

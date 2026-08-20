@@ -23,6 +23,8 @@ from urllib.parse import urlparse
 
 import httpx
 
+from modstore_server.operational_errors import BOUNDARY_ERRORS
+
 
 def _normalized_allowed_hosts(values: Iterable[str]) -> set[str]:
     return {str(value or "").strip().lower() for value in values if str(value or "").strip()}
@@ -161,7 +163,7 @@ async def probe_mod_host(
                         data.get("version") or data.get("server_version") or ""
                     )[:80]
                     row["min_mod_sdk_version"] = str(data.get("min_mod_sdk_version") or "")[:80]
-            except Exception as exc:  # noqa: BLE001 - each endpoint retains evidence
+            except BOUNDARY_ERRORS as exc:  # noqa: BLE001 - each endpoint retains evidence
                 row.update(
                     {
                         "ok": False,
@@ -242,7 +244,7 @@ async def validate_xcemp_package(
     try:
         target = _safe_workspace_target(workspace_root, relative_path)
         archive = _inspect_xcemp_archive(target)
-    except Exception as exc:  # noqa: BLE001 - structured failure is the tool contract
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001 - structured failure is the tool contract
         return {"ok": False, "stage": "archive_inspection", "error": str(exc)[:400]}
 
     digest = hashlib.sha256(target.read_bytes()).hexdigest()
@@ -266,7 +268,7 @@ async def validate_xcemp_package(
         )
         try:
             stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             process.kill()
             await process.communicate()
             return {

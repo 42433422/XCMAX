@@ -43,43 +43,83 @@ export interface ModuleMeta {
 
 export const MODULE_META: Record<EmployeeModuleKind, ModuleMeta> = {
   identity: {
-    kind: 'identity', label: '身份', icon: '🪪', accent: '#6366f1', required: true,
+    kind: 'identity',
+    label: '身份',
+    icon: '🪪',
+    accent: '#6366f1',
+    required: true,
     paths: ['identity'],
   },
   prompt: {
-    kind: 'prompt', label: '提示词', icon: '💬', accent: '#8b5cf6', required: false,
+    kind: 'prompt',
+    label: '提示词',
+    icon: '💬',
+    accent: '#8b5cf6',
+    required: false,
     paths: ['cognition.agent'],
   },
   skills: {
-    kind: 'skills', label: '技能', icon: '⚡', accent: '#f59e0b', required: false,
+    kind: 'skills',
+    label: '技能',
+    icon: '⚡',
+    accent: '#f59e0b',
+    required: false,
     paths: ['cognition.skills'],
   },
   workflow_heart: {
-    kind: 'workflow_heart', label: '工作流心脏', icon: '❤️', accent: '#ef4444', required: true,
+    kind: 'workflow_heart',
+    label: '工作流心脏',
+    icon: '❤️',
+    accent: '#ef4444',
+    required: true,
     paths: ['collaboration.workflow'],
   },
   memory: {
-    kind: 'memory', label: '记忆', icon: '🧠', accent: '#10b981', required: false,
+    kind: 'memory',
+    label: '记忆',
+    icon: '🧠',
+    accent: '#10b981',
+    required: false,
     paths: ['memory'],
   },
   voice: {
-    kind: 'voice', label: '语音', icon: '🎙️', accent: '#06b6d4', required: false,
+    kind: 'voice',
+    label: '语音',
+    icon: '🎙️',
+    accent: '#06b6d4',
+    required: false,
     paths: ['perception.audio', 'actions.voice_output'],
   },
   perception: {
-    kind: 'perception', label: '感知', icon: '👁️', accent: '#3b82f6', required: false,
+    kind: 'perception',
+    label: '感知',
+    icon: '👁️',
+    accent: '#3b82f6',
+    required: false,
     paths: ['perception'],
   },
   actions: {
-    kind: 'actions', label: '行动', icon: '🎯', accent: '#ec4899', required: false,
+    kind: 'actions',
+    label: '行动',
+    icon: '🎯',
+    accent: '#ec4899',
+    required: false,
     paths: ['actions'],
   },
   management: {
-    kind: 'management', label: '管理', icon: '⚙️', accent: '#64748b', required: false,
+    kind: 'management',
+    label: '管理',
+    icon: '⚙️',
+    accent: '#64748b',
+    required: false,
     paths: ['management'],
   },
   collaboration: {
-    kind: 'collaboration', label: '协作权限', icon: '🤝', accent: '#84cc16', required: false,
+    kind: 'collaboration',
+    label: '协作权限',
+    icon: '🤝',
+    accent: '#84cc16',
+    required: false,
     paths: ['collaboration.permissions'],
   },
 }
@@ -200,21 +240,14 @@ export function manifestToEdges(nodes: Node[]): Edge[] {
  * data flow is declared in the workflow JSON. This is a no-op
  * for now but provides the hook for future edge-to-config writes.
  */
-export function applyEdgeToManifest(
-  _manifest: Record<string, unknown>,
-  _source: string,
-  _target: string,
-): Record<string, unknown> {
+export function applyEdgeToManifest(_manifest: Record<string, unknown>, _source: string, _target: string): Record<string, unknown> {
   return _manifest
 }
 
 /**
  * Add a module node to an existing manifest.
  */
-export function addModuleToManifest(
-  manifest: Record<string, unknown>,
-  kind: EmployeeModuleKind,
-): Record<string, unknown> {
+export function addModuleToManifest(manifest: Record<string, unknown>, kind: EmployeeModuleKind): Record<string, unknown> {
   const next = { ...manifest }
   const meta = MODULE_META[kind]
 
@@ -223,12 +256,21 @@ export function addModuleToManifest(
       short_term: { context_window: 8000, session_timeout: 1800, keep_history: true },
     }
   } else if (kind === 'perception') {
-    next.perception = next.perception ?? { vision: { enabled: false }, document: { enabled: false } }
+    next.perception = next.perception ?? {
+      vision: { enabled: false },
+      document: { enabled: false },
+    }
   } else if (kind === 'voice') {
     const p = (next.perception as Record<string, unknown> | undefined) ?? {}
-    next.perception = { ...p, audio: { enabled: true, asr: { enabled: true, languages: ['zh-CN'] } } }
+    next.perception = {
+      ...p,
+      audio: { enabled: true, asr: { enabled: true, languages: ['zh-CN'] } },
+    }
     const a = (next.actions as Record<string, unknown> | undefined) ?? {}
-    next.actions = { ...a, voice_output: { enabled: true, tts: { provider: 'aliyun', voice_name: '' } } }
+    next.actions = {
+      ...a,
+      voice_output: { enabled: true, tts: { provider: 'aliyun', voice_name: '' } },
+    }
   } else if (kind === 'actions') {
     next.actions = next.actions ?? { text_output: { enabled: true, formats: ['text', 'json'] } }
   } else if (kind === 'management') {
@@ -251,10 +293,7 @@ export function addModuleToManifest(
 /**
  * Remove a module from a manifest. Required modules cannot be removed.
  */
-export function removeModuleFromManifest(
-  manifest: Record<string, unknown>,
-  kind: EmployeeModuleKind,
-): Record<string, unknown> {
+export function removeModuleFromManifest(manifest: Record<string, unknown>, kind: EmployeeModuleKind): Record<string, unknown> {
   const meta = MODULE_META[kind]
   if (meta.required) return manifest
   const next = { ...manifest }

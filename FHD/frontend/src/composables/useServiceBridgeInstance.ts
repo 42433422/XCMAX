@@ -2,10 +2,7 @@ import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useAccountProfileStore } from '@/stores/accountProfile'
 import { useModsStore } from '@/stores/mods'
-import {
-  CLIENT_PRIMARY_ERP_MOD_ID,
-  hasInstalledClientPrimaryErpMod,
-} from '@/constants/genericModPack'
+import { CLIENT_PRIMARY_ERP_MOD_ID, hasInstalledClientPrimaryErpMod } from '@/constants/genericModPack'
 import { LS_MARKET_USER_JSON, type MarketUserProfile } from '@/api/marketAccount'
 
 const LS_INSTANCE_ID = 'xcagi_service_bridge_instance_id'
@@ -66,10 +63,7 @@ export function useServiceBridgeInstance() {
       return '太阳鸟'
     }
     if (brand) return brand
-    const cached =
-      typeof localStorage !== 'undefined'
-        ? localStorage.getItem(LS_INSTANCE_NAME)?.trim()
-        : ''
+    const cached = typeof localStorage !== 'undefined' ? localStorage.getItem(LS_INSTANCE_NAME)?.trim() : ''
     if (cached) return cached
     return uname || '本企业'
   })

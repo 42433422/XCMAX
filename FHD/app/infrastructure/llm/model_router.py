@@ -31,7 +31,7 @@ import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -232,7 +232,7 @@ class ModelRouter:
         if not path.exists():
             return None
         with path.open("r", encoding="utf-8") as f:
-            return json.load(f)
+            return cast("dict[str, Any] | None", json.load(f))
 
     @staticmethod
     def _resolve_repo_root() -> Path | None:
@@ -248,7 +248,7 @@ class ModelRouter:
     @staticmethod
     def _validate_tier(value: Any, default: ModelTier) -> ModelTier:
         v = str(value or "").strip().lower()
-        return v if v in {"small", "large"} else default
+        return cast("ModelTier", v) if v in {"small", "large"} else default
 
     @staticmethod
     def _coerce_keywords(value: Any, default: tuple[str, ...]) -> tuple[str, ...]:

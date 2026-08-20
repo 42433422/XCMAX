@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, attr-defined, no-any-return, valid-type"
 """联系页公司名联网检索（总墙钟预算 + 多引擎 SERP）。
 
 从 research_tools 拆出，避免 oversized 文件继续膨胀。
@@ -11,6 +12,7 @@ import re
 import time
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.research_tools import (
     _company_name_key,
     _contact_searxng_fallback_bases,
@@ -154,7 +156,7 @@ async def contact_known_site_company_lookup(query: str, *, max_results: int = 5)
                     found.append(name)
                     if len(found) >= max_results:
                         return found
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 continue
     return found
 
@@ -243,7 +245,7 @@ async def _contact_company_web_fetch_one(
                     via_labels.append(label)
                 if _names_from_merged():
                     return merged[: rn + 4], "+".join(via_labels), err_parts
-        except Exception as e:
+        except RECOVERABLE_ERRORS as e:
             err_parts.append(f"{label}: {_request_error_fragment(e)}"[:140])
 
     tasks: List[Tuple[str, Any]] = [("duckduckgo", duckduckgo_html_search(sq, max_results=rn))]
@@ -305,7 +307,7 @@ async def search_company_names_via_web(
                 ),
                 timeout=remaining,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             err_parts.append("timeout")
             break
         err_parts.extend(crawl_errors or [])

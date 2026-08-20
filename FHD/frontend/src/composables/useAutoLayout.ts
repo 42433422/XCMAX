@@ -14,18 +14,8 @@ export interface LayoutOptions {
   nodeSep?: number
 }
 
-export function computeAutoLayout(
-  nodes: Node[],
-  edges: Edge[],
-  opts: LayoutOptions = {},
-): Map<string, { x: number; y: number }> {
-  const {
-    direction = 'LR',
-    nodeWidth = 220,
-    nodeHeight = 92,
-    rankSep = 80,
-    nodeSep = 48,
-  } = opts
+export function computeAutoLayout(nodes: Node[], edges: Edge[], opts: LayoutOptions = {}): Map<string, { x: number; y: number }> {
+  const { direction = 'LR', nodeWidth = 220, nodeHeight = 92, rankSep = 80, nodeSep = 48 } = opts
 
   const g = new dagre.graphlib.Graph()
   g.setDefaultEdgeLabel(() => ({}))
@@ -68,16 +58,7 @@ export function computeGridLayout(
   ids: string[],
   opts: GridLayoutOptions,
 ): { positions: Map<string, { x: number; y: number }>; width: number; height: number } {
-  const {
-    cols,
-    cellWidth,
-    cellHeight,
-    gapX = 12,
-    gapY = 12,
-    paddingX = 14,
-    paddingY = 36,
-    paddingBottom = 14,
-  } = opts
+  const { cols, cellWidth, cellHeight, gapX = 12, gapY = 12, paddingX = 14, paddingY = 36, paddingBottom = 14 } = opts
 
   const positions = new Map<string, { x: number; y: number }>()
   const rowCount = Math.max(1, Math.ceil(Math.max(ids.length, 1) / cols))

@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 
-const props = withDefaults(
+const _props = withDefaults(
   defineProps<{
     /** 账户中心嵌入：精简列表，桌面加密导出见开发者门户 */
     embedded?: boolean
@@ -35,6 +35,15 @@ interface DeveloperToken {
   is_active: boolean
 }
 
+interface KeyExportAuditEvent {
+  id: number | string
+  created_at: string | null
+  action: string
+  success: boolean
+  detail: string
+  client_ip?: string | null
+}
+
 const tokens = ref<DeveloperToken[]>([])
 const activeTokens = computed(() => tokens.value.filter((t) => t.is_active))
 const loading = ref(false)
@@ -47,22 +56,14 @@ const draft = reactive({ name: '', scopesCsv: 'mod:sync,catalog:read', expiresDa
 const justCreated = ref<{ token: string; meta: DeveloperToken } | null>(null)
 const copied = ref(false)
 
-const SCOPE_HINTS = [
-  'mod:sync',
-  'llm:use',
-  'workflow:read',
-  'workflow:execute',
-  'employee:execute',
-  'catalog:read',
-  'webhook:manage',
-]
+const SCOPE_HINTS = ['mod:sync', 'llm:use', 'workflow:read', 'workflow:execute', 'employee:execute', 'catalog:read', 'webhook:manage']
 
 const desktopPubB64 = ref('')
 const exportPassword = ref('')
 const exportSelected = ref<number[]>([])
 const exportBusy = ref(false)
 const exportAuditOpen = ref(false)
-const exportAudit = ref<any[]>([])
+const exportAudit = ref<KeyExportAuditEvent[]>([])
 const exportAuditLoading = ref(false)
 
 function onExportCheck(id: number, ev: Event) {
@@ -92,21 +93,16 @@ async function runExportBundle() {
     errMsg.value = '请至少勾选一个要下发的 Token'
     return
   }
-  if (
-    !confirm(
-      '将使用所选 Token 的同名同权限**轮换签发**新明文，并仅写入加密包；网页上旧前缀将立即失效。确定继续？',
-    )
-  )
-    return
+  if (!confirm('将使用所选 Token 的同名同权限**轮换签发**新明文，并仅写入加密包；网页上旧前缀将立即失效。确定继续？')) return
   exportBusy.value = true
   try {
-    const resp: any = await api.developerExportKeyBundle({
+    const resp = (await api.developerExportKeyBundle({
       recipient_public_key_spki_b64: desktopPubB64.value.trim(),
       current_password: exportPassword.value,
       token_ids: exportSelected.value,
       rotate_source_tokens: true,
-    })
-    const b64 = resp?.cipher_b64 as string
+    })) as { cipher_b64?: string }
+    const b64 = resp.cipher_b64
     if (!b64) throw new Error('响应缺少 cipher_b64')
     const bin = atob(b64)
     const bytes = new Uint8Array(bin.length)
@@ -130,7 +126,7 @@ async function runExportBundle() {
 async function loadExportAudit() {
   exportAuditLoading.value = true
   try {
-    const r: any = await api.developerListKeyExportAudit(30)
+    const r = (await api.developerListKeyExportAudit(30)) as { events?: KeyExportAuditEvent[] }
     exportAudit.value = Array.isArray(r?.events) ? r.events : []
   } catch {
     exportAudit.value = []
@@ -148,7 +144,7 @@ async function refresh() {
   loading.value = true
   errMsg.value = ''
   try {
-    const list: any = await api.developerListTokens()
+    const list = await api.developerListTokens()
     tokens.value = Array.isArray(list) ? list : []
   } catch (e: unknown) {
     errMsg.value = errText(e, '加载失败')
@@ -199,11 +195,11 @@ async function submitCreate() {
       .map((s) => s.trim())
       .filter(Boolean)
     const days = draft.expiresDays.trim() ? Number(draft.expiresDays) : null
-    const resp: any = await api.developerCreateToken(
+    const resp = (await api.developerCreateToken(
       draft.name.trim(),
       scopes,
       Number.isFinite(days as number) && (days as number) > 0 ? (days as number) : null,
-    )
+    )) as DeveloperToken & { token?: string }
     showDialog.value = false
     if (resp?.token) {
       const { token, ...meta } = resp
@@ -253,7 +249,7 @@ async function revoke(row: DeveloperToken) {
   try {
     await api.developerRevokeToken(row.id)
     await refresh()
-  } catch (e: any) {
+  } catch (e: unknown) {
     errMsg.value = errText(e, '吊销失败')
   }
 }
@@ -284,8 +280,7 @@ function scopesSummary(scopes: string[]): string {
 
 function statusOf(row: DeveloperToken): { text: string; cls: string } {
   if (row.revoked_at) return { text: '已吊销', cls: 'st-revoked' }
-  if (row.expires_at && new Date(row.expires_at).getTime() < Date.now())
-    return { text: '已过期', cls: 'st-expired' }
+  if (row.expires_at && new Date(row.expires_at).getTime() < Date.now()) return { text: '已过期', cls: 'st-expired' }
   return { text: '可用', cls: 'st-active' }
 }
 
@@ -308,9 +303,7 @@ function justCreatedHasScope(scope: string): boolean {
         创建后明文仅显示一次。
         <a href="/dev-docs/" target="_blank" rel="noreferrer">API 文档</a>
       </p>
-      <button class="dt__btn dt__btn--primary" type="button" @click="openCreate">
-        创建 Token
-      </button>
+      <button class="dt__btn dt__btn--primary" type="button" @click="openCreate">创建 Token</button>
     </header>
 
     <p v-if="errMsg" class="dt__err">{{ errMsg }}</p>
@@ -320,12 +313,7 @@ function justCreatedHasScope(scope: string): boolean {
       {{ embedded ? '暂无 Token，点击「创建 Token」生成密钥。' : '还没有 Token，点击「创建新 Token」开始接入第三方应用。' }}
     </div>
     <ul v-else-if="embedded" class="dt__list">
-      <li
-        v-for="t in tokens"
-        :key="t.id"
-        class="dt__list-item"
-        :class="{ 'dt__list-item--inactive': !t.is_active }"
-      >
+      <li v-for="t in tokens" :key="t.id" class="dt__list-item" :class="{ 'dt__list-item--inactive': !t.is_active }">
         <div class="dt__list-body">
           <div class="dt__list-top">
             <span class="dt__list-name">{{ t.name || '—' }}</span>
@@ -339,14 +327,7 @@ function justCreatedHasScope(scope: string): boolean {
             {{ formatExpiresShort(t.expires_at) }}
           </p>
         </div>
-        <button
-          v-if="t.is_active"
-          class="dt__btn dt__btn--danger dt__btn--sm"
-          type="button"
-          @click="revoke(t)"
-        >
-          吊销
-        </button>
+        <button v-if="t.is_active" class="dt__btn dt__btn--danger dt__btn--sm" type="button" @click="revoke(t)">吊销</button>
       </li>
     </ul>
     <table v-else class="dt__table">
@@ -365,7 +346,9 @@ function justCreatedHasScope(scope: string): boolean {
       <tbody>
         <tr v-for="t in tokens" :key="t.id" :class="{ 'dt__row--inactive': !t.is_active }">
           <td>{{ t.name || '—' }}</td>
-          <td><code>{{ t.prefix }}…</code></td>
+          <td>
+            <code>{{ t.prefix }}…</code>
+          </td>
           <td>
             <span v-if="!t.scopes.length" class="dt__scope-empty">未配置</span>
             <span v-for="s in t.scopes" :key="s" class="dt__scope">{{ s }}</span>
@@ -377,14 +360,7 @@ function justCreatedHasScope(scope: string): boolean {
             <span class="dt__status" :class="statusOf(t).cls">{{ statusOf(t).text }}</span>
           </td>
           <td>
-            <button
-              v-if="t.is_active"
-              class="dt__btn dt__btn--danger"
-              type="button"
-              @click="revoke(t)"
-            >
-              吊销
-            </button>
+            <button v-if="t.is_active" class="dt__btn dt__btn--danger" type="button" @click="revoke(t)">吊销</button>
           </td>
         </tr>
       </tbody>
@@ -397,7 +373,9 @@ function justCreatedHasScope(scope: string): boolean {
 
     <section v-if="!embedded" class="dt-desk">
       <h3 class="dt-desk__title">传到桌面（加密包）</h3>
-      <p class="dt-desk__hint">粘贴桌面公钥并确认密码后下发加密包。<a href="/dev-docs/developer/08-key-export-desktop.md" target="_blank" rel="noreferrer">说明</a></p>
+      <p class="dt-desk__hint">
+        粘贴桌面公钥并确认密码后下发加密包。<a href="/dev-docs/developer/08-key-export-desktop.md" target="_blank" rel="noreferrer">说明</a>
+      </p>
       <label class="dt-field">
         <span>桌面端公钥（base64 DER SPKI）</span>
         <textarea v-model="desktopPubB64" class="dt-desk__ta" rows="3" placeholder="MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE..." />
@@ -413,22 +391,17 @@ function justCreatedHasScope(scope: string): boolean {
         </div>
         <label v-for="t in activeTokens" :key="'ex-' + t.id" class="dt-desk__cb">
           <input type="checkbox" :checked="exportSelected.includes(t.id)" @change="onExportCheck(t.id, $event)" />
-          <span>{{ t.name }} <code>{{ t.prefix }}…</code></span>
+          <span
+            >{{ t.name }} <code>{{ t.prefix }}…</code></span
+          >
         </label>
       </div>
       <p v-else class="dt__placeholder">没有可用 Token，请先创建。</p>
       <div class="dt-desk__actions">
-        <button
-          class="dt__btn dt__btn--primary"
-          type="button"
-          :disabled="exportBusy || !activeTokens.length"
-          @click="runExportBundle"
-        >
+        <button class="dt__btn dt__btn--primary" type="button" :disabled="exportBusy || !activeTokens.length" @click="runExportBundle">
           {{ exportBusy ? '生成中…' : '生成并下载 .msk1 加密包' }}
         </button>
-        <button type="button" class="dt__btn" @click="toggleAudit">
-          {{ exportAuditOpen ? '收起' : '查看' }}导出审计
-        </button>
+        <button type="button" class="dt__btn" @click="toggleAudit">{{ exportAuditOpen ? '收起' : '查看' }}导出审计</button>
       </div>
       <div v-if="exportAuditOpen" class="dt-desk__audit">
         <p v-if="exportAuditLoading">加载审计…</p>
@@ -475,13 +448,7 @@ function justCreatedHasScope(scope: string): boolean {
                 本地 Mod 同步请至少包含 <code>mod:sync</code>；读取 Catalog 建议同时包含 <code>catalog:read</code>。
                 <br />
                 可选：
-                <button
-                  v-for="s in SCOPE_HINTS"
-                  :key="s"
-                  type="button"
-                  class="dt-field__chip"
-                  @click="addScope(s)"
-                >
+                <button v-for="s in SCOPE_HINTS" :key="s" type="button" class="dt-field__chip" @click="addScope(s)">
                   {{ s }}
                 </button>
               </small>
@@ -516,23 +483,18 @@ function justCreatedHasScope(scope: string): boolean {
             <pre
               v-if="justCreatedHasScope('mod:sync')"
               class="dt-just__sample-code"
-><code>curl -X POST https://xiu-ci.com/v1/mod-sync/push \
+            ><code>curl -X POST https://xiu-ci.com/v1/mod-sync/push \
   -H "Authorization: Bearer {{ justCreated.token }}" \
   -H "Content-Type: application/json" \
   -d '{"mod_ids":["example-mod"]}'</code></pre>
-            <pre
-              v-else
-              class="dt-just__sample-code"
-><code>curl https://&lt;your-domain&gt;/api/employees/ \
+            <pre v-else class="dt-just__sample-code"><code>curl https://&lt;your-domain&gt;/api/employees/ \
   -H "Authorization: Bearer {{ justCreated.token }}"</code></pre>
           </div>
           <footer class="dt-modal__foot">
             <button class="dt__btn" type="button" @click="copyJustCreated">
               {{ copied ? '已复制 ✓' : '复制到剪贴板' }}
             </button>
-            <button class="dt__btn dt__btn--primary" type="button" @click="dismissJustCreated">
-              我已保存
-            </button>
+            <button class="dt__btn dt__btn--primary" type="button" @click="dismissJustCreated">我已保存</button>
           </footer>
         </div>
       </div>

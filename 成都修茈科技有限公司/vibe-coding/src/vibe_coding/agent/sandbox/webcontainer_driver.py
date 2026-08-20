@@ -164,10 +164,7 @@ class WebContainerSandboxDriver:
             error_type=str(payload.get("error_type") or ""),
             error_message=str(payload.get("error_message") or ""),
             traceback_str=str(payload.get("traceback_str") or ""),
-            duration_ms=float(
-                payload.get("duration_ms")
-                or round((time.perf_counter() - t0) * 1000, 3)
-            ),
+            duration_ms=float(payload.get("duration_ms") or round((time.perf_counter() - t0) * 1000, 3)),
         )
 
 

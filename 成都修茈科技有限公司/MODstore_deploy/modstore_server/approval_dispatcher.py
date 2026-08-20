@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """邮件 token 校验后的部署链：git push → 本地 sync 脚本 → 健康检查。"""
 
 from __future__ import annotations
@@ -5,12 +6,14 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional
 
 from modstore_server.datetime_utils import as_utc_aware
 from modstore_server.email_service import send_simple_html_email
-from modstore_server.employee_change_request_service import apply_employee_change_request
+from modstore_server.employee_change_request_service import (
+    apply_employee_change_request,
+)
 from modstore_server.integrations.ops_action_handlers import (
     APPROVAL_DISPATCHER_EMPLOYEE_ID,
     dispatch_ops_handler,
@@ -22,6 +25,7 @@ from modstore_server.models import (
     User,
     get_session_factory,
 )
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +33,7 @@ logger = logging.getLogger(__name__)
 def _first_admin_user_id() -> int:
     sf = get_session_factory()
     with sf() as session:
-        u = (
-            session.query(User).filter(User.is_admin == True).order_by(User.id.asc()).first()
-        )  # noqa: E712
+        u = session.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).first()
         if u:
             return int(u.id)
         u2 = session.query(User).order_by(User.id.asc()).first()
@@ -60,7 +62,7 @@ def _notify_failure(subject: str, html: str) -> None:
         return
     try:
         send_simple_html_email(to_email, subject, html)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("approval notify email failed")
 
 
@@ -88,7 +90,12 @@ def deploy_staged_change(
             f"MODstore 部署失败（git push）· {branch}",
             f"<p>git-push-branch 失败。</p><pre>{json.dumps(r1, ensure_ascii=False)[:4000]}</pre>",
         )
-        return {"ok": False, "error": "git push failed", "detail": r1, "audit_ids": audit_ids}
+        return {
+            "ok": False,
+            "error": "git push failed",
+            "detail": r1,
+            "audit_ids": audit_ids,
+        }
 
     r2 = _run_cmd("local-sync-deploy", {})
     if r2.get("audit_log_id"):
@@ -99,7 +106,12 @@ def deploy_staged_change(
             f"MODstore 部署失败（sync）· {branch}",
             f"<p>local-sync-deploy 失败。</p><pre>{json.dumps(r2, ensure_ascii=False)[:4000]}</pre>",
         )
-        return {"ok": False, "error": "sync failed", "detail": r2, "audit_ids": audit_ids}
+        return {
+            "ok": False,
+            "error": "sync failed",
+            "detail": r2,
+            "audit_ids": audit_ids,
+        }
 
     r3 = _run_cmd("http-probe-after-deploy", {})
     probe_id = r3.get("audit_log_id")
@@ -111,7 +123,12 @@ def deploy_staged_change(
             f"MODstore 部署失败（健康检查）· {branch}",
             f"<p>http-probe-after-deploy 失败。</p><pre>{json.dumps(r3, ensure_ascii=False)[:4000]}</pre>",
         )
-        return {"ok": False, "error": "health probe failed", "detail": r3, "audit_ids": audit_ids}
+        return {
+            "ok": False,
+            "error": "health probe failed",
+            "detail": r3,
+            "audit_ids": audit_ids,
+        }
 
     from modstore_server.post_deploy_smoke import run_post_deploy_smoke
 
@@ -135,13 +152,13 @@ def deploy_staged_change(
         from modstore_server.digest_action_items import sync_merged_on_deploy
 
         sync_merged_on_deploy()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("action_items merge writeback failed staged_id=%s", staged_id)
     try:
         from modstore_server.public_action_board import write_public_action_board
 
         write_public_action_board()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("public action board after deploy failed staged_id=%s", staged_id)
 
     # 自动 merge PR（若启用）
@@ -154,7 +171,7 @@ def deploy_staged_change(
     if auto_pr:
         try:
             _maybe_merge_pr(branch, human_approved_by=human_approved_by)
-        except Exception as _merr:
+        except RECOVERABLE_ERRORS as _merr:
             logger.warning("auto PR merge failed for branch %s: %s", branch, _merr)
 
     return {
@@ -178,7 +195,7 @@ def _mark_staged_deployed(
     staged_id: int, probe_audit_id: Optional[int], audit_ids: List[int]
 ) -> None:
     sf = get_session_factory()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     with sf() as session:
         row = session.get(OpsStagedChange, staged_id)
         if row:
@@ -201,13 +218,13 @@ def handle_token_row(token_id: int, *, message_id: str = "") -> Dict[str, Any]:
             return {"ok": False, "error": "token not found"}
         if tok.used_at is not None:
             return {"ok": False, "error": "token already used"}
-        if as_utc_aware(tok.expires_at) < datetime.now(timezone.utc):
+        if as_utc_aware(tok.expires_at) < datetime.now(UTC):
             return {"ok": False, "error": "token expired"}
 
         kind = (tok.kind or "").strip()
         payload = json.loads(tok.payload_json or "{}")
 
-        tok.used_at = datetime.now(timezone.utc)
+        tok.used_at = datetime.now(UTC)
         tok.consumed_message_id = (message_id or "")[:512]
         session.commit()
 
@@ -278,7 +295,7 @@ def handle_token_row(token_id: int, *, message_id: str = "") -> Dict[str, Any]:
 
         _finalize_token_audit(token_id, all_audit)
         return {"ok": False, "error": f"unknown token kind: {kind}"}
-    except Exception as e:  # noqa: BLE001
+    except BOUNDARY_ERRORS as e:  # noqa: BLE001
         logger.exception("handle_token_row failed: %s", e)
         _finalize_token_audit(token_id, all_audit)
         _notify_failure("MODstore 审批执行异常", f"<pre>{str(e)[:4000]}</pre>")
@@ -337,7 +354,11 @@ def _maybe_merge_pr(branch: str, *, human_approved_by: str = "") -> Dict[str, An
     )
     if proc.returncode != 0:
         logger.info("auto merge PR for branch %s: %s", branch, proc.stderr[:200])
-        return {"ok": False, "error": proc.stderr[:200], "risk_decision": decision.to_dict()}
+        return {
+            "ok": False,
+            "error": proc.stderr[:200],
+            "risk_decision": decision.to_dict(),
+        }
     return {"ok": True, "risk_decision": decision.to_dict()}
 
 
@@ -365,7 +386,7 @@ def handle_incoming_approval_email(*, from_addr: str, body: str, message_id: str
                 .filter(
                     OpsApprovalToken.token_hash == h,
                     OpsApprovalToken.used_at.is_(None),
-                    OpsApprovalToken.expires_at > datetime.now(timezone.utc),
+                    OpsApprovalToken.expires_at > datetime.now(UTC),
                 )
                 .first()
             )

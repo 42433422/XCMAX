@@ -1,10 +1,6 @@
 import { describe, expect, it, beforeEach, vi, afterEach } from 'vitest'
 import { QUICK_START_PAGE_HIGHLIGHTS } from './quickStartPageHighlights'
-import {
-  QUICK_START_FOCUS_NAV_KEYS,
-  QUICK_START_PAGE_ROUTE,
-  QUICK_START_NAV_INTRO,
-} from './quickStartNav'
+import { QUICK_START_FOCUS_NAV_KEYS, QUICK_START_PAGE_ROUTE, QUICK_START_NAV_INTRO } from './quickStartNav'
 import { buildAssistantFloatSteps } from './buildAssistantFloatTour'
 import { closeAssistantFloatPanelForTutorial, isAssistantFloatPanelOpen } from './assistantFloatTutorial'
 import { isOnboardingDriverTutorialActive } from './onboardingTutorialActive'
@@ -18,11 +14,7 @@ import {
   highlightElement,
   sleep,
 } from './demoHelpers'
-import {
-  buildDriverScheduleFromTutorialSteps,
-  waitForSelector,
-  demoGroupCleanup,
-} from './buildDriverSchedule'
+import { buildDriverScheduleFromTutorialSteps, waitForSelector, demoGroupCleanup } from './buildDriverSchedule'
 import { resolveTrackSteps, resolveAllWarmupSteps } from './resolveSteps'
 import {
   fetchTutorialSampleFile,
@@ -42,11 +34,7 @@ import {
   runQuickStartDeleteCustomersDemo,
   runQuickStartDeleteProductsDemo,
 } from './tutorialDbSampleDemo'
-import {
-  launchAdvancedDriverTour,
-  promptAdvancedTutorialAfterInstall,
-  resolveRouteNameFromPath,
-} from './promptAdvancedTutorial'
+import { launchAdvancedDriverTour, promptAdvancedTutorialAfterInstall, resolveRouteNameFromPath } from './promptAdvancedTutorial'
 import type { TutorialStep } from './types'
 
 // jsdom 没有 DataTransfer，需要 mock
@@ -108,9 +96,7 @@ const appConfirmMock = (await import('@/utils/appDialog')).appConfirm
 
 describe('quickStartPageHighlights', () => {
   it('exports highlights for chat, workflow-employee-space, im, and settings', () => {
-    expect(Object.keys(QUICK_START_PAGE_HIGHLIGHTS).sort()).toEqual(
-      ['chat', 'im', 'settings', 'workflow-employee-space'].sort(),
-    )
+    expect(Object.keys(QUICK_START_PAGE_HIGHLIGHTS).sort()).toEqual(['chat', 'im', 'settings', 'workflow-employee-space'].sort())
   })
 
   it('chat highlights have three entries with targetSelector', () => {
@@ -149,13 +135,7 @@ describe('quickStartPageHighlights', () => {
 
 describe('quickStartNav', () => {
   it('QUICK_START_FOCUS_NAV_KEYS has five entries in order', () => {
-    expect(QUICK_START_FOCUS_NAV_KEYS).toEqual([
-      'chat',
-      'ai-ecosystem',
-      'employee-workflow',
-      'im',
-      'settings',
-    ])
+    expect(QUICK_START_FOCUS_NAV_KEYS).toEqual(['chat', 'ai-ecosystem', 'employee-workflow', 'im', 'settings'])
   })
 
   it('QUICK_START_PAGE_ROUTE maps employee-workflow to workflow-employee-space', () => {
@@ -585,7 +565,18 @@ describe('buildDriverSchedule (additional coverage)', () => {
     it('returns element when found and visible', async () => {
       const el = document.createElement('div')
       el.className = 'found'
-      el.getBoundingClientRect = () => ({ width: 100, height: 100, top: 0, left: 0, right: 100, bottom: 100, x: 0, y: 0, toJSON: () => {} } as DOMRect)
+      el.getBoundingClientRect = () =>
+        ({
+          width: 100,
+          height: 100,
+          top: 0,
+          left: 0,
+          right: 100,
+          bottom: 100,
+          x: 0,
+          y: 0,
+          toJSON: () => {},
+        }) as DOMRect
       document.body.appendChild(el)
       const result = await waitForSelector('.found', 1000, 50)
       expect(result).toBe(el)
@@ -686,7 +677,11 @@ describe('tutorialOfficeImportDemo', () => {
       const blobSpy = vi.fn()
       const fetchSpy = vi.fn().mockResolvedValue({ ok: false, status: 404, blob: blobSpy } as unknown as Response)
       vi.stubGlobal('fetch', fetchSpy)
-      Object.defineProperty(globalThis, 'fetch', { value: fetchSpy, configurable: true, writable: true })
+      Object.defineProperty(globalThis, 'fetch', {
+        value: fetchSpy,
+        configurable: true,
+        writable: true,
+      })
       await expect(fetchTutorialSampleFile('/url', 'f.xlsx')).rejects.toThrow('样本下载失败 HTTP 404')
     })
 
@@ -698,7 +693,11 @@ describe('tutorialOfficeImportDemo', () => {
         blob: () => Promise.resolve(blob),
       } as unknown as Response)
       vi.stubGlobal('fetch', fetchSpy)
-      Object.defineProperty(globalThis, 'fetch', { value: fetchSpy, configurable: true, writable: true })
+      Object.defineProperty(globalThis, 'fetch', {
+        value: fetchSpy,
+        configurable: true,
+        writable: true,
+      })
       const file = await fetchTutorialSampleFile('/url', 'f.xlsx')
       expect(file).toBeInstanceOf(File)
       expect(file.name).toBe('f.xlsx')
@@ -742,7 +741,11 @@ describe('tutorialOfficeImportDemo', () => {
         blob: () => Promise.resolve(blob),
       } as unknown as Response)
       vi.stubGlobal('fetch', fetchSpy)
-      Object.defineProperty(globalThis, 'fetch', { value: fetchSpy, configurable: true, writable: true })
+      Object.defineProperty(globalThis, 'fetch', {
+        value: fetchSpy,
+        configurable: true,
+        writable: true,
+      })
 
       await injectExcelAnalyzeSample('/url', 'f.xlsx')
       expect(input.files).not.toBeNull()
@@ -773,7 +776,10 @@ describe('tutorialOfficeImportDemo', () => {
         workspace_root: '/root',
         filename: 'p.docx',
       })
-      vi.mocked(officeApiMock.readWordViaOfficePack).mockResolvedValue({ ok: true, summary: 'done' })
+      vi.mocked(officeApiMock.readWordViaOfficePack).mockResolvedValue({
+        ok: true,
+        summary: 'done',
+      })
       const file = new File(['d'], 'f.docx')
       const result = await readWordSampleViaOfficePack(file)
       expect(result.ok).toBe(true)
@@ -798,7 +804,11 @@ describe('tutorialOfficeImportDemo', () => {
         blob: () => Promise.resolve(blob),
       } as unknown as Response)
       vi.stubGlobal('fetch', fetchSpy)
-      Object.defineProperty(globalThis, 'fetch', { value: fetchSpy, configurable: true, writable: true })
+      Object.defineProperty(globalThis, 'fetch', {
+        value: fetchSpy,
+        configurable: true,
+        writable: true,
+      })
 
       await runQuickStartExcelDemo('a')
       expect(input.files!.length).toBe(1)
@@ -824,7 +834,11 @@ describe('tutorialOfficeImportDemo', () => {
         blob: () => Promise.resolve(blob),
       } as unknown as Response)
       vi.stubGlobal('fetch', fetchSpy)
-      Object.defineProperty(globalThis, 'fetch', { value: fetchSpy, configurable: true, writable: true })
+      Object.defineProperty(globalThis, 'fetch', {
+        value: fetchSpy,
+        configurable: true,
+        writable: true,
+      })
 
       await runQuickStartExcelDemo('b')
       expect(input.files![0].name).toBe('xcagi-quickstart-sample-b.xlsx')
@@ -840,20 +854,25 @@ describe('tutorialOfficeImportDemo', () => {
         blob: () => Promise.resolve(blob),
       } as unknown as Response)
       vi.stubGlobal('fetch', fetchSpy)
-      Object.defineProperty(globalThis, 'fetch', { value: fetchSpy, configurable: true, writable: true })
+      Object.defineProperty(globalThis, 'fetch', {
+        value: fetchSpy,
+        configurable: true,
+        writable: true,
+      })
 
       vi.mocked(officeApiMock.uploadTutorialOfficeFile).mockResolvedValue({
         file_path: '/p.docx',
         workspace_root: '/root',
         filename: 'p.docx',
       })
-      vi.mocked(officeApiMock.readWordViaOfficePack).mockResolvedValue({ ok: true, summary: 'Word ok' })
+      vi.mocked(officeApiMock.readWordViaOfficePack).mockResolvedValue({
+        ok: true,
+        summary: 'Word ok',
+      })
 
       const dispatchSpy = vi.spyOn(window, 'dispatchEvent')
       await runQuickStartWordDemo()
-      const customEvents = dispatchSpy.mock.calls
-        .map((c) => c[0])
-        .filter((e): e is CustomEvent => e instanceof CustomEvent)
+      const customEvents = dispatchSpy.mock.calls.map((c) => c[0]).filter((e): e is CustomEvent => e instanceof CustomEvent)
       expect(customEvents.length).toBeGreaterThan(0)
       const event = customEvents[customEvents.length - 1]
       expect(event.type).toBe('xcagi:tutorial-chat-line')
@@ -869,20 +888,25 @@ describe('tutorialOfficeImportDemo', () => {
         blob: () => Promise.resolve(blob),
       } as unknown as Response)
       vi.stubGlobal('fetch', fetchSpy)
-      Object.defineProperty(globalThis, 'fetch', { value: fetchSpy, configurable: true, writable: true })
+      Object.defineProperty(globalThis, 'fetch', {
+        value: fetchSpy,
+        configurable: true,
+        writable: true,
+      })
 
       vi.mocked(officeApiMock.uploadTutorialOfficeFile).mockResolvedValue({
         file_path: '/p.docx',
         workspace_root: '/root',
         filename: 'p.docx',
       })
-      vi.mocked(officeApiMock.readWordViaOfficePack).mockResolvedValue({ ok: false, summary: 'failed' })
+      vi.mocked(officeApiMock.readWordViaOfficePack).mockResolvedValue({
+        ok: false,
+        summary: 'failed',
+      })
 
       const dispatchSpy = vi.spyOn(window, 'dispatchEvent')
       await runQuickStartWordDemo()
-      const customEvents = dispatchSpy.mock.calls
-        .map((c) => c[0])
-        .filter((e): e is CustomEvent => e instanceof CustomEvent)
+      const customEvents = dispatchSpy.mock.calls.map((c) => c[0]).filter((e): e is CustomEvent => e instanceof CustomEvent)
       const event = customEvents[customEvents.length - 1]
       expect((event.detail as { role: string }).role).toBe('task')
       dispatchSpy.mockRestore()
@@ -939,7 +963,11 @@ describe('tutorialOfficeImportDemo', () => {
 
       const fetchSpy = vi.fn().mockResolvedValue({ ok: true } as unknown as Response)
       vi.stubGlobal('fetch', fetchSpy)
-      Object.defineProperty(globalThis, 'fetch', { value: fetchSpy, configurable: true, writable: true })
+      Object.defineProperty(globalThis, 'fetch', {
+        value: fetchSpy,
+        configurable: true,
+        writable: true,
+      })
 
       await cleanupQuickStartImportDemo()
       expect(clickSpy).toHaveBeenCalled()
@@ -950,7 +978,11 @@ describe('tutorialOfficeImportDemo', () => {
       sessionStorage.clear()
       const fetchSpy = vi.fn()
       vi.stubGlobal('fetch', fetchSpy)
-      Object.defineProperty(globalThis, 'fetch', { value: fetchSpy, configurable: true, writable: true })
+      Object.defineProperty(globalThis, 'fetch', {
+        value: fetchSpy,
+        configurable: true,
+        writable: true,
+      })
       await cleanupQuickStartImportDemo()
       expect(fetchSpy).not.toHaveBeenCalled()
     })
@@ -1032,10 +1064,7 @@ describe('tutorialDbSampleDemo', () => {
 
   describe('purgeQuickStartTutorialDbSamples', () => {
     it('deletes stored customers and products then clears ids', async () => {
-      sessionStorage.setItem(
-        'xcagi_tutorial_db_sample_ids',
-        JSON.stringify({ customerIds: [1, 2], productIds: [3, 4] }),
-      )
+      sessionStorage.setItem('xcagi_tutorial_db_sample_ids', JSON.stringify({ customerIds: [1, 2], productIds: [3, 4] }))
       vi.mocked(customersApiMock.batchDeleteCustomers).mockResolvedValue({} as never)
       vi.mocked(productsApiMock.batchDeleteProducts).mockResolvedValue({} as never)
 
@@ -1052,10 +1081,7 @@ describe('tutorialDbSampleDemo', () => {
     })
 
     it('continues when batch delete throws', async () => {
-      sessionStorage.setItem(
-        'xcagi_tutorial_db_sample_ids',
-        JSON.stringify({ customerIds: [1], productIds: [2] }),
-      )
+      sessionStorage.setItem('xcagi_tutorial_db_sample_ids', JSON.stringify({ customerIds: [1], productIds: [2] }))
       vi.mocked(customersApiMock.batchDeleteCustomers).mockRejectedValue(new Error('fail'))
       vi.mocked(productsApiMock.batchDeleteProducts).mockRejectedValue(new Error('fail'))
 
@@ -1067,10 +1093,7 @@ describe('tutorialDbSampleDemo', () => {
   describe('runQuickStartDeleteCustomersDemo', () => {
     it('runs without throwing when no UI present', async () => {
       vi.useFakeTimers()
-      sessionStorage.setItem(
-        'xcagi_tutorial_db_sample_ids',
-        JSON.stringify({ customerIds: [10], productIds: [] }),
-      )
+      sessionStorage.setItem('xcagi_tutorial_db_sample_ids', JSON.stringify({ customerIds: [10], productIds: [] }))
       vi.mocked(customersApiMock.batchDeleteCustomers).mockResolvedValue({} as never)
       const promise = runQuickStartDeleteCustomersDemo()
       await vi.advanceTimersByTimeAsync(2000)
@@ -1083,10 +1106,7 @@ describe('tutorialDbSampleDemo', () => {
   describe('runQuickStartDeleteProductsDemo', () => {
     it('runs without throwing when no UI present', async () => {
       vi.useFakeTimers()
-      sessionStorage.setItem(
-        'xcagi_tutorial_db_sample_ids',
-        JSON.stringify({ customerIds: [], productIds: [20] }),
-      )
+      sessionStorage.setItem('xcagi_tutorial_db_sample_ids', JSON.stringify({ customerIds: [], productIds: [20] }))
       vi.mocked(productsApiMock.batchDeleteProducts).mockResolvedValue({} as never)
       const promise = runQuickStartDeleteProductsDemo()
       await vi.advanceTimersByTimeAsync(2000)

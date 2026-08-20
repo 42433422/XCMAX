@@ -35,7 +35,7 @@ function ctx(message: string, route = '/contact.html'): AgentContext {
 
 function bridge(overrides: Record<string, unknown> = {}) {
   return {
-    getState: () => ({ userRole: '', directions: [] } as never),
+    getState: () => ({ userRole: '', directions: [] }) as never,
     goToStep: vi.fn(),
     applyDraft: vi.fn(),
     highlightField: vi.fn(),
@@ -66,16 +66,28 @@ describe('corpIntakeSkill', () => {
     expect(matchCorpIntakeIntent(ctx('提交前帮我核对'))).toEqual({ kind: 'review' })
     expect(matchCorpIntakeIntent(ctx('跳到联系方式'))).toEqual({ kind: 'step', stepId: 'contact' })
     expect(matchCorpIntakeIntent(ctx('跳到第 2 题'))).toEqual({ kind: 'step', stepId: 'problem' })
-    expect(matchCorpIntakeIntent(ctx('跳到计划和预算怎么对接'))).toEqual({ kind: 'step', stepId: 'plan' })
-    expect(matchCorpIntakeIntent(ctx('跳到日常流程怎么做'))).toEqual({ kind: 'step', stepId: 'workflow' })
-    expect(matchCorpIntakeIntent(ctx('跳到最大的困扰是什么'))).toEqual({ kind: 'step', stepId: 'problem' })
-    expect(matchCorpIntakeIntent(ctx('跳到认识我的岗位角色'))).toEqual({ kind: 'step', stepId: 'profile' })
+    expect(matchCorpIntakeIntent(ctx('跳到计划和预算怎么对接'))).toEqual({
+      kind: 'step',
+      stepId: 'plan',
+    })
+    expect(matchCorpIntakeIntent(ctx('跳到日常流程怎么做'))).toEqual({
+      kind: 'step',
+      stepId: 'workflow',
+    })
+    expect(matchCorpIntakeIntent(ctx('跳到最大的困扰是什么'))).toEqual({
+      kind: 'step',
+      stepId: 'problem',
+    })
+    expect(matchCorpIntakeIntent(ctx('跳到认识我的岗位角色'))).toEqual({
+      kind: 'step',
+      stepId: 'profile',
+    })
     expect(matchCorpIntakeIntent(ctx('随便聊聊'))).toBeNull()
   })
 
   it('runs intake_fill task with preset prompt via API', async () => {
     vi.mocked(waitForBridge).mockResolvedValue({
-      getState: () => ({ userRole: '', directions: [] } as never),
+      getState: () => ({ userRole: '', directions: [] }) as never,
       goToStep: vi.fn(),
       applyDraft: vi.fn(),
       highlightField: vi.fn(),
@@ -115,7 +127,9 @@ describe('corpIntakeSkill', () => {
     })
 
     const fillBridge = bridge()
-    vi.mocked(waitForBridge).mockResolvedValueOnce(fillBridge as never).mockResolvedValueOnce(fillBridge as never)
+    vi.mocked(waitForBridge)
+      .mockResolvedValueOnce(fillBridge as never)
+      .mockResolvedValueOnce(fillBridge as never)
     vi.mocked(api.agentCorpIntakeFill).mockResolvedValueOnce({
       success: true,
       reply: '',
@@ -189,7 +203,7 @@ describe('corpIntakeSkill', () => {
 
   it('navigate task assigns location', async () => {
     const assign = vi.fn()
-    vi.stubGlobal('location', { assign } as Location)
+    vi.stubGlobal('location', { assign } as unknown as Location)
     const result = await runCorpQuickTask({
       label: '预约方案沟通',
       task: 'navigate',

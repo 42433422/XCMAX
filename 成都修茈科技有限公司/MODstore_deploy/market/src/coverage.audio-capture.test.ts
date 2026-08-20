@@ -48,7 +48,7 @@ class FakeAudioContext {
     disconnect: vi.fn(),
   }
   audioWorklet = {
-    addModule: vi.fn(async () => {
+    addModule: vi.fn(async (): Promise<void> => {
       throw new Error('force script processor fallback')
     }),
   }
@@ -123,13 +123,7 @@ afterEach(() => {
 
 describe('audio capture coverage', () => {
   it('converts and resamples PCM buffers', () => {
-    expect(Array.from(float32ToInt16(new Float32Array([-2, -0.5, 0, 0.5, 2])))).toEqual([
-      -32768,
-      -16384,
-      0,
-      16383,
-      32767,
-    ])
+    expect(Array.from(float32ToInt16(new Float32Array([-2, -0.5, 0, 0.5, 2])))).toEqual([-32768, -16384, 0, 16383, 32767])
 
     const same = new Float32Array([1, 2, 3])
     expect(resampleFloat32(same, 16000, 16000)).toBe(same)
@@ -140,8 +134,14 @@ describe('audio capture coverage', () => {
   it('starts, wakes, reuses handlers, records PCM stats, and stops owned resources', async () => {
     vi.useFakeTimers()
     vi.stubGlobal('AudioContext', FakeAudioContext)
-    vi.stubGlobal('requestAnimationFrame', vi.fn((cb: FrameRequestCallback) => window.setTimeout(() => cb(0), 16)))
-    vi.stubGlobal('cancelAnimationFrame', vi.fn((id: number) => window.clearTimeout(id)))
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn((cb: FrameRequestCallback) => window.setTimeout(() => cb(0), 16)),
+    )
+    vi.stubGlobal(
+      'cancelAnimationFrame',
+      vi.fn((id: number) => window.clearTimeout(id)),
+    )
 
     const stream = new FakeMediaStream()
     const firstData = vi.fn()
@@ -176,13 +176,17 @@ describe('audio capture coverage', () => {
   it('falls back from strict getUserMedia constraints and rejects silent tracks', async () => {
     vi.useFakeTimers()
     vi.stubGlobal('AudioContext', FakeAudioContext)
-    vi.stubGlobal('requestAnimationFrame', vi.fn((cb: FrameRequestCallback) => window.setTimeout(() => cb(0), 16)))
-    vi.stubGlobal('cancelAnimationFrame', vi.fn((id: number) => window.clearTimeout(id)))
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn((cb: FrameRequestCallback) => window.setTimeout(() => cb(0), 16)),
+    )
+    vi.stubGlobal(
+      'cancelAnimationFrame',
+      vi.fn((id: number) => window.clearTimeout(id)),
+    )
 
     const stream = new FakeMediaStream()
-    const getUserMedia = vi.fn()
-      .mockRejectedValueOnce(new Error('strict failed'))
-      .mockResolvedValueOnce(stream)
+    const getUserMedia = vi.fn().mockRejectedValueOnce(new Error('strict failed')).mockResolvedValueOnce(stream)
     Object.defineProperty(navigator, 'mediaDevices', {
       value: { getUserMedia },
       configurable: true,
@@ -218,10 +222,13 @@ describe('audio capture coverage', () => {
     vi.useFakeTimers()
     vi.stubGlobal('AudioContext', FakeAudioContext)
     const rafCallbacks: FrameRequestCallback[] = []
-    vi.stubGlobal('requestAnimationFrame', vi.fn((cb: FrameRequestCallback) => {
-      rafCallbacks.push(cb)
-      return rafCallbacks.length
-    }))
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn((cb: FrameRequestCallback) => {
+        rafCallbacks.push(cb)
+        return rafCallbacks.length
+      }),
+    )
     vi.stubGlobal('cancelAnimationFrame', vi.fn())
     Object.defineProperty(navigator, 'userAgent', {
       value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X)',
@@ -276,19 +283,19 @@ describe('audio capture coverage', () => {
       configurable: true,
     })
     const rafCallbacks: FrameRequestCallback[] = []
-    vi.stubGlobal('requestAnimationFrame', vi.fn((cb: FrameRequestCallback) => {
-      rafCallbacks.push(cb)
-      return rafCallbacks.length
-    }))
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn((cb: FrameRequestCallback) => {
+        rafCallbacks.push(cb)
+        return rafCallbacks.length
+      }),
+    )
     vi.stubGlobal('cancelAnimationFrame', vi.fn())
 
     const onData = vi.fn()
     const onLevel = vi.fn()
     const capture = new AudioCapture()
-    const start = capture.start(
-      { onAudioData: onData, onAudioLevel: onLevel },
-      new FakeMediaStream() as unknown as MediaStream,
-    )
+    const start = capture.start({ onAudioData: onData, onAudioLevel: onLevel }, new FakeMediaStream() as unknown as MediaStream)
     await vi.advanceTimersByTimeAsync(0)
 
     expect(workletNodes).toHaveLength(1)
@@ -316,9 +323,7 @@ describe('audio capture coverage', () => {
 
     const endedStream = new FakeMediaStream()
     endedStream.tracks[0].readyState = 'ended'
-    await expect(
-      new AudioCapture().start({ onAudioData: vi.fn() }, endedStream as unknown as MediaStream),
-    ).rejects.toThrow('麦克风不可用')
+    await expect(new AudioCapture().start({ onAudioData: vi.fn() }, endedStream as unknown as MediaStream)).rejects.toThrow('麦克风不可用')
 
     const silentCapture = new AudioCapture()
     const start = silentCapture.start({ onAudioData: vi.fn() }, new FakeMediaStream() as unknown as MediaStream)
@@ -348,17 +353,17 @@ describe('audio capture coverage', () => {
     vi.useFakeTimers()
     vi.stubGlobal('AudioContext', FakeAudioContext)
     const rafCallbacks: FrameRequestCallback[] = []
-    vi.stubGlobal('requestAnimationFrame', vi.fn((cb: FrameRequestCallback) => {
-      rafCallbacks.push(cb)
-      return rafCallbacks.length
-    }))
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn((cb: FrameRequestCallback) => {
+        rafCallbacks.push(cb)
+        return rafCallbacks.length
+      }),
+    )
     vi.stubGlobal('cancelAnimationFrame', vi.fn())
 
     const capture = new AudioCapture()
-    const start = capture.start(
-      { onAudioData: vi.fn(), onAudioLevel: vi.fn() },
-      new FakeMediaStream() as unknown as MediaStream,
-    )
+    const start = capture.start({ onAudioData: vi.fn(), onAudioLevel: vi.fn() }, new FakeMediaStream() as unknown as MediaStream)
     await vi.advanceTimersByTimeAsync(0)
     emitPcm(contexts[0].processor, new Float32Array([0.01]))
     await vi.advanceTimersByTimeAsync(520)

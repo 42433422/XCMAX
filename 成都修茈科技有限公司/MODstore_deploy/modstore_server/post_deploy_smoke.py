@@ -12,9 +12,11 @@ import os
 import time
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
+
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +33,7 @@ def _state_file_path() -> Path:
         from modstore_server.daily_digest import _repo_root
 
         root = Path(_repo_root())
-    except Exception:
+    except RECOVERABLE_ERRORS:
         root = Path(os.environ.get("MODSTORE_REPO_ROOT", ".")).resolve()
     return root / raw
 
@@ -41,7 +43,7 @@ def _persist_last_result(payload: Dict[str, Any]) -> None:
         path = _state_file_path()
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("post_deploy_smoke: persist last result failed")
 
 
@@ -53,7 +55,7 @@ def load_last_smoke_result() -> Dict[str, Any]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else {}
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return {}
 
 
@@ -90,7 +92,7 @@ def _http_get_status(url: str, *, timeout_sec: float) -> Tuple[int, str]:
             return int(resp.status), ""
     except urllib.error.HTTPError as exc:
         return int(exc.code), str(exc.reason or exc)
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         return 0, str(exc)
 
 
@@ -129,7 +131,7 @@ def run_post_deploy_smoke(*, timeout_sec: float | None = None) -> Dict[str, Any]
         "skipped": False,
         "probes": probes,
         "duration_ms": round((time.perf_counter() - t0) * 1000, 1),
-        "ran_at": datetime.now(timezone.utc).isoformat(),
+        "ran_at": datetime.now(UTC).isoformat(),
     }
     _persist_last_result(result)
     return result

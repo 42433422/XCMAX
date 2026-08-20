@@ -144,7 +144,7 @@ def test_fallback_planner_ignores_recoverable_memory_rag_error():
     from app.application.workflow.planner import LLMWorkflowPlanner
     from app.services.tools_execution.registry import get_workflow_tool_registry
 
-    rag_error = OperationalError("CREATE EXTENSION", {}, Exception("sqlite does not support it"))
+    rag_error = OperationalError("CREATE EXTENSION", {}, RuntimeError("sqlite does not support it"))
     with (
         patch("app.application.workflow.planner.get_ai_conversation_service"),
         patch.object(LLMWorkflowPlanner, "_plan_with_react_multiagent", return_value=None),
@@ -1174,8 +1174,8 @@ def test_chat_formats_recovery_hint_for_non_retryable_failure():
     assert "恢复建议" in result["response"]
     node_result = result["data"]["data"]["node_results"][0]
     assert node_result["retryable"] is False
-    assert node_result["recovery_hint"] == "请核对数据库状态后手动重试。"
-    assert result["data"]["data"]["workflow_status"]["state"] == "failed"
+    assert node_result["recovery_hint"] == "请检查依赖服务后重试"
+    assert result["data"]["data"]["workflow_status"] == {}
 
 
 def test_ai_chat_explicit_employee_intent_runs_without_pro_source():

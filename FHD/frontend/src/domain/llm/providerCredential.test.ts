@@ -1,9 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  providerRowHasUsableKey,
-  buildProviderStatusMap,
-  type LlmProviderStatus,
-} from './providerCredential'
+import { providerRowHasUsableKey, buildProviderStatusMap, type LlmProviderStatus } from './providerCredential'
 
 describe('providerCredential', () => {
   describe('providerRowHasUsableKey', () => {
@@ -127,9 +123,7 @@ describe('providerCredential', () => {
     })
 
     it('trims provider id', () => {
-      const rows: LlmProviderStatus[] = [
-        { provider: '  openai  ', has_platform_key: true },
-      ]
+      const rows: LlmProviderStatus[] = [{ provider: '  openai  ', has_platform_key: true }]
       const map = buildProviderStatusMap(rows)
       expect(map.openai).toBeDefined()
       expect(map['  openai  ']).toBeUndefined()

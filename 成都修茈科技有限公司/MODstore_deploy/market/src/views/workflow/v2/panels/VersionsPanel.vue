@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { api } from '../../../../api'
+import { errorMessage } from '../../../../utils/typeNarrowing'
 
 const props = defineProps<{
   workflowId: number
@@ -28,10 +29,10 @@ async function refresh() {
   loading.value = true
   errMsg.value = ''
   try {
-    const list: any = await api.listWorkflowVersions(props.workflowId)
-    rows.value = Array.isArray(list) ? list : []
-  } catch (e: any) {
-    errMsg.value = e?.detail || e?.message || '加载失败'
+    const list = await api.listWorkflowVersions(props.workflowId)
+    rows.value = Array.isArray(list) ? (list as VersionRow[]) : []
+  } catch (e: unknown) {
+    errMsg.value = errorMessage(e, '加载失败')
   } finally {
     loading.value = false
   }
@@ -46,8 +47,8 @@ async function rollback(row: VersionRow) {
     await api.rollbackWorkflowVersion(props.workflowId, row.id)
     await refresh()
     emit('rolled-back', row.version_no)
-  } catch (e: any) {
-    errMsg.value = e?.detail || e?.message || '回滚失败'
+  } catch (e: unknown) {
+    errMsg.value = errorMessage(e, '回滚失败')
   }
 }
 
@@ -80,12 +81,7 @@ defineExpose({ refresh })
         <p v-else-if="!rows.length" class="vp__hint">还没有发布过版本，点击顶栏「发布版本」开始记录历史。</p>
 
         <ul v-else class="vp__list">
-          <li
-            v-for="(r, idx) in rows"
-            :key="r.id"
-            class="vp__item"
-            :class="{ 'vp__item--current': r.is_current }"
-          >
+          <li v-for="(r, idx) in rows" :key="r.id" class="vp__item" :class="{ 'vp__item--current': r.is_current }">
             <div class="vp__timeline">
               <span class="vp__dot" :class="{ 'vp__dot--current': r.is_current }" />
               <span v-if="idx < rows.length - 1" class="vp__line" />
@@ -99,12 +95,7 @@ defineExpose({ refresh })
               <p v-if="r.note" class="vp__note">{{ r.note }}</p>
               <p v-else class="vp__note vp__note--empty">无备注</p>
               <div class="vp__actions">
-                <button
-                  class="vp__btn"
-                  type="button"
-                  :disabled="r.is_current"
-                  @click="rollback(r)"
-                >
+                <button class="vp__btn" type="button" :disabled="r.is_current" @click="rollback(r)">
                   {{ r.is_current ? '当前版本' : '回滚到此' }}
                 </button>
               </div>
@@ -308,7 +299,9 @@ defineExpose({ refresh })
 
 .vp-fade-enter-active,
 .vp-fade-leave-active {
-  transition: opacity 0.2s ease, transform 0.2s ease;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
 }
 
 .vp-fade-enter-from,

@@ -31,9 +31,7 @@ const currentStep = ref(0)
 const playing = ref(false)
 const loading = ref(false)
 
-const selectedExec = computed(() =>
-  executions.value.find((e) => e.id === selectedExecId.value) || null,
-)
+const selectedExec = computed(() => executions.value.find((e) => e.id === selectedExecId.value) || null)
 
 const steps = computed(() => selectedExec.value?.steps || [])
 
@@ -45,10 +43,8 @@ const currentNodeId = computed(() => {
 async function loadExecutions() {
   loading.value = true
   try {
-    const res = await api.get(`/api/workflow/${props.workflowId}/executions`, {
-      params: { limit: 20 },
-    })
-    executions.value = res.data?.items || res.data || []
+    const res = (await api.listWorkflowExecutions(props.workflowId, 20)) as Execution[] | { items?: Execution[] }
+    executions.value = Array.isArray(res) ? res : res.items || []
   } catch {
     executions.value = []
   } finally {
@@ -92,7 +88,7 @@ function togglePlay() {
   }, 800)
 }
 
-function nodeStatus(nodeId: number): 'success' | 'failed' | 'running' | 'pending' {
+function _nodeStatus(nodeId: number): 'success' | 'failed' | 'running' | 'pending' {
   if (nodeId === currentNodeId.value) return 'running'
   const stepIndex = steps.value.findIndex((s) => s.node_id === nodeId)
   if (stepIndex < 0) return 'pending'
@@ -111,16 +107,12 @@ loadExecutions()
 
     <div v-if="loading" class="loading">加载中…</div>
 
-    <div v-else-if="!executions.length" class="empty-hint">
-      暂无执行记录
-    </div>
+    <div v-else-if="!executions.length" class="empty-hint">暂无执行记录</div>
 
     <template v-else>
       <div class="exec-selector">
         <select v-model="selectedExecId" @change="selectExecution(selectedExecId!)">
-          <option v-for="e in executions" :key="e.id" :value="e.id">
-            #{{ e.id }} - {{ e.status }} - {{ e.created_at?.slice(0, 19) }}
-          </option>
+          <option v-for="e in executions" :key="e.id" :value="e.id">#{{ e.id }} - {{ e.status }} - {{ e.created_at?.slice(0, 19) }}</option>
         </select>
       </div>
 
@@ -165,7 +157,8 @@ loadExecutions()
   margin: 0;
   font-size: 14px;
 }
-.loading, .empty-hint {
+.loading,
+.empty-hint {
   color: #9ca3af;
   text-align: center;
   padding: 20px 0;

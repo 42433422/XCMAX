@@ -12,21 +12,13 @@ import {
 
 describe('resolvePhoneAgentApiBase', () => {
   it('returns trimmed full api base without trailing slashes', () => {
-    expect(
-      resolvePhoneAgentApiBase(
-        { id: 'x', label: 'L', phone_agent_api_base: '/api/mod/m1/agent//' },
-        'm1'
-      )
-    ).toBe('/api/mod/m1/agent')
+    expect(resolvePhoneAgentApiBase({ id: 'x', label: 'L', phone_agent_api_base: '/api/mod/m1/agent//' }, 'm1')).toBe('/api/mod/m1/agent')
   })
 
   it('builds path from phone_agent_base_path and modId', () => {
-    expect(
-      resolvePhoneAgentApiBase(
-        { id: 'p', label: 'P', phone_agent_base_path: '/phone-agent/' },
-        'mod-a'
-      )
-    ).toBe('/api/mod/mod-a/phone-agent')
+    expect(resolvePhoneAgentApiBase({ id: 'p', label: 'P', phone_agent_base_path: '/phone-agent/' }, 'mod-a')).toBe(
+      '/api/mod/mod-a/phone-agent',
+    )
   })
 
   it('prefers phone_agent_api_base over relative path', () => {
@@ -38,8 +30,8 @@ describe('resolvePhoneAgentApiBase', () => {
           phone_agent_api_base: '/api/mod/x/root',
           phone_agent_base_path: 'ignored',
         },
-        'mod-a'
-      )
+        'mod-a',
+      ),
     ).toBe('/api/mod/x/root')
   })
 
@@ -61,7 +53,7 @@ describe('countManifestWorkflowEmployeeRows', () => {
           ],
         },
         { id: 'b', workflow_employees: [{ id: 'dup', label: 'shadow' }] },
-      ])
+      ]),
     ).toBe(2)
   })
 
@@ -69,8 +61,14 @@ describe('countManifestWorkflowEmployeeRows', () => {
     expect(countManifestWorkflowEmployeeRows(undefined)).toBe(0)
     expect(
       countManifestWorkflowEmployeeRows([
-        { id: 'm', workflow_employees: [{ id: '  ', label: 'x' }, { id: 'ok', label: 'y' }] },
-      ])
+        {
+          id: 'm',
+          workflow_employees: [
+            { id: '  ', label: 'x' },
+            { id: 'ok', label: 'y' },
+          ],
+        },
+      ]),
     ).toBe(1)
   })
 })
@@ -103,9 +101,7 @@ describe('getPhoneAgentApiBaseForEmployeeId', () => {
     const mods = [
       {
         id: 'mid',
-        workflow_employees: [
-          { id: 'call', label: 'C', phone_agent_base_path: 'phone-agent' },
-        ],
+        workflow_employees: [{ id: 'call', label: 'C', phone_agent_base_path: 'phone-agent' }],
       },
     ]
     expect(getPhoneAgentApiBaseForEmployeeId(mods, 'call')).toBe('/api/mod/mid/phone-agent')
@@ -136,7 +132,12 @@ describe('isPhoneAgentStatusEmployee', () => {
       {
         id: 'm',
         workflow_employees: [
-          { id: 'x', label: 'X', phone_agent_api_base: '/api/mod/m/p', phone_agent_status_poll: true },
+          {
+            id: 'x',
+            label: 'X',
+            phone_agent_api_base: '/api/mod/m/p',
+            phone_agent_status_poll: true,
+          },
         ],
       },
     ]
@@ -218,9 +219,7 @@ describe('buildModWorkflowPanelMeta', () => {
   })
 
   it('uses defaults when panel fields missing', () => {
-    const meta = buildModWorkflowPanelMeta([
-      { id: 'm', name: 'NM', workflow_employees: [{ id: 'only', label: 'L' }] },
-    ])
+    const meta = buildModWorkflowPanelMeta([{ id: 'm', name: 'NM', workflow_employees: [{ id: 'only', label: 'L' }] }])
     expect(meta.only.title).toBe('工作流 · L')
     expect(meta.only.summary).toContain('NM')
     expect(meta.only.summary).toContain('L')

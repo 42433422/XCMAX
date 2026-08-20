@@ -1,13 +1,13 @@
-# -*- coding: utf-8 -*-
 """
 测试两个标签图片的表格识别 - 修正版
 """
 
-from paddleocr import PaddleOCR
-import numpy as np
-import cv2
-import json
 import glob
+import json
+
+import cv2
+import numpy as np
+from paddleocr import PaddleOCR
 
 
 def recognize_table(image_path):
@@ -79,8 +79,8 @@ def recognize_table(image_path):
                 merged.append(line)
         return merged
 
-    horizontal_lines = sorted(list(set(horizontal_lines)))
-    vertical_lines = sorted(list(set(vertical_lines)))
+    horizontal_lines = sorted(set(horizontal_lines))
+    vertical_lines = sorted(set(vertical_lines))
     horizontal_lines = merge_very_close(horizontal_lines, threshold=5)
     vertical_lines = merge_very_close(vertical_lines, threshold=5)
     horizontal_lines = merge_lines(horizontal_lines, threshold=50)
@@ -245,7 +245,7 @@ for img_path in images:
     if result:
         name = filename.replace(".png", "")
         results[name] = result
-        print(f"\n表格结构：")
+        print("\n表格结构：")
         for row_data in result["table"]:
             cells_str = []
             for cell in row_data["cells"]:

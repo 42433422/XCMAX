@@ -8,11 +8,12 @@ import socket
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlparse
 
 from app.application.etl.errors import EtlError
 from app.application.etl.targets.base import TargetField, json_safe
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 def assert_safe_webhook_url(url: str) -> None:
@@ -50,7 +51,7 @@ def optional_text(value: Any) -> str | None:
 def decimal_or_zero(value: Any) -> Decimal:
     try:
         return Decimal(str(value or "0").replace(",", ""))
-    except Exception as exc:  # noqa: BLE001
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
         raise EtlError("ETL_NUMBER_INVALID", f"数字格式不正确: {value}") from exc
 
 
@@ -66,14 +67,16 @@ def parse_date(value: Any) -> date:
 
 
 def model_values(obj: Any, fields: tuple[TargetField, ...]) -> dict[str, Any]:
-    return json_safe({field.key: getattr(obj, field.key, None) for field in fields})
+    return cast(
+        "dict[str, Any]", json_safe({field.key: getattr(obj, field.key, None) for field in fields})
+    )
 
 
 def _values_equal(current: Any, expected: Any) -> bool:
     if isinstance(current, Decimal):
         try:
             return current == Decimal(str(expected))
-        except Exception:  # noqa: BLE001
+        except RECOVERABLE_ERRORS:  # noqa: BLE001
             return False
     if isinstance(current, datetime):
         return current.isoformat() == str(expected)

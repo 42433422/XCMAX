@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import importlib
 import logging
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
@@ -15,12 +15,11 @@ from app.fastapi_routes.mobile_extensions.models import (
     SyncPullBody,
     SyncPushBody,
 )
-from app.utils.mobile_api import format_mobile_response
+from app.utils.device_system.mobile_api import format_mobile_response
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-OPERATIONAL_ERRORS = RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router: APIRouter = APIRouter()
 
 
 def _parent():
@@ -75,7 +74,7 @@ async def _mobile_sync_circle_posts(user: Any, *, limit: int = 50) -> list[dict[
     parent = _parent()
     override = getattr(parent, "_mobile_sync_circle_posts", None)
     if override is not None and override is not _mobile_sync_circle_posts:
-        return await override(user, limit=limit)
+        return cast("list[dict[str, Any]]", await override(user, limit=limit))
     try:
         import importlib
 
@@ -84,7 +83,7 @@ async def _mobile_sync_circle_posts(user: Any, *, limit: int = 50) -> list[dict[
         employee_circle_sync = importlib.import_module("app.application.employee_circle_sync")
         try:
             await employee_circle_sync.sync_modstore_reports()
-        except Exception:  # noqa: BLE001 - 交流圈同步是拉取增强项，不能拖垮整次手机同步
+        except RECOVERABLE_ERRORS:  # noqa: BLE001 - 交流圈同步是拉取增强项，不能拖垮整次手机同步
             logger.warning("mobile sync: circle modstore report sync skipped", exc_info=True)
 
         uid, _, _ = _ai_circle_user(user)
@@ -96,7 +95,7 @@ async def _mobile_sync_circle_posts(user: Any, *, limit: int = 50) -> list[dict[
                 post["author_name"] = profile["name"]
                 post["author_avatar"] = profile["avatar"] or post.get("author_avatar")
         return posts
-    except Exception as exc:  # noqa: BLE001 - 手机同步的其他数据不能被交流圈投影拖垮
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - 手机同步的其他数据不能被交流圈投影拖垮
         logger.warning("mobile sync: circle posts skipped: %s", exc)
         return []
 
@@ -117,7 +116,7 @@ async def mobile_sync_status(user=Depends(get_mobile_user)):
             st["inbox_pending"] = conn.execute(
                 "SELECT COUNT(*) FROM sync_inbox WHERE status='pending'",
             ).fetchone()[0]
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         st = {"error": "同步服务健康检查失败", "healthy": False}
     st.update(_mobile_sync_runtime_contract())
     return format_mobile_response(data=st)
@@ -158,7 +157,7 @@ async def mobile_sync_pull(body: SyncPullBody, user=Depends(get_mobile_user)):
                 "shipments": shipments,
             },
         )
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("mobile_sync_pull: %s", exc)
         return JSONResponse(
             format_mobile_response(None, "同步服务暂不可用", success=False, code=500),
@@ -193,10 +192,10 @@ async def mobile_sync_push(body: SyncPushBody, user=Depends(get_mobile_user)):
             from app.application.xcmax_sync_app import apply_inbox
 
             apply_result = apply_inbox(limit=written + 50) or {}
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             apply_result = {"error": "同步结果应用失败"}
         return format_mobile_response(data={"written": written, "apply": apply_result})
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("mobile_sync_push: %s", exc)
         return JSONResponse(
             format_mobile_response(None, "同步服务暂不可用", success=False, code=500),
@@ -216,7 +215,7 @@ async def mobile_sync_ack(body: SyncAckBody, user=Depends(get_mobile_user)):
         sync_db = SyncDb()
         sync_db.update_remote_cursor(int(body.cursor))
         return format_mobile_response(data={"acked": int(body.cursor)})
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("mobile_sync_ack: %s", exc)
         return JSONResponse(
             format_mobile_response(None, "同步服务暂不可用", success=False, code=500),
@@ -243,6 +242,6 @@ async def mobile_sync_conflicts(user=Depends(get_mobile_user)):
                 """,
             ).fetchall()
             items = [dict(r) for r in rows]
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         return format_mobile_response(data={"items": [], "error": "同步记录暂不可用"})
     return format_mobile_response(data={"items": items})

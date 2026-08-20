@@ -15,14 +15,18 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 FHD_ROOT = Path(__file__).resolve().parents[2]
 TESTS_DIR = FHD_ROOT / "tests"
 APP_DIR = FHD_ROOT / "app"
-METRICS_FILE = FHD_ROOT / "metrics" / "test-bloat-history.jsonl"
+METRICS_FILE = Path(
+    os.environ.get("XCMAX_TEST_BLOAT_METRICS_PATH")
+    or FHD_ROOT / "metrics" / "test-bloat-history.jsonl"
+)
 
 RATIO_GOAL = 1.5
 STUB_LINES_GOAL = 50_000
@@ -53,7 +57,7 @@ def collect() -> dict:
     stub_lines = sum(_line_count(p) for p in stub_files)
     ratio = round(test_lines / src_lines, 3) if src_lines else 0.0
     return {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "test_files": len(test_files),
         "test_lines": test_lines,
         "src_files": len(src_files),
@@ -95,7 +99,7 @@ def cmd_report() -> int:
     return 0
 
 
-def cmd_check(seed: bool = False) -> int:
+def cmd_check(seed: bool = False, record: bool = False) -> int:
     rec = collect()
     ratio = rec["ratio"]
     stub_lines = rec["stub_lines"]
@@ -112,12 +116,16 @@ def cmd_check(seed: bool = False) -> int:
     print(f"[test-bloat] goals ratio<={RATIO_GOAL} stub<={STUB_LINES_GOAL} (documented)")
     failed = False
     if ratio > base_ratio + RATIO_TOLERANCE:
-        print(f"[test-bloat] FAIL: ratio {ratio} > baseline {base_ratio} + tol {RATIO_TOLERANCE}",
-              file=sys.stderr)
+        print(
+            f"[test-bloat] FAIL: ratio {ratio} > baseline {base_ratio} + tol {RATIO_TOLERANCE}",
+            file=sys.stderr,
+        )
         failed = True
     if stub_lines > base_stub + STUB_TOLERANCE:
-        print(f"[test-bloat] FAIL: stub_lines {stub_lines} > baseline {base_stub} + tol {STUB_TOLERANCE}",
-              file=sys.stderr)
+        print(
+            f"[test-bloat] FAIL: stub_lines {stub_lines} > baseline {base_stub} + tol {STUB_TOLERANCE}",
+            file=sys.stderr,
+        )
         failed = True
     if failed:
         stub_files = sorted(
@@ -126,10 +134,13 @@ def cmd_check(seed: bool = False) -> int:
             reverse=True,
         )[:10]
         for p in stub_files:
-            print(f"  stub: {p.relative_to(FHD_ROOT).as_posix()} ({_line_count(p)} lines)",
-                  file=sys.stderr)
+            print(
+                f"  stub: {p.relative_to(FHD_ROOT).as_posix()} ({_line_count(p)} lines)",
+                file=sys.stderr,
+            )
         return 1
-    append_history(rec)
+    if record:
+        append_history(rec)
     print("[test-bloat] OK - no regression")
     return 0
 
@@ -138,10 +149,15 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="CI ratchet gate")
     parser.add_argument("--seed", action="store_true", help="seed baseline")
+    parser.add_argument(
+        "--record",
+        action="store_true",
+        help="append a successful measurement to the history (never implicit in --check)",
+    )
     args = parser.parse_args(argv)
     if not args.check:
         return cmd_report()
-    return cmd_check(seed=args.seed)
+    return cmd_check(seed=args.seed, record=args.record)
 
 
 if __name__ == "__main__":

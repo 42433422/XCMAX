@@ -1,5 +1,5 @@
-import sqlite3
 import os
+import sqlite3
 
 db_files = [
     r"e:\FHD\424\customer_products_final_corrected.db",

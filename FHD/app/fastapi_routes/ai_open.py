@@ -18,11 +18,10 @@
 from __future__ import annotations
 
 import logging
-import secrets
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Header, Query, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse, PlainTextResponse, Response
+from fastapi.responses import JSONResponse, PlainTextResponse
 
 from app.application.agent_orchestrator.chat_trace import (
     attach_chat_trace_run,
@@ -43,6 +42,24 @@ from app.application.aiopen.service import (
     revoke_api_key,
     seed_capability_whitelist,
     verify_api_key,
+)
+from app.fastapi_routes.aiopen_route_support import (
+    handle_mcp_message,
+    safe_control_payload,
+    trace_control_result,
+    trace_tool_call,
+)
+from app.fastapi_routes.aiopen_route_support import (
+    jsonrpc_error as _jsonrpc_error,
+)
+from app.fastapi_routes.aiopen_route_support import (
+    mcp_response_headers as _mcp_response_headers,
+)
+from app.fastapi_routes.aiopen_route_support import (
+    resolve_mcp_protocol_version as _resolve_mcp_protocol_version,
+)
+from app.fastapi_routes.aiopen_route_support import (
+    wrap_mcp_json as _wrap_mcp_json,
 )
 from app.infrastructure.aiopen.cursor_hub import aiopen_cursor_hub
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -70,51 +87,20 @@ def _trace_aiopen_tool_call(
     result: dict[str, Any],
     user_id: str = "",
 ) -> str:
-    try:
-        message = str(result.get("message") or result.get("code") or f"AIOPEN tool {tool} executed")
-        trace_payload = {
-            "success": bool(result.get("success", False)),
-            "response": message,
-            "data": {
-                "text": message,
-                "legacy_tool_records": [
-                    {
-                        "tool_id": "aiopen",
-                        "tool_name": "aiopen",
-                        "action": tool,
-                        "params": dict(args or {}),
-                        "output": dict(result or {}),
-                        "tool_call_id": f"aiopen:{tool}",
-                    }
-                ],
-            },
-        }
-        run = create_chat_trace_run(
-            trace_payload,
-            message=f"AIOPEN {tool}",
-            runtime_context={
-                "route": route,
-                "source": "aiopen",
-                "tool": tool,
-                "protocol": "mcp" if channel == "aiopen_mcp" else "rest",
-            },
-            user_id=user_id or str(args.get("user_id") or args.get("userId") or "aiopen"),
-            source="aiopen",
-            channel=channel,
-            intent="aiopen_tool_call",
-        )
-        return run.run_id
-    except Exception:  # noqa: BLE001 - tracing must not break external tool calls
-        logger.exception("failed to attach AgentRun trace to AIOPEN tool call")
-        return ""
+    return trace_tool_call(
+        route=route,
+        channel=channel,
+        tool=tool,
+        args=args,
+        result=result,
+        create_trace_run=create_chat_trace_run,
+        logger=logger,
+        user_id=user_id,
+    )
 
 
 def _safe_aiopen_control_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    safe = dict(payload or {})
-    raw_key = str(safe.pop("key", "") or "")
-    if raw_key:
-        safe["key_preview"] = raw_key[:16]
-    return safe
+    return safe_control_payload(payload)
 
 
 def _trace_aiopen_control_result(
@@ -126,39 +112,16 @@ def _trace_aiopen_control_result(
     channel: str = "aiopen_control",
     intent: str = "aiopen_control_update",
 ) -> dict[str, Any]:
-    if not isinstance(payload, dict) or payload.get("run_id") or payload.get("agent_run_id"):
-        return payload
-    try:
-        safe_payload = _safe_aiopen_control_payload(payload)
-        safe_body = _safe_aiopen_control_payload(body or {})
-        message = str(payload.get("message") or action)
-        run = create_chat_trace_run(
-            {
-                "success": bool(payload.get("success", False)),
-                "response": message,
-                "data": {"text": message, "control_result": safe_payload},
-            },
-            message=f"AIOPEN {action}",
-            runtime_context={
-                "route": route,
-                "source": "aiopen",
-                "action": action,
-                "request": safe_body,
-            },
-            user_id=str(
-                (body or {}).get("user_id") or (body or {}).get("userId") or "aiopen-control"
-            ),
-            source="aiopen",
-            channel=channel,
-            intent=intent,
-        )
-        traced = dict(payload)
-        traced["run_id"] = run.run_id
-        traced["agent_run_id"] = run.run_id
-        return traced
-    except Exception:  # noqa: BLE001 - tracing must not break control-plane writes
-        logger.exception("failed to attach AgentRun trace to AIOPEN control action")
-        return payload
+    return trace_control_result(
+        payload,
+        route=route,
+        action=action,
+        create_trace_run=create_chat_trace_run,
+        logger=logger,
+        body=body,
+        channel=channel,
+        intent=intent,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -217,7 +180,8 @@ async def aiopen_invoke(
     if not verify_api_key(x_aiopen_key):
         return _unauthorized()
     tool = str(body.get("tool") or "").strip()
-    args = body.get("args") if isinstance(body.get("args"), dict) else {}
+    raw_args = body.get("args")
+    args: dict[str, Any] = raw_args if isinstance(raw_args, dict) else {}
     if not tool:
         return JSONResponse({"success": False, "message": "tool 不能为空"}, status_code=400)
     result = await invoke_tool(tool, args, request.app)
@@ -246,112 +210,19 @@ async def aiopen_invoke(
 # ---------------------------------------------------------------------------
 
 
-def _resolve_mcp_protocol_version(params: dict[str, Any] | None) -> str:
-    params = params if isinstance(params, dict) else {}
-    requested = str(params.get("protocolVersion") or "").strip()
-    if requested in MCP_PROTOCOL_VERSIONS:
-        return requested
-    return MCP_DEFAULT_PROTOCOL_VERSION
-
-
-def _mcp_response_headers(
-    request: Request, protocol_version: str, *, new_session: bool = False
-) -> dict[str, str]:
-    headers = {"MCP-Protocol-Version": protocol_version}
-    incoming = str(
-        request.headers.get("mcp-session-id") or request.headers.get("Mcp-Session-Id") or ""
-    ).strip()
-    if incoming:
-        headers["Mcp-Session-Id"] = incoming
-    elif new_session:
-        headers["Mcp-Session-Id"] = secrets.token_hex(16)
-    return headers
-
-
-def _jsonrpc_result(req_id: Any, result: dict[str, Any]) -> dict[str, Any]:
-    return {"jsonrpc": "2.0", "id": req_id, "result": result}
-
-
-def _jsonrpc_error(req_id: Any, code: int, message: str) -> dict[str, Any]:
-    return {"jsonrpc": "2.0", "id": req_id, "error": {"code": code, "message": message}}
-
-
 async def _handle_mcp_message(
     msg: dict[str, Any], app: Any, protocol_version: str
 ) -> dict[str, Any] | None:
     """处理单条 JSON-RPC 消息；notification（无 id）返回 None。"""
-    method = str(msg.get("method") or "")
-    req_id = msg.get("id")
-    is_notification = "id" not in msg
-
-    if method.startswith("notifications/"):
-        return None
-
-    if method == "initialize":
-        params = msg.get("params") if isinstance(msg.get("params"), dict) else {}
-        negotiated = _resolve_mcp_protocol_version(params)
-        manifest = aiopen_manifest()
-        return _jsonrpc_result(
-            req_id,
-            {
-                "protocolVersion": negotiated,
-                "capabilities": {"tools": {"listChanged": False}},
-                "serverInfo": {"name": manifest["name"], "version": manifest["version"]},
-                "instructions": (
-                    f"{manifest['tagline']}\n"
-                    "操作流程：ui_sessions → ui_snapshot → ui_click/ui_type/ui_navigate。"
-                    "业务数据用 api_catalog + api_call；对话用 chat。"
-                ),
-            },
-        )
-    if method == "ping":
-        return _jsonrpc_result(req_id, {})
-    if method == "tools/list":
-        return _jsonrpc_result(req_id, {"tools": aiopen_manifest()["tools"]})
-    if method == "tools/call":
-        params = msg.get("params") if isinstance(msg.get("params"), dict) else {}
-        tool = str(params.get("name") or "")
-        args = params.get("arguments") if isinstance(params.get("arguments"), dict) else {}
-        try:
-            result = await invoke_tool(tool, args, app)
-        except RECOVERABLE_ERRORS as err:
-            return _jsonrpc_error(req_id, -32603, f"tool execution failed: {err}")
-        is_error = not bool(result.get("success", False))
-        text = format_tool_result_text(tool, result)
-        run_id = _trace_aiopen_tool_call(
-            route="/api/aiopen/mcp",
-            channel="aiopen_mcp",
-            tool=tool,
-            args=args,
-            result=result,
-        )
-        mcp_result: dict[str, Any] = {
-            "content": [{"type": "text", "text": text}],
-            "isError": is_error,
-        }
-        if run_id:
-            mcp_result["_meta"] = {"run_id": run_id, "agent_run_id": run_id}
-        return _jsonrpc_result(
-            req_id,
-            mcp_result,
-        )
-    if is_notification:
-        return None
-    return _jsonrpc_error(req_id, -32601, f"method not found: {method}")
-
-
-def _wrap_mcp_json(
-    payload: dict[str, Any] | list[dict[str, Any]] | None,
-    request: Request,
-    *,
-    status_code: int = 200,
-    protocol_version: str = MCP_DEFAULT_PROTOCOL_VERSION,
-    new_session: bool = False,
-) -> Response:
-    headers = _mcp_response_headers(request, protocol_version, new_session=new_session)
-    if payload is None:
-        return Response(status_code=status_code, headers=headers)
-    return JSONResponse(payload, status_code=status_code, headers=headers)
+    return await handle_mcp_message(
+        msg,
+        app,
+        protocol_version,
+        manifest=aiopen_manifest,
+        invoke=invoke_tool,
+        format_result=format_tool_result_text,
+        trace_call=_trace_aiopen_tool_call,
+    )
 
 
 @router.get("/api/aiopen/mcp")

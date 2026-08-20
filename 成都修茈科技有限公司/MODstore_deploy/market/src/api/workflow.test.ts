@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { scriptWorkflows, workflow } from './workflow'
-import { req, authHeaders, fetchZipBlob } from './shared'
+import { req } from './shared'
 
 vi.mock('./shared', () => ({
   req: vi.fn(),

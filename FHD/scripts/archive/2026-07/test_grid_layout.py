@@ -1,9 +1,10 @@
+import glob
+import json
+
+import cv2
+import numpy as np
 from paddleocr import PaddleOCR
 from PIL import Image
-import numpy as np
-import glob
-import cv2
-import json
 
 # 读取图片
 png_files = glob.glob(r"E:\FHD\*PE*.png")
@@ -34,8 +35,8 @@ if lines is not None:
             vertical_lines.append(x1)
 
 # 去重并排序
-horizontal_lines = sorted(list(set([int(y) for y in horizontal_lines])))
-vertical_lines = sorted(list(set([int(x) for x in vertical_lines])))
+horizontal_lines = sorted({int(y) for y in horizontal_lines})
+vertical_lines = sorted({int(x) for x in vertical_lines})
 
 
 # 3. 合并相近的线条
@@ -52,7 +53,7 @@ def merge_close_lines(lines, threshold=30):
 horizontal_lines = merge_close_lines(horizontal_lines)
 vertical_lines = merge_close_lines(vertical_lines)
 
-print(f"\n=== 网格结构 ===")
+print("\n=== 网格结构 ===")
 print(f"水平线：{len(horizontal_lines)} 条 -> {horizontal_lines}")
 print(f"垂直线：{len(vertical_lines)} 条 -> {vertical_lines}")
 
@@ -72,7 +73,7 @@ if len(horizontal_lines) >= 2 and len(vertical_lines) >= 2:
                 "height": horizontal_lines[i + 1] - horizontal_lines[i],
             }
             cells.append(cell)
-    print(f"共 {len(cells)} 个单元格 ({len(horizontal_lines)-1}行 x {len(vertical_lines)-1}列)")
+    print(f"共 {len(cells)} 个单元格 ({len(horizontal_lines) - 1}行 x {len(vertical_lines) - 1}列)")
 
 # 5. OCR 识别
 print("\n=== OCR 识别 ===")

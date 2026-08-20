@@ -63,9 +63,7 @@ describe('useChatViewHost', () => {
     const host = useChatViewHost(deps)
     const dispatchSpy = vi.spyOn(window, 'dispatchEvent')
     host.onAutoRefreshToolbarChange(true)
-    expect(dispatchSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'xcagi:auto-refresh-wechat-changed' }),
-    )
+    expect(dispatchSpy).toHaveBeenCalledWith(expect.objectContaining({ type: 'xcagi:auto-refresh-wechat-changed' }))
     dispatchSpy.mockRestore()
   })
 

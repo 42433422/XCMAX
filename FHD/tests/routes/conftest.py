@@ -1,3 +1,4 @@
+# mypy: disable-error-code="attr-defined, misc"
 """Shared fixtures for tests/routes/ — coverage ramp C3.3-a.
 
 Provides:
@@ -12,6 +13,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
+from app.utils.operational_errors import BOUNDARY_ERRORS
+
 
 @pytest.fixture
 def fastapi_test_client() -> TestClient:
@@ -24,11 +27,12 @@ def fastapi_test_client() -> TestClient:
         from app.fastapi_app.factory import create_app
 
         app = create_app()
-    except Exception:
+    except BOUNDARY_ERRORS:
         from fastapi import FastAPI
 
         app = FastAPI()
-    return TestClient(app)
+    with TestClient(app) as client:
+        yield client
 
 
 @pytest.fixture

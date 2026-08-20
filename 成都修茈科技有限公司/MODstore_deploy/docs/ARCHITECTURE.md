@@ -65,34 +65,34 @@ flowchart TD
 
 目标分层采用“接口层薄、应用层编排、领域层表达规则、基础设施可替换”的 DDD 方向。
 
-| 层级 | 当前落点 | 目标职责 |
-| --- | --- | --- |
-| UI 层 | `market/src/views`、`market/src/components` | 页面、交互状态、路由，不直接散落业务协议细节 |
-| API Client | `market/src/api.js` | 逐步拆分为按领域组织的 TypeScript client |
-| 接口层 | `modstore_server/*_api.py`、`app.py` 中的路由 | 参数校验、鉴权、响应转换，只调用应用层 |
-| 应用层 | 当前散落在 `modstore_server/*.py` | 用例编排、事务边界、跨领域协调 |
-| 领域层 | 当前由业务函数、模型、校验逻辑混合承载 | Catalog、Employee、Workflow、Payment 等核心规则 |
-| 基础设施层 | SQLAlchemy、文件系统、Redis、支付宝 SDK、HTTP proxy | 数据库、缓存、外部 API、文件与包存储实现 |
-| 子服务 | `java_payment_service` | 独立承载高一致性、高并发或强隔离领域 |
+| 层级       | 当前落点                                            | 目标职责                                        |
+| ---------- | --------------------------------------------------- | ----------------------------------------------- |
+| UI 层      | `market/src/views`、`market/src/components`         | 页面、交互状态、路由，不直接散落业务协议细节    |
+| API Client | `market/src/api.js`                                 | 逐步拆分为按领域组织的 TypeScript client        |
+| 接口层     | `modstore_server/*_api.py`、`app.py` 中的路由       | 参数校验、鉴权、响应转换，只调用应用层          |
+| 应用层     | 当前散落在 `modstore_server/*.py`                   | 用例编排、事务边界、跨领域协调                  |
+| 领域层     | 当前由业务函数、模型、校验逻辑混合承载              | Catalog、Employee、Workflow、Payment 等核心规则 |
+| 基础设施层 | SQLAlchemy、文件系统、Redis、支付宝 SDK、HTTP proxy | 数据库、缓存、外部 API、文件与包存储实现        |
+| 子服务     | `java_payment_service`                              | 独立承载高一致性、高并发或强隔离领域            |
 
 ## 4. MODstore 版 NeuroDomain
 
 NeuroDomain 在 MODstore 中表示“自治业务域”。每个域应有清晰的输入、输出、数据所有权和可观测事件。
 
-| NeuroDomain | 现有代表文件 | 领域职责 |
-| --- | --- | --- |
-| CatalogDomain | `catalog_api.py`、`catalog_store.py`、`market_api.py` | 公网目录、本地包索引、检索、购买入口 |
-| AuthoringDomain | `authoring.py`、`mod_ai_scaffold.py`、`mod_scaffold_runner.py` | Mod 制作、AI 脚手架、manifest 读写与校验 |
-| EmployeeDomain | `employee_api.py`、`employee_runtime.py`、`employee_pack_export.py` | AI 员工配置、员工包导出、员工运行态 |
-| WorkflowDomain | `workflow_api.py`、`workflow_engine.py`、`workflow_scheduler.py` | 工作流图、沙盒运行、调度与变量 |
-| PaymentDomain | `payment_api.py`、`java_payment_service/.../PaymentController.java` | 下单、支付回调、订单状态 |
-| WalletDomain | `java_payment_service/.../WalletController.java` | 钱包余额、充值、交易记录 |
-| EntitlementDomain | `java_payment_service/.../EntitlementService.java` | 支付成功后的购买权益与套餐额度 |
-| LLMDomain | `llm_api.py`、`llm_chat_proxy.py`、`llm_key_resolver.py` | 模型目录、BYOK、对话代理、配额消耗 |
-| NotificationDomain | `notification_api.py`、`notification_service.py` | 站内通知、业务提醒 |
-| SafetyDomain | `package_sandbox_audit.py`、`security.py`、`quota_middleware.py` | 沙盒审核、鉴权、配额、签名与安全门 |
-| AnalyticsDomain | `analytics_api.py` | 数据看板、执行统计 |
-| IntegrationDomain | `workflow_mod_link.py`、`catalog_sync.py` | 与 XCAGI、Mod 根目录、外部目录同步 |
+| NeuroDomain        | 现有代表文件                                                        | 领域职责                                 |
+| ------------------ | ------------------------------------------------------------------- | ---------------------------------------- |
+| CatalogDomain      | `catalog_api.py`、`catalog_store.py`、`market_api.py`               | 公网目录、本地包索引、检索、购买入口     |
+| AuthoringDomain    | `authoring.py`、`mod_ai_scaffold.py`、`mod_scaffold_runner.py`      | Mod 制作、AI 脚手架、manifest 读写与校验 |
+| EmployeeDomain     | `employee_api.py`、`employee_runtime.py`、`employee_pack_export.py` | AI 员工配置、员工包导出、员工运行态      |
+| WorkflowDomain     | `workflow_api.py`、`workflow_engine.py`、`workflow_scheduler.py`    | 工作流图、沙盒运行、调度与变量           |
+| PaymentDomain      | `payment_api.py`、`java_payment_service/.../PaymentController.java` | 下单、支付回调、订单状态                 |
+| WalletDomain       | `java_payment_service/.../WalletController.java`                    | 钱包余额、充值、交易记录                 |
+| EntitlementDomain  | `java_payment_service/.../EntitlementService.java`                  | 支付成功后的购买权益与套餐额度           |
+| LLMDomain          | `llm_api.py`、`llm_chat_proxy.py`、`llm_key_resolver.py`            | 模型目录、BYOK、对话代理、配额消耗       |
+| NotificationDomain | `notification_api.py`、`notification_service.py`                    | 站内通知、业务提醒                       |
+| SafetyDomain       | `package_sandbox_audit.py`、`security.py`、`quota_middleware.py`    | 沙盒审核、鉴权、配额、签名与安全门       |
+| AnalyticsDomain    | `analytics_api.py`                                                  | 数据看板、执行统计                       |
+| IntegrationDomain  | `workflow_mod_link.py`、`catalog_sync.py`                           | 与 XCAGI、Mod 根目录、外部目录同步       |
 
 这些域可以先保持同进程模块化，不要求立即拆成独立服务。拆服务的判断标准是：数据一致性要求、部署节奏、故障隔离、团队边界和性能压力。
 
@@ -114,14 +114,14 @@ flowchart LR
 
 建议优先定义这些事件：
 
-| 事件 | 生产者 | 消费者 |
-| --- | --- | --- |
-| `catalog.package_published` | CatalogDomain / AuthoringDomain | NotificationDomain、AnalyticsDomain |
-| `employee.pack_registered` | EmployeeDomain | CatalogDomain、SafetyDomain |
-| `workflow.sandbox_completed` | WorkflowDomain | EmployeeDomain、AnalyticsDomain |
-| `payment.order_paid` | PaymentDomain | EntitlementDomain、NotificationDomain、AnalyticsDomain |
-| `wallet.balance_changed` | WalletDomain | NotificationDomain、AnalyticsDomain |
-| `llm.quota_consumed` | LLMDomain | WalletDomain 或 Quota 模块、AnalyticsDomain |
+| 事件                         | 生产者                          | 消费者                                                 |
+| ---------------------------- | ------------------------------- | ------------------------------------------------------ |
+| `catalog.package_published`  | CatalogDomain / AuthoringDomain | NotificationDomain、AnalyticsDomain                    |
+| `employee.pack_registered`   | EmployeeDomain                  | CatalogDomain、SafetyDomain                            |
+| `workflow.sandbox_completed` | WorkflowDomain                  | EmployeeDomain、AnalyticsDomain                        |
+| `payment.order_paid`         | PaymentDomain                   | EntitlementDomain、NotificationDomain、AnalyticsDomain |
+| `wallet.balance_changed`     | WalletDomain                    | NotificationDomain、AnalyticsDomain                    |
+| `llm.quota_consumed`         | LLMDomain                       | WalletDomain 或 Quota 模块、AnalyticsDomain            |
 
 事件字段建议固定为：
 
@@ -265,14 +265,14 @@ docs/contracts/
 
 ## 10. 分阶段路线图
 
-| 阶段 | 目标 | 交付物 |
-| --- | --- | --- |
-| P0 | 统一架构语言和边界 | 本文档、文档入口、迁移原则 |
-| P1 | 前端类型边界 | TS 配置、API client 拆分、核心 DTO |
-| P2 | Python 包内分层 | application/domain/infrastructure 新结构，路由变薄 |
-| P3 | 支付默认微服务化 | `PAYMENT_BACKEND=java` 生产默认，Python 支付退为兼容 |
-| P4 | 事件契约与异步化 | NeuroBus/outbox、幂等键、追踪、订阅者 |
-| P5 | 服务拆分评估 | 根据负载和团队边界拆出 Employee、Workflow、LLM 等子服务 |
+| 阶段 | 目标               | 交付物                                                  |
+| ---- | ------------------ | ------------------------------------------------------- |
+| P0   | 统一架构语言和边界 | 本文档、文档入口、迁移原则                              |
+| P1   | 前端类型边界       | TS 配置、API client 拆分、核心 DTO                      |
+| P2   | Python 包内分层    | application/domain/infrastructure 新结构，路由变薄      |
+| P3   | 支付默认微服务化   | `PAYMENT_BACKEND=java` 生产默认，Python 支付退为兼容    |
+| P4   | 事件契约与异步化   | NeuroBus/outbox、幂等键、追踪、订阅者                   |
+| P5   | 服务拆分评估       | 根据负载和团队边界拆出 Employee、Workflow、LLM 等子服务 |
 
 详细执行文档：
 
@@ -317,13 +317,13 @@ python <pack_id>.xcemp run --llm                # 需 OPENAI_API_KEY 或 DEEPSEE
 
 ### 11.3 涉及文件
 
-| 文件 | 说明 |
-|------|------|
-| `modstore_server/employee_pack_standalone_template.py` | 模板渲染器，生成 standalone/* 源码 |
-| `modstore_server/employee_pack_export.py` | `_build_employee_pack_zip_with_source` 注入顶层 `__main__.py` 与 `standalone/` |
-| `modstore_server/workbench_api.py` | 制作流水线追加 `standalone_smoke` 步骤（第 12 步，失败降级 warning）|
-| `market/src/employeePackClientExport.ts` | 浏览器兜底导出函数同步注入同样内容 |
-| `tests/test_employee_pack_standalone.py` | subprocess 端到端测试 |
+| 文件                                                   | 说明                                                                           |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| `modstore_server/employee_pack_standalone_template.py` | 模板渲染器，生成 standalone/\* 源码                                            |
+| `modstore_server/employee_pack_export.py`              | `_build_employee_pack_zip_with_source` 注入顶层 `__main__.py` 与 `standalone/` |
+| `modstore_server/workbench_api.py`                     | 制作流水线追加 `standalone_smoke` 步骤（第 12 步，失败降级 warning）           |
+| `market/src/employeePackClientExport.ts`               | 浏览器兜底导出函数同步注入同样内容                                             |
+| `tests/test_employee_pack_standalone.py`               | subprocess 端到端测试                                                          |
 
 ### 11.4 向后兼容
 

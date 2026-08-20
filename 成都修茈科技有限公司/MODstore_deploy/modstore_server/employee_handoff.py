@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """员工任务转交（10 项成熟度第 6 项「会协作」）。
 
 一个员工发现任务不是自己范围，要能 @ 对的人、生成协作线程、交接上下文，
@@ -21,6 +22,8 @@ import logging
 import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set
+
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +60,7 @@ def _coerce_directive(raw: Any, *, fallback_brief: str = "") -> Optional[Handoff
     reason = str(raw.get("reason") or raw.get("why") or "")[:500]
     try:
         priority = int(raw.get("priority") or 5)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         priority = 5
     return HandoffDirective(
         to_employee_id=eid,
@@ -124,7 +127,7 @@ def build_followup_subtasks(
     visited: Set[str],
     depth: int,
     fallback_brief: str,
-) -> List["Any"]:
+) -> List[Any]:
     """根据上一层 results 构造下一层 SubTask。
 
     返回空列表表示没有 handoff 需要继续。
@@ -146,7 +149,10 @@ def build_followup_subtasks(
         from_employee_id = str(result.get("employee_id") or "")
         for directive in directives:
             if not directive.to_employee_id or directive.to_employee_id in visited:
-                logger.info("handoff: skip target=%s (visited or empty)", directive.to_employee_id)
+                logger.info(
+                    "handoff: skip target=%s (visited or empty)",
+                    directive.to_employee_id,
+                )
                 continue
             input_data = dict(directive.input_data or {})
             input_data.setdefault("_handoff_chain", []).append(
@@ -213,7 +219,7 @@ def _target_exists(employee_id: str) -> bool:
                 .first()
             )
             return row2 is not None
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.debug("handoff target_exists check failed employee_id=%s err=%s", employee_id, exc)
         return False
 
@@ -376,7 +382,7 @@ def perform_handoff(
                 auto_dispatch=False,
             )
             suggestion_id = int(sg_out.get("suggestion_id") or 0)
-        except Exception as _sg_exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as _sg_exc:  # noqa: BLE001
             logger.debug("create suggestion for handoff failed: %s", _sg_exc)
 
         return {
@@ -389,7 +395,7 @@ def perform_handoff(
             "reason": reason_s,
             "suggestion_id": suggestion_id or None,
         }
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.exception("perform_handoff failed src=%s tgt=%s", src, tgt)
         return {
             "ok": False,

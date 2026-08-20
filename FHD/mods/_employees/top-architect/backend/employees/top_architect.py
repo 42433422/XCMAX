@@ -35,14 +35,10 @@ def run(payload: dict[str, Any], _ctx: dict[str, Any]) -> dict[str, Any]:
         source_layer = module_layers.get(source, "")
         target_layer = module_layers.get(target, "")
         allowed_targets = (
-            allowed.get(source_layer)
-            if isinstance(allowed.get(source_layer), list)
-            else []
+            allowed.get(source_layer) if isinstance(allowed.get(source_layer), list) else []
         )
         if not source_layer or not target_layer:
-            violations.append(
-                {"source": source, "target": target, "reason": "module_unknown"}
-            )
+            violations.append({"source": source, "target": target, "reason": "module_unknown"})
         elif target_layer not in {str(item) for item in allowed_targets}:
             violations.append(
                 {

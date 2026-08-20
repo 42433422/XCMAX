@@ -1,3 +1,4 @@
+# mypy: disable-error-code="misc"
 """neuro_bus events 基类与领域事件注册表（Phase 4 高 ROI mock 单测）。"""
 
 from __future__ import annotations

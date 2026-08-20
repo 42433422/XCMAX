@@ -19,7 +19,7 @@ from app.infrastructure.tenant_scope import apply_tenant_filter, tenant_id_for_w
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
-_REPOSITORY_ERRORS = (*RECOVERABLE_ERRORS, Exception)
+_REPOSITORY_ERRORS = RECOVERABLE_ERRORS
 
 
 class SQLAlchemyProductRepository(ProductRepository, ProductExportMixin):
@@ -233,8 +233,8 @@ class SQLAlchemyProductRepository(ProductRepository, ProductExportMixin):
 
             return {"success": True, "message": "产品创建成功", "product_id": product_id}
 
-        except _REPOSITORY_ERRORS as e:
-            return {"success": False, "message": f"创建失败：{str(e)}"}
+        except _REPOSITORY_ERRORS:
+            return {"success": False, "message": "产品创建失败，请稍后重试"}
 
     def update(self, product_id: int, data: dict[str, Any]) -> dict[str, Any]:
         try:
@@ -288,8 +288,8 @@ class SQLAlchemyProductRepository(ProductRepository, ProductExportMixin):
 
             return {"success": True, "message": "产品更新成功"}
 
-        except _REPOSITORY_ERRORS as e:
-            return {"success": False, "message": f"更新失败：{str(e)}"}
+        except _REPOSITORY_ERRORS:
+            return {"success": False, "message": "产品更新失败，请稍后重试"}
 
     def batch_create(self, products_data: list[dict[str, Any]]) -> dict[str, Any]:
         try:
@@ -339,8 +339,13 @@ class SQLAlchemyProductRepository(ProductRepository, ProductExportMixin):
                                 }
                             )
 
-                        except RECOVERABLE_ERRORS as e:
-                            failed_products.append({"index": batch_start + index, "reason": str(e)})
+                        except RECOVERABLE_ERRORS:
+                            failed_products.append(
+                                {
+                                    "index": batch_start + index,
+                                    "reason": "product_create_failed",
+                                }
+                            )
 
                     if batch_records:
                         try:
@@ -379,8 +384,8 @@ class SQLAlchemyProductRepository(ProductRepository, ProductExportMixin):
 
             return result
 
-        except _REPOSITORY_ERRORS as e:
-            return {"success": False, "message": f"批量添加失败：{str(e)}"}
+        except _REPOSITORY_ERRORS:
+            return {"success": False, "message": "批量添加失败，请稍后重试"}
 
     def batch_delete(self, product_ids: list[int]) -> dict[str, Any]:
         try:
@@ -408,8 +413,8 @@ class SQLAlchemyProductRepository(ProductRepository, ProductExportMixin):
                     "deleted_count": len(products),
                 }
 
-        except _REPOSITORY_ERRORS as e:
-            return {"success": False, "message": f"批量删除失败：{str(e)}"}
+        except _REPOSITORY_ERRORS:
+            return {"success": False, "message": "批量删除失败，请稍后重试"}
 
     def exists(self, product_id: int) -> bool:
         try:

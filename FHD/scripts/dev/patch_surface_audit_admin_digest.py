@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """P-W 管理端截图：admin 登录 + digest-identity 解锁 + 10 个 /market/admin 路由。"""
+
 from __future__ import annotations
 
 import sys
@@ -13,7 +14,7 @@ TARGET = Path(
 
 MARKER = "_fetch_admin_digest_code_sync"
 
-ADMIN_PAGES = '''    for name, admin_path in (
+ADMIN_PAGES = """    for name, admin_path in (
         ("管理端·数据库管理", "/admin/database"),
         ("管理端·值班员工", "/admin/duty-employees"),
         ("管理端·运维审计", "/admin/ops-audit"),
@@ -35,7 +36,7 @@ ADMIN_PAGES = '''    for name, admin_path in (
                 prepare="admin_digest",
             )
         )
-'''
+"""
 
 HELPERS = '''
 
@@ -64,7 +65,7 @@ def _fetch_admin_digest_code_sync(auth: Dict[str, str]) -> str:
         code = str(data.get("code") or "").strip().upper()
         if len(code) == 6:
             return code
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures
         logger.warning("surface audit: digest-identity fetch failed: %s", exc)
     return ""
 
@@ -103,7 +104,7 @@ async def _prepare_admin_digest(context: Any, auth: Dict[str, str]) -> None:
             )
             with urllib.request.urlopen(req, timeout=30):
                 pass
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures
             logger.warning("surface audit: verify-admin-digest-code failed: %s", exc)
     await _inject_admin_digest(context, code)
 

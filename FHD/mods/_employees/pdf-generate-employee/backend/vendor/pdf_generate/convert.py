@@ -85,7 +85,7 @@ async def convert_file(
     ctx: Dict[str, Any],
     rule_spec: Dict[str, Any],
 ) -> Dict[str, Any]:
-    from app.application.office_plaintext_generate import resolve_pdf_document_spec
+    from app.mod_sdk.host_services import resolve_pdf_document_spec
 
     suffix = src_path.suffix.lower()
     output_dir = output_path.parent

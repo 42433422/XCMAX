@@ -13,11 +13,7 @@ vi.mock('@/utils/workspacePrefsApi', () => ({
   patchWorkspacePrefs: (...a: unknown[]) => patchWorkspacePrefsMock(...a),
 }))
 
-import {
-  resetHostOnboardingForTest,
-  bootstrapDesktopDatabase,
-  openAssistantTutorialTab,
-} from './devTestInit'
+import { resetHostOnboardingForTest, bootstrapDesktopDatabase, openAssistantTutorialTab } from './devTestInit'
 
 describe('devTestInit', () => {
   beforeEach(() => {

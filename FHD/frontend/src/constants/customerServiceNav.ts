@@ -11,10 +11,7 @@ export function customerServiceSideForNavKey(key: string): CustomerServiceSide |
   return null
 }
 
-export function isCustomerServiceNavVisible(
-  key: string,
-  isAdminAccount: boolean,
-): boolean {
+export function isCustomerServiceNavVisible(key: string, isAdminAccount: boolean): boolean {
   const side = customerServiceSideForNavKey(key)
   if (!side) return true
   return side === 'admin' ? isAdminAccount : !isAdminAccount

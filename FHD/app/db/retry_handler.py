@@ -15,7 +15,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
-_sqlite_retry_errors: tuple[type[BaseException], ...] = ()
+_sqlite_retry_errors: tuple[type[Exception], ...] = ()
 try:
     import sqlite3
 
@@ -23,7 +23,7 @@ try:
 except ImportError:
     pass
 
-_RETRYABLE_DB_ERRORS: tuple[type[BaseException], ...] = RECOVERABLE_ERRORS + _sqlite_retry_errors
+_RETRYABLE_DB_ERRORS: tuple[type[Exception], ...] = RECOVERABLE_ERRORS + _sqlite_retry_errors
 
 T = TypeVar("T")
 

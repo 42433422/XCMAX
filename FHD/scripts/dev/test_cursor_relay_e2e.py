@@ -3,12 +3,12 @@
 
 Requires desktop relay poller running (see start_desktop_relay_poller.sh).
 """
+
 from __future__ import annotations
 
-import json
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 
@@ -17,9 +17,7 @@ FRESH_SEC = 5 * 60
 
 
 def _sort_key(row: dict) -> str:
-    return str(
-        row.get("last_seen_at") or row.get("updated_at") or row.get("paired_at") or ""
-    )
+    return str(row.get("last_seen_at") or row.get("updated_at") or row.get("paired_at") or "")
 
 
 def _is_fresh(row: dict) -> bool:
@@ -27,7 +25,7 @@ def _is_fresh(row: dict) -> bool:
     if not raw:
         return False
     dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-    age = (datetime.now(timezone.utc) - dt).total_seconds()
+    age = (datetime.now(UTC) - dt).total_seconds()
     return age <= FRESH_SEC
 
 

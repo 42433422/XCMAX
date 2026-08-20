@@ -10,13 +10,14 @@
   - 不做任何 pytest.skip；
   - 断言每个导入模块的源码文件位于 FHD/packages 下的 vendored 包内（而非 PyPI 上游）。
 """
+
 from __future__ import annotations
 
 import inspect
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-PKG = HERE.parent          # packages/xcagi_langgraph_prebuilt
+PKG = HERE.parent  # packages/xcagi_langgraph_prebuilt
 PACKAGES_ROOT = PKG.parent  # FHD/packages/
 
 
@@ -57,15 +58,22 @@ def test_create_react_agent_unwrapped() -> None:
 
 
 def test_interrupt_types_importable() -> None:
+    from langgraph.types import Command, interrupt
+
     from langgraph.prebuilt.interrupt import (
         ActionRequest,
         HumanInterrupt,
         HumanInterruptConfig,
         HumanResponse,
     )
-    from langgraph.types import Command, interrupt
 
-    for sym in (HumanInterrupt, HumanResponse, ActionRequest, HumanInterruptConfig, Command):
+    for sym in (
+        HumanInterrupt,
+        HumanResponse,
+        ActionRequest,
+        HumanInterruptConfig,
+        Command,
+    ):
         assert isinstance(sym, type)
     assert callable(interrupt)
 
@@ -75,11 +83,14 @@ def test_dependencies_resolve_to_vendored_siblings() -> None:
     import langgraph.checkpoint.base
     import langgraph.checkpoint.postgres
     import langgraph.checkpoint.sqlite
-    import langgraph.prebuilt
     import langgraph.types
+
+    import langgraph.prebuilt
 
     _assert_vendored(langgraph.prebuilt, "xcagi_langgraph_prebuilt")
     _assert_vendored(langgraph.types, "xcagi_langgraph_core")
     _assert_vendored(langgraph.checkpoint.base, "xcagi_langgraph_checkpoint")
     _assert_vendored(langgraph.checkpoint.sqlite, "xcagi_langgraph_checkpoint_backends")
-    _assert_vendored(langgraph.checkpoint.postgres, "xcagi_langgraph_checkpoint_backends")
+    _assert_vendored(
+        langgraph.checkpoint.postgres, "xcagi_langgraph_checkpoint_backends"
+    )

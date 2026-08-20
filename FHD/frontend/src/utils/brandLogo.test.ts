@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  BRAND_LOGO_ICON_CANDIDATES,
-  BRAND_LOGO_WORDMARK_CANDIDATES,
-  startupAssetUrl,
-} from './brandLogo'
+import { BRAND_LOGO_ICON_CANDIDATES, BRAND_LOGO_WORDMARK_CANDIDATES, startupAssetUrl } from './brandLogo'
 
 describe('brandLogo', () => {
   it('startupAssetUrl joins base and startup path', () => {

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """校验 deploy/requirements-server-api.txt 与 lock 文件顶层包名一致。"""
+
 from __future__ import annotations
 
 import re
@@ -56,10 +57,16 @@ def main() -> int:
     lock_names = parse_lock(LOCK)
     missing = sorted(req_names - lock_names)
     if missing:
-        print("lock file missing top-level packages from requirements-server-api.txt:", file=sys.stderr)
+        print(
+            "lock file missing top-level packages from requirements-server-api.txt:",
+            file=sys.stderr,
+        )
         for name in missing:
             print(f"  - {name}", file=sys.stderr)
-        print("Regenerate: pip install -r deploy/requirements-server-api.txt && pip freeze > deploy/requirements-server-api.lock.txt", file=sys.stderr)
+        print(
+            "Regenerate: pip install -r deploy/requirements-server-api.txt && pip freeze > deploy/requirements-server-api.lock.txt",
+            file=sys.stderr,
+        )
         return 1
     print(f"requirements lock OK ({len(req_names)} top-level packages)")
     return 0

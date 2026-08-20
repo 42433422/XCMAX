@@ -57,7 +57,8 @@ DEFAULT_INTENT_LABELS = [
 class DistilledIntentRecognizer:
     """蒸馏模型意图识别器"""
 
-    _instance = None
+    _instance: "DistilledIntentRecognizer | None" = None
+    _initialized: bool
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
@@ -69,10 +70,10 @@ class DistilledIntentRecognizer:
             return
 
         self.model_path = model_path or os.path.join(CHECKPOINT_DIR, "best.pt")
-        self.model = None
-        self.tokenizer = None
-        self.id2label = None
-        self.label2id = None
+        self.model: Any = None
+        self.tokenizer: Any = None
+        self.id2label: dict[int, str] | None = None
+        self.label2id: dict[str, int] | None = None
         self._initialized = False
 
         self._load_model()
@@ -183,7 +184,8 @@ class DistilledIntentRecognizer:
 
             predicted_idx = predicted_idx.item()
             confidence = confidence.item()
-            predicted_label = self.id2label.get(predicted_idx, "unk")
+            label_map = self.id2label or {}
+            predicted_label = label_map.get(predicted_idx, "unk")
 
             return {
                 "intent": predicted_label,

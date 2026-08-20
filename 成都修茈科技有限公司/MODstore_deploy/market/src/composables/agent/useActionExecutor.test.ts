@@ -76,7 +76,9 @@ describe('useActionExecutor', () => {
     vi.spyOn(storageProto, 'getItem').mockImplementationOnce(() => {
       throw new Error('blocked')
     })
-    await expect(api.navigate({ route: 'fallback-route' })).resolves.toMatchObject({ success: true })
+    await expect(api.navigate({ route: 'fallback-route' })).resolves.toMatchObject({
+      success: true,
+    })
   })
 
   it('clicks by every supported target strategy and reports cancel, missing, invalid, and thrown clicks', async () => {
@@ -229,10 +231,18 @@ describe('useActionExecutor', () => {
   it('scrolls all directions and reads serialized page content', async () => {
     const api = useActionExecutor()
 
-    await expect(api.scroll({ direction: 'top' })).resolves.toMatchObject({ message: '已滚动：top' })
-    await expect(api.scroll({ direction: 'bottom' })).resolves.toMatchObject({ message: '已滚动：bottom' })
-    await expect(api.scroll({ direction: 'up', px: 120 })).resolves.toMatchObject({ message: '已滚动：up' })
-    await expect(api.scroll({ direction: 'down', px: 90 })).resolves.toMatchObject({ message: '已滚动：down' })
+    await expect(api.scroll({ direction: 'top' })).resolves.toMatchObject({
+      message: '已滚动：top',
+    })
+    await expect(api.scroll({ direction: 'bottom' })).resolves.toMatchObject({
+      message: '已滚动：bottom',
+    })
+    await expect(api.scroll({ direction: 'up', px: 120 })).resolves.toMatchObject({
+      message: '已滚动：up',
+    })
+    await expect(api.scroll({ direction: 'down', px: 90 })).resolves.toMatchObject({
+      message: '已滚动：down',
+    })
 
     expect(window.scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' })
     expect(window.scrollTo).toHaveBeenCalledWith({ top: 1280, behavior: 'smooth' })

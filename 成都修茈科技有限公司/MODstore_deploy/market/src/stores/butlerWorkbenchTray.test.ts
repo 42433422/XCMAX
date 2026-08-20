@@ -2,20 +2,20 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useButlerWorkbenchTrayStore } from './butlerWorkbenchTray'
 import type { ButlerTrayAttachment } from './butlerWorkbenchTray'
+import type { DirectGeneratedFile } from '../utils/directGeneratedFiles'
 
 function makeAttachment(id: string): ButlerTrayAttachment {
   return { id, name: `att-${id}`, status: 'ready' }
 }
 
-function makeGenerated(id: string) {
+function makeGenerated(id: string): DirectGeneratedFile {
   return {
     id,
+    role: 'generated',
+    name: `Generated ${id}`,
+    status: 'ready',
+    jobId: id,
     filename: `gen-${id}.docx`,
-    label: `Generated ${id}`,
-    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    url: `https://example.com/${id}`,
-    source: 'office' as const,
-    createdAt: 1,
   }
 }
 

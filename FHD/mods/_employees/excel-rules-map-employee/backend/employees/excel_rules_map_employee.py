@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from app.mod_sdk.errors import BOUNDARY_ERRORS
+
 EMPLOYEE_ID = "excel-rules-map-employee"
 EMPLOYEE_LABEL = "Excel 规则映射员"
 SYSTEM_PROMPT = "你是Excel 规则映射员。你必须按 direct_python 方式工作：infer 时从读取员的 workbook.json 推断模板结构规则并写出 rules.json 提案（含置信度与待确认项）；compile 时把固化规则与槽位记录编译为模板写入员的 plan.json（带 rules_ref 哈希）。禁止 LLM 编造结构或数据；推断不确定的项必须列入 open_questions 交人确认，不得假装确定。"
@@ -147,11 +149,17 @@ async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
                 f"未生成输出文件：{produced}",
                 meta={"handler": "direct_python", "action": action or "auto"},
             )
-        run_warnings = [str(w) for w in (result.get("warnings") or [])] if isinstance(result, dict) else []
+        run_warnings = (
+            [str(w) for w in (result.get("warnings") or [])] if isinstance(result, dict) else []
+        )
         normalized = _ok(
             result,
             warnings=run_warnings,
-            meta={"handler": "direct_python", "action": str(result.get("action") or action or "auto"), "runtime": "generated_python"},
+            meta={
+                "handler": "direct_python",
+                "action": str(result.get("action") or action or "auto"),
+                "runtime": "generated_python",
+            },
         )
         return {
             "ok": normalized["ok"],
@@ -161,9 +169,13 @@ async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
             "error": normalized["error"],
             "meta": normalized["meta"],
         }
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         return _err(
             str(exc),
             warnings=["请检查上传的 workbook.json/rules.json 结构与 payload.action 是否匹配。"],
-            meta={"handler": "direct_python", "action": action or "auto", "runtime": "generated_python"},
+            meta={
+                "handler": "direct_python",
+                "action": action or "auto",
+                "runtime": "generated_python",
+            },
         )

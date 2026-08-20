@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 清空 XCAGI / FHD 业务库中与「产品、购买单位、客户、出货」等相关数据，便于重新上传。
 
@@ -19,11 +18,14 @@
 说明：若你启用了 XCAGI_MOD_ISOLATED_DATABASES 或单独映射了库 URL，请确认 DATABASE_URL
 指向你要清空的那一套库（例如 xcagi__sz_qsm_pro），否则清的是「基库」而不是扩展库。
 """
+
 from __future__ import annotations
 
 import argparse
 import os
 import sys
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -53,7 +55,7 @@ def _has_column(conn, table: str, col: str) -> bool:
 
     try:
         cols = {c["name"] for c in inspect(conn).get_columns(table)}
-    except Exception:
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
         return False
     return col in cols
 

@@ -261,10 +261,7 @@ export const agentRunsApi = {
   },
 
   markTaskRead(taskId: string): Promise<AgentTaskResponse> {
-    return api.post<AgentTaskResponse>(
-      `/api/agent/tasks/${encodeURIComponent(taskId)}/read`,
-      {},
-    )
+    return api.post<AgentTaskResponse>(`/api/agent/tasks/${encodeURIComponent(taskId)}/read`, {})
   },
 
   getTaskRuntime(): Promise<ApiResponse<AgentTaskRuntime>> {
@@ -276,55 +273,33 @@ export const agentRunsApi = {
   },
 
   archiveTask(taskId: string): Promise<AgentTaskResponse> {
-    return api.post<AgentTaskResponse>(
-      `/api/agent/tasks/${encodeURIComponent(taskId)}/archive`,
-      {},
-    )
+    return api.post<AgentTaskResponse>(`/api/agent/tasks/${encodeURIComponent(taskId)}/archive`, {})
   },
 
   observeTool(payload: ObserveAgentToolPayload): Promise<ApiResponse<AgentRunReference>> {
     return api.post<ApiResponse<AgentRunReference>>('/api/agent/runs/observed-tool', payload)
   },
 
-  continueRun(
-    runId: string,
-    payload: ContinueAgentRunPayload,
-  ): Promise<AgentRunResponse> {
-    return api.post<AgentRunResponse>(
-      `/api/agent/runs/${encodeURIComponent(runId)}/continue`,
-      payload,
-    )
+  continueRun(runId: string, payload: ContinueAgentRunPayload): Promise<AgentRunResponse> {
+    return api.post<AgentRunResponse>(`/api/agent/runs/${encodeURIComponent(runId)}/continue`, payload)
   },
 
   pauseRun(runId: string): Promise<ApiResponse<AgentRun>> {
-    return api.post<ApiResponse<AgentRun>>(
-      `/api/agent/runs/${encodeURIComponent(runId)}/pause`,
-      {},
-    )
+    return api.post<ApiResponse<AgentRun>>(`/api/agent/runs/${encodeURIComponent(runId)}/pause`, {})
   },
 
   cancelRun(runId: string): Promise<ApiResponse<AgentRun>> {
-    return api.post<ApiResponse<AgentRun>>(
-      `/api/agent/runs/${encodeURIComponent(runId)}/cancel`,
-      {},
-    )
+    return api.post<ApiResponse<AgentRun>>(`/api/agent/runs/${encodeURIComponent(runId)}/cancel`, {})
   },
 
-  resumeRun(
-    runId: string,
-    runtimeContext: Record<string, unknown> = {},
-  ): Promise<ApiResponse<AgentRun>> {
-    return api.post<ApiResponse<AgentRun>>(
-      `/api/agent/runs/${encodeURIComponent(runId)}/resume`,
-      { runtime_context: runtimeContext },
-    )
+  resumeRun(runId: string, runtimeContext: Record<string, unknown> = {}): Promise<ApiResponse<AgentRun>> {
+    return api.post<ApiResponse<AgentRun>>(`/api/agent/runs/${encodeURIComponent(runId)}/resume`, {
+      runtime_context: runtimeContext,
+    })
   },
 
   retryRun(runId: string): Promise<ApiResponse<AgentRunReference>> {
-    return api.post<ApiResponse<AgentRunReference>>(
-      `/api/agent/runs/${encodeURIComponent(runId)}/retry`,
-      {},
-    )
+    return api.post<ApiResponse<AgentRunReference>>(`/api/agent/runs/${encodeURIComponent(runId)}/retry`, {})
   },
 
   getRun(runId: string): Promise<AgentRunResponse> {
@@ -335,21 +310,13 @@ export const agentRunsApi = {
     return api.get<ApiResponse<AgentRun[]>>('/api/agent/runs', params)
   },
 
-  listEvents(
-    runId: string,
-    params: { after_event_id?: string } = {},
-  ): Promise<AgentRunEventsResponse> {
-    return api.get<AgentRunEventsResponse>(
-      `/api/agent/runs/${encodeURIComponent(runId)}/events`,
-      params,
-    )
+  listEvents(runId: string, params: { after_event_id?: string } = {}): Promise<AgentRunEventsResponse> {
+    return api.get<AgentRunEventsResponse>(`/api/agent/runs/${encodeURIComponent(runId)}/events`, params)
   },
 
   eventStreamPath(runId: string, afterEventId?: string): string {
     const base = `/api/agent/runs/${encodeURIComponent(runId)}/events/stream`
-    return afterEventId
-      ? `${base}?after_event_id=${encodeURIComponent(afterEventId)}`
-      : base
+    return afterEventId ? `${base}?after_event_id=${encodeURIComponent(afterEventId)}` : base
   },
 }
 

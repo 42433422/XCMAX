@@ -1,5 +1,6 @@
 import sqlite3
-import os
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 def check_customer_databases():
@@ -36,7 +37,7 @@ def check_customer_databases():
                 print("    未找到'半岛风情'相关数据")
 
         conn.close()
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"检查customers.db时出错: {e}")
 
     print("\n=== 检查 database.db ===")
@@ -69,7 +70,7 @@ def check_customer_databases():
                 print("    未找到'半岛风情'相关数据")
 
         conn.close()
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"检查database.db时出错: {e}")
 
 

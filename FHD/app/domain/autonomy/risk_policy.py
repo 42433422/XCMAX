@@ -241,6 +241,8 @@ class RiskPolicyCatalog:
             "suppress_change_requests",
             "suppress_lifecycle_events",
         )
+        if not isinstance(work_contract, dict):
+            work_contract = {}
         read_only_burn_in = (
             str(work_contract.get("risk_level") or "").strip().lower()
             in {"low", "read_only", "readonly"}

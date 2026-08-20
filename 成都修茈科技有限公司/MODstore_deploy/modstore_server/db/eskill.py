@@ -2,9 +2,18 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 
 from modstore_server.db.base import Base
 
@@ -19,11 +28,11 @@ class ESkill(Base):
     domain = Column(Text, default="")
     description = Column(Text, default="")
     active_version = Column(Integer, default=1, nullable=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
     updated_at = Column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
 
@@ -39,7 +48,7 @@ class ESkillVersion(Base):
     quality_gate_json = Column(Text, default="{}")
     source_run_id = Column(Integer, nullable=True, index=True)
     note = Column(Text, default="")
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
 
 class ESkillRun(Base):
@@ -56,5 +65,5 @@ class ESkillRun(Base):
     patch_json = Column(Text, default="{}")
     error_message = Column(Text, default="")
     duration_ms = Column(Float, default=0.0)
-    started_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    started_at = Column(DateTime, default=lambda: datetime.now(UTC))
     completed_at = Column(DateTime, nullable=True)

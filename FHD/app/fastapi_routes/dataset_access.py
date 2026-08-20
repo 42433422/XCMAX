@@ -127,7 +127,7 @@ def dataset_access_context_from_request(
         tenant = str(resolved_tenant) if resolved_tenant is not None else ""
     actor_id = (headers.get("X-Dataset-Actor-ID") or headers.get("X-User-ID") or "").strip()
     permissions_raw = headers.get("X-Dataset-Permissions") or headers.get("X-Permissions") or ""
-    permissions = frozenset(
+    header_permissions = frozenset(
         part.strip() for part in permissions_raw.replace(";", ",").split(",") if part.strip()
     )
     is_admin = headers.get("X-Dataset-Admin", "").strip().lower() in {
@@ -136,11 +136,11 @@ def dataset_access_context_from_request(
         "yes",
         "on",
     }
-    if tenant or actor_id or permissions or is_admin:
+    if tenant or actor_id or header_permissions or is_admin:
         return DatasetAccessContext(
             actor_id=actor_id,
             tenant_id=tenant,
-            permissions=permissions,
+            permissions=header_permissions,
             is_admin=is_admin,
         )
 

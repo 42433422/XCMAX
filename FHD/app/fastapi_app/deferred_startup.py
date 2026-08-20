@@ -70,7 +70,7 @@ async def _deferred_heavy_startup(app: FastAPI) -> None:
         logger.warning("Deliverable runtime setup skipped: %s", exc)
 
     try:
-        from app.utils.performance_initializer import init_performance_optimization
+        from app.utils.performance.performance_initializer import init_performance_optimization
 
         init_performance_optimization(app)
         mark_startup("performance_optimizer_ready")

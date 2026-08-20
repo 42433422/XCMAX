@@ -7,15 +7,16 @@
         ## 上游 Handoff 契约
 
         ### handoff: test-qa-runner → 本岗
+
 - **触发条件**：`employee.task.done:test-qa-runner`（pytest 全绿 + coverage gate 通过）
 - **输入**：CI 测试报告路径、覆盖率摘要
 - **门禁**：测试红灯时本岗不得继续；回滚上游修复后重触发
 
 ### handoff: dbops-engineer → 本岗
+
 - **触发条件**：`employee.task.done:dbops-engineer`
 - **输入**：待补充（参见 `yuangon/**/dbops-engineer/runbook.md`）
 - **门禁**：依赖完成前本岗不得继续
-
 
         ## Handlers
 
@@ -26,6 +27,7 @@
         ## 核心 Scope
 
         - `MODstore_deploy/market/src/**`
+
 - `MODstore_deploy/modstore_server/**`
 - `MODstore_deploy/tests/**`
 - `MODstore_deploy/pyproject.toml`

@@ -8,6 +8,7 @@ from typing import Any
 from app.bootstrap import get_shipment_app_service
 from app.db.models import Product
 from app.db.session import get_db
+from app.services.shipment_number_mode_payloads import build_unit_not_found_payload
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
@@ -220,40 +221,7 @@ class ShipmentNumberModeService:
     def _build_unit_not_found_payload(
         self, typed_unit: str, all_units: list[str]
     ) -> dict[str, Any]:
-        typed = str(typed_unit or "").strip()
-        if any(unit == typed for unit in all_units):
-            return {}
-
-        contains = [unit for unit in all_units if typed and (typed in unit or unit in typed)]
-        fuzzy = difflib.get_close_matches(typed, all_units, n=5, cutoff=0.35) if typed else []
-        suggestions: list[str] = []
-        for unit in contains + fuzzy:
-            if unit and unit not in suggestions:
-                suggestions.append(unit)
-            if len(suggestions) >= 5:
-                break
-
-        if suggestions:
-            suggestion_text = "；".join(f"{idx + 1}){name}" for idx, name in enumerate(suggestions))
-            message = (
-                f"未找到购买单位：{typed}。"
-                f"请确认单位名称后重试，或从候选中选择：{suggestion_text}。"
-            )
-        else:
-            message = (
-                f"未找到购买单位：{typed}。请先创建该购买单位，或输入已存在的单位名称后再生成。"
-            )
-
-        return {
-            "success": False,
-            "message": message,
-            "error_code": "purchase_unit_not_found",
-            "data": {
-                "input_unit_name": typed,
-                "candidate_units": suggestions,
-                "need_confirm_unit": True,
-            },
-        }
+        return build_unit_not_found_payload(typed_unit, all_units)
 
     @staticmethod
     def _normalize_success_payload(payload: dict[str, Any]) -> dict[str, Any]:
@@ -266,8 +234,8 @@ class ShipmentNumberModeService:
         record_id = payload.get("record_id")
         order_id = payload.get("order_id")
         final_record_id = record_id if record_id is not None else order_id
-        document = payload.get("document") if isinstance(payload.get("document"), dict) else {}
-
+        raw_document = payload.get("document")
+        document: dict[str, Any] = dict(raw_document) if isinstance(raw_document, dict) else {}
         if doc_name and not document.get("filename"):
             document["filename"] = doc_name
         if file_path and not document.get("filepath"):
@@ -278,7 +246,8 @@ class ShipmentNumberModeService:
             document["record_id"] = final_record_id
             document["order_id"] = final_record_id
 
-        data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+        raw_data = payload.get("data")
+        data: dict[str, Any] = dict(raw_data) if isinstance(raw_data, dict) else {}
         if doc_name:
             data["doc_name"] = doc_name
         if file_path:
@@ -388,7 +357,12 @@ class ShipmentNumberModeService:
                     "error_code": "NUMBER_MODE_STRICT_FAILED",
                     "data": {"parsed_data": parsed},
                 }, 400
-            products = list(parsed.get("products") or [])
+            raw_products = parsed.get("products")
+            products = (
+                [dict(item) for item in raw_products if isinstance(item, dict)]
+                if isinstance(raw_products, list)
+                else []
+            )
 
         if not products or not unit_to_use:
             return {
@@ -430,7 +404,7 @@ class ShipmentNumberModeService:
             )
 
             try:
-                quantity_value = float(quantity)
+                quantity_value = float(quantity or 0.0)
             except RECOVERABLE_ERRORS:
                 quantity_value = 0.0
 

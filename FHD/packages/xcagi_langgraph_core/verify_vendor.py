@@ -18,6 +18,7 @@
 
 退出码: 0=全部通过; 1=校验失败。
 """
+
 from __future__ import annotations
 
 import argparse
@@ -116,7 +117,9 @@ def verify_manifest() -> bool:
     actual = collect_files()
     missing = [rel for rel in expected if rel not in actual]
     extra = [rel for rel in actual if rel not in expected]
-    changed = [rel for rel in actual if rel in expected and actual[rel] != expected[rel]]
+    changed = [
+        rel for rel in actual if rel in expected and actual[rel] != expected[rel]
+    ]
 
     ok = True
     for rel in sorted(missing):
@@ -150,8 +153,7 @@ def _git(args: list[str], cwd: Path | None = None) -> subprocess.CompletedProces
     return subprocess.run(
         ["git", *args],
         cwd=str(cwd) if cwd is not None else None,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
     )
 
@@ -159,7 +161,16 @@ def _git(args: list[str], cwd: Path | None = None) -> subprocess.CompletedProces
 def _clone_tag(repo: Path) -> tuple[bool, str]:
     """在临时目录浅克隆远端精确 tag (无 v 前缀)。返回 (成功, commit sha 或错误信息)。"""
     proc = _git(
-        ["clone", "--depth", "1", "--branch", EXPECTED_TAG, "--single-branch", UPSTREAM_REPO, str(repo)]
+        [
+            "clone",
+            "--depth",
+            "1",
+            "--branch",
+            EXPECTED_TAG,
+            "--single-branch",
+            UPSTREAM_REPO,
+            str(repo),
+        ]
     )
     if proc.returncode != 0:
         return False, f"git clone tag {EXPECTED_TAG} 失败: {proc.stderr.strip()}"
@@ -176,10 +187,14 @@ def verify_upstream(prov: dict) -> bool:
     src = prov.get("source_path", "")
 
     if tag != EXPECTED_TAG:
-        print(f"[FAIL] PROVENANCE upstream_tag 应为 {EXPECTED_TAG}（无 v 前缀），当前 {tag!r}")
+        print(
+            f"[FAIL] PROVENANCE upstream_tag 应为 {EXPECTED_TAG}（无 v 前缀），当前 {tag!r}"
+        )
         return False
     if sha != EXPECTED_SHA:
-        print(f"[FAIL] PROVENANCE upstream_commit_sha 应为 {EXPECTED_SHA}，当前 {sha!r}")
+        print(
+            f"[FAIL] PROVENANCE upstream_commit_sha 应为 {EXPECTED_SHA}，当前 {sha!r}"
+        )
         return False
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -190,7 +205,9 @@ def verify_upstream(prov: dict) -> bool:
             print(f"[FAIL] {resolved}")
             return False
         if resolved != sha:
-            print(f"[FAIL] 远端 tag {EXPECTED_TAG} 解析为 {resolved[:12]}，与锁定 SHA {sha[:12]} 不一致")
+            print(
+                f"[FAIL] 远端 tag {EXPECTED_TAG} 解析为 {resolved[:12]}，与锁定 SHA {sha[:12]} 不一致"
+            )
             return False
         print(f"[OK] 远端 tag {EXPECTED_TAG} -> commit {resolved}")
 
@@ -201,7 +218,9 @@ def verify_upstream(prov: dict) -> bool:
 
         mismatches: list[str] = []
         for rel, digest in collect_files().items():
-            upstream = upstream_root / "LICENSE" if rel == "LICENSE" else upstream_root / rel
+            upstream = (
+                upstream_root / "LICENSE" if rel == "LICENSE" else upstream_root / rel
+            )
             if not upstream.is_file():
                 mismatches.append(f"{rel} (上游缺失)")
                 continue
@@ -210,7 +229,9 @@ def verify_upstream(prov: dict) -> bool:
 
     ok = not mismatches
     if ok:
-        print(f"[OK] 与远端 tag {EXPECTED_TAG} ({sha[:12]}) 的 {src}/langgraph + LICENSE 字节级一致")
+        print(
+            f"[OK] 与远端 tag {EXPECTED_TAG} ({sha[:12]}) 的 {src}/langgraph + LICENSE 字节级一致"
+        )
     else:
         for m in mismatches:
             print(f"[FAIL] 与上游不一致: {m}")
@@ -220,7 +241,9 @@ def verify_upstream(prov: dict) -> bool:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--gen", action="store_true", help="重新生成 MANIFEST.sha256")
-    parser.add_argument("--offline", action="store_true", help="跳过上游吸收源字节级比对")
+    parser.add_argument(
+        "--offline", action="store_true", help="跳过上游吸收源字节级比对"
+    )
     args = parser.parse_args()
 
     if args.gen:

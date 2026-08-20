@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -65,7 +65,7 @@ def update_customer(args: dict[str, Any]) -> dict[str, Any]:
         confirm: 写操作二次确认（默认 False）
     """
     try:
-        customer_id = int(args.get("customer_id"))
+        customer_id = int(args.get("customer_id") or 0)
     except (TypeError, ValueError):
         return {"success": False, "error": "customer_id is required and must be int"}
 
@@ -92,7 +92,7 @@ def update_customer(args: dict[str, Any]) -> dict[str, Any]:
         result = svc.update(customer_id, normalized)
         if isinstance(result, dict):
             result.setdefault("customer_id", customer_id)
-        return result
+        return cast("dict[str, Any]", result)
     except RECOVERABLE_ERRORS as e:
         logger.exception("update_customer 失败: %s", e)
         return {"success": False, "error": str(e), "customer_id": customer_id}
@@ -109,7 +109,7 @@ def delete_customer(args: dict[str, Any]) -> dict[str, Any]:
         force: 是否强制删除（忽略关联检查，传给 service 层）。默认 False
     """
     try:
-        customer_id = int(args.get("customer_id"))
+        customer_id = int(args.get("customer_id") or 0)
     except (TypeError, ValueError):
         return {"success": False, "error": "customer_id is required and must be int"}
 
@@ -130,7 +130,7 @@ def delete_customer(args: dict[str, Any]) -> dict[str, Any]:
         result = svc.delete(customer_id, force=force)
         if isinstance(result, dict):
             result.setdefault("customer_id", customer_id)
-        return result
+        return cast("dict[str, Any]", result)
     except RECOVERABLE_ERRORS as e:
         logger.exception("delete_customer 失败: %s", e)
         return {"success": False, "error": str(e), "customer_id": customer_id}
@@ -166,7 +166,7 @@ def list_customers(args: dict[str, Any]) -> dict[str, Any]:
         # service 返回 {success, data, total, page, per_page}，直接透传
         if isinstance(result, dict):
             result.setdefault("filters", filters)
-        return result
+        return cast("dict[str, Any]", result)
     except RECOVERABLE_ERRORS as e:
         logger.exception("list_customers 失败: %s", e)
         return {"success": False, "error": str(e), "data": [], "total": 0}

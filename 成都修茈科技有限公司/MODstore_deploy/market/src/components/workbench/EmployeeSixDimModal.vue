@@ -5,7 +5,7 @@ import type { SixDimensionReport } from '../../types/sixDimension'
 export type { SixDimensionReport } from '../../types/sixDimension'
 export type { SixDimEntry } from '../../types/sixDimension'
 
-const props = defineProps<{
+const _props = defineProps<{
   open: boolean
   report: SixDimensionReport | null
 }>()
@@ -17,23 +17,11 @@ const emit = defineEmits<{
 
 <template>
   <Teleport to="body">
-    <div
-      v-if="open && report"
-      class="wb-six-dim-backdrop"
-      role="presentation"
-      @click.self="emit('close')"
-    >
-      <div
-        class="wb-six-dim-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="wb-six-dim-title"
-      >
+    <div v-if="open && report" class="wb-six-dim-backdrop" role="presentation" @click.self="emit('close')">
+      <div class="wb-six-dim-dialog" role="dialog" aria-modal="true" aria-labelledby="wb-six-dim-title">
         <header class="wb-six-dim-head">
           <h2 id="wb-six-dim-title" class="wb-six-dim-title">六维质量评估</h2>
-          <button type="button" class="wb-six-dim-close" aria-label="关闭" @click="emit('close')">
-            ×
-          </button>
+          <button type="button" class="wb-six-dim-close" aria-label="关闭" @click="emit('close')">×</button>
         </header>
         <div class="wb-six-dim-dialog-body">
           <EmployeeSixDimPanel :report="report" title="" :show-grade-scale="true" />

@@ -54,7 +54,7 @@ class ProductExportMixin:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 filename = f"{unit_name or '产品'}_价格表_{timestamp}.xlsx"
 
-                from app.utils.path_utils import get_data_dir
+                from app.utils.path_io.path_utils import get_data_dir
 
                 export_dir = os.path.join(get_data_dir(), "exports")
                 os.makedirs(export_dir, exist_ok=True)
@@ -105,6 +105,7 @@ class ProductExportMixin:
                 else:
                     wb = Workbook()
                     ws = wb.active
+                    assert ws is not None
                     ws.title = "产品列表"
 
                     headers = ["产品编码", "产品名称", "价格"]
@@ -128,10 +129,10 @@ class ProductExportMixin:
                     "count": len(products),
                 }
 
-        except RECOVERABLE_ERRORS as e:
+        except RECOVERABLE_ERRORS:
             return {
                 "success": False,
-                "message": f"导出失败：{str(e)}",
+                "message": "导出失败",
                 "file_path": None,
                 "filename": None,
             }

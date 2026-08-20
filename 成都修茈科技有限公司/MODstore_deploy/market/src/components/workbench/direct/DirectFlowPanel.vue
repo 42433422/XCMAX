@@ -23,9 +23,7 @@ const flowRef = ref<HTMLElement | null>(null)
 const bottomRef = ref<HTMLElement | null>(null)
 let resizeObs: ResizeObserver | null = null
 
-const displayMessages = computed(() =>
-  props.messages.filter((m) => m.role === 'user' || m.role === 'assistant'),
-)
+const displayMessages = computed(() => props.messages.filter((m) => m.role === 'user' || m.role === 'assistant'))
 
 const lastAssistantIdx = computed(() => {
   for (let i = displayMessages.value.length - 1; i >= 0; i--) {
@@ -41,10 +39,7 @@ function scrollToBottom(behavior: ScrollBehavior = 'smooth') {
 }
 
 watch(
-  () =>
-    displayMessages.value
-      .map((m) => `${m.id}:${m.content.length}:${m.pending ? 1 : 0}`)
-      .join('|'),
+  () => displayMessages.value.map((m) => `${m.id}:${m.content.length}:${m.pending ? 1 : 0}`).join('|'),
   () => {
     const last = displayMessages.value[displayMessages.value.length - 1]
     scrollToBottom(last?.pending ? 'auto' : 'smooth')
@@ -77,28 +72,18 @@ onUnmounted(() => {
       >
         <div v-if="m.role === 'user'" class="wb-direct-turn__user-col">
           <p v-if="m.attachments?.length" class="wb-direct-turn__meta">
-            <span
-              v-for="a in m.attachments"
-              :key="`${m.id}-att-${a.name}`"
-              class="wb-direct-turn__meta-item"
-            >{{ a.name }} · {{ formatDirectFileSize(a.size) }}</span>
+            <span v-for="a in m.attachments" :key="`${m.id}-att-${a.name}`" class="wb-direct-turn__meta-item"
+              >{{ a.name }} · {{ formatDirectFileSize(a.size) }}</span
+            >
           </p>
           <p class="wb-direct-turn__user">{{ m.content }}</p>
-          <MessageActions
-            role="user"
-            :content="m.content"
-            @edit="emit('edit', m.id)"
-          />
+          <MessageActions role="user" :content="m.content" @edit="emit('edit', m.id)" />
         </div>
 
         <div v-else class="wb-direct-turn__assistant-col">
           <div class="wb-direct-turn__assistant">
             <ThinkingRow v-if="m.pending && !String(m.content || '').trim()" />
-            <MessageBody
-              v-else
-              :content="m.content"
-              :streaming="!!m.pending && !!String(m.content || '').trim()"
-            />
+            <MessageBody v-else :content="m.content" :streaming="!!m.pending && !!String(m.content || '').trim()" />
           </div>
           <MessageActions
             v-if="!m.pending"
@@ -124,11 +109,7 @@ onUnmounted(() => {
             </button>
           </div>
           <div v-if="m.citations?.length" class="wb-direct-turn__cites">
-            <details
-              v-for="(cite, ci) in m.citations"
-              :key="`cite-${m.id}-${ci}`"
-              class="wb-direct-turn__cite"
-            >
+            <details v-for="(cite, ci) in m.citations" :key="`cite-${m.id}-${ci}`" class="wb-direct-turn__cite">
               <summary>{{ cite.title }}</summary>
               <p v-if="cite.snippet">{{ cite.snippet }}</p>
             </details>

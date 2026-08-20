@@ -1,3 +1,4 @@
+# mypy: disable-error-code="var-annotated"
 """测试 ai_chat_app_service 的分支覆盖（第二轮，聚焦未覆盖方法与边界分支）。
 
 覆盖目标（与 _branch_cov.py 互补）：
@@ -1361,7 +1362,8 @@ class TestFormatWorkflowRunResponseBranchCov:
         run_result = _make_run_result(success=False, node_results=[node_result])
 
         result = svc._format_workflow_run_response(plan, run_result)
-        assert "恢复建议: try again later" in result["response"]
+        assert "恢复建议: 请检查依赖服务后重试" in result["response"]
+        assert "try again later" not in result["response"]
 
     def test_failed_node_non_string_recovery_hint(self):
         svc = _make_svc()
@@ -1578,7 +1580,7 @@ class TestProcessChatErrorBranches:
             mock_chat.side_effect = raise_apikey_error
             result = svc.process_chat("u1", "查产品", None, None, None)
         assert result["success"] is False
-        assert "API Key" in result["response"]
+        assert "AI 服务暂时不可用" in result["response"]
 
     def test_apikey_case_insensitive_error(self):
         svc = _make_svc()
@@ -1598,7 +1600,7 @@ class TestProcessChatErrorBranches:
             mock_chat.side_effect = raise_apikey_error
             result = svc.process_chat("u1", "查产品", None, None, None)
         assert result["success"] is False
-        assert "API Key" in result["response"]
+        assert "AI 服务暂时不可用" in result["response"]
 
     def test_connection_in_error_fallback(self):
         svc = _make_svc()
@@ -1618,7 +1620,7 @@ class TestProcessChatErrorBranches:
             mock_chat.side_effect = raise_conn_error
             result = svc.process_chat("u1", "查产品", None, None, None)
         assert result["success"] is False
-        assert "无法连接" in result["response"]
+        assert "AI 服务暂时不可用" in result["response"]
 
     def test_generic_error_fallback(self):
         svc = _make_svc()

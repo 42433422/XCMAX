@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.utils.performance_config import PerformanceConfig, get_performance_config
+from app.utils.performance.performance_config import PerformanceConfig, get_performance_config
 
 
 class TestPerformanceConfigDefaults:

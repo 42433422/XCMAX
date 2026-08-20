@@ -4,9 +4,10 @@ import json
 import re
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.git_status import GENERATED_ABSORPTION_NAMES
+from retort_engine.operational_errors import BOUNDARY_ERRORS
 
 BEHAVIOR_SUFFIXES = {".py", ".js", ".ts", ".tsx", ".jsx", ".go"}
 MIN_TEST_TO_SOURCE_RATIO = 0.8
@@ -19,14 +20,14 @@ def capability_absorption_audit(root: Path) -> dict[str, Any]:
     external_projects = absorption_external_projects(root)
     external_project_count = len(external_projects)
     if not latest:
-        blockers = ["no_real_absorption_run", *static_risks["failed"]]
+        missing_run_blockers = ["no_real_absorption_run", *static_risks["failed"]]
         if external_project_count < 3:
-            blockers.append("insufficient_cross_project_reproduction")
+            missing_run_blockers.append("insufficient_cross_project_reproduction")
         return {
             "local_score_removed": True,
             "status": "needs_llm_project_level_review",
-            "risk_level": audit_risk_level(blockers),
-            "blockers": sorted(set(blockers)),
+            "risk_level": audit_risk_level(missing_run_blockers),
+            "blockers": sorted(set(missing_run_blockers)),
             "reason": "no_real_absorption_run",
             "changed_files": [],
             "behavior_source_files": [],
@@ -259,10 +260,11 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
             comment_ranking_model = str(
                 (result.get("summary") or {}).get("comment_ranking_model") or ""
             )
-            rank_weights = (
+            rank_weights = cast(
+                dict[str, Any],
                 (result.get("summary") or {}).get("absorbed_context_rank_weights")
                 if isinstance(result.get("summary"), dict)
-                else {}
+                else {},
             )
             if isinstance(rank_weights, dict):
                 absorbed_context_rank_weight_count = sum(
@@ -271,10 +273,11 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 absorbed_context_rank_weight_max = max(
                     [int(value or 0) for value in rank_weights.values()] or [0]
                 )
-            calibration = (
+            calibration = cast(
+                dict[str, Any],
                 (result.get("summary") or {}).get("calibration_policy")
                 if isinstance(result.get("summary"), dict)
-                else {}
+                else {},
             )
             if isinstance(calibration, dict):
                 calibration_policy_enabled = bool(calibration.get("enabled"))
@@ -307,10 +310,11 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
             benchmark = build_review_quality_benchmark(
                 root, sample_count=80, negative_sample_count=4
             )
-            benchmark_summary = (
+            benchmark_summary = cast(
+                dict[str, Any],
                 benchmark.get("summary")
                 if isinstance(benchmark.get("summary"), dict)
-                else {}
+                else {},
             )
             benchmark_status = str(benchmark.get("status") or "")
             benchmark_sample_count = int(benchmark_summary.get("sample_count") or 0)
@@ -340,10 +344,11 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 issue_context="Fix login token handling",
                 max_comments=10,
             )
-            diff_pipeline_summary = (
+            diff_pipeline_summary = cast(
+                dict[str, Any],
                 diff_pipeline.get("summary")
                 if isinstance(diff_pipeline.get("summary"), dict)
-                else {}
+                else {},
             )
             diff_pipeline_status = str(diff_pipeline.get("status") or "")
             diff_pipeline_depth_score = int(
@@ -365,10 +370,11 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 diff_pipeline_summary.get("large_diff_chunking")
             )
             large_review = review_diff(_audit_large_diff_sample(), max_comments=4)
-            large_review_summary = (
+            large_review_summary = cast(
+                dict[str, Any],
                 large_review.get("summary")
                 if isinstance(large_review.get("summary"), dict)
-                else {}
+                else {},
             )
             core_large_diff_chunking = bool(
                 large_review_summary.get("large_diff_chunking")
@@ -406,10 +412,11 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
             extension_review = review_diff(
                 _audit_extension_policy_sample(), max_comments=8
             )
-            extension_policy = (
+            extension_policy = cast(
+                dict[str, Any],
                 (extension_review.get("summary") or {}).get("extension_policy")
                 if isinstance(extension_review.get("summary"), dict)
-                else {}
+                else {},
             )
             if isinstance(extension_policy, dict):
                 extension_policy_known_count = int(
@@ -436,15 +443,17 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
             cross_review = review_diff(
                 _audit_cross_language_transfer_sample(), max_comments=10
             )
-            cross_transfer = (
+            cross_transfer = cast(
+                dict[str, Any],
                 cross_review.get("cross_language_transfer")
                 if isinstance(cross_review.get("cross_language_transfer"), dict)
-                else {}
+                else {},
             )
-            cross_summary = (
+            cross_summary = cast(
+                dict[str, Any],
                 cross_transfer.get("summary")
                 if isinstance(cross_transfer.get("summary"), dict)
-                else {}
+                else {},
             )
             cross_language_status = str(cross_transfer.get("status") or "")
             cross_language_finding_count = int(cross_summary.get("finding_count") or 0)
@@ -461,10 +470,11 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 if isinstance(comment, dict)
                 and comment.get("capability") == "cross_language_transfer"
             )
-            cross_core_score = (
+            cross_core_score = cast(
+                dict[str, Any],
                 (cross_review.get("summary") or {}).get("core_review_score")
                 if isinstance(cross_review.get("summary"), dict)
-                else {}
+                else {},
             )
             if isinstance(cross_core_score, dict):
                 cross_language_top_ranked = bool(
@@ -477,15 +487,17 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                     cross_core_score.get("cross_language_max_rank_score") or 0
                 )
             hunk_review = review_diff(_audit_hunk_semantic_sample(), max_comments=4)
-            hunk_summary = (
+            hunk_summary = cast(
+                dict[str, Any],
                 (hunk_review.get("summary") or {}).get("hunk_semantic_analysis")
                 if isinstance(hunk_review.get("summary"), dict)
-                else {}
+                else {},
             )
-            hunk_core_score = (
+            hunk_core_score = cast(
+                dict[str, Any],
                 (hunk_review.get("summary") or {}).get("core_review_score")
                 if isinstance(hunk_review.get("summary"), dict)
-                else {}
+                else {},
             )
             if isinstance(hunk_summary, dict):
                 hunk_semantic_status = str(hunk_summary.get("status") or "")
@@ -514,10 +526,11 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
             adjudication_report = read_json(
                 root / "docs" / "retort_review_adjudication_calibration.json"
             )
-            adjudication_summary = (
+            adjudication_summary = cast(
+                dict[str, Any],
                 adjudication_report.get("summary")
                 if isinstance(adjudication_report.get("summary"), dict)
-                else {}
+                else {},
             )
             adjudication_status = str(adjudication_report.get("status") or "")
             adjudication_human_label_count = int(
@@ -532,7 +545,7 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
             adjudication_false_negative_count = int(
                 adjudication_summary.get("false_negative_count") or 0
             )
-        except Exception:  # noqa: BLE001 - optional audit evidence must fail closed
+        except BOUNDARY_ERRORS:
             sample_comment_count = 0
     return {
         "runtime": source.is_file()
@@ -924,10 +937,11 @@ def post_absorption_hardening_files(root: Path) -> dict[str, Any]:
 
 def latest_absorption_merge_commit(root: Path) -> str:
     state = read_json(root / ".retort" / "absorption_state.json")
-    proof = (
+    proof = cast(
+        dict[str, Any],
         state.get("closed_loop_proof")
         if isinstance(state.get("closed_loop_proof"), dict)
-        else {}
+        else {},
     )
     for item in proof.get("evidence") or []:
         text = str(item)
@@ -1001,25 +1015,29 @@ def latest_employee_result_payload(root: Path) -> dict[str, Any]:
 
 
 def _employee_worker_review_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    runtime = (
+    runtime = cast(
+        dict[str, Any],
         payload.get("runtime_evidence")
         if isinstance(payload.get("runtime_evidence"), dict)
-        else {}
+        else {},
     )
-    review = (
+    review = cast(
+        dict[str, Any],
         runtime.get("worker_review")
         if isinstance(runtime.get("worker_review"), dict)
-        else {}
+        else {},
     )
-    multi_worker = (
+    multi_worker = cast(
+        dict[str, Any],
         runtime.get("multi_worker")
         if isinstance(runtime.get("multi_worker"), dict)
-        else {}
+        else {},
     )
-    process_isolation = (
+    process_isolation = cast(
+        dict[str, Any],
         multi_worker.get("process_isolation")
         if isinstance(multi_worker.get("process_isolation"), dict)
-        else {}
+        else {},
     )
     if not review:
         return {}
@@ -1067,23 +1085,29 @@ def _employee_worker_review_from_payload(payload: dict[str, Any]) -> dict[str, A
 
 def employee_patch_closure_evidence(root: Path) -> dict[str, Any]:
     report = read_json(root / "docs" / "retort_employee_patch_closure.json")
-    summary = report.get("summary") if isinstance(report.get("summary"), dict) else {}
+    summary = cast(
+        dict[str, Any],
+        report.get("summary") if isinstance(report.get("summary"), dict) else {},
+    )
     latest_runtime_patch: dict[str, Any] = {}
     for path in reversed(employee_result_files(root)):
         payload = read_json(path)
-        runtime = (
+        runtime = cast(
+            dict[str, Any],
             payload.get("runtime_evidence")
             if isinstance(payload.get("runtime_evidence"), dict)
-            else {}
+            else {},
         )
-        patch = (
+        patch = cast(
+            dict[str, Any],
             runtime.get("employee_patch_closure")
             if isinstance(runtime.get("employee_patch_closure"), dict)
-            else {}
+            else {},
         )
         if patch:
-            patch_summary = (
-                patch.get("summary") if isinstance(patch.get("summary"), dict) else {}
+            patch_summary = cast(
+                dict[str, Any],
+                patch.get("summary") if isinstance(patch.get("summary"), dict) else {},
             )
             latest_runtime_patch = {
                 "status": patch.get("status", ""),
@@ -1147,7 +1171,10 @@ def architecture_memory_external_project_count(root: Path) -> int:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return 0
-    summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+    summary = cast(
+        dict[str, Any],
+        payload.get("summary") if isinstance(payload.get("summary"), dict) else {},
+    )
     source_count = int(summary.get("source_count") or 0)
     return max(source_count, len(architecture_memory_external_projects(root)))
 
@@ -1159,10 +1186,11 @@ def architecture_memory_external_projects(root: Path) -> list[str]:
     except (OSError, json.JSONDecodeError):
         return []
     sources: set[str] = set()
-    component_index = (
+    component_index = cast(
+        dict[str, Any],
         payload.get("component_index")
         if isinstance(payload.get("component_index"), dict)
-        else {}
+        else {},
     )
     for component in component_index.values():
         if not isinstance(component, dict):
@@ -1300,7 +1328,7 @@ def self_assessment_risk_checks(root: Path) -> dict[str, Any]:
         {
             "name": "single_absorb_failure_isolated",
             "passed": "_loop_failure_summary" in loop_text
-            and "except Exception as exc" in loop_text,
+            and "except BOUNDARY_ERRORS as exc" in loop_text,
         },
         {
             "name": "max_rounds_is_enforced",

@@ -4,6 +4,6 @@
 
 <script setup lang="ts">
 defineEmits<{
-  unlocked: [];
-}>();
+  unlocked: []
+}>()
 </script>

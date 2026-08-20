@@ -4,22 +4,14 @@ export function isMicPermissionError(msg: string): boolean {
   return /麦克风|Permission|NotAllowed|getUserMedia|授权|占用|允许麦克风/i.test(msg || '')
 }
 
-export function resolveInlineVoicePhase(
-  listening: boolean,
-  recognizing: boolean,
-  permissionHint: string,
-): InlineVoiceUiPhase {
+export function resolveInlineVoicePhase(listening: boolean, recognizing: boolean, permissionHint: string): InlineVoiceUiPhase {
   if (permissionHint.trim()) return 'permission'
   if (listening) return 'recording'
   if (recognizing) return 'recognizing'
   return 'idle'
 }
 
-export function inlineVoiceAriaLabel(
-  phase: InlineVoiceUiPhase,
-  mobile: boolean,
-  cancelIntent = false,
-): string {
+export function inlineVoiceAriaLabel(phase: InlineVoiceUiPhase, mobile: boolean, cancelIntent = false): string {
   switch (phase) {
     case 'recording':
       return cancelIntent ? '松开取消录音' : '录音中…'

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """里程碑 S：NeuroBus 运行时统一装配。"""
 
 from __future__ import annotations
@@ -10,7 +9,7 @@ FACTORY_PHASE = "S"
 
 
 def _load_adapters():
-    from app.infrastructure.mods.mod_manager import import_mod_backend_py
+    from app.mod_sdk.host_services import import_mod_backend_py
     from app.mod_sdk.neuro_bus_compat import NEURO_BUS_BRIDGE_MOD_ID, _resolve_mod_dir
 
     mod_dir = _resolve_mod_dir()

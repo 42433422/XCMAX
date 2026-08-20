@@ -178,6 +178,7 @@ def _ocr_pdf_plaintext(file_path: str) -> dict[str, Any]:
 
         wb = load_workbook(grid_path, read_only=True, data_only=True)
         ws = wb.active
+        assert ws is not None
         for row in ws.iter_rows(values_only=True):
             cells = [str(c).strip() for c in row if c is not None and str(c).strip()]
             if cells:

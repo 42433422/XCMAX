@@ -22,7 +22,6 @@ from vibe_coding.agent.observability import (
     instrument_react_agent,
 )
 
-
 # ---------------------------------------------------- logger
 
 
@@ -84,7 +83,7 @@ def test_logger_capture_buffers_records() -> None:
 def test_tracer_emits_root_span() -> None:
     exporter = InMemoryTraceExporter()
     tracer = Tracer(exporters=[exporter])
-    with tracer.start_span("root", attributes={"foo": "bar"}) as span:
+    with tracer.start_span("root", attributes={"foo": "bar"}):
         # Sleep long enough to clear the Windows monotonic clock granularity
         # (~15ms) so duration_ms is reliably non-zero.
         time.sleep(0.05)
@@ -100,9 +99,8 @@ def test_tracer_emits_root_span() -> None:
 def test_tracer_nested_spans_share_trace_id() -> None:
     exporter = InMemoryTraceExporter()
     tracer = Tracer(exporters=[exporter])
-    with tracer.start_span("parent"):
-        with tracer.start_span("child"):
-            pass
+    with tracer.start_span("parent"), tracer.start_span("child"):
+        pass
     spans = {s.name: s for s in exporter.all()}
     assert spans["child"].context.trace_id == spans["parent"].context.trace_id
     assert spans["child"].context.parent_id == spans["parent"].context.span_id
@@ -111,9 +109,8 @@ def test_tracer_nested_spans_share_trace_id() -> None:
 def test_tracer_records_exception_status() -> None:
     exporter = InMemoryTraceExporter()
     tracer = Tracer(exporters=[exporter])
-    with pytest.raises(RuntimeError):
-        with tracer.start_span("boom"):
-            raise RuntimeError("kaboom")
+    with pytest.raises(RuntimeError), tracer.start_span("boom"):
+        raise RuntimeError("kaboom")
     spans = exporter.all()
     assert spans[0].status == "error"
     assert "kaboom" in spans[0].status_message
@@ -188,9 +185,7 @@ def test_instrument_records_log_span_metric() -> None:
     tracer = Tracer(exporters=[tracer_exporter])
     captured: list[str] = []
     logger = StructuredLogger(writer=captured.append, level="debug")
-    obs = instrument(
-        coder, logger=logger, tracer=tracer, metrics=metrics, component="vibe"
-    )
+    obs = instrument(coder, logger=logger, tracer=tracer, metrics=metrics, component="vibe")
     coder.code("rename foo")
     coder.edit_project("rewrite", root="/tmp/p")
     # Counter went up twice.

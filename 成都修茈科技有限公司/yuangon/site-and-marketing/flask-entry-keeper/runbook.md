@@ -1,11 +1,11 @@
 # Runbook — Flask 入口维护员
 
-| 字段 | 值 |
-|------|----|
-| 员工 ID | `flask-entry-keeper` |
-| 负责区域 | site-and-marketing |
-| 最后更新 | 2026-05-06 |
-| 应急联系 | admin |
+| 字段     | 值                   |
+| -------- | -------------------- |
+| 员工 ID  | `flask-entry-keeper` |
+| 负责区域 | site-and-marketing   |
+| 最后更新 | 2026-05-06           |
+| 应急联系 | admin                |
 
 ---
 
@@ -49,5 +49,5 @@ curl -s http://localhost:5000/health || echo "health route missing"
 ## ESkill 动态阶段触发记录
 
 | 日期 | 触发原因 | patch_id | 结果 | 是否固化 |
-|------|----------|----------|------|----------|
-| — | — | — | — | — |
+| ---- | -------- | -------- | ---- | -------- |
+| —    | —        | —        | —    | —        |

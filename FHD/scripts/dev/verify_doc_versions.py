@@ -61,7 +61,9 @@ def main() -> int:
         if "software-copyright" in path.parts:
             continue
         rel = path.relative_to(REPO)
-        for i, line in enumerate(path.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+        for i, line in enumerate(
+            path.read_text(encoding="utf-8", errors="replace").splitlines(), 1
+        ):
             if any(k in line for k in ("历史", "曾使用", "原 v", "当时对比", "升级到 v7")):
                 continue
             for pat in BAD_PATTERNS:

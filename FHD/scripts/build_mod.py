@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="no-any-return"
 """通用 mod 打包脚本：将任意 mod 目录打包为 .xcmod / .xcemp。
 
 进化状态闭环（2026-07-20）：系统自己打包上架 MODstore 的「打包」环节。

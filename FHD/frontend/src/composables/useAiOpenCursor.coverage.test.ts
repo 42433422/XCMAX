@@ -65,8 +65,7 @@ class WebSocketMock {
 }
 
 // 替换全局 WebSocket
-;(globalThis as unknown as { WebSocket: typeof WebSocketMock }).WebSocket =
-  WebSocketMock as unknown as typeof WebSocket
+;(globalThis as unknown as { WebSocket: typeof WebSocketMock }).WebSocket = WebSocketMock as unknown as typeof WebSocket
 
 // jsdom 可能没有 CSS 全局对象，buildSelector 使用 CSS.escape
 if (typeof (globalThis as unknown as { CSS?: unknown }).CSS === 'undefined') {
@@ -91,28 +90,23 @@ function resetCursorState() {
   cursorActionLabel.value = ''
 }
 
-/** 清理模块级 WS 状态：禁用并断开，确保下一个用例从干净状态开始 */
-async function cleanupModuleWs() {
-  // 启用 fake timers 时不能 await，所以先同步禁用
-  aiopenCursorEnabled.value = false
-  // 直接调用 setAiOpenCursorEnabled(false) 会触发 disconnect
-  try {
-    setAiOpenCursorEnabled(false)
-  } catch {
-    /* ignore */
-  }
-}
-
 /** 让 jsdom 元素被视为可见：stub getBoundingClientRect 与 getComputedStyle */
 function makeVisible(el: Element) {
   const htmlEl = el as HTMLElement
   // rect.top 必须在 [0, window.innerHeight] 范围内，否则 isVisible 返回 false
   // jsdom 默认 innerHeight=0，所以这里把 top 设为 0，bottom 设为 1
-  htmlEl.getBoundingClientRect = () => ({
-    x: 0, y: 0, width: 100, height: 30,
-    top: 0, right: 100, bottom: 30, left: 0,
-    toJSON: () => ({}),
-  }) as DOMRect
+  htmlEl.getBoundingClientRect = () =>
+    ({
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 30,
+      top: 0,
+      right: 100,
+      bottom: 30,
+      left: 0,
+      toJSON: () => ({}),
+    }) as DOMRect
   htmlEl.scrollIntoView = vi.fn()
   htmlEl.scrollBy = vi.fn()
   htmlEl.click = vi.fn()
@@ -160,8 +154,16 @@ describe('useAiOpenCursor - coverage ramp', () => {
     wsCtorError = null
     vi.useFakeTimers()
     // 确保 window.innerHeight > 0，否则 isVisible 的 rect.top > innerHeight 检查会失败
-    Object.defineProperty(window, 'innerHeight', { value: 768, configurable: true, writable: true })
-    Object.defineProperty(window, 'innerWidth', { value: 1024, configurable: true, writable: true })
+    Object.defineProperty(window, 'innerHeight', {
+      value: 768,
+      configurable: true,
+      writable: true,
+    })
+    Object.defineProperty(window, 'innerWidth', {
+      value: 1024,
+      configurable: true,
+      writable: true,
+    })
     stubComputedStyle()
   })
 
@@ -342,7 +344,9 @@ describe('useAiOpenCursor - coverage ramp', () => {
       const ws = lastWs()!
       ws.onopen!()
 
-      ws.onmessage!({ data: JSON.stringify({ type: 'command', id: 'r1', action: 'foo', params: {} }) })
+      ws.onmessage!({
+        data: JSON.stringify({ type: 'command', id: 'r1', action: 'foo', params: {} }),
+      })
       await vi.runAllTimersAsync()
 
       const sent = ws.send.mock.calls.find((c) => {
@@ -371,7 +375,9 @@ describe('useAiOpenCursor - coverage ramp', () => {
       const ws = lastWs()!
       ws.onopen!()
 
-      ws.onmessage!({ data: JSON.stringify({ type: 'command', id: 'r2', action: 'snapshot', params: {} }) })
+      ws.onmessage!({
+        data: JSON.stringify({ type: 'command', id: 'r2', action: 'snapshot', params: {} }),
+      })
       await vi.runAllTimersAsync()
 
       const sent = ws.send.mock.calls
@@ -403,7 +409,9 @@ describe('useAiOpenCursor - coverage ramp', () => {
       const ws = lastWs()!
       ws.onopen!()
 
-      ws.onmessage!({ data: JSON.stringify({ type: 'command', id: 'r3', action: 'snapshot', params: {} }) })
+      ws.onmessage!({
+        data: JSON.stringify({ type: 'command', id: 'r3', action: 'snapshot', params: {} }),
+      })
       await vi.runAllTimersAsync()
 
       const sent = ws.send.mock.calls
@@ -429,7 +437,14 @@ describe('useAiOpenCursor - coverage ramp', () => {
       const ws = lastWs()!
       ws.onopen!()
 
-      ws.onmessage!({ data: JSON.stringify({ type: 'command', id: 'r4', action: 'navigate', params: { path: '' } }) })
+      ws.onmessage!({
+        data: JSON.stringify({
+          type: 'command',
+          id: 'r4',
+          action: 'navigate',
+          params: { path: '' },
+        }),
+      })
       await vi.runAllTimersAsync()
 
       const sent = ws.send.mock.calls
@@ -455,7 +470,14 @@ describe('useAiOpenCursor - coverage ramp', () => {
       const ws = lastWs()!
       ws.onopen!()
 
-      ws.onmessage!({ data: JSON.stringify({ type: 'command', id: 'r5', action: 'navigate', params: { path: '/x' } }) })
+      ws.onmessage!({
+        data: JSON.stringify({
+          type: 'command',
+          id: 'r5',
+          action: 'navigate',
+          params: { path: '/x' },
+        }),
+      })
       await vi.runAllTimersAsync()
 
       const sent = ws.send.mock.calls
@@ -484,7 +506,14 @@ describe('useAiOpenCursor - coverage ramp', () => {
       const ws = lastWs()!
       ws.onopen!()
 
-      ws.onmessage!({ data: JSON.stringify({ type: 'command', id: 'r6', action: 'navigate', params: { path: '/target' } }) })
+      ws.onmessage!({
+        data: JSON.stringify({
+          type: 'command',
+          id: 'r6',
+          action: 'navigate',
+          params: { path: '/target' },
+        }),
+      })
       await vi.runAllTimersAsync()
 
       expect(router.push).toHaveBeenCalledWith('/target')
@@ -513,7 +542,14 @@ describe('useAiOpenCursor - coverage ramp', () => {
       const ws = lastWs()!
       ws.onopen!()
 
-      ws.onmessage!({ data: JSON.stringify({ type: 'command', id: 'r7', action: 'click', params: { selector: '#target-btn' } }) })
+      ws.onmessage!({
+        data: JSON.stringify({
+          type: 'command',
+          id: 'r7',
+          action: 'click',
+          params: { selector: '#target-btn' },
+        }),
+      })
       await vi.runAllTimersAsync()
 
       expect(clickSpy).toHaveBeenCalled()
@@ -544,7 +580,14 @@ describe('useAiOpenCursor - coverage ramp', () => {
       const ws = lastWs()!
       ws.onopen!()
 
-      ws.onmessage!({ data: JSON.stringify({ type: 'command', id: 'r8', action: 'click', params: { text: 'Login' } }) })
+      ws.onmessage!({
+        data: JSON.stringify({
+          type: 'command',
+          id: 'r8',
+          action: 'click',
+          params: { text: 'Login' },
+        }),
+      })
       await vi.runAllTimersAsync()
 
       expect(clickSpy).toHaveBeenCalled()
@@ -555,7 +598,9 @@ describe('useAiOpenCursor - coverage ramp', () => {
       const ws = lastWs()!
       ws.onopen!()
 
-      ws.onmessage!({ data: JSON.stringify({ type: 'command', id: 'r9', action: 'click', params: {} }) })
+      ws.onmessage!({
+        data: JSON.stringify({ type: 'command', id: 'r9', action: 'click', params: {} }),
+      })
       await vi.runAllTimersAsync()
 
       const sent = ws.send.mock.calls
@@ -581,7 +626,14 @@ describe('useAiOpenCursor - coverage ramp', () => {
       const ws = lastWs()!
       ws.onopen!()
 
-      ws.onmessage!({ data: JSON.stringify({ type: 'command', id: 'r10', action: 'click', params: { selector: '###invalid', text: 'Save' } }) })
+      ws.onmessage!({
+        data: JSON.stringify({
+          type: 'command',
+          id: 'r10',
+          action: 'click',
+          params: { selector: '###invalid', text: 'Save' },
+        }),
+      })
       await vi.runAllTimersAsync()
 
       const sent = ws.send.mock.calls
@@ -606,7 +658,14 @@ describe('useAiOpenCursor - coverage ramp', () => {
       const ws = lastWs()!
       ws.onopen!()
 
-      ws.onmessage!({ data: JSON.stringify({ type: 'command', id: 'r11', action: 'type', params: { selector: '#name', text: 'hello' } }) })
+      ws.onmessage!({
+        data: JSON.stringify({
+          type: 'command',
+          id: 'r11',
+          action: 'type',
+          params: { selector: '#name', text: 'hello' },
+        }),
+      })
       await vi.runAllTimersAsync()
 
       expect((input as HTMLInputElement).value).toBe('hello')
@@ -633,7 +692,14 @@ describe('useAiOpenCursor - coverage ramp', () => {
       const ws = lastWs()!
       ws.onopen!()
 
-      ws.onmessage!({ data: JSON.stringify({ type: 'command', id: 'r12', action: 'type', params: { selector: '#desc', text: 'multi line' } }) })
+      ws.onmessage!({
+        data: JSON.stringify({
+          type: 'command',
+          id: 'r12',
+          action: 'type',
+          params: { selector: '#desc', text: 'multi line' },
+        }),
+      })
       await vi.runAllTimersAsync()
 
       expect((ta as HTMLTextAreaElement).value).toBe('multi line')
@@ -644,7 +710,14 @@ describe('useAiOpenCursor - coverage ramp', () => {
       const ws = lastWs()!
       ws.onopen!()
 
-      ws.onmessage!({ data: JSON.stringify({ type: 'command', id: 'r13', action: 'type', params: { selector: '', text: 'x' } }) })
+      ws.onmessage!({
+        data: JSON.stringify({
+          type: 'command',
+          id: 'r13',
+          action: 'type',
+          params: { selector: '', text: 'x' },
+        }),
+      })
       await vi.runAllTimersAsync()
 
       const sent = ws.send.mock.calls
@@ -670,7 +743,14 @@ describe('useAiOpenCursor - coverage ramp', () => {
       const ws = lastWs()!
       ws.onopen!()
 
-      ws.onmessage!({ data: JSON.stringify({ type: 'command', id: 'r14', action: 'type', params: { selector: '#n' } }) })
+      ws.onmessage!({
+        data: JSON.stringify({
+          type: 'command',
+          id: 'r14',
+          action: 'type',
+          params: { selector: '#n' },
+        }),
+      })
       await vi.runAllTimersAsync()
 
       expect((input as HTMLInputElement).value).toBe('')
@@ -687,7 +767,14 @@ describe('useAiOpenCursor - coverage ramp', () => {
       const ws = lastWs()!
       ws.onopen!()
 
-      ws.onmessage!({ data: JSON.stringify({ type: 'command', id: 'r15', action: 'scroll', params: { selector: '#scroll-target' } }) })
+      ws.onmessage!({
+        data: JSON.stringify({
+          type: 'command',
+          id: 'r15',
+          action: 'scroll',
+          params: { selector: '#scroll-target' },
+        }),
+      })
       await vi.runAllTimersAsync()
 
       expect(scrollSpy).toHaveBeenCalled()
@@ -709,7 +796,14 @@ describe('useAiOpenCursor - coverage ramp', () => {
       const ws = lastWs()!
       ws.onopen!()
 
-      ws.onmessage!({ data: JSON.stringify({ type: 'command', id: 'r16', action: 'scroll', params: { selector: '#nope' } }) })
+      ws.onmessage!({
+        data: JSON.stringify({
+          type: 'command',
+          id: 'r16',
+          action: 'scroll',
+          params: { selector: '#nope' },
+        }),
+      })
       await vi.runAllTimersAsync()
 
       const sent = ws.send.mock.calls
@@ -735,7 +829,14 @@ describe('useAiOpenCursor - coverage ramp', () => {
       const ws = lastWs()!
       ws.onopen!()
 
-      ws.onmessage!({ data: JSON.stringify({ type: 'command', id: 'r17', action: 'scroll', params: { delta_y: 500 } }) })
+      ws.onmessage!({
+        data: JSON.stringify({
+          type: 'command',
+          id: 'r17',
+          action: 'scroll',
+          params: { delta_y: 500 },
+        }),
+      })
       await vi.runAllTimersAsync()
 
       expect(scrollSpy).toHaveBeenCalledWith({ top: 500, behavior: 'smooth' })
@@ -762,7 +863,9 @@ describe('useAiOpenCursor - coverage ramp', () => {
       const ws = lastWs()!
       ws.onopen!()
 
-      ws.onmessage!({ data: JSON.stringify({ type: 'command', id: 'r18', action: 'scroll', params: {} }) })
+      ws.onmessage!({
+        data: JSON.stringify({ type: 'command', id: 'r18', action: 'scroll', params: {} }),
+      })
       await vi.runAllTimersAsync()
 
       const sent = ws.send.mock.calls
@@ -783,7 +886,14 @@ describe('useAiOpenCursor - coverage ramp', () => {
       ws.onopen!()
 
       // params 为字符串，应被替换为 {}
-      ws.onmessage!({ data: JSON.stringify({ type: 'command', id: 'r19', action: 'navigate', params: 'not-object' }) })
+      ws.onmessage!({
+        data: JSON.stringify({
+          type: 'command',
+          id: 'r19',
+          action: 'navigate',
+          params: 'not-object',
+        }),
+      })
       await vi.runAllTimersAsync()
 
       const sent = ws.send.mock.calls
@@ -811,7 +921,14 @@ describe('useAiOpenCursor - coverage ramp', () => {
       } as any
       initAiOpenCursor(router)
 
-      ws.onmessage!({ data: JSON.stringify({ type: 'command', id: 'r20', action: 'navigate', params: { path: '/x' } }) })
+      ws.onmessage!({
+        data: JSON.stringify({
+          type: 'command',
+          id: 'r20',
+          action: 'navigate',
+          params: { path: '/x' },
+        }),
+      })
       await vi.runAllTimersAsync()
 
       const sent = ws.send.mock.calls
@@ -836,7 +953,9 @@ describe('useAiOpenCursor - coverage ramp', () => {
       })
 
       // 不应抛出
-      ws.onmessage!({ data: JSON.stringify({ type: 'command', id: 'r21', action: 'snapshot', params: {} }) })
+      ws.onmessage!({
+        data: JSON.stringify({ type: 'command', id: 'r21', action: 'snapshot', params: {} }),
+      })
       await vi.runAllTimersAsync()
     })
   })
@@ -928,7 +1047,9 @@ describe('useAiOpenCursor - coverage ramp', () => {
       const ws = lastWs()!
       ws.onopen!()
 
-      ws.onmessage!({ data: JSON.stringify({ type: 'command', id: 'r22', action: 'snapshot', params: {} }) })
+      ws.onmessage!({
+        data: JSON.stringify({ type: 'command', id: 'r22', action: 'snapshot', params: {} }),
+      })
       await vi.runAllTimersAsync()
 
       const sent = ws.send.mock.calls
@@ -955,7 +1076,14 @@ describe('useAiOpenCursor - coverage ramp', () => {
       const ws = lastWs()!
       ws.onopen!()
 
-      ws.onmessage!({ data: JSON.stringify({ type: 'command', id: 'r23', action: 'click', params: { text: 'Hidden' } }) })
+      ws.onmessage!({
+        data: JSON.stringify({
+          type: 'command',
+          id: 'r23',
+          action: 'click',
+          params: { text: 'Hidden' },
+        }),
+      })
       await vi.runAllTimersAsync()
 
       const sent = ws.send.mock.calls
@@ -981,7 +1109,14 @@ describe('useAiOpenCursor - coverage ramp', () => {
       const ws = lastWs()!
       ws.onopen!()
 
-      ws.onmessage!({ data: JSON.stringify({ type: 'command', id: 'r24', action: 'click', params: { text: 'search-term' } }) })
+      ws.onmessage!({
+        data: JSON.stringify({
+          type: 'command',
+          id: 'r24',
+          action: 'click',
+          params: { text: 'search-term' },
+        }),
+      })
       await vi.runAllTimersAsync()
 
       const sent = ws.send.mock.calls
@@ -1006,7 +1141,14 @@ describe('useAiOpenCursor - coverage ramp', () => {
       const ws = lastWs()!
       ws.onopen!()
 
-      ws.onmessage!({ data: JSON.stringify({ type: 'command', id: 'r25', action: 'click', params: { text: 'close-dialog' } }) })
+      ws.onmessage!({
+        data: JSON.stringify({
+          type: 'command',
+          id: 'r25',
+          action: 'click',
+          params: { text: 'close-dialog' },
+        }),
+      })
       await vi.runAllTimersAsync()
 
       const sent = ws.send.mock.calls
@@ -1031,7 +1173,14 @@ describe('useAiOpenCursor - coverage ramp', () => {
       const ws = lastWs()!
       ws.onopen!()
 
-      ws.onmessage!({ data: JSON.stringify({ type: 'command', id: 'r26', action: 'click', params: { text: '请输入关键词' } }) })
+      ws.onmessage!({
+        data: JSON.stringify({
+          type: 'command',
+          id: 'r26',
+          action: 'click',
+          params: { text: '请输入关键词' },
+        }),
+      })
       await vi.runAllTimersAsync()
 
       const sent = ws.send.mock.calls
@@ -1069,7 +1218,9 @@ describe('useAiOpenCursor - coverage ramp', () => {
       ws.onopen!()
 
       // snapshot 会调用 buildSelector
-      ws.onmessage!({ data: JSON.stringify({ type: 'command', id: 'r27', action: 'snapshot', params: {} }) })
+      ws.onmessage!({
+        data: JSON.stringify({ type: 'command', id: 'r27', action: 'snapshot', params: {} }),
+      })
       await vi.runAllTimersAsync()
 
       const sent = ws.send.mock.calls

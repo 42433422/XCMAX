@@ -10,10 +10,8 @@
 5. PrinterService - 打印服务
 """
 
-import os
 import re
 from pathlib import Path
-from typing import List, Tuple, Optional
 
 
 class CoreServiceMigrator:
@@ -78,7 +76,7 @@ class CoreServiceMigrator:
 
         # 检查是否已有 NeuroBus 导入
         if "from app.neuro_bus.bus import get_neuro_bus" in content:
-            print(f"  [SKIP] 已有 NeuroBus 导入")
+            print("  [SKIP] 已有 NeuroBus 导入")
             return False
 
         # 在文件顶部添加导入
@@ -110,7 +108,7 @@ from app.neuro_bus.events.base import NeuroEvent, EventPriority
             )
             bus.publish(event)
             return event.metadata.event_id
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             logger.warning(f"发布事件失败 {event_type}: {e}")
             return None
 '''
@@ -129,7 +127,7 @@ from app.neuro_bus.events.base import NeuroEvent, EventPriority
 
         # 写回文件
         file_path.write_text("\n".join(lines), encoding="utf-8")
-        print(f"  [OK] 已添加事件发布能力")
+        print("  [OK] 已添加事件发布能力")
         return True
 
     def migrate_all_core_services(self) -> int:
@@ -203,9 +201,9 @@ from app.neuro_bus.events.base import NeuroEvent, EventPriority
                     route_file.write_text(content, encoding="utf-8")
 
                     updated_count += 1
-                    print(f"  [UPDATED] 已更新到 V2")
+                    print("  [UPDATED] 已更新到 V2")
                 else:
-                    print(f"  [SKIP] 无需更新")
+                    print("  [SKIP] 无需更新")
 
         print(f"\n[SUMMARY] 成功更新 {updated_count} 个路由文件")
         return updated_count
@@ -232,10 +230,6 @@ from app.neuro_bus.events.base import NeuroEvent, EventPriority
 
                 # 为使用了 V2 服务的函数添加 async
                 # 查找调用 V2 服务的模式
-                v2_patterns = [
-                    r"(def (\w+)\([^)]*\)):",
-                    r"get_\w+_v2\(\)",
-                ]
 
                 # 简单处理：如果文件包含 V2 导入，添加 async
                 if "_v2" in content and "async def" not in content:
@@ -301,7 +295,7 @@ class {service_class}V2:
             )
             self._bus.publish(event)
             return event.metadata.event_id
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             logger.warning(f"发布事件失败 {{event_type}}: {{e}}")
             return None
     

@@ -5,142 +5,21 @@ from __future__ import annotations
 import logging
 import os
 import uuid
-from typing import Any
 
 from fastapi import APIRouter, Body, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse
 
+from app.fastapi_routes.domains.excel.agent_helpers import (
+    run_excel_skill_agent as _run_excel_skill_agent,
+)
+from app.fastapi_routes.domains.excel.agent_helpers import (
+    trace_excel_route as _trace_excel_route,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.utils.path_utils import get_upload_dir
+from app.utils.path_io.path_utils import get_upload_dir
 
 logger = logging.getLogger(__name__)
-
 router = APIRouter(tags=["legacy-excel"], deprecated=True)
-
-
-def _trace_excel_route(
-    payload: dict[str, Any],
-    *,
-    route: str,
-    message: str,
-    user_id: str = "",
-    intent: str = "excel_ai_route",
-    runtime_context: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    if not isinstance(payload, dict) or payload.get("run_id") or payload.get("agent_run_id"):
-        return payload
-    try:
-        from app.application.agent_orchestrator.chat_trace import create_chat_trace_run
-
-        runtime = {
-            "route": route,
-            "source": "legacy_excel_route",
-            **(runtime_context or {}),
-        }
-        run = create_chat_trace_run(
-            payload,
-            message=message,
-            runtime_context=runtime,
-            user_id=user_id or "legacy-excel-route",
-            source="legacy_excel_route",
-            channel="excel_ai_route",
-            intent=intent,
-        )
-    except Exception:  # noqa: BLE001 - tracing must not break legacy AI routes
-        logger.exception("failed to attach AgentRun trace to excel route response")
-        return payload
-    traced = dict(payload)
-    traced["run_id"] = run.run_id
-    traced["agent_run_id"] = run.run_id
-    return traced
-
-
-def _agent_node_payload(run: Any, node_id: str) -> dict[str, Any]:
-    final_output = getattr(run, "final_output", None)
-    node_outputs = dict((final_output or {}).get("node_outputs") or {})
-    output = dict(node_outputs.get(node_id) or {})
-    if not output:
-        for step in getattr(run, "steps", []) or []:
-            if str(getattr(step, "node_id", "")) == node_id:
-                output = dict(getattr(step, "output", {}) or {})
-                break
-    if not output:
-        output = {"success": getattr(run, "status", "") == "completed"}
-    if not output.get("success") and getattr(run, "error", "") and not output.get("message"):
-        output["message"] = getattr(run, "error", "")
-    run_id = str(getattr(run, "run_id", "") or "")
-    if run_id:
-        output["run_id"] = run_id
-        output["agent_run_id"] = run_id
-    output["agent_status"] = str(getattr(run, "status", "") or "")
-    if isinstance(output.get("data"), dict):
-        output["data"].setdefault("run_id", run_id)
-        output["data"].setdefault("agent_run_id", run_id)
-    return output
-
-
-def _user_id_from_excel_skill_request(request: Request, body: dict[str, Any]) -> str:
-    return str(
-        request.headers.get("X-User-Id")
-        or request.headers.get("X-User-ID")
-        or body.get("user_id")
-        or body.get("userId")
-        or "excel-skill-route"
-    ).strip()
-
-
-def _run_excel_skill_agent(
-    *,
-    request: Request,
-    body: dict[str, Any],
-    route_path: str,
-    tool_id: str,
-    action: str,
-    params: dict[str, Any],
-    intent: str,
-    message: str,
-) -> dict[str, Any]:
-    from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.workflow.types import PlanGraph, WorkflowNode
-    from app.application.workflow_registry_app import get_workflow_tool_registry
-
-    registry = get_workflow_tool_registry()
-    action_meta = dict((registry.get(tool_id) or {}).get("actions") or {}).get(action)
-    if not isinstance(action_meta, dict):
-        return {"success": False, "message": f"未注册的工具动作: {tool_id}.{action}"}
-
-    node_id = f"{intent}_{tool_id}_{action}".replace(".", "_").replace("-", "_")
-    plan = PlanGraph(
-        plan_id=intent,
-        intent=intent,
-        todo_steps=[f"通过 AgentOrchestrator 执行 {tool_id}.{action}"],
-        nodes=[
-            WorkflowNode(
-                node_id=node_id,
-                tool_id=tool_id,
-                action=action,
-                params=dict(params),
-                risk=str(action_meta.get("risk") or "low"),
-                idempotent=bool(action_meta.get("idempotent", False)),
-                description=f"Execute {tool_id}.{action} through the unified Agent runtime.",
-            )
-        ],
-        risk_level=str(action_meta.get("risk") or "low"),
-        metadata={"source": "excel_skill_route", "route": route_path},
-    )
-    user_id = _user_id_from_excel_skill_request(request, body)
-    run = AgentOrchestrator().start_run_from_plan(
-        user_id=user_id,
-        message=message,
-        plan=plan,
-        runtime_context={
-            "source": "excel_skill_route",
-            "route": route_path,
-            "request_path": str(request.url.path),
-            "user_id": user_id,
-        },
-    )
-    return _agent_node_payload(run, node_id)
 
 
 @router.post("/api/ai/parse-single")
@@ -214,7 +93,7 @@ async def ai_analyze_post(
 ):
     try:
         from app.application.facades.conversation_facade import get_data_analysis_service
-        from app.utils.secure_filename import secure_filename as _sf
+        from app.utils.security.secure_filename import secure_filename as _sf
 
         service = get_data_analysis_service()
         if file is not None and file.filename:
@@ -271,9 +150,9 @@ async def ai_analyze_post(
                 runtime_context={"query": str(query or "")},
             )
         return JSONResponse({"success": False, "message": "请提供文件或查询内容"}, status_code=400)
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("ai analyze: %s", e)
-        return JSONResponse({"success": False, "message": f"服务器错误: {str(e)}"}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("ai analyze failed")
+        return JSONResponse({"success": False, "message": "分析服务暂不可用"}, status_code=500)
 
 
 @router.post("/api/ai/file/analyze")
@@ -336,10 +215,9 @@ async def ai_file_analyze(
                 data.setdefault("run_id", run_id)
                 data.setdefault("agent_run_id", run_id)
         return JSONResponse(result, status_code=200 if result.get("success") else 400)
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse(
-            {"success": False, "message": f"文件分析失败：{str(e)}"}, status_code=500
-        )
+    except RECOVERABLE_ERRORS:
+        logger.exception("file analysis failed")
+        return JSONResponse({"success": False, "message": "文件分析失败"}, status_code=500)
 
 
 @router.post("/api/ai/sqlite/import_unit_products")
@@ -430,8 +308,9 @@ def ai_sqlite_import_unit_products(body: dict = Body(default_factory=dict)):
             },
             status_code=202 if run.status in {"waiting_user", "blocked"} else 200,
         )
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": f"导入失败：{str(e)}"}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("unit products import failed")
+        return JSONResponse({"success": False, "message": "导入失败"}, status_code=500)
 
 
 @router.post("/api/skills/analyze/excel")

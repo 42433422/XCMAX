@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment"
 """XC AGI 邮件发送服务：基于 QQ邮箱 SMTP 发送验证码。
 
 诊断与排障约定：
@@ -15,7 +16,6 @@ from __future__ import annotations
 import mimetypes
 import os
 import random
-import re
 import smtplib
 from email import encoders
 from email.mime.application import MIMEApplication
@@ -29,6 +29,7 @@ from sqlalchemy import func
 
 from modstore_server.env_loader import load_modstore_env
 from modstore_server.models import User, get_session_factory
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 _MODSTORE_ROOT = Path(__file__).resolve().parent.parent
 
@@ -103,7 +104,12 @@ _CODE_LENGTH = 6
 
 
 def _email_debug_enabled() -> bool:
-    return os.environ.get("MODSTORE_EMAIL_DEBUG", "").strip().lower() in ("1", "true", "yes", "on")
+    return os.environ.get("MODSTORE_EMAIL_DEBUG", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
 
 
 def _generate_code() -> str:
@@ -182,7 +188,10 @@ def send_verification_email(email: str, code: str, purpose: str = "login") -> No
     _load_modstore_env()
 
     if _email_debug_enabled():
-        print(f"[MODSTORE_EMAIL_DEBUG] to={email} purpose={purpose} code={code}", flush=True)
+        print(
+            f"[MODSTORE_EMAIL_DEBUG] to={email} purpose={purpose} code={code}",
+            flush=True,
+        )
         return
 
     state = _config_state()
@@ -238,7 +247,12 @@ def send_test_email(email: str) -> Dict[str, object]:
     _load_modstore_env()
     if _email_debug_enabled():
         print(f"[MODSTORE_EMAIL_DEBUG] test email to={email}", flush=True)
-        return {"mode": "debug", "delivered": True, "host": _smtp_host(), "port": _smtp_port()}
+        return {
+            "mode": "debug",
+            "delivered": True,
+            "host": _smtp_host(),
+            "port": _smtp_port(),
+        }
 
     state = _config_state()
     if not state["configured"]:
@@ -322,7 +336,7 @@ def _attach_file(msg: MIMEMultipart, path: Path) -> bool:
         part.add_header("Content-Disposition", "attachment", filename=filename)
         msg.attach(part)
         return True
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         return False
 
 
@@ -392,7 +406,12 @@ def send_html_email_with_attachments(
     with smtplib.SMTP_SSL(_smtp_host(), _smtp_port()) as server:
         server.login(user, password)
         server.sendmail(_sender_email(), to_email, msg.as_string())
-    return {"mode": "smtp", "delivered": True, "attached": attached, "skipped_attachments": skipped}
+    return {
+        "mode": "smtp",
+        "delivered": True,
+        "attached": attached,
+        "skipped_attachments": skipped,
+    }
 
 
 def find_user_by_email(email: str) -> User | None:

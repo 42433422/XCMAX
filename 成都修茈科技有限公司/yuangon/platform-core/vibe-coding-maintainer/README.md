@@ -6,25 +6,25 @@
 
 ## 负责文件
 
-| 文件 | 说明 |
-|------|------|
-| `vibe-coding/src/vibe_coding/code_factory.py` | 代码生成工厂 |
-| `vibe-coding/src/vibe_coding/workflow_factory.py` | 工作流生成工厂 |
-| `vibe-coding/src/vibe_coding/facade.py` | 对外门面 API |
-| `vibe-coding/src/vibe_coding/nl/parsing.py` | NL 解析 |
-| `vibe-coding/src/vibe_coding/nl/prompts.py` | NL 提示词 |
-| `vibe-coding/src/vibe_coding/runtime/validator.py` | 运行时校验器 |
-| `vibe-coding/src/vibe_coding/_internals/code_models.py` | 内部代码模型 |
-| `vibe-coding/src/vibe_coding/agent/**` | Agent 层（loop/react/patch/sandbox/memory/orchestration/marketplace/web） |
-| `vibe-coding/src/vibe_coding/agent/security/**` | 安全模块（路径守卫、环境清洗） |
-| `vibe-coding/src/vibe_coding/workflow_engine.py` | 工作流引擎 |
-| `vibe-coding/src/vibe_coding/workflow_conditions.py` | 工作流条件表达式 |
-| `vibe-coding/src/vibe_coding/workflow_models.py` | 工作流数据模型 |
-| `vibe-coding/tests/**` | 单元/集成测试 |
-| `vibe-coding/docs/**` | 平台文档 |
-| `vibe-coding/examples/**` | 示例代码 |
-| `vibe-coding/README.md` | 主 README |
-| `vibe-coding/CHANGELOG.md` | 变更日志 |
+| 文件                                                    | 说明                                                                      |
+| ------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `vibe-coding/src/vibe_coding/code_factory.py`           | 代码生成工厂                                                              |
+| `vibe-coding/src/vibe_coding/workflow_factory.py`       | 工作流生成工厂                                                            |
+| `vibe-coding/src/vibe_coding/facade.py`                 | 对外门面 API                                                              |
+| `vibe-coding/src/vibe_coding/nl/parsing.py`             | NL 解析                                                                   |
+| `vibe-coding/src/vibe_coding/nl/prompts.py`             | NL 提示词                                                                 |
+| `vibe-coding/src/vibe_coding/runtime/validator.py`      | 运行时校验器                                                              |
+| `vibe-coding/src/vibe_coding/_internals/code_models.py` | 内部代码模型                                                              |
+| `vibe-coding/src/vibe_coding/agent/**`                  | Agent 层（loop/react/patch/sandbox/memory/orchestration/marketplace/web） |
+| `vibe-coding/src/vibe_coding/agent/security/**`         | 安全模块（路径守卫、环境清洗）                                            |
+| `vibe-coding/src/vibe_coding/workflow_engine.py`        | 工作流引擎                                                                |
+| `vibe-coding/src/vibe_coding/workflow_conditions.py`    | 工作流条件表达式                                                          |
+| `vibe-coding/src/vibe_coding/workflow_models.py`        | 工作流数据模型                                                            |
+| `vibe-coding/tests/**`                                  | 单元/集成测试                                                             |
+| `vibe-coding/docs/**`                                   | 平台文档                                                                  |
+| `vibe-coding/examples/**`                               | 示例代码                                                                  |
+| `vibe-coding/README.md`                                 | 主 README                                                                 |
+| `vibe-coding/CHANGELOG.md`                              | 变更日志                                                                  |
 
 ## 典型任务
 
@@ -41,15 +41,15 @@
 
 ## KPI
 
-| 指标 | 目标 |
-|------|------|
-| 单元测试覆盖率 | ≥ 85% |
-| `python -m pytest vibe-coding/tests/` 通过率 | 100% |
-| 接口向后兼容（`vibe_eskill_adapter` 无 break） | 100% |
-| 文档一致性率（API 签名与文档匹配） | 100% |
-| Agent 层覆盖率 | ≥ 85% |
-| 安全审计通过率 | 100% |
-| 工作流引擎测试通过率 | 100% |
+| 指标                                           | 目标  |
+| ---------------------------------------------- | ----- |
+| 单元测试覆盖率                                 | ≥ 85% |
+| `python -m pytest vibe-coding/tests/` 通过率   | 100%  |
+| 接口向后兼容（`vibe_eskill_adapter` 无 break） | 100%  |
+| 文档一致性率（API 签名与文档匹配）             | 100%  |
+| Agent 层覆盖率                                 | ≥ 85% |
+| 安全审计通过率                                 | 100%  |
+| 工作流引擎测试通过率                           | 100%  |
 
 ## 禁区
 

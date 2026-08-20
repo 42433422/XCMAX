@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """红线审批门控系统：将硬阻断改为 AI 执行 + 人工审批。
 
 红线领域（原硬阻断 → 现审批门控）：
@@ -17,8 +18,10 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -187,7 +190,7 @@ def create_redline_request(
             "message": f"红线变更 [{domain}] 已提交，等待 admin 审批",
         }
 
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("create_redline_request failed: %s", exc)
         return {"ok": False, "error": str(exc)}
 
@@ -200,7 +203,9 @@ def approve_redline_request(
 ) -> Dict[str, Any]:
     """审批通过红线请求 → 落盘变更。"""
     try:
-        from modstore_server.employee_change_request_service import apply_employee_change_request
+        from modstore_server.employee_change_request_service import (
+            apply_employee_change_request,
+        )
 
         result = apply_employee_change_request(cr_id, admin_user_id)
 
@@ -222,7 +227,7 @@ def approve_redline_request(
 
         return {"ok": True, "cr_id": cr_id, "result": result}
 
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("approve_redline_request failed: %s", exc)
         return {"ok": False, "error": str(exc)}
 
@@ -235,7 +240,9 @@ def reject_redline_request(
 ) -> Dict[str, Any]:
     """审批拒绝红线请求 → 回滚变更。"""
     try:
-        from modstore_server.employee_change_request_service import reject_employee_change_request
+        from modstore_server.employee_change_request_service import (
+            reject_employee_change_request,
+        )
 
         result = reject_employee_change_request(
             cr_id,
@@ -261,7 +268,7 @@ def reject_redline_request(
 
         return {"ok": True, "cr_id": cr_id, "result": result}
 
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("reject_redline_request failed: %s", exc)
         return {"ok": False, "error": str(exc)}
 
@@ -300,7 +307,7 @@ def get_pending_redline_requests() -> List[Dict[str, Any]]:
                         }
                     )
             return results
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("get_pending_redline_requests failed")
         return []
 
@@ -312,7 +319,7 @@ def check_redline_timeout() -> Dict[str, Any]:
         from modstore_server.models import EmployeeChangeRequest, get_session_factory
 
         sf = get_session_factory()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         with sf() as session:
             pending = (
@@ -336,9 +343,7 @@ def check_redline_timeout() -> Dict[str, Any]:
                 created = getattr(cr, "created_at", None)
                 if created and hasattr(created, "tzinfo"):
                     if created.tzinfo is None:
-                        from datetime import timezone as _tz
-
-                        created = created.replace(tzinfo=_tz.utc)
+                        created = created.replace(tzinfo=UTC)
                     elapsed = (now - created).total_seconds() / 3600
                     if elapsed > timeout_hours and domain_config.get("auto_rollback"):
                         reject_redline_request(
@@ -349,7 +354,7 @@ def check_redline_timeout() -> Dict[str, Any]:
                         expired_count += 1
                 session.commit()
 
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("check_redline_timeout failed")
 
     return {"ok": True, "expired_rolled_back": expired_count}

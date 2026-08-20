@@ -77,9 +77,7 @@ def _is_new_throwaway(path: str) -> bool:
         return True
     if basename.endswith(".v1_backup"):
         return True
-    is_temp_prefixed = basename.endswith((".py", ".sh")) and basename.startswith(
-        TEMP_PREFIXES
-    )
+    is_temp_prefixed = basename.endswith((".py", ".sh")) and basename.startswith(TEMP_PREFIXES)
     if not is_temp_prefixed and not any(p.match(basename) for p in OPS_THROWAWAY_PATTERNS):
         return False
     if "/" not in rel:
@@ -111,10 +109,24 @@ def _report(kind: str, paths: list[str]) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--all-tracked", action="store_true", help="scan all tracked files for globally forbidden names")
-    parser.add_argument("--added-from-git", action="store_true", help="scan staged added files for throwaway patterns")
-    parser.add_argument("--added-from-stdin", action="store_true", help="scan newline-delimited added files from stdin")
-    parser.add_argument("paths", nargs="*", help="changed paths to scan for globally forbidden names")
+    parser.add_argument(
+        "--all-tracked",
+        action="store_true",
+        help="scan all tracked files for globally forbidden names",
+    )
+    parser.add_argument(
+        "--added-from-git",
+        action="store_true",
+        help="scan staged added files for throwaway patterns",
+    )
+    parser.add_argument(
+        "--added-from-stdin",
+        action="store_true",
+        help="scan newline-delimited added files from stdin",
+    )
+    parser.add_argument(
+        "paths", nargs="*", help="changed paths to scan for globally forbidden names"
+    )
     args = parser.parse_args(argv)
 
     repo_root = _repo_root()

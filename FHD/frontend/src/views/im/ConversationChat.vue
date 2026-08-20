@@ -4,21 +4,13 @@
       <span class="im-avatar im-avatar--sm" aria-hidden="true">{{ avatarText(activeTitle) }}</span>
       <span class="im-chat-title">{{ activeTitle }}</span>
     </header>
-    <button
-      v-if="hasMoreHistory"
-      type="button"
-      class="im-load-more"
-      :disabled="busy"
-      @click="emit('load-older')"
-    >
-      加载更早消息
-    </button>
+    <button v-if="hasMoreHistory" type="button" class="im-load-more" :disabled="busy" @click="emit('load-older')">加载更早消息</button>
     <div :ref="scrollEl" class="im-messages">
       <template v-for="m in messages" :key="m.id">
         <div :class="['im-bubble-row', isMyMessage(m) ? 'mine' : 'theirs']">
           <div class="im-bubble">
             <span v-if="!isMyMessage(m)" class="im-sender">
-              {{ m.sender_display_name || ('用户' + m.sender_user_id) }}
+              {{ m.sender_display_name || '用户' + m.sender_user_id }}
             </span>
             <p>{{ m.body }}</p>
             <time>{{ formatTime(m.created_at) }}</time>
@@ -36,37 +28,35 @@
         :disabled="busy"
         @input="onInput"
       />
-      <button type="submit" class="im-btn im-btn--primary" :disabled="busy || !draft.trim()">
-        发送
-      </button>
+      <button type="submit" class="im-btn im-btn--primary" :disabled="busy || !draft.trim()">发送</button>
     </form>
   </main>
 </template>
 
 <script setup lang="ts">
-import type { Ref } from 'vue';
-import { type ImMessage } from '@/api/im';
-import { avatarText } from '@/composables/messenger/useMessengerEntries';
+import type { Ref } from 'vue'
+import { type ImMessage } from '@/api/im'
+import { avatarText } from '@/composables/messenger/useMessengerEntries'
 
 defineProps<{
-  activeTitle: string;
-  hasMoreHistory: boolean;
-  busy: boolean;
-  messages: ImMessage[];
-  draft: string;
-  isMyMessage: (m: ImMessage) => boolean;
-  formatTime: (iso: string | null) => string;
-  scrollEl: Ref<HTMLElement | null>;
-}>();
+  activeTitle: string
+  hasMoreHistory: boolean
+  busy: boolean
+  messages: ImMessage[]
+  draft: string
+  isMyMessage: (m: ImMessage) => boolean
+  formatTime: (iso: string | null) => string
+  scrollEl: Ref<HTMLElement | null>
+}>()
 
 const emit = defineEmits<{
-  (e: 'load-older'): void;
-  (e: 'update:draft', value: string): void;
-  (e: 'send'): void;
-}>();
+  (e: 'load-older'): void
+  (e: 'update:draft', value: string): void
+  (e: 'send'): void
+}>()
 
 function onInput(ev: Event): void {
-  emit('update:draft', (ev.target as HTMLInputElement).value);
+  emit('update:draft', (ev.target as HTMLInputElement).value)
 }
 </script>
 

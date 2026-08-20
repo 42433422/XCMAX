@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -24,11 +24,23 @@ from app.application.etl.service_support import (
 from app.application.etl.targets import TargetAdapter, get_adapter
 from app.db.models.etl import EtlRun, EtlRunRow, EtlUpload
 from app.infrastructure.tenant_scope import tenant_id_for_write, tenant_scope
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
 
 class ExecutionServiceMixin:
+    if TYPE_CHECKING:
+        _owned_run: Any
+        _owned_target_config: Any
+        _owned_upload: Any
+        _owned_upload_record: Any
+        _row_context: Any
+        _submit_preview: Any
+        _submit_revalidation: Any
+        get_run: Any
+        run_dict: Any
+
     def execute(
         self,
         db: Session,
@@ -64,7 +76,7 @@ class ExecutionServiceMixin:
         db.commit()
         self._submit_execution(run.id, tenant_id, owner_user_id, valid_rows_only)
         db.expire_all()
-        return self.get_run(db, run_id=run.id, owner_user_id=owner_user_id)
+        return cast("dict[str, Any]", self.get_run(db, run_id=run.id, owner_user_id=owner_user_id))
 
     def _submit_execution(
         self,
@@ -213,7 +225,7 @@ class ExecutionServiceMixin:
             run.receipt_json = dump_json(receipt)
             db.commit()
             self._record_execution_metrics(run, started_at, "success")
-        except Exception as exc:  # noqa: BLE001
+        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
             db.rollback()
             code, message = safe_error(exc)
             try:
@@ -224,7 +236,7 @@ class ExecutionServiceMixin:
                 run.error_message = message[:500]
                 db.commit()
                 self._record_execution_metrics(run, started_at, "failed")
-            except Exception:  # noqa: BLE001
+            except RECOVERABLE_ERRORS:  # noqa: BLE001
                 db.rollback()
                 logger.exception("Unable to persist ETL execution failure for %s", run_id)
         finally:
@@ -239,7 +251,7 @@ class ExecutionServiceMixin:
             etl_run_duration_seconds.labels("execute", run.target_type).observe(
                 max(0.0, time.monotonic() - started_at)
             )
-        except Exception:  # noqa: BLE001
+        except RECOVERABLE_ERRORS:  # noqa: BLE001
             logger.debug("ETL execution metrics unavailable", exc_info=True)
 
     def _execute_rows(
@@ -281,7 +293,7 @@ class ExecutionServiceMixin:
                 run.executed_rows = executed
                 run.progress = min(99, int((chunk_start + len(chunk)) / max(1, total) * 100))
                 db.commit()
-            except Exception as exc:  # noqa: BLE001
+            except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
                 failed_row_id = row.id
                 completed_row_ids = [item.id for item in chunk[:completed_in_chunk]]
                 db.rollback()
@@ -353,14 +365,14 @@ class ExecutionServiceMixin:
             from app.utils.metrics import etl_retries_total
 
             etl_retries_total.labels(run.target_type).inc()
-        except Exception:  # noqa: BLE001
+        except RECOVERABLE_ERRORS:  # noqa: BLE001
             logger.debug("ETL retry metrics unavailable", exc_info=True)
         if rerun_parse:
             self._submit_preview(run_id, tenant_id, owner_user_id)
         else:
             self._submit_revalidation(run_id, tenant_id, owner_user_id)
         db.expire_all()
-        return self.get_run(db, run_id=run_id, owner_user_id=owner_user_id)
+        return cast("dict[str, Any]", self.get_run(db, run_id=run_id, owner_user_id=owner_user_id))
 
     def rollback(self, db: Session, *, run_id: str, owner_user_id: int) -> dict[str, Any]:
         run = self._owned_run(db, run_id, owner_user_id)
@@ -406,7 +418,7 @@ class ExecutionServiceMixin:
                 run.receipt_json = dump_json(receipt)
                 db.commit()
                 self._record_rollback_metric(run.target_type, "success")
-                return self.run_dict(run, file_name=upload.file_name)
+                return cast("dict[str, Any]", self.run_dict(run, file_name=upload.file_name))
             for row in rows:
                 adapter.rollback_row(
                     db,
@@ -429,8 +441,8 @@ class ExecutionServiceMixin:
             run.receipt_json = dump_json(receipt)
             db.commit()
             self._record_rollback_metric(run.target_type, "success")
-            return self.run_dict(run, file_name=upload.file_name)
-        except Exception as exc:  # noqa: BLE001
+            return cast("dict[str, Any]", self.run_dict(run, file_name=upload.file_name))
+        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
             db.rollback()
             code, message = safe_error(exc)
             run = self._owned_run(db, run_id, owner_user_id)
@@ -447,5 +459,5 @@ class ExecutionServiceMixin:
             from app.utils.metrics import etl_rollbacks_total
 
             etl_rollbacks_total.labels(target_type, status).inc()
-        except Exception:  # noqa: BLE001
+        except RECOVERABLE_ERRORS:  # noqa: BLE001
             logger.debug("ETL rollback metrics unavailable", exc_info=True)

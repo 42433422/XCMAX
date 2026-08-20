@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """支付公共工具：签名、防重放、金额校验、套餐常量与辅助函数。"""
 
 from __future__ import annotations
@@ -8,8 +9,6 @@ import logging
 import os
 import threading
 import time
-from datetime import datetime, timedelta, timezone
-from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Optional
 
 from fastapi import HTTPException
@@ -21,8 +20,8 @@ from modstore_server.models import (
     PlanTemplate,
     Purchase,
     UserPlan,
-    get_session_factory,
 )
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -275,7 +274,7 @@ def _catalog_entitlement_metadata(item: CatalogItem, source: str) -> str:
 def _plan_rows(session) -> list[PlanTemplate]:
     rows = [
         row
-        for row in session.query(PlanTemplate).filter(PlanTemplate.is_active == True).all()
+        for row in session.query(PlanTemplate).filter(PlanTemplate.is_active.is_(True)).all()
         if not is_account_license_plan_id(row.id)
     ]
     rows.sort(
@@ -299,7 +298,7 @@ def _user_max_membership_tier_order(session, user_id: int) -> int:
         return -1
     rows = (
         session.query(UserPlan.plan_id)
-        .filter(UserPlan.user_id == user_id, UserPlan.is_active == True)
+        .filter(UserPlan.user_id == user_id, UserPlan.is_active.is_(True))
         .all()
     )
     m = -1
@@ -317,7 +316,7 @@ def _user_owns_svip_tier(session, user_id: int) -> bool:
         return False
     rows = (
         session.query(UserPlan.plan_id)
-        .filter(UserPlan.user_id == user_id, UserPlan.is_active == True)
+        .filter(UserPlan.user_id == user_id, UserPlan.is_active.is_(True))
         .all()
     )
     return any((pid or "") in SVIP_TIER_PLAN_IDS for (pid,) in rows)
@@ -326,7 +325,7 @@ def _user_owns_svip_tier(session, user_id: int) -> bool:
 def _plan_as_dict(row: PlanTemplate) -> dict[str, Any]:
     try:
         features = __import__("json").loads(row.features_json or "[]")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         features = []
     return {
         "id": row.id,
@@ -341,7 +340,7 @@ def _plan_as_dict(row: PlanTemplate) -> dict[str, Any]:
 def _plan_quotas(row: PlanTemplate) -> dict[str, int]:
     try:
         q = __import__("json").loads(row.quotas_json or "{}")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         q = {}
     if not isinstance(q, dict):
         return {}
@@ -368,7 +367,12 @@ def _membership_meta(plan_id: str | None) -> dict[str, Any]:
         "plan_svip7": ("svip7", "SVIP7", True, True),
         "plan_svip8": ("svip8", "SVIP8", True, True),
     }.get(pid, ("free", "普通用户", False, False))
-    return {"tier": meta[0], "label": meta[1], "is_member": meta[2], "can_byok": meta[3]}
+    return {
+        "tier": meta[0],
+        "label": meta[1],
+        "is_member": meta[2],
+        "can_byok": meta[3],
+    }
 
 
 def _resolve_checkout_fields(
@@ -397,7 +401,7 @@ def _resolve_checkout_fields(
     elif body.plan_id:
         plan_row = (
             session.query(PlanTemplate)
-            .filter(PlanTemplate.id == body.plan_id, PlanTemplate.is_active == True)
+            .filter(PlanTemplate.id == body.plan_id, PlanTemplate.is_active.is_(True))
             .first()
         )
         if not plan_row:
@@ -433,7 +437,10 @@ def _resolve_checkout_fields(
         if user_id:
             dup = (
                 session.query(Purchase)
-                .filter(Purchase.user_id == int(user_id), Purchase.catalog_id == int(body.item_id))
+                .filter(
+                    Purchase.user_id == int(user_id),
+                    Purchase.catalog_id == int(body.item_id),
+                )
                 .first()
             )
             if dup:

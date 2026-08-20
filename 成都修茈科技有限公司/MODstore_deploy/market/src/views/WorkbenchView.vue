@@ -1,24 +1,61 @@
 <template>
   <div class="workbench" :class="{ 'workbench--home': isWorkbenchHome }">
     <nav class="wb-scene-nav">
-      <a :href="router.resolve({ name: 'workbench-home' }).href" class="wb-scene-nav-item" :class="{ 'wb-scene-nav-item--active': isWorkbenchHome }" @click.prevent="navigateTo({ name: 'workbench-home' })">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2 2h5v5H2zM9 2h5v5H9zM2 9h5v5H2zM9 9h5v5H9z"/></svg>
+      <a
+        :href="router.resolve({ name: 'workbench-home' }).href"
+        class="wb-scene-nav-item"
+        :class="{ 'wb-scene-nav-item--active': isWorkbenchHome }"
+        @click.prevent="navigateTo({ name: 'workbench-home' })"
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+          <path d="M2 2h5v5H2zM9 2h5v5H9zM2 9h5v5H2zM9 9h5v5H9z" />
+        </svg>
         <span>首页</span>
       </a>
-      <a :href="router.resolve({ name: 'workbench-unified', query: { focus: 'repository' } }).href" class="wb-scene-nav-item" :class="{ 'wb-scene-nav-item--active': isUnifiedRepo }" @click.prevent="navigateTo({ name: 'workbench-unified', query: { focus: 'repository' } })">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><rect x="1.5" y="1.5" width="13" height="13" rx="2"/><path d="M5 8h6M8 5v6"/></svg>
+      <a
+        :href="router.resolve({ name: 'workbench-unified', query: { focus: 'repository' } }).href"
+        class="wb-scene-nav-item"
+        :class="{ 'wb-scene-nav-item--active': isUnifiedRepo }"
+        @click.prevent="navigateTo({ name: 'workbench-unified', query: { focus: 'repository' } })"
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+          <rect x="1.5" y="1.5" width="13" height="13" rx="2" />
+          <path d="M5 8h6M8 5v6" />
+        </svg>
         <span>统一工作台</span>
       </a>
-      <a :href="router.resolve({ name: 'workbench-script-workflows' }).href" class="wb-scene-nav-item" :class="{ 'wb-scene-nav-item--active': scriptWorkflowsNavActive }" @click.prevent="navigateTo({ name: 'workbench-script-workflows' })">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2 4h12M2 8h8M2 12h5"/></svg>
+      <a
+        :href="router.resolve({ name: 'workbench-script-workflows' }).href"
+        class="wb-scene-nav-item"
+        :class="{ 'wb-scene-nav-item--active': scriptWorkflowsNavActive }"
+        @click.prevent="navigateTo({ name: 'workbench-script-workflows' })"
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+          <path d="M2 4h12M2 8h8M2 12h5" />
+        </svg>
         <span>脚本工作流</span>
       </a>
-      <a :href="router.resolve({ name: 'workbench-employees' }).href" class="wb-scene-nav-item" :class="{ 'wb-scene-nav-item--active': myEmployeesNavActive }" @click.prevent="navigateTo({ name: 'workbench-employees' })">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="5" r="2.5"/><path d="M3 14c0-2.76 2.24-5 5-5s5 2.24 5 5"/></svg>
+      <a
+        :href="router.resolve({ name: 'workbench-employees' }).href"
+        class="wb-scene-nav-item"
+        :class="{ 'wb-scene-nav-item--active': myEmployeesNavActive }"
+        @click.prevent="navigateTo({ name: 'workbench-employees' })"
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+          <circle cx="8" cy="5" r="2.5" />
+          <path d="M3 14c0-2.76 2.24-5 5-5s5 2.24 5 5" />
+        </svg>
         <span>我的员工</span>
       </a>
-      <a :href="router.resolve({ name: 'workbench-materials' }).href" class="wb-scene-nav-item" :class="{ 'wb-scene-nav-item--active': isMaterialsPage }" @click.prevent="navigateTo({ name: 'workbench-materials' })">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2 2h4v4H2zM6 2h4v4H6zM10 2h4v4h-4zM2 6h4v4H2zM6 6h4v4H6z"/></svg>
+      <a
+        :href="router.resolve({ name: 'workbench-materials' }).href"
+        class="wb-scene-nav-item"
+        :class="{ 'wb-scene-nav-item--active': isMaterialsPage }"
+        @click.prevent="navigateTo({ name: 'workbench-materials' })"
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+          <path d="M2 2h4v4H2zM6 2h4v4H6zM10 2h4v4h-4zM2 6h4v4H2zM6 6h4v4H6z" />
+        </svg>
         <span>我的素材</span>
       </a>
       <span class="wb-scene-nav-brand" aria-hidden="true">XC</span>
@@ -39,16 +76,65 @@
       </router-view>
     </main>
     <nav class="wb-mobile-tabbar">
-      <a class="wb-mobile-tabbar-item" :class="{ 'wb-mobile-tabbar-item--active': isChatTab }" @click.prevent="navigateTo({ name: 'workbench-home' })">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      <a
+        class="wb-mobile-tabbar-item"
+        :class="{ 'wb-mobile-tabbar-item--active': isChatTab }"
+        @click.prevent="navigateTo({ name: 'workbench-home' })"
+      >
+        <svg
+          width="22"
+          height="22"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        </svg>
         <span>聊天</span>
       </a>
-      <a class="wb-mobile-tabbar-item" :class="{ 'wb-mobile-tabbar-item--active': isEmployeeTab }" @click.prevent="navigateTo({ name: 'workbench-employees' })">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="4"/><path d="M5.5 21c0-4.14 2.92-7.5 6.5-7.5s6.5 3.36 6.5 7.5"/></svg>
+      <a
+        class="wb-mobile-tabbar-item"
+        :class="{ 'wb-mobile-tabbar-item--active': isEmployeeTab }"
+        @click.prevent="navigateTo({ name: 'workbench-employees' })"
+      >
+        <svg
+          width="22"
+          height="22"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <circle cx="12" cy="7" r="4" />
+          <path d="M5.5 21c0-4.14 2.92-7.5 6.5-7.5s6.5 3.36 6.5 7.5" />
+        </svg>
         <span>员工</span>
       </a>
-      <a class="wb-mobile-tabbar-item" :class="{ 'wb-mobile-tabbar-item--active': isMyTab }" @click.prevent="navigateTo({ name: 'workbench-materials' })">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <a
+        class="wb-mobile-tabbar-item"
+        :class="{ 'wb-mobile-tabbar-item--active': isMyTab }"
+        @click.prevent="navigateTo({ name: 'workbench-materials' })"
+      >
+        <svg
+          width="22"
+          height="22"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <circle cx="12" cy="12" r="3" />
+          <path
+            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+          />
+        </svg>
         <span>我的</span>
       </a>
     </nav>
@@ -65,7 +151,9 @@ const route = useRoute()
 const isWorkbenchHome = computed(() => String(route.name || '') === 'workbench-home')
 const isUnifiedRepo = computed(() => {
   if (String(route.name || '') !== 'workbench-unified') return false
-  const f = String(route.query.focus || '').trim().toLowerCase()
+  const f = String(route.query.focus || '')
+    .trim()
+    .toLowerCase()
   return f === 'repository' || f === ''
 })
 const scriptWorkflowsNavActive = computed(() => String(route.path || '').includes('/script-workflows'))
@@ -178,11 +266,26 @@ async function navigateTo(routeLocation: Parameters<typeof router.push>[0]) {
   -webkit-overflow-scrolling: touch;
 }
 
-html[data-workbench-theme='light'] .workbench{background:#f5f5f7}
-html[data-workbench-theme='light'] .wb-scene-nav-item{color:#86868b}
-html[data-workbench-theme='light'] .wb-scene-nav-item:hover{background:rgba(0,0,0,.04);color:#1d1d1f}
-html[data-workbench-theme='light'] .wb-scene-nav-item--active{background:rgba(0,113,227,.08);color:#1d1d1f}
-html[data-workbench-theme='light'] .wb-scene-nav-brand{background:linear-gradient(135deg,#0071e3 0%,#1d1d1f 100%);color:transparent;background-clip:text;-webkit-background-clip:text}
+html[data-workbench-theme='light'] .workbench {
+  background: #f5f5f7;
+}
+html[data-workbench-theme='light'] .wb-scene-nav-item {
+  color: #86868b;
+}
+html[data-workbench-theme='light'] .wb-scene-nav-item:hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: #1d1d1f;
+}
+html[data-workbench-theme='light'] .wb-scene-nav-item--active {
+  background: rgba(0, 113, 227, 0.08);
+  color: #1d1d1f;
+}
+html[data-workbench-theme='light'] .wb-scene-nav-brand {
+  background: linear-gradient(135deg, #0071e3 0%, #1d1d1f 100%);
+  color: transparent;
+  background-clip: text;
+  -webkit-background-clip: text;
+}
 @media (max-width: 768px) {
   html[data-workbench-theme='light'] .wb-scene-nav {
     border-bottom-color: rgba(0, 0, 0, 0.08);

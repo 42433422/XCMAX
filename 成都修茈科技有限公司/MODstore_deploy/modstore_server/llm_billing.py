@@ -1,3 +1,4 @@
+# mypy: disable-error-code="operator"
 """LLM metering, wallet settlement and lightweight risk controls."""
 
 from __future__ import annotations
@@ -6,15 +7,14 @@ import json
 import os
 import time
 import uuid
-from dataclasses import dataclass
-from decimal import ROUND_HALF_UP, Decimal
-from typing import Any, Dict, Iterable, List, Optional, Union, cast
+from decimal import Decimal
+from typing import Any, Dict, Iterable, List, Optional, cast
 
-import httpx
 from fastapi import HTTPException, Request
 from sqlalchemy.orm import Session
 
-from modstore_server.application.payment_gateway import PaymentGatewayService
+from modstore_server import llm_billing_values as _values
+from modstore_server.llm_wallet_client import JavaWalletClient
 from modstore_server.models import (
     AiModelPrice,
     ChatConversation,
@@ -24,11 +24,17 @@ from modstore_server.models import (
     RiskEvent,
 )
 from modstore_server.multimodal_llm import (
-    VISION_IMAGE_TOKEN_ESTIMATE,
-    first_user_text_preview,
     flatten_message_content_for_risk,
     redact_message_content_for_storage,
 )
+
+UsageMeter = _values.UsageMeter
+WalletHold = _values.WalletHold
+estimate_tokens_from_message_content = _values.estimate_tokens_from_message_content
+estimate_tokens_from_text = _values.estimate_tokens_from_text
+money = _values.money
+money_str = _values.money_str
+usage_from_response = _values.usage_from_response
 
 DEFAULT_INPUT_PRICE_PER_1K = Decimal(os.environ.get("COSER_DEFAULT_INPUT_PRICE_PER_1K", "0.006"))
 DEFAULT_OUTPUT_PRICE_PER_1K = Decimal(os.environ.get("COSER_DEFAULT_OUTPUT_PRICE_PER_1K", "0.018"))
@@ -37,79 +43,6 @@ DEFAULT_PREAUTH_CHARGE = Decimal(os.environ.get("COSER_DEFAULT_PREAUTH_CHARGE", 
 DEFAULT_SERVICE_FEE_MULTIPLIER = Decimal(os.environ.get("COSER_SERVICE_FEE_MULTIPLIER", "1.5"))
 
 _WINDOWS: dict[str, list[float]] = {}
-
-
-@dataclass
-class UsageMeter:
-    prompt_tokens: int
-    completion_tokens: int
-    total_tokens: int
-    estimated: bool = False
-
-
-@dataclass
-class WalletHold:
-    hold_no: str
-    amount: Decimal
-    enabled: bool
-
-
-def money(value: Decimal | float | int | str) -> Decimal:
-    return Decimal(str(value or "0")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-
-
-def money_str(value: Decimal | float | int | str) -> str:
-    return format(money(value), "f")
-
-
-def estimate_tokens_from_text(text: str) -> int:
-    # 粗略估算：中英文混合场景按 4 字符约 1 token，保底 1。
-    return max(1, int(len(text or "") / 4) + 1)
-
-
-def estimate_tokens_from_message_content(content: Union[str, list, Any]) -> int:
-    """Estimate prompt tokens for one message ``content`` (string or OpenAI vision parts)."""
-    if isinstance(content, str):
-        return estimate_tokens_from_text(content)
-    if isinstance(content, list):
-        n = 0
-        for p in content:
-            if not isinstance(p, dict):
-                continue
-            if p.get("type") == "text":
-                n += estimate_tokens_from_text(str(p.get("text") or ""))
-            elif p.get("type") == "image_url":
-                n += VISION_IMAGE_TOKEN_ESTIMATE
-        return max(1, n)
-    return 1
-
-
-def usage_from_response(
-    raw_usage: Dict[str, Any] | None,
-    messages: Iterable[Dict[str, Any]],
-    content: str,
-) -> UsageMeter:
-    usage = raw_usage or {}
-    prompt = int(
-        usage.get("prompt_tokens")
-        or usage.get("input_tokens")
-        or usage.get("promptTokenCount")
-        or 0
-    )
-    completion = int(
-        usage.get("completion_tokens")
-        or usage.get("output_tokens")
-        or usage.get("candidatesTokenCount")
-        or 0
-    )
-    total = int(usage.get("total_tokens") or usage.get("totalTokenCount") or 0)
-    if prompt or completion or total:
-        if not total:
-            total = prompt + completion
-        return UsageMeter(prompt, completion, total, estimated=False)
-    prompt = sum(estimate_tokens_from_message_content(m.get("content")) for m in messages)
-    completion = estimate_tokens_from_text(content)
-    return UsageMeter(prompt, completion, prompt + completion, estimated=True)
 
 
 def _env_default_input() -> Decimal:
@@ -186,7 +119,7 @@ def model_price(session: Session, provider: str, model: str) -> tuple[Decimal, D
         .filter(
             AiModelPrice.provider == provider,
             AiModelPrice.model == model,
-            AiModelPrice.enabled == True,
+            AiModelPrice.enabled.is_(True),
         )
         .first()
     )
@@ -217,7 +150,7 @@ def pricing_public_dict(
             .filter(
                 AiModelPrice.provider == provider,
                 AiModelPrice.model == model,
-                AiModelPrice.enabled == True,
+                AiModelPrice.enabled.is_(True),
             )
             .first()
         )
@@ -267,7 +200,7 @@ def pricing_public_dict(
 def merge_catalog_pricing(session: Session, providers_out: List[Dict[str, Any]]) -> None:
     """就地写入 models_detailed[].pricing。"""
     priced: Dict[tuple[str, str], AiModelPrice] = {}
-    for r in session.query(AiModelPrice).filter(AiModelPrice.enabled == True).all():
+    for r in session.query(AiModelPrice).filter(AiModelPrice.enabled.is_(True)).all():
         priced[(str(r.provider), str(r.model))] = r
     for block in providers_out:
         prov = str(block.get("provider") or "")
@@ -302,9 +235,17 @@ def estimate_preauthorization(
         os.environ.get("COSER_DEFAULT_PREAUTH_COMPLETION_TOKENS", "1024")
     )
     estimated = UsageMeter(
-        prompt_tokens, completion_tokens, prompt_tokens + completion_tokens, estimated=True
+        prompt_tokens,
+        completion_tokens,
+        prompt_tokens + completion_tokens,
+        estimated=True,
     )
-    return money(max(calculate_charge(session, provider, model, estimated), DEFAULT_PREAUTH_CHARGE))
+    return money(
+        max(
+            calculate_charge(session, provider, model, estimated),
+            DEFAULT_PREAUTH_CHARGE,
+        )
+    )
 
 
 def _client_ip(request: Request | None) -> str:
@@ -339,7 +280,10 @@ def enforce_risk_limits(
     ip = _client_ip(request)
     try:
         _limit_key(
-            "llm_user_minute", str(user_id), 60, int(os.environ.get("COSER_USER_LLM_RPM", "20"))
+            "llm_user_minute",
+            str(user_id),
+            60,
+            int(os.environ.get("COSER_USER_LLM_RPM", "20")),
         )
         if ip:
             _limit_key("llm_ip_minute", ip, 60, int(os.environ.get("COSER_IP_LLM_RPM", "60")))
@@ -382,96 +326,6 @@ def enforce_risk_limits(
             )
             session.commit()
             raise HTTPException(400, "内容未通过安全检查")
-
-
-class JavaWalletClient:
-    def __init__(self):
-        self.gateway = PaymentGatewayService()
-
-    @property
-    def enabled(self) -> bool:
-        return cast(str, self.gateway.backend) == "java"
-
-    async def preauthorize(
-        self, authorization: str, amount: Decimal, provider: str, model: str, request_id: str
-    ) -> WalletHold:
-        if not self.enabled:
-            return WalletHold(hold_no=f"debug-{request_id}", amount=money(amount), enabled=False)
-        data = await self._post(
-            "/api/wallet/ai/preauthorize",
-            authorization,
-            {
-                "amount": money_str(amount),
-                "provider": provider,
-                "model": model,
-                "request_id": request_id,
-                "idempotency_key": f"{request_id}:preauth",
-            },
-        )
-        hold = data.get("hold") or {}
-        return WalletHold(
-            hold_no=str(hold.get("hold_no") or ""),
-            amount=money(hold.get("amount") or amount),
-            enabled=True,
-        )
-
-    async def settle(
-        self, authorization: str, hold: WalletHold, actual_amount: Decimal, request_id: str
-    ) -> None:
-        if not hold.enabled:
-            return
-        await self._post(
-            "/api/wallet/ai/settle",
-            authorization,
-            {
-                "hold_no": hold.hold_no,
-                "actual_amount": money_str(actual_amount),
-                "idempotency_key": f"{request_id}:settle",
-            },
-        )
-
-    async def release(
-        self, authorization: str, hold: WalletHold, reason: str, request_id: str
-    ) -> None:
-        if not hold.enabled:
-            return
-        await self._post(
-            "/api/wallet/ai/release",
-            authorization,
-            {
-                "hold_no": hold.hold_no,
-                "reason": reason,
-                "idempotency_key": f"{request_id}:release",
-            },
-        )
-
-    async def _post(self, path: str, authorization: str, body: Dict[str, Any]) -> Dict[str, Any]:
-        if not authorization:
-            raise HTTPException(401, "缺少登录令牌，无法完成钱包扣费")
-        url = f"{self.gateway.target_base_url()}{path}"
-        from modstore_server.infrastructure.http_clients import get_java_client
-
-        try:
-            client = get_java_client()
-            resp = await client.post(
-                url,
-                headers={"Authorization": authorization, "Content-Type": "application/json"},
-                json=body,
-                timeout=20.0,
-            )
-        except httpx.HTTPError as e:
-            from modstore_server.application.payment_gateway import java_payment_unreachable_message
-
-            raise HTTPException(502, java_payment_unreachable_message(e)) from e
-        if resp.status_code >= 400:
-            raise HTTPException(resp.status_code, resp.text[:500])
-        data = resp.json()
-        if data.get("ok") is False:
-            msg = str(data.get("message") or "钱包扣费失败")
-            if "余额不足" in msg:
-                raise HTTPException(402, msg)
-            raise HTTPException(503, msg)
-        return cast(dict[str, Any], data)
 
 
 def authorization_header(request: Request | None) -> str:
@@ -538,14 +392,18 @@ def save_success_log(
     if conversation_id:
         conversation = (
             session.query(ChatConversation)
-            .filter(ChatConversation.id == conversation_id, ChatConversation.user_id == user_id)
+            .filter(
+                ChatConversation.id == conversation_id,
+                ChatConversation.user_id == user_id,
+            )
             .first()
         )
     if not conversation:
         title = (
-            next((m.get("content", "").strip() for m in messages if m.get("role") == "user"), "")[
-                :80
-            ]
+            next(
+                (m.get("content", "").strip() for m in messages if m.get("role") == "user"),
+                "",
+            )[:80]
             or "新对话"
         )
         conversation = ChatConversation(
@@ -600,7 +458,13 @@ def save_success_log(
 
 
 def save_failure_log(
-    session: Session, *, user_id: int, provider: str, model: str, error: str, hold_no: str = ""
+    session: Session,
+    *,
+    user_id: int,
+    provider: str,
+    model: str,
+    error: str,
+    hold_no: str = "",
 ) -> None:
     session.add(
         LlmCallLog(

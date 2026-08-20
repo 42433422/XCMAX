@@ -1,10 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import {
-  PLANNER_FACADE_MOD_ID,
-  LS_PLANNER_MOD_FACADE_ENABLED,
-  readPlannerModFacadeEnabled,
-  setPlannerModFacadeEnabled,
-} from './plannerMod'
+import { PLANNER_FACADE_MOD_ID, LS_PLANNER_MOD_FACADE_ENABLED, readPlannerModFacadeEnabled, setPlannerModFacadeEnabled } from './plannerMod'
 
 describe('plannerMod constants and functions', () => {
   beforeEach(() => {

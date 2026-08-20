@@ -1,9 +1,8 @@
-from logging.config import fileConfig
-import sys
 import os
+import sys
+from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
+from sqlalchemy import engine_from_config, pool
 
 from alembic import context
 
@@ -34,7 +33,7 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 # Import all models to ensure they're registered with Base.metadata
-from app.db.models import *
+from app.db.models import *  # noqa: F403 - Alembic needs every model registered
 
 # Tables intentionally NOT modeled in the ORM (created via raw SQL in the squashed
 # baseline migration, versions/2026_06_22_baseline_squashed_schema.py). Excluded
@@ -54,6 +53,7 @@ def _include_name(name, type_, parent_names):
     if type_ == "table":
         return name not in _NON_ORM_TABLES
     return True
+
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
@@ -101,7 +101,7 @@ def run_migrations_online() -> None:
 
     """
     config.set_main_option("sqlalchemy.url", _database_url())
-    
+
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",

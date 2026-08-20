@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import types
-
 
 def test_plan_and_dispatch_delegates_to_duty_graph(monkeypatch):
     captured: dict = {}

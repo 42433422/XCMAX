@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from typing import Any
+from typing import Any, cast
 
 from app.application.etl.errors import EtlError
 from app.application.etl.targets.base import (
@@ -53,7 +53,7 @@ class KnowledgeAdapter(TargetAdapter):
         cache = context.setdefault("_preview_cache", {})
         cache_key = f"knowledge:{tenant_id_for_write()}"
         if cache_key in cache:
-            return cache[cache_key]
+            return cast("list[dict[str, Any]]", cache[cache_key])
         from app.application.dataset_rag_app_service import (
             DATASET_READ_PERMISSION,
             DatasetAccessContext,
@@ -72,7 +72,7 @@ class KnowledgeAdapter(TargetAdapter):
         )
         documents = status.get("documents") if status.get("success") else []
         cache[cache_key] = documents if isinstance(documents, list) else []
-        return cache[cache_key]
+        return cast("list[dict[str, Any]]", cache[cache_key])
 
     def preview(self, db, data, *, allowed_update_fields, context):
         issues = self.validate(data)

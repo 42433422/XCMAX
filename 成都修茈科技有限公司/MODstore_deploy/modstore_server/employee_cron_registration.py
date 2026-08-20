@@ -6,6 +6,8 @@ import logging
 from collections.abc import Callable, Iterable
 from typing import Any
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -40,7 +42,7 @@ def build_employee_cron_candidates(
                     pack = load_employee_pack(session, employee_id)
                 if isinstance(pack.get("manifest"), dict):
                     manifest = pack["manifest"]
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 logger.warning(
                     "catalog manifest unavailable for %s; trying reviewed duty SSOT",
                     employee_id,
@@ -49,7 +51,7 @@ def build_employee_cron_candidates(
         if not manifest and contract:
             try:
                 manifest = load_reviewed_duty_manifest(employee_id)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 logger.warning(
                     "reviewed duty manifest unavailable for %s",
                     employee_id,

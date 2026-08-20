@@ -8,9 +8,7 @@ describe('opsDeepLinks', () => {
   })
 
   it('encodes employee id in desktop duty URL', () => {
-    expect(desktopOpsDeepLink('change-request-auditor')).toBe(
-      'xcagi://ops/duty?employee=change-request-auditor',
-    )
+    expect(desktopOpsDeepLink('change-request-auditor')).toBe('xcagi://ops/duty?employee=change-request-auditor')
     expect(desktopOpsDeepLink('a/b c')).toBe('xcagi://ops/duty?employee=a%2Fb%20c')
   })
 })

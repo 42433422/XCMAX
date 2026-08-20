@@ -35,13 +35,13 @@ export function useFieldAi() {
     error.value = ''
     try {
       if (kind === 'refine-prompt') {
-        const res = await api.refineSystemPrompt({
+        const res = (await api.refineSystemPrompt({
           current_prompt: value,
           instruction: ctx?.instruction || '请优化这段 system prompt，使其更专业、更清晰',
           role_context: ctx?.roleContext,
           provider: ctx?.provider,
           model: ctx?.model,
-        }) as Record<string, unknown>
+        })) as Record<string, unknown>
         return {
           value: String(res?.improved_prompt || value),
           explanation: String(res?.diff_explanation || ''),
@@ -50,9 +50,7 @@ export function useFieldAi() {
 
       if (kind === 'explain') {
         // Lightweight: use chat stream for a single completion
-        const explanation = await singleChatCompletion(
-          `请用一句话说明这段配置的作用：\n${value}`,
-        )
+        const explanation = await singleChatCompletion(`请用一句话说明这段配置的作用：\n${value}`)
         return { value, explanation }
       }
 
@@ -79,7 +77,10 @@ async function singleChatCompletion(prompt: string): Promise<string> {
     body: JSON.stringify({ messages: [{ role: 'user', content: prompt }], stream: false }),
   })
   if (!resp.ok) return ''
-  const data = (await resp.json()) as { choices?: Array<{ message?: { content?: string } }>; content?: string }
+  const data = (await resp.json()) as {
+    choices?: Array<{ message?: { content?: string } }>
+    content?: string
+  }
   const choices = data?.choices
   return String(choices?.[0]?.message?.content ?? data?.content ?? '')
 }

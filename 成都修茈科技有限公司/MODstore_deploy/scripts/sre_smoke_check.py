@@ -5,12 +5,13 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 import time
 import urllib.error
 import urllib.request
 from dataclasses import asdict, dataclass
 from typing import Any
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 @dataclass
@@ -61,7 +62,7 @@ def check_http(
         elapsed_ms = int((time.perf_counter() - started) * 1000)
         try:
             body = exc.read().decode("utf-8", errors="replace")
-        except Exception:
+        except RECOVERABLE_ERRORS:
             body = str(exc)
         return CheckResult(
             name=name,
@@ -70,7 +71,7 @@ def check_http(
             latency_ms=elapsed_ms,
             message=body[:300],
         )
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         elapsed_ms = int((time.perf_counter() - started) * 1000)
         return CheckResult(name=name, ok=False, latency_ms=elapsed_ms, message=str(exc))
 
@@ -97,7 +98,7 @@ def check_prometheus_targets(prometheus_url: str, timeout: float) -> CheckResult
             elapsed_ms,
             "unhealthy targets: " + ", ".join(unhealthy) if unhealthy else "",
         )
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         elapsed_ms = int((time.perf_counter() - started) * 1000)
         return CheckResult("prometheus.targets", False, latency_ms=elapsed_ms, message=str(exc))
 

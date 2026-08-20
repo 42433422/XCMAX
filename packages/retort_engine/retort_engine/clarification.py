@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, cast
 
 _SENSITIVE_PATH_RE = re.compile(
     r"(^|/)("
@@ -52,7 +52,9 @@ def build_clarification_questions(
     sensitive = [path for path in files if _SENSITIVE_PATH_RE.search(path)]
     secretish = [line for line in added_samples if _SECRET_LINE_RE.search(line)]
     risk = str(risk_level or "").strip().lower()
-    assessment = assessment if isinstance(assessment, Mapping) else {}
+    assessment = cast(
+        dict[str, Any], assessment if isinstance(assessment, Mapping) else {}
+    )
     status = str(assessment.get("status") or "").strip()
     missing = [
         str(item).strip()

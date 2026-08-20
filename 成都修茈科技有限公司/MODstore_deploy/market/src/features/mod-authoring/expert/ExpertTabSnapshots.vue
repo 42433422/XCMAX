@@ -18,20 +18,12 @@ const {
   <section class="panel">
     <h2 class="panel-title">版本</h2>
     <div class="snap-toolbar">
-      <input
-        v-model="snapshotLabelDraft"
-        type="text"
-        class="input snap-label-input"
-        maxlength="240"
-        placeholder="备注（可选）"
-      />
+      <input v-model="snapshotLabelDraft" type="text" class="input snap-label-input" maxlength="240" placeholder="备注（可选）" />
       <button type="button" class="btn btn-primary" :disabled="snapshotBusy" @click="() => void captureSnapshotManual()">
         {{ snapshotBusy ? '…' : '快照' }}
       </button>
       <button type="button" class="btn" :disabled="snapshotBusy" @click="() => void refreshSnapshots()">刷新</button>
-      <button type="button" class="btn" :disabled="snapshotBusy" @click="() => void bumpManifestPatch()">
-        patch+1
-      </button>
+      <button type="button" class="btn" :disabled="snapshotBusy" @click="() => void bumpManifestPatch()">patch+1</button>
     </div>
     <p v-if="snapshotsLoadErr" class="flash flash-err">{{ snapshotsLoadErr }}</p>
     <ul v-if="snapshotsRows.length" class="snap-list">

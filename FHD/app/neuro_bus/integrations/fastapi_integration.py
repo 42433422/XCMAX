@@ -64,10 +64,11 @@ def get_neurobus_health() -> dict[str, Any]:
 
         return health
 
-    except RECOVERABLE_ERRORS as e:
+    except RECOVERABLE_ERRORS:
+        logger.exception("NeuroBus health route failed")
         return {
             "status": "error",
-            "error": str(e),
+            "error": "unavailable",
         }
 
 
@@ -89,7 +90,8 @@ def add_neurobus_routes(app: FastAPI):
         try:
             processor = get_processor_coordinator()
             return processor.get_all_processor_stats()
-        except RECOVERABLE_ERRORS as e:
-            return {"error": str(e)}
+        except RECOVERABLE_ERRORS:
+            logger.exception("NeuroBus processor stats failed")
+            return {"error": "unavailable"}
 
     logger.info("NeuroBus routes added")

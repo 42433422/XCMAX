@@ -18,7 +18,7 @@ _BANNER_CSS = (
 _BANNER_HTML = (
     '<div id="xcagi-sandbox-banner" role="status">'
     "<strong>沙盒模式</strong> · 数据默认不落生产 · Mod 验证通过后请打包并在完整 FHD 中安装。"
-    " <a href=\"https://xiu-ci.com/market\" target=\"_blank\" rel=\"noopener\">修茈市场</a>"
+    ' <a href="https://xiu-ci.com/market" target="_blank" rel="noopener">修茈市场</a>'
     "</div>"
 )
 

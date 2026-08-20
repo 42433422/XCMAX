@@ -36,7 +36,11 @@ describe('MediaGenPanel coverage extras', () => {
   it('generates image, video, ppt, and document outputs including error paths', async () => {
     const runner = {
       generateImages: vi.fn(async () => ['https://img.example/a.png', 'https://img.example/b.png']),
-      generateVideo: vi.fn(async () => ({ status: 'done' as const, message: '视频任务完成', previewUrl: 'https://video.example/v.mp4' })),
+      generateVideo: vi.fn(async () => ({
+        status: 'done' as const,
+        message: '视频任务完成',
+        previewUrl: 'https://video.example/v.mp4',
+      })),
       generatePptOutline: vi.fn(async () => '## 封面\n- 要点'),
       generatePptx: vi.fn(async () => new Blob(['pptx'])),
       generateDocument: vi.fn(async () => '# 周报\n完成重点任务'),
@@ -49,7 +53,7 @@ describe('MediaGenPanel coverage extras', () => {
         runner,
       },
     })
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
     await vm.onGenImage()
     expect(runner.generateImages).not.toHaveBeenCalled()
@@ -60,7 +64,10 @@ describe('MediaGenPanel coverage extras', () => {
     await vm.onGenImage()
     expect(vm.previewImages).toHaveLength(2)
     expect(vm.currentImageInsertText).toContain('客服海报')
-    await wrapper.findAll('button').find((b) => b.text().includes('把结果插入对话'))?.trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text().includes('把结果插入对话'))
+      ?.trigger('click')
     expect(wrapper.emitted('insert')?.[0]?.[0]).toContain('AI 生图')
 
     runner.generateImages.mockRejectedValueOnce(new Error('image failed'))
@@ -135,14 +142,17 @@ describe('SandboxView coverage extras', () => {
       configurable: true,
       value: vi.fn(),
     })
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 200 })))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(null, { status: 200 })),
+    )
   })
 
   it('discovers host, pushes mod, opens host, and surfaces push/connect failures', async () => {
     const Component = (await import('./views/SandboxView.vue')).default
     const wrapper = mount(Component)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
     expect(vm.connected).toBe(true)
     expect(vm.statusText).toBe('已匹配')
@@ -177,9 +187,12 @@ describe('SandboxView coverage extras', () => {
 
     routeMocks.route.query = { host: 'https://broken.example.test' }
     routeMocks.sandboxApi.connectHost.mockRejectedValue(new Error('connect failed'))
-    vi.stubGlobal('fetch', vi.fn(async () => {
-      throw new Error('browser probe failed')
-    }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new Error('browser probe failed')
+      }),
+    )
     await vm.discoverAndConnect()
     expect(vm.connected).toBe(false)
     expect(vm.connectError).toContain('connect failed')

@@ -62,8 +62,20 @@ describe('OrderListView', () => {
   it('renders order list', async () => {
     vi.mocked(api.paymentOrders).mockResolvedValue({
       orders: [
-        { out_trade_no: 'ORD-001', status: 'paid', subject: '套餐购买', total_amount: '99.9', created_at: '2026-01-01' },
-        { out_trade_no: 'ORD-002', status: 'pending', subject: '商品购买', total_amount: '50', created_at: '2026-01-02' },
+        {
+          out_trade_no: 'ORD-001',
+          status: 'paid',
+          subject: '套餐购买',
+          total_amount: '99.9',
+          created_at: '2026-01-01',
+        },
+        {
+          out_trade_no: 'ORD-002',
+          status: 'pending',
+          subject: '商品购买',
+          total_amount: '50',
+          created_at: '2026-01-02',
+        },
       ],
     })
     router.push('/')
@@ -95,7 +107,13 @@ describe('OrderListView', () => {
   it('shows refund button for paid orders', async () => {
     vi.mocked(api.paymentOrders).mockResolvedValue({
       orders: [
-        { out_trade_no: 'ORD-001', status: 'paid', subject: '套餐', total_amount: '99', created_at: '2026-01-01' },
+        {
+          out_trade_no: 'ORD-001',
+          status: 'paid',
+          subject: '套餐',
+          total_amount: '99',
+          created_at: '2026-01-01',
+        },
       ],
     })
     router.push('/')
@@ -110,7 +128,13 @@ describe('OrderListView', () => {
   it('shows cancel button for pending orders', async () => {
     vi.mocked(api.paymentOrders).mockResolvedValue({
       orders: [
-        { out_trade_no: 'ORD-001', status: 'pending', subject: '套餐', total_amount: '99', created_at: '2026-01-01' },
+        {
+          out_trade_no: 'ORD-001',
+          status: 'pending',
+          subject: '套餐',
+          total_amount: '99',
+          created_at: '2026-01-01',
+        },
       ],
     })
     router.push('/')
@@ -136,7 +160,13 @@ describe('OrderListView', () => {
   it('shows dismiss button when orders exist', async () => {
     vi.mocked(api.paymentOrders).mockResolvedValue({
       orders: [
-        { out_trade_no: 'ORD-001', status: 'paid', subject: '套餐', total_amount: '99', created_at: '2026-01-01' },
+        {
+          out_trade_no: 'ORD-001',
+          status: 'paid',
+          subject: '套餐',
+          total_amount: '99',
+          created_at: '2026-01-01',
+        },
       ],
     })
     router.push('/')

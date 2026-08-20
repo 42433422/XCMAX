@@ -82,7 +82,9 @@ def test_daily_backup_failure_sets_guard_and_alerts(
 
     # 恢复：成功备份解除守卫
     monkeypatch.setattr(
-        bj, "_backup_sqlite", lambda *a, **k: {"ok": True, "path": "x", "bytes": 1, "pruned": 0}
+        bj,
+        "_backup_sqlite",
+        lambda *a, **k: {"ok": True, "path": "x", "bytes": 1, "pruned": 0},
     )
     out2 = bj.run_daily_backup_job()
     assert out2["ok"] is True

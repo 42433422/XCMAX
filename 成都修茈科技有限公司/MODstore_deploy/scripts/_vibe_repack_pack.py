@@ -5,10 +5,8 @@ from __future__ import annotations
 
 import hashlib
 import io
-import json
 import sys
 import zipfile
-from pathlib import Path
 
 from modstore_server.catalog_store import files_dir
 from modstore_server.mod_scaffold_runner import modstore_library_path

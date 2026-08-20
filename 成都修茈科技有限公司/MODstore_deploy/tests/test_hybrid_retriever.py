@@ -1,7 +1,5 @@
 """混合检索器单元测试。"""
 
-import pytest
-
 from modstore_server.hybrid_retriever import HybridRetriever, _tokenize
 from modstore_server.rag_service import RetrievedChunk
 

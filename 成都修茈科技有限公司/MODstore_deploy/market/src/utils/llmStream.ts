@@ -12,6 +12,7 @@
 
 import { api } from '../api'
 import { refreshLevelAndWalletAfterLlm } from './llmBillingRefresh'
+import { asUnknownRecord } from './typeNarrowing'
 
 export interface StreamHandle {
   abort: () => void
@@ -39,13 +40,13 @@ function parseStreamHttpError(body: string, status: number): string {
   const fallback = body.trim() || `流式接口不可用（HTTP ${status}）`
   if (!body.trim()) return fallback
   try {
-    const data = JSON.parse(body)
-    const d = data?.detail
+    const data = asUnknownRecord(JSON.parse(body))
+    const d = data.detail
     if (typeof d === 'string' && d.trim()) {
       if (status === 401 || d.includes('登录')) return '登录已过期，请重新登录'
       return d.trim()
     }
-    if (typeof data?.message === 'string' && data.message.trim()) return data.message.trim()
+    if (typeof data.message === 'string' && data.message.trim()) return data.message.trim()
   } catch {
     /* raw text */
   }
@@ -60,13 +61,15 @@ export function streamLLMChat(opts: StreamOptions): StreamHandle {
 
   const runFallback = async () => {
     let fullText = ''
-    const res: any = await api.llmChat(
-      opts.provider,
-      opts.model,
-      opts.messages as unknown[],
-      opts.maxTokens ?? null,
-      opts.conversationId ?? null,
-      opts.allowFailover !== false,
+    const res = asUnknownRecord(
+      await api.llmChat(
+        opts.provider,
+        opts.model,
+        opts.messages as unknown[],
+        opts.maxTokens ?? null,
+        opts.conversationId ?? null,
+        opts.allowFailover !== false,
+      ),
     )
     if (ctrl.signal.aborted) {
       aborted = true
@@ -105,7 +108,7 @@ export function streamLLMChat(opts: StreamOptions): StreamHandle {
     })
   }
 
-  const parseSseChunk = (chunk: string, onEvent: (event: string, data: any) => void) => {
+  const parseSseChunk = (chunk: string, onEvent: (event: string, data: unknown) => void) => {
     const lines = chunk.split(/\r?\n/)
     let event = 'message'
     const dataLines: string[] = []
@@ -145,13 +148,14 @@ export function streamLLMChat(opts: StreamOptions): StreamHandle {
     let completed = false
     let billedThisStream = false
 
-    const onEvent = (event: string, data: any) => {
-      if (event === 'meta' && data && data.billed === true) {
+    const onEvent = (event: string, data: unknown) => {
+      const payload = asUnknownRecord(data)
+      if (event === 'meta' && payload.billed === true) {
         billedThisStream = true
         return
       }
       if (event === 'delta') {
-        const delta = String(data?.delta || '')
+        const delta = String(payload.delta || '')
         if (!delta) return
         sawDelta = true
         fullText += delta
@@ -159,8 +163,8 @@ export function streamLLMChat(opts: StreamOptions): StreamHandle {
         return
       }
       if (event === 'done') {
-        if (data && (data.billed === true || (Number(data.charge_amount) || 0) > 0)) billedThisStream = true
-        const final = String(data?.content || fullText || '').trim()
+        if (payload.billed === true || (Number(payload.charge_amount) || 0) > 0) billedThisStream = true
+        const final = String(payload.content || fullText || '').trim()
         if (final && final !== fullText) {
           const delta = final.slice(fullText.length)
           fullText = final
@@ -170,7 +174,7 @@ export function streamLLMChat(opts: StreamOptions): StreamHandle {
         return
       }
       if (event === 'error') {
-        throw new Error(String(data?.error || data || '流式生成失败'))
+        throw new Error(String(payload.error || data || '流式生成失败'))
       }
     }
 
@@ -204,19 +208,19 @@ export function streamLLMChat(opts: StreamOptions): StreamHandle {
   const done = (async () => {
     try {
       return await runSse()
-    } catch (e: any) {
+    } catch (e: unknown) {
       if (ctrl.signal.aborted) {
         opts.onDone?.('', true)
         return { content: '', aborted: true }
       }
       try {
         return await runFallback()
-      } catch (fallbackErr: any) {
+      } catch (fallbackErr: unknown) {
         if (ctrl.signal.aborted) {
           opts.onDone?.('', true)
           return { content: '', aborted: true }
         }
-        const err = fallbackErr instanceof Error ? fallbackErr : new Error(String(fallbackErr?.message || fallbackErr || e))
+        const err = fallbackErr instanceof Error ? fallbackErr : new Error(String(fallbackErr || e))
         opts.onError?.(err)
         throw err
       }

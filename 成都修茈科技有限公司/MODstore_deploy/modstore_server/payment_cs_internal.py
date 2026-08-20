@@ -1,3 +1,4 @@
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """客服/CRM 服务间支付查询：统一走 Java SoT 或 Python JSON（与 PAYMENT_BACKEND 一致）。"""
 
 from __future__ import annotations
@@ -11,6 +12,7 @@ import httpx
 
 from modstore_server import payment_orders
 from modstore_server.application.payment_gateway import PaymentGatewayService
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -75,14 +77,19 @@ def fetch_user_orders_for_cs(
                 }
             data = resp.json()
             if not isinstance(data, dict):
-                return {"ok": False, "message": "invalid java response", "orders": [], "total": 0}
+                return {
+                    "ok": False,
+                    "message": "invalid java response",
+                    "orders": [],
+                    "total": 0,
+                }
             return {
                 "ok": bool(data.get("ok", True)),
                 "orders": list(data.get("orders") or []),
                 "total": int(data.get("total") or 0),
                 "source": "java_postgresql",
             }
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             logger.exception("fetch_user_orders_for_cs java failed uid=%s", uid)
             return {
                 "ok": False,

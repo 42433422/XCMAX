@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentTaskSummary } from '@/api/agentRuns'
-import {
-  taskNeedsApproval,
-  taskProgressPercent,
-  taskStatusLabel,
-  taskUnreadCount,
-} from './taskWorkspacePresentation'
+import { taskNeedsApproval, taskProgressPercent, taskStatusLabel, taskUnreadCount } from './taskWorkspacePresentation'
 
 function task(overrides: Partial<AgentTaskSummary> = {}): AgentTaskSummary {
   return {

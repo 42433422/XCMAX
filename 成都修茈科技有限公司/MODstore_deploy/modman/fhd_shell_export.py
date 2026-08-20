@@ -77,7 +77,10 @@ def build_fhd_shell_mod_rows(library: Path) -> List[Dict[str, Any]]:
     for d in iter_mod_dirs(library):
         data, err = read_manifest(d)
         if err or not data:
-            print(f"[export-fhd-shell] 跳过（manifest 无效）: {d.name}: {err}", file=sys.stderr)
+            print(
+                f"[export-fhd-shell] 跳过（manifest 无效）: {d.name}: {err}",
+                file=sys.stderr,
+            )
             continue
         row = _row_for_manifest(d, data)
         if row:

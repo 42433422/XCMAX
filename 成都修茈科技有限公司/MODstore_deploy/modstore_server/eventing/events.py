@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
+
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 
 @dataclass(frozen=True)
@@ -59,13 +61,13 @@ def new_event(
             ct, cs = current_trace_ids()
             tid = tid or ct
             sp = sp or cs
-        except Exception:  # noqa: BLE001
+        except BOUNDARY_ERRORS:  # noqa: BLE001
             pass
     return DomainEvent(
         event_id=str(uuid4()),
         event_name=event_name,
         event_version=event_version,
-        occurred_at=datetime.now(timezone.utc).isoformat(),
+        occurred_at=datetime.now(UTC).isoformat(),
         producer=producer,
         idempotency_key=idempotency_key or f"{event_name}:{subject_id}",
         subject_id=subject_id,

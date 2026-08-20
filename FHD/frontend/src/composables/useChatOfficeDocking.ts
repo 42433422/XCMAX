@@ -31,11 +31,7 @@ type OfficeDockingIntentId =
   | 'customer_product'
   | 'generic_table'
   | 'document'
-type OfficeDockingDatabaseAction =
-  | ''
-  | 'attendance_import'
-  | 'shipment_etl_execute'
-  | 'customer_product_import'
+type OfficeDockingDatabaseAction = '' | 'attendance_import' | 'shipment_etl_execute' | 'customer_product_import'
 
 export type ShipmentEtlNotePreview = {
   sheet_name?: string
@@ -150,7 +146,9 @@ function truncate(text: string, max = 6000): string {
 }
 
 function compactText(value: unknown): string {
-  return String(value || '').replace(/\s+/g, '').trim()
+  return String(value || '')
+    .replace(/\s+/g, '')
+    .trim()
 }
 
 function excelSheetNames(analysis?: Record<string, unknown>): string[] {
@@ -212,13 +210,12 @@ function inferOfficeDockingIntent(item: {
   const hasMonthly = sheets.includes('月度统计')
   const hasDingtalk = sheets.includes('每日统计') || sheets.includes('原始记录')
   const hasRosterFields = ['部门', '性质', '姓名'].filter((key) => haystack.includes(key)).length >= 2
-  const hasProductFields = ['客户', '购买单位', '购货单位', '产品', '品名', '型号', '规格', '单价', '价格']
-    .filter((key) => haystack.includes(key)).length >= 3
-  const looksLikeDeliveryNote = (
-    (haystack.includes('送货单') || haystack.includes('发货单'))
-    && (haystack.includes('购货单位') || haystack.includes('购买单位') || haystack.includes('客户'))
-    && ['型号', '品名', '产品名称', '数量'].filter((key) => haystack.includes(key)).length >= 2
-  )
+  const hasProductFields =
+    ['客户', '购买单位', '购货单位', '产品', '品名', '型号', '规格', '单价', '价格'].filter((key) => haystack.includes(key)).length >= 3
+  const looksLikeDeliveryNote =
+    (haystack.includes('送货单') || haystack.includes('发货单')) &&
+    (haystack.includes('购货单位') || haystack.includes('购买单位') || haystack.includes('客户')) &&
+    ['型号', '品名', '产品名称', '数量'].filter((key) => haystack.includes(key)).length >= 2
 
   if ((hasMingxi && (hasMonthly || hasRosterFields)) || file.includes('考勤转换结果')) {
     return {
@@ -279,10 +276,7 @@ function inferOfficeDockingIntent(item: {
   }
 }
 
-function applyShipmentEtlIntent(
-  item: ChatOfficeDockingReviewItem,
-  preview: ShipmentEtlPreview,
-): void {
+function applyShipmentEtlIntent(item: ChatOfficeDockingReviewItem, preview: ShipmentEtlPreview): void {
   const notes = asArray<ShipmentEtlNotePreview>(preview.notes)
   const noteCount = Number(preview.note_count || notes.length) || notes.length
   const units = [...new Set(notes.map((n) => asString(n.unit_name).trim()).filter(Boolean))].slice(0, 3)
@@ -294,8 +288,7 @@ function applyShipmentEtlIntent(
   }
   item.intentId = 'shipment_delivery'
   item.intentLabel = '送货单/发货单'
-  item.intentSummary = asString(preview.message).trim()
-    || `内容指纹识别到 ${noteCount} 张送货单，确认后写入客户、产品与发货单`
+  item.intentSummary = asString(preview.message).trim() || `内容指纹识别到 ${noteCount} 张送货单，确认后写入客户、产品与发货单`
   item.databaseTargetLabel = '客户/产品/发货单'
   item.databaseAction = 'shipment_etl_execute'
   item.databaseDisabledReason = ''
@@ -306,10 +299,7 @@ function applyShipmentEtlIntent(
     item.warnings = [...item.warnings, `其中 ${dup} 张疑似已导入（幂等将跳过）`]
   }
   if (preview.ledger_risk) {
-    item.warnings = [
-      ...item.warnings,
-      `同文件另有约 ${Number(preview.ledger_available_count || 0)} 组历史流水未纳入本次导入`,
-    ]
+    item.warnings = [...item.warnings, `同文件另有约 ${Number(preview.ledger_available_count || 0)} 组历史流水未纳入本次导入`]
   }
   if (units.length) {
     item.fieldNames = [...new Set(['购货单位', '型号', '品名', '数量', ...item.fieldNames])].slice(0, 80)
@@ -325,10 +315,7 @@ function applyShipmentEtlIntent(
   if (itemCount > 0) item.rowCount = Math.max(item.rowCount, itemCount)
 }
 
-async function previewShipmentExcelEtl(
-  filePath: string,
-  workspaceRoot?: string,
-): Promise<ShipmentEtlPreview | null> {
+async function previewShipmentExcelEtl(filePath: string, workspaceRoot?: string): Promise<ShipmentEtlPreview | null> {
   const path = asString(filePath).trim()
   if (!path) return null
   await primeCsrfCookie()
@@ -377,18 +364,13 @@ function stringifyPreview(value: unknown, max = 6000): string {
 }
 
 function rowsToGrid(columns: string[], rows: Record<string, unknown>[]): unknown[][] {
-  return [
-    columns,
-    ...rows.slice(0, 20).map((row) => columns.map((col) => row[col] ?? '')),
-  ]
+  return [columns, ...rows.slice(0, 20).map((row) => columns.map((col) => row[col] ?? ''))]
 }
 
-function buildCsvExcelAnalysis(
-  upload: OfficeFileUploadResult,
-  csvData: Record<string, unknown>,
-  summary: string,
-): Record<string, unknown> {
-  const columns = asArray<unknown>(csvData.columns).map((c) => asString(c).trim()).filter(Boolean)
+function buildCsvExcelAnalysis(upload: OfficeFileUploadResult, csvData: Record<string, unknown>, summary: string): Record<string, unknown> {
+  const columns = asArray<unknown>(csvData.columns)
+    .map((c) => asString(c).trim())
+    .filter(Boolean)
   const rows = asArray<Record<string, unknown>>(csvData.rows).map((row) => asRecord(row))
   const sheet = {
     sheet_index: 1,
@@ -447,7 +429,9 @@ function extractFieldNames(analysis?: Record<string, unknown>): string[] {
 
 function extractSampleRows(analysis?: Record<string, unknown>): Record<string, unknown>[] {
   const preview = asRecord(analysis?.preview_data)
-  return asArray<Record<string, unknown>>(preview.sample_rows).map((row) => asRecord(row)).slice(0, 8)
+  return asArray<Record<string, unknown>>(preview.sample_rows)
+    .map((row) => asRecord(row))
+    .slice(0, 8)
 }
 
 function buildPptText(jsonData: Record<string, unknown>): string {
@@ -544,9 +528,7 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
   const officeDockingProcessing = ref(false)
   const officeDockingPanelOpen = ref(false)
   const officeDockingReviewItems = ref<ChatOfficeDockingReviewItem[]>([])
-  const officeDockingPendingCount = computed(
-    () => officeDockingReviewItems.value.filter((item) => item.status === 'ready').length,
-  )
+  const officeDockingPendingCount = computed(() => officeDockingReviewItems.value.filter((item) => item.status === 'ready').length)
 
   function triggerOfficeDocking() {
     if (officeDockingProcessing.value) return
@@ -601,23 +583,19 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
       item.upload = upload
       item.summary = `已上传，正在由 ${item.employeeLabel} 读取...`
       touchItems()
-      const employeeData = await runOfficeEmployeeRead(
-        employeeId,
-        upload.file_path,
-        upload.workspace_root,
-        { outputRelpath: outputRelpathFor(item.id, employeeId) },
-      )
+      const employeeData = await runOfficeEmployeeRead(employeeId, upload.file_path, upload.workspace_root, {
+        outputRelpath: outputRelpathFor(item.id, employeeId),
+      })
       const warnings = [
-        ...asArray<unknown>(employeeData.warnings).map((w) => asString(w)).filter(Boolean),
+        ...asArray<unknown>(employeeData.warnings)
+          .map((w) => asString(w))
+          .filter(Boolean),
         ...asArray<Record<string, unknown>>(employeeData.items)
           .flatMap((row) => asArray<unknown>(row.warnings).map((w) => asString(w)))
           .filter(Boolean),
       ]
       item.warnings = warnings
-      const outputs = await readOfficeEmployeeOutputs(
-        upload.workspace_root,
-        collectEmployeeOutputPaths(employeeData),
-      )
+      const outputs = await readOfficeEmployeeOutputs(upload.workspace_root, collectEmployeeOutputPaths(employeeData))
       item.outputFiles = outputs
       const jsonData = firstJsonData(outputs)
       const textData = firstText(outputs)
@@ -656,19 +634,15 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
       item.databaseDisabledReason = intent.databaseDisabledReason
       item.selectedDatabase = intent.selectedDatabase
 
-      const canRunShipmentEtl = (
-        Boolean(item.upload?.file_path)
-        && item.excelAnalysis
-        && item.intentId !== 'attendance_roster'
-        && item.intentId !== 'attendance_source'
-        && (employeeId === EXCEL_FULL_READ_EMPLOYEE_ID || employeeId === CSV_FULL_READ_EMPLOYEE_ID)
-      )
+      const canRunShipmentEtl =
+        Boolean(item.upload?.file_path) &&
+        item.excelAnalysis &&
+        item.intentId !== 'attendance_roster' &&
+        item.intentId !== 'attendance_source' &&
+        (employeeId === EXCEL_FULL_READ_EMPLOYEE_ID || employeeId === CSV_FULL_READ_EMPLOYEE_ID)
       if (canRunShipmentEtl) {
         try {
-          const shipmentPreview = await previewShipmentExcelEtl(
-            item.upload!.file_path,
-            item.upload!.workspace_root,
-          )
+          const shipmentPreview = await previewShipmentExcelEtl(item.upload!.file_path, item.upload!.workspace_root)
           if (shipmentPreview) applyShipmentEtlIntent(item, shipmentPreview)
         } catch {
           // 预览失败不阻断办公对接；仍保留字段启发式意图
@@ -698,10 +672,7 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
     officeDockingPanelOpen.value = true
     officeDockingProcessing.value = true
     officeDockingReviewItems.value = []
-    await deps.addAndSaveMessage(
-      `[对接] 已收到 ${files.length} 个文件，开始调用办公员工识别。`,
-      'ai',
-    )
+    await deps.addAndSaveMessage(`[对接] 已收到 ${files.length} 个文件，开始调用办公员工识别。`, 'ai')
     try {
       for (const file of files) {
         await analyzeFile(file)
@@ -722,12 +693,13 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
   }
 
   async function confirmOfficeDockingReview() {
-    const ready = officeDockingReviewItems.value.filter((item) => (
-      item.status === 'ready'
-      && item.commitStatus !== 'committed'
-      && item.commitStatus !== 'committing'
-      && (item.selectedKnowledge || item.selectedDatabase)
-    ))
+    const ready = officeDockingReviewItems.value.filter(
+      (item) =>
+        item.status === 'ready' &&
+        item.commitStatus !== 'committed' &&
+        item.commitStatus !== 'committing' &&
+        (item.selectedKnowledge || item.selectedDatabase),
+    )
     if (!ready.length) return
     for (const item of ready) {
       item.commitStatus = 'committing'

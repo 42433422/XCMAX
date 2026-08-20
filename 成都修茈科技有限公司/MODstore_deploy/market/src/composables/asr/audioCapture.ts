@@ -8,9 +8,7 @@ const BASE = import.meta.env.BASE_URL || '/'
 function preferScriptProcessorCapture(): boolean {
   if (typeof navigator === 'undefined') return false
   const ua = navigator.userAgent
-  const ios =
-    /iPad|iPhone|iPod/.test(ua) ||
-    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  const ios = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
   const android = /Android/i.test(ua)
   return ios || android
 }
@@ -235,16 +233,42 @@ export class AudioCapture {
       cancelAnimationFrame(this.rafId)
       this.rafId = 0
     }
-    try { this.workletNode?.disconnect() } catch { /* */ }
-    try { this.processor?.disconnect() } catch { /* */ }
-    try { this.analyser?.disconnect() } catch { /* */ }
-    try { this.mute?.disconnect() } catch { /* */ }
-    try { this.source?.disconnect() } catch { /* */ }
-    try { this.ctx?.close() } catch { /* */ }
+    try {
+      this.workletNode?.disconnect()
+    } catch {
+      /* */
+    }
+    try {
+      this.processor?.disconnect()
+    } catch {
+      /* */
+    }
+    try {
+      this.analyser?.disconnect()
+    } catch {
+      /* */
+    }
+    try {
+      this.mute?.disconnect()
+    } catch {
+      /* */
+    }
+    try {
+      this.source?.disconnect()
+    } catch {
+      /* */
+    }
+    try {
+      this.ctx?.close()
+    } catch {
+      /* */
+    }
     if (this.ownsStream) {
       try {
         this.stream?.getTracks().forEach((t) => t.stop())
-      } catch { /* */ }
+      } catch {
+        /* */
+      }
     }
     this.workletNode = null
     this.processor = null
@@ -271,11 +295,7 @@ export function float32ToInt16(f32: Float32Array): Int16Array {
 }
 
 /** 将 PCM 重采样到目标采样率（FunASR/Vosk 需要 16kHz） */
-export function resampleFloat32(
-  input: Float32Array,
-  fromRate: number,
-  toRate = 16000,
-): Float32Array {
+export function resampleFloat32(input: Float32Array, fromRate: number, toRate = 16000): Float32Array {
   if (!input.length || fromRate === toRate) return input
   const ratio = fromRate / toRate
   const outLen = Math.max(1, Math.floor(input.length / ratio))

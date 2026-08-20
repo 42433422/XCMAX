@@ -33,9 +33,7 @@ describe('useEtlTemplateSelection', () => {
       targetType,
     })
 
-    expect(selection.compatibleTemplates.value.map((item) => item.id)).toEqual([
-      'customer-products-1',
-    ])
+    expect(selection.compatibleTemplates.value.map((item) => item.id)).toEqual(['customer-products-1'])
 
     selection.templateSelection.value = 'template:customer-products-1'
     await Promise.resolve()
@@ -83,9 +81,7 @@ describe('useEtlTemplateSelection', () => {
     const targetType = ref('customers')
     const selection = useEtlTemplateSelection({
       capabilities: ref({
-        compatibility_presets: [
-          { id: 'legacy-customers', target_type: 'customers', label: '客户预设' },
-        ],
+        compatibility_presets: [{ id: 'legacy-customers', target_type: 'customers', label: '客户预设' }],
       } as never),
       templates: ref([]),
       targetType,

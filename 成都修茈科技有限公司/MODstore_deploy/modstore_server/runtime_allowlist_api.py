@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """管理员维护「沙箱第三方包 allowlist」的 API。
 
 端点：

@@ -5,11 +5,12 @@
 扩展 register_all_neuro_domains，添加 Product 和 Shipment 领域。
 """
 
-import logging
 import asyncio
+import logging
 from typing import Optional
 
-from app.neuro_bus.bus import get_neuro_bus, NeuroBus
+from app.neuro_bus.bus import NeuroBus, get_neuro_bus
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ async def register_all_neuro_domains_v2(bus: Optional[NeuroBus] = None) -> None:
 
         register_all_neuro_domains()
         logger.info("[NeuroDomainRegistration] 原有领域处理器注册完成")
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         logger.warning(f"[NeuroDomainRegistration] 原有领域注册失败或部分失败: {e}")
 
     # 2. 注册 Product 领域处理器
@@ -42,7 +43,7 @@ async def register_all_neuro_domains_v2(bus: Optional[NeuroBus] = None) -> None:
 
         register_product_domain_handlers(bus)
         logger.info("[NeuroDomainRegistration] Product 领域处理器注册完成")
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         logger.error(f"[NeuroDomainRegistration] Product 领域注册失败: {e}")
 
     # 3. 注册 Shipment 领域处理器
@@ -51,7 +52,7 @@ async def register_all_neuro_domains_v2(bus: Optional[NeuroBus] = None) -> None:
 
         register_shipment_domain_handlers(bus)
         logger.info("[NeuroDomainRegistration] Shipment 领域处理器注册完成")
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         logger.error(f"[NeuroDomainRegistration] Shipment 领域注册失败: {e}")
 
     logger.info("[NeuroDomainRegistration] 所有领域处理器注册完成 V2")

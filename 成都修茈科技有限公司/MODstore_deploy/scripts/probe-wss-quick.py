@@ -4,6 +4,8 @@ import sys
 
 import websockets
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 
 async def main() -> None:
     base = sys.argv[1] if len(sys.argv) > 1 else "wss://xiu-ci.com"
@@ -17,7 +19,7 @@ async def main() -> None:
             async with websockets.connect(url, open_timeout=12) as ws:
                 msg = await asyncio.wait_for(ws.recv(), timeout=8)
                 print(f"OK {path} -> {msg[:100]}")
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             print(f"FAIL {path} -> {exc}")
 
 

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """COVERAGE_RAMP Phase 6 round 22: backend medium-coverage modules.
 
 补充覆盖以下模块的未覆盖分支（已有部分覆盖于 phase6_p7-p11）：
@@ -353,12 +354,14 @@ class TestAiAssistantBranches:
         # unit_name 不应被修改
         assert mock_unit.unit_name == "原单位"
 
-    def test_compat_print_shipment_file_with_printer_name(self) -> None:
+    def test_compat_print_shipment_file_with_printer_name(self, tmp_path: Path) -> None:
         """打印文件时使用 printer_name 字段。"""
         client = _ai_assistant_client()
+        output_dir = tmp_path / "shipment_outputs"
+        output_dir.mkdir()
+        (output_dir / "foo.docx").write_bytes(b"docx")
         with (
-            patch("app.utils.path_utils.get_app_data_dir", return_value="/tmp/app"),
-            patch("os.path.exists", return_value=True),
+            patch("app.utils.path_io.path_utils.get_app_data_dir", return_value=str(tmp_path)),
             patch.object(ai_assistant, "_printer_svc") as mock_svc_get,
         ):
             mock_svc = MagicMock()
@@ -372,12 +375,14 @@ class TestAiAssistantBranches:
         call_kwargs = mock_svc.print_document.call_args.kwargs
         assert call_kwargs["printer_name"] == "HP-LaserJet"
 
-    def test_compat_print_shipment_file_with_printer_field_fallback(self) -> None:
+    def test_compat_print_shipment_file_with_printer_field_fallback(self, tmp_path: Path) -> None:
         """printer 字段作为 printer_name 的回退。"""
         client = _ai_assistant_client()
+        output_dir = tmp_path / "shipment_outputs"
+        output_dir.mkdir()
+        (output_dir / "foo.docx").write_bytes(b"docx")
         with (
-            patch("app.utils.path_utils.get_app_data_dir", return_value="/tmp/app"),
-            patch("os.path.exists", return_value=True),
+            patch("app.utils.path_io.path_utils.get_app_data_dir", return_value=str(tmp_path)),
             patch.object(ai_assistant, "_printer_svc") as mock_svc_get,
         ):
             mock_svc = MagicMock()
@@ -2289,7 +2294,7 @@ class TestModsRoutesBranches:
             resp = client.get("/api/mods")
         body = resp.json()
         assert body["success"] is False
-        assert "mm boom" in body["error"]
+        assert body["error"] == "扩展服务暂时不可用，请稍后重试"
 
     def test_loading_status_load_mismatch_when_scanned_but_not_loaded(self) -> None:
         """scanned > 0 但 mods_loaded=0 → load_mismatch=True。"""
@@ -2410,7 +2415,7 @@ class TestModsRoutesBranches:
         assert resp.status_code == 500
         body = resp.json()
         assert body["success"] is False
-        assert "mm boom" in body["error"]
+        assert body["error"] == "扩展服务暂时不可用，请稍后重试"
 
     def test_uninstall_mod_success(self) -> None:
         """uninstall_mod 成功。"""
@@ -2452,7 +2457,7 @@ class TestModsRoutesBranches:
         assert resp.status_code == 500
         body = resp.json()
         assert body["success"] is False
-        assert "uninstall boom" in body["message"]
+        assert body["message"] == "扩展服务暂时不可用，请稍后重试"
 
     def test_employee_pack_config_preview_default_mods_root_import_error(
         self,

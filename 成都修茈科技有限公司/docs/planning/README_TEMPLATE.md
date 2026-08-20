@@ -8,16 +8,18 @@
 ✅ **智能解析**: 自动识别表格、字段、数据类型和占位符  
 ✅ **一键上传**: 简单快捷的上传流程  
 ✅ **完整 API**: RESTful API 支持 CRUD 操作  
-✅ **单元测试**: 17 个测试用例，100% 通过  
+✅ **单元测试**: 17 个测试用例，100% 通过
 
 ## 快速开始
 
 ### 1. 启动服务
+
 ```bash
 uvicorn backend.http_app:app --reload
 ```
 
 ### 2. 上传模板
+
 ```bash
 curl -X POST "http://localhost:8000/api/templates/upload" \
   -F "file=@template.xlsx" \
@@ -26,26 +28,28 @@ curl -X POST "http://localhost:8000/api/templates/upload" \
 ```
 
 ### 3. 运行演示
+
 ```bash
 python scripts/demo_template_upload.py
 ```
 
 ## API 端点
 
-| 方法 | 端点 | 说明 |
-|------|------|------|
-| POST | `/api/templates/upload` | 上传模板 |
-| GET | `/api/templates` | 获取模板列表 |
-| GET | `/api/templates/{id}` | 获取模板详情 |
-| PUT | `/api/templates/{id}` | 更新模板 |
-| PUT | `/api/templates/{id}/fields` | 更新字段配置 |
-| DELETE | `/api/templates/{id}` | 删除模板 |
+| 方法   | 端点                         | 说明         |
+| ------ | ---------------------------- | ------------ |
+| POST   | `/api/templates/upload`      | 上传模板     |
+| GET    | `/api/templates`             | 获取模板列表 |
+| GET    | `/api/templates/{id}`        | 获取模板详情 |
+| PUT    | `/api/templates/{id}`        | 更新模板     |
+| PUT    | `/api/templates/{id}/fields` | 更新字段配置 |
+| DELETE | `/api/templates/{id}`        | 删除模板     |
 
 完整文档：http://localhost:8000/docs
 
 ## 示例代码
 
 ### Python
+
 ```python
 import requests
 
@@ -62,17 +66,18 @@ print(response.json())
 ```
 
 ### JavaScript
+
 ```javascript
-const formData = new FormData();
-formData.append('file', fileInput.files[0]);
-formData.append('type', 'excel');
+const formData = new FormData()
+formData.append('file', fileInput.files[0])
+formData.append('type', 'excel')
 
 fetch('http://localhost:8000/api/templates/upload', {
   method: 'POST',
-  body: formData
+  body: formData,
 })
-.then(r => r.json())
-.then(console.log);
+  .then((r) => r.json())
+  .then(console.log)
 ```
 
 ## 核心模块
@@ -117,13 +122,13 @@ python -m pytest backend/tests/test_template_upload.py::TestExcelParser -v
 
 ## 字段类型自动推断
 
-| 类型 | 识别关键词 |
-|------|-----------|
-| date | 日期、date、时间 |
-| number | 金额、价格、price |
-| integer | 数量、qty、count |
-| phone | 电话、手机、phone |
-| email | 邮箱、email、@ |
+| 类型    | 识别关键词        |
+| ------- | ----------------- |
+| date    | 日期、date、时间  |
+| number  | 金额、价格、price |
+| integer | 数量、qty、count  |
+| phone   | 电话、手机、phone |
+| email   | 邮箱、email、@    |
 
 ## 文件限制
 
@@ -136,7 +141,7 @@ python -m pytest backend/tests/test_template_upload.py::TestExcelParser -v
 ✅ MIME 类型校验  
 ✅ 文件大小限制  
 ✅ 路径遍历防护  
-✅ 隔离存储目录  
+✅ 隔离存储目录
 
 ## 许可证
 
@@ -144,4 +149,4 @@ python -m pytest backend/tests/test_template_upload.py::TestExcelParser -v
 
 ---
 
-*最后更新：2026-04-12*
+_最后更新：2026-04-12_

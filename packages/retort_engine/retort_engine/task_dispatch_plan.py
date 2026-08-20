@@ -4,7 +4,7 @@ import json
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.history import RetortHistoryStore
 from retort_engine.models import EmployeeTaskRecord, ImprovementTask
@@ -77,10 +77,11 @@ def _latest_llm_employee_tasks(root: Path) -> list[dict[str, Any]]:
             payload = json.loads(line)
         except json.JSONDecodeError:
             continue
-        result = (
+        result = cast(
+            dict[str, Any],
             payload.get("json_result")
             if isinstance(payload.get("json_result"), dict)
-            else {}
+            else {},
         )
         current = [
             item

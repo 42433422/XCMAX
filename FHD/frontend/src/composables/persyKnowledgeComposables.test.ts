@@ -47,13 +47,7 @@ function memory(memoryId: string, status: 'pending' | 'active', strength: number
 describe('Persy knowledge composables', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    for (const action of [
-      mocks.confirmMemory,
-      mocks.rejectMemory,
-      mocks.updateMemory,
-      mocks.deleteMemory,
-      mocks.rebuildIndex,
-    ]) {
+    for (const action of [mocks.confirmMemory, mocks.rejectMemory, mocks.updateMemory, mocks.deleteMemory, mocks.rebuildIndex]) {
       action.mockResolvedValue({ success: true })
     }
   })
@@ -100,21 +94,13 @@ describe('Persy knowledge composables', () => {
     await governance.deleteMemory(pending)
 
     expect(mocks.confirmMemory).toHaveBeenCalledWith('persy-knowledge', 'm-pending')
-    expect(mocks.rejectMemory).toHaveBeenCalledWith(
-      'persy-knowledge',
-      'm-pending',
-      'user_rejected_from_persy',
-    )
+    expect(mocks.rejectMemory).toHaveBeenCalledWith('persy-knowledge', 'm-pending', 'user_rejected_from_persy')
     expect(mocks.updateMemory).toHaveBeenCalledWith(
       'persy-knowledge',
       'm-pending',
       expect.objectContaining({ reason: 'user_corrected_from_persy' }),
     )
-    expect(mocks.deleteMemory).toHaveBeenCalledWith(
-      'persy-knowledge',
-      'm-pending',
-      'user_deleted_from_persy',
-    )
+    expect(mocks.deleteMemory).toHaveBeenCalledWith('persy-knowledge', 'm-pending', 'user_deleted_from_persy')
     expect(selectMemory).toHaveBeenCalled()
     expect(setIngestMessage).toHaveBeenLastCalledWith('记忆已删除')
   })

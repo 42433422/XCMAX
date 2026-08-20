@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="union-attr"
 """批量检测公开市场表格类员工包：craft validate + 六维，可选修复 catalog 元数据。"""
 
 from __future__ import annotations

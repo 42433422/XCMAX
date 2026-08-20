@@ -136,13 +136,15 @@ class HybridRetriever:
         self._chunks = list(chunks)
         self._chunk_texts = [c.text for c in chunks]
         self._bm25.fit(self._chunk_texts)
-        precomputed = [
-            (c.metadata or {}).get("_embedding")
-            for c in chunks
-            if isinstance((c.metadata or {}).get("_embedding"), list)
-        ]
+        precomputed: list[list[Any]] = []
+        for chunk in chunks:
+            embedding = (chunk.metadata or {}).get("_embedding")
+            if isinstance(embedding, list):
+                precomputed.append(embedding)
         if len(precomputed) == len(chunks) and chunks:
-            self._embeddings = [[float(value) for value in embedding] for embedding in precomputed]
+            self._embeddings = [
+                [float(value) for value in embedding] for embedding in (precomputed or [])
+            ]
         elif self._embedder is not None:
             try:
                 self._embeddings = [self._embedder(c.text) for c in chunks]

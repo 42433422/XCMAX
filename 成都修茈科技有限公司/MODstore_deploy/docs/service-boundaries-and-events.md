@@ -45,13 +45,13 @@ HTTP 投递头：
 - Python: `modstore_server/eventing/contracts.py`
 - Java: `com.modstore.event.EventContracts`
 
-| 事件 | 版本 | 聚合 | 发布方 | 关键字段 |
-| --- | --- | --- | --- | --- |
-| `payment.paid` | 1 | payment_order | Python 或 Java | `out_trade_no`, `user_id`, `subject`, `total_amount`, `order_kind` |
-| `wallet.balance_changed` | 1 | wallet | Python | `user_id`, `amount`, `source_order_id`, `transaction_type` |
-| `refund.approved` | 1 | refund | Python | `refund_id`, `order_no`, `user_id`, `amount`, `status` |
-| `refund.rejected` | 1 | refund | Python | `refund_id`, `order_no`, `user_id`, `amount`, `status` |
-| `refund.failed` | 1 | refund | Python | `refund_id`, `order_no`, `user_id`, `amount`, `status` |
+| 事件                     | 版本 | 聚合          | 发布方         | 关键字段                                                           |
+| ------------------------ | ---- | ------------- | -------------- | ------------------------------------------------------------------ |
+| `payment.paid`           | 1    | payment_order | Python 或 Java | `out_trade_no`, `user_id`, `subject`, `total_amount`, `order_kind` |
+| `wallet.balance_changed` | 1    | wallet        | Python         | `user_id`, `amount`, `source_order_id`, `transaction_type`         |
+| `refund.approved`        | 1    | refund        | Python         | `refund_id`, `order_no`, `user_id`, `amount`, `status`             |
+| `refund.rejected`        | 1    | refund        | Python         | `refund_id`, `order_no`, `user_id`, `amount`, `status`             |
+| `refund.failed`          | 1    | refund        | Python         | `refund_id`, `order_no`, `user_id`, `amount`, `status`             |
 
 `payment.order_paid` 是 legacy alias，发布时会规范化为 `payment.paid`。
 

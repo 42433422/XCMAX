@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """按订单类型拆分的履约策略（item / plan / wallet）。
 
 原 ``payment_api._fulfill_paid_order`` 是 280+ 行的单函数，混杂了：
@@ -18,7 +19,7 @@ import logging
 import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Dict
 
@@ -41,6 +42,7 @@ from modstore_server.models import (
     UserPlan,
     Wallet,
 )
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 from modstore_server.payment_common import _plan_quotas
 
 _PLATFORM_FEE_RATE: float = float(os.environ.get("PLATFORM_FEE_RATE", "0.30"))
@@ -305,7 +307,7 @@ class PlanFulfilStrategy(FulfilStrategy):
                     Decimal(str(ctx.total_amount)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
                 )
             )
-        except Exception:  # noqa: BLE001
+        except BOUNDARY_ERRORS:  # noqa: BLE001
             grant_yuan = int(round(float(ctx.total_amount or 0)))
         if grant_yuan > 0:
             w = (

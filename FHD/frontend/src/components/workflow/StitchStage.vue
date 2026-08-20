@@ -2,11 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { YuangongStitchHotspot } from '@/constants/yuangongStitchHotspots'
 import type { StitchEmployeePlacement } from '@/constants/yuangongStitchPlacements'
-import {
-  YUANGONG_CANVAS_H,
-  YUANGONG_CANVAS_W,
-  yuangongComposedBaseSizeFromCanvas,
-} from '@/constants/yuangongComposedTrim'
+import { YUANGONG_CANVAS_H, YUANGONG_CANVAS_W, yuangongComposedBaseSizeFromCanvas } from '@/constants/yuangongComposedTrim'
 import { YUANGONG_ENTRY_STITCH_PNG } from '@/constants/yuangongAssets'
 import { useYuangongDeskIntrinsicSize } from '@/composables/useYuangongDeskIntrinsicSize'
 import type { WorkflowEmployeeDeskRow } from '@/composables/useWorkflowEmployeeDesks'
@@ -63,14 +59,10 @@ const { deskW, deskH, deskIntrinsicReady } = useYuangongDeskIntrinsicSize()
 const COMPOSED_DESK_LAYOUT_MAX_DIM = 240
 
 const composedLayoutDeskW = computed(() =>
-  deskW.value > COMPOSED_DESK_LAYOUT_MAX_DIM || deskH.value > COMPOSED_DESK_LAYOUT_MAX_DIM
-    ? YUANGONG_CANVAS_W
-    : deskW.value
+  deskW.value > COMPOSED_DESK_LAYOUT_MAX_DIM || deskH.value > COMPOSED_DESK_LAYOUT_MAX_DIM ? YUANGONG_CANVAS_W : deskW.value,
 )
 const composedLayoutDeskH = computed(() =>
-  deskW.value > COMPOSED_DESK_LAYOUT_MAX_DIM || deskH.value > COMPOSED_DESK_LAYOUT_MAX_DIM
-    ? YUANGONG_CANVAS_H
-    : deskH.value
+  deskW.value > COMPOSED_DESK_LAYOUT_MAX_DIM || deskH.value > COMPOSED_DESK_LAYOUT_MAX_DIM ? YUANGONG_CANVAS_H : deskH.value,
 )
 
 /** 舞台视口宽高（ResizeObserver），用于 composed 动态缩放 */
@@ -78,9 +70,7 @@ const viewportW = ref(0)
 const viewportH = ref(0)
 let viewportResizeObserver: ResizeObserver | null = null
 
-const composedBaseSize = computed(() =>
-  yuangongComposedBaseSizeFromCanvas(composedLayoutDeskW.value, composedLayoutDeskH.value)
-)
+const composedBaseSize = computed(() => yuangongComposedBaseSizeFromCanvas(composedLayoutDeskW.value, composedLayoutDeskH.value))
 const composedBaseW = computed(() => composedBaseSize.value.width)
 const composedBaseH = computed(() => composedBaseSize.value.height)
 
@@ -139,21 +129,13 @@ const composedStationScale = computed(() => {
 const composedCellW = computed(() => composedBaseW.value * composedStationScale.value)
 
 /** 同组 flex 负 margin 重叠比例（须足够大，且工位图可溢出格宽） */
-const composedCellOverlapPx = computed(() =>
-  Math.max(10, Math.round(composedCellW.value * 0.44))
-)
+const composedCellOverlapPx = computed(() => Math.max(10, Math.round(composedCellW.value * 0.44)))
 
-const composedMidGapPx = computed(() =>
-  Math.max(COMPOSED_MID_GAP_MIN_PX, Math.round(composedCellW.value * COMPOSED_MID_GAP_RATIO))
-)
+const composedMidGapPx = computed(() => Math.max(COMPOSED_MID_GAP_MIN_PX, Math.round(composedCellW.value * COMPOSED_MID_GAP_RATIO)))
 
-const isEstablishmentLayout = computed(
-  () => props.mode === 'composed' && props.composedLayout === 'establishment'
-)
+const isEstablishmentLayout = computed(() => props.mode === 'composed' && props.composedLayout === 'establishment')
 
-const composedEstablishmentColGap = computed(() =>
-  Math.max(12, Math.round(composedCellW.value * 0.1))
-)
+const composedEstablishmentColGap = computed(() => Math.max(12, Math.round(composedCellW.value * 0.1)))
 
 const composedStationH = computed(() => composedBaseH.value * composedStationScale.value)
 /** 底部名称条与字号随单格宽度变化，避免大图时 7px 字看不见 */
@@ -201,7 +183,7 @@ const props = withDefaults(
     useComposedPanorama: true,
     visualSkin: 'pixel',
     composedLayout: 'strip',
-  }
+  },
 )
 
 function composedGroupStripWidth(count: number): number {
@@ -264,9 +246,7 @@ const composedPanoramaUrl = computed(() => {
 const showComposedBackdrop = computed(() => isComposed.value && Boolean(composedPanoramaUrl.value))
 
 /** 全景底图加载成功后，空闲格不再叠整张 desk，避免与底图「双工位」 */
-const composedIdleDeskVisible = computed(
-  () => !showComposedBackdrop.value || composedBackdropState.value !== 'ready'
-)
+const composedIdleDeskVisible = computed(() => !showComposedBackdrop.value || composedBackdropState.value !== 'ready')
 
 watch(composedPanoramaUrl, () => {
   composedBackdropState.value = 'idle'
@@ -276,7 +256,7 @@ watch(
   () => props.mode,
   (m) => {
     if (m !== 'composed') composedBackdropState.value = 'idle'
-  }
+  },
 )
 
 const zoom = ref(1)
@@ -548,9 +528,7 @@ function stationAriaLabel(empId: string, row: WorkflowEmployeeDeskRow): string {
   return `员工 ${row.shortName}`
 }
 
-const composedSlots = computed(() =>
-  props.desks.map((row) => ({ empId: row.empId, row }))
-)
+const composedSlots = computed(() => props.desks.map((row) => ({ empId: row.empId, row })))
 
 const composedRows = computed(() => {
   const slots = composedSlots.value
@@ -568,11 +546,7 @@ const establishmentColumns = computed(() => {
     byZone.set(z.id, [])
   }
   for (const slot of slots) {
-    const zid = resolveEnterpriseOrgLayer(
-      slot.empId,
-      slot.row.shortName,
-      slot.row.panelTitle
-    )
+    const zid = resolveEnterpriseOrgLayer(slot.empId, slot.row.shortName, slot.row.panelTitle)
     const list = byZone.get(zid) ?? byZone.get('management')!
     list.push(slot)
   }
@@ -626,14 +600,14 @@ watch(
         scheduleFit()
       }
     })
-  }
+  },
 )
 
 watch(
   () => props.mode,
   () => {
     void nextTick(() => scheduleFit())
-  }
+  },
 )
 
 watch(
@@ -642,7 +616,7 @@ watch(
     if (props.mode === 'composed') {
       void nextTick(() => scheduleFit())
     }
-  }
+  },
 )
 
 watch(
@@ -651,7 +625,7 @@ watch(
     if (props.mode === 'composed') {
       void nextTick(() => clampPan())
     }
-  }
+  },
 )
 
 watch([deskW, deskH], () => {
@@ -679,7 +653,7 @@ watch(
   () => {
     if (props.mode !== 'composed') return
     void nextTick(() => scheduleFit())
-  }
+  },
 )
 </script>
 
@@ -697,9 +671,7 @@ watch(
     "
   >
     <div class="stitch-stage-toolbar" role="toolbar" aria-label="缩放与中键平移说明">
-      <button type="button" class="stitch-stage-btn" :disabled="zoom <= minZoom" @click="zoomOut">
-        缩小
-      </button>
+      <button type="button" class="stitch-stage-btn" :disabled="zoom <= minZoom" @click="zoomOut">缩小</button>
       <label class="stitch-stage-zoom-label">
         <span class="stitch-stage-sr">缩放比例</span>
         <input
@@ -713,12 +685,8 @@ watch(
         />
         <span class="stitch-stage-zoom-readout" aria-hidden="true">{{ zoomPct }}%</span>
       </label>
-      <button type="button" class="stitch-stage-btn" :disabled="zoom >= maxZoom" @click="zoomIn">
-        放大
-      </button>
-      <button type="button" class="stitch-stage-btn stitch-stage-btn--ghost" title="缩放至可见整图" @click="resetZoom">
-        全图
-      </button>
+      <button type="button" class="stitch-stage-btn" :disabled="zoom >= maxZoom" @click="zoomIn">放大</button>
+      <button type="button" class="stitch-stage-btn stitch-stage-btn--ghost" title="缩放至可见整图" @click="resetZoom">全图</button>
       <span class="stitch-stage-hint" aria-hidden="true">中键拖移</span>
     </div>
 
@@ -765,9 +733,7 @@ watch(
                 @load="onComposedBackdropLoad"
                 @error="onComposedBackdropError"
               />
-              <p v-if="!composedSlots.length" class="stitch-composed-empty">
-                暂无工作流员工；请从 MOD 商店安装工作流员工 Mod 后刷新。
-              </p>
+              <p v-if="!composedSlots.length" class="stitch-composed-empty">暂无工作流员工；请从 MOD 商店安装工作流员工 Mod 后刷新。</p>
               <div
                 v-else-if="isEstablishmentLayout"
                 class="stitch-establishment"
@@ -813,7 +779,9 @@ watch(
                     >
                       <div
                         class="stitch-composed-station-wrap"
-                        :class="{ 'stitch-composed-station-wrap--selected': selectedEmpId === slot.empId }"
+                        :class="{
+                          'stitch-composed-station-wrap--selected': selectedEmpId === slot.empId,
+                        }"
                         :style="composedStationWrapStyle"
                       >
                         <span class="stitch-composed-station-vis" aria-hidden="true">
@@ -826,108 +794,112 @@ watch(
                           />
                         </span>
                       </div>
-                      <p class="stitch-composed-label" :title="slot.row.panelTitle">{{ slot.row.shortName }}</p>
+                      <p class="stitch-composed-label" :title="slot.row.panelTitle">
+                        {{ slot.row.shortName }}
+                      </p>
                     </div>
                   </div>
                 </div>
               </div>
               <template v-else>
-              <div
-                v-for="(rowSlots, rowIdx) in composedRows"
-                :key="'cmp-row-' + rowIdx"
-                class="stitch-composed-row"
-                :style="{
-                  width: `${composedRowStripWidth(rowSlots.length)}px`,
-                  height: `${composedTrackH}px`,
-                  top: `${rowIdx * (composedTrackH + COMPOSED_ROW_GAP_PX)}px`,
-                  left: `${(composedStripW - composedRowStripWidth(rowSlots.length)) / 2}px`,
-                }"
-              >
-                <div class="stitch-composed-group">
-                  <div
-                    v-for="(slot, idx) in composedRowGroups(rowSlots).left"
-                    :key="'cmp-' + slot.empId"
-                    class="stitch-composed-cell"
-                    role="button"
-                    tabindex="0"
-                    :aria-label="stationAriaLabel(slot.empId, slot.row)"
-                    :aria-current="selectedEmpId === slot.empId ? 'true' : undefined"
-                    :style="{
-                      width: `${composedCellW}px`,
-                      height: `${composedTrackH}px`,
-                      marginLeft: composedCellOverlapMargin(idx),
-                      zIndex:
-                        selectedEmpId === slot.empId
-                          ? 20
-                          : rowIdx * COMPOSED_SLOTS_PER_ROW + idx + 1,
-                    }"
-                    @click.stop="emit('select', slot.empId)"
-                    @keydown.enter.prevent="emit('select', slot.empId)"
-                  >
-                    <div
-                      class="stitch-composed-station-wrap"
-                      :class="{ 'stitch-composed-station-wrap--selected': selectedEmpId === slot.empId }"
-                      :style="composedStationWrapStyle"
-                    >
-                      <span class="stitch-composed-station-vis" aria-hidden="true">
-                        <YuangongStation
-                          pixel-layout="composed"
-                          :composed-idle-desk-visible="composedIdleDeskVisible"
-                          :enabled="slot.row.enabled"
-                          :busy="stationBusy(slot.row)"
-                          :ariaLabel="stationAriaLabel(slot.empId, slot.row)"
-                        />
-                      </span>
-                    </div>
-                    <p class="stitch-composed-label" :title="slot.row.panelTitle">{{ slot.row.shortName }}</p>
-                  </div>
-                </div>
                 <div
-                  v-if="composedRowGroups(rowSlots).right.length"
-                  class="stitch-composed-aisle"
-                  :style="{ width: `${composedMidGapPx}px` }"
-                  aria-hidden="true"
-                />
-                <div v-if="composedRowGroups(rowSlots).right.length" class="stitch-composed-group">
-                  <div
-                    v-for="(slot, idx) in composedRowGroups(rowSlots).right"
-                    :key="'cmp-' + slot.empId"
-                    class="stitch-composed-cell"
-                    role="button"
-                    tabindex="0"
-                    :aria-label="stationAriaLabel(slot.empId, slot.row)"
-                    :aria-current="selectedEmpId === slot.empId ? 'true' : undefined"
-                    :style="{
-                      width: `${composedCellW}px`,
-                      height: `${composedTrackH}px`,
-                      marginLeft: composedCellOverlapMargin(idx),
-                      zIndex:
-                        selectedEmpId === slot.empId
-                          ? 20
-                          : rowIdx * COMPOSED_SLOTS_PER_ROW + COMPOSED_LEFT_GROUP_SIZE + idx + 1,
-                    }"
-                    @click.stop="emit('select', slot.empId)"
-                    @keydown.enter.prevent="emit('select', slot.empId)"
-                  >
+                  v-for="(rowSlots, rowIdx) in composedRows"
+                  :key="'cmp-row-' + rowIdx"
+                  class="stitch-composed-row"
+                  :style="{
+                    width: `${composedRowStripWidth(rowSlots.length)}px`,
+                    height: `${composedTrackH}px`,
+                    top: `${rowIdx * (composedTrackH + COMPOSED_ROW_GAP_PX)}px`,
+                    left: `${(composedStripW - composedRowStripWidth(rowSlots.length)) / 2}px`,
+                  }"
+                >
+                  <div class="stitch-composed-group">
                     <div
-                      class="stitch-composed-station-wrap"
-                      :class="{ 'stitch-composed-station-wrap--selected': selectedEmpId === slot.empId }"
-                      :style="composedStationWrapStyle"
+                      v-for="(slot, idx) in composedRowGroups(rowSlots).left"
+                      :key="'cmp-' + slot.empId"
+                      class="stitch-composed-cell"
+                      role="button"
+                      tabindex="0"
+                      :aria-label="stationAriaLabel(slot.empId, slot.row)"
+                      :aria-current="selectedEmpId === slot.empId ? 'true' : undefined"
+                      :style="{
+                        width: `${composedCellW}px`,
+                        height: `${composedTrackH}px`,
+                        marginLeft: composedCellOverlapMargin(idx),
+                        zIndex: selectedEmpId === slot.empId ? 20 : rowIdx * COMPOSED_SLOTS_PER_ROW + idx + 1,
+                      }"
+                      @click.stop="emit('select', slot.empId)"
+                      @keydown.enter.prevent="emit('select', slot.empId)"
                     >
-                      <span class="stitch-composed-station-vis" aria-hidden="true">
-                        <YuangongStation
-                          pixel-layout="composed"
-                          :composed-idle-desk-visible="composedIdleDeskVisible"
-                          :enabled="slot.row.enabled"
-                          :busy="stationBusy(slot.row)"
-                          :ariaLabel="stationAriaLabel(slot.empId, slot.row)"
-                        />
-                      </span>
+                      <div
+                        class="stitch-composed-station-wrap"
+                        :class="{
+                          'stitch-composed-station-wrap--selected': selectedEmpId === slot.empId,
+                        }"
+                        :style="composedStationWrapStyle"
+                      >
+                        <span class="stitch-composed-station-vis" aria-hidden="true">
+                          <YuangongStation
+                            pixel-layout="composed"
+                            :composed-idle-desk-visible="composedIdleDeskVisible"
+                            :enabled="slot.row.enabled"
+                            :busy="stationBusy(slot.row)"
+                            :ariaLabel="stationAriaLabel(slot.empId, slot.row)"
+                          />
+                        </span>
+                      </div>
+                      <p class="stitch-composed-label" :title="slot.row.panelTitle">
+                        {{ slot.row.shortName }}
+                      </p>
                     </div>
-                    <p class="stitch-composed-label" :title="slot.row.panelTitle">{{ slot.row.shortName }}</p>
+                  </div>
+                  <div
+                    v-if="composedRowGroups(rowSlots).right.length"
+                    class="stitch-composed-aisle"
+                    :style="{ width: `${composedMidGapPx}px` }"
+                    aria-hidden="true"
+                  />
+                  <div v-if="composedRowGroups(rowSlots).right.length" class="stitch-composed-group">
+                    <div
+                      v-for="(slot, idx) in composedRowGroups(rowSlots).right"
+                      :key="'cmp-' + slot.empId"
+                      class="stitch-composed-cell"
+                      role="button"
+                      tabindex="0"
+                      :aria-label="stationAriaLabel(slot.empId, slot.row)"
+                      :aria-current="selectedEmpId === slot.empId ? 'true' : undefined"
+                      :style="{
+                        width: `${composedCellW}px`,
+                        height: `${composedTrackH}px`,
+                        marginLeft: composedCellOverlapMargin(idx),
+                        zIndex: selectedEmpId === slot.empId ? 20 : rowIdx * COMPOSED_SLOTS_PER_ROW + COMPOSED_LEFT_GROUP_SIZE + idx + 1,
+                      }"
+                      @click.stop="emit('select', slot.empId)"
+                      @keydown.enter.prevent="emit('select', slot.empId)"
+                    >
+                      <div
+                        class="stitch-composed-station-wrap"
+                        :class="{
+                          'stitch-composed-station-wrap--selected': selectedEmpId === slot.empId,
+                        }"
+                        :style="composedStationWrapStyle"
+                      >
+                        <span class="stitch-composed-station-vis" aria-hidden="true">
+                          <YuangongStation
+                            pixel-layout="composed"
+                            :composed-idle-desk-visible="composedIdleDeskVisible"
+                            :enabled="slot.row.enabled"
+                            :busy="stationBusy(slot.row)"
+                            :ariaLabel="stationAriaLabel(slot.empId, slot.row)"
+                          />
+                        </span>
+                      </div>
+                      <p class="stitch-composed-label" :title="slot.row.panelTitle">
+                        {{ slot.row.shortName }}
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
               </template>
             </div>
           </div>
@@ -957,11 +929,7 @@ watch(
             @keydown.enter.prevent="emit('select', placement.empId)"
           >
             <span class="stitch-stage-station-vis" aria-hidden="true">
-              <YuangongStation
-                :enabled="row.enabled"
-                :busy="stationBusy(row)"
-                :ariaLabel="stationAriaLabel(placement.empId, row)"
-              />
+              <YuangongStation :enabled="row.enabled" :busy="stationBusy(row)" :ariaLabel="stationAriaLabel(placement.empId, row)" />
             </span>
           </div>
           <button
@@ -1353,7 +1321,12 @@ watch(
 
 /* —— Office 浅色皮肤：与员工空间 / 六部门编制图对齐 —— */
 .stitch-stage--office .stitch-stage-toolbar {
-  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
   gap: 8px;
 }
 
@@ -1403,8 +1376,7 @@ watch(
   border-radius: 10px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
   background:
-    radial-gradient(ellipse at 50% 100%, rgba(11, 114, 217, 0.07) 0%, transparent 58%),
-    linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+    radial-gradient(ellipse at 50% 100%, rgba(11, 114, 217, 0.07) 0%, transparent 58%), linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
 }
 
 .stitch-stage--office .stitch-stage-viewport:focus-visible {
@@ -1561,4 +1533,3 @@ watch(
   font-size: 8px;
 }
 </style>
-

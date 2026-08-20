@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 """Tests for digest_daily_line_chain (Phase B/C employee wiring)."""
 
 from __future__ import annotations

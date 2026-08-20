@@ -109,13 +109,13 @@ async def metrics() -> Response:
 
 ## Counter / histogram cheat sheet
 
-| Metric | Type | Labels |
-| --- | --- | --- |
-| `vibe_coder_action_total` | counter | `method` |
-| `vibe_coder_action_errors_total` | counter | `method`, `error` |
-| `vibe_coder_action_duration_ms` | histogram | `method` |
-| `agent_react_step_total` | counter | `tool` |
-| `agent_react_step_duration_ms` | histogram | `tool` |
+| Metric                           | Type      | Labels            |
+| -------------------------------- | --------- | ----------------- |
+| `vibe_coder_action_total`        | counter   | `method`          |
+| `vibe_coder_action_errors_total` | counter   | `method`, `error` |
+| `vibe_coder_action_duration_ms`  | histogram | `method`          |
+| `agent_react_step_total`         | counter   | `tool`            |
+| `agent_react_step_duration_ms`   | histogram | `tool`            |
 
 Custom dashboards: register your own counter / gauge / histogram on
 `obs.metrics` and they round-trip through the same Prometheus output:

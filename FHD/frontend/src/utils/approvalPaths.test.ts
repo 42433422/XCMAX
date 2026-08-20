@@ -9,9 +9,7 @@ describe('approvalPaths', () => {
 
   it('maps to mod facade when enabled', () => {
     localStorage.setItem('xcagi_approval_mod_facade_enabled', '1')
-    expect(resolveApprovalApiPath('/api/approval/requests')).toBe(
-      '/api/mod/xcagi-approval-bridge/requests'
-    )
+    expect(resolveApprovalApiPath('/api/approval/requests')).toBe('/api/mod/xcagi-approval-bridge/requests')
     localStorage.removeItem('xcagi_approval_mod_facade_enabled')
   })
 })

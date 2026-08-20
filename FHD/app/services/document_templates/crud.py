@@ -96,7 +96,8 @@ def _create_template_with_payload_inner(payload: dict):
         business_scope = str(
             payload.get("business_scope") or _infer_business_scope(template_type) or ""
         ).strip()
-        fields = payload.get("fields") if isinstance(payload.get("fields"), list) else []
+        raw_fields = payload.get("fields")
+        fields = list(raw_fields) if isinstance(raw_fields, list) else []
         preview_data = (
             payload.get("preview_data") if isinstance(payload.get("preview_data"), dict) else {}
         )
@@ -127,6 +128,8 @@ def _create_template_with_payload_inner(payload: dict):
             "preview_data": preview_data,
         }
         editable_config = fields
+        if not isinstance(preview_data, dict):
+            preview_data = {}
         business_rules = {
             "business_scope": business_scope,
             "source": source,

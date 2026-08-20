@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { mount } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { setActivePinia, createPinia } from 'pinia'
 import LoginView from './LoginView.vue'
@@ -68,6 +68,6 @@ describe('LoginView', () => {
     })
 
     const button = wrapper.find('button[type="submit"]')
-    expect(button.element.disabled).toBe(false)
+    expect((button.element as HTMLButtonElement).disabled).toBe(false)
   })
 })

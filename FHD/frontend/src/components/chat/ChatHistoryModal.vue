@@ -4,12 +4,7 @@
       <div class="modal-header history-modal-header">
         <span>{{ $t('chat.historyTitle') }}</span>
         <div class="history-modal-actions">
-          <button
-            type="button"
-            class="btn btn-secondary btn-sm history-modal-btn"
-            :disabled="historyLoading"
-            @click="$emit('refresh')"
-          >
+          <button type="button" class="btn btn-secondary btn-sm history-modal-btn" :disabled="historyLoading" @click="$emit('refresh')">
             {{ $t('chat.refresh') }}
           </button>
           <button
@@ -26,18 +21,16 @@
             :aria-label="$t('chat.closeHistory')"
             :title="$t('chat.closeHistory')"
             @click="$emit('close')"
-          >×</button>
+          >
+            ×
+          </button>
         </div>
       </div>
       <div class="modal-body history-modal-body">
         <div v-if="historyLoading" class="empty-state">{{ $t('chat.historyLoading') }}</div>
         <div v-else-if="historyError" class="history-error-wrap">
           <div class="history-error-text">{{ historyError }}</div>
-          <button
-            type="button"
-            class="btn btn-secondary btn-sm"
-            @click="$emit('refresh')"
-          >
+          <button type="button" class="btn btn-secondary btn-sm" @click="$emit('refresh')">
             {{ $t('chat.retry') }}
           </button>
         </div>

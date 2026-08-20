@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 初始化项目必要的目录和数据库表
 
@@ -8,7 +7,8 @@
 """
 
 import os
-import sys
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 BASE_DIR = SCRIPT_DIR
@@ -27,7 +27,7 @@ def init_distillation_dirs():
 
     training_data = os.path.join(distillation_root, "training_data.jsonl")
     if not os.path.exists(training_data):
-        with open(training_data, "w", encoding="utf-8") as f:
+        with open(training_data, "w", encoding="utf-8"):
             pass
         print(f"创建文件: {training_data}")
 
@@ -56,7 +56,7 @@ def init_db_tables():
         initialize_databases()
         init_distillation_tables(engine)
         print("数据库表初始化完成")
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"数据库初始化失败: {e}")
         print("注意: 如果数据库已存在此操作是安全的")
 

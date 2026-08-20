@@ -2,16 +2,17 @@
 
 ## 元信息
 
-| 字段 | 值 |
-|------|----|
-| skill_id | `skill-pre-commit-maintain` |
-| 所属员工 | `test-qa-runner` |
-| 业务域 | pre-commit hook 配置维护与代码质量门禁 |
-| 版本 | 1.0.0 |
+| 字段     | 值                                     |
+| -------- | -------------------------------------- |
+| skill_id | `skill-pre-commit-maintain`            |
+| 所属员工 | `test-qa-runner`                       |
+| 业务域   | pre-commit hook 配置维护与代码质量门禁 |
+| 版本     | 1.0.0                                  |
 
 ## 1. 静态阶段
 
 **执行逻辑**：
+
 ```
 1. 读取 .pre-commit-config.yaml 中的现有 hook 列表
 2. 扫描项目实际使用的 linter/formatter：
@@ -24,6 +25,7 @@
 ```
 
 **输出 schema**：
+
 ```json
 {
   "status": "ok | fail",
@@ -39,11 +41,11 @@
 
 ## 2. 动态触发条件
 
-| 触发类型 | 规则 |
-|----------|------|
-| hook 缺失 | `hooks_missing.length > 0` |
+| 触发类型  | 规则                        |
+| --------- | --------------------------- |
+| hook 缺失 | `hooks_missing.length > 0`  |
 | hook 过时 | `hooks_outdated.length > 0` |
-| hook 损坏 | `hooks_broken.length > 0` |
+| hook 损坏 | `hooks_broken.length > 0`   |
 
 ## 3. 动态阶段
 

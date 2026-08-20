@@ -552,7 +552,7 @@ class TestCheckShipmentAssociationsAdditional:
         assert result["has_associations"] is False
         assert result["shipment_count"] == 0
         assert result["sample_records"] == []
-        assert "db error" in result["message"]
+        assert result["message"] == "关联发货记录检查失败"
 
 
 # ---------------------------------------------------------------------------
@@ -1026,7 +1026,8 @@ class TestImportFromExcelLockedAdditional:
         with patch.object(svc, "_get_session", side_effect=RuntimeError("db error")):
             result = svc._import_from_excel_locked("nonexistent.xlsx")
         assert result["success"] is False
-        assert "db error" in result["message"]
+        assert result["message"] == "客户导入失败"
+        assert "db error" not in result["message"]
 
 
 # ---------------------------------------------------------------------------
@@ -1044,7 +1045,7 @@ class TestExportToExcelAdditional:
         mock_session.query.return_value = mock_query
         with (
             patch.object(svc, "_get_session", return_value=mock_session),
-            patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)),
+            patch("app.utils.path_io.path_utils.get_data_dir", return_value=str(tmp_path)),
         ):
             result = svc.export_to_excel(keyword="Test")
         assert result["success"] is True
@@ -1055,7 +1056,8 @@ class TestExportToExcelAdditional:
         with patch.object(svc, "_get_session", side_effect=RuntimeError("db error")):
             result = svc.export_to_excel()
         assert result["success"] is False
-        assert "db error" in result["message"]
+        assert result["message"] == "客户导出失败"
+        assert "db error" not in result["message"]
 
     def test_export_with_template_id_not_found(self, tmp_path):
         """Test export with template_id that doesn't match any template."""
@@ -1067,7 +1069,7 @@ class TestExportToExcelAdditional:
         mock_session.query.return_value = mock_query
         with (
             patch.object(svc, "_get_session", return_value=mock_session),
-            patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)),
+            patch("app.utils.path_io.path_utils.get_data_dir", return_value=str(tmp_path)),
             patch("app.application.get_template_app_service") as mock_get_templates,
         ):
             mock_template_svc = MagicMock()
@@ -1092,7 +1094,7 @@ class TestExportToExcelAdditional:
         wb.save(str(template_file))
         with (
             patch.object(svc, "_get_session", return_value=mock_session),
-            patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)),
+            patch("app.utils.path_io.path_utils.get_data_dir", return_value=str(tmp_path)),
             patch("app.application.get_template_app_service") as mock_get_templates,
         ):
             mock_template_svc = MagicMock()
@@ -1113,7 +1115,7 @@ class TestExportToExcelAdditional:
         mock_session.query.return_value = mock_query
         with (
             patch.object(svc, "_get_session", return_value=mock_session),
-            patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)),
+            patch("app.utils.path_io.path_utils.get_data_dir", return_value=str(tmp_path)),
             patch(
                 "app.application.get_template_app_service",
                 side_effect=RuntimeError("template error"),

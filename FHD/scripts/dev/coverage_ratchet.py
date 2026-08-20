@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """覆盖率棘轮（ratchet）：行/分支（后端）+ lines/branches/functions/statements（前端），只升不降。
 
 与 ``check_layer_ratchet.py`` / ``count_type_debt.py`` / ``count_raw_sql.py`` 同级，
@@ -53,7 +52,7 @@ import math
 import re
 import subprocess
 import sys
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 FHD_ROOT = Path(__file__).resolve().parents[2]
@@ -144,7 +143,8 @@ def write_fail_under(p: Path, value: int) -> None:
 def load_baseline() -> dict:
     if BASELINE.is_file():
         try:
-            return json.loads(BASELINE.read_text(encoding="utf-8"))
+            payload = json.loads(BASELINE.read_text(encoding="utf-8"))
+            return payload if isinstance(payload, dict) else {}
         except (OSError, json.JSONDecodeError):
             return {}
     return {}
@@ -248,12 +248,12 @@ def _git_short_sha() -> str | None:
 
 def read_history_peaks() -> dict[str, float]:
     """从 coverage-history.jsonl 读取历史峰值（只看 backend_lines/branches）。
-    
+
     返回 {"backend_lines_peak": float, "backend_branches_peak": float}
     """
     if not HISTORY.is_file():
         return {}
-    
+
     peaks = {"backend_lines_peak": 0.0, "backend_branches_peak": 0.0}
     try:
         lines = HISTORY.read_text(encoding="utf-8").strip().splitlines()
@@ -262,28 +262,30 @@ def read_history_peaks() -> dict[str, float]:
                 rec = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            
+
             # 只看 bump 记录（避免 check-fail 的低值污染峰值）
             if rec.get("note") != "bump":
                 continue
-            
+
             be_lines = rec.get("backend_lines")
             if be_lines is not None and be_lines > peaks["backend_lines_peak"]:
                 peaks["backend_lines_peak"] = be_lines
-            
+
             be_branches = rec.get("backend_branches")
             if be_branches is not None and be_branches > peaks["backend_branches_peak"]:
                 peaks["backend_branches_peak"] = be_branches
     except OSError:
         pass
-    
+
     return peaks
 
 
-def append_history(be: dict | None, fe: dict | None, note: str = "", beh: dict | None = None) -> None:
+def append_history(
+    be: dict | None, fe: dict | None, note: str = "", beh: dict | None = None
+) -> None:
     rec = {
         "date": date.today().isoformat(),
-        "ts": datetime.now(timezone.utc).isoformat(),
+        "ts": datetime.now(UTC).isoformat(),
         "backend_lines": be["line_pct"] if be else None,
         "backend_branches": be["branch_pct"] if be else None,
         "backend_statements": be["num_statements"] if be else None,
@@ -320,7 +322,7 @@ def cmd_check(args: argparse.Namespace) -> int:
         branch_floor = base.get("backend_branch_floor")
     fe_floors = base.get("frontend_floors", {})
     behavior_floors = base.get("behavior_floors", {})
-    
+
     # 峰值硬阻断：读取历史峰值
     peaks = read_history_peaks() if args.peak_floor else {}
     line_peak = peaks.get("backend_lines_peak", 0.0)
@@ -352,7 +354,11 @@ def cmd_check(args: argparse.Namespace) -> int:
             )
             failed = True
         # 峰值硬阻断检查（比 floor 更严格）
-        if args.peak_floor and line_peak > 0 and be["line_pct"] + eps < line_peak - PEAK_FLOOR_MARGIN:
+        if (
+            args.peak_floor
+            and line_peak > 0
+            and be["line_pct"] + eps < line_peak - PEAK_FLOOR_MARGIN
+        ):
             print(
                 f"FAIL: line coverage regression from peak — 后端行覆盖率 {be['line_pct']}% < 历史峰值 {line_peak}% − {PEAK_FLOOR_MARGIN}%（静默回退）",
                 file=sys.stderr,
@@ -420,7 +426,9 @@ def cmd_check(args: argparse.Namespace) -> int:
                 f"[cov-ratchet] behavior line={beh['line_pct']}% (floor {beh_line_floor}) "
                 f"branch={bp} (floor {beh_branch_floor}) jitter={jitter}%"
             )
-            if beh_line_floor is not None and beh["line_pct"] + jitter + eps < float(beh_line_floor):
+            if beh_line_floor is not None and beh["line_pct"] + jitter + eps < float(
+                beh_line_floor
+            ):
                 print(
                     f"FAIL: behavior line coverage regression — 行为行覆盖率 {beh['line_pct']}% < floor {beh_line_floor}% (−jitter {jitter}%)",
                     file=sys.stderr,
@@ -538,10 +546,10 @@ def cmd_history(args: argparse.Namespace) -> int:
     if args.record:
         be = read_backend(args.coverage_json)
         beh = (
-        read_backend(getattr(args, "behavior_json", BEHAVIOR_JSON_DEFAULT))
-        if getattr(args, "behavior", False)
-        else None
-    )
+            read_backend(getattr(args, "behavior_json", BEHAVIOR_JSON_DEFAULT))
+            if getattr(args, "behavior", False)
+            else None
+        )
         fe = read_frontend(args.frontend_summary)
         append_history(be, fe, note="record", beh=beh)
         print("[cov-ratchet] 已追加快照到 coverage-history.jsonl")
@@ -555,24 +563,31 @@ def cmd_history(args: argparse.Namespace) -> int:
         except json.JSONDecodeError:
             continue
         print(
-            f"{r.get('date','')} be_line={r.get('backend_lines')}% "
+            f"{r.get('date', '')} be_line={r.get('backend_lines')}% "
             f"be_branch={r.get('backend_branches')}% "
             f"bh_line={r.get('behavior_lines')}% bh_branch={r.get('behavior_branches')}% "
             f"fe_lines={r.get('frontend_lines')}% "
-            f"fe_func={r.get('frontend_functions')}% {r.get('commit') or ''} {r.get('note','')}"
+            f"fe_func={r.get('frontend_functions')}% {r.get('commit') or ''} {r.get('note', '')}"
         )
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--check", action="store_true", help="门禁：覆盖率回退则失败（退出码1）")
     mode.add_argument("--bump", action="store_true", help="把当前实测提升为新 floor（只升不降）")
     mode.add_argument("--history", action="store_true", help="打印趋势（配合 --record 追加快照）")
-    parser.add_argument("--coverage-json", type=Path, default=BACKEND_JSON_DEFAULT, help="后端 coverage.json 路径")
     parser.add_argument(
-        "--behavior-json", type=Path, default=BEHAVIOR_JSON_DEFAULT, help="行为（排除 stub）coverage-behavior.json 路径"
+        "--coverage-json", type=Path, default=BACKEND_JSON_DEFAULT, help="后端 coverage.json 路径"
+    )
+    parser.add_argument(
+        "--behavior-json",
+        type=Path,
+        default=BEHAVIOR_JSON_DEFAULT,
+        help="行为（排除 stub）coverage-behavior.json 路径",
     )
     parser.add_argument(
         "--behavior",
@@ -580,10 +595,17 @@ def main(argv: list[str] | None = None) -> int:
         help="check/bump/history：启用行为覆盖率口径（排除 coverage_ramp stub，唯一硬 gate）",
     )
     parser.add_argument(
-        "--frontend-summary", type=Path, default=FRONTEND_SUMMARY_DEFAULT, help="前端 coverage-summary.json 路径"
+        "--frontend-summary",
+        type=Path,
+        default=FRONTEND_SUMMARY_DEFAULT,
+        help="前端 coverage-summary.json 路径",
     )
-    parser.add_argument("--margin", type=float, default=DEFAULT_MARGIN, help="bump 安全余量（pt，默认1）")
-    parser.add_argument("--no-vitest", action="store_true", help="bump 时不同步 vitest.config.js thresholds")
+    parser.add_argument(
+        "--margin", type=float, default=DEFAULT_MARGIN, help="bump 安全余量（pt，默认1）"
+    )
+    parser.add_argument(
+        "--no-vitest", action="store_true", help="bump 时不同步 vitest.config.js thresholds"
+    )
     parser.add_argument("--require-backend", action="store_true", help="check：缺后端数据即失败")
     parser.add_argument("--require-frontend", action="store_true", help="check：缺前端数据即失败")
     parser.add_argument("--record", action="store_true", help="history：先追加当前快照")
@@ -591,7 +613,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--peak-floor",
         action="store_true",
-        help="check：启用峰值硬阻断，低于历史峰值 %.1f%% 即失败" % PEAK_FLOOR_MARGIN,
+        help=f"check：启用峰值硬阻断，低于历史峰值 {PEAK_FLOOR_MARGIN:.1f}% 即失败",
     )
     args = parser.parse_args(argv)
 

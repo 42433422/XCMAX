@@ -40,7 +40,7 @@
           type="search"
           class="admin-business-customers-search"
           placeholder="搜索客户名称 / 账号 / 邮箱 / 电话 / 行业 / VIP"
-        >
+        />
         <span class="muted">共 {{ filteredCustomers.length }} / {{ customers.length }} 个业务对象</span>
       </section>
 
@@ -94,87 +94,87 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
-import { api } from '@/api/core';
-import { xcmaxAdminApi } from '@/api/xcmaxAdmin';
+import { computed, onMounted, ref } from 'vue'
+import { api } from '@/api/core'
+import { xcmaxAdminApi } from '@/api/xcmaxAdmin'
 
 type MarketCustomerRow = {
-  id?: number | string;
-  user_id?: number;
-  username?: string;
-  name?: string;
-  company?: string;
-  company_name?: string;
-  email?: string;
-  phone?: string;
-  mobile?: string;
-  is_admin?: boolean;
-  is_enterprise?: boolean;
-  mod_ids?: string[];
-  tier?: string;
-  industry_id?: string;
-  account_tier?: string;
-  budget_range?: string;
-  entitled_industries?: string[];
-  market_membership_tier?: string;
-  membership_tier?: string;
-  plan_tier?: string;
-  membership?: { tier?: string; label?: string };
-};
+  id?: number | string
+  user_id?: number
+  username?: string
+  name?: string
+  company?: string
+  company_name?: string
+  email?: string
+  phone?: string
+  mobile?: string
+  is_admin?: boolean
+  is_enterprise?: boolean
+  mod_ids?: string[]
+  tier?: string
+  industry_id?: string
+  account_tier?: string
+  budget_range?: string
+  entitled_industries?: string[]
+  market_membership_tier?: string
+  membership_tier?: string
+  plan_tier?: string
+  membership?: { tier?: string; label?: string }
+}
 
 type LocalProfile = {
-  tier?: string;
-  industry_id?: string;
-  account_tier?: string;
-  budget_range?: string;
-  entitled_industries?: string[];
-};
+  tier?: string
+  industry_id?: string
+  account_tier?: string
+  budget_range?: string
+  entitled_industries?: string[]
+}
 
 type WalletRow = {
-  user_id?: number;
-  balance?: number | string | null;
-};
+  user_id?: number
+  balance?: number | string | null
+}
 
 type ErpCustomerRow = {
-  id?: number | string;
-  name?: string;
-  customer_name?: string;
-  unit_name?: string;
-  contact_person?: string;
-  contact_phone?: string;
-  contact_address?: string;
-  address?: string;
-};
+  id?: number | string
+  name?: string
+  customer_name?: string
+  unit_name?: string
+  contact_person?: string
+  contact_phone?: string
+  contact_address?: string
+  address?: string
+}
 
 type BusinessCustomerRow = {
-  key: string;
-  source: 'platform' | 'erp';
-  sourceLabel: string;
-  id: string;
-  name: string;
-  accountText: string;
-  contactText: string;
-  identityLabel: string;
-  membershipLabel: string;
-  accountTierLabel: string;
-  industryText: string;
-  businessText: string;
-  searchText: string;
-};
+  key: string
+  source: 'platform' | 'erp'
+  sourceLabel: string
+  id: string
+  name: string
+  accountText: string
+  contactText: string
+  identityLabel: string
+  membershipLabel: string
+  accountTierLabel: string
+  industryText: string
+  businessText: string
+  searchText: string
+}
 
-type AnyObject = Record<string, unknown>;
+type AnyObject = Record<string, unknown>
 
-const customers = ref<BusinessCustomerRow[]>([]);
-const loading = ref(false);
-const errorMessage = ref('');
-const searchText = ref('');
+const customers = ref<BusinessCustomerRow[]>([])
+const loading = ref(false)
+const errorMessage = ref('')
+const searchText = ref('')
 
 const ACCOUNT_TIER_LABELS: Record<string, string> = {
   normal: '普通',
   pro: 'Pro',
   max: 'Max',
   ultra: 'Ultra',
-};
+}
 
 const MEMBERSHIP_TIER_LABELS: Record<string, string> = {
   free: 'Free',
@@ -189,82 +189,66 @@ const MEMBERSHIP_TIER_LABELS: Record<string, string> = {
   svip6: 'SVIP6',
   svip7: 'SVIP7',
   svip8: 'SVIP8',
-};
+}
 
 const filteredCustomers = computed(() => {
-  const q = searchText.value.trim().toLowerCase();
-  if (!q) return customers.value;
-  return customers.value.filter((customer) => customer.searchText.includes(q));
-});
+  const q = searchText.value.trim().toLowerCase()
+  if (!q) return customers.value
+  return customers.value.filter((customer) => customer.searchText.includes(q))
+})
 
-const platformCustomerCount = computed(() =>
-  customers.value.filter((customer) => customer.source === 'platform').length,
-);
-const erpCustomerCount = computed(() =>
-  customers.value.filter((customer) => customer.source === 'erp').length,
-);
-const enterpriseCustomerCount = computed(() =>
-  customers.value.filter((customer) => customer.identityLabel === '企业').length,
-);
-const vipCustomerCount = computed(() =>
-  customers.value.filter((customer) => !['-', 'Free'].includes(customer.membershipLabel)).length,
-);
+const platformCustomerCount = computed(() => customers.value.filter((customer) => customer.source === 'platform').length)
+const erpCustomerCount = computed(() => customers.value.filter((customer) => customer.source === 'erp').length)
+const enterpriseCustomerCount = computed(() => customers.value.filter((customer) => customer.identityLabel === '企业').length)
+const vipCustomerCount = computed(() => customers.value.filter((customer) => !['-', 'Free'].includes(customer.membershipLabel)).length)
 
 function unwrapArray<T>(body: unknown, keys: string[]): T[] {
   for (const key of keys) {
     const value = key.split('.').reduce<unknown>((acc, part) => {
-      if (!acc || typeof acc !== 'object') return undefined;
-      return (acc as AnyObject)[part];
-    }, body);
-    if (Array.isArray(value)) return value as T[];
+      if (!acc || typeof acc !== 'object') return undefined
+      return (acc as AnyObject)[part]
+    }, body)
+    if (Array.isArray(value)) return value as T[]
   }
-  return [];
+  return []
 }
 
 function unwrapProfiles(body: unknown): Record<string, LocalProfile> {
-  if (!body || typeof body !== 'object') return {};
-  const data = (body as AnyObject).data;
-  return data && typeof data === 'object' && !Array.isArray(data)
-    ? (data as Record<string, LocalProfile>)
-    : {};
+  if (!body || typeof body !== 'object') return {}
+  const data = (body as AnyObject).data
+  return data && typeof data === 'object' && !Array.isArray(data) ? (data as Record<string, LocalProfile>) : {}
 }
 
 function text(value: unknown): string {
-  return String(value ?? '').trim();
+  return String(value ?? '').trim()
 }
 
 function formatIdentity(row: MarketCustomerRow): string {
-  const tier = text(row.tier);
-  if (tier === 'admin' || row.is_admin) return '管理员';
-  if (tier === 'enterprise' || row.is_enterprise) return '企业';
-  return '个人';
+  const tier = text(row.tier)
+  if (tier === 'admin' || row.is_admin) return '管理员'
+  if (tier === 'enterprise' || row.is_enterprise) return '企业'
+  return '个人'
 }
 
 function formatMembership(row: MarketCustomerRow): string {
-  const tier = text(
-    row.membership?.label ||
-      row.market_membership_tier ||
-      row.membership_tier ||
-      row.plan_tier ||
-      row.membership?.tier,
-  );
-  if (!tier) return '-';
-  return MEMBERSHIP_TIER_LABELS[tier] || tier.toUpperCase();
+  const tier = text(row.membership?.label || row.market_membership_tier || row.membership_tier || row.plan_tier || row.membership?.tier)
+  if (!tier) return '-'
+  return MEMBERSHIP_TIER_LABELS[tier] || tier.toUpperCase()
 }
 
 function formatAccountTier(row: MarketCustomerRow): string {
-  const tier = text(row.account_tier);
-  if (!tier) return '-';
-  return ACCOUNT_TIER_LABELS[tier] || tier;
+  const tier = text(row.account_tier)
+  if (!tier) return '-'
+  return ACCOUNT_TIER_LABELS[tier] || tier
 }
 
 function formatBalance(row: WalletRow | undefined, walletQuerySucceeded = true): string {
-  if (!walletQuerySucceeded) return '余额查询失败';
-  const raw = row?.balance;
-  if (raw === null || raw === undefined || raw === '') return '余额 ¥0.00';
-  const n = typeof raw === 'string' ? parseFloat(raw) : raw;
-  if (!Number.isFinite(n)) return '余额 -';
-  return `余额 ¥${n.toFixed(2)}`;
+  if (!walletQuerySucceeded) return '余额查询失败'
+  const raw = row?.balance
+  if (raw === null || raw === undefined || raw === '') return '余额 ¥0.00'
+  const n = typeof raw === 'string' ? parseFloat(raw) : raw
+  if (!Number.isFinite(n)) return '余额 -'
+  return `余额 ¥${n.toFixed(2)}`
 }
 
 function buildSearchText(row: BusinessCustomerRow): string {
@@ -281,7 +265,7 @@ function buildSearchText(row: BusinessCustomerRow): string {
     row.businessText,
   ]
     .join(' ')
-    .toLowerCase();
+    .toLowerCase()
 }
 
 function normalizeMarketCustomers(
@@ -291,8 +275,8 @@ function normalizeMarketCustomers(
   walletQuerySucceeded = true,
 ): BusinessCustomerRow[] {
   return rawRows.map((raw, index) => {
-    const username = text(raw.username || raw.name);
-    const profile = profiles[username] || {};
+    const username = text(raw.username || raw.name)
+    const profile = profiles[username] || {}
     const row: MarketCustomerRow = {
       ...raw,
       tier: raw.tier || profile.tier,
@@ -300,15 +284,14 @@ function normalizeMarketCustomers(
       account_tier: raw.account_tier || profile.account_tier,
       budget_range: raw.budget_range || profile.budget_range,
       entitled_industries: raw.entitled_industries || profile.entitled_industries,
-    };
-    const numericId =
-      typeof row.id === 'number' ? row.id : typeof row.user_id === 'number' ? row.user_id : undefined;
-    const wallet = numericId === undefined ? undefined : wallets.get(numericId);
-    const company = text(row.company || row.company_name);
-    const displayName = company || username || `客户 ${index + 1}`;
-    const contact = [row.email, row.phone || row.mobile].map(text).filter(Boolean).join(' / ') || '-';
-    const modCount = Array.isArray(row.mod_ids) ? row.mod_ids.length : 0;
-    const keySeed = text(row.id ?? row.user_id) || username || String(index);
+    }
+    const numericId = typeof row.id === 'number' ? row.id : typeof row.user_id === 'number' ? row.user_id : undefined
+    const wallet = numericId === undefined ? undefined : wallets.get(numericId)
+    const company = text(row.company || row.company_name)
+    const displayName = company || username || `客户 ${index + 1}`
+    const contact = [row.email, row.phone || row.mobile].map(text).filter(Boolean).join(' / ') || '-'
+    const modCount = Array.isArray(row.mod_ids) ? row.mod_ids.length : 0
+    const keySeed = text(row.id ?? row.user_id) || username || String(index)
     const out: BusinessCustomerRow = {
       key: `platform:${keySeed}`,
       source: 'platform',
@@ -323,20 +306,20 @@ function normalizeMarketCustomers(
       industryText: text(row.industry_id) || '通用',
       businessText: `${modCount} 个 Mod · ${formatBalance(wallet, walletQuerySucceeded)}`,
       searchText: '',
-    };
-    out.searchText = buildSearchText(out);
-    return out;
-  });
+    }
+    out.searchText = buildSearchText(out)
+    return out
+  })
 }
 
 function erpName(row: ErpCustomerRow): string {
-  return text(row.name || row.customer_name || row.unit_name) || '-';
+  return text(row.name || row.customer_name || row.unit_name) || '-'
 }
 
 function normalizeErpCustomers(rawRows: ErpCustomerRow[]): BusinessCustomerRow[] {
   return rawRows.map((row, index) => {
-    const name = erpName(row);
-    const keySeed = text(row.id) || name || String(index);
+    const name = erpName(row)
+    const keySeed = text(row.id) || name || String(index)
     const out: BusinessCustomerRow = {
       key: `erp:${keySeed}`,
       source: 'erp',
@@ -351,66 +334,56 @@ function normalizeErpCustomers(rawRows: ErpCustomerRow[]): BusinessCustomerRow[]
       industryText: text(row.contact_address || row.address) || '-',
       businessText: '业务库客户',
       searchText: '',
-    };
-    out.searchText = buildSearchText(out);
-    return out;
-  });
+    }
+    out.searchText = buildSearchText(out)
+    return out
+  })
 }
 
 async function loadCustomers() {
-  loading.value = true;
-  errorMessage.value = '';
+  loading.value = true
+  errorMessage.value = ''
   try {
     const [usersRes, profilesRes, walletsRes, erpRes] = await Promise.allSettled([
       xcmaxAdminApi.listUsers(),
       xcmaxAdminApi.getUserProfiles(),
       xcmaxAdminApi.listWallets(500, 0),
       api.get('/api/customers/list', { page: 1, per_page: 1000 }),
-    ]);
+    ])
 
-    const errors: string[] = [];
-    const userRows =
-      usersRes.status === 'fulfilled'
-        ? unwrapArray<MarketCustomerRow>(usersRes.value, ['users', 'data.users', 'data'])
-        : [];
-    if (usersRes.status === 'rejected') errors.push(`平台客户读取失败：${usersRes.reason}`);
+    const errors: string[] = []
+    const userRows = usersRes.status === 'fulfilled' ? unwrapArray<MarketCustomerRow>(usersRes.value, ['users', 'data.users', 'data']) : []
+    if (usersRes.status === 'rejected') errors.push(`平台客户读取失败：${usersRes.reason}`)
 
-    const profiles =
-      profilesRes.status === 'fulfilled' ? unwrapProfiles(profilesRes.value) : {};
-    if (profilesRes.status === 'rejected') errors.push(`账号档位读取失败：${profilesRes.reason}`);
+    const profiles = profilesRes.status === 'fulfilled' ? unwrapProfiles(profilesRes.value) : {}
+    if (profilesRes.status === 'rejected') errors.push(`账号档位读取失败：${profilesRes.reason}`)
 
-    const walletRows =
-      walletsRes.status === 'fulfilled'
-        ? unwrapArray<WalletRow>(walletsRes.value, ['items', 'data.items', 'data'])
-        : [];
-    if (walletsRes.status === 'rejected') errors.push(`钱包读取失败：${walletsRes.reason}`);
-    const walletMap = new Map<number, WalletRow>();
+    const walletRows = walletsRes.status === 'fulfilled' ? unwrapArray<WalletRow>(walletsRes.value, ['items', 'data.items', 'data']) : []
+    if (walletsRes.status === 'rejected') errors.push(`钱包读取失败：${walletsRes.reason}`)
+    const walletMap = new Map<number, WalletRow>()
     for (const wallet of walletRows) {
-      if (typeof wallet?.user_id === 'number') walletMap.set(wallet.user_id, wallet);
+      if (typeof wallet?.user_id === 'number') walletMap.set(wallet.user_id, wallet)
     }
 
-    const erpRows =
-      erpRes.status === 'fulfilled'
-        ? unwrapArray<ErpCustomerRow>(erpRes.value, ['data', 'customers', 'data.customers'])
-        : [];
-    if (erpRes.status === 'rejected') errors.push(`ERP客户读取失败：${erpRes.reason}`);
+    const erpRows = erpRes.status === 'fulfilled' ? unwrapArray<ErpCustomerRow>(erpRes.value, ['data', 'customers', 'data.customers']) : []
+    if (erpRes.status === 'rejected') errors.push(`ERP客户读取失败：${erpRes.reason}`)
 
     customers.value = [
       ...normalizeMarketCustomers(userRows, profiles, walletMap, walletsRes.status === 'fulfilled'),
       ...normalizeErpCustomers(erpRows),
-    ];
-    errorMessage.value = errors.join('；');
+    ]
+    errorMessage.value = errors.join('；')
   } catch (e) {
-    customers.value = [];
-    errorMessage.value = e instanceof Error ? e.message : String(e);
+    customers.value = []
+    errorMessage.value = e instanceof Error ? e.message : String(e)
   } finally {
-    loading.value = false;
+    loading.value = false
   }
 }
 
 onMounted(() => {
-  void loadCustomers();
-});
+  void loadCustomers()
+})
 </script>
 
 <style scoped>

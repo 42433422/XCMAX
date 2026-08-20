@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, exit-return"
 """COVERAGE_RAMP Phase 4 round 16: xcmax_sync_service helpers + push/pull/apply (33%→)."""
 
 from __future__ import annotations

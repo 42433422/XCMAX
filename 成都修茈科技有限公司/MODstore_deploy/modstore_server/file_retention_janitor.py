@@ -15,13 +15,21 @@ import os
 import shutil
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import and_, func, or_, select
-
-from modstore_server.models import EmployeeExecutionMetric, Notification, User, get_session_factory
+from modstore_server.file_retention_support import build_report_md as _build_report_md
+from modstore_server.file_retention_support import format_bytes as _format_bytes
+from modstore_server.file_retention_support import (
+    prune_notifications,
+)
+from modstore_server.file_retention_support import (
+    record_retention_runtime as _record_retention_runtime,
+)
+from modstore_server.file_retention_support import resolve_admin_user_id as _resolve_admin_user_id
+from modstore_server.file_retention_support import write_metric as _write_metric
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -118,107 +126,6 @@ RETENTION_TARGETS: List[RetentionTarget] = [
 def is_dry_run() -> bool:
     raw = (os.environ.get("MODSTORE_RETENTION_DRY_RUN") or "1").strip().lower()
     return raw not in {"0", "false", "no", "off"}
-
-
-def _bounded_env_int(name: str, default: int, minimum: int, maximum: int) -> int:
-    try:
-        value = int(str(os.environ.get(name) or default).strip())
-    except (TypeError, ValueError):
-        value = default
-    return max(minimum, min(maximum, value))
-
-
-def prune_notifications(
-    *,
-    dry_run: Optional[bool] = None,
-    now: Optional[datetime] = None,
-) -> Dict[str, Any]:
-    """Bound derived notifications without deleting business evidence.
-
-    Only high-volume operational ``system`` and ``employee_execution_done``
-    rows are eligible. Payment and human-question notifications are never
-    selected. A per-user/per-kind window prevents one noisy account from
-    crowding out another account's recent alerts.
-    """
-
-    is_dry = is_dry_run() if dry_run is None else bool(dry_run)
-    current = now or datetime.now(timezone.utc)
-    system_keep = _bounded_env_int("MODSTORE_NOTIFICATION_SYSTEM_KEEP_PER_USER", 200, 10, 5000)
-    execution_keep = _bounded_env_int(
-        "MODSTORE_NOTIFICATION_EXECUTION_KEEP_PER_USER", 200, 10, 5000
-    )
-    ttl_days = _bounded_env_int("MODSTORE_NOTIFICATION_RETENTION_DAYS", 30, 7, 3650)
-    max_delete = _bounded_env_int(
-        "MODSTORE_NOTIFICATION_RETENTION_MAX_DELETE", 1_000_000, 1000, 1_000_000
-    )
-    cutoff = current - timedelta(days=ttl_days)
-
-    ranked = (
-        select(
-            Notification.id.label("id"),
-            Notification.kind.label("kind"),
-            Notification.created_at.label("created_at"),
-            func.row_number()
-            .over(
-                partition_by=(Notification.user_id, Notification.kind),
-                order_by=Notification.id.desc(),
-            )
-            .label("row_number"),
-        )
-        .where(Notification.kind.in_(_NOISY_NOTIFICATION_KINDS))
-        .subquery()
-    )
-    candidate_filter = or_(
-        ranked.c.created_at < cutoff,
-        and_(ranked.c.kind == "system", ranked.c.row_number > system_keep),
-        and_(
-            ranked.c.kind == "employee_execution_done",
-            ranked.c.row_number > execution_keep,
-        ),
-    )
-    candidate_ids = select(ranked.c.id).where(candidate_filter)
-    limited_ids = candidate_ids.order_by(ranked.c.id.asc()).limit(max_delete)
-
-    sf = get_session_factory()
-    with sf() as session:
-        candidate_rows = candidate_ids.subquery()
-        candidate_count = int(
-            session.execute(select(func.count()).select_from(candidate_rows)).scalar_one() or 0
-        )
-        candidate_by_kind = {
-            str(kind): int(count or 0)
-            for kind, count in session.execute(
-                select(ranked.c.kind, func.count()).where(candidate_filter).group_by(ranked.c.kind)
-            ).all()
-        }
-        selected_count = min(candidate_count, max_delete)
-        removed = 0
-        if not is_dry and selected_count:
-            removed = int(
-                session.query(Notification)
-                .filter(Notification.id.in_(limited_ids))
-                .delete(synchronize_session=False)
-                or 0
-            )
-            session.commit()
-
-    return {
-        "ok": True,
-        "dry_run": is_dry,
-        "candidate_count": candidate_count,
-        "candidate_by_kind": candidate_by_kind,
-        "removed_count": removed,
-        "selected_count": selected_count,
-        "truncated": candidate_count > max_delete,
-        "max_delete": max_delete,
-        "ttl_days": ttl_days,
-        "keep_per_user": {
-            "system": system_keep,
-            "employee_execution_done": execution_keep,
-        },
-        "eligible_kinds": list(_NOISY_NOTIFICATION_KINDS),
-        "vacuum_recommended": removed > 0,
-    }
 
 
 def _is_forbidden(path: Path) -> bool:
@@ -375,7 +282,7 @@ def _process_target(
         # 单次执行硬上限：超过 5 GiB 立即停止扫描该 target。
         if cumulative_released + rep.released_bytes + size > _MAX_RELEASED_BYTES:
             rep.warnings.append(
-                f"达到单次清理上限 {_MAX_RELEASED_BYTES // (1024 ** 3)} GiB，停止此 target"
+                f"达到单次清理上限 {_MAX_RELEASED_BYTES // (1024**3)} GiB，停止此 target"
             )
             break
 
@@ -398,100 +305,6 @@ def _process_target(
     return rep
 
 
-def _resolve_admin_user_id() -> int:
-    """优先取最早创建的管理员；没有管理员时取最早的用户；都没有时返回 0（不写流水）。"""
-    sf = get_session_factory()
-    with sf() as db:
-        admin = (
-            db.query(User)
-            .filter(User.is_admin == True)  # noqa: E712
-            .order_by(User.id.asc())
-            .first()
-        )
-        if admin:
-            return int(admin.id)
-        any_user = db.query(User).order_by(User.id.asc()).first()
-        return int(any_user.id) if any_user else 0
-
-
-def _write_metric(
-    *,
-    user_id: int,
-    task: str,
-    status: str,
-    duration_ms: float,
-    error: str = "",
-) -> Optional[int]:
-    """把一次清理写入 ``EmployeeExecutionMetric``（``user_id == 0`` 时跳过）。"""
-    if user_id <= 0:
-        logger.warning("retention janitor: 找不到任何用户，跳过流水写入")
-        return None
-    sf = get_session_factory()
-    with sf() as db:
-        metric = EmployeeExecutionMetric(
-            user_id=user_id,
-            employee_id=EMPLOYEE_ID,
-            task=task[:128],
-            status=status[:32],
-            duration_ms=float(duration_ms),
-            llm_tokens=0,
-            error=(error or "")[:4000],
-        )
-        db.add(metric)
-        db.commit()
-        return int(metric.id)
-
-
-def _format_bytes(n: int) -> str:
-    units = ["B", "KiB", "MiB", "GiB", "TiB"]
-    f = float(max(0, int(n)))
-    for unit in units:
-        if f < 1024.0:
-            return f"{f:.1f} {unit}"
-        f /= 1024.0
-    return f"{f:.1f} PiB"
-
-
-def _build_report_md(
-    *,
-    dry_run: bool,
-    targets: List[TargetReport],
-    total_released: int,
-    total_removed: int,
-    duration_ms: float,
-) -> str:
-    head = "# 档案清理执行报告"
-    mode = "**dry-run（仅预览）**" if dry_run else "**真实删除**"
-    lines = [
-        head,
-        "",
-        f"- 模式：{mode}",
-        f"- 已清理目标数：{len(targets)}",
-        f"- 累计删除条目：{total_removed}",
-        f"- 累计释放空间：{_format_bytes(total_released)}",
-        f"- 耗时：{duration_ms:.1f} ms",
-        "",
-        "## 各目标明细",
-        "",
-        "| 目录 | TTL（天） | 删除 | 保留 | 释放 | 备注 |",
-        "|------|-----------|------|------|------|------|",
-    ]
-    for r in targets:
-        parts: List[str] = []
-        if not r.exists:
-            parts.append("目录不存在")
-        if r.notes:
-            parts.extend(r.notes)
-        if r.warnings:
-            parts.extend(r.warnings)
-        remark = "; ".join(parts) if parts else "—"
-        lines.append(
-            f"| `{r.path}` | {r.ttl_days} | {r.removed} | {r.kept} | "
-            f"{_format_bytes(r.released_bytes)} | {remark} |"
-        )
-    return "\n".join(lines) + "\n"
-
-
 def run_retention_janitor(
     *,
     dry_run: Optional[bool] = None,
@@ -503,7 +316,7 @@ def run_retention_janitor(
     传入 ``notification_dry_run``，使派生通知按保留契约自动清理，而文件目标
     仍保持预演。
     """
-    started_at = datetime.now(timezone.utc)
+    started_at = datetime.now(UTC)
     t0 = time.perf_counter()
     is_dry = is_dry_run() if dry_run is None else bool(dry_run)
     database_is_dry = is_dry if notification_dry_run is None else bool(notification_dry_run)
@@ -523,13 +336,13 @@ def run_retention_janitor(
             )
             cumulative_released += rep.released_bytes
             target_reports.append(rep)
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.exception("retention janitor failed")
         error_text = str(exc)[:1000]
 
     try:
         database_retention = prune_notifications(dry_run=database_is_dry)
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.exception("notification retention failed")
         database_retention = {
             "ok": False,
@@ -595,7 +408,7 @@ def run_retention_janitor(
             duration_ms=duration_ms,
             error=error_text,
         )
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         logger.exception("retention janitor: write metric failed")
 
     result = {
@@ -616,24 +429,6 @@ def run_retention_janitor(
     }
     _record_retention_runtime(result)
     return result
-
-
-def _record_retention_runtime(result: Dict[str, Any]) -> None:
-    try:
-        from modstore_server.time_rail_runtime import record_node_run
-
-        record_node_run(
-            "R",
-            ok=bool(result.get("ok")),
-            source="file_retention_janitor",
-            meta={
-                "status": result.get("status"),
-                "dry_run": result.get("dry_run"),
-                "metric_id": result.get("metric_id"),
-            },
-        )
-    except Exception:  # noqa: BLE001
-        logger.exception("retention janitor: time_rail runtime record failed")
 
 
 def _cli() -> int:
@@ -666,12 +461,14 @@ def _cli() -> int:
 def cleanup_employee_workspaces() -> Dict[str, Any]:
     """清理过期员工工作区文件（由定时任务或 janitor 主流程调用）。"""
     try:
-        from modstore_server.employee_workspace_manager import cleanup_expired_workspaces
+        from modstore_server.employee_workspace_manager import (
+            cleanup_expired_workspaces,
+        )
 
         result = cleanup_expired_workspaces()
         logger.info("janitor: workspace cleanup: %s", result)
         return result
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("janitor: workspace cleanup failed")
         return {"cleaned_files": 0, "error": str(exc)}
 

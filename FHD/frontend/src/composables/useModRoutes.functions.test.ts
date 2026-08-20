@@ -49,9 +49,7 @@ describe('useModRoutes', () => {
   })
 
   it('maps menu items with mod- prefix when id does not start with mod-', () => {
-    mockGetModMenu.mockReturnValue([
-      { id: 'my-mod', label: 'My Mod', icon: 'fa-icon', modId: 'mod-1', path: '/mod-1' },
-    ])
+    mockGetModMenu.mockReturnValue([{ id: 'my-mod', label: 'My Mod', icon: 'fa-icon', modId: 'mod-1', path: '/mod-1' }])
     const { modMenuItems } = useModRoutes()
     expect(modMenuItems.value).toHaveLength(1)
     expect(modMenuItems.value[0].key).toBe('mod-my-mod')
@@ -62,41 +60,31 @@ describe('useModRoutes', () => {
   })
 
   it('does not add mod- prefix when id already starts with mod-', () => {
-    mockGetModMenu.mockReturnValue([
-      { id: 'mod-existing', label: 'Existing', icon: '', modId: 'mod-2', path: '/mod-2' },
-    ])
+    mockGetModMenu.mockReturnValue([{ id: 'mod-existing', label: 'Existing', icon: '', modId: 'mod-2', path: '/mod-2' }])
     const { modMenuItems } = useModRoutes()
     expect(modMenuItems.value[0].key).toBe('mod-existing')
   })
 
   it('uses default icon fa-plug when icon is empty', () => {
-    mockGetModMenu.mockReturnValue([
-      { id: 'no-icon', label: 'No Icon', icon: '', modId: 'mod-3', path: '/mod-3' },
-    ])
+    mockGetModMenu.mockReturnValue([{ id: 'no-icon', label: 'No Icon', icon: '', modId: 'mod-3', path: '/mod-3' }])
     const { modMenuItems } = useModRoutes()
     expect(modMenuItems.value[0].iconClass).toBe('fa-plug')
   })
 
   it('uses default icon fa-plug when icon is undefined', () => {
-    mockGetModMenu.mockReturnValue([
-      { id: 'no-icon', label: 'No Icon', modId: 'mod-4', path: '/mod-4' },
-    ])
+    mockGetModMenu.mockReturnValue([{ id: 'no-icon', label: 'No Icon', modId: 'mod-4', path: '/mod-4' }])
     const { modMenuItems } = useModRoutes()
     expect(modMenuItems.value[0].iconClass).toBe('fa-plug')
   })
 
   it('trims whitespace in menu id', () => {
-    mockGetModMenu.mockReturnValue([
-      { id: '  spaced  ', label: 'Spaced', modId: 'mod-5', path: '/mod-5' },
-    ])
+    mockGetModMenu.mockReturnValue([{ id: '  spaced  ', label: 'Spaced', modId: 'mod-5', path: '/mod-5' }])
     const { modMenuItems } = useModRoutes()
     expect(modMenuItems.value[0].key).toBe('mod-spaced')
   })
 
   it('handles empty string id', () => {
-    mockGetModMenu.mockReturnValue([
-      { id: '', label: 'Empty', modId: 'mod-6', path: '/mod-6' },
-    ])
+    mockGetModMenu.mockReturnValue([{ id: '', label: 'Empty', modId: 'mod-6', path: '/mod-6' }])
     const { modMenuItems } = useModRoutes()
     expect(modMenuItems.value[0].key).toBe('mod-')
   })

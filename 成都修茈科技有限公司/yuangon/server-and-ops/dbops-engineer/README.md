@@ -10,14 +10,14 @@
 
 ## 负责文件
 
-| 路径 | 说明 |
-|------|------|
-| `MODstore_deploy/modstore_server/models.py` | SQLAlchemy ORM 模型主入口 |
-| `MODstore_deploy/modstore_server/migrations/**` | 项目内迁移脚本 |
-| `MODstore_deploy/alembic/**` + `alembic.ini` | Alembic 迁移配置与版本树 |
+| 路径                                                     | 说明                           |
+| -------------------------------------------------------- | ------------------------------ |
+| `MODstore_deploy/modstore_server/models.py`              | SQLAlchemy ORM 模型主入口      |
+| `MODstore_deploy/modstore_server/migrations/**`          | 项目内迁移脚本                 |
+| `MODstore_deploy/alembic/**` + `alembic.ini`             | Alembic 迁移配置与版本树       |
 | `MODstore_deploy/modstore_server/db.py` / `database*.py` | 连接池、Session 工厂、引擎封装 |
-| `MODstore_deploy/scripts/db_*.py` | 一次性数据修复 / 体检脚本 |
-| `MODstore_deploy/docs/runbooks/dbops-*.md` | DBA 运维 Runbook |
+| `MODstore_deploy/scripts/db_*.py`                        | 一次性数据修复 / 体检脚本      |
+| `MODstore_deploy/docs/runbooks/dbops-*.md`               | DBA 运维 Runbook               |
 
 ## 典型任务
 
@@ -29,12 +29,12 @@
 
 ## KPI
 
-| 指标 | 目标 |
-|------|------|
-| 迁移脚本回滚成功率 | 100%（全部 `downgrade()` 必须可执行） |
-| 慢查询工单平均响应 | ≤ 30 分钟生成首个建议补丁 |
-| `alembic upgrade head` 在 sandbox 通过率 | 100% |
-| 与 backend API 的 schema 漂移次数 | 0（每次 backend 改 models 必同步迁移） |
+| 指标                                     | 目标                                   |
+| ---------------------------------------- | -------------------------------------- |
+| 迁移脚本回滚成功率                       | 100%（全部 `downgrade()` 必须可执行）  |
+| 慢查询工单平均响应                       | ≤ 30 分钟生成首个建议补丁              |
+| `alembic upgrade head` 在 sandbox 通过率 | 100%                                   |
+| 与 backend API 的 schema 漂移次数        | 0（每次 backend 改 models 必同步迁移） |
 
 ## 禁区
 

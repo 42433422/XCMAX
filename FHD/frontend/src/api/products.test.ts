@@ -29,9 +29,17 @@ describe('productsApi', () => {
 
   it('searchProducts builds params conditionally', async () => {
     await productsApi.searchProducts('  ', undefined)
-    expect(apiMock.get).toHaveBeenLastCalledWith(expect.stringContaining('/products/list'), { page: 1, per_page: 20 })
+    expect(apiMock.get).toHaveBeenLastCalledWith(expect.stringContaining('/products/list'), {
+      page: 1,
+      per_page: 20,
+    })
     await productsApi.searchProducts('paint', 'u1')
-    expect(apiMock.get).toHaveBeenLastCalledWith(expect.any(String), { page: 1, per_page: 20, keyword: 'paint', unit: 'u1' })
+    expect(apiMock.get).toHaveBeenLastCalledWith(expect.any(String), {
+      page: 1,
+      per_page: 20,
+      keyword: 'paint',
+      unit: 'u1',
+    })
   })
 
   it('getProductUnits handles array, nested, and empty shapes', async () => {

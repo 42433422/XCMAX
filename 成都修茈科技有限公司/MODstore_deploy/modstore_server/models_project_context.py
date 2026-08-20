@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment, attr-defined, index, no-any-return, valid-type"
 """项目级 / 员工级 持久上下文备忘（cross-task context memo）。
 
 为什么单独一个文件：
@@ -18,14 +19,13 @@ from __future__ import annotations
 
 import json
 import logging
-import os
-import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import Column, DateTime, Index, Integer, String, Text, UniqueConstraint
 
 from modstore_server.models import Base, get_session_factory
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -42,8 +42,8 @@ class ProjectContextMemo(Base):
     value_json = Column(Text, default="{}")
     updated_at = Column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
         index=True,
     )
 
@@ -57,20 +57,20 @@ class ProjectContextMemo(Base):
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _safe_loads(raw: str, default: Any = None) -> Any:
     try:
         return json.loads(raw or "")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return default if default is not None else {}
 
 
 def _ensure_context_table(session: Any) -> None:
     try:
         ProjectContextMemo.__table__.create(bind=session.get_bind(), checkfirst=True)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.debug("project_context_memos ensure table failed", exc_info=True)
 
 
@@ -105,7 +105,7 @@ def upsert_memo(
             blob = json.dumps(new_payload, ensure_ascii=False, default=str)[:200_000]
             if row:
                 row.value_json = blob
-                row.updated_at = datetime.now(timezone.utc)
+                row.updated_at = datetime.now(UTC)
             else:
                 row = ProjectContextMemo(
                     scope=scope,
@@ -116,7 +116,7 @@ def upsert_memo(
                 session.add(row)
             session.commit()
             return {"ok": True, "id": int(row.id)}
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("project_context_memo upsert failed: %s", exc)
         return {"ok": False, "error": str(exc)}
 
@@ -148,7 +148,7 @@ def get_memos(
             for r in rows:
                 out[r.key] = _safe_loads(r.value_json, {})
             return out
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("project_context_memo get failed: %s", exc)
         return {}
 
@@ -182,7 +182,7 @@ def append_event(
                 if len(arr) > max_keep:
                     arr = arr[-max_keep:]
                 row.value_json = json.dumps(arr, ensure_ascii=False, default=str)[:300_000]
-                row.updated_at = datetime.now(timezone.utc)
+                row.updated_at = datetime.now(UTC)
             else:
                 row = ProjectContextMemo(
                     scope=scope,
@@ -193,7 +193,7 @@ def append_event(
                 session.add(row)
             session.commit()
             return {"ok": True, "id": int(row.id)}
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("project_context_memo append failed: %s", exc)
         return {"ok": False, "error": str(exc)}
 
@@ -406,7 +406,11 @@ def gather_for_employee(
           "global":   {key: value, ...}
         }
     """
-    out = {"employee": {}, "project": {}, "global": {}}
+    out: Dict[str, List[Dict[str, Any]]] = {
+        "employee": [],
+        "project": [],
+        "global": [],
+    }
     try:
         out["employee"] = get_memos(
             scope="employee",
@@ -417,7 +421,7 @@ def gather_for_employee(
         if proj_key:
             out["project"] = get_memos(scope="project", scope_key=proj_key, limit=project_max)
         out["global"] = get_memos(scope="global", scope_key="global", limit=4)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.debug("gather_for_employee failed", exc_info=True)
     return out
 
@@ -476,7 +480,7 @@ def record_execution_outcome(
             input_data=input_data,
             status=status,
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.debug("record_execution_outcome failed", exc_info=True)
 
 

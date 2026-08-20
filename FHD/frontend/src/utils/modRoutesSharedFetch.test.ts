@@ -35,10 +35,7 @@ describe('modRoutesSharedFetch', () => {
       ok: true,
       json: async () => ({ success: true, data: [] }),
     } as Response)
-    const [a, b] = await Promise.all([
-      fetchModRoutesPayloadShared(),
-      fetchModRoutesPayloadShared(),
-    ])
+    const [a, b] = await Promise.all([fetchModRoutesPayloadShared(), fetchModRoutesPayloadShared()])
     expect(a).toEqual([])
     expect(b).toEqual([])
     expect(apiFetch).toHaveBeenCalledTimes(1)

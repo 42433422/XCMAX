@@ -1,6 +1,6 @@
         # 生态分润对账员 (`ecosystem-revenue-share-reconciler`)
 
-        **area**：`partner-ecosystem`  
+        **area**：`partner-ecosystem`
         **yuangon 路径**：`成都修茈科技有限公司/yuangon/partner-ecosystem/ecosystem-revenue-share-reconciler/`
 
         ## 职责
@@ -10,16 +10,19 @@
         ## 上游依赖 (`depends_on`)
 
         - `payment-billing-reconciler`
+
 - `java-payment-bridge-officer`
 
         ## 支持的 Handlers
 
         - `llm_md`：接收 Markdown 任务描述，调用 LLM 输出结构化结果
+
 - `echo`：调试用：原样返回输入，用于 smoke 测试
 
         ## Scope（核心文件范围）
 
         - `MODstore_deploy/modstore_server/**/reconciliation*`
+
 - `MODstore_deploy/java_payment_service/**/Order*`
 - `FHD/app/**/payment*`
 - `yuangon/partner-ecosystem/ecosystem-revenue-share-reconciler/**`

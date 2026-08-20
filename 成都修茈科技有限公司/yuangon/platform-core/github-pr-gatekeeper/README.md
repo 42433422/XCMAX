@@ -9,22 +9,22 @@
 
 ## 与 `change-request-auditor` 分工
 
-| 员工 | PR 来源 | 类型 |
-|------|---------|------|
+| 员工                               | PR 来源                                    | 类型    |
+| ---------------------------------- | ------------------------------------------ | ------- |
 | **`github-pr-gatekeeper`（本岗）** | GitHub 原生 PR（Dependabot/Renovate/人工） | 外部 PR |
-| `change-request-auditor` | 员工包补丁队列（内部 CR） | 内部 CR |
+| `change-request-auditor`           | 员工包补丁队列（内部 CR）                  | 内部 CR |
 
 本岗只做 review/approve/merge/comment，不直接改业务源码；major 升级必须派发 `vibe-coding-maintainer` 做兼容性验证。
 
 ## 决策矩阵
 
-| PR 类型 | CI 状态 | 变更范围 | 决策 |
-|---------|---------|---------|------|
-| Dependabot patch/minor | 通过 | 仅依赖文件 | 自动 approve + merge |
-| Dependabot major | 通过 | 仅依赖文件 | 派发 `vibe-coding-maintainer` 验证 |
-| Dependabot security | 通过 | 仅依赖文件 | 自动 approve + merge（跳过 major 限制） |
-| Dependabot any | 失败 | - | request_changes + 通知 |
-| 人工 PR | - | - | 跑 `test-qa-runner` 验证 |
+| PR 类型                | CI 状态 | 变更范围   | 决策                                    |
+| ---------------------- | ------- | ---------- | --------------------------------------- |
+| Dependabot patch/minor | 通过    | 仅依赖文件 | 自动 approve + merge                    |
+| Dependabot major       | 通过    | 仅依赖文件 | 派发 `vibe-coding-maintainer` 验证      |
+| Dependabot security    | 通过    | 仅依赖文件 | 自动 approve + merge（跳过 major 限制） |
+| Dependabot any         | 失败    | -          | request_changes + 通知                  |
+| 人工 PR                | -       | -          | 跑 `test-qa-runner` 验证                |
 
 ## 上游依赖 (`depends_on`)
 
@@ -65,4 +65,5 @@
 - 兄弟岗：`change-request-auditor`（内部 CR）、`vibe-coding-maintainer`（major 验证）
 
 ---
-*本文件由 admin 在 2026-06-28 录入 yuangon 编制，与 change-request-auditor 分工（外部 PR vs 内部 CR）。*
+
+_本文件由 admin 在 2026-06-28 录入 yuangon 编制，与 change-request-auditor 分工（外部 PR vs 内部 CR）。_

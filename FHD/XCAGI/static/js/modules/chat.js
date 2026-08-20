@@ -1086,38 +1086,49 @@ function renderLabelPanel(labels) {
     var floatContainer = document.getElementById('labelFloatPreviews');
     if (!listEl) return;
     var base = window.location.origin || (window.location.protocol + '//' + window.location.host);
-    var html = '<p class="labels-export-hint" style="margin-bottom:10px;">点击文件名下载标签（共 ' + labels.length + ' 个）</p><ul class="labels-export-ul">';
+    listEl.replaceChildren();
+    var hint = document.createElement('p');
+    hint.className = 'labels-export-hint';
+    hint.style.marginBottom = '10px';
+    hint.textContent = '点击文件名下载标签（共 ' + labels.length + ' 个）';
+    var list = document.createElement('ul');
+    list.className = 'labels-export-ul';
     labels.forEach(function(item) {
-        var url = base + '/api/print/label/' + encodeURIComponent(item.filename);
+        var filename = String(item.filename || 'label.png');
+        var url = base + '/api/print/label/' + encodeURIComponent(filename);
         var label = (item.order_number || '') + ' 第' + (item.label_number || '') + ' 项';
-        html += '<li><a href="' + url + '" download="' + (item.filename || 'label.png') + '" target="_blank" rel="noopener">' + (item.filename || label) + '</a></li>';
+        var li = document.createElement('li');
+        var link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        link.target = '_blank';
+        link.rel = 'noopener';
+        link.textContent = item.filename || label;
+        li.appendChild(link);
+        list.appendChild(li);
     });
-    html += '</ul>';
-    listEl.innerHTML = html;
+    listEl.append(hint, list);
     if (floatContainer) {
+        floatContainer.replaceChildren();
         var maxPreviews = Math.min(8, labels.length);
         for (var i = 0; i < maxPreviews; i++) {
-            var item = labels[i];
-            var url = base + '/api/print/label/' + encodeURIComponent(item.filename);
+            let item = labels[i];
+            let filename = String(item.filename || 'label.png');
+            let url = base + '/api/print/label/' + encodeURIComponent(filename);
             var img = document.createElement('img');
             img.className = 'label-float-preview';
             img.src = url;
             img.alt = item.filename || ('标签 ' + (i + 1));
             img.loading = 'lazy';
-            img.setAttribute('data-download-url', url);
-            img.setAttribute('data-filename', item.filename || 'label.png');
             img.addEventListener('click', function (e) {
                 e.preventDefault();
-                var u = this.getAttribute('data-download-url');
-                var f = this.getAttribute('data-filename');
-                if (!u) return;
                 var modal = document.getElementById('labelPreviewModal');
                 var modalImg = document.getElementById('labelPreviewModalImg');
                 var modalDownload = document.getElementById('labelPreviewModalDownload');
                 if (modal && modalImg && modalDownload) {
-                    modalImg.src = u;
-                    modalDownload.href = u;
-                    modalDownload.download = f;
+                    modalImg.src = url;
+                    modalDownload.href = url;
+                    modalDownload.download = filename;
                     modal.classList.remove('hidden');
                     modal.setAttribute('aria-hidden', 'false');
                 }

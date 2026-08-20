@@ -9,11 +9,6 @@ describe('pinSidebarMenuItemsTop', () => {
       { key: 'chat', name: '智能对话' },
       { key: 'orders', name: '考勤单' },
     ]
-    expect(pinSidebarMenuItemsTop(items).map((i) => i.key)).toEqual([
-      'chat',
-      'products',
-      'other-tools',
-      'orders',
-    ])
+    expect(pinSidebarMenuItemsTop(items).map((i) => i.key)).toEqual(['chat', 'products', 'other-tools', 'orders'])
   })
 })

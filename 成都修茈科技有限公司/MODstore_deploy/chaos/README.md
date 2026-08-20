@@ -4,13 +4,13 @@
 
 ## 支持场景
 
-| 场景 | 影响验证 |
-| --- | --- |
-| `redis-stop` | Redis 不可用时缓存、防重放、支付和 RAG 的降级与告警 |
-| `rabbitmq-stop` | RabbitMQ 不可用时预留消息链路和 Java 服务健康 |
-| `payment-restart` | Java 支付服务重启时 FastAPI 代理、前端提示和恢复时间 |
-| `postgres-stop` | 数据库不可用时 health/readiness、Java 连接池和 5xx 告警 |
-| `api-restart` | FastAPI 重启时入口恢复、Prometheus target 和前端体验 |
+| 场景              | 影响验证                                                |
+| ----------------- | ------------------------------------------------------- |
+| `redis-stop`      | Redis 不可用时缓存、防重放、支付和 RAG 的降级与告警     |
+| `rabbitmq-stop`   | RabbitMQ 不可用时预留消息链路和 Java 服务健康           |
+| `payment-restart` | Java 支付服务重启时 FastAPI 代理、前端提示和恢复时间    |
+| `postgres-stop`   | 数据库不可用时 health/readiness、Java 连接池和 5xx 告警 |
+| `api-restart`     | FastAPI 重启时入口恢复、Prometheus target 和前端体验    |
 
 ## dry-run
 

@@ -8,9 +8,17 @@ must never be mistaken for a new delivery-note execution target.
 from __future__ import annotations
 
 import re
-from datetime import date, datetime
 from typing import Any
 
+from app.application.etl.parser_shipment_history_dates import (
+    number as _number,
+)
+from app.application.etl.parser_shipment_history_dates import (
+    source_date as _source_date,
+)
+from app.application.etl.parser_shipment_history_dates import (
+    source_date_from_values as _source_date_from_values,
+)
 from app.application.etl.parser_structure import clean_cell_text, semantic_key
 from app.application.etl.parser_types import ParsedRow
 
@@ -20,9 +28,6 @@ _CUSTOMER_SUFFIX_RE = re.compile(
     r"(?:有限责任公司|有限公司|公司|家私|家具|商贸|贸易|建材|装饰)", re.I
 )
 _PARENTHETICAL_RE = re.compile(r"[（(][^）)]*[）)]")
-_DATE_TEXT_RE = re.compile(
-    r"(?P<year>(?:19|20)\d{2})[年./-](?P<month>\d{1,2})(?:[月./-](?P<day>\d{1,2}))?"
-)
 # Notes such as "未签单" are often written in the model-number column of a
 # running shipment ledger.  They describe the order, not a sellable SKU.  This
 # list is deliberately narrow and only matches complete, well-known status
@@ -39,63 +44,6 @@ def customer_alias_key(value: Any) -> str:
     text = _PARENTHETICAL_RE.sub("", text)
     text = _CUSTOMER_SUFFIX_RE.sub("", text)
     return re.sub(r"[\s\-_/\\·,.，。:：]+", "", text).lower()
-
-
-def _number(value: Any) -> float | None:
-    if isinstance(value, bool) or value in (None, ""):
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _source_date(value: Any) -> str:
-    """Return an ISO business date from a cell when it is unambiguous.
-
-    Historical shipment ledgers commonly use Excel serial dates, while price
-    sheets put an effective date into a title.  We preserve that evidence so
-    deduplication can choose the newest record instead of whichever tab happens
-    to be parsed last.
-    """
-
-    if isinstance(value, datetime):
-        return value.date().isoformat()
-    if isinstance(value, date):
-        return value.isoformat()
-    text = clean_cell_text(value)
-    if match := _DATE_TEXT_RE.search(text):
-        try:
-            return date(
-                int(match.group("year")),
-                int(match.group("month")),
-                int(match.group("day") or 1),
-            ).isoformat()
-        except ValueError:
-            return ""
-    serial = _number(value)
-    # Excel serial dates for modern business ledgers. Values such as product
-    # model numbers (9803) and prices must not be treated as dates.
-    if serial is None or not 30_000 <= serial <= 70_000:
-        return ""
-    try:
-        from openpyxl.utils.datetime import from_excel
-
-        converted = from_excel(serial)
-        if isinstance(converted, datetime):
-            return converted.date().isoformat()
-        if isinstance(converted, date):
-            return converted.isoformat()
-    except (TypeError, ValueError, OverflowError):
-        return ""
-    return ""
-
-
-def _source_date_from_values(values: tuple[Any, ...], *, max_columns: int = 4) -> tuple[str, int]:
-    for index, value in enumerate(values[:max_columns], start=1):
-        if source_date := _source_date(value):
-            return source_date, index
-    return "", 0
 
 
 def _looks_like_product(value: Any) -> bool:
@@ -153,8 +101,15 @@ def _line_candidate(values: tuple[Any, ...]) -> dict[str, Any] | None:
         quantity_kg = _number(values[index + 3])
         price = _number(values[index + 4])
         amount = _number(values[index + 5])
-        if None in {quantity_tins, specification, quantity_kg, price, amount}:
+        if any(
+            value is None for value in (quantity_tins, specification, quantity_kg, price, amount)
+        ):
             continue
+        assert quantity_tins is not None
+        assert specification is not None
+        assert quantity_kg is not None
+        assert price is not None
+        assert amount is not None
         if quantity_tins <= 0 or specification <= 0 or quantity_kg <= 0 or price < 0:
             continue
         kg_error = abs(quantity_kg - quantity_tins * specification)

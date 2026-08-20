@@ -71,7 +71,11 @@ def test_agent_runner_one_tool_then_answer(tmp_path):
     ctx = _make_ctx(
         [
             json.dumps(
-                {"thought": "先列目录", "tool": "list_workspace_dir", "input": {"path": "."}}
+                {
+                    "thought": "先列目录",
+                    "tool": "list_workspace_dir",
+                    "input": {"path": "."},
+                }
             ),
             json.dumps({"thought": "目录已列", "answer": "工作区内容已获取"}),
         ],
@@ -259,7 +263,9 @@ def test_tool_run_sandboxed_python_blocks_dangerous(tmp_path):
 
 def test_blueprints_template_renders_workspace_code():
     """blueprints.py must inject workspace tools and agent_runner into ctx."""
-    from modstore_server.employee_pack_blueprints_template import render_employee_pack_blueprints_py
+    from modstore_server.employee_pack_blueprints_template import (
+        render_employee_pack_blueprints_py,
+    )
 
     src = render_employee_pack_blueprints_py(
         pack_id="test-pack",
@@ -277,7 +283,9 @@ def test_blueprints_template_renders_workspace_code():
 
 def test_employee_template_renders_agent_handler():
     """employees/<stem>.py must include _handle_agent and 'agent' in _DISPATCH."""
-    from modstore_server.employee_pack_blueprints_template import render_employee_pack_employee_py
+    from modstore_server.employee_pack_blueprints_template import (
+        render_employee_pack_employee_py,
+    )
 
     src = render_employee_pack_employee_py(
         employee_id="test-emp",

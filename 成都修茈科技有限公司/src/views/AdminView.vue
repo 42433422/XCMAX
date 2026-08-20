@@ -56,15 +56,15 @@ onMounted(async () => {
   display: block;
   padding: 1.5rem;
   background: #111111;
-  border: 0.5px solid rgba(255,255,255,0.1);
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
   text-decoration: none;
   transition: all 0.2s;
 }
 
 .admin-card:hover {
-  background: rgba(255,255,255,0.03);
-  border-color: rgba(255,255,255,0.2);
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .admin-card-icon {
@@ -81,7 +81,7 @@ onMounted(async () => {
 
 .admin-card-desc {
   font-size: 0.85rem;
-  color: rgba(255,255,255,0.4);
+  color: rgba(255, 255, 255, 0.4);
   margin: 0;
 }
 </style>

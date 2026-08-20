@@ -1,3 +1,4 @@
+# mypy: disable-error-code="list-item"
 """SQLite INTEGER PK 行为回归（①-C 移除 sqlite_autoincrement 后）。"""
 
 from __future__ import annotations

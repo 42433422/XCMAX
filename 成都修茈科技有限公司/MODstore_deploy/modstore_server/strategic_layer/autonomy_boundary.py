@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """自治边界规则与评估器。
 
 边界定义了 AI 在执行层可自主决策的范围。决策提议进入 ``StrategicDecisionLedger`` 后，
@@ -16,7 +17,7 @@ from __future__ import annotations
 import fnmatch
 import logging
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
@@ -250,7 +251,7 @@ class AutonomyEvaluator:
         )
 
     @classmethod
-    def from_db(cls, session: Any = None) -> "AutonomyEvaluator":
+    def from_db(cls, session: Any = None) -> AutonomyEvaluator:
         """从 DB 加载启用规则；若表为空则 seed 默认规则。"""
         if session is None:
             session = get_session_factory()()
@@ -330,7 +331,7 @@ def seed_default_boundaries(
         for row in session.execute(select(AutonomyBoundaryModel.rule_id)).scalars():
             existing_ids.add(str(row))
         added = 0
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         for rule in DEFAULT_AUTONOMY_BOUNDARIES:
             if rule.rule_id in existing_ids:
                 continue

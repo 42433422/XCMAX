@@ -1,13 +1,13 @@
-# -*- coding: utf-8 -*-
 """
 使用 PaddleOCR PPStructure 表格识别
 """
 
-from paddleocr import PPStructure
-import numpy as np
-import cv2
-import json
 import glob
+import json
+
+import cv2
+import numpy as np
+from paddleocr import PPStructure
 
 # 读取图片
 files = glob.glob(r"e:\FHD\26-0300001A*.png")
@@ -39,14 +39,14 @@ if result and len(result) > 0:
         print(f"结果 keys：{result[0].keys()}")
 
         if "table" in result[0]:
-            print(f"\n表格结构：")
+            print("\n表格结构：")
             print(result[0]["table"])
 
         if "img" in result[0]:
-            print(f"\n检测到图片")
+            print("\n检测到图片")
 
         if "res" in result[0]:
-            print(f"\nOCR 结果：")
+            print("\nOCR 结果：")
             for i, item in enumerate(result[0]["res"]):
                 print(f"  {i}: {item}")
 

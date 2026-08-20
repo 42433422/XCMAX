@@ -35,6 +35,8 @@ def verify_employee_run_result(
         for item in outputs:
             if isinstance(item, dict) and item.get("ok") is False:
                 child = item.get("output") if isinstance(item.get("output"), dict) else {}
+                if not isinstance(child, dict):
+                    child = {}
                 return False, str(
                     item.get("error")
                     or child.get("error")

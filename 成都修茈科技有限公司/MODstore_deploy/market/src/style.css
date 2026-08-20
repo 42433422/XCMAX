@@ -146,28 +146,28 @@ html[data-workbench-theme='light'] .dg-stat {
 
 html[data-workbench-theme='light'] .dg-stat--ok {
   color: #059669;
-  background: var(--dg-stat-bg-ok, rgba(52, 168, 83, 0.10));
+  background: var(--dg-stat-bg-ok, rgba(52, 168, 83, 0.1));
 }
 
 html[data-workbench-theme='light'] .dg-stat--healthy {
   color: #059669;
-  background: var(--dg-stat-bg-healthy, rgba(52, 168, 83, 0.10));
+  background: var(--dg-stat-bg-healthy, rgba(52, 168, 83, 0.1));
 }
 
 html[data-workbench-theme='light'] .dg-stat--warn {
   color: #d97706;
-  background: var(--dg-stat-bg-warn, rgba(217, 119, 6, 0.10));
+  background: var(--dg-stat-bg-warn, rgba(217, 119, 6, 0.1));
 }
 
 html[data-workbench-theme='light'] .dg-stat--dep,
 html[data-workbench-theme='light'] .dg-stat--llm-ok {
   color: #0071e3;
-  background: var(--dg-stat-bg-dep, rgba(0, 113, 227, 0.10));
+  background: var(--dg-stat-bg-dep, rgba(0, 113, 227, 0.1));
 }
 
 html[data-workbench-theme='light'] .dg-stat--llm-err {
   color: #d70015;
-  background: var(--dg-stat-bg-err, rgba(215, 0, 21, 0.10));
+  background: var(--dg-stat-bg-err, rgba(215, 0, 21, 0.1));
 }
 
 html[data-workbench-theme='light'] .dg-stat--clickable:hover {
@@ -202,7 +202,7 @@ html[data-workbench-theme='light'] .dg-more-item:hover {
 html[data-workbench-theme='light'] .dg-more-menu {
   background: #fff;
   border-color: rgba(0, 0, 0, 0.1);
-  box-shadow: var(--dg-menu-shadow, 0 12px 28px rgba(0, 0, 0, 0.10));
+  box-shadow: var(--dg-menu-shadow, 0 12px 28px rgba(0, 0, 0, 0.1));
 }
 
 html[data-workbench-theme='light'] .dg-more-item {

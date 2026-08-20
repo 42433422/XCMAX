@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from vibe_coding.agent.patch import minimise_diff
 from vibe_coding.agent.patch.differ import unified_diff
 

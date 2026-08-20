@@ -153,7 +153,12 @@ function previewRows() {
         low_confidence_fields: ['购买单位'],
       },
       validation_issues: [
-        { code: 'OCR_LOW_CONFIDENCE', message: '请复核购买单位', severity: 'error', field: 'customer_name' },
+        {
+          code: 'OCR_LOW_CONFIDENCE',
+          message: '请复核购买单位',
+          severity: 'error',
+          field: 'customer_name',
+        },
       ],
       llm_suggestion: {},
       suggested_action: 'error',
@@ -316,7 +321,12 @@ describe('EtlCenterView folder workflow', () => {
           document_type: 'delivery_note_workbook',
         },
         sheet_plan: [
-          { sheet: '侯雪梅', role: 'delivery_note_template_and_records', status: 'included', rows: 6 },
+          {
+            sheet: '侯雪梅',
+            role: 'delivery_note_template_and_records',
+            status: 'included',
+            rows: 6,
+          },
           { sheet: '25年回款', role: 'finance_or_reconciliation', status: 'excluded', rows: 0 },
         ],
       },
@@ -346,10 +356,12 @@ describe('EtlCenterView folder workflow', () => {
     await buttonByText(wrapper, '上传并写入数据库')?.trigger('click')
     await flushPromises()
 
-    expect(etlApiMock.preview).toHaveBeenCalledWith(expect.objectContaining({
-      upload_id: 'upload-houxuemei',
-      target_type: 'auto',
-    }))
+    expect(etlApiMock.preview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        upload_id: 'upload-houxuemei',
+        target_type: 'auto',
+      }),
+    )
     // 解析就绪后自动写入业务库；存在 1 行错误，仅写入正确行。
     expect(etlApiMock.execute).toHaveBeenCalledWith(shipment.id, true)
     expect(wrapper.text()).toContain('运行历史')
@@ -379,11 +391,13 @@ describe('EtlCenterView folder workflow', () => {
     await buttonByText(wrapper, '上传并写入数据库')?.trigger('click')
     await flushPromises()
 
-    expect(etlApiMock.preview).toHaveBeenCalledWith(expect.objectContaining({
-      upload_id: 'upload-legacy',
-      target_type: 'customer_products',
-      compatibility_preset_id: 'legacy',
-    }))
+    expect(etlApiMock.preview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        upload_id: 'upload-legacy',
+        target_type: 'customer_products',
+        compatibility_preset_id: 'legacy',
+      }),
+    )
     expect(etlApiMock.preview.mock.calls[0][0].template_id).toBeUndefined()
     wrapper.unmount()
   })
@@ -419,10 +433,7 @@ describe('EtlCenterView folder workflow', () => {
   it('shows folder name, file count, relative paths, and batch action', async () => {
     const wrapper = await mountView()
     const input = wrapper.find('input[type="file"][webkitdirectory]')
-    const files = [
-      folderFile('customers.csv', '华东批次/客户/customers.csv'),
-      folderFile('products.csv', '华东批次/产品/products.csv'),
-    ]
+    const files = [folderFile('customers.csv', '华东批次/客户/customers.csv'), folderFile('products.csv', '华东批次/产品/products.csv')]
     Object.defineProperty(input.element, 'files', { value: files })
     await input.trigger('change')
 
@@ -441,30 +452,20 @@ describe('EtlCenterView folder workflow', () => {
       size_bytes: file.size,
       sha256: file.name,
     }))
-    etlApiMock.preview.mockImplementation(async ({ upload_id }: { upload_id: string }) => (
-      queuedRun(`run-${upload_id}`, upload_id)
-    ))
+    etlApiMock.preview.mockImplementation(async ({ upload_id }: { upload_id: string }) => queuedRun(`run-${upload_id}`, upload_id))
     const wrapper = await mountView()
     const input = wrapper.find('input[type="file"][webkitdirectory]')
-    const files = [
-      folderFile('customers.csv', '华东批次/客户/customers.csv'),
-      folderFile('products.csv', '华东批次/产品/products.csv'),
-    ]
+    const files = [folderFile('customers.csv', '华东批次/客户/customers.csv'), folderFile('products.csv', '华东批次/产品/products.csv')]
     Object.defineProperty(input.element, 'files', { value: files })
     await input.trigger('change')
-    const start = wrapper.findAll('button').find((button) => (
-      button.text().includes('批量上传并写入 2 个文件')
-    ))
+    const start = wrapper.findAll('button').find((button) => button.text().includes('批量上传并写入 2 个文件'))
     await start?.trigger('click')
     await flushPromises()
 
     expect(etlApiMock.upload).toHaveBeenCalledTimes(2)
     const options = etlApiMock.upload.mock.calls.map((call) => call[1])
     expect(new Set(options.map((item) => item.batchId)).size).toBe(1)
-    expect(options.map((item) => item.relativePath)).toEqual([
-      '华东批次/客户/customers.csv',
-      '华东批次/产品/products.csv',
-    ])
+    expect(options.map((item) => item.relativePath)).toEqual(['华东批次/客户/customers.csv', '华东批次/产品/products.csv'])
     expect(etlApiMock.preview).toHaveBeenCalledTimes(2)
     wrapper.unmount()
   })
@@ -487,8 +488,7 @@ describe('EtlCenterView folder workflow', () => {
     await buttonByText(wrapper, '字段映射')?.trigger('click')
     const transformSelect = wrapper.find('tbody select')
     await transformSelect.setValue('trim')
-    expect((wrapper.findAll('textarea[aria-label="安全转换 JSON"]')[0].element as HTMLTextAreaElement).value)
-      .toBe('[{"op":"trim"}]')
+    expect((wrapper.findAll('textarea[aria-label="安全转换 JSON"]')[0].element as HTMLTextAreaElement).value).toBe('[{"op":"trim"}]')
 
     const transformEditors = wrapper.findAll('textarea[aria-label="安全转换 JSON"]')
     await transformEditors[1].setValue('{}')
@@ -498,32 +498,37 @@ describe('EtlCenterView folder workflow', () => {
     expect(etlApiMock.patchDraft).not.toHaveBeenCalled()
 
     await transformEditors[1].setValue('[{"op":"trim"}]')
-    const ocrCheckbox = wrapper.findAll('input[type="checkbox"]').find((input) => (
-      input.element.parentElement?.textContent?.includes('OCR 表格位置')
-    ))
+    const ocrCheckbox = wrapper
+      .findAll('input[type="checkbox"]')
+      .find((input) => input.element.parentElement?.textContent?.includes('OCR 表格位置'))
     await ocrCheckbox?.setValue(true)
-    const addressCheckbox = wrapper.findAll('input[type="checkbox"]').find((input) => (
-      input.element.parentElement?.textContent?.includes('地址')
-    ))
+    const addressCheckbox = wrapper
+      .findAll('input[type="checkbox"]')
+      .find((input) => input.element.parentElement?.textContent?.includes('地址'))
     await addressCheckbox?.setValue(true)
     await buttonByText(wrapper, '保存并重新校验')?.trigger('click')
     await flushPromises()
 
-    expect(etlApiMock.patchDraft).toHaveBeenCalledWith(run.id, expect.objectContaining({
-      allowed_update_fields: ['address'],
-      ocr_confirmed: true,
-    }))
+    expect(etlApiMock.patchDraft).toHaveBeenCalledWith(
+      run.id,
+      expect.objectContaining({
+        allowed_update_fields: ['address'],
+        ocr_confirmed: true,
+      }),
+    )
 
     await buttonByText(wrapper, '保存个人模板')?.trigger('click')
     await flushPromises()
-    expect(etlApiMock.createTemplate).toHaveBeenCalledWith(expect.objectContaining({
-      name: '客户产品模板',
-      target_type: 'customer_products',
-    }))
+    expect(etlApiMock.createTemplate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: '客户产品模板',
+        target_type: 'customer_products',
+      }),
+    )
 
-    const validRowsCheckbox = wrapper.findAll('input[type="checkbox"]').find((input) => (
-      input.element.parentElement?.textContent?.includes('仅写入正确行')
-    ))
+    const validRowsCheckbox = wrapper
+      .findAll('input[type="checkbox"]')
+      .find((input) => input.element.parentElement?.textContent?.includes('仅写入正确行'))
     await validRowsCheckbox?.setValue(true)
     await buttonByText(wrapper, '写入数据库')?.trigger('click')
     await flushPromises()
@@ -538,12 +543,7 @@ describe('EtlCenterView folder workflow', () => {
     etlApiMock.run.mockResolvedValue(run)
     etlApiMock.patchDraft.mockResolvedValue(run)
     const rows = previewRows()
-    etlApiMock.rows.mockImplementation(async (
-      _id: string,
-      page: number,
-      pageSize: number,
-      action = '',
-    ) => {
+    etlApiMock.rows.mockImplementation(async (_id: string, page: number, pageSize: number, action = '') => {
       const items = action ? rows.filter((row) => row.final_action === action) : rows
       return { page, page_size: pageSize, total: items.length, items }
     })
@@ -676,15 +676,8 @@ describe('EtlCenterView folder workflow', () => {
     await buttonByText(wrapper, '保存发货单版式')?.trigger('click')
     await flushPromises()
 
-    expect(prompt).toHaveBeenCalledWith(
-      '发货单版式名称（可选；留空将按识别到的客户命名）',
-      '',
-    )
-    expect(etlApiMock.saveShipmentTemplate).toHaveBeenCalledWith(
-      run.id,
-      '',
-      '',
-    )
+    expect(prompt).toHaveBeenCalledWith('发货单版式名称（可选；留空将按识别到的客户命名）', '')
+    expect(etlApiMock.saveShipmentTemplate).toHaveBeenCalledWith(run.id, '', '')
     expect(wrapper.text()).toContain('金汉武家私-发货单版式')
     expect(wrapper.text()).toContain('后续开单会自动匹配')
     wrapper.unmount()
@@ -731,11 +724,7 @@ describe('EtlCenterView folder workflow', () => {
     await buttonByText(wrapper, '保存发货单版式')?.trigger('click')
     await flushPromises()
 
-    expect(etlApiMock.saveShipmentTemplate).toHaveBeenCalledWith(
-      run.id,
-      '金汉武专用打印版式',
-      '',
-    )
+    expect(etlApiMock.saveShipmentTemplate).toHaveBeenCalledWith(run.id, '金汉武专用打印版式', '')
     wrapper.unmount()
   })
 
@@ -784,11 +773,7 @@ describe('EtlCenterView folder workflow', () => {
     await buttonByText(wrapper, '保存发货单版式')?.trigger('click')
     await flushPromises()
 
-    expect(etlApiMock.saveShipmentTemplate).toHaveBeenCalledWith(
-      run.id,
-      '',
-      '侯雪梅!R29C1:10',
-    )
+    expect(etlApiMock.saveShipmentTemplate).toHaveBeenCalledWith(run.id, '', '侯雪梅!R29C1:10')
     wrapper.unmount()
   })
 
@@ -865,9 +850,7 @@ describe('EtlCenterView folder workflow', () => {
       upload_id: 'upload-houxuemei',
       target_type: 'customer_products',
     }
-    etlApiMock.run.mockImplementation(async (id: string) => (
-      id === shipment.id ? shipment : linked
-    ))
+    etlApiMock.run.mockImplementation(async (id: string) => (id === shipment.id ? shipment : linked))
 
     const wrapper = await mountView(shipment.id)
     expect(wrapper.text()).toContain('已自动规划客户库和产品库导入')

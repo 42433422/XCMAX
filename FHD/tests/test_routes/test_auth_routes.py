@@ -107,7 +107,7 @@ class TestUserPublicDict:
         user.role = "admin"
         user.is_active = True
         user.wx_avatar_url = None
-        with patch("app.utils.user_avatar_storage.public_avatar_url", return_value=""):
+        with patch("app.utils.path_io.user_avatar_storage.public_avatar_url", return_value=""):
             d = auth_mod._user_public_dict(user)
             assert d["id"] == 1
             assert d["username"] == "test"
@@ -166,7 +166,7 @@ class TestJitCreateLocalUserForEnterprise:
         mock_db.__exit__ = MagicMock(return_value=False)
         with (
             patch("app.db.session.get_db", return_value=mock_db),
-            patch("app.utils.password_hash.generate_password_hash", return_value="hash"),
+            patch("app.utils.security.password_hash.generate_password_hash", return_value="hash"),
             patch("app.utils.time.utc_now_naive"),
         ):
             result = auth_mod._jit_create_local_user_for_enterprise("newuser", "pass", "e@e.com")

@@ -1,10 +1,5 @@
 import { describe, expect, it, beforeEach } from 'vitest'
-import {
-  LS_PRODUCT_FLOW_LAST_STEP,
-  readProductFlowLastStep,
-  resolveProductFlowEntryStep,
-  saveProductFlowLastStep,
-} from './productFlow'
+import { LS_PRODUCT_FLOW_LAST_STEP, readProductFlowLastStep, resolveProductFlowEntryStep, saveProductFlowLastStep } from './productFlow'
 
 describe('productFlow last step resume', () => {
   beforeEach(() => {

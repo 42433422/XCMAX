@@ -137,11 +137,15 @@ onMounted(() => void load())
 
     <section v-if="approveExtras" class="cr-extras">
       <h2 class="cr-extras-title">{{ t('admin.changeRequests.approveGitTitle') }}</h2>
-      <pre v-if="approveExtras.git_suggestions?.length" class="cr-pre cr-pre--compact">{{ (approveExtras.git_suggestions || []).join('\n') }}</pre>
+      <pre v-if="approveExtras.git_suggestions?.length" class="cr-pre cr-pre--compact">{{
+        (approveExtras.git_suggestions || []).join('\n')
+      }}</pre>
       <p v-else class="muted">—</p>
       <h2 class="cr-extras-title">{{ t('admin.changeRequests.approveCiTitle') }}</h2>
       <pre class="cr-pre cr-pre--compact">{{ JSON.stringify(approveExtras.post_apply_pytest ?? {}, null, 2) }}</pre>
-      <button type="button" class="btn ghost cr-extras-dismiss" @click="approveExtras = null">{{ t('admin.changeRequests.dismissApproveExtras') }}</button>
+      <button type="button" class="btn ghost cr-extras-dismiss" @click="approveExtras = null">
+        {{ t('admin.changeRequests.dismissApproveExtras') }}
+      </button>
     </section>
 
     <div class="cr-table-wrap">
@@ -160,13 +164,19 @@ onMounted(() => void load())
         <tbody>
           <tr v-for="row in items" :key="row.id">
             <td>{{ row.id }}</td>
-            <td><code>{{ row.source_employee_id }}</code></td>
+            <td>
+              <code>{{ row.source_employee_id }}</code>
+            </td>
             <td>{{ row.change_kind }}</td>
-            <td><span class="pill">{{ row.status }}</span></td>
+            <td>
+              <span class="pill">{{ row.status }}</span>
+            </td>
             <td>{{ row.risk_level }}</td>
             <td class="muted">{{ row.created_at || '—' }}</td>
             <td>
-              <button type="button" class="btn link" @click="openDetail(row)">{{ t('admin.changeRequests.detail') }}</button>
+              <button type="button" class="btn link" @click="openDetail(row)">
+                {{ t('admin.changeRequests.detail') }}
+              </button>
             </td>
           </tr>
         </tbody>
@@ -183,8 +193,12 @@ onMounted(() => void load())
         <p class="muted">{{ selected.diff_summary }}</p>
         <pre class="cr-pre">{{ formatBlob(selected.diff_blob) }}</pre>
         <div v-if="selected.status === 'pending'" class="cr-drawer-actions">
-          <button type="button" class="btn primary" :disabled="loading" @click="approve">{{ t('admin.changeRequests.approve') }}</button>
-          <button type="button" class="btn ghost" :disabled="loading" @click="reject">{{ t('admin.changeRequests.reject') }}</button>
+          <button type="button" class="btn primary" :disabled="loading" @click="approve">
+            {{ t('admin.changeRequests.approve') }}
+          </button>
+          <button type="button" class="btn ghost" :disabled="loading" @click="reject">
+            {{ t('admin.changeRequests.reject') }}
+          </button>
         </div>
       </aside>
     </div>
@@ -334,15 +348,41 @@ onMounted(() => void load())
 .btn.ghost {
   background: transparent;
 }
-html[data-workbench-theme='light'] .cr-err{color:#dc2626}
-html[data-workbench-theme='light'] .cr-extras{background:rgba(0,0,0,0.03);border-color:#e2e8f0}
-html[data-workbench-theme='light'] .cr-table th,html[data-workbench-theme='light'] .cr-table td{border-color:#e2e8f0}
-html[data-workbench-theme='light'] .muted{color:#94a3b8}
-html[data-workbench-theme='light'] .pill{background:rgba(0,0,0,0.06)}
-html[data-workbench-theme='light'] .btn.link{color:#2563eb}
-html[data-workbench-theme='light'] .cr-drawer-backdrop{background:rgba(0,0,0,0.2)}
-html[data-workbench-theme='light'] .cr-drawer{background:#fff;color:#1a1a1a}
-html[data-workbench-theme='light'] .cr-pre{background:rgba(0,0,0,0.04)}
-html[data-workbench-theme='light'] .btn{border-color:#d1d5db}
-html[data-workbench-theme='light'] .btn.primary{background:#3b82f6;color:#fff}
+html[data-workbench-theme='light'] .cr-err {
+  color: #dc2626;
+}
+html[data-workbench-theme='light'] .cr-extras {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: #e2e8f0;
+}
+html[data-workbench-theme='light'] .cr-table th,
+html[data-workbench-theme='light'] .cr-table td {
+  border-color: #e2e8f0;
+}
+html[data-workbench-theme='light'] .muted {
+  color: #94a3b8;
+}
+html[data-workbench-theme='light'] .pill {
+  background: rgba(0, 0, 0, 0.06);
+}
+html[data-workbench-theme='light'] .btn.link {
+  color: #2563eb;
+}
+html[data-workbench-theme='light'] .cr-drawer-backdrop {
+  background: rgba(0, 0, 0, 0.2);
+}
+html[data-workbench-theme='light'] .cr-drawer {
+  background: #fff;
+  color: #1a1a1a;
+}
+html[data-workbench-theme='light'] .cr-pre {
+  background: rgba(0, 0, 0, 0.04);
+}
+html[data-workbench-theme='light'] .btn {
+  border-color: #d1d5db;
+}
+html[data-workbench-theme='light'] .btn.primary {
+  background: #3b82f6;
+  color: #fff;
+}
 </style>

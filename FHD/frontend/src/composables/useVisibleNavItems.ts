@@ -15,11 +15,7 @@ import {
   SETTINGS_MENU_ITEM,
 } from '@/constants/coreMenuCatalog'
 import { useAccountProfileStore } from '@/stores/accountProfile'
-import {
-  isPlatformShellModeEnabled,
-  resolvePlatformShellMenuKeys,
-  shouldExposeIndustrySidebar,
-} from '@/constants/platformShellMode'
+import { isPlatformShellModeEnabled, resolvePlatformShellMenuKeys, shouldExposeIndustrySidebar } from '@/constants/platformShellMode'
 import { hostPackAcknowledgedRef } from '@/constants/productFlow'
 import {
   isClientErpSidebarContext,
@@ -30,10 +26,7 @@ import {
 import { resolveNavRouteName } from '@/constants/navRouteAliases'
 import { resolveCoreNavLabel } from '@/utils/coreNavLabel'
 import { isCustomerServiceNavVisible } from '@/constants/customerServiceNav'
-import {
-  mergeSidebarMenuItems,
-  type ResolvedSidebarMenuItem,
-} from '@/utils/mergeSidebarMenuItems'
+import { mergeSidebarMenuItems, type ResolvedSidebarMenuItem } from '@/utils/mergeSidebarMenuItems'
 import { pinSidebarMenuItemsTop } from '@/utils/pinSidebarMenuItemsTop'
 import { buildRoleMenuProfile, canShowCoreMenuKey } from '@/utils/roleMenuProfile'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
@@ -127,17 +120,11 @@ export function useVisibleNavItems() {
   const memoMenuItems = makeSyncMemo<ResolvedSidebarMenuItem[]>()
   const memoVisibleNavItems = makeSyncMemo<VisibleNavItem[]>()
 
-  const installedModIds = computed(() =>
-    (mods.value || []).map((m) => String(m.id || '').trim()).filter(Boolean),
-  )
+  const installedModIds = computed(() => (mods.value || []).map((m) => String(m.id || '').trim()).filter(Boolean))
 
-  const exposeIndustrySidebar = computed(() =>
-    shouldExposeIndustrySidebar(installedModIds.value, hostPackAck.value),
-  )
+  const exposeIndustrySidebar = computed(() => shouldExposeIndustrySidebar(installedModIds.value, hostPackAck.value))
 
-  const hasIndustryBusinessMod = computed(() =>
-    isClientErpSidebarContext(installedModIds.value, activeModId.value),
-  )
+  const hasIndustryBusinessMod = computed(() => isClientErpSidebarContext(installedModIds.value, activeModId.value))
 
   const roleMenuProfile = computed(() =>
     buildRoleMenuProfile(
@@ -153,18 +140,12 @@ export function useVisibleNavItems() {
 
   const coreMenuOverrides = computed(() => buildCoreMenuOverrides(mods.value || []))
 
-  const industryId = computed(() =>
-    String(industryStore.currentIndustryId || DEFAULT_INDUSTRY_ID),
-  )
+  const industryId = computed(() => String(industryStore.currentIndustryId || DEFAULT_INDUSTRY_ID))
 
   const isCoreNavHidden = (key: string) => {
     const override = coreMenuOverrides.value.get(key)
     if (override?.hidden !== true) return false
-    return !keepHostNavKeyVisibleWhenModSidebarFacetSuppressed(
-      key,
-      installedModIds.value,
-      activeModId.value,
-    )
+    return !keepHostNavKeyVisibleWhenModSidebarFacetSuppressed(key, installedModIds.value, activeModId.value)
   }
 
   const localizedCoreBase = computed((): ResolvedSidebarMenuItem[] =>
@@ -194,15 +175,12 @@ export function useVisibleNavItems() {
           if (isCoreNavHidden(item.key)) return null
           const childKeys = [
             ...(item.children?.map((c) => c.key) || []),
-            ...(item.key === 'employee-workflow' &&
-            isAdminConsoleSpa() &&
-            accountProfileStore.isAdminAccount
+            ...(item.key === 'employee-workflow' && isAdminConsoleSpa() && accountProfileStore.isAdminAccount
               ? ADMIN_EMPLOYEE_WORKFLOW_MENU_CHILDREN.map((c) => c.key)
               : []),
           ]
           const parentAllowed =
-            canShowCoreMenuKey(roleMenuProfile.value, item.key) ||
-            childKeys.some((key) => canShowCoreMenuKey(roleMenuProfile.value, key))
+            canShowCoreMenuKey(roleMenuProfile.value, item.key) || childKeys.some((key) => canShowCoreMenuKey(roleMenuProfile.value, key))
           if (!parentAllowed) return null
           const resolved: ResolvedSidebarMenuItem = {
             ...item,
@@ -212,9 +190,7 @@ export function useVisibleNavItems() {
           if (item.children?.length) {
             const childSource = [
               ...item.children,
-              ...(isAdminConsoleSpa() && accountProfileStore.isAdminAccount
-                ? ADMIN_EMPLOYEE_WORKFLOW_MENU_CHILDREN
-                : []),
+              ...(isAdminConsoleSpa() && accountProfileStore.isAdminAccount ? ADMIN_EMPLOYEE_WORKFLOW_MENU_CHILDREN : []),
             ]
             resolved.children = childSource
               .map((child) => {
@@ -245,8 +221,7 @@ export function useVisibleNavItems() {
         // 企业完整包下客户 ERP 场景会抑制通用 bridge 的重复菜单，也需要用宿主槽位承载。
         // 仅取行业/定制 label 覆盖；其同名 mod 入口会在 merge 阶段因占用宿主槽位被去重。
         const industryDelivery: ResolvedSidebarMenuItem[] = []
-        const shouldInjectIndustryDelivery =
-          !isPlatformShellMode() || exposeIndustrySidebar.value
+        const shouldInjectIndustryDelivery = !isPlatformShellMode() || exposeIndustrySidebar.value
         if (!adminShell && shouldInjectIndustryDelivery) {
           for (const item of INDUSTRY_DELIVERY_CORE_ITEMS) {
             const override = coreMenuOverrides.value.get(item.key)
@@ -263,85 +238,67 @@ export function useVisibleNavItems() {
   )
 
   const trailingLocalized = computed((): ResolvedSidebarMenuItem[] =>
-    memoTrailingLocalized(
-      [
-        industryId.value,
-        modsForUi.value,
-        roleMenuProfile.value,
-        accountProfileStore.isAdminAccount,
-      ],
-      () => {
-        const id = industryId.value
-        const adminShell = isAdminConsoleSpa() && accountProfileStore.isAdminAccount
-        const trailingSource = adminShell
-          ? ADMIN_OPERATOR_AUX_MENU_ITEMS
-          : CORE_MENU_ITEMS_TRAILING
-        return trailingSource.map((item) => ({
+    memoTrailingLocalized([industryId.value, modsForUi.value, roleMenuProfile.value, accountProfileStore.isAdminAccount], () => {
+      const id = industryId.value
+      const adminShell = isAdminConsoleSpa() && accountProfileStore.isAdminAccount
+      const trailingSource = adminShell ? ADMIN_OPERATOR_AUX_MENU_ITEMS : CORE_MENU_ITEMS_TRAILING
+      return trailingSource
+        .map((item) => ({
           ...item,
           name: resolveCoreNavLabel(item.key, id, modsForUi.value) || item.name,
-        })).filter((item) => {
+        }))
+        .filter((item) => {
           if (isSandboxMode() && !SANDBOX_MENU_KEYS.has(item.key)) return false
           if (isPlatformShellMode()) return false
           if (!canShowCoreMenuKey(roleMenuProfile.value, item.key)) return false
-          if (
-            !isCustomerServiceNavVisible(item.key, accountProfileStore.isAdminAccount)
-          ) {
+          if (!isCustomerServiceNavVisible(item.key, accountProfileStore.isAdminAccount)) {
             return false
           }
           return true
         })
-      },
-    ),
+    }),
   )
 
   const adminItems = computed((): ResolvedSidebarMenuItem[] =>
-    memoAdminItems(
-      [roleMenuProfile.value, industryId.value, modsForUi.value],
-      () => {
-        if (!roleMenuProfile.value.canSeeAdminMenus) return []
-        const id = industryId.value
-        return [
-          {
-            ...ADMIN_MENU_ITEM,
-            name:
-              resolveCoreNavLabel(ADMIN_MENU_ITEM.key, id, modsForUi.value) ||
-              ADMIN_MENU_ITEM.name,
-          },
-        ]
-      },
-    ),
+    memoAdminItems([roleMenuProfile.value, industryId.value, modsForUi.value], () => {
+      if (!roleMenuProfile.value.canSeeAdminMenus) return []
+      const id = industryId.value
+      return [
+        {
+          ...ADMIN_MENU_ITEM,
+          name: resolveCoreNavLabel(ADMIN_MENU_ITEM.key, id, modsForUi.value) || ADMIN_MENU_ITEM.name,
+        },
+      ]
+    }),
   )
 
   const modItemsResolved = computed((): ResolvedSidebarMenuItem[] =>
-    memoModItemsResolved(
-      [modMenuItems.value, roleMenuProfile.value, accountProfileStore.isAdminAccount],
-      () => {
-        const adminShell = isAdminConsoleSpa() && accountProfileStore.isAdminAccount
-        return modMenuItems.value
-          .filter((item) => {
-            const navKey = normalizeModSidebarNavKey(String(item.key || ''))
-            if (shouldHideAttendanceModSidebarMenu(navKey)) return false
-            if (
-              roleMenuProfile.value.role === 'enterprise-user' &&
-              (navKey === 'workflow-visualization' || navKey === 'mod-workflow-visualization')
-            ) {
-              return false
-            }
-            if (!adminShell) return true
-            const modId = String(item.modId || '').trim()
-            if (modId && ADMIN_OPERATOR_HIDDEN_MOD_IDS.has(modId)) return false
-            if (modId && ADMIN_OPERATOR_ATTENDANCE_MOD_IDS.has(modId)) return false
-            return true
-          })
-          .map((item) => ({
-            key: item.key,
-            name: item.name,
-            iconClass: item.iconClass,
-            modId: item.modId,
-            path: item.path,
-          }))
-      },
-    ),
+    memoModItemsResolved([modMenuItems.value, roleMenuProfile.value, accountProfileStore.isAdminAccount], () => {
+      const adminShell = isAdminConsoleSpa() && accountProfileStore.isAdminAccount
+      return modMenuItems.value
+        .filter((item) => {
+          const navKey = normalizeModSidebarNavKey(String(item.key || ''))
+          if (shouldHideAttendanceModSidebarMenu(navKey)) return false
+          if (
+            roleMenuProfile.value.role === 'enterprise-user' &&
+            (navKey === 'workflow-visualization' || navKey === 'mod-workflow-visualization')
+          ) {
+            return false
+          }
+          if (!adminShell) return true
+          const modId = String(item.modId || '').trim()
+          if (modId && ADMIN_OPERATOR_HIDDEN_MOD_IDS.has(modId)) return false
+          if (modId && ADMIN_OPERATOR_ATTENDANCE_MOD_IDS.has(modId)) return false
+          return true
+        })
+        .map((item) => ({
+          key: item.key,
+          name: item.name,
+          iconClass: item.iconClass,
+          modId: item.modId,
+          path: item.path,
+        }))
+    }),
   )
 
   const mergedMenuItems = computed((): ResolvedSidebarMenuItem[] =>
@@ -367,37 +324,38 @@ export function useVisibleNavItems() {
   )
 
   const menuItems = computed((): ResolvedSidebarMenuItem[] =>
-    memoMenuItems(
-      [mergedMenuItems.value, activeModId.value, modItemsResolved.value],
-      () => {
-        const ordered = sidebarLayoutStore.applyOrder(mergedMenuItems.value)
-        const active = String(activeModId.value || '').trim()
-        let result = ordered
-        if (!isAdminConsoleSpa() && (active === 'attendance-industry' || active === 'taiyangniao-pro')) {
-          const modKeys = new Set(
-            modItemsResolved.value
-              .filter((m) => {
-                const id = String(m.modId || '').trim()
-                return id === 'attendance-industry' || id === 'taiyangniao-pro'
-              })
-              .map((m) => m.key),
-          )
-          if (modKeys.size) {
-            const modOnly = ordered.filter((item) => modKeys.has(item.key))
-            const rest = ordered.filter((item) => !modKeys.has(item.key))
-            result = [...modOnly, ...rest]
-          }
+    memoMenuItems([mergedMenuItems.value, activeModId.value, modItemsResolved.value], () => {
+      const ordered = sidebarLayoutStore.applyOrder(mergedMenuItems.value)
+      const active = String(activeModId.value || '').trim()
+      let result = ordered
+      if (!isAdminConsoleSpa() && (active === 'attendance-industry' || active === 'taiyangniao-pro')) {
+        const modKeys = new Set(
+          modItemsResolved.value
+            .filter((m) => {
+              const id = String(m.modId || '').trim()
+              return id === 'attendance-industry' || id === 'taiyangniao-pro'
+            })
+            .map((m) => m.key),
+        )
+        if (modKeys.size) {
+          const modOnly = ordered.filter((item) => modKeys.has(item.key))
+          const rest = ordered.filter((item) => !modKeys.has(item.key))
+          result = [...modOnly, ...rest]
         }
-        return pinSidebarMenuItemsTop(result)
-      },
-    ),
+      }
+      return pinSidebarMenuItemsTop(result)
+    }),
   )
 
   const visibleNavItems = computed((): VisibleNavItem[] =>
     memoVisibleNavItems([menuItems.value, industryId.value, modsForUi.value], () => {
       const out: VisibleNavItem[] = []
       for (const item of menuItems.value) {
-        const source: VisibleNavSource = item.modId ? 'mod' : item.key.startsWith('enterprise-') || item.key.startsWith('internal-') ? 'trailing' : 'core'
+        const source: VisibleNavSource = item.modId
+          ? 'mod'
+          : item.key.startsWith('enterprise-') || item.key.startsWith('internal-')
+            ? 'trailing'
+            : 'core'
         out.push({
           key: item.key,
           name: item.name,

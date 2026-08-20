@@ -5,6 +5,7 @@
 """
 
 import logging
+from typing import cast
 
 from app.db.models import UserPreference
 from app.db.session import get_db
@@ -116,7 +117,7 @@ class UserPreferenceService(NeuroEventPublisherMixin):
             )
 
             db.commit()
-            return result > 0
+            return cast("bool", result > 0)
 
 
 def get_user_preference_service() -> UserPreferenceService:

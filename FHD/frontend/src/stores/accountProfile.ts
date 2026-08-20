@@ -1,14 +1,11 @@
-import { defineStore } from 'pinia';
-import { ref, computed } from 'vue';
-import { authApi, type AccountKind, type AccountTier } from '@/api/auth';
-import {
-  invalidateEnterpriseSessionCache,
-  validateEnterpriseSessionCached,
-} from '@/utils/authSessionCache';
-import { fetchProductSku, isEnterpriseEdition } from '@/utils/productSku';
-import { refreshTenantScopedClientStores } from '@/utils/refreshTenantScopedClientStores';
-import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime';
-import type { TenantStorageScopeInput } from '@/utils/tenantStorageScope';
+import { defineStore } from 'pinia'
+import { ref, computed } from 'vue'
+import { authApi, type AccountKind, type AccountTier } from '@/api/auth'
+import { invalidateEnterpriseSessionCache, validateEnterpriseSessionCached } from '@/utils/authSessionCache'
+import { fetchProductSku, isEnterpriseEdition } from '@/utils/productSku'
+import { refreshTenantScopedClientStores } from '@/utils/refreshTenantScopedClientStores'
+import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
+import type { TenantStorageScopeInput } from '@/utils/tenantStorageScope'
 
 function buildScopeInput(
   tenantId: number | null,
@@ -23,7 +20,7 @@ function buildScopeInput(
     localUserId,
     marketUsername: marketUsername || undefined,
     accountKind,
-  };
+  }
 }
 
 function syncTenantScopedStoresFromProfile(
@@ -33,159 +30,141 @@ function syncTenantScopedStoresFromProfile(
   accountKind: AccountKind,
   marketUsername: string,
 ): Promise<void> {
-  const input = buildScopeInput(
-    tenantId,
-    marketUserId,
-    localUserId,
-    accountKind,
-    marketUsername,
-  );
-  setRuntimeTenantStorageScopeInput(input);
-  return refreshTenantScopedClientStores(input);
+  const input = buildScopeInput(tenantId, marketUserId, localUserId, accountKind, marketUsername)
+  setRuntimeTenantStorageScopeInput(input)
+  return refreshTenantScopedClientStores(input)
 }
 
 export const useAccountProfileStore = defineStore('accountProfile', () => {
-  const accountKind = ref<AccountKind>('enterprise');
-  const companyBrand = ref('');
-  const marketIsAdmin = ref(false);
-  const marketIsEnterprise = ref(false);
-  const tenantId = ref<number | null>(null);
-  const tenantName = ref('');
-  const marketUserId = ref<number | null>(null);
-  const localUserId = ref<number | null>(null);
-  const impersonatingMarketUserId = ref<number | null>(null);
-  const impersonatingUsername = ref('');
+  const accountKind = ref<AccountKind>('enterprise')
+  const companyBrand = ref('')
+  const marketIsAdmin = ref(false)
+  const marketIsEnterprise = ref(false)
+  const tenantId = ref<number | null>(null)
+  const tenantName = ref('')
+  const marketUserId = ref<number | null>(null)
+  const localUserId = ref<number | null>(null)
+  const impersonatingMarketUserId = ref<number | null>(null)
+  const impersonatingUsername = ref('')
   // 账号体系真相源（前端只读展示）：身份 / 等级 / 预算 / 已授权行业 / 会员
-  const tier = ref<AccountKind | null>(null);
-  const accountTier = ref<AccountTier | null>(null);
-  const budgetRange = ref('');
-  const entitledIndustries = ref<string[]>([]);
-  const marketMembershipTier = ref<string | null>(null);
-  const loaded = ref(false);
+  const tier = ref<AccountKind | null>(null)
+  const accountTier = ref<AccountTier | null>(null)
+  const budgetRange = ref('')
+  const entitledIndustries = ref<string[]>([])
+  const marketMembershipTier = ref<string | null>(null)
+  const loaded = ref(false)
 
-  const isAdminAccount = computed(
-    () => accountKind.value === 'admin' && marketIsAdmin.value,
-  );
+  const isAdminAccount = computed(() => accountKind.value === 'admin' && marketIsAdmin.value)
 
-  const isImpersonating = computed(() => impersonatingMarketUserId.value != null);
+  const isImpersonating = computed(() => impersonatingMarketUserId.value != null)
 
   const displayBrand = computed(() => {
-    const brand = companyBrand.value.trim();
-    if (brand) return brand;
-    return '';
-  });
+    const brand = companyBrand.value.trim()
+    if (brand) return brand
+    return ''
+  })
 
   function applySessionFields(data: Record<string, unknown>): Promise<void> {
-    const kind = String(data.account_kind || 'enterprise').trim();
+    const kind = String(data.account_kind || 'enterprise').trim()
     if (kind === 'personal' || kind === 'enterprise' || kind === 'admin') {
-      accountKind.value = kind;
+      accountKind.value = kind
     }
-    companyBrand.value = String(data.company_brand || '').trim();
-    marketIsAdmin.value = Boolean(data.market_is_admin);
-    marketIsEnterprise.value = Boolean(data.market_is_enterprise);
-    const tid = data.tenant_id;
-    tenantId.value = tid === null || tid === undefined || tid === '' ? null : Number(tid);
-    tenantName.value = String(data.tenant_name || data.company_brand || '').trim();
-    const mid = data.market_user_id;
-    marketUserId.value =
-      mid === null || mid === undefined || mid === '' ? null : Number(mid);
-    const lid = data.local_user_id;
+    companyBrand.value = String(data.company_brand || '').trim()
+    marketIsAdmin.value = Boolean(data.market_is_admin)
+    marketIsEnterprise.value = Boolean(data.market_is_enterprise)
+    const tid = data.tenant_id
+    tenantId.value = tid === null || tid === undefined || tid === '' ? null : Number(tid)
+    tenantName.value = String(data.tenant_name || data.company_brand || '').trim()
+    const mid = data.market_user_id
+    marketUserId.value = mid === null || mid === undefined || mid === '' ? null : Number(mid)
+    const lid = data.local_user_id
     if (lid === null || lid === undefined || lid === '') {
-      const nested = data.user;
+      const nested = data.user
       if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
-        const uid = (nested as Record<string, unknown>).id;
-        localUserId.value =
-          uid === null || uid === undefined || uid === '' ? null : Number(uid);
+        const uid = (nested as Record<string, unknown>).id
+        localUserId.value = uid === null || uid === undefined || uid === '' ? null : Number(uid)
       }
     } else {
-      localUserId.value = Number(lid);
+      localUserId.value = Number(lid)
     }
-    const imp = data.impersonating_market_user_id;
-    impersonatingMarketUserId.value =
-      imp === null || imp === undefined || imp === '' ? null : Number(imp);
-    impersonatingUsername.value = String(data.impersonating_username || '').trim();
-    const t = String(data.tier || '').trim();
-    tier.value = t === 'personal' || t === 'enterprise' || t === 'admin' ? t : null;
-    const at = String(data.account_tier || '').trim();
-    accountTier.value =
-      at === 'normal' || at === 'pro' || at === 'max' || at === 'ultra' ? at : null;
-    budgetRange.value = String(data.budget_range || '').trim();
-    entitledIndustries.value = Array.isArray(data.entitled_industries)
-      ? (data.entitled_industries as unknown[]).map((x) => String(x))
-      : [];
-    const mmt = data.market_membership_tier;
-    marketMembershipTier.value =
-      mmt === null || mmt === undefined || mmt === '' ? null : String(mmt).trim();
-    loaded.value = true;
+    const imp = data.impersonating_market_user_id
+    impersonatingMarketUserId.value = imp === null || imp === undefined || imp === '' ? null : Number(imp)
+    impersonatingUsername.value = String(data.impersonating_username || '').trim()
+    const t = String(data.tier || '').trim()
+    tier.value = t === 'personal' || t === 'enterprise' || t === 'admin' ? t : null
+    const at = String(data.account_tier || '').trim()
+    accountTier.value = at === 'normal' || at === 'pro' || at === 'max' || at === 'ultra' ? at : null
+    budgetRange.value = String(data.budget_range || '').trim()
+    entitledIndustries.value = Array.isArray(data.entitled_industries) ? (data.entitled_industries as unknown[]).map((x) => String(x)) : []
+    const mmt = data.market_membership_tier
+    marketMembershipTier.value = mmt === null || mmt === undefined || mmt === '' ? null : String(mmt).trim()
+    loaded.value = true
     return syncTenantScopedStoresFromProfile(
       tenantId.value,
       marketUserId.value,
       localUserId.value,
       accountKind.value,
       impersonatingUsername.value,
-    );
+    )
   }
 
   function applyFromMeData(data: Record<string, unknown> | null | undefined): Promise<void> {
-    if (!data || typeof data !== 'object') return Promise.resolve();
-    return applySessionFields(data);
+    if (!data || typeof data !== 'object') return Promise.resolve()
+    return applySessionFields(data)
   }
 
   function applyFromLoginPayload(raw: Record<string, unknown>): Promise<void> {
-    const payload =
-      raw.data && typeof raw.data === 'object' && !Array.isArray(raw.data)
-        ? (raw.data as Record<string, unknown>)
-        : raw;
-    return applySessionFields(payload);
+    const payload = raw.data && typeof raw.data === 'object' && !Array.isArray(raw.data) ? (raw.data as Record<string, unknown>) : raw
+    return applySessionFields(payload)
   }
 
   async function refreshFromServer() {
     try {
-      let sku = 'generic';
+      let sku = 'generic'
       try {
-        sku = await fetchProductSku();
+        sku = await fetchProductSku()
       } catch {
         /* ignore */
       }
       if (isEnterpriseEdition(sku)) {
-        const valid = await validateEnterpriseSessionCached();
+        const valid = await validateEnterpriseSessionCached()
         if (!valid) {
-          clear();
-          return;
+          clear()
+          return
         }
       }
-      const res = await authApi.getCurrentUser();
+      const res = await authApi.getCurrentUser()
       if (res?.success && res.data) {
-        await applyFromMeData(res.data as Record<string, unknown>);
-        return;
+        await applyFromMeData(res.data as Record<string, unknown>)
+        return
       }
-      invalidateEnterpriseSessionCache();
-      clear();
+      invalidateEnterpriseSessionCache()
+      clear()
     } catch {
-      invalidateEnterpriseSessionCache();
-      clear();
+      invalidateEnterpriseSessionCache()
+      clear()
     }
   }
 
   function clear() {
-    accountKind.value = 'enterprise';
-    companyBrand.value = '';
-    marketIsAdmin.value = false;
-    marketIsEnterprise.value = false;
-    tenantId.value = null;
-    tenantName.value = '';
-    marketUserId.value = null;
-    localUserId.value = null;
-    impersonatingMarketUserId.value = null;
-    impersonatingUsername.value = '';
-    tier.value = null;
-    accountTier.value = null;
-    budgetRange.value = '';
-    entitledIndustries.value = [];
-    marketMembershipTier.value = null;
-    loaded.value = false;
-    setRuntimeTenantStorageScopeInput(null);
-    refreshTenantScopedClientStores({ tenantId: null, accountKind: 'enterprise' });
+    accountKind.value = 'enterprise'
+    companyBrand.value = ''
+    marketIsAdmin.value = false
+    marketIsEnterprise.value = false
+    tenantId.value = null
+    tenantName.value = ''
+    marketUserId.value = null
+    localUserId.value = null
+    impersonatingMarketUserId.value = null
+    impersonatingUsername.value = ''
+    tier.value = null
+    accountTier.value = null
+    budgetRange.value = ''
+    entitledIndustries.value = []
+    marketMembershipTier.value = null
+    loaded.value = false
+    setRuntimeTenantStorageScopeInput(null)
+    refreshTenantScopedClientStores({ tenantId: null, accountKind: 'enterprise' })
   }
 
   return {
@@ -212,5 +191,5 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
     applyFromLoginPayload,
     refreshFromServer,
     clear,
-  };
-});
+  }
+})

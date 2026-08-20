@@ -3,15 +3,15 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 
-const router = useRouter();
+const router = useRouter()
 
 onMounted(() => {
   void router.replace({
     name: 'settings',
     query: { section: 'model-payment' },
-  });
-});
+  })
+})
 </script>

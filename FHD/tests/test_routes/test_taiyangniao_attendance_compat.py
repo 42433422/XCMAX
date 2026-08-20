@@ -1,3 +1,4 @@
+# mypy: disable-error-code="attr-defined"
 from __future__ import annotations
 
 import sqlite3
@@ -11,8 +12,8 @@ import pytest
 from fastapi import FastAPI
 from starlette.testclient import TestClient
 
-from app.fastapi_routes import taiyangniao_attendance_compat as tac
-from app.fastapi_routes.taiyangniao_attendance_compat import (
+from app.legacy.routes import taiyangniao_attendance_compat as tac
+from app.legacy.routes.taiyangniao_attendance_compat import (
     DEFAULT_TEMPLATE_RELPATH,
     router,
 )

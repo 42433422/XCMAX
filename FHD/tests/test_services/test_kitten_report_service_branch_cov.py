@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr, var-annotated"
 """Branch-coverage tests for app.services.kitten_report.service.
 
 Targets KittenReportExportService branches:

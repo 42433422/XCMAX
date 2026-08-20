@@ -22,6 +22,7 @@ from psycopg.rows import DictRow, dict_row
 from psycopg_pool import AsyncConnectionPool
 
 from langgraph.checkpoint.postgres import _ainternal
+from langgraph.store.postgres._exception_policy import BOUNDARY_ERRORS
 from langgraph.store.postgres.base import (
     PLACEHOLDER,
     BasePostgresStore,
@@ -268,7 +269,7 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
                         if "dims" in params:
                             try:
                                 params["dims"] = int(params["dims"])
-                            except Exception as e:
+                            except BOUNDARY_ERRORS as e:
                                 raise ValueError(
                                     f"Invalid dims for vector index: {params['dims']}"
                                 ) from e
@@ -346,7 +347,7 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
                         logger.info(f"Store swept {expired_items} expired items")
                 except asyncio.CancelledError:
                     break
-                except Exception as exc:
+                except BOUNDARY_ERRORS as exc:
                     logger.exception("Store TTL sweep iteration failed", exc_info=exc)
 
         task = asyncio.create_task(_sweep_loop())

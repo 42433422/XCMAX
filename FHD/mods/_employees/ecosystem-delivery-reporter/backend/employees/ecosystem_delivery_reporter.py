@@ -37,10 +37,7 @@ def run(payload: dict[str, Any], _ctx: dict[str, Any]) -> dict[str, Any]:
         status = str(row.get("sla_status") or "").strip().lower()
         if status and status not in _VALID_SLA:
             missing.append("sla_status_invalid")
-        if (
-            status in {"at_risk", "breached"}
-            and not str(row.get("next_step") or "").strip()
-        ):
+        if status in {"at_risk", "breached"} and not str(row.get("next_step") or "").strip():
             missing.append("next_step")
         if missing:
             blockers.append({"index": index, "reasons": missing})

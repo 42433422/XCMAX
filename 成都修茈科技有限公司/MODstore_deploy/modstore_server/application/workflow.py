@@ -6,9 +6,15 @@ from typing import Any, Optional
 
 from modstore_server.eventing.bus import NeuroBus
 from modstore_server.eventing.global_bus import neuro_bus as default_neuro_bus
-from modstore_server.services.employee import EmployeeRuntimeClient, get_default_employee_client
+from modstore_server.services.employee import (
+    EmployeeRuntimeClient,
+    get_default_employee_client,
+)
 from modstore_server.services.llm import LlmChatClient, get_default_llm_client
-from modstore_server.services.workflow import WorkflowEngineClient, get_default_workflow_client
+from modstore_server.services.workflow import (
+    WorkflowEngineClient,
+    get_default_workflow_client,
+)
 
 
 class WorkflowApplicationService:

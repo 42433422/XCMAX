@@ -185,9 +185,7 @@ export function parseByokPaste(text: string): ByokParseResult {
   }
 
   if (unrecognizedLines > 0) {
-    warnings.push(
-      `已跳过 ${unrecognizedLines} 行无法识别的内容（既不是 NAME=VALUE，也不像 API Key）。`,
-    )
+    warnings.push(`已跳过 ${unrecognizedLines} 行无法识别的内容（既不是 NAME=VALUE，也不像 API Key）。`)
   }
 
   const entries: ByokParsedEntry[] = []

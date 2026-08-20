@@ -352,9 +352,7 @@ describe('useWorkflowAiEmployeesStore', () => {
 
   describe('hydrateFromMods', () => {
     it('merges mod workflow ids into enabled', () => {
-      mockFilterWorkflowRegistrySourceMods.mockReturnValue([
-        { workflow_employees: [{ id: 'emp1' }, { id: 'emp2' }] },
-      ])
+      mockFilterWorkflowRegistrySourceMods.mockReturnValue([{ workflow_employees: [{ id: 'emp1' }, { id: 'emp2' }] }])
       const store = useWorkflowAiEmployeesStore()
       store.hydrateFromMods([])
       expect(store.enabled).toHaveProperty('emp1', false)
@@ -362,9 +360,7 @@ describe('useWorkflowAiEmployeesStore', () => {
     })
 
     it('does not overwrite existing enabled keys', () => {
-      mockFilterWorkflowRegistrySourceMods.mockReturnValue([
-        { workflow_employees: [{ id: 'emp1' }] },
-      ])
+      mockFilterWorkflowRegistrySourceMods.mockReturnValue([{ workflow_employees: [{ id: 'emp1' }] }])
       const store = useWorkflowAiEmployeesStore()
       store.toggle('emp1') // true
       store.hydrateFromMods([])
@@ -372,9 +368,7 @@ describe('useWorkflowAiEmployeesStore', () => {
     })
 
     it('skips non-workflow desk employee ids', () => {
-      mockFilterWorkflowRegistrySourceMods.mockReturnValue([
-        { workflow_employees: [{ id: 'desk-emp' }] },
-      ])
+      mockFilterWorkflowRegistrySourceMods.mockReturnValue([{ workflow_employees: [{ id: 'desk-emp' }] }])
       mockIsNonWorkflowDeskEmployeeId.mockReturnValue(true)
       const store = useWorkflowAiEmployeesStore()
       store.hydrateFromMods([])
@@ -413,9 +407,7 @@ describe('useWorkflowAiEmployeesStore', () => {
     })
 
     it('keeps keys in manifest', () => {
-      mockFilterWorkflowRegistrySourceMods.mockReturnValue([
-        { workflow_employees: [{ id: 'manifest-emp' }] },
-      ])
+      mockFilterWorkflowRegistrySourceMods.mockReturnValue([{ workflow_employees: [{ id: 'manifest-emp' }] }])
       const store = useWorkflowAiEmployeesStore()
       store.toggle('manifest-emp')
       store.pruneOrphanWorkflowEmployeeToggles([])

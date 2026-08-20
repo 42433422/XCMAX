@@ -1,0 +1,230 @@
+"""Printer automation utilities."""
+
+import logging
+import subprocess
+import time
+from typing import Any, cast
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+try:
+    import win32api
+    import win32con
+    import win32gui
+    import win32print
+
+    _WIN32_AUTOMATION_AVAILABLE = True
+    _WIN32_AUTOMATION_ERROR = ""
+except ImportError:
+    win32api = None
+    win32con = None
+    win32gui = None
+    win32print = None
+    _WIN32_AUTOMATION_AVAILABLE = False
+    _WIN32_AUTOMATION_ERROR = "Windows printing dependencies unavailable"
+
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
+
+
+class PrinterAutomation:
+    def __init__(self):
+        self.current_printer = None
+        self.original_default = None
+
+    @staticmethod
+    def _is_available() -> bool:
+        return _WIN32_AUTOMATION_AVAILABLE
+
+    def _unavailable_result(self) -> dict:
+        return {
+            "success": False,
+            "message": f"当前环境不支持自动化打印（缺少 Windows 依赖）：{_WIN32_AUTOMATION_ERROR or 'unknown'}",
+        }
+
+    def move_mouse(self, x: int, y: int):
+        if not self._is_available():
+            return
+        win32api.SetCursorPos((x, y))
+        time.sleep(0.2)
+
+    def click_mouse(self, x: int, y: int, button: str = "left"):
+        if not self._is_available():
+            return
+        self.move_mouse(x, y)
+
+        if button == "left":
+            win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+            time.sleep(0.1)
+            win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+        elif button == "right":
+            win32api.mouse_event(win32con.MOUSEEVENTF_RIGHTDOWN, 0, 0, 0, 0)
+            time.sleep(0.1)
+            win32api.mouse_event(win32con.MOUSEEVENTF_RIGHTUP, 0, 0, 0, 0)
+        time.sleep(0.3)
+
+    def find_window(self, title: str) -> int:
+        if not self._is_available():
+            return 0
+
+        def callback(hwnd, hwnds):
+            if win32gui.IsWindowVisible(hwnd):
+                window_title = win32gui.GetWindowText(hwnd)
+                if title in window_title:
+                    hwnds.append(hwnd)
+            return True
+
+        hwnds: list[int] = []
+        win32gui.EnumWindows(callback, hwnds)
+        return hwnds[0] if hwnds else 0
+
+    def get_window_position(self, hwnd: int) -> tuple[int, int, int, int]:
+        if not self._is_available():
+            return (0, 0, 0, 0)
+        rect = win32gui.GetWindowRect(hwnd)
+        return cast("tuple[int, int, int, int]", rect)
+
+    def set_default_printer(self, printer_name: str) -> bool:
+        if not self._is_available():
+            logger.warning(self._unavailable_result()["message"])
+            return False
+        try:
+            logger.info("设置Windows默认打印机为: %s", printer_name)
+
+            result = subprocess.run(
+                ["rundll32", "printui.dll,PrintUIEntry", "/y", "/n", printer_name],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+
+            if result.returncode == 0:
+                logger.info("成功设置默认打印机为: %s", printer_name)
+                time.sleep(1)
+                return True
+            else:
+                logger.error("设置默认打印机失败: %s", result.stderr)
+                return False
+
+        except RECOVERABLE_ERRORS as e:
+            logger.error("设置默认打印机异常: %s", e)
+            return False
+
+    def handle_printer_dialog(self, target_printer: str, timeout: int = 10) -> bool:
+        if not self._is_available():
+            logger.warning(self._unavailable_result()["message"])
+            return False
+        start_time = time.time()
+
+        while (time.time() - start_time) < timeout:
+            hwnd = self.find_window("打印")
+            if hwnd:
+                logger.info("找到打印机对话框，窗口句柄: %s", hwnd)
+
+                rect = self.get_window_position(hwnd)
+                logger.info("对话框位置: %s", rect)
+
+                center_x = (rect[0] + rect[2]) // 2
+                center_y = (rect[1] + rect[3]) // 2
+
+                printer_dropdown_x = center_x
+                printer_dropdown_y = center_y - 100
+                self.click_mouse(printer_dropdown_x, printer_dropdown_y)
+
+                time.sleep(0.5)
+
+                logger.info("尝试选择打印机: %s", target_printer)
+
+                ok_button_x = center_x + 100
+                ok_button_y = center_y + 50
+                self.click_mouse(ok_button_x, ok_button_y)
+
+                logger.info("打印机对话框处理完成")
+                return True
+
+            time.sleep(0.5)
+
+        logger.info("未找到打印机对话框")
+        return False
+
+    def print_with_automation(self, file_path: str, target_printer: str) -> dict:
+        if not self._is_available():
+            return self._unavailable_result()
+        try:
+            logger.info("开始自动化打印: %s 到 %s", file_path, target_printer)
+
+            self.original_default = win32print.GetDefaultPrinter()
+            logger.info("原始默认打印机: %s", self.original_default)
+
+            if self.original_default != target_printer:
+                logger.info("临时设置默认打印机为: %s", target_printer)
+                self.set_default_printer(target_printer)
+
+            logger.info("使用ShellExecute打印文件")
+            result = win32api.ShellExecute(0, "print", file_path, f'/d:"{target_printer}"', ".", 1)
+
+            if result <= 32:
+                raise Exception(f"ShellExecute失败，错误代码: {result}")
+
+            logger.info("ShellExecute调用成功，结果: %s", result)
+
+            logger.info("检查是否需要处理打印机对话框...")
+            self.handle_printer_dialog(target_printer)
+
+            logger.info("等待打印完成...")
+            time.sleep(5)
+
+            if self.original_default and self.original_default != target_printer:
+                logger.info("恢复原始默认打印机: %s", self.original_default)
+                self.set_default_printer(self.original_default)
+
+            return {
+                "success": True,
+                "message": f"自动化打印成功发送到 {target_printer}",
+                "printer": target_printer,
+                "file": file_path,
+            }
+
+        except RECOVERABLE_ERRORS as e:
+            logger.error("自动化打印失败: %s", e)
+
+            if self.original_default and self.current_printer != self.original_default:
+                try:
+                    self.set_default_printer(self.original_default)
+                except RECOVERABLE_ERRORS:
+                    pass
+
+            return {"success": False, "message": "自动化打印失败"}
+
+
+class EnhancedPrinterUtils:
+    def __init__(self):
+        self.automation = PrinterAutomation()
+
+    def print_file_enhanced(
+        self,
+        file_path: str,
+        printer_name: str,
+        use_automation: bool = True,
+        use_default_printer: bool = False,
+    ) -> dict:
+        if use_automation and not self.automation._is_available():
+            return cast("dict[Any, Any]", self.automation._unavailable_result())
+        try:
+            if not use_automation:
+                from app.utils.path_io.print_utils import PrinterUtils
+
+                utils = PrinterUtils()
+                return utils.print_file(
+                    file_path, printer_name, use_default_printer=use_default_printer
+                )
+            else:
+                return cast(
+                    "dict[Any, Any]", self.automation.print_with_automation(file_path, printer_name)
+                )
+
+        except RECOVERABLE_ERRORS:
+            logger.exception("增强打印失败")
+            return {"success": False, "message": "增强打印失败"}

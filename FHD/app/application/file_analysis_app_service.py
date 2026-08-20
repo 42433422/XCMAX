@@ -12,16 +12,19 @@ import os
 import sqlite3
 import uuid
 from typing import Any, cast
+from zipfile import BadZipFile
+
+from openpyxl.utils.exceptions import InvalidFileException
 
 from app.di.registry import get_service_registry
 from app.infrastructure.db.sql_identifiers import (
     quote_sqlite_identifier,
     resolve_products_table,
 )
-from app.utils.external_sqlite import sqlite_conn
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.utils.path_utils import get_upload_dir
-from app.utils.secure_filename import secure_filename
+from app.utils.path_io.external_sqlite import sqlite_conn
+from app.utils.path_io.path_utils import get_upload_dir
+from app.utils.security.secure_filename import secure_filename
 
 logger = logging.getLogger(__name__)
 
@@ -157,9 +160,50 @@ class FileAnalysisService:
                         "table_columns": table_columns,
                     },
                 }
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("SQLite 数据库分析失败：%s", e)
-            return {"success": False, "message": f"文件分析失败：{str(e)}"}
+        except RECOVERABLE_ERRORS:
+            logger.exception("SQLite 数据库分析失败")
+            return {"success": False, "message": "文件分析失败，服务暂时不可用，请稍后重试"}
+
+    def _analyze_excel_file(
+        self, saved_path: str, saved_name: str, raw_filename: str, filename: str
+    ) -> dict[str, Any]:
+        """Extract a bounded workbook preview without evaluating formulas."""
+        try:
+            from openpyxl import load_workbook
+
+            workbook = load_workbook(saved_path, read_only=True, data_only=True)
+            sheets: list[dict[str, Any]] = []
+            for worksheet in workbook.worksheets[:20]:
+                preview = [
+                    [cell for cell in row]
+                    for row in worksheet.iter_rows(
+                        min_row=1,
+                        max_row=min(int(worksheet.max_row or 1), 20),
+                        values_only=True,
+                    )
+                ]
+                sheets.append(
+                    {
+                        "name": worksheet.title,
+                        "max_row": int(worksheet.max_row or 0),
+                        "max_column": int(worksheet.max_column or 0),
+                        "preview": preview,
+                    }
+                )
+            workbook.close()
+            return {
+                "success": True,
+                "parser_used": "openpyxl",
+                "extension": os.path.splitext(filename)[1].lower(),
+                "analyzed": True,
+                "saved_name": saved_name,
+                "original_name": raw_filename,
+                "suggested_use": "excel_import",
+                "excel_meta": {"sheet_count": len(sheets), "sheets": sheets},
+            }
+        except RECOVERABLE_ERRORS + (BadZipFile, InvalidFileException):
+            logger.exception("Excel 文件分析失败")
+            return {"success": False, "message": "Excel 文件分析失败，请确认文件格式后重试"}
 
     def _determine_suggested_use(self, table_names: list, table_columns: dict[str, list]) -> str:
         """根据表结构确定建议用途"""

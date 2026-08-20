@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 
-def _ok(summary: str = "", *, items=None, meta: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def _ok(
+    summary: str = "", *, items=None, meta: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
     return {
         "ok": True,
         "summary": summary[:4000],
@@ -17,7 +19,14 @@ def _ok(summary: str = "", *, items=None, meta: Optional[Dict[str, Any]] = None)
 
 
 def _err(msg: str, *, meta: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    return {"ok": False, "summary": msg[:400], "items": [], "warnings": [], "error": msg[:1000], "meta": dict(meta or {})}
+    return {
+        "ok": False,
+        "summary": msg[:400],
+        "items": [],
+        "warnings": [],
+        "error": msg[:1000],
+        "meta": dict(meta or {}),
+    }
 
 
 def _action(payload: Dict[str, Any]) -> str:
@@ -41,4 +50,7 @@ async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
             items=[{"line": line}] if line else [],
             meta={"employee_id": EMPLOYEE_ID, "action": act},
         )
-    return _err(f"不支持的 action: {act}", meta={"employee_id": EMPLOYEE_ID, "supported": ["status", "signal_ack"]})
+    return _err(
+        f"不支持的 action: {act}",
+        meta={"employee_id": EMPLOYEE_ID, "supported": ["status", "signal_ack"]},
+    )

@@ -33,8 +33,22 @@ describe('workflowEmployeeScope', () => {
   it('filters registry entries to enterprise package mods', () => {
     const stack = buildEnterpriseModStack(basePlan)
     const entries = [
-      { id: 'a', label: 'A', kind: 'mod_extension' as const, order: 1, carrierModId: 'coating-industry', hostModId: 'coating-industry' },
-      { id: 'b', label: 'B', kind: 'mod_extension' as const, order: 2, carrierModId: 'artifact-generate-ai-employee', hostModId: 'artifact-generate-ai-employee' },
+      {
+        id: 'a',
+        label: 'A',
+        kind: 'mod_extension' as const,
+        order: 1,
+        carrierModId: 'coating-industry',
+        hostModId: 'coating-industry',
+      },
+      {
+        id: 'b',
+        label: 'B',
+        kind: 'mod_extension' as const,
+        order: 2,
+        carrierModId: 'artifact-generate-ai-employee',
+        hostModId: 'artifact-generate-ai-employee',
+      },
     ]
     const filtered = filterWorkflowRegistryEntriesForEnterpriseStack(entries, stack)
     expect(filtered.map((e) => e.id)).toEqual(['a'])
@@ -94,16 +108,17 @@ describe('workflowEmployeeScope', () => {
 
   it('returns false when entry has no carrier and no mod id', () => {
     const stack = buildEnterpriseModStack(basePlan)
-    expect(
-      workflowRegistryEntryBelongsToStack({ carrierModId: '', hostModId: '' }, stack),
-    ).toBe(false)
+    expect(workflowRegistryEntryBelongsToStack({ carrierModId: '', hostModId: '' }, stack)).toBe(false)
   })
 
   it('returns false for custom phase employee carrier mod id', () => {
     const stack = buildEnterpriseModStack(basePlan)
     expect(
       workflowRegistryEntryBelongsToStack(
-        { carrierModId: 'xcagi-workflow-employee-custom', hostModId: 'xcagi-workflow-employee-custom' },
+        {
+          carrierModId: 'xcagi-workflow-employee-custom',
+          hostModId: 'xcagi-workflow-employee-custom',
+        },
         stack,
       ),
     ).toBe(false)
@@ -112,7 +127,10 @@ describe('workflowEmployeeScope', () => {
   it('returns true for workflow carrier mod when stack is null', () => {
     expect(
       workflowRegistryEntryBelongsToStack(
-        { carrierModId: 'xcagi-workflow-employee-attendance', hostModId: 'xcagi-workflow-employee-attendance' },
+        {
+          carrierModId: 'xcagi-workflow-employee-attendance',
+          hostModId: 'xcagi-workflow-employee-attendance',
+        },
         null,
       ),
     ).toBe(true)
@@ -120,26 +138,25 @@ describe('workflowEmployeeScope', () => {
 
   it('returns true for host bridge mod when stack is null', () => {
     expect(
-      workflowRegistryEntryBelongsToStack(
-        { carrierModId: 'xcagi-erp-domain-bridge', hostModId: 'xcagi-erp-domain-bridge' },
-        null,
-      ),
+      workflowRegistryEntryBelongsToStack({ carrierModId: 'xcagi-erp-domain-bridge', hostModId: 'xcagi-erp-domain-bridge' }, null),
     ).toBe(true)
   })
 
   it('returns false for unknown carrier mod when stack is null', () => {
-    expect(
-      workflowRegistryEntryBelongsToStack(
-        { carrierModId: 'some-random-mod', hostModId: 'some-random-mod' },
-        null,
-      ),
-    ).toBe(false)
+    expect(workflowRegistryEntryBelongsToStack({ carrierModId: 'some-random-mod', hostModId: 'some-random-mod' }, null)).toBe(false)
   })
 
   it('filterModsForEnterpriseWorkflowRegistry filters source mods when stack is null', () => {
     const mods = [
-      { id: 'xcagi-workflow-employee-attendance', workflow_employees: [{ id: 'att_ai', label: '考勤' }] },
-      { id: 'xcagi-host-foundation-employee', type: 'employee_pack', workflow_employees: [{ id: 'gen_ai', label: '生成' }] },
+      {
+        id: 'xcagi-workflow-employee-attendance',
+        workflow_employees: [{ id: 'att_ai', label: '考勤' }],
+      },
+      {
+        id: 'xcagi-host-foundation-employee',
+        type: 'employee_pack',
+        workflow_employees: [{ id: 'gen_ai', label: '生成' }],
+      },
     ]
     const scoped = filterModsForEnterpriseWorkflowRegistry(mods, null)
     expect(scoped.map((m) => m.id)).toEqual(['xcagi-workflow-employee-attendance'])
@@ -173,7 +190,11 @@ describe('workflowEmployeeScope', () => {
   it('filterModsForEnterpriseWorkflowRegistry skips employee pack entries', () => {
     const stack = buildEnterpriseModStack(basePlan)
     const mods = [
-      { id: 'xcagi-host-foundation-employee', type: 'employee_pack', workflow_employees: [{ id: 'e1', label: 'E1' }] },
+      {
+        id: 'xcagi-host-foundation-employee',
+        type: 'employee_pack',
+        workflow_employees: [{ id: 'e1', label: 'E1' }],
+      },
       { id: 'coating-industry', workflow_employees: [{ id: 'e2', label: 'E2' }] },
     ]
     // coating-industry is in stack.packageModIds but the employee pack is not in stack

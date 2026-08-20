@@ -1,9 +1,5 @@
 import type { WorkflowEmployeeRegistryEntry } from '@/types/workflow-employee'
-import {
-  isWorkflowCarrierModId,
-  modBelongsToEnterpriseStack,
-  type EnterpriseModStack,
-} from '@/constants/enterpriseModStack'
+import { isWorkflowCarrierModId, modBelongsToEnterpriseStack, type EnterpriseModStack } from '@/constants/enterpriseModStack'
 import { isHostBridgeModId } from '@/constants/genericModPack'
 import {
   filterWorkflowRegistrySourceMods,

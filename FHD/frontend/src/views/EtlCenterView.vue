@@ -12,11 +12,7 @@ import {
   type EtlTargetConfig,
   type EtlTemplate,
 } from '@/api/etl'
-import {
-  batchFileStatusLabel,
-  ignoredReasonLabel,
-  useEtlFolderBatch,
-} from '@/composables/useEtlFolderBatch'
+import { batchFileStatusLabel, ignoredReasonLabel, useEtlFolderBatch } from '@/composables/useEtlFolderBatch'
 import { useEtlTemplateSelection } from '@/composables/useEtlTemplateSelection'
 import { tabForRunStatus, type EtlRunTab } from '@/utils/etlRunView'
 import { ETL_FILE_ACCEPT, formatEtlBytes } from '@/utils/etlFileSelection'
@@ -108,14 +104,8 @@ async function tryAutoWrite(run: EtlRun) {
   }
 }
 
-const {
-  templateSelection,
-  compatibleTemplates,
-  compatiblePresets,
-  templateId,
-  compatibilityPresetId,
-  selectedCompatibilityPreset,
-} = useEtlTemplateSelection({ capabilities, templates, targetType })
+const { templateSelection, compatibleTemplates, compatiblePresets, templateId, compatibilityPresetId, selectedCompatibilityPreset } =
+  useEtlTemplateSelection({ capabilities, templates, targetType })
 
 const {
   selectedFiles,
@@ -172,11 +162,9 @@ function allowedActionsForRow(row: EtlRunRow): EtlAction[] {
     return true
   })
 }
-const bulkNewRows = computed(() => runRows.value.filter((row) => (
-  row.validation_issues.length === 0
-  && !row.match_ref
-  && row.suggested_action !== 'skip'
-)))
+const bulkNewRows = computed(() =>
+  runRows.value.filter((row) => row.validation_issues.length === 0 && !row.match_ref && row.suggested_action !== 'skip'),
+)
 const canExecute = computed(() => {
   if (!currentRun.value || currentRun.value.status !== 'preview_ready') return false
   if (currentRun.value.summary.error && !validRowsOnly.value) return false
@@ -190,24 +178,16 @@ const summaryCards = computed(() => [
 ])
 const savedShipmentTemplate = computed<Record<string, unknown> | null>(() => {
   const candidate = currentRun.value?.details?.shipment_document_template
-  return candidate && typeof candidate === 'object' && !Array.isArray(candidate)
-    ? candidate as Record<string, unknown>
-    : null
+  return candidate && typeof candidate === 'object' && !Array.isArray(candidate) ? (candidate as Record<string, unknown>) : null
 })
-const savedShipmentTemplateName = computed(() => (
-  String(savedShipmentTemplate.value?.name || '').trim()
-))
+const savedShipmentTemplateName = computed(() => String(savedShipmentTemplate.value?.name || '').trim())
 const shipmentTemplateCandidates = computed<Array<Record<string, unknown>>>(() => {
   const listed = currentRun.value?.source_features?.shipment_template_candidates
   if (Array.isArray(listed)) {
-    return listed.filter(
-      (item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object' && !Array.isArray(item),
-    )
+    return listed.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object' && !Array.isArray(item))
   }
   const legacy = currentRun.value?.source_features?.shipment_template_candidate
-  return legacy && typeof legacy === 'object' && !Array.isArray(legacy)
-    ? [legacy as Record<string, unknown>]
-    : []
+  return legacy && typeof legacy === 'object' && !Array.isArray(legacy) ? [legacy as Record<string, unknown>] : []
 })
 const shipmentTemplateCandidate = computed<Record<string, unknown> | null>(() => {
   const selected = shipmentTemplateCandidates.value.find(
@@ -215,26 +195,18 @@ const shipmentTemplateCandidate = computed<Record<string, unknown> | null>(() =>
   )
   return selected || shipmentTemplateCandidates.value[0] || null
 })
-const shipmentTemplateCandidateName = computed(() => (
-  String(shipmentTemplateCandidate.value?.name || '').trim()
-))
+const shipmentTemplateCandidateName = computed(() => String(shipmentTemplateCandidate.value?.name || '').trim())
 const linkedCustomerProductPreview = computed<Record<string, unknown> | null>(() => {
   const linked = currentRun.value?.details?.linked_customer_products_preview
-  return linked && typeof linked === 'object' && !Array.isArray(linked)
-    ? linked as Record<string, unknown>
-    : null
+  return linked && typeof linked === 'object' && !Array.isArray(linked) ? (linked as Record<string, unknown>) : null
 })
 const linkedCustomerNames = computed(() => {
-  const names = runRows.value
-    .map((row) => String(row.normalized.customer_name || '').trim())
-    .filter(Boolean)
+  const names = runRows.value.map((row) => String(row.normalized.customer_name || '').trim()).filter(Boolean)
   return [...new Set(names)]
 })
 const plannedBusinessRows = computed(() => {
   if (!currentRun.value) return 0
-  return currentRun.value.summary.new
-    + currentRun.value.summary.update
-    + currentRun.value.summary.skip
+  return currentRun.value.summary.new + currentRun.value.summary.update + currentRun.value.summary.skip
 })
 const runOutcomeText = computed(() => {
   if (!currentRun.value) return ''
@@ -246,34 +218,24 @@ const runOutcomeText = computed(() => {
 })
 const regionSummary = computed<Record<string, unknown> | null>(() => {
   const value = currentRun.value?.source_features?.region_summary
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null
 })
 const detectedRegions = computed<Array<Record<string, unknown>>>(() => {
   const value = currentRun.value?.source_features?.regions
-  return Array.isArray(value)
-    ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
-    : []
+  return Array.isArray(value) ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object') : []
 })
 const workbookSheetPlan = computed<Array<Record<string, unknown>>>(() => {
   const value = currentRun.value?.source_features?.sheet_plan
-  return Array.isArray(value)
-    ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
-    : []
+  return Array.isArray(value) ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object') : []
 })
 const latestRecordSelection = computed<Record<string, unknown> | null>(() => {
   const value = currentRun.value?.source_features?.latest_record_selection
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null
 })
 const llmPlanningText = computed(() => {
   const structure = currentRun.value?.source_features?.llm_structure
   const mapping = currentRun.value?.source_features?.llm_mapping
-  const entries = [structure, mapping].filter(
-    (item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object',
-  )
+  const entries = [structure, mapping].filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
   if (entries.some((item) => item.used_llm === true && item.degraded !== true)) return '软件 LLM 已参与结构或字段建议'
   if (entries.some((item) => item.degraded === true)) return 'LLM 已降级，当前结果由确定性规则生成'
   return '当前结构由确定性规则识别'
@@ -293,10 +255,7 @@ async function bootstrap() {
     templates.value = templateRows
     runs.value = history
     targetConfigs.value = configs
-    if (
-      targetType.value !== 'auto'
-      && !caps.targets.some((item) => item.type === targetType.value)
-    ) {
+    if (targetType.value !== 'auto' && !caps.targets.some((item) => item.type === targetType.value)) {
       targetType.value = 'auto'
     }
     const requestedRun = String(route.query.run_id || '')
@@ -343,9 +302,7 @@ function schedulePoll() {
 
 function syncDraft() {
   if (!currentRun.value) return
-  const candidateIds = shipmentTemplateCandidates.value
-    .map((candidate) => String(candidate.source_region_id || '').trim())
-    .filter(Boolean)
+  const candidateIds = shipmentTemplateCandidates.value.map((candidate) => String(candidate.source_region_id || '').trim()).filter(Boolean)
   if (!candidateIds.includes(selectedShipmentTemplateRegionId.value)) {
     selectedShipmentTemplateRegionId.value = candidateIds[0] || ''
   }
@@ -429,9 +386,7 @@ async function overrideRow(row: EtlRunRow, event: Event) {
 
 async function bulkOverride(action: 'new' | 'skip') {
   if (!currentRun.value) return
-  const candidates = action === 'new'
-    ? bulkNewRows.value
-    : runRows.value.filter((row) => row.validation_issues.length === 0)
+  const candidates = action === 'new' ? bulkNewRows.value : runRows.value.filter((row) => row.validation_issues.length === 0)
   if (!candidates.length) return
   busy.value = true
   try {
@@ -484,10 +439,7 @@ async function saveCurrentAsTemplate() {
 
 async function saveCurrentAsShipmentTemplate() {
   if (!currentRun.value || currentRun.value.target_type !== 'shipment_records') return
-  const requestedName = window.prompt(
-    '发货单版式名称（可选；留空将按识别到的客户命名）',
-    '',
-  )
+  const requestedName = window.prompt('发货单版式名称（可选；留空将按识别到的客户命名）', '')
   if (requestedName === null) return
   const name = requestedName.trim()
   busy.value = true
@@ -498,9 +450,7 @@ async function saveCurrentAsShipmentTemplate() {
       name,
       String(shipmentTemplateCandidate.value?.source_region_id || ''),
     )
-    shipmentTemplateMessage.value = result.name
-      ? `已保存“${result.name}”。${result.message}`
-      : result.message
+    shipmentTemplateMessage.value = result.name ? `已保存“${result.name}”。${result.message}` : result.message
     currentRun.value = await etlApi.run(currentRun.value.id)
   } catch (error) {
     pageError.value = error instanceof Error ? error.message : '发货单版式保存失败'
@@ -531,7 +481,10 @@ async function previewCustomerProductsFromShipment() {
       syncDraft()
       activeTab.value = tabForRunStatus(customerProductRun.status)
       if (customerProductRun.status === 'preview_ready') await loadRows()
-      await router.replace({ path: '/business-docking', query: { run_id: customerProductRun.id } })
+      await router.replace({
+        path: '/business-docking',
+        query: { run_id: customerProductRun.id },
+      })
       schedulePoll()
     } catch (error) {
       pageError.value = error instanceof Error ? error.message : '读取关联客户及产品任务失败'
@@ -559,13 +512,8 @@ async function previewCustomerProductsFromShipment() {
     rowActionFilter.value = ''
     runRows.value = []
     rowTotal.value = 0
-    const retainedRuns = runs.value.some((run) => run.id === sourceRun.id)
-      ? runs.value
-      : [sourceRun, ...runs.value]
-    runs.value = [
-      customerProductRun,
-      ...retainedRuns.filter((run) => run.id !== customerProductRun.id),
-    ]
+    const retainedRuns = runs.value.some((run) => run.id === sourceRun.id) ? runs.value : [sourceRun, ...runs.value]
+    runs.value = [customerProductRun, ...retainedRuns.filter((run) => run.id !== customerProductRun.id)]
     customerProductPreviewMessage.value = '已从同一上传文件创建客户及产品导入任务；请核对后点击“写入数据库”。'
     if (autoWriteEnabled.value) markAutoWrite(customerProductRun.id)
     syncDraft()
@@ -697,26 +645,56 @@ function actionReason(action: string) {
   return action === 'skip' ? '重复数据，默认不写入' : '无差异'
 }
 function stageLabel(stage: string) {
-  return ({ queued: '等待后台任务', parsing: '解析文件', validating: '转换与校验', preview_ready: '解析完成', executing: '执行写入' } as Record<string, string>)[stage] || stage
+  return (
+    (
+      {
+        queued: '等待后台任务',
+        parsing: '解析文件',
+        validating: '转换与校验',
+        preview_ready: '解析完成',
+        executing: '执行写入',
+      } as Record<string, string>
+    )[stage] || stage
+  )
 }
 function statusLabel(status: string) {
-  return ({ queued: '排队中', previewing: '解析中', preview_ready: '待写入', executing: '写入中', completed: '已写入', failed: '失败', interrupted: '已中断' } as Record<string, string>)[status] || status
+  return (
+    (
+      {
+        queued: '排队中',
+        previewing: '解析中',
+        preview_ready: '待写入',
+        executing: '写入中',
+        completed: '已写入',
+        failed: '失败',
+        interrupted: '已中断',
+      } as Record<string, string>
+    )[status] || status
+  )
 }
 function sheetRoleLabel(role: unknown) {
-  return ({
-    delivery_note_template_and_records: '送货单版式与发货数据',
-    supporting_customer_product_data: '客户与产品补充数据',
-    finance_or_reconciliation: '财务或对账附表',
-    reference_catalog: '参考目录',
-    non_target_appendix: '非业务附表',
-  } as Record<string, string>)[String(role || '')] || '工作表'
+  return (
+    (
+      {
+        delivery_note_template_and_records: '送货单版式与发货数据',
+        supporting_customer_product_data: '客户与产品补充数据',
+        finance_or_reconciliation: '财务或对账附表',
+        reference_catalog: '参考目录',
+        non_target_appendix: '非业务附表',
+      } as Record<string, string>
+    )[String(role || '')] || '工作表'
+  )
 }
 function sheetPlanStatusLabel(status: unknown) {
-  return ({
-    included: '纳入本次导入',
-    reviewed: '已读取，仅作参考',
-    excluded: '已排除',
-  } as Record<string, string>)[String(status || '')] || '已检查'
+  return (
+    (
+      {
+        included: '纳入本次导入',
+        reviewed: '已读取，仅作参考',
+        excluded: '已排除',
+      } as Record<string, string>
+    )[String(status || '')] || '已检查'
+  )
 }
 function sheetPlanRows(item: Record<string, unknown>) {
   const rows = Number(item.rows || 0)
@@ -737,7 +715,10 @@ function confidenceClass(value: number) {
   return value >= 0.9 ? 'confidence-high' : value >= 0.6 ? 'confidence-medium' : 'confidence-low'
 }
 function compactRecord(value: Record<string, unknown>) {
-  return Object.entries(value).slice(0, 5).map(([key, item]) => `${key}: ${String(item ?? '')}`).join(' · ')
+  return Object.entries(value)
+    .slice(0, 5)
+    .map(([key, item]) => `${key}: ${String(item ?? '')}`)
+    .join(' · ')
 }
 function ocrTableRow(row: EtlRunRow) {
   const table = row.provenance.table_position

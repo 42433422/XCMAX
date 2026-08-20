@@ -4,7 +4,7 @@ import os
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 
@@ -13,7 +13,7 @@ from app.domain.ports.embedder import EmbedderPort, HashEmbedder
 from app.infrastructure.persistence.pg_vector_store import PgVectorStore
 from app.infrastructure.persistence.sqlite_vector_store import SQLiteVectorStore
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.utils.path_utils import get_app_data_dir
+from app.utils.path_io.path_utils import get_app_data_dir
 
 # HashEmbedder 实现已下沉至 app.domain.ports.embedder（本模块仍 re-export，
 # 保持 app.application.excel_vector_app_service.HashEmbedder 历史 import 路径可用）。
@@ -37,7 +37,7 @@ def _get_default_embedder() -> EmbedderPort:
 
         svc = get_default_embedding_service()
         if svc is not None and svc.is_available():
-            return svc
+            return cast("EmbedderPort", svc)
     except RECOVERABLE_ERRORS:
         pass
     return HashEmbedder()

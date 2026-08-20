@@ -1586,7 +1586,7 @@ class TestPreparePersistentWorktree:
 
     def test_exception_returns_none(self, tmp_path):
         svc = _make_svc(tmp_path)
-        with patch.object(svc, "_git", side_effect=Exception("crash")):
+        with patch.object(svc, "_git", side_effect=RuntimeError("crash")):
             assert (
                 svc._prepare_persistent_worktree(str(tmp_path), str(tmp_path / "wt"), "branch")
                 is None

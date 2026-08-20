@@ -6,7 +6,7 @@ import subprocess
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 GitHubFetcher = Callable[[str], dict[str, Any]]
 
@@ -139,10 +139,11 @@ def _probe_target(target: dict[str, Any], *, fetch: GitHubFetcher) -> dict[str, 
     )
     pr = fetch(f"repos/{repo}/pulls/{pr_number}")
     merge_sha = str(pr.get("merge_commit_sha") or "")
-    checks = (
+    checks = cast(
+        dict[str, Any],
         fetch(f"repos/{repo}/commits/{merge_sha}/check-runs?per_page=100")
         if merge_sha
-        else {}
+        else {},
     )
     runs = [run for run in checks.get("check_runs") or [] if isinstance(run, dict)]
     successful = [

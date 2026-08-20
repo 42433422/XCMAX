@@ -30,10 +30,6 @@ export {
   combinedRequestUrl,
   dbReadHeaders,
   dbWriteHeaders,
-} from '@/fhd/dbTokenHeaders';
+} from '@/fhd/dbTokenHeaders'
 
-export type {
-  DbTokensStatus,
-  ProductsReadLockState,
-  ProductsReadProbeOptions,
-} from '@/fhd/dbTokenHeaders';
+export type { DbTokensStatus, ProductsReadLockState, ProductsReadProbeOptions } from '@/fhd/dbTokenHeaders'

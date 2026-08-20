@@ -1,10 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
-import {
-  isAdminConsoleSpa,
-  resolveAdminConsoleOrigin,
-  resolveAdminConsoleLoginUrl,
-  resolveAdminConsoleHomeUrl,
-} from './adminConsoleUrl'
+import { isAdminConsoleSpa, resolveAdminConsoleOrigin, resolveAdminConsoleLoginUrl, resolveAdminConsoleHomeUrl } from './adminConsoleUrl'
 
 describe('adminConsoleUrl', () => {
   beforeEach(() => {

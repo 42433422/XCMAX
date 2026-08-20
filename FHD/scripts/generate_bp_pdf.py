@@ -1,29 +1,27 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
+# mypy: disable-error-code="import-not-found, import-untyped"
 """
 XCAGI 商业计划书 Markdown 转 PDF
 """
 
-import markdown2
-from reportlab.lib import colors
-from reportlab.lib import pagesizes
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import inch, cm
-from reportlab.platypus import (
-    SimpleDocTemplate,
-    Paragraph,
-    Spacer,
-    PageBreak,
-    Table,
-    TableStyle,
-    Image,
-)
-from reportlab.lib.enums import TA_LEFT, TA_CENTER
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.lib.pagesizes import A4
 import os
 import re
+
+import markdown2
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import cm, inch
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.platypus import (
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+    Table,
+    TableStyle,
+)
 
 # 注册中文字体
 try:
@@ -38,11 +36,11 @@ def markdown_to_pdf(markdown_file, pdf_file):
     """将 Markdown 文件转换为 PDF"""
 
     # 读取 Markdown 文件
-    with open(markdown_file, "r", encoding="utf-8") as f:
+    with open(markdown_file, encoding="utf-8") as f:
         markdown_text = f.read()
 
     # 转换为 HTML
-    html = markdown2.markdown(markdown_text, extras=["tables", "toc", "fenced-code-blocks"])
+    markdown2.markdown(markdown_text, extras=["tables", "toc", "fenced-code-blocks"])
 
     # 创建 PDF 文档
     doc = SimpleDocTemplate(

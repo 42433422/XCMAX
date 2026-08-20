@@ -28,7 +28,6 @@ export const useWalletStore = defineStore('wallet', () => {
           balance.value = n
           setMembershipReferenceYuan((res as { membership_reference_yuan?: unknown }).membership_reference_yuan)
           lastUpdated.value = Date.now()
-          console.log(`[Wallet] 余额刷新成功: ¥${n.toFixed(2)}`)
           return balance.value
         } else {
           throw new Error('Invalid API response format')
@@ -36,7 +35,7 @@ export const useWalletStore = defineStore('wallet', () => {
       } catch (err) {
         console.warn(`[Wallet] 余额刷新失败 (尝试 ${attempt + 1}/${retryCount + 1}):`, err)
         if (attempt < retryCount) {
-          await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)))
+          await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)))
         } else {
           error.value = err instanceof Error ? err.message : String(err)
           console.error('[Wallet] 所有重试失败，余额设为 null')
@@ -73,6 +72,6 @@ export const useWalletStore = defineStore('wallet', () => {
     refreshBalance,
     setBalance,
     setMembershipReferenceYuan,
-    clear
+    clear,
   }
 })

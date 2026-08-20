@@ -122,9 +122,7 @@ export function subscribeButlerTask(handler: (event: ButlerTaskPublishEvent) => 
 }
 
 export function buildButlerTaskPrompt(event: ButlerTaskPublishEvent): string {
-  const target = event.employeeName
-    ? `${event.employeeName} (${event.employeeId})`
-    : event.employeeId
+  const target = event.employeeName ? `${event.employeeName} (${event.employeeId})` : event.employeeId
   const inputDataJson = JSON.stringify(event.inputData || {}, null, 2)
   return [
     '请处理一条来自「在岗员工节点图」的任务发布请求。',

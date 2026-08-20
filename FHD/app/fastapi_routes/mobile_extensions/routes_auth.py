@@ -9,12 +9,11 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from app.fastapi_routes.mobile_extensions.models import AuthQrConfirmBody, OidcExchangeBody
-from app.utils.mobile_api import format_mobile_response
+from app.utils.device_system.mobile_api import format_mobile_response
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-OPERATIONAL_ERRORS = RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router: APIRouter = APIRouter()
 
 # ── 认证 ──
 
@@ -43,8 +42,13 @@ async def mobile_auth_qr_confirm(body: AuthQrConfirmBody, request: Request):
     username = (body.username or "").strip()
     password = body.password or ""
     auth_app_service = get_auth_app_service()
-    sku = resolve_product_sku()
-    fields_set = getattr(body, "model_fields_set", getattr(body, "__fields_set__", set()))
+    sku = resolve_product_sku() or "personal"
+    # Do not put ``__fields_set__`` in a nested getattr default: Python eagerly
+    # evaluates defaults, which touches Pydantic v2's deprecated compatibility
+    # property even when ``model_fields_set`` exists.
+    fields_set = getattr(body, "model_fields_set", None)
+    if fields_set is None:
+        fields_set = getattr(body, "__dict__", {}).get("__fields_set__", set())
     qr_account_kind = str(rec.get("account_kind") or "").strip()
     body_account_kind = body.account_kind if "account_kind" in fields_set else qr_account_kind
     account_kind = normalize_account_kind(
@@ -89,8 +93,8 @@ async def mobile_auth_qr_confirm(body: AuthQrConfirmBody, request: Request):
             try:
                 import json as _json
 
-                msg = _json.loads(err.body.decode("utf-8")).get("message") or msg
-            except OPERATIONAL_ERRORS:
+                msg = _json.loads(bytes(err.body).decode("utf-8")).get("message") or msg
+            except RECOVERABLE_ERRORS:
                 pass
         return JSONResponse(
             format_mobile_response(None, msg, success=False, code=401),
@@ -132,10 +136,9 @@ async def mobile_auth_oidc_exchange(body: OidcExchangeBody):
         )
     try:
         oidc_session = await exchange_oidc_authorization(body.code)
-        profile = (
-            oidc_session.get("profile") if isinstance(oidc_session.get("profile"), dict) else {}
-        )
-    except OPERATIONAL_ERRORS:
+        raw_profile = oidc_session.get("profile")
+        profile: dict[str, Any] = dict(raw_profile) if isinstance(raw_profile, dict) else {}
+    except RECOVERABLE_ERRORS:
         return JSONResponse(
             format_mobile_response(None, "OIDC 登录服务暂不可用", success=False, code=502),
             status_code=502,
@@ -152,7 +155,7 @@ async def mobile_auth_oidc_exchange(body: OidcExchangeBody):
             ),
             status_code=401,
         )
-    sku = resolve_product_sku()
+    sku = resolve_product_sku() or "personal"
     account_kind = normalize_account_kind(
         None, default="enterprise" if sku == "enterprise" else "personal"
     )

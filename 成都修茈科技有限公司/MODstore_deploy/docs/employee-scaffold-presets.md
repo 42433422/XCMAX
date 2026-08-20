@@ -10,23 +10,23 @@
 
 ## 预设键一览
 
-| `department_preset` | 中文标签 | 默认能力（节选） |
-|---------------------|----------|------------------|
-| `design` | 设计与创意 | `ux.copy_review`, `brand.guide_check`, … |
-| `engineering` | 研发工程 | `code.review`, `bug.triage`, … |
-| `qa` | 测试与质量 | `test.plan_draft`, `regression.checklist`, … |
-| `product` | 产品与需求 | `prd.outline`, `acceptance.criteria`, … |
-| `operations` | 运营 | `campaign.checklist`, `content.calendar_hint`, … |
-| `marketing` | 市场增长 | `copy.variations`, `landing.hints`, `seo.brief`, … |
-| `sales` | 销售与客户拓展 | `pitch.outline`, `objection.handling`, … |
-| `support` | 客户支持 | `ticket.classify`, `customer.reply`, … |
-| `data` | 数据与分析 | `sql.explain_hint`, `metric.definition`, … |
-| `security` | 安全与合规 | `threat.model_sketch`, `secret.handling_check`, … |
-| `hr` | 人力资源 | `jd.outline`, `interview.rubric`, … |
-| `legal_ops` | 法务与条款运营 | `clause.plain_language`, `risk.flag_hint`, … |
-| `devops` | 运维与发布 | `deploy.runbook_hint`, `rollback.checklist`, … |
-| `finance` | 财务与对账 | `invoice.field_check`, `reconciliation.hints`, … |
-| `research` | 研究与竞品 | `competitor.matrix`, `source.trace_hint`, … |
+| `department_preset` | 中文标签       | 默认能力（节选）                                   |
+| ------------------- | -------------- | -------------------------------------------------- |
+| `design`            | 设计与创意     | `ux.copy_review`, `brand.guide_check`, …           |
+| `engineering`       | 研发工程       | `code.review`, `bug.triage`, …                     |
+| `qa`                | 测试与质量     | `test.plan_draft`, `regression.checklist`, …       |
+| `product`           | 产品与需求     | `prd.outline`, `acceptance.criteria`, …            |
+| `operations`        | 运营           | `campaign.checklist`, `content.calendar_hint`, …   |
+| `marketing`         | 市场增长       | `copy.variations`, `landing.hints`, `seo.brief`, … |
+| `sales`             | 销售与客户拓展 | `pitch.outline`, `objection.handling`, …           |
+| `support`           | 客户支持       | `ticket.classify`, `customer.reply`, …             |
+| `data`              | 数据与分析     | `sql.explain_hint`, `metric.definition`, …         |
+| `security`          | 安全与合规     | `threat.model_sketch`, `secret.handling_check`, …  |
+| `hr`                | 人力资源       | `jd.outline`, `interview.rubric`, …                |
+| `legal_ops`         | 法务与条款运营 | `clause.plain_language`, `risk.flag_hint`, …       |
+| `devops`            | 运维与发布     | `deploy.runbook_hint`, `rollback.checklist`, …     |
+| `finance`           | 财务与对账     | `invoice.field_check`, `reconciliation.hints`, …   |
+| `research`          | 研究与竞品     | `competitor.matrix`, `source.trace_hint`, …        |
 
 每项预设另有 **`skill_hints`**（给人读的设计说明，不自动写入 manifest；可作为提示词补充）。
 

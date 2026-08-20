@@ -20,10 +20,13 @@ import logging
 import os
 from typing import Any
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 logger = logging.getLogger(__name__)
 
 PAID_EVENT_TYPE = "payment.paid"
 REQUIRED_PAID_FIELDS = ("out_trade_no", "user_id", "subject", "total_amount")
+_SEEN_DEDUP_KEYS: set[str] = set()
 
 
 def bridge_secret() -> str:
@@ -73,11 +76,7 @@ def event_dedup_key(envelope: dict[str, Any]) -> str:
 
 def _seen_dedup() -> set[str]:
     """进程内幂等缓存（生产可外化为 event_store/dedup）。"""
-    cache = getattr(_seen_dedup, "_cache", None)
-    if cache is None:
-        cache = set()
-        _seen_dedup._cache = cache
-    return cache
+    return _SEEN_DEDUP_KEYS
 
 
 def parse_paid_envelope(envelope: dict[str, Any]) -> dict[str, Any] | None:
@@ -138,7 +137,7 @@ def emit_paid_event(data: dict[str, Any]) -> bool:
                 "order.paid 发布到 NeuroBus 返回 False (out_trade_no=%s)", data["out_trade_no"]
             )
         return ok
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("emit order.paid failed out_trade_no=%s", data.get("out_trade_no"))
         return False
 
@@ -164,7 +163,7 @@ def _record_reconciliation_if_user(data: dict[str, Any]) -> None:
             data.get("out_trade_no"),
             data.get("total_amount"),
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("record_reconciliation failed out_trade_no=%s", data["out_trade_no"])
 
 

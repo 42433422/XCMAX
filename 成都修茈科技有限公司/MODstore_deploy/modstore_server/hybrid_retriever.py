@@ -13,8 +13,9 @@ from __future__ import annotations
 import logging
 import os
 import re
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Dict, List, Optional
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.rag_service import RetrievedChunk
 
 logger = logging.getLogger(__name__)
@@ -94,7 +95,7 @@ class HybridRetriever:
 
         try:
             return self._fuse_with_bm25(vector_results, query, corpus, bm25_top_k, final_top_k)
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             logger.warning("HybridRetriever: BM25 fusion failed, using vector only: %s", exc)
             return vector_results[:final_top_k]
 

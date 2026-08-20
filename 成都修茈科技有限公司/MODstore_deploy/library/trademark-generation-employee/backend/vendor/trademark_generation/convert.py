@@ -110,7 +110,11 @@ PROMPT_PRESETS: Dict[str, Dict[str, Any]] = {
             "九格分别探索文字商标、字母商标、图形商标、抽象商标、吉祥物商标、组合商标、徽章/印章、App 图标、包装标签。"
             "要求平面矢量感、轮廓强、负空间清楚、印刷安全、不要近似任何现有品牌。"
         ),
-        "postprocess": ["选 1-2 个方向精修", "做黑白/反白/24px 小尺寸检查", "转 SVG 并清理锚点"],
+        "postprocess": [
+            "选 1-2 个方向精修",
+            "做黑白/反白/24px 小尺寸检查",
+            "转 SVG 并清理锚点",
+        ],
     },
     "startup_combination_mark": {
         "label": "新品牌图文组合商标",
@@ -165,7 +169,11 @@ PROMPT_PRESETS: Dict[str, Dict[str, Any]] = {
             "要求货架可见、印刷安全、轮廓强，可用于贴纸/瓶贴/外卖包装/电商主图；风格：{style}；配色：{palette}。"
             "不要套用图库模板，不要近似知名品牌。"
         ),
-        "postprocess": ["转 CMYK 前检查对比", "准备横版/竖版/圆形贴纸版本", "保留出血和安全边距"],
+        "postprocess": [
+            "转 CMYK 前检查对比",
+            "准备横版/竖版/圆形贴纸版本",
+            "保留出血和安全边距",
+        ],
     },
 }
 
@@ -214,18 +222,31 @@ def _first(payload: Dict[str, Any], *keys: str, default: str = "") -> str:
 
 def normalize_trademark_type(payload: Dict[str, Any]) -> str:
     raw = (
-        str(payload.get("trademark_type") or payload.get("logo_type") or payload.get("type") or "")
+        str(
+            payload.get("trademark_type")
+            or payload.get("logo_type")
+            or payload.get("type")
+            or ""
+        )
         .strip()
         .lower()
     )
     text = (raw + "\n" + _text_blob(payload)).lower()
     if raw in TRADEMARK_TYPES:
         return raw
-    if any(token in text for token in ("app", "favicon", "应用", "小程序", "移动端", "手机桌面")):
+    if any(
+        token in text
+        for token in ("app", "favicon", "应用", "小程序", "移动端", "手机桌面")
+    ):
         return "app_icon"
-    if any(token in text for token in ("包装", "标签", "贴纸", "瓶贴", "货架", "package", "label")):
+    if any(
+        token in text
+        for token in ("包装", "标签", "贴纸", "瓶贴", "货架", "package", "label")
+    ):
         return "package_label"
-    if any(token in text for token in ("字母", "缩写", "首字母", "monogram", "lettermark")):
+    if any(
+        token in text for token in ("字母", "缩写", "首字母", "monogram", "lettermark")
+    ):
         return "lettermark"
     for key, spec in TRADEMARK_TYPES.items():
         for alias in spec["aliases"]:
@@ -276,9 +297,16 @@ def _format_preset_text(template: str, values: Dict[str, str]) -> str:
         return template
 
 
-def _select_prompt_preset(payload: Dict[str, Any], brand_name: str, mark_type: str) -> str:
+def _select_prompt_preset(
+    payload: Dict[str, Any], brand_name: str, mark_type: str
+) -> str:
     raw = (
-        str(payload.get("prompt_preset") or payload.get("preset") or payload.get("template") or "")
+        str(
+            payload.get("prompt_preset")
+            or payload.get("preset")
+            or payload.get("template")
+            or ""
+        )
         .strip()
         .lower()
     )
@@ -332,7 +360,9 @@ def _build_prompt_preset(
     }
 
 
-def _clearance_checklist(brand_name: str, industry: str, mark_type: str) -> List[Dict[str, str]]:
+def _clearance_checklist(
+    brand_name: str, industry: str, mark_type: str
+) -> List[Dict[str, str]]:
     return [
         {
             "item": "名称近似检索",
@@ -365,13 +395,25 @@ def build_trademark_profile(payload: Dict[str, Any]) -> Dict[str, Any]:
     payload = dict(payload or {})
     mark_type = normalize_trademark_type(payload)
     spec = TRADEMARK_TYPES[mark_type]
-    brand_name = _first(payload, "brand_name", "name", "company", "product_name", default="新品牌")
-    industry = _first(payload, "industry", "category", "business", default="AI 软件 / 企业服务")
+    brand_name = _first(
+        payload, "brand_name", "name", "company", "product_name", default="新品牌"
+    )
+    industry = _first(
+        payload, "industry", "category", "business", default="AI 软件 / 企业服务"
+    )
     audience = _first(
-        payload, "audience", "target_user", "target_audience", default="企业客户和专业用户"
+        payload,
+        "audience",
+        "target_user",
+        "target_audience",
+        default="企业客户和专业用户",
     )
     brand_values = _first(
-        payload, "brand_values", "values", "personality", default="可靠、聪明、高效、有温度"
+        payload,
+        "brand_values",
+        "values",
+        "personality",
+        default="可靠、聪明、高效、有温度",
     )
     palette = _first(
         payload,
@@ -387,9 +429,14 @@ def build_trademark_profile(payload: Dict[str, Any]) -> Dict[str, Any]:
         "platform",
         default="官网、App 图标、名片、包装、市场页",
     )
-    style = _style_modifier(mark_type, _first(payload, "style", "art_style", default=""))
+    style = _style_modifier(
+        mark_type, _first(payload, "style", "art_style", default="")
+    )
     symbol = _first(
-        payload, "symbol", "icon", default=_industry_symbol(f"{industry} {_text_blob(payload)}")
+        payload,
+        "symbol",
+        "icon",
+        default=_industry_symbol(f"{industry} {_text_blob(payload)}"),
     )
     selected_preset = _select_prompt_preset(payload, brand_name, mark_type)
     preset = _build_prompt_preset(
@@ -478,14 +525,17 @@ def _image_credentials(provider: str) -> Tuple[str, str, str]:
         return (
             os.environ.get("DOUBAO_API_KEY") or os.environ.get("ARK_API_KEY") or "",
             (
-                os.environ.get("DOUBAO_BASE_URL") or "https://ark.cn-beijing.volces.com/api/v3"
+                os.environ.get("DOUBAO_BASE_URL")
+                or "https://ark.cn-beijing.volces.com/api/v3"
             ).rstrip("/"),
             "doubao-seedream-5-0-260128",
         )
     if provider == "openai":
         return (
             os.environ.get("OPENAI_API_KEY") or "",
-            (os.environ.get("OPENAI_BASE_URL") or "https://api.openai.com/v1").rstrip("/"),
+            (os.environ.get("OPENAI_BASE_URL") or "https://api.openai.com/v1").rstrip(
+                "/"
+            ),
             "gpt-image-1",
         )
     return "", "", ""
@@ -533,7 +583,9 @@ async def _generate_images(
     body = {"model": model, "prompt": profile["prompt_en"], "size": size, "n": n}
     headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
     async with httpx.AsyncClient(timeout=120.0) as client:
-        resp = await client.post(f"{base_url}/images/generations", headers=headers, json=body)
+        resp = await client.post(
+            f"{base_url}/images/generations", headers=headers, json=body
+        )
     if resp.status_code >= 400:
         return {
             "ok": False,
@@ -555,9 +607,18 @@ async def _generate_images(
         elif b64:
             data_url = f"data:image/png;base64,{b64}"
             images.append(
-                {"url": data_url, "local_path": _write_data_url(data_url, output_path, idx)}
+                {
+                    "url": data_url,
+                    "local_path": _write_data_url(data_url, output_path, idx),
+                }
             )
-    return {"ok": bool(images), "images": images, "provider": provider, "model": model, "raw": data}
+    return {
+        "ok": bool(images),
+        "images": images,
+        "provider": provider,
+        "model": model,
+        "raw": data,
+    }
 
 
 async def convert_trademark_profile(
@@ -578,7 +639,10 @@ async def convert_trademark_profile(
     if generate_image:
         image_result = await _generate_images(profile, payload, output_path)
         if not image_result.get("ok"):
-            warn = str(image_result.get("warning") or "生图未返回图片，已保留商标方案和提示词。")
+            warn = str(
+                image_result.get("warning")
+                or "生图未返回图片，已保留商标方案和提示词。"
+            )
             warnings.append(warn)
     result = {
         "ok": True,

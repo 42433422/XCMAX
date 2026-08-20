@@ -1,9 +1,5 @@
 import type { RouteRecordRaw } from 'vue-router'
-import {
-  isPlatformShellModeEnabled,
-  INDUSTRY_DELIVERY_ROUTE_NAMES,
-  SHELL_CORE_ROUTE_NAMES,
-} from '@/constants/platformShellMode'
+import { isPlatformShellModeEnabled, INDUSTRY_DELIVERY_ROUTE_NAMES, SHELL_CORE_ROUTE_NAMES } from '@/constants/platformShellMode'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 
 const SANDBOX_ALLOWED = new Set([

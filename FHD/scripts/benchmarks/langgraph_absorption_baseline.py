@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="no-any-return"
 """LG-W0-09 — LangGraph 吸收基线基准（legacy WorkflowEngine vs vendored LangGraph）。
 
 在可比较的确定性场景下测量两条执行路径：
@@ -79,7 +80,14 @@ LANGGRAPH_GATES = {
     "checkpoint_200": 5000,
 }
 
-SCENARIOS = ("compile_100", "execute_100", "compile_1000", "execute_1000", "fanout_64", "checkpoint_200")
+SCENARIOS = (
+    "compile_100",
+    "execute_100",
+    "compile_1000",
+    "execute_1000",
+    "fanout_64",
+    "checkpoint_200",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -213,9 +221,32 @@ def legacy_contract_gate() -> dict:
         plan_id="p_ct",
         intent="contract",
         nodes=[
-            WorkflowNode(node_id="n1", tool_id="t1", action="a1", params={"k": 1}, risk="low", idempotent=True),
-            WorkflowNode(node_id="n2", tool_id="t2", action="a2", params={"k": 2}, risk="low", idempotent=True, depends_on=["n1"]),
-            WorkflowNode(node_id="n3", tool_id="t3", action="a3", params={"k": 3}, risk="low", idempotent=True, depends_on=["n2"]),
+            WorkflowNode(
+                node_id="n1",
+                tool_id="t1",
+                action="a1",
+                params={"k": 1},
+                risk="low",
+                idempotent=True,
+            ),
+            WorkflowNode(
+                node_id="n2",
+                tool_id="t2",
+                action="a2",
+                params={"k": 2},
+                risk="low",
+                idempotent=True,
+                depends_on=["n1"],
+            ),
+            WorkflowNode(
+                node_id="n3",
+                tool_id="t3",
+                action="a3",
+                params={"k": 3},
+                risk="low",
+                idempotent=True,
+                depends_on=["n2"],
+            ),
         ],
     )
     result = WorkflowEngine(_legacy_dispatch).run(plan)
@@ -342,7 +373,9 @@ def benchmark_langgraph() -> dict:
     """通过 uv run 在 vendored core 包锁定 uv 环境内跑 LangGraph 基准（package-local locked sources）。"""
     uv_bin = shutil.which("uv")
     if uv_bin is None:
-        raise RuntimeError("未找到 uv：需用 `uv run --project packages/xcagi_langgraph_core` 从 vendored 包锁定环境导入 langgraph")
+        raise RuntimeError(
+            "未找到 uv：需用 `uv run --project packages/xcagi_langgraph_core` 从 vendored 包锁定环境导入 langgraph"
+        )
     code = (
         _LANGGRAPH_WORKER.replace("__SEED_REPLACE__", repr(SEED))
         .replace("__WARMUP_REPLACE__", repr(WARMUP))
@@ -356,7 +389,9 @@ def benchmark_langgraph() -> dict:
         env={**os.environ, "LG_BASELINE_REPO_ROOT": str(_REPO_ROOT)},
     )
     if proc.returncode != 0:
-        raise RuntimeError("vendored langgraph worker 失败: " + (proc.stderr or proc.stdout or "")[-2000:])
+        raise RuntimeError(
+            "vendored langgraph worker 失败: " + (proc.stderr or proc.stdout or "")[-2000:]
+        )
     return json.loads(proc.stdout.strip().splitlines()[-1])
 
 
@@ -393,7 +428,9 @@ def _environment() -> dict:
 # ---------------------------------------------------------------------------
 # 汇总 JSON
 # ---------------------------------------------------------------------------
-def _assemble(legacy: dict, langgraph: dict, contract: dict, legacy_gates: dict, lg_gates: dict) -> dict:
+def _assemble(
+    legacy: dict, langgraph: dict, contract: dict, legacy_gates: dict, lg_gates: dict
+) -> dict:
     gates = {
         "legacy_workflow_engine": legacy_gates,
         "vendor_langgraph": lg_gates,
@@ -437,7 +474,9 @@ def _markdown(doc: dict) -> str:
     lines.append("")
     lines.append("## 测量对象")
     lines.append("")
-    lines.append(f"- **legacy WorkflowEngine**：`{doc['source']['legacy_workflow_engine']}`（FHD 当前产品实现）")
+    lines.append(
+        f"- **legacy WorkflowEngine**：`{doc['source']['legacy_workflow_engine']}`（FHD 当前产品实现）"
+    )
     lines.append(f"- **vendored LangGraph**：`{lg_source}`（仓库 vendored、锁定版本）")
     lines.append("")
     lines.append("## 场景与方法学")
@@ -449,7 +488,9 @@ def _markdown(doc: dict) -> str:
     lines.append("| `fanout_64` | 64 个独立并行节点（fan-out） |")
     lines.append("| `checkpoint_200` | 200 节点 + 逐步 checkpoint |")
     lines.append("")
-    lines.append(f"- seed=`{doc['seed']}`（确定性构造）· warmup=`{doc['warmup']}` · measured repeats=`{doc['repeats']}`")
+    lines.append(
+        f"- seed=`{doc['seed']}`（确定性构造）· warmup=`{doc['warmup']}` · measured repeats=`{doc['repeats']}`"
+    )
     lines.append("- 每个场景输出 `min` / `median` / `p95` / `max`（单位 ms）")
     lines.append("")
     lines.append("## 机器条件（本次运行）")
@@ -482,13 +523,17 @@ def _markdown(doc: dict) -> str:
     lines.append("|------|------|----------|----------|------|")
     for engine, gates in doc["gates"].items():
         for name, g in gates.items():
-            lines.append(f"| {engine} | {name} | {g['limit']} | {g['measured']} | {'✅' if g['pass'] else '❌'} |")
+            lines.append(
+                f"| {engine} | {name} | {g['limit']} | {g['measured']} | {'✅' if g['pass'] else '❌'} |"
+            )
     lines.append("")
     c = doc["legacy_contract"]
-    lines.append(f"## legacy 契约门禁（W0-06 fixture）")
+    lines.append("## legacy 契约门禁（W0-06 fixture）")
     lines.append("")
     lines.append(f"- fixture：`{c['fixture']}`")
-    lines.append(f"- 期望 executed_nodes：`{c['expected_executed_nodes']}` · 实测：`{c['actual_executed_nodes']}` · success=`{c['success']}`")
+    lines.append(
+        f"- 期望 executed_nodes：`{c['expected_executed_nodes']}` · 实测：`{c['actual_executed_nodes']}` · success=`{c['success']}`"
+    )
     lines.append(f"- **契约匹配：{'✅' if c['match'] else '❌'}**")
     lines.append("")
     lines.append(f"## 总体门禁：**{'PASS' if doc['all_gates_pass'] else 'FAIL'}**")
@@ -497,8 +542,12 @@ def _markdown(doc: dict) -> str:
     lines.append("")
     lines.append("```bash")
     lines.append("cd FHD")
-    lines.append("XCAGI_SKIP_LEGACY_COMPAT_ROUTES=1 .venv/bin/python -m scripts.benchmarks.langgraph_absorption_baseline")
-    lines.append("XCAGI_SKIP_LEGACY_COMPAT_ROUTES=1 .venv/bin/python -m scripts.benchmarks.langgraph_absorption_baseline --write-doc")
+    lines.append(
+        "XCAGI_SKIP_LEGACY_COMPAT_ROUTES=1 .venv/bin/python -m scripts.benchmarks.langgraph_absorption_baseline"
+    )
+    lines.append(
+        "XCAGI_SKIP_LEGACY_COMPAT_ROUTES=1 .venv/bin/python -m scripts.benchmarks.langgraph_absorption_baseline --write-doc"
+    )
     lines.append("```")
     lines.append("")
     lg_src = doc["results"]["vendor_langgraph"].get("_langgraph_source", {})
@@ -506,14 +555,24 @@ def _markdown(doc: dict) -> str:
     lines.append("")
     lines.append("| 检查项 | 结果 |")
     lines.append("|--------|------|")
-    lines.append(f"| langgraph.core 来自仓库 XCAGI vendored 来源 | {'✅' if lg_src.get('core_from_xcagi_vendor') else '❌'} |")
-    lines.append(f"| langgraph.checkpoint 来自仓库 XCAGI vendored 来源 | {'✅' if lg_src.get('checkpoint_from_xcagi_vendor') else '❌'} |")
+    lines.append(
+        f"| langgraph.core 来自仓库 XCAGI vendored 来源 | {'✅' if lg_src.get('core_from_xcagi_vendor') else '❌'} |"
+    )
+    lines.append(
+        f"| langgraph.checkpoint 来自仓库 XCAGI vendored 来源 | {'✅' if lg_src.get('checkpoint_from_xcagi_vendor') else '❌'} |"
+    )
     lines.append("")
     lines.append("## LangGraph 来源合规说明")
     lines.append("")
-    lines.append("- LangGraph 由 vendored 包自身锁定 uv 环境（`uv run --project packages/xcagi_langgraph_core`，uv.lock + [tool.uv.sources] → 兄弟 vendored 包）子进程导入。")
-    lines.append("- 不使用根 site-packages、不使用 /tmp 源码、不做 PYTHONPATH / sys.path 注入；core 包 .venv 被外部清理时按锁定来源按需重建，不改兄弟包。")
-    lines.append("- 输出 JSON 不含绝对路径、不含易变时间戳；来源自检仅以布尔进 JSON，绝对路径仅打到 stderr。")
+    lines.append(
+        "- LangGraph 由 vendored 包自身锁定 uv 环境（`uv run --project packages/xcagi_langgraph_core`，uv.lock + [tool.uv.sources] → 兄弟 vendored 包）子进程导入。"
+    )
+    lines.append(
+        "- 不使用根 site-packages、不使用 /tmp 源码、不做 PYTHONPATH / sys.path 注入；core 包 .venv 被外部清理时按锁定来源按需重建，不改兄弟包。"
+    )
+    lines.append(
+        "- 输出 JSON 不含绝对路径、不含易变时间戳；来源自检仅以布尔进 JSON，绝对路径仅打到 stderr。"
+    )
     lines.append("")
     return "\n".join(lines)
 
@@ -523,7 +582,9 @@ def _markdown(doc: dict) -> str:
 # ---------------------------------------------------------------------------
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="LG-W0-09 LangGraph 吸收基线基准")
-    parser.add_argument("--write-doc", action="store_true", help="额外写入 09-baseline.md（含本次实测结果）")
+    parser.add_argument(
+        "--write-doc", action="store_true", help="额外写入 09-baseline.md（含本次实测结果）"
+    )
     args = parser.parse_args(argv)
 
     contract = legacy_contract_gate()

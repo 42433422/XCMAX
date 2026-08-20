@@ -93,6 +93,33 @@ class RetortService:
     def assess(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self.llm_service.assess(payload)
 
+    def record_proof(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self.llm_service.record_proof(payload)
+
+    def similar_project_radar(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self.llm_service.similar_project_radar(payload)
+
+    def similar_project_loop(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self.llm_service.similar_project_loop(payload)
+
+    def absorption_saturation_report(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self.llm_service.absorption_saturation_report(payload)
+
+    def absorption_lights(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self.llm_service.absorption_lights(payload)
+
+    def llm_review(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self.llm_service.llm_review(payload)
+
+    def llm_review_status(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self.llm_service.llm_review_status(payload)
+
+    def llm_parallel_review(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self.llm_service.llm_parallel_review(payload)
+
+    def llm_parallel_status(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self.llm_service.llm_parallel_status(payload)
+
     def self_evolve(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self.llm_service.self_evolve(payload)
 

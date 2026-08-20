@@ -11,6 +11,8 @@ import logging
 import os
 from typing import Any, Dict
 
+from modstore_server.operational_errors import BOUNDARY_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -46,7 +48,7 @@ def _record_dr_probe_runtime(result: Dict[str, Any]) -> None:
                 "recovered": result.get("recovered"),
             },
         )
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         logger.exception("dr recovery probe: time_rail runtime record failed")
 
 
@@ -175,7 +177,7 @@ def _escalate(
             },
             source="dr-recovery-probe",
         )
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         logger.exception("dr recovery probe: escalate alert publish failed")
     return {
         "ok": False,

@@ -53,6 +53,7 @@ _TASK_DIR_RE = re.compile(
     re.IGNORECASE,
 )
 _BACKUP_MARKERS = (".backup-", ".backup.", ".bak-", ".bak.")
+BOUNDARY_ERRORS = (Exception,)
 
 
 def _rm_tree(path: Path, removed: list[str]) -> None:
@@ -81,7 +82,7 @@ def _clean_retort(
         removed.extend(result.get("removed") or [])
         kept.extend(result.get("kept") or [])
         errors.extend(result.get("errors") or [])
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:
         # Fallback: wipe ephemeral under .retort manually
         runtime = project / ".retort"
         if not runtime.exists():
@@ -329,7 +330,7 @@ def _is_git_tracked(path: Path) -> bool:
             check=False,
         )
         return proc.returncode == 0
-    except Exception:
+    except (OSError, ValueError):
         return False
 
 

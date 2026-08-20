@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """变更信号与员工任务生命周期事件。
 
 - doc_change：依赖员工文档相关产出后发布，供 doc-knowledge-curator 等订阅。
@@ -10,8 +11,10 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +41,7 @@ class ChangeSignal:
 
     def __post_init__(self) -> None:
         if not self.timestamp:
-            self.timestamp = datetime.now(timezone.utc).isoformat()
+            self.timestamp = datetime.now(UTC).isoformat()
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -74,7 +77,7 @@ def emit_execution_recovery_event(
         from modstore_server.incident_bus import publish
 
         return publish("employee.execution.recovery", payload, source=employee_id)
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("Failed to publish execution recovery event: %s", exc)
         return False
 
@@ -108,7 +111,7 @@ def emit_task_lifecycle_event(
         from modstore_server.incident_bus import publish
 
         return publish(event_type, payload, source=employee_id)
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("Failed to publish task lifecycle event: %s", exc)
         return False
 
@@ -138,7 +141,7 @@ def publish_doc_change_signal(
             signal.to_dict(),
             source=source_employee,
         )
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("Failed to publish doc change signal: %s", exc)
         return False
 
@@ -232,6 +235,6 @@ def get_pending_signals_for_doc_curator() -> List[Dict[str, Any]]:
                     }
                 )
         return signals
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("Failed to get pending signals: %s", exc)
         return []

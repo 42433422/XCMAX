@@ -24,12 +24,7 @@ import { asString, asNumber, asRecord } from '@/utils/typeGuards'
 
 export type TracePhaseKind = 'planner' | 'tool' | 'run'
 
-export type TracePhaseStatus =
-  | 'running'
-  | 'success'
-  | 'failed'
-  | 'waiting'
-  | 'blocked'
+export type TracePhaseStatus = 'running' | 'success' | 'failed' | 'waiting' | 'blocked'
 
 export interface TraceBasePhase {
   kind: TracePhaseKind
@@ -140,17 +135,10 @@ function safeOutputPreview(data: Record<string, unknown>): string | undefined {
     const chat = asRecord(data.chat_payload)
     const nested = asRecord(chat.data)
     const text =
-      asString(nested.text).trim() ||
-      asString(nested.response).trim() ||
-      asString(chat.response).trim() ||
-      asString(chat.message).trim()
+      asString(nested.text).trim() || asString(nested.response).trim() || asString(chat.response).trim() || asString(chat.message).trim()
     return text ? truncate(text, 240) : undefined
   }
-  const raw =
-    data.output_preview ??
-    data.output ??
-    data.result ??
-    data.message
+  const raw = data.output_preview ?? data.output ?? data.result ?? data.message
   if (raw == null) return undefined
   if (typeof raw === 'string') return truncate(raw, 240)
   try {
@@ -196,9 +184,7 @@ export function isTrivialChatTrace(trace: AgentRunTraceData | null | undefined):
 }
 
 /** 执行计划图：仅多工具/复杂链路才有信息量；单工具默认不展示。 */
-export function shouldShowAgentRunPlanGraph(
-  trace: AgentRunTraceData | null | undefined,
-): boolean {
+export function shouldShowAgentRunPlanGraph(trace: AgentRunTraceData | null | undefined): boolean {
   if (!trace || isTrivialChatTrace(trace)) return false
   return toolPhasesOf(trace).length >= 2
 }
@@ -209,10 +195,7 @@ export function shouldShowAgentRunPlanGraph(
  * @param events 后端事件流（按时间顺序）
  * @param runId  AgentRun id
  */
-export function buildAgentRunTraceFromEvents(
-  events: AgentRunEvent[],
-  runId: string,
-): AgentRunTraceData {
+export function buildAgentRunTraceFromEvents(events: AgentRunEvent[], runId: string): AgentRunTraceData {
   const list = Array.isArray(events) ? events : []
   const phases: TracePhase[] = []
   let intent = ''
@@ -241,9 +224,7 @@ export function buildAgentRunTraceFromEvents(
 
     // PlannerPhase
     if (type === 'planner.started') {
-      const openPlanner = [...phases].reverse().find(
-        (p) => p.kind === 'planner' && p.status === 'running',
-      ) as TracePlannerPhase | undefined
+      const openPlanner = [...phases].reverse().find((p) => p.kind === 'planner' && p.status === 'running') as TracePlannerPhase | undefined
       const title = friendlyPhaseTitle(ev.message, '正在生成执行计划')
       if (openPlanner) {
         openPlanner.title = title
@@ -280,9 +261,7 @@ export function buildAgentRunTraceFromEvents(
           duration_ms: pickNumber(data, 'duration_ms', 'planning_duration_ms'),
           step_count: pickNumber(data, 'step_count', 'steps_count'),
           title: '执行计划已生成',
-          subtitle: pickNumber(data, 'step_count', 'steps_count')
-            ? `${pickNumber(data, 'step_count', 'steps_count')} 步`
-            : undefined,
+          subtitle: pickNumber(data, 'step_count', 'steps_count') ? `${pickNumber(data, 'step_count', 'steps_count')} 步` : undefined,
         } as TracePlannerPhase)
       }
       status = 'running'
@@ -351,7 +330,7 @@ export function buildAgentRunTraceFromEvents(
           title: pickString(data, 'tool_id', 'tool') || '工具调用',
           params_json: safeParamsJson(data),
           output_preview: failed ? undefined : safeOutputPreview(data),
-          error: failed ? (asString(ev.message).trim() || asString(data.error).trim() || '工具执行失败') : undefined,
+          error: failed ? asString(ev.message).trim() || asString(data.error).trim() || '工具执行失败' : undefined,
           observations: [],
           waiting_approval: false,
           retries: 0,
@@ -418,8 +397,7 @@ export function buildAgentRunTraceFromEvents(
       terminal = true
       totalDurationMs = pickNumber(data, 'duration_ms', 'total_duration_ms')
       // chat_payload 的可读文本已在气泡正文渲染；再塞 final_output 会造成名单双份
-      const finalPreview =
-        data.chat_payload != null ? undefined : safeOutputPreview(data)
+      const finalPreview = data.chat_payload != null ? undefined : safeOutputPreview(data)
       phases.push({
         kind: 'run',
         status: 'success',

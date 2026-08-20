@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.utils.logger import (
+from app.utils.logging.logger import (
     StructuredLogFormatter,
     StructuredLogger,
     get_logger,
@@ -304,7 +304,7 @@ class TestLogOperationDecorator:
         def my_func(x):
             return x * 2
 
-        with patch("app.utils.logger.get_logger") as mock_get_logger:
+        with patch("app.utils.logging.logger.get_logger") as mock_get_logger:
             mock_logger = MagicMock()
             mock_get_logger.return_value = mock_logger
             result = my_func(5)
@@ -315,7 +315,7 @@ class TestLogOperationDecorator:
         def my_func():
             raise ValueError("boom")
 
-        with patch("app.utils.logger.get_logger") as mock_get_logger:
+        with patch("app.utils.logging.logger.get_logger") as mock_get_logger:
             mock_logger = MagicMock()
             mock_get_logger.return_value = mock_logger
             with pytest.raises(ValueError, match="boom"):
@@ -327,7 +327,7 @@ class TestLogOperationDecorator:
         async def my_func(x):
             return x * 3
 
-        with patch("app.utils.logger.get_logger") as mock_get_logger:
+        with patch("app.utils.logging.logger.get_logger") as mock_get_logger:
             mock_logger = MagicMock()
             mock_get_logger.return_value = mock_logger
             result = await my_func(5)
@@ -339,7 +339,7 @@ class TestLogOperationDecorator:
         async def my_func():
             raise RuntimeError("async boom")
 
-        with patch("app.utils.logger.get_logger") as mock_get_logger:
+        with patch("app.utils.logging.logger.get_logger") as mock_get_logger:
             mock_logger = MagicMock()
             mock_get_logger.return_value = mock_logger
             with pytest.raises(RuntimeError, match="async boom"):

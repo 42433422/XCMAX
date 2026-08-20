@@ -13,10 +13,11 @@ import json
 import logging
 import os
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 from modstore_server.public_strategic_goals import verified_strategic_goal_items
 
 logger = logging.getLogger(__name__)
@@ -163,8 +164,8 @@ def _calendar_today() -> str:
         from zoneinfo import ZoneInfo
 
         return datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d")
-    except Exception:  # noqa: BLE001
-        return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    except BOUNDARY_ERRORS:  # noqa: BLE001
+        return datetime.now(UTC).strftime("%Y-%m-%d")
 
 
 def build_public_action_board(*, day: Optional[str] = None) -> Dict[str, Any]:
@@ -175,7 +176,7 @@ def build_public_action_board(*, day: Optional[str] = None) -> Dict[str, Any]:
     day_stale = False
     try:
         strategic_updates = verified_strategic_goal_items(limit=100)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("public_action_board: verified strategic goals unavailable")
         strategic_updates = []
     strategic_days = sorted(
@@ -231,7 +232,7 @@ def build_public_action_board(*, day: Optional[str] = None) -> Dict[str, Any]:
 
     return {
         "schema": "xcagi.public_action_board/v1",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "day": use_day,
         "calendar_day": calendar_day,
         "day_stale": day_stale,
@@ -257,6 +258,9 @@ def build_public_action_board(*, day: Optional[str] = None) -> Dict[str, Any]:
 
 
 def public_board_targets() -> List[Path]:
+    isolated_output = (os.environ.get("MODSTORE_PUBLIC_OUTPUT_ROOT") or "").strip()
+    if isolated_output:
+        return [Path(isolated_output).expanduser().resolve() / "download-action-board.json"]
     root = _repo_root()
     targets = [
         root / "成都修茈科技有限公司" / "download-action-board.json",
@@ -269,7 +273,10 @@ def public_board_targets() -> List[Path]:
         root / "FHD" / "MODstore" / "market" / "public" / "download-action-board.json",
     ]
     # 生产 nginx live root（常为 /opt/xcmax/current 的 symlink）
-    for raw in ("/root/成都修茈科技有限公司", "/opt/xcmax/current/成都修茈科技有限公司"):
+    for raw in (
+        "/root/成都修茈科技有限公司",
+        "/opt/xcmax/current/成都修茈科技有限公司",
+    ):
         try:
             live = Path(raw)
             if live.is_dir():
@@ -298,7 +305,7 @@ def write_public_action_board(*, day: Optional[str] = None) -> Dict[str, Any]:
     """写出公开 JSON；失败不抛（不阻断 digest）。"""
     try:
         payload = build_public_action_board(day=day)
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("public_action_board: build failed")
         return {"ok": False, "error": str(exc), "written": []}
 
@@ -311,7 +318,7 @@ def write_public_action_board(*, day: Optional[str] = None) -> Dict[str, Any]:
                 continue
             tgt.write_text(body, encoding="utf-8")
             written.append(str(tgt))
-        except Exception:  # noqa: BLE001
+        except BOUNDARY_ERRORS:  # noqa: BLE001
             logger.exception("public_action_board: write failed %s", tgt)
     logger.info(
         "public_action_board: day=%s patch=%s update=%s written=%s",
@@ -324,6 +331,11 @@ def write_public_action_board(*, day: Optional[str] = None) -> Dict[str, Any]:
         from modstore_server.public_company_hall import write_public_company_hall
 
         write_public_company_hall(day=day)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("public_action_board: company hall refresh failed")
-    return {"ok": True, "day": payload.get("day"), "written": written, "payload": payload}
+    return {
+        "ok": True,
+        "day": payload.get("day"),
+        "written": written,
+        "payload": payload,
+    }

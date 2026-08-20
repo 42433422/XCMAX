@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  formatPricePer1kLine,
-  formatPricingDetail,
-  modelOptionLabelWithPricing,
-  providerTileMinPriceHint,
-} from './useLlmPricingDisplay'
+import { formatPricePer1kLine, formatPricingDetail, modelOptionLabelWithPricing, providerTileMinPriceHint } from './useLlmPricingDisplay'
 
 describe('useLlmPricingDisplay', () => {
   it('formatPricePer1kLine uses effective prices', () => {
@@ -42,10 +37,7 @@ describe('useLlmPricingDisplay', () => {
 
   it('providerTileMinPriceHint picks minimum', () => {
     const hint = providerTileMinPriceHint(
-      [
-        { pricing: { min_charge: 0.05, effective_input_per_1k: 0.02 } },
-        { pricing: { min_charge: 0.02, effective_input_per_1k: 0.05 } },
-      ],
+      [{ pricing: { min_charge: 0.05, effective_input_per_1k: 0.02 } }, { pricing: { min_charge: 0.02, effective_input_per_1k: 0.05 } }],
       null,
     )
     expect(hint).toBe('起价 ¥0.02')

@@ -120,8 +120,12 @@ describe('useChatVoiceInput', () => {
         static isTypeSupported = vi.fn(() => true)
         state: RecordingState = 'inactive'
         listeners: Record<string, (event?: unknown) => void> = {}
-        addEventListener(type: string, cb: (event?: unknown) => void) { this.listeners[type] = cb }
-        start() { this.state = 'recording' }
+        addEventListener(type: string, cb: (event?: unknown) => void) {
+          this.listeners[type] = cb
+        }
+        start() {
+          this.state = 'recording'
+        }
         stop() {
           this.state = 'inactive'
           this.listeners.dataavailable?.({ data: new Blob(['silent'], { type: 'audio/webm' }) })
@@ -132,7 +136,10 @@ describe('useChatVoiceInput', () => {
         configurable: true,
         value: { getUserMedia: vi.fn().mockResolvedValue(stream) },
       })
-      Object.defineProperty(window, 'MediaRecorder', { configurable: true, value: MockMediaRecorder })
+      Object.defineProperty(window, 'MediaRecorder', {
+        configurable: true,
+        value: MockMediaRecorder,
+      })
       vi.mocked(apiFetch).mockResolvedValue({
         ok: true,
         text: async () => JSON.stringify({ success: true, data: { text: '' } }),

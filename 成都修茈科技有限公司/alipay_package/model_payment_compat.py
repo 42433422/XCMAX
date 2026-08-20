@@ -12,6 +12,8 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from backend.services import model_payment_alipay as mp_ali
 from backend.services import model_payment_order_store as mp_orders
 
+BOUNDARY_ERRORS = (Exception,)
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/model-payment", tags=["model-payment"])
@@ -79,7 +81,10 @@ def checkout(
     legacy_channel = str(body.get("channel") or "").strip().lower()
     if legacy_channel and legacy_channel != "alipay":
         return JSONResponse(
-            {"success": False, "message": "仅支持支付宝；请移除 channel 或传 channel=alipay"},
+            {
+                "success": False,
+                "message": "仅支持支付宝；请移除 channel 或传 channel=alipay",
+            },
             status_code=400,
         )
     plan = _plan_by_id(plan_id)
@@ -161,7 +166,9 @@ def checkout(
             amount_yuan=amount_yuan,
         )
     except OSError as e:
-        logger.exception("[model-payment] 写入本地订单失败（notify 将无法幂等关联）: %s", e)
+        logger.exception(
+            "[model-payment] 写入本地订单失败（notify 将无法幂等关联）: %s", e
+        )
 
     return JSONResponse(
         {
@@ -188,7 +195,7 @@ async def alipay_trade_notify(request: Request):
     """
     try:
         form = await request.form()
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         logger.warning("alipay notify: bad form: %s", e)
         return PlainTextResponse("fail", status_code=400)
 
@@ -203,7 +210,7 @@ async def alipay_trade_notify(request: Request):
 
     try:
         ok = mp_ali.verify_notify(data, signature)
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         logger.exception("alipay notify verify error: %s", e)
         return PlainTextResponse("fail", status_code=500)
 
@@ -261,7 +268,11 @@ def query_trade(out_trade_no: str):
     local = mp_orders.get_order(out_trade_no)
     if not res["ok"]:
         return JSONResponse(
-            {"success": False, "message": res.get("message") or "查询失败", "data": {"local": local}}
+            {
+                "success": False,
+                "message": res.get("message") or "查询失败",
+                "data": {"local": local},
+            }
         )
     return JSONResponse(
         {
@@ -283,9 +294,13 @@ def refund_trade(body: dict[str, Any] = Body(default_factory=dict)):
     refund_reason = str(body.get("refund_reason") or "").strip() or None
 
     if not out_trade_no:
-        return JSONResponse({"success": False, "message": "out_trade_no 必填"}, status_code=400)
+        return JSONResponse(
+            {"success": False, "message": "out_trade_no 必填"}, status_code=400
+        )
     if not refund_amount:
-        return JSONResponse({"success": False, "message": "refund_amount 必填（元）"}, status_code=400)
+        return JSONResponse(
+            {"success": False, "message": "refund_amount 必填（元）"}, status_code=400
+        )
 
     res = mp_ali.refund_order(
         out_trade_no=out_trade_no,
@@ -299,7 +314,9 @@ def refund_trade(body: dict[str, Any] = Body(default_factory=dict)):
             out_trade_no,
             res.get("message"),
         )
-        return JSONResponse({"success": False, "message": res.get("message") or "退款失败"})
+        return JSONResponse(
+            {"success": False, "message": res.get("message") or "退款失败"}
+        )
 
     try:
         mp_orders.update_order_status(
@@ -314,7 +331,11 @@ def refund_trade(body: dict[str, Any] = Body(default_factory=dict)):
     except OSError as e:
         logger.exception("[model-payment] 写入退款本地记录失败: %s", e)
 
-    logger.info("[model-payment] refund ok out_trade_no=%s amount=%s", out_trade_no, refund_amount)
+    logger.info(
+        "[model-payment] refund ok out_trade_no=%s amount=%s",
+        out_trade_no,
+        refund_amount,
+    )
     return JSONResponse({"success": True, "data": res.get("raw")})
 
 
@@ -331,7 +352,9 @@ def close_trade(body: dict[str, Any] = Body(default_factory=dict)):
 
     res = mp_ali.close_order(out_trade_no=out_trade_no, trade_no=trade_no)
     if not res["ok"]:
-        return JSONResponse({"success": False, "message": res.get("message") or "关闭交易失败"})
+        return JSONResponse(
+            {"success": False, "message": res.get("message") or "关闭交易失败"}
+        )
 
     if out_trade_no:
         try:
@@ -339,7 +362,9 @@ def close_trade(body: dict[str, Any] = Body(default_factory=dict)):
         except OSError as e:
             logger.exception("[model-payment] 写入关闭本地记录失败: %s", e)
 
-    logger.info("[model-payment] close ok out_trade_no=%s trade_no=%s", out_trade_no, trade_no)
+    logger.info(
+        "[model-payment] close ok out_trade_no=%s trade_no=%s", out_trade_no, trade_no
+    )
     return JSONResponse({"success": True, "data": res.get("raw")})
 
 
@@ -347,8 +372,12 @@ def close_trade(body: dict[str, Any] = Body(default_factory=dict)):
 def refund_query(out_trade_no: str, out_request_no: str | None = None):
     """alipay.trade.fastpay.refund.query：退款查询。不传 out_request_no 则默认等于 out_trade_no。"""
     if not out_trade_no:
-        return JSONResponse({"success": False, "message": "out_trade_no 必填"}, status_code=400)
+        return JSONResponse(
+            {"success": False, "message": "out_trade_no 必填"}, status_code=400
+        )
     res = mp_ali.query_refund(out_trade_no=out_trade_no, out_request_no=out_request_no)
     if not res["ok"]:
-        return JSONResponse({"success": False, "message": res.get("message") or "退款查询失败"})
+        return JSONResponse(
+            {"success": False, "message": res.get("message") or "退款查询失败"}
+        )
     return JSONResponse({"success": True, "data": res.get("raw")})

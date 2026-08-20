@@ -1,6 +1,7 @@
-import openpyxl
-from openpyxl import load_workbook
+# mypy: disable-error-code="operator"
 import os
+
+from openpyxl import load_workbook
 
 folder = r"e:\FHD\424"
 

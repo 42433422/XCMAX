@@ -111,6 +111,6 @@ def test_save_customer_update_existing_maps_name_and_address(monkeypatch):
     assert existing.contact_phone == "010"
     assert isinstance(existing.address, str)
     assert existing.address == "北京北京"
-    # 返回经 mapper 转换的领域对象
-    assert result.unit_name == "顺丰"
-    assert result.contact_person == "王五"
+    # 返回 Customer 领域对象，符合仓储接口的静态契约
+    assert result.customer_name == "顺丰"
+    assert result.contact_info.name == "王五"

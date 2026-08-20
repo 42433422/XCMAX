@@ -2,11 +2,12 @@ import sys
 
 sys.path.insert(0, r"E:\FHD\XCAGI")
 
+import glob
+import json
+
 from app.services.skills.label_template_generator.label_template_generator import (
     extract_text_with_ocr,
 )
-import json
-import glob
 
 # 使用 glob 匹配文件
 png_files = glob.glob(r"E:\FHD\*PE*.png")
@@ -25,7 +26,7 @@ if result["success"]:
 
     # 打印网格信息
     grid = result.get("grid", {})
-    print(f"=== 网格结构 ===")
+    print("=== 网格结构 ===")
     print(f"行数：{grid.get('rows', 0)}")
     print(f"列数：{grid.get('cols', 0)}")
 

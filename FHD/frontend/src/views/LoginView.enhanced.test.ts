@@ -59,7 +59,10 @@ vi.mock('@/constants/loginBranding', () => ({
 }))
 
 vi.mock('@/constants/accountModBinding', () => ({
-  isSunbirdAccountUsername: (u: string) => String(u || '').trim().toUpperCase() === 'SUNBIRD',
+  isSunbirdAccountUsername: (u: string) =>
+    String(u || '')
+      .trim()
+      .toUpperCase() === 'SUNBIRD',
 }))
 
 vi.mock('@/utils/productSku', () => ({
@@ -118,7 +121,7 @@ vi.mock('@/components/OtpCells.vue', () => ({
 
 // ── helpers ────────────────────────────────────────────────
 
-function makeRouter(query: Record<string, string> = {}) {
+function makeRouter() {
   return createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -130,7 +133,7 @@ function makeRouter(query: Record<string, string> = {}) {
 }
 
 async function mountLoginView(routerOverrides: Record<string, string> = {}) {
-  const router = makeRouter(routerOverrides)
+  const router = makeRouter()
   await router.push({ path: '/login', query: routerOverrides })
   await router.isReady()
 
@@ -192,7 +195,11 @@ describe('LoginView.vue – login mode switching', () => {
   beforeEach(() => {
     mockAuthApiGetOidcStatus.mockResolvedValue({ data: { enabled: false } })
     mockAuthApiIssueAuthQr.mockResolvedValue({
-      data: { qr_id: 'test-qr', poll_secret: 'secret', expires_at: Math.floor(Date.now() / 1000) + 300 },
+      data: {
+        qr_id: 'test-qr',
+        poll_secret: 'secret',
+        expires_at: Math.floor(Date.now() / 1000) + 300,
+      },
     })
   })
 
@@ -243,7 +250,10 @@ describe('LoginView.vue – submitLogin', () => {
   })
 
   it('calls authApi.login with username and password', async () => {
-    mockAuthApiLogin.mockResolvedValue({ success: true, data: { success: true, username: 'testuser' } })
+    mockAuthApiLogin.mockResolvedValue({
+      success: true,
+      data: { success: true, username: 'testuser' },
+    })
     const { wrapper } = await mountLoginView()
     await wrapper.find('#lv-username').setValue('testuser')
     await wrapper.find('#lv-password').setValue('testpass')
@@ -275,7 +285,11 @@ describe('LoginView.vue – submitLogin', () => {
 
   it('sets loading state during login', async () => {
     let resolveLogin: (value: unknown) => void
-    mockAuthApiLogin.mockReturnValue(new Promise((resolve) => { resolveLogin = resolve }))
+    mockAuthApiLogin.mockReturnValue(
+      new Promise((resolve) => {
+        resolveLogin = resolve
+      }),
+    )
     const { wrapper } = await mountLoginView()
     await wrapper.find('#lv-username').setValue('testuser')
     await wrapper.find('#lv-password').setValue('testpass')
@@ -283,6 +297,7 @@ describe('LoginView.vue – submitLogin', () => {
     // Check loading is true
     expect(wrapper.vm.loading).toBe(true)
     resolveLogin!({ success: true, data: { success: true } })
+    await submitPromise
     await vi.dynamicImportSettled()
   })
 })

@@ -13,8 +13,8 @@ from unittest.mock import patch
 import pytest
 from fastapi import FastAPI
 
-from app.fastapi_routes.openapi_route_compat import iter_effective_routes
 from app.legacy.routes.legacy_compat import register_legacy_compat_routes
+from app.legacy.routes.openapi_route_compat import iter_effective_routes
 
 
 @pytest.fixture

@@ -56,6 +56,7 @@ const titleMap: Record<EmployeePackIconKind, string> = {
   word: 'Word',
   report: '报告 / 附属包',
   office: '办公员工包',
+  chart: '图表',
   generic: 'AI 员工',
 }
 

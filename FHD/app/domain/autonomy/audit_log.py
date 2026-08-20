@@ -111,7 +111,7 @@ def _iso_now() -> str:
 def append_autonomy_audit(record: dict[str, Any]) -> dict[str, Any]:
     """Append one immutable audit event to SQLite and its JSONL mirror."""
 
-    row = {
+    row: dict[str, Any] = {
         "action_id": str(record.get("action_id") or "system"),
         "action": str(record.get("action") or "unknown"),
         "risk_level": str(record.get("risk_level") or "BLOCKED").upper(),
@@ -149,7 +149,7 @@ def append_autonomy_audit(record: dict[str, Any]) -> dict[str, Any]:
                     json.dumps(row["metadata"], ensure_ascii=False, default=str),
                 ),
             )
-            row["id"] = int(cur.lastrowid)
+            row["id"] = int(cur.lastrowid or 0)
 
         mirror = _jsonl_path()
         mirror.parent.mkdir(parents=True, exist_ok=True)

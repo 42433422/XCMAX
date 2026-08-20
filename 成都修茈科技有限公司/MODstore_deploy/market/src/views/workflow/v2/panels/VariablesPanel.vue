@@ -78,9 +78,7 @@ function updateManualVar(name: string, value: string) {
       <button class="btn-add" @click="addManualVar">+ 添加变量</button>
     </div>
 
-    <div v-if="allVars.length === 0" class="empty-hint">
-      暂无变量。添加节点或手动创建变量。
-    </div>
+    <div v-if="allVars.length === 0" class="empty-hint">暂无变量。添加节点或手动创建变量。</div>
 
     <div v-for="v in allVars" :key="v.name" class="var-row">
       <div class="var-name">
@@ -91,11 +89,7 @@ function updateManualVar(name: string, value: string) {
         <span class="var-source">来源: {{ v.source }}</span>
       </div>
       <div v-if="v.type === 'manual'" class="var-edit">
-        <input
-          :value="v.value"
-          placeholder="默认值"
-          @input="updateManualVar(v.name, ($event.target as HTMLInputElement).value)"
-        />
+        <input :value="v.value" placeholder="默认值" @input="updateManualVar(v.name, ($event.target as HTMLInputElement).value)" />
         <button class="btn-remove" @click="removeManualVar(v.name)">✕</button>
       </div>
     </div>

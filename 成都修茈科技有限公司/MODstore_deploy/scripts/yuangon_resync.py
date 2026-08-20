@@ -25,8 +25,10 @@ import json
 import os
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 YUANGON_DIR = REPO_ROOT / "yuangon"
@@ -67,10 +69,10 @@ def _emit_event_fallback_jsonl(
 ) -> None:
     EVENT_OUTBOX.parent.mkdir(parents=True, exist_ok=True)
     record = {
-        "event_id": f"{name}:{datetime.now(timezone.utc).isoformat()}",
+        "event_id": f"{name}:{datetime.now(UTC).isoformat()}",
         "event_name": name,
         "event_version": 1,
-        "occurred_at": datetime.now(timezone.utc).isoformat(),
+        "occurred_at": datetime.now(UTC).isoformat(),
         "producer": producer,
         "subject_id": payload.get("subject_id", "yuangon"),
         "payload": payload,
@@ -90,7 +92,7 @@ def _emit_event(name: str, payload: dict, producer: str = "push-update-context-o
         ok = publish(name, payload if isinstance(payload, dict) else {}, source=producer)
         if ok:
             return
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     _emit_event_fallback_jsonl(name, payload, producer=producer)
 
@@ -117,7 +119,7 @@ def main() -> int:
     else:
         try:
             paths = _git_diff_paths(args.base_ref)
-        except Exception as exc:  # noqa: BLE001
+        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
             print(f"[WARN] git diff failed: {exc}; falling back to all employees", file=sys.stderr)
             paths = []
         ids = _changed_pkg_ids(paths)
@@ -166,7 +168,7 @@ def main() -> int:
             },
         )
         PROCESS_LOG_DIR.mkdir(parents=True, exist_ok=True)
-        log_path = PROCESS_LOG_DIR / f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')}.json"
+        log_path = PROCESS_LOG_DIR / f"{datetime.now(UTC).strftime('%Y%m%dT%H%M%S')}.json"
         log_path.write_text(
             json.dumps({"pkg_ids": ids, "rc": rc, "rc_routing": rc2}, ensure_ascii=False, indent=2),
             encoding="utf-8",

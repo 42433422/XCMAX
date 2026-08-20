@@ -138,9 +138,7 @@ class MultiAgentOrchestrator:
                 None,
             )
             if patch_msg is None:
-                err = next(
-                    (m for m in patch_messages if m.kind == "patch"), None
-                )
+                err = next((m for m in patch_messages if m.kind == "patch"), None)
                 result.error = (err.content.get("error") if err else "coder produced no patch") or "no patch"
                 break
             last_patch_msg = patch_msg
@@ -181,10 +179,7 @@ class MultiAgentOrchestrator:
                 content={
                     "plan_summary": "revision-round",
                     "tasks": revised_tasks,
-                    "original_brief": (
-                        (current_plan.content.get("original_brief") or brief).strip()
-                        + feedback_block
-                    ),
+                    "original_brief": ((current_plan.content.get("original_brief") or brief).strip() + feedback_block),
                     "reviewer_feedback": review_msg.content,
                 },
             )
@@ -265,7 +260,7 @@ class BestOfNOrchestrator:
             result.messages = [m.to_dict() for m in self.bus.snapshot()]
             return result
         scored.sort(key=lambda triple: triple[0], reverse=True)
-        winning_score, winning_patch, winning_review = scored[0]
+        _winning_score, winning_patch, winning_review = scored[0]
         result.final_patch = dict(winning_patch.content.get("patch") or {})
         result.final_review = dict(winning_review.content)
         result.success = winning_review.kind == "approval"

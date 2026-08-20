@@ -1,3 +1,4 @@
+# mypy: disable-error-code="misc"
 """Tests for app.fastapi_routes.fhd_meta — coverage ramp C3.3-a.
 
 Covers ``/api/fhd/db-tokens/status`` with various states of the
@@ -19,7 +20,8 @@ from app.fastapi_routes.fhd_meta import router
 def client() -> TestClient:
     app = FastAPI()
     app.include_router(router)
-    return TestClient(app)
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 class TestDbTokensStatus:

@@ -58,7 +58,9 @@ def _policy_company_keywords() -> tuple[str, ...]:
     return COMPANY_FACTORY_GROUP_KEYWORDS
 
 
-def is_company_factory_group(group_name: str | None, shift_name: str | None = None) -> bool:
+def is_company_factory_group(
+    group_name: str | None, shift_name: str | None = None
+) -> bool:
     text = normalize_group_text(group_name, shift_name)
     return any(keyword in text for keyword in _policy_company_keywords())
 
@@ -98,7 +100,9 @@ def _floor_to_saturday(d: date) -> date:
     return d - timedelta(days=off)
 
 
-def _is_company_size_week_employee(group_name: str | None, shift_name: str | None) -> bool:
+def _is_company_size_week_employee(
+    group_name: str | None, shift_name: str | None
+) -> bool:
     """大小周六仅「公司」员工：默认匹配 group_match_substrings；未配置时用「含公司且非纯工厂」。"""
     cas = ACTIVE_POLICY.get("company_alternate_saturday")
     if not isinstance(cas, dict) or not cas.get("enabled", False):

@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  applyEmployeeDraftPipelineEvent,
-  makeStages,
-  makePipelineStatus,
-  makeStageState,
-} from './employeeDraftPipeline'
+import { applyEmployeeDraftPipelineEvent, makeStages, makePipelineStatus, makeStageState } from './employeeDraftPipeline'
 import { ref } from 'vue'
 
 describe('makeStageState', () => {
@@ -86,7 +81,14 @@ describe('applyEmployeeDraftPipelineEvent', () => {
     const stages = makeStages()
     const status = makePipelineStatus()
     const messages = ref<string[]>([])
-    const data = { id: 'emp1', name: 'Test', role: 'assistant', scenario: 'test', industry: 'tech', complexity: 'low' }
+    const data = {
+      id: 'emp1',
+      name: 'Test',
+      role: 'assistant',
+      scenario: 'test',
+      industry: 'tech',
+      complexity: 'low',
+    }
 
     applyEmployeeDraftPipelineEvent(stages, status, messages, {
       event: 'stage_done',

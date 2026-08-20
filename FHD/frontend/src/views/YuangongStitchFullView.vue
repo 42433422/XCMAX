@@ -3,21 +3,16 @@
     <div class="page-content psf">
       <header class="psf-head">
         <div class="psf-head-row">
-          <router-link :to="{ name: 'workflow-employee-space' }" class="psf-link-btn">
-            返回员工空间
-          </router-link>
-          <router-link
-            v-if="showWorkflowPanoramaNav"
-            :to="workflowVisualizationLocation"
-            class="psf-link-btn psf-link-btn--ghost"
-          >
+          <router-link :to="{ name: 'workflow-employee-space' }" class="psf-link-btn"> 返回员工空间 </router-link>
+          <router-link v-if="showWorkflowPanoramaNav" :to="workflowVisualizationLocation" class="psf-link-btn psf-link-btn--ghost">
             流程全景说明
           </router-link>
         </div>
         <div class="psf-head-text">
           <h2 class="psf-title">员工工作流全景</h2>
           <p class="psf-sub">
-            企业端<strong class="psf-sub-em">四部门节点图</strong>：员工归属「行业通用 + 定制」组成的企业 Mod，上岗后进入该栈下的工具 / 执行 / 服务 / 管理四部门。
+            企业端<strong class="psf-sub-em">四部门节点图</strong>：员工归属「行业通用 + 定制」组成的企业 Mod，上岗后进入该栈下的工具 / 执行
+            / 服务 / 管理四部门。
           </p>
         </div>
       </header>
@@ -45,12 +40,7 @@
         </div>
       </div>
 
-      <section
-        class="psf-monitor"
-        role="region"
-        aria-labelledby="psf-monitor-h"
-        :style="panoramaPaneStyle"
-      >
+      <section class="psf-monitor" role="region" aria-labelledby="psf-monitor-h" :style="panoramaPaneStyle">
         <div class="psf-monitor-head">
           <div>
             <h3 id="psf-monitor-h" class="psf-monitor-title">四部门节点图</h3>
@@ -77,11 +67,7 @@
               @reset="resetPanoramaPaneWidth"
             />
           </div>
-          <WorkflowEmployeeInspector
-            v-model:selected-emp-id="selectedEmpId"
-            :desks="panoramaDesks"
-            hide-workspace-link
-          />
+          <WorkflowEmployeeInspector v-model:selected-emp-id="selectedEmpId" :desks="panoramaDesks" hide-workspace-link />
         </div>
       </section>
     </div>
@@ -94,17 +80,10 @@ import PaneResizeHandle from '@/components/PaneResizeHandle.vue'
 import { useResizablePane } from '@/composables/useResizablePane'
 import EnterpriseEstablishmentGraph from '@/components/workflow/EnterpriseEstablishmentGraph.vue'
 import WorkflowEmployeeInspector from '@/components/workflow/WorkflowEmployeeInspector.vue'
-import {
-  useWorkflowEmployeeDesks,
-  type WorkflowEmployeeDeskRow,
-} from '@/composables/useWorkflowEmployeeDesks'
+import { useWorkflowEmployeeDesks, type WorkflowEmployeeDeskRow } from '@/composables/useWorkflowEmployeeDesks'
 import { resolveWorkflowVisualizationLocation } from '@/utils/workflowNav'
 import { useWorkflowPanoramaNavVisible } from '@/composables/useWorkflowPanoramaNavVisible'
-import {
-  employeeBelongsToEnterpriseStack,
-  isWorkflowCarrierModId,
-  type EnterpriseModStack,
-} from '@/constants/enterpriseModStack'
+import { employeeBelongsToEnterpriseStack, isWorkflowCarrierModId, type EnterpriseModStack } from '@/constants/enterpriseModStack'
 import { isHostBridgeModId } from '@/constants/genericModPack'
 import { resolveEnterpriseModStack } from '@/utils/enterpriseModStackApi'
 
@@ -231,7 +210,10 @@ onBeforeUnmount(() => {
   font-size: 13px;
   font-weight: 600;
   text-decoration: none;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
 }
 
 .psf-link-btn:hover {

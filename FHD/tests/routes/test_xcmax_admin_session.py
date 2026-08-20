@@ -1,3 +1,4 @@
+# mypy: disable-error-code="misc, union-attr"
 """Tests for app.fastapi_routes.xcmax_admin — coverage ramp C3.3-a.
 
 Covers:
@@ -24,7 +25,8 @@ from app.fastapi_routes.xcmax_admin import router
 def client() -> TestClient:
     app = FastAPI()
     app.include_router(router)
-    return TestClient(app)
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 class TestRequireMarketAdmin:

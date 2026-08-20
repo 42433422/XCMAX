@@ -78,7 +78,6 @@ describe('chatExportTemplatesRegistry', () => {
       if (hadOwn && descriptor) {
         Object.defineProperty(globalThis, 'localStorage', descriptor)
       } else {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         delete (globalThis as any).localStorage
       }
     }

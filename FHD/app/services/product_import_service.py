@@ -154,7 +154,7 @@ class ProductImportService(NeuroEventPublisherMixin):
                 - failed: 失败数量
                 - details: 详细信息
         """
-        result = {
+        result: dict[str, Any] = {
             "imported": 0,
             "skipped": 0,
             "failed": 0,
@@ -215,10 +215,12 @@ class ProductImportService(NeuroEventPublisherMixin):
                         )
                         db.add(product)
                         result["imported"] += 1
-                    except RECOVERABLE_ERRORS as e:
-                        logger.error("导入产品失败：%s", e)
+                    except RECOVERABLE_ERRORS:
+                        logger.exception("导入产品失败")
                         result["failed"] += 1
-                        result["details"]["failed_items"].append({"data": row, "error": str(e)})
+                        result["details"]["failed_items"].append(
+                            {"data": row, "error": "product_import_failed"}
+                        )
 
                 db.commit()
 
@@ -236,11 +238,78 @@ class ProductImportService(NeuroEventPublisherMixin):
                 result["failed"],
             )
 
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("导入产品数据失败：%s", e)
-            result["error"] = str(e)
+        except RECOVERABLE_ERRORS:
+            logger.exception("导入产品数据失败")
+            result["error"] = "product_import_failed"
 
         return result
+
+    def import_products_from_excel(self, file_path: str, unit_name: str) -> dict[str, Any]:
+        """Read an Excel/CSV product sheet and pass normalized rows to ``import_data``."""
+        try:
+            import pandas as pd
+
+            if str(file_path).lower().endswith(".csv"):
+                frame = pd.read_csv(file_path, dtype=object)
+            else:
+                frame = pd.read_excel(file_path, dtype=object)
+            aliases = {
+                "产品编码": "product_code",
+                "产品型号": "product_code",
+                "型号": "product_code",
+                "产品名称": "product_name",
+                "名称": "product_name",
+                "规格": "specification",
+                "单价": "unit_price",
+                "价格": "unit_price",
+                "单位": "unit",
+                "备注": "remark",
+            }
+            frame = frame.rename(
+                columns={
+                    column: aliases.get(str(column).strip(), str(column).strip())
+                    for column in frame.columns
+                }
+            )
+            frame = frame.where(frame.notna(), None)
+            rows = [dict(row) for row in frame.to_dict(orient="records")]
+            for row in rows:
+                row.setdefault("unit", unit_name or "个")
+            result = self.import_data(rows)
+            result["success"] = not bool(result.get("error"))
+            result["count"] = int(result.get("imported") or 0)
+            return result
+        except (OSError, ValueError, TypeError, ImportError):
+            logger.exception("读取产品导入文件失败")
+            return {"success": False, "message": "读取导入文件失败", "count": 0}
+
+    def batch_add_products(self, products: list[dict[str, Any]], unit_name: str) -> dict[str, Any]:
+        rows = [dict(item) for item in products]
+        for row in rows:
+            row.setdefault("unit", unit_name or "个")
+        result = self.import_data(rows)
+        result["success"] = not bool(result.get("error"))
+        return result
+
+    def validate_products(self, products: list[dict[str, Any]]) -> dict[str, Any]:
+        cleaned = self.clean_data([dict(item) for item in products])
+        valid, invalid = self.validate_data(cleaned)
+        return {
+            "success": not invalid,
+            "valid": valid,
+            "invalid": invalid,
+            "valid_count": len(valid),
+            "invalid_count": len(invalid),
+        }
+
+    def get_import_history(self, page: int = 1, per_page: int = 20) -> dict[str, Any]:
+        from app.services.extract_log_service import ExtractLogService
+
+        offset = max(0, page - 1) * max(1, per_page)
+        items = ExtractLogService().get_logs(
+            data_type="products", limit=max(1, per_page), offset=offset
+        )
+        return {"success": True, "items": items, "page": page, "per_page": per_page}
 
 
 from app.neuro_bus.neuro_service_instrumentation import instrument_service_layer_class

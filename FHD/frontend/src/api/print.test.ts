@@ -25,7 +25,9 @@ describe('printApi', () => {
     await printApi.savePrinterSelection({ document_printer: 'p1' })
     expect(apiMock.get).toHaveBeenCalled()
     expect(apiMock.post).toHaveBeenCalled()
-    expect(apiMock.put).toHaveBeenCalledWith('/api/print/printer-selection', { document_printer: 'p1' })
+    expect(apiMock.put).toHaveBeenCalledWith('/api/print/printer-selection', {
+      document_printer: 'p1',
+    })
   })
 
   it('printByFilename encodes filename', async () => {

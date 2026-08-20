@@ -40,13 +40,13 @@ flowchart TB
 
 ## Standalone vs upstream
 
-| Concern | Upstream `eskill.vibe_coding` | Standalone `vibe_coding` |
-| --- | --- | --- |
-| Self-healing runtime | `eskill.code.CodeSkillRuntime` | `vibe_coding.runtime.CodeSkillRuntime` (copied + import-rewritten) |
-| Models / TriggerPolicy / quality | `eskill.models` / `eskill.static_executor` | `vibe_coding._internals` (lifted) |
-| Config-layer Skill | `ESkill` / `ESkillRuntime` (full support) | not vendored — `VibeCoder.config_skill()` raises |
-| `ESkillNodeWrapper` integration | optional | not available |
-| Tests | mirror in `tests/test_vibe_coding_*.py` | mirror minus config-layer tests |
+| Concern                          | Upstream `eskill.vibe_coding`              | Standalone `vibe_coding`                                           |
+| -------------------------------- | ------------------------------------------ | ------------------------------------------------------------------ |
+| Self-healing runtime             | `eskill.code.CodeSkillRuntime`             | `vibe_coding.runtime.CodeSkillRuntime` (copied + import-rewritten) |
+| Models / TriggerPolicy / quality | `eskill.models` / `eskill.static_executor` | `vibe_coding._internals` (lifted)                                  |
+| Config-layer Skill               | `ESkill` / `ESkillRuntime` (full support)  | not vendored — `VibeCoder.config_skill()` raises                   |
+| `ESkillNodeWrapper` integration  | optional                                   | not available                                                      |
+| Tests                            | mirror in `tests/test_vibe_coding_*.py`    | mirror minus config-layer tests                                    |
 
 When upstream evolves, run `python scripts/sync_from_eskill.py` to refresh
 `runtime/`, `nl/`, `code_factory.py`, `workflow_models.py`,

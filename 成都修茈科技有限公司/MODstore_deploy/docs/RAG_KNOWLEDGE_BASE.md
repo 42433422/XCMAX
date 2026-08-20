@@ -56,33 +56,33 @@ flowchart TB
 
 ## 关键文件
 
-| 文件 | 角色 |
-|---|---|
-| [`modstore_server/vector_engine.py`](../modstore_server/vector_engine.py) | 单例 Chroma `PersistentClient`；upsert/query/delete/count |
-| [`modstore_server/embedding_service.py`](../modstore_server/embedding_service.py) | OpenAI 兼容外部 embedding 客户端 |
-| [`modstore_server/knowledge_ingest.py`](../modstore_server/knowledge_ingest.py) | 文件解析（pdf/docx/xlsx/...）+ 分块 + page metadata |
-| [`modstore_server/knowledge_vector_store.py`](../modstore_server/knowledge_vector_store.py) | v1 门面，对外 API 不变；按 `MODSTORE_VECTOR_BACKEND` 选 chroma/redis |
-| [`modstore_server/knowledge_vector_store_redis.py`](../modstore_server/knowledge_vector_store_redis.py) | 旧 Redis Stack 实现（兼容路径，迁移用） |
-| [`modstore_server/rag_service.py`](../modstore_server/rag_service.py) | 多集合并集 + 权限 + rerank + prompt 注入 |
-| [`modstore_server/knowledge_v2_api.py`](../modstore_server/knowledge_v2_api.py) | v2 路由 |
-| [`modstore_server/knowledge_vector_api.py`](../modstore_server/knowledge_vector_api.py) | v1 路由（不变） |
-| [`modstore_server/employee_executor.py`](../modstore_server/employee_executor.py) | `_cognition_real` 接 RAG；`_memory_long_term_chroma` 走统一引擎 |
-| [`modstore_server/workflow_engine.py`](../modstore_server/workflow_engine.py) | 注册 `knowledge_search` 节点 |
-| [`scripts/migrate_kb_redis_to_chroma.py`](../scripts/migrate_kb_redis_to_chroma.py) | Redis → Chroma 幂等迁移脚本 |
+| 文件                                                                                                    | 角色                                                                 |
+| ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| [`modstore_server/vector_engine.py`](../modstore_server/vector_engine.py)                               | 单例 Chroma `PersistentClient`；upsert/query/delete/count            |
+| [`modstore_server/embedding_service.py`](../modstore_server/embedding_service.py)                       | OpenAI 兼容外部 embedding 客户端                                     |
+| [`modstore_server/knowledge_ingest.py`](../modstore_server/knowledge_ingest.py)                         | 文件解析（pdf/docx/xlsx/...）+ 分块 + page metadata                  |
+| [`modstore_server/knowledge_vector_store.py`](../modstore_server/knowledge_vector_store.py)             | v1 门面，对外 API 不变；按 `MODSTORE_VECTOR_BACKEND` 选 chroma/redis |
+| [`modstore_server/knowledge_vector_store_redis.py`](../modstore_server/knowledge_vector_store_redis.py) | 旧 Redis Stack 实现（兼容路径，迁移用）                              |
+| [`modstore_server/rag_service.py`](../modstore_server/rag_service.py)                                   | 多集合并集 + 权限 + rerank + prompt 注入                             |
+| [`modstore_server/knowledge_v2_api.py`](../modstore_server/knowledge_v2_api.py)                         | v2 路由                                                              |
+| [`modstore_server/knowledge_vector_api.py`](../modstore_server/knowledge_vector_api.py)                 | v1 路由（不变）                                                      |
+| [`modstore_server/employee_executor.py`](../modstore_server/employee_executor.py)                       | `_cognition_real` 接 RAG；`_memory_long_term_chroma` 走统一引擎      |
+| [`modstore_server/workflow_engine.py`](../modstore_server/workflow_engine.py)                           | 注册 `knowledge_search` 节点                                         |
+| [`scripts/migrate_kb_redis_to_chroma.py`](../scripts/migrate_kb_redis_to_chroma.py)                     | Redis → Chroma 幂等迁移脚本                                          |
 
 ## 集合模型
 
 每条 `KnowledgeCollection` 行对应**一个**物理 Chroma 集合 `kb_<collection_id>`。
 
-| 字段 | 说明 |
-|---|---|
-| `owner_kind` | `user` / `employee` / `workflow` / `org` |
-| `owner_id` | 对应实体 ID（user_id 字符串、employee_pack_id、workflow_id 字符串、org_id） |
-| `name` | 集合名（owner 内唯一） |
-| `visibility` | `private` / `shared` / `public` |
-| `embedding_model` | 创建时的嵌入模型名（如 `text-embedding-3-small`） |
-| `embedding_dim` | 嵌入维度（每集合独立） |
-| `chunk_count` | 缓存的总 chunk 数 |
+| 字段              | 说明                                                                        |
+| ----------------- | --------------------------------------------------------------------------- |
+| `owner_kind`      | `user` / `employee` / `workflow` / `org`                                    |
+| `owner_id`        | 对应实体 ID（user_id 字符串、employee_pack_id、workflow_id 字符串、org_id） |
+| `name`            | 集合名（owner 内唯一）                                                      |
+| `visibility`      | `private` / `shared` / `public`                                             |
+| `embedding_model` | 创建时的嵌入模型名（如 `text-embedding-3-small`）                           |
+| `embedding_dim`   | 嵌入维度（每集合独立）                                                      |
+| `chunk_count`     | 缓存的总 chunk 数                                                           |
 
 **共享**：通过 `KnowledgeMembership(grantee_kind, grantee_id, permission)` 把集合 grant 给另一个 owner（user/employee/workflow/org）。`permission ∈ {read, write, admin}`。
 
@@ -98,12 +98,12 @@ flowchart TB
 
 ## v1 → v2 兼容
 
-| 场景 | v1 行为 | v2 行为 |
-|---|---|---|
-| 上传文档 | `POST /api/knowledge/documents` 写入用户默认集合 | `POST /api/knowledge/v2/collections/{id}/documents` |
-| 列出文档 | 仅返回我自己默认集合 | 任意可访问集合 |
-| 搜索 | `POST /api/knowledge/search` 仅 user_id 隔离 | `POST /api/knowledge/v2/retrieve` 跨集合，可带 `employee_id` |
-| 集合管理 | 不支持 | `/api/knowledge/v2/collections/*` |
+| 场景     | v1 行为                                          | v2 行为                                                      |
+| -------- | ------------------------------------------------ | ------------------------------------------------------------ |
+| 上传文档 | `POST /api/knowledge/documents` 写入用户默认集合 | `POST /api/knowledge/v2/collections/{id}/documents`          |
+| 列出文档 | 仅返回我自己默认集合                             | 任意可访问集合                                               |
+| 搜索     | `POST /api/knowledge/search` 仅 user_id 隔离     | `POST /api/knowledge/v2/retrieve` 跨集合，可带 `employee_id` |
+| 集合管理 | 不支持                                           | `/api/knowledge/v2/collections/*`                            |
 
 v1 改造为 chroma 后端后，前端**不需要任何修改**也能继续工作。
 
@@ -117,7 +117,7 @@ v1 改造为 chroma 后端后，前端**不需要任何修改**也能继续工�
 {
   "cognition": {
     "system_prompt": "你是助手",
-    "model": {"provider": "openai", "model_name": "gpt-4o-mini"},
+    "model": { "provider": "openai", "model_name": "gpt-4o-mini" },
     "knowledge": {
       "enabled": true,
       "top_k": 6,
@@ -134,13 +134,13 @@ v1 改造为 chroma 后端后，前端**不需要任何修改**也能继续工�
 
 新节点类型 `knowledge_search`，配置：
 
-| 字段 | 说明 |
-|---|---|
-| `query` 或 `query_template` | 检索文本，支持 `${var.path}` 模板 |
-| `collection_ids` | 显式指定集合（受可见性裁剪） |
-| `employee_id` / `workflow_id` | 带上额外身份上下文 |
-| `top_k` / `min_score` | 检索控制 |
-| `output_var` | 写入 `data` 的键名（默认 `knowledge`） |
+| 字段                          | 说明                                   |
+| ----------------------------- | -------------------------------------- |
+| `query` 或 `query_template`   | 检索文本，支持 `${var.path}` 模板      |
+| `collection_ids`              | 显式指定集合（受可见性裁剪）           |
+| `employee_id` / `workflow_id` | 带上额外身份上下文                     |
+| `top_k` / `min_score`         | 检索控制                               |
+| `output_var`                  | 写入 `data` 的键名（默认 `knowledge`） |
 
 沙盒模式下走 `_execute_knowledge_search_mock`，不真实查向量库。
 
@@ -150,20 +150,20 @@ v1 改造为 chroma 后端后，前端**不需要任何修改**也能继续工�
 
 ## 部署 / env 变量
 
-| 变量 | 默认 | 说明 |
-|---|---|---|
-| `MODSTORE_VECTOR_BACKEND` | `chroma` | `chroma` / `redis`（兼容） |
-| `MODSTORE_VECTOR_DB_DIR` | `modstore_server/data/chroma` | Chroma 持久化目录；compose 配置为 `/data/chroma` 落入 `modstore_data` 卷 |
-| `MODSTORE_EMBEDDING_API_KEY` | (空) | OpenAI 兼容 embedding API Key |
-| `MODSTORE_EMBEDDING_BASE_URL` | `https://api.openai.com/v1` | embedding 服务 base URL |
-| `MODSTORE_EMBEDDING_MODEL` | `text-embedding-3-small` | embedding 模型名 |
-| `MODSTORE_EMBEDDING_DIM` | `1536` | 与模型一致 |
-| `MODSTORE_KB_MAX_UPLOAD_BYTES` | `20971520` | 单文件上限 |
-| `MODSTORE_KB_CHUNK_SIZE` | `1000` | 分块大小 |
-| `MODSTORE_KB_CHUNK_OVERLAP` | `120` | 分块重叠 |
-| `MODSTORE_RAG_RERANK` | (空) | 设为 `cross-encoder` 启用 sentence-transformers 重排 |
-| `MODSTORE_RAG_RERANK_MODEL` | `cross-encoder/ms-marco-MiniLM-L-6-v2` | rerank 模型 |
-| `MODSTORE_VECTOR_REDIS_URL` / `REDIS_URL` | (空) | 仅迁移期使用 |
+| 变量                                      | 默认                                   | 说明                                                                     |
+| ----------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------ |
+| `MODSTORE_VECTOR_BACKEND`                 | `chroma`                               | `chroma` / `redis`（兼容）                                               |
+| `MODSTORE_VECTOR_DB_DIR`                  | `modstore_server/data/chroma`          | Chroma 持久化目录；compose 配置为 `/data/chroma` 落入 `modstore_data` 卷 |
+| `MODSTORE_EMBEDDING_API_KEY`              | (空)                                   | OpenAI 兼容 embedding API Key                                            |
+| `MODSTORE_EMBEDDING_BASE_URL`             | `https://api.openai.com/v1`            | embedding 服务 base URL                                                  |
+| `MODSTORE_EMBEDDING_MODEL`                | `text-embedding-3-small`               | embedding 模型名                                                         |
+| `MODSTORE_EMBEDDING_DIM`                  | `1536`                                 | 与模型一致                                                               |
+| `MODSTORE_KB_MAX_UPLOAD_BYTES`            | `20971520`                             | 单文件上限                                                               |
+| `MODSTORE_KB_CHUNK_SIZE`                  | `1000`                                 | 分块大小                                                                 |
+| `MODSTORE_KB_CHUNK_OVERLAP`               | `120`                                  | 分块重叠                                                                 |
+| `MODSTORE_RAG_RERANK`                     | (空)                                   | 设为 `cross-encoder` 启用 sentence-transformers 重排                     |
+| `MODSTORE_RAG_RERANK_MODEL`               | `cross-encoder/ms-marco-MiniLM-L-6-v2` | rerank 模型                                                              |
+| `MODSTORE_VECTOR_REDIS_URL` / `REDIS_URL` | (空)                                   | 仅迁移期使用                                                             |
 
 容器依赖通过 `pip install -e ".[web,knowledge]"` 安装（`chromadb/pypdf/python-docx/openpyxl`）。
 

@@ -1,9 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  PROTECTED_CLIENT_MOD_IDS,
-  isProtectedClientModId,
-  type ProtectedClientModId,
-} from './protectedMods'
+import { PROTECTED_CLIENT_MOD_IDS, isProtectedClientModId, type ProtectedClientModId } from './protectedMods'
 
 describe('protectedMods constants and functions', () => {
   describe('PROTECTED_CLIENT_MOD_IDS', () => {

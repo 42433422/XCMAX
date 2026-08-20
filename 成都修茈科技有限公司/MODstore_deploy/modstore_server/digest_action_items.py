@@ -16,8 +16,22 @@ import hashlib
 import logging
 import os
 import re
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Sequence
+from datetime import UTC, datetime
+from typing import Any, Dict, List, Optional
+
+from modstore_server.digest_action_status import (
+    find_matching_item_ids,
+)
+from modstore_server.digest_action_status import normalize_match_text as _normalize_match_text
+from modstore_server.digest_action_status import (
+    set_status,
+    set_status_if_advanced,
+    stats,
+    sync_dispatched_for_work_units,
+    sync_merged_on_deploy,
+)
+from modstore_server.digest_action_status import text_matches as _text_matches
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +96,7 @@ def _infer_priority(text: str, *, kind: str, section_priority: str, indent: int)
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _normalize_action_text(text: str) -> str:
@@ -168,7 +182,7 @@ def ensure_table() -> None:
         ):
             try:
                 conn.execute(_sql(stmt))
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 pass
 
 
@@ -207,9 +221,7 @@ def _parse_markdown(markdown: str, *, kind: str) -> List[Dict[str, Any]]:
             pr = _infer_priority(
                 item_text, kind=kind, section_priority=section_priority, indent=indent
             )
-            if indent < 2 and _PRIORITY_RE.search(item_text):
-                section_priority = pr
-            elif indent < 2 and not section_priority:
+            if indent < 2 and _PRIORITY_RE.search(item_text) or indent < 2 and not section_priority:
                 section_priority = pr
             ip = _PATH_RE.search(item_text)
             out.append(
@@ -235,7 +247,7 @@ def parse_and_store_action_items(
     """解析双清单并 upsert 到 daily_action_items；返回计数。失败不抛错（不阻断 digest）。"""
     try:
         ensure_table()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("action_items: ensure_table failed")
         return {"ok": False, "error": "ensure_table failed", "patch": 0, "update": 0}
 
@@ -246,7 +258,7 @@ def parse_and_store_action_items(
         )
 
         emp_lines = build_employee_dispatch_map()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         emp_lines = {}
 
         def pick_dispatch_line(eid, _m, *, list_kind):  # type: ignore
@@ -261,7 +273,7 @@ def parse_and_store_action_items(
             eid = it["employee_id"]
             try:
                 line = pick_dispatch_line(eid, emp_lines, list_kind=lk)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 line = "P-S"
             rows.append(
                 {
@@ -308,11 +320,11 @@ def parse_and_store_action_items(
                     r,
                 )
                 inserted[r["kind"]] = inserted.get(r["kind"], 0) + 1
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 logger.exception("action_items: insert failed key=%s", r.get("dedupe_key"))
         try:
             compacted = _compact_open_backlog(conn)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.exception("action_items: compact open backlog failed")
     logger.info(
         "action_items stored day=%s patch=%s update=%s closed_low_signal=%s closed_duplicates=%s",
@@ -347,7 +359,7 @@ def list_action_items(
 ) -> List[Dict[str, Any]]:
     try:
         ensure_table()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return []
     from sqlalchemy import text as _sql
 
@@ -439,8 +451,13 @@ def compact_open_backlog() -> Dict[str, Any]:
     """手动收敛现有 open backlog；用于运维和测试。"""
     try:
         ensure_table()
-    except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "error": str(exc), "closed_low_signal": 0, "closed_duplicates": 0}
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "error": str(exc),
+            "closed_low_signal": 0,
+            "closed_duplicates": 0,
+        }
     eng = _engine()
     with eng.begin() as conn:
         out = _compact_open_backlog(conn)
@@ -450,7 +467,7 @@ def compact_open_backlog() -> Dict[str, Any]:
 def latest_day(*, kind: Optional[str] = None) -> str:
     try:
         ensure_table()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return ""
     from sqlalchemy import text as _sql
 
@@ -466,207 +483,13 @@ def latest_day(*, kind: Optional[str] = None) -> str:
     return str(row[0]) if row else ""
 
 
-def _normalize_match_text(text: str) -> str:
-    """条目 / WorkUnit 文本归一化，便于跨解析器模糊匹配。"""
-    return _normalize_action_text(text)[:400]
-
-
-def _text_matches(item_text: str, task_text: str) -> bool:
-    a = _normalize_match_text(item_text)
-    b = _normalize_match_text(task_text)
-    if not a or not b:
-        return False
-    if a == b:
-        return True
-    shorter, longer = (a, b) if len(a) <= len(b) else (b, a)
-    if len(shorter) >= 12 and shorter in longer:
-        return True
-    if len(shorter) >= 6 and shorter in longer and len(longer) - len(shorter) <= 80:
-        return True
-    return False
-
-
-def find_matching_item_ids(
-    *,
-    record_id: int,
-    employee_id: str,
-    kind: str,
-    task_text: str,
-    day: Optional[str] = None,
-) -> List[int]:
-    """按 digest + 员工 + 种类 + 任务摘要匹配行动条目 id（派发回写用）。"""
-    items = list_action_items(kind=kind, record_id=int(record_id or 0), limit=500)
-    if day:
-        items = [it for it in items if str(it.get("day") or "") == day]
-    eid = (employee_id or "").strip()
-    ids: List[int] = []
-    for it in items:
-        if eid and str(it.get("employee_id") or "").strip() != eid:
-            continue
-        if _text_matches(str(it.get("text") or ""), task_text):
-            ids.append(int(it["id"]))
-    if ids or not eid:
-        return ids
-    # WorkUnit 可能经 resolve_work_unit_employee 改派，回退为仅文本匹配
-    for it in items:
-        if _text_matches(str(it.get("text") or ""), task_text):
-            iid = int(it["id"])
-            if iid not in ids:
-                ids.append(iid)
-    return ids
-
-
-def set_status_if_advanced(item_id: int, status: str) -> bool:
-    """仅向前推进状态（open→dispatched→…→merged），不降级。"""
-    status = str(status or "").strip().lower()
-    if status not in VALID_STATUS:
-        return False
-    from sqlalchemy import text as _sql
-
-    eng = _engine()
-    with eng.begin() as conn:
-        row = conn.execute(
-            _sql("SELECT status FROM daily_action_items WHERE id=:id"),
-            {"id": int(item_id)},
-        ).first()
-        if not row:
-            return False
-        cur = str(row[0] or "open").strip().lower()
-        if _STATUS_RANK.get(status, 0) <= _STATUS_RANK.get(cur, 0):
-            return False
-        conn.execute(
-            _sql("UPDATE daily_action_items SET status=:s, updated_at=:u WHERE id=:id"),
-            {"s": status, "u": _now(), "id": int(item_id)},
-        )
-    return True
-
-
-def set_status(item_id: int, status: str) -> Dict[str, Any]:
-    status = str(status or "").strip().lower()
-    if status not in VALID_STATUS:
-        return {"ok": False, "error": f"invalid status; allowed={VALID_STATUS}"}
-    from sqlalchemy import text as _sql
-
-    eng = _engine()
-    with eng.begin() as conn:
-        conn.execute(
-            _sql("UPDATE daily_action_items SET status=:s, updated_at=:u WHERE id=:id"),
-            {"s": status, "u": _now(), "id": int(item_id)},
-        )
-    return {"ok": True, "id": int(item_id), "status": status}
-
-
-def sync_dispatched_for_work_units(record_id: int, units: Sequence[Any]) -> Dict[str, Any]:
-    """line-execute 派发成功后：匹配条目 → dispatched（已派发）。"""
-    updated = 0
-    matched: List[int] = []
-    for u in units:
-        lk = str(
-            getattr(u, "list_kind", None)
-            or (u.get("list_kind") if isinstance(u, dict) else "")
-            or ""
-        )
-        kind = KIND_PATCH if lk == "patches" else KIND_UPDATE
-        eid = str(
-            getattr(u, "employee_id", None)
-            or (u.get("employee_id") if isinstance(u, dict) else "")
-            or ""
-        )
-        brief = str(
-            getattr(u, "task_brief", None)
-            or (u.get("task_brief") if isinstance(u, dict) else "")
-            or ""
-        )
-        if not brief:
-            continue
-        for iid in find_matching_item_ids(
-            record_id=int(record_id),
-            employee_id=eid,
-            kind=kind,
-            task_text=brief,
-        ):
-            if iid in matched:
-                continue
-            if set_status_if_advanced(iid, "dispatched"):
-                updated += 1
-                matched.append(iid)
-    logger.info("action_items dispatch writeback record=%s updated=%s", record_id, updated)
-    return {"ok": True, "updated": updated, "matched_ids": matched}
-
-
-def sync_merged_on_deploy(
-    *, record_id: Optional[int] = None, day: Optional[str] = None
-) -> Dict[str, Any]:
-    """OpsStagedChange 部署/合并成功后：dispatched|in_progress → merged（已闭环）。"""
-    use_day = (day or "").strip() or latest_day()
-    items = list_action_items(day=use_day or None, limit=2000)
-    if record_id:
-        items = [it for it in items if int(it.get("record_id") or 0) == int(record_id)]
-    updated = 0
-    merged_ids: List[int] = []
-    for it in items:
-        st = str(it.get("status") or "open")
-        if st not in ("dispatched", "in_progress"):
-            continue
-        iid = int(it["id"])
-        if set_status_if_advanced(iid, "merged"):
-            updated += 1
-            merged_ids.append(iid)
-    logger.info("action_items merge writeback day=%s updated=%s", use_day, updated)
-    return {"ok": True, "updated": updated, "merged_ids": merged_ids, "day": use_day}
-
-
-def stats(*, kind: Optional[str] = None, day: Optional[str] = None) -> Dict[str, Any]:
-    """完成率/分布指标（Agentic Business OS 趋势用）。"""
-    try:
-        ensure_table()
-    except Exception:
-        return {
-            "total": 0,
-            "done": 0,
-            "completion_rate": 0.0,
-            "by_status": {},
-            "by_line": {},
-            "by_priority": {},
-        }
-    from sqlalchemy import text as _sql
-
-    where = []
-    params: Dict[str, Any] = {}
-    if kind:
-        where.append("kind=:kind")
-        params["kind"] = kind
-    if day:
-        where.append("day=:day")
-        params["day"] = day
-    sql = "SELECT status, line, priority, COUNT(*) AS n FROM daily_action_items"
-    if where:
-        sql += " WHERE " + " AND ".join(where)
-    sql += " GROUP BY status, line, priority"
-
-    total = 0
-    by_status: Dict[str, int] = {}
-    by_line: Dict[str, int] = {}
-    by_priority: Dict[str, int] = {}
-    eng = _engine()
-    with eng.begin() as conn:
-        rows = conn.execute(_sql(sql), params).mappings()
-        for row in rows:
-            n = int(row.get("n") or 0)
-            total += n
-            status = str(row.get("status") or "")
-            line = str(row.get("line") or "")
-            priority = str(row.get("priority") or "")
-            by_status[status] = by_status.get(status, 0) + n
-            by_line[line] = by_line.get(line, 0) + n
-            if priority:
-                by_priority[priority] = by_priority.get(priority, 0) + n
-    done = by_status.get("merged", 0) + by_status.get("closed", 0)
-    return {
-        "total": total,
-        "done": done,
-        "completion_rate": round(done / total * 100, 1) if total else 0.0,
-        "by_status": by_status,
-        "by_line": by_line,
-        "by_priority": by_priority,
-    }
+__all__ = [
+    "_normalize_match_text",
+    "_text_matches",
+    "find_matching_item_ids",
+    "set_status",
+    "set_status_if_advanced",
+    "stats",
+    "sync_dispatched_for_work_units",
+    "sync_merged_on_deploy",
+]

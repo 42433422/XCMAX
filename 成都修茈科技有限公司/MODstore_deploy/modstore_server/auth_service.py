@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """XC AGI 用户认证服务：注册、登录、JWT，以及 Personal Access Token (PAT) 工具。"""
 
 from __future__ import annotations
@@ -7,7 +8,7 @@ import json
 import os
 import secrets
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any, List, Optional, Tuple, cast
 
 import bcrypt
@@ -16,6 +17,7 @@ from sqlalchemy import func
 
 from modstore_server.datetime_utils import as_utc_aware
 from modstore_server.models import DeveloperToken, User, Wallet, get_session_factory
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 _JWT_ALGORITHM = "HS256"
 _JWT_EXPIRE_HOURS = 72
@@ -54,7 +56,7 @@ def verify_password(raw: str, hashed: str) -> bool:
             dk = _hl.pbkdf2_hmac("sha256", raw.encode("utf-8"), salt.encode("utf-8"), iterations)
             computed = _b64.b64encode(dk).decode("utf-8")
             return computed == stored_hash
-        except Exception:
+        except RECOVERABLE_ERRORS:
             return False
     if hashed == "external-jwt":
         return False
@@ -74,7 +76,7 @@ def create_access_token(
 ) -> str:
     """签发 access JWT。``roles`` 与 Java 支付网关 ``JwtAuthenticationFilter`` 对齐（``ADMIN`` → ``ROLE_ADMIN``）。"""
     roles: List[str] = ["ADMIN"] if is_admin else []
-    expire = datetime.now(timezone.utc) + (
+    expire = datetime.now(UTC) + (
         expires_delta if expires_delta is not None else timedelta(hours=_JWT_EXPIRE_HOURS)
     )
     payload = {
@@ -93,7 +95,8 @@ def create_access_token(
 def decode_access_token(token: str) -> Optional[dict]:
     try:
         payload = cast(
-            dict[Any, Any], jwt.decode(token, _jwt_secret(), algorithms=[_JWT_ALGORITHM])
+            dict[Any, Any],
+            jwt.decode(token, _jwt_secret(), algorithms=[_JWT_ALGORITHM]),
         )
     except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
         return None
@@ -105,7 +108,7 @@ def decode_access_token(token: str) -> Optional[dict]:
 
 
 def create_refresh_token(user_id: int, username: str) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(days=_JWT_REFRESH_EXPIRE_DAYS)
+    expire = datetime.now(UTC) + timedelta(days=_JWT_REFRESH_EXPIRE_DAYS)
     payload = {
         "sub": str(user_id),
         "username": username,
@@ -118,7 +121,8 @@ def create_refresh_token(user_id: int, username: str) -> str:
 def decode_refresh_token(token: str) -> Optional[dict]:
     try:
         payload = cast(
-            dict[Any, Any], jwt.decode(token, _jwt_secret(), algorithms=[_JWT_ALGORITHM])
+            dict[Any, Any],
+            jwt.decode(token, _jwt_secret(), algorithms=[_JWT_ALGORITHM]),
         )
     except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
         return None
@@ -295,7 +299,7 @@ def resolve_pat_identity(raw_token: str) -> Optional[PatIdentity]:
         if not row:
             return None
         exp = as_utc_aware(row.expires_at)
-        if exp and exp < datetime.now(timezone.utc):
+        if exp and exp < datetime.now(UTC):
             return None
         user = session.query(User).filter(User.id == row.user_id).first()
         if not user:
@@ -308,9 +312,9 @@ def resolve_pat_identity(raw_token: str) -> Optional[PatIdentity]:
             scopes_raw = []
         scopes = tuple(str(s) for s in scopes_raw if s)
         try:
-            row.last_used_at = datetime.now(timezone.utc)
+            row.last_used_at = datetime.now(UTC)
             session.commit()
-        except Exception:
+        except RECOVERABLE_ERRORS:
             session.rollback()
         return PatIdentity(user=user, scopes=scopes)
 
@@ -338,15 +342,15 @@ def resolve_user_from_pat(raw_token: str) -> Optional[User]:
         if not row:
             return None
         exp = as_utc_aware(row.expires_at)
-        if exp and exp < datetime.now(timezone.utc):
+        if exp and exp < datetime.now(UTC):
             return None
         user = session.query(User).filter(User.id == row.user_id).first()
         if not user:
             return None
         # 写一次 last_used_at（容忍并发竞态：单字段 UPDATE 安全）
         try:
-            row.last_used_at = datetime.now(timezone.utc)
+            row.last_used_at = datetime.now(UTC)
             session.commit()
-        except Exception:
+        except RECOVERABLE_ERRORS:
             session.rollback()
         return user

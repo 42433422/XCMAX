@@ -14,9 +14,24 @@ type BackendEntry = {
 }
 
 const BACKEND_CHAIN: BackendEntry[] = [
-  { id: 'funasr', create: () => new FunASRBackend(), startHint: '正在连接语音服务…', timeoutMs: 15000 },
-  { id: 'webspeech', create: () => new WebSpeechBackend(), startHint: '正在尝试浏览器语音…', timeoutMs: 12000 },
-  { id: 'whisper-web', create: () => new WhisperWebBackend(), startHint: '正在加载本地识别模型…', timeoutMs: 30000 },
+  {
+    id: 'funasr',
+    create: () => new FunASRBackend(),
+    startHint: '正在连接语音服务…',
+    timeoutMs: 15000,
+  },
+  {
+    id: 'webspeech',
+    create: () => new WebSpeechBackend(),
+    startHint: '正在尝试浏览器语音…',
+    timeoutMs: 12000,
+  },
+  {
+    id: 'whisper-web',
+    create: () => new WhisperWebBackend(),
+    startHint: '正在加载本地识别模型…',
+    timeoutMs: 30000,
+  },
 ]
 
 function isMobileDevice(): boolean {
@@ -72,7 +87,9 @@ export function useSpeechRecognition() {
     if (!currentBackend) return
     try {
       currentBackend.abort()
-    } catch { /* */ }
+    } catch {
+      /* */
+    }
     currentBackend = null
     activeBackendId.value = ''
     sessionReady.value = false
@@ -91,12 +108,7 @@ export function useSpeechRecognition() {
     const entry = BACKEND_CHAIN[chainIndex]
     if (_continuousMode && (entry?.id === 'webspeech' || entry?.id === 'funasr')) {
       // 持续聆听：仅连接阶段超时，就绪后不因静音降级（移动网络放宽）
-      const connectMs =
-        entry.id === 'funasr'
-          ? isMobileDevice()
-            ? 35000
-            : 20000
-          : 8000
+      const connectMs = entry.id === 'funasr' ? (isMobileDevice() ? 35000 : 20000) : 8000
       _resultTimeout = setTimeout(() => {
         void handleResultTimeout(chainIndex, sessionId)
       }, connectMs)
@@ -133,9 +145,7 @@ export function useSpeechRecognition() {
       await tryBackendChain(chainIndex + 1, sessionId)
       return
     }
-    const msg = _continuousMode && isMobileDevice()
-      ? mobileContinuousHint()
-      : '语音识别无响应，请检查麦克风或使用文字输入。'
+    const msg = _continuousMode && isMobileDevice() ? mobileContinuousHint() : '语音识别无响应，请检查麦克风或使用文字输入。'
     error.value = msg
     _onError?.(msg)
   }
@@ -145,9 +155,7 @@ export function useSpeechRecognition() {
 
     if (chainIndex >= BACKEND_CHAIN.length) {
       loadingHint.value = ''
-      const msg = _continuousMode && isMobileDevice()
-        ? mobileContinuousHint()
-        : '语音识别不可用。请检查麦克风权限或使用文字输入。'
+      const msg = _continuousMode && isMobileDevice() ? mobileContinuousHint() : '语音识别不可用。请检查麦克风权限或使用文字输入。'
       error.value = msg
       _onError?.(msg)
       return
@@ -183,8 +191,7 @@ export function useSpeechRecognition() {
       return
     }
 
-    loadingHint.value =
-      entry.id === 'funasr' ? '请允许麦克风权限…' : entry.startHint
+    loadingHint.value = entry.id === 'funasr' ? '请允许麦克风权限…' : entry.startHint
     try {
       await tryBackend(backend, entry.id, chainIndex, sessionId)
     } catch {
@@ -229,12 +236,7 @@ export function useSpeechRecognition() {
     await _startTask
   }
 
-  async function tryBackend(
-    backend: ASRBackend,
-    id: string,
-    chainIndex: number,
-    sessionId: number,
-  ) {
+  async function tryBackend(backend: ASRBackend, id: string, chainIndex: number, sessionId: number) {
     if (sessionId !== _sessionId) return
 
     stopCurrentBackend()
@@ -286,11 +288,7 @@ export function useSpeechRecognition() {
 
       stopCurrentBackend()
 
-      if (
-        _continuousMode &&
-        chainIndex === 0 &&
-        _funasrRetryCount < FUNASR_CONTINUOUS_MAX_RETRY
-      ) {
+      if (_continuousMode && chainIndex === 0 && _funasrRetryCount < FUNASR_CONTINUOUS_MAX_RETRY) {
         _funasrRetryCount += 1
         loadingHint.value = '正在重连语音服务…'
         if (savedPartial) interimText.value = savedPartial
@@ -339,33 +337,16 @@ export function useSpeechRecognition() {
     }
 
     await (id === 'funasr'
-      ? (backend as FunASRBackend).start(
-          handleResult,
-          handleError,
-          handleAudioLevel,
-          handleReady,
-          handleMicReady,
-          mediaStream,
-          { persistentMic: _continuousMode },
-        )
-      : backend.start(
-          handleResult,
-          handleError,
-          handleAudioLevel,
-          handleReady,
-          undefined,
-          mediaStream,
-        ))
+      ? (backend as FunASRBackend).start(handleResult, handleError, handleAudioLevel, handleReady, handleMicReady, mediaStream, {
+          persistentMic: _continuousMode,
+        })
+      : backend.start(handleResult, handleError, handleAudioLevel, handleReady, undefined, mediaStream))
 
     if (sessionId !== _sessionId) return
 
     if (!sessionReady.value && currentBackend === backend) {
       stopCurrentBackend()
-      if (
-        _continuousMode &&
-        chainIndex === 0 &&
-        _funasrRetryCount < FUNASR_CONTINUOUS_MAX_RETRY
-      ) {
+      if (_continuousMode && chainIndex === 0 && _funasrRetryCount < FUNASR_CONTINUOUS_MAX_RETRY) {
         _funasrRetryCount += 1
         loadingHint.value = '正在重连语音服务…'
         await new Promise((r) => setTimeout(r, 600 + _funasrRetryCount * 400))
@@ -392,9 +373,7 @@ export function useSpeechRecognition() {
     }
 
     if (currentBackend === backend) {
-      const skipListenTimer =
-        _continuousMode &&
-        (chainId === 'webspeech' || chainId === 'funasr')
+      const skipListenTimer = _continuousMode && (chainId === 'webspeech' || chainId === 'funasr')
       if (!skipListenTimer) {
         startResultTimeout(chainIndex, sessionId)
       }
@@ -454,7 +433,9 @@ export function useSpeechRecognition() {
     sessionReady.value = false
   }
 
-  onBeforeUnmount(() => { abort() })
+  onBeforeUnmount(() => {
+    abort()
+  })
 
   return {
     error,

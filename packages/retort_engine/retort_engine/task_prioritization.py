@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from collections import Counter
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 
 def build_task_prioritization_report(project: str | Path) -> dict[str, Any]:
@@ -123,7 +123,9 @@ def _dimensions_in_result(
     item: dict[str, Any], queued_dimensions: set[str]
 ) -> set[str]:
     dimensions: set[str] = set()
-    task = item.get("task") if isinstance(item.get("task"), dict) else {}
+    task = cast(
+        dict[str, Any], item.get("task") if isinstance(item.get("task"), dict) else {}
+    )
     if task.get("dimension"):
         dimensions.add(str(task["dimension"]))
     text = json.dumps(item, ensure_ascii=False)

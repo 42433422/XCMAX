@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { catalog } from './catalog'
-import { req, authHeaders, fetchZipBlob } from './shared'
+import { req, fetchZipBlob } from './shared'
 
 vi.mock('./shared', () => ({
   req: vi.fn(),
@@ -17,7 +17,7 @@ describe('catalog api', () => {
     vi.mocked(req).mockResolvedValue({ items: [] })
     await catalog.catalog()
     expect(req).toHaveBeenCalledWith(expect.stringContaining('/api/market/catalog?'))
-    const call = vi.mocked(req).mock.calls[0] as any[]
+    const call = vi.mocked(req).mock.calls[0] as UnsafeTestValue[]
     const url = call[0] as string
     expect(url).toContain('limit=50')
     expect(url).toContain('offset=0')
@@ -26,7 +26,7 @@ describe('catalog api', () => {
   it('catalog passes q and artifact params', async () => {
     vi.mocked(req).mockResolvedValue({ items: [] })
     await catalog.catalog('search', 'employee_pack')
-    const call = vi.mocked(req).mock.calls[0] as any[]
+    const call = vi.mocked(req).mock.calls[0] as UnsafeTestValue[]
     const url = call[0] as string
     expect(url).toContain('q=search')
     expect(url).toContain('artifact=employee_pack')
@@ -35,7 +35,7 @@ describe('catalog api', () => {
   it('catalog passes industry and securityLevel', async () => {
     vi.mocked(req).mockResolvedValue({ items: [] })
     await catalog.catalog('', '', 50, 0, 'tech', 'high')
-    const call = vi.mocked(req).mock.calls[0] as any[]
+    const call = vi.mocked(req).mock.calls[0] as UnsafeTestValue[]
     const url = call[0] as string
     expect(url).toContain('industry=tech')
     expect(url).toContain('security_level=high')
@@ -44,7 +44,7 @@ describe('catalog api', () => {
   it('catalog adds cacheBust param', async () => {
     vi.mocked(req).mockResolvedValue({ items: [] })
     await catalog.catalog('', '', 50, 0, '', '', '', '', true)
-    const call = vi.mocked(req).mock.calls[0] as any[]
+    const call = vi.mocked(req).mock.calls[0] as UnsafeTestValue[]
     const url = call[0] as string
     expect(url).toContain('_cb=')
   })

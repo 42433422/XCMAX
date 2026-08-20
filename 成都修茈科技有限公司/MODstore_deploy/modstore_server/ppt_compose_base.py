@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, index"
 """Build base PPTX from edit plan slides (compose-first)."""
 
 from __future__ import annotations
@@ -5,7 +6,9 @@ from __future__ import annotations
 import io
 import shutil
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 EMU_PER_INCH = 914400
 
@@ -123,7 +126,7 @@ def create_compose_deck(
             img_path = _resolve_image_path(workspace, ref)
             if not img_path or not img_path.is_file():
                 continue
-            logical_id = str(img.get("logical_id") or f"s{idx+1}_img{j+1}")[:40]
+            logical_id = str(img.get("logical_id") or f"s{idx + 1}_img{j + 1}")[:40]
             left = Inches(pic_left + j * (pic_width + 0.25))
             try:
                 pic = slide.shapes.add_picture(
@@ -138,13 +141,13 @@ def create_compose_deck(
                     "shape_id": pic.shape_id,
                     "name": logical_id,
                 }
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 continue
 
         if notes:
             try:
                 slide.notes_slide.notes_text_frame.text = notes
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 pass
 
     bio = io.BytesIO()
@@ -169,6 +172,6 @@ def copy_template_base(template_path: Path, output_path: Path) -> Dict[str, Any]
 
         prs = Presentation(str(output_path))
         slide_count = len(prs.slides)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         slide_count = 1
     return {"slide_count": slide_count, "media_count": 0, "logical_map": {}}

@@ -7,21 +7,17 @@ import os
 import re
 import time
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any, Dict, Optional
 
-from fastapi import Depends, Header, HTTPException, Request
-from pydantic import BaseModel, Field
+from fastapi import Header, HTTPException, Request
 
 from modstore_server.api.deps import get_current_user, require_admin
 from modstore_server.duty_roster import employee_partition_meta
 from modstore_server.models import (
     CatalogItem,
     Entitlement,
-    LandingContactSubmission,
     User,
-    VerificationCode,
-    get_session_factory,
 )
 
 _get_current_user = get_current_user
@@ -46,7 +42,12 @@ LICENSE_SCOPE_LABELS = {
     "enterprise": "企业级",
 }
 
-RISKY_ORIGIN_TYPES = {"derivative", "collaboration", "fan_linkage", "suspected_plagiarism"}
+RISKY_ORIGIN_TYPES = {
+    "derivative",
+    "collaboration",
+    "fan_linkage",
+    "suspected_plagiarism",
+}
 RISKY_IP_LEVELS = {"medium", "high"}
 
 _CONTACT_EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
@@ -66,7 +67,9 @@ _WORKBENCH_MATCH_WINDOW_SEC = int(
 )
 
 
-def _optional_current_user(authorization: Optional[str] = Header(None)) -> Optional[User]:
+def _optional_current_user(
+    authorization: Optional[str] = Header(None),
+) -> Optional[User]:
     if not authorization:
         return None
     try:
@@ -210,7 +213,7 @@ def _grant_catalog_entitlement(
         .filter(
             Entitlement.user_id == user_id,
             Entitlement.catalog_id == item.id,
-            Entitlement.is_active == True,
+            Entitlement.is_active.is_(True),
         )
         .first()
     )
@@ -226,7 +229,7 @@ def _grant_catalog_entitlement(
             entitlement_type=ent_type,
             source_order_id=source_order_id,
             metadata_json=_entitlement_metadata(item, source),
-            granted_at=datetime.now(timezone.utc),
+            granted_at=datetime.now(UTC),
             is_active=True,
         )
     )

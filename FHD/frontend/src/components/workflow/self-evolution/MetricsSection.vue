@@ -18,7 +18,8 @@ defineProps<{
       <li v-for="window in windows" :key="`${window.from_week}-${window.to_week}`">
         <strong>{{ window.from_week || '起始' }} → {{ window.to_week || '结束' }}</strong>
         <span>
-          覆盖率 {{ window.coverage_delta ?? '—' }} · pytest {{ window.passed_delta ?? '—' }} · 债务 {{ window.debt_delta ?? '—' }}
+          覆盖率 {{ window.coverage_delta ?? '—' }} · pytest {{ window.passed_delta ?? '—' }} · 债务
+          {{ window.debt_delta ?? '—' }}
         </span>
         <small v-if="Array.isArray(window.misses) && window.misses.length">{{ window.misses.join(' / ') }}</small>
       </li>
@@ -34,9 +35,7 @@ defineProps<{
   padding: 11px 12px;
   border: 1px solid #dcfce7;
   border-radius: 12px;
-  background:
-    radial-gradient(circle at 12% 0%, rgba(34, 197, 94, 0.10), transparent 36%),
-    rgba(255, 255, 255, 0.78);
+  background: radial-gradient(circle at 12% 0%, rgba(34, 197, 94, 0.1), transparent 36%), rgba(255, 255, 255, 0.78);
 }
 
 .selp-metrics-cards {
@@ -55,9 +54,15 @@ defineProps<{
   background: #f8fafc;
 }
 
-.selp-metrics-card--ok { background: #ecfdf5; }
-.selp-metrics-card--warn { background: #fffbeb; }
-.selp-metrics-card--bad { background: #fef2f2; }
+.selp-metrics-card--ok {
+  background: #ecfdf5;
+}
+.selp-metrics-card--warn {
+  background: #fffbeb;
+}
+.selp-metrics-card--bad {
+  background: #fef2f2;
+}
 
 .selp-metrics-card span,
 .selp-metrics-card small {

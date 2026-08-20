@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="dict-item"
 """Onboard approved yuangon employees into the MODstore employee catalog.
 
 This script is intentionally explicit: yuangon/ files describe planned roles,
@@ -13,6 +14,8 @@ import sys
 import tempfile
 from pathlib import Path
 from typing import Any
+
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 MODSTORE_ROOT = Path(__file__).resolve().parents[2]
 REPO_ROOT = MODSTORE_ROOT.parent
@@ -255,7 +258,10 @@ def main() -> int:
     try:
         import yaml
     except ImportError:
-        print("PyYAML is required. Install MODstore web dependencies first.", file=sys.stderr)
+        print(
+            "PyYAML is required. Install MODstore web dependencies first.",
+            file=sys.stderr,
+        )
         return 2
 
     from modstore_server.yuangon_paths import resolve_yuangon_repo_root
@@ -267,8 +273,12 @@ def main() -> int:
         print(f"No employee.yaml files found under {yuangon_dir}", file=sys.stderr)
         return 2
 
-    from modstore_server.application.catalog import get_default_catalog_application_service
-    from modstore_server.application.employee import get_default_employee_application_service
+    from modstore_server.application.catalog import (
+        get_default_catalog_application_service,
+    )
+    from modstore_server.application.employee import (
+        get_default_employee_application_service,
+    )
     from modstore_server.employee_ai_scaffold import build_employee_pack_zip
     from modstore_server.models import CatalogItem, User, get_session_factory
 
@@ -290,7 +300,7 @@ def main() -> int:
         rel = employee_file.relative_to(yuangon_dir)
         try:
             data = yaml.safe_load(employee_file.read_text(encoding="utf-8"))
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
             print(f"[ERR] {rel}: failed to read YAML: {exc}")
             failed += 1
             continue
@@ -361,7 +371,7 @@ def main() -> int:
                 db.commit()
             print(f"[ONBOARD] {pack_id}: v{record['version']} from {rel}")
             imported += 1
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
             print(f"[ERR] {pack_id}: {exc}")
             failed += 1
         finally:
@@ -379,11 +389,13 @@ def main() -> int:
 
     if not args.dry_run and failed == 0:
         try:
-            from modstore_server.incident_bus import sync_employee_trigger_bindings_from_yuangon
+            from modstore_server.incident_bus import (
+                sync_employee_trigger_bindings_from_yuangon,
+            )
 
             n = sync_employee_trigger_bindings_from_yuangon(yuangon_dir)
             print(f"synced incident trigger bindings: {n} rows (yuangon)")
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
             print(f"[WARN] sync trigger bindings failed: {exc}", file=sys.stderr)
 
     print(f"done: onboarded={imported}, skipped={skipped}, failed={failed}")

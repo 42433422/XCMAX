@@ -167,9 +167,7 @@ def _values_match(planned: Any, actual: Any) -> bool:
     return str(planned) == str(actual) if planned is not None else actual is None
 
 
-def _range_bounds(
-    ws, token: str
-) -> Tuple[str, int, int, int, int]:
+def _range_bounds(ws, token: str) -> Tuple[str, int, int, int, int]:
     """``Sheet!A1:B2`` → (sheet, min_row, min_col, max_row, max_col)；无界用已用范围兜底。"""
     text = str(token).strip()
     sheet = ""
@@ -192,7 +190,9 @@ def _range_bounds(
 # ---------------------------------------------------------------------------
 
 
-def _check_conformance(wb, plan: Dict[str, Any], write_report: Optional[Dict[str, Any]]) -> _Finding:
+def _check_conformance(
+    wb, plan: Dict[str, Any], write_report: Optional[Dict[str, Any]]
+) -> _Finding:
     f = _Finding("conformance")
     cell_writes = _iter_writes(plan, "cell_writes")
     formula_writes = _iter_writes(plan, "formula_writes")
@@ -215,15 +215,21 @@ def _check_conformance(wb, plan: Dict[str, Any], write_report: Optional[Dict[str
         if not _values_match(planned, actual):
             f.fail(
                 "格值与计划不符",
-                sheet=sheet, row=row, col=col,
-                planned=str(w.get("value")), actual=str(actual),
+                sheet=sheet,
+                row=row,
+                col=col,
+                planned=str(w.get("value")),
+                actual=str(actual),
             )
         nf = w.get("number_format")
         if nf and wb[sheet].cell(row, col).number_format != str(nf):
             f.warn(
                 "number_format 与计划不符",
-                sheet=sheet, row=row, col=col,
-                planned=str(nf), actual=str(wb[sheet].cell(row, col).number_format),
+                sheet=sheet,
+                row=row,
+                col=col,
+                planned=str(nf),
+                actual=str(wb[sheet].cell(row, col).number_format),
             )
 
     for w in formula_writes:
@@ -241,8 +247,11 @@ def _check_conformance(wb, plan: Dict[str, Any], write_report: Optional[Dict[str
         if str(actual) != str(w.get("formula")):
             f.fail(
                 "公式与计划不符",
-                sheet=sheet, row=row, col=col,
-                planned=str(w.get("formula"))[:80], actual=str(actual)[:80],
+                sheet=sheet,
+                row=row,
+                col=col,
+                planned=str(w.get("formula"))[:80],
+                actual=str(actual)[:80],
             )
 
     residues = 0
@@ -251,7 +260,7 @@ def _check_conformance(wb, plan: Dict[str, Any], write_report: Optional[Dict[str
             continue
         for token in ph.get("ranges") or []:
             text = str(token)
-            sheet = text.split("!")[0].strip("'") if "!" in text else ""
+            sheet = text.split("!", maxsplit=1)[0].strip("'") if "!" in text else ""
             if sheet and sheet not in wb.sheetnames:
                 f.warn(f"clear 范围 sheet 不在输出中：{sheet!r}")
                 continue
@@ -271,7 +280,9 @@ def _check_conformance(wb, plan: Dict[str, Any], write_report: Optional[Dict[str
                         if residues <= _MAX_SAMPLES:
                             f.fail(
                                 "clear 范围内存在计划外残值",
-                                sheet=sheet_name, row=r, col=c,
+                                sheet=sheet_name,
+                                row=r,
+                                col=c,
                                 actual=str(ws.cell(r, c).value)[:40],
                             )
 
@@ -332,8 +343,11 @@ def _check_protection(wb, plan: Dict[str, Any], template_wb) -> _Finding:
                     if diffs <= _MAX_SAMPLES:
                         f.fail(
                             "保护区格与原模板不一致",
-                            sheet=sheet, row=r, col=c,
-                            template=str(tpl_v)[:40], actual=str(out_v)[:40],
+                            sheet=sheet,
+                            row=r,
+                            col=c,
+                            template=str(tpl_v)[:40],
+                            actual=str(out_v)[:40],
                         )
     f.stats = {"protected_ranges": len(tokens), "diffs": diffs}
     return f
@@ -359,7 +373,9 @@ def _check_expected(wb, plan: Dict[str, Any], rules: Optional[Dict[str, Any]]) -
 
     exp_cells = expected.get("cells_planned")
     if exp_cells is not None and int(exp_cells) != len(cell_writes):
-        f.fail(f"expected.cells_planned={exp_cells} 与计划实际 {len(cell_writes)} 不符（映射员自述失真）")
+        f.fail(
+            f"expected.cells_planned={exp_cells} 与计划实际 {len(cell_writes)} 不符（映射员自述失真）"
+        )
     exp_formulas = expected.get("formulas_planned")
     if exp_formulas is not None and int(exp_formulas) != len(formula_writes):
         f.fail(f"expected.formulas_planned={exp_formulas} 与计划实际 {len(formula_writes)} 不符")
@@ -393,9 +409,7 @@ def _check_expected(wb, plan: Dict[str, Any], rules: Optional[Dict[str, Any]]) -
             pv = plan_sum.get(str(key), 0.0)
             fv = file_sum.get(str(key), 0.0)
             if abs(float(exp_v) - pv) > _NUM_TOL:
-                f.fail(
-                    f"键 {key!r} expected 数值合计 {exp_v} ≠ 计划重算 {pv}（映射员统计失真）"
-                )
+                f.fail(f"键 {key!r} expected 数值合计 {exp_v} ≠ 计划重算 {pv}（映射员统计失真）")
             if abs(pv - fv) > _NUM_TOL:
                 f.fail(f"键 {key!r} 计划数值合计 {pv} ≠ 输出文件重算 {fv}（写入丢失/篡改）")
         f.stats = {"keys_checked": len(exp_sum), "plan_sum": plan_sum, "file_sum": file_sum}
@@ -440,7 +454,11 @@ def _check_formulas(wb) -> _Finding:
 
 def _check_traceability(plan: Dict[str, Any], rules: Optional[Dict[str, Any]]) -> _Finding:
     f = _Finding("traceability")
-    ref = ((plan.get("meta") or {}).get("rules_ref") or {}) if isinstance(plan.get("meta"), dict) else {}
+    ref = (
+        ((plan.get("meta") or {}).get("rules_ref") or {})
+        if isinstance(plan.get("meta"), dict)
+        else {}
+    )
     declared = str(ref.get("sha256") or "")
     if not declared:
         f.skip("计划未携带 meta.rules_ref（无法追溯规则版本）")
@@ -486,9 +504,14 @@ def _check_structure(wb, rules: Optional[Dict[str, Any]]) -> _Finding:
             if drift <= _MAX_SAMPLES:
                 f.fail(
                     "块键与规则不符（模板重排/规则过期）",
-                    row=top, expected=expected_key, actual=actual,
+                    row=top,
+                    expected=expected_key,
+                    actual=actual,
                 )
-    f.stats = {"keyed_blocks": sum(1 for b in blocks if str(b.get('key') or '').strip()), "drift": drift}
+    f.stats = {
+        "keyed_blocks": sum(1 for b in blocks if str(b.get("key") or "").strip()),
+        "drift": drift,
+    }
     return f
 
 

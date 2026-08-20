@@ -3,8 +3,7 @@ import { appConfirm } from '@/utils/appDialog'
 import type { OnboardingReturnContext } from '@/stores/onboardingTutorial'
 import type { TutorialBuildContext } from '@/tutorial/types'
 
-const DEFAULT_INSTALL_MESSAGE =
-  '安装已完成，可以开始使用了。\n\n是否现在打开进阶教程，进入真实业务实训课程？'
+const DEFAULT_INSTALL_MESSAGE = '安装已完成，可以开始使用了。\n\n是否现在打开进阶教程，进入真实业务实训课程？'
 
 export async function launchAdvancedDriverTour(options: {
   router: Router
@@ -14,9 +13,11 @@ export async function launchAdvancedDriverTour(options: {
 }): Promise<boolean> {
   void options
   if (typeof window === 'undefined') return false
-  window.dispatchEvent(new CustomEvent('xcagi:open-assistant-float', {
-    detail: { feature: 'tutorial', advanced: true },
-  }))
+  window.dispatchEvent(
+    new CustomEvent('xcagi:open-assistant-float', {
+      detail: { feature: 'tutorial', advanced: true },
+    }),
+  )
   return true
 }
 
@@ -29,13 +30,7 @@ export async function promptAdvancedTutorialAfterInstall(options: {
   returnContext?: OnboardingReturnContext
   skipIfCompleted?: boolean
 }): Promise<InstallTutorialPromptResult> {
-  const {
-    router,
-    buildContext,
-    message = DEFAULT_INSTALL_MESSAGE,
-    returnContext,
-    skipIfCompleted = true,
-  } = options
+  const { router, buildContext, message = DEFAULT_INSTALL_MESSAGE, returnContext, skipIfCompleted = true } = options
 
   // V1 local completion is deliberately ignored: it is not V2 course evidence.
   void skipIfCompleted

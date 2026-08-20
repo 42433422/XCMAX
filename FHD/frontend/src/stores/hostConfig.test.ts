@@ -95,7 +95,10 @@ describe('hostConfig', () => {
       await store.bootstrapHostConfig()
 
       expect(store.industryPresetIds.value).toEqual(['tech', 'retail'])
-      expect(store.industryPresets.value).toEqual({ tech: { label: '科技' }, retail: { label: '零售' } })
+      expect(store.industryPresets.value).toEqual({
+        tech: { label: '科技' },
+        retail: { label: '零售' },
+      })
       expect(store.workflowEmployeeModIds.value).toEqual(['mod1', 'mod2'])
       expect(store.workflowEmployeeIds.value).toEqual(['emp1'])
       expect(store.employeeRegistryRules.value).toEqual({

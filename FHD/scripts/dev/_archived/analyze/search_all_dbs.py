@@ -1,7 +1,7 @@
-# -*- coding: utf-8 -*-
+# mypy: disable-error-code="import-not-found"
+import os
 import sqlite3
 import sys
-import os
 
 sys.path.insert(0, r"E:\FHD\XCAGI\resources\wechat-decrypt")
 from mcp_server import _decompress_content
@@ -48,7 +48,7 @@ for db_file in sorted(os.listdir(msg_dir)):
                 pass
 
         if found == 0:
-            print(f"  未找到")
+            print("  未找到")
     except:
         pass
 

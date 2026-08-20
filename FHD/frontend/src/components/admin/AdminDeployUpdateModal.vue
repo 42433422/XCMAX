@@ -12,11 +12,11 @@
       </p>
 
       <div v-if="checkData && !checkLoading" class="deploy-update-pipeline" aria-hidden="true">
-        <span class="deploy-update-pipeline__node is-admin">管理端<br><small>推</small></span>
+        <span class="deploy-update-pipeline__node is-admin">管理端<br /><small>推</small></span>
         <span class="deploy-update-pipeline__arrow">→</span>
-        <span class="deploy-update-pipeline__node is-hub">update 站<br><small>中转</small></span>
+        <span class="deploy-update-pipeline__node is-hub">update 站<br /><small>中转</small></span>
         <span class="deploy-update-pipeline__arrow">→</span>
-        <span class="deploy-update-pipeline__node is-ent">企业端<br><small>收</small></span>
+        <span class="deploy-update-pipeline__node is-ent">企业端<br /><small>收</small></span>
       </div>
 
       <div v-if="checkLoading" class="deploy-update-modal__checking">正在检测更新…</div>
@@ -34,17 +34,25 @@
           <tr>
             <td>① 管理端本地</td>
             <td>{{ checkData.admin_local.version }}</td>
-            <td><code>{{ checkData.admin_local.git_sha }}</code></td>
+            <td>
+              <code>{{ checkData.admin_local.git_sha }}</code>
+            </td>
           </tr>
           <tr>
             <td>② update 中转站</td>
             <td>{{ checkData.update_hub.version || '—' }}</td>
-            <td><code>{{ checkData.update_hub.git_sha || '—' }}</code></td>
+            <td>
+              <code>{{ checkData.update_hub.git_sha || '—' }}</code>
+            </td>
           </tr>
           <tr>
             <td>③ 企业运行态（只读）</td>
-            <td>{{ checkData.enterprise.reachable ? (checkData.enterprise.version || '—') : '不可达' }}</td>
-            <td><code>{{ checkData.enterprise.deploy_sha256?.slice(0, 12) || '—' }}</code></td>
+            <td>
+              {{ checkData.enterprise.reachable ? checkData.enterprise.version || '—' : '不可达' }}
+            </td>
+            <td>
+              <code>{{ checkData.enterprise.deploy_sha256?.slice(0, 12) || '—' }}</code>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -56,15 +64,15 @@
       <details class="deploy-update-custom" :open="customOpen">
         <summary>定制更新内容</summary>
         <label class="deploy-update-check">
-          <input v-model="opts.include_backend" type="checkbox" :disabled="pushing">
+          <input v-model="opts.include_backend" type="checkbox" :disabled="pushing" />
           后端（打包 + 上传 update 站）
         </label>
         <label class="deploy-update-check">
-          <input v-model="opts.include_frontend" type="checkbox" :disabled="pushing">
+          <input v-model="opts.include_frontend" type="checkbox" :disabled="pushing" />
           前端（构建 vue-dist + 发布到 update 站）
         </label>
         <label class="deploy-update-check">
-          <input v-model="opts.skip_pack" type="checkbox" :disabled="pushing || !opts.include_backend">
+          <input v-model="opts.skip_pack" type="checkbox" :disabled="pushing || !opts.include_backend" />
           跳过后端打包（使用已有 dist/deploy 产物）
         </label>
         <label class="deploy-update-field">
@@ -77,11 +85,7 @@
       </details>
 
       <ol v-if="jobSteps.length" class="deploy-update-steps">
-        <li
-          v-for="step in jobSteps"
-          :key="step.id"
-          :class="['deploy-update-step', `is-${step.status}`]"
-        >
+        <li v-for="step in jobSteps" :key="step.id" :class="['deploy-update-step', `is-${step.status}`]">
           <span class="deploy-update-step__icon" aria-hidden="true">{{ stepIcon(step.status) }}</span>
           <span class="deploy-update-step__label">{{ step.label }}</span>
           <span v-if="step.detail" class="deploy-update-step__detail muted">{{ step.detail }}</span>
@@ -92,31 +96,12 @@
     </div>
 
     <template #footer>
-      <button type="button" class="btn btn-secondary btn-sm" :disabled="pushing" @click="close">
-        关闭
-      </button>
-      <button
-        type="button"
-        class="btn btn-secondary btn-sm"
-        :disabled="checkLoading || pushing"
-        @click="runCheck"
-      >
-        重新检测
-      </button>
-      <button
-        type="button"
-        class="btn btn-primary btn-sm"
-        :disabled="checkLoading || pushing || !canPush"
-        @click="startPush(false)"
-      >
+      <button type="button" class="btn btn-secondary btn-sm" :disabled="pushing" @click="close">关闭</button>
+      <button type="button" class="btn btn-secondary btn-sm" :disabled="checkLoading || pushing" @click="runCheck">重新检测</button>
+      <button type="button" class="btn btn-primary btn-sm" :disabled="checkLoading || pushing || !canPush" @click="startPush(false)">
         {{ pushing ? '推送中…' : '推送到 update 站' }}
       </button>
-      <button
-        type="button"
-        class="btn btn-primary btn-sm"
-        :disabled="checkLoading || pushing || !canPush"
-        @click="startPush(true)"
-      >
+      <button type="button" class="btn btn-primary btn-sm" :disabled="checkLoading || pushing || !canPush" @click="startPush(true)">
         定制推送
       </button>
     </template>
@@ -124,148 +109,154 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
-import Modal from '@/components/Modal.vue';
-import { xcmaxAdminApi, type DeployCheckData, type DeployJobData } from '@/api/xcmaxAdmin';
+import { computed, ref, watch } from 'vue'
+import Modal from '@/components/Modal.vue'
+import { xcmaxAdminApi, type DeployCheckData, type DeployJobData } from '@/api/xcmaxAdmin'
 
-const props = defineProps<{ modelValue: boolean }>();
-const emit = defineEmits<{ 'update:modelValue': [boolean]; done: [] }>();
+const props = defineProps<{ modelValue: boolean }>()
+const emit = defineEmits<{ 'update:modelValue': [boolean]; done: [] }>()
 
-const checkLoading = ref(false);
-const checkError = ref('');
-const checkData = ref<DeployCheckData | null>(null);
-const customOpen = ref(false);
-const pushing = ref(false);
-const jobSteps = ref<DeployJobData['steps']>([]);
-const jobError = ref('');
-const pollTimer = ref<number | null>(null);
+const checkLoading = ref(false)
+const checkError = ref('')
+const checkData = ref<DeployCheckData | null>(null)
+const customOpen = ref(false)
+const pushing = ref(false)
+const jobSteps = ref<DeployJobData['steps']>([])
+const jobError = ref('')
+const pollTimer = ref<number | null>(null)
 
 const opts = ref({
   include_backend: true,
   include_frontend: true,
   skip_pack: false,
   channel: 'stable' as 'stable' | 'staging',
-});
+})
 
 const statusBanner = computed(() => {
-  const d = checkData.value;
-  if (!d) return null;
-  const f = d.flags;
+  const d = checkData.value
+  if (!d) return null
+  const f = d.flags
   if (f.up_to_date && !f.enterprise_pending) {
-    return { kind: 'ok', text: '管理端与 update 站已同步；若企业端未更新，请通知企业在 :5001 点击「检查并更新」。' };
+    return {
+      kind: 'ok',
+      text: '管理端与 update 站已同步；若企业端未更新，请通知企业在 :5001 点击「检查并更新」。',
+    }
   }
   if (f.needs_push) {
-    return { kind: 'warn', text: '发现新版本：请推送到 update 中转站（不会直连企业机）。' };
+    return { kind: 'warn', text: '发现新版本：请推送到 update 中转站（不会直连企业机）。' }
   }
   if (f.enterprise_pending) {
     return {
       kind: 'info',
       text: 'update 站已有新包，企业端待拉取（cron 约 5 分钟，或企业用户在界面手动更新）。',
-    };
+    }
   }
   if (f.needs_pack) {
-    return { kind: 'warn', text: '本地尚未打包，推送时将自动 pack。' };
+    return { kind: 'warn', text: '本地尚未打包，推送时将自动 pack。' }
   }
-  return null;
-});
+  return null
+})
 
-const canPush = computed(() => opts.value.include_backend || opts.value.include_frontend);
+const canPush = computed(() => opts.value.include_backend || opts.value.include_frontend)
 
 function stepIcon(status: string) {
-  if (status === 'done') return '✓';
-  if (status === 'running') return '…';
-  if (status === 'error') return '✕';
-  if (status === 'skipped') return '−';
-  return '○';
+  if (status === 'done') return '✓'
+  if (status === 'running') return '…'
+  if (status === 'error') return '✕'
+  if (status === 'skipped') return '−'
+  return '○'
 }
 
 function stopPoll() {
   if (pollTimer.value != null) {
-    window.clearInterval(pollTimer.value);
-    pollTimer.value = null;
+    window.clearInterval(pollTimer.value)
+    pollTimer.value = null
   }
 }
 
 async function runCheck() {
-  checkLoading.value = true;
-  checkError.value = '';
+  checkLoading.value = true
+  checkError.value = ''
   try {
-    const res = (await xcmaxAdminApi.checkDeployUpdates()) as { data?: DeployCheckData; message?: string };
-    if (!res?.data) throw new Error(res?.message || '检测失败');
-    checkData.value = res.data;
+    const res = (await xcmaxAdminApi.checkDeployUpdates()) as {
+      data?: DeployCheckData
+      message?: string
+    }
+    if (!res?.data) throw new Error(res?.message || '检测失败')
+    checkData.value = res.data
   } catch (e) {
-    checkError.value = e instanceof Error ? e.message : String(e);
-    checkData.value = null;
+    checkError.value = e instanceof Error ? e.message : String(e)
+    checkData.value = null
   } finally {
-    checkLoading.value = false;
+    checkLoading.value = false
   }
 }
 
 async function pollJob(jobId: string) {
-  stopPoll();
+  stopPoll()
   pollTimer.value = window.setInterval(async () => {
     try {
-      const res = (await xcmaxAdminApi.getDeployJob(jobId)) as { data?: DeployJobData };
-      const job = res?.data;
-      if (!job) return;
-      jobSteps.value = job.steps || [];
+      const res = (await xcmaxAdminApi.getDeployJob(jobId)) as { data?: DeployJobData }
+      const job = res?.data
+      if (!job) return
+      jobSteps.value = job.steps || []
       if (job.status === 'done') {
-        pushing.value = false;
-        jobError.value = '';
-        stopPoll();
-        await runCheck();
-        emit('done');
+        pushing.value = false
+        jobError.value = ''
+        stopPoll()
+        await runCheck()
+        emit('done')
       } else if (job.status === 'error') {
-        pushing.value = false;
-        jobError.value = job.error || '推送失败';
-        stopPoll();
+        pushing.value = false
+        jobError.value = job.error || '推送失败'
+        stopPoll()
       }
     } catch (e) {
-      pushing.value = false;
-      jobError.value = e instanceof Error ? e.message : String(e);
-      stopPoll();
+      pushing.value = false
+      jobError.value = e instanceof Error ? e.message : String(e)
+      stopPoll()
     }
-  }, 1200);
+  }, 1200)
 }
 
 async function startPush(openCustom: boolean) {
-  if (openCustom) customOpen.value = true;
-  pushing.value = true;
-  jobError.value = '';
-  jobSteps.value = [];
+  if (openCustom) customOpen.value = true
+  pushing.value = true
+  jobError.value = ''
+  jobSteps.value = []
   try {
     const res = (await xcmaxAdminApi.startDeployPush({ ...opts.value })) as {
-      data?: DeployJobData;
-      message?: string;
-    };
-    const jobId = res?.data?.job_id;
-    if (!jobId) throw new Error(res?.message || '未收到任务 ID');
-    jobSteps.value = res.data?.steps || [];
-    await pollJob(jobId);
+      data?: DeployJobData
+      message?: string
+    }
+    const jobId = res?.data?.job_id
+    if (!jobId) throw new Error(res?.message || '未收到任务 ID')
+    jobSteps.value = res.data?.steps || []
+    await pollJob(jobId)
   } catch (e) {
-    pushing.value = false;
-    jobError.value = e instanceof Error ? e.message : String(e);
+    pushing.value = false
+    jobError.value = e instanceof Error ? e.message : String(e)
   }
 }
 
 function close() {
-  if (pushing.value) return;
-  emit('update:modelValue', false);
+  if (pushing.value) return
+  emit('update:modelValue', false)
 }
 
 watch(
   () => props.modelValue,
   (open) => {
     if (open) {
-      customOpen.value = false;
-      jobSteps.value = [];
-      jobError.value = '';
-      void runCheck();
+      customOpen.value = false
+      jobSteps.value = []
+      jobError.value = ''
+      void runCheck()
     } else {
-      stopPoll();
+      stopPoll()
     }
   },
-);
+)
 </script>
 
 <style scoped>

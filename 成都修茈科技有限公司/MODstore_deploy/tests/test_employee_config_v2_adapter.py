@@ -50,7 +50,12 @@ def test_translate_merges_role_rules_few_shot_into_system_prompt():
         "cognition": {
             "agent": {
                 "system_prompt": "用户段",
-                "role": {"name": "助手", "persona": "耐心", "tone": "friendly", "expertise": ["A"]},
+                "role": {
+                    "name": "助手",
+                    "persona": "耐心",
+                    "tone": "friendly",
+                    "expertise": ["A"],
+                },
                 "behavior_rules": ["规则1", {"name": "R2", "description": "说明"}],
                 "few_shot_examples": [{"input": "hi", "output": "hey", "explanation": "礼貌"}],
                 "model": {"provider": "deepseek", "model_name": "deepseek-chat"},

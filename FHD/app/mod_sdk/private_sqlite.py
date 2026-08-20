@@ -90,7 +90,7 @@ def resolve_mod_private_sqlite_path(filename: str) -> Path:
                 base_path = found
             else:
                 try:
-                    from app.utils.path_utils import get_data_dir
+                    from app.utils.path_io.path_utils import get_data_dir
 
                     db_dir = Path(get_data_dir()).resolve() / "mod_dbs"
                     db_dir.mkdir(parents=True, exist_ok=True)

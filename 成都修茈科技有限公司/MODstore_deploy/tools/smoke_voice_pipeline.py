@@ -24,12 +24,13 @@ import argparse
 import asyncio
 import json
 import os
-import struct
 import subprocess
 import sys
 import tempfile
 import time
 from pathlib import Path
+
+BOUNDARY_ERRORS = (Exception,)
 
 CHUNK_SAMPLES = 960
 SAMPLE_RATE = 16000
@@ -74,7 +75,7 @@ def ensure_token() -> str:
         from modstore_server.auth_service import create_access_token
 
         return create_access_token(1, "smoke-voice-pipeline")
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         raise RuntimeError(f"无法签发 ASR_TOKEN: {e}") from e
 
 
@@ -91,7 +92,9 @@ def extract_text(msg: dict) -> str:
         return direct
     sents = msg.get("stamp_sents") or []
     if isinstance(sents, list) and sents:
-        return "".join(str(s.get("text_seg") or "").replace(" ", "") for s in sents).strip()
+        return "".join(
+            str(s.get("text_seg") or "").replace(" ", "") for s in sents
+        ).strip()
     return ""
 
 
@@ -104,9 +107,19 @@ async def smoke_asr_handshake() -> dict:
         raw = await asyncio.wait_for(ws.recv(), timeout=10)
         msg = json.loads(raw)
         if msg.get("type") == "error":
-            return {"ok": False, "step": "handshake", "error": msg.get("message"), "ms": 0}
+            return {
+                "ok": False,
+                "step": "handshake",
+                "error": msg.get("message"),
+                "ms": 0,
+            }
         if msg.get("type") != "connected":
-            return {"ok": False, "step": "handshake", "error": f"unexpected: {msg}", "ms": 0}
+            return {
+                "ok": False,
+                "step": "handshake",
+                "error": f"unexpected: {msg}",
+                "ms": 0,
+            }
         await ws.send(json.dumps(ASR_CFG))
         await ws.send(b"\x00" * (CHUNK_SAMPLES * 2 * 3))
         await ws.send(json.dumps({"is_speaking": False}))
@@ -221,9 +234,19 @@ async def smoke_tts() -> dict:
         with urllib.request.urlopen(req, timeout=30) as resp:
             data = resp.read()
         ok = len(data) > 500
-        return {"ok": ok, "step": "tts", "bytes": len(data), "ms": int((time.time() - t0) * 1000)}
-    except Exception as e:
-        return {"ok": False, "step": "tts", "error": str(e), "ms": int((time.time() - t0) * 1000)}
+        return {
+            "ok": ok,
+            "step": "tts",
+            "bytes": len(data),
+            "ms": int((time.time() - t0) * 1000),
+        }
+    except BOUNDARY_ERRORS as e:
+        return {
+            "ok": False,
+            "step": "tts",
+            "error": str(e),
+            "ms": int((time.time() - t0) * 1000),
+        }
 
 
 async def check_funasr_direct() -> dict:
@@ -231,7 +254,12 @@ async def check_funasr_direct() -> dict:
 
     host = os.getenv("FUNASR_HOST", "127.0.0.1")
     port = os.getenv("FUNASR_PORT", "10095")
-    use_ssl = os.getenv("FUNASR_USE_SSL", "0").strip().lower() not in ("0", "false", "no", "off")
+    use_ssl = os.getenv("FUNASR_USE_SSL", "0").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+        "off",
+    )
     scheme = "wss" if use_ssl else "ws"
     url = f"{scheme}://{host}:{port}"
     try:
@@ -239,13 +267,12 @@ async def check_funasr_direct() -> dict:
         if use_ssl:
             import ssl
 
-            ctx = ssl.create_default_context()
-            ctx.check_hostname = False
-            ctx.verify_mode = ssl.CERT_NONE
+            ca_bundle = os.getenv("FUNASR_CA_BUNDLE", "").strip()
+            ctx = ssl.create_default_context(cafile=ca_bundle or None)
             kw["ssl"] = ctx
         async with websockets.connect(url, **kw):
             return {"ok": True, "step": "funasr_direct", "url": url}
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         return {"ok": False, "step": "funasr_direct", "url": url, "error": str(e)}
 
 
@@ -263,7 +290,9 @@ async def smoke_unified_ws_handshake() -> dict:
     except ImportError:
         return {"ok": False, "step": "unified_ws", "error": "websockets not installed"}
 
-    base = os.getenv("UNIFIED_WS_URL", "ws://127.0.0.1:9999/api/workbench/voice/unified/ws")
+    base = os.getenv(
+        "UNIFIED_WS_URL", "ws://127.0.0.1:9999/api/workbench/voice/unified/ws"
+    )
     token = os.getenv("ASR_TOKEN", "").strip()
     if not token:
         try:
@@ -272,7 +301,7 @@ async def smoke_unified_ws_handshake() -> dict:
             from modstore_server.auth_service import create_access_token
 
             token = create_access_token(sub="1", username="smoke")
-        except Exception as e:
+        except BOUNDARY_ERRORS as e:
             return {"ok": False, "step": "unified_ws", "error": f"no token: {e}"}
     sep = "&" if "?" in base else "?"
     url = f"{base}{sep}token={token}"
@@ -284,13 +313,15 @@ async def smoke_unified_ws_handshake() -> dict:
             if msg.get("type") == "error":
                 return {"ok": False, "step": "unified_ws", "error": msg.get("message")}
             return {"ok": True, "step": "unified_ws", "first": msg.get("type")}
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         return {"ok": False, "step": "unified_ws", "error": str(e)}
 
 
 async def main() -> int:
     parser = argparse.ArgumentParser(description="语音 ASR/TTS 全链路冒烟")
-    parser.add_argument("--asr-only", action="store_true", help="仅测 ASR 握手，不做 TTS 合成识别")
+    parser.add_argument(
+        "--asr-only", action="store_true", help="仅测 ASR 握手，不做 TTS 合成识别"
+    )
     args = parser.parse_args()
 
     print("=== smoke_voice_pipeline ===")

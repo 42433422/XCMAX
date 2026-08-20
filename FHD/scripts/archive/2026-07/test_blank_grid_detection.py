@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 测试空白网格的网格检测逻辑
 """
@@ -73,8 +72,8 @@ for x in range(gray.shape[1]):
         vertical_lines.append(x)
 
 # 去重并排序
-horizontal_lines = sorted(list(set([int(y) for y in horizontal_lines])))
-vertical_lines = sorted(list(set([int(x) for x in vertical_lines])))
+horizontal_lines = sorted({int(y) for y in horizontal_lines})
+vertical_lines = sorted({int(x) for x in vertical_lines})
 
 
 # 合并相近的线条
@@ -108,25 +107,25 @@ vertical_lines = merge_very_close_lines(vertical_lines, threshold=5)
 horizontal_lines_merged = merge_close_lines(horizontal_lines, threshold=50)
 vertical_lines_merged = merge_close_lines(vertical_lines, threshold=50)
 
-print(f"\n检测结果:")
+print("\n检测结果:")
 print(f"  水平线：{len(horizontal_lines)} 条 -> 合并后：{len(horizontal_lines_merged)} 条")
 print(f"  垂直线：{len(vertical_lines)} 条 -> 合并后：{len(vertical_lines_merged)} 条")
 
-print(f"\n水平线 Y 坐标:")
+print("\n水平线 Y 坐标:")
 for i, y in enumerate(horizontal_lines):
     marker = "✓" if y in horizontal_lines_merged else " "
     print(f"  {marker} [{i}] Y={y}")
 
-print(f"\n垂直线 X 坐标:")
+print("\n垂直线 X 坐标:")
 for i, x in enumerate(vertical_lines):
     marker = "✓" if x in vertical_lines_merged else " "
     print(f"  {marker} [{i}] X={x}")
 
-print(f"\n合并后的坐标:")
+print("\n合并后的坐标:")
 print(f"  水平线：{horizontal_lines_merged}")
 print(f"  垂直线：{vertical_lines_merged}")
 
-print(f"\n网格结构:")
+print("\n网格结构:")
 rows = len(horizontal_lines_merged) - 1 if len(horizontal_lines_merged) > 1 else 0
 cols = len(vertical_lines_merged) - 1 if len(vertical_lines_merged) > 1 else 0
 print(f"  {rows} 行 x {cols} 列 = {rows * cols} 个单元格")

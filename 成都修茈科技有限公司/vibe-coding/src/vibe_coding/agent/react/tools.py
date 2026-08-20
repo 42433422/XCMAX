@@ -21,8 +21,11 @@ from __future__ import annotations
 
 import inspect
 import textwrap
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Iterable, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
+
+from vibe_coding.operational_errors import BOUNDARY_ERRORS
 
 ToolFunc = Callable[..., Any]
 
@@ -84,7 +87,7 @@ class Tool:
                 observation=f"[{self.name}] failed: {exc}",
                 error=str(exc),
             )
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:
             return ToolResult(
                 success=False,
                 observation=f"[{self.name}] crashed: {type(exc).__name__}: {exc}",
@@ -191,10 +194,7 @@ class ToolRegistry:
                 arg_lines = []
                 for a in t.arguments:
                     req = "**required**" if a.get("required", True) else "optional"
-                    arg_lines.append(
-                        f"- `{a['name']}` ({a.get('type', 'string')}, {req}): "
-                        f"{a.get('description', '')}"
-                    )
+                    arg_lines.append(f"- `{a['name']}` ({a.get('type', 'string')}, {req}): {a.get('description', '')}")
                 lines.append("\n".join(arg_lines))
             lines.append("")
         return "\n".join(lines).rstrip()
@@ -214,9 +214,7 @@ def _infer_arguments(fn: ToolFunc) -> list[dict[str, Any]]:
             continue
         if param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
             continue
-        annotation = (
-            param.annotation if param.annotation is not inspect.Parameter.empty else str
-        )
+        annotation = param.annotation if param.annotation is not inspect.Parameter.empty else str
         out.append(
             {
                 "name": param.name,
@@ -281,7 +279,7 @@ def _render_observation(output: Any, *, max_chars: int = 4_000) -> str:
         except (TypeError, ValueError):
             text = repr(output)
     if len(text) > max_chars:
-        text = text[: max_chars] + f"\n... [truncated {len(text) - max_chars} chars]"
+        text = text[:max_chars] + f"\n... [truncated {len(text) - max_chars} chars]"
     return text
 
 

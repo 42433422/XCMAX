@@ -93,6 +93,7 @@ class KittenReportExportService:
     ) -> bytes:
         wb = Workbook()
         ws_summary = wb.active
+        assert ws_summary is not None
         ws_summary.title = "报告摘要"
         ws_summary.append(["字段", "内容"])
         ws_summary.append(["报告标题", str(result.get("title") or "AI 分析")])

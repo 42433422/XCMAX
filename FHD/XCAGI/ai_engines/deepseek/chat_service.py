@@ -4,13 +4,14 @@ DeepSeek 聊天服务
 使用 DeepSeek 模型进行对话生成
 """
 
-from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
+from typing import Dict, List
 
 
 @dataclass
 class ChatMessage:
     """聊天消息"""
+
     role: str
     content: str
 
@@ -66,10 +67,7 @@ class DeepSeekChatService:
 
     def get_history(self) -> List[Dict[str, str]]:
         """获取对话历史"""
-        return [
-            {"role": m.role, "content": m.content}
-            for m in self._messages
-        ]
+        return [{"role": m.role, "content": m.content} for m in self._messages]
 
 
 def get_deepseek_chat_service(api_key: str = None) -> DeepSeekChatService:

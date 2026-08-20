@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 """兼容层：路由已迁至 ``modstore_server.api.catalog_public_routes``。"""
 
 from __future__ import annotations

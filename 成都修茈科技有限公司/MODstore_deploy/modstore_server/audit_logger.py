@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 _audit_logger = logging.getLogger("audit")
 
@@ -15,7 +15,7 @@ def audit_log(
     success: bool = True,
 ) -> None:
     entry = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "event_type": event_type,
         "user_id": user_id,
         "ip_address": ip_address,

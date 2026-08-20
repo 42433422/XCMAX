@@ -4,13 +4,11 @@
 提供销售、库存、采购等统计报表。
 """
 
-import logging
 from datetime import datetime
 from decimal import Decimal
-from io import BytesIO
 from typing import Any
 
-import pandas as pd
+import pandas as pd  # noqa: F401 - compatibility patch point for existing tests/extensions
 from sqlalchemy import func
 
 from app.db.models import (
@@ -25,9 +23,7 @@ from app.db.models import (
 )
 from app.db.session import get_db
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
-from app.utils.operational_errors import RECOVERABLE_ERRORS
-
-logger = logging.getLogger(__name__)
+from app.services.report_export import export_report_to_excel
 
 
 class ReportService(NeuroEventPublisherMixin):
@@ -208,7 +204,7 @@ class ReportService(NeuroEventPublisherMixin):
             records = query.group_by(ShipmentRecord.id).all()
 
             if group_by == "product":
-                product_stats = {}
+                product_stats: dict[str, dict[str, Any]] = {}
                 for record, count in records:
                     key = record.product_name or f"产品{record.id}"
                     if key not in product_stats:
@@ -226,7 +222,7 @@ class ReportService(NeuroEventPublisherMixin):
                 }
 
             elif group_by == "customer":
-                customer_stats = {}
+                customer_stats: dict[str, dict[str, Any]] = {}
                 for record, count in records:
                     key = record.purchase_unit or f"客户{record.unit_id or record.id}"
                     if key not in customer_stats:
@@ -244,7 +240,7 @@ class ReportService(NeuroEventPublisherMixin):
                 }
 
             elif group_by == "date":
-                date_stats = {}
+                date_stats: dict[str, dict[str, Any]] = {}
                 for record, count in records:
                     date_key = (
                         record.created_at.strftime("%Y-%m-%d") if record.created_at else "unknown"
@@ -278,7 +274,7 @@ class ReportService(NeuroEventPublisherMixin):
 
             ledgers = query.all()
 
-            product_inventory = {}
+            product_inventory: dict[int, dict[str, Any]] = {}
             for ledger, product in ledgers:
                 key = product.id
                 if key not in product_inventory:
@@ -327,7 +323,7 @@ class ReportService(NeuroEventPublisherMixin):
             orders = query.all()
 
             if group_by == "supplier":
-                supplier_stats = {}
+                supplier_stats: dict[str, dict[str, Any]] = {}
                 for order in orders:
                     key = order.supplier.name if order.supplier else f"供应商{order.supplier_id}"
                     if key not in supplier_stats:
@@ -351,7 +347,7 @@ class ReportService(NeuroEventPublisherMixin):
                 }
 
             elif group_by == "status":
-                status_stats = {}
+                status_stats: dict[str, dict[str, Any]] = {}
                 for order in orders:
                     key = order.status or "unknown"
                     if key not in status_stats:
@@ -362,7 +358,7 @@ class ReportService(NeuroEventPublisherMixin):
                 return {"success": True, "data": list(status_stats.values())}
 
             elif group_by == "date":
-                date_stats = {}
+                date_stats: dict[str, dict[str, Any]] = {}
                 for order in orders:
                     date_key = (
                         order.order_date.strftime("%Y-%m-%d") if order.order_date else "unknown"
@@ -483,25 +479,7 @@ class ReportService(NeuroEventPublisherMixin):
     def export_to_excel(
         self, report_type: str, data: list[dict[str, Any]], filename: str
     ) -> dict[str, Any]:
-        try:
-            df = pd.DataFrame(data)
-
-            output = BytesIO()
-            with pd.ExcelWriter(output, engine="openpyxl") as writer:
-                df.to_excel(writer, index=False, sheet_name=report_type)
-
-            output.seek(0)
-
-            return {
-                "success": True,
-                "file_path": None,
-                "data": output.read(),
-                "filename": f"{filename}.xlsx",
-                "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            }
-        except RECOVERABLE_ERRORS as e:
-            logger.error("导出Excel失败: %s", e)
-            return {"success": False, "message": str(e)}
+        return export_report_to_excel(report_type, data, filename)
 
 
 # NEURO-DDD: 为 Services 层类添加 instrumentation

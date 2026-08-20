@@ -13,6 +13,7 @@ Usage::
         --field trace_id=abc123
     python append_evolution_event.py --event custom_event --data '{"foo": "bar"}'
 """
+
 from __future__ import annotations
 
 import argparse
@@ -30,9 +31,7 @@ from modstore_server.evolution_ledger import append_event  # noqa: E402
 def _parse_field(s: str) -> tuple[str, str]:
     """解析 key=value 形式。值尝试 JSON 解析，失败则保持字符串。"""
     if "=" not in s:
-        raise argparse.ArgumentTypeError(
-            f"--field expects key=value format, got: {s!r}"
-        )
+        raise argparse.ArgumentTypeError(f"--field expects key=value format, got: {s!r}")
     key, _, raw = s.partition("=")
     key = key.strip()
     if not key:

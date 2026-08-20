@@ -1,7 +1,4 @@
-import {
-  MODEL_PAYMENT_BRIDGE_MOD_ID,
-  readModelPaymentModFacadeEnabled,
-} from '@/constants/modelPaymentMod'
+import { MODEL_PAYMENT_BRIDGE_MOD_ID, readModelPaymentModFacadeEnabled } from '@/constants/modelPaymentMod'
 
 const MOD_PREFIX = `/mod/${MODEL_PAYMENT_BRIDGE_MOD_ID}`
 

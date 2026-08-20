@@ -6,12 +6,7 @@
   "vitest": {
     "configFile": "vitest.config.js"
   },
-  "mutate": [
-    "src/utils/**/*.ts",
-    "src/composables/**/*.ts",
-    "!src/**/*.test.ts",
-    "!src/**/*.d.ts"
-  ],
+  "mutate": ["src/utils/**/*.ts", "src/composables/**/*.ts", "!src/**/*.test.ts", "!src/**/*.d.ts"],
   "thresholds": {
     "high": 80,
     "low": 60,

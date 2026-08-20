@@ -29,26 +29,16 @@
         <p v-if="item.intentSummary" class="office-docking-review__intent">
           意图：{{ item.intentLabel }}{{ item.databaseTargetLabel ? ` · ${item.databaseTargetLabel}` : '' }}，{{ item.intentSummary }}
         </p>
-        <ul
-          v-if="item.warnings.length"
-          class="office-docking-review__warnings"
-          aria-label="风险提示"
-        >
+        <ul v-if="item.warnings.length" class="office-docking-review__warnings" aria-label="风险提示">
           <li v-for="(warn, idx) in item.warnings.slice(0, 4)" :key="`${item.id}-warn-${idx}`">
             {{ warn }}
           </li>
         </ul>
-        <ul
-          v-if="shipmentNotes(item).length"
-          class="office-docking-review__shipment-notes"
-          aria-label="送货单预览"
-        >
+        <ul v-if="shipmentNotes(item).length" class="office-docking-review__shipment-notes" aria-label="送货单预览">
           <li v-for="(note, idx) in shipmentNotes(item).slice(0, 5)" :key="`${item.id}-note-${idx}`">
             {{ noteLabel(note) }}
           </li>
-          <li v-if="shipmentNotes(item).length > 5">
-            …另有 {{ shipmentNotes(item).length - 5 }} 张
-          </li>
+          <li v-if="shipmentNotes(item).length > 5">…另有 {{ shipmentNotes(item).length - 5 }} 张</li>
         </ul>
         <p v-if="item.error" class="office-docking-review__error">{{ item.error }}</p>
 
@@ -71,7 +61,7 @@
               :checked="item.selectedKnowledge"
               :disabled="item.status !== 'ready' || item.commitStatus === 'committing'"
               @change="onToggle(item.id, 'knowledge', $event)"
-            >
+            />
             入知识库
           </label>
           <label :class="{ muted: !item.databaseAction }" :title="item.databaseDisabledReason">
@@ -80,7 +70,7 @@
               :checked="item.selectedDatabase"
               :disabled="!item.excelAnalysis || !item.databaseAction || item.status !== 'ready' || item.commitStatus === 'committing'"
               @change="onToggle(item.id, 'database', $event)"
-            >
+            />
             入数据库{{ item.databaseTargetLabel ? `（${item.databaseTargetLabel}）` : '' }}
           </label>
         </div>
@@ -93,12 +83,7 @@
     <footer class="office-docking-review__foot">
       <span class="office-docking-review__selection-hint">{{ selectionHint }}</span>
       <button type="button" class="btn" @click="$emit('close')">取消</button>
-      <button
-        type="button"
-        class="btn btn-primary"
-        :disabled="processing || !selectedReadyCount || committing"
-        @click="$emit('confirm')"
-      >
+      <button type="button" class="btn btn-primary" :disabled="processing || !selectedReadyCount || committing" @click="$emit('confirm')">
         {{ confirmLabel }}
       </button>
     </footer>
@@ -107,10 +92,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type {
-  ChatOfficeDockingReviewItem,
-  ShipmentEtlNotePreview,
-} from '@/composables/useChatOfficeDocking'
+import type { ChatOfficeDockingReviewItem, ShipmentEtlNotePreview } from '@/composables/useChatOfficeDocking'
 
 const props = defineProps<{
   items: ChatOfficeDockingReviewItem[]
@@ -123,23 +105,22 @@ const emit = defineEmits<{
   toggleTarget: [id: string, target: 'knowledge' | 'database', enabled: boolean]
 }>()
 
-const readyCount = computed(() => props.items.filter((item) => (
-  item.status === 'ready' && item.commitStatus !== 'committed'
-)).length)
+const readyCount = computed(() => props.items.filter((item) => item.status === 'ready' && item.commitStatus !== 'committed').length)
 const committing = computed(() => props.items.some((item) => item.commitStatus === 'committing'))
-const selectedReadyItems = computed(() => props.items.filter((item) => (
-  item.status === 'ready'
-  && item.commitStatus !== 'committed'
-  && item.commitStatus !== 'committing'
-  && (item.selectedKnowledge || item.selectedDatabase)
-)))
+const selectedReadyItems = computed(() =>
+  props.items.filter(
+    (item) =>
+      item.status === 'ready' &&
+      item.commitStatus !== 'committed' &&
+      item.commitStatus !== 'committing' &&
+      (item.selectedKnowledge || item.selectedDatabase),
+  ),
+)
 const selectedReadyCount = computed(() => selectedReadyItems.value.length)
 
-const databaseTargets = computed(() => [...new Set(
-  selectedReadyItems.value
-    .filter((item) => item.selectedDatabase)
-    .map((item) => item.databaseTargetLabel || '业务数据库'),
-)])
+const databaseTargets = computed(() => [
+  ...new Set(selectedReadyItems.value.filter((item) => item.selectedDatabase).map((item) => item.databaseTargetLabel || '业务数据库')),
+])
 const hasKnowledgeTarget = computed(() => selectedReadyItems.value.some((item) => item.selectedKnowledge))
 
 const selectionHint = computed(() => {
@@ -179,7 +160,9 @@ function samplePreview(item: ChatOfficeDockingReviewItem): string {
 }
 
 function normalizedTextPreview(item: ChatOfficeDockingReviewItem): string {
-  return String(item.textPreview || '').replace(/\s+/g, ' ').trim()
+  return String(item.textPreview || '')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 function previewSnippet(item: ChatOfficeDockingReviewItem): string {

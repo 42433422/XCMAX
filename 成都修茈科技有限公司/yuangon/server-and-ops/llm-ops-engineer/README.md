@@ -10,19 +10,19 @@
 
 ## 负责文件
 
-| 路径 | 说明 |
-|------|------|
-| `app/infrastructure/llm/**` | LLM provider 适配层与路由实现 |
-| `app/mod_sdk/mod_employee_llm.py` | 员工 LLM 调用 SDK 封装 |
-| `app/application/employee_runtime/agent_runner.py` | 员工 agent 运行时，影响 token 计量 |
-| `app/legacy/llm_config*` | 旧版 LLM 配置兼容层 |
-| `MODstore_deploy/modstore_server/llm_key_resolver.py` | 后端 key 解析与轮换 |
-| `MODstore_deploy/modstore_server/llm_catalog.py` | 供应商模型与原生能力元数据动态目录 |
-| `MODstore_deploy/modstore_server/llm_model_taxonomy.py` | 跨供应商模态、操作能力与推断来源归一化 |
-| `MODstore_deploy/modstore_server/llm_runtime_route.py` | 平台 AI 员工运行时切换、探活、审计和回滚 |
-| `MODstore_deploy/modstore_server/llm_ai_assets.py` | 全量 AI 资产/接口目录（供 list_available_ai_routes.assets） |
-| `MODstore_deploy/modstore_server/llm_billing.py` | 后端 LLM 计费账本 |
-| `MODstore_deploy/docs/runbooks/llm-ops-*.md` | LLM 运维 Runbook |
+| 路径                                                    | 说明                                                        |
+| ------------------------------------------------------- | ----------------------------------------------------------- |
+| `app/infrastructure/llm/**`                             | LLM provider 适配层与路由实现                               |
+| `app/mod_sdk/mod_employee_llm.py`                       | 员工 LLM 调用 SDK 封装                                      |
+| `app/application/employee_runtime/agent_runner.py`      | 员工 agent 运行时，影响 token 计量                          |
+| `app/legacy/llm_config*`                                | 旧版 LLM 配置兼容层                                         |
+| `MODstore_deploy/modstore_server/llm_key_resolver.py`   | 后端 key 解析与轮换                                         |
+| `MODstore_deploy/modstore_server/llm_catalog.py`        | 供应商模型与原生能力元数据动态目录                          |
+| `MODstore_deploy/modstore_server/llm_model_taxonomy.py` | 跨供应商模态、操作能力与推断来源归一化                      |
+| `MODstore_deploy/modstore_server/llm_runtime_route.py`  | 平台 AI 员工运行时切换、探活、审计和回滚                    |
+| `MODstore_deploy/modstore_server/llm_ai_assets.py`      | 全量 AI 资产/接口目录（供 list_available_ai_routes.assets） |
+| `MODstore_deploy/modstore_server/llm_billing.py`        | 后端 LLM 计费账本                                           |
+| `MODstore_deploy/docs/runbooks/llm-ops-*.md`            | LLM 运维 Runbook                                            |
 
 ## 十大职责
 
@@ -39,11 +39,11 @@
 
 ## KPI
 
-| 指标 | 目标 |
-|------|------|
-| Key 失效发现到上报时长 | ≤ 15 分钟 |
-| 月度成本报告覆盖率 | 100% 在岗员工 |
-| 异常 token 突增识别 | 24h 内告警 |
+| 指标                     | 目标              |
+| ------------------------ | ----------------- |
+| Key 失效发现到上报时长   | ≤ 15 分钟         |
+| 月度成本报告覆盖率       | 100% 在岗员工     |
+| 异常 token 突增识别      | 24h 内告警        |
 | 国产便宜/免费 LLM 优先率 | ≥ 70%（按调用量） |
 
 ## 禁区

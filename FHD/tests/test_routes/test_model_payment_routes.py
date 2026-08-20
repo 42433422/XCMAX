@@ -146,7 +146,7 @@ class TestCheckout:
         ):
             r = client_mp.post("/api/model-payment/checkout", json={"plan_id": "p1"})
             assert r.status_code == 409
-            assert r.json()["data"]["proxy_error"] == "proxy error"
+            assert r.json()["data"]["proxy_error"] == "market_checkout_unavailable"
 
     def test_checkout_json_legacy_with_postgres_url_returns_409(self, client_mp):
         with (

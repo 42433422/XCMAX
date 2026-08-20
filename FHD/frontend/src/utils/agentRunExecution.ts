@@ -1,12 +1,6 @@
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
 
-const EXECUTION_EVENT_TYPES = new Set([
-  'tool.started',
-  'tool.completed',
-  'tool.failed',
-  'step.waiting_user',
-  'step.blocked',
-])
+const EXECUTION_EVENT_TYPES = new Set(['tool.started', 'tool.completed', 'tool.failed', 'step.waiting_user', 'step.blocked'])
 
 /** A chat lifecycle is not an agent execution. Show task state only with execution evidence. */
 export function hasAgentRunExecutionEvidence(events: unknown): boolean {

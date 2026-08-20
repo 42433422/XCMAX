@@ -10,6 +10,8 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from modstore_server.operational_errors import BOUNDARY_ERRORS
+
 OfficeFormatKind = str  # word | excel | csv | ppt | pdf
 
 _JSON_FENCE = re.compile(r"```(?:json)?\s*([\s\S]*?)```", re.IGNORECASE)
@@ -119,7 +121,7 @@ def build_table_spec_from_text(text: str, *, sheet_name: str = "Sheet1") -> Dict
         reader = csv.reader(io.StringIO("\n".join(lines)))
         rows_raw = list(reader)
         if rows_raw:
-            columns = [str(c).strip() or f"列{i+1}" for i, c in enumerate(rows_raw[0])]
+            columns = [str(c).strip() or f"列{i + 1}" for i, c in enumerate(rows_raw[0])]
             rows = []
             for r in rows_raw[1:]:
                 row = {columns[i]: (r[i] if i < len(r) else "") for i in range(len(columns))}
@@ -133,7 +135,7 @@ def build_table_spec_from_text(text: str, *, sheet_name: str = "Sheet1") -> Dict
             }
     if "\t" in sample:
         rows_raw = [ln.split("\t") for ln in lines]
-        columns = [f"列{i+1}" for i in range(len(rows_raw[0]))]
+        columns = [f"列{i + 1}" for i in range(len(rows_raw[0]))]
         rows = [
             {columns[i]: (r[i] if i < len(r) else "") for i in range(len(columns))}
             for r in rows_raw
@@ -162,7 +164,7 @@ def build_presentation_spec_from_text(text: str) -> Dict[str, Any]:
     slides = []
     for i, chunk in enumerate(chunks[:30]):
         lines = [ln.strip() for ln in chunk.splitlines() if ln.strip()]
-        slide_title = lines[0][:120] if lines else f"第{i+1}页"
+        slide_title = lines[0][:120] if lines else f"第{i + 1}页"
         bullets = lines[1:] if len(lines) > 1 else [chunk[:500]]
         slides.append({"title": slide_title, "bullets": bullets[:8]})
     return {"title": title, "slides": slides}
@@ -247,10 +249,14 @@ async def _structure_via_llm(
         return None, warnings
     try:
         res = await asyncio.wait_for(
-            call_llm(messages, max_tokens=int(payload.get("max_tokens") or 8000), temperature=0.2),
+            call_llm(
+                messages,
+                max_tokens=int(payload.get("max_tokens") or 8000),
+                temperature=0.2,
+            ),
             timeout=float(payload.get("llm_timeout_s") or 90.0),
         )
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         warnings.append(f"LLM 结构化失败: {exc}")
         return None, warnings
     if not isinstance(res, dict) or not res.get("ok"):

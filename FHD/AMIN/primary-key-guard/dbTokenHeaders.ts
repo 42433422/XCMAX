@@ -1,5 +1,4 @@
 /** 与 FHD 后端 X-FHD-Db-Read-Token 对齐；供 apiFetch / fetch 补丁 / 一级锁 UI 使用。 */
-import { XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY } from '@/utils/xcagiStorageKeys';
 
 export const LS_DB_READ_TOKEN = 'xcagi_db_read_token';
 export const LS_DB_WRITE_TOKEN = 'xcagi_db_write_token';
@@ -43,47 +42,14 @@ export async function fetchDbTokensStatus(apiBase = ''): Promise<DbTokensStatus>
   return r.json();
 }
 
-function readActiveModId(): string {
-  if (typeof localStorage === 'undefined') return '';
-  try {
-    return String(localStorage.getItem(XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY) || '').trim();
-  } catch {
-    return '';
-  }
-}
-
 function readTokensByModMap(): Record<string, { read?: string; write?: string }> {
-  if (typeof localStorage === 'undefined') return {};
-  try {
-    const raw = String(localStorage.getItem(LS_DB_TOKENS_BY_MOD) || '').trim();
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
-    const out: Record<string, { read?: string; write?: string }> = {};
-    for (const [modId, row] of Object.entries(parsed as Record<string, unknown>)) {
-      const key = String(modId || '').trim();
-      if (!key || !row || typeof row !== 'object' || Array.isArray(row)) continue;
-      const read = String((row as Record<string, unknown>).read || '').trim();
-      const write = String((row as Record<string, unknown>).write || '').trim();
-      if (!read && !write) continue;
-      out[key] = {};
-      if (read) out[key].read = read;
-      if (write) out[key].write = write;
-    }
-    return out;
-  } catch {
-    return {};
-  }
+  return {};
 }
 
 function writeTokensByModMap(next: Record<string, { read?: string; write?: string }>): void {
   if (typeof localStorage === 'undefined') return;
-  const keys = Object.keys(next);
-  if (!keys.length) {
-    localStorage.removeItem(LS_DB_TOKENS_BY_MOD);
-    return;
-  }
-  localStorage.setItem(LS_DB_TOKENS_BY_MOD, JSON.stringify(next));
+  void next;
+  localStorage.removeItem(LS_DB_TOKENS_BY_MOD);
 }
 
 export function readStoredDbTokensForMod(modId: string): { read: string; write: string } {
@@ -122,60 +88,30 @@ export function saveStoredDbTokensForMod(modId: string, read: string, write: str
 }
 
 export function readStoredDbTokens(): { read: string; write: string } {
-  if (typeof localStorage === 'undefined') return { read: '', write: '' };
-  const globalTokens = {
-    read: (localStorage.getItem(LS_DB_READ_TOKEN) || '').trim(),
-    write: (localStorage.getItem(LS_DB_WRITE_TOKEN) || '').trim(),
-  };
-  const activeModId = readActiveModId();
-  if (!activeModId) return globalTokens;
-  const byMod = readStoredDbTokensForMod(activeModId);
-  return {
-    read: byMod.read || globalTokens.read,
-    write: byMod.write || globalTokens.write,
-  };
+  return { read: '', write: '' };
 }
 
 export function saveStoredDbTokens(read: string, write: string): void {
   if (typeof localStorage === 'undefined') return;
-  const rt = read.trim();
-  const wt = write.trim();
-  if (rt) localStorage.setItem(LS_DB_READ_TOKEN, rt);
-  else localStorage.removeItem(LS_DB_READ_TOKEN);
-  if (wt) localStorage.setItem(LS_DB_WRITE_TOKEN, wt);
-  else localStorage.removeItem(LS_DB_WRITE_TOKEN);
+  void read;
+  void write;
+  localStorage.removeItem(LS_DB_READ_TOKEN);
+  localStorage.removeItem(LS_DB_WRITE_TOKEN);
+  localStorage.removeItem(LS_DB_TOKENS_BY_MOD);
 }
 
 export function saveStoredReadToken(read: string): void {
   if (typeof localStorage === 'undefined') return;
-  const rt = read.trim();
-  const activeModId = readActiveModId();
-  if (activeModId) {
-    const { write } = readStoredDbTokensForMod(activeModId);
-    saveStoredDbTokensForMod(activeModId, rt, write);
-    return;
-  }
-  if (rt) {
-    localStorage.setItem(LS_DB_READ_TOKEN, rt);
-  } else {
-    localStorage.removeItem(LS_DB_READ_TOKEN);
-  }
+  void read;
+  localStorage.removeItem(LS_DB_READ_TOKEN);
+  localStorage.removeItem(LS_DB_TOKENS_BY_MOD);
 }
 
 export function saveStoredWriteToken(write: string): void {
   if (typeof localStorage === 'undefined') return;
-  const wt = write.trim();
-  const activeModId = readActiveModId();
-  if (activeModId) {
-    const { read } = readStoredDbTokensForMod(activeModId);
-    saveStoredDbTokensForMod(activeModId, read, wt);
-    return;
-  }
-  if (wt) {
-    localStorage.setItem(LS_DB_WRITE_TOKEN, wt);
-  } else {
-    localStorage.removeItem(LS_DB_WRITE_TOKEN);
-  }
+  void write;
+  localStorage.removeItem(LS_DB_WRITE_TOKEN);
+  localStorage.removeItem(LS_DB_TOKENS_BY_MOD);
 }
 
 const _listProbeUrl = (apiBase: string) => `${apiBase}/api/products/list?page=1&per_page=1`;

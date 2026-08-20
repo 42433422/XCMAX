@@ -6,6 +6,8 @@ import threading
 from datetime import UTC, datetime
 from typing import Any
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 _lock = threading.Lock()
 _DEFAULT_METRICS: dict[str, Any] = {
     "runs_total": 0,
@@ -82,7 +84,7 @@ def record_employee_run(
             task=task,
             summary=summary,
         )
-    except Exception:  # noqa: BLE001  # metrics must never break employee execution
+    except RECOVERABLE_ERRORS:  # noqa: BLE001  # metrics must never break employee execution
         pass
 
 

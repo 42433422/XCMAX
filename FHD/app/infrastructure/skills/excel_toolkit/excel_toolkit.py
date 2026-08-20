@@ -38,7 +38,10 @@ def view_excel_content(
             else:
                 return {"success": False, "message": f"Sheet '{sheet_name}' 不存在"}
         else:
-            ws = wb.active
+            active_ws = wb.active
+            if active_ws is None:
+                return {"success": False, "message": "工作簿不包含工作表"}
+            ws = active_ws
 
         content = []
         row_count = 0
@@ -102,6 +105,7 @@ def get_merged_cells(file_path: str, sheet_name: str | None = None) -> dict[str,
             ws = wb.active
 
         merged_list = []
+        assert ws is not None
         for merged_range in ws.merged_cells.ranges:
             master_cell = ws.cell(merged_range.min_row, merged_range.min_col)
             merged_list.append(
@@ -151,6 +155,7 @@ def get_cell_styles(
         ws = wb[sheet_name] if sheet_name and sheet_name in wb.sheetnames else wb.active
 
         styles = []
+        assert ws is not None
         for row in ws.iter_rows(min_row=1, max_row=min(max_rows, ws.max_row)):
             for cell in row:
                 if cell.value is not None:
@@ -203,7 +208,9 @@ def analyze_structure(file_path: str, sheet_name: str | None = None) -> dict[str
 
         sheet_names = wb.sheetnames
         target_sheet = sheet_name if sheet_name and sheet_name in sheet_names else wb.active
-        ws = wb[target_sheet]
+        if target_sheet is None:
+            return {"success": False, "message": "工作簿不包含工作表"}
+        ws = wb[target_sheet] if isinstance(target_sheet, str) else target_sheet
 
         column_info = []
         for col in range(1, ws.max_column + 1):

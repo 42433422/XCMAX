@@ -433,7 +433,7 @@ describe('ChatView functions – openShipmentRecordsFromAuditTask', () => {
     expect(spy).toHaveBeenCalledWith(
       expect.objectContaining({
         detail: { view: 'shipment-records' },
-      })
+      }),
     )
     window.removeEventListener('xcagi:switch-view', spy)
     wrapper.unmount()
@@ -460,7 +460,7 @@ describe('ChatView functions – emitSwitchView', () => {
     expect(spy).toHaveBeenCalledWith(
       expect.objectContaining({
         detail: { view: 'products' },
-      })
+      }),
     )
     window.removeEventListener('xcagi:switch-view', spy)
     wrapper.unmount()
@@ -475,7 +475,7 @@ describe('ChatView functions – emitSwitchView', () => {
     expect(spy).toHaveBeenCalledWith(
       expect.objectContaining({
         detail: { view: '' },
-      })
+      }),
     )
     window.removeEventListener('xcagi:switch-view', spy)
     wrapper.unmount()

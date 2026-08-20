@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from app.mod_sdk.errors import BOUNDARY_ERRORS
+
 EMPLOYEE_ID = "excel-template-write-employee"
 EMPLOYEE_LABEL = "Excel 模板写入员"
 SYSTEM_PROMPT = "你是Excel 模板写入员。你必须按 direct_python 方式执行 plan.json 写入计划，把值/公式回填进模板 xlsx，保留模板样式、合并单元格与既有公式，拒绝写入保护区。成功条件是实际写出回填结果文件与 write_report.json。任何计划缺失、模板缺失、sheet 不匹配都要返回明确错误，禁止编造已完成。"
@@ -92,7 +94,9 @@ def _resolve_input(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Optional[Pat
     if not raw:
         if isinstance(payload.get("plan"), dict):
             return None
-        raise FileNotFoundError("缺少 file_path：请上传 plan.json 写入计划，或在 payload.plan 传入计划对象。")
+        raise FileNotFoundError(
+            "缺少 file_path：请上传 plan.json 写入计划，或在 payload.plan 传入计划对象。"
+        )
     p = Path(raw).expanduser()
     if not p.is_absolute():
         p = _workspace_root(ctx, payload) / raw
@@ -205,7 +209,7 @@ async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
             "error": normalized["error"],
             "meta": normalized["meta"],
         }
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         return _err(
             str(exc),
             warnings=["请检查 plan.json 写入计划、模板文件与 sheet 名是否匹配。"],

@@ -19,10 +19,14 @@ def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
             asset_id = str(item.get("id") or "").strip()[:160]
             version = str(item.get("version") or "").strip()[:80]
             if not asset_id or not version:
-                issues.append({"code": "missing_identity", "path": f"asset_registry.{group}[{index}]"})
+                issues.append(
+                    {"code": "missing_identity", "path": f"asset_registry.{group}[{index}]"}
+                )
             else:
                 rows.append((group, asset_id, version))
-    duplicate_ids = sorted(key for key, count in Counter(row[1] for row in rows).items() if count > 1)
+    duplicate_ids = sorted(
+        key for key, count in Counter(row[1] for row in rows).items() if count > 1
+    )
     for asset_id in duplicate_ids:
         issues.append({"code": "duplicate_asset_id", "path": asset_id})
     references = registry.get("references") if isinstance(registry.get("references"), list) else []
@@ -30,7 +34,9 @@ def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     for index, raw in enumerate(references[:400]):
         ref = raw if isinstance(raw, dict) else {}
         if str(ref.get("from") or "") not in known or str(ref.get("to") or "") not in known:
-            issues.append({"code": "dangling_reference", "path": f"asset_registry.references[{index}]"})
+            issues.append(
+                {"code": "dangling_reference", "path": f"asset_registry.references[{index}]"}
+            )
     return {
         "ok": True,
         "status": "approved" if not issues else "rejected",
@@ -38,11 +44,24 @@ def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         "asset_count": len(rows),
         "issues": issues,
         "registry_consistent": not issues,
-        "evidence": ["input.asset_registry.mods", "input.asset_registry.eskills", "input.asset_registry.employee_packs", "input.asset_registry.references"],
+        "evidence": [
+            "input.asset_registry.mods",
+            "input.asset_registry.eskills",
+            "input.asset_registry.employee_packs",
+            "input.asset_registry.references",
+        ],
         "read_only": True,
         "side_effects": [],
     }
 
 
 def _failed(message: str, code: str) -> dict[str, Any]:
-    return {"ok": False, "status": "failed", "summary": message, "error_code": code, "evidence": [], "read_only": True, "side_effects": []}
+    return {
+        "ok": False,
+        "status": "failed",
+        "summary": message,
+        "error_code": code,
+        "evidence": [],
+        "read_only": True,
+        "side_effects": [],
+    }

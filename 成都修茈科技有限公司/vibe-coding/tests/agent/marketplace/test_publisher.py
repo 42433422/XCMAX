@@ -36,9 +36,7 @@ from vibe_coding.agent.marketplace import (
 
 @pytest.fixture
 def sample_skill() -> CodeSkill:
-    sig = CodeFunctionSignature(
-        params=["text"], return_type="dict", required_params=["text"]
-    )
+    sig = CodeFunctionSignature(params=["text"], return_type="dict", required_params=["text"])
     return CodeSkill(
         skill_id="reverse_string",
         name="Reverse String",
@@ -68,7 +66,7 @@ class _FakeResponse:
     def read(self) -> bytes:
         return self._body
 
-    def __enter__(self) -> "_FakeResponse":
+    def __enter__(self) -> _FakeResponse:
         return self
 
     def __exit__(self, *exc: Any) -> None:
@@ -80,7 +78,7 @@ def _patched_urlopen(handler):
     """``handler(req) -> _FakeResponse``; called for each ``urlopen``."""
     captured: list[Any] = []
 
-    def fake_urlopen(req, timeout=None, context=None):  # noqa: ARG001
+    def fake_urlopen(req, timeout=None, context=None):
         captured.append(req)
         return handler(req)
 
@@ -141,9 +139,8 @@ def test_client_login_raises_auth_error_on_401() -> None:
         )
 
     client = MODstoreClient(base_url="https://m.example.com")
-    with pytest.raises(MODstoreAuthError):
-        with _patched_urlopen(handler):
-            client.login("alice", "wrong")
+    with pytest.raises(MODstoreAuthError), _patched_urlopen(handler):
+        client.login("alice", "wrong")
 
 
 def test_upload_catalog_sends_multipart(tmp_path: Path) -> None:
@@ -155,9 +152,7 @@ def test_upload_catalog_sends_multipart(tmp_path: Path) -> None:
     def handler(req):
         ct = req.headers.get("Content-type") or req.headers.get("Content-Type") or ""
         seen_payload["content_type"] = ct
-        seen_payload["auth"] = req.headers.get("Authorization") or req.headers.get(
-            "authorization"
-        )
+        seen_payload["auth"] = req.headers.get("Authorization") or req.headers.get("authorization")
         seen_payload["body_starts_with"] = bytes(req.data)[:120]
         return _FakeResponse(
             json.dumps(
@@ -212,15 +207,14 @@ def test_upload_rejects_oversize(tmp_path: Path) -> None:
 
     real_stat = Path.stat
 
-    def fake_stat(self, *, follow_symlinks=True):  # noqa: ARG001
+    def fake_stat(self, *, follow_symlinks=True):
         if self == big:
             return _BigStat()
         return real_stat(self, follow_symlinks=follow_symlinks)
 
     client = MODstoreClient(base_url="https://m.example.com", access_token="t")
-    with patch.object(Path, "stat", fake_stat):
-        with pytest.raises(MODstoreError):
-            client.upload_catalog(big, pkg_id="x", version="1", name="x")
+    with patch.object(Path, "stat", fake_stat), pytest.raises(MODstoreError):
+        client.upload_catalog(big, pkg_id="x", version="1", name="x")
 
 
 def test_list_catalog_round_trips() -> None:
@@ -240,14 +234,10 @@ def test_list_catalog_round_trips() -> None:
 # ----------------------------------------------------------------- publisher
 
 
-def test_publisher_dry_run_skips_network(
-    sample_skill: CodeSkill, tmp_path: Path
-) -> None:
-    publisher = SkillPublisher.from_token(
-        base_url="https://m.example.com", admin_token="t"
-    )
+def test_publisher_dry_run_skips_network(sample_skill: CodeSkill, tmp_path: Path) -> None:
+    publisher = SkillPublisher.from_token(base_url="https://m.example.com", admin_token="t")
 
-    def handler(req):  # noqa: ARG001
+    def handler(req):
         raise AssertionError("dry_run should not call out to the network")
 
     with _patched_urlopen(handler):
@@ -262,12 +252,8 @@ def test_publisher_dry_run_skips_network(
     assert result.artifact.archive_path.exists()
 
 
-def test_publisher_publishes_on_real_call(
-    sample_skill: CodeSkill, tmp_path: Path
-) -> None:
-    publisher = SkillPublisher.from_token(
-        base_url="https://m.example.com", admin_token="t"
-    )
+def test_publisher_publishes_on_real_call(sample_skill: CodeSkill, tmp_path: Path) -> None:
+    publisher = SkillPublisher.from_token(base_url="https://m.example.com", admin_token="t")
 
     def handler(req):
         return _FakeResponse(
@@ -291,12 +277,8 @@ def test_publisher_publishes_on_real_call(
     assert result.upload.item_id == 7
 
 
-def test_publisher_publish_workflow_requires_pkg_id(
-    sample_skill: CodeSkill, tmp_path: Path
-) -> None:
-    publisher = SkillPublisher.from_token(
-        base_url="https://m.example.com", admin_token="t"
-    )
+def test_publisher_publish_workflow_requires_pkg_id(sample_skill: CodeSkill, tmp_path: Path) -> None:
+    publisher = SkillPublisher.from_token(base_url="https://m.example.com", admin_token="t")
     with pytest.raises(PackagingError):
         publisher.publish_workflow(
             [sample_skill],
@@ -305,14 +287,10 @@ def test_publisher_publish_workflow_requires_pkg_id(
         )
 
 
-def test_publisher_records_error_on_http_failure(
-    sample_skill: CodeSkill, tmp_path: Path
-) -> None:
+def test_publisher_records_error_on_http_failure(sample_skill: CodeSkill, tmp_path: Path) -> None:
     import urllib.error
 
-    publisher = SkillPublisher.from_token(
-        base_url="https://m.example.com", admin_token="t"
-    )
+    publisher = SkillPublisher.from_token(base_url="https://m.example.com", admin_token="t")
 
     def handler(req):
         raise urllib.error.HTTPError(

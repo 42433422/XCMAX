@@ -21,12 +21,7 @@ const iframeSrc = computed(() => xcagiAibizDashboardUrl())
         <p class="page-desc">AI 业务数据 · 与全景仪表盘 #aibiz 同源（Web / 桌面 / App 终端 + Prometheus）</p>
       </div>
     </div>
-    <iframe
-      class="ops-terminal-frame"
-      :src="iframeSrc"
-      title="AI 业务数据 · 运维终端"
-      referrerpolicy="no-referrer"
-    />
+    <iframe class="ops-terminal-frame" :src="iframeSrc" title="AI 业务数据 · 运维终端" referrerpolicy="no-referrer" />
   </div>
 </template>
 

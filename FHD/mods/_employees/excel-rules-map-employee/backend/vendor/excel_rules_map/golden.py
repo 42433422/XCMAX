@@ -54,9 +54,7 @@ def extract_records_from_workbook(
     if not isinstance(bands, dict) or not bands:
         raise ValueError("rules.bands 缺失，无法反读金样")
     sheet_name = str(tm.get("sheet") or "")
-    sheet = next(
-        (s for s in (workbook.get("sheets") or []) if s.get("name") == sheet_name), None
-    )
+    sheet = next((s for s in (workbook.get("sheets") or []) if s.get("name") == sheet_name), None)
     if sheet is None:
         raise ValueError(f"金样中找不到 sheet：{sheet_name!r}")
     cells = _cells_index(sheet)
@@ -86,7 +84,10 @@ def extract_records_from_workbook(
                         if not symbol and value is None:
                             continue
                         entries.append(
-                            {"symbol": symbol, "value": _as_number(value) if value is not None else None}
+                            {
+                                "symbol": symbol,
+                                "value": _as_number(value) if value is not None else None,
+                            }
                         )
                     else:
                         value = cells.get((row, symbol_col))
@@ -106,7 +107,11 @@ def _slot_map(records: List[Dict[str, Any]]) -> Dict[Tuple[str, int, str], List[
         if not isinstance(r, dict):
             continue
         try:
-            slot = (str(r.get("key") or "").strip(), int(r.get("day")), str(r.get("band") or "").strip())
+            slot = (
+                str(r.get("key") or "").strip(),
+                int(r.get("day")),
+                str(r.get("band") or "").strip(),
+            )
         except (TypeError, ValueError):
             continue
         entries = [e for e in (r.get("entries") or []) if isinstance(e, dict)]

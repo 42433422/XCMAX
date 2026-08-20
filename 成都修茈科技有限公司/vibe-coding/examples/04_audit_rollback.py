@@ -51,10 +51,7 @@ def main() -> int:
 
         print("\nPatch history (most recent last):")
         for record in coder.history(skill.skill_id):
-            print(
-                f"  stage={record.stage} reason={record.summary or '-'} "
-                f"err={(record.error or '-')[:60]}"
-            )
+            print(f"  stage={record.stage} reason={record.summary or '-'} err={(record.error or '-')[:60]}")
 
         # Rollback to v1
         print("\nRolling back to v1 ...")

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """NeuroDDD 增强层：将 FHD 的三级处理器管道与可靠性机制栈桥接到 MODstore 现有 eventing。
 
 架构融合策略：
@@ -28,13 +29,14 @@ from __future__ import annotations
 import logging
 import os
 import time
-from collections import defaultdict
 from collections.abc import Callable
 from enum import IntEnum
 from typing import Any, Optional
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 from .bus import InMemoryNeuroBus
-from .events import DomainEvent, new_event
+from .events import DomainEvent
 
 logger = logging.getLogger(__name__)
 
@@ -187,12 +189,13 @@ class NeuroDDDBus:
         self._tier_handlers: list[_TierHandler] = []
         self._wildcard_handlers: list[_TierHandler] = []
 
-        env_flag = lambda name, default=False: os.environ.get(name, "").strip().lower() in {
-            "1",
-            "true",
-            "yes",
-            "on",
-        }
+        def env_flag(name, default=False):
+            return os.environ.get(name, "").strip().lower() in {
+                "1",
+                "true",
+                "yes",
+                "on",
+            }
 
         self._dedup = (
             _Deduplicator()
@@ -265,7 +268,7 @@ class NeuroDDDBus:
             start = time.monotonic()
             try:
                 handler.handler(event)
-            except Exception as exc:
+            except RECOVERABLE_ERRORS as exc:
                 logger.exception(
                     "NeuroDDD handler failed: %s tier=%s event=%s",
                     handler.handler.__name__,

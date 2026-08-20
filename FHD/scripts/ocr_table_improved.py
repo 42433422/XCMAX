@@ -1,13 +1,14 @@
-# -*- coding: utf-8 -*-
+# mypy: disable-error-code="assignment, var-annotated"
 """
 使用 PaddleOCR 文本位置推断表格结构 - 改进版
 """
 
-from paddleocr import PaddleOCR
-import numpy as np
-import cv2
-import json
 import glob
+import json
+
+import cv2
+import numpy as np
+from paddleocr import PaddleOCR
 
 # 读取图片
 files = glob.glob(r"e:\FHD\26-0300001A*.png")
@@ -68,7 +69,7 @@ for i in range(len(rec_polys)):
         }
     )
 
-print(f"\n" + "=" * 70)
+print("\n" + "=" * 70)
 print("OCR 识别结果")
 print("=" * 70)
 for i, box in enumerate(text_boxes):
@@ -77,13 +78,13 @@ for i, box in enumerate(text_boxes):
     )
 
 # 改进：使用聚类来分行
-print(f"\n" + "=" * 70)
+print("\n" + "=" * 70)
 print("使用聚类算法分行")
 print("=" * 70)
 
 # 提取所有文本框的中心 Y 坐标
 y_centers = [box["center_y"] for box in text_boxes]
-y_centers = sorted(set([int(y) for y in y_centers]))
+y_centers = sorted({int(y) for y in y_centers})
 
 print(f"Y 中心坐标：{y_centers}")
 
@@ -117,7 +118,7 @@ for box in text_boxes:
 
 # 同样的方法分列
 x_centers = [box["center_x"] for box in text_boxes]
-x_centers = sorted(set([int(x) for x in x_centers]))
+x_centers = sorted({int(x) for x in x_centers})
 
 x_gaps = []
 for i in range(len(x_centers) - 1):
@@ -145,7 +146,7 @@ for box in text_boxes:
     box["col"] = col
 
 # 打印表格结构
-print(f"\n" + "=" * 70)
+print("\n" + "=" * 70)
 print("推断的表格结构")
 print("=" * 70)
 
@@ -163,7 +164,7 @@ for row in sorted(rows_data.keys()):
     print(f"行 {row}: {row_text}")
 
 # 生成合并信息
-print(f"\n" + "=" * 70)
+print("\n" + "=" * 70)
 print("合并单元格检测")
 print("=" * 70)
 

@@ -19,8 +19,8 @@ from app.middleware.error_handler import register_exception_handlers
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.middleware.xss_sanitizer import XSSSanitizerMiddleware
 from app.security import LanCidrGuard, LanLicenseGuard
-
 from sandbox_app.mock_routes import mount_api_fallback_last, mount_mock_routes
+from sandbox_app.operational_errors import BOUNDARY_ERRORS
 from sandbox_app.route_whitelist import mount_whitelist_routes
 from sandbox_app.sandbox_settings import resolve_vue_dist_dir
 from sandbox_app.spa_static import (
@@ -82,7 +82,7 @@ async def _init_mods_async(app: FastAPI) -> None:
         load_mod_routes(app, mm)
         app.state.mods_routes_loaded = True
         logger.info("sandbox: mod routes mounted in lifespan")
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         logger.warning("sandbox lifespan mod init failed: %s", e)
 
 
@@ -91,7 +91,7 @@ async def sandbox_lifespan(app: FastAPI):
     logger.info("sandbox lifespan: starting mod init")
     try:
         await _init_mods_async(app)
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         logger.warning("sandbox lifespan mod init: %s", e)
     yield
     logger.info("sandbox lifespan: shutdown")
@@ -116,13 +116,13 @@ def create_sandbox_app() -> FastAPI:
     app.add_middleware(XSSSanitizerMiddleware)
 
     _cors_regex = resolve_cors_allow_origin_regex()
-    _cors_kw: dict = dict(
-        allow_origins=resolve_cors_allow_origins(),
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-        expose_headers=["*"],
-    )
+    _cors_kw: dict = {
+        "allow_origins": resolve_cors_allow_origins(),
+        "allow_credentials": True,
+        "allow_methods": ["*"],
+        "allow_headers": ["*"],
+        "expose_headers": ["*"],
+    }
     if _cors_regex:
         _cors_kw["allow_origin_regex"] = _cors_regex
     if (
@@ -157,7 +157,7 @@ def create_sandbox_app() -> FastAPI:
             load_mod_routes(app, mm)
             app.state.mods_routes_loaded = True
             logger.info("sandbox: mod routes mounted before API fallback")
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         logger.warning("sandbox: mod sync load failed (lifespan may retry): %s", e)
 
     mount_api_fallback_last(app)
@@ -182,7 +182,7 @@ def _mount_minimal_mod_store_if_needed(app: FastAPI) -> None:
 
         app.include_router(minimal_mod_store_router)
         logger.info("sandbox: mounted minimal /api/mod-store/install fallback")
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         logger.warning("sandbox: minimal mod-store fallback unavailable: %s", e)
 
 

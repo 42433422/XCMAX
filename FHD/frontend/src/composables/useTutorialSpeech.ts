@@ -98,12 +98,7 @@ export function createTutorialSpeech(): TutorialSpeechController {
       })
       const data = await resp.json().catch(() => ({}))
       const uri = data?.data?.audioBase64
-      if (
-        !resp.ok ||
-        !data?.success ||
-        typeof uri !== 'string' ||
-        !uri.startsWith('data:audio/')
-      ) {
+      if (!resp.ok || !data?.success || typeof uri !== 'string' || !uri.startsWith('data:audio/')) {
         return null
       }
       const durationMs = await measureDurationMs(uri)

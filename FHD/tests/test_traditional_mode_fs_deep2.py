@@ -1,3 +1,4 @@
+# mypy: disable-error-code="attr-defined, index, union-attr"
 """Deep tests for ``app.traditional_mode_fs`` covering remaining uncovered branches."""
 
 from __future__ import annotations

@@ -150,7 +150,14 @@ describe('approval API functions', () => {
         is_active: true,
       }
       const nodes = [
-        { node_name: 'N1', node_type: 'approve', node_order: 1, approver_type: 'user', approver_ids: [1], is_active: true },
+        {
+          node_name: 'N1',
+          node_type: 'approve',
+          node_order: 1,
+          approver_type: 'user',
+          approver_ids: [1],
+          is_active: true,
+        },
       ]
       const result = await approvalApi.createFlow(flowData, nodes)
       expect(mockApi.post).toHaveBeenCalledWith('/api/approval/flows', {
@@ -222,7 +229,11 @@ describe('approval API functions', () => {
     it('returns failure on API error', async () => {
       mockApi.post.mockRejectedValue(new Error('fail'))
       const warnSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      const result = await approvalApi.submitRequest({ flow_key: 't', business_type: 'b', title: 't' })
+      const result = await approvalApi.submitRequest({
+        flow_key: 't',
+        business_type: 'b',
+        title: 't',
+      })
       expect(result.success).toBe(false)
       warnSpy.mockRestore()
     })
@@ -232,11 +243,7 @@ describe('approval API functions', () => {
     it('calls POST with correct params', async () => {
       mockApi.post.mockResolvedValue({ success: true })
       const result = await approvalApi.withdraw(1, 10)
-      expect(mockApi.post).toHaveBeenCalledWith(
-        '/api/approval/requests/1/withdraw',
-        {},
-        { headers: { 'X-User-ID': '10' } },
-      )
+      expect(mockApi.post).toHaveBeenCalledWith('/api/approval/requests/1/withdraw', {}, { headers: { 'X-User-ID': '10' } })
       expect(result.success).toBe(true)
     })
 
@@ -253,11 +260,7 @@ describe('approval API functions', () => {
     it('calls DELETE with correct params', async () => {
       mockApi.delete.mockResolvedValue({ success: true, data: { deleted: 1, request_id: 5 } })
       const result = await approvalApi.deleteRequest(5, 10)
-      expect(mockApi.delete).toHaveBeenCalledWith(
-        '/api/approval/requests/5',
-        {},
-        { headers: { 'X-User-ID': '10' } },
-      )
+      expect(mockApi.delete).toHaveBeenCalledWith('/api/approval/requests/5', {}, { headers: { 'X-User-ID': '10' } })
       expect(result.success).toBe(true)
     })
 
@@ -292,14 +295,18 @@ describe('approval API functions', () => {
     it('calls PATCH with is_active true', async () => {
       mockApi.patch.mockResolvedValue({ success: true })
       const result = await approvalApi.toggleFlowActive(1, true)
-      expect(mockApi.patch).toHaveBeenCalledWith('/api/approval/flows/1/active', { is_active: true })
+      expect(mockApi.patch).toHaveBeenCalledWith('/api/approval/flows/1/active', {
+        is_active: true,
+      })
       expect(result.success).toBe(true)
     })
 
     it('calls PATCH with is_active false', async () => {
       mockApi.patch.mockResolvedValue({ success: true })
       await approvalApi.toggleFlowActive(2, false)
-      expect(mockApi.patch).toHaveBeenCalledWith('/api/approval/flows/2/active', { is_active: false })
+      expect(mockApi.patch).toHaveBeenCalledWith('/api/approval/flows/2/active', {
+        is_active: false,
+      })
     })
 
     it('returns failure on API error', async () => {
@@ -330,7 +337,10 @@ describe('approval API functions', () => {
 
   describe('cleanupCompleted', () => {
     it('calls POST with default options', async () => {
-      mockApi.post.mockResolvedValue({ success: true, data: { matched: 5, deleted: 5, dry_run: false } })
+      mockApi.post.mockResolvedValue({
+        success: true,
+        data: { matched: 5, deleted: 5, dry_run: false },
+      })
       const result = await approvalApi.cleanupCompleted(10)
       expect(mockApi.post).toHaveBeenCalledWith(
         '/api/approval/requests/cleanup',
@@ -370,11 +380,7 @@ describe('approval API functions', () => {
       mockResolveApprovalApiPath.mockReturnValue('/api/mod/approval-bridge/requests')
       mockApi.get.mockResolvedValue({ success: true, data: [] })
       await approvalApi.getPendingApprovals(1)
-      expect(mockApi.get).toHaveBeenCalledWith(
-        '/api/mod/approval-bridge/requests',
-        expect.anything(),
-        expect.anything(),
-      )
+      expect(mockApi.get).toHaveBeenCalledWith('/api/mod/approval-bridge/requests', expect.anything(), expect.anything())
     })
   })
 })

@@ -23,7 +23,7 @@ def build_routing_features(
     extra = extra or {}
     t = text or ""
     n = max(len(t), 1)
-    ep = EventPriority.NORMAL.value
+    ep = float(EventPriority.NORMAL.value)
     if event is not None:
         ep = float(event.priority.value)
 

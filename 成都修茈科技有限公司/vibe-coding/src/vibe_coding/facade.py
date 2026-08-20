@@ -19,6 +19,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from vibe_coding.operational_errors import BOUNDARY_ERRORS
+
 from ._internals import CodeSkill, CodeSkillRun
 from .audit import PatchLedger, PatchRecord
 from .code_factory import GenerationMode, NLCodeSkillFactory
@@ -34,10 +36,10 @@ from .workflow_factory import NLWorkflowFactory, WorkflowGenerationReport
 from .workflow_models import VibeWorkflowGraph
 
 if TYPE_CHECKING:
+    from .agent.coder import HealResult, ProjectVibeCoder
     from .agent.context import AgentContext
     from .agent.patch import ApplyResult, ProjectPatch
     from .agent.repo_index import RepoIndex
-    from .agent.coder import HealResult, ProjectVibeCoder
 
 
 class VibeCoder:
@@ -105,9 +107,7 @@ class VibeCoder:
         *,
         project_root: str | Path | None = None,
     ) -> WorkflowGenerationReport:
-        return self.workflow_factory.generate_with_report(
-            brief, project_root=project_root
-        )
+        return self.workflow_factory.generate_with_report(brief, project_root=project_root)
 
     # ------------------------------------------------------------------ execution
 
@@ -138,7 +138,7 @@ class VibeCoder:
 
     # ------------------------------------------------------------------ agent
 
-    def project_coder(self, root: str | Path) -> "ProjectVibeCoder":
+    def project_coder(self, root: str | Path) -> ProjectVibeCoder:
         """Construct (or reuse) a :class:`ProjectVibeCoder` for ``root``.
 
         Lazy-imports :mod:`vibe_coding.agent.coder` so legacy users never pay
@@ -147,9 +147,7 @@ class VibeCoder:
         """
         from .agent.coder import ProjectVibeCoder
 
-        cache: dict[str, ProjectVibeCoder] = self.__dict__.setdefault(
-            "_project_coders", {}
-        )
+        cache: dict[str, ProjectVibeCoder] = self.__dict__.setdefault("_project_coders", {})
         key = str(Path(root).resolve())
         coder = cache.get(key)
         if coder is None:
@@ -161,7 +159,7 @@ class VibeCoder:
             cache[key] = coder
         return coder
 
-    def index_project(self, root: str | Path, *, refresh: bool = False) -> "RepoIndex":
+    def index_project(self, root: str | Path, *, refresh: bool = False) -> RepoIndex:
         """Build (or refresh) the :class:`RepoIndex` for ``root``."""
         return self.project_coder(root).index_project(refresh=refresh)
 
@@ -170,20 +168,18 @@ class VibeCoder:
         brief: str,
         *,
         root: str | Path,
-        context: "AgentContext | None" = None,
+        context: AgentContext | None = None,
         focus_paths: list[str] | None = None,
-    ) -> "ProjectPatch":
-        return self.project_coder(root).edit_project(
-            brief, context=context, focus_paths=focus_paths
-        )
+    ) -> ProjectPatch:
+        return self.project_coder(root).edit_project(brief, context=context, focus_paths=focus_paths)
 
     def apply_patch(
         self,
-        patch: "ProjectPatch",
+        patch: ProjectPatch,
         *,
         root: str | Path,
         dry_run: bool = False,
-    ) -> "ApplyResult":
+    ) -> ApplyResult:
         return self.project_coder(root).apply_patch(patch, dry_run=dry_run)
 
     def rollback_patch(self, patch_id: str, *, root: str | Path) -> bool:
@@ -194,10 +190,10 @@ class VibeCoder:
         brief: str,
         *,
         root: str | Path,
-        context: "AgentContext | None" = None,
+        context: AgentContext | None = None,
         max_rounds: int = 3,
         tool_runner: Any | None = None,
-    ) -> "HealResult":
+    ) -> HealResult:
         return self.project_coder(root).heal_project(
             brief,
             context=context,
@@ -260,6 +256,6 @@ def _build_code_patch_generator(llm: LLMClient):
 
         if isinstance(llm, OpenAILLM):
             return OpenAICodePatchGenerator(api_key=llm.api_key, model=llm.model, base_url=llm.base_url)
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:
         pass
     return RuleBasedCodePatchGenerator()

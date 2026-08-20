@@ -224,7 +224,7 @@ class ConsciousProcessor:
                 if self._circuit_breaker:
                     self._circuit_breaker.record_failure(event.metadata.domain, event.event_type)
                 if self._deduplicator:
-                    self._deduplicator.remove(event)
+                    self._deduplicator.release(event)
 
             self._error_count += 1
             self._processed_count += 1

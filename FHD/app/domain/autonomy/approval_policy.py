@@ -22,8 +22,6 @@ def approval_evidence(context: dict[str, Any], risk: RiskLevel) -> tuple[bool, s
     approver = str(context.get("approved_by") or context.get("approver") or "").strip()
     if risk == RiskLevel.MEDIUM and truthy(context.get("allow_medium_risk")):
         return True, approver or "legacy_explicit_runtime_approval"
-    if risk == RiskLevel.HIGH and truthy(context.get("workflow_auto_approve_high_risk")):
-        return True, approver or "explicit_workflow_session_override"
     if risk == RiskLevel.HIGH and truthy(context.get("allow_high_risk_real_run")):
         configured = (
             os.environ.get("FHD_RISK_HIGH_GATE_TOKEN")
@@ -31,7 +29,7 @@ def approval_evidence(context: dict[str, Any], risk: RiskLevel) -> tuple[bool, s
             or ""
         ).strip()
         supplied = str(context.get("high_risk_gate_token") or "").strip()
-        if not configured or (supplied and supplied == configured):
+        if configured and supplied and supplied == configured:
             return True, approver or "legacy_high_risk_gate"
     return False, ""
 

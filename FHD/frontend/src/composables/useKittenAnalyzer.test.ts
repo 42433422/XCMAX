@@ -153,7 +153,13 @@ describe('useKittenAnalyzer', () => {
       id: 'test',
       label: 'Test',
       description: 'Test chart',
-      config: { type: 'pie' as const, xField: '城市', yField: '', groupField: '', aggregate: 'count' as const },
+      config: {
+        type: 'pie' as const,
+        xField: '城市',
+        yField: '',
+        groupField: '',
+        aggregate: 'count' as const,
+      },
     }
     analyzer.applyChartRecommendation(rec)
     expect(analyzer.chartConfig.value.type).toBe('pie')
@@ -170,7 +176,13 @@ describe('useKittenAnalyzer', () => {
   })
 
   it('clearResult with dataset sets schemaReady phase', () => {
-    analyzer.datasetSummary.value = { name: 'test.csv', rows: 10, columns: 3, fieldNames: ['a', 'b', 'c'], previewText: '' }
+    analyzer.datasetSummary.value = {
+      name: 'test.csv',
+      rows: 10,
+      columns: 3,
+      fieldNames: ['a', 'b', 'c'],
+      previewText: '',
+    }
     analyzer.setChartConfig({ type: 'bar', xField: 'a' })
     analyzer.clearResult()
     expect(analyzer.kittenPhase.value).toBe('schemaReady')
@@ -324,8 +336,21 @@ describe('useKittenAnalyzer', () => {
     const { safeJsonRequest } = await import('@/utils/safeJsonRequest')
     analyzer.messages.value.push({ role: 'user', content: 'test', time: '10:00' })
     analyzer.kittenPhase.value = 'delivered'
-    analyzer.datasetSummary.value = { name: 'test.csv', rows: 10, columns: 3, fieldNames: ['a'], previewText: '' }
-    analyzer.currentResult.value = { id: 1, title: 'test', summary: 's', chart: false, type: 't', kind: 'k' }
+    analyzer.datasetSummary.value = {
+      name: 'test.csv',
+      rows: 10,
+      columns: 3,
+      fieldNames: ['a'],
+      previewText: '',
+    }
+    analyzer.currentResult.value = {
+      id: 1,
+      title: 'test',
+      summary: 's',
+      chart: false,
+      type: 't',
+      kind: 'k',
+    }
 
     await analyzer.resetSession()
 
@@ -341,7 +366,12 @@ describe('useKittenAnalyzer', () => {
 
   it('resetSession handles clear context failure gracefully', async () => {
     const { safeJsonRequest } = await import('@/utils/safeJsonRequest')
-    vi.mocked(safeJsonRequest).mockResolvedValueOnce({ ok: false, data: null, status: 500, message: 'fail' })
+    vi.mocked(safeJsonRequest).mockResolvedValueOnce({
+      ok: false,
+      data: null,
+      status: 500,
+      message: 'fail',
+    })
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     await analyzer.resetSession()
     expect(warnSpy).toHaveBeenCalled()
@@ -444,7 +474,14 @@ describe('useKittenAnalyzer', () => {
       },
       blob: async () => new Blob([new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x00, 0x00, 0x00, 0x00])]),
     } as unknown as Response)
-    analyzer.currentResult.value = { id: 1, title: 'test', summary: 's', chart: false, type: 't', kind: 'k' }
+    analyzer.currentResult.value = {
+      id: 1,
+      title: 'test',
+      summary: 's',
+      chart: false,
+      type: 't',
+      kind: 'k',
+    }
     await analyzer.exportResult()
     expect(kittenApi.exportReport).toHaveBeenCalled()
   })
@@ -460,7 +497,14 @@ describe('useKittenAnalyzer', () => {
       status: 500,
       text: async () => 'Server error',
     } as unknown as Response)
-    analyzer.currentResult.value = { id: 1, title: 'test', summary: 's', chart: false, type: 't', kind: 'k' }
+    analyzer.currentResult.value = {
+      id: 1,
+      title: 'test',
+      summary: 's',
+      chart: false,
+      type: 't',
+      kind: 'k',
+    }
     const { appAlert } = await import('@/utils/appDialog')
     await analyzer.exportDocx()
     expect(appAlert).toHaveBeenCalled()
@@ -480,7 +524,7 @@ describe('useKittenAnalyzer', () => {
       ok: true,
       status: 200,
       headers: {
-        get: (name: string) => name === 'content-type' ? 'application/octet-stream' : null,
+        get: (name: string) => (name === 'content-type' ? 'application/octet-stream' : null),
       },
       blob: async () => pkBlob,
     } as unknown as Response)

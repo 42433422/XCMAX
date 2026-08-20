@@ -8,6 +8,8 @@ from typing import Any, ClassVar, Literal
 
 from typing_extensions import NotRequired, TypedDict
 
+from langgraph._internal._exception_policy import TERMINATION_ERRORS
+
 _logger = logging.getLogger(__name__)
 
 
@@ -288,7 +290,7 @@ class StreamTransformer(ABC):
             return await coro
         except asyncio.CancelledError:
             raise
-        except BaseException:
+        except TERMINATION_ERRORS:
             _logger.exception("Scheduled StreamTransformer task failed")
 
     def _scheduled_task_set(self) -> set[asyncio.Task[Any]]:

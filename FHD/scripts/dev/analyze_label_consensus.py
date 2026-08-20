@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+# mypy: disable-error-code="var-annotated"
 """标注一致性分析：统计 gold/silver/disputed 比例，检测共同偏差。
 
 读取 ``labeled_data.jsonl``，输出：
@@ -60,9 +60,7 @@ def _format_table(headers: list[str], rows: list[list[str]]) -> str:
             widths[i] = max(widths[i], len(cell))
     sep = "  ".join("-" * w for w in widths)
     head = "  ".join(h.ljust(widths[i]) for i, h in enumerate(headers))
-    body = "\n".join(
-        "  ".join(str(c).ljust(widths[i]) for i, c in enumerate(r)) for r in rows
-    )
+    body = "\n".join("  ".join(str(c).ljust(widths[i]) for i, c in enumerate(r)) for r in rows)
     return f"{head}\n{sep}\n{body}"
 
 
@@ -73,7 +71,7 @@ def analyze(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
     # 各模型标签分布
     per_provider: dict[str, Counter] = {p: Counter() for p in PROVIDERS}
-    per_provider_available: dict[str, int] = {p: 0 for p in PROVIDERS}
+    per_provider_available: dict[str, int] = dict.fromkeys(PROVIDERS, 0)
     for r in rows:
         labels = r.get("labels") or {}
         for p in PROVIDERS:
@@ -125,9 +123,7 @@ def analyze(rows: list[dict[str, Any]]) -> dict[str, Any]:
         for proc in PROCESSORS:
             ratio = overall.get(proc, 0) / total_valid
             if ratio >= bias_threshold:
-                bias_warnings.append(
-                    f"共同偏差：三模型合计有 {ratio:.1%} 样本选 {proc}"
-                )
+                bias_warnings.append(f"共同偏差：三模型合计有 {ratio:.1%} 样本选 {proc}")
 
     return {
         "total": total,
@@ -195,7 +191,9 @@ def render_report(stats: dict[str, Any]) -> str:
                 str(avail),
             ]
         )
-    lines.append(_format_table(["模型", "reflex", "subconscious", "conscious", "有效样本"], model_rows))
+    lines.append(
+        _format_table(["模型", "reflex", "subconscious", "conscious", "有效样本"], model_rows)
+    )
 
     lines.append("")
     lines.append("【gold/silver 子集 processor 分布】")

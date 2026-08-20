@@ -20,6 +20,8 @@ import re
 import time
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
+from app.mod_sdk.errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
+
 from .golden import diff_records
 
 CallLLM = Callable[..., Awaitable[Dict[str, Any]]]
@@ -70,14 +72,14 @@ def _load_and_run(
     namespace: Dict[str, Any] = {"__name__": "solidified_transform"}
     try:
         exec(compile(code, "<solidified_transform>", "exec"), namespace)  # noqa: S102
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         return None, f"脚本加载失败：{type(exc).__name__}: {exc}"
     fn = namespace.get("produce_records")
     if not callable(fn):
         return None, "脚本执行后未得到可调用的 produce_records"
     try:
         records = fn(source_workbook, rules)
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         return None, f"produce_records 执行异常：{type(exc).__name__}: {exc}"
     if not isinstance(records, list):
         return None, f"produce_records 必须返回 list，得到 {type(records).__name__}"
@@ -146,8 +148,8 @@ def build_solidify_prompt(
     system = (
         "你是数据转换工程师。写一个纯计算的 Python 脚本，定义：\n"
         "def produce_records(source_workbook: dict, rules: dict) -> list[dict]\n"
-        "records 契约：[{\"key\": str, \"day\": int, \"band\": str, "
-        "\"entries\": [{\"symbol\": str, \"value\": float|None}]}]；"
+        'records 契约：[{"key": str, "day": int, "band": str, '
+        '"entries": [{"symbol": str, "value": float|None}]}]；'
         "band 必须取自 rules['bands'] 的键；day 在 rules['template_map']['calendar']['day_count'] 内；"
         "key 必须与模板块键一致。\n"
         "source_workbook 是读取员的 workbook.json（sheets[].columns/rows 为展平数据行）。\n"
@@ -162,7 +164,9 @@ def build_solidify_prompt(
     }
     if feedback:
         payload["上一轮失败反馈"] = feedback
-        payload["要求"] = "修正脚本使金样对账全绿：missing 槽要补齐，mismatched 槽要与期望一致，extra 槽要去掉。"
+        payload["要求"] = (
+            "修正脚本使金样对账全绿：missing 槽要补齐，mismatched 槽要与期望一致，extra 槽要去掉。"
+        )
     return [
         {"role": "system", "content": system},
         {"role": "user", "content": json.dumps(payload, ensure_ascii=False, default=str)},
@@ -180,7 +184,9 @@ async def solidify_transform(
 ) -> Dict[str, Any]:
     """返回 {ok, script, script_sha256, records, diff, iterations: [..]}。"""
     if not expected_records:
-        raise SolidifyError("金样期望 records 为空：请提供金样输出（经读取员转 JSON）或期望 records。")
+        raise SolidifyError(
+            "金样期望 records 为空：请提供金样输出（经读取员转 JSON）或期望 records。"
+        )
     iterations: List[Dict[str, Any]] = []
     feedback: Optional[Dict[str, Any]] = None
     script = ""
@@ -198,7 +204,7 @@ async def solidify_transform(
                 max_tokens=4000,
                 temperature=0.1,
             )
-        except Exception as exc:  # noqa: BLE001
+        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
             it["error"] = f"LLM 调用异常：{exc}"
             iterations.append(it)
             feedback = {"error": it["error"]}

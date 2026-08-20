@@ -1,6 +1,6 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 """专业模式诊断工具 - 检查为什么发送消息没有回复。从仓库根目录解析路径。"""
+
 from __future__ import annotations
 
 import json
@@ -9,6 +9,8 @@ import re
 import sys
 import urllib.request
 from pathlib import Path
+
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -24,7 +26,6 @@ def main() -> None:
     print("\n1. 环境变量 DEEPSEEK_API_KEY:")
     if api_key_env:
         print(f"   ✅ 已配置 (长度: {len(api_key_env)} 字符)")
-        print(f"   前缀: {api_key_env[:8]}...")
     else:
         print("   ❌ 未配置")
 
@@ -79,7 +80,7 @@ def main() -> None:
                 print("   ✅ API 调用成功！")
                 reply = result["choices"][0]["message"]["content"]
                 print(f"   AI 回复: {reply[:50]}...")
-        except Exception as e:
+        except BOUNDARY_ERRORS as e:
             error_msg = str(e)
             print(f"   ❌ API 调用失败: {error_msg[:100]}")
             if "401" in error_msg or "Unauthorized" in error_msg:

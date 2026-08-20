@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 XCAGI 性能压力测试脚本 (Locust)
 
@@ -24,9 +23,8 @@ XCAGI 性能压力测试脚本 (Locust)
 """
 
 import random
-import string
-from locust import HttpUser, task, between, events
-from locust.runners import MasterRunner
+
+from locust import HttpUser, between, events, task
 
 
 class XCAGIUser(HttpUser):
@@ -206,7 +204,7 @@ class XCAGIUser(HttpUser):
                     "quantity": random.randint(1, 100),
                     "unit_price": round(random.uniform(100, 1000), 2),
                 }
-                ],
+            ],
             "delivery_address": f"测试地址_{random.randint(1, 100)}",
             "remark": "Locust压力测试",
         }
@@ -293,7 +291,9 @@ def on_test_stop(environment, **kwargs):
     print(f"失败率: {failure_rate:.2f}%")
 
     print("\n🔝 慢接口 TOP 10:")
-    sorted_stats = sorted(stats.entries.values(), key=lambda x: x.avg_response_time, reverse=True)[:10]
+    sorted_stats = sorted(stats.entries.values(), key=lambda x: x.avg_response_time, reverse=True)[
+        :10
+    ]
 
     for i, stat in enumerate(sorted_stats, 1):
         print(

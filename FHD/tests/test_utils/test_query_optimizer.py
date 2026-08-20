@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.utils.query_optimizer import (
+from app.utils.performance.query_optimizer import (
     BatchResult,
     QueryOptimizer,
     QueryStats,
@@ -423,7 +423,7 @@ class TestStats:
 
 class TestGetQueryOptimizer:
     def test_returns_instance(self):
-        import app.utils.query_optimizer as qo
+        import app.utils.performance.query_optimizer as qo
 
         old = qo._optimizer_instance
         qo._optimizer_instance = None

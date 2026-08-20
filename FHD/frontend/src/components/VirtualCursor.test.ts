@@ -9,12 +9,10 @@ describe('VirtualCursor', () => {
   beforeEach(() => {
     originalVirtualCursor = (window as unknown as { virtualCursor?: unknown }).virtualCursor
     vi.useFakeTimers()
-    rafSpy = vi
-      .spyOn(window, 'requestAnimationFrame')
-      .mockImplementation((cb: FrameRequestCallback) => {
-        cb(0)
-        return 0
-      })
+    rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
+      cb(0)
+      return 0
+    })
   })
 
   afterEach(() => {
@@ -23,8 +21,7 @@ describe('VirtualCursor', () => {
     if (originalVirtualCursor === undefined) {
       delete (window as unknown as { virtualCursor?: unknown }).virtualCursor
     } else {
-      ;(window as unknown as { virtualCursor?: unknown }).virtualCursor =
-        originalVirtualCursor
+      ;(window as unknown as { virtualCursor?: unknown }).virtualCursor = originalVirtualCursor
     }
   })
 
@@ -61,7 +58,11 @@ describe('VirtualCursor', () => {
   it('exposes API on window.virtualCursor after mount', () => {
     mountCursor()
     expect((window as unknown as { virtualCursor?: unknown }).virtualCursor).toBeDefined()
-    const api = (window as unknown as { virtualCursor: { moveTo: unknown; click: unknown; hide: unknown; show: unknown } }).virtualCursor
+    const api = (
+      window as unknown as {
+        virtualCursor: { moveTo: unknown; click: unknown; hide: unknown; show: unknown }
+      }
+    ).virtualCursor
     expect(typeof api.moveTo).toBe('function')
     expect(typeof api.click).toBe('function')
     expect(typeof api.hide).toBe('function')
@@ -102,17 +103,20 @@ describe('VirtualCursor', () => {
   it('moveTo() with HTMLElement scrolls into view and centers', async () => {
     const wrapper = mountCursor()
     const el = document.createElement('div')
-    el.getBoundingClientRect = vi.fn(() => ({
-      left: 50,
-      top: 60,
-      width: 20,
-      height: 40,
-      right: 70,
-      bottom: 100,
-      x: 50,
-      y: 60,
-      toJSON: () => ({}),
-    }) as DOMRect)
+    el.getBoundingClientRect = vi.fn(
+      () =>
+        ({
+          left: 50,
+          top: 60,
+          width: 20,
+          height: 40,
+          right: 70,
+          bottom: 100,
+          x: 50,
+          y: 60,
+          toJSON: () => ({}),
+        }) as DOMRect,
+    )
     el.scrollIntoView = vi.fn()
     const api = (window as unknown as { virtualCursor: { moveTo: (t: unknown, o?: unknown) => void } }).virtualCursor
     api.moveTo(el, { duration: 100 })
@@ -138,17 +142,20 @@ describe('VirtualCursor', () => {
   it('click() calls moveTo with click option', async () => {
     const wrapper = mountCursor()
     const el = document.createElement('div')
-    el.getBoundingClientRect = vi.fn(() => ({
-      left: 0,
-      top: 0,
-      width: 100,
-      height: 100,
-      right: 100,
-      bottom: 100,
-      x: 0,
-      y: 0,
-      toJSON: () => ({}),
-    }) as DOMRect)
+    el.getBoundingClientRect = vi.fn(
+      () =>
+        ({
+          left: 0,
+          top: 0,
+          width: 100,
+          height: 100,
+          right: 100,
+          bottom: 100,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        }) as DOMRect,
+    )
     el.scrollIntoView = vi.fn()
     const api = (window as unknown as { virtualCursor: { click: (t: unknown, o?: unknown) => void } }).virtualCursor
     api.click(el, { duration: 200, label: '点击' })

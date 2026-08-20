@@ -1,4 +1,6 @@
+# mypy: disable-error-code="attr-defined"
 import sqlite3
+
 from app.infrastructure.db.sync_engine import resolve_products_db_path
 
 path = resolve_products_db_path()

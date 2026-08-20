@@ -1,10 +1,10 @@
-# -*- coding: utf-8 -*-
 import sys
 
 sys.path.insert(0, r"e:\FHD\XCAGI")
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+
 from app.db.init_db import get_db_path
 from app.db.models.purchase_unit import PurchaseUnit
 
@@ -21,5 +21,5 @@ with Session() as session:
         has_contact = u.contact_person or u.contact_phone or u.address
         status = "✓ 有联系人" if has_contact else "✗ 无联系人"
         print(
-            f'  {u.unit_name}: {u.contact_person or "-"} | {u.contact_phone or "-"} | {u.address or "-"} [{status}]'
+            f"  {u.unit_name}: {u.contact_person or '-'} | {u.contact_phone or '-'} | {u.address or '-'} [{status}]"
         )

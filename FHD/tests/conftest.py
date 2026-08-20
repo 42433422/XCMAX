@@ -1,3 +1,4 @@
+# mypy: disable-error-code="no-redef"
 """
 pytest 配置与 fixtures（FastAPI 版）
 """
@@ -5,10 +6,13 @@ pytest 配置与 fixtures（FastAPI 版）
 from __future__ import annotations
 
 import asyncio
+import atexit
+import importlib
 import os
 import shutil
 import sys
 import tempfile
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -16,9 +20,51 @@ import pytest
 
 os.environ.setdefault("SECRET_KEY", "xcagi-test-only-secret-key-32-bytes-minimum")
 
+_PYTEST_RUNTIME_ROOT = Path(tempfile.mkdtemp(prefix="xcagi_fhd_pytest_"))
+atexit.register(shutil.rmtree, _PYTEST_RUNTIME_ROOT, True)
+_PYTEST_DATABASE_URL = f"sqlite+pysqlite:///{_PYTEST_RUNTIME_ROOT / 'xcagi-test.sqlite3'}"
+os.environ.setdefault("DATABASE_URL", _PYTEST_DATABASE_URL)
+os.environ.setdefault("VECTOR_DB_URL", _PYTEST_DATABASE_URL)
+os.environ.setdefault("DATASET_RAG_STORE_PATH", str(_PYTEST_RUNTIME_ROOT / "dataset_rag.json"))
+os.environ.setdefault(
+    "DATASET_RAG_VECTOR_INDEX_PATH", str(_PYTEST_RUNTIME_ROOT / "dataset_vectors.sqlite")
+)
+os.environ.setdefault("XCAGI_AUTONOMY_DATA_DIR", str(_PYTEST_RUNTIME_ROOT / "autonomy"))
+os.environ.setdefault(
+    "XCAGI_AUTONOMY_AUDIT_DB_PATH", str(_PYTEST_RUNTIME_ROOT / "autonomy-audit.sqlite3")
+)
+os.environ.setdefault(
+    "XCAGI_AUTONOMY_AUDIT_LOG_PATH", str(_PYTEST_RUNTIME_ROOT / "autonomy-audit.jsonl")
+)
+os.environ.setdefault("XCAGI_PLAN_GRAPH_LOG", str(_PYTEST_RUNTIME_ROOT / "plan_graphs.jsonl"))
+os.environ.setdefault(
+    "XIUCI_PLATFORM_MADE_TOKENS_PATH", str(_PYTEST_RUNTIME_ROOT / "platform_made_tokens.json")
+)
+os.environ.setdefault("XCAGI_SLA_SNAPSHOT_PATH", str(_PYTEST_RUNTIME_ROOT / "sla-snapshot.json"))
+os.environ.setdefault(
+    "XCMAX_TEST_BLOAT_METRICS_PATH", str(_PYTEST_RUNTIME_ROOT / "test-bloat-history.jsonl")
+)
+# 历史 fixture 生成未签名样例包；生产默认仍为强制验签。
+os.environ.setdefault("XCAGI_REQUIRE_SIGNED_MODS", "0")
+
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
+
+from app.utils.operational_errors import BOUNDARY_ERRORS  # noqa: E402
+
+# A few legacy coverage modules install minimal ``sys.modules`` stubs during
+# collection. Preload the real host-policy modules used by the application
+# factory so one test module cannot poison later, unrelated route suites.
+for _stable_module in (
+    "app.mod_sdk.edition_policy",
+    "app.enterprise.mod_entitlements",
+):
+    try:
+        importlib.import_module(_stable_module)
+    except (ImportError, OSError):
+        # Optional-dependency environments may still let the owning tests skip.
+        pass
 
 
 def pytest_collection_modifyitems(config, items):
@@ -34,24 +80,39 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(ramp_marker)
 
 
+_legacy_sync_test_loops: set[asyncio.AbstractEventLoop] = set()
+
+
 class _AutoCreatingEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
     """Keep legacy ``asyncio.get_event_loop()`` behavior for sync tests."""
 
     def get_event_loop(self):
         try:
-            return super().get_event_loop()
+            loop = super().get_event_loop()
         except RuntimeError:
             loop = self.new_event_loop()
             self.set_event_loop(loop)
-            return loop
+        _legacy_sync_test_loops.add(loop)
+        return loop
 
 
 asyncio.set_event_loop_policy(_AutoCreatingEventLoopPolicy())
 
+
+def pytest_sessionfinish(session, exitstatus):
+    """Close event loops created for legacy synchronous coroutine tests."""
+    for loop in tuple(_legacy_sync_test_loops):
+        if not loop.is_closed():
+            loop.close()
+    _legacy_sync_test_loops.clear()
+    asyncio.set_event_loop(None)
+
+
 # pytest-cov 采集时会多次触达 ORM；先一次性加载全部 model，避免 Table 重复注册。
 try:
     import app.db.models  # noqa: F401
-except Exception:  # pragma: no cover - 个别桌面/缺依赖环境允许后续用例自行 skip
+    import app.infrastructure.mods.employee_registry  # noqa: F401
+except BOUNDARY_ERRORS:  # pragma: no cover - 个别桌面/缺依赖环境允许后续用例自行 skip
     pass
 
 
@@ -132,10 +193,10 @@ def _isolate_edition_and_product_sku_env(monkeypatch):
         "XCAGI_MODS_ROOT",
         "XCAGI_MODS_DIR",
         "XCAGI_DESKTOP_MODE",
-        "XCAGI_DATA_DIR",
         "XCAGI_DESKTOP_DATA_DIR",
     ):
         monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(_PYTEST_RUNTIME_ROOT / "app-data"))
     monkeypatch.setenv("FHD_ALLOW_X_USER_ID_HEADER", "1")
     monkeypatch.setenv(
         "XCAGI_PRODUCT_SKU_FILE",
@@ -146,8 +207,14 @@ def _isolate_edition_and_product_sku_env(monkeypatch):
 @pytest.fixture(scope="session")
 def app():
     """FastAPI 应用实例（整机装配，走 ``get_test_fastapi_app()``）。"""
+    from app.db import engine
+    from app.db.base import Base
     from tests.fixtures.app_factory import get_test_fastapi_app
 
+    # The session app uses the isolated SQLite URL declared above.  Production
+    # startup deliberately refuses an unmigrated schema, so give the test-only
+    # database the same current ORM shape before entering the lifespan.
+    Base.metadata.create_all(engine, checkfirst=True)
     return get_test_fastapi_app()
 
 
@@ -156,7 +223,8 @@ def client(app):
     """与整机 FastAPI 应用绑定的 ``TestClient``。"""
     from fastapi.testclient import TestClient
 
-    yield TestClient(app, raise_server_exceptions=False)
+    with TestClient(app, raise_server_exceptions=False) as test_client:
+        yield test_client
 
 
 @pytest.fixture
@@ -193,7 +261,7 @@ def mock_file_system():
 
     try:
         shutil.rmtree(temp_dir)
-    except Exception:
+    except BOUNDARY_ERRORS:
         pass
 
 

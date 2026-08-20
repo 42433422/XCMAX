@@ -40,6 +40,10 @@ const err = ref('')
 const authStore = useAuthStore()
 const registerRoute = computed(() => ({ name: 'register', query: route.query }))
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error || '登录失败')
+}
+
 async function doLogin() {
   loading.value = true
   err.value = ''
@@ -47,8 +51,8 @@ async function doLogin() {
     await authStore.loginWithPassword(username.value, password.value)
     const dest = pickRedirectFromRoute(route)
     await router.replace(dest)
-  } catch (e) {
-    err.value = e.message
+  } catch (e: unknown) {
+    err.value = errorMessage(e)
   } finally {
     loading.value = false
   }

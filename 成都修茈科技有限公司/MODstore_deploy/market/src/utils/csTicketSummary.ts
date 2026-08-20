@@ -1,8 +1,5 @@
-import {
-  shortTicketRef,
-  ticketIntentLabel,
-  ticketLifecycleLabel,
-} from './csTicketLifecycle'
+import { shortTicketRef, ticketIntentLabel, ticketLifecycleLabel } from './csTicketLifecycle'
+import { asUnknownRecord, type UnknownRecord } from './typeNarrowing'
 
 function humanizeRationale(raw: unknown): string {
   let s = String(raw || '').trim()
@@ -26,7 +23,7 @@ function humanizeRationale(raw: unknown): string {
   return s
 }
 
-function actionLine(actions: any[]): {
+function actionLine(actions: unknown[]): {
   ok: boolean
   failed: boolean
   labels: string[]
@@ -40,12 +37,12 @@ function actionLine(actions: any[]): {
     'employee.dispatch': '员工跟进',
   }
   const labels: string[] = []
-  let ok = false
   let failed = false
   let hasBusinessDone = false
   let hasEmployeeFollowup = false
-  for (const item of actions || []) {
-    const type = String(item?.action_type || '')
+  for (const value of actions || []) {
+    const item = asUnknownRecord(value)
+    const type = String(item.action_type || '')
     const name = map[type] || ''
     const st = String(item?.status || '').toLowerCase()
     if (!name) continue
@@ -56,7 +53,6 @@ function actionLine(actions: any[]): {
       continue
     }
     if (st === 'completed' || st === 'skipped') {
-      ok = true
       hasBusinessDone = true
       if (!labels.includes(name)) labels.push(name)
     } else if (st === 'failed') {
@@ -73,11 +69,7 @@ function actionLine(actions: any[]): {
 }
 
 /** 把工单详情收成用户看得懂的一段话（对话里不再堆多张卡） */
-export function composeTicketUserMessage(input: {
-  ticket: any
-  decision?: any | null
-  actions?: any[]
-}): string {
+export function composeTicketUserMessage(input: { ticket: UnknownRecord; decision?: UnknownRecord | null; actions?: unknown[] }): string {
   const ticket = input.ticket || {}
   const decision = input.decision || null
   const actions = Array.isArray(input.actions) ? input.actions : []
@@ -117,15 +109,13 @@ export function composeTicketUserMessage(input: {
     return `${head}：已有处理进展，值班员工仍在跟进。可继续补充截图或具体页面。`
   }
   if (decisionKey === 'accepted' || stage === '处理中' || stage === '已收到') {
-    const tip = rationale && !/自动受理|审核标准/.test(rationale)
-      ? rationale
-      : '可继续补充截图或页面位置。'
+    const tip = rationale && !/自动受理|审核标准/.test(rationale) ? rationale : '可继续补充截图或页面位置。'
     return `${head}：已收到，正在跟进处理。${tip}`
   }
   return `${head}：当前进度「${stage}」。`
 }
 
-export function toUserFacingCards(_cards: any[]): any[] {
+export function toUserFacingCards<T>(_cards: T[]): T[] {
   // 对话气泡不再展示多张内部卡
   return []
 }

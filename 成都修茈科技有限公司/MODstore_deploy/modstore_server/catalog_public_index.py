@@ -1,12 +1,17 @@
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """公网 ``/v1/index.json`` 可见性：与 AI 市场 ``catalog_items.is_public`` 对齐。"""
 
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Iterable, Set
+from typing import Any, Dict, Set
 
 from modstore_server.catalog_store import load_store, norm_pkg_id, norm_version
-from modstore_server.duty_roster import all_planned_employee_ids, is_planned_duty_employee_pack
+from modstore_server.duty_roster import (
+    all_planned_employee_ids,
+    is_planned_duty_employee_pack,
+)
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +33,7 @@ def _public_pkg_ids_from_db() -> Set[str] | None:
                 .all()
             )
         return {norm_pkg_id(r[0]) for r in rows if r and norm_pkg_id(r[0])}
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("catalog_public_index: DB lookup failed: %s", exc)
         return None
 

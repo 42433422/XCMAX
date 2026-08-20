@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, misc, var-annotated"
 """Tests for app.fastapi_routes.market_account — coverage ramp.
 
 Covers helper functions, route endpoints, token management, and error paths.
@@ -26,7 +27,8 @@ def app_with_router() -> FastAPI:
 
 @pytest.fixture
 def client(app_with_router: FastAPI) -> TestClient:
-    return TestClient(app_with_router, raise_server_exceptions=False)
+    with TestClient(app_with_router, raise_server_exceptions=False) as test_client:
+        yield test_client
 
 
 @pytest.fixture(autouse=True)

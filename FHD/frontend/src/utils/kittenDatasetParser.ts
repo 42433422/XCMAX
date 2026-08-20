@@ -37,7 +37,9 @@ const getExtension = (filename: string): string => {
 
 const getParserWorker = (): Worker => {
   if (!parserWorker) {
-    parserWorker = new Worker(new URL('../workers/datasetParser.worker.ts', import.meta.url), { type: 'module' })
+    parserWorker = new Worker(new URL('../workers/datasetParser.worker.ts', import.meta.url), {
+      type: 'module',
+    })
     parserWorker.addEventListener('error', () => {
       parserWorker = null
     })
@@ -60,7 +62,12 @@ const parseWithWorker = (file: File, ext: string): Promise<ParsedDatasetFile> =>
     }
 
     const onMessage = (event: MessageEvent) => {
-      const data = event.data as { requestId?: number; ok?: boolean; payload?: ParsedDatasetFile; error?: string }
+      const data = event.data as {
+        requestId?: number
+        ok?: boolean
+        payload?: ParsedDatasetFile
+        error?: string
+      }
       if (!data || data.requestId !== requestId) return
       cleanup()
       if (!data.ok || !data.payload) {
@@ -119,7 +126,7 @@ const normalizeRows = (rows: Record<string, unknown>[], columns: string[]): Pars
     columns,
     preview: rows.slice(0, 3),
     sampleRows,
-    fieldProfiles: profileFields(sampleRows, columns)
+    fieldProfiles: profileFields(sampleRows, columns),
   }
 }
 
@@ -151,7 +158,10 @@ const normalizeJsonPayload = (payload: unknown): ParsedDatasetFile => {
       columns: ['value'],
       preview: payload.slice(0, 3).map((value) => ({ value })),
       sampleRows: payload.slice(0, KITTEN_DATASET_SAMPLE_LIMIT).map((value) => ({ value })),
-      fieldProfiles: profileFields(payload.slice(0, KITTEN_DATASET_SAMPLE_LIMIT).map((value) => ({ value })), ['value'])
+      fieldProfiles: profileFields(
+        payload.slice(0, KITTEN_DATASET_SAMPLE_LIMIT).map((value) => ({ value })),
+        ['value'],
+      ),
     }
   }
 
@@ -176,7 +186,7 @@ const parseCsvLike = async (file: File): Promise<ParsedDatasetFile> => {
   const bodyRows = rows.slice(1).map((row) => Object.fromEntries(headers.map((header, idx) => [header, row[idx] ?? ''])))
   return {
     ...normalizeRows(bodyRows, headers),
-    preview: rows.slice(0, 3)
+    preview: rows.slice(0, 3),
   }
 }
 

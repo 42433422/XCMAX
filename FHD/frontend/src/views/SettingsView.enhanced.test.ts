@@ -96,8 +96,8 @@ vi.mock('@/i18n', () => ({
 }))
 
 vi.mock('@/utils/typeGuards', () => ({
-  asRecord: (v: unknown) => (v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {}),
-  asArray: <T>(v: unknown) => (Array.isArray(v) ? v as T[] : [] as T[]),
+  asRecord: (v: unknown) => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {}),
+  asArray: <T>(v: unknown) => (Array.isArray(v) ? (v as T[]) : ([] as T[])),
   asString: (v: unknown, fallback = '') => (typeof v === 'string' ? v : fallback),
   asBoolean: (v: unknown, fallback = false) => (typeof v === 'boolean' ? v : fallback),
   asDisposable: (v: unknown) => (typeof v === 'function' ? v : () => {}),
@@ -105,7 +105,12 @@ vi.mock('@/utils/typeGuards', () => ({
 
 /* ── store mocks ── */
 const mockIndustryStore = {
-  industries: [] as Array<{ id: string | number; name: string; code: string; [k: string]: unknown }>,
+  industries: [] as Array<{
+    id: string | number
+    name: string
+    code: string
+    [k: string]: unknown
+  }>,
   currentIndustry: null as unknown,
   currentConfig: null as unknown,
   currentIndustryId: 'default',
@@ -319,7 +324,10 @@ describe('SettingsView.vue – profile section', () => {
   })
 
   it('shows login link when not logged in', async () => {
-    mockAuthApiGetCurrentUser.mockResolvedValueOnce({ success: false, data: { user: null, permissions: [] } })
+    mockAuthApiGetCurrentUser.mockResolvedValueOnce({
+      success: false,
+      data: { user: null, permissions: [] },
+    })
     mockAuthApiValidateSession.mockResolvedValueOnce({ success: false })
     const wrapper = await mountSettings()
     // When not logged in, should show login link (router-link with primary btn class)
@@ -344,11 +352,22 @@ describe('SettingsView.vue – profile section', () => {
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({
       success: true,
       data: {
-        user: { id: 1, username: 'testuser', display_name: 'Test', email: 't@t.com', role: 'user', is_active: true },
+        user: {
+          id: 1,
+          username: 'testuser',
+          display_name: 'Test',
+          email: 't@t.com',
+          role: 'user',
+          is_active: true,
+        },
         permissions: [],
       },
     })
-    mockAuthApiValidateSession.mockResolvedValueOnce({ success: true, valid: true, data: { username: 'testuser', user_id: 1 } })
+    mockAuthApiValidateSession.mockResolvedValueOnce({
+      success: true,
+      valid: true,
+      data: { username: 'testuser', user_id: 1 },
+    })
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
@@ -361,7 +380,14 @@ describe('SettingsView.vue – profile section', () => {
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({
       success: true,
       data: {
-        user: { id: 1, username: 'testuser', display_name: 'Test User', email: 't@t.com', role: 'user', is_active: true },
+        user: {
+          id: 1,
+          username: 'testuser',
+          display_name: 'Test User',
+          email: 't@t.com',
+          role: 'user',
+          is_active: true,
+        },
         permissions: [],
       },
     })
@@ -435,7 +461,7 @@ describe('SettingsView.vue – basic settings', () => {
     const wrapper = await mountSettings()
     const select = wrapper.find('#settings-locale')
     const options = select.findAll('option')
-    const values = options.map(o => o.attributes('value'))
+    const values = options.map((o) => o.attributes('value'))
     expect(values).toContain('zh-CN')
     expect(values).toContain('en-US')
     wrapper.unmount()
@@ -445,7 +471,7 @@ describe('SettingsView.vue – basic settings', () => {
     const wrapper = await mountSettings()
     const select = wrapper.find('#settings-ai-mode')
     const options = select.findAll('option')
-    const values = options.map(o => o.attributes('value'))
+    const values = options.map((o) => o.attributes('value'))
     expect(values).toContain('absolute_safe')
     expect(values).toContain('safe')
     expect(values).toContain('performance')
@@ -480,7 +506,10 @@ describe('SettingsView.vue – intent showcase', () => {
     mockIndustryStore.industries = [{ id: 'default', name: '默认行业', code: 'default' }]
     mockSystemApiGetIndustries.mockResolvedValueOnce({
       success: true,
-      data: { industries: [{ id: 'default', name: '默认行业', code: 'default' }], current: 'default' },
+      data: {
+        industries: [{ id: 'default', name: '默认行业', code: 'default' }],
+        current: 'default',
+      },
     })
     const wrapper = await mountSettings()
     // The intent showcase should show either grid or "not loaded" message
@@ -637,7 +666,10 @@ describe('SettingsView.vue – session handling', () => {
   })
 
   it('handles session validation failure gracefully', async () => {
-    mockAuthApiGetCurrentUser.mockResolvedValueOnce({ success: false, data: { user: null, permissions: [] } })
+    mockAuthApiGetCurrentUser.mockResolvedValueOnce({
+      success: false,
+      data: { user: null, permissions: [] },
+    })
     mockAuthApiValidateSession.mockRejectedValueOnce(new Error('Network error'))
     const wrapper = await mountSettings()
     expect(wrapper.exists()).toBe(true)
@@ -645,7 +677,10 @@ describe('SettingsView.vue – session handling', () => {
   })
 
   it('handles session validation success', async () => {
-    mockAuthApiGetCurrentUser.mockResolvedValueOnce({ success: false, data: { user: null, permissions: [] } })
+    mockAuthApiGetCurrentUser.mockResolvedValueOnce({
+      success: false,
+      data: { user: null, permissions: [] },
+    })
     mockAuthApiValidateSession.mockResolvedValueOnce({
       success: true,
       valid: true,
@@ -660,7 +695,14 @@ describe('SettingsView.vue – session handling', () => {
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({
       success: true,
       data: {
-        user: { id: 1, username: 'admin', display_name: 'Admin', email: 'a@a.com', role: 'admin', is_active: true },
+        user: {
+          id: 1,
+          username: 'admin',
+          display_name: 'Admin',
+          email: 'a@a.com',
+          role: 'admin',
+          is_active: true,
+        },
         permissions: [],
       },
     })
@@ -697,7 +739,11 @@ describe('SettingsView.vue – computed properties', () => {
 
   it('systemDisplayName uses account custom delivery name', async () => {
     mockModsStore.mods = [
-      { id: 'taiyangniao-pro', name: '太阳鸟 PRO', industry: { id: '考勤', name: '考勤/人事行业' } },
+      {
+        id: 'taiyangniao-pro',
+        name: '太阳鸟 PRO',
+        industry: { id: '考勤', name: '考勤/人事行业' },
+      },
     ]
     mockModsStore.activeModId = 'taiyangniao-pro'
     const wrapper = await mountSettings()
@@ -722,7 +768,10 @@ describe('SettingsView.vue – computed properties', () => {
   })
 
   it('isLoggedIn is false when no user', async () => {
-    mockAuthApiGetCurrentUser.mockResolvedValueOnce({ success: false, data: { user: null, permissions: [] } })
+    mockAuthApiGetCurrentUser.mockResolvedValueOnce({
+      success: false,
+      data: { user: null, permissions: [] },
+    })
     mockAuthApiValidateSession.mockResolvedValueOnce({ success: false })
     const wrapper = await mountSettings()
     const vm = wrapper.vm as Record<string, unknown>
@@ -826,7 +875,7 @@ describe('SettingsView.vue – industry loading', () => {
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    await new Promise(r => setTimeout(r, 100))
+    await new Promise((r) => setTimeout(r, 100))
     expect(mockIndustryStore.initialize).toHaveBeenCalled()
     wrapper.unmount()
   })
@@ -835,7 +884,7 @@ describe('SettingsView.vue – industry loading', () => {
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    await new Promise(r => setTimeout(r, 100))
+    await new Promise((r) => setTimeout(r, 100))
     expect(mockSystemApiGetIndustries).toHaveBeenCalled()
     wrapper.unmount()
   })
@@ -843,11 +892,14 @@ describe('SettingsView.vue – industry loading', () => {
   it('populates industries from API response', async () => {
     mockSystemApiGetIndustries.mockResolvedValueOnce({
       success: true,
-      data: { industries: [{ id: 'manufacturing', name: '制造业', code: 'mfg' }], current: 'manufacturing' },
+      data: {
+        industries: [{ id: 'manufacturing', name: '制造业', code: 'mfg' }],
+        current: 'manufacturing',
+      },
     })
     const wrapper = await mountSettings()
     // Wait for async operations
-    await new Promise(r => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 50))
     expect(wrapper.exists()).toBe(true)
     wrapper.unmount()
   })
@@ -871,7 +923,10 @@ describe('SettingsView.vue – audit logs', () => {
   })
 
   it('does not show audit logs for non-admin users', async () => {
-    mockAuthApiGetCurrentUser.mockResolvedValueOnce({ success: false, data: { user: null, permissions: [] } })
+    mockAuthApiGetCurrentUser.mockResolvedValueOnce({
+      success: false,
+      data: { user: null, permissions: [] },
+    })
     mockAuthApiValidateSession.mockResolvedValueOnce({ success: false })
     const wrapper = await mountSettings()
     expect(wrapper.find('[data-tutorial-id="settings-audit-logs"]').exists()).toBe(false)
@@ -882,14 +937,21 @@ describe('SettingsView.vue – audit logs', () => {
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({
       success: true,
       data: {
-        user: { id: 1, username: 'admin', display_name: 'Admin', email: 'a@a.com', role: 'admin', is_active: true },
+        user: {
+          id: 1,
+          username: 'admin',
+          display_name: 'Admin',
+          email: 'a@a.com',
+          role: 'admin',
+          is_active: true,
+        },
         permissions: [],
       },
     })
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    await new Promise(r => setTimeout(r, 100))
+    await new Promise((r) => setTimeout(r, 100))
     expect(wrapper.find('[data-tutorial-id="settings-audit-logs"]').exists()).toBe(true)
     wrapper.unmount()
   })

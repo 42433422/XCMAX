@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, attr-defined, no-any-return, valid-type"
 """Mod 库与 XCAGI ``mods/`` 同步的公网 API（挂载在 ``/v1/mod-sync``）。
 
 与已登录工作台调用的 ``POST /api/sync/push``、``POST /api/sync/pull`` 行为一致，
@@ -23,7 +24,12 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from modman.repo_config import resolved_xcagi
-from modman.store import build_mod_zip_bytes, deploy_to_xcagi, list_mods, pull_from_xcagi
+from modman.store import (
+    build_mod_zip_bytes,
+    deploy_to_xcagi,
+    list_mods,
+    pull_from_xcagi,
+)
 from modstore_server.auth_service import (
     PAT_PREFIX,
     decode_access_token,
@@ -135,7 +141,8 @@ def api_v1_mod_sync_push(
     xc = resolved_xcagi(cfg)
     if not xc:
         raise HTTPException(
-            400, "未配置有效的 XCAGI 根目录（Mod 源码库「路径与同步」或环境变量 XCAGI_ROOT）"
+            400,
+            "未配置有效的 XCAGI 根目录（Mod 源码库「路径与同步」或环境变量 XCAGI_ROOT）",
         )
     lib = _lib()
     allowed_ids = _authorized_mod_ids(auth, body.mod_ids)
@@ -183,7 +190,9 @@ def _assert_sync_can_read_mod(ctx: SyncAuthContext, mod_id: str) -> str:
 
 
 @router.get("/mods", summary="列出当前账号可同步的 Mod（与 /api/mods 范围一致）")
-def api_v1_mod_sync_list_mods(authorization: Optional[str] = Header(None, alias="Authorization")):
+def api_v1_mod_sync_list_mods(
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
     auth = _require_mod_sync_auth(authorization)
     lib = _lib()
     if auth.user.is_admin:

@@ -4,7 +4,6 @@ import { createRouter, createMemoryHistory } from 'vue-router'
 import { setActivePinia, createPinia } from 'pinia'
 import NotificationCenter from './NotificationCenter.vue'
 import { api } from '../api'
-import { useNotificationStore } from '../stores/notifications'
 
 vi.mock('../api', () => ({
   api: {
@@ -46,8 +45,24 @@ describe('NotificationCenter', () => {
   it('renders notification items', async () => {
     vi.mocked(api.notificationsList).mockResolvedValue({
       notifications: [
-        { id: 1, title: '支付成功', content: '订单已支付', is_read: true, created_at: '2024-01-01', type: 'payment_success', data: {} },
-        { id: 2, title: '配额警告', content: '余额不足', is_read: false, created_at: '2024-01-02', type: 'quota_warning', data: {} },
+        {
+          id: 1,
+          title: '支付成功',
+          content: '订单已支付',
+          is_read: true,
+          created_at: '2024-01-01',
+          type: 'payment_success',
+          data: {},
+        },
+        {
+          id: 2,
+          title: '配额警告',
+          content: '余额不足',
+          is_read: false,
+          created_at: '2024-01-02',
+          type: 'quota_warning',
+          data: {},
+        },
       ],
     })
     router.push('/')

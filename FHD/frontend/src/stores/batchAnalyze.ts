@@ -61,13 +61,20 @@ export const useBatchAnalyzeStore = defineStore('batchAnalyze', () => {
 
   const phaseLabel = computed(() => {
     switch (phase.value) {
-      case 'idle': return '等待开始'
-      case 'extracting': return '正在拆解文档'
-      case 'grouping': return '正在分组'
-      case 'matching': return '正在匹配模板'
-      case 'done': return '分析完成'
-      case 'error': return '发生错误'
-      default: return ''
+      case 'idle':
+        return '等待开始'
+      case 'extracting':
+        return '正在拆解文档'
+      case 'grouping':
+        return '正在分组'
+      case 'matching':
+        return '正在匹配模板'
+      case 'done':
+        return '分析完成'
+      case 'error':
+        return '发生错误'
+      default:
+        return ''
     }
   })
 
@@ -93,7 +100,7 @@ export const useBatchAnalyzeStore = defineStore('batchAnalyze', () => {
 
   const selectedGroup = computed(() => {
     if (!selectedGroupId.value) return null
-    return groups.value.find(g => g.id === selectedGroupId.value) || null
+    return groups.value.find((g) => g.id === selectedGroupId.value) || null
   })
 
   function reset() {
@@ -125,14 +132,16 @@ export const useBatchAnalyzeStore = defineStore('batchAnalyze', () => {
     phase.value = newPhase
   }
 
-  function updateProgress(update: Partial<{
-    totalFiles: number
-    processedFiles: number
-    totalSheets: number
-    currentFileName: string
-    currentSheetName: string
-    progress: number
-  }>) {
+  function updateProgress(
+    update: Partial<{
+      totalFiles: number
+      processedFiles: number
+      totalSheets: number
+      currentFileName: string
+      currentSheetName: string
+      progress: number
+    }>,
+  ) {
     if (update.totalFiles !== undefined) totalFiles.value = update.totalFiles
     if (update.processedFiles !== undefined) processedFiles.value = update.processedFiles
     if (update.totalSheets !== undefined) totalSheets.value = update.totalSheets
@@ -159,7 +168,7 @@ export const useBatchAnalyzeStore = defineStore('batchAnalyze', () => {
   }
 
   function updateGroupTemplate(groupId: string, templateId: string, templateName: string, matchScore: number) {
-    const group = groups.value.find(g => g.id === groupId)
+    const group = groups.value.find((g) => g.id === groupId)
     if (group) {
       group.recommendedTemplateId = templateId
       group.recommendedTemplateName = templateName
@@ -168,14 +177,14 @@ export const useBatchAnalyzeStore = defineStore('batchAnalyze', () => {
   }
 
   function updateSheetGridData(fileName: string, sheetName: string, gridData: unknown) {
-    const sheet = extractedSheets.value.find(s => s.fileName === fileName && s.sheetName === sheetName)
+    const sheet = extractedSheets.value.find((s) => s.fileName === fileName && s.sheetName === sheetName)
     if (sheet) {
       sheet.gridData = gridData
     }
   }
 
   function updateGroupExtractStatus(groupId: string, status: SheetGroup['extractStatus'], error?: string) {
-    const group = groups.value.find(g => g.id === groupId)
+    const group = groups.value.find((g) => g.id === groupId)
     if (group) {
       group.extractStatus = status
       if (error) group.extractError = error
@@ -183,7 +192,7 @@ export const useBatchAnalyzeStore = defineStore('batchAnalyze', () => {
   }
 
   function updateGroupSheets(groupId: string, sheets: SheetInfo[]) {
-    const group = groups.value.find(g => g.id === groupId)
+    const group = groups.value.find((g) => g.id === groupId)
     if (group) {
       group.matchedSheets = sheets
     }
@@ -219,6 +228,6 @@ export const useBatchAnalyzeStore = defineStore('batchAnalyze', () => {
     updateSheetGridData,
     updateGroupExtractStatus,
     updateGroupSheets,
-    addFailedFile
+    addFailedFile,
   }
 })

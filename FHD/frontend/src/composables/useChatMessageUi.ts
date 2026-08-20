@@ -1,5 +1,5 @@
 import { ref, computed, watch, type Ref } from 'vue'
-import { sanitizeChatBubbleMarkdown } from '@/utils/sanitizeHtml'
+import { plainTextFromChatHtml, plainTextFromChatMarkdown } from '@/utils/sanitizeHtml'
 import { speakText, stopSpeaking, cleanTextForSpeech } from '@/utils/tts'
 import { estimateMessageHeight, getPerformanceStats } from '@/utils/pretext'
 import type { ChatMessage } from './useChatMessages'
@@ -21,10 +21,7 @@ export function useChatMessageUi(deps: UseChatMessageUiDeps) {
     const cached = messageHeights.value.get(index)
     if (cached) return cached
     const role = messages.value[index]?.role
-    const plainSource =
-      role === 'ai'
-        ? sanitizeChatBubbleMarkdown(content).replace(/<[^>]*>/g, '')
-        : String(content || '').replace(/<[^>]*>/g, '')
+    const plainSource = role === 'ai' ? plainTextFromChatMarkdown(content) : plainTextFromChatHtml(content)
     const height = estimateMessageHeight(plainSource, chatContainerWidth.value - 32, 14)
     messageHeights.value.set(index, height)
     return height
@@ -45,11 +42,9 @@ export function useChatMessageUi(deps: UseChatMessageUiDeps) {
     const s = String(raw || '')
     if (!s) return ''
     try {
-      const el = document.createElement('div')
-      el.innerHTML = sanitizeChatBubbleMarkdown(s)
-      return (el.textContent || el.innerText || '').replace(/\s+/g, ' ').trim()
+      return plainTextFromChatMarkdown(s).replace(/\s+/g, ' ').trim()
     } catch {
-      return s.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+      return ''
     }
   }
 
@@ -69,14 +64,16 @@ export function useChatMessageUi(deps: UseChatMessageUiDeps) {
     const myIdx = idx
     playingMsgIdx.value = myIdx
     try {
-      void Promise.resolve(speakText(text, {
-        onEnd: () => {
-          if (playingMsgIdx.value === myIdx) playingMsgIdx.value = -1
-        },
-        onError: () => {
-          if (playingMsgIdx.value === myIdx) playingMsgIdx.value = -1
-        },
-      })).catch(() => {
+      void Promise.resolve(
+        speakText(text, {
+          onEnd: () => {
+            if (playingMsgIdx.value === myIdx) playingMsgIdx.value = -1
+          },
+          onError: () => {
+            if (playingMsgIdx.value === myIdx) playingMsgIdx.value = -1
+          },
+        }),
+      ).catch(() => {
         if (playingMsgIdx.value === myIdx) playingMsgIdx.value = -1
       })
     } catch {
@@ -111,11 +108,7 @@ export function useChatMessageUi(deps: UseChatMessageUiDeps) {
   }
 
   const getCollapsedPreview = (htmlText: string) => {
-    const text = String(htmlText || '')
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<[^>]*>/g, '')
-      .replace(/\s+/g, ' ')
-      .trim()
+    const text = plainTextFromChatHtml(htmlText).replace(/\s+/g, ' ').trim()
     if (!text) return '（无内容）'
     return text.length > 120 ? `${text.slice(0, 120)}...` : text
   }
@@ -123,9 +116,7 @@ export function useChatMessageUi(deps: UseChatMessageUiDeps) {
   watch(
     () => messages.value.length,
     () => {
-      expandedMessageIndexes.value = expandedMessageIndexes.value.filter(
-        (idx) => idx >= 0 && idx < messages.value.length,
-      )
+      expandedMessageIndexes.value = expandedMessageIndexes.value.filter((idx) => idx >= 0 && idx < messages.value.length)
     },
   )
 

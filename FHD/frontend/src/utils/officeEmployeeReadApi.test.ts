@@ -1,9 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import {
-  isOfficeExcelReadInstalled,
-  mapOfficeExcelReadToAnalysisResult,
-  summarizeOfficeExcelRead,
-} from './officeEmployeeReadApi'
+import { isOfficeExcelReadInstalled, mapOfficeExcelReadToAnalysisResult, summarizeOfficeExcelRead } from './officeEmployeeReadApi'
 
 vi.mock('@/utils/platformShellApi', () => ({
   fetchEmployeePlannerStatus: vi.fn(),

@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any
 
 import httpx
 from fastapi import APIRouter
 
 from modstore_server.application.payment_gateway import PaymentGatewayService
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.payment_orders import is_local_source_of_truth
 
 logger = logging.getLogger(__name__)
@@ -47,13 +47,13 @@ def compute_payment_health() -> dict[str, Any]:
                 parsed = resp.json()
                 if isinstance(parsed, dict):
                     body = parsed
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 body = None
         if body:
             out["java_actuator_status"] = body.get("status")
         else:
             out["java_actuator_status"] = "unknown"
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.debug("java payment health probe failed", exc_info=True)
         out["java_payment_reachable"] = False
         out["java_probe_error"] = str(exc)[:300]
@@ -80,8 +80,6 @@ def api_payment_health() -> dict[str, Any]:
     data = compute_payment_health()
     status = "ok"
     if data.get("payment_backend") == "java":
-        if not data.get("java_payment_reachable"):
-            status = "degraded"
-        elif not data.get("ready_for_java_cutover"):
+        if not data.get("java_payment_reachable") or not data.get("ready_for_java_cutover"):
             status = "degraded"
     return {"status": status, **data}

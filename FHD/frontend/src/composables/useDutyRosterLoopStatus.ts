@@ -23,7 +23,7 @@ export type DutyRosterLoopStatus = {
 }
 
 function objectValue(raw: unknown): Record<string, unknown> {
-  return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : {}
+  return raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {}
 }
 
 function stringArray(raw: unknown): string[] {
@@ -51,10 +51,7 @@ export function normalizeDutyRosterLoopStatus(payload: HealthPayload | null | un
   const extraIds = stringArray(staffing.extra_employees ?? health.extra_local_employee_pack_ids)
   const missingCatalogCount = missingCatalogIds.length
   const missingLocalCount = missingLocalIds.length
-  const plannedCount = numberValue(
-    staffing.planned_count ?? health.planned_count,
-    plannedFallback,
-  )
+  const plannedCount = numberValue(staffing.planned_count ?? health.planned_count, plannedFallback)
   const catalogRegisteredCount = numberValue(
     staffing.registered_count ?? health.registered_count,
     Math.max(0, plannedCount - missingCatalogCount),
@@ -70,11 +67,7 @@ export function normalizeDutyRosterLoopStatus(payload: HealthPayload | null | un
       : []
   const ok = health.ok === true || health.success === true || health.healthy === true
   const source = String(health.source || '').trim() || 'unknown'
-  const message = typeof staffing.error === 'string'
-    ? staffing.error
-    : typeof health.message === 'string'
-      ? health.message
-      : ''
+  const message = typeof staffing.error === 'string' ? staffing.error : typeof health.message === 'string' ? health.message : ''
 
   return {
     ok,
@@ -121,11 +114,9 @@ export function useDutyRosterLoopStatus(options: { autoRefreshMs?: number } = {}
   const error = ref('')
   let timer: number | null = null
 
-  const ready = computed(() =>
-    status.value.ok
-    && status.value.plannedCount > 0
-    && status.value.missingCatalogCount === 0
-    && status.value.missingLocalCount === 0,
+  const ready = computed(
+    () =>
+      status.value.ok && status.value.plannedCount > 0 && status.value.missingCatalogCount === 0 && status.value.missingLocalCount === 0,
   )
 
   const healthLabel = computed(() => {
@@ -148,7 +139,7 @@ export function useDutyRosterLoopStatus(options: { autoRefreshMs?: number } = {}
     loading.value = true
     error.value = ''
     try {
-      const payload = await xcmaxMarketProxy.adminDutyGraphHealth() as HealthPayload
+      const payload = (await xcmaxMarketProxy.adminDutyGraphHealth()) as HealthPayload
       status.value = normalizeDutyRosterLoopStatus(payload)
     } catch (e: unknown) {
       error.value = e instanceof Error ? e.message : String(e)
@@ -162,9 +153,12 @@ export function useDutyRosterLoopStatus(options: { autoRefreshMs?: number } = {}
     void refresh()
     const ms = Number(options.autoRefreshMs || 0)
     if (ms > 0 && typeof window !== 'undefined') {
-      timer = window.setInterval(() => {
-        void refresh()
-      }, Math.max(5000, ms))
+      timer = window.setInterval(
+        () => {
+          void refresh()
+        },
+        Math.max(5000, ms),
+      )
     }
   })
 

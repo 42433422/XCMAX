@@ -3,6 +3,7 @@
 ## 📊 当前问题分析
 
 ### 现状
+
 ```
 app/
 ├── services/        # 33 个服务文件 - ❌ 职责混乱
@@ -18,6 +19,7 @@ app/
 ```
 
 ### 问题
+
 1. **分层边界模糊**: services 和 application 职责重叠
 2. **路由绕过应用层**: routes 直接调用 services
 3. **领域逻辑泄露**: 业务逻辑在 services 层，不在 domain 层
@@ -27,6 +29,7 @@ app/
 ## 🎯 重构目标
 
 ### 目标架构
+
 ```
 app/
 ├── domain/              # 领域层 (Entities + Aggregates + Domain Services)
@@ -60,6 +63,7 @@ app/
 ## 📝 服务分类策略
 
 ### 第一类：应用服务 (迁移到 application/)
+
 这些服务负责**用例编排**，应该保留并强化:
 
 ```python
@@ -72,6 +76,7 @@ app/
 ```
 
 **新增应用服务**:
+
 ```python
 # 需要从 services/ 迁移过来
 - auth_app_service.py           # 从 auth_service.py 提取
@@ -82,6 +87,7 @@ app/
 ```
 
 ### 第二类：领域服务 (移动到 domain/services/)
+
 这些是**无状态的业务逻辑**，符合 DDD 领域服务概念:
 
 ```python
@@ -95,6 +101,7 @@ app/
 ```
 
 ### 第三类：基础设施服务 (移动到 infrastructure/)
+
 这些是**技术实现细节**，应该属于基础设施层:
 
 ```python
@@ -108,6 +115,7 @@ app/
 ```
 
 ### 第四类：工具服务 (保留但重命名)
+
 这些是**通用工具**，可以保留但需要重新组织:
 
 ```python
@@ -119,6 +127,7 @@ app/
 ```
 
 ### 第五类：AI/ML 服务 (独立模块)
+
 这些是**AI 模型相关**，建议独立:
 
 ```python
@@ -135,26 +144,31 @@ app/
 ## 🔄 迁移步骤
 
 ### 阶段 1: 准备 (1-2 天)
+
 1. ✅ 创建新的目录结构
 2. ✅ 添加 `__init__.py` 和类型注解
 3. ✅ 更新导入路径映射
 
 ### 阶段 2: 迁移应用服务 (2-3 天)
+
 1. 创建新的应用服务接口
 2. 迁移 auth, user, material 等服务
 3. 更新 routes 调用
 
 ### 阶段 3: 迁移领域服务 (3-4 天)
+
 1. 提取领域逻辑到 domain/services/
 2. 确保领域服务无状态
 3. 更新应用服务调用
 
 ### 阶段 4: 迁移基础设施 (2-3 天)
+
 1. 移动技术实现到 infrastructure/
 2. 实现端口接口
 3. 更新依赖注入
 
 ### 阶段 5: 清理 (1-2 天)
+
 1. 删除旧的 services/ 目录
 2. 更新文档
 3. 运行测试验证
@@ -226,6 +240,7 @@ app/
 ### 示例 1: Auth 服务重构
 
 **当前代码** (routes/auth.py):
+
 ```python
 from app.services.auth_service import get_auth_service
 
@@ -236,6 +251,7 @@ def login():
 ```
 
 **重构后** (routes/auth.py):
+
 ```python
 from app.application.auth.auth_app_service import get_auth_app_service
 
@@ -246,6 +262,7 @@ def login():
 ```
 
 **应用服务** (application/auth/auth_app_service.py):
+
 ```python
 from domain.services.intent_recognition import IntentRecognizer
 from infrastructure.auth.auth_service_impl import AuthServiceImpl
@@ -255,7 +272,7 @@ class AuthAppService:
     def __init__(self, auth_impl: AuthServiceImpl, session_mgr: SessionManager):
         self._auth_impl = auth_impl
         self._session_mgr = session_mgr
-    
+
     def login(self, username: str, password: str) -> dict:
         # 用例编排
         user = self._auth_impl.authenticate(username, password)
@@ -269,17 +286,20 @@ class AuthAppService:
 
 重构完成后，检查以下标准:
 
-1. ✅ **routes/ 只导入 application/** 
+1. ✅ **routes/ 只导入 application/**
+
    ```bash
    grep -r "from app.services" app/routes/  # 应该无结果
    ```
 
 2. ✅ **application/ 只导入 domain/ 和 ports/**
+
    ```bash
    grep -r "from app.infrastructure" app/application/  # 应该只通过 ports
    ```
 
 3. ✅ **domain/ 无外部依赖**
+
    ```bash
    grep -r "from app.infrastructure" app/domain/  # 应该无结果
    ```
@@ -293,28 +313,31 @@ class AuthAppService:
 
 ## 📅 时间估算
 
-| 阶段 | 工作量 | 风险 |
-|------|--------|------|
-| 阶段 1: 准备 | 1-2 天 | 低 |
-| 阶段 2: 应用服务 | 2-3 天 | 中 |
-| 阶段 3: 领域服务 | 3-4 天 | 中 |
-| 阶段 4: 基础设施 | 2-3 天 | 高 |
-| 阶段 5: 清理 | 1-2 天 | 低 |
-| **总计** | **9-14 天** | **中** |
+| 阶段             | 工作量      | 风险   |
+| ---------------- | ----------- | ------ |
+| 阶段 1: 准备     | 1-2 天      | 低     |
+| 阶段 2: 应用服务 | 2-3 天      | 中     |
+| 阶段 3: 领域服务 | 3-4 天      | 中     |
+| 阶段 4: 基础设施 | 2-3 天      | 高     |
+| 阶段 5: 清理     | 1-2 天      | 低     |
+| **总计**         | **9-14 天** | **中** |
 
 ---
 
 ## 🚨 风险评估
 
 ### 高风险
+
 1. **基础设施迁移**: 可能影响现有功能
 2. **依赖注入**: 需要仔细处理循环依赖
 
 ### 中风险
+
 1. **领域服务提取**: 可能遗漏某些业务逻辑
 2. **测试覆盖**: 需要补充测试
 
 ### 低风险
+
 1. **目录结构调整**: 机械性工作
 2. **导入路径更新**: 可自动化处理
 
@@ -323,7 +346,7 @@ class AuthAppService:
 ## 📚 参考文档
 
 - [DDD 分层架构](https://martinfowler.com/bliki/DDD.html)
-- [端口适配器模式](https://en.wikipedia.org/wiki/Hexagonal_architecture_(software))
+- [端口适配器模式](<https://en.wikipedia.org/wiki/Hexagonal_architecture_(software)>)
 - [Clean Architecture](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html)
 
 ---

@@ -206,7 +206,7 @@ class TestParseTaskShipment:
         assert result["slots"].get("unit_name") is not None
 
     def test_model_from_spec_pattern(self, agent):
-        """Model extracted via `(\d{3,6})的?规格` pattern."""
+        r"""Model extracted via `(\d{3,6})的?规格` pattern."""
         result = agent.parse_task("打印9803的规格25打印发货单3桶", {})
         assert result is not None
 

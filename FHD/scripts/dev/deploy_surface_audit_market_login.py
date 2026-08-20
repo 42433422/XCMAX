@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="import-untyped"
 """上传 market-login patch 到生产 MODstore 并重拍需登录页。"""
+
 from __future__ import annotations
 
 import os

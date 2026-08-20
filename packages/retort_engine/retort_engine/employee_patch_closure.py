@@ -458,7 +458,9 @@ def run_multi_file_employee_patch_closure_case(
         "status": (
             "patch_verified"
             if retained_change
-            else "patch_rolled_back" if rollback_verified else "patch_failed"
+            else "patch_rolled_back"
+            if rollback_verified
+            else "patch_failed"
         ),
         "project": str(root),
         "target": ",".join(changed_files),
@@ -569,7 +571,9 @@ def run_employee_patch_closure_case(
     status = (
         "patch_verified"
         if retained_change
-        else "patch_rolled_back" if rollback_verified else "patch_failed"
+        else "patch_rolled_back"
+        if rollback_verified
+        else "patch_failed"
     )
     return {
         "status": status,

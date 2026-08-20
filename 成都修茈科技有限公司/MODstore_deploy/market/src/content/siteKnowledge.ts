@@ -67,8 +67,7 @@ const CORP_PAGES: Record<string, PageKnowledge & { paths: string[] }> = {
       '成都修茈科技有限公司专注 AI 单据智能处理、Excel 识别、标签打印、出货收货管理和企业流程自动化，帮助中小企业把业务数据真正跑起来。',
     welcomeTitle: 'Hi，想了解 XCAGI 能帮您做什么？',
     welcomeDesc: '我可以介绍 XCAGI 桌面、行业 Mod，并引导您下载试用、查看方案或预约沟通。',
-    summary:
-      '首页主推 XCAGI AI 员工桌面：安装行业 Mod，用对话下达目标，AI 员工自动拆解协作，交付可复核的业务成果。',
+    summary: '首页主推 XCAGI AI 员工桌面：安装行业 Mod，用对话下达目标，AI 员工自动拆解协作，交付可复核的业务成果。',
     highlights: ['行业 Mod 即装即用', '任务过程全程留痕', '结果可人工复核', '下载 XCAGI'],
     quickActions: [
       { label: '介绍 XCAGI', message: 'XCAGI 是什么？能做什么？' },
@@ -82,12 +81,10 @@ const CORP_PAGES: Record<string, PageKnowledge & { paths: string[] }> = {
     pageId: 'about',
     paths: ['/about.html', '/about'],
     title: '关于修茈 | 成都修茈科技有限公司',
-    description:
-      '了解成都修茈科技有限公司：专注 AI 单据处理、企业流程自动化与 XCAGI 工作台，为中小企业提供可落地的数字化方案。',
+    description: '了解成都修茈科技有限公司：专注 AI 单据处理、企业流程自动化与 XCAGI 工作台，为中小企业提供可落地的数字化方案。',
     welcomeTitle: 'Hi，想了解修茈科技是谁？',
     welcomeDesc: '本页介绍公司定位、XCAGI 工作台与 MODstore 的关系，可问我如何开始试用。',
-    summary:
-      '成都修茈科技（XCAGI）专注中小企业 AI 自动化：从单据识别到工作台与智能体市场，强调可落地实施与持续迭代。',
+    summary: '成都修茈科技（XCAGI）专注中小企业 AI 自动化：从单据识别到工作台与智能体市场，强调可落地实施与持续迭代。',
     highlights: ['公司定位与团队方向', 'XCAGI 工作台能力', '与 MODstore 智能体市场衔接'],
     quickActions: [
       { label: '公司是做什么的', message: '修茈科技是做什么的？' },
@@ -101,12 +98,10 @@ const CORP_PAGES: Record<string, PageKnowledge & { paths: string[] }> = {
     pageId: 'services',
     paths: ['/services.html', '/services'],
     title: '产品中心 | 成都修茈科技有限公司',
-    description:
-      '修茈科技产品中心：AI Excel Helper、标签打印、出货收货管理、微信消息自动化、知识库与 AI 工作流。',
+    description: '修茈科技产品中心：AI Excel Helper、标签打印、出货收货管理、微信消息自动化、知识库与 AI 工作流。',
     welcomeTitle: 'Hi，想了解哪类产品？',
     welcomeDesc: '可问我各产品线适用场景，或带您看行业方案与预约沟通。',
-    summary:
-      '产品中心涵盖 AI Excel 单据识别、标签打印与库存、出货收货、微信自动化、知识库与 MODstore 智能体市场等可组合能力。',
+    summary: '产品中心涵盖 AI Excel 单据识别、标签打印与库存、出货收货、微信自动化、知识库与 MODstore 智能体市场等可组合能力。',
     highlights: ['AI Excel Helper', '标签打印与库存', 'MODstore 市场', '微信与知识库自动化'],
     quickActions: [
       { label: 'AI Excel 单据识别', message: 'AI Excel 单据识别能做什么？' },
@@ -120,12 +115,10 @@ const CORP_PAGES: Record<string, PageKnowledge & { paths: string[] }> = {
     pageId: 'solutions',
     paths: ['/solutions.html', '/solutions'],
     title: '解决方案 | 成都修茈科技有限公司',
-    description:
-      '修茈科技解决方案覆盖制造贸易单据处理、园区服务协同、教育移动服务和企业 AI 工作流。',
+    description: '修茈科技解决方案覆盖制造贸易单据处理、园区服务协同、教育移动服务和企业 AI 工作流。',
     welcomeTitle: 'Hi，您的行业是哪种场景？',
     welcomeDesc: '可按制造贸易、园区、教育等方向了解方案，并查看对应案例。',
-    summary:
-      '解决方案覆盖制造贸易单据与库存协同、园区企业服务、教育移动服务，以及企业级 AI 工作流编排。',
+    summary: '解决方案覆盖制造贸易单据与库存协同、园区企业服务、教育移动服务，以及企业级 AI 工作流编排。',
     highlights: ['制造与贸易', '园区综合服务', '教育协同', 'AI 工作流'],
     quickActions: [
       { label: '制造贸易怎么落地', message: '制造贸易场景怎么落地？' },
@@ -139,8 +132,7 @@ const CORP_PAGES: Record<string, PageKnowledge & { paths: string[] }> = {
     pageId: 'cases',
     paths: ['/cases.html', '/cases'],
     title: '客户案例 | 成都修茈科技有限公司',
-    description:
-      '修茈科技案例中心：制造企业生产协同、园区企业服务平台、校园移动服务与业务协同。',
+    description: '修茈科技案例中心：制造企业生产协同、园区企业服务平台、校园移动服务与业务协同。',
     welcomeTitle: 'Hi，想看看哪类客户实践？',
     welcomeDesc: '案例中心汇总制造、园区、教育等方向，可指定行业让我推荐详情。',
     summary: '案例中心展示制造生产协同、园区企业服务平台、校园移动服务等方向的实践摘要与详情链接。',
@@ -157,12 +149,10 @@ const CORP_PAGES: Record<string, PageKnowledge & { paths: string[] }> = {
     pageId: 'case-manufacture',
     paths: ['/case-manufacture.html', '/case-manufacture'],
     title: '案例详情 - 生产协同与库存管理 | 成都修茈科技有限公司',
-    description:
-      '制造企业生产协同与库存管理案例，围绕生产计划、库存数据、报表分析和跨部门协同进行系统化建设。',
+    description: '制造企业生产协同与库存管理案例，围绕生产计划、库存数据、报表分析和跨部门协同进行系统化建设。',
     welcomeTitle: 'Hi，想了解制造协同案例？',
     welcomeDesc: '本页介绍生产计划、库存、报表与跨部门协同，可问挑战、方案或如何复用到您企业。',
-    summary:
-      '制造案例：围绕生产计划、仓储库存、报表分析与跨部门协同建设一体化系统，降低重复录入与错漏。',
+    summary: '制造案例：围绕生产计划、仓储库存、报表分析与跨部门协同建设一体化系统，降低重复录入与错漏。',
     highlights: ['生产计划协同', '库存数据统一', '报表分析', '跨部门流程'],
     quickActions: [
       { label: '案例解决了什么问题', message: '这个制造案例解决了什么问题？' },
@@ -176,8 +166,7 @@ const CORP_PAGES: Record<string, PageKnowledge & { paths: string[] }> = {
     pageId: 'case-park',
     paths: ['/case-park.html', '/case-park'],
     title: '案例详情 - 园区企业综合服务平台 | 成都修茈科技有限公司',
-    description:
-      '园区企业综合服务平台案例，建设企业服务、事项办理、统计分析和领导驾驶舱等能力。',
+    description: '园区企业综合服务平台案例，建设企业服务、事项办理、统计分析和领导驾驶舱等能力。',
     welcomeTitle: 'Hi，想了解园区服务案例？',
     welcomeDesc: '本页介绍企业服务、事项办理、统计与领导驾驶舱，可问实施路径或预约交流。',
     summary: '园区案例：整合企业服务、事项办理、数据统计与领导驾驶舱，提升园区数字化管理效率。',
@@ -194,8 +183,7 @@ const CORP_PAGES: Record<string, PageKnowledge & { paths: string[] }> = {
     pageId: 'case-edu',
     paths: ['/case-edu.html', '/case-edu'],
     title: '案例详情 - 校园移动服务与业务协同 | 成都修茈科技有限公司',
-    description:
-      '校园移动服务与业务协同案例，整合通知、审批、服务申请和统计分析，提升师生服务体验。',
+    description: '校园移动服务与业务协同案例，整合通知、审批、服务申请和统计分析，提升师生服务体验。',
     welcomeTitle: 'Hi，想了解校园服务案例？',
     welcomeDesc: '本页介绍通知、审批、服务申请与统计，可问适用学校类型或对接方式。',
     summary: '教育案例：统一通知、审批、服务申请与数据统计，改善师生服务体验与管理效率。',
@@ -212,8 +200,7 @@ const CORP_PAGES: Record<string, PageKnowledge & { paths: string[] }> = {
     pageId: 'news',
     paths: ['/news.html', '/news'],
     title: '新闻资讯 | 成都修茈科技有限公司',
-    description:
-      '修茈科技新闻资讯与行业观察：企业 AI 自动化、单据处理、Agent 趋势与中小企业数字化。',
+    description: '修茈科技新闻资讯与行业观察：企业 AI 自动化、单据处理、Agent 趋势与中小企业数字化。',
     welcomeTitle: 'Hi，想了解最新动态？',
     welcomeDesc: '可问公司新闻、行业观察，或带您看产品与预约沟通。',
     summary: '新闻资讯栏目提供公司动态、产品更新与行业观察，帮助了解 AI 自动化与单据处理趋势。',
@@ -230,12 +217,10 @@ const CORP_PAGES: Record<string, PageKnowledge & { paths: string[] }> = {
     pageId: 'honors',
     paths: ['/honors.html', '/honors'],
     title: '资质与能力 | 成都修茈科技有限公司',
-    description:
-      '成都修茈科技有限公司能力说明：软件开发、项目实施、信息安全、服务机制和持续迭代能力。',
+    description: '成都修茈科技有限公司能力说明：软件开发、项目实施、信息安全、服务机制和持续迭代能力。',
     welcomeTitle: 'Hi，想了解合作保障？',
     welcomeDesc: '本页说明研发、交付、安全与服务机制（以实际公示为准），可问资质或预约沟通。',
-    summary:
-      '能力说明涵盖软件开发、项目实施、信息安全、服务机制与持续迭代；具体资质证照以实际公示为准。',
+    summary: '能力说明涵盖软件开发、项目实施、信息安全、服务机制与持续迭代；具体资质证照以实际公示为准。',
     highlights: ['软件开发能力', '项目实施', '信息安全', '服务与迭代机制'],
     quickActions: [
       { label: '交付与服务机制', message: '修茈科技的服务和交付机制是怎样的？' },
@@ -249,13 +234,10 @@ const CORP_PAGES: Record<string, PageKnowledge & { paths: string[] }> = {
     pageId: 'contact',
     paths: ['/contact.html', '/contact'],
     title: '联系我们 | 成都修茈科技有限公司',
-    description:
-      '联系成都修茈科技有限公司，咨询 AI 单据处理、企业自动化、MODstore 智能体市场和数字化解决方案。',
+    description: '联系成都修茈科技有限公司，咨询 AI 单据处理、企业自动化、MODstore 智能体市场和数字化解决方案。',
     welcomeTitle: 'Hi，我来帮您填需求问卷',
-    welcomeDesc:
-      '告诉我公司与系统类型，我可一键预填右侧问卷，您简单改改就能提交。',
-    summary:
-      '联系我们页提供预约方案沟通表单，可说明单据识别、标签打印、AI 工作台等需求，我们会尽快回复。',
+    welcomeDesc: '告诉我公司与系统类型，我可一键预填右侧问卷，您简单改改就能提交。',
+    summary: '联系我们页提供预约方案沟通表单，可说明单据识别、标签打印、AI 工作台等需求，我们会尽快回复。',
     highlights: ['预约方案沟通', '场景需求说明', '销售与技术支持入口'],
     quickActions: [
       {
@@ -279,12 +261,10 @@ const CORP_PAGES: Record<string, PageKnowledge & { paths: string[] }> = {
     pageId: 'excel-to-ai',
     paths: ['/excel-to-ai.html', '/excel-to-ai'],
     title: 'Excel → AI 上传工具 | 成都修茈科技有限公司',
-    description:
-      '在线体验 AI Excel 单据识别：上传出货单、收货单等表格，自动提取关键字段，了解修茈科技单据处理能力。',
+    description: '在线体验 AI Excel 单据识别：上传出货单、收货单等表格，自动提取关键字段，了解修茈科技单据处理能力。',
     welcomeTitle: 'Hi，想体验 Excel 识别？',
     welcomeDesc: '本页可上传表格试识别；完整流程与打印联动见产品中心，也可预约方案沟通。',
-    summary:
-      'Excel → AI 工具页用于快速体验表格单据识别，提取产品、数量、价格等字段，完整能力见 AI Excel Helper 与产品中心。',
+    summary: 'Excel → AI 工具页用于快速体验表格单据识别，提取产品、数量、价格等字段，完整能力见 AI Excel Helper 与产品中心。',
     highlights: ['上传 Excel 体验', '字段自动提取', '对接完整产品线'],
     quickActions: [
       { label: '上传工具怎么用', message: 'Excel 上传工具怎么用？' },
@@ -321,8 +301,7 @@ const CORP_PAGES: Record<string, PageKnowledge & { paths: string[] }> = {
     description: '下载 XCAGI 桌面端与相关产品包，查看版本与系统要求。',
     welcomeTitle: 'Hi，需要下载 XCAGI？',
     welcomeDesc: '可问 macOS、Windows、Android 安装包、系统要求或授权购买。',
-    summary:
-      '这里是 XCAGI 产品下载页，可选 macOS、Windows 或 Android 安装包，并查看版本与系统要求。',
+    summary: '这里是 XCAGI 产品下载页，可选 macOS、Windows 或 Android 安装包，并查看版本与系统要求。',
     highlights: ['macOS / Windows / Android', '版本与系统要求', '授权与试用'],
     quickActions: [
       { label: '怎么下载', message: '怎么下载 XCAGI？' },
@@ -430,20 +409,15 @@ const CORP_PAGES: Record<string, PageKnowledge & { paths: string[] }> = {
     welcomeDesc: '可问数据处理、账号与联系方式；具体条款以页面正文为准。',
     summary: '本页说明服务协议、隐私保护与联系方式。',
     highlights: ['隐私保护', '服务协议', '联系方式'],
-    quickActions: [
-      { label: '如何联系', message: '怎么联系你们？' },
-      CORP_CONTACT_NAV,
-    ],
+    quickActions: [{ label: '如何联系', message: '怎么联系你们？' }, CORP_CONTACT_NAV],
   },
   'market-about': {
     pageId: 'market-about',
     paths: [],
     title: 'XC AGI 市场 | 智能员工与 AI 工作台',
-    description:
-      '修茈科技 AI 市场：组合 Mod 与 AI 员工，处理单据、流程与报表；支持注册试用与进入工作台。',
+    description: '修茈科技 AI 市场：组合 Mod 与 AI 员工，处理单据、流程与报表；支持注册试用与进入工作台。',
     welcomeDesc: '这是 AI 市场公开介绍页。可了解智能员工能力，或引导您注册、查看会员方案。',
-    summary:
-      'AI 市场落地页介绍可复制的智能员工团队：单据识别、自动化处理、7×24 运行与多行业场景，可注册进入工作台。',
+    summary: 'AI 市场落地页介绍可复制的智能员工团队：单据识别、自动化处理、7×24 运行与多行业场景，可注册进入工作台。',
     highlights: ['智能单据识别', '自动化处理', '7×24 AI 员工', '免费注册试用'],
     quickActions: [
       { label: '有哪些能力', message: 'AI 市场有什么功能？' },
@@ -633,11 +607,7 @@ function synthesizeCorpPageKnowledge(pageId: string): PageKnowledge {
     welcomeDesc: '想了解产品、案例或预约沟通，直接问我，或点快捷问题。',
     summary: '本页为官网相关页面，可问产品能力、下载试用或预约方案沟通。',
     highlights: ['产品与方案', '下载试用', '预约沟通'],
-    quickActions: [
-      { label: '介绍 XCAGI', message: 'XCAGI 是什么？能做什么？' },
-      CORP_CONTACT_NAV,
-      CORP_MARKET_NAV,
-    ],
+    quickActions: [{ label: '介绍 XCAGI', message: 'XCAGI 是什么？能做什么？' }, CORP_CONTACT_NAV, CORP_MARKET_NAV],
   }
 }
 
@@ -683,13 +653,8 @@ export function getMarketWelcomeDesc(routeName?: string | null): string {
   return page.welcomeDesc || page.summary
 }
 
-export function getStructuredPageSummary(opts: {
-  corpPathname?: string
-  routeName?: string | null
-  domExcerpt?: string
-}): string {
-  const corp =
-    opts.corpPathname != null ? getCorpPageKnowledge(undefined, opts.corpPathname) : null
+export function getStructuredPageSummary(opts: { corpPathname?: string; routeName?: string | null; domExcerpt?: string }): string {
+  const corp = opts.corpPathname != null ? getCorpPageKnowledge(undefined, opts.corpPathname) : null
   const market = opts.routeName ? getMarketPageKnowledge(opts.routeName) : null
   const page = market || corp
   if (!page) return opts.domExcerpt?.slice(0, 800) || ''

@@ -34,33 +34,33 @@
 
 ### 1.2 各模块完成度
 
-| 模块 | 完成度 | 关键缺口 |
-|------|--------|---------|
-| 用户注册/登录 | 85% | 缺忘记密码、Token 刷新、用户资料编辑 |
-| 商品浏览/购买 | 70% | 购买与支付衔接断裂、缺评价/购物车 |
-| 支付/钱包 | 75% | 金额校验、幂等性、并发安全、微信支付 |
-| 权益发放 | 80% | Java 端逻辑错误、权益验证接口缺失 |
-| AI 员工制作 | 75% | 向导与 BlockBuilder 关系不清、模板联动 |
-| AI 员工执行 | 50% | Excel/OCR/知识库/微信通知均为占位 |
-| 工作流编排 | 70% | 连线交互不完整、无版本管理 |
-| 退款售后 | 40% | 无管理员审核、无支付宝退款接口调用 |
-| 通知系统 | 60% | 无实时推送、无分类/角标/跳转 |
-| 门户网站 | 50% | 内容为示例、表单无后端、无产品截图 |
-| 公网部署 | 30% | HTTPS/域名/生产密钥/数据库迁移均未完成 |
+| 模块          | 完成度 | 关键缺口                               |
+| ------------- | ------ | -------------------------------------- |
+| 用户注册/登录 | 85%    | 缺忘记密码、Token 刷新、用户资料编辑   |
+| 商品浏览/购买 | 70%    | 购买与支付衔接断裂、缺评价/购物车      |
+| 支付/钱包     | 75%    | 金额校验、幂等性、并发安全、微信支付   |
+| 权益发放      | 80%    | Java 端逻辑错误、权益验证接口缺失      |
+| AI 员工制作   | 75%    | 向导与 BlockBuilder 关系不清、模板联动 |
+| AI 员工执行   | 50%    | Excel/OCR/知识库/微信通知均为占位      |
+| 工作流编排    | 70%    | 连线交互不完整、无版本管理             |
+| 退款售后      | 40%    | 无管理员审核、无支付宝退款接口调用     |
+| 通知系统      | 60%    | 无实时推送、无分类/角标/跳转           |
+| 门户网站      | 50%    | 内容为示例、表单无后端、无产品截图     |
+| 公网部署      | 30%    | HTTPS/域名/生产密钥/数据库迁移均未完成 |
 
 **整体闭环完成度：≈ 60%**
 
 ### 1.3 前序文档已覆盖的修复（本文档不重复）
 
-| 修复项 | 文档 |
-|--------|------|
-| 员工真实执行引擎（_cognition_real / _actions_real / _perception_real / _memory_real） | MODstore_P0_P1_P2修复实施文档.md |
-| 工作流触发器调度器（workflow_scheduler.py） | MODstore_P0_P1_P2修复实施文档.md |
-| 消息通知系统（notification_service.py / notification_api.py） | MODstore_P0_P1_P2修复实施文档.md |
-| 配额检查中间件接入 | MODstore_P0_P1_P2修复实施文档.md |
-| 退款申请 API（用户端 refund_api.py） | MODstore_P0_P1_P2修复实施文档.md |
-| 使用统计面板（analytics_api.py） | MODstore_P0_P1_P2修复实施文档.md |
-| 健康检查 API（health_api.py） | MODstore_P0_P1_P2修复实施文档.md |
+| 修复项                                                                                    | 文档                             |
+| ----------------------------------------------------------------------------------------- | -------------------------------- |
+| 员工真实执行引擎（\_cognition_real / \_actions_real / \_perception_real / \_memory_real） | MODstore_P0_P1_P2修复实施文档.md |
+| 工作流触发器调度器（workflow_scheduler.py）                                               | MODstore_P0_P1_P2修复实施文档.md |
+| 消息通知系统（notification_service.py / notification_api.py）                             | MODstore_P0_P1_P2修复实施文档.md |
+| 配额检查中间件接入                                                                        | MODstore_P0_P1_P2修复实施文档.md |
+| 退款申请 API（用户端 refund_api.py）                                                      | MODstore_P0_P1_P2修复实施文档.md |
+| 使用统计面板（analytics_api.py）                                                          | MODstore_P0_P1_P2修复实施文档.md |
+| 健康检查 API（health_api.py）                                                             | MODstore_P0_P1_P2修复实施文档.md |
 
 ---
 
@@ -71,6 +71,7 @@
 **严重程度**：🔴 阻断级 — 攻击者可伪造小额支付冒充大额订单
 
 **涉及文件**：
+
 - `modstore_server/payment_api.py`（Python 后端）
 - `modstore_server/alipay_service.py`（Python 后端）
 
@@ -229,10 +230,12 @@ async def run_employee(
 **严重程度**：🔴 阻断级 — 签名密钥在前端暴露，形同虚设
 
 **涉及文件**：
+
 - `market/src/api.js`（前端）
 - `modstore_server/payment_api.py`（后端）
 
 **现状**：
+
 - 前端 `generateSignature()` 使用 `VITE_PAYMENT_SECRET` 生成签名
 - 默认回退 `'default_secret_key'`，生产环境若未配置将使用弱密钥
 - 前端密钥可被浏览器开发者工具查看，签名机制可被绕过
@@ -298,11 +301,11 @@ async function paymentCheckout(params) {
       total_amount: params.total_amount,
       wallet_recharge: params.wallet_recharge || false,
     }),
-  });
+  })
 
-  if (!signResult.ok) throw new Error('签名请求失败');
+  if (!signResult.ok) throw new Error('签名请求失败')
 
-  const signData = await signResult.json();
+  const signData = await signResult.json()
 
   // 使用后端返回的签名发起支付
   return fetchWithAuth('/api/payment/checkout', {
@@ -314,7 +317,7 @@ async function paymentCheckout(params) {
       timestamp: signData.timestamp,
       signature: signData.signature,
     }),
-  });
+  })
 }
 ```
 
@@ -336,18 +339,18 @@ async function paymentCheckout(params) {
 
 **现状问题汇总**：
 
-| 问题 | 严重程度 |
-|------|---------|
-| 无 JWT 认证过滤器，所有认证请求返回 403 | 严重 |
-| 无登录/注册接口 | 严重 |
-| 所有 Controller 硬编码 user.setId(1L) | 严重 |
-| AuthController 返回硬编码用户 | 严重 |
-| fulfillOrder 对所有订单类型都执行钱包充值 | 严重 |
-| 无退款代码 | 严重 |
-| 钱包无并发控制（双花风险） | 严重 |
-| 金额使用 double 类型 | 高 |
-| 手写 JSON 序列化不处理转义 | 高 |
-| AlipayConfig Request Bean 线程不安全 | 高 |
+| 问题                                      | 严重程度 |
+| ----------------------------------------- | -------- |
+| 无 JWT 认证过滤器，所有认证请求返回 403   | 严重     |
+| 无登录/注册接口                           | 严重     |
+| 所有 Controller 硬编码 user.setId(1L)     | 严重     |
+| AuthController 返回硬编码用户             | 严重     |
+| fulfillOrder 对所有订单类型都执行钱包充值 | 严重     |
+| 无退款代码                                | 严重     |
+| 钱包无并发控制（双花风险）                | 严重     |
+| 金额使用 double 类型                      | 高       |
+| 手写 JSON 序列化不处理转义                | 高       |
+| AlipayConfig Request Bean 线程不安全      | 高       |
 
 **决策建议**：
 
@@ -379,6 +382,7 @@ Python 后端的支付系统（`payment_api.py` + `alipay_service.py`）已经�
 **严重程度**：🔴 阻断级 — JSON 文件 + SQLite 双存储数据不一致
 
 **涉及文件**：
+
 - `modstore_server/catalog_store.py`
 - `modstore_server/catalog_api.py`
 
@@ -440,6 +444,7 @@ def sync_catalog_from_json(db_session):
 **严重程度**：🟠 严重 — 用户可申请退款但无管理员审批
 
 **涉及文件**：
+
 - `modstore_server/refund_api.py`（后端，已存在用户端）
 - `market/src/views/RefundApplyView.vue`（前端，已存在）
 
@@ -566,6 +571,7 @@ def refund_order(order_no: str, amount: float, reason: str = "用户申请退款
 **步骤 3：前端退款页面增强**
 
 在 `RefundApplyView.vue` 中添加：
+
 - 从订单列表选择订单号（而非手动输入）
 - 显示退款进度时间线
 - 退款政策说明
@@ -578,6 +584,7 @@ def refund_order(order_no: str, amount: float, reason: str = "用户申请退款
 **严重程度**：🟠 严重 — 付费商品无法走支付结账流程
 
 **涉及文件**：
+
 - `market/src/views/CatalogDetailView.vue`（前端）
 - `market/src/api.js`（前端）
 
@@ -603,13 +610,13 @@ async function handlePurchase() {
     // 员工包：跳转套餐选择
     router.push({
       path: '/plans',
-      query: { item_id: item.id, subject: item.name, amount: item.price }
+      query: { item_id: item.id, subject: item.name, amount: item.price },
     })
   } else {
     // 其他商品：直接跳转结账
     router.push({
       path: `/checkout/new`,
-      query: { item_id: item.id, subject: item.name, amount: item.price }
+      query: { item_id: item.id, subject: item.name, amount: item.price },
     })
   }
 }
@@ -624,6 +631,7 @@ async function handlePurchase() {
 **严重程度**：🟠 严重 — 用户忘记密码无法自助恢复
 
 **涉及文件**：
+
 - `modstore_server/auth_service.py`（后端）
 - `market/src/router/index.js`（前端路由）
 - 新增 `market/src/views/ForgotPasswordView.vue`
@@ -730,6 +738,7 @@ class ResetPasswordBody(BaseModel):
 **严重程度**：🟠 严重 — JWT 过期后用户被强制登出
 
 **涉及文件**：
+
 - `modstore_server/auth_service.py`（后端）
 - `market/src/api.js`（前端）
 
@@ -788,7 +797,7 @@ function subscribeTokenRefresh(cb) {
 }
 
 function onTokenRefreshed(newToken) {
-  refreshSubscribers.forEach(cb => cb(newToken))
+  refreshSubscribers.forEach((cb) => cb(newToken))
   refreshSubscribers = []
 }
 
@@ -797,7 +806,7 @@ async function fetchWithAuth(url, options = {}) {
   if (token) {
     options.headers = {
       ...options.headers,
-      'Authorization': `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
     }
   }
 
@@ -809,7 +818,7 @@ async function fetchWithAuth(url, options = {}) {
       try {
         const refreshRes = await fetch('/api/auth/refresh', {
           method: 'POST',
-          headers: { 'Authorization': `Bearer ${token}` },
+          headers: { Authorization: `Bearer ${token}` },
         })
         if (refreshRes.ok) {
           const data = await refreshRes.json()
@@ -830,8 +839,8 @@ async function fetchWithAuth(url, options = {}) {
     }
 
     // 等待刷新完成
-    return new Promise(resolve => {
-      subscribeTokenRefresh(newToken => {
+    return new Promise((resolve) => {
+      subscribeTokenRefresh((newToken) => {
         options.headers['Authorization'] = `Bearer ${newToken}`
         resolve(fetch(url, options))
       })
@@ -985,11 +994,9 @@ def wallet_deduct_balance(user_id: int, amount: float, db_session, description: 
   <div class="order-list-page">
     <h2>我的订单</h2>
     <div class="order-filters">
-      <button
-        v-for="f in filters" :key="f.value"
-        :class="{ active: currentFilter === f.value }"
-        @click="currentFilter = f.value"
-      >{{ f.label }}</button>
+      <button v-for="f in filters" :key="f.value" :class="{ active: currentFilter === f.value }" @click="currentFilter = f.value">
+        {{ f.label }}
+      </button>
     </div>
     <div class="order-list">
       <div v-for="order in orders" :key="order.order_no" class="order-card" @click="goDetail(order)">
@@ -1202,6 +1209,7 @@ def _action_wechat_notify(config: dict, reasoning: dict, task: str):
 ### 4.2 通知系统增强
 
 **涉及文件**：
+
 - `market/src/views/NotificationCenter.vue`（前端）
 - `market/src/App.vue`（前端）
 
@@ -1271,10 +1279,13 @@ onUnmounted(() => {
 <template>
   <div class="notification-filters">
     <button
-      v-for="cat in categories" :key="cat.value"
+      v-for="cat in categories"
+      :key="cat.value"
       :class="{ active: currentCategory === cat.value }"
       @click="currentCategory = cat.value"
-    >{{ cat.label }}</button>
+    >
+      {{ cat.label }}
+    </button>
   </div>
 </template>
 
@@ -1319,6 +1330,7 @@ function handleNotificationClick(notification) {
 ### 4.3 订单管理完善
 
 **涉及文件**：
+
 - `modstore_server/payment_api.py`（后端）
 
 #### 4.3.1 订单取消接口
@@ -1394,7 +1406,7 @@ function retryPayment() {
       item_id: route.query.item_id,
       subject: route.query.subject,
       amount: route.query.amount,
-    }
+    },
   })
 }
 </script>
@@ -1504,6 +1516,7 @@ async function saveWorkflow() {
 ### 4.5 员工制作向导与 BlockBuilder 统一
 
 **涉及文件**：
+
 - `market/src/views/EmployeeAuthoringView.vue`
 - `market/src/views/employee-steps/Step1Identity.vue` ~ `Step7Management.vue`
 
@@ -1518,14 +1531,10 @@ async function saveWorkflow() {
     <div class="mode-info">
       <span v-if="currentMode === 'wizard'" class="mode-badge">简化向导</span>
       <span v-else class="mode-badge advanced">高级构建器</span>
-      <button @click="toggleMode" class="btn-toggle">
-        切换到{{ currentMode === 'wizard' ? '高级构建器' : '简化向导' }}
-      </button>
+      <button @click="toggleMode" class="btn-toggle">切换到{{ currentMode === 'wizard' ? '高级构建器' : '简化向导' }}</button>
     </div>
     <p class="mode-hint">
-      {{ currentMode === 'wizard'
-        ? '简化向导：通过开关快速配置员工各层能力'
-        : '高级构建器：通过拖拽画布和 JSON 编辑精确控制员工行为' }}
+      {{ currentMode === 'wizard' ? '简化向导：通过开关快速配置员工各层能力' : '高级构建器：通过拖拽画布和 JSON 编辑精确控制员工行为' }}
     </p>
   </div>
 </template>
@@ -1592,6 +1601,7 @@ function onTemplateSelected(template) {
 ### 5.1 门户网站内容完善
 
 **涉及文件**：
+
 - `contact.html`（联系表单后端对接）
 - `about.html` / `services.html` / `cases.html`（内容真实性）
 
@@ -2055,27 +2065,27 @@ ALTER TABLE users ADD COLUMN last_login DATETIME;
 
 ### 7.1 新增页面
 
-| 文件 | 说明 | 优先级 |
-|------|------|--------|
-| `views/NotFoundView.vue` | 404 页面 | P1 |
-| `views/ForgotPasswordView.vue` | 忘记密码 | P1 |
-| `views/OrderListView.vue` | 订单列表 | P1 |
-| `views/AccountSettingsView.vue` | 账户设置 | P3 |
+| 文件                            | 说明     | 优先级 |
+| ------------------------------- | -------- | ------ |
+| `views/NotFoundView.vue`        | 404 页面 | P1     |
+| `views/ForgotPasswordView.vue`  | 忘记密码 | P1     |
+| `views/OrderListView.vue`       | 订单列表 | P1     |
+| `views/AccountSettingsView.vue` | 账户设置 | P3     |
 
 ### 7.2 修改现有页面
 
-| 文件 | 修改内容 | 优先级 |
-|------|----------|--------|
-| `api.js` | 移除前端签名逻辑，改为后端签名；添加 Token 自动刷新 | P0 |
-| `App.vue` | 添加通知角标、用户菜单（退出登录/账户设置） | P1 |
-| `router/index.js` | 添加 404 路由、忘记密码路由、订单列表路由、账户设置路由 | P1 |
-| `CatalogDetailView.vue` | 付费商品跳转支付结账流程；添加评价/收藏 | P1/P3 |
-| `RefundApplyView.vue` | 从订单列表选择订单号；退款进度时间线；退款政策说明 | P1 |
-| `NotificationCenter.vue` | 分类筛选；点击跳转；删除通知 | P2 |
-| `PaymentCheckoutView.vue` | 支付超时后重新支付按钮 | P2 |
-| `WorkflowView.vue` | 连线交互补全；保存策略优化 | P2 |
-| `EmployeeAuthoringView.vue` | 模式切换说明；模板预填充 | P2 |
-| `WalletView.vue` | 添加扣款 API 调用（购买商品时） | P1 |
+| 文件                        | 修改内容                                                | 优先级 |
+| --------------------------- | ------------------------------------------------------- | ------ |
+| `api.js`                    | 移除前端签名逻辑，改为后端签名；添加 Token 自动刷新     | P0     |
+| `App.vue`                   | 添加通知角标、用户菜单（退出登录/账户设置）             | P1     |
+| `router/index.js`           | 添加 404 路由、忘记密码路由、订单列表路由、账户设置路由 | P1     |
+| `CatalogDetailView.vue`     | 付费商品跳转支付结账流程；添加评价/收藏                 | P1/P3  |
+| `RefundApplyView.vue`       | 从订单列表选择订单号；退款进度时间线；退款政策说明      | P1     |
+| `NotificationCenter.vue`    | 分类筛选；点击跳转；删除通知                            | P2     |
+| `PaymentCheckoutView.vue`   | 支付超时后重新支付按钮                                  | P2     |
+| `WorkflowView.vue`          | 连线交互补全；保存策略优化                              | P2     |
+| `EmployeeAuthoringView.vue` | 模式切换说明；模板预填充                                | P2     |
+| `WalletView.vue`            | 添加扣款 API 调用（购买商品时）                         | P1     |
 
 ### 7.3 API 封装新增
 
@@ -2171,48 +2181,48 @@ echo "chromadb>=0.4.0" >> requirements.txt
 
 ### 阶段一（2-3 天）：P0 安全与关键逻辑
 
-| 序号 | 修复项 | 预估 |
-|------|--------|------|
-| 1 | 支付宝通知金额校验 + 幂等性 | 0.5 天 |
-| 2 | 员工执行权限校验 | 0.5 天 |
-| 3 | 前端支付签名移至后端 | 1 天 |
-| 4 | Java 支付服务决策（弃用/修复） | 0.5 天 |
-| 5 | Catalog 双存储同步 | 0.5 天 |
+| 序号 | 修复项                         | 预估   |
+| ---- | ------------------------------ | ------ |
+| 1    | 支付宝通知金额校验 + 幂等性    | 0.5 天 |
+| 2    | 员工执行权限校验               | 0.5 天 |
+| 3    | 前端支付签名移至后端           | 1 天   |
+| 4    | Java 支付服务决策（弃用/修复） | 0.5 天 |
+| 5    | Catalog 双存储同步             | 0.5 天 |
 
 ### 阶段二（3-4 天）：P1 核心体验
 
-| 序号 | 修复项 | 预估 |
-|------|--------|------|
-| 6 | 退款管理员审核 + 支付宝退款接口 | 1 天 |
-| 7 | 购买→支付结账流程衔接 | 0.5 天 |
-| 8 | 忘记密码 + 密码重置 | 0.5 天 |
-| 9 | Token 刷新机制 | 0.5 天 |
-| 10 | 钱包并发安全 | 0.5 天 |
-| 11 | 404 页面 + 订单列表页 | 0.5 天 |
+| 序号 | 修复项                          | 预估   |
+| ---- | ------------------------------- | ------ |
+| 6    | 退款管理员审核 + 支付宝退款接口 | 1 天   |
+| 7    | 购买→支付结账流程衔接           | 0.5 天 |
+| 8    | 忘记密码 + 密码重置             | 0.5 天 |
+| 9    | Token 刷新机制                  | 0.5 天 |
+| 10   | 钱包并发安全                    | 0.5 天 |
+| 11   | 404 页面 + 订单列表页           | 0.5 天 |
 
 ### 阶段三（3-5 天）：P2 运营优化
 
-| 序号 | 修复项 | 预估 |
-|------|--------|------|
-| 12 | Excel 解析（openpyxl） | 0.5 天 |
-| 13 | OCR / 图片解析（Vision Model） | 1 天 |
-| 14 | 长期记忆 / 知识库（ChromaDB） | 1 天 |
-| 15 | 微信通知真实集成 | 0.5 天 |
-| 16 | 通知系统增强（角标/分类/跳转） | 1 天 |
-| 17 | 订单管理完善（取消/超时/重新支付） | 0.5 天 |
-| 18 | 工作流编辑器修复（连线/保存） | 1 天 |
-| 19 | 员工制作向导优化（模式切换/模板预填充） | 0.5 天 |
+| 序号 | 修复项                                  | 预估   |
+| ---- | --------------------------------------- | ------ |
+| 12   | Excel 解析（openpyxl）                  | 0.5 天 |
+| 13   | OCR / 图片解析（Vision Model）          | 1 天   |
+| 14   | 长期记忆 / 知识库（ChromaDB）           | 1 天   |
+| 15   | 微信通知真实集成                        | 0.5 天 |
+| 16   | 通知系统增强（角标/分类/跳转）          | 1 天   |
+| 17   | 订单管理完善（取消/超时/重新支付）      | 0.5 天 |
+| 18   | 工作流编辑器修复（连线/保存）           | 1 天   |
+| 19   | 员工制作向导优化（模式切换/模板预填充） | 0.5 天 |
 
 ### 阶段四（3-5 天）：P3 扩展与部署
 
-| 序号 | 修复项 | 预估 |
-|------|--------|------|
-| 20 | 门户网站联系表单后端 + 内容完善 | 1 天 |
-| 21 | 公网部署（HTTPS/域名/生产密钥） | 1 天 |
-| 22 | 数据库迁移（SQLite → PostgreSQL） | 1 天 |
-| 23 | 商品运营功能（评价/收藏） | 1 天 |
-| 24 | 用户账户管理 | 0.5 天 |
-| 25 | 微信电话业务员工作流 | 0.5 天 |
+| 序号 | 修复项                            | 预估   |
+| ---- | --------------------------------- | ------ |
+| 20   | 门户网站联系表单后端 + 内容完善   | 1 天   |
+| 21   | 公网部署（HTTPS/域名/生产密钥）   | 1 天   |
+| 22   | 数据库迁移（SQLite → PostgreSQL） | 1 天   |
+| 23   | 商品运营功能（评价/收藏）         | 1 天   |
+| 24   | 用户账户管理                      | 0.5 天 |
+| 25   | 微信电话业务员工作流              | 0.5 天 |
 
 **总计预估：11-17 天**
 
@@ -2222,28 +2232,28 @@ echo "chromadb>=0.4.0" >> requirements.txt
 
 ### 11.1 安全风险
 
-| 风险 | 缓解措施 |
-|------|---------|
+| 风险         | 缓解措施                           |
+| ------------ | ---------------------------------- |
 | 支付密钥泄露 | 签名逻辑移至后端，密钥不暴露给前端 |
-| JWT 密钥弱 | 生产环境必须配置强随机密钥 |
-| 金额篡改 | 通知处理时校验金额 |
-| 并发双花 | 钱包操作使用行级锁 |
+| JWT 密钥弱   | 生产环境必须配置强随机密钥         |
+| 金额篡改     | 通知处理时校验金额                 |
+| 并发双花     | 钱包操作使用行级锁                 |
 
 ### 11.2 兼容性风险
 
-| 风险 | 缓解措施 |
-|------|---------|
-| 前端签名移除后旧版本不兼容 | 部署时前后端同步更新 |
-| 数据库迁移数据丢失 | 迁移前备份 SQLite 数据库 |
-| ChromaDB 依赖冲突 | 使用独立虚拟环境或 Docker 隔离 |
+| 风险                       | 缓解措施                       |
+| -------------------------- | ------------------------------ |
+| 前端签名移除后旧版本不兼容 | 部署时前后端同步更新           |
+| 数据库迁移数据丢失         | 迁移前备份 SQLite 数据库       |
+| ChromaDB 依赖冲突          | 使用独立虚拟环境或 Docker 隔离 |
 
 ### 11.3 运营风险
 
-| 风险 | 缓解措施 |
-|------|---------|
-| LLM 调用成本增加 | 配额检查 + 用户 BYOK |
-| 退款资金安全 | 管理员审核 + 退款时限控制 |
-| 员工执行沙盒逃逸 | Docker 隔离 + 资源限制 |
+| 风险             | 缓解措施                  |
+| ---------------- | ------------------------- |
+| LLM 调用成本增加 | 配额检查 + 用户 BYOK      |
+| 退款资金安全     | 管理员审核 + 退款时限控制 |
+| 员工执行沙盒逃逸 | Docker 隔离 + 资源限制    |
 
 ### 11.4 向后兼容
 

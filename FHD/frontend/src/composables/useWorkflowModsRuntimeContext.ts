@@ -1,10 +1,7 @@
 import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useModsStore } from '@/stores/mods'
-import {
-  isModWorkflowEmployeesActive,
-  type WorkflowDocsRuntimeContext,
-} from '@/utils/workflowEmployeeDocs'
+import { isModWorkflowEmployeesActive, type WorkflowDocsRuntimeContext } from '@/utils/workflowEmployeeDocs'
 
 /** 流程全景 / 员工工作流管理 / 副窗链接等与 Mod 相关的展示统一用同一套运行时上下文 */
 export function useWorkflowModsRuntimeContext() {
@@ -17,9 +14,7 @@ export function useWorkflowModsRuntimeContext() {
       clientModsUiOff: clientModsUiOff.value,
       modsForUi: modsForWorkflowUi.value,
       isModsListLoaded: isLoaded.value,
-      modsDisabledByServer:
-        typeof err === 'string' &&
-        (err.includes('XCAGI_DISABLE_MODS') || err.includes('Mod 扩展已关闭')),
+      modsDisabledByServer: typeof err === 'string' && (err.includes('XCAGI_DISABLE_MODS') || err.includes('Mod 扩展已关闭')),
     }
   })
 

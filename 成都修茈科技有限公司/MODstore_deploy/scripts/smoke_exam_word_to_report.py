@@ -9,6 +9,8 @@ import sys
 import uuid
 from pathlib import Path
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 MODSTORE_ROOT = Path(__file__).resolve().parents[1]
 if str(MODSTORE_ROOT) not in sys.path:
     sys.path.insert(0, str(MODSTORE_ROOT))
@@ -76,7 +78,7 @@ def _simulate_execute_file(
             )
             out["error"] = err or "Word 读取未产出 document_full.json"
         return out
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         return {"ok": False, "error": str(exc)[:800]}
     finally:
         shutil.rmtree(session_dir, ignore_errors=True)
@@ -122,7 +124,7 @@ def main() -> int:
 
     try:
         json_payload = _json_bytes_from_word_result(word_res)
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         print(
             json.dumps(
                 {"ok": False, "stage": "prepare_json", "error": str(exc)},

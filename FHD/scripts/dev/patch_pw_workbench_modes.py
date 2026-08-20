@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """P-W 对齐侧栏入口：聊/做/说分镜 + 客服/沙箱；去掉无入口 about。"""
+
 from __future__ import annotations
 
 import sys
@@ -13,7 +14,7 @@ TARGET = Path(
 
 MARKER = "_PW_WB_MODE_PAGES"
 
-WB_PAGES = '''
+WB_PAGES = """
 _PW_WB_MODE_PAGES: Tuple[Tuple[str, str, str], ...] = (
     ("工作台·聊", "/market/workbench/home", "direct"),
     ("工作台·做", "/market/workbench/home", "make"),
@@ -24,9 +25,9 @@ _PW_SIDEBAR_PAGES: Tuple[Tuple[str, str], ...] = (
     ("AI 客服", "/market/customer-service"),
     ("沙箱测试", "/market/sandbox"),
 )
-'''
+"""
 
-BUILD_LOOP = '''
+BUILD_LOOP = """
     for name, path, mode in _PW_WB_MODE_PAGES:
         out.append(
             SurfaceTarget(
@@ -42,9 +43,9 @@ BUILD_LOOP = '''
     for name, path in _PW_SIDEBAR_PAGES:
         out.append(SurfaceTarget("P-W", "网站 P-W", name, path, "desktop"))
 
-'''
+"""
 
-APPLY_BRANCH = '''    if prepare.startswith("wb_mode:"):
+APPLY_BRANCH = """    if prepare.startswith("wb_mode:"):
         mode = prepare.split(":", 1)[1]
         labels = {"direct": "聊", "make": "做", "voice": "说"}
         label = labels.get(mode, "")
@@ -53,7 +54,7 @@ APPLY_BRANCH = '''    if prepare.startswith("wb_mode:"):
             await btn.first.click(timeout=min(timeout_ms, 20_000))
             await page.wait_for_timeout(800)
         return
-'''
+"""
 
 if __name__ == "__main__":
     text = TARGET.read_text(encoding="utf-8")

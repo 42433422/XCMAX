@@ -2,44 +2,75 @@
   <aside class="wb-sidebar" :class="{ 'wb-sidebar--collapsed': collapsed }">
     <div class="wb-sidebar-top">
       <button type="button" class="wb-sidebar-toggle" @click="$emit('toggle')" :aria-label="collapsed ? '展开侧栏' : '折叠侧栏'">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="0.5" y="2" width="15" height="12" rx="1.5" fill="none"/><rect x="2" y="4" width="3.5" height="8" rx="0.5" fill="currentColor"/></svg>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+          <rect x="0.5" y="2" width="15" height="12" rx="1.5" fill="none" />
+          <rect x="2" y="4" width="3.5" height="8" rx="0.5" fill="currentColor" />
+        </svg>
       </button>
     </div>
 
     <div class="wb-sidebar-bottom">
       <div class="wb-sidebar-nav-links">
         <a href="/market/workbench/home" class="wb-sidebar-mode-btn">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><rect x="1" y="2" width="14" height="10" rx="1.5"/><line x1="5" y1="14" x2="11" y2="14"/><line x1="8" y1="12" x2="8" y2="14"/></svg>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+            <rect x="1" y="2" width="14" height="10" rx="1.5" />
+            <line x1="5" y1="14" x2="11" y2="14" />
+            <line x1="8" y1="12" x2="8" y2="14" />
+          </svg>
           <span>工作台</span>
         </a>
         <a href="/market/plans" class="wb-sidebar-mode-btn">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M8 1.5l1.8 3.6 4 .6-2.9 2.8.7 4L8 10.4 4.4 12.5l.7-4L2.2 5.7l4-.6z"/></svg>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+            <path d="M8 1.5l1.8 3.6 4 .6-2.9 2.8.7 4L8 10.4 4.4 12.5l.7-4L2.2 5.7l4-.6z" />
+          </svg>
           <span>会员</span>
         </a>
         <a href="/market/ai-store" class="wb-sidebar-mode-btn">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2 4h12l-1 9H3L2 4z"/><path d="M5 4V2.5a3 3 0 016 0V4"/></svg>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+            <path d="M2 4h12l-1 9H3L2 4z" />
+            <path d="M5 4V2.5a3 3 0 016 0V4" />
+          </svg>
           <span>AI 市场</span>
         </a>
         <a href="/market/customer-service" class="wb-sidebar-mode-btn">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M3 8a5 5 0 0110 0v2a1 1 0 01-1 1H4a1 1 0 01-1-1V8z"/><path d="M6 13h4"/><path d="M8 11v2"/></svg>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+            <path d="M3 8a5 5 0 0110 0v2a1 1 0 01-1 1H4a1 1 0 01-1-1V8z" />
+            <path d="M6 13h4" />
+            <path d="M8 11v2" />
+          </svg>
           <span>AI 客服</span>
         </a>
         <a href="/market/ai-test" class="wb-sidebar-mode-btn">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2 5l6-3 6 3v6l-6 3-6-3V5z"/><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="5" x2="14" y2="11"/><line x1="14" y1="5" x2="2" y2="11"/></svg>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+            <path d="M2 5l6-3 6 3v6l-6 3-6-3V5z" />
+            <line x1="8" y1="2" x2="8" y2="14" />
+            <line x1="2" y1="5" x2="14" y2="11" />
+            <line x1="14" y1="5" x2="2" y2="11" />
+          </svg>
           <span>AI 测试</span>
         </a>
       </div>
       <div class="wb-sidebar-divider"></div>
       <button type="button" class="wb-sidebar-mode-btn" @click="$emit('open-settings')">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="8" r="2.5"/><path d="M8 1.5v1.2M8 13.3v1.2M1.5 8h1.2M13.3 8h1.2M3.4 3.4l.85.85M11.75 11.75l.85.85M3.4 12.6l.85-.85M11.75 4.25l.85-.85"/></svg>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+          <circle cx="8" cy="8" r="2.5" />
+          <path d="M8 1.5v1.2M8 13.3v1.2M1.5 8h1.2M13.3 8h1.2M3.4 3.4l.85.85M11.75 11.75l.85.85M3.4 12.6l.85-.85M11.75 4.25l.85-.85" />
+        </svg>
         <span>设置</span>
       </button>
       <a href="/market/notifications" class="wb-sidebar-mode-btn" title="通知">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M8 2a4 4 0 0 0-4 4v2.07l-.56 1.12A1.6 1.6 0 0 0 4.87 11.8h6.26a1.6 1.6 0 0 0 1.43-2.61L12 8.07V6a4 4 0 0 0-4-4z"/><path d="M6.5 13a1.5 1.5 0 0 0 3 0"/></svg>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round">
+          <path d="M8 2a4 4 0 0 0-4 4v2.07l-.56 1.12A1.6 1.6 0 0 0 4.87 11.8h6.26a1.6 1.6 0 0 0 1.43-2.61L12 8.07V6a4 4 0 0 0-4-4z" />
+          <path d="M6.5 13a1.5 1.5 0 0 0 3 0" />
+        </svg>
         <span>通知</span>
       </a>
       <a href="/market/wallet" class="wb-sidebar-mode-btn" title="钱包">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><rect x="1.5" y="4" width="13" height="9" rx="1.5"/><path d="M1.5 7h13"/><path d="M11 9.5h1.5"/></svg>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round">
+          <rect x="1.5" y="4" width="13" height="9" rx="1.5" />
+          <path d="M1.5 7h13" />
+          <path d="M11 9.5h1.5" />
+        </svg>
         <span>钱包</span>
       </a>
       <div class="wb-sidebar-user-row">
@@ -132,7 +163,9 @@ defineEmits<{
   cursor: pointer;
   padding: 0;
   flex-shrink: 0;
-  transition: background 180ms ease, color 180ms ease;
+  transition:
+    background 180ms ease,
+    color 180ms ease;
 }
 
 .wb-sidebar-toggle:hover {
@@ -153,7 +186,9 @@ defineEmits<{
   font-size: 13px;
   font-weight: 400;
   cursor: pointer;
-  transition: background 180ms ease, color 180ms ease;
+  transition:
+    background 180ms ease,
+    color 180ms ease;
 }
 
 .wb-sidebar-new-chat:hover {
@@ -200,7 +235,9 @@ defineEmits<{
   cursor: pointer;
   text-align: left;
   text-decoration: none;
-  transition: background 180ms ease, color 180ms ease;
+  transition:
+    background 180ms ease,
+    color 180ms ease;
 }
 
 .wb-sidebar-mode-btn:hover {
@@ -288,8 +325,13 @@ defineEmits<{
 }
 
 @keyframes wb-sidebar-balance-pulse {
-  0%, 100% { opacity: 0.4; }
-  50% { opacity: 0.8; }
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.8;
+  }
 }
 
 .wb-sidebar-logout-btn {
@@ -301,7 +343,9 @@ defineEmits<{
   cursor: pointer;
   padding: 2px 6px;
   border-radius: 4px;
-  transition: color 150ms ease, background 150ms ease;
+  transition:
+    color 150ms ease,
+    background 150ms ease;
 }
 
 .wb-sidebar-logout-btn:hover {

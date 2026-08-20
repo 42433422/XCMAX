@@ -117,7 +117,8 @@ describe('useAgentTaskWorkspace', () => {
   })
 
   it('archives completed tasks in the server SSOT without deleting a run', async () => {
-    apiMock.listTasks.mockResolvedValueOnce({ success: true, data: [serverTask('completed')] })
+    apiMock.listTasks
+      .mockResolvedValueOnce({ success: true, data: [serverTask('completed')] })
       .mockResolvedValue({ success: true, data: [] })
     const state = setup()
     await state.workspace.refreshTasks()

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { computeAutoLayout, computeGridLayout } from '@/composables/useAutoLayout'
 
 vi.mock('@dagrejs/dagre', () => ({
@@ -8,10 +8,16 @@ vi.mock('@dagrejs/dagre', () => ({
         private nodes: Map<string, any> = new Map()
         private edges: any[] = []
         private graphOpts: any = {}
-        setDefaultEdgeLabel(fn: () => any) {}
-        setGraph(opts: any) { this.graphOpts = opts }
-        setNode(id: string, opts: any) { this.nodes.set(id, opts) }
-        setEdge(source: string, target: string) { this.edges.push({ source, target }) }
+        setDefaultEdgeLabel(_fn: () => any) {}
+        setGraph(opts: any) {
+          this.graphOpts = opts
+        }
+        setNode(id: string, opts: any) {
+          this.nodes.set(id, opts)
+        }
+        setEdge(source: string, target: string) {
+          this.edges.push({ source, target })
+        }
         node(id: string) {
           const n = this.nodes.get(id)
           if (!n) return undefined
@@ -26,13 +32,8 @@ vi.mock('@dagrejs/dagre', () => ({
 describe('useAutoLayout', () => {
   describe('computeAutoLayout', () => {
     it('returns positions for all nodes', () => {
-      const nodes = [
-        { id: 'a' } as any,
-        { id: 'b' } as any,
-      ]
-      const edges = [
-        { source: 'a', target: 'b' } as any,
-      ]
+      const nodes = [{ id: 'a' } as any, { id: 'b' } as any]
+      const edges = [{ source: 'a', target: 'b' } as any]
       const result = computeAutoLayout(nodes, edges)
       expect(result.size).toBe(2)
       expect(result.has('a')).toBe(true)

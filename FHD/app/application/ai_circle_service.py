@@ -6,9 +6,9 @@ import logging
 import os
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
-from sqlalchemy import func
+from sqlalchemy import Table, func
 
 from app.db.base import Base
 from app.db.models.ai_circle import AiCircleComment, AiCirclePost, AiCircleReaction
@@ -61,9 +61,9 @@ def ensure_ai_circle_tables() -> None:
         Base.metadata.create_all(
             bind=db.get_bind(),
             tables=[
-                AiCirclePost.__table__,
-                AiCircleReaction.__table__,
-                AiCircleComment.__table__,
+                cast("Table", AiCirclePost.__table__),
+                cast("Table", AiCircleReaction.__table__),
+                cast("Table", AiCircleComment.__table__),
             ],
             checkfirst=True,
         )

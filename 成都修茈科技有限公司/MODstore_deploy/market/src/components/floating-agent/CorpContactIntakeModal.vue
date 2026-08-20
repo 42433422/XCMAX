@@ -1,35 +1,14 @@
 <template>
   <Teleport to="body">
     <Transition name="corp-intake-modal">
-      <div
-        v-if="contactIntakeModalOpen"
-        class="corp-intake-modal"
-        role="presentation"
-        @click.self="closeModal"
-      >
-        <div
-          class="corp-intake-modal__sheet"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="corp-intake-modal-title"
-          @click.stop
-        >
+      <div v-if="contactIntakeModalOpen" class="corp-intake-modal" role="presentation" @click.self="closeModal">
+        <div class="corp-intake-modal__sheet" role="dialog" aria-modal="true" aria-labelledby="corp-intake-modal-title" @click.stop>
           <header class="corp-intake-modal__head">
             <div>
               <h3 id="corp-intake-modal-title" class="corp-intake-modal__title">AI 一键填表</h3>
-              <p class="corp-intake-modal__desc">
-                填写公司与行业后点「发送」，将自动写好页面上的需求问卷。
-              </p>
+              <p class="corp-intake-modal__desc">填写公司与行业后点「发送」，将自动写好页面上的需求问卷。</p>
             </div>
-            <button
-              type="button"
-              class="corp-intake-modal__close"
-              aria-label="关闭"
-              :disabled="filling"
-              @click="closeModal"
-            >
-              ×
-            </button>
+            <button type="button" class="corp-intake-modal__close" aria-label="关闭" :disabled="filling" @click="closeModal">×</button>
           </header>
 
           <form class="corp-intake-modal__form" @submit.prevent="submitMobileFill">
@@ -57,11 +36,7 @@
                 >
                   <span class="intake-company-result__text">{{ resultText }}</span>
                 </div>
-                <ul
-                  v-if="matchUiUnlocked && showSuggestions && suggestions.length"
-                  class="intake-company-suggest"
-                  role="listbox"
-                >
+                <ul v-if="matchUiUnlocked && showSuggestions && suggestions.length" class="intake-company-suggest" role="listbox">
                   <li v-for="(item, idx) in suggestions" :key="idx">
                     <button type="button" role="option" @click="selectSuggestion(item, company)">
                       {{ item.name }}
@@ -109,11 +84,7 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { runContactAiAssistFill } from '../../corp-butler/contactIntakeBridge'
-import {
-  closeContactIntakeModal,
-  contactIntakeFillCompleted,
-  contactIntakeModalOpen,
-} from '../../corp-butler/useContactIntakeModal'
+import { closeContactIntakeModal, contactIntakeFillCompleted, contactIntakeModalOpen } from '../../corp-butler/useContactIntakeModal'
 import { useContactCompanyMatch } from '../../corp-butler/useContactCompanyMatch'
 import { useAgentStore } from '../../stores/agent'
 
@@ -236,9 +207,7 @@ async function submitMobileFill() {
       closeContactIntakeModal()
       agentStore.updateLastMessage({
         isLoading: false,
-        content:
-          result.message ||
-          '已预填下方问卷，请逐步核对；联系方式不会自动填写，请自行补全后提交。',
+        content: result.message || '已预填下方问卷，请逐步核对；联系方式不会自动填写，请自行补全后提交。',
       })
     } else {
       fillError.value = result.message

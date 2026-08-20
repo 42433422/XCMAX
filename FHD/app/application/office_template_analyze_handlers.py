@@ -125,7 +125,8 @@ def analyze_pptx_template(
                 400,
             )
 
-        fields = analyzed.get("fields") if isinstance(analyzed.get("fields"), list) else []
+        raw_fields = analyzed.get("fields")
+        fields = list(raw_fields) if isinstance(raw_fields, list) else []
         valid, missing_terms = _validate_required_terms({}, fields, template_scope)
         if not valid:
             _cleanup_progress_tracking(task_id)
@@ -188,7 +189,8 @@ def analyze_pdf_template(
                 400,
             )
 
-        fields = analyzed.get("fields") if isinstance(analyzed.get("fields"), list) else []
+        raw_fields = analyzed.get("fields")
+        fields = list(raw_fields) if isinstance(raw_fields, list) else []
         valid, missing_terms = _validate_required_terms({}, fields, template_scope)
         if not valid:
             _cleanup_progress_tracking(task_id)

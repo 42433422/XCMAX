@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="import-not-found"
 """重拍需登录的 /market/* 页（注入 modstore_token 后更新 manifest PNG）。"""
+
 from __future__ import annotations
 
 import asyncio
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(os.environ.get("MODSTORE_DEPLOY_ROOT", "/root/modstore-git/MODstore_deploy"))
@@ -28,7 +30,7 @@ async def main() -> None:
     if not auth:
         raise SystemExit("market login failed — set MODSTORE_SURFACE_AUDIT_USER/PASSWORD")
 
-    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    day = datetime.now(UTC).strftime("%Y-%m-%d")
     out_dir = _save_dir(day)
     if out_dir is None:
         raise SystemExit("save dir unavailable")

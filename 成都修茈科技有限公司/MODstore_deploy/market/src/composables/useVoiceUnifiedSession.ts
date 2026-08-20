@@ -29,7 +29,7 @@ function buildWsUrl(): string {
   return `${proto}://${host}/api/workbench/voice/unified/ws?token=${encodeURIComponent(token)}`
 }
 
-const SEND_CHUNK = 960
+const _SEND_CHUNK = 960
 
 export function useVoiceUnifiedSession() {
   const state = ref<VoiceUnifiedState>('idle')
@@ -49,7 +49,6 @@ export function useVoiceUnifiedSession() {
   let onTextDelta: VoiceUnifiedEndUtteranceOpts['onTextDelta'] | null = null
   const msePlayer = new S2sMseAudioPlayer()
   let llmFirstMarked = false
-  let activeTurnId = ''
 
   function b64ToBytes(b64: string): Uint8Array {
     const binary = atob(b64)
@@ -283,7 +282,6 @@ export function useVoiceUnifiedSession() {
 
   function buildTurnPayload(opts: VoiceUnifiedEndUtteranceOpts, type: 'end_utterance' | 'utterance' | 'utterance_start') {
     const turnId = opts.turnId || `t${Date.now()}`
-    activeTurnId = turnId
     return {
       type,
       turn_id: turnId,
@@ -387,14 +385,11 @@ export function createUnifiedAsrBridge(session: ReturnType<typeof useVoiceUnifie
       onResult: (r: ASRResult) => void,
       onError: (msg: string) => void,
       onLevel?: (level: number) => void,
-      _onReady?: () => void,
-      _onMic?: () => void,
-      _stream?: MediaStream,
       _opts?: { continuous?: boolean },
     ) => session.startListening(onResult, onError, onLevel),
     flushListening: () => session.flushListening(),
     signalEndOfSpeech: () => session.signalEndOfSpeech(),
     stopListening: () => session.stopListening(),
-    abort: (opts?: { keepMic?: boolean }) => session.abort(),
+    abort: (_opts?: { keepMic?: boolean }) => session.abort(),
   }
 }

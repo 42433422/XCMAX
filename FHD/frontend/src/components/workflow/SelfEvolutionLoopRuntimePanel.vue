@@ -28,30 +28,24 @@ import LoopStageFlow from './self-evolution/LoopStageFlow.vue'
 import LoopDecisionGrid from './self-evolution/LoopDecisionGrid.vue'
 import LoopTeamLanes from './self-evolution/LoopTeamLanes.vue'
 
-const props = withDefaults(defineProps<{
-  compact?: boolean
-  surface?: 'employee-space' | 'duty-roster'
-}>(), {
-  compact: false,
-  surface: 'employee-space',
-})
+const props = withDefaults(
+  defineProps<{
+    compact?: boolean
+    surface?: 'employee-space' | 'duty-roster'
+  }>(),
+  {
+    compact: false,
+    surface: 'employee-space',
+  },
+)
 
 const state = useSelfEvolutionRuntimePanelState(props.surface, props.compact)
 const presenters = useSelfEvolutionRuntimePresenters(state)
 </script>
 
 <template>
-  <section
-    class="selp"
-    :class="[`selp--${presenters.statusTone}`, { 'selp--compact': compact }]"
-    aria-label="自进化循环运行状态"
-  >
-    <PanelHeaderSection
-      :status-label="presenters.statusLabel"
-      :loading="state.loading"
-      :error="state.error"
-      :on-refresh="state.refresh"
-    />
+  <section class="selp" :class="[`selp--${presenters.statusTone}`, { 'selp--compact': compact }]" aria-label="自进化循环运行状态">
+    <PanelHeaderSection :status-label="presenters.statusLabel" :loading="state.loading" :error="state.error" :on-refresh="state.refresh" />
 
     <L4ReadinessSection
       v-if="!compact"
@@ -115,10 +109,7 @@ const presenters = useSelfEvolutionRuntimePresenters(state)
       :missing-nested="state.runtimeContractMissingNested"
     />
 
-    <ActiveGatesSection
-      :items="state.activeGateItems"
-      :active-gates="state.activeGates"
-    />
+    <ActiveGatesSection :items="state.activeGateItems" :active-gates="state.activeGates" />
 
     <ContractIncidentsSection
       :all-surface-incidents="state.runtimeAllSurfaceIncidents"
@@ -152,10 +143,7 @@ const presenters = useSelfEvolutionRuntimePresenters(state)
       :candidate-meta="proactiveCandidateMeta"
     />
 
-    <MetricsSection
-      :cards="presenters.evolutionMetricCards"
-      :windows="presenters.metricWindows"
-    />
+    <MetricsSection :cards="presenters.evolutionMetricCards" :windows="presenters.metricWindows" />
 
     <RosterSection
       :cards="presenters.rosterAlignmentCards"
@@ -165,18 +153,9 @@ const presenters = useSelfEvolutionRuntimePresenters(state)
 
     <LoopTeamLanes :lanes="state.teamLanes" />
 
-    <TimelineSection
-      :timeline="presenters.runTimeline"
-      :review-dim-status="reviewDimStatus"
-      :review-dim-failed="reviewDimFailed"
-    />
+    <TimelineSection :timeline="presenters.runTimeline" :review-dim-status="reviewDimStatus" :review-dim-failed="reviewDimFailed" />
 
-    <BottomSection
-      v-if="!compact"
-      :policy="state.policy"
-      :branch-name="state.branchName"
-      :action-label="state.actionLabel"
-    />
+    <BottomSection v-if="!compact" :policy="state.policy" :branch-name="state.branchName" :action-label="state.actionLabel" />
   </section>
 </template>
 
@@ -194,17 +173,25 @@ const presenters = useSelfEvolutionRuntimePresenters(state)
   border: 1px solid var(--selp-border);
   border-left: 4px solid var(--selp-accent);
   border-radius: 14px;
-  background:
-    radial-gradient(circle at 18% 0%, rgba(37, 99, 235, 0.10), transparent 34%),
-    linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+  background: radial-gradient(circle at 18% 0%, rgba(37, 99, 235, 0.1), transparent 34%), linear-gradient(180deg, #fff 0%, #f8fafc 100%);
   color: var(--selp-text);
 }
 
-.selp--running { --selp-accent: #2563eb; }
-.selp--ok { --selp-accent: #16a34a; }
-.selp--warn { --selp-accent: #f59e0b; }
-.selp--bad { --selp-accent: #ef4444; }
-.selp--idle { --selp-accent: #64748b; }
+.selp--running {
+  --selp-accent: #2563eb;
+}
+.selp--ok {
+  --selp-accent: #16a34a;
+}
+.selp--warn {
+  --selp-accent: #f59e0b;
+}
+.selp--bad {
+  --selp-accent: #ef4444;
+}
+.selp--idle {
+  --selp-accent: #64748b;
+}
 
 .selp--compact {
   padding: 14px;

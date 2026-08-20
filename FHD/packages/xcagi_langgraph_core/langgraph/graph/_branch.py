@@ -24,6 +24,7 @@ from langchain_core.runnables import (
     RunnableLambda,
 )
 
+from langgraph._internal._exception_policy import BOUNDARY_ERRORS
 from langgraph._internal._runnable import (
     RunnableCallable,
 )
@@ -112,7 +113,7 @@ class BranchSpec(NamedTuple):
                     if rtn_type := get_type_hints(func).get("return"):
                         if get_origin(rtn_type) is Literal:
                             path_map_ = {name: name for name in get_args(rtn_type)}
-        except Exception:
+        except BOUNDARY_ERRORS:
             pass
         # infer input schema
         input_schema = _get_branch_path_input_schema(path) if infer_schema else None

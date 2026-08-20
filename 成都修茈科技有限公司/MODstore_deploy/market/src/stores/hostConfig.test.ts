@@ -30,8 +30,7 @@ describe('hostConfig', () => {
         },
       })
 
-    const { bootstrapHostConfig, industryPresets, industryPresetIds, employeeRegistryRules } =
-      await import('./hostConfig')
+    const { bootstrapHostConfig, industryPresets, industryPresetIds, employeeRegistryRules } = await import('./hostConfig')
 
     await bootstrapHostConfig()
 
@@ -54,9 +53,7 @@ describe('hostConfig', () => {
       })
       .mockResolvedValueOnce(null)
 
-    const { bootstrapHostConfig, industryPresetIds, employeeRegistryRules } = await import(
-      './hostConfig'
-    )
+    const { bootstrapHostConfig, industryPresetIds, employeeRegistryRules } = await import('./hostConfig')
 
     await bootstrapHostConfig()
 
@@ -73,9 +70,7 @@ describe('hostConfig', () => {
         workflow_employee_id_prefixes: ['X-'],
       })
 
-    const { bootstrapHostConfig, industryPresets, employeeRegistryRules } = await import(
-      './hostConfig'
-    )
+    const { bootstrapHostConfig, industryPresets, employeeRegistryRules } = await import('./hostConfig')
 
     await bootstrapHostConfig()
 
@@ -99,13 +94,9 @@ describe('hostConfig', () => {
   })
 
   it('bootstrapHostConfig handles request failures gracefully', async () => {
-    requestJsonMock
-      .mockRejectedValueOnce(new Error('network'))
-      .mockRejectedValueOnce(new Error('network'))
+    requestJsonMock.mockRejectedValueOnce(new Error('network')).mockRejectedValueOnce(new Error('network'))
 
-    const { bootstrapHostConfig, industryPresets, employeeRegistryRules } = await import(
-      './hostConfig'
-    )
+    const { bootstrapHostConfig, industryPresets, employeeRegistryRules } = await import('./hostConfig')
 
     await expect(bootstrapHostConfig()).resolves.not.toThrow()
     expect(Object.keys(industryPresets.value)).toHaveLength(0)
@@ -115,9 +106,7 @@ describe('hostConfig', () => {
   it('bootstrapHostConfig handles null responses', async () => {
     requestJsonMock.mockResolvedValueOnce(null).mockResolvedValueOnce(null)
 
-    const { bootstrapHostConfig, industryPresets, employeeRegistryRules } = await import(
-      './hostConfig'
-    )
+    const { bootstrapHostConfig, industryPresets, employeeRegistryRules } = await import('./hostConfig')
 
     await bootstrapHostConfig()
     expect(Object.keys(industryPresets.value)).toHaveLength(0)
@@ -141,9 +130,7 @@ describe('hostConfig', () => {
   })
 
   it('bootstrapHostConfig handles empty presets object', async () => {
-    requestJsonMock
-      .mockResolvedValueOnce({ data: { presets: {} } })
-      .mockResolvedValueOnce(null)
+    requestJsonMock.mockResolvedValueOnce({ data: { presets: {} } }).mockResolvedValueOnce(null)
 
     const { bootstrapHostConfig, industryPresets, industryPresetIds } = await import('./hostConfig')
 

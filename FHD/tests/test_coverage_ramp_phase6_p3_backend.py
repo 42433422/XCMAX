@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment, misc"
 """COVERAGE_RAMP Phase 6 round 3: backend low-coverage modules.
 
 Targets:
@@ -24,6 +25,7 @@ from app.services.hybrid_intent_service import (
     hybrid_recognize_intents_sync,
     reset_hybrid_intent_service,
 )
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 # ---------------------------------------------------------------------------
 # order_store — fixtures
@@ -1038,7 +1040,7 @@ def test_recognize_sync_handles_recoverable_error() -> None:
             # Close the coroutine to avoid "never awaited" warning, then raise
             try:
                 coro.close()
-            except Exception:
+            except BOUNDARY_ERRORS:
                 pass
             raise ValueError("bad")
 

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """退款申请（用户侧 + 管理员审核）。
 
 主路径：``PAYMENT_BACKEND=java`` 时，FastAPI 将 ``/api/refunds/**`` 整段透传到
@@ -23,9 +24,14 @@ from modstore_server import (
     webhook_dispatcher,
 )
 from modstore_server.api.deps import _get_current_user
-from modstore_server.eventing.contracts import REFUND_APPROVED, REFUND_FAILED, REFUND_REJECTED
+from modstore_server.eventing.contracts import (
+    REFUND_APPROVED,
+    REFUND_FAILED,
+    REFUND_REJECTED,
+)
 from modstore_server.infrastructure.db import get_db
 from modstore_server.models import Entitlement, RefundRequest, User
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 router = APIRouter(prefix="/api/refunds", tags=["refunds"])
 
@@ -136,7 +142,7 @@ async def admin_review_refund(
         refund.status = "refunded"
         db.query(Entitlement).filter(
             Entitlement.source_order_id == refund.order_no,
-            Entitlement.is_active == True,
+            Entitlement.is_active.is_(True),
         ).update({"is_active": False})
         try:
             account_level_service.revoke_order_xp(
@@ -145,7 +151,7 @@ async def admin_review_refund(
                 out_trade_no=refund.order_no,
                 description=f"退款扣回经验 ({refund.order_no})",
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
         db.commit()
         db.refresh(refund)

@@ -5,9 +5,10 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
-import tempfile
 from pathlib import Path
 from typing import Any, Dict, Tuple
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 _OLE_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
 
@@ -26,7 +27,7 @@ def is_zip_docx(path: Path) -> bool:
     try:
         with zipfile.ZipFile(path) as zf:
             return "word/document.xml" in zf.namelist()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return False
 
 

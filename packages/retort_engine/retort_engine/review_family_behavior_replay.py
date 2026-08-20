@@ -4,7 +4,7 @@ import json
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.pr_review import review_diff
 
@@ -121,11 +121,15 @@ def _evaluate_case(lab: Path, case: dict[str, str]) -> dict[str, Any]:
         max_comments=8,
     )
     comments = [item for item in review.get("comments") or [] if isinstance(item, dict)]
-    summary = review.get("summary") if isinstance(review.get("summary"), dict) else {}
-    extension_policy = (
+    summary = cast(
+        dict[str, Any],
+        review.get("summary") if isinstance(review.get("summary"), dict) else {},
+    )
+    extension_policy = cast(
+        dict[str, Any],
         summary.get("extension_policy")
         if isinstance(summary.get("extension_policy"), dict)
-        else {}
+        else {},
     )
     contexts = {
         str(item.get("review_context") or "")
@@ -187,10 +191,11 @@ def _evaluate_case(lab: Path, case: dict[str, str]) -> dict[str, Any]:
 def _adjudicate(cases: list[dict[str, Any]]) -> dict[str, Any]:
     rows = []
     for case in cases:
-        assertions = (
+        assertions = cast(
+            dict[str, Any],
             case.get("output_assertions")
             if isinstance(case.get("output_assertions"), dict)
-            else {}
+            else {},
         )
         artifact_paths = [
             Path(str(path)) for path in (case.get("artifacts") or {}).values()

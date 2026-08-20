@@ -42,7 +42,14 @@ def test_minimal_payload_validates_against_schema(name: str) -> None:
 
 
 def _dummy_value(key: str) -> object:
-    if key in ("user_id", "author_id", "workflow_id", "execution_id", "refund_id", "tokens"):
+    if key in (
+        "user_id",
+        "author_id",
+        "workflow_id",
+        "execution_id",
+        "refund_id",
+        "tokens",
+    ):
         return 1
     if key in ("total_amount", "amount", "cost", "duration_ms"):
         return 0.0

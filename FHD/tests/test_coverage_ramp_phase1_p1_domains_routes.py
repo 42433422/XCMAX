@@ -1,3 +1,4 @@
+# mypy: disable-error-code="method-assign"
 """COVERAGE_RAMP Phase 1 (p1-p0-core): system/product/excel/conversation/shipment/misc routes."""
 
 from __future__ import annotations
@@ -78,7 +79,7 @@ def test_database_restore_missing_file(system_client: TestClient) -> None:
     assert r.status_code == 400
 
 
-@patch("app.utils.performance_initializer.get_performance_optimizer")
+@patch("app.utils.performance.performance_initializer.get_performance_optimizer")
 def test_performance_status_uninitialized(mock_get: MagicMock, system_client: TestClient) -> None:
     opt = MagicMock()
     opt._initialized = False

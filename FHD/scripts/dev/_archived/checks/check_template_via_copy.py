@@ -1,8 +1,8 @@
 """查看模板文件结构 - 使用复制方式"""
 
-import os
 import shutil
 from pathlib import Path
+
 from openpyxl import load_workbook
 
 dir_path = Path(r"e:\FHD\424")
@@ -41,7 +41,7 @@ try:
         print(f"  合并单元格：{len(merged)} 个")
 
         # 显示前 10 行
-        print(f"  前 10 行:")
+        print("  前 10 行:")
         for row_idx in range(1, min(11, ws.max_row + 1)):
             row_data = []
             for col_idx in range(1, min(15, ws.max_column + 1)):
@@ -56,4 +56,4 @@ finally:
     # 清理临时文件
     if temp_file.exists():
         temp_file.unlink()
-        print(f"已清理临时文件")
+        print("已清理临时文件")

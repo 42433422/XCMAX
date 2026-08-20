@@ -54,6 +54,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_NODE_ERROR,
     CONFIG_KEY_RUNTIME,
 )
+from langgraph._internal._exception_policy import TERMINATION_ERRORS
 from langgraph._internal._typing import MISSING
 from langgraph.errors import NodeError
 from langgraph.types import StreamWriter
@@ -417,7 +418,7 @@ class RunnableCallable(Runnable):
                 # run in context
                 with set_config_context(child_config, run) as context:
                     ret = context.run(self.func, *args, **kwargs)
-            except BaseException as e:
+            except TERMINATION_ERRORS as e:
                 run_manager.on_chain_error(e)
                 raise
             else:
@@ -492,7 +493,7 @@ class RunnableCallable(Runnable):
                         ret = await asyncio.create_task(coro, context=context)
                 else:
                     ret = await coro
-            except BaseException as e:
+            except TERMINATION_ERRORS as e:
                 await run_manager.on_chain_error(e)
                 raise
             else:
@@ -685,7 +686,7 @@ class RunnableSeq(Runnable):
                 else:
                     input = step.invoke(input, config)
         # finish the root run
-        except BaseException as e:
+        except TERMINATION_ERRORS as e:
             run_manager.on_chain_error(e)
             raise
         else:
@@ -738,7 +739,7 @@ class RunnableSeq(Runnable):
                 else:
                     input = await step.ainvoke(input, config)
         # finish the root run
-        except BaseException as e:
+        except TERMINATION_ERRORS as e:
             await run_manager.on_chain_error(e)
             raise
         else:
@@ -799,7 +800,7 @@ class RunnableSeq(Runnable):
                 output = context.run(_consume_iter, iterator)
                 # sequence doesn't emit output, yield to mark as generator
                 yield
-            except BaseException as e:
+            except TERMINATION_ERRORS as e:
                 run_manager.on_chain_error(e)
                 raise
             else:
@@ -869,7 +870,7 @@ class RunnableSeq(Runnable):
                         )
                         # sequence doesn't emit output, yield to mark as generator
                         yield
-                except BaseException as e:
+                except TERMINATION_ERRORS as e:
                     await run_manager.on_chain_error(e)
                     raise
                 else:
@@ -899,7 +900,7 @@ class RunnableSeq(Runnable):
                     output = await _consume_aiter(aiterator)
                     # sequence doesn't emit output, yield to mark as generator
                     yield
-            except BaseException as e:
+            except TERMINATION_ERRORS as e:
                 await run_manager.on_chain_error(e)
                 raise
             else:

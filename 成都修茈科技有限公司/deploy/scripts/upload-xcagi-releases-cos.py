@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """Upload /var/www/update/releases/stable to xcagi-releases COS bucket (multipart)."""
+
 from __future__ import annotations
 
 import os
 import sys
 from pathlib import Path
+
+BOUNDARY_ERRORS = (Exception,)
 
 try:
     from qcloud_cos import CosConfig, CosS3Client
@@ -59,11 +62,13 @@ for edition_dir in sorted(LOCAL_ROOT.iterdir()):
                 )
                 print(f"  ok ({attempt}/3)", flush=True)
                 break
-            except Exception as exc:
+            except BOUNDARY_ERRORS as exc:
                 print(f"  retry {attempt}/3: {exc}", flush=True)
                 if attempt == 3:
                     raise
         uploaded += 1
 
 print(f"Done. {uploaded} object(s). Verify:")
-print(f"  curl -sI https://{BUCKET}.cos.{REGION}.myqcloud.com/{PREFIX}/enterprise/XCAGI-Enterprise-Setup-8.0.0-x64.exe")
+print(
+    f"  curl -sI https://{BUCKET}.cos.{REGION}.myqcloud.com/{PREFIX}/enterprise/XCAGI-Enterprise-Setup-8.0.0-x64.exe"
+)

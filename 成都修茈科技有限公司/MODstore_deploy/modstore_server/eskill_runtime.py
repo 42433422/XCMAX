@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """ESkill runtime: static-first execution with controlled dynamic solidification."""
 
 from __future__ import annotations
@@ -6,114 +7,20 @@ import json
 import re
 import time
 from copy import deepcopy
-from datetime import datetime, timezone
-from string import Template
+from datetime import UTC, datetime
 from typing import Any, Dict, Optional
 
 from sqlalchemy.orm import Session
 
+from modstore_server.eskill_adapter import (
+    RuleBasedESkillAdapter,
+)
+from modstore_server.eskill_adapter import dumps as _dumps
+from modstore_server.eskill_adapter import loads as _loads
+from modstore_server.eskill_adapter import render_template as _render_template
 from modstore_server.models import ESkill, ESkillRun, ESkillVersion
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 from modstore_server.workflow_variables import resolve_value
-
-
-def _loads(raw: str | None, default: Any) -> Any:
-    if not raw:
-        return default
-    try:
-        return json.loads(raw)
-    except Exception:  # noqa: BLE001
-        return default
-
-
-def _dumps(value: Any) -> str:
-    return json.dumps(value if value is not None else {}, ensure_ascii=False)
-
-
-def _render_template(template: str, values: Dict[str, Any]) -> str:
-    flat = {str(k): "" if v is None else str(v) for k, v in values.items()}
-    rendered = Template(template or "").safe_substitute(flat)
-    return re.sub(r"\s+", " ", rendered).strip()
-
-
-class RuleBasedESkillAdapter:
-    """Strategy-engine adapter; replaceable with an LLM implementation."""
-
-    def propose_patch(
-        self,
-        *,
-        reason: str,
-        logic: Dict[str, Any],
-        input_data: Dict[str, Any],
-        history: list[Dict[str, Any]] | None = None,
-        error: Exception | None = None,
-    ) -> Dict[str, Any]:
-        history = history or []
-        changes: Dict[str, Any] = {
-            "metadata": {
-                "adapted_for": reason,
-                "history_matches": len(history),
-            }
-        }
-        logic_type = str(logic.get("type") or "template_transform")
-        if error:
-            changes["metadata"]["last_error"] = str(error)
-        if input_data.get("details"):
-            changes["metadata"]["used_details"] = True
-
-        for prior in history:
-            prior_changes = prior.get("changes")
-            if isinstance(prior_changes, dict):
-                changes.update({k: v for k, v in prior_changes.items() if k != "metadata"})
-                changes["metadata"]["reused_patch"] = True
-                return {
-                    "reason": reason,
-                    "strategy": "history_reuse",
-                    "changes": changes,
-                    "created_at": datetime.now(timezone.utc).isoformat(),
-                }
-
-        if logic_type == "template_transform":
-            changes["template"] = (
-                logic.get("dynamic_template")
-                or logic.get("fallback_template")
-                or logic.get("template")
-                or "Dynamic result: ${details}"
-            )
-            changes["required_fields"] = []
-            if bool(logic.get("allow_steps")):
-                changes["type"] = "pipeline"
-                changes["steps"] = [
-                    {
-                        "id": "render_dynamic_template",
-                        "type": "template_transform",
-                        "template": changes["template"],
-                        "output_var": str(logic.get("output_var") or "eskill_result"),
-                    },
-                    {
-                        "id": "attach_adaptation_reason",
-                        "type": "set_value",
-                        "output_var": "adaptation_reason",
-                        "value": reason,
-                    },
-                ]
-        elif logic_type == "employee_task":
-            task = str(logic.get("task_template") or logic.get("task") or "")
-            changes["task_template"] = (
-                f"{task}\n请适配当前特殊场景：${details}".strip()
-                if task
-                else "请根据输入完成任务，并适配特殊场景：${details}"
-            )
-            changes["retry_count"] = max(int(logic.get("retry_count") or 0), 1)
-        else:
-            changes["type"] = "template_transform"
-            changes["template"] = "Dynamic result: ${details}"
-            changes["required_fields"] = []
-        return {
-            "reason": reason,
-            "strategy": "rule_based_structured_patch",
-            "changes": changes,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        }
 
 
 class ESkillRuntime:
@@ -172,7 +79,7 @@ class ESkillRuntime:
             workflow_node_id=workflow_node_id,
             stage="static",
             input_json=_dumps(input_data),
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
         )
 
         try:
@@ -196,7 +103,7 @@ class ESkillRuntime:
                 quality_gate=quality_gate,
                 solidify=solidify,
             )
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
             if not bool(trigger_policy.get("on_error", True)):
                 return self._finish_run(db, run, {}, t0, "static_error", error=str(exc))
             return self._run_dynamic(
@@ -250,7 +157,7 @@ class ESkillRuntime:
         patched_logic = self._apply_patch(logic, patch)
         try:
             output = self._execute_logic(patched_logic, input_data, user_id=user_id)
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
             if self._rollback_to_previous_version(db, skill):
                 db.commit()
             return self._finish_run(
@@ -296,7 +203,7 @@ class ESkillRuntime:
                 )
             )
             skill.active_version = next_version
-            skill.updated_at = datetime.now(timezone.utc)
+            skill.updated_at = datetime.now(UTC)
             run.stage = "solidified"
             run.output_json = _dumps({**output, "solidified_version": next_version})
             db.commit()
@@ -321,7 +228,7 @@ class ESkillRuntime:
         run.patch_json = _dumps(patch or {})
         run.error_message = error
         run.duration_ms = round((time.perf_counter() - t0) * 1000, 3)
-        run.completed_at = datetime.now(timezone.utc)
+        run.completed_at = datetime.now(UTC)
         if commit:
             db.add(run)
             db.commit()
@@ -384,7 +291,9 @@ class ESkillRuntime:
             return self._execute_pipeline(logic, input_data, user_id=user_id)
 
         if logic_type in ("vibe_code", "vibe_workflow"):
-            from modstore_server.integrations.vibe_eskill_adapter import execute_vibe_kind
+            from modstore_server.integrations.vibe_eskill_adapter import (
+                execute_vibe_kind,
+            )
 
             return execute_vibe_kind(logic, input_data, user_id=user_id)
 
@@ -573,7 +482,7 @@ class ESkillRuntime:
         if not previous:
             return False
         skill.active_version = previous.version
-        skill.updated_at = datetime.now(timezone.utc)
+        skill.updated_at = datetime.now(UTC)
         db.add(skill)
         return True
 

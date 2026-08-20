@@ -13,9 +13,7 @@ import {
 describe('utils/index pure functions', () => {
   describe('escapeHtml', () => {
     it('escapes HTML special characters', () => {
-      expect(escapeHtml('<script>alert("xss")</script>')).toBe(
-        '&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;',
-      )
+      expect(escapeHtml('<script>alert("xss")</script>')).toBe('&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;')
     })
 
     it('escapes ampersand first to avoid double-encoding', () => {
@@ -75,9 +73,7 @@ describe('utils/index pure functions', () => {
 
     it('parses UTF-8 encoded filename', () => {
       const encoded = encodeURIComponent('中文文件.xlsx')
-      expect(getFilenameFromDisposition(`attachment; filename*=UTF-8''${encoded}`)).toBe(
-        '中文文件.xlsx',
-      )
+      expect(getFilenameFromDisposition(`attachment; filename*=UTF-8''${encoded}`)).toBe('中文文件.xlsx')
     })
 
     it('parses plain filename without quotes', () => {

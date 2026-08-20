@@ -68,11 +68,6 @@ function getRefreshToken(): string {
   return localStorage.getItem(REFRESH_TOKEN_KEY) || ''
 }
 
-function setRefreshToken(value: string): void {
-  if (value) localStorage.setItem(REFRESH_TOKEN_KEY, value)
-  else localStorage.removeItem(REFRESH_TOKEN_KEY)
-}
-
 function clearTokens(): void {
   localStorage.removeItem('modstore_token')
   localStorage.removeItem(REFRESH_TOKEN_KEY)
@@ -131,11 +126,7 @@ function amountSignStr(n: number | string | null | undefined): string {
   return s || '0'
 }
 
-export function buildCheckoutSignData(
-  data: CheckoutData,
-  requestId: string,
-  timestamp: number | string,
-): CheckoutSignPayload {
+export function buildCheckoutSignData(data: CheckoutData, requestId: string, timestamp: number | string): CheckoutSignPayload {
   const itemId = Number(data.item_id ?? 0) | 0
   const planId = String(data.plan_id ?? '').trim()
   const subject = String(data.subject ?? '').trim()
@@ -151,7 +142,7 @@ export function buildCheckoutSignData(
   }
 }
 
-function paymentSecretKey(): string {
+export function paymentSecretKey(): string {
   // P0-2 修复：支付签名必须在后端完成，前端不持有任何签名密钥。
   // 后端 /api/model-payment/checkout 直接用 plan_id 查套餐金额并调支付宝下单，
   // 不信任前端传值，因此前端签名是"假安全"——已移除密钥，保留空实现以兼容旧调用点。
@@ -163,10 +154,7 @@ function generateRequestId(): string {
   return 'req_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
 }
 
-export async function generateSignature(
-  data: Record<string, string>,
-  secret: string,
-): Promise<string> {
+export async function generateSignature(data: Record<string, string>, secret: string): Promise<string> {
   const sortedKeys = Object.keys(data).sort()
   const signString = sortedKeys.map((k) => `${k}=${data[k]}`).join('&') + secret
   const encoder = new TextEncoder()
@@ -190,13 +178,7 @@ async function req<T = any>(path: string, opts: RequestOptions = {}): Promise<T>
     if (csrf) headers['X-CSRF-Token'] = csrf
   }
   const body = opts.body
-  if (
-    !(body instanceof FormData) &&
-    method !== 'GET' &&
-    method !== 'HEAD' &&
-    body !== undefined &&
-    body !== null
-  ) {
+  if (!(body instanceof FormData) && method !== 'GET' && method !== 'HEAD' && body !== undefined && body !== null) {
     if (!headers['Content-Type'] && !headers['content-type']) {
       headers['Content-Type'] = 'application/json'
     }
@@ -208,11 +190,7 @@ async function req<T = any>(path: string, opts: RequestOptions = {}): Promise<T>
   let r = await doFetch(headers)
 
   // P0-4：401 自动刷新 + 重试（排除 refresh 接口本身，避免循环）
-  if (
-    r.status === 401 &&
-    !path.includes('/api/auth/token/refresh') &&
-    getRefreshToken()
-  ) {
+  if (r.status === 401 && !path.includes('/api/auth/token/refresh') && getRefreshToken()) {
     try {
       const newToken = await refreshAccessToken()
       headers['Authorization'] = `Bearer ${newToken}`
@@ -265,8 +243,7 @@ export const api = {
         verification_code: verificationCode,
       }),
     }),
-  login: (username: string, password: string) =>
-    req('/api/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
+  login: (username: string, password: string) => req('/api/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
   me: () => req('/api/auth/me'),
   /** P0-4：用 refresh token 轮转新令牌（后端 /api/auth/token/refresh）。 */
   refreshToken: (refreshToken: string) =>
@@ -275,10 +252,8 @@ export const api = {
       body: JSON.stringify({ refresh_token: refreshToken }),
     }),
 
-  sendVerificationCode: (email: string) =>
-    req('/api/auth/send-code', { method: 'POST', body: JSON.stringify({ email }) }),
-  sendRegisterVerificationCode: (email: string) =>
-    req('/api/auth/send-register-code', { method: 'POST', body: JSON.stringify({ email }) }),
+  sendVerificationCode: (email: string) => req('/api/auth/send-code', { method: 'POST', body: JSON.stringify({ email }) }),
+  sendRegisterVerificationCode: (email: string) => req('/api/auth/send-register-code', { method: 'POST', body: JSON.stringify({ email }) }),
   loginWithCode: (email: string, code: string) =>
     req('/api/auth/login-with-code', { method: 'POST', body: JSON.stringify({ email, code }) }),
 
@@ -288,8 +263,7 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ amount, description }),
     }),
-  transactions: (limit = 50, offset = 0) =>
-    req(`/api/wallet/transactions?limit=${limit}&offset=${offset}`),
+  transactions: (limit = 50, offset = 0) => req(`/api/wallet/transactions?limit=${limit}&offset=${offset}`),
 
   catalog: (q = '', artifact = '', limit = 50, offset = 0, industry = '', securityLevel = '') => {
     let url = `/api/market/catalog?limit=${limit}&offset=${offset}`
@@ -325,18 +299,13 @@ export const api = {
 
   adminStatus: () => req('/api/admin/status'),
   adminUpload: (formData: FormData) => req('/api/admin/catalog', { method: 'POST', body: formData }),
-  adminListCatalog: (limit = 200, offset = 0) =>
-    req(`/api/admin/catalog?limit=${limit}&offset=${offset}`),
-  adminDeleteCatalog: (id: number | string) =>
-    req(`/api/admin/catalog/${id}`, { method: 'DELETE' }),
-  adminListUsers: (limit = 200, offset = 0) =>
-    req(`/api/admin/users?limit=${limit}&offset=${offset}`),
+  adminListCatalog: (limit = 200, offset = 0) => req(`/api/admin/catalog?limit=${limit}&offset=${offset}`),
+  adminDeleteCatalog: (id: number | string) => req(`/api/admin/catalog/${id}`, { method: 'DELETE' }),
+  adminListUsers: (limit = 200, offset = 0) => req(`/api/admin/users?limit=${limit}&offset=${offset}`),
   adminSetUserAdmin: (userId: number | string, isAdmin: boolean) =>
     req(`/api/admin/users/${userId}/admin?is_admin=${isAdmin}`, { method: 'PUT' }),
-  adminListWallets: (limit = 200, offset = 0) =>
-    req(`/api/admin/wallets?limit=${limit}&offset=${offset}`),
-  adminListTransactions: (limit = 200, offset = 0) =>
-    req(`/api/admin/transactions?limit=${limit}&offset=${offset}`),
+  adminListWallets: (limit = 200, offset = 0) => req(`/api/admin/wallets?limit=${limit}&offset=${offset}`),
+  adminListTransactions: (limit = 200, offset = 0) => req(`/api/admin/transactions?limit=${limit}&offset=${offset}`),
 
   paymentPlans: () => req('/api/payment/plans'),
   paymentCheckout: async (data: CheckoutData) => {
@@ -411,17 +380,13 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ manifest }),
     }),
-  getModFile: (modId: string, path: string) =>
-    req(`/api/mods/${encodeURIComponent(modId)}/file?path=${encodeURIComponent(path)}`),
+  getModFile: (modId: string, path: string) => req(`/api/mods/${encodeURIComponent(modId)}/file?path=${encodeURIComponent(path)}`),
   putModFile: (modId: string, path: string, content: string) =>
     req(`/api/mods/${encodeURIComponent(modId)}/file`, {
       method: 'PUT',
       body: JSON.stringify({ path, content }),
     }),
-  getModAuthoringSummary: (modId: string) =>
-    req(`/api/mods/${encodeURIComponent(modId)}/authoring-summary`),
-  getModBlueprintRoutes: (modId: string) =>
-    req(`/api/mods/${encodeURIComponent(modId)}/blueprint-routes`),
-  getAuthoringExtensionSurface: (mergeHost = false) =>
-    req(`/api/authoring/extension-surface?merge_host=${mergeHost ? 'true' : 'false'}`),
+  getModAuthoringSummary: (modId: string) => req(`/api/mods/${encodeURIComponent(modId)}/authoring-summary`),
+  getModBlueprintRoutes: (modId: string) => req(`/api/mods/${encodeURIComponent(modId)}/blueprint-routes`),
+  getAuthoringExtensionSurface: (mergeHost = false) => req(`/api/authoring/extension-surface?merge_host=${mergeHost ? 'true' : 'false'}`),
 }

@@ -9,6 +9,7 @@
 包依赖由 [tool.uv.sources] 指向的 XCAGI 兄弟包以可编辑方式安装，因此模块文件落在仓库内
 FHD/packages/ 之下。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -16,14 +17,15 @@ from pathlib import Path
 from typing import Any
 
 import langgraph.checkpoint.serde  # noqa: F401
-import langgraph.graph  # noqa: F401
 import langgraph.prebuilt  # noqa: F401
-from langgraph.graph import END, START, StateGraph
 from typing_extensions import TypedDict
 
+import langgraph.graph  # noqa: F401
+from langgraph.graph import END, START, StateGraph
+
 HERE = Path(__file__).resolve().parent
-PKG = HERE.parent       # packages/xcagi_langgraph_core
-PACKAGES = PKG.parent   # FHD/packages/  (XCAGI 兄弟包根)
+PKG = HERE.parent  # packages/xcagi_langgraph_core
+PACKAGES = PKG.parent  # FHD/packages/  (XCAGI 兄弟包根)
 
 
 def _file(mod: Any, name: str) -> Path:

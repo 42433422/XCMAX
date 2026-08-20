@@ -31,12 +31,7 @@ class MoonshotLLM(OpenAICompatibleLLM):
         timeout_s: float | None = None,
         verify_ssl: bool = True,
     ) -> None:
-        resolved = (
-            api_key
-            or os.environ.get("MOONSHOT_API_KEY")
-            or os.environ.get("KIMI_API_KEY")
-            or ""
-        )
+        resolved = api_key or os.environ.get("MOONSHOT_API_KEY") or os.environ.get("KIMI_API_KEY") or ""
         super().__init__(
             api_key=resolved,
             model=model,

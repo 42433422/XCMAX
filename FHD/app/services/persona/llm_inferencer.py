@@ -7,6 +7,7 @@ import logging
 from dataclasses import dataclass
 
 from app.domain.persona.value_objects import PersonaAxes
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +87,7 @@ class LlmInferencer:
             content = response["choices"][0]["message"]["content"]
 
             return self._parse_response(content)
-        except Exception as e:  # noqa: BLE001  LLM API 边界：任何异常都降级为中性值
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001  LLM API 边界：任何异常都降级为中性值
             logger.warning("L3 LLM 推断失败，返回中性值: %s", e)
             return LlmInferResult(
                 axes=PersonaAxes(),

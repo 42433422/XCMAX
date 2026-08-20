@@ -13,6 +13,7 @@ import logging
 from typing import Any, Dict, Optional
 
 from modstore_server.models import get_session_factory
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,7 @@ def _resolve_provider_model(logic: Dict[str, Any], user_id: int) -> Dict[str, st
         )
 
         return _safe_resolve_provider_model(int(user_id or 0), prov, mdl)
-    except Exception:  # pragma: no cover
+    except RECOVERABLE_ERRORS:  # pragma: no cover
         logger.exception("vibe_eskill_adapter 解析 provider/model 失败")
         return {"provider": prov, "model": mdl}
 
@@ -60,7 +61,9 @@ def _resolve_project_root(logic: Dict[str, Any], user_id: int) -> Optional[str]:
     if not raw:
         return None
     try:
-        from modstore_server.employee_executor import _trusted_system_burn_in_project_root
+        from modstore_server.employee_executor import (
+            _trusted_system_burn_in_project_root,
+        )
         from modstore_server.integrations.vibe_adapter import ensure_within_workspace
 
         trusted = _trusted_system_burn_in_project_root(
@@ -73,7 +76,7 @@ def _resolve_project_root(logic: Dict[str, Any], user_id: int) -> Optional[str]:
             return trusted
         validated = ensure_within_workspace(raw, user_id=int(user_id or 0))
         return str(validated)
-    except Exception:  # VibePathError or any OS error — re-raise so caller can surface it
+    except RECOVERABLE_ERRORS:  # VibePathError or any OS error — re-raise so caller can surface it
         raise
 
 
@@ -118,7 +121,7 @@ def execute_vibe_code_kind(
     try:
         root_logic = {**(input_data or {}), **(logic or {})}
         project_root = _resolve_project_root(root_logic, int(user_id or 0))
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         return {
             "eskill_logic_type": "vibe_code",
             "ok": False,
@@ -162,7 +165,7 @@ def execute_vibe_code_kind(
                     ensure_ascii=False,
                 )
             )
-        except Exception:  # noqa: BLE001 — analysis is optional, never block execution
+        except BOUNDARY_ERRORS:  # noqa: BLE001 — analysis is optional, never block execution
             logger.warning("vibe_code: project_root 分析失败，已跳过", exc_info=True)
 
     sf = get_session_factory()
@@ -186,7 +189,7 @@ def execute_vibe_code_kind(
                 try:
                     if coder.code_store.has_code_skill(str(skill_id_hint)):
                         skill = coder.code_store.get_code_skill(str(skill_id_hint))
-                except Exception:  # noqa: BLE001
+                except BOUNDARY_ERRORS:  # noqa: BLE001
                     skill = None
             if skill is None:
                 skill = coder.code(
@@ -221,9 +224,9 @@ def execute_vibe_code_kind(
                         )
                         skill = repaired_skill
                         repaired = True
-                    except Exception as repair_exc:  # noqa: BLE001
+                    except BOUNDARY_ERRORS as repair_exc:  # noqa: BLE001
                         logger.warning("vibe_code auto repair failed: %s", repair_exc)
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.exception("vibe_code ESkill execution failed")
         return {
             "eskill_logic_type": "vibe_code",
@@ -302,7 +305,7 @@ def execute_vibe_workflow_kind(
     project_root: Optional[str] = None
     try:
         project_root = _resolve_project_root(logic, int(user_id or 0))
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         return {
             "eskill_logic_type": "vibe_workflow",
             "ok": False,
@@ -334,7 +337,7 @@ def execute_vibe_workflow_kind(
                     ensure_ascii=False,
                 )
             )
-        except Exception:  # noqa: BLE001
+        except BOUNDARY_ERRORS:  # noqa: BLE001
             logger.warning("vibe_workflow: project_root 分析失败，已跳过", exc_info=True)
 
     sf = get_session_factory()
@@ -355,7 +358,7 @@ def execute_vibe_workflow_kind(
                 }
             graph = coder.workflow(brief, project_root=project_root)
             run_result = coder.execute(graph, exec_input)
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.exception("vibe_workflow ESkill execution failed")
         return {
             "eskill_logic_type": "vibe_workflow",
@@ -366,7 +369,10 @@ def execute_vibe_workflow_kind(
     graph_dict = (
         graph.to_dict()
         if hasattr(graph, "to_dict") and callable(graph.to_dict)
-        else {"nodes": getattr(graph, "nodes", []), "edges": getattr(graph, "edges", [])}
+        else {
+            "nodes": getattr(graph, "nodes", []),
+            "edges": getattr(graph, "edges", []),
+        }
     )
     run_dict = (
         run_result.to_dict()

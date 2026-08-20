@@ -7,7 +7,7 @@ the original row remains available for audit.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import DDL, Column, DateTime, Index, Integer, String, Text, event
 
@@ -19,7 +19,11 @@ class CustomerValueReceipt(Base):
     __table_args__ = (
         Index("ix_customer_value_receipts_order_no", "order_no"),
         Index("ix_customer_value_receipts_goal_id", "customer_goal_id"),
-        Index("ix_customer_value_receipts_kind_status", "receipt_kind", "verification_status"),
+        Index(
+            "ix_customer_value_receipts_kind_status",
+            "receipt_kind",
+            "verification_status",
+        ),
         Index("ix_customer_value_receipts_occurred_at", "occurred_at"),
     )
 
@@ -44,7 +48,7 @@ class CustomerValueReceipt(Base):
     evidence_json = Column(Text, nullable=False, default="{}")
     evidence_digest = Column(String(64), nullable=False)
     occurred_at = Column(DateTime, nullable=False)
-    recorded_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    recorded_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
 
 
 # ``Base.metadata.create_all`` is the init migration used by the self-hosted

@@ -22,10 +22,7 @@ export type VoiceCaptureSnapshot = {
 export function silenceIdleMs(s: VoiceCaptureSnapshot, now: number): number {
   if (s.audioSpeaking) return 0
   if (s.lastSpeechAt > 0) return now - s.lastSpeechAt
-  const text =
-    s.listenPartial.trim() ||
-    String(s.voiceTranscript || '').trim() ||
-    String(s.voiceDraft || '').trim()
+  const text = s.listenPartial.trim() || String(s.voiceTranscript || '').trim() || String(s.voiceDraft || '').trim()
   if (text && s.lastAsrContentChangeAt > 0) {
     return now - s.lastAsrContentChangeAt
   }
@@ -40,17 +37,10 @@ export function hasFreshVoiceCapture(s: VoiceCaptureSnapshot, text: string): boo
   return s.lastAsrAt > s.lastSubmittedAt
 }
 
-export function shouldFlushVoiceUtterance(
-  s: VoiceCaptureSnapshot,
-  ep: VoiceEndpointConfig,
-  now: number,
-): boolean {
+export function shouldFlushVoiceUtterance(s: VoiceCaptureSnapshot, ep: VoiceEndpointConfig, now: number): boolean {
   if (s.audioSpeaking) return false
   if (silenceIdleMs(s, now) < ep.silenceMs - 80) return false
-  const text =
-    String(s.voiceTranscript || '').trim() ||
-    String(s.voiceDraft || '').trim() ||
-    s.listenPartial.trim()
+  const text = String(s.voiceTranscript || '').trim() || String(s.voiceDraft || '').trim() || s.listenPartial.trim()
   if (!text) return false
   if (text.length < ep.partialMinChars) return false
   if (hasFreshVoiceCapture(s, text)) return true

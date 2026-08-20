@@ -93,18 +93,20 @@
       />
       <div v-if="excelSheetOptions.length" class="sheet-link-bar">
         <span class="sheet-link-label">关联工作表：</span>
-        <button
-          class="sheet-link-btn"
-          :class="{ active: linkedExcelAllSheets }"
-          @click="bindAllExcelSheetsToChat"
-        >
+        <button class="sheet-link-btn" :class="{ active: linkedExcelAllSheets }" @click="bindAllExcelSheetsToChat">
           全部（{{ excelSheetOptions.length }}）
         </button>
         <button
           v-for="sheet in excelSheetOptions"
           :key="`${sheet.sheet_index}-${sheet.sheet_name}`"
           class="sheet-link-btn"
-          :class="{ active: !linkedExcelAllSheets && linkedExcelSheet && linkedExcelSheet.sheet_name === sheet.sheet_name && linkedExcelSheet.sheet_index === sheet.sheet_index }"
+          :class="{
+            active:
+              !linkedExcelAllSheets &&
+              linkedExcelSheet &&
+              linkedExcelSheet.sheet_name === sheet.sheet_name &&
+              linkedExcelSheet.sheet_index === sheet.sheet_index,
+          }"
           @click="bindExcelSheetToChat(sheet)"
         >
           Sheet {{ sheet.sheet_index }}（{{ sheet.sheet_name }}）
@@ -174,7 +176,7 @@
       type="file"
       multiple
       accept=".xlsx,.xlsm,.xls,.csv,.docx,.doc,.pdf,.pptx,.ppt"
-      style="display:none"
+      style="display: none"
       @change="onOfficeDockingFileChange"
     />
     <ChatOfficeDockingReview
@@ -215,13 +217,16 @@ import { formatTaskTime, formatTaskSourceLabel } from '@/utils/chatTaskLabels'
 import { readAiSessionIdFromStorage, writeAiSessionIdToStorage } from '@/utils/xcagiStorageKeys'
 import { resolveWorkspaceSessionId, useRoutedTaskWorkspace } from '@/composables/useRoutedTaskWorkspace'
 
-const props = withDefaults(defineProps<{
-  workspaceTaskId?: string
-  workspaceConversationId?: string
-}>(), {
-  workspaceTaskId: '',
-  workspaceConversationId: '',
-})
+const props = withDefaults(
+  defineProps<{
+    workspaceTaskId?: string
+    workspaceConversationId?: string
+  }>(),
+  {
+    workspaceTaskId: '',
+    workspaceConversationId: '',
+  },
+)
 
 const router = useRouter()
 const modsStore = useModsStore()
@@ -312,14 +317,17 @@ const {
   stageExcelAnalysisContext,
 } = chatViewApi
 
-const {
-  workspaceTaskId, workspaceMode, visibleTaskList, visibleFilteredTaskList,
-  visibleActiveTaskId, workspaceHeader,
-} = useRoutedTaskWorkspace({
-  props, currentSessionId, taskList, filteredTaskList, activeTaskId, loadSession,
-  taskSummaries: storeToRefs(taskCenterStore).tasks,
-  markTaskRead: taskCenterStore.markTaskRead,
-})
+const { workspaceTaskId, workspaceMode, visibleTaskList, visibleFilteredTaskList, visibleActiveTaskId, workspaceHeader } =
+  useRoutedTaskWorkspace({
+    props,
+    currentSessionId,
+    taskList,
+    filteredTaskList,
+    activeTaskId,
+    loadSession,
+    taskSummaries: storeToRefs(taskCenterStore).tasks,
+    markTaskRead: taskCenterStore.markTaskRead,
+  })
 
 function controlWorkspaceTask(action: 'approve' | 'pause' | 'cancel' | 'resume' | 'retry'): void {
   void taskCenterStore.controlTask(workspaceTaskId.value, action)
@@ -379,11 +387,7 @@ const inputPlaceholder = computed(() => {
   return preset.placeholderNormal
 })
 
-const hasTaskPanelContent = computed(() => (
-  !!currentTask.value
-  || visibleTaskList.value.length > 0
-  || !!latestAssistantPush.value
-))
+const hasTaskPanelContent = computed(() => !!currentTask.value || visibleTaskList.value.length > 0 || !!latestAssistantPush.value)
 
 const canSendMessage = computed(() => !!messageInput.value.trim() && !isLoading.value)
 const sendButtonTitle = computed(() => {

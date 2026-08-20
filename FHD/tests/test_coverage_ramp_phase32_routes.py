@@ -38,7 +38,7 @@ def test_legacy_excel_parse_single_success(monkeypatch: pytest.MonkeyPatch) -> N
 
 @pytest.fixture
 def compat_product_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    from app.fastapi_routes.domains.product import compat_routes as product_compat
+    from app.legacy.routes.product import compat_routes as product_compat
 
     monkeypatch.setattr(product_compat, "_business_mod_json_block", lambda: False)
     monkeypatch.setattr(
@@ -61,7 +61,7 @@ def test_compat_products_list(compat_product_client: TestClient) -> None:
             return_value=False,
         ),
         patch(
-            "app.fastapi_routes.domains.product.compat_routes._load_products_list_impl_pg",
+            "app.legacy.routes.product.compat_routes._load_products_list_impl_pg",
             return_value=([{"id": 1, "name": "螺丝"}], 1, None),
         ),
     ):

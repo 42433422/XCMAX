@@ -6,15 +6,37 @@ import type { LoopRuntimeActivity } from './useLoopRuntimeActivity'
 export function useLoopRuntimePresentation(core: LoopRuntimeCore, activity: LoopRuntimeActivity, deps: LoopRuntimeConsoleDeps) {
   const { plannedIds: ALL_PLANNED_YUANGON_PKG_IDS, totalCount } = deps
   const {
-    loopRuntimeSchemaVersion, loopRuntimeContractOk, loopRuntime, loopRuntimeContractMissingFields,
-    loopRuntimeSurfaceMissing, loopRuntimeContractValidation, loopRuntimeContractRequiredFields,
-    loopRuntimeContract, loopRuntimeSurfaceReadinessOk, loopRuntimeSurfaceReadiness,
-    loopRuntimeSurfaceIncidents, loopRuntimeSurfaceIncident, loopRuntimeSurfaceIncidentSummary,
-    loopRuntimeContractMissingNested, loopGovernanceAuditSummary, loopAlignedPlannedCount,
-    loopAlignedInRosterCount, loopAlignedInDeployedCount, loopNotDeployedCount,
-    loopRosterAlignment, loopRosterGate, loopOutOfRosterCount, loopOutOfRosterParticipantIds,
-    loopRosterRemediation, loopParticipantIds, loopOpenRunCount, loopGateReasonText,
-    loopEmployeeSpaceBridge, loopUiBridge, loopGovernanceAction, loopParticipantDisplay,
+    loopRuntimeSchemaVersion,
+    loopRuntimeContractOk,
+    loopRuntime,
+    loopRuntimeContractMissingFields,
+    loopRuntimeSurfaceMissing,
+    loopRuntimeContractValidation,
+    loopRuntimeContractRequiredFields,
+    loopRuntimeContract,
+    loopRuntimeSurfaceReadinessOk,
+    loopRuntimeSurfaceReadiness,
+    loopRuntimeSurfaceIncidents,
+    loopRuntimeSurfaceIncident,
+    loopRuntimeSurfaceIncidentSummary,
+    loopRuntimeContractMissingNested,
+    loopGovernanceAuditSummary,
+    loopAlignedPlannedCount,
+    loopAlignedInRosterCount,
+    loopAlignedInDeployedCount,
+    loopNotDeployedCount,
+    loopRosterAlignment,
+    loopRosterGate,
+    loopOutOfRosterCount,
+    loopOutOfRosterParticipantIds,
+    loopRosterRemediation,
+    loopParticipantIds,
+    loopOpenRunCount,
+    loopGateReasonText,
+    loopEmployeeSpaceBridge,
+    loopUiBridge,
+    loopGovernanceAction,
+    loopParticipantDisplay,
   } = core
   const { loopTimelineItems } = activity
   const loopRuntimeTruthCards = computed(() => [
@@ -22,25 +44,26 @@ export function useLoopRuntimePresentation(core: LoopRuntimeCore, activity: Loop
       key: 'contract',
       label: 'Runtime contract',
       value: loopFirstText(loopRuntimeSchemaVersion.value, '未知'),
-      sub: loopFirstText(
-        loopRecord(loopRecord(loopRuntime.value).source).name,
-        'schema/source missing',
-      ),
+      sub: loopFirstText(loopRecord(loopRecord(loopRuntime.value).source).name, 'schema/source missing'),
       tone: loopRuntimeContractOk.value ? 'ok' : 'bad',
     },
     {
       key: 'contract-fields',
       label: 'Contract fields',
-      value: loopRuntimeContractMissingFields.value.length || loopRuntimeSurfaceMissing.value.length
-        ? `missing ${loopRuntimeContractMissingFields.value.length + loopRuntimeSurfaceMissing.value.length}`
-        : `${loopNumber(loopRuntimeContractValidation.value.required_count) ?? loopRuntimeContractRequiredFields.value.length}`,
+      value:
+        loopRuntimeContractMissingFields.value.length || loopRuntimeSurfaceMissing.value.length
+          ? `missing ${loopRuntimeContractMissingFields.value.length + loopRuntimeSurfaceMissing.value.length}`
+          : `${loopNumber(loopRuntimeContractValidation.value.required_count) ?? loopRuntimeContractRequiredFields.value.length}`,
       sub: loopRuntimeContractMissingFields.value.length
         ? `缺字段=${loopRuntimeContractMissingFields.value.slice(0, 4).join(' / ')}`
         : loopRuntimeSurfaceMissing.value.length
-        ? `本页缺依赖=${loopRuntimeSurfaceMissing.value.slice(0, 4).join(' / ')}`
-        : loopArray(loopRuntimeContract.value.surfaces).length
-        ? `surfaces=${loopArray(loopRuntimeContract.value.surfaces).map((item) => loopString(item)).filter(Boolean).join(' / ')}`
-        : 'contract.required_top_level/surfaces missing',
+          ? `本页缺依赖=${loopRuntimeSurfaceMissing.value.slice(0, 4).join(' / ')}`
+          : loopArray(loopRuntimeContract.value.surfaces).length
+            ? `surfaces=${loopArray(loopRuntimeContract.value.surfaces)
+                .map((item) => loopString(item))
+                .filter(Boolean)
+                .join(' / ')}`
+            : 'contract.required_top_level/surfaces missing',
       tone: loopRuntimeContractOk.value ? 'ok' : 'warn',
     },
     {
@@ -49,7 +72,10 @@ export function useLoopRuntimePresentation(core: LoopRuntimeCore, activity: Loop
       value: loopRuntimeSurfaceReadinessOk.value ? '就绪' : '异常',
       sub: loopRuntimeSurfaceMissing.value.length
         ? `${loopFirstText(loopRuntimeSurfaceReadiness.value.action, 'repair')} · ${loopRuntimeSurfaceMissing.value.slice(0, 3).join(' / ')}`
-        : loopFirstText(loopRuntimeSurfaceReadiness.value.title, `required=${loopArray(loopRuntimeSurfaceReadiness.value.required).length || 0}`),
+        : loopFirstText(
+            loopRuntimeSurfaceReadiness.value.title,
+            `required=${loopArray(loopRuntimeSurfaceReadiness.value.required).length || 0}`,
+          ),
       tone: loopRuntimeSurfaceReadinessOk.value ? 'ok' : 'bad',
     },
     {
@@ -64,12 +90,18 @@ export function useLoopRuntimePresentation(core: LoopRuntimeCore, activity: Loop
     {
       key: 'incident-summary',
       label: 'Incident summary',
-      value: loopFirstText(loopRuntimeSurfaceIncidentSummary.value.status, `${loopNumber(loopRuntimeSurfaceIncidentSummary.value.total) ?? 0}`),
+      value: loopFirstText(
+        loopRuntimeSurfaceIncidentSummary.value.status,
+        `${loopNumber(loopRuntimeSurfaceIncidentSummary.value.total) ?? 0}`,
+      ),
       sub: loopFirstText(loopRuntimeSurfaceIncidentSummary.value.primary_action)
         ? `${loopRuntimeSurfaceIncidentSummary.value.primary_action} -> ${loopFirstText(loopRuntimeSurfaceIncidentSummary.value.primary_target_surface, loopRuntimeSurfaceIncidentSummary.value.primary_surface, '未知')} · 总计 ${loopNumber(loopRuntimeSurfaceIncidentSummary.value.total) ?? 0}`
         : loopArray(loopRuntimeSurfaceIncidentSummary.value.surfaces).length
-        ? `surfaces=${loopArray(loopRuntimeSurfaceIncidentSummary.value.surfaces).map((item) => loopString(item)).filter(Boolean).join(' / ')}`
-        : '全局 surface incident clear',
+          ? `surfaces=${loopArray(loopRuntimeSurfaceIncidentSummary.value.surfaces)
+              .map((item) => loopString(item))
+              .filter(Boolean)
+              .join(' / ')}`
+          : '全局 surface incident clear',
       tone: loopNumber(loopRuntimeSurfaceIncidentSummary.value.total) ? 'warn' : 'ok',
     },
     {
@@ -85,38 +117,31 @@ export function useLoopRuntimePresentation(core: LoopRuntimeCore, activity: Loop
       key: 'runtime',
       label: 'Runtime source',
       value: loopRuntime.value ? 'connected' : 'missing',
-      sub: loopRuntime.value
-        ? '来自 selfMaintenanceRuntimeStatus 实时接口'
-        : '未拿到后端 runtime，当前页面不能证明 loop 已运行',
+      sub: loopRuntime.value ? '来自 selfMaintenanceRuntimeStatus 实时接口' : '未拿到后端 runtime，当前页面不能证明 loop 已运行',
       tone: loopRuntime.value ? 'ok' : 'bad',
     },
     {
       key: 'ledger',
       label: 'Ledger evidence',
       value: loopTimelineItems.value.length ? `${loopTimelineItems.value.length}` : 'no events',
-      sub: loopTimelineItems.value.length
-        ? 'run_timelines 已回写员工 step'
-        : '没有 timeline 事件，不伪造成员工执行',
+      sub: loopTimelineItems.value.length ? 'run_timelines 已回写员工 step' : '没有 timeline 事件，不伪造成员工执行',
       tone: loopTimelineItems.value.length ? 'run' : 'warn',
     },
     {
       key: 'participants',
       label: 'Employee binding',
       value: loopParticipantIds.value.length ? `${loopParticipantIds.value.length}` : 'none',
-      sub: loopParticipantIds.value.length
-        ? '已从 participants / ledger 绑定到上岗员工'
-        : '没有 employee_id/actor 绑定',
+      sub: loopParticipantIds.value.length ? '已从 participants / ledger 绑定到上岗员工' : '没有 employee_id/actor 绑定',
       tone: loopParticipantIds.value.length ? 'run' : 'warn',
     },
     {
       key: 'governance',
       label: 'Governance audit',
-      value: loopGovernanceAuditSummary.value.recent_count != null
-        ? `${loopGovernanceAuditSummary.value.recent_count}`
-        : 'no audit',
-      sub: loopGovernanceAuditSummary.value.recent_count != null
-        ? `health=${loopGovernanceAuditSummary.value.health || 'ok'}`
-        : '没有治理审计记录，不隐藏风险',
+      value: loopGovernanceAuditSummary.value.recent_count != null ? `${loopGovernanceAuditSummary.value.recent_count}` : 'no audit',
+      sub:
+        loopGovernanceAuditSummary.value.recent_count != null
+          ? `health=${loopGovernanceAuditSummary.value.health || 'ok'}`
+          : '没有治理审计记录，不隐藏风险',
       tone: loopGovernanceAuditSummary.value.health === 'bad' ? 'bad' : 'ok',
     },
   ])
@@ -182,8 +207,11 @@ export function useLoopRuntimePresentation(core: LoopRuntimeCore, activity: Loop
       label: '未登记上岗',
       value: `${loopNotDeployedCount.value}`,
       sub: loopNotDeployedCount.value
-        ? loopArray(loopRosterAlignment.value.not_deployed_ids).map((id) => loopString(id)).filter(Boolean).slice(0, 3).join(' / ')
-          || loopFirstText(loopRosterGate.value.reason, '编制内但未登记上岗')
+        ? loopArray(loopRosterAlignment.value.not_deployed_ids)
+            .map((id) => loopString(id))
+            .filter(Boolean)
+            .slice(0, 3)
+            .join(' / ') || loopFirstText(loopRosterGate.value.reason, '编制内但未登记上岗')
         : '参与者均已登记上岗',
       tone: loopNotDeployedCount.value ? 'bad' : 'ok',
     },
@@ -192,8 +220,8 @@ export function useLoopRuntimePresentation(core: LoopRuntimeCore, activity: Loop
       label: '隔离拦截',
       value: `${loopOutOfRosterCount.value}`,
       sub: loopOutOfRosterCount.value
-        ? loopOutOfRosterParticipantIds.value.slice(0, 3).join(' / ')
-          || loopFirstText(loopRosterGate.value.reason, '非编制参与者已由后端隔离')
+        ? loopOutOfRosterParticipantIds.value.slice(0, 3).join(' / ') ||
+          loopFirstText(loopRosterGate.value.reason, '非编制参与者已由后端隔离')
         : loopFirstText(loopRosterGate.value.action, '未发现非编制参与者'),
       tone: loopOutOfRosterCount.value ? 'bad' : 'ok',
     },
@@ -212,8 +240,8 @@ export function useLoopRuntimePresentation(core: LoopRuntimeCore, activity: Loop
       const missingText = loopRuntimeContractMissingFields.value.length
         ? ` 缺字段：${loopRuntimeContractMissingFields.value.slice(0, 5).join(' / ')}。`
         : loopRuntimeSurfaceMissing.value.length
-        ? ` 当前 surface 缺依赖：${loopRuntimeSurfaceMissing.value.slice(0, 5).join(' / ')}。`
-        : ''
+          ? ` 当前 surface 缺依赖：${loopRuntimeSurfaceMissing.value.slice(0, 5).join(' / ')}。`
+          : ''
       return {
         tone: 'bad',
         title: loopFirstText(loopRuntimeSurfaceReadiness.value.title, 'Loop runtime contract 不匹配'),
@@ -222,7 +250,9 @@ export function useLoopRuntimePresentation(core: LoopRuntimeCore, activity: Loop
       }
     }
     if (loopRosterGate.value.action === 'hold' || loopNotDeployedCount.value) {
-      const targets = loopArray(loopRosterRemediation.value.target_employee_ids).map((id) => loopString(id)).filter(Boolean)
+      const targets = loopArray(loopRosterRemediation.value.target_employee_ids)
+        .map((id) => loopString(id))
+        .filter(Boolean)
       return {
         tone: 'bad',
         title: loopFirstText(loopRosterRemediation.value.title, '编制员工未登记上岗'),
@@ -231,7 +261,9 @@ export function useLoopRuntimePresentation(core: LoopRuntimeCore, activity: Loop
       }
     }
     if (loopRosterGate.value.blocking === true || loopOutOfRosterCount.value) {
-      const targets = loopArray(loopRosterRemediation.value.target_employee_ids).map((id) => loopString(id)).filter(Boolean)
+      const targets = loopArray(loopRosterRemediation.value.target_employee_ids)
+        .map((id) => loopString(id))
+        .filter(Boolean)
       return {
         tone: 'bad',
         title: loopFirstText(loopRosterRemediation.value.title, '发现非编制参与者'),
@@ -349,14 +381,9 @@ export function useLoopRuntimePresentation(core: LoopRuntimeCore, activity: Loop
   })
 
   function loopRoleGroupKey(row: Record<string, unknown>): 'scout' | 'fix' | 'review' | 'qa' | 'verify' | 'ops' | 'other' {
-    const text = [
-      row.role,
-      row.role_label,
-      row.stage,
-      row.stage_label,
-      ...loopArray(row.stages),
-      ...loopArray(row.stage_labels),
-    ].map((x) => loopString(x).toLowerCase()).join(' ')
+    const text = [row.role, row.role_label, row.stage, row.stage_label, ...loopArray(row.stages), ...loopArray(row.stage_labels)]
+      .map((x) => loopString(x).toLowerCase())
+      .join(' ')
     if (/scout|侦察|intake|dispatch|router|感知/.test(text)) return 'scout'
     if (/fix|repair|coding|修复|编码/.test(text)) return 'fix'
     if (/review|validator|评审|审查/.test(text)) return 'review'
@@ -393,8 +420,12 @@ export function useLoopRuntimePresentation(core: LoopRuntimeCore, activity: Loop
       .filter((group) => group.workers.length > 0)
   })
   return {
-    loopRuntimeTruthCards, loopRuntimeFreshnessCards, loopIsolationCards,
-    loopDiagnosis, loopGovernanceBridge, loopRoleGroups,
+    loopRuntimeTruthCards,
+    loopRuntimeFreshnessCards,
+    loopIsolationCards,
+    loopDiagnosis,
+    loopGovernanceBridge,
+    loopRoleGroups,
   }
 }
 

@@ -207,7 +207,7 @@ class TestCleanupOldShipmentDocumentsTask:
     @patch("app.tasks.shipment_tasks.os.path.exists")
     @patch("app.tasks.shipment_tasks.os.path.isfile")
     @patch("app.tasks.shipment_tasks.os.path.getmtime")
-    @patch("app.utils.path_utils.get_app_data_dir")
+    @patch("app.utils.path_io.path_utils.get_app_data_dir")
     def test_cleanup_old_documents_success(
         self, mock_data_dir, mock_getmtime, mock_isfile, mock_exists, mock_remove, mock_listdir
     ):

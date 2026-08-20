@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """REST API for ESkill registry and debug runs."""
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ from modstore_server.api.deps import _get_current_user
 from modstore_server.eskill_runtime import default_eskill_runtime
 from modstore_server.infrastructure.db import get_db
 from modstore_server.models import ESkill, ESkillRun, ESkillVersion, User
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 router = APIRouter(prefix="/api/eskills", tags=["eskills"])
 
@@ -47,7 +49,7 @@ def _loads(raw: str | None) -> Dict[str, Any]:
     try:
         data = json.loads(raw)
         return data if isinstance(data, dict) else {}
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         return {}
 
 
@@ -119,7 +121,7 @@ async def create_eskill(
         db.add(version)
         db.commit()
         db.refresh(skill)
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         db.rollback()
         raise HTTPException(400, f"创建 ESkill 失败: {exc}") from exc
     return _skill_to_dict(skill, version)

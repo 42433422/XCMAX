@@ -89,7 +89,7 @@ class OCRAnalysisMixin:
             type_name: sum(1 for keyword in values if keyword in text)
             for type_name, values in keywords.items()
         }
-        max_type = max(type_scores, key=type_scores.get)
+        max_type = max(type_scores, key=lambda name: type_scores[name])
         if type_scores[max_type] > 0:
             analysis["text_type"] = max_type
             analysis["confidence"] = min(1.0, type_scores[max_type] / 3)

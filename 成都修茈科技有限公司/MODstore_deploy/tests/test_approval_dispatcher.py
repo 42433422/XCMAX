@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 """approval_dispatcher：部署链顺序与 reject_all。"""
 
 from __future__ import annotations

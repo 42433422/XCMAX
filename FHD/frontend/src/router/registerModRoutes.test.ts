@@ -60,9 +60,7 @@ describe('registerModRoutes', () => {
       routes: [],
     })
     const addSpy = vi.spyOn(router, 'addRoute')
-    await registerModRoutes(router, [
-      { mod_id: 'test-mod', routes_path: '/mods/test-mod/frontend/routes.js' },
-    ])
+    await registerModRoutes(router, [{ mod_id: 'test-mod', routes_path: '/mods/test-mod/frontend/routes.js' }])
     expect(addSpy).toHaveBeenCalled()
     expect(router.getRoutes().some((r) => r.path.includes('test-mod'))).toBe(true)
   })
@@ -72,9 +70,7 @@ describe('registerModRoutes', () => {
       history: createMemoryHistory(),
       routes: [],
     })
-    await expect(
-      registerModRoutes(router, [{ mod_id: 'missing-mod', routes_path: 'x' }]),
-    ).resolves.toBeUndefined()
+    await expect(registerModRoutes(router, [{ mod_id: 'missing-mod', routes_path: 'x' }])).resolves.toBeUndefined()
   })
 
   it('marks intentionally empty routes as registered', async () => {
@@ -82,12 +78,8 @@ describe('registerModRoutes', () => {
       history: createMemoryHistory(),
       routes: [],
     })
-    await registerModRoutes(router, [
-      { mod_id: 'empty-mod', routes_path: '/mods/empty-mod/frontend/routes.js' },
-    ])
-    await registerModRoutes(router, [
-      { mod_id: 'empty-mod', routes_path: '/mods/empty-mod/frontend/routes.js' },
-    ])
+    await registerModRoutes(router, [{ mod_id: 'empty-mod', routes_path: '/mods/empty-mod/frontend/routes.js' }])
+    await registerModRoutes(router, [{ mod_id: 'empty-mod', routes_path: '/mods/empty-mod/frontend/routes.js' }])
     const { modRouteGlob } = await import('@/constants/modRouteGlob')
     expect(modRouteGlob['/mods/empty-mod/frontend/routes.js']).toHaveBeenCalledTimes(1)
   })
@@ -106,9 +98,7 @@ describe('registerModRoutes', () => {
     })
     const replaceSpy = vi.spyOn(router, 'replace')
 
-    await registerModRoutes(router, [
-      { mod_id: 'refresh-mod', routes_path: '/mods/refresh-mod/frontend/routes.js' },
-    ])
+    await registerModRoutes(router, [{ mod_id: 'refresh-mod', routes_path: '/mods/refresh-mod/frontend/routes.js' }])
 
     expect(replaceSpy).toHaveBeenCalledWith('/onboarding?step=welcome&redirect=/')
   })
@@ -129,9 +119,7 @@ describe('registerModRoutes', () => {
     window.history.replaceState(null, '', '/refresh-home-mod')
     const replaceSpy = vi.spyOn(router, 'replace')
 
-    await registerModRoutes(router, [
-      { mod_id: 'refresh-home-mod', routes_path: '/mods/refresh-home-mod/frontend/routes.js' },
-    ])
+    await registerModRoutes(router, [{ mod_id: 'refresh-home-mod', routes_path: '/mods/refresh-home-mod/frontend/routes.js' }])
 
     expect(replaceSpy).toHaveBeenCalledWith('/refresh-home-mod')
   })

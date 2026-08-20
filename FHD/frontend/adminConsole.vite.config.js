@@ -10,10 +10,7 @@ import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 import path from 'path'
 import fs from 'fs'
 import { fileURLToPath } from 'url'
-import {
-  createAdminConsoleAtAliasPlugin,
-  createWorkflowComponentsAliasPlugin,
-} from './vite.shared-alias.js'
+import { createAdminConsoleAtAliasPlugin, createWorkflowComponentsAliasPlugin } from './vite.shared-alias.js'
 import { resolveApiBase } from './vite/resolveApiBase.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -69,11 +66,7 @@ const adminModuleAliases = [
 })
 
 function buildDevProxy(apiBase) {
-  const modstoreBase = (
-    process.env.VITE_MODSTORE_BASE ||
-    process.env.XCAGI_MARKET_BASE_URL ||
-    'http://127.0.0.1:8788'
-  ).replace(/\/$/, '')
+  const modstoreBase = (process.env.VITE_MODSTORE_BASE || process.env.XCAGI_MARKET_BASE_URL || 'http://127.0.0.1:8788').replace(/\/$/, '')
   const forwardHost = (proxy) => {
     proxy.on('proxyReq', (proxyReq, req) => {
       const origHost = req.headers['host'] || ''

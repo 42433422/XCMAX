@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy.orm import Session
 
@@ -61,8 +61,10 @@ class ProductAdapter(TargetAdapter):
         query = owned_query(db, Product).filter(Product.unit == str(data.get("unit") or ""))
         model = str(data.get("model_number") or "").strip()
         if model:
-            return query.filter(Product.model_number == model).first()
-        return query.filter(Product.name == str(data.get("name") or "")).first()
+            return cast("Product | None", query.filter(Product.model_number == model).first())
+        return cast(
+            "Product | None", query.filter(Product.name == str(data.get("name") or "")).first()
+        )
 
     @staticmethod
     def _name_key(data: dict[str, Any]) -> tuple[str, str]:
@@ -83,13 +85,14 @@ class ProductAdapter(TargetAdapter):
         )
 
     def _same_name_candidates(self, db: Session, data: dict[str, Any]) -> list[Product]:
-        return (
+        return cast(
+            "list[Product]",
             owned_query(db, Product)
             .filter(
                 Product.unit == str(data.get("unit") or ""),
                 Product.name == str(data.get("name") or ""),
             )
-            .all()
+            .all(),
         )
 
     def preview(self, db, data, *, allowed_update_fields, context):

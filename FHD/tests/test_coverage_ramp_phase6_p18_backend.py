@@ -23,6 +23,8 @@ from __future__ import annotations
 
 import os
 
+from app.utils.operational_errors import BOUNDARY_ERRORS
+
 os.environ.setdefault("XCAGI_SKIP_LEGACY_COMPAT_ROUTES", "1")
 
 import json
@@ -168,7 +170,7 @@ def _resolve_circular_import():
     if "app.fastapi_routes.mobile_api_extensions" not in sys.modules:
         try:
             from app.fastapi_routes import mobile_api  # noqa: F401
-        except Exception:
+        except BOUNDARY_ERRORS:
             pass
     yield
 

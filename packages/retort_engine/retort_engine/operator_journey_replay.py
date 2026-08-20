@@ -6,10 +6,11 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.architecture_contracts import evaluate_architecture_contracts
 from retort_engine.codebase_graph import build_codebase_graph
+from retort_engine.operational_errors import BOUNDARY_ERRORS
 from retort_engine.ui_features import (
     blackhole_ui_operation_replay,
     blackhole_ui_structure,
@@ -37,7 +38,7 @@ def build_operator_journey_replay(
     manifest_path = (
         root / ".retort" / "operator_journey_replays" / f"{run_id}.manifest.json"
     )
-    summary = {
+    summary: dict[str, Any] = {
         "run_id": run_id,
         "stage_count": len(stages),
         "ready_stage_count": len(ready_stages),
@@ -320,7 +321,7 @@ def _journey_stages(
 
 def _artifact_manifest(root: Path, latest_run: dict[str, Any]) -> list[dict[str, Any]]:
     docs = root / "docs"
-    specs = [
+    specs: list[tuple[str, Path, str, tuple[str, ...]]] = [
         (
             "external_review_report",
             docs / "retort_external_review_report.json",
@@ -547,7 +548,7 @@ def _artifact(
     root: Path, name: str, path: Path, kind: str, required: tuple[str, ...]
 ) -> dict[str, Any]:
     exists = path.is_file()
-    payload = _read_json(path) if exists else {}
+    payload = cast(dict[str, Any], _read_json(path) if exists else {})
     present = [field for field in required if field in payload]
     try:
         relative = path.resolve().relative_to(root)
@@ -662,19 +663,21 @@ def _latest_real_absorption_run(root: Path) -> dict[str, Any]:
 
 
 def _code_graph_ready(run: dict[str, Any]) -> bool:
-    proof = (
+    proof = cast(
+        dict[str, Any],
         run.get("code_graph_proof")
         if isinstance(run.get("code_graph_proof"), dict)
-        else {}
+        else {},
     )
     return bool(proof.get("passed") and proof.get("per_run_required"))
 
 
 def _location_evidence(run: dict[str, Any]) -> dict[str, Any]:
-    proof = (
+    proof = cast(
+        dict[str, Any],
         run.get("code_graph_proof")
         if isinstance(run.get("code_graph_proof"), dict)
-        else {}
+        else {},
     )
     has_pre_focus = bool(run.get("pre_absorption_focus"))
     has_graph_focus = bool(
@@ -685,7 +688,9 @@ def _location_evidence(run: dict[str, Any]) -> dict[str, Any]:
     kind = (
         "pre_absorption_focus"
         if has_pre_focus
-        else "post_absorption_code_graph_focus" if has_graph_focus else "missing"
+        else "post_absorption_code_graph_focus"
+        if has_graph_focus
+        else "missing"
     )
     return {
         "ready": has_pre_focus or has_graph_focus,
@@ -906,9 +911,7 @@ def _write_manifest(path: Path, result: dict[str, Any]) -> None:
 def _safe_call(fn: Any) -> dict[str, Any]:
     try:
         result = fn()
-    except (
-        Exception  # noqa: BLE001 - replay captures arbitrary adapter failures
-    ) as exc:
+    except BOUNDARY_ERRORS as exc:
         return {
             "status": "error",
             "error": type(exc).__name__,

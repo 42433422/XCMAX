@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="no-any-return"
 """运行时真相清单：desired（拓扑 SSOT）× actual（端口/进程/systemd/health）。
 
 用法:
@@ -22,7 +23,7 @@ import subprocess
 import sys
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -125,9 +126,7 @@ def check_static() -> int:
     units = topo.get("systemd_units") or []
     errors: list[str] = []
 
-    must_services = [
-        sid for sid, svc in services.items() if (svc or {}).get("must_run")
-    ]
+    must_services = [sid for sid, svc in services.items() if (svc or {}).get("must_run")]
     if not must_services:
         errors.append("services 中无 must_run: true")
     must_procs = [p for p in processes if (p or {}).get("must_run")]
@@ -257,7 +256,7 @@ def build_inventory(*, host: str = "127.0.0.1") -> dict[str, Any]:
     unknown = sum(1 for i in items if i.get("actual") == "unknown")
     return {
         "schema": SCHEMA,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "host": host,
         "source": {
             "topology": (
@@ -332,15 +331,9 @@ def cmd_probe(*, host: str, as_json: bool, write: bool) -> int:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
     else:
         mark = "✓" if payload["ok"] else "✗"
-        print(
-            f"runtime inventory @ {host}  {mark} failed_must_run={payload['failed_must_run']}"
-        )
+        print(f"runtime inventory @ {host}  {mark} failed_must_run={payload['failed_must_run']}")
         for it in payload["items"]:
-            m = (
-                "✓"
-                if it["actual"] == "running"
-                else ("?" if it["actual"] == "unknown" else "✗")
-            )
+            m = "✓" if it["actual"] == "running" else ("?" if it["actual"] == "unknown" else "✗")
             flag = " [must_run]" if it.get("must_run") else ""
             detail = f"  {it.get('detail')}" if it.get("detail") else ""
             print(f"  {m} {it['kind']:<8} {it['id']:<28} {it['actual']}{flag}{detail}")

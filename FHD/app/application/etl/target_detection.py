@@ -95,17 +95,17 @@ def detect_etl_target(path: str | Path, *, suffix: str = "") -> dict[str, Any]:
         from openpyxl import load_workbook
 
         workbook = load_workbook(source, read_only=True, data_only=True, keep_links=False)
-        lines = []
+        workbook_lines: list[str] = []
         try:
             for worksheet in workbook.worksheets[:30]:
-                lines.append(worksheet.title)
-                for index, row in enumerate(worksheet.iter_rows(values_only=True)):
-                    lines.append(_joined(row))
+                workbook_lines.append(worksheet.title)
+                for index, sheet_row in enumerate(worksheet.iter_rows(values_only=True)):
+                    workbook_lines.append(_joined(sheet_row))
                     if index >= 79:
                         break
         finally:
             workbook.close()
-        return _classify(lines, suffix=ext)
+        return _classify(workbook_lines, suffix=ext)
     filename = source.name
     if _DELIVERY_RE.search(filename):
         return {

@@ -1,12 +1,14 @@
 """Vendor 内嵌：旧版 .doc (OLE) → .docx，供员工包 convert 导入（无 modstore 依赖）。"""
+
 from __future__ import annotations
 
 import os
 import shutil
 import subprocess
-import tempfile
 from pathlib import Path
 from typing import Any, Dict, Tuple
+
+from app.mod_sdk.errors import RECOVERABLE_ERRORS
 
 _OLE_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
 
@@ -25,7 +27,7 @@ def is_zip_docx(path: Path) -> bool:
     try:
         with zipfile.ZipFile(path) as zf:
             return "word/document.xml" in zf.namelist()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return False
 
 
@@ -71,7 +73,17 @@ def _convert_soffice(src: Path, work_dir: Path) -> Path | None:
             continue
         try:
             subprocess.run(
-                [exe, "--headless", "--nologo", "--nofirststartwizard", "--convert-to", "docx", "--outdir", str(work_dir), str(src)],
+                [
+                    exe,
+                    "--headless",
+                    "--nologo",
+                    "--nofirststartwizard",
+                    "--convert-to",
+                    "docx",
+                    "--outdir",
+                    str(work_dir),
+                    str(src),
+                ],
                 check=True,
                 capture_output=True,
                 timeout=int(os.environ.get("LEGACY_DOC_CONVERT_TIMEOUT", "180")),
@@ -93,7 +105,12 @@ def _convert_textutil(src: Path, dest: Path) -> bool:
     dest = Path(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
     try:
-        subprocess.run([tu, "-convert", "docx", "-output", str(dest), str(src)], check=True, capture_output=True, timeout=120)
+        subprocess.run(
+            [tu, "-convert", "docx", "-output", str(dest), str(src)],
+            check=True,
+            capture_output=True,
+            timeout=120,
+        )
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
         return False
     return dest.is_file() and is_zip_docx(dest)

@@ -1,10 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import {
-  LAN_BRIDGE_MOD_ID,
-  LS_LAN_MOD_FACADE_ENABLED,
-  readLanModFacadeEnabled,
-  setLanModFacadeEnabled,
-} from './lanMod'
+import { LAN_BRIDGE_MOD_ID, LS_LAN_MOD_FACADE_ENABLED, readLanModFacadeEnabled, setLanModFacadeEnabled } from './lanMod'
 
 describe('lanMod constants and functions', () => {
   beforeEach(() => {

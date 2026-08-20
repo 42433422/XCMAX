@@ -13,7 +13,7 @@ const props = withDefaults(
     /** deck：底栏叠卡；chip：顶栏单行胶囊 */
     layout?: 'deck' | 'chip'
   }>(),
-  { layout: 'deck' },
+  { layout: 'deck', maxVisible: undefined },
 )
 
 const emit = defineEmits<{
@@ -67,7 +67,6 @@ function onCardKeydown(e: KeyboardEvent, f: DirectGeneratedFile) {
     tag="div"
     class="wb-direct-file-stack"
     :class="{ 'wb-direct-file-stack--generated': true, 'wb-direct-file-stack--chip': isChip }"
-    aria-label="已生成文件"
   >
     <template v-if="isChip">
       <article

@@ -12,6 +12,7 @@ from typing import Any, Callable
 
 from app.domain.autonomy.audit_log import append_autonomy_audit
 from app.domain.autonomy.autonomy_guard import RiskDecision, evaluate_risk
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _FHD_ROOT = Path(__file__).resolve().parents[3]
 _DEFAULT_LEDGER_PATH = _FHD_ROOT / "metrics" / "autonomy-approval-ledger.jsonl"
@@ -263,6 +264,8 @@ def _execute_self_maintenance_merge(payload: dict[str, Any]) -> Any:
     from modstore_server.self_maintenance_loop_runner import _auto_merge_low_risk_branch
 
     approval = payload.get("_approval") if isinstance(payload.get("_approval"), dict) else {}
+    if not isinstance(approval, dict):
+        approval = {}
     return _auto_merge_low_risk_branch(
         run_id=str(payload.get("run_id") or ""),
         task_id=str(payload.get("task_id") or "") or None,
@@ -348,13 +351,13 @@ def resume_action(
     try:
         raw_outcome = chosen(
             {
-                **dict(payload),
+                **dict(payload or {}),
                 "_approval": {"approver": actor, "approval_id": approval_id},
             }
         )
         outcome = raw_outcome if isinstance(raw_outcome, dict) else {"result": raw_outcome}
         ok = bool(outcome.get("ok", outcome.get("success", True)))
-    except Exception as exc:  # noqa: BLE001 - executor boundary must become an audited outcome
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - executor boundary must become an audited outcome
         outcome = {"ok": False, "error": str(exc)}
         ok = False
     return complete_action(

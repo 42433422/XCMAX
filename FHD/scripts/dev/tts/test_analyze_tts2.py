@@ -1,4 +1,5 @@
 import asyncio
+
 import edge_tts
 
 
@@ -25,9 +26,9 @@ async def analyze_audio_full():
             word = chunk.get("text", "")
             offset = chunk.get("offset", 0) / 10000000
             duration = chunk.get("duration", 0) / 10000000
-            print(f"  [{event_type}] '{word}' ({offset:.2f}s - {offset+duration:.2f}s)")
+            print(f"  [{event_type}] '{word}' ({offset:.2f}s - {offset + duration:.2f}s)")
 
-    print(f"\n=== 事件统计 ===")
+    print("\n=== 事件统计 ===")
     for etype, count in event_types.items():
         print(f"  {etype}: {count}")
     print(f"\n总音频大小: {total_audio} bytes")

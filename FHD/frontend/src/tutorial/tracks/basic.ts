@@ -21,8 +21,7 @@ export function buildBasicSteps(ctx: TutorialBuildContext): TutorialStep[] {
       id: 'starter-pack-open-tab',
       title: '打开「新手对话包」',
       description: '请先点击副窗顶部的「新手对话包」标签，切换到对话包列表后，再按后面步骤逐条点…',
-      targetSelector:
-        '[data-tutorial-spotlight="assistant-panel"] .assistant-tab[data-tutorial-id="tab-starterPack"]',
+      targetSelector: '[data-tutorial-spotlight="assistant-panel"] .assistant-tab[data-tutorial-id="tab-starterPack"]',
       actionType: 'click',
       routeName: 'chat',
       assistantTab: 'push',
@@ -111,8 +110,7 @@ export function buildBasicSteps(ctx: TutorialBuildContext): TutorialStep[] {
       id: 'tab-push',
       title: '推送与微信消息',
       description: '请点击副窗顶部的「推送」标签',
-      targetSelector:
-        '[data-tutorial-spotlight="assistant-panel"] .assistant-tab[data-tutorial-id="tab-push"]',
+      targetSelector: '[data-tutorial-spotlight="assistant-panel"] .assistant-tab[data-tutorial-id="tab-push"]',
       actionType: 'click',
       routeName: 'chat',
       assistantTab: 'push',
@@ -159,8 +157,7 @@ export function buildBasicSteps(ctx: TutorialBuildContext): TutorialStep[] {
       id: 'tab-assistant',
       title: '产品协助',
       description: '请点击「协助副窗」，用于产品查询与资料修正。',
-      targetSelector:
-        '[data-tutorial-spotlight="assistant-panel"] .assistant-tab[data-tutorial-id="tab-assistant"]',
+      targetSelector: '[data-tutorial-spotlight="assistant-panel"] .assistant-tab[data-tutorial-id="tab-assistant"]',
       actionType: 'click',
       routeName: 'chat',
       assistantTab: 'assistant',

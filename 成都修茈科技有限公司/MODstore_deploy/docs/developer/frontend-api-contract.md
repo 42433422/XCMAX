@@ -20,8 +20,8 @@
 
 ## 角色分工
 
-| 角色 | 责任 |
-| --- | --- |
-| 后端 | 路由上补齐 `summary` / `response_model` / `responses`（见 [`api-docs.md`](../api-docs.md)）；保持快照与 CI 门禁绿 |
-| **market-frontend-dev** | 保证 `api.ts` 与已合并的 `modstore-server.json` 一致；若选路径 B，维护生成脚本与导入边界 |
-| 评审 | Breaking change 须在 PR 描述中显式写明，并 `@` 前端对接人 |
+| 角色                    | 责任                                                                                                              |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| 后端                    | 路由上补齐 `summary` / `response_model` / `responses`（见 [`api-docs.md`](../api-docs.md)）；保持快照与 CI 门禁绿 |
+| **market-frontend-dev** | 保证 `api.ts` 与已合并的 `modstore-server.json` 一致；若选路径 B，维护生成脚本与导入边界                          |
+| 评审                    | Breaking change 须在 PR 描述中显式写明，并 `@` 前端对接人                                                         |

@@ -49,7 +49,7 @@ class TestExportToExcel:
                 "app.infrastructure.repositories.product_repository_export_mixin.inspect",
                 fake_inspect,
             ),
-            patch("app.utils.path_utils.get_data_dir", return_value=tmp),
+            patch("app.utils.path_io.path_utils.get_data_dir", return_value=tmp),
         ):
             result = ProductExportMixin().export_to_excel(unit_name="蓝天单位")
         assert result["success"] is True

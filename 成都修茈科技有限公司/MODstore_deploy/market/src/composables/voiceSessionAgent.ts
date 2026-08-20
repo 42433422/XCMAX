@@ -4,19 +4,13 @@ import {
   routeVoiceUtterance,
   type VoiceRouteContext,
   VOICE_PUSHBACK_RE,
-  inferUserGoalFromVoiceMessages,
   hasEmployeePlanContext,
   looksLikeEmployeeTaskDescription,
   isLikelyShortProceedFragment,
 } from './voiceUtteranceRouter'
 import { normalizeVoiceAsrText } from './normalizeVoiceAsrText'
 
-export type VoiceSessionStage =
-  | 'exploring'
-  | 'clarifying'
-  | 'ready_to_plan'
-  | 'planning'
-  | 'executing'
+export type VoiceSessionStage = 'exploring' | 'clarifying' | 'ready_to_plan' | 'planning' | 'executing'
 
 export type VoiceUserTone = 'neutral' | 'complaint' | 'confirm' | 'cancel'
 
@@ -71,9 +65,7 @@ const VALID_ACTIONS = new Set<VoiceAgentAction>([
   'status',
 ])
 
-export function createDefaultVoiceSessionState(
-  mode: VoiceSessionState['mode'] = 'employee',
-): VoiceSessionState {
+export function createDefaultVoiceSessionState(mode: VoiceSessionState['mode'] = 'employee'): VoiceSessionState {
   return {
     mode,
     stage: 'exploring',
@@ -85,20 +77,23 @@ export function createDefaultVoiceSessionState(
   }
 }
 
-export function applyVoiceSessionPatch(
-  state: VoiceSessionState,
-  patch: Partial<VoiceSessionState> | undefined,
-): VoiceSessionState {
+export function applyVoiceSessionPatch(state: VoiceSessionState, patch: Partial<VoiceSessionState> | undefined): VoiceSessionState {
   if (!patch || !Object.keys(patch).length) return state
   if (patch.userGoal !== undefined) state.userGoal = String(patch.userGoal || '').trim()
   if (patch.openQuestions !== undefined) {
     state.openQuestions = Array.isArray(patch.openQuestions)
-      ? patch.openQuestions.map((q) => String(q).trim()).filter(Boolean).slice(0, 6)
+      ? patch.openQuestions
+          .map((q) => String(q).trim())
+          .filter(Boolean)
+          .slice(0, 6)
       : []
   }
   if (patch.constraints !== undefined) {
     state.constraints = Array.isArray(patch.constraints)
-      ? patch.constraints.map((c) => String(c).trim()).filter(Boolean).slice(0, 8)
+      ? patch.constraints
+          .map((c) => String(c).trim())
+          .filter(Boolean)
+          .slice(0, 8)
       : []
   }
   if (patch.stage !== undefined) state.stage = patch.stage
@@ -109,10 +104,7 @@ export function applyVoiceSessionPatch(
   return state
 }
 
-export function resetVoiceSessionState(
-  stateRef: Ref<VoiceSessionState>,
-  mode: VoiceSessionState['mode'] = 'employee',
-) {
+export function resetVoiceSessionState(stateRef: Ref<VoiceSessionState>, mode: VoiceSessionState['mode'] = 'employee') {
   stateRef.value = createDefaultVoiceSessionState(mode)
 }
 
@@ -133,9 +125,7 @@ export function buildAgentAwarePrompt(state: VoiceSessionState, extraHint?: stri
   } else {
     parts.push('系统判断：仍在探索/澄清，禁止输出「已开始规划」或催促确认摘要。')
   }
-  parts.push(
-    '闲聊或 ASR 噪声时：简短确认听清与否，不要画 Mermaid/流程图，除非用户明确要求「画个图」。',
-  )
+  parts.push('闲聊或 ASR 噪声时：简短确认听清与否，不要画 Mermaid/流程图，除非用户明确要求「画个图」。')
   if (extraHint?.trim()) parts.push(extraHint.trim())
   return parts.join('\n')
 }
@@ -168,13 +158,7 @@ function normalizeTone(raw: unknown): VoiceUserTone {
 
 function normalizeStage(raw: unknown): VoiceSessionStage | undefined {
   const s = String(raw || '').trim()
-  if (
-    s === 'exploring' ||
-    s === 'clarifying' ||
-    s === 'ready_to_plan' ||
-    s === 'planning' ||
-    s === 'executing'
-  ) {
+  if (s === 'exploring' || s === 'clarifying' || s === 'ready_to_plan' || s === 'planning' || s === 'executing') {
     return s
   }
   return undefined
@@ -349,27 +333,19 @@ export function coerceClassificationForEmployee(
     }
   }
 
-  let { action, confidence } = classification
+  let { action } = classification
+  const { confidence } = classification
 
-  if (
-    ctx?.planSessionPhase === 'checklist' &&
-    action === 'chat' &&
-    confidence < 0.55 &&
-    text.length <= 16
-  ) {
+  if (ctx?.planSessionPhase === 'checklist' && action === 'chat' && confidence < 0.55 && text.length <= 16) {
     action = 'clarify'
-    classification.replyHint =
-      classification.replyHint || '清单已展示，请用户明确是否开始制作，或说修改哪一条。'
+    classification.replyHint = classification.replyHint || '清单已展示，请用户明确是否开始制作，或说修改哪一条。'
   }
 
   if (action === 'open_plan') {
-    const patchReady =
-      classification.statePatch.readyToPlan ?? state.readyToPlan ?? looksLikeEmployeeTaskDescription(text)
+    const patchReady = classification.statePatch.readyToPlan ?? state.readyToPlan ?? looksLikeEmployeeTaskDescription(text)
     if (!patchReady && confidence < 0.65) {
       action = 'clarify'
-      classification.replyHint =
-        classification.replyHint ||
-        '先复述你对用户需求的理解，并追问 1-2 个关键点；不要开规划面板。'
+      classification.replyHint = classification.replyHint || '先复述你对用户需求的理解，并追问 1-2 个关键点；不要开规划面板。'
     }
   }
 
@@ -396,9 +372,7 @@ export function shouldUseFastVoiceClassifier(ctx: ClassifyVoiceTurnContext): boo
   return t.length <= 12
 }
 
-export async function classifyVoiceTurn(
-  ctx: ClassifyVoiceTurnContext,
-): Promise<VoiceTurnClassification> {
+export async function classifyVoiceTurn(ctx: ClassifyVoiceTurnContext): Promise<VoiceTurnClassification> {
   if (shouldUseFastVoiceClassifier(ctx)) {
     return coerceClassificationForEmployee(fallbackClassifyVoiceTurn(ctx), ctx.state, {
       text: ctx.text,
@@ -407,10 +381,15 @@ export async function classifyVoiceTurn(
     })
   }
   try {
-    const res = (await api.llmChat(ctx.provider, ctx.model, [
-      { role: 'system', content: buildClassifierSystemPrompt(ctx.composerIntent) },
-      { role: 'user', content: buildClassifierUserPayload(ctx) },
-    ], 200)) as { content?: unknown }
+    const res = (await api.llmChat(
+      ctx.provider,
+      ctx.model,
+      [
+        { role: 'system', content: buildClassifierSystemPrompt(ctx.composerIntent) },
+        { role: 'user', content: buildClassifierUserPayload(ctx) },
+      ],
+      200,
+    )) as { content?: unknown }
     const parsed = parseClassificationResponse(String(res?.content ?? ''))
     if (parsed) {
       return coerceClassificationForEmployee(parsed, ctx.state, {
@@ -481,14 +460,7 @@ export function pickBestEmployeeBriefFromVoice(
   const userChunks = messages
     .filter((m) => m.role === 'user')
     .map((m) => sanitizeVoiceUtteranceText(String(m.content || '')))
-    .filter(
-      (t) =>
-        t &&
-        t !== ex &&
-        !isPlaceholderPlanContent(t) &&
-        !isLikelyShortProceedFragment(t) &&
-        !isLikelyAsrEchoNoise(t, topicHint),
-    )
+    .filter((t) => t && t !== ex && !isPlaceholderPlanContent(t) && !isLikelyShortProceedFragment(t) && !isLikelyAsrEchoNoise(t, topicHint))
 
   if (!userChunks.length) return goal || ''
 
@@ -500,10 +472,7 @@ export function pickBestEmployeeBriefFromVoice(
   return scored[0]?.t || userChunks[userChunks.length - 1] || ''
 }
 
-export function formatFilteredPlanMessagesForBrief(
-  msgs: Array<{ role: string; content: string }>,
-  topicHint?: string,
-): string {
+export function formatFilteredPlanMessagesForBrief(msgs: Array<{ role: string; content: string }>, topicHint?: string): string {
   if (!Array.isArray(msgs) || !msgs.length) return ''
   const hint = topicHint || msgs.map((m) => m.content).join(' ')
   return msgs
@@ -528,10 +497,7 @@ export function buildDefaultEmployeePlanAssistantReply(brief: string): string {
   ].join('\n')
 }
 
-export function buildPlanBriefFromSessionState(
-  state: VoiceSessionState,
-  utterance: string,
-): string {
+export function buildPlanBriefFromSessionState(state: VoiceSessionState, utterance: string): string {
   const parts: string[] = []
   const goal = sanitizeVoiceUtteranceText(state.userGoal)
   if (goal) parts.push(`【已理解的用户目标】\n${goal}`)
@@ -550,11 +516,7 @@ export function buildPlanBriefFromVoiceMessages(
   const goal = sanitizeVoiceUtteranceText(state.userGoal)
   if (goal) parts.push(`【已理解的用户目标】\n${goal}`)
   if (state.constraints.length) parts.push(`【约束】\n${state.constraints.join('\n')}`)
-  const topicHint = [
-    goal,
-    ...messages.map((m) => String(m.content || '')),
-    String(triggerUtterance || ''),
-  ].join(' ')
+  const topicHint = [goal, ...messages.map((m) => String(m.content || '')), String(triggerUtterance || '')].join(' ')
   const transcript = messages
     .map((m) => {
       const c = sanitizeVoiceUtteranceText(String(m.content || ''))

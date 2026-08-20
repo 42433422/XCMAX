@@ -1,7 +1,7 @@
-# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 import logging
+
 from fastapi import APIRouter
 
 logger = logging.getLogger(__name__)
@@ -13,7 +13,10 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.get("/status")
     def mod_status():
-        return {"success": True, "data": {"mod_id": mod_id, "role": "workflow_visualization_bridge"}}
+        return {
+            "success": True,
+            "data": {"mod_id": mod_id, "role": "workflow_visualization_bridge"},
+        }
 
     app.include_router(router)
     logger.info("workflow visualization bridge registered %s", mod_id)

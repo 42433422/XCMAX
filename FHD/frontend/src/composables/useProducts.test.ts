@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { ref, nextTick } from 'vue'
+import { ref } from 'vue'
 
 vi.mock('../api/products', () => ({
   default: {
@@ -77,18 +77,14 @@ describe('useProducts', () => {
 
     it('returns empty when no match', () => {
       const products = useProducts()
-      products.products.value = [
-        { id: 1, name: 'Product A', model_number: 'MA' },
-      ] as any
+      products.products.value = [{ id: 1, name: 'Product A', model_number: 'MA' }] as any
       products.searchQuery.value = 'nonexistent'
       expect(products.filteredProducts.value).toHaveLength(0)
     })
 
     it('handles products without name or model_number', () => {
       const products = useProducts()
-      products.products.value = [
-        { id: 1 } as any,
-      ]
+      products.products.value = [{ id: 1 } as any]
       products.searchQuery.value = 'test'
       expect(products.filteredProducts.value).toHaveLength(0)
     })
@@ -98,7 +94,10 @@ describe('useProducts', () => {
     it('loads products successfully', async () => {
       vi.mocked(productsApi.getProducts).mockResolvedValueOnce({
         success: true,
-        data: [{ id: 1, name: 'P1' }, { id: 2, name: 'P2' }],
+        data: [
+          { id: 1, name: 'P1' },
+          { id: 2, name: 'P2' },
+        ],
       } as any)
       const products = useProducts()
       const result = await products.loadProducts()
@@ -109,7 +108,9 @@ describe('useProducts', () => {
 
     it('sets loading state during request', async () => {
       let resolvePromise: (v: any) => void
-      const promise = new Promise((resolve) => { resolvePromise = resolve })
+      const promise = new Promise((resolve) => {
+        resolvePromise = resolve
+      })
       vi.mocked(productsApi.getProducts).mockReturnValueOnce(promise as any)
       const products = useProducts()
       const loadPromise = products.loadProducts()
@@ -145,9 +146,7 @@ describe('useProducts', () => {
       products.selectedUnit.value = 'unit1'
       products.searchQuery.value = 'query1'
       await products.loadProducts()
-      expect(productsApi.getProducts).toHaveBeenCalledWith(
-        expect.objectContaining({ unit: 'unit1', search: 'query1' }),
-      )
+      expect(productsApi.getProducts).toHaveBeenCalledWith(expect.objectContaining({ unit: 'unit1', search: 'query1' }))
     })
 
     it('merges params with unit and search', async () => {
@@ -157,9 +156,7 @@ describe('useProducts', () => {
       } as any)
       const products = useProducts()
       await products.loadProducts({ page: 2 })
-      expect(productsApi.getProducts).toHaveBeenCalledWith(
-        expect.objectContaining({ page: 2 }),
-      )
+      expect(productsApi.getProducts).toHaveBeenCalledWith(expect.objectContaining({ page: 2 }))
     })
 
     it('does not update products when result is not successful', async () => {

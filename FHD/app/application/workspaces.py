@@ -114,6 +114,8 @@ class WorkspaceRegistry:
                 )
             raise WorkspaceError(f"unknown workspace: {wid}")
         vcs = raw.get("vcs") if isinstance(raw.get("vcs"), dict) else {}
+        if not isinstance(vcs, dict):
+            vcs = {}
         return Workspace(
             id=wid,
             label=str(raw.get("label") or wid),

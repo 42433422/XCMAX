@@ -79,10 +79,10 @@ cd market && npm ci && npm run build
 
 ## 勿与 MODstore /market/ 部署混用
 
-| 变更类型 | 只动 | 部署后检查 |
-|----------|------|------------|
-| COS / 安装包加速 | `/var/www/update/`、`deploy/nginx/snippets/xcagi-cos-alias.inc.conf` | `curl -sI https://xiu-ci.com/xcagi-v8.1.0/personal/...` 与 `.../enterprise/...` |
-| MODstore 工作台 | `MODstore_deploy/market/dist`、`deploy/nginx/snippets/market-static.inc.conf` | `bash deploy/scripts/post-deploy-check.sh` + 浏览器只开 `https://xiu-ci.com/market/` |
+| 变更类型         | 只动                                                                          | 部署后检查                                                                           |
+| ---------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| COS / 安装包加速 | `/var/www/update/`、`deploy/nginx/snippets/xcagi-cos-alias.inc.conf`          | `curl -sI https://xiu-ci.com/xcagi-v8.1.0/personal/...` 与 `.../enterprise/...`      |
+| MODstore 工作台  | `MODstore_deploy/market/dist`、`deploy/nginx/snippets/market-static.inc.conf` | `bash deploy/scripts/post-deploy-check.sh` + 浏览器只开 `https://xiu-ci.com/market/` |
 
 **禁止**：将官网根目录 `index.html`（含 `site-header`、`./main.js`）复制到 `market/dist/`。  
 **禁止**：在 `^~ /market/assets/` 上对 `alias` 使用 `try_files` 回退到 `index.html`（缺失 chunk 会返回 HTML，触发 `Unexpected token '<'`）。

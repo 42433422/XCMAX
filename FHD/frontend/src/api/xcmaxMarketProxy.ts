@@ -11,10 +11,7 @@ function marketPath(subpath: string): string {
   return `${MARKET_PREFIX}/${p}`
 }
 
-async function marketReq<T = unknown>(
-  subpath: string,
-  init?: { method?: string; body?: unknown },
-): Promise<T> {
+async function marketReq<T = unknown>(subpath: string, init?: { method?: string; body?: unknown }): Promise<T> {
   const url = marketPath(subpath)
   const method = (init?.method || 'GET').toUpperCase()
   if (method === 'GET') return api.get(url) as Promise<T>
@@ -112,27 +109,20 @@ const xcmaxMarketProxy = {
       throw e
     }
   },
-  adminDutyGraphRunStart: (payload: Record<string, unknown>) =>
-    marketReq('admin/duty-graph/runs', { method: 'POST', body: payload }),
-  adminDutyGraphRunDetail: (runId: number | string) =>
-    marketReq(`admin/duty-graph/runs/${encodeURIComponent(String(runId))}`),
+  adminDutyGraphRunStart: (payload: Record<string, unknown>) => marketReq('admin/duty-graph/runs', { method: 'POST', body: payload }),
+  adminDutyGraphRunDetail: (runId: number | string) => marketReq(`admin/duty-graph/runs/${encodeURIComponent(String(runId))}`),
   adminEmployeeExecutionCapabilities: (employeeIds?: string[]) =>
     marketReq('admin/employees/execution-capabilities', {
       method: 'POST',
       body: { employee_ids: Array.isArray(employeeIds) ? employeeIds : [] },
     }),
-  adminEmployeeExecutionMetrics: (
-    employeeId: string,
-    params?: { limit?: number; offset?: number; user_id?: number },
-  ) => {
+  adminEmployeeExecutionMetrics: (employeeId: string, params?: { limit?: number; offset?: number; user_id?: number }) => {
     const p = new URLSearchParams()
     if (params?.limit != null) p.set('limit', String(params.limit))
     if (params?.offset != null) p.set('offset', String(params.offset))
     if (params?.user_id != null) p.set('user_id', String(params.user_id))
     const q = p.toString()
-    return marketReq(
-      `admin/employees/${encodeURIComponent(employeeId)}/execution-metrics${q ? `?${q}` : ''}`,
-    )
+    return marketReq(`admin/employees/${encodeURIComponent(employeeId)}/execution-metrics${q ? `?${q}` : ''}`)
   },
   getEmployeeStatus: async (employeeId: string) => {
     if (!(await isLocalDutyApiAvailable())) {
@@ -156,11 +146,7 @@ const xcmaxMarketProxy = {
       return await api.get(`${LOCAL_PREFIX}/employees/${encodeURIComponent(employeeId)}/manifest`)
     } catch (e: unknown) {
       const err = e as { status?: number; message?: string }
-      if (
-        err?.status === 404
-        || String(err?.message || '').includes('不存在')
-        || String(err?.message || '').includes('未找到')
-      ) {
+      if (err?.status === 404 || String(err?.message || '').includes('不存在') || String(err?.message || '').includes('未找到')) {
         throw new Error(`AI 员工 ${employeeId} 的 manifest 不存在`)
       }
       throw e
@@ -185,8 +171,7 @@ const xcmaxMarketProxy = {
       throw e
     }
   },
-  localEmployeeCronJobs: () =>
-    api.get(`${LOCAL_PREFIX}/employee-cron/jobs`) as Promise<unknown>,
+  localEmployeeCronJobs: () => api.get(`${LOCAL_PREFIX}/employee-cron/jobs`) as Promise<unknown>,
   localRunEmployeeCronJob: (jobId: string, payload?: { task?: string; input_data?: unknown }) =>
     api.post(`${LOCAL_PREFIX}/employee-cron/jobs/${encodeURIComponent(jobId)}/run`, payload ?? {}) as Promise<unknown>,
   selfMaintenanceRuntimeStatus: async (limit = 80) => {

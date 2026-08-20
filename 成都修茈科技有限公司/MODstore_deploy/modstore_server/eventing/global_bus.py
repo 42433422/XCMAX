@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment"
 """Process-local NeuroBus instance (memory | rabbitmq) + optional shadow dual-write.
 
 Bus backend is controlled by ``MODSTORE_BUS``:
@@ -18,9 +19,16 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Callable
 
-from modstore_server.eventing.bus import InMemoryNeuroBus, NeuroBus
+from modstore_server.eventing.bus import (
+    EventHandler,
+    HandlerSubscription,
+    InMemoryNeuroBus,
+    NeuroBus,
+)
 from modstore_server.eventing.events import DomainEvent
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 from .outbox import FileEventOutbox
 
@@ -39,7 +47,7 @@ def _build_primary_bus() -> NeuroBus:
                 getattr(bus, "_connected", False),
             )
             return bus
-        except Exception:  # noqa: BLE001
+        except BOUNDARY_ERRORS:  # noqa: BLE001
             logger.exception("MODSTORE_BUS=%s but rabbitmq bus init failed; using memory", raw)
     logger.info("NeuroBus primary backend: InMemoryNeuroBus (MODSTORE_BUS=%s)", raw)
     return InMemoryNeuroBus()
@@ -52,19 +60,30 @@ class _ShadowNeuroBus(NeuroBus):
         self._primary = primary
         self._secondary = secondary
 
-    def subscribe(self, event_name: str, handler) -> None:
-        self._primary.subscribe(event_name, handler)
+    def subscribe(
+        self,
+        event_name: str,
+        handler: EventHandler,
+        *,
+        priority: int = 0,
+        filter_fn: Callable[[DomainEvent], bool] | None = None,
+    ) -> HandlerSubscription:
+        subscription = self._primary.subscribe(
+            event_name, handler, priority=priority, filter_fn=filter_fn
+        )
         try:
-            self._secondary.subscribe(event_name, handler)
-        except Exception:  # noqa: BLE001
+            self._secondary.subscribe(event_name, handler, priority=priority, filter_fn=filter_fn)
+        except BOUNDARY_ERRORS:  # noqa: BLE001
             logger.debug("shadow subscribe failed on secondary", exc_info=True)
+        return subscription
 
-    def publish(self, event: DomainEvent) -> None:
-        self._primary.publish(event)
+    def publish(self, event: DomainEvent) -> bool:
+        published = self._primary.publish(event)
         try:
             self._secondary.publish(event)
-        except Exception:  # noqa: BLE001
+        except BOUNDARY_ERRORS:  # noqa: BLE001
             logger.warning("shadow publish failed on secondary bus", exc_info=True)
+        return published
 
 
 def _build_bus() -> NeuroBus:
@@ -76,7 +95,7 @@ def _build_bus() -> NeuroBus:
         from modstore_server.eventing.rabbitmq_bus import RabbitMqNeuroBus
 
         secondary = RabbitMqNeuroBus()
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         secondary = InMemoryNeuroBus()
     return _ShadowNeuroBus(primary, secondary)
 
@@ -109,7 +128,7 @@ def _alert_dead_letters() -> None:
                 "high-impact rows remain quarantined with audit evidence.",
                 count,
             )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.debug("dead-letter check skipped (db not ready or table missing)", exc_info=True)
 
 

@@ -14,6 +14,11 @@ MODstore_deploy/market/coverage/
 MODstore_deploy/market/playwright-report/
 MODstore_deploy/market/test-results/
 MODstore_deploy/market/package-lock.json
+# Runtime-owned session and webhook payloads are not source-format targets.
+MODstore_deploy/modstore_server/data/
+MODstore_deploy/modstore_server/webhook_events/
+# The market frontend owns its own formatter and source-governance exceptions.
+MODstore_deploy/market/src/
 MODstore_deploy/java_payment_service/
 *.min.js
 *.min.css

@@ -39,6 +39,7 @@ def pytest_collection_modifyitems(config, items):
         if any(frag in nodeid for frag in _XCAGI_LEGACY_SKIP_FRAGMENTS):
             item.add_marker(legacy_skip)
 
+
 _fd, _TEST_DB = tempfile.mkstemp(suffix="_pytest_xcagi.db")
 os.close(_fd)
 _sqlite_url = "sqlite:///" + _TEST_DB.replace("\\", "/")

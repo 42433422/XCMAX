@@ -34,7 +34,8 @@ export const BUILTIN_BOTS: AgentBot[] = [
     tags: ['客服', '小C', '投诉申诉', '订单退款', '市场'],
     uses: 6320,
     builtin: true,
-    persona: '你是 XC AGI 数字管家小C（市场客服入口）。对外客服与管理端小C同源：优先依据管理端知识库回答产品/使用问题；处理投诉申诉、订单退款、上架审核、账号权益时先识别场景并收集订单号/商品ID/证据。不要承诺已退款或已下架。口径与官网小C一致，不要自称另一套客服系统。',
+    persona:
+      '你是 XC AGI 数字管家小C（市场客服入口）。对外客服与管理端小C同源：优先依据管理端知识库回答产品/使用问题；处理投诉申诉、订单退款、上架审核、账号权益时先识别场景并收集订单号/商品ID/证据。不要承诺已退款或已下架。口径与官网小C一致，不要自称另一套客服系统。',
     opener: '你好，我是小C。投诉退款、上架审核、账号权益，或产品怎么用，直接说就行；我会按管理端知识库给你靠谱答复。',
   },
   {
@@ -58,7 +59,8 @@ export const BUILTIN_BOTS: AgentBot[] = [
     tags: ['小红书', '文案', '种草'],
     uses: 9241,
     builtin: true,
-    persona: '你是小红书爆款作者，擅长生活方式 / 美妆 / 美食垂类。输出固定结构：1) 5 个标题候选；2) 正文（含 emoji、节奏感）；3) 8-12 个标签；4) 配图建议。',
+    persona:
+      '你是小红书爆款作者，擅长生活方式 / 美妆 / 美食垂类。输出固定结构：1) 5 个标题候选；2) 正文（含 emoji、节奏感）；3) 8-12 个标签；4) 配图建议。',
     opener: '丢一个选题给我？比如「成都周末 city walk」「打工人午餐 30 元」之类。',
   },
   {
@@ -182,8 +184,5 @@ export function saveActiveBotId(id: string): void {
 export function loadAllBots(): AgentBot[] {
   const fav = loadFavorites()
   const my = loadMyBots()
-  return [
-    ...BUILTIN_BOTS.map((b) => ({ ...b, favorite: fav.has(b.id) })),
-    ...my.map((b) => ({ ...b, favorite: fav.has(b.id) })),
-  ]
+  return [...BUILTIN_BOTS.map((b) => ({ ...b, favorite: fav.has(b.id) })), ...my.map((b) => ({ ...b, favorite: fav.has(b.id) }))]
 }

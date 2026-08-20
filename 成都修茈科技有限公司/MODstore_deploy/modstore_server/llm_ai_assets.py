@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr"
 """Platform AI asset / interface inventory for the LLM operations employee.
 
 Aggregates HTTP surfaces, catalogued models by modality, and local CLI

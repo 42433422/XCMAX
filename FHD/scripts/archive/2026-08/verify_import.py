@@ -1,10 +1,11 @@
-# -*- coding: utf-8 -*-
+# mypy: disable-error-code="assignment, var-annotated"
 import sys
 
 sys.path.insert(0, r"e:\FHD\XCAGI")
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+
 from app.db.init_db import get_db_path
 from app.db.models.purchase_unit import PurchaseUnit
 

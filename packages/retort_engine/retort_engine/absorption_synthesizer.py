@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.repository_intelligence import (
     build_ranked_repository_map,
@@ -126,8 +126,9 @@ def _external_review_signals(external: Path, source: str) -> dict[str, Any]:
 def _weights_from_signals(
     signals: dict[str, Any], *, source: str, run_id: str
 ) -> dict[str, Any]:
-    hits = (
-        signals.get("text_hits") if isinstance(signals.get("text_hits"), dict) else {}
+    hits = cast(
+        dict[str, Any],
+        signals.get("text_hits") if isinstance(signals.get("text_hits"), dict) else {},
     )
     reviewdog = 20 + min(40, int(hits.get("reviewdog") or 0) * 2)
     pr_agent = 15 + min(
@@ -165,8 +166,9 @@ def _weights_from_signals(
 def _rules_from_signals(
     signals: dict[str, Any], *, source: str, run_id: str
 ) -> dict[str, Any]:
-    hits = (
-        signals.get("text_hits") if isinstance(signals.get("text_hits"), dict) else {}
+    hits = cast(
+        dict[str, Any],
+        signals.get("text_hits") if isinstance(signals.get("text_hits"), dict) else {},
     )
     rules = [
         {

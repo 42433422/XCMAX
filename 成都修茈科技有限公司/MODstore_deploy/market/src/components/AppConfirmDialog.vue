@@ -1,11 +1,6 @@
 <template>
   <Teleport to="body">
-    <div
-      v-if="open && options"
-      class="app-confirm-overlay"
-      role="presentation"
-      @click.self="resolveDangerConfirm(false)"
-    >
+    <div v-if="open && options" class="app-confirm-overlay" role="presentation" @click.self="resolveDangerConfirm(false)">
       <div class="app-confirm-dialog" role="alertdialog" aria-modal="true" :aria-labelledby="'app-confirm-title'">
         <h3 id="app-confirm-title" class="app-confirm-dialog__title">{{ options.title }}</h3>
         <p class="app-confirm-dialog__message">{{ options.message }}</p>

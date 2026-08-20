@@ -129,7 +129,7 @@ class TestTryPrecreate:
         with patch.object(alipay_mod, "build_client", side_effect=RuntimeError("no sdk")):
             out = alipay_mod._try_precreate(out_trade_no="O1", subject="s", total_amount="0.01")
         assert out["success"] is False
-        assert "no sdk" in out["message"]
+        assert out["message"] == "支付宝服务暂时不可用"
 
     def test_success_with_qr_code(self, full_credentials, monkeypatch):
         fake_client = MagicMock()
@@ -187,7 +187,7 @@ class TestTryPrecreate:
         with patch.object(alipay_mod, "build_client", return_value=fake_client):
             out = alipay_mod._try_precreate(out_trade_no="O1", subject="s", total_amount="0.01")
         assert out["success"] is False
-        assert "net fail" in out["message"]
+        assert out["message"] == "支付宝服务暂时不可用"
 
 
 # ── _try_page_pay ────────────────────────────────────────────────────────────
@@ -203,7 +203,7 @@ class TestTryPagePay:
         with patch.object(alipay_mod, "build_client", side_effect=RuntimeError("no sdk")):
             out = alipay_mod._try_page_pay(out_trade_no="O1", subject="s", total_amount="0.01")
         assert out["success"] is False
-        assert "no sdk" in out["message"]
+        assert out["message"] == "支付宝服务暂时不可用"
 
     def test_success(self, full_credentials, monkeypatch):
         fake_client = MagicMock()
@@ -233,7 +233,7 @@ class TestTryPagePay:
         with patch.object(alipay_mod, "build_client", return_value=fake_client):
             out = alipay_mod._try_page_pay(out_trade_no="O1", subject="s", total_amount="0.01")
         assert out["success"] is False
-        assert "net fail" in out["message"]
+        assert out["message"] == "支付宝服务暂时不可用"
 
 
 # ── _try_wap_pay ─────────────────────────────────────────────────────────────
@@ -248,7 +248,7 @@ class TestTryWapPay:
         with patch.object(alipay_mod, "build_client", side_effect=RuntimeError("no sdk")):
             out = alipay_mod._try_wap_pay(out_trade_no="O1", subject="s", total_amount="0.01")
         assert out["success"] is False
-        assert "no sdk" in out["message"]
+        assert out["message"] == "支付宝服务暂时不可用"
 
     def test_success(self, full_credentials, monkeypatch):
         fake_client = MagicMock()
@@ -270,7 +270,7 @@ class TestTryWapPay:
         with patch.object(alipay_mod, "build_client", return_value=fake_client):
             out = alipay_mod._try_wap_pay(out_trade_no="O1", subject="s", total_amount="0.01")
         assert out["success"] is False
-        assert "net fail" in out["message"]
+        assert out["message"] == "支付宝服务暂时不可用"
 
 
 # ── create_pay_order ─────────────────────────────────────────────────────────
@@ -512,7 +512,7 @@ class TestRefundOrder:
         with patch.object(alipay_mod, "build_client", side_effect=RuntimeError("no sdk")):
             out = alipay_mod.refund_order(out_trade_no="O1", refund_amount="0.01")
         assert out["success"] is False
-        assert "no sdk" in out["message"]
+        assert out["message"] == "支付宝服务暂时不可用"
 
     def test_success(self, monkeypatch):
         fake_client = MagicMock()
@@ -537,7 +537,7 @@ class TestRefundOrder:
         with patch.object(alipay_mod, "build_client", return_value=fake_client):
             out = alipay_mod.refund_order(out_trade_no="O1", refund_amount="0.01")
         assert out["success"] is False
-        assert "net fail" in out["message"]
+        assert out["message"] == "支付宝服务暂时不可用"
 
 
 class TestCloseOrder:
@@ -567,7 +567,7 @@ class TestCloseOrder:
         with patch.object(alipay_mod, "build_client", return_value=fake_client):
             out = alipay_mod.close_order(out_trade_no="O1")
         assert out["success"] is False
-        assert "net fail" in out["message"]
+        assert out["message"] == "支付宝服务暂时不可用"
 
 
 class TestQueryRefund:
@@ -607,7 +607,7 @@ class TestQueryRefund:
         with patch.object(alipay_mod, "build_client", return_value=fake_client):
             out = alipay_mod.query_refund(out_trade_no="O1")
         assert out["success"] is False
-        assert "net fail" in out["message"]
+        assert out["message"] == "支付宝服务暂时不可用"
 
 
 # ── _private_key_source / _public_key_source ─────────────────────────────────

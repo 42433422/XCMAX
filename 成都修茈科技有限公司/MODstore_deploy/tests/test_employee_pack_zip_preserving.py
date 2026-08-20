@@ -74,7 +74,9 @@ def test_build_zip_for_library_rejects_word_without_runtime(tmp_path: Path, monk
         build_employee_pack_zip_for_library("word-full-extract-employee", mf)
 
 
-def test_handlers_contract_fails_without_rule_spec_but_canvas_direct_python(tmp_path: Path):
+def test_handlers_contract_fails_without_rule_spec_but_canvas_direct_python(
+    tmp_path: Path,
+):
     pack_dir = tmp_path / "pack"
     pack_dir.mkdir()
     mf = {

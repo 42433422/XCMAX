@@ -295,7 +295,7 @@ class TestRegisterDesktopRelayForPairing:
             patch.object(m, "_host_is_private_or_loopback", return_value=True),
             patch(
                 "app.application.facades.mobile_relay_facade.register_desktop_relay",
-                side_effect=Exception("bad relay url"),
+                side_effect=RuntimeError("bad relay url"),
             ),
         ):
             result = m._register_desktop_relay_for_pairing("192.168.1.1", 5000)
@@ -346,11 +346,10 @@ class TestAiConversationChanges:
         assert result == []
 
     def test_operational_error_returns_empty(self, m):
-        """branch [321,322]: OPERATIONAL_ERRORS caught → []."""
+        """branch [321,322]: recoverable database failure caught → []."""
         u = _user(uid=5)
-        err_class = list(m.OPERATIONAL_ERRORS)[0] if m.OPERATIONAL_ERRORS else Exception
 
-        with patch("app.db.session.get_db", side_effect=err_class("db gone")):
+        with patch("app.db.session.get_db", side_effect=OSError("db gone")):
             result = m._ai_conversation_changes(u, limit=10)
         assert result == []
 
@@ -442,13 +441,12 @@ class TestMobileModItems:
         assert result == []
 
     def test_operational_error_still_calls_upsert(self, m):
-        """branch [410,411]: OPERATIONAL_ERRORS → upsert called with empty list."""
-        err_class = list(m.OPERATIONAL_ERRORS)[0] if m.OPERATIONAL_ERRORS else Exception
+        """branch [410,411]: recoverable failure → upsert called with empty list."""
         upsert_mock = MagicMock()
 
         with (
             patch(
-                "app.infrastructure.mods.mod_manager.get_mod_manager", side_effect=err_class("boom")
+                "app.infrastructure.mods.mod_manager.get_mod_manager", side_effect=OSError("boom")
             ),
             patch(
                 "app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item", upsert_mock
@@ -1661,10 +1659,9 @@ class TestMobileNavMenu:
 
     @pytest.mark.asyncio
     async def test_operational_error_in_mod_items(self, m):
-        """branch [1718,1719]: OPERATIONAL_ERRORS in mod section → logged, continues."""
+        """branch [1718,1719]: recoverable failure in mod section → logged, continues."""
         u = _user(uid=1, role="admin")
-        err_class = list(m.OPERATIONAL_ERRORS)[0] if m.OPERATIONAL_ERRORS else Exception
-        with patch.object(m, "_mobile_mod_items", side_effect=err_class("boom")):
+        with patch.object(m, "_mobile_mod_items", side_effect=OSError("boom")):
             result = await m.mobile_nav_menu(user=u)
         # Should still return 200 even if mod items fail
         assert result is not None

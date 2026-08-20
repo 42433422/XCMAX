@@ -46,7 +46,7 @@ const CHAT_BUBBLE_CONFIG: Config = {
     'kbd',
     'mark',
     'small',
-    'time'
+    'time',
   ],
   ALLOWED_ATTR: [
     'href',
@@ -65,9 +65,9 @@ const CHAT_BUBBLE_CONFIG: Config = {
     'height',
     'lang',
     'dir',
-    'style'
+    'style',
   ],
-  ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i
+  ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
 }
 
 /** AI 气泡：Markdown → HTML 后再消毒；允许代码块复制按钮与图片等 Markdown 产物 */
@@ -84,8 +84,8 @@ const CHAT_MARKDOWN_CONFIG: Config = {
     'data-source',
     'data-tex',
     'aria-label',
-    'role'
-  ]
+    'role',
+  ],
 }
 
 const SALES_CONTRACT_SANITIZE_CONFIG: Config = {
@@ -104,15 +104,11 @@ const SALES_CONTRACT_SANITIZE_CONFIG: Config = {
     'data-row-id',
     'data-field',
     'data-index',
-    'data-task-id'
-  ]
+    'data-task-id',
+  ],
 }
 
-function salesContractInteractiveAttrHook(
-  currentNode: Element,
-  hookEvent: UponSanitizeAttributeHookEvent,
-  _config: Config
-) {
+function salesContractInteractiveAttrHook(currentNode: Element, hookEvent: UponSanitizeAttributeHookEvent, _config: Config) {
   const name = String(hookEvent.attrName || '')
   if (!name.startsWith('on')) return
   const tag = currentNode.tagName
@@ -145,6 +141,29 @@ export function sanitizeChatBubbleMarkdown(raw: string | undefined | null): stri
   if (!stripped) return ''
   const html = renderMarkdown(stripped)
   return DOMPurify.sanitize(html, CHAT_MARKDOWN_CONFIG)
+}
+
+function sanitizedHtmlToPlainText(sanitizedHtml: string): string {
+  if (!sanitizedHtml) return ''
+  if (typeof DOMParser === 'undefined') {
+    return DOMPurify.sanitize(sanitizedHtml, { ALLOWED_TAGS: [], ALLOWED_ATTR: [], KEEP_CONTENT: true })
+  }
+  const doc = new DOMParser().parseFromString(sanitizedHtml, 'text/html')
+  doc.body.querySelectorAll('br').forEach((node) => node.replaceWith(doc.createTextNode('\n')))
+  const text = String(doc.body.textContent || '').replace(/\u00a0/g, ' ')
+  if (!text.includes('&')) return text
+  const decoded = new DOMParser().parseFromString(text, 'text/html')
+  return String(decoded.body.textContent || '').replace(/\u00a0/g, ' ')
+}
+
+/** 将不可信 HTML 转成纯文本；先由 DOMPurify 消毒，再由 DOM 解析器提取 textContent。 */
+export function plainTextFromChatHtml(raw: string | undefined | null): string {
+  return sanitizedHtmlToPlainText(sanitizeChatBubbleHtml(raw))
+}
+
+/** 将不可信 Markdown 转成纯文本，供预览、TTS 与请求上下文使用。 */
+export function plainTextFromChatMarkdown(raw: string | undefined | null): string {
+  return sanitizedHtmlToPlainText(sanitizeChatBubbleMarkdown(raw))
 }
 
 export type TaskSummarySanitizeInput = {

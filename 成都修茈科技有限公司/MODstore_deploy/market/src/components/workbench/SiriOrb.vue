@@ -1,15 +1,7 @@
 <template>
   <div class="siri-orb-wrap">
     <svg class="siri-progress-ring" viewBox="0 0 200 200">
-      <circle
-        class="siri-progress-ring__bg"
-        cx="100"
-        cy="100"
-        r="96"
-        fill="none"
-        stroke="rgba(255,255,255,0.06)"
-        stroke-width="2"
-      />
+      <circle class="siri-progress-ring__bg" cx="100" cy="100" r="96" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="2" />
       <circle
         class="siri-progress-ring__fill"
         cx="100"
@@ -35,32 +27,29 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 
-const props = defineProps({
-  mode: {
-    type: String,
-    default: 'idle',
-    validator: (v) => ['idle', 'listening', 'processing', 'reporting'].includes(v)
-  },
-  progress: {
-    type: Number,
-    default: 0,
-    validator: (v) => v >= 0 && v <= 100
-  },
-  audioLevel: {
-    type: Number,
-    default: 0,
-    validator: (v) => v >= 0 && v <= 1
-  }
-})
+type SiriOrbMode = 'idle' | 'listening' | 'processing' | 'reporting'
 
-const themeColors = {
-  idle:       { accent: '#8b5cf6' },
-  listening:  { accent: '#22c55e' },
+const props = withDefaults(
+  defineProps<{
+    mode?: SiriOrbMode
+    progress?: number
+    audioLevel?: number
+  }>(),
+  {
+    mode: 'idle',
+    progress: 0,
+    audioLevel: 0,
+  },
+)
+
+const themeColors: Record<SiriOrbMode, { accent: string }> = {
+  idle: { accent: '#8b5cf6' },
+  listening: { accent: '#22c55e' },
   processing: { accent: '#7c3aed' },
-  reporting:  { accent: '#f59e0b' }
+  reporting: { accent: '#f59e0b' },
 }
 
 const ringColor = computed(() => themeColors[props.mode]?.accent ?? '#8b5cf6')
@@ -99,7 +88,7 @@ const orbOuterStyle = computed(() => {
   return {
     '--au-s': s,
     '--au-sx': `${sx}deg`,
-    '--au-sy': `${sy}deg`
+    '--au-sy': `${sy}deg`,
   }
 })
 
@@ -132,7 +121,9 @@ const orbClass = computed(() => {
 }
 
 .siri-progress-ring__fill {
-  transition: stroke-dashoffset 0.4s ease, stroke 0.6s ease;
+  transition:
+    stroke-dashoffset 0.4s ease,
+    stroke 0.6s ease;
 }
 
 .siri-orb-outer {
@@ -184,7 +175,9 @@ const orbClass = computed(() => {
   position: absolute;
   border-radius: 50%;
   will-change: transform, opacity;
-  transition: background 0.6s ease, opacity 0.6s ease;
+  transition:
+    background 0.6s ease,
+    opacity 0.6s ease;
 }
 
 .siri-blob--1 {
@@ -233,91 +226,221 @@ const orbClass = computed(() => {
   animation: siri-orbit5 4.7s ease-in-out infinite;
 }
 
-.siri-orb--idle .siri-blob--1 { background: radial-gradient(circle at 30% 30%, #6366f1, #8b5cf6); }
-.siri-orb--idle .siri-blob--2 { background: radial-gradient(circle at 70% 70%, #818cf8, #6366f1); }
-.siri-orb--idle .siri-blob--3 { background: radial-gradient(circle at 50% 20%, #a78bfa, #7c3aed); }
-.siri-orb--idle .siri-blob--4 { background: radial-gradient(circle at 40% 80%, #7c3aed, #6366f1); }
-.siri-orb--idle .siri-blob--5 { background: radial-gradient(circle at 60% 50%, #c4b5fd, #8b5cf6); }
+.siri-orb--idle .siri-blob--1 {
+  background: radial-gradient(circle at 30% 30%, #6366f1, #8b5cf6);
+}
+.siri-orb--idle .siri-blob--2 {
+  background: radial-gradient(circle at 70% 70%, #818cf8, #6366f1);
+}
+.siri-orb--idle .siri-blob--3 {
+  background: radial-gradient(circle at 50% 20%, #a78bfa, #7c3aed);
+}
+.siri-orb--idle .siri-blob--4 {
+  background: radial-gradient(circle at 40% 80%, #7c3aed, #6366f1);
+}
+.siri-orb--idle .siri-blob--5 {
+  background: radial-gradient(circle at 60% 50%, #c4b5fd, #8b5cf6);
+}
 
-.siri-orb--listening .siri-blob--1 { background: radial-gradient(circle at 30% 30%, #06b6d4, #22c55e); }
-.siri-orb--listening .siri-blob--2 { background: radial-gradient(circle at 70% 70%, #22c55e, #06b6d4); }
-.siri-orb--listening .siri-blob--3 { background: radial-gradient(circle at 50% 20%, #34d399, #0ea5e9); }
-.siri-orb--listening .siri-blob--4 { background: radial-gradient(circle at 40% 80%, #0ea5e9, #22c55e); }
-.siri-orb--listening .siri-blob--5 { background: radial-gradient(circle at 60% 50%, #67e8f9, #10b981); }
+.siri-orb--listening .siri-blob--1 {
+  background: radial-gradient(circle at 30% 30%, #06b6d4, #22c55e);
+}
+.siri-orb--listening .siri-blob--2 {
+  background: radial-gradient(circle at 70% 70%, #22c55e, #06b6d4);
+}
+.siri-orb--listening .siri-blob--3 {
+  background: radial-gradient(circle at 50% 20%, #34d399, #0ea5e9);
+}
+.siri-orb--listening .siri-blob--4 {
+  background: radial-gradient(circle at 40% 80%, #0ea5e9, #22c55e);
+}
+.siri-orb--listening .siri-blob--5 {
+  background: radial-gradient(circle at 60% 50%, #67e8f9, #10b981);
+}
 
-.siri-orb--processing .siri-blob--1 { background: radial-gradient(circle at 30% 30%, #7c3aed, #6366f1); }
-.siri-orb--processing .siri-blob--2 { background: radial-gradient(circle at 70% 70%, #6366f1, #22c55e); }
-.siri-orb--processing .siri-blob--3 { background: radial-gradient(circle at 50% 20%, #818cf8, #10b981); }
-.siri-orb--processing .siri-blob--4 { background: radial-gradient(circle at 40% 80%, #22c55e, #7c3aed); }
-.siri-orb--processing .siri-blob--5 { background: radial-gradient(circle at 60% 50%, #a78bfa, #34d399); }
+.siri-orb--processing .siri-blob--1 {
+  background: radial-gradient(circle at 30% 30%, #7c3aed, #6366f1);
+}
+.siri-orb--processing .siri-blob--2 {
+  background: radial-gradient(circle at 70% 70%, #6366f1, #22c55e);
+}
+.siri-orb--processing .siri-blob--3 {
+  background: radial-gradient(circle at 50% 20%, #818cf8, #10b981);
+}
+.siri-orb--processing .siri-blob--4 {
+  background: radial-gradient(circle at 40% 80%, #22c55e, #7c3aed);
+}
+.siri-orb--processing .siri-blob--5 {
+  background: radial-gradient(circle at 60% 50%, #a78bfa, #34d399);
+}
 
-.siri-orb--reporting .siri-blob--1 { background: radial-gradient(circle at 30% 30%, #f59e0b, #fbbf24); }
-.siri-orb--reporting .siri-blob--2 { background: radial-gradient(circle at 70% 70%, #fbbf24, #f59e0b); }
-.siri-orb--reporting .siri-blob--3 { background: radial-gradient(circle at 50% 20%, #fcd34d, #d97706); }
-.siri-orb--reporting .siri-blob--4 { background: radial-gradient(circle at 40% 80%, #d97706, #fbbf24); }
-.siri-orb--reporting .siri-blob--5 { background: radial-gradient(circle at 60% 50%, #fde68a, #b45309); }
+.siri-orb--reporting .siri-blob--1 {
+  background: radial-gradient(circle at 30% 30%, #f59e0b, #fbbf24);
+}
+.siri-orb--reporting .siri-blob--2 {
+  background: radial-gradient(circle at 70% 70%, #fbbf24, #f59e0b);
+}
+.siri-orb--reporting .siri-blob--3 {
+  background: radial-gradient(circle at 50% 20%, #fcd34d, #d97706);
+}
+.siri-orb--reporting .siri-blob--4 {
+  background: radial-gradient(circle at 40% 80%, #d97706, #fbbf24);
+}
+.siri-orb--reporting .siri-blob--5 {
+  background: radial-gradient(circle at 60% 50%, #fde68a, #b45309);
+}
 
 @keyframes siri-breathe {
-  0%, 100% { transform: scale(0.96); }
-  50% { transform: scale(1.04); }
+  0%,
+  100% {
+    transform: scale(0.96);
+  }
+  50% {
+    transform: scale(1.04);
+  }
 }
 @keyframes siri-bounce {
-  0%, 100% { transform: scale(1); }
-  25% { transform: scale(1.1); }
-  50% { transform: scale(0.93); }
-  75% { transform: scale(1.05); }
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  25% {
+    transform: scale(1.1);
+  }
+  50% {
+    transform: scale(0.93);
+  }
+  75% {
+    transform: scale(1.05);
+  }
 }
 @keyframes siri-pulse {
-  0%, 100% { transform: scale(1); }
-  30% { transform: scale(1.08); }
-  60% { transform: scale(0.95); }
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  30% {
+    transform: scale(1.08);
+  }
+  60% {
+    transform: scale(0.95);
+  }
 }
 @keyframes siri-flow {
-  0%, 100% { transform: scale(1) rotate(0deg); }
-  25% { transform: scale(1.03) rotate(2deg); }
-  50% { transform: scale(0.98) rotate(0deg); }
-  75% { transform: scale(1.01) rotate(-2deg); }
+  0%,
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+  25% {
+    transform: scale(1.03) rotate(2deg);
+  }
+  50% {
+    transform: scale(0.98) rotate(0deg);
+  }
+  75% {
+    transform: scale(1.01) rotate(-2deg);
+  }
 }
 
 @keyframes siri-orbit1 {
-  0% { transform: translate(0, 0) scale(1); }
-  20% { transform: translate(18%, -12%) scale(1.08); }
-  40% { transform: translate(-8%, 20%) scale(0.92); }
-  60% { transform: translate(-20%, -8%) scale(1.04); }
-  80% { transform: translate(10%, 14%) scale(0.96); }
-  100% { transform: translate(0, 0) scale(1); }
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  20% {
+    transform: translate(18%, -12%) scale(1.08);
+  }
+  40% {
+    transform: translate(-8%, 20%) scale(0.92);
+  }
+  60% {
+    transform: translate(-20%, -8%) scale(1.04);
+  }
+  80% {
+    transform: translate(10%, 14%) scale(0.96);
+  }
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
 }
 @keyframes siri-orbit2 {
-  0% { transform: translate(0, 0) scale(1); }
-  20% { transform: translate(-16%, 18%) scale(0.94); }
-  40% { transform: translate(14%, -10%) scale(1.06); }
-  60% { transform: translate(10%, 16%) scale(0.97); }
-  80% { transform: translate(-12%, -14%) scale(1.03); }
-  100% { transform: translate(0, 0) scale(1); }
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  20% {
+    transform: translate(-16%, 18%) scale(0.94);
+  }
+  40% {
+    transform: translate(14%, -10%) scale(1.06);
+  }
+  60% {
+    transform: translate(10%, 16%) scale(0.97);
+  }
+  80% {
+    transform: translate(-12%, -14%) scale(1.03);
+  }
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
 }
 @keyframes siri-orbit3 {
-  0% { transform: translate(0, 0) scale(1); }
-  20% { transform: translate(12%, 16%) scale(1.05); }
-  40% { transform: translate(-18%, -8%) scale(0.95); }
-  60% { transform: translate(-8%, -18%) scale(1.02); }
-  80% { transform: translate(16%, 8%) scale(0.98); }
-  100% { transform: translate(0, 0) scale(1); }
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  20% {
+    transform: translate(12%, 16%) scale(1.05);
+  }
+  40% {
+    transform: translate(-18%, -8%) scale(0.95);
+  }
+  60% {
+    transform: translate(-8%, -18%) scale(1.02);
+  }
+  80% {
+    transform: translate(16%, 8%) scale(0.98);
+  }
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
 }
 @keyframes siri-orbit4 {
-  0% { transform: translate(0, 0) scale(1); }
-  20% { transform: translate(-10%, -16%) scale(0.97); }
-  40% { transform: translate(16%, 12%) scale(1.04); }
-  60% { transform: translate(8%, -12%) scale(0.99); }
-  80% { transform: translate(-14%, 10%) scale(1.01); }
-  100% { transform: translate(0, 0) scale(1); }
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  20% {
+    transform: translate(-10%, -16%) scale(0.97);
+  }
+  40% {
+    transform: translate(16%, 12%) scale(1.04);
+  }
+  60% {
+    transform: translate(8%, -12%) scale(0.99);
+  }
+  80% {
+    transform: translate(-14%, 10%) scale(1.01);
+  }
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
 }
 @keyframes siri-orbit5 {
-  0% { transform: translate(0, 0) scale(1); }
-  20% { transform: translate(14%, -14%) scale(1.06); }
-  40% { transform: translate(-12%, 18%) scale(0.93); }
-  60% { transform: translate(18%, 10%) scale(1.03); }
-  80% { transform: translate(-6%, -16%) scale(0.97); }
-  100% { transform: translate(0, 0) scale(1); }
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  20% {
+    transform: translate(14%, -14%) scale(1.06);
+  }
+  40% {
+    transform: translate(-12%, 18%) scale(0.93);
+  }
+  60% {
+    transform: translate(18%, 10%) scale(1.03);
+  }
+  80% {
+    transform: translate(-6%, -16%) scale(0.97);
+  }
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
 }
 
 html[data-workbench-theme='light'] .siri-orb {

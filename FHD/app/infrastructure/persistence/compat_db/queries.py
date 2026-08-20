@@ -363,8 +363,9 @@ def _customers_schema_hint_if_empty() -> str | None:
     try:
         eng = get_sync_engine()
         names = set(inspect(eng).get_table_names())
-    except RECOVERABLE_ERRORS as e:
-        return f"无法连接 PostgreSQL：{e}。请检查 DATABASE_URL。"
+    except RECOVERABLE_ERRORS:
+        logger.warning("customers schema inspection failed")
+        return "无法连接客户数据存储，请检查数据库连接后重试。"
 
     has_c = "customers" in names
     has_pu = "purchase_units" in names
@@ -398,7 +399,7 @@ def _units_select_data_unified() -> list[dict]:
         seen.add(lk)
         rid = row.get("id")
         try:
-            oid = int(rid)
+            oid = int(rid) if rid not in (None, "") else None
         except (TypeError, ValueError):
             oid = None
         staged.append((name, oid))

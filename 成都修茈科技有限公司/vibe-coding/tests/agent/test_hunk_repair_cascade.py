@@ -155,9 +155,7 @@ def test_failure_raises_when_no_strategy_succeeds() -> None:
 
 def test_no_raise_mode_records_failure() -> None:
     source = "totally unrelated\n"
-    hunk = Hunk(
-        anchor_before="missing\n", old_text="missing\n", new_text="x\n", anchor_after=""
-    )
+    hunk = Hunk(anchor_before="missing\n", old_text="missing\n", new_text="x\n", anchor_after="")
     out = apply_hunks_to_source(source, [hunk], raise_on_failure=False)
     assert not out.results[0].success
     assert out.source == source

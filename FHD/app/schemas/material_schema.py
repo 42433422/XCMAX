@@ -1,7 +1,7 @@
 import re
 from datetime import datetime
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class MaterialCreate(BaseModel):
@@ -58,6 +58,8 @@ class MaterialUpdate(BaseModel):
 
 
 class MaterialResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     material_code: str
     name: str
@@ -74,9 +76,6 @@ class MaterialResponse(BaseModel):
     is_active: int
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class PaginationMeta(BaseModel):

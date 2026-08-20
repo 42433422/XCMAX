@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from sqlalchemy.engine import make_url
 
-from app.db import engine
+from app.db import get_runtime_engine
 from app.db.init_db import (
     ensure_product_query_indexes,
     ensure_sessions_account_meta_columns,
@@ -107,7 +107,7 @@ async def lifespan(app: FastAPI):
             logger.warning("Deliverable runtime setup skipped: %s", exc)
 
         try:
-            from app.utils.performance_initializer import init_performance_optimization
+            from app.utils.performance.performance_initializer import init_performance_optimization
 
             init_performance_optimization(app)
             mark_startup("performance_optimizer_ready")
@@ -142,8 +142,14 @@ async def lifespan(app: FastAPI):
     finally:
         # 无论正常关闭还是被注入异常（如 CancelledError）终止，都在 finally 中
         # 完成全部清理，避免神经总线、监控循环与各调度线程在异常关闭路径下泄漏。
+        from app.fastapi_app.mod_startup import wait_for_background_mod_load
+
+        await asyncio.to_thread(wait_for_background_mod_load, app)
         _stop_agent_tasks(app)
         _close_workflow_resources(app)
+        from app.fastapi_app.resource_cleanup import close_llm_http_clients
+
+        await close_llm_http_clients()
 
         logger.info("🛑 FastAPI 应用关闭中...")
         if fast_start:
@@ -240,6 +246,8 @@ def _initialize_databases_sync(app: FastAPI):
             else:
                 init_template_tables()
 
+        engine = get_runtime_engine()
+
         init_distillation_tables(engine)
         init_extract_logs_tables(engine)
         ensure_product_query_indexes(engine)
@@ -304,11 +312,11 @@ def _initialize_databases_sync(app: FastAPI):
             from app.runtime_integrity import clear_runtime_issue
 
             clear_runtime_issue("ai_action_audit")
-        except RECOVERABLE_ERRORS as audit_err:
+        except RECOVERABLE_ERRORS:
             from app.runtime_integrity import record_runtime_issue
 
-            record_runtime_issue("ai_action_audit", str(audit_err), ttl_seconds=3600)
-            logger.warning("AI审计表初始化失败（不影响主流程）: %s", audit_err)
+            record_runtime_issue("ai_action_audit", "AI action audit unavailable", ttl_seconds=3600)
+            logger.exception("AI审计表初始化失败（不影响主流程）")
     except RECOVERABLE_ERRORS as e:
         safe_url = str(database_url or "").strip()
         try:

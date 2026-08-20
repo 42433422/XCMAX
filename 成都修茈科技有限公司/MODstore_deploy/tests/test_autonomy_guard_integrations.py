@@ -226,7 +226,7 @@ def test_loop_never_reaches_git_merge_when_domain_guard_denies(monkeypatch) -> N
     assert not any(command[:2] == ["git", "merge"] for command in commands)
 
 
-def test_high_risk_pr_merge_auto_approves_and_is_audited(monkeypatch, tmp_path) -> None:
+def test_high_risk_pr_merge_requires_human_approval(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(
         "modstore_server.integrations.ops_action_handlers.repo_root",
         lambda: tmp_path,
@@ -235,7 +235,7 @@ def test_high_risk_pr_merge_auto_approves_and_is_audited(monkeypatch, tmp_path) 
         "subprocess.run",
         lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="", stderr=""),
     )
-    approved = approval_dispatcher._maybe_merge_pr("auto/security-fix")
-    assert approved["ok"] is True
-    assert approved["risk_decision"]["decision"] == "auto_approve"
-    assert approved["risk_decision"]["approver"] is None
+    blocked = approval_dispatcher._maybe_merge_pr("auto/security-fix")
+    assert blocked["ok"] is False
+    assert blocked["risk_decision"]["decision"] == "require_human"
+    assert blocked["risk_decision"]["requires_confirmation"] is True

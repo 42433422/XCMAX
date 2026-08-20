@@ -19,8 +19,10 @@ def client() -> TestClient:
 
 
 @pytest.fixture(autouse=True)
-def _mock_svc():
+def _mock_svc(tmp_path, monkeypatch: pytest.MonkeyPatch):
     """默认 mock shipment application service。"""
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+    (tmp_path / "shipment_outputs").mkdir(exist_ok=True)
     mock = MagicMock()
     with patch.object(shipment_orders, "_svc", return_value=mock):
         yield mock
@@ -89,7 +91,7 @@ class TestShipmentGenerate:
         assert r.status_code == 400
 
     def test_service_error(self, client: TestClient, _mock_svc: MagicMock):
-        _mock_svc.generate_shipment_document.side_effect = Exception("DB error")
+        _mock_svc.generate_shipment_document.side_effect = RuntimeError("DB error")
         r = client.post(
             "/api/shipment/generate", json={"unit_name": "单位", "products": [{"name": "A"}]}
         )
@@ -143,26 +145,34 @@ class TestShipmentPrint:
         assert r.status_code == 404
 
     def test_with_order_id(self, client: TestClient, _mock_svc: MagicMock, tmp_path):
-        test_file = tmp_path / "test.xlsx"
+        test_file = tmp_path / "shipment_outputs" / "test.xlsx"
         test_file.write_bytes(b"fake")
         _mock_svc.mark_as_printed.return_value = {"success": True}
         r = client.post("/api/shipment/print", json={"file_path": str(test_file), "order_id": 1})
         assert r.status_code == 200
 
     def test_without_order_id(self, client: TestClient, _mock_svc: MagicMock, tmp_path):
-        test_file = tmp_path / "test.xlsx"
+        test_file = tmp_path / "shipment_outputs" / "test.xlsx"
         test_file.write_bytes(b"fake")
         r = client.post("/api/shipment/print", json={"file_path": str(test_file)})
         assert r.status_code == 200
         assert r.json()["updated"] is False
 
     def test_invalid_order_id(self, client: TestClient, _mock_svc: MagicMock, tmp_path):
-        test_file = tmp_path / "test.xlsx"
+        test_file = tmp_path / "shipment_outputs" / "test.xlsx"
         test_file.write_bytes(b"fake")
         r = client.post(
             "/api/shipment/print", json={"file_path": str(test_file), "order_id": "abc"}
         )
         assert r.status_code == 400
+
+    def test_rejects_existing_file_outside_shipment_outputs(
+        self, client: TestClient, _mock_svc: MagicMock, tmp_path
+    ):
+        outside = tmp_path / "outside.xlsx"
+        outside.write_bytes(b"private")
+        r = client.post("/api/shipment/print", json={"file_path": str(outside)})
+        assert r.status_code == 404
 
 
 # ---------------------------------------------------------------------------
@@ -314,7 +324,7 @@ class TestApiOrdersExport:
         export_dir.mkdir()
         export_file = export_dir / "shipment_records_all_20260714_000000.xlsx"
         export_file.write_bytes(b"xlsx-test")
-        monkeypatch.setattr("app.utils.path_utils.get_data_dir", lambda: str(tmp_path))
+        monkeypatch.setattr("app.utils.path_io.path_utils.get_data_dir", lambda: str(tmp_path))
         _mock_svc.export_shipment_records.return_value = {
             "success": True,
             "file_path": str(export_file),

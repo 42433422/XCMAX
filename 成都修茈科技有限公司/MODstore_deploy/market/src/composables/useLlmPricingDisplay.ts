@@ -40,8 +40,7 @@ function fmtYuan(n: number | undefined | null, digits = 4): string {
 export function formatPricePer1kLine(pricing: LlmModelPricing | null | undefined): string {
   if (!pricing) return ''
   const ein = pricing.effective_input_per_1k ?? (pricing.input_price_per_1k ?? 0) * (pricing.service_fee_multiplier ?? 1)
-  const eout =
-    pricing.effective_output_per_1k ?? (pricing.output_price_per_1k ?? 0) * (pricing.service_fee_multiplier ?? 1)
+  const eout = pricing.effective_output_per_1k ?? (pricing.output_price_per_1k ?? 0) * (pricing.service_fee_multiplier ?? 1)
   return `¥${fmtYuan(ein)}/1k入 · ¥${fmtYuan(eout)}/1k出`
 }
 
@@ -59,7 +58,7 @@ export function formatPricingDetail(pricing: LlmModelPricing | null | undefined)
     if (pricing.suggested_input_per_1k != null) {
       official += `（×${fmtYuan(pricing.official_markup_multiplier ?? fee, 2)} 建议售价 ${formatPricePer1kLine({
         effective_input_per_1k: pricing.suggested_input_per_1k,
-        effective_output_per_1k: pricing.suggested_output_per_1k,
+        effective_output_per_1k: pricing.suggested_output_per_1k ?? undefined,
       })}）`
     }
   }
@@ -81,11 +80,9 @@ export function providerTileMinPriceHint(
   for (const r of rows) {
     const p = r.pricing
     if (!p) continue
-    const candidates = [
-      Number(p.min_charge),
-      Number(p.effective_input_per_1k),
-      Number(p.effective_output_per_1k),
-    ].filter((x) => Number.isFinite(x) && x > 0)
+    const candidates = [Number(p.min_charge), Number(p.effective_input_per_1k), Number(p.effective_output_per_1k)].filter(
+      (x) => Number.isFinite(x) && x > 0,
+    )
     for (const c of candidates) {
       if (best === null || c < best) best = c
     }

@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from typing import cast
 
 import numpy as np
 
 from app.domain.persona.value_objects import PersonaAxes
 from app.infrastructure.persona.embedding_client import EmbeddingClient
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +98,7 @@ class EmbeddingInferencer:
             pattern, confidence = _nearest_pattern(dominant, refs)
             axes = _CLUSTER_AXES_MAP.get(pattern, PersonaAxes())
             return EmbeddingInferResult(axes=axes, pattern_label=pattern, confidence=confidence)
-        except Exception as e:  # noqa: BLE001  embedding API 边界：任何异常都降级为中性值
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001  embedding API 边界：任何异常都降级为中性值
             logger.warning("L2 embedding 推断失败，返回中性值: %s", e)
             return EmbeddingInferResult(axes=PersonaAxes(), pattern_label="error", confidence=0.0)
 
@@ -120,7 +122,7 @@ class EmbeddingInferencer:
                     grouped.setdefault(owner, []).append(vec)
                 for pattern, vecs in grouped.items():
                     centroids[pattern] = np.mean(np.stack(vecs), axis=0)
-        except Exception as e:  # noqa: BLE001  参照向量失败不致命，退化为无锚点
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001  参照向量失败不致命，退化为无锚点
             logger.warning("L2 参照质心加载失败，退化为中性匹配: %s", e)
 
         self._ref_centroids = centroids
@@ -144,11 +146,11 @@ def _dominant_centroid(embeddings: np.ndarray) -> np.ndarray:
     """K-means 取最大簇的质心（样本不足则用整体质心），抗离群消息。"""
     n = embeddings.shape[0]
     if n < _MIN_KMEANS_SAMPLES:
-        return embeddings.mean(axis=0)
+        return cast(np.ndarray, embeddings.mean(axis=0))
     k = min(3, n)
     labels, centers = _kmeans(embeddings, k)
     counts = np.bincount(labels, minlength=k)
-    return centers[int(np.argmax(counts))]
+    return cast(np.ndarray, centers[int(np.argmax(counts))])
 
 
 def _kmeans(x: np.ndarray, k: int, iters: int = 10) -> tuple[np.ndarray, np.ndarray]:

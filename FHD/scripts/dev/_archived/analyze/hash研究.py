@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # 研究 Msg_<hash> 表名的生成规则
 # 看看 hash 是否可能和 wxid 或 real_sender_id 相关
 
@@ -47,7 +46,6 @@ print(f"md5(wxid utf8) = {h}")
 
 # 查看所有 Msg 表
 import sys
-import os
 
 sys.path.insert(0, r"E:\FHD\XCAGI\resources\wechat-decrypt")
 import sqlite3

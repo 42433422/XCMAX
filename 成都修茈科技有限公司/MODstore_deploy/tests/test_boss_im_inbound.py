@@ -120,13 +120,21 @@ def test_same_text_twice_creates_two_tasks(notify_calls):
 
 
 def test_dispatch_boss_im_task_executes_and_replies(monkeypatch, notify_calls):
-    from modstore_server.boss_im_inbound import dispatch_boss_im_task, enqueue_boss_im_task
+    from modstore_server.boss_im_inbound import (
+        dispatch_boss_im_task,
+        enqueue_boss_im_task,
+    )
 
     seen_exec: Dict[str, Any] = {}
 
     def _fake_execute(employee_id, task, input_data, user_id, **kwargs):
         seen_exec.update(
-            {"employee_id": employee_id, "task": task, "input": input_data, "user_id": user_id}
+            {
+                "employee_id": employee_id,
+                "task": task,
+                "input": input_data,
+                "user_id": user_id,
+            }
         )
         return {
             "employee_id": employee_id,
@@ -159,7 +167,10 @@ def test_dispatch_boss_im_task_executes_and_replies(monkeypatch, notify_calls):
 
 
 def test_dispatch_boss_im_task_failure_still_replies(monkeypatch, notify_calls):
-    from modstore_server.boss_im_inbound import dispatch_boss_im_task, enqueue_boss_im_task
+    from modstore_server.boss_im_inbound import (
+        dispatch_boss_im_task,
+        enqueue_boss_im_task,
+    )
 
     def _boom(*args, **kwargs):
         raise RuntimeError("LLM 配额用尽")
@@ -245,7 +256,13 @@ def test_report_hook_suppressed_for_managed_im_reply(notify_calls):
     """im_reply_managed 输入标记抑制 _actions_real 的 report hook，避免老板收到双份回复。"""
     from modstore_server.employee_executor import _actions_real
 
-    _actions_real({}, {"reasoning": "干完了", "input": {"im_reply_managed": True}}, "t", "emp-a", 1)
+    _actions_real(
+        {},
+        {"reasoning": "干完了", "input": {"im_reply_managed": True}},
+        "t",
+        "emp-a",
+        1,
+    )
     assert not notify_calls
 
     _actions_real({}, {"reasoning": "干完了", "input": {}}, "t", "emp-a", 1)

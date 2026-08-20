@@ -38,9 +38,7 @@ export function formatDate(value: unknown): string {
 }
 
 export function memoryValue(memory: PersyMemoryRecord): PersyMemoryValue {
-  return memory.value && typeof memory.value === 'object'
-    ? (memory.value as PersyMemoryValue)
-    : {}
+  return memory.value && typeof memory.value === 'object' ? (memory.value as PersyMemoryValue) : {}
 }
 
 export function memoryStatusLabel(status: string): string {
@@ -50,7 +48,9 @@ export function memoryStatusLabel(status: string): string {
       active: '已确认',
       rejected: '已忽略',
       deleted: '已删除',
-    }[status] || status || '未知'
+    }[status] ||
+    status ||
+    '未知'
   )
 }
 
@@ -95,7 +95,9 @@ export function buildMemoryStatement(subject: string, predicate: string, object:
 
 export function normalizeChunkSource(chunk: KnowledgeBaseChunk): string {
   const source = chunk.metadata?.source || chunk.source || '知识来源'
-  const normalized = String(source).replace(/\+rerank$/i, '').trim()
+  const normalized = String(source)
+    .replace(/\+rerank$/i, '')
+    .trim()
   if (normalized.toLowerCase() === 'bm25') return '关键词召回'
   return normalized || '知识来源'
 }

@@ -13,10 +13,12 @@
 
 from __future__ import annotations
 
+import importlib
 import logging
 import os
 import re
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request
@@ -26,7 +28,18 @@ from fastapi.responses import FileResponse, JSONResponse
 from app.application.facades.query_facade import query_service
 from app.bootstrap import get_shipment_application_service_core
 from app.db.models import ShipmentRecord
+from app.fastapi_routes import shipment_agent_runtime as _shipment_agent_runtime
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.security.safe_download_path import (
+    UnsafeDownloadPathError,
+    resolve_under_allowed_dirs,
+)
+from app.utils.security.secure_filename import secure_filename
+
+_agent_node_output = _shipment_agent_runtime.agent_node_output
+_shipment_agent_user_id = _shipment_agent_runtime.shipment_agent_user_id
+_run_shipment_records_agent = _shipment_agent_runtime.run_shipment_records_agent
+_run_shipment_orders_agent = _shipment_agent_runtime.run_shipment_orders_agent
 
 logger = logging.getLogger(__name__)
 
@@ -37,11 +50,22 @@ def _svc():
     return get_shipment_application_service_core()
 
 
+def _resolve_shipment_output_path(file_arg: object) -> Path | None:
+    from app.utils.path_io.path_utils import get_app_data_dir
+
+    output_dir = Path(get_app_data_dir()).resolve() / "shipment_outputs"
+    try:
+        candidate = resolve_under_allowed_dirs(str(file_arg or ""), [output_dir])
+    except (OSError, UnsafeDownloadPathError):
+        return None
+    return candidate if candidate.is_file() else None
+
+
 def _safe_shipment_export_path(result: dict[str, Any]) -> str | None:
     from pathlib import Path
 
     from app.infrastructure.workspace import resolve_existing_file_under_root
-    from app.utils.path_utils import get_data_dir
+    from app.utils.path_io.path_utils import get_data_dir
 
     filename = os.path.basename(str(result.get("filename") or ""))
     if not re.fullmatch(r"shipment_records_[^/\\]{1,160}_\d{8}_\d{6}\.xlsx", filename):
@@ -53,173 +77,6 @@ def _safe_shipment_export_path(result: dict[str, Any]) -> str | None:
     except (OSError, ValueError):
         return None
     return str(candidate)
-
-
-def _agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
-    final_output = getattr(run, "final_output", None)
-    node_outputs = dict((final_output or {}).get("node_outputs") or {})
-    output = dict(node_outputs.get(node_id) or {})
-    if not output:
-        for step in getattr(run, "steps", []) or []:
-            if str(getattr(step, "node_id", "")) == node_id:
-                output = dict(getattr(step, "output", {}) or {})
-                break
-    if not output:
-        output = {"success": getattr(run, "status", "") == "completed"}
-    if not output.get("success"):
-        output["message"] = "出货单操作失败"
-        output.pop("error", None)
-        output.pop("traceback", None)
-    run_id = str(getattr(run, "run_id", "") or "")
-    if run_id:
-        output["run_id"] = run_id
-        output["agent_run_id"] = run_id
-    output["agent_status"] = str(getattr(run, "status", "") or "")
-    return output
-
-
-def _shipment_agent_user_id(request: Request, payload: dict[str, Any]) -> str:
-    return str(
-        request.headers.get("X-User-Id")
-        or request.headers.get("X-User-ID")
-        or payload.get("user_id")
-        or payload.get("userId")
-        or "shipment-route"
-    ).strip()
-
-
-def _run_shipment_records_agent(
-    *,
-    request: Request,
-    action: str,
-    params: dict[str, Any],
-    route_path: str,
-) -> dict[str, Any]:
-    from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.workflow.types import PlanGraph, WorkflowNode
-    from app.application.workflow_registry_app import get_workflow_tool_registry
-
-    registry = get_workflow_tool_registry()
-    action_meta = dict((registry.get("shipment_records") or {}).get("actions") or {}).get(action)
-    if not isinstance(action_meta, dict):
-        return {
-            "success": False,
-            "message": f"未注册的 shipment_records 动作: {action}",
-            "agent_status": "failed",
-        }
-
-    node_id = f"shipment_records_{action}"
-    user_id = _shipment_agent_user_id(request, params)
-    plan = PlanGraph(
-        plan_id=node_id,
-        intent=node_id,
-        todo_steps=[f"通过 AgentOrchestrator 执行 shipment_records.{action}"],
-        nodes=[
-            WorkflowNode(
-                node_id=node_id,
-                tool_id="shipment_records",
-                action=action,
-                params=dict(params or {}),
-                risk=str(action_meta.get("risk") or "medium"),
-                idempotent=bool(action_meta.get("idempotent", False)),
-                description=f"Execute shipment_records.{action} through the unified Agent runtime.",
-            )
-        ],
-        risk_level=str(action_meta.get("risk") or "medium"),
-        metadata={"source": "shipment_records_route", "route": route_path},
-    )
-    runtime_context = {
-        "source": "shipment_records_route",
-        "route": route_path,
-        "request_path": str(request.url.path),
-        "user_id": user_id,
-        "route_confirmed": True,
-        "service_source": "fastapi_shipment_records_route",
-    }
-    orchestrator = AgentOrchestrator()
-    run = orchestrator.start_run_from_plan(
-        user_id=user_id,
-        message=str(params.get("message") or f"Shipment records {action}"),
-        plan=plan,
-        runtime_context=runtime_context,
-    )
-    if run.status in {"waiting_user", "running"}:
-        continued = orchestrator.continue_run(
-            run.run_id,
-            approved_by=user_id or "shipment-route",
-            approved_step_id=node_id,
-            runtime_context=runtime_context,
-        )
-        if continued is not None:
-            run = continued
-    return _agent_node_output(run, node_id)
-
-
-def _run_shipment_orders_agent(
-    *,
-    request: Request,
-    action: str,
-    params: dict[str, Any],
-    route_path: str,
-) -> dict[str, Any]:
-    from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.workflow.types import PlanGraph, WorkflowNode
-    from app.application.workflow_registry_app import get_workflow_tool_registry
-
-    registry = get_workflow_tool_registry()
-    action_meta = dict((registry.get("shipment_orders") or {}).get("actions") or {}).get(action)
-    if not isinstance(action_meta, dict):
-        return {
-            "success": False,
-            "message": f"未注册的 shipment_orders 动作: {action}",
-            "agent_status": "failed",
-        }
-
-    node_id = f"shipment_orders_{action}"
-    user_id = _shipment_agent_user_id(request, params)
-    plan = PlanGraph(
-        plan_id=node_id,
-        intent=node_id,
-        todo_steps=[f"通过 AgentOrchestrator 执行 shipment_orders.{action}"],
-        nodes=[
-            WorkflowNode(
-                node_id=node_id,
-                tool_id="shipment_orders",
-                action=action,
-                params=dict(params or {}),
-                risk=str(action_meta.get("risk") or "high"),
-                idempotent=bool(action_meta.get("idempotent", False)),
-                description=f"Execute shipment_orders.{action} through the unified Agent runtime.",
-            )
-        ],
-        risk_level=str(action_meta.get("risk") or "high"),
-        metadata={"source": "shipment_orders_route", "route": route_path},
-    )
-    runtime_context = {
-        "source": "shipment_orders_route",
-        "route": route_path,
-        "request_path": str(request.url.path),
-        "user_id": user_id,
-        "route_confirmed": True,
-        "service_source": "fastapi_shipment_orders_route",
-    }
-    orchestrator = AgentOrchestrator()
-    run = orchestrator.start_run_from_plan(
-        user_id=user_id,
-        message=str(params.get("message") or f"Shipment orders {action}"),
-        plan=plan,
-        runtime_context=runtime_context,
-    )
-    if run.status in {"waiting_user", "running"}:
-        continued = orchestrator.continue_run(
-            run.run_id,
-            approved_by=user_id or "shipment-route",
-            approved_step_id=node_id,
-            runtime_context=runtime_context,
-        )
-        if continued is not None:
-            run = continued
-    return _agent_node_output(run, node_id)
 
 
 def _next_order_number_payload(suffix: str = "A") -> dict[str, Any]:
@@ -299,10 +156,10 @@ def shipment_generate(request: Request, payload: dict[str, Any] = Body(default_f
             route_path="/api/shipment/generate",
         )
         return JSONResponse(result, status_code=200 if result.get("success") else 500)
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("shipment generate: %s", e)
+    except RECOVERABLE_ERRORS:
+        logger.exception("shipment generate failed")
         return JSONResponse(
-            {"success": False, "message": f"生成失败：{str(e)}"},
+            {"success": False, "message": "发货单生成服务暂时不可用"},
             status_code=500,
         )
 
@@ -315,9 +172,12 @@ def shipment_print(request: Request, payload: dict[str, Any] = Body(default_fact
 
     if not file_path:
         raise HTTPException(status_code=400, detail="文件路径不能为空")
-    if not os.path.exists(str(file_path)):
-        raise HTTPException(status_code=404, detail="文件不存在")
-
+    resolved_file = _resolve_shipment_output_path(file_path)
+    if resolved_file is None:
+        return JSONResponse(
+            {"success": False, "message": "文件不存在"},
+            status_code=404,
+        )
     try:
         if order_id:
             try:
@@ -328,7 +188,7 @@ def shipment_print(request: Request, payload: dict[str, Any] = Body(default_fact
             request=request,
             action="print",
             params={
-                "file_path": str(file_path),
+                "file_path": str(resolved_file),
                 "order_id": order_id,
                 "printer_name": printer_name,
             },
@@ -337,20 +197,23 @@ def shipment_print(request: Request, payload: dict[str, Any] = Body(default_fact
         return JSONResponse(result, status_code=200 if result.get("success") else 500)
     except HTTPException:
         raise
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("shipment print: %s", e)
+    except RECOVERABLE_ERRORS:
+        logger.exception("shipment print failed")
         return JSONResponse(
-            {"success": False, "message": f"打印失败：{str(e)}"},
+            {"success": False, "message": "发货单打印服务暂时不可用"},
             status_code=500,
         )
 
 
 @router.get("/api/shipment/download/{filename:path}")
 def shipment_download(filename: str):
-    from app.utils.path_utils import get_app_data_dir
+    from app.utils.path_io.path_utils import get_app_data_dir
 
     output_dir = os.path.join(get_app_data_dir(), "shipment_outputs")
-    safe = os.path.basename(filename) or filename
+    base_name = os.path.basename(str(filename or "").replace("\\", "/"))
+    safe = secure_filename(base_name)
+    if not safe or safe != base_name:
+        return JSONResponse({"success": False, "message": "文件名无效"}, status_code=400)
     file_path = os.path.join(output_dir, safe)
     if file_path and os.path.exists(file_path):
         return FileResponse(
@@ -452,225 +315,21 @@ def shipment_orders_get(order_number: str):
     raise HTTPException(status_code=404, detail="订单不存在")
 
 
-# ----- /api/orders（静态子路径必须早于 /api/orders/{order_number}）-----
-
-
-@router.get("/api/orders")
-def api_orders_list(limit: int = Query(default=100, ge=1, le=5000)):
-    orders = _svc().get_orders(limit=limit) or []
-    return {"success": True, "data": orders, "count": len(orders)}
-
-
-@router.post("/api/orders", status_code=201)
-def api_orders_create(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
-    """Create the shipment record shown by the desktop Orders page.
-
-    ``/api/orders`` is the historical desktop name for shipment records.  Keep
-    the public contract here so callers do not need to know the internal
-    ``/api/shipment/shipment-records/record`` compatibility path.
-    """
-    purchase_unit = str(
-        payload.get("purchase_unit")
-        or payload.get("unit_name")
-        or payload.get("customer_name")
-        or ""
-    ).strip()
-    products = payload.get("products") or payload.get("items") or []
-    if not purchase_unit:
-        raise HTTPException(status_code=400, detail="缺少购买单位")
-    if not isinstance(products, list) or not products:
-        raise HTTPException(status_code=400, detail="产品列表不能为空")
-    result = _run_shipment_records_agent(
-        request=request,
-        action="create",
-        params={
-            "unit_name": purchase_unit,
-            "products": products,
-            "contact_person": payload.get("contact_person"),
-            "contact_phone": payload.get("contact_phone"),
-        },
-        route_path="/api/orders",
-    )
-    return JSONResponse(result, status_code=201 if result.get("success") else 400)
-
-
-@router.delete("/api/orders")
-@router.delete("/api/orders/", include_in_schema=False)
-def api_orders_delete_root(request: Request):
-    result = _run_shipment_orders_agent(
-        request=request,
-        action="clear_all",
-        params={},
-        route_path="/api/orders",
-    )
-    return JSONResponse(result, status_code=200 if result.get("success") else 500)
-
-
-@router.get("/api/orders/latest")
-def api_orders_latest():
-    orders = _svc().get_orders(limit=10) or []
-    return {"success": True, "data": orders, "count": len(orders)}
-
-
-@router.get("/api/orders/search")
-def api_orders_search(q: str = Query(default="")):
-    qs = (q or "").strip()
-    rows = _svc().search_orders(qs) if qs else []
-    return {"success": True, "data": rows, "count": len(rows)}
-
-
-@router.post("/api/orders/set-sequence")
-def api_orders_set_sequence(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
-    sequence = int(payload.get("sequence", 1))
-    result = _run_shipment_orders_agent(
-        request=request,
-        action="set_sequence",
-        params={"sequence": sequence},
-        route_path="/api/orders/set-sequence",
-    )
-    return JSONResponse(result, status_code=200 if result.get("success") else 500)
-
-
-@router.post("/api/orders/reset-sequence")
-def api_orders_reset_sequence(request: Request):
-    result = _run_shipment_orders_agent(
-        request=request,
-        action="reset_sequence",
-        params={},
-        route_path="/api/orders/reset-sequence",
-    )
-    return JSONResponse(result, status_code=200 if result.get("success") else 500)
-
-
-@router.get("/api/orders/purchase-units")
-def api_orders_purchase_units():
-    units = _svc().get_purchase_units()
-    return {"success": True, "data": units, "count": len(units)}
-
-
-@router.post("/api/orders/clear-shipment")
-def api_orders_clear_shipment(
-    request: Request, payload: dict[str, Any] = Body(default_factory=dict)
-):
-    purchase_unit = str(payload.get("purchase_unit") or "").strip()
-    if not purchase_unit:
-        raise HTTPException(status_code=400, detail="缺少购买单位参数")
-    result = _run_shipment_orders_agent(
-        request=request,
-        action="clear_shipment",
-        params={"purchase_unit": purchase_unit},
-        route_path="/api/orders/clear-shipment",
-    )
-    return JSONResponse(result, status_code=200 if result.get("success") else 500)
-
-
-@router.get("/api/orders/export")
-def api_orders_export(
-    unit: str | None = Query(default=None),
-    purchase_unit: str | None = Query(default=None),
-    template_id: str | None = Query(default=None),
-    status: str | None = Query(default=None),
-):
-    """Export the current Orders page data as a real XLSX workbook."""
-    selected_unit = (unit or purchase_unit or "").strip() or None
-    result = _svc().export_shipment_records(
-        unit_name=selected_unit,
-        template_id=template_id,
-        status_filter=status,
-    )
-    file_path = _safe_shipment_export_path(result)
-    if result.get("success") and file_path:
-        return FileResponse(
-            file_path,
-            filename=os.path.basename(file_path),
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-    return JSONResponse(result, status_code=400 if not result.get("success") else 500)
-
-
-@router.delete("/api/orders/clear-all")
-def api_orders_clear_all(request: Request):
-    result = _run_shipment_orders_agent(
-        request=request,
-        action="clear_all",
-        params={},
-        route_path="/api/orders/clear-all",
-    )
-    return JSONResponse(result, status_code=200 if result.get("success") else 500)
-
-
-@router.patch("/api/orders/{order_number}")
-def api_orders_update(
-    request: Request,
-    order_number: str,
-    payload: dict[str, Any] = Body(default_factory=dict),
-):
-    try:
-        record_id = int(order_number)
-    except ValueError:
-        raise HTTPException(status_code=404, detail="订单不存在")
-
-    requested_status = payload.get("status")
-    if requested_status is not None and str(requested_status) not in {
-        "pending",
-        "printed",
-        "completed",
-        "cancelled",
-    }:
-        raise HTTPException(status_code=400, detail="无效的订单状态")
-
-    update_params = {
-        "id": record_id,
-        "unit_name": payload.get("purchase_unit") or payload.get("unit_name"),
-        "product_name": payload.get("product_name"),
-        "model_number": payload.get("model_number"),
-        "quantity_kg": payload.get("quantity_kg"),
-        "quantity_tins": payload.get("quantity_tins"),
-        "tin_spec": payload.get("tin_spec"),
-        "unit_price": payload.get("unit_price"),
-        "amount": payload.get("amount"),
-        "status": requested_status,
-    }
-    result = _run_shipment_records_agent(
-        request=request,
-        action="update",
-        params={key: value for key, value in update_params.items() if value is not None},
-        route_path="/api/orders/{order_number}",
-    )
-    if not result.get("success"):
-        return JSONResponse(result, status_code=404)
-    result["data"] = _svc().get_order(str(record_id))
-    return JSONResponse(jsonable_encoder(result), status_code=200)
-
-
-@router.get("/api/orders/{order_number}")
-def api_orders_get(order_number: str):
-    try:
-        int(order_number)
-    except ValueError:
-        raise HTTPException(status_code=404, detail="订单不存在")
-    order = _svc().get_order(str(order_number))
-    if not order:
-        raise HTTPException(status_code=404, detail="订单不存在")
-    return {"success": True, "data": order}
-
-
-@router.delete("/api/shipment/orders/{order_number}")
-def shipment_orders_delete(request: Request, order_number: str):
-    try:
-        shipment_id = int(order_number)
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"无效的订单编号格式：{order_number}")
-    result = _run_shipment_orders_agent(
-        request=request,
-        action="delete",
-        params={"id": shipment_id, "order_number": order_number},
-        route_path="/api/shipment/orders/{order_number}",
-    )
-    if not result.get("success"):
-        raise HTTPException(status_code=400, detail=result.get("message", "删除失败"))
-    result["message"] = f"订单 {order_number} 已删除"
-    return result
+_api_order_routes = importlib.import_module("app.fastapi_routes.shipment_api_order_routes")
+api_orders_list = _api_order_routes.api_orders_list
+api_orders_create = _api_order_routes.api_orders_create
+api_orders_delete_root = _api_order_routes.api_orders_delete_root
+api_orders_latest = _api_order_routes.api_orders_latest
+api_orders_search = _api_order_routes.api_orders_search
+api_orders_set_sequence = _api_order_routes.api_orders_set_sequence
+api_orders_reset_sequence = _api_order_routes.api_orders_reset_sequence
+api_orders_purchase_units = _api_order_routes.api_orders_purchase_units
+api_orders_clear_shipment = _api_order_routes.api_orders_clear_shipment
+api_orders_export = _api_order_routes.api_orders_export
+api_orders_clear_all = _api_order_routes.api_orders_clear_all
+api_orders_update = _api_order_routes.api_orders_update
+api_orders_get = _api_order_routes.api_orders_get
+shipment_orders_delete = _api_order_routes.shipment_orders_delete
 
 
 # ----- /api/shipment/shipment-records -----

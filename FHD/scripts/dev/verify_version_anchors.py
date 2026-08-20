@@ -24,20 +24,40 @@ ANCHORS: list[tuple[str, str, str]] = [
     ("sunbird-console/package.json", r'"version"\s*:\s*"([\d.]+)"', TOOLCHAIN_VERSION),
     ("app/fastapi_app/factory.py", r'version="([\d.]+)"', PRODUCT_VERSION),
     ("app/infrastructure/mods/manifest.py", r'current_version\s*=\s*"([\d.]+)"', PRODUCT_VERSION),
-    ("mobile-flutter-poc/android/app/build.gradle.kts", r'injectedVersionName[\s\S]*?\?:\s*"([\d.]+)"', PRODUCT_VERSION),
-    ("mobile-flutter-poc/pubspec.yaml", r'(?m)^version:\s*([\d.]+)\+\d+', TOOLCHAIN_VERSION),
-    ("mobile-flutter-poc/ios/Flutter/Version.xcconfig", r'(?m)^FLUTTER_BUILD_NAME=([\d.]+)', TOOLCHAIN_VERSION),
+    (
+        "mobile-flutter-poc/android/app/build.gradle.kts",
+        r'injectedVersionName[\s\S]*?\?:\s*"([\d.]+)"',
+        PRODUCT_VERSION,
+    ),
+    ("mobile-flutter-poc/pubspec.yaml", r"(?m)^version:\s*([\d.]+)\+\d+", TOOLCHAIN_VERSION),
+    (
+        "mobile-flutter-poc/ios/Flutter/Version.xcconfig",
+        r"(?m)^FLUTTER_BUILD_NAME=([\d.]+)",
+        TOOLCHAIN_VERSION,
+    ),
     ("desktop/resources/build-info.json", r'"version"\s*:\s*"([\d.]+)"', PRODUCT_VERSION),
-    ("mobile-flutter-poc/lib/src/api/mobile_api.dart", r"versionName\s*=\s*'([\d.]+)'", PRODUCT_VERSION),
+    (
+        "mobile-flutter-poc/lib/src/api/mobile_api.dart",
+        r"versionName\s*=\s*'([\d.]+)'",
+        PRODUCT_VERSION,
+    ),
     ("config/download_release.json", r'"marketing_version"\s*:\s*"([\d.]+)"', PRODUCT_VERSION),
     ("config/release_train.json", r'"product_version"\s*:\s*"([\d.]+)"', PRODUCT_VERSION),
-    ("../成都修茈科技有限公司/FHD/config/release_train.json", r'"product_version"\s*:\s*"([\d.]+)"', PRODUCT_VERSION),
+    (
+        "../成都修茈科技有限公司/FHD/config/release_train.json",
+        r'"product_version"\s*:\s*"([\d.]+)"',
+        PRODUCT_VERSION,
+    ),
     ("contracts/openapi.json", r'"info"[\s\S]*?"version"\s*:\s*"([\d.]+)"', PRODUCT_VERSION),
     ("setup.iss", r'#define\s+MyAppVersion\s+"([\d.]+)"', PRODUCT_VERSION),
     ("tools/XcagiDownloader/Models/AppSettings.cs", r'return\s+"([\d.]+)";', PRODUCT_VERSION),
     ("scripts/package/build-installer.sh", r'VERSION="\$\{1:-([\d.]+)\}"', PRODUCT_VERSION),
-    ("scripts/package/build-installer.ps1", r'\[string\]\$Version\s*=\s*"([\d.]+)"', PRODUCT_VERSION),
-    ("release/VERSION", r'(?m)^([\d.]+)$', PRODUCT_VERSION),
+    (
+        "scripts/package/build-installer.ps1",
+        r'\[string\]\$Version\s*=\s*"([\d.]+)"',
+        PRODUCT_VERSION,
+    ),
+    ("release/VERSION", r"(?m)^([\d.]+)$", PRODUCT_VERSION),
 ]
 
 

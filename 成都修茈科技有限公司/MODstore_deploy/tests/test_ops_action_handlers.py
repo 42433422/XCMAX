@@ -46,7 +46,9 @@ def test_employee_not_allowed_for_command(monkeypatch: pytest.MonkeyPatch) -> No
     assert recorded and recorded[0].get("exit_code") == -1
 
 
-def test_nginx_reload_requires_approval_dry_run(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_nginx_reload_requires_approval_dry_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     recorded: list[dict] = []
 
     monkeypatch.setattr(ops, "_write_audit", lambda **kw: recorded.append(dict(kw)))  # type: ignore[misc]

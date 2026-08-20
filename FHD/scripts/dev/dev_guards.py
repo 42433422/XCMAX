@@ -36,17 +36,33 @@ EXIT_OK, EXIT_FAIL, EXIT_USAGE = 0, 1, 2
 # 待对应漂移修复后改为 blocking=True。其余为当前全绿、硬阻断守卫。
 GUARDS: list[tuple[str, list[str], bool]] = [
     ("layer-ratchet", ["python", "scripts/dev/check_layer_ratchet.py"], True),
-    ("type-debt", ["python", "scripts/dev/count_type_debt.py",
-                    "--max-type-ignore", "69", "--max-ts-nocheck", "0", "--max-any", "99999"], True),
+    (
+        "type-debt",
+        [
+            "python",
+            "scripts/dev/count_type_debt.py",
+            "--max-type-ignore",
+            "69",
+            "--max-ts-nocheck",
+            "0",
+            "--max-any",
+            "99999",
+        ],
+        True,
+    ),
     ("raw-sql", ["python", "scripts/dev/count_raw_sql.py"], True),
     ("big-files", ["python", "scripts/dev/count_big_files.py"], False),
-    ("coverage-ramp-stubs", ["python", "scripts/dev/count_coverage_ramp_stubs.py", "--check"], True),
+    (
+        "coverage-ramp-stubs",
+        ["python", "scripts/dev/count_coverage_ramp_stubs.py", "--check"],
+        True,
+    ),
     ("test-bloat", ["python", "scripts/dev/test_bloat_report.py", "--check"], True),
     ("requirements-lock", ["python", "scripts/dev/check_requirements_lock.py"], True),
     ("mods-inline-ui", ["python", "scripts/dev/guard_mods_inline_ui.py"], True),
     ("utils-boundary", ["python", "scripts/dev/guard_utils_boundary.py"], True),
-    ("mod-import-boundaries", ["python", "scripts/dev/check_mod_import_boundaries.py"], False),
-    ("arch-fitness", ["python", "scripts/arch_fitness.py"], False),
+    ("mod-import-boundaries", ["python", "scripts/dev/check_mod_import_boundaries.py"], True),
+    ("arch-fitness", ["python", "scripts/arch_fitness.py"], True),
 ]
 
 
@@ -78,9 +94,7 @@ def run_all(*, verbose: bool = True) -> tuple[int, list[dict]]:
         if verbose:
             tag = "BLOCK" if blocking else "advisory"
             print(f"[dev-guards] {name:<22} {'OK' if code == 0 else 'FAIL'} ({tag})")
-        results.append(
-            {"name": name, "status": status, "exit": code, "blocking": blocking}
-        )
+        results.append({"name": name, "status": status, "exit": code, "blocking": blocking})
         if code != 0 and blocking:
             blocking_fail += 1
             worst = EXIT_FAIL
@@ -88,17 +102,18 @@ def run_all(*, verbose: bool = True) -> tuple[int, list[dict]]:
         final = "ALL PASS" if worst == 0 else "BLOCKING FAILURES PRESENT"
         print(
             f"[dev-guards] {final}（blocking "
-            f"{sum(1 for r in results if r['blocking'] and r['status']=='ok')}/"
+            f"{sum(1 for r in results if r['blocking'] and r['status'] == 'ok')}/"
             f"{sum(1 for r in results if r['blocking'])}；advisory 漂移 "
-            f"{sum(1 for r in results if not r['blocking'] and r['status']=='fail')} 项）"
+            f"{sum(1 for r in results if not r['blocking'] and r['status'] == 'fail')} 项）"
         )
     return worst, results
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", nargs="?", choices=["check"], default="check",
-                        help="check（默认）")
+    parser.add_argument(
+        "action", nargs="?", choices=["check"], default="check", help="check（默认）"
+    )
     parser.add_argument("--json", action="store_true", help="以 JSON 输出每个守卫的判定")
     args = parser.parse_args(argv)
 

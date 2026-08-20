@@ -11,9 +11,9 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
 from app.application.ports.vector_store import VectorStorePort
-from app.utils.external_sqlite import connect_sqlite
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.utils.path_utils import get_app_data_dir
+from app.utils.path_io.external_sqlite import connect_sqlite
+from app.utils.path_io.path_utils import get_app_data_dir
 
 logger = logging.getLogger(__name__)
 

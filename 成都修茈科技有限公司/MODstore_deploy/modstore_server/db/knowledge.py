@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 
 from modstore_server.db.base import Base
 
@@ -22,11 +30,11 @@ class KnowledgeCollection(Base):
     embedding_model = Column(String(64), default="")
     embedding_dim = Column(Integer, default=1536)
     chunk_count = Column(Integer, default=0)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
     updated_at = Column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
 
@@ -48,7 +56,7 @@ class KnowledgeMembership(Base):
     grantee_kind = Column(String(16), nullable=False)
     grantee_id = Column(String(64), nullable=False, index=True)
     permission = Column(String(8), default="read")
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
 
 class KnowledgeDocument(Base):
@@ -63,4 +71,4 @@ class KnowledgeDocument(Base):
     filename = Column(String(256), default="")
     size_bytes = Column(Integer, default=0)
     chunk_count = Column(Integer, default=0)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))

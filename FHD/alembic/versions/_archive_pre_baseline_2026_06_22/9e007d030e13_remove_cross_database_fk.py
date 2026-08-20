@@ -9,6 +9,7 @@ SQLite 不支持跨数据库的外键约束，因为 shipment_records 在 produc
 而 purchase_units 在 customers.db 中。
 
 """
+from app.utils.operational_errors import BOUNDARY_ERRORS
 from typing import Sequence, Union
 
 from alembic import op
@@ -44,7 +45,7 @@ def upgrade() -> None:
             # 删除外键约束（如果存在）
             try:
                 batch_op.drop_constraint('fk_shipment_records_unit_id_purchase_units', type_='foreignkey')
-            except Exception:
+            except BOUNDARY_ERRORS:
                 # 如果约束不存在，忽略错误
                 pass
 

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="misc, union-attr"
 """Tests for app.fastapi_routes.mod_store_routes — coverage ramp.
 
 Covers helper functions, route endpoints, catalog operations, and error paths.
@@ -25,7 +26,8 @@ def app_with_router() -> FastAPI:
 
 @pytest.fixture
 def client(app_with_router: FastAPI) -> TestClient:
-    return TestClient(app_with_router, raise_server_exceptions=False)
+    with TestClient(app_with_router, raise_server_exceptions=False) as test_client:
+        yield test_client
 
 
 # ---------------------------------------------------------------------------
@@ -499,7 +501,7 @@ class TestModStoreInstall:
         with patch(
             "app.fastapi_routes.mod_store_routes._install_from_catalog",
             new_callable=AsyncMock,
-            side_effect=Exception("should not be called"),
+            side_effect=RuntimeError("should not be called"),
         ):
             # When pkg_id is empty and no package_file, _install_from_catalog
             # should raise HTTPException(400)

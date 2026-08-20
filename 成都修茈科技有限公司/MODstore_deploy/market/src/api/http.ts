@@ -11,10 +11,7 @@ function withQuery(path: string, params?: Record<string, string | number | boole
   return qs ? `${path}?${qs}` : path
 }
 
-export async function get<T = unknown>(
-  path: string,
-  params?: Record<string, string | number | boolean | undefined | null>,
-): Promise<T> {
+export async function get<T = unknown>(path: string, params?: Record<string, string | number | boolean | undefined | null>): Promise<T> {
   return requestJson<T>(withQuery(path, params), { method: 'GET' })
 }
 

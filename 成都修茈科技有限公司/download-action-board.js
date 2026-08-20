@@ -42,10 +42,7 @@
     }
 
     var s = board.summary || {}
-    var day =
-      (window.__ACTION_BOARD__ && window.__ACTION_BOARD__.day) ||
-      (board.items && board.items[0] && board.items[0].day) ||
-      '—'
+    var day = (window.__ACTION_BOARD__ && window.__ACTION_BOARD__.day) || (board.items && board.items[0] && board.items[0].day) || '—'
     meta.textContent = day + ' · 共 ' + (s.total || 0) + ' 条 · 只读公开'
 
     if (accent === 'patch') {

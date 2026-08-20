@@ -1,11 +1,11 @@
 # Runbook — Vibe-Coding 维护员
 
-| 字段 | 值 |
-|------|----|
-| 员工 ID | `vibe-coding-maintainer` |
-| 版本 | 2.0.0 |
-| 最后更新 | 2026-05-07 |
-| 应急联系 | admin |
+| 字段     | 值                       |
+| -------- | ------------------------ |
+| 员工 ID  | `vibe-coding-maintainer` |
+| 版本     | 2.0.0                    |
+| 最后更新 | 2026-05-07               |
+| 应急联系 | admin                    |
 
 ## 日常巡检
 
@@ -77,10 +77,10 @@ python -m pytest tests/test_workflow_*.py tests/agent/test_advanced_workflow.py 
 
 ## 工作流引擎职责边界（vibe-coding vs MODstore）
 
-| 引擎 | 路径 | 维护员工 | 可观测性/测试说明 |
-|------|------|----------|-------------------|
-| Standalone（画布/NL 工厂用） | `vibe-coding/src/vibe_coding/workflow_engine.py` 等 | `vibe-coding-maintainer` | `tests/test_workflow_*.py`、`tests/agent/test_advanced_workflow.py`；见 `skill-workflow-engine-update` |
-| 平台运行时（DB 技能组、员工节点） | `MODstore_deploy/modstore_server/workflow_engine.py` | `modstore-backend-api` | 回归测试写在 `MODstore_deploy/tests/**`；结构化日志字段契约由 `log-monitor-incident` 在 runbook 中备案 |
+| 引擎                              | 路径                                                 | 维护员工                 | 可观测性/测试说明                                                                                      |
+| --------------------------------- | ---------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------ |
+| Standalone（画布/NL 工厂用）      | `vibe-coding/src/vibe_coding/workflow_engine.py` 等  | `vibe-coding-maintainer` | `tests/test_workflow_*.py`、`tests/agent/test_advanced_workflow.py`；见 `skill-workflow-engine-update` |
+| 平台运行时（DB 技能组、员工节点） | `MODstore_deploy/modstore_server/workflow_engine.py` | `modstore-backend-api`   | 回归测试写在 `MODstore_deploy/tests/**`；结构化日志字段契约由 `log-monitor-incident` 在 runbook 中备案 |
 
 本员工 **不** 修改 `MODstore_deploy/modstore_server/**`。若变更需落 MODstore 引擎，请提交给 `modstore-backend-api`，并由 `test-qa-runner` 补充/维护 `MODstore_deploy/tests/` 用例。
 
@@ -92,5 +92,5 @@ python -m pytest tests/test_workflow_*.py tests/agent/test_advanced_workflow.py 
 ## ESkill 动态阶段触发记录
 
 | 日期 | 触发原因 | patch_id | 结果 | 是否固化 |
-|------|----------|----------|------|----------|
-| — | — | — | — | — |
+| ---- | -------- | -------- | ---- | -------- |
+| —    | —        | —        | —    | —        |

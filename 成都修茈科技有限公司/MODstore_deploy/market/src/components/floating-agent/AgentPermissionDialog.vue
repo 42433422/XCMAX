@@ -1,13 +1,14 @@
 <template>
-  <div
-    class="perm-overlay"
-    role="dialog"
-    aria-modal="true"
-    aria-labelledby="perm-title"
-    @click.self="$emit('dismiss')"
-  >
+  <div class="perm-overlay" role="dialog" aria-modal="true" aria-labelledby="perm-title" @click.self="$emit('dismiss')">
     <div class="perm-card">
-      <div class="perm-icon"><svg width="24" height="24" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><rect x="3" y="4" width="10" height="7" rx="1.5"/><circle cx="6" cy="7.5" r="0.75" fill="currentColor" stroke="none"/><circle cx="10" cy="7.5" r="0.75" fill="currentColor" stroke="none"/><path d="M6 11v1.5M10 11v1.5M5 4V2.5M11 4V2.5"/></svg></div>
+      <div class="perm-icon">
+        <svg width="24" height="24" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round">
+          <rect x="3" y="4" width="10" height="7" rx="1.5" />
+          <circle cx="6" cy="7.5" r="0.75" fill="currentColor" stroke="none" />
+          <circle cx="10" cy="7.5" r="0.75" fill="currentColor" stroke="none" />
+          <path d="M6 11v1.5M10 11v1.5M5 4V2.5M11 4V2.5" />
+        </svg>
+      </div>
       <h2 id="perm-title" class="perm-title">
         {{ corpMode ? '小C — 隐私提示' : 'AI 数字管家 — 隐私提示' }}
       </h2>
@@ -32,12 +33,8 @@
         }}
       </p>
       <div class="perm-actions">
-        <button type="button" class="perm-btn perm-btn--primary" @click="$emit('agree')">
-          同意并继续
-        </button>
-        <button type="button" class="perm-btn perm-btn--ghost" @click="$emit('dismiss')">
-          稍后再说
-        </button>
+        <button type="button" class="perm-btn perm-btn--primary" @click="$emit('agree')">同意并继续</button>
+        <button type="button" class="perm-btn perm-btn--ghost" @click="$emit('dismiss')">稍后再说</button>
       </div>
     </div>
   </div>

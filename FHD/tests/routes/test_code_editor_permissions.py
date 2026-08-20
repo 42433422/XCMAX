@@ -1,3 +1,4 @@
+# mypy: disable-error-code="misc"
 """Tests for app.fastapi_routes.code_editor — coverage ramp C3.3-a.
 
 Covers the workspace code-editor endpoints:
@@ -27,7 +28,8 @@ from app.fastapi_routes.code_editor import router
 def client(tmp_path: Path) -> TestClient:
     app = FastAPI()
     app.include_router(router)
-    return TestClient(app)
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 class TestSafePath:

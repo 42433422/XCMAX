@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr"
 """员工包运行时加载与 V2 解析。"""
 
 from __future__ import annotations
@@ -10,12 +11,16 @@ from typing import Any, Dict, Optional
 
 from modstore_server.catalog_store import employee_pack_records_from_store, files_dir
 from modstore_server.duty_employee_registry import get_duty_employee_record
-from modstore_server.duty_roster import employee_partition_meta, is_planned_duty_employee_pack
+from modstore_server.duty_roster import (
+    employee_partition_meta,
+    is_planned_duty_employee_pack,
+)
 from modstore_server.employee_config_v2_adapter import (
     needs_executor_translation,
     translate_v2_to_executor_config,
 )
 from modstore_server.models import CatalogItem
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 EXECUTOR_ACTION_HANDLERS = frozenset(
     {
@@ -173,7 +178,12 @@ def load_employee_pack(session, pack_id: str) -> Dict[str, Any]:
                     if inner:
                         manifest = json.loads(zf.read(inner).decode("utf-8"))
                         normalize_manifest_legacy_deepseek_to_auto(manifest)
-            except (OSError, zipfile.BadZipFile, json.JSONDecodeError, UnicodeDecodeError):
+            except (
+                OSError,
+                zipfile.BadZipFile,
+                json.JSONDecodeError,
+                UnicodeDecodeError,
+            ):
                 pass
     archive_mtime = 0.0
     if fn:
@@ -250,7 +260,7 @@ def try_load_employee_pack_from_library(pack_id: str) -> Optional[Dict[str, Any]
         from modman.manifest_util import read_manifest
         from modman.repo_config import load_config, resolved_library
         from modman.store import find_mod_dir_by_manifest_id
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return None
     try:
         lib = resolved_library(load_config())

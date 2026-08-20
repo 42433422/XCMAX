@@ -10,40 +10,19 @@
       <div class="oac-import-grid">
         <label class="oac-field">
           <span class="oac-field-label">连接器名称 *</span>
-          <input
-            v-model="importForm.name"
-            class="oac-input"
-            placeholder="例如：jira-cloud"
-            maxlength="128"
-            spellcheck="false"
-          />
+          <input v-model="importForm.name" class="oac-input" placeholder="例如：jira-cloud" maxlength="128" spellcheck="false" />
         </label>
         <label class="oac-field">
           <span class="oac-field-label">备注</span>
-          <input
-            v-model="importForm.description"
-            class="oac-input"
-            placeholder="可选：用途描述"
-            maxlength="200"
-          />
+          <input v-model="importForm.description" class="oac-input" placeholder="可选：用途描述" maxlength="200" />
         </label>
         <label class="oac-field oac-field--span">
           <span class="oac-field-label">Spec URL（可选，与下方文本二选一）</span>
-          <input
-            v-model="importForm.spec_url"
-            class="oac-input"
-            placeholder="https://example.com/openapi.json"
-            spellcheck="false"
-          />
+          <input v-model="importForm.spec_url" class="oac-input" placeholder="https://example.com/openapi.json" spellcheck="false" />
         </label>
         <label class="oac-field oac-field--span">
           <span class="oac-field-label">覆盖 base_url（可选）</span>
-          <input
-            v-model="importForm.base_url_override"
-            class="oac-input"
-            placeholder="留空则使用 spec.servers[0].url"
-            spellcheck="false"
-          />
+          <input v-model="importForm.base_url_override" class="oac-input" placeholder="留空则使用 spec.servers[0].url" spellcheck="false" />
         </label>
         <label class="oac-field oac-field--span oac-field--full">
           <span class="oac-field-label">或直接粘贴 OpenAPI 文档（JSON / YAML）</span>
@@ -51,18 +30,13 @@
             v-model="importForm.spec_text"
             class="oac-textarea"
             rows="8"
-            placeholder="{\n  \&quot;openapi\&quot;: \&quot;3.0.3\&quot;, ...\n}"
+            placeholder='{\n  \"openapi\": \"3.0.3\", ...\n}'
             spellcheck="false"
           />
         </label>
       </div>
       <div class="oac-actions">
-        <button
-          type="button"
-          class="oac-btn oac-btn--primary"
-          :disabled="state.importing || !canImport"
-          @click="handleImport"
-        >
+        <button type="button" class="oac-btn oac-btn--primary" :disabled="state.importing || !canImport" @click="handleImport">
           {{ state.importing ? '导入中…' : '解析并导入' }}
         </button>
         <span v-if="state.importError" class="oac-error" role="alert">{{ state.importError }}</span>
@@ -98,9 +72,7 @@
     <section v-if="detail" class="oac-detail">
       <header class="oac-detail-head">
         <h3 class="oac-section-title">{{ detail.connector.name }} · 详情</h3>
-        <button type="button" class="oac-btn oac-btn--ghost" @click="loadDetail(detail.connector.id)">
-          刷新
-        </button>
+        <button type="button" class="oac-btn oac-btn--ghost" @click="loadDetail(detail.connector.id)">刷新</button>
         <button type="button" class="oac-btn oac-btn--danger" @click="handleDelete">删除</button>
       </header>
 
@@ -195,7 +167,7 @@
               :class="{ 'oac-op--active': activeOperationId === op.operation_id }"
               @click="activeOperationId = op.operation_id"
             >
-              <span class="oac-op-method" :data-method="op.method">{{ op.method }}</span>
+              <span class="oac-op-method" :class="`oac-op-method--${op.method.toLowerCase()}`">{{ op.method }}</span>
               <span class="oac-op-path">{{ op.path }}</span>
               <span class="oac-op-id">{{ op.operation_id }}</span>
               <label class="oac-op-toggle" @click.stop>
@@ -227,7 +199,9 @@
             </button>
             <span v-if="testForm.error" class="oac-error">{{ testForm.error }}</span>
           </div>
-          <pre v-if="testResult" class="oac-preview" :class="{ 'oac-preview--error': testResult.ok === false }">{{ formatTestResult(testResult) }}</pre>
+          <pre v-if="testResult" class="oac-preview" :class="{ 'oac-preview--error': testResult.ok === false }">{{
+            formatTestResult(testResult)
+          }}</pre>
 
           <h4 class="oac-publish-title">发布到工作流</h4>
           <div class="oac-publish-row">
@@ -321,7 +295,9 @@ const publishForm = reactive({
   name: '',
 })
 
-const canImport = computed(() => importForm.name.trim().length > 0 && (importForm.spec_text.trim().length > 0 || importForm.spec_url.trim().length > 0))
+const canImport = computed(
+  () => importForm.name.trim().length > 0 && (importForm.spec_text.trim().length > 0 || importForm.spec_url.trim().length > 0),
+)
 const canPublish = computed(() => publishForm.workflow_id > 0 && !!activeOperationId.value)
 
 const activeOperation = computed<OpenApiOperationSummary | null>(() => {
@@ -787,22 +763,22 @@ select.oac-input {
   background: rgba(255, 255, 255, 0.08);
 }
 
-.oac-op-method[data-method='GET'] {
+.oac-op-method--get {
   background: rgba(60, 200, 120, 0.15);
   color: #6cf;
 }
 
-.oac-op-method[data-method='POST'] {
+.oac-op-method--post {
   background: rgba(43, 168, 255, 0.18);
 }
 
-.oac-op-method[data-method='DELETE'] {
+.oac-op-method--delete {
   background: rgba(255, 100, 100, 0.18);
   color: #fbb;
 }
 
-.oac-op-method[data-method='PUT'],
-.oac-op-method[data-method='PATCH'] {
+.oac-op-method--put,
+.oac-op-method--patch {
   background: rgba(255, 200, 50, 0.18);
   color: #ffd66e;
 }

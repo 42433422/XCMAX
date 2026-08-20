@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, operator"
 """Tests for app.infrastructure.excel.text_to_pandas."""
 
 from __future__ import annotations

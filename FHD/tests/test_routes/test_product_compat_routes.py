@@ -1,4 +1,4 @@
-"""Tests for app.fastapi_routes.domains.product.compat_routes — product CRUD & export routes."""
+"""Tests for app.legacy.routes.product.compat_routes — product CRUD & export routes."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.fastapi_routes.domains.product.compat_routes import router
+from app.legacy.routes.product.compat_routes import router
 
 
 @pytest.fixture
@@ -31,9 +31,9 @@ def client_compat(app_compat):
 class TestProductsUnits:
     def test_products_units_returns_data(self, client_compat):
         with (
-            patch("app.fastapi_routes.domains.product.compat_routes.verify_db_read_token_header"),
+            patch("app.legacy.routes.product.compat_routes.verify_db_read_token_header"),
             patch(
-                "app.fastapi_routes.domains.product.compat_routes._products_units_for_select",
+                "app.legacy.routes.product.compat_routes._products_units_for_select",
                 return_value={"units": ["kg", "个"]},
             ),
         ):
@@ -47,7 +47,7 @@ class TestProductsUnits:
 class TestShipmentRecordsUnits:
     def test_shipment_records_units_returns_data(self, client_compat):
         with patch(
-            "app.fastapi_routes.domains.product.compat_routes._products_units_for_select",
+            "app.legacy.routes.product.compat_routes._products_units_for_select",
             return_value={"units": ["kg"]},
         ):
             r = client_compat.get("/shipment/shipment-records/units")
@@ -56,7 +56,7 @@ class TestShipmentRecordsUnits:
     def test_taiyangniao_host_alias_does_not_depend_on_private_mod_version(self, client_compat):
         with (
             patch(
-                "app.fastapi_routes.domains.product.compat_routes._products_units_for_select",
+                "app.legacy.routes.product.compat_routes._products_units_for_select",
                 return_value={"success": True, "data": [{"name": "销售部"}]},
             ),
             patch(
@@ -80,7 +80,7 @@ class TestShipmentRecordsUnits:
 class TestPurchaseUnits:
     def test_purchase_units_returns_data(self, client_compat):
         with patch(
-            "app.fastapi_routes.domains.product.compat_routes._merged_purchase_unit_entries",
+            "app.legacy.routes.product.compat_routes._merged_purchase_unit_entries",
             return_value=[{"name": "kg"}],
         ):
             r = client_compat.get("/purchase_units")
@@ -99,7 +99,7 @@ class TestProductsList:
                 "app.mod_sdk.erp_domain_dispatch.try_invoke_erp_domain_handler",
                 return_value={"success": True, "data": []},
             ),
-            patch("app.fastapi_routes.domains.product.compat_routes.verify_db_read_token_header"),
+            patch("app.legacy.routes.product.compat_routes.verify_db_read_token_header"),
         ):
             r = client_compat.get("/products/list")
             assert r.status_code == 200
@@ -115,9 +115,9 @@ class TestProductsList:
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.domains.product.compat_routes.verify_db_read_token_header"),
+            patch("app.legacy.routes.product.compat_routes.verify_db_read_token_header"),
             patch(
-                "app.fastapi_routes.domains.product.compat_routes._load_products_list_impl_pg",
+                "app.legacy.routes.product.compat_routes._load_products_list_impl_pg",
                 return_value=([{"id": 1, "name": "Widget"}], 1, None),
             ),
         ):
@@ -137,9 +137,9 @@ class TestProductsList:
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.domains.product.compat_routes.verify_db_read_token_header"),
+            patch("app.legacy.routes.product.compat_routes.verify_db_read_token_header"),
             patch(
-                "app.fastapi_routes.domains.product.compat_routes._load_products_list_impl_pg",
+                "app.legacy.routes.product.compat_routes._load_products_list_impl_pg",
                 side_effect=RuntimeError("db down"),
             ),
         ):
@@ -176,9 +176,9 @@ class TestProductsList:
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.domains.product.compat_routes.verify_db_read_token_header"),
+            patch("app.legacy.routes.product.compat_routes.verify_db_read_token_header"),
             patch(
-                "app.fastapi_routes.domains.product.compat_routes._load_products_list_impl_pg",
+                "app.legacy.routes.product.compat_routes._load_products_list_impl_pg",
                 return_value=([], 0, "missing columns"),
             ),
         ):
@@ -211,7 +211,7 @@ class TestProductsGetById:
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.domains.product.compat_routes.verify_db_read_token_header"),
+            patch("app.legacy.routes.product.compat_routes.verify_db_read_token_header"),
             patch("app.bootstrap.get_products_service") as mock_svc,
         ):
             mock_svc.return_value.get_product.return_value = {
@@ -227,7 +227,7 @@ class TestProductsGetById:
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.domains.product.compat_routes.verify_db_read_token_header"),
+            patch("app.legacy.routes.product.compat_routes.verify_db_read_token_header"),
             patch("app.bootstrap.get_products_service") as mock_svc,
         ):
             mock_svc.return_value.get_product.return_value = {
@@ -243,14 +243,14 @@ class TestProductsGetById:
 
 class TestProductsResolveNameHints:
     def test_resolve_name_hints_invalid_hints_type(self, client_compat):
-        with patch("app.fastapi_routes.domains.product.compat_routes.verify_db_read_token_header"):
+        with patch("app.legacy.routes.product.compat_routes.verify_db_read_token_header"):
             r = client_compat.post("/products/resolve-name-hints", json={"hints": "not_a_list"})
             body = r.json()
             assert body["success"] is False
             assert "数组" in body["message"]
 
     def test_resolve_name_hints_empty_hints(self, client_compat):
-        with patch("app.fastapi_routes.domains.product.compat_routes.verify_db_read_token_header"):
+        with patch("app.legacy.routes.product.compat_routes.verify_db_read_token_header"):
             r = client_compat.post("/products/resolve-name-hints", json={"hints": []})
             body = r.json()
             assert body["success"] is False
@@ -258,9 +258,9 @@ class TestProductsResolveNameHints:
 
     def test_resolve_name_hints_business_mod_blocked(self, client_compat):
         with (
-            patch("app.fastapi_routes.domains.product.compat_routes.verify_db_read_token_header"),
+            patch("app.legacy.routes.product.compat_routes.verify_db_read_token_header"),
             patch(
-                "app.fastapi_routes.domains.product.compat_routes._business_mod_json_block",
+                "app.legacy.routes.product.compat_routes._business_mod_json_block",
                 return_value={"success": False, "message": "blocked"},
             ),
         ):
@@ -270,9 +270,9 @@ class TestProductsResolveNameHints:
 
     def test_resolve_name_hints_raises_501(self, client_compat):
         with (
-            patch("app.fastapi_routes.domains.product.compat_routes.verify_db_read_token_header"),
+            patch("app.legacy.routes.product.compat_routes.verify_db_read_token_header"),
             patch(
-                "app.fastapi_routes.domains.product.compat_routes._business_mod_json_block",
+                "app.legacy.routes.product.compat_routes._business_mod_json_block",
                 return_value=None,
             ),
         ):
@@ -306,9 +306,9 @@ class TestProductsUpdate:
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.domains.product.compat_routes._products_write_raise"),
+            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
             patch(
-                "app.fastapi_routes.domains.product.compat_routes._business_mod_json_block",
+                "app.legacy.routes.product.compat_routes._business_mod_json_block",
                 return_value=None,
             ),
             patch.dict("sys.modules", {"app.application.excel_imports": mock_excel}),
@@ -324,14 +324,14 @@ class TestProductsUpdate:
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.domains.product.compat_routes._products_write_raise"),
+            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
             patch(
-                "app.fastapi_routes.domains.product.compat_routes._business_mod_json_block",
+                "app.legacy.routes.product.compat_routes._business_mod_json_block",
                 return_value=None,
             ),
-            patch("app.fastapi_routes.domains.product.compat_routes.products_pg_update_row"),
+            patch("app.legacy.routes.product.compat_routes.products_pg_update_row"),
             patch(
-                "app.fastapi_routes.domains.product.compat_routes._product_parse_id",
+                "app.legacy.routes.product.compat_routes._product_parse_id",
                 return_value=1,
             ),
             patch.dict("sys.modules", {"app.application.excel_imports": mock_excel}),
@@ -346,9 +346,9 @@ class TestProductsUpdate:
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.domains.product.compat_routes._products_write_raise"),
+            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
             patch(
-                "app.fastapi_routes.domains.product.compat_routes._business_mod_json_block",
+                "app.legacy.routes.product.compat_routes._business_mod_json_block",
                 return_value={"success": False, "message": "blocked"},
             ),
         ):
@@ -361,17 +361,17 @@ class TestProductsUpdate:
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.domains.product.compat_routes._products_write_raise"),
+            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
             patch(
-                "app.fastapi_routes.domains.product.compat_routes._business_mod_json_block",
+                "app.legacy.routes.product.compat_routes._business_mod_json_block",
                 return_value=None,
             ),
             patch(
-                "app.fastapi_routes.domains.product.compat_routes._product_parse_id",
+                "app.legacy.routes.product.compat_routes._product_parse_id",
                 return_value=1,
             ),
             patch(
-                "app.fastapi_routes.domains.product.compat_routes.products_pg_update_row",
+                "app.legacy.routes.product.compat_routes.products_pg_update_row",
                 side_effect=RuntimeError("db error"),
             ),
         ):
@@ -405,13 +405,13 @@ class TestProductsAdd:
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.domains.product.compat_routes._products_write_raise"),
+            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
             patch(
-                "app.fastapi_routes.domains.product.compat_routes._business_mod_json_block",
+                "app.legacy.routes.product.compat_routes._business_mod_json_block",
                 return_value=None,
             ),
             patch(
-                "app.fastapi_routes.domains.product.compat_routes.products_pg_insert_row",
+                "app.legacy.routes.product.compat_routes.products_pg_insert_row",
                 return_value=10,
             ),
             patch.dict("sys.modules", {"app.application.excel_imports": mock_excel}),
@@ -426,13 +426,13 @@ class TestProductsAdd:
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.domains.product.compat_routes._products_write_raise"),
+            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
             patch(
-                "app.fastapi_routes.domains.product.compat_routes._business_mod_json_block",
+                "app.legacy.routes.product.compat_routes._business_mod_json_block",
                 return_value=None,
             ),
             patch(
-                "app.fastapi_routes.domains.product.compat_routes.products_pg_insert_row",
+                "app.legacy.routes.product.compat_routes.products_pg_insert_row",
                 side_effect=RuntimeError("db error"),
             ),
         ):
@@ -464,9 +464,9 @@ class TestProductsDelete:
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.domains.product.compat_routes._products_write_raise"),
+            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
             patch(
-                "app.fastapi_routes.domains.product.compat_routes._business_mod_json_block",
+                "app.legacy.routes.product.compat_routes._business_mod_json_block",
                 return_value=None,
             ),
         ):
@@ -479,16 +479,16 @@ class TestProductsDelete:
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.domains.product.compat_routes._products_write_raise"),
+            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
             patch(
-                "app.fastapi_routes.domains.product.compat_routes._business_mod_json_block",
+                "app.legacy.routes.product.compat_routes._business_mod_json_block",
                 return_value=None,
             ),
             patch(
-                "app.fastapi_routes.domains.product.compat_routes._product_parse_id",
+                "app.legacy.routes.product.compat_routes._product_parse_id",
                 return_value=1,
             ),
-            patch("app.fastapi_routes.domains.product.compat_routes.products_pg_delete_row"),
+            patch("app.legacy.routes.product.compat_routes.products_pg_delete_row"),
         ):
             r = client_compat.post("/products/delete", json={"id": 1})
             assert r.status_code == 200
@@ -500,17 +500,17 @@ class TestProductsDelete:
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.domains.product.compat_routes._products_write_raise"),
+            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
             patch(
-                "app.fastapi_routes.domains.product.compat_routes._business_mod_json_block",
+                "app.legacy.routes.product.compat_routes._business_mod_json_block",
                 return_value=None,
             ),
             patch(
-                "app.fastapi_routes.domains.product.compat_routes._product_parse_id",
+                "app.legacy.routes.product.compat_routes._product_parse_id",
                 return_value=1,
             ),
             patch(
-                "app.fastapi_routes.domains.product.compat_routes.products_pg_delete_row",
+                "app.legacy.routes.product.compat_routes.products_pg_delete_row",
                 side_effect=RuntimeError("db error"),
             ),
         ):
@@ -542,9 +542,9 @@ class TestProductsBatchDelete:
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.domains.product.compat_routes._products_write_raise"),
+            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
             patch(
-                "app.fastapi_routes.domains.product.compat_routes._business_mod_json_block",
+                "app.legacy.routes.product.compat_routes._business_mod_json_block",
                 return_value=None,
             ),
         ):
@@ -557,13 +557,13 @@ class TestProductsBatchDelete:
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.domains.product.compat_routes._products_write_raise"),
+            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
             patch(
-                "app.fastapi_routes.domains.product.compat_routes._business_mod_json_block",
+                "app.legacy.routes.product.compat_routes._business_mod_json_block",
                 return_value=None,
             ),
             patch(
-                "app.fastapi_routes.domains.product.compat_routes.products_pg_batch_delete_rows",
+                "app.legacy.routes.product.compat_routes.products_pg_batch_delete_rows",
                 return_value=(2, 0),
             ),
         ):
@@ -579,13 +579,13 @@ class TestProductsBatchDelete:
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.domains.product.compat_routes._products_write_raise"),
+            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
             patch(
-                "app.fastapi_routes.domains.product.compat_routes._business_mod_json_block",
+                "app.legacy.routes.product.compat_routes._business_mod_json_block",
                 return_value=None,
             ),
             patch(
-                "app.fastapi_routes.domains.product.compat_routes.products_pg_batch_delete_rows",
+                "app.legacy.routes.product.compat_routes.products_pg_batch_delete_rows",
                 side_effect=RuntimeError("db error"),
             ),
         ):
@@ -599,7 +599,7 @@ class TestProductsBatchDelete:
 class TestProductsPriceListExport:
     def test_price_list_export_business_not_exposed(self, client_compat):
         with (
-            patch("app.fastapi_routes.domains.product.compat_routes.verify_db_read_token_header"),
+            patch("app.legacy.routes.product.compat_routes.verify_db_read_token_header"),
             patch(
                 "app.shell.mod_business_scope.business_data_exposed",
                 return_value=False,
@@ -614,7 +614,7 @@ class TestProductsPriceListExport:
 
     def test_price_list_export_template_not_found(self, client_compat):
         with (
-            patch("app.fastapi_routes.domains.product.compat_routes.verify_db_read_token_header"),
+            patch("app.legacy.routes.product.compat_routes.verify_db_read_token_header"),
             patch(
                 "app.shell.mod_business_scope.business_data_exposed",
                 return_value=True,
@@ -634,7 +634,7 @@ class TestProductsPriceListExport:
 class TestProductsPriceListTemplatePreview:
     def test_template_preview_business_not_exposed(self, client_compat):
         with (
-            patch("app.fastapi_routes.domains.product.compat_routes.verify_db_read_token_header"),
+            patch("app.legacy.routes.product.compat_routes.verify_db_read_token_header"),
             patch(
                 "app.shell.mod_business_scope.business_data_exposed",
                 return_value=False,
@@ -649,7 +649,7 @@ class TestProductsPriceListTemplatePreview:
 
     def test_template_preview_success(self, client_compat):
         with (
-            patch("app.fastapi_routes.domains.product.compat_routes.verify_db_read_token_header"),
+            patch("app.legacy.routes.product.compat_routes.verify_db_read_token_header"),
             patch(
                 "app.shell.mod_business_scope.business_data_exposed",
                 return_value=True,

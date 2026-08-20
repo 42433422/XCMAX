@@ -23,6 +23,7 @@
 
 退出码: 0=全部通过; 1=校验失败。
 """
+
 from __future__ import annotations
 
 import argparse
@@ -117,7 +118,9 @@ def verify_manifest() -> bool:
     actual = collect_files()
     missing = [rel for rel in expected if rel not in actual]
     extra = [rel for rel in actual if rel not in expected]
-    changed = [rel for rel in actual if rel in expected and actual[rel] != expected[rel]]
+    changed = [
+        rel for rel in actual if rel in expected and actual[rel] != expected[rel]
+    ]
 
     ok = True
     for rel in sorted(missing):
@@ -161,18 +164,26 @@ def _clone_tag_at_sha(prov: dict, workdir: Path) -> tuple[bool, Path, str]:
         ["git", "-C", str(repo), "remote", "add", "origin", repo_url],
         # 取回远端 tag 并写入本地 refs/tags/<tag>，以便后续 rev-parse 解引用该 tag
         [
-            "git", "-C", str(repo), "fetch", "--depth", "1", "origin",
+            "git",
+            "-C",
+            str(repo),
+            "fetch",
+            "--depth",
+            "1",
+            "origin",
             f"refs/tags/{tag}:refs/tags/{tag}",
         ],
     ]
     for cmd in steps:
-        proc = subprocess.run(
-            cmd, check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-        )
+        proc = subprocess.run(cmd, check=False, capture_output=True)
         if proc.returncode != 0:
-            return False, repo, (
-                f"git 步骤失败: {' '.join(cmd)} -> "
-                f"{proc.stderr.decode(errors='replace').strip()}"
+            return (
+                False,
+                repo,
+                (
+                    f"git 步骤失败: {' '.join(cmd)} -> "
+                    f"{proc.stderr.decode(errors='replace').strip()}"
+                ),
             )
 
     # rev-parse 该 tag 指向的 commit（^{} 解引用 annotated/lightweight tag）
@@ -180,13 +191,14 @@ def _clone_tag_at_sha(prov: dict, workdir: Path) -> tuple[bool, Path, str]:
     rev = subprocess.run(
         ["git", "-C", str(repo), "rev-parse", ref],
         check=False,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
     )
     tag_commit = rev.stdout.decode(errors="replace").strip()
     if rev.returncode != 0 or tag_commit != sha:
-        return False, repo, (
-            f"远端 tag {tag} 未解析到锁定 SHA: tag_commit={tag_commit!r} != {sha!r}"
+        return (
+            False,
+            repo,
+            (f"远端 tag {tag} 未解析到锁定 SHA: tag_commit={tag_commit!r} != {sha!r}"),
         )
     return True, repo, ""
 
@@ -205,8 +217,7 @@ def verify_upstream(prov: dict) -> bool:
         archive = subprocess.run(
             ["git", "-C", str(repo), "archive", "--format=tar", sha, *UPSTREAM_PATHS],
             check=False,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
         )
         if archive.returncode != 0:
             print(
@@ -224,7 +235,7 @@ def verify_upstream(prov: dict) -> bool:
         upstream_lg = base / "libs" / "prebuilt"
         upstream_lic = base / "libs" / "prebuilt" / "LICENSE"
         if not upstream_lg.is_dir():
-            print(f"[FAIL] 锁定 commit 缺少 libs/prebuilt")
+            print("[FAIL] 锁定 commit 缺少 libs/prebuilt")
             return False
 
         mismatches: list[str] = []
@@ -251,7 +262,9 @@ def verify_upstream(prov: dict) -> bool:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--gen", action="store_true", help="重新生成 MANIFEST.sha256")
-    parser.add_argument("--offline", action="store_true", help="跳过上游吸收源字节级比对")
+    parser.add_argument(
+        "--offline", action="store_true", help="跳过上游吸收源字节级比对"
+    )
     args = parser.parse_args()
 
     if args.gen:

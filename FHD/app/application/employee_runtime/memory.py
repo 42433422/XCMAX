@@ -18,6 +18,7 @@ from datetime import datetime
 from typing import Any
 
 from app.domain.employee.memory_scope import MemoryScope
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +71,8 @@ class EmployeeMemoryManager:
         top_k: int = _LONG_TERM_TOPK,
     ) -> MemoryContext:
         short = self._recall_short_term(session_id) if self.scope.short_term_enabled else []
-        long_prompt, hits = ("", [])
+        long_prompt: str = ""
+        hits: list[dict[str, Any]] = []
         if self.scope.long_term_enabled:
             long_prompt, hits = self._recall_long_term(task, user_id=user_id, top_k=top_k)
         return MemoryContext(long_term_prompt=long_prompt, short_term_messages=short, hits=hits)
@@ -83,7 +85,7 @@ class EmployeeMemoryManager:
             from app.services.conversation_service import ConversationService
 
             rows = ConversationService().get_session_messages(sid, limit=50)
-        except Exception:  # noqa: BLE001 - 记忆读写是尽力而为的旁路,任何失败都不能搞崩员工回复
+        except RECOVERABLE_ERRORS:  # noqa: BLE001 - 记忆读写是尽力而为的旁路,任何失败都不能搞崩员工回复
             logger.debug("short-term recall skipped (session=%s)", sid, exc_info=True)
             return []
         out: list[dict[str, str]] = []
@@ -133,8 +135,8 @@ class EmployeeMemoryManager:
                 return "", []
             prompt = rag.format_for_prompt(index_ns, query_text, hits)
             return prompt, hits
-        except Exception:  # noqa: BLE001 - 记忆读写是尽力而为的旁路,任何失败都不能搞崩员工回复
-            logger.debug("long-term recall skipped (ns=%s)", index_ns, exc_info=True)
+        except RECOVERABLE_ERRORS:  # noqa: BLE001 - 记忆读写是尽力而为的旁路,任何失败都不能搞崩员工回复
+            logger.debug("long-term recall skipped", exc_info=True)
             return "", []
 
     # ---- remember ----
@@ -177,8 +179,8 @@ class EmployeeMemoryManager:
                     intent=self.scope.employee_id,
                     metadata=meta,
                 )
-        except Exception:  # noqa: BLE001 - 记忆读写是尽力而为的旁路,任何失败都不能搞崩员工回复
-            logger.debug("short-term remember skipped (session=%s)", sid, exc_info=True)
+        except RECOVERABLE_ERRORS:  # noqa: BLE001 - 记忆读写是尽力而为的旁路,任何失败都不能搞崩员工回复
+            logger.debug("short-term remember skipped", exc_info=True)
 
     def _remember_long_term(self, task: str, summary: str, *, user_id: Any, success: bool) -> None:
         index_ns = self.scope.long_term_index(user_id)
@@ -204,8 +206,8 @@ class EmployeeMemoryManager:
                 },
             )
             get_user_memory_vector_ingest_app_service().ingest_chunks(index_ns, [chunk])
-        except Exception:  # noqa: BLE001 - 记忆读写是尽力而为的旁路,任何失败都不能搞崩员工回复
-            logger.debug("long-term remember skipped (ns=%s)", index_ns, exc_info=True)
+        except RECOVERABLE_ERRORS:  # noqa: BLE001 - 记忆读写是尽力而为的旁路,任何失败都不能搞崩员工回复
+            logger.debug("long-term remember skipped", exc_info=True)
 
 
 __all__ = ["EmployeeMemoryManager", "MemoryContext"]

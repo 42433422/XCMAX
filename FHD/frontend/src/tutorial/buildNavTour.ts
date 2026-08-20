@@ -1,11 +1,6 @@
 import type { VisibleNavItem } from '@/composables/useVisibleNavItems'
 import type { TutorialBuildContext, TutorialPageHighlight, TutorialStep } from './types'
-import {
-  advancedSidebarNavStep,
-  createStep,
-  fallbackPageObserveStep,
-  pageHighlightToStep,
-} from './stepFactory'
+import { advancedSidebarNavStep, createStep, fallbackPageObserveStep, pageHighlightToStep } from './stepFactory'
 import { HOST_PAGE_HIGHLIGHTS, mergePageHighlights } from './pageHighlights'
 import { collectModPageHighlights } from './buildModSteps'
 import { buildOfficeEmployeePackSteps } from './buildOfficePackTour'
@@ -35,25 +30,18 @@ export function buildAdvancedIntroStep(): TutorialStep {
   })
 }
 
-export function buildAdvancedNavSteps(
-  visibleNav: VisibleNavItem[],
-  ctx: TutorialBuildContext,
-): TutorialStep[] {
+export function buildAdvancedNavSteps(visibleNav: VisibleNavItem[], ctx: TutorialBuildContext): TutorialStep[] {
   const pageMap = mergePageHighlights(HOST_PAGE_HIGHLIGHTS, collectModPageHighlights(ctx))
   const steps: TutorialStep[] = [buildAdvancedIntroStep()]
 
   for (const item of visibleNav) {
     if (item.source === 'child') {
-      steps.push(
-        advancedSidebarNavStep(item.key, item.name, navEntryDescription(item)),
-      )
+      steps.push(advancedSidebarNavStep(item.key, item.name, navEntryDescription(item)))
       appendPageSteps(steps, item.routeName, item.name, pageMap)
       continue
     }
     if (item.key === 'settings') {
-      steps.push(
-        advancedSidebarNavStep(item.key, item.name, `【入口】行业、意图与其它系统项。请点击「${item.name}」。`),
-      )
+      steps.push(advancedSidebarNavStep(item.key, item.name, `【入口】行业、意图与其它系统项。请点击「${item.name}」。`))
       appendPageSteps(steps, item.routeName, item.name, pageMap)
       continue
     }
@@ -65,12 +53,7 @@ export function buildAdvancedNavSteps(
   return steps
 }
 
-function appendPageSteps(
-  steps: TutorialStep[],
-  routeName: string,
-  menuLabel: string,
-  pageMap: Record<string, TutorialPageHighlight[]>,
-) {
+function appendPageSteps(steps: TutorialStep[], routeName: string, menuLabel: string, pageMap: Record<string, TutorialPageHighlight[]>) {
   const route = String(routeName || '').trim()
   if (!route) return
   const highlights = pageMap[route]

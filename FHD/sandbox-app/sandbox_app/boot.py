@@ -8,6 +8,8 @@ from datetime import UTC, datetime
 
 from sqlalchemy import select
 
+from sandbox_app.operational_errors import BOUNDARY_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -18,7 +20,7 @@ def ensure_sandbox_admin() -> None:
 
     from app.db import SessionLocal
     from app.db.models.user import User
-    from app.utils.password_hash import generate_password_hash
+    from app.utils.security.password_hash import generate_password_hash
 
     db = SessionLocal()
     try:
@@ -38,7 +40,7 @@ def ensure_sandbox_admin() -> None:
         db.add(user)
         db.commit()
         logger.info("sandbox admin created: %s", username)
-    except Exception:
+    except BOUNDARY_ERRORS:
         logger.exception("ensure_sandbox_admin failed")
         db.rollback()
     finally:

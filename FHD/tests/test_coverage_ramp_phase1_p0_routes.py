@@ -292,11 +292,11 @@ def test_static_outputs_missing(
     tmp_path, monkeypatch: pytest.MonkeyPatch, static_client: TestClient
 ) -> None:
     monkeypatch.setattr(
-        "app.utils.path_utils.get_app_data_dir",
+        "app.utils.path_io.path_utils.get_app_data_dir",
         lambda: str(tmp_path / "missing_outputs"),
     )
     monkeypatch.setattr(
-        "app.utils.path_utils.get_resource_path",
+        "app.utils.path_io.path_utils.get_resource_path",
         lambda *a, **k: str(tmp_path / "also_missing"),
     )
     r = static_client.get("/outputs/file.xlsx")

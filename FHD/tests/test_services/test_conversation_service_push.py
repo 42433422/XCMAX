@@ -79,7 +79,8 @@ class TestSaveMessagePush:
         with (
             patch("app.services.conversation_service.get_db") as mock_get_db,
             patch(
-                "app.services.conversation_service.notify_user", side_effect=Exception("push fail")
+                "app.services.conversation_service.notify_user",
+                side_effect=RuntimeError("push fail"),
             ),
         ):
             mock_get_db.return_value.__enter__.return_value = mock_db

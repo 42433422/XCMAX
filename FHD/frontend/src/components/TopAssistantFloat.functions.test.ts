@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
-import { defineComponent, h, nextTick } from 'vue'
+import { defineComponent, h } from 'vue'
 import TopAssistantFloat from './TopAssistantFloat.vue'
 
 // ===== Mock 模块 =====
@@ -10,7 +10,10 @@ import TopAssistantFloat from './TopAssistantFloat.vue'
 const RouterLinkStub = defineComponent({
   name: 'RouterLinkStub',
   props: { to: { type: [String, Object], default: '/' } },
-  setup: (props, { slots }) => () => h('a', { href: typeof props.to === 'string' ? props.to : '#' }, slots.default?.()),
+  setup:
+    (props, { slots }) =>
+    () =>
+      h('a', { href: typeof props.to === 'string' ? props.to : '#' }, slots.default?.()),
 })
 
 const ExcelPreviewStub = defineComponent({
@@ -47,9 +50,9 @@ const mockSearchProducts = vi.fn(async (keyword = '') => ({
   success: true,
   data: String(keyword).trim()
     ? [
-      { id: 1, model_number: 'M-1', name: '产品A', product_name: '产品A', price: 10, unit: '件' },
-      { id: 2, model_number: 'M-2', name: '产品B', product_name: '产品B', price: 20, unit: '套' },
-    ]
+        { id: 1, model_number: 'M-1', name: '产品A', product_name: '产品A', price: 10, unit: '件' },
+        { id: 2, model_number: 'M-2', name: '产品B', product_name: '产品B', price: 20, unit: '套' },
+      ]
     : [],
   total: String(keyword).trim() ? 2 : 0,
 }))
@@ -69,7 +72,13 @@ vi.mock('@/tutorial/promptAdvancedTutorial', () => ({
 vi.mock('@/composables/useTutorialCatalog', () => ({
   useTutorialCatalog: () => ({
     tutorialTracks: [
-      { id: 'host', title: '宿主入门', summary: '认识XC', description: '宿主入门说明', recommended: true },
+      {
+        id: 'host',
+        title: '宿主入门',
+        summary: '认识XC',
+        description: '宿主入门说明',
+        recommended: true,
+      },
       { id: 'advanced', title: '进阶', summary: '进阶教程', description: '进阶说明' },
     ],
     advancedTrackHint: '进阶路线提示',
@@ -95,7 +104,9 @@ vi.mock('@/utils/erpDomainPaths', () => ({
 
 vi.mock('@/composables/useEnterpriseScopedWorkflowRegistry', () => ({
   useEnterpriseScopedWorkflowRegistry: () => ({
-    scopedRegistryEntries: { value: [{ id: 'wechat_msg' }, { id: 'label_print' }, { id: 'receipt_confirm' }] },
+    scopedRegistryEntries: {
+      value: [{ id: 'wechat_msg' }, { id: 'label_print' }, { id: 'receipt_confirm' }],
+    },
   }),
 }))
 
@@ -167,9 +178,22 @@ function makeFetchResponse(body: unknown = { ok: true }, ok = true) {
 
 function createTestRouter() {
   const names = [
-    'home', 'login', 'register', 'settings', 'mod-store', 'products', 'product-onboarding',
-    'chat', 'dashboard', 'workflow-visualization', 'shipment-records', 'customers',
-    'template-preview', 'materials', 'inventory', 'approval-hub',
+    'home',
+    'login',
+    'register',
+    'settings',
+    'mod-store',
+    'products',
+    'product-onboarding',
+    'chat',
+    'dashboard',
+    'workflow-visualization',
+    'shipment-records',
+    'customers',
+    'template-preview',
+    'materials',
+    'inventory',
+    'approval-hub',
   ]
   const EmptyComp = defineComponent({ setup: () => () => h('div') })
   const routes = names.map((name) => ({ path: `/${name}`, name, component: EmptyComp }))
@@ -196,16 +220,15 @@ async function mountComponent(options: Record<string, unknown> = {}) {
   return { wrapper, router }
 }
 
-function dispatchWindowEvent(name: string, detail: Record<string, unknown> = {}) {
-  window.dispatchEvent(new CustomEvent(name, { detail }))
-}
-
 // ===== 测试 =====
 
 describe('TopAssistantFloat functions – toggleOpen', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => makeFetchResponse()),
+    )
     localStorage.clear()
     vi.clearAllMocks()
   })
@@ -251,7 +274,10 @@ describe('TopAssistantFloat functions – toggleOpen', () => {
 describe('TopAssistantFloat functions – closeAssistantPanelUi', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => makeFetchResponse()),
+    )
     localStorage.clear()
     vi.clearAllMocks()
   })
@@ -293,7 +319,10 @@ describe('TopAssistantFloat functions – closeAssistantPanelUi', () => {
 describe('TopAssistantFloat functions – onDocumentKeydownCapture', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => makeFetchResponse()),
+    )
     localStorage.clear()
     vi.clearAllMocks()
   })
@@ -341,7 +370,10 @@ describe('TopAssistantFloat functions – onDocumentKeydownCapture', () => {
 describe('TopAssistantFloat functions – recordOperation', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => makeFetchResponse()),
+    )
     localStorage.clear()
     vi.clearAllMocks()
   })
@@ -387,7 +419,10 @@ describe('TopAssistantFloat functions – recordOperation', () => {
 describe('TopAssistantFloat functions – addPush', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => makeFetchResponse()),
+    )
     localStorage.clear()
     vi.clearAllMocks()
   })
@@ -457,7 +492,10 @@ describe('TopAssistantFloat functions – addPush', () => {
 describe('TopAssistantFloat functions – openFromNotice', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => makeFetchResponse()),
+    )
     localStorage.clear()
     vi.clearAllMocks()
   })
@@ -483,7 +521,10 @@ describe('TopAssistantFloat functions – openFromNotice', () => {
 describe('TopAssistantFloat functions – openTutorialTab', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => makeFetchResponse()),
+    )
     localStorage.clear()
     vi.clearAllMocks()
   })
@@ -509,7 +550,10 @@ describe('TopAssistantFloat functions – openTutorialTab', () => {
 describe('TopAssistantFloat functions – onAssistantPanelKeydown', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => makeFetchResponse()),
+    )
     localStorage.clear()
     vi.clearAllMocks()
   })
@@ -570,7 +614,10 @@ describe('TopAssistantFloat functions – onAssistantPanelKeydown', () => {
 describe('TopAssistantFloat functions – onAssistantPush', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => makeFetchResponse()),
+    )
     localStorage.clear()
     vi.clearAllMocks()
   })
@@ -610,7 +657,10 @@ describe('TopAssistantFloat functions – onAssistantPush', () => {
 describe('TopAssistantFloat functions – onOpenAssistantFloat', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => makeFetchResponse()),
+    )
     localStorage.clear()
     vi.clearAllMocks()
   })
@@ -707,7 +757,10 @@ describe('TopAssistantFloat functions – onOpenAssistantFloat', () => {
 describe('TopAssistantFloat functions – searchProducts', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => makeFetchResponse()),
+    )
     localStorage.clear()
     vi.clearAllMocks()
   })
@@ -787,7 +840,10 @@ describe('TopAssistantFloat functions – searchProducts', () => {
 describe('TopAssistantFloat functions – productEmptyMessage', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => makeFetchResponse()),
+    )
     localStorage.clear()
     vi.clearAllMocks()
   })
@@ -841,7 +897,10 @@ describe('TopAssistantFloat functions – productEmptyMessage', () => {
 describe('TopAssistantFloat functions – saveProductRow', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => makeFetchResponse()),
+    )
     localStorage.clear()
     vi.clearAllMocks()
   })
@@ -891,7 +950,10 @@ describe('TopAssistantFloat functions – saveProductRow', () => {
 describe('TopAssistantFloat functions – applyExcelSheetContext', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => makeFetchResponse()),
+    )
     localStorage.clear()
     vi.clearAllMocks()
   })
@@ -908,7 +970,13 @@ describe('TopAssistantFloat functions – applyExcelSheetContext', () => {
       excel_analysis: {
         preview_data: {
           all_sheets: [
-            { sheet_name: 'Sheet1', sheet_index: 1, fields: ['f1'], sample_rows: [['v1']], grid_preview: { rows: [] } },
+            {
+              sheet_name: 'Sheet1',
+              sheet_index: 1,
+              fields: ['f1'],
+              sample_rows: [['v1']],
+              grid_preview: { rows: [] },
+            },
           ],
         },
       },
@@ -962,7 +1030,10 @@ describe('TopAssistantFloat functions – applyExcelSheetContext', () => {
 describe('TopAssistantFloat functions – navigateToSubjectPage', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => makeFetchResponse()),
+    )
     localStorage.clear()
     vi.clearAllMocks()
   })
@@ -1007,7 +1078,10 @@ describe('TopAssistantFloat functions – navigateToSubjectPage', () => {
 describe('TopAssistantFloat functions – onRestoreFloatState', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => makeFetchResponse()),
+    )
     localStorage.clear()
     vi.clearAllMocks()
   })
@@ -1082,7 +1156,10 @@ describe('TopAssistantFloat functions – onRestoreFloatState', () => {
 describe('TopAssistantFloat functions – onTutorialSetAssistantTab', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => makeFetchResponse()),
+    )
     localStorage.clear()
     vi.clearAllMocks()
   })
@@ -1123,7 +1200,10 @@ describe('TopAssistantFloat functions – onTutorialSetAssistantTab', () => {
 describe('TopAssistantFloat functions – onCloseAssistantFloat', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => makeFetchResponse()),
+    )
     localStorage.clear()
     vi.clearAllMocks()
   })
@@ -1160,7 +1240,10 @@ describe('TopAssistantFloat functions – onCloseAssistantFloat', () => {
 describe('TopAssistantFloat functions – tryFillChatInput', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => makeFetchResponse()),
+    )
     localStorage.clear()
     vi.clearAllMocks()
   })
@@ -1182,7 +1265,7 @@ describe('TopAssistantFloat functions – tryFillChatInput', () => {
     const { wrapper } = await mountComponent()
     const vm = wrapper.vm as any
     const fillFn = vi.fn(() => true)
-      ; (window as any).__VUE_CHAT_FILL__ = fillFn
+    ;(window as any).__VUE_CHAT_FILL__ = fillFn
     expect(vm.tryFillChatInput('hello')).toBe(true)
     expect(fillFn).toHaveBeenCalledWith('hello')
     delete (window as any).__VUE_CHAT_FILL__
@@ -1201,7 +1284,10 @@ describe('TopAssistantFloat functions – tryFillChatInput', () => {
 describe('TopAssistantFloat functions – onExcelSheetContext', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => makeFetchResponse()),
+    )
     localStorage.clear()
     vi.clearAllMocks()
   })
@@ -1235,7 +1321,10 @@ describe('TopAssistantFloat functions – onExcelSheetContext', () => {
 describe('TopAssistantFloat functions – triggerGridReadFromChat', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => makeFetchResponse()),
+    )
     localStorage.clear()
     vi.clearAllMocks()
   })
@@ -1271,7 +1360,10 @@ describe('TopAssistantFloat functions – triggerGridReadFromChat', () => {
 describe('TopAssistantFloat functions – onStarterPackItemClick', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => makeFetchResponse()),
+    )
     localStorage.clear()
     vi.clearAllMocks()
   })
@@ -1305,7 +1397,10 @@ describe('TopAssistantFloat functions – onStarterPackItemClick', () => {
 describe('TopAssistantFloat functions – startHostOnboardingGuide', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => makeFetchResponse()),
+    )
     localStorage.clear()
     vi.clearAllMocks()
   })
@@ -1329,7 +1424,10 @@ describe('TopAssistantFloat functions – startHostOnboardingGuide', () => {
 describe('TopAssistantFloat functions – workflowEmployeeDefs computed', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => makeFetchResponse()),
+    )
     localStorage.clear()
     vi.clearAllMocks()
   })
@@ -1353,7 +1451,10 @@ describe('TopAssistantFloat functions – workflowEmployeeDefs computed', () => 
 describe('TopAssistantFloat functions – workflowPanoramaLinkTitle computed', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => makeFetchResponse()),
+    )
     localStorage.clear()
     vi.clearAllMocks()
   })
@@ -1375,7 +1476,10 @@ describe('TopAssistantFloat functions – workflowPanoramaLinkTitle computed', (
 describe('TopAssistantFloat functions – coreWorkflowEnabled', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => makeFetchResponse()),
+    )
     localStorage.clear()
     vi.clearAllMocks()
   })
@@ -1410,7 +1514,10 @@ describe('TopAssistantFloat functions – coreWorkflowEnabled', () => {
 describe('TopAssistantFloat functions – toggleWorkflowEmployee', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => makeFetchResponse()),
+    )
     localStorage.clear()
     vi.clearAllMocks()
   })
@@ -1435,7 +1542,10 @@ describe('TopAssistantFloat functions – toggleWorkflowEmployee', () => {
 describe('TopAssistantFloat functions – onTopScroll / onExcelScroll', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => makeFetchResponse()),
+    )
     localStorage.clear()
     vi.clearAllMocks()
   })
@@ -1462,7 +1572,10 @@ describe('TopAssistantFloat functions – onTopScroll / onExcelScroll', () => {
 describe('TopAssistantFloat functions – syncTopScrollMetrics', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => makeFetchResponse()),
+    )
     localStorage.clear()
     vi.clearAllMocks()
   })
@@ -1483,7 +1596,10 @@ describe('TopAssistantFloat functions – syncTopScrollMetrics', () => {
 describe('TopAssistantFloat functions – fillChatInputWithRetry', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => makeFetchResponse()),
+    )
     localStorage.clear()
     vi.clearAllMocks()
   })
@@ -1496,7 +1612,7 @@ describe('TopAssistantFloat functions – fillChatInputWithRetry', () => {
     const { wrapper } = await mountComponent()
     const vm = wrapper.vm as any
     const fillFn = vi.fn(() => true)
-      ; (window as any).__VUE_CHAT_FILL__ = fillFn
+    ;(window as any).__VUE_CHAT_FILL__ = fillFn
     await vm.fillChatInputWithRetry('')
     expect(fillFn).not.toHaveBeenCalled()
     delete (window as any).__VUE_CHAT_FILL__
@@ -1507,7 +1623,7 @@ describe('TopAssistantFloat functions – fillChatInputWithRetry', () => {
     const { wrapper } = await mountComponent()
     const vm = wrapper.vm as any
     const fillFn = vi.fn(() => true)
-      ; (window as any).__VUE_CHAT_FILL__ = fillFn
+    ;(window as any).__VUE_CHAT_FILL__ = fillFn
     await vm.fillChatInputWithRetry('hello')
     expect(fillFn).toHaveBeenCalledWith('hello')
     delete (window as any).__VUE_CHAT_FILL__
@@ -1522,7 +1638,7 @@ describe('TopAssistantFloat functions – fillChatInputWithRetry', () => {
       callCount++
       return callCount >= 2
     })
-      ; (window as any).__VUE_CHAT_FILL__ = fillFn
+    ;(window as any).__VUE_CHAT_FILL__ = fillFn
     await vm.fillChatInputWithRetry('hello')
     expect(fillFn).toHaveBeenCalledTimes(2)
     delete (window as any).__VUE_CHAT_FILL__

@@ -143,7 +143,11 @@ describe('FunASR backend extra coverage', () => {
     expect(onAudioLevel).toHaveBeenCalledWith(0.4)
 
     socket.emit({ mode: '2pass-online', stamp_sents: [{ text_seg: ' 你 ' }, { text_seg: ' 好 ' }] })
-    expect(onResult).toHaveBeenLastCalledWith({ text: '你好', isFinal: false, segmentMode: 'online' })
+    expect(onResult).toHaveBeenLastCalledWith({
+      text: '你好',
+      isFinal: false,
+      segmentMode: 'online',
+    })
 
     backend.signalEndOfSpeech()
     expect(socket.sent).toContainEqual(JSON.stringify({ is_speaking: false }))
@@ -165,7 +169,9 @@ describe('FunASR backend extra coverage', () => {
     const { FunASRBackend } = await import('./composables/asr/FunASRBackend')
     const backend = new FunASRBackend()
 
-    const start = backend.start(vi.fn(), vi.fn(), undefined, vi.fn(), vi.fn(), undefined, { persistentMic: true })
+    const start = backend.start(vi.fn(), vi.fn(), undefined, vi.fn(), vi.fn(), undefined, {
+      persistentMic: true,
+    })
     await flushSocketHandshake()
     await start
 
@@ -221,7 +227,7 @@ describe('FunASR backend extra coverage', () => {
     const abortedDuringMic = new FunASRBackend()
     await abortedDuringMic.start(vi.fn(), vi.fn(), () => abortedDuringMic.abort())
 
-    const empty = new FunASRBackend() as any
+    const empty = new FunASRBackend() as UnsafeTestValue
     expect(empty.isLoading()).toBe(false)
     empty.flushPreConnectPcm()
     for (let i = 0; i < 205; i += 1) empty.onPcm(new Float32Array([i]))
@@ -240,19 +246,27 @@ describe('FunASR backend extra coverage', () => {
 
     const onResult = vi.fn()
     const onError = vi.fn()
-    const backend = new FunASRBackend() as any
+    const backend = new FunASRBackend() as UnsafeTestValue
     const start = backend.start(onResult, onError)
     await flushSocketHandshake()
     await start
     const socket = FakeWebSocket.instances.at(-1)!
 
     socket.onmessage?.({ data: { mode: 'online', text: '对象消息' } })
-    expect(onResult).toHaveBeenLastCalledWith({ text: '对象消息', isFinal: false, segmentMode: 'online' })
+    expect(onResult).toHaveBeenLastCalledWith({
+      text: '对象消息',
+      isFinal: false,
+      segmentMode: 'online',
+    })
     backend.handleServerMessage({ type: 'connected' })
     backend.handleServerMessage({ type: 'error' })
     expect(onError).toHaveBeenLastCalledWith('FunASR 服务错误')
     backend.handleServerMessage({ mode: 'custom', text: '其他模式' })
-    expect(onResult).toHaveBeenLastCalledWith({ text: '其他模式', isFinal: false, segmentMode: 'other' })
+    expect(onResult).toHaveBeenLastCalledWith({
+      text: '其他模式',
+      isFinal: false,
+      segmentMode: 'other',
+    })
     backend.handleServerMessage({ stamp_sents: [] })
 
     backend._pcmChunksSent = 0
@@ -323,8 +337,13 @@ describe('FunASR backend extra coverage', () => {
       onmessage: ((event: { data: unknown }) => void) | null = null
       sent: unknown[] = []
       constructor(public url: string) {}
-      send(data: unknown) { this.sent.push(data) }
-      close() { this.readyState = 3; this.onclose?.() }
+      send(data: unknown) {
+        this.sent.push(data)
+      }
+      close() {
+        this.readyState = 3
+        this.onclose?.()
+      }
     }
     mockMobileVoice = true
     vi.stubGlobal('WebSocket', NeverOpenWebSocket)

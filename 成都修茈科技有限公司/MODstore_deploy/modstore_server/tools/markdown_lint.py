@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -150,13 +151,17 @@ def _cli_lint(filepath: str, *, cwd: Optional[str] = None) -> LintResult:
         result.errors.append(
             LintError(line=0, rule="TIMEOUT", description="markdownlint timed out")
         )
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         result.errors.append(LintError(line=0, rule="ERROR", description=str(exc)[:200]))
     return result
 
 
 def lint_file(
-    filepath: str, *, mode: str = "auto", cwd: Optional[str] = None, max_line_length: int = 200
+    filepath: str,
+    *,
+    mode: str = "auto",
+    cwd: Optional[str] = None,
+    max_line_length: int = 200,
 ) -> LintResult:
     if mode == "python":
         try:

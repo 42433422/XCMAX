@@ -6,6 +6,8 @@ import logging
 import os
 from typing import Any, Dict, Optional, Sequence
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -35,7 +37,7 @@ def release_slo_halt_active() -> bool:
         if smoke.get("skipped"):
             return False
         return not bool(smoke.get("ok"))
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("release_slo_halt smoke check failed")
         return True
 
@@ -130,7 +132,7 @@ def should_auto_approve_staged(
                 policy.get("reason"),
             )
             return False
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("ops staged self-maintenance policy failed closed")
         return False
     hit = blocked_pattern_hit(_changed_file_evidence(changed_files, diff_summary))
@@ -166,6 +168,6 @@ def try_auto_deploy_staged_change(staged_id: int) -> Optional[Dict[str, Any]]:
         out = deploy_staged_change(int(staged_id))
         logger.info("ops staged auto-deploy id=%s ok=%s", staged_id, out.get("ok"))
         return out
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("try_auto_deploy_staged_change failed id=%s", staged_id)
         return {"ok": False, "error": "auto deploy failed"}

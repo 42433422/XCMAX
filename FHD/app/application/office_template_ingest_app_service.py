@@ -76,6 +76,8 @@ def _build_create_payload_from_analyze(
         or str(analyzed.get("template_name") or "").strip()
         or Path(filename or "template").stem
     )
+    if not isinstance(preview, dict):
+        preview = {}
     file_path = str(preview.get("file_path") or preview.get("image_path") or "").strip() or None
     scope = str(template_scope or "").strip()
     return {
@@ -103,7 +105,7 @@ def ingest_office_bytes_to_template_library(
     source: str = "office_upload",
 ) -> tuple[dict[str, Any], int]:
     """解析办公文件字节并写入模版库 ``templates`` 表。"""
-    from app.fastapi_routes.document_templates_compat import (
+    from app.legacy.routes.document_templates_compat import (
         run_archive_template_analyze,
         run_archive_template_create,
     )
@@ -116,9 +118,9 @@ def ingest_office_bytes_to_template_library(
             template_name=str(template_name or "").strip(),
             template_scope=str(template_scope or "").strip(),
         )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("办公文件解析失败: %s", exc)
-        return {"success": False, "message": f"解析失败：{exc}", "ingested": False}, 500
+    except RECOVERABLE_ERRORS:
+        logger.exception("办公文件解析失败")
+        return {"success": False, "message": "办公文件解析失败", "ingested": False}, 500
 
     if not isinstance(analyzed, dict) or not analyzed.get("success"):
         payload = dict(analyzed or {})
@@ -135,11 +137,11 @@ def ingest_office_bytes_to_template_library(
     )
     try:
         created, create_code = run_archive_template_create(create_payload)
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("模版库入库失败: %s", exc)
+    except RECOVERABLE_ERRORS:
+        logger.exception("模版库入库失败")
         return {
             "success": False,
-            "message": f"解析成功但入库失败：{exc}",
+            "message": "解析成功但模版库入库失败",
             "ingested": False,
             "analyzed": analyzed,
             "task_id": analyzed.get("task_id"),
@@ -192,10 +194,10 @@ def ingest_office_path_to_template_library(
         }, 400
     try:
         body = path.read_bytes()
-    except OSError as exc:
+    except OSError:
         return {
             "success": False,
-            "message": f"读取文件失败：{exc}",
+            "message": "读取办公文件失败",
             "ingested": False,
             "error_code": "read_failed",
         }, 400
@@ -245,12 +247,12 @@ def attach_template_ingest_to_etl_result(
             template_scope=template_scope,
             source=source,
         )
-    except RECOVERABLE_ERRORS as exc:
-        logger.warning("ETL 后模版库入库异常: %s", exc)
+    except RECOVERABLE_ERRORS:
+        logger.exception("ETL 后模版库入库异常")
         ingest_payload = {
             "success": False,
             "ingested": False,
-            "message": f"模版库入库异常：{exc}",
+            "message": "模版库入库异常",
         }
     out["template_ingest"] = ingest_payload
     return out

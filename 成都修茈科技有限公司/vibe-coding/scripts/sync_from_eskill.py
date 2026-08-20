@@ -263,12 +263,8 @@ TASKS = [
     FileTask("src/eskill/vibe_coding/nl/prompts.py", "src/vibe_coding/nl/prompts.py", "nl"),
     # other vibe_coding modules with rewrites
     FileTask("src/eskill/vibe_coding/code_factory.py", "src/vibe_coding/code_factory.py", "code_factory"),
-    FileTask(
-        "src/eskill/vibe_coding/workflow_models.py", "src/vibe_coding/workflow_models.py", "workflow_models"
-    ),
-    FileTask(
-        "src/eskill/vibe_coding/workflow_factory.py", "src/vibe_coding/workflow_factory.py", "workflow_factory"
-    ),
+    FileTask("src/eskill/vibe_coding/workflow_models.py", "src/vibe_coding/workflow_models.py", "workflow_models"),
+    FileTask("src/eskill/vibe_coding/workflow_factory.py", "src/vibe_coding/workflow_factory.py", "workflow_factory"),
     # NOTE: audit.py, facade.py, cli.py, __init__.py, workflow_engine.py are
     # hand-maintained in the standalone tree because they intentionally drop
     # the config-layer integration upstream still has. Do NOT add them here.

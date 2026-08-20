@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.review_calibration_policy import calibration_summary
 
@@ -13,7 +13,10 @@ def build_publish_dry_run(
 ) -> dict[str, Any]:
     report_path = Path(review_report_path)
     report = json.loads(report_path.read_text(encoding="utf-8"))
-    review = report.get("review") if isinstance(report.get("review"), dict) else {}
+    review = cast(
+        dict[str, Any],
+        report.get("review") if isinstance(report.get("review"), dict) else {},
+    )
     comments = [item for item in review.get("comments") or [] if isinstance(item, dict)]
     calibration = calibration_summary()
     publishable = [
@@ -129,10 +132,11 @@ def run_publish_sandbox(
 
 
 def _publish_comment(comment: dict[str, Any]) -> dict[str, Any]:
-    payload = (
+    payload = cast(
+        dict[str, Any],
         comment.get("publish_payload")
         if isinstance(comment.get("publish_payload"), dict)
-        else {}
+        else {},
     )
     return {
         "path": str(

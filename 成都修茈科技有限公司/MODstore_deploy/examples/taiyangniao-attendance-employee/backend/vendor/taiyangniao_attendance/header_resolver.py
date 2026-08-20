@@ -11,7 +11,8 @@ import logging
 import os
 import re
 from dataclasses import dataclass
-from typing import Any
+
+BOUNDARY_ERRORS = (Exception,)
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +113,9 @@ def _detect_header_row_from(rows: list[tuple[object, ...]], *, hint: int = 0) ->
         has_date = any(v in ("日期", "考勤日期") for v in values[:20])
         if has_name and has_date:
             return idx
-    raise ValueError("未能在前若干行内找到考勤表表头（需要同时包含 ‘姓名’ 与 ‘日期/考勤日期’）")
+    raise ValueError(
+        "未能在前若干行内找到考勤表表头（需要同时包含 ‘姓名’ 与 ‘日期/考勤日期’）"
+    )
 
 
 def _compute_leave_columns(header: list[str], leave_start: int) -> list[int]:
@@ -279,19 +282,21 @@ def _llm_resolve_columns(header: list[str], *, missing: list[str]) -> dict[str, 
     """
     try:
         from app.infrastructure.llm.client import get_llm_client, resolve_chat_model
-    except Exception as exc:
+    except BOUNDARY_ERRORS as exc:
         logger.info("attendance LLM resolver unavailable (import failed): %s", exc)
         return {}
 
     try:
         client = get_llm_client()
-    except Exception as exc:
+    except BOUNDARY_ERRORS as exc:
         logger.info("attendance LLM resolver unavailable (no credentials): %s", exc)
         return {}
     if client is None:
         return {}
 
-    numbered_header = "\n".join(f"{i}: {cell or '(空)'}" for i, cell in enumerate(header))
+    numbered_header = "\n".join(
+        f"{i}: {cell or '(空)'}" for i, cell in enumerate(header)
+    )
     if len(numbered_header) > 2000:
         raise ValueError(
             f"表头列数过多（{len(header)} 列，约 {len(numbered_header)} 字符），"
@@ -322,7 +327,9 @@ def _llm_resolve_columns(header: list[str], *, missing: list[str]) -> dict[str, 
         f"需要定位的语义键:\n{json.dumps(wanted, ensure_ascii=False, indent=2)}"
     )
     if len(user_msg) > 4000:
-        raise ValueError(f"LLM 请求体过大（{len(user_msg)} 字符），请减少列数或拆分处理。")
+        raise ValueError(
+            f"LLM 请求体过大（{len(user_msg)} 字符），请减少列数或拆分处理。"
+        )
 
     try:
         resp = client.chat.completions.create(
@@ -336,7 +343,7 @@ def _llm_resolve_columns(header: list[str], *, missing: list[str]) -> dict[str, 
         )
         content = (resp.choices[0].message.content or "").strip()
         data = json.loads(content or "{}")
-    except Exception as exc:
+    except BOUNDARY_ERRORS as exc:
         logger.warning("attendance LLM column resolver failed: %s", exc)
         return {}
 

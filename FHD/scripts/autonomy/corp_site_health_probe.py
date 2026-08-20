@@ -26,9 +26,11 @@ import json
 import os
 import sys
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 try:
     import httpx
@@ -145,7 +147,7 @@ def probe_url(
         result.error = "httpx unavailable"
         return result
 
-    started = datetime.now(timezone.utc)
+    started = datetime.now(UTC)
     close_after = False
     if client is None:
         client = httpx.Client(timeout=spec.timeout, follow_redirects=True)
@@ -171,16 +173,16 @@ def probe_url(
                 return result
         result.ok = True
         return result
-    except Exception as exc:  # noqa: BLE001 - 探测层覆盖所有异常转 ProbeResult
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - 探测层覆盖所有异常转 ProbeResult
         result.error = f"http error: {exc!r}"
         return result
     finally:
-        finished = datetime.now(timezone.utc)
+        finished = datetime.now(UTC)
         result.duration_ms = (finished - started).total_seconds() * 1000.0
         if close_after:
             try:
                 client.close()
-            except Exception:  # noqa: BLE001 - pragma: no cover
+            except RECOVERABLE_ERRORS:  # noqa: BLE001 - pragma: no cover
                 pass
 
 
@@ -194,7 +196,7 @@ def run_probe(
     surfaces = surfaces if surfaces is not None else DEFAULT_SURFACES
     report = ProbeReport(
         base_url=base_url,
-        started_at=datetime.now(timezone.utc).isoformat(),
+        started_at=datetime.now(UTC).isoformat(),
     )
     close_client = client is None
     if client is None and httpx is not None:
@@ -210,9 +212,9 @@ def run_probe(
         if close_client and client is not None:
             try:
                 client.close()
-            except Exception:  # noqa: BLE001 - pragma: no cover
+            except RECOVERABLE_ERRORS:  # noqa: BLE001 - pragma: no cover
                 pass
-    report.finished_at = datetime.now(timezone.utc).isoformat()
+    report.finished_at = datetime.now(UTC).isoformat()
     return report
 
 
@@ -229,7 +231,7 @@ def write_audit(report: ProbeReport, audit_dir: Path) -> Path | None:
         except OSError as exc:
             print(f"[corp-probe] audit dir mkdir failed: {exc!r}", file=sys.stderr)
             return None
-    ts = datetime.now(timezone.utc).strftime("%Y%m%d")
+    ts = datetime.now(UTC).strftime("%Y%m%d")
     audit_file = audit_dir / f"corp_site_health_{ts}.jsonl"
     try:
         with audit_file.open("a", encoding="utf-8") as f:
@@ -275,7 +277,7 @@ def _post_to_approval_ledger(
     try:
         with httpx.Client(timeout=10.0) as client:
             resp = client.post(url, headers=headers, json=body)
-    except Exception as exc:  # noqa: BLE001 - fail-open 覆盖网络/超时
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - fail-open 覆盖网络/超时
         print(f"[corp-probe] ledger http error: {exc!r}", file=sys.stderr)
         return None
     if resp.status_code < 200 or resp.status_code >= 300:
@@ -286,7 +288,7 @@ def _post_to_approval_ledger(
         return None
     try:
         data = resp.json()
-    except Exception as exc:  # noqa: BLE001 - pragma: no cover
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - pragma: no cover
         print(f"[corp-probe] ledger json decode error: {exc!r}", file=sys.stderr)
         return None
     if not isinstance(data, dict):
@@ -382,12 +384,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[corp-probe] PASS - all {len(report.results)} surfaces OK")
         return 0
 
-    print(
-        f"[corp-probe] FAIL - {report.failed_count}/{len(report.results)} surfaces failed"
-    )
+    print(f"[corp-probe] FAIL - {report.failed_count}/{len(report.results)} surfaces failed")
     ledger_result = escalate(report, dry_run=args.dry_run)
     if ledger_result is not None:
-        print(f"[corp-probe] ledger accepted: {json.dumps(ledger_result, ensure_ascii=False)[:300]}")
+        print(
+            f"[corp-probe] ledger accepted: {json.dumps(ledger_result, ensure_ascii=False)[:300]}"
+        )
     elif args.dry_run:
         print("[corp-probe] dry-run: ledger not called")
     else:

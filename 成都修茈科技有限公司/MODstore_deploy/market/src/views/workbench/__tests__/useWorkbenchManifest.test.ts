@@ -20,7 +20,10 @@ describe('useWorkbenchManifest', () => {
     })
 
     it('does not produce optional nodes when absent from manifest', () => {
-      const manifest = { identity: { id: 'x', name: 'x', version: '1.0.0', artifact: 'employee_pack' }, collaboration: { workflow: { workflow_id: 1 } } } as Record<string, unknown>
+      const manifest = {
+        identity: { id: 'x', name: 'x', version: '1.0.0', artifact: 'employee_pack' },
+        collaboration: { workflow: { workflow_id: 1 } },
+      } as Record<string, unknown>
       const nodes = manifestToNodes(manifest)
       const kinds = nodes.map((n) => n.data.moduleKind)
       expect(kinds).not.toContain('memory')
@@ -52,7 +55,13 @@ describe('useWorkbenchManifest', () => {
     it('generates edges between identity → workflow_heart → prompt', () => {
       const manifest = createEmptyEmployeeConfigV2() as Record<string, unknown>
       manifest.cognition = {
-        agent: { system_prompt: 'test', role: { name: '', tone: 'professional', persona: '', expertise: [] }, behavior_rules: [], few_shot_examples: [], model: {} },
+        agent: {
+          system_prompt: 'test',
+          role: { name: '', tone: 'professional', persona: '', expertise: [] },
+          behavior_rules: [],
+          few_shot_examples: [],
+          model: {},
+        },
         skills: [],
       }
       const nodes = manifestToNodes(manifest)
@@ -63,9 +72,24 @@ describe('useWorkbenchManifest', () => {
 
     it('skips edge if a required node is missing', () => {
       // Only identity, no workflow_heart, no prompt
-      const manifest = { identity: { id: 'x', name: 'x', version: '1.0.0', artifact: 'employee_pack' } } as Record<string, unknown>
+      const _manifest = {
+        identity: { id: 'x', name: 'x', version: '1.0.0', artifact: 'employee_pack' },
+      } as Record<string, unknown>
       // Manually create minimal node list
-      const nodes = [{ id: 'emp-identity', type: 'employeeModule', position: { x: 0, y: 0 }, data: { moduleKind: 'identity', label: '身份', meta: MODULE_META.identity, slice: null, enabled: true } }]
+      const nodes = [
+        {
+          id: 'emp-identity',
+          type: 'employeeModule',
+          position: { x: 0, y: 0 },
+          data: {
+            moduleKind: 'identity',
+            label: '身份',
+            meta: MODULE_META.identity,
+            slice: null,
+            enabled: true,
+          },
+        },
+      ]
       const edges = manifestToEdges(nodes)
       expect(edges.length).toBe(0)
     })
@@ -98,15 +122,21 @@ describe('useWorkbenchManifest', () => {
       const withPerception = addModuleToManifest(manifest, 'perception')
       expect(withPerception.perception).toMatchObject({ vision: { enabled: false } })
 
-      const withVoice = addModuleToManifest({ perception: { document: { enabled: true } }, actions: { text_output: { enabled: true } } }, 'voice')
-      expect((withVoice.perception as any).audio.asr.languages).toContain('zh-CN')
-      expect((withVoice.actions as any).voice_output.tts.provider).toBe('aliyun')
+      const withVoice = addModuleToManifest(
+        {
+          perception: { document: { enabled: true } },
+          actions: { text_output: { enabled: true } },
+        },
+        'voice',
+      )
+      expect((withVoice.perception as UnsafeTestValue).audio.asr.languages).toContain('zh-CN')
+      expect((withVoice.actions as UnsafeTestValue).voice_output.tts.provider).toBe('aliyun')
 
       const withManagement = addModuleToManifest({}, 'management')
-      expect((withManagement.management as any).error_handling.retry_policy.max_retries).toBe(3)
+      expect((withManagement.management as UnsafeTestValue).error_handling.retry_policy.max_retries).toBe(3)
 
       const withCollaboration = addModuleToManifest({ collaboration: { workflow: { id: 1 } } }, 'collaboration')
-      expect((withCollaboration.collaboration as any).permissions.access_level).toBe('read_write')
+      expect((withCollaboration.collaboration as UnsafeTestValue).permissions.access_level).toBe('read_write')
     })
   })
 
@@ -133,18 +163,21 @@ describe('useWorkbenchManifest', () => {
       } as Record<string, unknown>
 
       const withoutVoice = removeModuleFromManifest(manifest, 'voice')
-      expect((withoutVoice.perception as any).audio).toBeUndefined()
-      expect((withoutVoice.actions as any).voice_output).toBeUndefined()
+      expect((withoutVoice.perception as UnsafeTestValue).audio).toBeUndefined()
+      expect((withoutVoice.actions as UnsafeTestValue).voice_output).toBeUndefined()
 
       expect(removeModuleFromManifest(manifest, 'perception').perception).toBeUndefined()
       expect(removeModuleFromManifest(manifest, 'actions').actions).toBeUndefined()
       expect(removeModuleFromManifest(manifest, 'management').management).toBeUndefined()
-      expect((removeModuleFromManifest(manifest, 'collaboration').collaboration as any).permissions).toBeUndefined()
+      expect((removeModuleFromManifest(manifest, 'collaboration').collaboration as UnsafeTestValue).permissions).toBeUndefined()
 
-      const voiceOnly = removeModuleFromManifest({
-        perception: { audio: { enabled: true } },
-        actions: { voice_output: { enabled: true } },
-      }, 'voice')
+      const voiceOnly = removeModuleFromManifest(
+        {
+          perception: { audio: { enabled: true } },
+          actions: { voice_output: { enabled: true } },
+        },
+        'voice',
+      )
       expect(voiceOnly.perception).toBeUndefined()
       expect(voiceOnly.actions).toBeUndefined()
     })

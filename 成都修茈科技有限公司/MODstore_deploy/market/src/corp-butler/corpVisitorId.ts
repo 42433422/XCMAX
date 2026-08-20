@@ -25,7 +25,9 @@ export function getOrCreateCorpVisitorId(): string {
 
 export function getCorpVisitorLabel(): string {
   try {
-    return String(localStorage.getItem(LABEL_KEY) || '').trim().slice(0, 32)
+    return String(localStorage.getItem(LABEL_KEY) || '')
+      .trim()
+      .slice(0, 32)
   } catch {
     return ''
   }

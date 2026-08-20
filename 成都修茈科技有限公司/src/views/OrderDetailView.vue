@@ -107,7 +107,11 @@ function formatTime(iso) {
   min-height: 100vh;
   background: #0a0a0a;
   color: #ffffff;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family:
+    'Inter',
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
   display: flex;
   justify-content: center;
   padding-top: 80px;
@@ -127,7 +131,8 @@ function formatTime(iso) {
   letter-spacing: -0.02em;
 }
 
-.loading, .not-found {
+.loading,
+.not-found {
   text-align: center;
   padding: 48px 0;
   color: rgba(255, 255, 255, 0.5);

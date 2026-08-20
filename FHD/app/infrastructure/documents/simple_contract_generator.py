@@ -9,7 +9,7 @@ from docx.shared import Cm, Pt
 
 
 class SimpleSalesContractGenerator:
-    def __init__(self, output_dir: str = None):
+    def __init__(self, output_dir: str | None = None):
         self.output_dir = output_dir or os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "generated_contracts"
         )
@@ -18,10 +18,10 @@ class SimpleSalesContractGenerator:
     def generate(
         self,
         customer_name: str,
-        contract_date: str = None,
-        products: list[dict] = None,
-        return_buckets_expected: int = None,
-        return_buckets_actual: int = None,
+        contract_date: str | None = None,
+        products: list[dict] | None = None,
+        return_buckets_expected: int | None = None,
+        return_buckets_actual: int | None = None,
     ) -> dict:
         if contract_date is None:
             now = datetime.now()
@@ -76,8 +76,8 @@ class SimpleSalesContractGenerator:
                     run.font.size = Pt(10)
                 paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-        total_amount = 0
-        total_quantity = 0
+        total_amount = 0.0
+        total_quantity = 0.0
 
         for product in products:
             row_cells = table.add_row().cells

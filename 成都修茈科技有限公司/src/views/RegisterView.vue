@@ -11,14 +11,7 @@
         <div class="form-group">
           <label>邮箱（必填）</label>
           <p class="field-hint">用于登录与找回，请先填写邮箱再获取验证码。</p>
-          <input
-            class="input"
-            type="email"
-            v-model="email"
-            required
-            autocomplete="email"
-            placeholder="name@example.com"
-          />
+          <input class="input" type="email" v-model="email" required autocomplete="email" placeholder="name@example.com" />
         </div>
         <div class="form-group form-group-code">
           <label>邮箱验证码</label>
@@ -31,13 +24,7 @@
               autocomplete="one-time-code"
               placeholder="6 位数字"
             />
-            <button
-              type="button"
-              class="btn btn-send"
-              :disabled="sendDisabled"
-              :aria-busy="sendCodeLoading"
-              @click="sendCode"
-            >
+            <button type="button" class="btn btn-send" :disabled="sendDisabled" :aria-busy="sendCodeLoading" @click="sendCode">
               {{ sendLabel }}
             </button>
           </div>
@@ -50,9 +37,7 @@
           {{ loading ? '注册中...' : '注册' }}
         </button>
       </form>
-      <p class="auth-footer">
-        已有账号？<router-link to="/login" class="link">登录</router-link>
-      </p>
+      <p class="auth-footer">已有账号？<router-link to="/login" class="link">登录</router-link></p>
     </div>
   </div>
 </template>
@@ -75,9 +60,7 @@ let tick = null
 
 const emailTrimmed = computed(() => email.value.trim())
 
-const sendDisabled = computed(
-  () => cooldown.value > 0 || loading.value || sendCodeLoading.value || !emailTrimmed.value,
-)
+const sendDisabled = computed(() => cooldown.value > 0 || loading.value || sendCodeLoading.value || !emailTrimmed.value)
 
 const sendLabel = computed(() => {
   if (sendCodeLoading.value) return '发送中…'
@@ -147,35 +130,82 @@ async function doRegister() {
 </script>
 
 <style scoped>
-.auth-page { display: flex; justify-content: center; padding-top: 60px; }
-.auth-card { background: #111111; border-radius: 12px; border: 0.5px solid rgba(255,255,255,0.1); padding: 32px; width: 100%; max-width: 400px; }
-.auth-card h2 { font-size: 22px; margin-bottom: 24px; text-align: center; color: #ffffff; }
-.form-group { margin-bottom: 16px; }
-.form-group label { display: block; font-size: 13px; color: rgba(255,255,255,0.5); margin-bottom: 6px; }
-.field-hint { font-size: 12px; color: rgba(255,255,255,0.35); margin: 0 0 8px; line-height: 1.45; }
-.code-row { display: flex; gap: 10px; align-items: stretch; }
-.input-code { flex: 1; min-width: 0; }
+.auth-page {
+  display: flex;
+  justify-content: center;
+  padding-top: 60px;
+}
+.auth-card {
+  background: #111111;
+  border-radius: 12px;
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  padding: 32px;
+  width: 100%;
+  max-width: 400px;
+}
+.auth-card h2 {
+  font-size: 22px;
+  margin-bottom: 24px;
+  text-align: center;
+  color: #ffffff;
+}
+.form-group {
+  margin-bottom: 16px;
+}
+.form-group label {
+  display: block;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 6px;
+}
+.field-hint {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.35);
+  margin: 0 0 8px;
+  line-height: 1.45;
+}
+.code-row {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+.input-code {
+  flex: 1;
+  min-width: 0;
+}
 .btn-send {
   flex-shrink: 0;
   padding: 0 14px;
   font-size: 13px;
   font-weight: 500;
   border-radius: 8px;
-  border: 0.5px solid rgba(255,255,255,0.2);
-  background: rgba(255,255,255,0.08);
-  color: rgba(255,255,255,0.85);
+  border: 0.5px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.85);
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.15s ease, opacity 0.15s ease;
+  transition:
+    background 0.15s ease,
+    opacity 0.15s ease;
 }
 .btn-send:hover:not(:disabled) {
-  background: rgba(255,255,255,0.12);
+  background: rgba(255, 255, 255, 0.12);
 }
 .btn-send:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
-.btn-block { width: 100%; }
-.auth-footer { text-align: center; margin-top: 16px; font-size: 14px; color: rgba(255,255,255,0.5); }
-.link { color: #ffffff; font-weight: 500; }
+.btn-block {
+  width: 100%;
+}
+.auth-footer {
+  text-align: center;
+  margin-top: 16px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.5);
+}
+.link {
+  color: #ffffff;
+  font-weight: 500;
+}
 </style>

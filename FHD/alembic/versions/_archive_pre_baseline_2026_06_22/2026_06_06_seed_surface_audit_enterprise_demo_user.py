@@ -5,6 +5,7 @@ Revises: 2026_06_05_tenant_saas
 """
 
 from __future__ import annotations
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 import json
 from pathlib import Path
@@ -12,7 +13,7 @@ from pathlib import Path
 from alembic import op
 from sqlalchemy import text
 
-from app.utils.password_hash import generate_password_hash
+from app.utils.security.password_hash import generate_password_hash
 from app.utils.time import utc_now_naive
 
 revision = "2026_06_06_surface_audit_demo"
@@ -35,7 +36,7 @@ def _cfg() -> dict:
             raw = json.loads(_CONFIG.read_text(encoding="utf-8"))
             if isinstance(raw, dict):
                 return {**defaults, **raw}
-        except Exception:
+        except BOUNDARY_ERRORS:
             pass
     return defaults
 

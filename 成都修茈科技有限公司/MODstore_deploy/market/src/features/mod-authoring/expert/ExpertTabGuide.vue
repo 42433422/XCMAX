@@ -6,7 +6,6 @@ import EmployeeTable from '../shared/EmployeeTable.vue'
 import ModChecklist from '../shared/ModChecklist.vue'
 
 const {
-  modData,
   modDescriptionLine,
   aiBlueprint,
   industryCard,
@@ -52,12 +51,7 @@ const {
     </details>
 
     <div v-if="suggestedSkills.length || suggestedPricing" class="ai-suggestions-inline">
-      <button
-        type="button"
-        class="btn btn-sm btn-secondary"
-        :disabled="refinePromptLoading"
-        @click="handleRefineSystemPrompt"
-      >
+      <button type="button" class="btn btn-sm btn-secondary" :disabled="refinePromptLoading" @click="handleRefineSystemPrompt">
         {{ refinePromptLoading ? '优化中…' : '优化 Prompt' }}
       </button>
       <button v-if="suggestedPricing" type="button" class="btn btn-sm" @click="applyPricingSuggestion">复制定价</button>

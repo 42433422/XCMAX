@@ -191,10 +191,10 @@ def test_llm_assist_degradation_code_exception_types():
         _owner_call_lock,
     )
 
-    assert _degradation_code(Exception("quota exhausted")) == "ETL_LLM_QUOTA_EXHAUSTED"
-    assert _degradation_code(Exception("429 Too Many")) == "ETL_LLM_QUOTA_EXHAUSTED"
-    assert _degradation_code(Exception("额度不足")) == "ETL_LLM_QUOTA_EXHAUSTED"
-    assert _degradation_code(Exception("boom")) == "ETL_LLM_UNAVAILABLE"
+    assert _degradation_code(RuntimeError("quota exhausted")) == "ETL_LLM_QUOTA_EXHAUSTED"
+    assert _degradation_code(RuntimeError("429 Too Many")) == "ETL_LLM_QUOTA_EXHAUSTED"
+    assert _degradation_code(RuntimeError("额度不足")) == "ETL_LLM_QUOTA_EXHAUSTED"
+    assert _degradation_code(RuntimeError("boom")) == "ETL_LLM_UNAVAILABLE"
 
     assert _circuit_cooldown_seconds("ETL_LLM_QUOTA_EXHAUSTED") == 300.0
     assert _circuit_cooldown_seconds("ETL_LLM_UNAVAILABLE") == 30.0
@@ -1330,7 +1330,7 @@ def test_purchase_order_execute_and_rollback(session):
     # rollback deletes item + order
     item_id = int(r["match_ref"])
     a.rollback_row(session, match_ref=str(item_id), before={}, after=r["after"], context={})
-    assert session.query(PurchaseOrderItem).get(item_id) is None
+    assert session.get(PurchaseOrderItem, item_id) is None
 
 
 def _make_shipment_record(db, order_no, run_id):
@@ -1518,7 +1518,7 @@ def test_shipment_execute_and_rollback(session):
     assert ex.value.code == "ETL_MATCH_CHANGED"
 
     # rollback
-    obj = session.query(ShipmentRecord).get(int(r["match_ref"]))
+    obj = session.get(ShipmentRecord, int(r["match_ref"]))
     a.rollback_row(session, match_ref=str(obj.id), before={}, after=r["after"], context=context)
     session.flush()
     session.expire_all()

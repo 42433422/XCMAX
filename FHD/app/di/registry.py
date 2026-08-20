@@ -13,6 +13,8 @@ from contextlib import ExitStack
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, cast
 
+from app.utils.operational_errors import BOUNDARY_ERRORS
+
 # LG-W1-T9-A 组合根：下划线是唯一合法的标识符分隔符。所有涉及 workflow 运行时
 # 装配的精确标识符都必须用 ``sep``（即 ``chr(95)`` == ``_``）机械拼装，避免任何
 # 依赖下划线显示缺失的脆弱写法。
@@ -79,7 +81,7 @@ class ServiceContainer:
         self._ai_chat_application_service = None
         self._unit_products_import_application_service = None
         self._file_analysis_application_service = None
-        self._template_application_service = None
+        self._template_application_service: TemplateApplicationService | None = None
         self._materials_service = None
         self._products_service = None
         self._extract_log_service = None
@@ -87,10 +89,10 @@ class ServiceContainer:
         self._shipment_application_service_core = None
         self._shipment_event_primary_facade = None
         # LG-W1-T9-A workflow 运行时组合根：懒加载，首次访问时构建，close/reload 后清空重建。
-        self._workflow_runtime = None
-        self._workflow_checkpointer = None
-        self._workflow_shadow_checkpointer = None
-        self._workflow_resource_stack = None
+        self._workflow_runtime: WorkflowRuntime | None = None
+        self._workflow_checkpointer: CheckpointStore | None = None
+        self._workflow_shadow_checkpointer: CheckpointStore | None = None
+        self._workflow_resource_stack: ExitStack[bool | None] | None = None
 
     def _lazy(self, attr: str, factory):
         """线程安全懒加载：模块级 ``_lock``（RLock，可重入）下双重检查初始化。
@@ -325,7 +327,7 @@ class ServiceContainer:
         from app.infrastructure.workflow.checkpoint_bridge import LanggraphCheckpointBridge
         from app.infrastructure.workflow.neuro_bus_bridge import NeuroBusEventBridge
         from app.infrastructure.workflow.runtime_selector import build_runtime_pair
-        from app.utils.path_utils import get_data_dir
+        from app.utils.path_io.path_utils import get_data_dir
 
         def _dispatch(tool_id: str, action: str, params: dict[str, Any]) -> dict[str, Any]:
             return execute_registered_workflow_tool(tool_id, action, params)
@@ -359,6 +361,7 @@ class ServiceContainer:
             mode = lg_runtime_mode()
             canary_ratio = lg_runtime_canary_ratio()
 
+            runtime: WorkflowRuntime
             if mode == "legacy":
                 runtime = legacy_runtime
             elif mode == "primary":
@@ -402,7 +405,7 @@ class ServiceContainer:
             self._workflow_checkpointer = serving_bridge
             self._workflow_shadow_checkpointer = shadow_bridge
             self._workflow_runtime = runtime
-        except BaseException:
+        except BOUNDARY_ERRORS:
             # 槽位发布前任何异常：关闭本地 stack（释放已进入的 SQLite 上下文句柄）后重抛，
             # 避免泄漏 SQLite 句柄。槽位尚未发布仍为 None，后续访问会重新构建。
             stack.close()

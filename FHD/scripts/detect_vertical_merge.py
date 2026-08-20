@@ -1,10 +1,8 @@
-# -*- coding: utf-8 -*-
 """
 测试垂直合并检测
 """
 
 import cv2
-import numpy as np
 
 # 读取测试图片
 test_image_path = r"e:\FHD\test_vertical_merge2.png"
@@ -77,14 +75,14 @@ def merge_lines(lines, threshold=30):
     return merged
 
 
-horizontal_lines = sorted(list(set(horizontal_lines)))
-vertical_lines = sorted(list(set(vertical_lines)))
+horizontal_lines = sorted(set(horizontal_lines))
+vertical_lines = sorted(set(vertical_lines))
 horizontal_lines = merge_very_close(horizontal_lines, threshold=5)
 vertical_lines = merge_very_close(vertical_lines, threshold=5)
 horizontal_lines = merge_lines(horizontal_lines, threshold=30)
 vertical_lines = merge_lines(vertical_lines, threshold=30)
 
-print(f"\n检测到的网格线：")
+print("\n检测到的网格线：")
 print(f"  水平线 Y：{horizontal_lines}")
 print(f"  垂直线 X：{vertical_lines}")
 
@@ -140,10 +138,10 @@ for i in range(rows):
 
         cells.append(cell)
 
-print(f"\n单元格边框检测详情：")
+print("\n单元格边框检测详情：")
 for cell in cells:
-    right_info = f"右侧{cell['right_border_ratio']*100:.0f}%"
-    bottom_info = f"底部{cell['bottom_border_ratio']*100:.0f}%"
+    right_info = f"右侧{cell['right_border_ratio'] * 100:.0f}%"
+    bottom_info = f"底部{cell['bottom_border_ratio'] * 100:.0f}%"
 
     status = []
     if cell["should_merge_right"]:

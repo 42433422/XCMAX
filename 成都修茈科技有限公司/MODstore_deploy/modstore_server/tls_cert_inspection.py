@@ -17,9 +17,11 @@ import os
 import subprocess
 import sys
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import List, Literal, Sequence
+
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 CertLevel = Literal["OK", "INFO", "WARNING", "CRITICAL"]
 
@@ -57,7 +59,7 @@ def parse_openssl_not_after(line: str) -> datetime:
         raise ValueError(f"unrecognized notAfter: {line!r}")
     mon, day, hms, year, tz = parts[0], parts[1], parts[2], parts[3], parts[4]
     fixed = f"{mon} {int(day, 10)} {hms} {year} {tz}"
-    return datetime.strptime(fixed, "%b %d %H:%M:%S %Y %Z").replace(tzinfo=timezone.utc)
+    return datetime.strptime(fixed, "%b %d %H:%M:%S %Y %Z").replace(tzinfo=UTC)
 
 
 def openssl_cert_not_after(cert_path: Path) -> datetime:
@@ -96,10 +98,10 @@ def inspect_certificate_file(
     cert_path: Path, *, now: datetime | None = None
 ) -> CertInspectionResult:
     """评估单个证书文件。"""
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     na = openssl_cert_not_after(cert_path)
     # 按日历日差（与 KPI「提前 X 天」语义一致）
-    delta = na.date() - now.astimezone(timezone.utc).date()
+    delta = na.date() - now.astimezone(UTC).date()
     days = int(delta.days)
     info_d, warn_d, crit_d = thresholds()
     level = classify_days_remaining(days, info_d=info_d, warn_d=warn_d, crit_d=crit_d)
@@ -137,11 +139,13 @@ def _repo_root_optional() -> Path | None:
         from modstore_server.integrations.ops_action_handlers import repo_root as rr
 
         return Path(rr())
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return None
 
 
-def scan_tls_certificates(paths: Sequence[Path | str] | None = None) -> List[CertInspectionResult]:
+def scan_tls_certificates(
+    paths: Sequence[Path | str] | None = None,
+) -> List[CertInspectionResult]:
     """扫描路径列表；默认来自 ``MODSTORE_TLS_CERT_PATHS``。"""
     resolved: List[Path] = []
     if paths is None:
@@ -150,7 +154,7 @@ def scan_tls_certificates(paths: Sequence[Path | str] | None = None) -> List[Cer
         for p in paths:
             resolved.append(Path(p))
     results: List[CertInspectionResult] = []
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     for p in resolved:
         if not p.is_file():
             continue
@@ -163,7 +167,7 @@ def scan_tls_certificates(paths: Sequence[Path | str] | None = None) -> List[Cer
 
 def format_cli_line(r: CertInspectionResult) -> str:
     na = r.not_after_utc.strftime("%Y-%m-%d %H:%M:%SZ")
-    return f"level={r.level} days_remaining={r.days_remaining} " f"notAfter={na} path={r.path}"
+    return f"level={r.level} days_remaining={r.days_remaining} notAfter={na} path={r.path}"
 
 
 def main(argv: List[str] | None = None) -> int:
@@ -178,7 +182,7 @@ def main(argv: List[str] | None = None) -> int:
         return 2
     try:
         r = inspect_certificate_file(path)
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         print(f"error: {exc}", file=sys.stderr)
         return 1
     print(format_cli_line(r))

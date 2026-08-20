@@ -271,7 +271,8 @@ def yuangon_area_for_pkg(pkg_id: str) -> Optional[str]:
     if not pid:
         return None
     for area_key, block in YUANGON_AREAS.items():
-        ids = block.get("ids") if isinstance(block.get("ids"), list) else []
+        raw_ids = block.get("ids")
+        ids = raw_ids if isinstance(raw_ids, list) else []
         if pid in ids:
             return str(area_key)
     return None

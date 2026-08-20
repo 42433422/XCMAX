@@ -4,6 +4,8 @@ import os
 import socket
 import sys
 
+BOUNDARY_ERRORS = (Exception,)
+
 HOST = os.getenv("FUNASR_HOST", "funasr")
 PORT = int(os.getenv("FUNASR_PORT", "10095"))
 
@@ -14,7 +16,7 @@ def tcp_test():
         s.close()
         print(f"TCP {HOST}:{PORT} OK")
         return True
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         print(f"TCP {HOST}:{PORT} FAIL: {e}")
         return False
 
@@ -28,7 +30,7 @@ async def ws_test():
         print(f"WS {url} OK")
         await ws.close()
         return True
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         print(f"WS {url} FAIL: {e}")
         return False
 

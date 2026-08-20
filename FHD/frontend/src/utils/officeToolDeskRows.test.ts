@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { OFFICE_EMPLOYEE_PKG_IDS } from '@/constants/officeEmployeePack'
-import {
-  buildOfficeToolDeskRows,
-  officePackIdToShortLabel,
-  resolveOfficeInstalledPackIds,
-} from './officeToolDeskRows'
+import { buildOfficeToolDeskRows, officePackIdToShortLabel, resolveOfficeInstalledPackIds } from './officeToolDeskRows'
 
 describe('officeToolDeskRows', () => {
   it('labels office pack ids for graph display', () => {

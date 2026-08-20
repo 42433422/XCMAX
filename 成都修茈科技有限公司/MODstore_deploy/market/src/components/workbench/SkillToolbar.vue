@@ -13,9 +13,7 @@
       <span class="skill-toolbar__icon" aria-hidden="true">{{ s.icon }}</span>
       <span class="skill-toolbar__label">{{ s.label }}</span>
     </button>
-    <span v-if="active.length" class="skill-toolbar__hint" role="status">
-      已开启 {{ active.length }} 项 · 点同名按钮关闭
-    </span>
+    <span v-if="active.length" class="skill-toolbar__hint" role="status"> 已开启 {{ active.length }} 项 · 点同名按钮关闭 </span>
   </div>
 </template>
 
@@ -63,7 +61,10 @@ function toggle(id: string) {
   cursor: pointer;
   font-size: 0.78rem;
   line-height: 1.2;
-  transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
 }
 
 .skill-toolbar__btn:hover {
@@ -75,7 +76,9 @@ function toggle(id: string) {
   background: linear-gradient(135deg, rgba(129, 140, 248, 0.32), rgba(99, 102, 241, 0.5));
   border-color: rgba(165, 180, 252, 0.55);
   color: #fff;
-  box-shadow: 0 0 0 1px rgba(165, 180, 252, 0.25), 0 4px 14px rgba(99, 102, 241, 0.32);
+  box-shadow:
+    0 0 0 1px rgba(165, 180, 252, 0.25),
+    0 4px 14px rgba(99, 102, 241, 0.32);
 }
 
 .skill-toolbar__icon {

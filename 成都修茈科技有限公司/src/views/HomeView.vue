@@ -25,8 +25,8 @@
             可无限复制的智能员工团队
           </h1>
           <p class="hero-description">
-            让 AI 承担重复性工作，您专注创造性价值。
-            数据存储、流程规则、自动化处理——用 MOD 把各种组件组合在一起，审批、进销存、工单、报表，什么都能做。
+            让 AI 承担重复性工作，您专注创造性价值。 数据存储、流程规则、自动化处理——用 MOD
+            把各种组件组合在一起，审批、进销存、工单、报表，什么都能做。
           </p>
           <div class="hero-actions">
             <router-link to="/register" class="btn btn-white">开始使用</router-link>
@@ -65,9 +65,7 @@
       <div class="container">
         <div class="section-header">
           <h2 class="section-title">智能单据处理</h2>
-          <p class="section-description">
-            告别繁琐的手工录入，AI 员工帮您自动识别 Excel 单据，智能提取关键数据，一键生成标签并打印
-          </p>
+          <p class="section-description">告别繁琐的手工录入，AI 员工帮您自动识别 Excel 单据，智能提取关键数据，一键生成标签并打印</p>
         </div>
 
         <div class="video-wrapper">
@@ -127,9 +125,7 @@
       <div class="container">
         <div class="section-header">
           <h2 class="section-title">行业场景</h2>
-          <p class="section-description">
-            帮助各行业实现数字化，降低运营成本
-          </p>
+          <p class="section-description">帮助各行业实现数字化，降低运营成本</p>
         </div>
 
         <div class="scenarios-grid">
@@ -158,8 +154,8 @@
         <div class="about-section">
           <h2 class="section-title">关于我们</h2>
           <p class="about-text">
-            成都修茈科技有限公司专注于企业级软件开发与数字化解决方案。我们相信 AI 技术能够为中小企业带来前所未有的效率提升。
-            我们的 AI 员工系统基于 DeepSeek AI 和 OCR 技术，能够自动识别和处理各种商业单据，让您的团队从繁琐的重复工作中解放出来。
+            成都修茈科技有限公司专注于企业级软件开发与数字化解决方案。我们相信 AI 技术能够为中小企业带来前所未有的效率提升。 我们的 AI
+            员工系统基于 DeepSeek AI 和 OCR 技术，能够自动识别和处理各种商业单据，让您的团队从繁琐的重复工作中解放出来。
           </p>
         </div>
       </div>
@@ -200,9 +196,7 @@
       <div class="container">
         <div class="cta-inner">
           <h2 class="cta-heading">准备好迎接您的 AI 员工了吗？</h2>
-          <p class="cta-description">
-            立即体验，让 AI 为您工作
-          </p>
+          <p class="cta-description">立即体验，让 AI 为您工作</p>
           <router-link to="/register" class="btn btn-white btn--large">开始使用</router-link>
         </div>
       </div>
@@ -238,12 +232,9 @@
             邮箱：<a class="footer-mail" href="mailto:970882904@qq.com">970882904@qq.com</a>
           </p>
           <p class="footer-beian">
-            <a
-              class="footer-beian-link"
-              href="https://beian.miit.gov.cn/"
-              target="_blank"
-              rel="noopener noreferrer"
-            >蜀ICP备2026014056号-3A</a>
+            <a class="footer-beian-link" href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer"
+              >蜀ICP备2026014056号-3A</a
+            >
             <span class="footer-beian-sep" aria-hidden="true">·</span>
             <span class="footer-beian-police">川公网安备13f68c61238ea5b1f4c4887c942a0d55号</span>
           </p>
@@ -269,9 +260,7 @@ const isLoggedIn = ref(false)
 
 /** 已登录直接去仓库工作台；未登录去登录页并带回跳，避免已登录点 /login 被守卫立即打回首页像「点不动」 */
 const workbenchLink = computed(() =>
-  isLoggedIn.value
-    ? '/workbench/repository'
-    : { path: '/login', query: { redirect: '/workbench/repository' } },
+  isLoggedIn.value ? '/workbench/repository' : { path: '/login', query: { redirect: '/workbench/repository' } },
 )
 
 function truncate(str, len) {
@@ -316,7 +305,11 @@ onUnmounted(() => {
   min-height: 100vh;
   background: #0a0a0a;
   color: #ffffff;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family:
+    'Inter',
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -414,8 +407,9 @@ onUnmounted(() => {
   left: 0;
   width: 100%;
   height: 100%;
-  background: radial-gradient(ellipse at top right, rgba(96,165,250,0.15) 0%, transparent 60%),
-              radial-gradient(ellipse at bottom left, rgba(167,139,250,0.1) 0%, transparent 60%);
+  background:
+    radial-gradient(ellipse at top right, rgba(96, 165, 250, 0.15) 0%, transparent 60%),
+    radial-gradient(ellipse at bottom left, rgba(167, 139, 250, 0.1) 0%, transparent 60%);
   z-index: 0;
 }
 
@@ -706,7 +700,7 @@ onUnmounted(() => {
 .market-loading {
   text-align: center;
   padding: 3rem;
-  color: rgba(255,255,255,0.3);
+  color: rgba(255, 255, 255, 0.3);
 }
 
 .market-grid {
@@ -717,16 +711,16 @@ onUnmounted(() => {
 
 .market-card {
   padding: 20px;
-  border: 0.5px solid rgba(255,255,255,0.08);
+  border: 0.5px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
-  background: rgba(255,255,255,0.02);
+  background: rgba(255, 255, 255, 0.02);
   transition: all 0.2s;
   display: flex;
   flex-direction: column;
 }
 
 .market-card:hover {
-  border-color: rgba(255,255,255,0.15);
+  border-color: rgba(255, 255, 255, 0.15);
 }
 
 .market-card-title {
@@ -738,7 +732,7 @@ onUnmounted(() => {
 .market-card-desc {
   font-size: 12px;
   line-height: 1.6;
-  color: rgba(255,255,255,0.4);
+  color: rgba(255, 255, 255, 0.4);
   margin: 0 0 16px;
   flex: 1;
 }
@@ -762,7 +756,7 @@ onUnmounted(() => {
 .market-empty {
   text-align: center;
   padding: 2rem;
-  color: rgba(255,255,255,0.3);
+  color: rgba(255, 255, 255, 0.3);
   font-size: 14px;
 }
 
@@ -883,7 +877,9 @@ onUnmounted(() => {
   color: rgba(255, 255, 255, 0.55);
   text-decoration: none;
   border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-  transition: color 0.15s ease, border-color 0.15s ease;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .footer-mail:hover {

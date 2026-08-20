@@ -20,10 +20,7 @@ function parseSseDataLine(line: string): PlannerSseEvent | null {
 }
 
 /** 读取 ``fetch`` 得到的 SSE（``text/event-stream``）响应体并逐条回调事件 */
-export async function readPlannerSseResponse(
-  response: Response,
-  onEvent: (ev: PlannerSseEvent) => void
-): Promise<void> {
+export async function readPlannerSseResponse(response: Response, onEvent: (ev: PlannerSseEvent) => void): Promise<void> {
   if (!response.body) {
     throw new Error('响应体不可读（可能被代理缓冲或未返回流）')
   }
@@ -60,7 +57,9 @@ export function resolveChatStreamPath(): string {
 }
 
 export function isChatStreamEnabled(): boolean {
-  const v = String(import.meta.env.VITE_CHAT_STREAM ?? '').trim().toLowerCase()
+  const v = String(import.meta.env.VITE_CHAT_STREAM ?? '')
+    .trim()
+    .toLowerCase()
   if (v === '0' || v === 'false' || v === 'off' || v === 'no') return false
   return true
 }

@@ -22,10 +22,11 @@ const task = {
 }
 
 describe('AgentTaskRuntimePanel', () => {
-  const mountTask = (overrides: Record<string, unknown> = {}) => mount(AgentTaskRuntimePanel, {
-    props: { task: { ...task, ...overrides } },
-    global: { mocks: { $t: (key: string) => key } },
-  })
+  const mountTask = (overrides: Record<string, unknown> = {}) =>
+    mount(AgentTaskRuntimePanel, {
+      props: { task: { ...task, ...overrides } },
+      global: { mocks: { $t: (key: string) => key } },
+    })
 
   it('shows traceable runtime details and controls the exact task', async () => {
     const wrapper = mountTask()
@@ -71,7 +72,13 @@ describe('AgentTaskRuntimePanel', () => {
           { step_id: 'unknown', description: '未知状态', status: 'unknown' },
         ],
         toolCalls: [
-          { call_id: 'timed', tool_id: 'terminal', action: 'test', status: 'completed', duration_ms: 42 },
+          {
+            call_id: 'timed',
+            tool_id: 'terminal',
+            action: 'test',
+            status: 'completed',
+            duration_ms: 42,
+          },
         ],
         artifactCount: 0,
       },
@@ -95,20 +102,15 @@ describe('AgentTaskRuntimePanel', () => {
     expect(wrapper.emitted('cancel')).toHaveLength(1)
   })
 
-  it.each(['failed', 'cancelled', 'blocked'] as const)(
-    'offers a retry for %s tasks',
-    async (status) => {
-      const wrapper = mountTask({ status, payload: null })
-      const retry = wrapper.findAll('button').find((button) => button.text() === 'chat.retryTask')
+  it.each(['failed', 'cancelled', 'blocked'] as const)('offers a retry for %s tasks', async (status) => {
+    const wrapper = mountTask({ status, payload: null })
+    const retry = wrapper.findAll('button').find((button) => button.text() === 'chat.retryTask')
 
-      expect(retry).toBeDefined()
-      await retry!.trigger('click')
-      expect(wrapper.emitted('retry')).toHaveLength(1)
-      expect(wrapper.findAll('button').some((button) => button.text() === 'chat.cancel')).toBe(
-        status === 'blocked',
-      )
-    },
-  )
+    expect(retry).toBeDefined()
+    await retry!.trigger('click')
+    expect(wrapper.emitted('retry')).toHaveLength(1)
+    expect(wrapper.findAll('button').some((button) => button.text() === 'chat.cancel')).toBe(status === 'blocked')
+  })
 
   it('offers a real approval action only at the waiting checkpoint', async () => {
     const wrapper = mountTask({

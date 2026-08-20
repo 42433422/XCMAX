@@ -32,23 +32,43 @@ describe('textParser deep branches', () => {
   })
 
   it('extractModelQtySpec matches bucket+model only (p00b)', () => {
-    expect(extractModelQtySpec('2桶ABC')).toEqual({ model: 'ABC', quantity_tins: 2, tin_spec: null })
+    expect(extractModelQtySpec('2桶ABC')).toEqual({
+      model: 'ABC',
+      quantity_tins: 2,
+      tin_spec: null,
+    })
   })
 
   it('extractModelQtySpec matches bucket+spec without model (p00c)', () => {
-    expect(extractModelQtySpec('3桶规格20')).toEqual({ model: null, quantity_tins: 3, tin_spec: 20 })
+    expect(extractModelQtySpec('3桶规格20')).toEqual({
+      model: null,
+      quantity_tins: 3,
+      tin_spec: 20,
+    })
   })
 
   it('extractModelQtySpec matches spec only (p00d)', () => {
-    expect(extractModelQtySpec('规格12.5')).toEqual({ model: null, quantity_tins: null, tin_spec: 12.5 })
+    expect(extractModelQtySpec('规格12.5')).toEqual({
+      model: null,
+      quantity_tins: null,
+      tin_spec: 12.5,
+    })
   })
 
   it('extractModelQtySpec matches model+spec (p3)', () => {
-    expect(extractModelQtySpec('X100规格15')).toEqual({ model: 'X100', quantity_tins: null, tin_spec: 15 })
+    expect(extractModelQtySpec('X100规格15')).toEqual({
+      model: 'X100',
+      quantity_tins: null,
+      tin_spec: 15,
+    })
   })
 
   it('extractModelQtySpec falls back to model only (p4)', () => {
-    expect(extractModelQtySpec('AB12')).toEqual({ model: 'AB12', quantity_tins: null, tin_spec: null })
+    expect(extractModelQtySpec('AB12')).toEqual({
+      model: 'AB12',
+      quantity_tins: null,
+      tin_spec: null,
+    })
   })
 
   it('extractModelQtySpec returns null for noise', () => {

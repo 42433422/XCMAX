@@ -43,11 +43,7 @@ function startupPublicUrl(fileName: string) {
         <template v-if="startupModNames.length > 1">
           <div class="startup-mod-chips-hint">已加载扩展包</div>
           <div class="startup-mod-chips">
-            <span
-              v-for="modName in startupModNames"
-              :key="modName"
-              class="startup-mod-chip"
-            >
+            <span v-for="modName in startupModNames" :key="modName" class="startup-mod-chip">
               {{ modName }}
             </span>
           </div>
@@ -73,10 +69,7 @@ function startupPublicUrl(fileName: string) {
       </div>
       <div v-if="visible" class="startup-progress-wrap" aria-hidden="true">
         <div class="startup-progress-track">
-          <div
-            class="startup-progress-fill"
-            :style="{ width: `${startupProgressPct}%` }"
-          ></div>
+          <div class="startup-progress-fill" :style="{ width: `${startupProgressPct}%` }"></div>
         </div>
       </div>
     </div>
@@ -96,7 +89,9 @@ function startupPublicUrl(fileName: string) {
     linear-gradient(135deg, #edf5fb 0%, #e7eef6 48%, #eef3f8 100%);
   opacity: 1;
   visibility: visible;
-  transition: opacity 360ms ease, visibility 0s linear 360ms;
+  transition:
+    opacity 360ms ease,
+    visibility 0s linear 360ms;
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
@@ -105,7 +100,7 @@ function startupPublicUrl(fileName: string) {
 
 .startup-splash::before,
 .startup-splash::after {
-  content: "";
+  content: '';
   position: absolute;
   pointer-events: none;
   display: none;
@@ -158,8 +153,7 @@ function startupPublicUrl(fileName: string) {
   display: grid;
   place-items: center;
   border-radius: 28px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, rgba(248, 251, 255, 0.76) 100%);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, rgba(248, 251, 255, 0.76) 100%);
   border: 1px solid rgba(255, 255, 255, 0.78);
   box-shadow:
     0 20px 50px rgba(15, 76, 129, 0.12),
@@ -310,8 +304,12 @@ function startupPublicUrl(fileName: string) {
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes startupContentEnter {

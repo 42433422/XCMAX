@@ -1,13 +1,17 @@
+# mypy: disable-error-code="import-not-found"
 """调试路径解析"""
 
 import sys
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 sys.path.insert(0, r"e:\FHD\backend\shell")
 
-from taiyangniao_attendance.paths import resolve_workspace_excel, workspace_root
 import os
 
-print(f'WORKSPACE_ROOT: {os.environ.get("WORKSPACE_ROOT", "未设置")}')
+from taiyangniao_attendance.paths import resolve_workspace_excel, workspace_root
+
+print(f"WORKSPACE_ROOT: {os.environ.get('WORKSPACE_ROOT', '未设置')}")
 print(f"workspace_root(): {workspace_root()}")
 
 # 测试路径解析
@@ -36,10 +40,10 @@ try:
         if "考勤统计" in f:
             print(f"  匹配文件：{f}")
             print(f"    repr: {repr(f)}")
-            print(f'    标准化：{f.replace(" ", "")}')
-            print(f'    匹配：{f.replace(" ", "") == normalized_file_name}')
+            print(f"    标准化：{f.replace(' ', '')}")
+            print(f"    匹配：{f.replace(' ', '') == normalized_file_name}")
 
-except Exception as e:
+except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"解析失败：{e}")
     import traceback
 

@@ -16,10 +16,7 @@
  * 铁律4：仅 mock 外部边界（@/api/products），被测函数真实调用
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import {
-  runProductKeywordFastPath,
-  type ChatProductFastPathDeps,
-} from './useChatProductFastPath'
+import { runProductKeywordFastPath, type ChatProductFastPathDeps } from './useChatProductFastPath'
 
 // ── mock 外部边界：productsApi ──────────────────────────────────
 const mockSearchProducts = vi.fn()
@@ -36,13 +33,10 @@ function makeDeps(overrides: Partial<ChatProductFastPathDeps> = {}): ChatProduct
   return {
     addAndSaveMessage: overrides.addAndSaveMessage ?? vi.fn().mockResolvedValue(undefined),
     syncTaskFromChatResponse: overrides.syncTaskFromChatResponse ?? vi.fn(),
-    attachContextSummaryToLastAiMessage:
-      overrides.attachContextSummaryToLastAiMessage ?? vi.fn(),
-    attachThinkingStepsToLastAiMessage:
-      overrides.attachThinkingStepsToLastAiMessage ?? vi.fn(),
+    attachContextSummaryToLastAiMessage: overrides.attachContextSummaryToLastAiMessage ?? vi.fn(),
+    attachThinkingStepsToLastAiMessage: overrides.attachThinkingStepsToLastAiMessage ?? vi.fn(),
     attachTodoStepsToLastAiMessage: overrides.attachTodoStepsToLastAiMessage ?? vi.fn(),
-    attachWorkflowTraceToLastAiMessage:
-      overrides.attachWorkflowTraceToLastAiMessage ?? vi.fn(),
+    attachWorkflowTraceToLastAiMessage: overrides.attachWorkflowTraceToLastAiMessage ?? vi.fn(),
     handleAutoAction: overrides.handleAutoAction ?? vi.fn(),
     clearCurrentTask: overrides.clearCurrentTask ?? vi.fn(),
   }
@@ -82,25 +76,16 @@ describe('useChatProductFastPath — coverage ramp', () => {
       expect(result).toBe(true)
       expect(mockSearchProducts).toHaveBeenCalledWith('X100')
       // 验证 addAndSaveMessage 收到带关键词的响应文本
-      expect(deps.addAndSaveMessage).toHaveBeenCalledWith(
-        expect.stringContaining('已帮你打开产品副窗并带入「X100」'),
-        'ai',
-      )
+      expect(deps.addAndSaveMessage).toHaveBeenCalledWith(expect.stringContaining('已帮你打开产品副窗并带入「X100」'), 'ai')
       // 验证其它依赖被调用
       expect(deps.syncTaskFromChatResponse).toHaveBeenCalledWith(
         expect.objectContaining({ success: true, response: expect.any(String) }),
         '帮我找 X100',
       )
       expect(deps.attachContextSummaryToLastAiMessage).toHaveBeenCalled()
-      expect(deps.attachThinkingStepsToLastAiMessage).toHaveBeenCalledWith(
-        expect.objectContaining({ success: true }),
-      )
-      expect(deps.attachTodoStepsToLastAiMessage).toHaveBeenCalledWith(
-        expect.objectContaining({ success: true }),
-      )
-      expect(deps.attachWorkflowTraceToLastAiMessage).toHaveBeenCalledWith(
-        expect.objectContaining({ success: true }),
-      )
+      expect(deps.attachThinkingStepsToLastAiMessage).toHaveBeenCalledWith(expect.objectContaining({ success: true }))
+      expect(deps.attachTodoStepsToLastAiMessage).toHaveBeenCalledWith(expect.objectContaining({ success: true }))
+      expect(deps.attachWorkflowTraceToLastAiMessage).toHaveBeenCalledWith(expect.objectContaining({ success: true }))
       // payload.task 未设置 → clearCurrentTask 被调用
       expect(deps.clearCurrentTask).toHaveBeenCalled()
       // 有结果 → handleAutoAction 被调用，且带 hydrateProductSearch
@@ -149,9 +134,7 @@ describe('useChatProductFastPath — coverage ramp', () => {
     })
 
     it('rows 超过 3 条时 lines 截断为前 3 条预览', async () => {
-      const rows = Array.from({ length: 5 }, (_, i) =>
-        makeRow({ id: i + 1, model_number: `M${i}` }),
-      )
+      const rows = Array.from({ length: 5 }, (_, i) => makeRow({ id: i + 1, model_number: `M${i}` }))
       mockSearchProducts.mockResolvedValue({ success: true, data: rows })
       const deps = makeDeps()
 
@@ -166,18 +149,13 @@ describe('useChatProductFastPath — coverage ramp', () => {
     })
 
     it('rows 超过 20 条时 mappedRows 截断为前 20 条', async () => {
-      const rows = Array.from({ length: 25 }, (_, i) =>
-        makeRow({ id: i + 1, model_number: `R${i}` }),
-      )
+      const rows = Array.from({ length: 25 }, (_, i) => makeRow({ id: i + 1, model_number: `R${i}` }))
       mockSearchProducts.mockResolvedValue({ success: true, data: rows })
       const deps = makeDeps()
 
       await runProductKeywordFastPath('R', '找 R', deps)
 
-      const autoActionArg = deps.handleAutoAction.mock.calls[0][0] as Record<
-        string,
-        unknown
-      >
+      const autoActionArg = deps.handleAutoAction.mock.calls[0][0] as Record<string, unknown>
       const mapped = (autoActionArg.hydrateProductSearch as { rows: unknown[] }).rows
       expect(mapped).toHaveLength(20)
     })
@@ -304,21 +282,14 @@ describe('useChatProductFastPath — coverage ramp', () => {
     it('mappedRows 中 name 缺失时回退到 product_name 再回退到空串', async () => {
       mockSearchProducts.mockResolvedValue({
         success: true,
-        data: [
-          makeRow({ id: 1, name: undefined, product_name: 'PN', unit: undefined }),
-        ],
+        data: [makeRow({ id: 1, name: undefined, product_name: 'PN', unit: undefined })],
       })
       const deps = makeDeps()
 
       await runProductKeywordFastPath('kw', 'text', deps)
 
-      const autoActionArg = deps.handleAutoAction.mock.calls[0][0] as Record<
-        string,
-        unknown
-      >
-      const mapped = (
-        autoActionArg.hydrateProductSearch as { rows: Record<string, unknown>[] }
-      ).rows[0]
+      const autoActionArg = deps.handleAutoAction.mock.calls[0][0] as Record<string, unknown>
+      const mapped = (autoActionArg.hydrateProductSearch as { rows: Record<string, unknown>[] }).rows[0]
       expect(mapped.name).toBe('PN')
       expect(mapped.unit).toBe('')
       expect(mapped.model_number).toBe('X100')
@@ -465,10 +436,7 @@ describe('useChatProductFastPath — coverage ramp', () => {
 
       // addAndSaveMessage 第一个参数是 String(payload.response || '')
       // 此场景下 responseText 非空
-      expect(deps.addAndSaveMessage).toHaveBeenCalledWith(
-        expect.any(String),
-        'ai',
-      )
+      expect(deps.addAndSaveMessage).toHaveBeenCalledWith(expect.any(String), 'ai')
     })
   })
 })

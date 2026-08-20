@@ -40,8 +40,7 @@ export function serializeVisibleDom(): string {
   if (ths.length) parts.push(`表格列：${ths.join(' | ')}`)
 
   // 主要文本（限 400 字）
-  const main =
-    document.querySelector('main')?.textContent?.replace(/\s+/g, ' ').trim().slice(0, 400) || ''
+  const main = document.querySelector('main')?.textContent?.replace(/\s+/g, ' ').trim().slice(0, 400) || ''
   if (main) parts.push(`页面主要内容：${main}`)
 
   return parts.join('\n')

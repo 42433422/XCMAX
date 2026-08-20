@@ -9,7 +9,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.paibi_llm import PAIBI_SUPPORTED_TOOLS
 
@@ -38,10 +38,11 @@ def build_paibi_cli_cross_adjudication(
     blind = _read_json(blind_file)
     behavior = _read_json(behavior_file)
     calibration = _read_json(calibration_file)
-    calibration_summary = (
+    calibration_summary = cast(
+        dict[str, Any],
         calibration.get("summary")
         if isinstance(calibration.get("summary"), dict)
-        else {}
+        else {},
     )
     calibration_label_count = int(
         calibration_summary.get("calibration_label_count")
@@ -226,8 +227,9 @@ def _cross_input(blind: dict[str, Any], behavior: dict[str, Any]) -> dict[str, A
     for case in behavior.get("cases") or []:
         if not isinstance(case, dict):
             continue
-        assertions = (
-            case.get("assertions") if isinstance(case.get("assertions"), dict) else {}
+        assertions = cast(
+            dict[str, Any],
+            case.get("assertions") if isinstance(case.get("assertions"), dict) else {},
         )
         behavior_cases.append(
             {
@@ -272,8 +274,14 @@ def _run_tool_adjudicator(
         check=False,
     )
     payload = _read_json(output_path)
-    summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
-    cases = payload.get("cases") if isinstance(payload.get("cases"), list) else []
+    summary = cast(
+        dict[str, Any],
+        payload.get("summary") if isinstance(payload.get("summary"), dict) else {},
+    )
+    cases = cast(
+        list[Any],
+        payload.get("cases") if isinstance(payload.get("cases"), list) else [],
+    )
     return {
         "tool_name": tool_name,
         "returncode": int(completed.returncode),

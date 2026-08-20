@@ -27,28 +27,28 @@ test.describe('onboarding empty enterprise @onboarding_e2e', () => {
           status: 200,
           contentType: 'application/json',
           body: JSON.stringify({ success: true, data: { step: 'industry', industries: ['retail', 'manufacturing'] } }),
-        })
+        }),
       )
       await page.route('**/api/onboarding/host-pack', (route) =>
         route.fulfill({
           status: 200,
           contentType: 'application/json',
           body: JSON.stringify({ success: true, data: { step: 'host-pack', packs: ['basic', 'pro'] } }),
-        })
+        }),
       )
       await page.route('**/api/onboarding/seed', (route) =>
         route.fulfill({
           status: 200,
           contentType: 'application/json',
           body: JSON.stringify({ success: true, data: { step: 'seed', seeded: true, count: 12 } }),
-        })
+        }),
       )
       await page.route('**/api/onboarding/ai-demo', (route) =>
         route.fulfill({
           status: 200,
           contentType: 'application/json',
           body: JSON.stringify({ success: true, data: { step: 'ai-demo', ready: true } }),
-        })
+        }),
       )
     }
 
@@ -57,7 +57,7 @@ test.describe('onboarding empty enterprise @onboarding_e2e', () => {
     for (const step of steps) {
       const resp = await request.get(`${apiBase}/api/onboarding/${step}`, { timeout: 15_000 })
       expect(resp.status(), await resp.text()).toBeLessThan(500)
-      const body = await resp.json().catch(() => ({} as any))
+      const body = await resp.json().catch(() => ({}) as any)
       expect(body?.success, `onboarding ${step} body: ${JSON.stringify(body)}`).toBe(true)
       const stepField = String(body?.data?.step || step)
       expect(stepField).toBe(step)

@@ -1,4 +1,5 @@
 """coverage 域适配器：转发到 coverage_ratchet.py。"""
+
 from __future__ import annotations
 
 from typing import Any

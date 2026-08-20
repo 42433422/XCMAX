@@ -1,10 +1,14 @@
+# mypy: disable-error-code="import-not-found"
 """测试完整转换流程"""
 
 import sys
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 sys.path.insert(0, r"e:\FHD\backend\shell")
 
 from pathlib import Path
+
 from taiyangniao_attendance.convert import convert_dingtalk_file
 
 source_file = Path(r"e:\FHD\424\钉钉导出来的考勤数据.xlsx")
@@ -24,9 +28,9 @@ try:
         header_row=2,
         template_path=template_file,
     )
-    print(f"\n✓ 转换成功！")
+    print("\n✓ 转换成功！")
     print(f"结果：{result}")
-except Exception as e:
+except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"\n✗ 转换失败：{e}")
     import traceback
 

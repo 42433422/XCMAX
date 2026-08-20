@@ -277,7 +277,7 @@ def test_desktop_package_includes_commercial_safe_office_employee_runtimes() -> 
         for path in (employee_root / employee_name / "backend").rglob("*.py")
     )
 
-    assert '"pypdf>=6.14,<7"' in pyproject
+    assert '"pypdf>=6.15,<7"' in pyproject
     assert '"reportlab>=5,<6"' in pyproject
     assert "PyMuPDF" not in pyproject
     assert "collect_submodules(module)" in spec

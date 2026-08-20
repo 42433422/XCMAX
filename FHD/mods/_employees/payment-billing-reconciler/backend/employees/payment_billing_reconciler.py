@@ -10,9 +10,7 @@ def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(ledger, dict):
         return _failed("ledger object is required", "missing_ledger")
     orders = ledger.get("orders") if isinstance(ledger.get("orders"), list) else []
-    payments = (
-        ledger.get("payments") if isinstance(ledger.get("payments"), list) else []
-    )
+    payments = ledger.get("payments") if isinstance(ledger.get("payments"), list) else []
     refunds = ledger.get("refunds") if isinstance(ledger.get("refunds"), list) else []
     if not orders and not payments and not refunds:
         return {
@@ -39,14 +37,8 @@ def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         for index, raw in enumerate(rows[:1000]):
             row = raw if isinstance(raw, dict) else {}
             cents = row.get("amount_cents")
-            if (
-                not str(row.get("id") or "").strip()
-                or not isinstance(cents, int)
-                or cents < 0
-            ):
-                issues.append(
-                    {"code": "invalid_ledger_row", "path": f"ledger.{group}[{index}]"}
-                )
+            if not str(row.get("id") or "").strip() or not isinstance(cents, int) or cents < 0:
+                issues.append({"code": "invalid_ledger_row", "path": f"ledger.{group}[{index}]"})
             else:
                 amount += cents
         return amount

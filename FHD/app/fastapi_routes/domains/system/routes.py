@@ -3,24 +3,38 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Annotated
 
 from fastapi import APIRouter, Body, File, Form, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, PlainTextResponse
 
-from app.fastapi_routes.tools_execute import (
-    tool_route_agent_payload as _tool_route_agent_payload,
+from app.fastapi_routes.domains.system.admin_llm_handlers import reload_llm_registry_payload
+from app.fastapi_routes.domains.system.agent_handlers import (
+    run_document_template_agent as _run_document_template_agent,
 )
-from app.fastapi_routes.tools_execute import (
-    user_id_from_tool_request as _user_id_from_tool_request,
+from app.fastapi_routes.domains.system.agent_handlers import (
+    run_system_maintenance_agent as _run_system_maintenance_agent,
+)
+from app.fastapi_routes.domains.system.agent_handlers import (
+    run_templates_analyze_agent as _run_templates_analyze_agent,
+)
+from app.fastapi_routes.domains.system.performance_handlers import (
+    performance_tasks_status_payload,
 )
 from app.template_analysis_progress import get_template_analysis_progress
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.utils.path_utils import get_base_dir
+from app.utils.path_io.path_utils import get_base_dir as get_base_dir
 
 logger = logging.getLogger(__name__)
+_SYSTEM_UNAVAILABLE = "系统服务暂时不可用，请稍后重试"
 
 router = APIRouter(tags=["legacy-system"], deprecated=True)
+
+
+def _system_failure(**extra: object) -> JSONResponse:
+    return JSONResponse(
+        {"success": False, "message": _SYSTEM_UNAVAILABLE, **extra}, status_code=500
+    )
 
 
 @router.get("/api/system/config")
@@ -35,15 +49,15 @@ def system_config_get():
                 "available_industries": ic.get_available_industries(),
             },
         }
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("system config: %s", e)
+    except RECOVERABLE_ERRORS:
+        logger.exception("system config unavailable")
         return {
             "success": True,
             "data": {
                 "current_industry": "涂料",
                 "available_industries": [{"id": "涂料", "name": "涂料/油漆行业"}],
                 "degraded": True,
-                "hint": (str(e) or "error")[:300],
+                "hint": _SYSTEM_UNAVAILABLE,
             },
         }
 
@@ -54,8 +68,9 @@ def system_info_get():
         from app.application.facades.session_facade import get_system_service
 
         return {"success": True, "data": get_system_service().get_system_info()}
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("system info unavailable")
+        return _system_failure()
 
 
 @router.get("/api/system/printer")
@@ -64,8 +79,9 @@ def system_printer_get():
         from app.application.facades.session_facade import get_system_service
 
         return {"success": True, "data": get_system_service().get_printer_config()}
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("system printer config unavailable")
+        return _system_failure()
 
 
 @router.post("/api/system/printer")
@@ -85,8 +101,9 @@ def system_startup_get():
         from app.application.facades.session_facade import get_system_service
 
         return {"success": True, "data": get_system_service().get_startup_config()}
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("system startup config unavailable")
+        return _system_failure()
 
 
 @router.post("/api/system/startup")
@@ -117,8 +134,9 @@ def database_backups_list():
         from app.application.facades.session_facade import get_database_service
 
         return get_database_service().list_backups()
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("database backup list unavailable")
+        return _system_failure()
 
 
 @router.delete("/api/database/backup/{backup_file:path}")
@@ -159,7 +177,7 @@ def performance_status():
     import time as _time
 
     try:
-        from app.utils.performance_initializer import get_performance_optimizer
+        from app.utils.performance.performance_initializer import get_performance_optimizer
 
         optimizer = get_performance_optimizer()
         if not optimizer._initialized:
@@ -168,8 +186,9 @@ def performance_status():
                 status_code=503,
             )
         return {"success": True, "data": optimizer.get_status(), "timestamp": _time.time()}
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": str(e), "data": None}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("performance status unavailable")
+        return _system_failure(data=None)
 
 
 @router.get("/api/performance/health")
@@ -177,7 +196,7 @@ def performance_health():
     import time as _time
 
     try:
-        from app.utils.performance_initializer import get_performance_optimizer
+        from app.utils.performance.performance_initializer import get_performance_optimizer
 
         optimizer = get_performance_optimizer()
         health = optimizer.get_health_check()
@@ -194,9 +213,10 @@ def performance_health():
         if "issues" in health:
             resp["issues"] = health["issues"]
         return JSONResponse(resp, status_code=code)
-    except RECOVERABLE_ERRORS as e:
+    except RECOVERABLE_ERRORS:
+        logger.exception("performance health unavailable")
         return JSONResponse(
-            {"status": "unhealthy", "error": str(e), "timestamp": _time.time()},
+            {"status": "unhealthy", "error": _SYSTEM_UNAVAILABLE, "timestamp": _time.time()},
             status_code=500,
         )
 
@@ -205,7 +225,7 @@ def performance_health():
 def performance_metrics_summary(minutes: int = Query(default=5)):
     try:
         minutes = max(1, min(minutes, 60))
-        from app.utils.performance_initializer import get_performance_optimizer
+        from app.utils.performance.performance_initializer import get_performance_optimizer
 
         optimizer = get_performance_optimizer()
         if not optimizer.performance_monitor:
@@ -215,14 +235,15 @@ def performance_metrics_summary(minutes: int = Query(default=5)):
             )
         summary = optimizer.performance_monitor.get_metrics_summary(minutes=minutes)
         return {"success": True, "data": summary}
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": str(e), "data": None}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("performance metrics summary unavailable")
+        return _system_failure(data=None)
 
 
 @router.get("/api/performance/metrics/prometheus")
 def performance_metrics_prometheus():
     try:
-        from app.utils.performance_initializer import get_performance_optimizer
+        from app.utils.performance.performance_initializer import get_performance_optimizer
 
         optimizer = get_performance_optimizer()
         if not optimizer.performance_monitor:
@@ -231,14 +252,15 @@ def performance_metrics_prometheus():
             optimizer.performance_monitor.get_prometheus_metrics(),
             media_type="text/plain; version=0.0.4; charset=utf-8",
         )
-    except RECOVERABLE_ERRORS as e:
-        return PlainTextResponse(f"# Error: {str(e)}\n", status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("prometheus metrics unavailable")
+        return PlainTextResponse("# Metrics unavailable\n", status_code=500)
 
 
 @router.get("/api/performance/cache/stats")
 def performance_cache_stats():
     try:
-        from app.utils.performance_initializer import get_performance_optimizer
+        from app.utils.performance.performance_initializer import get_performance_optimizer
 
         optimizer = get_performance_optimizer()
         if not optimizer.redis_cache:
@@ -247,8 +269,9 @@ def performance_cache_stats():
                 status_code=503,
             )
         return {"success": True, "data": optimizer.redis_cache.stats}
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": str(e), "data": None}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("performance cache stats unavailable")
+        return _system_failure(data=None)
 
 
 @router.post("/api/performance/cache/clear")
@@ -274,63 +297,14 @@ def performance_cache_invalidate(request: Request, body: dict = Body(default_fac
 
 
 @router.get("/api/performance/tasks/status")
-def performance_tasks_status(task_id: str | None = Query(default=None)):
-    try:
-        from app.utils.performance_initializer import get_performance_optimizer
-
-        optimizer = get_performance_optimizer()
-        if not optimizer.async_task_manager:
-            return JSONResponse(
-                {"success": False, "message": "异步任务管理未启用", "data": None},
-                status_code=503,
-            )
-        if task_id:
-            result = optimizer.async_task_manager.get_status(task_id)
-            if result is None:
-                return JSONResponse(
-                    {"success": False, "message": "任务不存在", "data": None},
-                    status_code=404,
-                )
-            return {
-                "success": True,
-                "data": {
-                    "task_id": result.task_id,
-                    "status": result.status.value,
-                    "progress": result.progress,
-                    "duration_ms": round(result.duration_ms, 2) if result.duration_ms else None,
-                    "error": result.error,
-                    "metadata": result.metadata,
-                },
-            }
-        active_tasks = optimizer.async_task_manager.active_tasks
-        stats = optimizer.async_task_manager.stats
-        return {
-            "success": True,
-            "data": {
-                "active_tasks": (
-                    {
-                        tid: {
-                            "task_id": t.task_id,
-                            "status": t.status.value,
-                            "progress": t.progress,
-                            "name": t.metadata.get("task_name", ""),
-                        }
-                        for tid, t in (active_tasks or {}).items()
-                    }
-                    if active_tasks
-                    else {}
-                ),
-                "stats": stats,
-            },
-        }
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": str(e), "data": None}, status_code=500)
+def performance_tasks_status(task_id: Annotated[str | None, Query()] = None):
+    return performance_tasks_status_payload(task_id)
 
 
 @router.get("/api/performance/alerts")
 def performance_alerts(level: str | None = Query(default=None), limit: int = Query(default=20)):
     try:
-        from app.utils.performance_initializer import get_performance_optimizer
+        from app.utils.performance.performance_initializer import get_performance_optimizer
 
         optimizer = get_performance_optimizer()
         if not optimizer.performance_monitor:
@@ -340,14 +314,15 @@ def performance_alerts(level: str | None = Query(default=None), limit: int = Que
             )
         alerts = optimizer.performance_monitor.get_alerts(level=level, limit=limit)
         return {"success": True, "data": alerts, "count": len(alerts)}
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": str(e), "data": []}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("performance alerts unavailable")
+        return _system_failure(data=[])
 
 
 @router.get("/api/performance/slow-queries")
 def performance_slow_queries(limit: int = Query(default=20)):
     try:
-        from app.utils.performance_initializer import get_performance_optimizer
+        from app.utils.performance.performance_initializer import get_performance_optimizer
 
         optimizer = get_performance_optimizer()
         if not optimizer.query_optimizer:
@@ -357,8 +332,9 @@ def performance_slow_queries(limit: int = Query(default=20)):
             )
         slow = optimizer.query_optimizer.get_slow_queries(limit=limit)
         return {"success": True, "data": slow, "count": len(slow)}
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": str(e), "data": []}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("slow query diagnostics unavailable")
+        return _system_failure(data=[])
 
 
 @router.post("/api/performance/optimize/reinitialize")
@@ -488,8 +464,9 @@ def skills_list():
 
         registry = get_skill_registry()
         return {"success": True, "skills": registry.list_all()}
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("skill registry unavailable")
+        return _system_failure()
 
 
 @router.get("/api/skills/info/{skill_id}")
@@ -511,243 +488,12 @@ def skills_info(skill_id: str):
                 },
             }
         return JSONResponse({"success": False, "message": "技能不存在"}, status_code=404)
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
-
-
-async def _run_templates_analyze_agent(
-    *,
-    request: Request,
-    file: UploadFile,
-    template_name: str,
-    template_scope: str,
-) -> tuple[dict[str, Any], int]:
-    from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.workflow.types import PlanGraph, WorkflowNode
-    from app.utils.upload_helpers import save_upload_file
-
-    saved_path = await save_upload_file(file, subdir="template-analysis")
-    node_id = "template_extract_analyze"
-    params = {
-        "file_path": saved_path,
-        "template_name": str(template_name or ""),
-        "template_scope": str(template_scope or ""),
-    }
-    plan = PlanGraph(
-        plan_id="templates_analyze",
-        intent="templates_analyze",
-        todo_steps=["通过 AgentOrchestrator 分析上传模板文件"],
-        nodes=[
-            WorkflowNode(
-                node_id=node_id,
-                tool_id="template_extract",
-                action="extract",
-                params=params,
-                risk="low",
-                idempotent=True,
-                description="Analyze uploaded template structure through the unified Agent runtime.",
-            )
-        ],
-        risk_level="low",
-        metadata={
-            "source": "templates_analyze_route",
-            "route": "/api/templates/analyze",
-            "artifacts": [
-                {
-                    "artifact_type": "excel_file",
-                    "name": file.filename or "upload.bin",
-                    "source": "templates_analyze_route",
-                    "uri": saved_path,
-                    "summary": "上传的模板分析源文件",
-                    "fields": [
-                        {"name": "template_name", "value": template_name},
-                        {"name": "template_scope", "value": template_scope},
-                    ],
-                }
-            ],
-        },
-    )
-    user_id = _user_id_from_tool_request(request, {"params": params})
-    run = AgentOrchestrator().start_run_from_plan(
-        user_id=user_id,
-        message=f"Analyze template: {file.filename or saved_path}",
-        plan=plan,
-        runtime_context={
-            "source": "templates_analyze_route",
-            "route": "/api/templates/analyze",
-            "request_path": str(request.url.path),
-            "user_id": user_id,
-            "file_path": saved_path,
-            "template_name": template_name,
-            "template_scope": template_scope,
-        },
-    )
-    payload = _tool_route_agent_payload(run, node_id)
-    if run.status in {"waiting_user", "blocked"}:
-        return payload, 202
-    return payload, 200 if payload.get("success") else 400
-
-
-def _run_system_maintenance_agent(
-    *,
-    request: Request,
-    action: str,
-    params: dict[str, Any],
-    route_path: str,
-) -> tuple[dict[str, Any], int]:
-    from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.workflow.types import PlanGraph, WorkflowNode
-    from app.application.workflow_registry_app import get_workflow_tool_registry
-
-    data = dict(params or {})
-    registry = get_workflow_tool_registry()
-    action_meta = dict((registry.get("system_maintenance") or {}).get("actions") or {}).get(action)
-    if not isinstance(action_meta, dict):
-        return {"success": False, "message": f"未注册的系统维护动作: {action}"}, 400
-
-    node_id = f"system_maintenance_{action}"
-    plan = PlanGraph(
-        plan_id=node_id,
-        intent=node_id,
-        todo_steps=[f"通过 AgentOrchestrator 执行 system_maintenance.{action}"],
-        nodes=[
-            WorkflowNode(
-                node_id=node_id,
-                tool_id="system_maintenance",
-                action=action,
-                params=data,
-                risk=str(action_meta.get("risk") or "high"),
-                idempotent=bool(action_meta.get("idempotent", False)),
-                description=f"Execute system_maintenance.{action} through the unified Agent runtime.",
-            )
-        ],
-        risk_level=str(action_meta.get("risk") or "high"),
-        metadata={"source": "system_maintenance_route", "route": route_path},
-    )
-    user_id = _user_id_from_tool_request(request, data)
-    runtime_context = {
-        "source": "system_maintenance_route",
-        "route": route_path,
-        "request_path": str(request.url.path),
-        "user_id": user_id,
-        "route_confirmed": True,
-    }
-    orchestrator = AgentOrchestrator()
-    run = orchestrator.start_run_from_plan(
-        user_id=user_id,
-        message=str(data.get("message") or f"System maintenance {action}"),
-        plan=plan,
-        runtime_context=runtime_context,
-    )
-    if run.status in {"waiting_user", "running"}:
-        continued = orchestrator.continue_run(
-            run.run_id,
-            approved_by=user_id or "system-maintenance-route",
-            approved_step_id=node_id,
-            runtime_context=runtime_context,
-        )
-        if continued is not None:
-            run = continued
-    payload = _tool_route_agent_payload(run, node_id)
-    status_code = int(
-        payload.pop("http_status_code", 0) or (200 if payload.get("success") else 400)
-    )
-    if payload.get("error_code") == "tool_exception":
-        status_code = 500
-    if run.status in {"waiting_user", "blocked"}:
-        status_code = 202
-    return payload, status_code
-
-
-def _run_document_template_agent(
-    *,
-    request: Request,
-    body: dict[str, Any],
-    action: str,
-    route_path: str,
-) -> tuple[dict[str, Any], int]:
-    from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.workflow.types import PlanGraph, WorkflowNode
-    from app.application.workflow_registry_app import get_workflow_tool_registry
-
-    data = dict(body or {})
-    registry = get_workflow_tool_registry()
-    action_meta = dict((registry.get("document_template") or {}).get("actions") or {}).get(action)
-    if not isinstance(action_meta, dict):
-        return {"success": False, "message": f"未注册的模板动作: {action}"}, 400
-    node_id = f"document_template_{action}"
-    plan = PlanGraph(
-        plan_id=f"document_template_{action}",
-        intent=f"document_template_{action}",
-        todo_steps=[f"通过 AgentOrchestrator 执行 document_template.{action}"],
-        nodes=[
-            WorkflowNode(
-                node_id=node_id,
-                tool_id="document_template",
-                action=action,
-                params=data,
-                risk=str(action_meta.get("risk") or "medium"),
-                idempotent=bool(action_meta.get("idempotent", False)),
-                description=f"Execute document_template.{action} through the unified Agent runtime.",
-            )
-        ],
-        risk_level=str(action_meta.get("risk") or "medium"),
-        metadata={"source": "document_template_route", "route": route_path},
-    )
-    user_id = _user_id_from_tool_request(request, data)
-    runtime_context = {
-        "source": "document_template_route",
-        "route": route_path,
-        "request_path": str(request.url.path),
-        "user_id": user_id,
-        "route_confirmed": True,
-    }
-    if action == "delete":
-        template_id = str(data.get("id") or "").strip()
-        if template_id.startswith("fs:") and template_id.split(":", 1)[1].strip():
-            try:
-                runtime_context["template_base_dir"] = get_base_dir()
-            except RECOVERABLE_ERRORS as exc:
-                return {"success": False, "message": f"删除失败：{str(exc)}"}, 500
-    orchestrator = AgentOrchestrator()
-    run = orchestrator.start_run_from_plan(
-        user_id=user_id,
-        message=str(data.get("message") or f"Template {action}"),
-        plan=plan,
-        runtime_context=runtime_context,
-    )
-    if run.status in {"waiting_user", "running"}:
-        continued = orchestrator.continue_run(
-            run.run_id,
-            approved_by=user_id or "document-template-route",
-            approved_step_id=node_id,
-            runtime_context=runtime_context,
-        )
-        if continued is not None:
-            run = continued
-    payload = _tool_route_agent_payload(run, node_id)
-    status_code = int(
-        payload.pop("http_status_code", 0) or (200 if payload.get("success") else 400)
-    )
-    if payload.get("error_code") == "tool_exception":
-        status_code = 500
-    if run.status in {"waiting_user", "blocked"}:
-        status_code = 202
-    return payload, status_code
+    except RECOVERABLE_ERRORS:
+        logger.exception("skill info unavailable")
+        return _system_failure()
 
 
 @router.post("/api/admin/llm/reload")
 async def admin_llm_reload() -> JSONResponse:
     """热切换：清空进程内 LLM Provider 注册表。"""
-    import os
-
-    from app.infrastructure.llm.providers import registry as reg_mod
-
-    reg_mod._registry = None
-    return JSONResponse(
-        {
-            "success": True,
-            "LLM_PROVIDER": (os.environ.get("LLM_PROVIDER") or "").strip(),
-            "LLM_ROUTING_ORDER": (os.environ.get("LLM_ROUTING_ORDER") or "").strip(),
-        }
-    )
+    return JSONResponse(reload_llm_registry_payload())

@@ -6,9 +6,9 @@ import json
 
 import pytest
 
-from vibe_coding.runtime import JsonCodeSkillStore
 from vibe_coding import MockLLM
 from vibe_coding.code_factory import NLCodeSkillFactory
+from vibe_coding.runtime import JsonCodeSkillStore
 from vibe_coding.workflow_factory import NLWorkflowFactory, VibeCodingError
 
 
@@ -22,9 +22,7 @@ def _spec(skill_id: str, fn: str) -> str:
             "purpose": "demo",
             "signature": {"params": ["x"], "return_type": "dict", "required_params": ["x"]},
             "dependencies": [],
-            "test_cases": [
-                {"case_id": "happy", "input_data": {"x": 1}, "expected_output": {"y": 1}}
-            ],
+            "test_cases": [{"case_id": "happy", "input_data": {"x": 1}, "expected_output": {"y": 1}}],
             "quality_gate": {"required_keys": ["y"]},
             "domain_keywords": [],
         }
@@ -32,9 +30,7 @@ def _spec(skill_id: str, fn: str) -> str:
 
 
 def _code(fn: str) -> str:
-    return json.dumps(
-        {"source_code": f"def {fn}(x):\n    \"\"\"Return x under the y key.\"\"\"\n    return {{'y': x}}\n"}
-    )
+    return json.dumps({"source_code": f'def {fn}(x):\n    """Return x under the y key."""\n    return {{\'y\': x}}\n'})
 
 
 def _workflow_payload() -> str:
@@ -84,9 +80,7 @@ def test_workflow_generates_graph_and_skills(tmp_path):
     assert len(report.code_skills_created) == 2
     assert len(report.graph.nodes) == 4
     # Each eskill node has a real skill ref mapped from its temp id
-    assert {n.code_skill_ref for n in report.graph.nodes if n.code_skill_ref} == set(
-        report.code_skills_created
-    )
+    assert {n.code_skill_ref for n in report.graph.nodes if n.code_skill_ref} == set(report.code_skills_created)
 
 
 def test_workflow_passes_project_analysis_to_workflow_and_skill_prompts(tmp_path):

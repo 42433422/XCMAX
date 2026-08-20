@@ -9,11 +9,11 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
 from app.fastapi_routes.mobile_api import get_mobile_user
-from app.utils.mobile_api import format_mobile_response
+from app.utils.device_system.mobile_api import format_mobile_response
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router: APIRouter = APIRouter()
 
 # ── 会话状态管理（非群聊的个人 AI 会话） ──
 

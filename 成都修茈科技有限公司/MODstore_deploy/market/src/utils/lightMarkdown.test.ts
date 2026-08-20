@@ -90,21 +90,23 @@ describe('lightMarkdown.renderMarkdown', () => {
   it('renders safe URLs, titles, images, centered tables, block math, hr, and empty inputs', () => {
     expect(renderMarkdown(null as unknown as string)).toBe('')
 
-    const html = renderMarkdown([
-      '[站点](https://example.com "标题")',
-      '![图](data:image/png;base64,abc "图标题")',
-      '自动链接 https://example.com/path',
-      '',
-      '\\[ a + b \\]',
-      '',
-      '| A | B |',
-      '| :---: | ---: |',
-      '| x | y |',
-      '',
-      '---',
-      '',
-      '[bad](data:text/html,1) [vb](vbscript:msgbox(1)) ![bad](data:text/html,1)',
-    ].join('\n'))
+    const html = renderMarkdown(
+      [
+        '[站点](https://example.com "标题")',
+        '![图](data:image/png;base64,abc "图标题")',
+        '自动链接 https://example.com/path',
+        '',
+        '\\[ a + b \\]',
+        '',
+        '| A | B |',
+        '| :---: | ---: |',
+        '| x | y |',
+        '',
+        '---',
+        '',
+        '[bad](data:text/html,1) [vb](vbscript:msgbox(1)) ![bad](data:text/html,1)',
+      ].join('\n'),
+    )
 
     expect(html).toContain('title="标题"')
     expect(html).toContain('title="图标题"')

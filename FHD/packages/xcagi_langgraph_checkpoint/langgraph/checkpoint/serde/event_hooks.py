@@ -7,6 +7,8 @@ from typing import TypedDict
 
 from typing_extensions import NotRequired
 
+from langgraph.checkpoint._exception_policy import BOUNDARY_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -48,5 +50,5 @@ def emit_serde_event(event: SerdeEvent) -> None:
     for listener in listeners:
         try:
             listener(event)
-        except Exception:
+        except BOUNDARY_ERRORS:
             logger.warning("Serde listener failed", exc_info=True)

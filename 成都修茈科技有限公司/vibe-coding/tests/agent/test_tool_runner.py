@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 import shutil
-import sys
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from vibe_coding.agent.sandbox import SandboxJob, SandboxPolicy, SubprocessSandboxDriver
-from vibe_coding.agent.tools import RuffAdapter, MypyAdapter, PytestAdapter, ToolRunner
-from vibe_coding.agent.tools.runner import ToolReport, ToolAdapter
-
+from vibe_coding.agent.sandbox import SandboxPolicy, SubprocessSandboxDriver
+from vibe_coding.agent.tools import PytestAdapter, RuffAdapter, ToolRunner
+from vibe_coding.agent.tools.runner import ToolAdapter, ToolReport
 
 # ------------------------------------------------------------------ stubs
 
@@ -104,9 +102,7 @@ def test_adapter_protocol_satisfied() -> None:
 
 @pytest.mark.skipif(shutil.which("ruff") is None, reason="ruff not installed")
 def test_ruff_on_clean_project(tmp_path: Path) -> None:
-    (tmp_path / "good.py").write_text(
-        "def foo() -> int:\n    return 1\n", encoding="utf-8"
-    )
+    (tmp_path / "good.py").write_text("def foo() -> int:\n    return 1\n", encoding="utf-8")
     adapter = RuffAdapter(format_check=False)
     drv = SubprocessSandboxDriver()
     report = adapter.run(tmp_path, sandbox=drv, policy=SandboxPolicy(timeout_s=30))

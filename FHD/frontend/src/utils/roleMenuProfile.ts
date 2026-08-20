@@ -49,26 +49,18 @@ const ENTERPRISE_BUSINESS_CORE_KEYS = new Set([
   'approval-hub',
 ])
 
-export function buildRoleMenuProfile(
-  source: AccountRoleSource,
-  hasIndustryBusinessMod = false,
-): RoleMenuProfile {
-  const isAdmin =
-    source.isAdminAccount === true ||
-    (source.accountKind === 'admin' && source.marketIsAdmin === true)
+export function buildRoleMenuProfile(source: AccountRoleSource, hasIndustryBusinessMod = false): RoleMenuProfile {
+  const isAdmin = source.isAdminAccount === true || (source.accountKind === 'admin' && source.marketIsAdmin === true)
   if (isAdmin) {
     return {
       role: 'local-admin',
       canSeeAdminMenus: true,
       canSeeDeveloperMenus: true,
-      visibleCoreKeys: isAdminConsoleSpa()
-        ? new Set(ADMIN_OPERATOR_VISIBLE_CORE_KEYS)
-        : null,
+      visibleCoreKeys: isAdminConsoleSpa() ? new Set(ADMIN_OPERATOR_VISIBLE_CORE_KEYS) : null,
     }
   }
 
-  const isEnterprise =
-    source.accountKind === 'enterprise' || source.marketIsEnterprise === true
+  const isEnterprise = source.accountKind === 'enterprise' || source.marketIsEnterprise === true
   if (!isEnterprise) {
     return {
       role: 'personal-user',

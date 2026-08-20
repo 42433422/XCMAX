@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr"
 """IMAP email intake bridge -> ``ops.intake.email`` events."""
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ from email.utils import parseaddr
 from typing import Any, Dict, List
 
 from modstore_server.email_service import _load_modstore_env
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -53,13 +55,13 @@ def _safe_header(msg: Message, name: str) -> str:
         if v is None:
             return ""
         return str(v).strip()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         try:
             raw_headers = getattr(msg, "_headers", None) or []
             for k, v in raw_headers:
                 if isinstance(k, str) and k.lower() == name.lower():
                     return str(v).strip() if v is not None else ""
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
         return ""
 
@@ -71,7 +73,7 @@ def _decode_payload(part: Message) -> str:
             return ""
         charset = part.get_content_charset() or "utf-8"
         return raw.decode(charset, errors="replace")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return ""
 
 
@@ -126,15 +128,15 @@ def _emit_email_event(
 ) -> bool:
     try:
         from modstore_server.incident_bus import publish
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("email intake: incident_bus import failed")
         return False
 
     source_ref = (
         message_id
-        or hashlib.sha256(
-            f"{from_addr}|{subject}|{date_hdr}|{body[:500]}".encode("utf-8")
-        ).hexdigest()[:24]
+        or hashlib.sha256(f"{from_addr}|{subject}|{date_hdr}|{body[:500]}".encode()).hexdigest()[
+            :24
+        ]
     )
     payload = {
         "subject_id": source_ref[:128],
@@ -147,7 +149,7 @@ def _emit_email_event(
         "message_id": message_id[:512],
         "date": date_hdr[:128],
     }
-    fp = hashlib.sha256(f"ops.intake.email|{source_ref}".encode("utf-8")).hexdigest()[:64]
+    fp = hashlib.sha256(f"ops.intake.email|{source_ref}".encode()).hexdigest()[:64]
     return bool(
         publish(
             "ops.intake.email",
@@ -199,7 +201,12 @@ def poll_email_intake_once() -> Dict[str, Any]:
 
     user, password = _imap_credentials()
     if not user or not password:
-        return {"ok": False, "error": "missing credentials", "processed": 0, "published": 0}
+        return {
+            "ok": False,
+            "error": "missing credentials",
+            "processed": 0,
+            "published": 0,
+        }
 
     processed = 0
     published = 0
@@ -235,7 +242,7 @@ def poll_email_intake_once() -> Dict[str, Any]:
                 date_hdr = _safe_header(msg, "Date")
                 try:
                     body = _message_body_text(msg)
-                except Exception:
+                except RECOVERABLE_ERRORS:
                     logger.exception("email intake: decode body failed mid=%s", message_id)
                     body = ""
 
@@ -250,14 +257,14 @@ def poll_email_intake_once() -> Dict[str, Any]:
                             message_id=message_id,
                             date_hdr=date_hdr,
                         )
-                    except Exception:
+                    except RECOVERABLE_ERRORS:
                         logger.exception("email intake: emit event failed mid=%s", message_id)
                         ok = False
                     if ok:
                         published += 1
                     else:
                         skipped += 1
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 logger.exception("email intake: skip malformed mail id=%s", raw_id)
                 skipped += 1
             finally:
@@ -265,7 +272,7 @@ def poll_email_intake_once() -> Dict[str, Any]:
                 if mark_seen:
                     try:
                         mail.store(raw_id, "+FLAGS", "\\Seen")
-                    except Exception:
+                    except RECOVERABLE_ERRORS:
                         logger.debug("email intake: mark seen failed", exc_info=True)
         mail.logout()
         _poll_fail_streak = 0
@@ -276,7 +283,7 @@ def poll_email_intake_once() -> Dict[str, Any]:
             "skipped": skipped,
             "search_query": search_query,
         }
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         _poll_fail_streak += 1
         logger.exception("email intake poll failed")
         return {

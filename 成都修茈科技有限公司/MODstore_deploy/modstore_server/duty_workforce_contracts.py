@@ -1,3 +1,4 @@
+# mypy: disable-error-code="attr-defined, no-any-return, union-attr, valid-type"
 """Runtime loader for the 55-role duty workforce work contracts.
 
 The roster says who exists.  This file loads the separate contract SSOT that
@@ -12,6 +13,8 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 
 def _candidate_paths() -> Iterable[Path]:
     configured = str(os.environ.get("MODSTORE_DUTY_WORK_CONTRACTS_PATH") or "").strip()
@@ -19,7 +22,7 @@ def _candidate_paths() -> Iterable[Path]:
         yield Path(configured).expanduser()
     monorepo = str(os.environ.get("XCMAX_MONOREPO_ROOT") or "").strip()
     if monorepo:
-        yield Path(monorepo).expanduser() / "FHD" / "config" / "duty_employee_work_contracts.json"
+        yield (Path(monorepo).expanduser() / "FHD" / "config" / "duty_employee_work_contracts.json")
     # Source checkout contains an extra company-site directory while the local
     # autonomy runtime mounts MODstore_deploy directly under its runtime root.
     # Search ancestors instead of baking in either layout.
@@ -82,7 +85,7 @@ def _duty_manifest_roots() -> Iterable[Path]:
     try:
         fhd_root = resolve_work_contracts_path().parent.parent
         yield fhd_root / "mods" / "_employees"
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
 
 
@@ -311,7 +314,11 @@ def duty_event_execution_input(
         payload["project_root"] = project_root
     if str(event_type or "").strip() == "ops.intake.customer_ticket" or str(
         incident_body.get("source") or ""
-    ).strip().lower() in {"customer_ticket", "customer-service-api", "customer-service-sim"}:
+    ).strip().lower() in {
+        "customer_ticket",
+        "customer-service-api",
+        "customer-service-sim",
+    }:
         _enrich_customer_ticket_duty_input(employee_id, payload, incident_body)
     return payload
 

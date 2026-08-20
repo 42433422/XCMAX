@@ -47,9 +47,7 @@ describe('parseByokPaste', () => {
       sk-another-bare-key-bbb
     `)
 
-    expect(result.entries).toEqual([
-      { provider: 'openai', api_key: 'sk-openai', base_url: null },
-    ])
+    expect(result.entries).toEqual([{ provider: 'openai', api_key: 'sk-openai', base_url: null }])
     expect(result.bareKeys).toEqual(['sk-bare-key-aaaaaa', 'sk-another-bare-key-bbb'])
     expect(result.warnings.join('\n')).not.toContain('跳过')
   })

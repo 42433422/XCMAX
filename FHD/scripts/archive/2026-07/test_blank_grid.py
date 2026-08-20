@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# mypy: disable-error-code="arg-type"
 """
 测试空白网格模板 - 验证网格检测逻辑
 """
@@ -40,6 +40,6 @@ image.save(output_path)
 
 print(f"✓ 空白网格模板已生成：{output_path}")
 print(f"  图片尺寸：{width} x {height}")
-print(f"  水平线：5 条（包括上下边框）")
-print(f"  垂直线：4 条（包括左右边框）")
-print(f"  单元格：4 行 x 3 列 = 12 个")
+print("  水平线：5 条（包括上下边框）")
+print("  垂直线：4 条（包括左右边框）")
+print("  单元格：4 行 x 3 列 = 12 个")

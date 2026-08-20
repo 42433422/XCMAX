@@ -4,19 +4,17 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
 from vibe_coding.cli import build_parser, main
 
 
 def test_parser_has_all_subcommands():
     parser = build_parser()
     sub = next(
-        a for a in parser._subparsers._group_actions if hasattr(a, "choices")  # type: ignore[attr-defined]
+        a
+        for a in parser._subparsers._group_actions
+        if hasattr(a, "choices")  # type: ignore[attr-defined]
     )
-    assert {"code", "workflow", "run", "rollback", "report", "history", "list"}.issubset(
-        sub.choices.keys()
-    )
+    assert {"code", "workflow", "run", "rollback", "report", "history", "list"}.issubset(sub.choices.keys())
 
 
 def test_cli_code_with_mock(tmp_path, capsys):

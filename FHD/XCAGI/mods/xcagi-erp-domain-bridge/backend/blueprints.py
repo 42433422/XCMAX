@@ -161,7 +161,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.get("/shipment/download/{filename:path}")
     def mod_shipment_download(filename: str):
-        from app.fastapi_routes.shipment_orders import shipment_download
+        from app.mod_sdk.host_services import shipment_download
 
         return shipment_download(filename)
 
@@ -171,20 +171,20 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.get("/orders/next_number")
     def mod_orders_next_number(suffix: str = Query(default="A")):
-        from app.fastapi_routes.shipment_orders import orders_next_number_under_api
+        from app.mod_sdk.host_services import orders_next_number_under_api
 
         return orders_next_number_under_api(suffix=suffix)
 
     @router.get("/purchase_units")
-    @router.get("/purchase_units/")
+    @router.get("/purchase_units/", include_in_schema=False)
     def mod_purchase_units_list():
-        from app.fastapi_routes.domains.product.compat_routes import purchase_units_list
+        from app.mod_sdk.host_services import purchase_units_list
 
         return purchase_units_list()
 
     @router.get("/purchase_units/by_name/{unit_name:path}")
     def mod_purchase_units_by_name(unit_name: str):
-        from app.fastapi_routes.ai_assistant import compat_purchase_units_by_name
+        from app.mod_sdk.host_services import compat_purchase_units_by_name
 
         return compat_purchase_units_by_name(unit_name)
 

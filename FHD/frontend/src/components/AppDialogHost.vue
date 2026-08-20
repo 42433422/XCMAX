@@ -1,18 +1,7 @@
 <template>
   <Teleport to="body">
-    <div
-      v-if="store.visible"
-      class="app-dialog-host-overlay"
-      role="presentation"
-      @click.self="onOverlayClick"
-    >
-      <div
-        class="app-dialog-host-panel"
-        role="dialog"
-        aria-modal="true"
-        :aria-labelledby="titleId"
-        @keydown.esc.prevent="onEscape"
-      >
+    <div v-if="store.visible" class="app-dialog-host-overlay" role="presentation" @click.self="onOverlayClick">
+      <div class="app-dialog-host-panel" role="dialog" aria-modal="true" :aria-labelledby="titleId" @keydown.esc.prevent="onEscape">
         <h2 :id="titleId" class="app-dialog-host-title">{{ store.title }}</h2>
         <p class="app-dialog-host-message">{{ store.message }}</p>
 
@@ -39,10 +28,7 @@
             </button>
             <button
               type="button"
-              :class="[
-                'app-dialog-host-btn',
-                store.danger ? 'app-dialog-host-btn-danger' : 'app-dialog-host-btn-primary',
-              ]"
+              :class="['app-dialog-host-btn', store.danger ? 'app-dialog-host-btn-danger' : 'app-dialog-host-btn-primary']"
               @click="store.ackConfirm(true)"
             >
               {{ store.confirmText }}
@@ -63,38 +49,38 @@
 </template>
 
 <script setup lang="ts">
-import { watch } from 'vue';
-import { useAppDialogStore } from '@/stores/appDialog';
+import { watch } from 'vue'
+import { useAppDialogStore } from '@/stores/appDialog'
 
-const store = useAppDialogStore();
-const titleId = 'app-dialog-host-title-text';
+const store = useAppDialogStore()
+const titleId = 'app-dialog-host-title-text'
 
 function onOverlayClick() {
   if (store.kind === 'alert') {
-    store.ackAlert();
-    return;
+    store.ackAlert()
+    return
   }
   if (store.kind === 'confirm') {
-    store.ackConfirm(false);
-    return;
+    store.ackConfirm(false)
+    return
   }
-  store.ackPrompt(false);
+  store.ackPrompt(false)
 }
 
 function onEscape() {
   if (store.kind === 'alert') {
-    store.ackAlert();
-    return;
+    store.ackAlert()
+    return
   }
   if (store.kind === 'confirm') {
-    store.ackConfirm(false);
-    return;
+    store.ackConfirm(false)
+    return
   }
-  store.ackPrompt(false);
+  store.ackPrompt(false)
 }
 
 function onPromptEnter() {
-  store.ackPrompt(true);
+  store.ackPrompt(true)
 }
 
 watch(
@@ -102,13 +88,13 @@ watch(
   (v) => {
     if (v && store.kind === 'prompt') {
       requestAnimationFrame(() => {
-        const el = document.querySelector('.app-dialog-host-input') as HTMLInputElement | null;
-        el?.focus();
-        el?.select();
-      });
+        const el = document.querySelector('.app-dialog-host-input') as HTMLInputElement | null
+        el?.focus()
+        el?.select()
+      })
     }
-  }
-);
+  },
+)
 </script>
 
 <style scoped>

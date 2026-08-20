@@ -6,7 +6,7 @@ import logging
 import os
 import shutil
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 from app.mod_sdk.platform_shell import GENERIC_HOST_MOD_IDS, MINIMAL_HOST_MOD_IDS
 from app.mod_sdk.product_skus import (
@@ -36,7 +36,7 @@ def resolve_edition() -> Edition:
     """与 ``platform_shell._resolve_edition`` 一致，供路由与中间件共用。"""
     explicit = (os.environ.get("XCAGI_EDITION") or "").strip().lower()
     if explicit in ("minimal", "generic", "full"):
-        return explicit
+        return cast("Edition", explicit)
     minimal = (os.environ.get("XCAGI_MINIMAL_EDITION") or "").strip().lower() in {
         "1",
         "true",
@@ -154,8 +154,10 @@ def _seed_bundled_employee_packs(bundle: Path, root: Path) -> list[dict[str, str
         try:
             shutil.copytree(source, destination)
             results.append({"mod_id": result_id, "status": "seeded", "message": str(destination)})
-        except OSError as exc:
-            results.append({"mod_id": result_id, "status": "error", "message": str(exc)})
+        except OSError:
+            results.append(
+                {"mod_id": result_id, "status": "error", "message": "employee pack seed failed"}
+            )
     return results
 
 
@@ -226,8 +228,8 @@ def seed_edition_mods_from_bundle(
         try:
             shutil.copytree(src, dst)
             results.append({"mod_id": mod_id, "status": "seeded", "message": str(dst)})
-        except OSError as exc:
-            results.append({"mod_id": mod_id, "status": "error", "message": str(exc)})
+        except OSError:
+            results.append({"mod_id": mod_id, "status": "error", "message": "mod seed failed"})
 
     results.extend(_seed_bundled_employee_packs(bundle, root))
     return results

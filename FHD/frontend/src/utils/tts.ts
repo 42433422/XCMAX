@@ -285,7 +285,6 @@ export function getTtsStatus(): TtsStatus {
   const v = pickBestChineseVoiceSync()
   const neural = hasYunxiOrXiaoxiaoAvailable()
   const offlineReadyNow = isOfflineReady()
-  const anyLocalZh = hasAnyChineseLocalVoice()
   const onlineVid = getOnlineVoiceId()
   let effective: 'system' | 'offline' | 'online'
   if (engineMode === 'online') effective = 'online'
@@ -387,29 +386,6 @@ async function playOnlineTts(text: string): Promise<void> {
       cleanup()
       reject(err)
     })
-  })
-}
-
-async function speakWithBrowserTts(
-  plain: string,
-  options?: { onEnd?: () => void; onError?: (e: unknown) => void },
-): Promise<void> {
-  if (!hasSpeechSynthesis()) {
-    options?.onEnd?.()
-    return
-  }
-  await ensureVoicesLoaded()
-  return new Promise<void>((resolve) => {
-    const u = createChineseUtterance(plain)
-    u.onend = () => {
-      options?.onEnd?.()
-      resolve()
-    }
-    u.onerror = (e) => {
-      options?.onError?.(e)
-      resolve()
-    }
-    window.speechSynthesis.speak(u)
   })
 }
 

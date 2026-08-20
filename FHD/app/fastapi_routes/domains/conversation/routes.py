@@ -56,7 +56,7 @@ def _trace_ai_message_save(payload: dict, *, body: dict) -> dict:
         traced["run_id"] = run.run_id
         traced["agent_run_id"] = run.run_id
         return traced
-    except Exception:  # noqa: BLE001 - tracing must not break legacy message persistence
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - tracing must not break legacy message persistence
         logger.exception("failed to attach AgentRun trace to /api/ai/message/save")
         return payload
 
@@ -79,7 +79,7 @@ def conversations_get(session_id: str, limit: int = Query(default=50)):
         return json_safe({"success": True, "session": session_info, "messages": result})
     except RECOVERABLE_ERRORS as e:
         logger.error("conversations get: %s", e)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+        return JSONResponse({"success": False, "message": "会话列表暂时不可用"}, status_code=500)
 
 
 @router.delete("/api/conversations/{session_id}")
@@ -92,7 +92,7 @@ def conversations_delete(session_id: str):
         return {"success": success}
     except RECOVERABLE_ERRORS as e:
         logger.error("conversations delete: %s", e)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+        return JSONResponse({"success": False, "message": "删除会话失败"}, status_code=500)
 
 
 @router.put("/api/conversations/{session_id}/title")
@@ -112,20 +112,26 @@ def conversations_title_put(session_id: str, body: dict = Body(default_factory=d
 def ai_analyze_export(export_id: str):
     try:
         from app.application.facades.conversation_facade import get_data_analysis_service
-        from app.utils.path_utils import get_upload_dir
+        from app.utils.path_io.path_utils import get_upload_dir
 
+        safe_export_id = "".join(
+            char for char in str(export_id)[:64] if char.isalnum() or char in {"-", "_"}
+        )
+        if not safe_export_id or safe_export_id != export_id:
+            return JSONResponse({"success": False, "message": "导出编号无效"}, status_code=400)
         service = get_data_analysis_service()
-        output_path = os.path.join(get_upload_dir(), f"report_{export_id}.xlsx")
+        output_path = os.path.join(get_upload_dir(), f"report_{safe_export_id}.xlsx")
         success = service.export_to_excel({}, output_path)
         if success and os.path.exists(output_path):
             return FileResponse(
                 output_path,
-                filename=f"分析报告_{export_id[:8]}.xlsx",
+                filename=f"分析报告_{safe_export_id[:8]}.xlsx",
                 media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
         return JSONResponse({"success": False, "message": "导出失败"}, status_code=500)
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("analysis export failed")
+        return JSONResponse({"success": False, "message": "导出失败"}, status_code=500)
 
 
 @router.post("/api/ai/message/save")
@@ -158,6 +164,7 @@ def ai_message_save(body: dict = Body(default_factory=dict)):
     try:
         message_id = service.save_message(session_id, user_id_str, role, content, intent, metadata)
         return _trace_ai_message_save({"success": True, "message_id": message_id}, body=body)
-    except RECOVERABLE_ERRORS as e:
-        traced = _trace_ai_message_save({"success": False, "message": str(e)}, body=body)
+    except RECOVERABLE_ERRORS:
+        logger.exception("conversation message save failed")
+        traced = _trace_ai_message_save({"success": False, "message": "消息保存失败"}, body=body)
         return JSONResponse(traced, status_code=500)

@@ -10,8 +10,6 @@ ContextFacade - 统一上下文门面
 """
 
 import logging
-from dataclasses import dataclass
-from enum import Enum
 from typing import Any
 
 from app.domain.services.conversation.context.chat_context import (
@@ -19,6 +17,13 @@ from app.domain.services.conversation.context.chat_context import (
     ChatTurn,
     get_chat_context,
 )
+from app.domain.services.conversation.context.context_models import (
+    ContextDecision,
+    IntentResult,
+    ProcessingAction,
+    ProcessingResult,
+)
+from app.domain.services.conversation.context.context_questions import ContextQuestionMixin
 from app.domain.services.conversation.context.intent_context import (
     SPECIAL_INTENTS,
     AdoptionReason,
@@ -26,66 +31,11 @@ from app.domain.services.conversation.context.intent_context import (
     PendingIntent,
     get_intent_context,
 )
-from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
 
-class ProcessingAction(Enum):
-    """处理动作枚举"""
-
-    GREETING = "greeting"
-    GOODBYE = "goodbye"
-    HELP = "help"
-    SLOT_FILL = "slot_fill"
-    TOOL_CALL = "tool_call"
-    AI_RESPONSE = "ai_response"
-    NEGATED = "negated"
-    DUPLICATE_RESPONSE = "duplicate_response"
-    INTENT_SWITCH_QUERY = "intent_switch_query"
-
-
-@dataclass
-class IntentResult:
-    """意图识别结果"""
-
-    primary_intent: str | None
-    tool_key: str | None
-    slots: dict[str, Any]
-    is_greeting: bool = False
-    is_goodbye: bool = False
-    is_help: bool = False
-    is_confirmation: bool = False
-    is_negation_intent: bool = False
-    is_negated: bool = False
-    confidence: float = 0.0
-    source: str = "unknown"
-
-
-@dataclass
-class ProcessingResult:
-    """处理结果"""
-
-    action: ProcessingAction
-    text: str
-    data: dict[str, Any]
-    pending_intent: PendingIntent | None = None
-    is_duplicate: bool = False
-    cached_response: str | None = None
-
-
-@dataclass
-class ContextDecision:
-    """上下文决策"""
-
-    should_continue: bool
-    action: ProcessingAction
-    reason: str
-    merged_slots: dict[str, Any] | None = None
-    pending_to_preserve: PendingIntent | None = None
-
-
-class ContextFacade:
+class ContextFacade(ContextQuestionMixin):
     """
     统一上下文门面
 
@@ -220,7 +170,7 @@ class ContextFacade:
             ContextDecision
         """
         pending = self._intent_context.get_pending(user_id)
-        primary_intent = intent_result.primary_intent
+        primary_intent = intent_result.primary_intent or "unknown"
 
         if intent_result.is_confirmation and pending:
             return ContextDecision(
@@ -412,7 +362,7 @@ class ContextFacade:
         self, user_id: str, message: str, intent_result: IntentResult, decision: ContextDecision
     ) -> ProcessingResult:
         """处理槽位填充"""
-        intent = intent_result.primary_intent
+        intent = intent_result.primary_intent or "unknown"
         slots = decision.merged_slots or intent_result.slots
 
         pending = PendingIntent(
@@ -436,7 +386,7 @@ class ContextFacade:
         self, user_id: str, message: str, intent_result: IntentResult, decision: ContextDecision
     ) -> ProcessingResult:
         """处理工具调用"""
-        intent = intent_result.primary_intent
+        intent = intent_result.primary_intent or "unknown"
         slots = decision.merged_slots or intent_result.slots
 
         self._intent_context.clear_pending(user_id)
@@ -460,7 +410,13 @@ class ContextFacade:
     ) -> ProcessingResult:
         """处理意图切换询问"""
         pending = decision.pending_to_preserve
-        new_intent = intent_result.primary_intent
+        new_intent = intent_result.primary_intent or "unknown"
+        if pending is None:
+            return ProcessingResult(
+                action=ProcessingAction.AI_RESPONSE,
+                text="抱歉，待续任务已经失效，请重新描述您的需求。",
+                data={"new_intent": new_intent, "new_slots": intent_result.slots},
+            )
 
         text = (
             f"您之前有一个【{pending.intent}】任务还没完成。\n"
@@ -481,58 +437,6 @@ class ContextFacade:
             },
             pending_intent=pending,
         )
-
-    def _get_missing_slots(self, intent: str, slots: dict[str, Any]) -> list[str]:
-        """获取缺失的槽位"""
-        required = self._get_required_slots(intent)
-        return [s for s in required if not slots.get(s)]
-
-    def _build_followup_question(
-        self, intent: str, missing_slots: list[str], current_slots: dict[str, Any]
-    ) -> str:
-        """生成追问问题"""
-        if not missing_slots:
-            return "请提供更多信息"
-
-        priority_order = ["unit_name", "model_number", "tin_spec", "quantity_tins"]
-
-        for slot in priority_order:
-            if slot in missing_slots:
-                return self._get_slot_question(intent, slot)
-
-        return f"请问{missing_slots[0]}是多少？"
-
-    def _get_slot_question(self, intent: str, slot: str) -> str:
-        """获取槽位追问"""
-        questions = {
-            "shipment_generate": {
-                "unit_name": "请问要发货给哪个客户呢？",
-                "model_number": "编号是多少呢？",
-                "tin_spec": "规格是多少呢？",
-                "quantity_tins": "这次需要多少桶呢？",
-            },
-            "product_query": {
-                "keyword": "请问要搜索什么关键词？",
-            },
-            "customer_query": {
-                "keyword": "请问要搜索什么关键词？",
-            },
-        }
-
-        intent_questions = questions.get(intent, {})
-        return intent_questions.get(slot, f"请问{slot}是多少呢？")
-
-    def _get_action_description(self, intent: str, slots: dict[str, Any]) -> str:
-        """获取动作描述"""
-        descriptions = {
-            "shipment_generate": f"正在为 {slots.get('unit_name', '该客户')} 生成发货单",
-            "products": f"正在查询 {slots.get('keyword', '该产品')} 的产品信息",
-            "customers": "正在查询客户信息",
-            "shipments": "正在查询发货记录",
-            "print_label": "正在处理标签打印",
-            "wechat_send": "正在发送微信消息",
-        }
-        return descriptions.get(intent, f"正在处理 {intent}")
 
     def update_pending_with_slots(
         self, user_id: str, new_slots: dict[str, Any]
@@ -557,27 +461,6 @@ class ContextFacade:
             "pending": self._intent_context.get_pending_summary(user_id),
             "history": self._chat_context.get_history_summary(user_id),
         }
-
-    def _notify_pending_preserved(self, user_id: str, pending: PendingIntent, action: str) -> None:
-        """通知 pending 保留（特殊意图时）"""
-        try:
-            notifier = self._get_notifier()
-            if notifier and pending:
-                pending_data = pending.to_dict()
-                notifier.notify_pending_preserved(user_id, pending_data, action)
-        except RECOVERABLE_ERRORS as e:
-            logger.warning("[CONTEXT_FACADE] Failed to notify preserved: %s", e)
-
-    def _get_notifier(self):
-        """懒加载获取通知器"""
-        if not hasattr(self, "_notifier"):
-            try:
-                from app.contexts.context_notifier import get_context_notifier
-
-                self._notifier = get_context_notifier()
-            except ImportError:
-                self._notifier = None
-        return self._notifier
 
 
 class ContextFacadeContainer:

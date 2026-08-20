@@ -1,3 +1,4 @@
+# mypy: disable-error-code="attr-defined"
 """测试 app.infrastructure.mods.mod_manager 的分支覆盖（第 3 轮）。
 
 覆盖目标（未在 cov2 / cov / ext* 中覆盖的分支）：

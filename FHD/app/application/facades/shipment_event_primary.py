@@ -5,6 +5,7 @@ Read/query methods delegate to the core application service via __getattr__.
 
 from __future__ import annotations
 
+import inspect
 import logging
 import uuid
 from typing import Any, cast
@@ -79,6 +80,12 @@ class ShipmentApplicationServiceEventPrimary:
         except RECOVERABLE_ERRORS as e:
             logger.exception("event-primary shipment command failed: %s", e)
             return {"success": False, "message": str(e)}
+        finally:
+            if (
+                inspect.iscoroutine(coro)
+                and inspect.getcoroutinestate(coro) == inspect.CORO_CREATED
+            ):
+                coro.close()
 
     def create_shipment(
         self,

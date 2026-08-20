@@ -1,4 +1,7 @@
-import json, base64, urllib.request, time
+import base64
+import json
+import time
+import urllib.request
 
 # 清除缓存影响 - 添加时间戳
 payload = {
@@ -19,7 +22,7 @@ req = urllib.request.Request(
 resp = urllib.request.urlopen(req)
 result = json.loads(resp.read())
 
-print(f"Response voice: {result.get('data',{}).get('voice')}")
+print(f"Response voice: {result.get('data', {}).get('voice')}")
 audio_b64 = result.get("data", {}).get("audio_base64", "")
 print(f"Audio b64 length: {len(audio_b64)}")
 

@@ -9,7 +9,7 @@ class Product:
     """产品实体"""
 
     id: int | None = None
-    model_number: ModelNumber = None
+    model_number: ModelNumber | None = None
     name: str = ""
     specification: str = ""
     price: Money = field(default_factory=Money.zero)

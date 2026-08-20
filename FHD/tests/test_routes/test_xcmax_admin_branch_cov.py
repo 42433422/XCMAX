@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """Branch-coverage tests for app.fastapi_routes.xcmax_admin (round 2).
 
 Targets the remaining missing branches identified by coverage analysis:
@@ -735,11 +736,12 @@ class TestAdminActivateEnterpriseImpersonation:
                 return_value="ent-sid",
             ),
         ):
+            client.cookies.set("session_id", "cookie-sid")
             resp = client.post(
                 "/api/xcmax/admin/impersonate/activate-enterprise",
                 json={"bridge_token": "valid"},
-                cookies={"session_id": "cookie-sid"},
             )
+            client.cookies.delete("session_id")
         assert resp.status_code == 200
 
 

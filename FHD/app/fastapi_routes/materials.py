@@ -12,6 +12,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.application import get_material_application_service
+from app.application.workflow.types import normalize_workflow_risk
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -34,8 +35,8 @@ def _agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
                 break
     if not output:
         output = {"success": getattr(run, "status", "") == "completed"}
-    if not output.get("success") and getattr(run, "error", "") and not output.get("message"):
-        output["message"] = getattr(run, "error", "")
+    if not output.get("success") and getattr(run, "error", False) and not output.get("message"):
+        output["message"] = getattr(run, "error", False)
     run_id = str(getattr(run, "run_id", "") or "")
     if run_id:
         output["run_id"] = run_id
@@ -86,12 +87,12 @@ def _run_materials_agent(
                 tool_id="materials",
                 action=action,
                 params=dict(params or {}),
-                risk=str(action_meta.get("risk") or "medium"),
+                risk=normalize_workflow_risk(str(action_meta.get("risk") or "medium")),
                 idempotent=bool(action_meta.get("idempotent", False)),
                 description=f"Execute materials.{action} through the unified Agent runtime.",
             )
         ],
-        risk_level=str(action_meta.get("risk") or "medium"),
+        risk_level=normalize_workflow_risk(str(action_meta.get("risk") or "medium")),
         metadata={"source": "materials_route", "route": route_path},
     )
     runtime_context = {
@@ -161,9 +162,9 @@ def add_material(request: Request, data: dict[str, Any] = Body(default_factory=d
         if result.get("error_code") == "tool_exception":
             status = 500
         return JSONResponse(jsonable_encoder(result), status_code=status)
-    except RECOVERABLE_ERRORS as e:
-        logger.error("添加原材料失败：%s", e)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("添加原材料失败")
+        return JSONResponse({"success": False, "message": "原材料服务暂时不可用"}, status_code=500)
 
 
 @router.get("/api/materials")
@@ -185,9 +186,9 @@ def get_materials(
         if result.get("success") and "count" not in result:
             result["count"] = len(result.get("data") or [])
         return JSONResponse(jsonable_encoder(result), status_code=200)
-    except RECOVERABLE_ERRORS as e:
-        logger.error("获取原材料列表失败：%s", e)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("获取原材料列表失败")
+        return JSONResponse({"success": False, "message": "原材料服务暂时不可用"}, status_code=500)
 
 
 @router.put("/api/materials/{material_id}")
@@ -219,9 +220,9 @@ def update_material(
             jsonable_encoder(result),
             status_code=200,
         )
-    except RECOVERABLE_ERRORS as e:
-        logger.error("更新原材料失败：%s", e)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("更新原材料失败")
+        return JSONResponse({"success": False, "message": "原材料服务暂时不可用"}, status_code=500)
 
 
 @router.delete("/api/materials/{material_id}")
@@ -238,9 +239,9 @@ def delete_material(request: Request, material_id: int):
             return JSONResponse(jsonable_encoder(result), status_code=status)
         result["message"] = result.get("message") or "删除成功"
         return JSONResponse(jsonable_encoder(result), status_code=200)
-    except RECOVERABLE_ERRORS as e:
-        logger.error("删除原材料失败：%s", e)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("删除原材料失败")
+        return JSONResponse({"success": False, "message": "原材料服务暂时不可用"}, status_code=500)
 
 
 @router.post("/api/materials/batch-delete")
@@ -296,9 +297,9 @@ def get_low_stock_materials(threshold: float | None = Query(default=None)):
     try:
         result = _svc().get_low_stock_materials(threshold=threshold)
         return JSONResponse(jsonable_encoder(result), status_code=200)
-    except RECOVERABLE_ERRORS as e:
-        logger.error("获取低库存原材料失败：%s", e)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("获取低库存原材料失败")
+        return JSONResponse({"success": False, "message": "原材料服务暂时不可用"}, status_code=500)
 
 
 @router.get("/api/materials/export")
@@ -319,6 +320,8 @@ def export_materials(
                 media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
         return JSONResponse({"success": False, "message": "导出文件不存在"}, status_code=500)
-    except RECOVERABLE_ERRORS as e:
-        logger.error("导出原材料失败：%s", e)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("导出原材料失败")
+        return JSONResponse(
+            {"success": False, "message": "原材料导出服务暂时不可用"}, status_code=500
+        )

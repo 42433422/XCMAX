@@ -7,6 +7,8 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from app.mod_sdk.errors import RECOVERABLE_ERRORS
+
 _CATEGORY_DIRS = ("figures", "photos", "diagrams", "icons", "uncategorized")
 
 
@@ -126,7 +128,7 @@ async def _vlm_describe_image(
         res = await asyncio.wait_for(
             call_llm(messages, max_tokens=600, temperature=0.1), timeout=90.0
         )
-    except Exception:  # noqa: BLE001 - employee LLM adapters expose provider-specific errors
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - employee LLM adapters expose provider-specific errors
         return None
     if not isinstance(res, dict) or not res.get("ok"):
         return None

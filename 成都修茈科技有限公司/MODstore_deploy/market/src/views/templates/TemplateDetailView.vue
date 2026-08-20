@@ -57,8 +57,9 @@ async function load() {
   errMsg.value = ''
   try {
     detail.value = (await api.templateDetail(templateId.value)) as TemplateDetail
-  } catch (e: any) {
-    errMsg.value = e?.detail || e?.message || '加载失败'
+  } catch (e: unknown) {
+    const detail = typeof e === 'object' && e !== null && 'detail' in e ? (e as { detail?: unknown }).detail : null
+    errMsg.value = typeof detail === 'string' ? detail : e instanceof Error ? e.message : '加载失败'
   } finally {
     loading.value = false
   }
@@ -71,12 +72,13 @@ async function install() {
   if (!confirm('一键安装此模板到你的工作流？将创建一个新的可编辑副本。')) return
   installing.value = true
   try {
-    const r: any = await api.templateInstall(templateId.value)
+    const r = (await api.templateInstall(templateId.value)) as { workflow_id?: number | string }
     if (r?.workflow_id) {
       router.push({ name: 'workflow-v2-editor', params: { id: String(r.workflow_id) } })
     }
-  } catch (e: any) {
-    errMsg.value = e?.detail || e?.message || '安装失败'
+  } catch (e: unknown) {
+    const detail = typeof e === 'object' && e !== null && 'detail' in e ? (e as { detail?: unknown }).detail : null
+    errMsg.value = typeof detail === 'string' ? detail : e instanceof Error ? e.message : '安装失败'
   } finally {
     installing.value = false
   }
@@ -101,9 +103,7 @@ function nodeKindLabel(kind: string): string {
 <template>
   <main class="td">
     <header class="td__crumbs">
-      <button class="td__crumb" type="button" @click="router.push({ name: 'templates' })">
-        ← 返回模板市场
-      </button>
+      <button class="td__crumb" type="button" @click="router.push({ name: 'templates' })">← 返回模板市场</button>
     </header>
 
     <div v-if="loading" class="td__placeholder">加载中…</div>
@@ -121,7 +121,9 @@ function nodeKindLabel(kind: string): string {
         <h1 class="td__name">{{ detail.name }}</h1>
         <p class="td__desc">{{ detail.description || '该模板暂无描述' }}</p>
         <div class="td__metrics">
-          <span><strong>{{ detail.install_count }}</strong> 次安装</span>
+          <span
+            ><strong>{{ detail.install_count }}</strong> 次安装</span
+          >
           <span :class="{ 'td__metric--paid': detail.price > 0 }">
             {{ detail.price > 0 ? `¥ ${detail.price.toFixed(2)}` : '免费' }}
           </span>
@@ -156,7 +158,9 @@ function nodeKindLabel(kind: string): string {
       <section class="td__section">
         <h2>安装后会发生什么</h2>
         <ul class="td__steps">
-          <li>1. 在你的工作流列表创建一个名为 "<strong>{{ detail.name }} (来自模板)</strong>" 的副本</li>
+          <li>
+            1. 在你的工作流列表创建一个名为 "<strong>{{ detail.name }} (来自模板)</strong>" 的副本
+          </li>
           <li>2. 自动跳转到 v2 可视化编辑器，节点位置和连线已就位</li>
           <li>3. 你可以替换 AI 员工 / 修改判断表达式 / 配置 webhook，无需从零搭起</li>
         </ul>

@@ -10,29 +10,24 @@ from __future__ import annotations
 import logging
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 from app.db.models import ChartOfAccount, JournalEntry, JournalEntryLine
 from app.db.session import get_db
+from app.services.accounting_values import (
+    AGING_BUCKETS as _AGING_BUCKETS,
+)
+from app.services.accounting_values import (
+    DEFAULT_CHART_OF_ACCOUNTS,
+)
+from app.services.accounting_values import (
+    to_decimal as _to_decimal,
+)
+from app.services.accounting_values import (
+    to_float as _to_float,
+)
 
 logger = logging.getLogger(__name__)
-
-
-def _to_float(value: Any) -> float:
-    if value is None:
-        return 0.0
-    if isinstance(value, Decimal):
-        return float(value)
-    return float(value)
-
-
-def _to_decimal(value: Any) -> Decimal:
-    """转成 ``Decimal`` 用于记账金额，避免二进制浮点误差与 float 转换。"""
-    if value is None:
-        return Decimal("0")
-    if isinstance(value, Decimal):
-        return value
-    return Decimal(str(value))
 
 
 def query_financial_ledger(
@@ -208,11 +203,17 @@ def _create_journal_entry(data: dict[str, Any], db: Any) -> dict[str, Any]:
 
 
 def _find_account(db: Any, account_id: int) -> ChartOfAccount | None:
-    return db.query(ChartOfAccount).filter(ChartOfAccount.id == int(account_id)).first()
+    return cast(
+        "ChartOfAccount | None",
+        db.query(ChartOfAccount).filter(ChartOfAccount.id == int(account_id)).first(),
+    )
 
 
 def _find_account_by_code(db: Any, code: str) -> ChartOfAccount | None:
-    return db.query(ChartOfAccount).filter(ChartOfAccount.code == str(code)).first()
+    return cast(
+        "ChartOfAccount | None",
+        db.query(ChartOfAccount).filter(ChartOfAccount.code == str(code)).first(),
+    )
 
 
 def get_chart_of_accounts() -> dict[str, Any]:
@@ -230,19 +231,6 @@ def get_chart_of_accounts() -> dict[str, Any]:
 def _generate_entry_no() -> str:
     # 含微秒前缀，避免同秒内多张凭证 entry_no 冲突（entry_no 唯一约束）
     return f"JE{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
-
-
-# 默认会计科目清单（Odoo account 吸收，code 唯一）
-DEFAULT_CHART_OF_ACCOUNTS: list[dict[str, Any]] = [
-    {"code": "1401", "name": "库存商品", "type": "asset", "debit_credit": "debit"},
-    {"code": "2201", "name": "应付账款", "type": "liability", "debit_credit": "credit"},
-    {"code": "1122", "name": "应收账款", "type": "asset", "debit_credit": "debit"},
-    {"code": "1001", "name": "库存现金", "type": "asset", "debit_credit": "debit"},
-    {"code": "6001", "name": "主营业务收入", "type": "revenue", "debit_credit": "credit"},
-    {"code": "5001", "name": "主营业务成本", "type": "expense", "debit_credit": "debit"},
-    {"code": "1405", "name": "原材料", "type": "asset", "debit_credit": "debit"},
-    {"code": "2211", "name": "应付职工薪酬", "type": "liability", "debit_credit": "credit"},
-]
 
 
 def seed_default_chart_of_accounts() -> dict[str, Any]:
@@ -316,15 +304,6 @@ def journal_entry_reverse(entry_id: int, *, description: str | None = None) -> d
             "message": f"冲销凭证已生成: {new_entry.entry_no}",
             "data": new_entry.to_dict(),
         }
-
-
-# 账龄桶定义（天数区间）
-_AGING_BUCKETS: list[tuple[str, int, int]] = [
-    ("0-30", 0, 30),
-    ("31-60", 31, 60),
-    ("61-90", 61, 90),
-    ("90+", 91, 10**9),
-]
 
 
 def aging_report(party_type: str, party_id: int, as_of_date: date | None = None) -> dict[str, Any]:

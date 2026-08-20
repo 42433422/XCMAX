@@ -6,59 +6,13 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-TXT_DOC_KEYWORDS = (
-    ".txt",
-    "txt",
-    "纯文本",
-    "文本文件",
-    "text file",
-    "plain text",
-)
-TXT_READ_ACTION_KEYWORDS = (
-    "读取",
-    "读出",
-    "全量",
-    "读入",
-    "read",
-    "load",
-    "提取",
-    "解析",
-)
-TXT_GENERATE_ACTION_KEYWORDS = (
-    "生成",
-    "写入",
-    "写文档",
-    "写 txt",
-    "写txt",
-    "输出",
-    "改写",
-    "润色",
-    "write",
-    "generate",
-    "json",
-    "结构化",
-)
-TXT_GENERATE_EXCLUDE = (
-    "仅读取",
-    "只读",
-    "原样",
-    "不要生成",
-    "read only",
-)
-
-TXT_READ_OUTPUT_FIELDS = (
-    "plain_text",
-    "encoding",
-    "line_count",
-    "char_count",
-    "source",
-)
-TXT_GENERATE_OUTPUT_FIELDS = (
-    "lines",
-    "paragraphs",
-    "plain_text",
-    "stats",
-    "metadata",
+from modstore_server.txt_extract_contract import (
+    TXT_DOC_KEYWORDS,
+    TXT_GENERATE_ACTION_KEYWORDS,
+    TXT_GENERATE_EXCLUDE,
+    TXT_GENERATE_OUTPUT_FIELDS,
+    TXT_READ_ACTION_KEYWORDS,
+    TXT_READ_OUTPUT_FIELDS,
 )
 
 
@@ -361,7 +315,9 @@ def convert_file(
 
 def validate_txt_read_backend(pack_dir: Path) -> Tuple[List[str], List[str]]:
     return _validate_txt_backend(
-        pack_dir, runtime_kind="txt_full_read", required_tokens=("document_full", ".txt")
+        pack_dir,
+        runtime_kind="txt_full_read",
+        required_tokens=("document_full", ".txt"),
     )
 
 
@@ -401,7 +357,9 @@ def _validate_txt_backend(
     handlers: List[str] = []
     if mf_path.is_file():
         try:
-            from modstore_server.employee_asset_pipeline import manifest_actions_handlers
+            from modstore_server.employee_asset_pipeline import (
+                manifest_actions_handlers,
+            )
 
             mf = json.loads(mf_path.read_text(encoding="utf-8"))
             handlers = manifest_actions_handlers(mf)
@@ -454,7 +412,7 @@ def txt_read_orchestration_plan(brief: str, payload: Dict[str, Any]) -> Dict[str
     return {
         "employee_name": short,
         "employee_brief": (
-            f"{merged or clean}\n\n" "员工必须使用 direct_python 真实读取 txt，禁止 LLM 编造正文。"
+            f"{merged or clean}\n\n员工必须使用 direct_python 真实读取 txt，禁止 LLM 编造正文。"
         ),
         "script_workflow_name": f"{short} 脚本工作流",
         "script_brief": script_brief,

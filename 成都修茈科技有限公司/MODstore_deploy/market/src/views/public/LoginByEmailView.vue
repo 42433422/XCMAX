@@ -57,7 +57,11 @@ const codeSent = ref(false)
 const countdown = ref(0)
 const authStore = useAuthStore()
 
-let timer = null
+let timer: ReturnType<typeof setInterval> | null = null
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error || '请求失败')
+}
 
 onMounted(() => {
   const storedEmail = sessionStorage.getItem('login_email')
@@ -69,7 +73,7 @@ function startCountdown() {
   if (timer) clearInterval(timer)
   timer = setInterval(() => {
     countdown.value--
-    if (countdown.value <= 0) clearInterval(timer)
+    if (countdown.value <= 0 && timer !== null) clearInterval(timer)
   }, 1000)
 }
 
@@ -82,8 +86,8 @@ async function sendCode() {
     sent.value = true
     sessionStorage.setItem('login_email', email.value)
     startCountdown()
-  } catch (e) {
-    err.value = e.message
+  } catch (e: unknown) {
+    err.value = errorMessage(e)
   } finally {
     loading.value = false
   }
@@ -101,8 +105,8 @@ async function doLogin() {
     await authStore.loginWithCode(email.value, code.value)
     const dest = pickRedirectFromRoute(route)
     await router.replace(dest)
-  } catch (e) {
-    err.value = e.message
+  } catch (e: unknown) {
+    err.value = errorMessage(e)
   } finally {
     loading.value = false
   }

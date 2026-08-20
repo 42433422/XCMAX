@@ -2,7 +2,10 @@
   <div v-if="visible" class="enterprise-update-bar" role="status">
     <span class="enterprise-update-bar__text">
       update 站有新版本
-      <template v-if="hubVersion">（{{ hubVersion }}<template v-if="hubSha"> · {{ hubSha }}</template>）</template>
+      <template v-if="hubVersion"
+        >（{{ hubVersion }}<template v-if="hubSha"> · {{ hubSha }}</template
+        >）</template
+      >
       ，请在企业端拉取更新。
     </span>
     <button type="button" class="btn btn-primary btn-sm" :disabled="applying" @click="openModal">
@@ -13,9 +16,7 @@
 
   <Modal v-model="modalOpen" title="企业端更新" max-width="520px">
     <div class="enterprise-update-modal">
-      <div class="enterprise-update-pipeline muted">
-        管理端已推送到 update 站 → 本机从此拉取并应用
-      </div>
+      <div class="enterprise-update-pipeline muted">管理端已推送到 update 站 → 本机从此拉取并应用</div>
       <table v-if="checkData" class="enterprise-update-table">
         <tbody>
           <tr>
@@ -37,9 +38,7 @@
       <p v-if="jobError" class="enterprise-update-error">{{ jobError }}</p>
     </div>
     <template #footer>
-      <button type="button" class="btn btn-secondary btn-sm" :disabled="applying" @click="modalOpen = false">
-        关闭
-      </button>
+      <button type="button" class="btn btn-secondary btn-sm" :disabled="applying" @click="modalOpen = false">关闭</button>
       <button type="button" class="btn btn-primary btn-sm" :disabled="applying" @click="runApply">
         {{ applying ? '拉取中…' : '立即更新' }}
       </button>
@@ -48,110 +47,108 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import Modal from '@/components/Modal.vue';
-import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl';
-import {
-  xcmaxDeployApi,
-  type DeployJobData,
-  type EnterpriseDeployCheck,
-} from '@/api/xcmaxDeploy';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import Modal from '@/components/Modal.vue'
+import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
+import { xcmaxDeployApi, type DeployJobData, type EnterpriseDeployCheck } from '@/api/xcmaxDeploy'
 
-const DISMISS_KEY = 'xcagi_enterprise_update_dismiss_sha';
+const DISMISS_KEY = 'xcagi_enterprise_update_dismiss_sha'
 
-const visible = ref(false);
-const modalOpen = ref(false);
-const applying = ref(false);
-const checkData = ref<EnterpriseDeployCheck | null>(null);
-const jobSteps = ref<DeployJobData['steps']>([]);
-const jobError = ref('');
-let pollTimer: number | null = null;
+const visible = ref(false)
+const modalOpen = ref(false)
+const applying = ref(false)
+const checkData = ref<EnterpriseDeployCheck | null>(null)
+const jobSteps = ref<DeployJobData['steps']>([])
+const jobError = ref('')
+let pollTimer: number | null = null
 
-const hubVersion = computed(() => checkData.value?.update_hub?.version || '');
-const hubSha = computed(() => checkData.value?.update_hub?.git_sha || '');
+const hubVersion = computed(() => checkData.value?.update_hub?.version || '')
+const hubSha = computed(() => checkData.value?.update_hub?.git_sha || '')
 
 function stopPoll() {
   if (pollTimer != null) {
-    window.clearInterval(pollTimer);
-    pollTimer = null;
+    window.clearInterval(pollTimer)
+    pollTimer = null
   }
 }
 
 async function refreshCheck() {
-  if (isAdminConsoleSpa()) return;
+  if (isAdminConsoleSpa()) return
   try {
-    const res = (await xcmaxDeployApi.checkEnterpriseUpdates()) as { data?: EnterpriseDeployCheck };
-    checkData.value = res?.data || null;
-    const hubShaVal = res?.data?.update_hub?.sha256 || '';
-    const dismissed = sessionStorage.getItem(DISMISS_KEY) || '';
-    visible.value = Boolean(res?.data?.flags?.needs_update && hubShaVal && hubShaVal !== dismissed);
+    const res = (await xcmaxDeployApi.checkEnterpriseUpdates()) as {
+      data?: EnterpriseDeployCheck
+    }
+    checkData.value = res?.data || null
+    const hubShaVal = res?.data?.update_hub?.sha256 || ''
+    const dismissed = sessionStorage.getItem(DISMISS_KEY) || ''
+    visible.value = Boolean(res?.data?.flags?.needs_update && hubShaVal && hubShaVal !== dismissed)
   } catch {
-    visible.value = false;
+    visible.value = false
   }
 }
 
 function dismiss() {
-  const sha = checkData.value?.update_hub?.sha256 || '';
-  if (sha) sessionStorage.setItem(DISMISS_KEY, sha);
-  visible.value = false;
+  const sha = checkData.value?.update_hub?.sha256 || ''
+  if (sha) sessionStorage.setItem(DISMISS_KEY, sha)
+  visible.value = false
 }
 
 function openModal() {
-  modalOpen.value = true;
-  jobSteps.value = [];
-  jobError.value = '';
+  modalOpen.value = true
+  jobSteps.value = []
+  jobError.value = ''
 }
 
 async function pollJob(jobId: string) {
-  stopPoll();
+  stopPoll()
   pollTimer = window.setInterval(async () => {
     try {
-      const res = (await xcmaxDeployApi.getEnterpriseJob(jobId)) as { data?: DeployJobData };
-      const job = res?.data;
-      if (!job) return;
-      jobSteps.value = job.steps || [];
+      const res = (await xcmaxDeployApi.getEnterpriseJob(jobId)) as { data?: DeployJobData }
+      const job = res?.data
+      if (!job) return
+      jobSteps.value = job.steps || []
       if (job.status === 'done') {
-        applying.value = false;
-        stopPoll();
-        await refreshCheck();
+        applying.value = false
+        stopPoll()
+        await refreshCheck()
       } else if (job.status === 'error') {
-        applying.value = false;
-        jobError.value = job.error || '更新失败';
-        stopPoll();
+        applying.value = false
+        jobError.value = job.error || '更新失败'
+        stopPoll()
       }
     } catch (e) {
-      applying.value = false;
-      jobError.value = e instanceof Error ? e.message : String(e);
-      stopPoll();
+      applying.value = false
+      jobError.value = e instanceof Error ? e.message : String(e)
+      stopPoll()
     }
-  }, 1200);
+  }, 1200)
 }
 
 async function runApply() {
-  applying.value = true;
-  jobError.value = '';
+  applying.value = true
+  jobError.value = ''
   try {
     const res = (await xcmaxDeployApi.applyEnterpriseUpdate()) as {
-      data?: DeployJobData;
-      message?: string;
-    };
-    const jobId = res?.data?.job_id;
-    if (!jobId) throw new Error(res?.message || '未收到任务 ID');
-    jobSteps.value = res.data?.steps || [];
-    await pollJob(jobId);
+      data?: DeployJobData
+      message?: string
+    }
+    const jobId = res?.data?.job_id
+    if (!jobId) throw new Error(res?.message || '未收到任务 ID')
+    jobSteps.value = res.data?.steps || []
+    await pollJob(jobId)
   } catch (e) {
-    applying.value = false;
-    jobError.value = e instanceof Error ? e.message : String(e);
+    applying.value = false
+    jobError.value = e instanceof Error ? e.message : String(e)
   }
 }
 
 onMounted(() => {
-  void refreshCheck();
-});
+  void refreshCheck()
+})
 
 onBeforeUnmount(() => {
-  stopPoll();
-});
+  stopPoll()
+})
 </script>
 
 <style scoped>

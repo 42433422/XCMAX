@@ -1,9 +1,11 @@
-# -*- coding: utf-8 -*-
 """
 复制标签图片到无中文路径
 """
+
 import os
 import shutil
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 # 源文件路径（使用 glob 找到的）
 src_files = [
@@ -21,7 +23,7 @@ for src in src_files:
             shutil.copy2(src, dst_path)
             print(f"✓ 已复制到：{dst_path}")
             break
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 复制失败：{e}")
 else:
     print("❌ 未找到任何源文件")

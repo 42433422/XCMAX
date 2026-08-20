@@ -18,7 +18,7 @@ def acquire_chat_stream_slot() -> bool:
     if max_per <= 0:
         return True
     try:
-        from app.utils.redis_cache import get_redis_cache
+        from app.utils.performance.redis_cache import get_redis_cache
 
         cache = get_redis_cache()
         if cache.is_available:
@@ -35,7 +35,7 @@ def acquire_chat_stream_slot() -> bool:
 
 def release_chat_stream_slot() -> None:
     try:
-        from app.utils.redis_cache import get_redis_cache
+        from app.utils.performance.redis_cache import get_redis_cache
 
         cache = get_redis_cache()
         if cache.is_available:

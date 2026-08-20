@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import re
 from functools import lru_cache
-from typing import Any
+from typing import Any, cast
 
 from app.mod_sdk.duty_roster import (
     all_planned_duty_employee_ids,
@@ -182,7 +182,7 @@ def enterprise_layer_for(
     eid = str(emp_id or "").strip()
     registry = load_enterprise_employees()
     if eid in registry:
-        return registry[eid]["enterprise_layer"]
+        return cast("str", registry[eid]["enterprise_layer"])
     return _infer_layer_by_keyword(f"{eid} {label} {title}")
 
 

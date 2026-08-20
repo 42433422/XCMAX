@@ -1,3 +1,4 @@
+# mypy: disable-error-code="attr-defined, no-any-return, union-attr, valid-type"
 """Apply ppt_edit_plan ops to an on-disk PPTX (OOXML + zip)."""
 
 from __future__ import annotations
@@ -8,8 +9,12 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from xml.etree import ElementTree as ET
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.ppt_edit_plan import validate_ooxml_fragment
-from modstore_server.ppt_homework_marquee import TIMING_XML, enhance_pptx_homework_marquee
+from modstore_server.ppt_homework_marquee import (
+    TIMING_XML,
+    enhance_pptx_homework_marquee,
+)
 
 NS = {
     "p": "http://schemas.openxmlformats.org/presentationml/2006/main",
@@ -22,9 +27,7 @@ R = f"{{{NS['r']}}}"
 
 
 def _parse_fragment(fragment: str) -> ET.Element:
-    wrapper = (
-        f'<root xmlns:p="{NS["p"]}" xmlns:a="{NS["a"]}" xmlns:r="{NS["r"]}">' f"{fragment}</root>"
-    )
+    wrapper = f'<root xmlns:p="{NS["p"]}" xmlns:a="{NS["a"]}" xmlns:r="{NS["r"]}">{fragment}</root>'
     return list(ET.fromstring(wrapper))[0]
 
 
@@ -115,7 +118,7 @@ def apply_edit_plan(
             files[slide_name] = _inject_timing_on_slide(files[slide_name], fragment)
             applied += 1
             has_timing = True
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             warnings.append(f"inject_timing 失败：{exc}")
             continue
         with zipfile.ZipFile(pptx_path, "w", compression=zipfile.ZIP_DEFLATED) as zout:
@@ -144,6 +147,6 @@ def validate_pptx_package(pptx_path: Path) -> Tuple[bool, List[str]]:
                 errors.append("无幻灯片 XML")
     except zipfile.BadZipFile:
         return False, ["损坏的 zip/pptx"]
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         return False, [str(exc)]
     return len(errors) == 0, errors

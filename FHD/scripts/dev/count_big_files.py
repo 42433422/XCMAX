@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="no-any-return"
 """巨型文件棘轮（ratchet）：只减不增地收口 FHD/app 大文件债务。
 
 守护两条基线（配合 architecture/REFACTOR_DECOMPOSITION_PLAN.md）：

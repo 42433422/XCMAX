@@ -1,6 +1,5 @@
-# -*- coding: utf-8 -*-
+# mypy: disable-error-code="import-not-found"
 import sys
-import os
 
 sys.path.insert(0, r"E:\FHD\XCAGI\resources\wechat-decrypt")
 from mcp_server import _decompress_content

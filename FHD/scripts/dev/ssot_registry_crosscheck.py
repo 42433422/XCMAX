@@ -26,9 +26,7 @@ INDEX = ROOT / "docs" / "SSOT_INDEX.md"
 SECTION = "## 机器注册表（ssot.yaml）"
 EXIT_OK, EXIT_DRIFT, EXIT_CONFIG = 0, 1, 2
 
-ROW_RE = re.compile(
-    r"^\|\s*`?([a-z0-9][a-z0-9\-_]*)`?\s*\|\s*`([^`]+)`\s*\|\s*(.+?)\s*\|$"
-)
+ROW_RE = re.compile(r"^\|\s*`?([a-z0-9][a-z0-9\-_]*)`?\s*\|\s*`([^`]+)`\s*\|\s*(.+?)\s*\|$")
 
 
 def load_enabled_domains() -> dict[str, str]:
@@ -112,9 +110,7 @@ def check() -> int:
                 file=sys.stderr,
             )
     if ok:
-        print(
-            f"registry-crosscheck OK：{len(yaml_domains)} 个 enabled 域与机器注册表一致"
-        )
+        print(f"registry-crosscheck OK：{len(yaml_domains)} 个 enabled 域与机器注册表一致")
         return EXIT_OK
     print(
         "修复：同步 FHD/docs/SSOT_INDEX.md「机器注册表（ssot.yaml）」与 FHD/config/ssot.yaml",

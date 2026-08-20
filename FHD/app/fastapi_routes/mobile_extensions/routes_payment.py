@@ -4,17 +4,17 @@ from __future__ import annotations
 
 import importlib
 import logging
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
 from app.fastapi_routes.mobile_api import get_mobile_user
-from app.utils.mobile_api import format_mobile_response
+from app.utils.device_system.mobile_api import format_mobile_response
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router: APIRouter = APIRouter()
 
 
 def _parent():
@@ -22,7 +22,7 @@ def _parent():
 
 
 def _mobile_market_authorization(request: Request, user) -> str:
-    return _parent()._mobile_market_authorization(request, user)
+    return cast("str", _parent()._mobile_market_authorization(request, user))
 
 
 def _mobile_unauthorized_response():
@@ -292,11 +292,8 @@ async def mobile_wallet_balance(request: Request, user=Depends(get_mobile_user))
         )
     wallet_obj: dict[str, Any] = {}
     if isinstance(wallet_payload, dict) and not wallet_payload.get("__proxy_error__"):
-        wallet_obj = (
-            wallet_payload.get("wallet")
-            if isinstance(wallet_payload.get("wallet"), dict)
-            else wallet_payload
-        )
+        raw_wallet = wallet_payload.get("wallet")
+        wallet_obj = raw_wallet if isinstance(raw_wallet, dict) else wallet_payload
     elif isinstance(wallet_payload, dict) and wallet_payload.get("__proxy_error__"):
         logger.warning(
             "mobile_wallet_balance: wallet overview unavailable: %s",

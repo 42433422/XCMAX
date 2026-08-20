@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from typing import Any, cast
 
 _HANDLER_MARK = "xcagi_desktop_rotating_file"
 
@@ -31,7 +32,7 @@ def attach_desktop_file_logging(
         backupCount=backup_count,
         encoding="utf-8",
     )
-    fh._xcagi_handler_mark = _HANDLER_MARK
+    cast("Any", fh)._xcagi_handler_mark = _HANDLER_MARK
     fh.setLevel(logging.DEBUG)
     fmt = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     fh.setFormatter(fmt)

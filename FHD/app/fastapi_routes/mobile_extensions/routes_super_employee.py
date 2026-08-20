@@ -15,11 +15,11 @@ from app.fastapi_routes.mobile_extensions.models import (
     CursorSuperEmployeeMobileMessageBody,
     TraeSuperEmployeeMobileMessageBody,
 )
-from app.utils.mobile_api import format_mobile_response
+from app.utils.device_system.mobile_api import format_mobile_response
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router: APIRouter = APIRouter()
 
 
 def _parent():
@@ -415,7 +415,7 @@ async def _stream_super_employee_invoke(
                 context=context,
             ):
                 yield _parent()._sse_line(event)
-        except Exception as exc:  # noqa: BLE001
+        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
             logger.exception("mobile_super_employee_stream failed: %s", exc)
             yield _parent()._sse_line({"type": "error", "message": "流式调用失败，请稍后重试"})
 

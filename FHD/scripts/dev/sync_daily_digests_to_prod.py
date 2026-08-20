@@ -20,17 +20,14 @@ import sys
 import tempfile
 from pathlib import Path
 
+from app.utils.operational_errors import BOUNDARY_ERRORS
+
 HOST = os.environ.get("XCMAX_REMOTE_HOST", "119.27.178.147")
 USER = os.environ.get("XCMAX_REMOTE_USER", "root")
 SINCE = (os.environ.get("MODSTORE_DIGEST_SYNC_SINCE") or "2026-06-11").strip()
-DEFAULT_DB = (
-    Path.home()
-    / "Library/Application Support/XCMAX/modstore-daily/modstore.db"
-)
+DEFAULT_DB = Path.home() / "Library/Application Support/XCMAX/modstore-daily/modstore.db"
 DB_PATH = Path(
-    os.environ.get("MODSTORE_RUNTIME_DB_PATH")
-    or os.environ.get("MODSTORE_DB_PATH")
-    or DEFAULT_DB
+    os.environ.get("MODSTORE_RUNTIME_DB_PATH") or os.environ.get("MODSTORE_DB_PATH") or DEFAULT_DB
 )
 
 COLUMNS = [
@@ -65,7 +62,7 @@ def _export_rows() -> list[dict]:
     con = sqlite3.connect(str(DB_PATH))
     con.row_factory = sqlite3.Row
     # 每天取最新一条；排除本地校验假日
-    sql = f"""
+    sql = """
     SELECT t.*
     FROM daily_digest_records t
     INNER JOIN (
@@ -186,7 +183,7 @@ def main() -> int:
             data = json.loads(resp.read().decode())
         top = [(r.get("id"), r.get("day")) for r in (data.get("data") or [])[:5]]
         print("[digest-sync] public top:", data.get("total"), top)
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         print("[digest-sync] public verify skipped:", exc)
     return 0
 

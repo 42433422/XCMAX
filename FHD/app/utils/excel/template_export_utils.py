@@ -79,7 +79,10 @@ def fill_workbook_from_template(
     elif wb.sheetnames:
         ws = wb[wb.sheetnames[0]]
     else:
-        ws = wb.active
+        active_ws = wb.active
+        if active_ws is None:
+            raise ValueError("workbook contains no worksheet")
+        ws = active_ws
 
     alias_lookup = _to_header_lookup(field_alias_map)
     alias_to_key = {normalized: key for normalized, _, key in alias_lookup}
@@ -143,8 +146,8 @@ def fill_workbook_from_template(
 
     for row_idx, record in enumerate(records or [], start=header_row + 1):
         for col_idx, normalized_header in header_cols:
-            record_key = alias_to_key.get(normalized_header)
-            value = record.get(record_key) if record_key else ""
+            lookup_key = alias_to_key.get(normalized_header)
+            value = record.get(lookup_key) if lookup_key else ""
             ws.cell(row_idx, col_idx, _format_cell_value(value) if value is not None else "")
 
     if append_missing_field_columns and field_alias_map:

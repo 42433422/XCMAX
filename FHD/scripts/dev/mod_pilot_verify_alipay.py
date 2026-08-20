@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="str-bytes-safe"
 """校验 Mod 试点支付宝沙箱：APPID ↔ keys 是否匹配（避免 invalid-signature）。"""
+
 from __future__ import annotations
 
 import json
@@ -12,8 +14,7 @@ from pathlib import Path
 MODSTORE_DEPLOY = Path(
     os.environ.get(
         "MODSTORE_DEPLOY_ROOT",
-        Path.home()
-        / "XCMAX-archives/m0-fhd-bulk-20260605/成都修茈科技有限公司/MODstore_deploy",
+        Path.home() / "XCMAX-archives/m0-fhd-bulk-20260605/成都修茈科技有限公司/MODstore_deploy",
     )
 )
 PORT = os.environ.get("MODSTORE_PORT", "8788")
@@ -29,7 +30,10 @@ def main() -> int:
     snap = alipay_service.diagnostics_snapshot()
     print("[verify-alipay] diagnostics:", json.dumps(snap, ensure_ascii=False))
     if not snap.get("alipay_configured"):
-        print("[verify-alipay] FAIL: alipay 未配置（检查 ALIPAY_* 环境变量与 app_factory 保留逻辑）", file=sys.stderr)
+        print(
+            "[verify-alipay] FAIL: alipay 未配置（检查 ALIPAY_* 环境变量与 app_factory 保留逻辑）",
+            file=sys.stderr,
+        )
         return 1
 
     login = json.loads(

@@ -1,12 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import {
-  ACCESS_TOKEN_KEY,
-  REFRESH_TOKEN_KEY,
-  clearAuthTokens,
-  getAccessToken,
-  getRefreshToken,
-  setAuthTokens,
-} from './tokenStore'
+import { ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY, clearAuthTokens, getAccessToken, getRefreshToken, setAuthTokens } from './tokenStore'
 
 describe('tokenStore', () => {
   it('stores and clears access and refresh tokens', () => {
@@ -54,7 +47,10 @@ describe('tokenStore', () => {
 
   it('does not set undefined tokens', () => {
     clearAuthTokens()
-    setAuthTokens({ access_token: undefined as any, refresh_token: undefined as any })
+    setAuthTokens({
+      access_token: undefined as UnsafeTestValue,
+      refresh_token: undefined as UnsafeTestValue,
+    })
     expect(getAccessToken()).toBe('')
     expect(getRefreshToken()).toBe('')
   })
@@ -75,9 +71,7 @@ describe('tokenStore', () => {
 
     expect(getAccessToken()).toBe('')
     expect(getRefreshToken()).toBe('')
-    expect(() =>
-      setAuthTokens({ access_token: 'access-1', refresh_token: 'refresh-1' }),
-    ).not.toThrow()
+    expect(() => setAuthTokens({ access_token: 'access-1', refresh_token: 'refresh-1' })).not.toThrow()
     expect(() => clearAuthTokens()).not.toThrow()
 
     if (descriptor) {

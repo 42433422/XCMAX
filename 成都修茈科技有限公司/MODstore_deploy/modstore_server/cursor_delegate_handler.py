@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 from typing import Any, Dict, List, Optional
 
 import httpx
+
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,7 @@ def _try_cursor_sdk_prompt(task: str, *, cwd: str) -> Dict[str, Any]:
             "status": status,
             "output": text[:20_000],
         }
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.exception("cursor_sdk delegate failed")
         return {"ok": False, "source": "cursor_sdk", "error": str(exc)}
 
@@ -93,7 +94,7 @@ def _try_cursor_webhook(task: str, *, cwd: str, input_data: Dict[str, Any]) -> D
         body: Dict[str, Any] = {}
         try:
             body = resp.json() if resp.content else {}
-        except Exception:
+        except RECOVERABLE_ERRORS:
             body = {"raw": resp.text[:4000]}
         ok = resp.status_code < 400 and bool(body.get("ok", resp.status_code < 300))
         return {
@@ -105,7 +106,7 @@ def _try_cursor_webhook(task: str, *, cwd: str, input_data: Dict[str, Any]) -> D
                 body.get("files_changed") if isinstance(body.get("files_changed"), list) else []
             ),
         }
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         return {"ok": False, "source": "cursor_webhook", "error": str(exc)}
 
 
@@ -127,10 +128,7 @@ def dispatch_cursor_delegate(
     cwd = _resolve_project_root(payload)
 
     out = _try_cursor_sdk_prompt(task, cwd=cwd)
-    if not out.get("ok") and out.get("reason") != "cursor_sdk not installed":
-        if _cursor_webhook_url():
-            out = _try_cursor_webhook(task, cwd=cwd, input_data=payload)
-    elif not out.get("ok"):
+    if not out.get("ok") and out.get("reason") != "cursor_sdk not installed" or not out.get("ok"):
         if _cursor_webhook_url():
             out = _try_cursor_webhook(task, cwd=cwd, input_data=payload)
 

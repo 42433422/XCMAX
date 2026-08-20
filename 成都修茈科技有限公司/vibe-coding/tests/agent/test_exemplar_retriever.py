@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from vibe_coding import MockLLM, VibeCoder
 from vibe_coding.agent.memory import ExemplarStore, ProjectMemory, Retriever
 from vibe_coding.agent.memory.exemplars import Exemplar
@@ -96,14 +94,18 @@ def test_project_memory_prompt_block(tmp_path: Path) -> None:
 
 def test_project_memory_record_success_triggers_style(tmp_path: Path) -> None:
     (tmp_path / "a.py").write_text("def foo(x: int) -> int:\n    return x\n", encoding="utf-8")
-    llm = MockLLM([
-        json.dumps({
-            "patch_id": "px",
-            "summary": "fix",
-            "rationale": "",
-            "edits": [],
-        })
-    ])
+    llm = MockLLM(
+        [
+            json.dumps(
+                {
+                    "patch_id": "px",
+                    "summary": "fix",
+                    "rationale": "",
+                    "edits": [],
+                }
+            )
+        ]
+    )
     coder = VibeCoder(llm=llm, store_dir=tmp_path / "store", llm_for_repair=False)
     pc = coder.project_coder(tmp_path)
     patch = pc.edit_project("add logging")

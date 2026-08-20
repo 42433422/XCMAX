@@ -100,7 +100,7 @@ describe('conversationStore', () => {
     c.messages.push(makeMessage('user', 'remember code zebra'), makeMessage('assistant', 'ok'))
     saveConversations([c])
     saveActiveId(c.id)
-    const memoryList: typeof c[] = [{ ...c, messages: [] }]
+    const memoryList: (typeof c)[] = [{ ...c, messages: [] }]
     const storageList = loadConversations()
     const uiCount = 0
     const hydrated = mergeConversationsForPick(memoryList, storageList, c.id, uiCount)

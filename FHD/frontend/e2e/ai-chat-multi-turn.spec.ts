@@ -40,7 +40,7 @@ test.describe('AI multi-turn conversation @multi_turn', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: '今天天气怎么样？', conversation_id: 'conv-e2e-001' }),
       })
-      const json = await r.json().catch(() => ({} as any))
+      const json = await r.json().catch(() => ({}) as any)
       return { status: r.status, body: json }
     })
     expect(firstResult.status, `first turn status`).toBe(200)
@@ -62,7 +62,7 @@ test.describe('AI multi-turn conversation @multi_turn', () => {
           },
         }),
       })
-      const json = await r.json().catch(() => ({} as any))
+      const json = await r.json().catch(() => ({}) as any)
       return { status: r.status, body: json }
     }, firstReply)
 

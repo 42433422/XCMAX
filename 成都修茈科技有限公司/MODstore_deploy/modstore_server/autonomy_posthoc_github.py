@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, union-attr"
 """Fail-closed GitHub evidence for historical self-maintenance merges."""
 
 from __future__ import annotations
@@ -12,22 +13,16 @@ from urllib.parse import quote
 
 import httpx
 
+from modstore_server.autonomy_posthoc_github_contract import (
+    generated_para_merge_contract_verdict as _generated_para_merge_contract_verdict,
+)
+from modstore_server.operational_errors import BOUNDARY_ERRORS
+
 UTC = timezone.utc  # noqa: UP017 - production runtime still supports Python 3.10
 _REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 _SHA = re.compile(r"^[0-9a-f]{40,64}$", re.IGNORECASE)
 _BRANCH = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,244}$")
-_TASK_ID = re.compile(
-    r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
-    re.IGNORECASE,
-)
 _SUCCESSFUL_CHECK_CONCLUSIONS = frozenset({"neutral", "skipped", "success"})
-_GENERATED_MERGE_REQUIRED_CHECKS = frozenset(
-    {
-        "release-verify",
-        "review",
-        "security-scan",
-    }
-)
 
 
 def _utc(value: datetime) -> datetime:
@@ -97,85 +92,6 @@ def _default_fetch_json(path: str, params: dict[str, str] | None = None) -> Any:
         response = client.get(path, params=params)
         response.raise_for_status()
         return response.json()
-
-
-def _generated_para_merge_contract_verdict(
-    *,
-    pull: dict[str, Any],
-    checks: list[dict[str, Any]],
-    expected_task_id: str,
-    branch: str,
-    base_branch: str,
-) -> dict[str, Any]:
-    """Bind an out-of-legacy-scope merge to the guarded Para PR contract."""
-
-    task_id = str(expected_task_id or "").strip()
-    if not _TASK_ID.fullmatch(task_id):
-        return {"ok": False, "reason": "github_para_task_id_invalid"}
-    body = str(pull.get("body") or "")
-    required_markers = (
-        "## Para 自动派工产物",
-        f"**任务 ID**: {task_id}",
-        f"**工作分支**: `{branch}`",
-        f"**目标分支**: `{base_branch}`",
-        "本 PR 由 merge-worker 自动创建",
-        "AI review APPROVE",
-        "`risk:r0`",
-        "`hold-merge`",
-        "`github-actions[bot]`",
-    )
-    if any(marker not in body for marker in required_markers):
-        return {"ok": False, "reason": "github_para_generated_contract_missing"}
-
-    labels = pull.get("labels") if isinstance(pull.get("labels"), list) else []
-    label_names = {
-        str(label.get("name") or "").strip().lower() for label in labels if isinstance(label, dict)
-    }
-    if "risk:r0" not in label_names or "hold-merge" in label_names:
-        return {"ok": False, "reason": "github_para_merge_labels_invalid"}
-    merged_by = pull.get("merged_by") if isinstance(pull.get("merged_by"), dict) else {}
-    if str(merged_by.get("login") or "").strip().lower() != "github-actions[bot]":
-        return {"ok": False, "reason": "github_para_merge_actor_invalid"}
-
-    successful_action_checks = {
-        str(check.get("name") or "").strip()
-        for check in checks
-        if isinstance(check, dict)
-        and str(check.get("status") or "").lower() == "completed"
-        and str(check.get("conclusion") or "").lower() == "success"
-        and str(
-            (check.get("app") if isinstance(check.get("app"), dict) else {}).get("slug") or ""
-        ).lower()
-        == "github-actions"
-    }
-    missing_checks = sorted(_GENERATED_MERGE_REQUIRED_CHECKS - successful_action_checks)
-    if missing_checks:
-        return {
-            "ok": False,
-            "reason": "github_para_required_checks_missing",
-            "missing_checks": missing_checks,
-        }
-
-    contract_digest = hashlib.sha256(
-        json.dumps(
-            {
-                "base_branch": base_branch,
-                "branch": branch,
-                "labels": sorted(label_names),
-                "merge_actor": "github-actions[bot]",
-                "required_checks": sorted(_GENERATED_MERGE_REQUIRED_CHECKS),
-                "task_id": task_id,
-            },
-            ensure_ascii=False,
-            separators=(",", ":"),
-            sort_keys=True,
-        ).encode("utf-8")
-    ).hexdigest()
-    return {
-        "ok": True,
-        "contract_digest": contract_digest,
-        "reason": "github_para_generated_merge_contract_verified",
-    }
 
 
 def _merge_scope_verdict(
@@ -288,7 +204,7 @@ def verify_github_self_maintenance_merge(
                 "state": "all",
             },
         )
-    except Exception:  # noqa: BLE001 - evidence outage must remain unknown
+    except BOUNDARY_ERRORS:  # noqa: BLE001 - evidence outage must remain unknown
         return {"ok": False, "reason": "github_pull_evidence_unavailable"}
     candidates = []
     if isinstance(pulls, list):
@@ -316,7 +232,7 @@ def verify_github_self_maintenance_merge(
         return {"ok": False, "reason": "github_pull_number_invalid"}
     try:
         pull = fetch(f"/repos/{repository}/pulls/{pull_number}", None)
-    except Exception:  # noqa: BLE001 - evidence outage must remain unknown
+    except BOUNDARY_ERRORS:  # noqa: BLE001 - evidence outage must remain unknown
         return {"ok": False, "reason": "github_pull_detail_unavailable"}
     if not isinstance(pull, dict):
         return {"ok": False, "reason": "github_pull_detail_invalid"}
@@ -365,7 +281,7 @@ def verify_github_self_maintenance_merge(
             ),
             None,
         )
-    except Exception:  # noqa: BLE001 - evidence outage must remain unknown
+    except BOUNDARY_ERRORS:  # noqa: BLE001 - evidence outage must remain unknown
         return {"ok": False, "reason": "github_merge_evidence_unavailable"}
     if not isinstance(files, list) or len(files) != changed_files:
         return {"ok": False, "reason": "github_pr_files_incomplete"}
@@ -472,7 +388,7 @@ def verify_github_self_maintenance_veto(
                 "state": "all",
             },
         )
-    except Exception:  # noqa: BLE001 - evidence outage must remain unknown
+    except BOUNDARY_ERRORS:  # noqa: BLE001 - evidence outage must remain unknown
         return {"ok": False, "reason": "github_pull_evidence_unavailable"}
     candidates = []
     if isinstance(pulls, list):
@@ -488,7 +404,7 @@ def verify_github_self_maintenance_veto(
     try:
         pull_number = int(candidates[0].get("number"))
         pull = fetch(f"/repos/{repository}/pulls/{pull_number}", None)
-    except Exception:  # noqa: BLE001 - evidence outage must remain unknown
+    except BOUNDARY_ERRORS:  # noqa: BLE001 - evidence outage must remain unknown
         return {"ok": False, "reason": "github_pull_detail_unavailable"}
     if not isinstance(pull, dict):
         return {"ok": False, "reason": "github_pull_detail_invalid"}

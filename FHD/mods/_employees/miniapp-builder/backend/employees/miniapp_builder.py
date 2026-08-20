@@ -32,8 +32,16 @@ def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
             continue
         seen.add(step_id)
         if not operation:
-            issues.append({"code": "missing_operation", "path": f"miniapp_spec.steps[{index}].operation"})
-        normalized.append({"id": step_id, "operation": operation, "depends_on": [str(value)[:160] for value in depends_on]})
+            issues.append(
+                {"code": "missing_operation", "path": f"miniapp_spec.steps[{index}].operation"}
+            )
+        normalized.append(
+            {
+                "id": step_id,
+                "operation": operation,
+                "depends_on": [str(value)[:160] for value in depends_on],
+            }
+        )
     if not normalized:
         issues.append({"code": "missing_steps", "path": "miniapp_spec.steps"})
     known = {item["id"] for item in normalized}
@@ -54,4 +62,12 @@ def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
 
 
 def _failed(message: str, code: str) -> dict[str, Any]:
-    return {"ok": False, "status": "failed", "summary": message, "error_code": code, "evidence": [], "read_only": True, "side_effects": []}
+    return {
+        "ok": False,
+        "status": "failed",
+        "summary": message,
+        "error_code": code,
+        "evidence": [],
+        "read_only": True,
+        "side_effects": [],
+    }

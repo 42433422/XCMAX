@@ -15,9 +15,7 @@
       </svg>
     </button>
     <div v-if="open" class="wb-user-menu__panel" role="menu" @click.stop>
-      <div v-if="balance !== null" class="wb-user-menu__balance" role="presentation">
-        余额 ¥{{ balance.toFixed(2) }}
-      </div>
+      <div v-if="balance !== null" class="wb-user-menu__balance" role="presentation">余额 ¥{{ balance.toFixed(2) }}</div>
       <router-link v-if="levelProfile" :to="{ name: 'account' }" class="wb-user-menu__item" role="menuitem" @click="close">
         Lv.{{ levelProfile.level }} · {{ levelProfile.title || '新手' }}
       </router-link>
@@ -26,7 +24,7 @@
       <router-link :to="{ name: 'plans' }" class="wb-user-menu__item" role="menuitem" @click="close">会员</router-link>
       <button type="button" class="wb-user-menu__item" role="menuitem" @click="onSettings">设置</button>
       <router-link :to="{ name: 'notifications' }" class="wb-user-menu__item" role="menuitem" @click="close">通知</router-link>
-      <router-link :to="{ name: 'ai-test' }" class="wb-user-menu__item" role="menuitem" @click="close">AI 测试</router-link>
+      <router-link :to="{ name: 'ai-test-sandbox' }" class="wb-user-menu__item" role="menuitem" @click="close">AI 测试</router-link>
       <a href="/index.html" class="wb-user-menu__item" target="_blank" rel="noopener" role="menuitem" @click="close">官网首页</a>
       <button v-if="isAdmin" type="button" class="wb-user-menu__item" role="menuitem" @click="onAdmin">管理端</button>
       <button v-if="isAdmin" type="button" class="wb-user-menu__item" role="menuitem" @click="onOpsTerminal">运维终端</button>

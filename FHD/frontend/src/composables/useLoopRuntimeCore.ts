@@ -1,10 +1,18 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter, type RouteLocationRaw } from 'vue-router'
 import xcmaxMarketProxy from '@/api/xcmaxMarketProxy'
-import { loopArray, loopFirstText, loopNumber, loopRecord, loopString, normalizeDutyRosterView, type LoopRuntimeConsoleDeps } from './loopRuntimeValues'
+import {
+  loopArray,
+  loopFirstText,
+  loopNumber,
+  loopRecord,
+  loopString,
+  normalizeDutyRosterView,
+  type LoopRuntimeConsoleDeps,
+} from './loopRuntimeValues'
 
 export function useLoopRuntimeCore(deps: LoopRuntimeConsoleDeps) {
-  const { plannedIds: ALL_PLANNED_YUANGON_PKG_IDS, visualizedEmployeeCount, totalCount, routeFocusedEmployeeId, showManagementLoopPanels } = deps
+  const { plannedIds: ALL_PLANNED_YUANGON_PKG_IDS, visualizedEmployeeCount, routeFocusedEmployeeId, showManagementLoopPanels } = deps
   const router = useRouter()
   const loopRuntime = ref<Record<string, unknown> | null>(null)
   let loopRuntimeTimer: number | null = null
@@ -25,7 +33,7 @@ export function useLoopRuntimeCore(deps: LoopRuntimeConsoleDeps) {
 
   async function refreshLoopRuntime() {
     try {
-      loopRuntime.value = await xcmaxMarketProxy.selfMaintenanceRuntimeStatus(40) as Record<string, unknown>
+      loopRuntime.value = (await xcmaxMarketProxy.selfMaintenanceRuntimeStatus(40)) as Record<string, unknown>
     } catch {
       loopRuntime.value = null
     }
@@ -129,10 +137,7 @@ export function useLoopRuntimeCore(deps: LoopRuntimeConsoleDeps) {
     return ''
   })
   const loopBridgePrimaryEmployeeId = computed(() =>
-    loopFirstText(
-      loopUiBridge.value.primary_employee_id,
-      loopArray(loopUiBridge.value.target_employee_ids)[0],
-    ),
+    loopFirstText(loopUiBridge.value.primary_employee_id, loopArray(loopUiBridge.value.target_employee_ids)[0]),
   )
   const loopBridgeBlockedEmployeeIds = computed(() =>
     loopArray(loopUiBridge.value.blocked_employee_ids)
@@ -151,24 +156,20 @@ export function useLoopRuntimeCore(deps: LoopRuntimeConsoleDeps) {
     return dutyRosterLoopLocation.value
   })
   const loopOutOfRosterParticipantIds = computed(() => {
-    const backendIds = loopArray(loopRosterAlignment.value.out_of_roster_ids).map((id) => loopString(id)).filter(Boolean)
+    const backendIds = loopArray(loopRosterAlignment.value.out_of_roster_ids)
+      .map((id) => loopString(id))
+      .filter(Boolean)
     if (backendIds.length || loopRosterAlignment.value.out_of_roster_count != null) return backendIds
     return loopRawParticipantIds.value.filter((id) => !ALL_PLANNED_YUANGON_PKG_IDS.value.has(id))
   })
-  const loopOutOfRosterCount = computed(() =>
-    loopNumber(loopRosterAlignment.value.out_of_roster_count) ?? loopOutOfRosterParticipantIds.value.length,
+  const loopOutOfRosterCount = computed(
+    () => loopNumber(loopRosterAlignment.value.out_of_roster_count) ?? loopOutOfRosterParticipantIds.value.length,
   )
-  const loopNotDeployedCount = computed(() =>
-    loopNumber(loopRosterAlignment.value.not_deployed_count) ?? 0,
-  )
-  const loopAlignedPlannedCount = computed(() =>
-    loopNumber(loopRosterAlignment.value.planned_count) ?? visualizedEmployeeCount.value,
-  )
-  const loopAlignedInRosterCount = computed(() =>
-    loopNumber(loopRosterAlignment.value.in_roster_count) ?? loopParticipantIds.value.length,
-  )
-  const loopAlignedInDeployedCount = computed(() =>
-    loopNumber(loopRosterAlignment.value.in_deployed_count) ?? loopAlignedInRosterCount.value,
+  const loopNotDeployedCount = computed(() => loopNumber(loopRosterAlignment.value.not_deployed_count) ?? 0)
+  const loopAlignedPlannedCount = computed(() => loopNumber(loopRosterAlignment.value.planned_count) ?? visualizedEmployeeCount.value)
+  const loopAlignedInRosterCount = computed(() => loopNumber(loopRosterAlignment.value.in_roster_count) ?? loopParticipantIds.value.length)
+  const loopAlignedInDeployedCount = computed(
+    () => loopNumber(loopRosterAlignment.value.in_deployed_count) ?? loopAlignedInRosterCount.value,
   )
 
   const loopParticipantRoleLabels = computed(() => {
@@ -179,8 +180,12 @@ export function useLoopRuntimeCore(deps: LoopRuntimeConsoleDeps) {
       const id = loopString(row.employee_id || row.id)
       if (!id) continue
       const role = loopString(row.role_label || row.role)
-      const stageLabels = loopArray(row.stage_labels).map((x) => loopString(x)).filter(Boolean)
-      const stages = loopArray(row.stages).map((x) => loopString(x)).filter(Boolean)
+      const stageLabels = loopArray(row.stage_labels)
+        .map((x) => loopString(x))
+        .filter(Boolean)
+      const stages = loopArray(row.stages)
+        .map((x) => loopString(x))
+        .filter(Boolean)
       labels[id] = role || stageLabels[0] || stages[0] || ''
     }
     return labels
@@ -216,7 +221,9 @@ export function useLoopRuntimeCore(deps: LoopRuntimeConsoleDeps) {
     ]
     return surfaces.map((surface) => {
       const item = loopRecord(readiness[surface.key])
-      const missing = loopArray(item.missing).map((value) => loopString(value)).filter(Boolean)
+      const missing = loopArray(item.missing)
+        .map((value) => loopString(value))
+        .filter(Boolean)
       const known = Object.keys(item).length > 0
       const ok = item.ok === true
       const severity = loopFirstText(item.severity, ok ? 'ok' : known && missing.length ? 'bad' : 'warn')
@@ -232,7 +239,10 @@ export function useLoopRuntimeCore(deps: LoopRuntimeConsoleDeps) {
         ctaLabel: ok ? '查看链路' : blocked ? '处理断点' : '等待状态',
         tone: severity === 'bad' || blocked ? 'bad' : severity === 'warn' || !known ? 'warn' : 'ok',
         action: loopFirstText(item.action, ok ? 'watch' : known ? 'inspect_runtime_contract' : 'waiting_runtime_contract'),
-        detail: loopFirstText(item.detail, missing.length ? `missing ${missing.slice(0, 3).join(' / ')}` : known ? 'contract ready' : '等待后端暴露该 surface readiness'),
+        detail: loopFirstText(
+          item.detail,
+          missing.length ? `missing ${missing.slice(0, 3).join(' / ')}` : known ? 'contract ready' : '等待后端暴露该 surface readiness',
+        ),
         sourceLabel: known ? 'source · contract_validation.surface_readiness' : 'waiting · runtime surface readiness missing',
         missing,
         target: loopFirstText(item.target_surface, surface.key),
@@ -241,7 +251,9 @@ export function useLoopRuntimeCore(deps: LoopRuntimeConsoleDeps) {
     })
   })
   const loopRuntimeContractRequiredFields = computed(() =>
-    loopArray(loopRuntimeContract.value.required_top_level).map((item) => loopString(item)).filter(Boolean),
+    loopArray(loopRuntimeContract.value.required_top_level)
+      .map((item) => loopString(item))
+      .filter(Boolean),
   )
   const loopRuntimeContractMissingFields = computed(() => {
     const backendMissing = loopArray(loopRuntimeContractValidation.value.missing_fields)
@@ -271,18 +283,12 @@ export function useLoopRuntimeCore(deps: LoopRuntimeConsoleDeps) {
       .filter((item) => loopString(item.surface) === 'employee_space'),
   )
   const loopRuntimeSurfaceIncident = computed(() => loopRuntimeSurfaceIncidents.value[0] || {})
-  const loopRuntimeSurfaceIncidentSummary = computed(() =>
-    loopRecord(loopRuntimeContractValidation.value.surface_incident_summary),
-  )
+  const loopRuntimeSurfaceIncidentSummary = computed(() => loopRecord(loopRuntimeContractValidation.value.surface_incident_summary))
   const loopRuntimeContractStatus = computed(() => {
     const topLevel = loopRecord(loopRuntime.value?.contract_status)
-    return Object.keys(topLevel).length
-      ? topLevel
-      : loopRecord(loopRuntimeContractValidation.value.contract_status)
+    return Object.keys(topLevel).length ? topLevel : loopRecord(loopRuntimeContractValidation.value.contract_status)
   })
-  const loopRuntimeContractPrimaryRoute = computed(() =>
-    loopRecord(loopRuntimeContractStatus.value.primary_route),
-  )
+  const loopRuntimeContractPrimaryRoute = computed(() => loopRecord(loopRuntimeContractStatus.value.primary_route))
   const loopRuntimePrimaryRouteLocation = computed<RouteLocationRaw>(() => {
     const surface = loopString(loopRuntimeContractPrimaryRoute.value.surface)
     const view = normalizeDutyRosterView(loopRuntimeContractPrimaryRoute.value.view)
@@ -314,11 +320,12 @@ export function useLoopRuntimeCore(deps: LoopRuntimeConsoleDeps) {
     if (surface === 'employee_space') return '定位员工空间'
     return '打开完整 Loop'
   })
-  const loopRuntimeContractOk = computed(() =>
-    loopRuntimeSchemaVersion.value === 'self_maintenance_runtime.v1'
-    && loopRuntimeContractRequiredFields.value.length > 0
-    && loopRuntimeContractMissingFields.value.length === 0
-    && loopRuntimeSurfaceReadinessOk.value
+  const loopRuntimeContractOk = computed(
+    () =>
+      loopRuntimeSchemaVersion.value === 'self_maintenance_runtime.v1' &&
+      loopRuntimeContractRequiredFields.value.length > 0 &&
+      loopRuntimeContractMissingFields.value.length === 0 &&
+      loopRuntimeSurfaceReadinessOk.value,
   )
   const loopStatusLabel = computed(() => {
     if (!loopRuntime.value) return '待连接'
@@ -331,10 +338,10 @@ export function useLoopRuntimeCore(deps: LoopRuntimeConsoleDeps) {
 
   const loopMissingEvidenceCount = computed(() =>
     loopNumber(
-      loopEvidence.value.missing_count
-        ?? loopEvidence.value.missingEvidenceCount
-        ?? loopEvidence.value.gap_count
-        ?? loopGate.value.missing_count,
+      loopEvidence.value.missing_count ??
+        loopEvidence.value.missingEvidenceCount ??
+        loopEvidence.value.gap_count ??
+        loopGate.value.missing_count,
     ),
   )
 
@@ -343,26 +350,69 @@ export function useLoopRuntimeCore(deps: LoopRuntimeConsoleDeps) {
   )
 
   return {
-    loopRuntime, refreshLoopRuntime, loopRecord, loopArray, loopString, loopFirstText, loopNumber,
-    panoramaLocation, dutyRosterLoopLocation, dutyRosterDepartmentLocation,
-    dutyRosterGovernanceLocation, dutyRosterEmployeeLocation, loopParticipantIds,
-    loopRawParticipantIds, loopRosterAlignment, loopRosterGate, loopRosterRemediation,
-    loopUiBridge, loopActiveGates, loopActiveGateBlockingKeys, loopGovernanceAudit,
-    loopGovernanceAuditSummary, loopGovernanceAuditLast, loopEmployeeSpaceBridge,
-    loopGovernanceAction, loopGovernanceAuditLastTargets, loopGovernanceAuditLastSummary,
-    loopBridgePrimaryEmployeeId, loopBridgeBlockedEmployeeIds, loopOutOfRosterParticipantIds,
-    loopOutOfRosterCount, loopNotDeployedCount, loopAlignedPlannedCount,
-    loopAlignedInRosterCount, loopAlignedInDeployedCount, loopParticipantRoleLabels,
-    loopParticipantDisplay, loopGate, loopEvidence, loopMergeDecision, loopMetrics,
-    loopOpenRunCount, loopRuntimeSchemaVersion, loopRuntimeContract,
-    loopRuntimeContractValidation, loopRuntimeSurfaceReadinessCards,
-    loopRuntimeContractRequiredFields, loopRuntimeContractMissingFields,
-    loopRuntimeContractMissingNested, loopRuntimeSurfaceReadiness,
-    loopRuntimeSurfaceReadinessOk, loopRuntimeSurfaceMissing, loopRuntimeSurfaceIncidents,
-    loopRuntimeSurfaceIncident, loopRuntimeSurfaceIncidentSummary, loopRuntimeContractStatus,
-    loopRuntimeContractPrimaryRoute, loopRuntimePrimaryRouteLocation,
-    loopRuntimePrimaryRouteLabel, loopRuntimeContractOk, loopStatusLabel,
-    loopMissingEvidenceCount, loopGateReasonText,
+    loopRuntime,
+    refreshLoopRuntime,
+    loopRecord,
+    loopArray,
+    loopString,
+    loopFirstText,
+    loopNumber,
+    panoramaLocation,
+    dutyRosterLoopLocation,
+    dutyRosterDepartmentLocation,
+    dutyRosterGovernanceLocation,
+    dutyRosterEmployeeLocation,
+    loopParticipantIds,
+    loopRawParticipantIds,
+    loopRosterAlignment,
+    loopRosterGate,
+    loopRosterRemediation,
+    loopUiBridge,
+    loopActiveGates,
+    loopActiveGateBlockingKeys,
+    loopGovernanceAudit,
+    loopGovernanceAuditSummary,
+    loopGovernanceAuditLast,
+    loopEmployeeSpaceBridge,
+    loopGovernanceAction,
+    loopGovernanceAuditLastTargets,
+    loopGovernanceAuditLastSummary,
+    loopBridgePrimaryEmployeeId,
+    loopBridgeBlockedEmployeeIds,
+    loopOutOfRosterParticipantIds,
+    loopOutOfRosterCount,
+    loopNotDeployedCount,
+    loopAlignedPlannedCount,
+    loopAlignedInRosterCount,
+    loopAlignedInDeployedCount,
+    loopParticipantRoleLabels,
+    loopParticipantDisplay,
+    loopGate,
+    loopEvidence,
+    loopMergeDecision,
+    loopMetrics,
+    loopOpenRunCount,
+    loopRuntimeSchemaVersion,
+    loopRuntimeContract,
+    loopRuntimeContractValidation,
+    loopRuntimeSurfaceReadinessCards,
+    loopRuntimeContractRequiredFields,
+    loopRuntimeContractMissingFields,
+    loopRuntimeContractMissingNested,
+    loopRuntimeSurfaceReadiness,
+    loopRuntimeSurfaceReadinessOk,
+    loopRuntimeSurfaceMissing,
+    loopRuntimeSurfaceIncidents,
+    loopRuntimeSurfaceIncident,
+    loopRuntimeSurfaceIncidentSummary,
+    loopRuntimeContractStatus,
+    loopRuntimeContractPrimaryRoute,
+    loopRuntimePrimaryRouteLocation,
+    loopRuntimePrimaryRouteLabel,
+    loopRuntimeContractOk,
+    loopStatusLabel,
+    loopMissingEvidenceCount,
+    loopGateReasonText,
   }
 }
 

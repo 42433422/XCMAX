@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """XCAGI vendored langgraph-checkpoint-sqlite 来源与许可证锁定验证脚本 (LG-W0-04).
 
-本脚本为「git tag -> SHA」来源校验（区别于 sdist 来源）：锁定的是上游 langgraph 仓库 tag 1.2.10
-@ commit 41341457342327166d72fc11952ab28fb61ec0bf（见同目录 PROVENANCE.json）。
+本脚本锁定上游 langgraph 仓库的 checkpoint-sqlite 3.1.1 release commit
+``b2926a0ff9589c28c7e01fe7cdbb337b86d5a4b4``（见同目录 PROVENANCE.json）。
 
 职责:
   1. 校验本目录下所有 vendored 文件 (langgraph/ 包 + LICENSE) 的 SHA-256 与 MANIFEST.sha256 一致。
   2. 校验 LICENSE 为 MIT (含关键字检查)。
-  3. 在 TemporaryDirectory 内自远端 fetch 精确 tag 1.2.10，断言提交 SHA == 锁定值，并对
+  3. 在 TemporaryDirectory 内自远端 fetch 精确 release commit，并对
      vendored 副本与上游 libs/checkpoint-sqlite/langgraph + LICENSE 做字节级比对（原样吸收）。
      跳过 caches/__pycache__/.venv/build/dist/*.egg-info 等本地产物。
 
@@ -18,6 +18,7 @@
 
 退出码: 0=全部通过; 1=校验失败。
 """
+
 from __future__ import annotations
 
 import argparse
@@ -35,10 +36,9 @@ PROVENANCE = HERE / "PROVENANCE.json"
 # MANIFEST 需要覆盖的顶层条目 (langgraph/ 包目录下所有文件 + LICENSE)
 TOPNODE = ["langgraph", "LICENSE"]
 
-# 上游远端与精确 tag / 锁定 SHA（与 PROVENANCE.json 一致）
+# 上游远端与精确 release commit（与 PROVENANCE.json 一致）
 UPSTREAM_REPO = "https://github.com/langchain-ai/langgraph.git"
-UPSTREAM_TAG = "1.2.10"
-UPSTREAM_SHA = "41341457342327166d72fc11952ab28fb61ec0bf"
+UPSTREAM_SHA = "b2926a0ff9589c28c7e01fe7cdbb337b86d5a4b4"
 # 锁定 commit 对应上游 libs/checkpoint-sqlite 下的相对路径
 UPSTREAM_PATHS = ["libs/checkpoint-sqlite/langgraph", "libs/checkpoint-sqlite/LICENSE"]
 
@@ -117,7 +117,9 @@ def verify_manifest() -> bool:
     actual = collect_files()
     missing = [rel for rel in expected if rel not in actual]
     extra = [rel for rel in actual if rel not in expected]
-    changed = [rel for rel in actual if rel in expected and actual[rel] != expected[rel]]
+    changed = [
+        rel for rel in actual if rel in expected and actual[rel] != expected[rel]
+    ]
 
     ok = True
     for rel in sorted(missing):
@@ -148,50 +150,61 @@ def verify_license() -> bool:
 
 
 def fetch_pinned(dst: Path) -> tuple[bool, str]:
-    """在给定目录内自远端浅克隆精确 tag，断言提交 SHA 后返回上游源码根。
+    """在给定目录内自远端获取精确 release commit，断言 SHA 后返回源码根。
 
-    返回 (成功, 错误信息)。成功时 dst 即 tag 1.2.10 的完整工作树。
+    返回 (成功, 错误信息)。成功时 dst 即锁定 commit 的完整工作树。
     """
-    proc = subprocess.run(
+    commands = (
+        ["git", "init", "--quiet", str(dst)],
+        ["git", "-C", str(dst), "remote", "add", "origin", UPSTREAM_REPO],
         [
-            "git", "clone", "--quiet", "--depth", "1", "--branch", UPSTREAM_TAG,
-            UPSTREAM_REPO, str(dst),
+            "git",
+            "-C",
+            str(dst),
+            "fetch",
+            "--quiet",
+            "--depth",
+            "1",
+            "origin",
+            UPSTREAM_SHA,
         ],
-        check=False,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        ["git", "-C", str(dst), "checkout", "--quiet", "--detach", "FETCH_HEAD"],
     )
-    if proc.returncode != 0:
-        return False, f"git clone {UPSTREAM_TAG} 失败: {proc.stderr.decode(errors='replace').strip()}"
+    for command in commands:
+        proc = subprocess.run(command, check=False, capture_output=True)
+        if proc.returncode != 0:
+            return (
+                False,
+                f"{' '.join(command)} 失败: {proc.stderr.decode(errors='replace').strip()}",
+            )
 
     rev = subprocess.run(
         ["git", "-C", str(dst), "rev-parse", "HEAD"],
         check=False,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
     )
     if rev.returncode != 0:
         return False, "无法解析 clone 后的 HEAD"
     head = rev.stdout.decode().strip()
     if head != UPSTREAM_SHA:
-        return False, f"tag {UPSTREAM_TAG} HEAD={head} != 锁定 {UPSTREAM_SHA}"
+        return False, f"HEAD={head} != 锁定 {UPSTREAM_SHA}"
     return True, ""
 
 
 def verify_upstream(prov: dict) -> bool:
-    """自远端 fetch 精确 tag 1.2.10，断言 SHA，并字节级比对 libs/checkpoint-sqlite/langgraph + LICENSE。"""
+    """自远端 fetch 精确 commit，并字节级比对源码与 LICENSE。"""
     with tempfile.TemporaryDirectory() as tmp:
         base = Path(tmp)
         ok, err = fetch_pinned(base)
         if not ok:
-            print(f"[FAIL] 无法自远端获取上游 tag {UPSTREAM_TAG}: {err}")
+            print(f"[FAIL] 无法自远端获取上游 commit {UPSTREAM_SHA}: {err}")
             return False
-        print(f"[OK] 自远端 {UPSTREAM_REPO} tag {UPSTREAM_TAG} 获取成功, SHA {UPSTREAM_SHA[:12]} 一致")
+        print(f"[OK] 自远端 {UPSTREAM_REPO} 获取成功, SHA {UPSTREAM_SHA[:12]} 一致")
 
         upstream_base = base / "libs" / "checkpoint-sqlite"
         upstream_lg = upstream_base / "langgraph"
         if not upstream_lg.is_dir():
-            print("[FAIL] tag 1.2.10 缺少 libs/checkpoint-sqlite/langgraph")
+            print("[FAIL] 锁定 commit 缺少 libs/checkpoint-sqlite/langgraph")
             return False
 
         mismatches: list[str] = []
@@ -209,7 +222,9 @@ def verify_upstream(prov: dict) -> bool:
 
     ok = not mismatches
     if ok:
-        print(f"[OK] 与上游 tag {UPSTREAM_TAG} ({UPSTREAM_SHA[:12]}) 的 libs/checkpoint-sqlite 字节级一致")
+        print(
+            f"[OK] 与上游 commit {UPSTREAM_SHA[:12]} 的 libs/checkpoint-sqlite 字节级一致"
+        )
     else:
         for m in mismatches:
             print(f"[FAIL] 与上游不一致: {m}")

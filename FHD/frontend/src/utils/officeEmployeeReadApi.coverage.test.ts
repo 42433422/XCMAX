@@ -24,8 +24,12 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/api/core', () => ({ primeCsrfCookie: mocks.primeCsrfCookie }))
 vi.mock('@/utils/apiBase', () => ({ apiFetch: mocks.apiFetch }))
 vi.mock('@/utils/csrfCookie', () => ({ readCsrfTokenFromCookie: mocks.readCsrfTokenFromCookie }))
-vi.mock('@/utils/platformShellApi', () => ({ fetchEmployeePlannerStatus: mocks.fetchEmployeePlannerStatus }))
-vi.mock('@/utils/officeToolDeskRows', () => ({ resolveOfficeInstalledPackIds: mocks.resolveOfficeInstalledPackIds }))
+vi.mock('@/utils/platformShellApi', () => ({
+  fetchEmployeePlannerStatus: mocks.fetchEmployeePlannerStatus,
+}))
+vi.mock('@/utils/officeToolDeskRows', () => ({
+  resolveOfficeInstalledPackIds: mocks.resolveOfficeInstalledPackIds,
+}))
 
 // ── 辅助函数 ──
 
@@ -148,9 +152,7 @@ describe('uploadChatOfficeFile', () => {
   })
 
   it('CHAT 返回 "Not Found" 消息时回退到 TUTORIAL', async () => {
-    mocks.apiFetch.mockResolvedValueOnce(
-      jsonRes({ message: 'Not Found' }, { ok: false, status: 500 }),
-    )
+    mocks.apiFetch.mockResolvedValueOnce(jsonRes({ message: 'Not Found' }, { ok: false, status: 500 }))
     mocks.apiFetch.mockResolvedValueOnce(
       jsonRes({
         success: true,
@@ -164,9 +166,7 @@ describe('uploadChatOfficeFile', () => {
   })
 
   it('CHAT 返回 "Method Not Allowed" 消息时回退到 TUTORIAL', async () => {
-    mocks.apiFetch.mockResolvedValueOnce(
-      jsonRes({ message: 'Method Not Allowed' }, { ok: false, status: 500 }),
-    )
+    mocks.apiFetch.mockResolvedValueOnce(jsonRes({ message: 'Method Not Allowed' }, { ok: false, status: 500 }))
     mocks.apiFetch.mockResolvedValueOnce(
       jsonRes({
         success: true,
@@ -228,9 +228,7 @@ describe('uploadChatOfficeFile', () => {
   })
 
   it('CHAT 返回 500 时直接抛出（不回退）', async () => {
-    mocks.apiFetch.mockResolvedValueOnce(
-      jsonRes({ message: 'Server Error' }, { ok: false, status: 500 }),
-    )
+    mocks.apiFetch.mockResolvedValueOnce(jsonRes({ message: 'Server Error' }, { ok: false, status: 500 }))
 
     await expect(mod.uploadChatOfficeFile(makeFile())).rejects.toThrow('Server Error')
     expect(mocks.apiFetch).toHaveBeenCalledTimes(1)
@@ -238,9 +236,7 @@ describe('uploadChatOfficeFile', () => {
 
   it('TUTORIAL 返回非 404/405 错误时直接抛出', async () => {
     mocks.apiFetch.mockResolvedValueOnce(jsonRes({}, { ok: false, status: 404 }))
-    mocks.apiFetch.mockResolvedValueOnce(
-      jsonRes({ message: 'Server Error' }, { ok: false, status: 500 }),
-    )
+    mocks.apiFetch.mockResolvedValueOnce(jsonRes({ message: 'Server Error' }, { ok: false, status: 500 }))
 
     await expect(mod.uploadChatOfficeFile(makeFile())).rejects.toThrow('Server Error')
     expect(mocks.apiFetch).toHaveBeenCalledTimes(2)
@@ -249,9 +245,7 @@ describe('uploadChatOfficeFile', () => {
   it('extract-grid 返回错误时抛出（使用 body.detail）', async () => {
     mocks.apiFetch.mockResolvedValueOnce(jsonRes({}, { ok: false, status: 404 }))
     mocks.apiFetch.mockResolvedValueOnce(jsonRes({}, { ok: false, status: 405 }))
-    mocks.apiFetch.mockResolvedValueOnce(
-      jsonRes({ detail: 'extract-grid error' }, { ok: false, status: 500 }),
-    )
+    mocks.apiFetch.mockResolvedValueOnce(jsonRes({ detail: 'extract-grid error' }, { ok: false, status: 500 }))
 
     await expect(mod.uploadChatOfficeFile(makeFile())).rejects.toThrow('extract-grid error')
   })
@@ -259,9 +253,7 @@ describe('uploadChatOfficeFile', () => {
   it('extract-grid success=false 时抛出', async () => {
     mocks.apiFetch.mockResolvedValueOnce(jsonRes({}, { ok: false, status: 404 }))
     mocks.apiFetch.mockResolvedValueOnce(jsonRes({}, { ok: false, status: 405 }))
-    mocks.apiFetch.mockResolvedValueOnce(
-      jsonRes({ success: false, detail: 'extract-grid 拒绝' }),
-    )
+    mocks.apiFetch.mockResolvedValueOnce(jsonRes({ success: false, detail: 'extract-grid 拒绝' }))
 
     await expect(mod.uploadChatOfficeFile(makeFile())).rejects.toThrow('extract-grid 拒绝')
   })
@@ -274,9 +266,7 @@ describe('uploadChatOfficeFile', () => {
       }),
     )
 
-    await expect(mod.uploadChatOfficeFile(makeFile())).rejects.toThrow(
-      '上传成功但未返回 file_path / workspace_root',
-    )
+    await expect(mod.uploadChatOfficeFile(makeFile())).rejects.toThrow('上传成功但未返回 file_path / workspace_root')
   })
 
   it('extract-grid 上传成功但无 file_path 时抛出', async () => {
@@ -288,9 +278,7 @@ describe('uploadChatOfficeFile', () => {
       }),
     )
 
-    await expect(mod.uploadChatOfficeFile(makeFile())).rejects.toThrow(
-      'extract-grid 上传成功但未返回 file_path / workspace_root',
-    )
+    await expect(mod.uploadChatOfficeFile(makeFile())).rejects.toThrow('extract-grid 上传成功但未返回 file_path / workspace_root')
   })
 
   it('上传 success=false 时抛出（使用 body.error）', async () => {
@@ -332,9 +320,7 @@ describe('uploadTutorialOfficeFile', () => {
   })
 
   it('TUTORIAL 上传失败时抛出', async () => {
-    mocks.apiFetch.mockResolvedValueOnce(
-      jsonRes({ message: 'rejected' }, { ok: false, status: 400 }),
-    )
+    mocks.apiFetch.mockResolvedValueOnce(jsonRes({ message: 'rejected' }, { ok: false, status: 400 }))
 
     await expect(mod.uploadTutorialOfficeFile(makeFile())).rejects.toThrow('rejected')
   })
@@ -466,38 +452,26 @@ describe('runOfficeEmployeeRead', () => {
   })
 
   it('未知员工 ID 时抛出', async () => {
-    await expect(mod.runOfficeEmployeeRead('unknown', '/path', '/root')).rejects.toThrow(
-      '未知办公员工：unknown',
-    )
+    await expect(mod.runOfficeEmployeeRead('unknown', '/path', '/root')).rejects.toThrow('未知办公员工：unknown')
     expect(mocks.apiFetch).not.toHaveBeenCalled()
   })
 
   it('HTTP 错误时抛出（使用 body.message）', async () => {
-    mocks.apiFetch.mockResolvedValueOnce(
-      jsonRes({ message: '执行失败' }, { ok: false, status: 500 }),
-    )
+    mocks.apiFetch.mockResolvedValueOnce(jsonRes({ message: '执行失败' }, { ok: false, status: 500 }))
 
-    await expect(
-      mod.runOfficeEmployeeRead('excel-full-read-employee', '/path', '/root'),
-    ).rejects.toThrow('执行失败')
+    await expect(mod.runOfficeEmployeeRead('excel-full-read-employee', '/path', '/root')).rejects.toThrow('执行失败')
   })
 
   it('success=false 时抛出（使用 body.error）', async () => {
-    mocks.apiFetch.mockResolvedValueOnce(
-      jsonRes({ success: false, error: '员工错误' }),
-    )
+    mocks.apiFetch.mockResolvedValueOnce(jsonRes({ success: false, error: '员工错误' }))
 
-    await expect(
-      mod.runOfficeEmployeeRead('excel-full-read-employee', '/path', '/root'),
-    ).rejects.toThrow('员工错误')
+    await expect(mod.runOfficeEmployeeRead('excel-full-read-employee', '/path', '/root')).rejects.toThrow('员工错误')
   })
 
   it('res.json() 抛错时使用 HTTP 状态码', async () => {
     mocks.apiFetch.mockResolvedValueOnce(throwingJsonRes({ ok: false, status: 502 }))
 
-    await expect(
-      mod.runOfficeEmployeeRead('excel-full-read-employee', '/path', '/root'),
-    ).rejects.toThrow('员工执行失败 HTTP 502')
+    await expect(mod.runOfficeEmployeeRead('excel-full-read-employee', '/path', '/root')).rejects.toThrow('员工执行失败 HTTP 502')
   })
 
   it('返回 body.data 为空时回退到 body', async () => {
@@ -518,7 +492,11 @@ describe('runOfficeEmployeeRead', () => {
 // ── mapOfficeExcelReadToAnalysisResult ──
 
 describe('mapOfficeExcelReadToAnalysisResult', () => {
-  const upload = { file_path: '/path/to/file.xlsx', workspace_root: '/root', filename: 'test.xlsx' }
+  const upload = {
+    file_path: '/path/to/file.xlsx',
+    workspace_root: '/root',
+    filename: 'test.xlsx',
+  }
 
   it('空 sheets 时返回空结果', () => {
     const result = mod.mapOfficeExcelReadToAnalysisResult(upload, { sheets: [] })
@@ -614,10 +592,7 @@ describe('mapOfficeExcelReadToAnalysisResult', () => {
 
     // 源代码：cells = asRecord(row.cells)；Object.keys(cells).length 为 0 时 source = row
     // 第二个 row 的 cells 是空对象 {}，所以 source = row 本身（包含空 cells 字段）
-    expect(result.sheets![0].sample_rows).toEqual([
-      { A: 'value1' },
-      { cells: {}, A: 'value2' },
-    ])
+    expect(result.sheets![0].sample_rows).toEqual([{ A: 'value1' }, { cells: {}, A: 'value2' }])
   })
 
   it('toExcelCellValue: 处理各种值类型（null/string/number/boolean/array/object/undefined/function）', () => {
@@ -704,10 +679,7 @@ describe('mapOfficeExcelReadToAnalysisResult', () => {
 
   it('workbookPayloadFromEmployeeData: 从 items 中提取含 sheets 的项', () => {
     const employeeData = {
-      items: [
-        { name: 'item1', sheets: [{ name: 'FromItem', headers: [], rows: [] }] },
-        { name: 'item2' },
-      ],
+      items: [{ name: 'item1', sheets: [{ name: 'FromItem', headers: [], rows: [] }] }, { name: 'item2' }],
     }
 
     const result = mod.mapOfficeExcelReadToAnalysisResult(upload, employeeData)
@@ -848,9 +820,7 @@ describe('summarizeOfficeExcelRead', () => {
 
   it('workbookPayloadFromEmployeeData: 从 items 提取', () => {
     const employeeData = {
-      items: [
-        { sheets: [{ name: 'ItemSheet', headers: [{ display: 'X' }], rows: [{ X: '1' }] }] },
-      ],
+      items: [{ sheets: [{ name: 'ItemSheet', headers: [{ display: 'X' }], rows: [{ X: '1' }] }] }],
     }
 
     const summary = mod.summarizeOfficeExcelRead('test.xlsx', employeeData)
@@ -1152,9 +1122,7 @@ describe('resolveWorkspaceRoot 缓存行为', () => {
       }),
     )
 
-    await expect(mod.uploadTutorialOfficeFile(makeFile())).rejects.toThrow(
-      '上传成功但未返回 file_path / workspace_root',
-    )
+    await expect(mod.uploadTutorialOfficeFile(makeFile())).rejects.toThrow('上传成功但未返回 file_path / workspace_root')
   })
 
   it('workspace-root API res.json() 抛错时返回空字符串', async () => {
@@ -1166,9 +1134,7 @@ describe('resolveWorkspaceRoot 缓存行为', () => {
     )
     mocks.apiFetch.mockResolvedValueOnce(throwingJsonRes({ ok: true, status: 200 }))
 
-    await expect(mod.uploadTutorialOfficeFile(makeFile())).rejects.toThrow(
-      '上传成功但未返回 file_path / workspace_root',
-    )
+    await expect(mod.uploadTutorialOfficeFile(makeFile())).rejects.toThrow('上传成功但未返回 file_path / workspace_root')
   })
 })
 

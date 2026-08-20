@@ -4,23 +4,18 @@
 from __future__ import annotations
 
 import re
-import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 APP_ROOT = REPO_ROOT / "FHD" / "app"
 
-SKIP_SUFFIXES = (
-    "utils/operational_errors.py",
-)
+SKIP_SUFFIXES = ("utils/operational_errors.py",)
 
 EXCEPT_RE = re.compile(r"\bexcept\s+OPERATIONAL_ERRORS\b")
 IMPORT_OLD = re.compile(
     r"from app\.utils\.operational_errors import OPERATIONAL_ERRORS\b"
 )
-IMPORT_MULTI = re.compile(
-    r"from app\.utils\.operational_errors import ([^\n]+)"
-)
+IMPORT_MULTI = re.compile(r"from app\.utils\.operational_errors import ([^\n]+)")
 
 
 def _patch_file(path: Path) -> bool:
@@ -39,6 +34,7 @@ def _patch_file(path: Path) -> bool:
             "from app.utils.operational_errors import RECOVERABLE_ERRORS", new_text
         )
     else:
+
         def _expand_import(match: re.Match[str]) -> str:
             names = match.group(1)
             if "OPERATIONAL_ERRORS" not in names:

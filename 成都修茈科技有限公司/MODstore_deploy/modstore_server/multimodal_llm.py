@@ -63,7 +63,9 @@ def approximate_multimodal_payload_bytes(messages: Iterable[Dict[str, Any]]) -> 
     return total
 
 
-def validate_multimodal_payload_size(messages: Iterable[Dict[str, Any]]) -> Optional[str]:
+def validate_multimodal_payload_size(
+    messages: Iterable[Dict[str, Any]],
+) -> Optional[str]:
     n = approximate_multimodal_payload_bytes(messages)
     if n > MULTIMODAL_MAX_TOTAL_BYTES:
         return (
@@ -105,7 +107,12 @@ def redact_message_content_for_storage(content: Any) -> str:
                 iu = p.get("image_url") or {}
                 url = str(iu.get("url") or "")
                 if url.startswith("data:") and "base64," in url:
-                    safe.append({"type": "image_url", "image_url": {"url": "[redacted:data-url]"}})
+                    safe.append(
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": "[redacted:data-url]"},
+                        }
+                    )
                 else:
                     safe.append({"type": "image_url", "image_url": {"url": url[:500]}})
             else:

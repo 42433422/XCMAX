@@ -1,3 +1,4 @@
+# mypy: disable-error-code="index"
 """COVERAGE_RAMP Phase 4 round 12: modstore_adapter pure helpers + sync facade (22%→)."""
 
 from __future__ import annotations

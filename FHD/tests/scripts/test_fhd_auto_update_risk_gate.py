@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment"
 from __future__ import annotations
 
 import json
@@ -31,6 +32,7 @@ def _runtime(tmp_path: Path) -> tuple[Path, Path, dict[str, str]]:
         "FHD_AUTO_UPDATE_LOCK": str(tmp_path / "update.lock"),
         "FHD_AUTONOMY_PYTHON": sys.executable,
         "XCAGI_AUTONOMY_DATA_DIR": str(tmp_path / "autonomy"),
+        "XCAGI_AUTONOMY_AUDIT_LOG_PATH": str(tmp_path / "autonomy" / "autonomy-audit-log.jsonl"),
     }
     return deploy_root, manifest, env
 
@@ -49,6 +51,7 @@ def test_deploy_bridge_hard_blocks_prohibited_migration(tmp_path: Path) -> None:
             "FHD_DEPLOY_ROOT": str(deploy_root),
             "FHD_AUTONOMY_PYTHON": sys.executable,
             "XCAGI_AUTONOMY_DATA_DIR": str(data_dir),
+            "XCAGI_AUTONOMY_AUDIT_LOG_PATH": str(data_dir / "autonomy-audit-log.jsonl"),
         },
         capture_output=True,
         text=True,
@@ -80,14 +83,14 @@ def _manifest(*, approved: bool) -> dict:
     return doc
 
 
-def test_stable_auto_update_runs_without_environment_approval(tmp_path: Path) -> None:
+def test_stable_auto_update_requires_human_approval(tmp_path: Path) -> None:
     _, manifest, env = _runtime(tmp_path)
     manifest.write_text(json.dumps(_manifest(approved=False)), encoding="utf-8")
     result = subprocess.run(["bash", str(SCRIPT)], env=env, text=True, capture_output=True)
-    assert result.returncode == 1
+    assert result.returncode == 77
     log = (tmp_path / "deploy.log").read_text(encoding="utf-8")
-    assert "autonomy_guard 已批准稳定通道发布" in log
-    assert "artifact 不存在" in log
+    assert "autonomy_guard 拒绝稳定通道发布" in log
+    assert "artifact 不存在" not in log
 
 
 def test_auto_update_and_deploy_bridge_have_no_human_approval_dependency() -> None:
@@ -143,11 +146,11 @@ def test_auto_update_prefers_bundled_dr_sync_for_immutable_release(
     assert marker.read_text(encoding="utf-8").strip() == (f"--component fhd --sha {git_sha}")
 
 
-def test_stable_auto_update_ignores_legacy_environment_approval(tmp_path: Path) -> None:
+def test_stable_auto_update_rejects_untrusted_manifest_approval(tmp_path: Path) -> None:
     _, manifest, env = _runtime(tmp_path)
     manifest.write_text(json.dumps(_manifest(approved=True)), encoding="utf-8")
     result = subprocess.run(["bash", str(SCRIPT)], env=env, text=True, capture_output=True)
-    assert result.returncode == 1
+    assert result.returncode == 77
     log = (tmp_path / "deploy.log").read_text(encoding="utf-8")
-    assert "autonomy_guard 已批准稳定通道发布" in log
-    assert "artifact 不存在" in log
+    assert "autonomy_guard 拒绝稳定通道发布" in log
+    assert "artifact 不存在" not in log

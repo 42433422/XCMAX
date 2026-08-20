@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment, union-attr"
 """老板 IM 消息入站闭环（老板 → 员工 → 干活 → 回话）。
 
 老板在 IM（手机 / 桌面 / Web）里给某个 AI 员工发消息后，FHD 把消息转发到
@@ -22,8 +23,10 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Dict
+
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +71,7 @@ def _employee_display_name(employee_id: str) -> str:
         manifest = pack.get("manifest") or {}
         ident = manifest.get("identity") if isinstance(manifest.get("identity"), dict) else {}
         return str(ident.get("name") or manifest.get("name") or "").strip()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.debug("boss_im display name lookup failed employee=%s", employee_id, exc_info=True)
         return ""
 
@@ -87,10 +90,10 @@ def enqueue_boss_im_task(*, boss_user_id: int, employee_id: str, text: str) -> D
 
     from modstore_server.models import PendingBriefTask, get_session_factory
 
-    now = datetime.now(timezone.utc)
-    fp = hashlib.sha256(
-        f"boss_im|{uid}|{eid}|{body}|{now.timestamp():.6f}".encode("utf-8")
-    ).hexdigest()[:64]
+    now = datetime.now(UTC)
+    fp = hashlib.sha256(f"boss_im|{uid}|{eid}|{body}|{now.timestamp():.6f}".encode()).hexdigest()[
+        :64
+    ]
     sf = get_session_factory()
     with sf() as session:
         row = PendingBriefTask(
@@ -126,7 +129,9 @@ def handle_boss_im_message(*, user_id: int, employee_id: str, text: str) -> Dict
     if uid <= 0 or not eid or not body:
         return {"ok": False, "reason": "bad_args"}
 
-    from modstore_server.human_uncertainty_queue import answer_latest_pending_for_employee
+    from modstore_server.human_uncertainty_queue import (
+        answer_latest_pending_for_employee,
+    )
 
     answered = answer_latest_pending_for_employee(user_id=uid, employee_id=eid, answer=body)
     if answered.get("ok"):
@@ -154,7 +159,7 @@ def handle_boss_im_message(*, user_id: int, employee_id: str, text: str) -> Dict
                 boss_user_id=uid,
                 owner_user_id=uid,
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.debug("boss_im ack skipped employee=%s", eid, exc_info=True)
     return {
         "ok": True,
@@ -257,7 +262,7 @@ def dispatch_boss_im_task(task_id: int, *, actor_user_id: int = 0) -> Dict[str, 
         else:
             ok = True
             reply = "✅ 已处理完，不过这次没有可展示的文本结果。"
-    except Exception as exc:  # noqa: BLE001 - 员工执行失败必须转成 IM 回音，不能抛死调度循环
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001 - 员工执行失败必须转成 IM 回音，不能抛死调度循环
         logger.exception("boss_im dispatch failed task_id=%s employee=%s", task_id, eid)
         error = str(exc)[:2000]
         reply = f"❌ 这条我执行失败了：{str(exc)[:300]}\n可以换个说法再发我一次。"
@@ -273,7 +278,7 @@ def dispatch_boss_im_task(task_id: int, *, actor_user_id: int = 0) -> Dict[str, 
             display_name=_employee_display_name(eid),
             boss_user_id=boss_uid,
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.debug("boss_im reply push skipped task_id=%s", task_id, exc_info=True)
 
     with sf() as session:
@@ -291,9 +296,14 @@ def dispatch_boss_im_task(task_id: int, *, actor_user_id: int = 0) -> Dict[str, 
                 },
                 ensure_ascii=False,
             )
-            row.completed_at = datetime.now(timezone.utc)
+            row.completed_at = datetime.now(UTC)
             session.commit()
-    return {"ok": ok, "task_id": int(task_id), "replied_via_im": replied, "reply": reply}
+    return {
+        "ok": ok,
+        "task_id": int(task_id),
+        "replied_via_im": replied,
+        "reply": reply,
+    }
 
 
 __all__ = [

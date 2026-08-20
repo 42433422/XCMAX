@@ -312,7 +312,8 @@ def test_pending_unexpected_remediation_failure_still_raises(
     )
 
     with pytest.raises(
-        RuntimeError, match="automated self-maintenance remediation failed: execution_timeout"
+        RuntimeError,
+        match="automated self-maintenance remediation failed: execution_timeout",
     ):
         run_pending_automated_remediation()
 

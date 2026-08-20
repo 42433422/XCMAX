@@ -10,7 +10,7 @@ tested helpers can never drift apart.
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.llm_schema import RETORT_SCORE_DIMENSIONS
 
@@ -26,18 +26,20 @@ __all__ = [
 
 
 def summarize_task(task_body: dict[str, Any]) -> dict[str, Any]:
-    task = (
-        task_body.get("task") if isinstance(task_body.get("task"), dict) else task_body
+    task = cast(
+        dict[str, Any],
+        task_body.get("task") if isinstance(task_body.get("task"), dict) else task_body,
     )
-    subtasks = task.get("subTasks") or task.get("subtasks") or []
+    subtasks = cast(list[Any], task.get("subTasks") or task.get("subtasks") or [])
     normalized_subtasks: list[dict[str, Any]] = []
     logs: list[str] = []
     if isinstance(subtasks, list):
         for subtask in subtasks:
             if not isinstance(subtask, dict):
                 continue
-            subtask_logs = (
-                subtask.get("logs") if isinstance(subtask.get("logs"), list) else []
+            subtask_logs = cast(
+                list[Any],
+                subtask.get("logs") if isinstance(subtask.get("logs"), list) else [],
             )
             for row in subtask_logs:
                 if isinstance(row, dict) and str(row.get("content") or "").strip():
@@ -65,7 +67,7 @@ def summarize_task(task_body: dict[str, Any]) -> dict[str, Any]:
             )
     excerpt = "\n".join(logs)[-8000:]
     json_result = _extract_last_json_object(excerpt)
-    result = {
+    result: dict[str, Any] = {
         "provider": "paibi",
         "task_id": str(task.get("id") or ""),
         "status": str(task.get("status") or ""),
@@ -80,8 +82,9 @@ def summarize_task(task_body: dict[str, Any]) -> dict[str, Any]:
 
 
 def parallel_summary(status: dict[str, Any]) -> dict[str, Any]:
-    subtasks = (
-        status.get("subtasks") if isinstance(status.get("subtasks"), list) else []
+    subtasks = cast(
+        list[Any],
+        status.get("subtasks") if isinstance(status.get("subtasks"), list) else [],
     )
     counts: dict[str, int] = {}
     devices: set[str] = set()
@@ -101,8 +104,9 @@ def parallel_summary(status: dict[str, Any]) -> dict[str, Any]:
 
 
 def analyze_task_blockers(status: dict[str, Any]) -> list[dict[str, Any]]:
-    subtasks = (
-        status.get("subtasks") if isinstance(status.get("subtasks"), list) else []
+    subtasks = cast(
+        list[Any],
+        status.get("subtasks") if isinstance(status.get("subtasks"), list) else [],
     )
     logs = str(status.get("logs_excerpt") or "")
     blockers: list[dict[str, Any]] = []
@@ -339,11 +343,12 @@ def normalize_llm_scores(payload: dict[str, Any] | None) -> list[dict[str, Any]]
             if dimension not in RETORT_SCORE_DIMENSIONS:
                 continue
             try:
-                value = max(0.0, min(100.0, float(item.get("value"))))
+                value = max(0.0, min(100.0, float(cast(Any, item.get("value")))))
             except (TypeError, ValueError):
                 continue
-            evidence = (
-                item.get("evidence") if isinstance(item.get("evidence"), list) else []
+            evidence = cast(
+                list[Any],
+                item.get("evidence") if isinstance(item.get("evidence"), list) else [],
             )
             scores.append(
                 {
@@ -359,7 +364,7 @@ def normalize_llm_scores(payload: dict[str, Any] | None) -> list[dict[str, Any]]
     if "calibrated_overall" not in existing:
         suggestion = payload.get("score_suggestion")
         try:
-            value = max(0.0, min(100.0, float(suggestion)))
+            value = max(0.0, min(100.0, float(cast(Any, suggestion))))
         except (TypeError, ValueError):
             value = -1.0
         if value >= 0:

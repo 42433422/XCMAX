@@ -65,9 +65,7 @@ describe('tabularReadEmployees', () => {
   })
 
   it('pickPresentationFullJsonDownload', () => {
-    const hit = pickPresentationFullJsonDownload([
-      { jobId: 'j1', filename: 'outputs/presentation_full.json' },
-    ])
+    const hit = pickPresentationFullJsonDownload([{ jobId: 'j1', filename: 'outputs/presentation_full.json' }])
     expect(hit?.filename).toContain('presentation_full.json')
   })
 
@@ -111,7 +109,13 @@ describe('tabularReadEmployees', () => {
       employee_id: 'word-full-read-employee',
       output_downloads: [{ job_id: 'j1', filename: 'document_full.json' }],
       result: {
-        outputs: [{ handler: 'direct_python', ok: true, output: { ok: true, paragraph_count: 12, table_count: 1 } }],
+        outputs: [
+          {
+            handler: 'direct_python',
+            ok: true,
+            output: { ok: true, paragraph_count: 12, table_count: 1 },
+          },
+        ],
       },
     })
     expect(text).toContain('自动')
@@ -134,7 +138,13 @@ describe('tabularReadEmployees', () => {
 
   it('formatEmployeeReadResultSummary shows failure without json dump', () => {
     const { text } = formatEmployeeReadResultSummary('word-full-read-employee', '3.doc', {
-      outputs: [{ handler: 'direct_python', ok: false, output: { ok: false, error: 'LibreOffice missing' } }],
+      outputs: [
+        {
+          handler: 'direct_python',
+          ok: false,
+          output: { ok: false, error: 'LibreOffice missing' },
+        },
+      ],
     })
     expect(text).toContain('试跑失败')
     expect(text).not.toContain('```json')
@@ -146,9 +156,13 @@ describe('tabularReadEmployees', () => {
       output_downloads: [{ job_id: 'j1', filename: 'document_full.json' }],
     })
     expect(text).toContain('自动')
-    expect(pickDocumentFullJsonDownload(parseEmployeeOutputDownloads({
-      output_downloads: [{ job_id: 'j1', filename: 'document_full.json' }],
-    }))).toBeDefined()
+    expect(
+      pickDocumentFullJsonDownload(
+        parseEmployeeOutputDownloads({
+          output_downloads: [{ job_id: 'j1', filename: 'document_full.json' }],
+        }),
+      ),
+    ).toBeDefined()
   })
 
   it('parseEmployeeOutputDownloads', () => {
@@ -164,16 +178,12 @@ describe('tabularReadEmployees', () => {
         output_downloads: [{ job_id: 'j9', filename: 'generated_document.docx', label: 'Word 文档' }],
       },
     })
-    expect(d).toEqual([
-      { jobId: 'j9', filename: 'generated_document.docx', label: 'Word 文档' },
-    ])
+    expect(d).toEqual([{ jobId: 'j9', filename: 'generated_document.docx', label: 'Word 文档' }])
   })
 
   it('parseEmployeeOutputDownloads supports outputDownloads camelCase and files[]', () => {
     const d = parseEmployeeOutputDownloads({
-      outputDownloads: [
-        { jobId: 'j2', files: ['generated_document.docx', 'document_full.json'] },
-      ],
+      outputDownloads: [{ jobId: 'j2', files: ['generated_document.docx', 'document_full.json'] }],
     })
     expect(d.map((x) => x.filename)).toEqual(['generated_document.docx', 'document_full.json'])
   })
@@ -224,7 +234,11 @@ describe('tabularReadEmployees', () => {
       tableCount: 2,
       title: undefined,
     })
-    expect(extractWordReadStats({ outputs: [{ output: { items: [{ paragraph_count: 3, table_count: 1 }] } }] })).toEqual({
+    expect(
+      extractWordReadStats({
+        outputs: [{ output: { items: [{ paragraph_count: 3, table_count: 1 }] } }],
+      }),
+    ).toEqual({
       paragraphCount: 3,
       tableCount: 1,
       title: undefined,
@@ -242,12 +256,7 @@ describe('tabularReadEmployees', () => {
       ],
     })
 
-    expect(downloads.map((d) => d.filename)).toEqual([
-      'from-file-object.txt',
-      'uses-shared-job.txt',
-      'uses-path.txt',
-      'uses-file.txt',
-    ])
+    expect(downloads.map((d) => d.filename)).toEqual(['from-file-object.txt', 'uses-shared-job.txt', 'uses-path.txt', 'uses-file.txt'])
     expect(downloads[2].label).toBe('Path Label')
     expect(pickQuantitativeReportDownload([{ jobId: 'job', filename: 'reports/quantitative_report.html' }])).toBeTruthy()
   })
@@ -266,7 +275,10 @@ describe('tabularReadEmployees', () => {
     const failed = formatEmployeeReadResultSummary('word-full-read-employee', 'legacy.doc', {
       ok: false,
       outputs: [
-        { ok: false, output: { ok: false, error: 'LibreOffice missing', warnings: ['请安装转换器'] } },
+        {
+          ok: false,
+          output: { ok: false, error: 'LibreOffice missing', warnings: ['请安装转换器'] },
+        },
       ],
     })
     expect(failed.text).toContain('提示')
@@ -307,30 +319,42 @@ describe('tabularReadEmployees', () => {
       { job_id: 'j2', filename: 'b.txt' },
     ])
 
-    const pptTooDeep = Array.from({ length: 14 }).reduce((node) => ({ data: node }), { slides: [] } as unknown)
+    const pptTooDeep = Array.from({ length: 14 }).reduce((node) => ({ data: node }), {
+      slides: [],
+    } as unknown)
     expect(extractPresentationFullJsonText(pptTooDeep)).toBeNull()
     expect(extractPresentationFullJsonText({ presentation_full: 'not-object' })).toBeNull()
-    expect(extractPresentationFullJsonText({
-      outputs: [null, 'bad', { output: { payload: { slides: [{ title: 'Nested' }] } } }],
-    })).toContain('Nested')
+    expect(
+      extractPresentationFullJsonText({
+        outputs: [null, 'bad', { output: { payload: { slides: [{ title: 'Nested' }] } } }],
+      }),
+    ).toContain('Nested')
 
-    const docTooDeep = Array.from({ length: 14 }).reduce((node) => ({ data: node }), { paragraphs: [] } as unknown)
+    const docTooDeep = Array.from({ length: 14 }).reduce((node) => ({ data: node }), {
+      paragraphs: [],
+    } as unknown)
     expect(extractDocumentFullJsonText(docTooDeep)).toBeNull()
     expect(extractDocumentFullJsonText({ document_full: 'not-object' })).toBeNull()
-    expect(extractDocumentFullJsonText({
-      outputs: [null, 'bad', { output: { payload: { paragraphs: [{ text: 'Nested' }] } } }],
-    })).toContain('Nested')
+    expect(
+      extractDocumentFullJsonText({
+        outputs: [null, 'bad', { output: { payload: { paragraphs: [{ text: 'Nested' }] } } }],
+      }),
+    ).toContain('Nested')
 
-    expect(extractWordReadStats({
-      llm_context_text: '{"title":"Root Title","paragraphs":[]}',
-      outputs: [{ output: { ok: true } }],
-    }).title).toBe('Root Title')
+    expect(
+      extractWordReadStats({
+        llm_context_text: '{"title":"Root Title","paragraphs":[]}',
+        outputs: [{ output: { ok: true } }],
+      }).title,
+    ).toBe('Root Title')
 
-    expect(extractEmployeeExecuteDiagnostics({
-      ok: false,
-      summary: 'top summary only',
-      outputs: [null, 'bad', { ok: true, output: { ok: true, warnings: [' '] } }],
-    })).toMatchObject({
+    expect(
+      extractEmployeeExecuteDiagnostics({
+        ok: false,
+        summary: 'top summary only',
+        outputs: [null, 'bad', { ok: true, output: { ok: true, warnings: [' '] } }],
+      }),
+    ).toMatchObject({
       success: false,
       error: 'top summary only',
       summary: 'top summary only',

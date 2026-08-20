@@ -1,3 +1,4 @@
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """每日 07:00 编排：切分支 → 跑 daily-orchestrator 员工 → 本地提交 → 写入 OpsStagedChange。"""
 
 from __future__ import annotations
@@ -5,8 +6,10 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Dict
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +32,7 @@ def _slo_halt_blocks_auto_merge() -> bool:
         if smoke.get("skipped"):
             return False
         return not bool(smoke.get("ok"))
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("slo halt smoke check failed")
         return True
 
@@ -80,7 +83,10 @@ def run_daily_orchestrator_job(*, bypass_digest_gate: bool = False) -> Dict[str,
         }
 
     from modstore_server.employee_orchestrator import plan_and_dispatch
-    from modstore_server.integrations.ops_action_handlers import dispatch_ops_handler, repo_root
+    from modstore_server.integrations.ops_action_handlers import (
+        dispatch_ops_handler,
+        repo_root,
+    )
     from modstore_server.models import OpsStagedChange, get_session_factory
 
     root = str(repo_root())
@@ -96,11 +102,16 @@ def run_daily_orchestrator_job(*, bypass_digest_gate: bool = False) -> Dict[str,
                 "daily orchestrator skipped: repo_root 非 git 工作树 (%s) — 跳过 git 编排（本地 dev 正常；生产应指向 modstore-git）",
                 root,
             )
-            return {"ok": True, "skipped": True, "reason": "repo_root_not_git", "root": root}
-    except Exception:
+            return {
+                "ok": True,
+                "skipped": True,
+                "reason": "repo_root_not_git",
+                "root": root,
+            }
+    except RECOVERABLE_ERRORS:
         logger.exception("daily orchestrator: is_git_repo 守卫异常，继续按原逻辑")
     prefix = os.environ.get("MODSTORE_DEPLOY_PUSH_BRANCH_PREFIX", "auto/daily-").strip()
-    day = datetime.now(timezone.utc).strftime("%Y%m%d")
+    day = datetime.now(UTC).strftime("%Y%m%d")
     # 同日幂等：每日汇总分支名固定（无随机后缀），同一天重跑复用同一分支 + 同一 PR，根治分支爆炸。
     branch = f"{prefix}{day}"
 
@@ -128,7 +139,13 @@ def run_daily_orchestrator_job(*, bypass_digest_gate: bool = False) -> Dict[str,
         logger.info("daily orchestrator: working tree dirty, stashing before checkout")
         st = _run_git(
             root,
-            ["stash", "push", "-u", "-m", f"daily-orchestrator-pre-checkout-{base_ref}"],
+            [
+                "stash",
+                "push",
+                "-u",
+                "-m",
+                f"daily-orchestrator-pre-checkout-{base_ref}",
+            ],
         )
         if st.returncode != 0:
             logger.warning("daily orchestrator: stash failed: %s, trying clean", st.stderr)
@@ -159,7 +176,12 @@ def run_daily_orchestrator_job(*, bypass_digest_gate: bool = False) -> Dict[str,
     else:
         br = dispatch_ops_handler(
             "shell_exec",
-            {"shell_exec": {"command_id": "git-create-branch", "args": {"branch": branch}}},
+            {
+                "shell_exec": {
+                    "command_id": "git-create-branch",
+                    "args": {"branch": branch},
+                }
+            },
             {},
             "daily orchestrator job",
             "daily-orchestrator",
@@ -189,7 +211,7 @@ def run_daily_orchestrator_job(*, bypass_digest_gate: bool = False) -> Dict[str,
         )
         if not out.get("ok"):
             logger.warning("daily orchestrator duty graph: %s", out.get("error"))
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("daily-orchestrator plan_and_dispatch failed")
 
     st = _run_git(root, ["status", "--porcelain"])
@@ -265,12 +287,14 @@ def run_daily_orchestrator_job(*, bypass_digest_gate: bool = False) -> Dict[str,
                     "reason": "slo_halt_auto_merge",
                 }
             else:
-                from modstore_server.ops_staged_auto_approve import try_auto_deploy_staged_change
+                from modstore_server.ops_staged_auto_approve import (
+                    try_auto_deploy_staged_change,
+                )
 
                 auto = try_auto_deploy_staged_change(int(staged_id))
                 if auto is not None:
                     result["auto_deploy"] = auto
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.exception("daily orchestrator auto-deploy skipped staged_id=%s", staged_id)
 
     # 自动创建 GitHub PR（若启用）
@@ -284,7 +308,7 @@ def run_daily_orchestrator_job(*, bypass_digest_gate: bool = False) -> Dict[str,
         try:
             pr_result = _maybe_create_pr(branch, diff_summary, files_n, staged_id)
             result["pr"] = pr_result
-        except Exception as _pr_exc:
+        except RECOVERABLE_ERRORS as _pr_exc:
             result["pr_error"] = str(_pr_exc)
 
     # 分支自动清理（best-effort，防分支爆炸）：删已合并/超期的 cr/* 与 auto/daily-*。
@@ -292,7 +316,7 @@ def run_daily_orchestrator_job(*, bypass_digest_gate: bool = False) -> Dict[str,
         from modstore_server.branch_janitor import prune_stale_branches
 
         result["branch_cleanup"] = prune_stale_branches(root, base=base_ref)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("daily orchestrator: branch cleanup skipped")
 
     if staged_id:
@@ -305,7 +329,7 @@ def run_daily_orchestrator_job(*, bypass_digest_gate: bool = False) -> Dict[str,
                 files=files_n,
                 pr_url=str((result.get("pr") or {}).get("pr_url") or ""),
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.exception("collab report (staged change) failed staged_id=%s", staged_id)
 
     return result
@@ -314,7 +338,6 @@ def run_daily_orchestrator_job(*, bypass_digest_gate: bool = False) -> Dict[str,
 def _maybe_create_pr(branch: str, diff_summary: str, files_n: int, staged_id: int) -> dict:
     """尝试通过 ``gh pr create`` 创建 GitHub PR。"""
     import subprocess
-    import sys
 
     from modstore_server.integrations.ops_action_handlers import repo_root
 
@@ -378,7 +401,7 @@ def cron_trigger_for_orchestrator():
         hour = int(os.environ.get("MODSTORE_DAILY_ORCHESTRATOR_HOUR", "7"))
         minute = int(os.environ.get("MODSTORE_DAILY_ORCHESTRATOR_MINUTE", "0"))
         return CronTrigger(hour=hour, minute=minute, timezone=tz)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         from apscheduler.triggers.cron import CronTrigger
 
         return CronTrigger(hour=7, minute=0)

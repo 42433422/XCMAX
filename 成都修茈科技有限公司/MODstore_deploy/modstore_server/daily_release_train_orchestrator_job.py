@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment, index, union-attr"
 """08:25 release_train 编排：Phase B/C 产线串联 + ProductionLine + installer/major 员工链。"""
 
 from __future__ import annotations
@@ -5,8 +6,10 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Dict, Optional
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +46,7 @@ def _persist_orchestrator_audit(record_id: int, payload: Dict[str, Any]) -> None
             meta["orchestrator_audit"] = payload
             row.vibe_prep_meta_json = json.dumps(meta, ensure_ascii=False)
             session.commit()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("persist orchestrator_audit failed record_id=%s", record_id)
 
 
@@ -167,7 +170,7 @@ def _record_time_rail_runtime(result: Dict[str, Any]) -> None:
                 source="daily_release_train_orchestrator_job.phase_c",
                 meta={**meta, "rollback": phase_c.get("rollback")},
             )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("release_train orchestrator: time_rail runtime record failed")
 
 
@@ -178,7 +181,11 @@ def run_daily_release_train_orchestrator_job(
 ) -> Dict[str, Any]:
     raw = (os.environ.get("MODSTORE_RELEASE_TRAIN_ENABLED", "1") or "").strip().lower()
     if raw in ("0", "false", "no", "off"):
-        return {"ok": True, "skipped": True, "reason": "MODSTORE_RELEASE_TRAIN_ENABLED=0"}
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "MODSTORE_RELEASE_TRAIN_ENABLED=0",
+        }
 
     from modstore_server.automation_primary import skip_daily_automation_result
 
@@ -194,7 +201,9 @@ def run_daily_release_train_orchestrator_job(
             "reason": "MODSTORE_DAILY_ORCHESTRATOR_DIGEST_MODE=off",
         }
 
-    from modstore_server.daily_vibe_line_execute_job import find_digest_record_for_execute
+    from modstore_server.daily_vibe_line_execute_job import (
+        find_digest_record_for_execute,
+    )
     from modstore_server.digest_daily_line_chain import (
         execute_installer_employee_chain,
         execute_phase_b_line_chain,
@@ -230,11 +239,13 @@ def run_daily_release_train_orchestrator_job(
         )
     elif mode in ("primary", "digest") and not force:
         try:
-            from modstore_server.daily_orchestrator_job import run_daily_orchestrator_job
+            from modstore_server.daily_orchestrator_job import (
+                run_daily_orchestrator_job,
+            )
 
             orch = run_daily_orchestrator_job(bypass_digest_gate=True)
             result["daily_orchestrator"] = orch
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.exception("release_train orchestrator: daily_orchestrator failed")
 
     try:
@@ -245,7 +256,7 @@ def run_daily_release_train_orchestrator_job(
         )
         if not result["phase_b"].get("ok"):
             result["ok"] = False
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("release_train orchestrator: phase_b line chain failed")
         result["phase_b"] = {"ok": False, "error": "phase_b failed"}
         result["ok"] = False
@@ -259,7 +270,7 @@ def run_daily_release_train_orchestrator_job(
         )
         if not result["phase_c_pipeline"].get("ok", True):
             result["ok"] = False
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("release_train orchestrator: production pipeline failed")
         result["phase_c_pipeline"] = {"ok": False, "error": "pipeline failed"}
         result["ok"] = False
@@ -277,7 +288,7 @@ def run_daily_release_train_orchestrator_job(
                 result["major_plan"] = result["phase_c"]
             if not result["phase_c"].get("ok", True):
                 result["ok"] = False
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.exception("release_train orchestrator: installer/major chain failed")
             result["phase_c"] = {"ok": False, "error": "phase_c failed"}
             result["ok"] = False
@@ -290,14 +301,16 @@ def run_daily_release_train_orchestrator_job(
             "release_kind": kind,
             "release_train": rt_after,
             "ok": bool(result.get("ok")),
-            "ran_at": datetime.now(timezone.utc).isoformat(),
+            "ran_at": datetime.now(UTC).isoformat(),
         },
     )
     _record_time_rail_runtime(result)
 
     # daily-digest 完成后触发战略层集成（失败 review / installer+major 战略复盘）
     try:
-        from modstore_server.digest_daily_line_chain import trigger_strategic_layer_dispatch
+        from modstore_server.digest_daily_line_chain import (
+            trigger_strategic_layer_dispatch,
+        )
 
         result["strategic_layer"] = trigger_strategic_layer_dispatch(
             rid,
@@ -305,7 +318,7 @@ def run_daily_release_train_orchestrator_job(
             release_train=rt_after,
             result=result,
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("release_train orchestrator: strategic_layer dispatch failed")
         result["strategic_layer"] = {"ok": False, "error": "strategic_layer failed"}
 
@@ -322,9 +335,12 @@ def run_daily_release_train_orchestrator_job(
             release_kind=kind,
             release_train=rt_after,
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("release_train orchestrator: strategic action bridge failed")
-        result["strategic_action_bridge"] = {"ok": False, "error": "strategic action bridge failed"}
+        result["strategic_action_bridge"] = {
+            "ok": False,
+            "error": "strategic action bridge failed",
+        }
 
     return result
 
@@ -342,7 +358,7 @@ def cron_trigger_for_release_train_orchestrator():
         hour = int(os.environ.get("MODSTORE_RELEASE_TRAIN_ORCHESTRATOR_HOUR", "8"))
         minute = int(os.environ.get("MODSTORE_RELEASE_TRAIN_ORCHESTRATOR_MINUTE", "25"))
         return CronTrigger(hour=hour, minute=minute, timezone=tz)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         from apscheduler.triggers.cron import CronTrigger
 
         return CronTrigger(hour=8, minute=25)

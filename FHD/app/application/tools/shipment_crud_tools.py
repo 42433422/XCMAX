@@ -12,7 +12,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -64,7 +64,7 @@ def delete_order(args: dict[str, Any]) -> dict[str, Any]:
         if isinstance(result, dict) and result.get("success"):
             result["order_number"] = order_number
             result["message"] = result.get("message") or f"订单 {order_number} 已删除"
-        return result
+        return cast("dict[str, Any]", result)
     except RECOVERABLE_ERRORS as e:
         logger.exception("delete_order 失败: %s", e)
         return {"success": False, "error": str(e), "order_number": order_number}
@@ -140,7 +140,7 @@ def update_order(args: dict[str, Any]) -> dict[str, Any]:
         result = svc.update_shipment_record(record_id, **update_kwargs)
         if isinstance(result, dict) and result.get("success"):
             result["order_number"] = order_number
-        return result
+        return cast("dict[str, Any]", result)
     except RECOVERABLE_ERRORS as e:
         logger.exception("update_order 失败: %s", e)
         return {"success": False, "error": str(e), "order_number": order_number}
@@ -205,7 +205,7 @@ def clear_all_orders(args: dict[str, Any]) -> dict[str, Any]:
     try:
         svc = _get_service()
         result = svc.clear_all_orders()
-        return result
+        return cast("dict[str, Any]", result)
     except RECOVERABLE_ERRORS as e:
         logger.exception("clear_all_orders 失败: %s", e)
         return {"success": False, "error": str(e)}

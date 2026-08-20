@@ -6,14 +6,14 @@ CI / 部署工作流的迁移。
 
 ## 1. 目标仓库边界
 
-| 目标仓库 | 源路径 | 迁移优先级 |
-| --- | --- | --- |
-| `modstore-payment-java` | `MODstore_deploy/java_payment_service/` | **P0**（跨语言链路风险最高，先切） |
-| `modstore-backend` | `MODstore_deploy/modstore_server/`、`modman/`、`tests/`、`pyproject.toml`、`alembic/`、`scripts/python-*.sh` | **P0** |
-| `modstore-frontend` | `MODstore_deploy/market/` | P1 |
-| `xiuci-marketing-site` | 根 `*.html`、`styles.css`、`main.js`、`assets/`、`site/`、`new/` | P1 |
-| `modstore-deploy-infra` | `MODstore_deploy/docker-compose.yml`、`deploy/`、`MODstore_deploy/deploy/`、`MODstore_deploy/monitoring/`、`MODstore_deploy/scripts/` | P2 |
-| `vibe-coding` | `vibe-coding/` | P2 |
+| 目标仓库                | 源路径                                                                                                                                | 迁移优先级                         |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| `modstore-payment-java` | `MODstore_deploy/java_payment_service/`                                                                                               | **P0**（跨语言链路风险最高，先切） |
+| `modstore-backend`      | `MODstore_deploy/modstore_server/`、`modman/`、`tests/`、`pyproject.toml`、`alembic/`、`scripts/python-*.sh`                          | **P0**                             |
+| `modstore-frontend`     | `MODstore_deploy/market/`                                                                                                             | P1                                 |
+| `xiuci-marketing-site`  | 根 `*.html`、`styles.css`、`main.js`、`assets/`、`site/`、`new/`                                                                      | P1                                 |
+| `modstore-deploy-infra` | `MODstore_deploy/docker-compose.yml`、`deploy/`、`MODstore_deploy/deploy/`、`MODstore_deploy/monitoring/`、`MODstore_deploy/scripts/` | P2                                 |
+| `vibe-coding`           | `vibe-coding/`                                                                                                                        | P2                                 |
 
 ## 2. 拆分顺序（风险从高到低）
 
@@ -50,11 +50,11 @@ flowchart LR
 
 ## 4. 双跑期 → 切换期 → 退役期
 
-| 阶段 | 说明 | 本仓库状态 |
-| --- | --- | --- |
-| 双跑期（1 周） | 新仓库 CI/部署生效；本仓库同名工作流仍跑做对照 | 保留 `MODstore_deploy/<component>` 目录 |
-| 切换期（1 周） | 生产环境切到新仓库产物；旧目录只读 | 本仓库禁用对应 CI（workflow disabled） |
-| 退役期 | 从本仓库删除源码目录；保留一个 `<component>/MIGRATED.md` 指向新仓库 | 彻底移除 |
+| 阶段           | 说明                                                                | 本仓库状态                              |
+| -------------- | ------------------------------------------------------------------- | --------------------------------------- |
+| 双跑期（1 周） | 新仓库 CI/部署生效；本仓库同名工作流仍跑做对照                      | 保留 `MODstore_deploy/<component>` 目录 |
+| 切换期（1 周） | 生产环境切到新仓库产物；旧目录只读                                  | 本仓库禁用对应 CI（workflow disabled）  |
+| 退役期         | 从本仓库删除源码目录；保留一个 `<component>/MIGRATED.md` 指向新仓库 | 彻底移除                                |
 
 每个组件都按这三段走，避免一次性切换导致的发布事故。
 

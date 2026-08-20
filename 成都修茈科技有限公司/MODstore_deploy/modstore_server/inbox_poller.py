@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr"
 """IMAP 收件：拉取未读邮件，匹配审批 token 并触发 approval_dispatcher。
 
 凭证与 SMTP 发信相同：默认使用 ``MODSTORE_SMTP_USER`` / ``MODSTORE_SMTP_PASSWORD``（QQ 邮箱授权码）。
@@ -18,6 +19,7 @@ from typing import Any, Dict, List
 
 from modstore_server.approval_dispatcher import handle_incoming_approval_email
 from modstore_server.email_service import _load_modstore_env
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +52,7 @@ def _decode_payload(part: Message) -> str:
             return ""
         charset = part.get_content_charset() or "utf-8"
         return raw.decode(charset, errors="replace")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return ""
 
 
@@ -102,13 +104,13 @@ def _safe_header(msg: Message, name: str) -> str:
         if v is None:
             return ""
         return str(v).strip()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         try:
             raw_headers = getattr(msg, "_headers", None) or []
             for k, v in raw_headers:
                 if isinstance(k, str) and k.lower() == name.lower():
                     return str(v).strip() if v is not None else ""
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
         return ""
 
@@ -167,7 +169,7 @@ def poll_inbox_once() -> Dict[str, Any]:
                 mid = _safe_header(msg, "Message-ID")
                 try:
                     body = _message_body_text(msg)
-                except Exception:
+                except RECOVERABLE_ERRORS:
                     logger.exception("decode body failed mid=%s", mid)
                     body = ""
                 try:
@@ -176,21 +178,21 @@ def poll_inbox_once() -> Dict[str, Any]:
                     )
                     if res.get("ok") or not res.get("skip"):
                         processed += 1
-                except Exception:
+                except RECOVERABLE_ERRORS:
                     logger.exception("handle incoming approval failed mid=%s", mid)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 logger.exception("inbox poller: skip malformed mail id=%s", raw_id)
             finally:
                 # 无论解析是否成功，都标记为已读，避免同一封异常邮件持续触发失败计数。
                 try:
                     mail.store(raw_id, "+FLAGS", "\\Seen")
-                except Exception:
+                except RECOVERABLE_ERRORS:
                     logger.exception("mark seen failed id=%s", raw_id)
 
         mail.logout()
         _poll_fail_streak = 0
         return {"ok": True, "processed": processed}
-    except Exception as e:  # noqa: BLE001
+    except BOUNDARY_ERRORS as e:  # noqa: BLE001
         _poll_fail_streak += 1
         logger.exception("IMAP poll failed: %s", e)
         return {

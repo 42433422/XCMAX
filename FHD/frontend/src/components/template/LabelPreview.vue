@@ -10,21 +10,21 @@ export default {
   props: {
     fields: {
       type: Array,
-      default: () => []
+      default: () => [],
     },
     width: {
       type: Number,
-      default: 300
+      default: 300,
     },
     height: {
       type: Number,
-      default: 200
-    }
+      default: 200,
+    },
   },
   data() {
     return {
       canvas: null,
-      ctx: null
+      ctx: null,
     }
   },
   mounted() {
@@ -38,8 +38,8 @@ export default {
       handler() {
         this.render()
       },
-      deep: true
-    }
+      deep: true,
+    },
   },
   methods: {
     initCanvas() {
@@ -68,12 +68,7 @@ export default {
       ctx.strokeStyle = '#333333'
       ctx.lineWidth = 1
       const innerPadding = 10
-      ctx.strokeRect(
-        innerPadding,
-        innerPadding,
-        w - innerPadding * 2,
-        h - innerPadding * 2
-      )
+      ctx.strokeRect(innerPadding, innerPadding, w - innerPadding * 2, h - innerPadding * 2)
 
       this.renderFields(ctx, w, h)
 
@@ -90,13 +85,10 @@ export default {
       ctx.font = 'bold 14px sans-serif'
       ctx.fillStyle = '#333333'
 
-      const fixedFields = fields.filter(f => f.type === 'fixed')
-      const dynamicFields = fields.filter(f => f.type === 'dynamic')
+      const fixedFields = fields.filter((f) => f.type === 'fixed')
+      const dynamicFields = fields.filter((f) => f.type === 'dynamic')
 
-      const allFields = [
-        ...fixedFields.map(f => ({ ...f, isLabel: true })),
-        ...dynamicFields.map(f => ({ ...f, isLabel: false }))
-      ]
+      const allFields = [...fixedFields.map((f) => ({ ...f, isLabel: true })), ...dynamicFields.map((f) => ({ ...f, isLabel: false }))]
 
       for (const field of allFields) {
         if (yOffset > h - 30) break
@@ -164,7 +156,7 @@ export default {
         { label: '颜色', value: '白色', type: 'dynamic' },
         { label: '码段', value: '00001', type: 'dynamic' },
         { label: '等级', value: '合格品', type: 'fixed' },
-        { label: '统一零售价', value: '¥199', type: 'dynamic' }
+        { label: '统一零售价', value: '¥199', type: 'dynamic' },
       ]
     },
 
@@ -173,8 +165,8 @@ export default {
         return this.canvas.toDataURL('image/png')
       }
       return ''
-    }
-  }
+    },
+  },
 }
 </script>
 

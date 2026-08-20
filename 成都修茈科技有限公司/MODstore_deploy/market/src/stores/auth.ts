@@ -5,6 +5,7 @@ import { ApiError } from '../infrastructure/http/client'
 import { getAccessToken } from '../infrastructure/storage/tokenStore'
 import { buildLevelProfileDict, normalizeMeResponse } from '../domain/accountLevel'
 import type { CurrentUser } from '../domain/auth/types'
+import { asUnknownRecord } from '../utils/typeNarrowing'
 
 function displayName(user: CurrentUser | null | undefined): string {
   const username = typeof user?.username === 'string' ? user.username.trim() : ''
@@ -38,9 +39,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   const ADMIN_DIGEST_UNLOCK_KEY = 'modstore_admin_digest_unlock_expires'
   const adminDigestUnlockExpires = ref<string>(
-    (typeof sessionStorage !== 'undefined'
-      ? sessionStorage.getItem(ADMIN_DIGEST_UNLOCK_KEY)
-      : '') || '',
+    (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(ADMIN_DIGEST_UNLOCK_KEY) : '') || '',
   )
   const adminUiUnlocked = computed(() => {
     const exp = adminDigestUnlockExpires.value
@@ -108,10 +107,10 @@ export const useAuthStore = defineStore('auth', () => {
       return
     }
     try {
-      const r: any = await api.paymentMyPlan()
+      const r = asUnknownRecord(await api.paymentMyPlan())
       membershipFetchFailed.value = false
-      const m = r?.membership && typeof r.membership === 'object' ? r.membership : null
-      if (m && typeof m.tier === 'string') {
+      const m = asUnknownRecord(r.membership)
+      if (typeof m.tier === 'string') {
         membership.value = {
           tier: String(m.tier),
           label: String(m.label || ''),
@@ -126,28 +125,19 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function refreshSession(force = false): Promise<any | null> {
+  async function refreshSession(force = false): Promise<CurrentUser | null> {
     const token = getAccessToken()
     if (!token) {
       resetSession()
       return null
     }
     const now = Date.now()
-    if (
-      !force &&
-      token === lastValidatedToken.value &&
-      user.value &&
-      now - lastMeFetchedAt.value < ME_STALE_MS
-    ) {
+    if (!force && token === lastValidatedToken.value && user.value && now - lastMeFetchedAt.value < ME_STALE_MS) {
       return user.value
     }
     try {
       const raw = await api.me()
-      if (
-        raw &&
-        typeof raw === 'object' &&
-        ((raw as { ok?: boolean }).ok === false || (raw as { success?: boolean }).success === false)
-      ) {
+      if (raw && typeof raw === 'object' && ((raw as { ok?: boolean }).ok === false || (raw as { success?: boolean }).success === false)) {
         clearAuthTokens()
         resetSession()
         return null
@@ -162,6 +152,8 @@ export const useAuthStore = defineStore('auth', () => {
         ...me,
         id: Number(me.id),
         username: String(me.username || me.email || ''),
+        level_profile:
+          me.level_profile && typeof me.level_profile === 'object' ? (me.level_profile as CurrentUser['level_profile']) : undefined,
       }
       lastValidatedToken.value = token
       lastMeFetchedAt.value = Date.now()
@@ -184,13 +176,13 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function loginWithPassword(usernameValue: string, password: string): Promise<any> {
+  async function loginWithPassword(usernameValue: string, password: string): Promise<unknown> {
     const res = await api.login(usernameValue, password)
     await refreshSession(true)
     return res
   }
 
-  async function loginWithCode(email: string, code: string): Promise<any> {
+  async function loginWithCode(email: string, code: string): Promise<unknown> {
     const res = await api.loginWithCode(email, code)
     await refreshSession(true)
     return res

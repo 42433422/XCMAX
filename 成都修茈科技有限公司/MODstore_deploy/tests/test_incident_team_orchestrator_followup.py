@@ -178,8 +178,9 @@ def test_prompt_failure_falls_back_to_task_market(monkeypatch):
     market_calls = []
     monkeypatch.setattr(
         "modstore_server.employee_task_market.dispatch_incident_via_market",
-        lambda *a, **k: market_calls.append((a, k))
-        or {"ok": True, "claimed": True, "employee_id": "vibe-1"},
+        lambda *a, **k: (
+            market_calls.append((a, k)) or {"ok": True, "claimed": True, "employee_id": "vibe-1"}
+        ),
     )
 
     results = _make_results("scout", "unexpected token in response")

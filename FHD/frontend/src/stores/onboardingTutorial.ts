@@ -47,11 +47,7 @@ export const useOnboardingTutorialStore = defineStore('onboardingTutorial', () =
     skipRequested.value = false
   }
 
-  const start = (options: {
-    track?: string
-    buildContext: TutorialBuildContext
-    returnContext?: OnboardingReturnContext
-  }) => {
+  const start = (options: { track?: string; buildContext: TutorialBuildContext; returnContext?: OnboardingReturnContext }) => {
     const tid = String(options.track || 'advanced').trim() || 'advanced'
     trackId.value = tid
     returnContext.value = options.returnContext || null

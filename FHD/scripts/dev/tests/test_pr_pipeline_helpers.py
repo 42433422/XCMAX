@@ -1,28 +1,36 @@
+# mypy: disable-error-code="import-not-found"
 # FHD/scripts/dev/tests/test_pr_pipeline_helpers.py
 """PR 流水线辅助脚本单元测试。"""
+
 from __future__ import annotations
 
 import json
 import sys
 from pathlib import Path
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import MagicMock
 
 import pytest
 
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SCRIPTS_DIR))
 
-from read_issue_proposal import extract_proposal_from_issue_body
-from open_pr_for_employee_pack import create_branch_commit_pr
-from wait_for_pr_merge import is_pr_merged
 from escalate_to_human import escalate
+from open_pr_for_employee_pack import create_branch_commit_pr
+from read_issue_proposal import extract_proposal_from_issue_body
+from wait_for_pr_merge import is_pr_merged
 
 
 def _make_issue_body() -> str:
     proposal = {
         "proposal_id": "abc-123",
         "department": "engineering",
-        "employee_pack": {"name": "x", "prompt_template": "y", "skills": [], "tools": [], "acceptance_criteria": []},
+        "employee_pack": {
+            "name": "x",
+            "prompt_template": "y",
+            "skills": [],
+            "tools": [],
+            "acceptance_criteria": [],
+        },
         "estimated_files": 2,
         "estimated_tokens": 10000,
     }
@@ -58,9 +66,11 @@ def test_extract_proposal_handles_invalid_json():
 def test_create_branch_commit_pr_calls_git_in_order(monkeypatch, tmp_path):
     """分支创建 → commit → push → 开 PR。"""
     runs = []
+
     def fake_run(cmd, **kwargs):
         runs.append(cmd)
         return MagicMock(returncode=0, stdout="https://github.com/x/y/pull/1\n", stderr="")
+
     monkeypatch.setattr("open_pr_for_employee_pack.subprocess.run", fake_run)
     monkeypatch.setenv("GITHUB_REPO", "owner/repo")
 
@@ -85,7 +95,7 @@ def test_create_branch_commit_pr_calls_git_in_order(monkeypatch, tmp_path):
 def test_is_pr_merged_returns_true_when_merged(monkeypatch):
     monkeypatch.setattr(
         "wait_for_pr_merge.subprocess.run",
-        lambda *a, **k: MagicMock(returncode=0, stdout="MERGED\n", stderr="")
+        lambda *a, **k: MagicMock(returncode=0, stdout="MERGED\n", stderr=""),
     )
     assert is_pr_merged(pr_number=1) is True
 
@@ -93,7 +103,7 @@ def test_is_pr_merged_returns_true_when_merged(monkeypatch):
 def test_is_pr_merged_returns_false_when_open(monkeypatch):
     monkeypatch.setattr(
         "wait_for_pr_merge.subprocess.run",
-        lambda *a, **k: MagicMock(returncode=0, stdout="OPEN\n", stderr="")
+        lambda *a, **k: MagicMock(returncode=0, stdout="OPEN\n", stderr=""),
     )
     assert is_pr_merged(pr_number=1) is False
 
@@ -101,7 +111,7 @@ def test_is_pr_merged_returns_false_when_open(monkeypatch):
 def test_is_pr_merged_returns_false_on_error(monkeypatch):
     monkeypatch.setattr(
         "wait_for_pr_merge.subprocess.run",
-        lambda *a, **k: MagicMock(returncode=1, stdout="", stderr="error")
+        lambda *a, **k: MagicMock(returncode=1, stdout="", stderr="error"),
     )
     assert is_pr_merged(pr_number=1) is False
 
@@ -113,9 +123,11 @@ def test_escalate_comments_on_issue_and_adds_label(monkeypatch, tmp_path):
     monkeypatch.setenv("GITHUB_REPO", "owner/repo")
 
     runs = []
+
     def fake_run(cmd, **kwargs):
         runs.append(cmd)
         return MagicMock(returncode=0, stdout="", stderr="")
+
     monkeypatch.setattr("escalate_to_human.subprocess.run", fake_run)
 
     escalate(

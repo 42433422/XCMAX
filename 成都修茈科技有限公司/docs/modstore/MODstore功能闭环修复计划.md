@@ -6,19 +6,17 @@
 
 ## 一、项目现状速览
 
-
-| 模块        | 完成度  | 核心问题                             |
-| --------- | ---- | -------------------------------- |
-| 支付系统      | ~85% | 退款/售后流程不完整，Java 支付服务未接入主服务       |
-| 用户系统      | ~90% | 缺少密码找回、用户资料编辑                    |
-| AI 员工制作向导 | ~95% | 前端 10 步向导完整，但**后端执行引擎是模拟的**      |
-| 工作流编辑器    | ~90% | 画布/节点/边完整，但**员工节点调用的是 mock 执行器** |
-| 商店/目录     | ~80% | 浏览/购买/上架流程存在，但真实执行后无产出           |
-| 工作台       | ~75% | AI 编排会话存在，但生成的工作流/员工无法真实运行       |
-| 部署运维      | ~60% | 基础脚本存在，缺少监控/告警/自动备份              |
-| 消息通知      | ~10% | 几乎空白                             |
-| 工作流触发器    | ~20% | 数据库表存在，但无调度器实现                   |
-
+| 模块            | 完成度 | 核心问题                                             |
+| --------------- | ------ | ---------------------------------------------------- |
+| 支付系统        | ~85%   | 退款/售后流程不完整，Java 支付服务未接入主服务       |
+| 用户系统        | ~90%   | 缺少密码找回、用户资料编辑                           |
+| AI 员工制作向导 | ~95%   | 前端 10 步向导完整，但**后端执行引擎是模拟的**       |
+| 工作流编辑器    | ~90%   | 画布/节点/边完整，但**员工节点调用的是 mock 执行器** |
+| 商店/目录       | ~80%   | 浏览/购买/上架流程存在，但真实执行后无产出           |
+| 工作台          | ~75%   | AI 编排会话存在，但生成的工作流/员工无法真实运行     |
+| 部署运维        | ~60%   | 基础脚本存在，缺少监控/告警/自动备份                 |
+| 消息通知        | ~10%   | 几乎空白                                             |
+| 工作流触发器    | ~20%   | 数据库表存在，但无调度器实现                         |
 
 **最大阻断点：用户能「制作」和「购买」AI 员工，但员工无法真正干活（Cognition 未调用 LLM、Actions 未调用真实工具）。**
 
@@ -93,30 +91,30 @@ async def _cognition_real(
     """
     agent = (config.get("cognition") or {}).get("agent") or {}
     system_prompt = agent.get("system_prompt", "你是智能员工助手")
-    
+
     # 构建 messages
     messages = [
         {"role": "system", "content": system_prompt},
     ]
-    
+
     # 加载记忆上下文
     mem_ctx = ""
     if memory and memory.get("session"):
         mem_ctx = f"\n[会话上下文]\n{json.dumps(memory['session'], ensure_ascii=False)}"
-    
+
     # 构建用户输入
     user_input = json.dumps(perceived.get("normalized_input", {}), ensure_ascii=False)
     if mem_ctx:
         user_input = f"{user_input}{mem_ctx}"
-    
+
     messages.append({"role": "user", "content": user_input})
-    
+
     # 解析模型配置
     model_cfg = agent.get("model") or {}
     provider = model_cfg.get("provider", "deepseek")
     model_name = model_cfg.get("model_name", "deepseek-chat")
     max_tokens = model_cfg.get("max_tokens", 4000)
-    
+
     # 解析 API Key
     api_key, source = resolve_api_key(session, user_id, provider)
     if not api_key:
@@ -126,11 +124,11 @@ async def _cognition_real(
             "input": perceived.get("normalized_input", {}),
             "memory": memory,
         }
-    
+
     base_url = None
     if provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS:
         base_url = resolve_base_url(session, user_id, provider)
-    
+
     # 调用 LLM
     result = await chat_dispatch(
         provider,
@@ -140,7 +138,7 @@ async def _cognition_real(
         messages=messages,
         max_tokens=max_tokens,
     )
-    
+
     if not result.get("ok"):
         return {
             "reasoning": "",
@@ -148,7 +146,7 @@ async def _cognition_real(
             "input": perceived.get("normalized_input", {}),
             "memory": memory,
         }
-    
+
     return {
         "reasoning": result.get("content", ""),
         "input": perceived.get("normalized_input", {}),
@@ -184,25 +182,25 @@ def _actions_real(
     actions_cfg = config.get("actions") or {}
     handlers = actions_cfg.get("handlers", ["echo"])
     outputs = []
-    
+
     for handler in handlers:
         if handler == "echo":
             outputs.append({
                 "handler": "echo",
                 "output": reasoning.get("reasoning", ""),
             })
-        
+
         elif handler == "http_request":
             http_cfg = actions_cfg.get("http_request") or {}
             url = http_cfg.get("url", "")
             method = http_cfg.get("method", "POST")
             headers = http_cfg.get("headers", {})
             body_template = http_cfg.get("body", "")
-            
+
             # 简单模板替换
             body = body_template.replace("{{reasoning}}", reasoning.get("reasoning", ""))
             body = body.replace("{{task}}", task)
-            
+
             import httpx
             try:
                 resp = httpx.request(method, url, headers=headers, content=body, timeout=30)
@@ -216,7 +214,7 @@ def _actions_real(
                     "handler": "http_request",
                     "error": str(e),
                 })
-        
+
         elif handler == "webhook":
             webhook_cfg = actions_cfg.get("webhook") or {}
             url = webhook_cfg.get("url", "")
@@ -238,16 +236,16 @@ def _actions_real(
                         "handler": "webhook",
                         "error": str(e),
                     })
-        
+
         elif handler == "data_sync":
             # 数据同步：将结果写入数据库或文件
             sync_cfg = actions_cfg.get("data_sync") or {}
             target = sync_cfg.get("target", "log")
             if target == "log":
-                logger.info("[data_sync] employee=%s task=%s result=%s", 
+                logger.info("[data_sync] employee=%s task=%s result=%s",
                            employee_id, task, reasoning.get("reasoning", "")[:500])
                 outputs.append({"handler": "data_sync", "target": "log", "status": "ok"})
-        
+
         elif handler == "wechat_notify":
             # 微信通知：需要接入企业微信/微信 API（当前占位）
             outputs.append({
@@ -255,10 +253,10 @@ def _actions_real(
                 "status": "not_implemented",
                 "message": "微信通知需要配置企业微信 API",
             })
-        
+
         else:
             outputs.append({"handler": handler, "error": "未知的 handler"})
-    
+
     return {
         "task": task,
         "handlers": handlers,
@@ -277,10 +275,10 @@ def _perception_real(config: Dict[str, Any], input_data: Dict[str, Any]) -> Dict
     """
     p_cfg = config.get("perception") or {}
     p_type = p_cfg.get("type", "text")
-    
+
     if p_type == "text":
         return {"normalized_input": input_data, "type": "text"}
-    
+
     elif p_type == "json":
         if isinstance(input_data, dict):
             return {"normalized_input": input_data, "type": "json"}
@@ -289,7 +287,7 @@ def _perception_real(config: Dict[str, Any], input_data: Dict[str, Any]) -> Dict
             return {"normalized_input": parsed, "type": "json"}
         except Exception:
             return {"normalized_input": input_data, "type": "json", "parse_error": True}
-    
+
     elif p_type == "csv":
         import csv
         import io
@@ -300,7 +298,7 @@ def _perception_real(config: Dict[str, Any], input_data: Dict[str, Any]) -> Dict
             return {"normalized_input": {"rows": rows}, "type": "csv", "row_count": len(rows)}
         except Exception as e:
             return {"normalized_input": input_data, "type": "csv", "parse_error": str(e)}
-    
+
     elif p_type == "excel":
         # 需要 openpyxl，当前占位
         return {
@@ -308,14 +306,14 @@ def _perception_real(config: Dict[str, Any], input_data: Dict[str, Any]) -> Dict
             "type": "excel",
             "note": "Excel 解析需要安装 openpyxl 并配置",
         }
-    
+
     elif p_type == "image":
         return {
             "normalized_input": input_data,
             "type": "image",
             "note": "图片解析需要接入 OCR 或 vision model",
         }
-    
+
     return {"normalized_input": input_data, "type": p_type}
 ```
 
@@ -328,7 +326,7 @@ def _memory_real(config: Dict[str, Any], ctx: Dict[str, Any], session, user_id: 
     """
     mem_cfg = config.get("memory") or {}
     result = {"session": {"employee_id": ctx["employee_id"]}, "long_term": None}
-    
+
     # 短期记忆：最近 5 条执行记录
     if mem_cfg.get("short_term", {}).get("enabled", True):
         from modstore_server.models import EmployeeExecutionMetric
@@ -343,14 +341,14 @@ def _memory_real(config: Dict[str, Any], ctx: Dict[str, Any], session, user_id: 
             {"task": r.task, "status": r.status, "created_at": r.created_at.isoformat() if r.created_at else None}
             for r in recent
         ]
-    
+
     # 长期记忆：知识库（当前占位）
     if mem_cfg.get("long_term", {}).get("enabled", False):
         result["long_term"] = {
             "enabled": True,
             "note": "知识库需要接入向量数据库（如 Chroma/Qdrant）",
         }
-    
+
     return result
 ```
 
@@ -371,16 +369,16 @@ def execute_employee_task(
             pack = load_employee_pack(session, employee_id)
             config = parse_employee_config_v2(pack.get("manifest") or {})
             ctx = build_employee_context(employee_id, payload)
-            
+
             # 真实执行管道
             perceived = _perception_real(config.get("perception", {}), payload)
             memory = _memory_real(config.get("memory", {}), ctx, session, user_id)
             reasoning = _cognition_sync(config, perceived, memory, session, user_id)
             result = _actions_real(config.get("actions", {}), reasoning, task, employee_id)
-            
+
             duration_ms = round((time.perf_counter() - t0) * 1000, 3)
             llm_tokens = _extract_token_count(reasoning)  # 从 LLM 响应中提取
-            
+
             session.add(
                 EmployeeExecutionMetric(
                     user_id=user_id,
@@ -392,7 +390,7 @@ def execute_employee_task(
                 )
             )
             session.commit()
-            
+
             return {
                 "employee_id": employee_id,
                 "pack": {"id": pack["pack_id"], "version": pack["version"]},
@@ -446,7 +444,7 @@ class WorkflowEngine:
     def __init__(self, user_id: int = 0):
         self.user_id = user_id
         self.executors = {...}
-    
+
     def _execute_employee_node(self, node, data, config):
         # ...
         result = execute_employee_task(employee_id, task, input_data, user_id=self.user_id)
@@ -527,13 +525,13 @@ async def _register_cron_trigger(trigger: WorkflowTrigger):
     """注册 cron 触发器到 APScheduler。"""
     config = json.loads(trigger.config_json or "{}")
     cron_expr = config.get("cron", "0 0 * * *")  # 默认每天 0 点
-    
+
     def job_wrapper():
         try:
             execute_workflow(trigger.workflow_id, {}, user_id=trigger.user_id)
         except Exception as e:
             logger.error("定时触发执行失败: workflow=%s error=%s", trigger.workflow_id, e)
-    
+
     _scheduler.add_job(
         job_wrapper,
         CronTrigger.from_crontab(cron_expr),
@@ -579,7 +577,7 @@ async def webhook_trigger_workflow(
 ):
     """通过 webhook 触发工作流执行（需要配置触发器）。"""
     from modstore_server.workflow_scheduler import trigger_webhook
-    
+
     # 验证工作流所有权
     workflow = db.query(Workflow).filter(
         Workflow.id == workflow_id,
@@ -587,7 +585,7 @@ async def webhook_trigger_workflow(
     ).first()
     if not workflow:
         raise HTTPException(404, "工作流不存在")
-    
+
     # 检查是否有 webhook 类型的触发器
     trigger = db.query(WorkflowTrigger).filter(
         WorkflowTrigger.workflow_id == workflow_id,
@@ -596,7 +594,7 @@ async def webhook_trigger_workflow(
     ).first()
     if not trigger:
         raise HTTPException(400, "该工作流未配置 webhook 触发器")
-    
+
     result = await trigger_webhook(workflow_id, payload, user.id)
     if not result.get("ok"):
         raise HTTPException(500, result.get("error"))
@@ -649,7 +647,7 @@ def create_notification(
         sf = get_session_factory()
         db = sf()
         should_close = True
-    
+
     try:
         notif = Notification(
             user_id=user_id,
@@ -689,7 +687,7 @@ def notify_quota_warning(user_id: int, quota_type: str, remaining: int, total: i
     usage_pct = (1 - remaining / total) * 100 if total > 0 else 0
     if usage_pct < 80:
         return  # 低于 80% 不通知
-    
+
     create_notification(
         user_id=user_id,
         notification_type=NotificationType.QUOTA_WARNING,
@@ -704,7 +702,7 @@ def notify_quota_warning(user_id: int, quota_type: str, remaining: int, total: i
 ```python
 class Notification(Base):
     __tablename__ = "notifications"
-    
+
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, nullable=False, index=True)
     type = Column(String(32), nullable=False)
@@ -865,14 +863,14 @@ async def apply_refund(
         raise HTTPException(404, "订单不存在")
     if order.status != "paid":
         raise HTTPException(400, "只有已支付订单可申请退款")
-    
+
     # 检查是否已有退款申请
     existing = db.query(RefundRequest).filter(
         RefundRequest.order_no == body.order_no,
     ).first()
     if existing:
         raise HTTPException(400, "该订单已有退款申请")
-    
+
     # 创建退款申请
     refund = RefundRequest(
         user_id=user.id,
@@ -883,11 +881,11 @@ async def apply_refund(
     )
     db.add(refund)
     db.commit()
-    
+
     # 发送通知给管理员
     from modstore_server.notification_service import create_notification, NotificationType
     # TODO: 查找管理员用户并发送通知
-    
+
     return {"ok": True, "refund_id": refund.id}
 
 @router.get("/my")
@@ -913,7 +911,7 @@ async def my_refunds(db: Session = Depends(get_db), user = Depends(_get_current_
 ```python
 class RefundRequest(Base):
     __tablename__ = "refund_requests"
-    
+
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, nullable=False, index=True)
     order_no = Column(String(64), nullable=False, index=True)
@@ -960,27 +958,27 @@ async def dashboard(db: Session = Depends(get_db), user = Depends(_get_current_u
     total_exec = db.query(EmployeeExecutionMetric).filter(
         EmployeeExecutionMetric.user_id == user.id,
     ).count()
-    
+
     success_exec = db.query(EmployeeExecutionMetric).filter(
         EmployeeExecutionMetric.user_id == user.id,
         EmployeeExecutionMetric.status == "success",
     ).count()
-    
+
     total_tokens = db.query(func.sum(EmployeeExecutionMetric.llm_tokens)).filter(
         EmployeeExecutionMetric.user_id == user.id,
     ).scalar() or 0
-    
+
     # 消费统计
     total_spent = db.query(func.sum(Order.amount)).filter(
         Order.user_id == user.id,
         Order.status == "paid",
     ).scalar() or 0
-    
+
     # 最近执行
     recent = db.query(EmployeeExecutionMetric).filter(
         EmployeeExecutionMetric.user_id == user.id,
     ).order_by(EmployeeExecutionMetric.id.desc()).limit(10).all()
-    
+
     return {
         "execution": {
             "total": total_exec,
@@ -1032,7 +1030,7 @@ async def health_check():
         "timestamp": datetime.utcnow().isoformat(),
         "version": os.environ.get("MODSTORE_VERSION", "unknown"),
     }
-    
+
     # 数据库检查
     try:
         sf = get_session_factory()
@@ -1042,7 +1040,7 @@ async def health_check():
     except Exception as e:
         checks["database"] = f"error: {e}"
         checks["status"] = "degraded"
-    
+
     return checks
 
 @router.get("/ready")
@@ -1072,10 +1070,11 @@ location /health {
 
 1. **路由重定向**：`/` → `/workbench`
 2. **新增 `WorkbenchHomeView.vue`**：
-  - 快速开始卡片（制作员工、创建工作流、浏览商店）
-  - 最近活动（最近执行的员工、最近编辑的工作流）
-  - 配额概览
-  - 推荐/热门员工
+
+- 快速开始卡片（制作员工、创建工作流、浏览商店）
+- 最近活动（最近执行的员工、最近编辑的工作流）
+- 配额概览
+- 推荐/热门员工
 
 ---
 
@@ -1129,41 +1128,34 @@ ALTER TABLE employee_execution_metrics ADD COLUMN llm_tokens INTEGER DEFAULT 0;
 
 ### 7.1 新增页面/组件
 
-
-| 文件                                        | 说明     |
-| ----------------------------------------- | ------ |
+| 文件                                      | 说明         |
+| ----------------------------------------- | ------------ |
 | `market/src/views/AnalyticsView.vue`      | 使用统计面板 |
 | `market/src/views/NotificationCenter.vue` | 消息通知中心 |
 | `market/src/views/RefundApplyView.vue`    | 退款申请页面 |
-| `market/src/views/WorkbenchHomeView.vue`  | 工作台首页  |
-
+| `market/src/views/WorkbenchHomeView.vue`  | 工作台首页   |
 
 ### 7.2 修改现有页面
 
-
-| 文件                                  | 修改内容                           |
-| ----------------------------------- | ------------------------------ |
-| `market/src/views/WalletView.vue`   | 添加「我的套餐」配额实时展示                 |
-| `market/src/views/WorkflowView.vue` | 添加触发器配置面板（cron/webhook）        |
-| `market/src/App.vue`                | 添加通知中心入口（右上角铃铛图标）              |
+| 文件                                | 修改内容                                   |
+| ----------------------------------- | ------------------------------------------ |
+| `market/src/views/WalletView.vue`   | 添加「我的套餐」配额实时展示               |
+| `market/src/views/WorkflowView.vue` | 添加触发器配置面板（cron/webhook）         |
+| `market/src/App.vue`                | 添加通知中心入口（右上角铃铛图标）         |
 | `market/src/router/index.js`        | 添加新路由，设置 `/` 重定向到 `/workbench` |
-
 
 ### 7.3 API 调用封装
 
 新增 `market/src/api/notifications.js`：
 
 ```javascript
-import axios from 'axios';
+import axios from 'axios'
 
-export const fetchNotifications = (unreadOnly = false) => 
-  axios.get('/api/notifications', { params: { unread_only: unreadOnly } });
+export const fetchNotifications = (unreadOnly = false) => axios.get('/api/notifications', { params: { unread_only: unreadOnly } })
 
-export const markNotificationRead = (id) => 
-  axios.post(`/api/notifications/${id}/read`);
+export const markNotificationRead = (id) => axios.post(`/api/notifications/${id}/read`)
 
-export const markAllNotificationsRead = () => 
-  axios.post('/api/notifications/read-all');
+export const markAllNotificationsRead = () => axios.post('/api/notifications/read-all')
 ```
 
 ---
@@ -1243,4 +1235,3 @@ echo "pandas>=2.0.0" >> requirements.txt
 3. **数据库迁移**：新增表和字段需要谨慎执行，建议先备份数据库
 4. **向后兼容**：保留 `mock_employees=True` 的沙盒模式，确保调试不受影响
 5. **错误处理**：LLM 调用失败时应有优雅降级，返回错误信息而不是崩溃
-

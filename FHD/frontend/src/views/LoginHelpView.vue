@@ -1,33 +1,33 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { computed, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import {
   LOGIN_HELP_PAGE_TITLE,
   LOGIN_HELP_SECTIONS,
   loginHelpDocUrl,
   loginPageTitle,
   marketForgotPasswordUrl,
-} from '@/constants/loginBranding';
-import { fetchProductSku } from '@/utils/productSku';
+} from '@/constants/loginBranding'
+import { fetchProductSku } from '@/utils/productSku'
 
-const route = useRoute();
-const router = useRouter();
+const route = useRoute()
+const router = useRouter()
 
-const productSku = ref<string>('generic');
-const forgotPasswordHref = computed(() => marketForgotPasswordUrl());
-const externalHelpHref = computed(() => loginHelpDocUrl().trim());
+const productSku = ref<string>('generic')
+const forgotPasswordHref = computed(() => marketForgotPasswordUrl())
+const externalHelpHref = computed(() => loginHelpDocUrl().trim())
 const loginBackQuery = computed(() => {
-  const q = { ...route.query };
-  return Object.keys(q).length ? q : undefined;
-});
+  const q = { ...route.query }
+  return Object.keys(q).length ? q : undefined
+})
 
 onMounted(async () => {
-  productSku.value = await fetchProductSku();
-  document.title = `${LOGIN_HELP_PAGE_TITLE} · ${loginPageTitle(productSku.value).replace(' · 登录', '')}`;
-});
+  productSku.value = await fetchProductSku()
+  document.title = `${LOGIN_HELP_PAGE_TITLE} · ${loginPageTitle(productSku.value).replace(' · 登录', '')}`
+})
 
 function goBackToLogin() {
-  router.push({ name: 'login', query: loginBackQuery.value });
+  router.push({ name: 'login', query: loginBackQuery.value })
 }
 </script>
 
@@ -53,14 +53,7 @@ function goBackToLogin() {
 
       <footer class="login-help-actions">
         <a :href="forgotPasswordHref" target="_blank" rel="noopener noreferrer">修茈市场 · 忘记密码</a>
-        <a
-          v-if="externalHelpHref"
-          :href="externalHelpHref"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          查看在线文档
-        </a>
+        <a v-if="externalHelpHref" :href="externalHelpHref" target="_blank" rel="noopener noreferrer"> 查看在线文档 </a>
       </footer>
     </section>
   </main>

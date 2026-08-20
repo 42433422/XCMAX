@@ -4,10 +4,7 @@ import {
   SETTINGS_MENU_ITEM,
   type CoreMenuCatalogItem,
 } from '@/constants/coreMenuCatalog'
-import {
-  resolvePlannerToolsExecutePath,
-  resolvePlannerToolsRegistryPath,
-} from '@/utils/plannerToolsPaths'
+import { resolvePlannerToolsExecutePath, resolvePlannerToolsRegistryPath } from '@/utils/plannerToolsPaths'
 
 function flattenCapabilities(items: CoreMenuCatalogItem[]): Array<Record<string, string>> {
   const result: Array<Record<string, string>> = []
@@ -28,11 +25,7 @@ function flattenCapabilities(items: CoreMenuCatalogItem[]): Array<Record<string,
  * the old blind spot where it knew chat tools but not the rest of the desktop.
  */
 export function buildChatSoftwareCapabilities(): Record<string, unknown> {
-  const navigation = flattenCapabilities([
-    ...CORE_MENU_ITEMS_BASE,
-    ...INDUSTRY_DELIVERY_CORE_ITEMS,
-    SETTINGS_MENU_ITEM,
-  ])
+  const navigation = flattenCapabilities([...CORE_MENU_ITEMS_BASE, ...INDUSTRY_DELIVERY_CORE_ITEMS, SETTINGS_MENU_ITEM])
   return {
     version: 1,
     current_path: typeof window === 'undefined' ? '/' : window.location.pathname,

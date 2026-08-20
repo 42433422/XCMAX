@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 对 ``XCAGI_MOD_ISOLATED_DATABASES=1`` 下各扩展库 ``{基库名}__<mod>`` 依次执行 ``alembic upgrade head``。
 
@@ -9,6 +8,7 @@
 
 Mod 列表发现规则与 bootstrap_mod_postgres_databases.py 一致。
 """
+
 from __future__ import annotations
 
 import importlib.util

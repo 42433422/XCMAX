@@ -2,11 +2,11 @@
   <div class="field-editor">
     <div class="editor-layout" :style="editorPaneStyle">
       <div class="preview-section">
-        <h4 style="margin-top:0;"><i class="fa fa-file-text-o" aria-hidden="true"></i> 预览</h4>
+        <h4 style="margin-top: 0"><i class="fa fa-file-text-o" aria-hidden="true"></i> 预览</h4>
         <div class="preview-container">
           <ExcelPreview v-if="templateType === 'excel'" :fields="fields" />
           <div v-else-if="templateType === 'word'" class="word-preview-box">
-            <p class="muted" style="font-size:13px;margin:0 0 10px;line-height:1.5;">
+            <p class="muted" style="font-size: 13px; margin: 0 0 10px; line-height: 1.5">
               Word 模板以文档中的占位符为准；下列词条参与「必备词条」匹配与导出替换。
             </p>
             <div class="word-preview-chips">
@@ -26,26 +26,19 @@
       </div>
 
       <div class="fields-section">
-        <h4 style="margin-top:0;"><i class="fa fa-list-alt" aria-hidden="true"></i> 字段列表</h4>
+        <h4 style="margin-top: 0"><i class="fa fa-list-alt" aria-hidden="true"></i> 字段列表</h4>
 
         <div class="fields-list">
           <div
             v-for="(field, index) in fields"
             :key="index"
             class="field-item"
-            :class="{ 'active': editingIndex === index }"
+            :class="{ active: editingIndex === index }"
             @click="selectField(index)"
           >
             <div class="field-main">
               <div class="field-label-input">
-                <input
-                  type="text"
-                  v-model="field.label"
-                  class="form-control-sm"
-                  placeholder="字段名"
-                  @click.stop
-                  @change="onFieldChange"
-                />
+                <input type="text" v-model="field.label" class="form-control-sm" placeholder="字段名" @click.stop @change="onFieldChange" />
                 <span class="separator">：</span>
                 <input
                   type="text"
@@ -67,28 +60,16 @@
               >
                 {{ field.type === 'fixed' ? '固定' : '可变' }}
               </span>
-              <button
-                type="button"
-                class="btn-icon"
-                @click.stop="editField(index)"
-                title="编辑"
-              >
+              <button type="button" class="btn-icon" @click.stop="editField(index)" title="编辑">
                 <i class="fa fa-pencil" aria-hidden="true"></i>
               </button>
-              <button
-                type="button"
-                class="btn-icon btn-danger"
-                @click.stop="deleteField(index)"
-                title="删除"
-              >
+              <button type="button" class="btn-icon btn-danger" @click.stop="deleteField(index)" title="删除">
                 <i class="fa fa-trash-o" aria-hidden="true"></i>
               </button>
             </div>
           </div>
 
-          <div v-if="fields.length === 0" class="empty-fields">
-            暂无字段，请添加或上传文件自动识别
-          </div>
+          <div v-if="fields.length === 0" class="empty-fields">暂无字段，请添加或上传文件自动识别</div>
         </div>
 
         <div class="add-field-actions">
@@ -109,21 +90,11 @@
         <div class="modal-body">
           <div class="form-group">
             <label>字段标签</label>
-            <input
-              type="text"
-              v-model="editingField.label"
-              class="form-control"
-              placeholder="例如：品名"
-            />
+            <input type="text" v-model="editingField.label" class="form-control" placeholder="例如：品名" />
           </div>
           <div class="form-group">
             <label>示例值</label>
-            <input
-              type="text"
-              v-model="editingField.value"
-              class="form-control"
-              placeholder="例如：运动鞋"
-            />
+            <input type="text" v-model="editingField.value" class="form-control" placeholder="例如：运动鞋" />
           </div>
           <div class="form-group">
             <label>字段类型</label>
@@ -163,7 +134,7 @@ export default {
   components: {
     ExcelPreview,
     LabelPreview,
-    PaneResizeHandle
+    PaneResizeHandle,
   },
   setup() {
     const FIELD_EDITOR_MQ = '(max-width: 960px)'
@@ -221,17 +192,17 @@ export default {
   props: {
     fields: {
       type: Array,
-      default: () => []
+      default: () => [],
     },
     templateType: {
       type: String,
-      default: 'excel'
-    }
+      default: 'excel',
+    },
   },
   data() {
     return {
       editingIndex: null,
-      editingField: null
+      editingField: null,
     }
   },
   methods: {
@@ -274,7 +245,7 @@ export default {
       this.$emit('add-field', {
         label: '新字段',
         value: '示例值',
-        type: 'dynamic'
+        type: 'dynamic',
       })
     },
 
@@ -284,8 +255,8 @@ export default {
 
     getFields() {
       return [...this.fields]
-    }
-  }
+    },
+  },
 }
 </script>
 
@@ -575,7 +546,7 @@ export default {
   background: #e9ecef;
 }
 
-.radio-label input[type="radio"] {
+.radio-label input[type='radio'] {
   margin-top: 4px;
 }
 

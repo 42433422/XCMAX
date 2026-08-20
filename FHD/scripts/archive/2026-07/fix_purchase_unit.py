@@ -1,5 +1,7 @@
 import sqlite3
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 
 def fix_purchase_unit():
     """将购买单位从'半岛家具'更正为'半岛风情'"""
@@ -52,7 +54,7 @@ def fix_purchase_unit():
 
         return updated_count > 0
 
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 修复购买单位时出错: {e}")
         return False
 

@@ -15,6 +15,8 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from app.mod_sdk.errors import BOUNDARY_ERRORS
+
 logger = logging.getLogger(__name__)
 
 EMPLOYEE_ID = "vibe-coding-maintainer"
@@ -22,9 +24,7 @@ EMPLOYEE_LABEL = "Vibe-Coding 维护员"
 
 SYSTEM_PROMPT = "你是 XCAGI 员工「Vibe-Coding 维护员」。按 manifest.employee_config_v2.actions.handlers 选择 echo、llm_md、webhook 或 agent 分支执行；先读取 payload 与 manifest 配置，提取关键字段，再调用 ctx 工具；输出统一返回 {ok, summary, items, warnings, error, meta}；信息不足时如实说明，禁止编造数据、密钥或外部执行结果。"
 
-DEFAULT_README_SECTIONS = (
-    "## 用途\n" "## 输入\n" "## 输出\n" "## 示例\n" "## 异常与边界\n"
-)
+DEFAULT_README_SECTIONS = "## 用途\n## 输入\n## 输出\n## 示例\n## 异常与边界\n"
 
 
 def _ok(
@@ -38,16 +38,12 @@ def _ok(
         "summary": (
             ""
             if data is None
-            else (
-                data if isinstance(data, str) else json.dumps(data, ensure_ascii=False)
-            )[:4000]
+            else (data if isinstance(data, str) else json.dumps(data, ensure_ascii=False))[:4000]
         ),
         "items": (
             data
             if isinstance(data, list)
-            else (
-                [] if data is None else [data] if not isinstance(data, dict) else [data]
-            )
+            else ([] if data is None else [data] if not isinstance(data, dict) else [data])
         ),
         "warnings": list(warnings or []),
         "error": "",
@@ -152,11 +148,7 @@ async def _handle_llm_md(
     cfg = _agent_model(v2)
     sys_prompt = cfg["system_prompt"] or SYSTEM_PROMPT
     if "##" not in sys_prompt:
-        sys_prompt = (
-            sys_prompt
-            + "\n\n请用 Markdown 输出，固定章节：\n"
-            + DEFAULT_README_SECTIONS
-        )
+        sys_prompt = sys_prompt + "\n\n请用 Markdown 输出，固定章节：\n" + DEFAULT_README_SECTIONS
     user_msg = json.dumps(payload or {}, ensure_ascii=False)[:6000]
     messages = [
         {"role": "system", "content": sys_prompt},
@@ -164,14 +156,12 @@ async def _handle_llm_md(
     ]
     try:
         res = await asyncio.wait_for(
-            call_llm(
-                messages, max_tokens=cfg["max_tokens"], temperature=cfg["temperature"]
-            ),
+            call_llm(messages, max_tokens=cfg["max_tokens"], temperature=cfg["temperature"]),
             timeout=120.0,
         )
     except TimeoutError:
         return _err("LLM 调用超时（120s）", meta={"handler": "llm_md"})
-    except Exception as e:  # noqa: BLE001
+    except BOUNDARY_ERRORS as e:  # noqa: BLE001
         logger.exception("call_llm raised")
         return _err("LLM 调用异常：" + str(e)[:300], meta={"handler": "llm_md"})
     if not isinstance(res, dict) or not res.get("ok"):
@@ -188,27 +178,17 @@ async def _handle_webhook(
 ) -> Dict[str, Any]:
     http_post = ctx.get("http_post")
     if not callable(http_post):
-        return _err(
-            "ctx.http_post 不可用：宿主未注入 HTTP 能力", meta={"handler": "webhook"}
-        )
-    cfg = (
-        _actions(v2).get("webhook")
-        if isinstance(_actions(v2).get("webhook"), dict)
-        else {}
-    )
+        return _err("ctx.http_post 不可用：宿主未注入 HTTP 能力", meta={"handler": "webhook"})
+    cfg = _actions(v2).get("webhook") if isinstance(_actions(v2).get("webhook"), dict) else {}
     url = str(cfg.get("url") or "").strip()
     if not url:
         return _err("actions.webhook.url 未配置", meta={"handler": "webhook"})
     try:
-        r = await asyncio.wait_for(
-            http_post(url, json_body=payload or {}), timeout=30.0
-        )
+        r = await asyncio.wait_for(http_post(url, json_body=payload or {}), timeout=30.0)
     except TimeoutError:
         return _err("webhook 超时（30s）", meta={"handler": "webhook", "url": url})
-    except Exception as e:  # noqa: BLE001
-        return _err(
-            "webhook 异常：" + str(e)[:300], meta={"handler": "webhook", "url": url}
-        )
+    except BOUNDARY_ERRORS as e:  # noqa: BLE001
+        return _err("webhook 异常：" + str(e)[:300], meta={"handler": "webhook", "url": url})
     if not isinstance(r, dict) or not r.get("ok"):
         return _err(
             str((r or {}).get("error") or f"HTTP {(r or {}).get('status')}"),
@@ -244,7 +224,7 @@ async def _handle_agent(
         )
     except TimeoutError:
         return _err("agent 执行超时（300s）", meta={"handler": "agent"})
-    except Exception as e:  # noqa: BLE001
+    except BOUNDARY_ERRORS as e:  # noqa: BLE001
         logger.exception("agent run raised")
         return _err("agent 执行异常：" + str(e)[:300], meta={"handler": "agent"})
     if not result.get("ok"):
@@ -271,9 +251,7 @@ _DISPATCH = {
 
 
 async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
-    logger.info(
-        "[employee:%s] run keys=%s", EMPLOYEE_ID, list((payload or {}).keys())[:12]
-    )
+    logger.info("[employee:%s] run keys=%s", EMPLOYEE_ID, list((payload or {}).keys())[:12])
     payload = payload or {}
     ctx = ctx or {}
     manifest = _load_manifest()
@@ -289,9 +267,7 @@ async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
             "manifest.employee_config_v2.actions.handlers 未声明；请在打包时显式声明 echo / llm_md / webhook 之一",
             meta={"employee_id": EMPLOYEE_ID},
         )
-    requested = (
-        str(payload.get("handler") or "").strip() if isinstance(payload, dict) else ""
-    )
+    requested = str(payload.get("handler") or "").strip() if isinstance(payload, dict) else ""
     chosen = requested if requested in handlers else handlers[0]
     # 目录包常把 executor 层 handler 写成 direct_python；本模块无该分支时回退 llm_md/agent，
     # 避免事故 fix 整单 handler_failed。

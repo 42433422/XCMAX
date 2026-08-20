@@ -19,7 +19,7 @@
 
 ```python
 from app.fastapi_routes.domains.auth import routes
-from app.fastapi_routes.xcagi_compat import router
+from app.legacy.routes.xcagi_compat import router
 from app.fastapi_app import create_fastapi_app  # 包 app/fastapi_app/factory.py
 ```
 

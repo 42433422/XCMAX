@@ -24,43 +24,42 @@ describe('employeePackClientExport', () => {
 
     expect(result.error).toBe('')
     expect(result.manifest?.id).toBe('sales-mod-assistant')
-    const employeeOut = (result.manifest as Record<string, any> | null)?.employee as
-      | { label?: string }
-      | undefined
+    const employeeOut = (result.manifest as Record<string, UnsafeTestValue> | null)?.employee as { label?: string } | undefined
     expect(employeeOut?.label).toBe('销售助手')
   })
 
   it('handles workflow manifest fallbacks and invalid workflow zip input', async () => {
     expect(buildEmployeePackManifestFromWorkflow('', {}, {}).error).toBe('Mod id 无效')
 
-    const fallback = buildEmployeePackManifestFromWorkflow(
-      'mod',
-      { dependencies: { host: '>=2' }, description: '默认描述' },
-      null,
-      3,
-    )
+    const fallback = buildEmployeePackManifestFromWorkflow('mod', { dependencies: { host: '>=2' }, description: '默认描述' }, null, 3)
     expect(fallback.error).toBe('')
     expect(fallback.manifest?.id).toBe('mod-emp3')
     expect(fallback.manifest?.dependencies).toEqual({ host: '>=2' })
 
-    expect(() => buildEmployeePackZipFromPanel({
-      modId: '',
-      workflowIndex: 0,
-      modManifest: {},
-      workflowJsonText: '{}',
-    })).toThrow('缺少 Mod id')
-    expect(() => buildEmployeePackZipFromPanel({
-      modId: 'mod',
-      workflowIndex: 0,
-      modManifest: {},
-      workflowJsonText: '{bad json',
-    })).toThrow('workflow_employees JSON 无法解析')
-    expect(() => buildEmployeePackZipFromPanel({
-      modId: 'mod',
-      workflowIndex: 0,
-      modManifest: {},
-      workflowJsonText: '[]',
-    })).toThrow('workflow 条目须为 JSON 对象')
+    expect(() =>
+      buildEmployeePackZipFromPanel({
+        modId: '',
+        workflowIndex: 0,
+        modManifest: {},
+        workflowJsonText: '{}',
+      }),
+    ).toThrow('缺少 Mod id')
+    expect(() =>
+      buildEmployeePackZipFromPanel({
+        modId: 'mod',
+        workflowIndex: 0,
+        modManifest: {},
+        workflowJsonText: '{bad json',
+      }),
+    ).toThrow('workflow_employees JSON 无法解析')
+    expect(() =>
+      buildEmployeePackZipFromPanel({
+        modId: 'mod',
+        workflowIndex: 0,
+        modManifest: {},
+        workflowJsonText: '[]',
+      }),
+    ).toThrow('workflow 条目须为 JSON 对象')
 
     const zip = buildEmployeePackZipFromPanel({
       modId: 'mod',
@@ -118,8 +117,8 @@ describe('employeePackClientExport', () => {
     expect(packId).toBe('x_pack-id')
     expect(manifest.name).toBe('x_pack-id')
     expect(manifest.version).toBe('1.0.0')
-    expect((manifest.employee as any).workflow_id).toBe(0)
-    expect((manifest.employee as any).capabilities).toEqual([
+    expect((manifest.employee as UnsafeTestValue).workflow_id).toBe(0)
+    expect((manifest.employee as UnsafeTestValue).capabilities).toEqual([
       'perception',
       'memory',
       'cognition',

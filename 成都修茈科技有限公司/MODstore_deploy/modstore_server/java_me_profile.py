@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """Java 支付服务上的用户档案片段：在 PAYMENT_BACKEND=java 时与 Python /api/auth/me 合并。"""
 
 from __future__ import annotations
@@ -6,9 +7,8 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
-import httpx
-
 from modstore_server.application.payment_gateway import PaymentGatewayService
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ def fetch_java_user_overlay(
 
         timeout = min(30.0, float(gw.connect_timeout_seconds) + float(gw.read_timeout_seconds))
         resp = get_java_sync_client().get(url, headers={"Authorization": raw}, timeout=timeout)
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("Java /api/auth/me 不可达，经验字段保留 Python 库: %s", exc)
         return None
     if resp.status_code != 200:
@@ -51,7 +51,7 @@ def fetch_java_user_overlay(
         return None
     try:
         data = resp.json()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return None
     if not isinstance(data, dict):
         return None

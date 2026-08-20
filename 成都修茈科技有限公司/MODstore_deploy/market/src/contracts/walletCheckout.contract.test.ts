@@ -1,15 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 /** 与 payment_contract.SIGN_FIELDS 及 sign-checkout 响应对齐。 */
-const SIGN_FIELDS = [
-  'item_id',
-  'plan_id',
-  'request_id',
-  'subject',
-  'timestamp',
-  'total_amount',
-  'wallet_recharge',
-] as const
+const SIGN_FIELDS = ['item_id', 'plan_id', 'request_id', 'subject', 'timestamp', 'total_amount', 'wallet_recharge'] as const
 
 describe('wallet checkout contract', () => {
   it('sign-checkout response includes all canonical sign fields', () => {

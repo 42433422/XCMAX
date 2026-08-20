@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, attr-defined"
 """ai_issue_implement 决策矩阵约束的纯函数单测。
 
 只测不依赖 GitHub API / git / LLM 的纯逻辑：

@@ -8,6 +8,8 @@ import urllib.request
 
 from modstore_server.auth_service import create_access_token
 
+BOUNDARY_ERRORS = (Exception,)
+
 
 def main() -> int:
     token = create_access_token(1, "smoke-tts")
@@ -31,7 +33,7 @@ def main() -> int:
             ok = len(data) > 500
             print(f"TTS {'OK' if ok else 'WARN'} bytes={len(data)} latency_ms={ms}")
             return 0 if ok else 1
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         print(f"TTS FAIL: {e}")
         return 1
 

@@ -1,9 +1,5 @@
 import { describe, expect, it, beforeEach } from 'vitest'
-import {
-  filterWorkflowRegistrySourceMods,
-  isEmployeePackModEntry,
-  isNonWorkflowDeskEmployeeId,
-} from './modWorkflowEmployees'
+import { filterWorkflowRegistrySourceMods, isEmployeePackModEntry, isNonWorkflowDeskEmployeeId } from './modWorkflowEmployees'
 import { mergeModManifestEntries as mergeRegistry } from './workflowEmployeeRegistry'
 import { employeeRegistryRules } from '@/stores/hostConfig'
 
@@ -44,43 +40,42 @@ describe('workflow registry mod/employee separation', () => {
   })
 
   it('mergeModManifestEntries ignores employee_pack rows', () => {
-    const merged = mergeRegistry(
-      { schemaVersion: 1, employees: [] },
-      [
+    const merged = mergeRegistry({ schemaVersion: 1, employees: [] }, [
+      {
+        id: 'ppt-generate-employee',
+        type: 'employee_pack',
+        name: 'PPT 生成员',
+        workflow_employees: [{ id: 'ppt-generate-employee', label: 'PPT' }],
+      },
+      {
+        id: 'xcagi-workflow-employee-label-print',
+        name: '标签打印',
+        workflow_employees: [{ id: 'label_print', label: '标签打印' }],
+      },
+    ])
+    expect(merged.map((e) => e.id)).toEqual(['label_print'])
+    const withDeskPack = mergeRegistry({ schemaVersion: 1, employees: [] }, [
+      {
+        id: 'intake-dispatcher',
+        type: 'employee_pack',
+        name: '需求接入员',
+        workflow_employees: [{ id: 'intake-dispatcher', label: '需求接入员' }],
+      },
+    ])
+    expect(withDeskPack.map((e) => e.id)).toEqual(['intake-dispatcher'])
+    expect(
+      filterWorkflowRegistrySourceMods([
         {
           id: 'ppt-generate-employee',
           type: 'employee_pack',
-          name: 'PPT 生成员',
           workflow_employees: [{ id: 'ppt-generate-employee', label: 'PPT' }],
         },
         {
           id: 'xcagi-workflow-employee-label-print',
-          name: '标签打印',
-          workflow_employees: [{ id: 'label_print', label: '标签打印' }],
+          workflow_employees: [{ id: 'label_print', label: 'L' }],
         },
-      ],
-    )
-    expect(merged.map((e) => e.id)).toEqual(['label_print'])
-    const withDeskPack = mergeRegistry(
-      { schemaVersion: 1, employees: [] },
-      [
-        {
-          id: 'intake-dispatcher',
-          type: 'employee_pack',
-          name: '需求接入员',
-          workflow_employees: [{ id: 'intake-dispatcher', label: '需求接入员' }],
-        },
-      ],
-    )
-    expect(withDeskPack.map((e) => e.id)).toEqual(['intake-dispatcher'])
-    expect(filterWorkflowRegistrySourceMods([
-      {
-        id: 'ppt-generate-employee',
-        type: 'employee_pack',
-        workflow_employees: [{ id: 'ppt-generate-employee', label: 'PPT' }],
-      },
-      { id: 'xcagi-workflow-employee-label-print', workflow_employees: [{ id: 'label_print', label: 'L' }] },
-    ])).toHaveLength(1)
+      ]),
+    ).toHaveLength(1)
   })
 
   it('excludes custom-phase employee carrier mods from registry', () => {

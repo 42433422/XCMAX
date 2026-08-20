@@ -4,14 +4,14 @@
 
 ## 关键模块
 
-| 模块 | 职责 |
-|------|------|
-| `modstore_server/digest_vibe_prep.py` | Vibe 预备 → 更新/补丁双清单 MD |
-| `modstore_server/digest_action_items.py` | 解析 MD → `daily_action_items` 落库 + 回写 |
-| `modstore_server/action_items_api.py` | `GET /api/admin/action-items` 等 API |
-| `modstore_server/daily_digest.py` | 08:00 digest 主流程（含 action items 钩子） |
-| `modstore_server/digest_line_executor.py` | 派发成功 → `dispatched` 回写 |
-| `modstore_server/approval_dispatcher.py` | 部署合并 → `merged` 回写 |
+| 模块                                      | 职责                                        |
+| ----------------------------------------- | ------------------------------------------- |
+| `modstore_server/digest_vibe_prep.py`     | Vibe 预备 → 更新/补丁双清单 MD              |
+| `modstore_server/digest_action_items.py`  | 解析 MD → `daily_action_items` 落库 + 回写  |
+| `modstore_server/action_items_api.py`     | `GET /api/admin/action-items` 等 API        |
+| `modstore_server/daily_digest.py`         | 08:00 digest 主流程（含 action items 钩子） |
+| `modstore_server/digest_line_executor.py` | 派发成功 → `dispatched` 回写                |
+| `modstore_server/approval_dispatcher.py`  | 部署合并 → `merged` 回写                    |
 
 ## 本地启动
 

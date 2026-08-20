@@ -8,7 +8,7 @@ test('首页可加载，标题包含 XC AGI', async ({ page }) => {
 
 test('官网首页可见核心栏目', async ({ page }) => {
   await page.goto('/')
-    await expect(page.getByRole('link', { name: '解决方案' }).first()).toBeVisible()
+  await expect(page.getByRole('link', { name: '方案与案例' }).first()).toBeVisible()
   await expect(page.getByRole('link', { name: '联系我们' }).first()).toBeVisible()
 })
 

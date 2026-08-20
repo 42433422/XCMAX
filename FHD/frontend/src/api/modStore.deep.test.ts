@@ -32,7 +32,11 @@ describe('modStore api deep', () => {
   it('installHostFoundation posts install request', async () => {
     vi.mocked(apiFetch).mockResolvedValue({
       ok: true,
-      json: async () => ({ success: true, message: 'ok', data: { id: 'f', name: 'F', version: '1' } }),
+      json: async () => ({
+        success: true,
+        message: 'ok',
+        data: { id: 'f', name: 'F', version: '1' },
+      }),
     } as Response)
     const res = await installHostFoundation('generic')
     expect(apiFetch).toHaveBeenCalled()

@@ -46,7 +46,10 @@ def test_run_script_job_reports_non_python_llm_output_before_static_check(tmp_pa
     import modstore_server.workbench_script_runner as runner
 
     async def fake_chat_dispatch(*args, **kwargs):
-        return {"ok": True, "content": "这是一个文档归纳助手。它会读取文档并输出 Markdown。"}
+        return {
+            "ok": True,
+            "content": "这是一个文档归纳助手。它会读取文档并输出 Markdown。",
+        }
 
     monkeypatch.setattr(runner, "SCRIPT_ROOT", tmp_path)
     monkeypatch.setattr(runner, "resolve_api_key", lambda *args, **kwargs: ("key", "test"))
@@ -253,7 +256,7 @@ def test_run_script_job_wraps_helper_only_script_with_outputs_guard(tmp_path, mo
         calls.append(kwargs["messages"][-1]["content"])
         return {
             "ok": True,
-            "content": ("```python\n" "def parse_url_list(file_path):\n" "    return []\n" "```"),
+            "content": ("```python\ndef parse_url_list(file_path):\n    return []\n```"),
         }
 
     monkeypatch.setattr(runner, "SCRIPT_ROOT", tmp_path)

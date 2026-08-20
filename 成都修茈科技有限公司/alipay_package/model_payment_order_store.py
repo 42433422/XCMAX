@@ -88,7 +88,11 @@ def record_checkout_pending(
             "last_notify_at": None,
         }
         _atomic_write(order_store_path(), data)
-    logger.info("[model-payment] order pending out_trade_no=%s plan_id=%s", out_trade_no, plan_id)
+    logger.info(
+        "[model-payment] order pending out_trade_no=%s plan_id=%s",
+        out_trade_no,
+        plan_id,
+    )
 
 
 def apply_notify_paid(

@@ -107,7 +107,8 @@ class TestUserPublicDict:
         user.is_active = True
         user.wx_avatar_url = None
         with patch(
-            "app.utils.user_avatar_storage.public_avatar_url", return_value="/avatar/default.png"
+            "app.utils.path_io.user_avatar_storage.public_avatar_url",
+            return_value="/avatar/default.png",
         ):
             result = auth_mod._user_public_dict(user)
         assert result["id"] == 1
@@ -124,7 +125,7 @@ class TestUserPublicDict:
         user.is_active = True
         user.wx_avatar_url = "https://example.com/av.jpg"
         with patch(
-            "app.utils.user_avatar_storage.public_avatar_url",
+            "app.utils.path_io.user_avatar_storage.public_avatar_url",
             return_value="https://example.com/av.jpg",
         ):
             result = auth_mod._user_public_dict(user)
@@ -291,7 +292,7 @@ class TestJitCreateLocalUser:
         mock_db.__exit__ = MagicMock(return_value=False)
         with (
             patch("app.db.session.get_db", return_value=mock_db),
-            patch("app.utils.password_hash.generate_password_hash", return_value="hashed"),
+            patch("app.utils.security.password_hash.generate_password_hash", return_value="hashed"),
         ):
             result = auth_mod._jit_create_local_user_for_enterprise("newuser", "pass", "e@e.com")
         assert result is True

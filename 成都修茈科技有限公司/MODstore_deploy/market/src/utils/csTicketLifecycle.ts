@@ -23,11 +23,7 @@ const LABEL_ALIASES: Record<string, string> = {
   结果回访: '已完成',
 }
 
-export function resolveTicketLifecycleStage(ticket: {
-  lifecycle_stage?: unknown
-  status?: unknown
-  decision_status?: unknown
-}): number {
+export function resolveTicketLifecycleStage(ticket: { lifecycle_stage?: unknown; status?: unknown; decision_status?: unknown }): number {
   const fromApi = Number(ticket?.lifecycle_stage || 0)
   if (fromApi >= 1 && fromApi <= 5) return fromApi
 
@@ -68,7 +64,9 @@ const INTENT_LABELS: Record<string, string> = {
 }
 
 export function ticketIntentLabel(intent: unknown): string {
-  const key = String(intent || '').trim().toLowerCase()
+  const key = String(intent || '')
+    .trim()
+    .toLowerCase()
   return INTENT_LABELS[key] || (key ? key : '咨询')
 }
 
@@ -92,7 +90,9 @@ export function issueDomainLabel(ticketOrDomain: unknown): string {
   }
   const fromApi = String(t.issue_domain_label || t.evidence?.issue_domain_label || '').trim()
   if (fromApi) return fromApi
-  const key = String(t.issue_domain || t.evidence?.issue_domain || '').trim().toLowerCase()
+  const key = String(t.issue_domain || t.evidence?.issue_domain || '')
+    .trim()
+    .toLowerCase()
   if (ISSUE_DOMAIN_LABELS[key]) return ISSUE_DOMAIN_LABELS[key]
   const title = String(t.title || '')
   if (title.includes('定制')) return '客户定制'
@@ -131,11 +131,7 @@ export function ticketLifecycleSteps(ticket: {
   }))
 }
 
-export function shortTicketRef(ticket: {
-  subject_id?: unknown
-  ticket_no?: unknown
-  intent?: unknown
-}): string {
+export function shortTicketRef(ticket: { subject_id?: unknown; ticket_no?: unknown; intent?: unknown }): string {
   const subject = String(ticket?.subject_id || '').trim()
   if (subject) return subject.length > 16 ? `${subject.slice(0, 14)}…` : subject
   const no = String(ticket?.ticket_no || '').trim()

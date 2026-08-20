@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+# mypy: disable-error-code="attr-defined"
 """
 XCAGI 材料/基础数据 服务启动入口
 
@@ -9,7 +9,6 @@ XCAGI 材料/基础数据 服务启动入口
 
 from app import create_app
 from app.config import DevelopmentConfig
-
 
 app = create_app(DevelopmentConfig, blueprint_groups=["warehouse"])
 

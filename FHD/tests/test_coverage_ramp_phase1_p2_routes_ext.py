@@ -1,3 +1,4 @@
+# mypy: disable-error-code="method-assign"
 """COVERAGE_RAMP Phase 1 round 2: domains routes ext (auth/conversation/misc/static/product compat)."""
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ from fastapi.testclient import TestClient
 
 @pytest.fixture
 def conv_compat_client() -> TestClient:
-    from app.fastapi_routes.domains.conversation import compat_routes
+    from app.legacy.routes.conversation import compat_routes
 
     app = FastAPI()
     app.include_router(compat_routes.router)
@@ -24,7 +25,7 @@ def conv_compat_client() -> TestClient:
 
 
 @patch(
-    "app.fastapi_routes.domains.conversation.compat_routes.execute_compat_chat",
+    "app.legacy.routes.conversation.compat_routes.execute_compat_chat",
     new_callable=AsyncMock,
 )
 def test_ai_chat_unified_compat(mock_exec: AsyncMock, conv_compat_client: TestClient) -> None:
@@ -35,7 +36,7 @@ def test_ai_chat_unified_compat(mock_exec: AsyncMock, conv_compat_client: TestCl
 
 
 @patch(
-    "app.fastapi_routes.domains.conversation.compat_routes.execute_compat_chat_batch",
+    "app.legacy.routes.conversation.compat_routes.execute_compat_chat_batch",
     new_callable=AsyncMock,
 )
 def test_ai_chat_batch_compat(mock_exec: AsyncMock, conv_compat_client: TestClient) -> None:
@@ -312,7 +313,7 @@ def test_system_test_db_enable(
 
 @pytest.fixture
 def product_compat_client() -> TestClient:
-    from app.fastapi_routes.domains.product import compat_routes
+    from app.legacy.routes.product import compat_routes
 
     app = FastAPI()
     app.include_router(compat_routes.router)

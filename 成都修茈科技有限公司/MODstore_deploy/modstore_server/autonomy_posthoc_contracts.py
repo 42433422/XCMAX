@@ -1,3 +1,4 @@
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Dedicated post-execution verifiers for autonomy decision contracts.
 
 Each verifier consumes only typed operational receipts.  It never treats the
@@ -11,18 +12,25 @@ import hashlib
 import json
 import os
 import re
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
+from modstore_server.autonomy_posthoc_helpers import (
+    failed_merge_request_attempt as _failed_merge_request_attempt,
+)
+from modstore_server.autonomy_posthoc_helpers import payload as _payload
+from modstore_server.autonomy_posthoc_helpers import recorded_at_or_after as _recorded_at_or_after
+from modstore_server.autonomy_posthoc_helpers import safe_repo_path as _safe_repo_path
+from modstore_server.autonomy_posthoc_helpers import utc as _utc
 from modstore_server.db.employee_ops import (
     DailyDigestRecord,
     EmployeeChangeRequest,
     EmployeeSuggestion,
     IncidentEvent,
 )
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
-UTC = timezone.utc  # noqa: UP017 - production runtime still supports Python 3.10
 _CHANGE_REQUEST_ACTION = re.compile(r"^change-request:(\d+):apply$")
 _DAILY_DIGEST_ACTION = re.compile(r"^daily-digest:(\d{4}-\d{2}-\d{2})$")
 _MERGE_ACTION = re.compile(
@@ -40,31 +48,6 @@ _TERMINAL_NO_EFFECT = frozenset(
         "merge_conflict",
     }
 )
-
-
-def _utc(value: datetime | None = None) -> datetime:
-    current = value or datetime.now(UTC)
-    if current.tzinfo is None:
-        current = current.replace(tzinfo=UTC)
-    return current.astimezone(UTC)
-
-
-def _payload(raw: Any) -> dict[str, Any]:
-    try:
-        value = json.loads(str(raw or "{}"))
-    except (TypeError, ValueError, json.JSONDecodeError):
-        return {}
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_repo_path(value: Any) -> str:
-    raw = str(value or "").strip().replace("\\", "/")
-    if not raw or Path(raw).is_absolute():
-        return ""
-    parts = [part for part in raw.split("/") if part and part != "."]
-    if not parts or any(part == ".." for part in parts):
-        return ""
-    return "/".join(parts)
 
 
 def _matching_validation_failure(
@@ -143,7 +126,7 @@ def _post_apply_scope_verdict(
         pack = load_employee_pack(session, str(change_request.source_employee_id or ""))
         manifest = pack.get("manifest") if isinstance(pack.get("manifest"), dict) else {}
         scope_globs, forbidden_globs, _approval_globs = workspace_policy_from_manifest(manifest)
-    except Exception:  # noqa: BLE001 - evidence outage must stay unknown, not crash the job
+    except BOUNDARY_ERRORS:  # noqa: BLE001 - evidence outage must stay unknown, not crash the job
         return {"ok": False, "reason": "workspace_policy_unavailable"}
     if not scope_globs and not forbidden_globs:
         return {"ok": False, "reason": "workspace_policy_missing"}
@@ -346,37 +329,6 @@ def default_para_task_fetcher(task_id: str) -> dict[str, Any]:
     return _fetch_para_task_state(api_base, task_id)
 
 
-def _recorded_at_or_after(record: dict[str, Any], allowed_at: datetime) -> bool:
-    raw = str(
-        record.get("created_at") or record.get("completed_at") or record.get("observed_at") or ""
-    ).strip()
-    if not raw:
-        return False
-    try:
-        return _utc(datetime.fromisoformat(raw.replace("Z", "+00:00"))) >= _utc(allowed_at)
-    except ValueError:
-        return False
-
-
-def _failed_merge_request_attempt(
-    records: list[dict[str, Any]],
-) -> dict[str, Any] | None:
-    for record in reversed(records):
-        policy = (
-            record.get("policy_decision") if isinstance(record.get("policy_decision"), dict) else {}
-        )
-        if (
-            str(record.get("phase") or "") == "complete"
-            and str(record.get("status") or "") == "completed_held_for_remediation"
-            and str(policy.get("action") or "") == "hold_for_automated_remediation"
-            and str(policy.get("reason") or "") == "para_merge_request_failed"
-            and str(record.get("para_task_id") or "").strip()
-            and str(record.get("branch") or "").strip()
-        ):
-            return record
-    return None
-
-
 def verify_self_maintenance_merge_action(
     *,
     action_id: str,
@@ -423,7 +375,7 @@ def verify_self_maintenance_merge_action(
     para_reason = ""
     try:
         task = para_task_fetcher(task_id)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         task = {}
         para_reason = "para_task_state_unavailable"
     if not isinstance(task, dict):
@@ -438,7 +390,7 @@ def verify_self_maintenance_merge_action(
                     branch=branch,
                     base_branch=base_branch,
                 )
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 veto = {"ok": False, "reason": "github_veto_evidence_unavailable"}
             if not isinstance(veto, dict) or veto.get("ok") is not True:
                 return {
@@ -495,8 +447,7 @@ def verify_self_maintenance_merge_action(
                 "ok": True,
                 "verdict": "no_prohibited_miss",
                 "evidence_ref": (
-                    f"para-task:{task_id}:merged:{task_merge_sha[:12]}"
-                    f"+workflow:{workflow_run_id}"
+                    f"para-task:{task_id}:merged:{task_merge_sha[:12]}+workflow:{workflow_run_id}"
                 ),
                 "reason": "merged_and_exact_production_identity_verified",
             }
@@ -512,7 +463,7 @@ def verify_self_maintenance_merge_action(
             expected_merge_sha=(task_merge_sha if _SHA.fullmatch(task_merge_sha) else ""),
             expected_task_id=task_id,
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         github = {"ok": False, "reason": "github_merge_evidence_unavailable"}
     if isinstance(github, dict) and github.get("ok") is True:
         return github

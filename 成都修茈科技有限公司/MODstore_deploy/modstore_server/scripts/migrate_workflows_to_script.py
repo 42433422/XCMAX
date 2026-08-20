@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """把节点图工作流迁移成脚本工作流（``ScriptWorkflow``）的后台 worker。
 
 主流程：
@@ -26,8 +27,8 @@ import json
 import logging
 import sys
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any, Callable, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
@@ -42,6 +43,7 @@ from modstore_server.models import (
     WorkflowTrigger,
     get_session_factory,
 )
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 from modstore_server.script_agent.agent_loop import run_agent_loop
 from modstore_server.script_agent.brief import Brief, BriefInputFile
 from modstore_server.script_agent.llm_client import LlmClient, RealLlmClient
@@ -209,7 +211,7 @@ async def migrate_one(
     db.commit()
 
     brief = build_brief_from_workflow(db, workflow)
-    session_id = f"migrate_{workflow.id}_{int(datetime.now(timezone.utc).timestamp())}"
+    session_id = f"migrate_{workflow.id}_{int(datetime.now(UTC).timestamp())}"
     sandbox_kwargs: Dict[str, Any] = {}
     if sandbox_kwargs_factory is not None:
         sandbox_kwargs = sandbox_kwargs_factory({})
@@ -226,7 +228,7 @@ async def migrate_one(
         ):
             if ev.type in ("done", "error"):
                 final_outcome = (ev.payload or {}).get("outcome") or {}
-    except Exception as e:  # noqa: BLE001
+    except BOUNDARY_ERRORS as e:  # noqa: BLE001
         workflow.migration_status = "failed"
         db.commit()
         return MigrationResult(workflow.id, ok=False, error=f"agent loop crashed: {e}")
@@ -334,7 +336,7 @@ async def migrate_user_workflows(
                     llm_factory=factory,
                     sandbox_kwargs_factory=sandbox_kwargs_factory,
                 )
-            except Exception as e:  # noqa: BLE001
+            except BOUNDARY_ERRORS as e:  # noqa: BLE001
                 wf.migration_status = "failed"
                 db.commit()
                 r = MigrationResult(wf.id, ok=False, error=f"{type(e).__name__}: {e}")

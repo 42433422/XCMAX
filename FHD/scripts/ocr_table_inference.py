@@ -1,13 +1,14 @@
-# -*- coding: utf-8 -*-
+# mypy: disable-error-code="assignment, var-annotated"
 """
 使用 PaddleOCR 文本位置推断表格结构 - 修正版
 """
 
-from paddleocr import PaddleOCR
-import numpy as np
-import cv2
-import json
 import glob
+import json
+
+import cv2
+import numpy as np
+from paddleocr import PaddleOCR
 
 # 读取图片
 files = glob.glob(r"e:\FHD\26-0300001A*.png")
@@ -75,7 +76,7 @@ for i in range(len(rec_polys)):
         }
     )
 
-print(f"\n" + "=" * 70)
+print("\n" + "=" * 70)
 print("OCR 识别结果")
 print("=" * 70)
 for i, box in enumerate(text_boxes):
@@ -84,7 +85,7 @@ for i, box in enumerate(text_boxes):
     )
 
 # 根据 Y 坐标分行
-print(f"\n" + "=" * 70)
+print("\n" + "=" * 70)
 print("根据 Y 坐标分行")
 print("=" * 70)
 
@@ -137,7 +138,7 @@ for box in text_boxes:
     box["col"] = col
 
 # 打印表格结构
-print(f"\n" + "=" * 70)
+print("\n" + "=" * 70)
 print("推断的表格结构")
 print("=" * 70)
 

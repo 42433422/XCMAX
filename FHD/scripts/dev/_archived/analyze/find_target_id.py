@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import sqlite3
 
 contact_db = r"E:\FHD\XCAGI\resources\wechat-decrypt\decrypted\contact\contact.db"

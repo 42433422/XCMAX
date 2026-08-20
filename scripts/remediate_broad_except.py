@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""ARCHIVED (2026-06): superseded by RECOVERABLE_ERRORS migration. Do not run."""
-"""Replace ``except Exception`` with ``except RECOVERABLE_ERRORS`` across FHD/app."""
+"""Replace broad catches with RECOVERABLE_ERRORS across FHD/app.
+
+ARCHIVED (2026-06): superseded by the RECOVERABLE_ERRORS migration. Do not run.
+"""
 
 from __future__ import annotations
 
 import re
-import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -19,7 +20,10 @@ SKIP_SUFFIXES = (
 )
 
 EXCEPT_PATTERNS = [
-    (re.compile(r"(\s*)except Exception as (\w+)\s*:"), r"\1except OPERATIONAL_ERRORS as \2:"),
+    (
+        re.compile(r"(\s*)except Exception as (\w+)\s*:"),
+        r"\1except OPERATIONAL_ERRORS as \2:",
+    ),
     (re.compile(r"(\s*)except Exception\s*:"), r"\1except OPERATIONAL_ERRORS:"),
 ]
 
@@ -35,7 +39,9 @@ def _inject_import(text: str) -> str:
     insert_at = 0
     if lines and lines[0].startswith("#!"):
         insert_at = 1
-    if insert_at < len(lines) and ('"""' in lines[insert_at] or "'''" in lines[insert_at]):
+    if insert_at < len(lines) and (
+        '"""' in lines[insert_at] or "'''" in lines[insert_at]
+    ):
         quote = '"""' if '"""' in lines[insert_at] else "'''"
         insert_at += 1
         while insert_at < len(lines) and quote not in lines[insert_at]:
@@ -43,10 +49,10 @@ def _inject_import(text: str) -> str:
         insert_at += 1
     if insert_at < len(lines) and "from __future__" in lines[insert_at]:
         insert_at += 1
-        while insert_at < len(lines) and (lines[insert_at].strip() == "" or "from __future__" in lines[insert_at]):
-            if "from __future__" in lines[insert_at]:
-                insert_at += 1
-            elif lines[insert_at].strip() == "":
+        while insert_at < len(lines) and (
+            lines[insert_at].strip() == "" or "from __future__" in lines[insert_at]
+        ):
+            if "from __future__" in lines[insert_at] or lines[insert_at].strip() == "":
                 insert_at += 1
             else:
                 break

@@ -21,6 +21,7 @@ from app.application.etl.parser_target_match import (
     target_header_hints,
 )
 from app.application.etl.parser_types import ParsedDataset, ParsedRow
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 MAX_ROWS = 100_000
 STRUCTURED_SUFFIXES = {".xlsx", ".xlsm", ".csv"}
@@ -403,7 +404,7 @@ def parse_file(
                 )
             except EtlError:
                 raise
-            except Exception:  # noqa: BLE001 - legacy presets remain a safe fallback
+            except RECOVERABLE_ERRORS:  # noqa: BLE001 - legacy presets remain a safe fallback
                 regional = None
             if regional is not None and covers_required_target_fields(regional, target_type):
                 return regional
@@ -431,7 +432,7 @@ def parse_file(
                 generic = _parse_workbook(source, max_rows, target_type)
             except EtlError:
                 raise
-            except Exception:  # noqa: BLE001 - a proven legacy preset remains a safe fallback
+            except RECOVERABLE_ERRORS:  # noqa: BLE001 - a proven legacy preset remains a safe fallback
                 return compatibility
             if generic.rows and covers_required_target_fields(generic, target_type):
                 generic.warnings.insert(

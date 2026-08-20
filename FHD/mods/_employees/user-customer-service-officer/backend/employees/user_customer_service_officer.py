@@ -41,10 +41,7 @@ def _normalize_ticket(payload: dict) -> Optional[Dict[str, Any]]:
     source = str(payload.get("source") or incident.get("source") or "").strip().lower()
     event_type = str(payload.get("event_type") or "").strip()
     if not (
-        ticket_id
-        or issue
-        or source == "customer_ticket"
-        or event_type.endswith("customer_ticket")
+        ticket_id or issue or source == "customer_ticket" or event_type.endswith("customer_ticket")
     ):
         return None
 
@@ -61,11 +58,7 @@ def _normalize_ticket(payload: dict) -> Optional[Dict[str, Any]]:
                 "text": issue[:500],
             }
         ]
-    severity = (
-        str(payload.get("severity") or incident.get("severity") or "normal")
-        .strip()
-        .lower()
-    )
+    severity = str(payload.get("severity") or incident.get("severity") or "normal").strip().lower()
     return {
         "id": ticket_id or "CS-unknown",
         "issue": issue or f"客服工单 {ticket_id}",
@@ -88,17 +81,13 @@ def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     ticket_id = str(ticket.get("id") or "").strip()[:160]
     issue = str(ticket.get("issue") or "").strip()[:2000]
     sources = (
-        ticket.get("knowledge_sources")
-        if isinstance(ticket.get("knowledge_sources"), list)
-        else []
+        ticket.get("knowledge_sources") if isinstance(ticket.get("knowledge_sources"), list) else []
     )
     issues: list[dict[str, str]] = []
     if not ticket_id or not issue:
         issues.append({"code": "missing_ticket_context", "path": "ticket"})
     if not sources:
-        issues.append(
-            {"code": "missing_grounding_sources", "path": "ticket.knowledge_sources"}
-        )
+        issues.append({"code": "missing_grounding_sources", "path": "ticket.knowledge_sources"})
     severity = str(ticket.get("severity") or "normal").strip().lower()
     if severity not in {"low", "normal", "high", "critical"}:
         issues.append({"code": "invalid_severity", "path": "ticket.severity"})

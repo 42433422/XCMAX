@@ -1,9 +1,5 @@
 import { describe, expect, it, afterEach } from 'vitest'
-import {
-  resolveOtherToolsLocation,
-  resolveWorkflowVisualizationLocation,
-  workflowVisualizationModPath,
-} from './workflowNav'
+import { resolveOtherToolsLocation, resolveWorkflowVisualizationLocation, workflowVisualizationModPath } from './workflowNav'
 
 const CORE_LS = 'xcagi_workflow_viz_mod_pages_enabled'
 const OFFICE_LS = 'xcagi_office_employee_pack_mod_pages_enabled'

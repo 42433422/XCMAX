@@ -4,7 +4,7 @@ import json
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.architecture_contracts import evaluate_architecture_contracts
 from retort_engine.architecture_refactor import build_core_refactor_plan
@@ -650,10 +650,11 @@ def _case(
 def _adjudicate_cases(cases: list[dict[str, Any]]) -> dict[str, Any]:
     rows = []
     for case in cases:
-        assertions = (
+        assertions = cast(
+            dict[str, Any],
             case.get("output_assertions")
             if isinstance(case.get("output_assertions"), dict)
-            else {}
+            else {},
         )
         artifacts = [Path(str(path)) for path in case.get("artifacts") or []]
         checks = {

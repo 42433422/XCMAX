@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import math
 import re
-from typing import Sequence
+from collections.abc import Sequence
 
 from .exemplars import Exemplar
 
@@ -47,10 +47,7 @@ class Retriever:
         for tokens in tokenised:
             for tok in set(tokens):
                 df[tok] = df.get(tok, 0) + 1
-        self._idf = {
-            tok: math.log((n - f + 0.5) / (f + 0.5) + 1)
-            for tok, f in df.items()
-        }
+        self._idf = {tok: math.log((n - f + 0.5) / (f + 0.5) + 1) for tok, f in df.items()}
         total = sum(len(t) for t in tokenised)
         self._avg_dl = total / max(n, 1)
 
@@ -62,6 +59,7 @@ class Retriever:
             return self._docs[:k]
         try:
             from rank_bm25 import BM25Okapi  # type: ignore[import-not-found]
+
             bm25 = BM25Okapi(self._index)
             scores = bm25.get_scores(q_tokens)
             ranked = sorted(range(len(self._docs)), key=lambda i: -scores[i])

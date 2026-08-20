@@ -5,15 +5,36 @@ import type { LoopRuntimeCore } from './useLoopRuntimeCore'
 export function useLoopRuntimeActivity(core: LoopRuntimeCore, deps: LoopRuntimeConsoleDeps) {
   const { visualizedEmployeeCount, routeFocusedEmployeeId } = deps
   const {
-    loopMissingEvidenceCount, loopMergeDecision, loopStatusLabel, loopRuntime,
-    loopRuntimeContractOk, loopRuntimeSchemaVersion, loopOpenRunCount, loopGateReasonText,
-    loopParticipantIds, loopGate, loopMetrics, loopEvidence, loopActiveGates,
-    loopActiveGateBlockingKeys, loopRosterAlignment, loopOutOfRosterParticipantIds,
-    loopBridgePrimaryEmployeeId, dutyRosterEmployeeLocation, dutyRosterLoopLocation,
-    loopAlignedPlannedCount, loopAlignedInRosterCount, loopAlignedInDeployedCount,
-    loopOutOfRosterCount, loopNotDeployedCount, loopRuntimeSurfaceIncident,
-    loopRuntimeSurfaceReadiness, loopRuntimeSurfaceIncidents, loopRuntimeSurfaceMissing,
-    dutyRosterGovernanceLocation, loopBridgeBlockedEmployeeIds, loopParticipantRoleLabels,
+    loopMissingEvidenceCount,
+    loopMergeDecision,
+    loopStatusLabel,
+    loopRuntime,
+    loopRuntimeContractOk,
+    loopRuntimeSchemaVersion,
+    loopOpenRunCount,
+    loopGateReasonText,
+    loopParticipantIds,
+    loopGate,
+    loopMetrics,
+    loopActiveGates,
+    loopActiveGateBlockingKeys,
+    loopRosterAlignment,
+    loopOutOfRosterParticipantIds,
+    loopBridgePrimaryEmployeeId,
+    dutyRosterEmployeeLocation,
+    dutyRosterLoopLocation,
+    loopAlignedPlannedCount,
+    loopAlignedInRosterCount,
+    loopAlignedInDeployedCount,
+    loopOutOfRosterCount,
+    loopNotDeployedCount,
+    loopRuntimeSurfaceIncident,
+    loopRuntimeSurfaceReadiness,
+    loopRuntimeSurfaceIncidents,
+    loopRuntimeSurfaceMissing,
+    dutyRosterGovernanceLocation,
+    loopBridgeBlockedEmployeeIds,
+    loopParticipantRoleLabels,
   } = core
   const loopRuntimeCards = computed(() => {
     const missing = loopMissingEvidenceCount.value
@@ -29,10 +50,20 @@ export function useLoopRuntimeActivity(core: LoopRuntimeCore, deps: LoopRuntimeC
         key: 'status',
         label: 'Loop 状态',
         value: loopStatusLabel.value,
-        sub: loopRuntime.value && !loopRuntimeContractOk.value
-          ? `版本=${loopRuntimeSchemaVersion.value || '未知'}，不是当前状态检查`
-          : loopOpenRunCount.value > 0 ? `${loopOpenRunCount.value} 个 run 未闭环` : loopGateReasonText.value,
-        tone: loopRuntime.value && !loopRuntimeContractOk.value ? 'bad' : loopOpenRunCount.value > 0 ? 'run' : loopRuntime.value ? 'ok' : 'warn',
+        sub:
+          loopRuntime.value && !loopRuntimeContractOk.value
+            ? `版本=${loopRuntimeSchemaVersion.value || '未知'}，不是当前状态检查`
+            : loopOpenRunCount.value > 0
+              ? `${loopOpenRunCount.value} 个 run 未闭环`
+              : loopGateReasonText.value,
+        tone:
+          loopRuntime.value && !loopRuntimeContractOk.value
+            ? 'bad'
+            : loopOpenRunCount.value > 0
+              ? 'run'
+              : loopRuntime.value
+                ? 'ok'
+                : 'warn',
       },
       {
         key: 'workers',
@@ -194,17 +225,11 @@ export function useLoopRuntimeActivity(core: LoopRuntimeCore, deps: LoopRuntimeC
       const participant = loopRecord(participantRecords[id])
       const items = timelineByEmployee[id] || []
       const latest = items[items.length - 1]
-      const role = loopFirstText(
-        participant.role_label,
-        participant.role,
-        loopParticipantRoleLabels.value[id],
-        'loop worker',
-      )
+      const role = loopFirstText(participant.role_label, participant.role, loopParticipantRoleLabels.value[id], 'loop worker')
       const department = loopFirstText(participant.department_label, participant.department_key, '未分部门')
       const rosterLabel = loopFirstText(participant.roster_label, participant.roster_status, '编制内')
-      const dutyLabel = participant.duty_registered === false
-        ? '未登记上岗'
-        : loopFirstText(participant.duty_registered_label, '已登记上岗')
+      const dutyLabel =
+        participant.duty_registered === false ? '未登记上岗' : loopFirstText(participant.duty_registered_label, '已登记上岗')
       const blocked = isolatedIds.has(id) || notDeployedIds.has(id)
       const latestStatus = loopFirstText(latest?.status, latest?.stage, latest?.label, items.length ? '有任务回写' : '等待派工')
       const failed = /fail|failed|block|blocked|error|reject/i.test(latestStatus)
@@ -229,32 +254,32 @@ export function useLoopRuntimeActivity(core: LoopRuntimeCore, deps: LoopRuntimeC
       if (!byRun[key]) byRun[key] = []
       byRun[key].push(item)
     }
-    return Object.entries(byRun).slice(-8).map(([key, items]) => {
-      const latest = items[items.length - 1]
-      const employeeIds = Array.from(new Set(items.map((item) => item.employeeId).filter(Boolean)))
-      const failed = items.some((item) => /fail|failed|block|blocked|error|reject/i.test(item.status))
-      const done = items.some((item) => /pass|passed|done|success|merged|complete/i.test(item.status))
-      const primaryEmployeeId = employeeIds[0] || loopBridgePrimaryEmployeeId.value
-      return {
-        key,
-        runId: latest?.runId || key,
-        title: loopFirstText(latest?.label, latest?.stage, 'Loop work order'),
-        status: loopFirstText(latest?.status, done ? 'done' : 'in_progress'),
-        stage: loopFirstText(latest?.stage, latest?.role, 'worker step'),
-        workers: employeeIds,
-        stepCount: items.length,
-        tone: failed ? 'bad' : done ? 'ok' : 'run',
-        to: primaryEmployeeId ? dutyRosterEmployeeLocation(primaryEmployeeId) : dutyRosterLoopLocation.value,
-      }
-    })
+    return Object.entries(byRun)
+      .slice(-8)
+      .map(([key, items]) => {
+        const latest = items[items.length - 1]
+        const employeeIds = Array.from(new Set(items.map((item) => item.employeeId).filter(Boolean)))
+        const failed = items.some((item) => /fail|failed|block|blocked|error|reject/i.test(item.status))
+        const done = items.some((item) => /pass|passed|done|success|merged|complete/i.test(item.status))
+        const primaryEmployeeId = employeeIds[0] || loopBridgePrimaryEmployeeId.value
+        return {
+          key,
+          runId: latest?.runId || key,
+          title: loopFirstText(latest?.label, latest?.stage, 'Loop work order'),
+          status: loopFirstText(latest?.status, done ? 'done' : 'in_progress'),
+          stage: loopFirstText(latest?.stage, latest?.role, 'worker step'),
+          workers: employeeIds,
+          stepCount: items.length,
+          tone: failed ? 'bad' : done ? 'ok' : 'run',
+          to: primaryEmployeeId ? dutyRosterEmployeeLocation(primaryEmployeeId) : dutyRosterLoopLocation.value,
+        }
+      })
   })
 
-  const loopFocusedEmployeeId = computed(() =>
-    loopFirstText(routeFocusedEmployeeId.value, loopBridgePrimaryEmployeeId.value),
-  )
+  const loopFocusedEmployeeId = computed(() => loopFirstText(routeFocusedEmployeeId.value, loopBridgePrimaryEmployeeId.value))
 
-  const loopFocusedWorkerTaskCard = computed(() =>
-    loopWorkerTaskCards.value.find((worker) => worker.id === loopFocusedEmployeeId.value) || null,
+  const loopFocusedWorkerTaskCard = computed(
+    () => loopWorkerTaskCards.value.find((worker) => worker.id === loopFocusedEmployeeId.value) || null,
   )
 
   const loopEmployeeSeparationMatrix = computed(() => {
@@ -279,8 +304,11 @@ export function useLoopRuntimeActivity(core: LoopRuntimeCore, deps: LoopRuntimeC
         label: '待补上岗',
         value: `${loopNotDeployedCount.value}`,
         sub: loopNotDeployedCount.value
-          ? loopArray(loopRosterAlignment.value.not_deployed_ids).map((id) => loopString(id)).filter(Boolean).slice(0, 4).join(' / ')
-            || '编制内但未登记上岗'
+          ? loopArray(loopRosterAlignment.value.not_deployed_ids)
+              .map((id) => loopString(id))
+              .filter(Boolean)
+              .slice(0, 4)
+              .join(' / ') || '编制内但未登记上岗'
           : '没有待补登记员工',
         tone: loopNotDeployedCount.value ? 'bad' : 'ok',
       },
@@ -288,9 +316,7 @@ export function useLoopRuntimeActivity(core: LoopRuntimeCore, deps: LoopRuntimeC
         key: 'isolated',
         label: '商店/非编制隔离',
         value: `${loopOutOfRosterCount.value}`,
-        sub: loopOutOfRosterCount.value
-          ? loopOutOfRosterParticipantIds.value.slice(0, 4).join(' / ')
-          : '未把商店员工混入上岗 loop',
+        sub: loopOutOfRosterCount.value ? loopOutOfRosterParticipantIds.value.slice(0, 4).join(' / ') : '未把商店员工混入上岗 loop',
         tone: loopOutOfRosterCount.value ? 'bad' : 'ok',
       },
     ]
@@ -300,7 +326,10 @@ export function useLoopRuntimeActivity(core: LoopRuntimeCore, deps: LoopRuntimeC
     const blockingCount = Number(loopActiveGates.value.blocking_count ?? loopActiveGateBlockingKeys.value.length) || 0
     const primaryEmployeeId = loopBridgePrimaryEmployeeId.value
     const surfaceIncidentAction = loopFirstText(loopRuntimeSurfaceIncident.value.action, loopRuntimeSurfaceReadiness.value.action)
-    const surfaceIncidentTarget = loopFirstText(loopRuntimeSurfaceIncident.value.target_surface, loopRuntimeSurfaceReadiness.value.target_surface)
+    const surfaceIncidentTarget = loopFirstText(
+      loopRuntimeSurfaceIncident.value.target_surface,
+      loopRuntimeSurfaceReadiness.value.target_surface,
+    )
     const surfaceIncidentCard = loopRuntimeSurfaceIncidents.value.length
       ? {
           key: 'surface-incident',
@@ -312,12 +341,14 @@ export function useLoopRuntimeActivity(core: LoopRuntimeCore, deps: LoopRuntimeC
               ? `缺依赖：${loopRuntimeSurfaceMissing.value.slice(0, 4).join(' / ')}`
               : '后端 surface_incidents 要求处理',
           ),
-          cta: surfaceIncidentTarget === 'duty_roster_graph' || surfaceIncidentAction === 'open_duty_roster_graph'
-            ? '去编制图谱处理'
-            : '查看完整 Loop',
-          to: surfaceIncidentTarget === 'duty_roster_graph' || surfaceIncidentAction === 'open_duty_roster_graph'
-            ? dutyRosterGovernanceLocation.value
-            : dutyRosterLoopLocation.value,
+          cta:
+            surfaceIncidentTarget === 'duty_roster_graph' || surfaceIncidentAction === 'open_duty_roster_graph'
+              ? '去编制图谱处理'
+              : '查看完整 Loop',
+          to:
+            surfaceIncidentTarget === 'duty_roster_graph' || surfaceIncidentAction === 'open_duty_roster_graph'
+              ? dutyRosterGovernanceLocation.value
+              : dutyRosterLoopLocation.value,
           tone: 'bad',
         }
       : null
@@ -327,9 +358,7 @@ export function useLoopRuntimeActivity(core: LoopRuntimeCore, deps: LoopRuntimeC
         key: 'workers',
         label: '员工现场',
         title: loopOpenRunCount.value > 0 ? '追踪正在执行的员工' : '等待下一轮派工',
-        detail: loopParticipantIds.value.length
-          ? `${loopParticipantIds.value.length} 个上岗员工有 loop 上下文`
-          : '当前还没有员工参与记录',
+        detail: loopParticipantIds.value.length ? `${loopParticipantIds.value.length} 个上岗员工有 loop 上下文` : '当前还没有员工参与记录',
         cta: primaryEmployeeId ? '定位目标员工' : '看完整 Loop',
         to: primaryEmployeeId ? dutyRosterEmployeeLocation(primaryEmployeeId) : dutyRosterLoopLocation.value,
         tone: loopParticipantIds.value.length ? 'run' : 'warn',
@@ -362,9 +391,16 @@ export function useLoopRuntimeActivity(core: LoopRuntimeCore, deps: LoopRuntimeC
   })
 
   return {
-    loopRuntimeCards, loopTimelineItems, loopPipelineStages, loopActiveGateCards,
-    loopWorkerTaskCards, loopWorkOrderCards, loopFocusedEmployeeId,
-    loopFocusedWorkerTaskCard, loopEmployeeSeparationMatrix, loopWorkspaceActionCards,
+    loopRuntimeCards,
+    loopTimelineItems,
+    loopPipelineStages,
+    loopActiveGateCards,
+    loopWorkerTaskCards,
+    loopWorkOrderCards,
+    loopFocusedEmployeeId,
+    loopFocusedWorkerTaskCard,
+    loopEmployeeSeparationMatrix,
+    loopWorkspaceActionCards,
   }
 }
 

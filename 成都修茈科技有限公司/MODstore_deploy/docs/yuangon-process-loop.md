@@ -38,25 +38,26 @@ flowchart LR
 
 下表是闭环用到的核心事件（与 `triggers.subscribes` 一一对应）：
 
-| 事件 | 发出方 | 主要订阅者 |
-|------|--------|------------|
-| `ops.intake.user_request` | Admin「下达任务」UI | intake-dispatcher |
-| `ops.intake.customer_ticket` | AdminCustomerServiceView | intake-dispatcher |
-| `ops.intake.candidate_pack` | mianshi/ 文件监听 | intake-dispatcher |
-| `employee.task.done:wechat-contacts-ai-employee` | 微信员工 | intake-dispatcher |
-| `ops.intake.task.queued` | intake-dispatcher | task-router-officer |
-| `employee.task.assigned:<id>` | task-router-officer | 对应业务员工 |
-| `ops.change_request.submitted` | 任意业务员工 | change-request-auditor |
-| `employee.task.done:test-qa-runner` | test-qa-runner | change-request-auditor |
-| `ops.change_request.approved` | change-request-auditor | deploy-release-officer |
-| `ops.change_request.escalated` | change-request-auditor | admin |
-| `yuangon.def.changed` | git hook / 文件监听 | push-update-context-officer |
-| `ops.yuangon.resync.done` | push-update-context-officer | task-router-officer（重建路由表） |
-| `employee.task.escalate:daily-orchestrator` | daily-orchestrator | dbops-engineer（schema 类） |
+| 事件                                             | 发出方                      | 主要订阅者                        |
+| ------------------------------------------------ | --------------------------- | --------------------------------- |
+| `ops.intake.user_request`                        | Admin「下达任务」UI         | intake-dispatcher                 |
+| `ops.intake.customer_ticket`                     | AdminCustomerServiceView    | intake-dispatcher                 |
+| `ops.intake.candidate_pack`                      | mianshi/ 文件监听           | intake-dispatcher                 |
+| `employee.task.done:wechat-contacts-ai-employee` | 微信员工                    | intake-dispatcher                 |
+| `ops.intake.task.queued`                         | intake-dispatcher           | task-router-officer               |
+| `employee.task.assigned:<id>`                    | task-router-officer         | 对应业务员工                      |
+| `ops.change_request.submitted`                   | 任意业务员工                | change-request-auditor            |
+| `employee.task.done:test-qa-runner`              | test-qa-runner              | change-request-auditor            |
+| `ops.change_request.approved`                    | change-request-auditor      | deploy-release-officer            |
+| `ops.change_request.escalated`                   | change-request-auditor      | admin                             |
+| `yuangon.def.changed`                            | git hook / 文件监听         | push-update-context-officer       |
+| `ops.yuangon.resync.done`                        | push-update-context-officer | task-router-officer（重建路由表） |
+| `employee.task.escalate:daily-orchestrator`      | daily-orchestrator          | dbops-engineer（schema 类）       |
 
 ## 三、典型用户故事
 
 ### 故事 1：自然语言"修一下管理后台缺岗角标"
+
 1. admin 在「下达任务」UI 输入 → `ops.intake.user_request`。
 2. `intake-dispatcher` 归一化：`{intent: bugfix, files_hint: [market/src/views/AdminDutyEmployeesView.vue], risk: low}`。
 3. `task-router-officer` 加载路由表 → 命中 `workbench-ux-stylist.scope_globs`（已扩展覆盖 `Admin*View.vue`） → 派发。
@@ -66,6 +67,7 @@ flowchart LR
 7. `log-monitor-incident` 24h 内无回滚信号 → 流程闭合。
 
 ### 故事 2：候选包入职
+
 1. admin 把 `mianshi/foo-bar.xcemp` 投放到本目录 → `ops.intake.candidate_pack`。
 2. `intake-dispatcher` 归一化 `{intent: onboarding, files_hint: [mianshi/foo-bar.xcemp]}`。
 3. `task-router-officer` 仲裁规则 3 → 派给 `employee-interview-assistant`。
@@ -75,6 +77,7 @@ flowchart LR
 7. 原 `.xcemp` 移到 `mianshi/_archived/` 并在该 README 决策表登记。
 
 ### 故事 3：yuangon 自定义改动回流
+
 1. 任意员工修改 `yuangon/<area>/<id>/employee.yaml`（例如增加 scope_globs）。
 2. git hook 发出 `yuangon.def.changed` 事件。
 3. `push-update-context-officer.skill-yuangon-resync` 接住 → 调 `onboard_yuangon_employees --force --pkg-ids <id>` → `sync_employee_trigger_bindings_from_yuangon`。
@@ -90,14 +93,14 @@ flowchart LR
 
 ## 五、与现有 UI 的对应
 
-| Admin UI 视图 | 对应数据表 | 主要负责员工 |
-|--------------|------------|--------------|
-| AdminDutyEmployeesView | `catalog_items` + `employees` | （UI 由 workbench-ux-stylist 维护） |
-| AdminEmployeeChangeRequestsView | `change_requests` | change-request-auditor |
-| AdminYuangonOnboardView | `yuangon/**/employee.yaml` | employee-interview-assistant + employee-pack-quality-interviewer |
-| AdminCustomerServiceView | `customer_tickets` | intake-dispatcher（接入） |
-| AdminOpsAuditView | `dispatch_log` + 审计事件 | task-router-officer（写）+ change-request-auditor（写） |
-| AdminDatabaseView | DB 元数据 | dbops-engineer |
+| Admin UI 视图                   | 对应数据表                    | 主要负责员工                                                     |
+| ------------------------------- | ----------------------------- | ---------------------------------------------------------------- |
+| AdminDutyEmployeesView          | `catalog_items` + `employees` | （UI 由 workbench-ux-stylist 维护）                              |
+| AdminEmployeeChangeRequestsView | `change_requests`             | change-request-auditor                                           |
+| AdminYuangonOnboardView         | `yuangon/**/employee.yaml`    | employee-interview-assistant + employee-pack-quality-interviewer |
+| AdminCustomerServiceView        | `customer_tickets`            | intake-dispatcher（接入）                                        |
+| AdminOpsAuditView               | `dispatch_log` + 审计事件     | task-router-officer（写）+ change-request-auditor（写）          |
+| AdminDatabaseView               | DB 元数据                     | dbops-engineer                                                   |
 
 ## 六、未决与已知
 
@@ -109,7 +112,7 @@ flowchart LR
 
 ## 七、变更记录
 
-| 日期 | 变更 | 操作人 |
-|------|------|--------|
-| 2026-05-08 | v1.0.0：闭环图 + 事件总线 + 3 个用户故事 | admin |
-| 2026-05-08 | v1.1.0：全覆盖（OWNERSHIP.md, 81,265 文件全部命中）+ 5 条 cron + git pre-push/post-commit hook + 4 个自动化脚手架（build_routing_table.py / yuangon_resync.py / intake_watcher.py / coverage_audit.py） | admin |
+| 日期       | 变更                                                                                                                                                                                                    | 操作人 |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| 2026-05-08 | v1.0.0：闭环图 + 事件总线 + 3 个用户故事                                                                                                                                                                | admin  |
+| 2026-05-08 | v1.1.0：全覆盖（OWNERSHIP.md, 81,265 文件全部命中）+ 5 条 cron + git pre-push/post-commit hook + 4 个自动化脚手架（build_routing_table.py / yuangon_resync.py / intake_watcher.py / coverage_audit.py） | admin  |

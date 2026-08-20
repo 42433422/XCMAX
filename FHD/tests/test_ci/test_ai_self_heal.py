@@ -1,3 +1,4 @@
+# mypy: disable-error-code="func-returns-value, import-not-found"
 """ai_self_heal.py 单元测试。
 
 覆盖：

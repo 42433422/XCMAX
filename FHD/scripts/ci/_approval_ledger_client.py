@@ -14,6 +14,8 @@ import os
 import sys
 from typing import Any
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 try:
     import httpx
 except ImportError:  # pragma: no cover - 测试环境可能未装 httpx
@@ -75,7 +77,7 @@ def post_to_approval_ledger(
     try:
         with httpx.Client(timeout=10.0) as client:
             resp = client.post(url, headers=headers, json=body)
-    except Exception as exc:  # pragma: no cover - fail-open，覆盖网络/超时等
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover - fail-open，覆盖网络/超时等
         print(f"[approval-ledger] http error: {exc!r}", file=sys.stderr)
         return None
 
@@ -88,7 +90,7 @@ def post_to_approval_ledger(
 
     try:
         data = resp.json()
-    except Exception as exc:  # pragma: no cover - 后端返回非 JSON
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover - 后端返回非 JSON
         print(f"[approval-ledger] json decode error: {exc!r}", file=sys.stderr)
         return None
 

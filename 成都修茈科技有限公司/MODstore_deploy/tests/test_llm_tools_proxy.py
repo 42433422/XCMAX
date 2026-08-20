@@ -25,7 +25,10 @@ def test_llm_chat_dto_accepts_tools_and_tool_choice():
                 "function": {
                     "name": "get_weather",
                     "description": "查询天气",
-                    "parameters": {"type": "object", "properties": {"city": {"type": "string"}}},
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"city": {"type": "string"}},
+                    },
                 },
             }
         ],
@@ -48,7 +51,10 @@ def test_chat_message_dto_preserves_tool_role_and_tool_calls():
                 {
                     "id": "call_1",
                     "type": "function",
-                    "function": {"name": "get_weather", "arguments": '{"city":"beijing"}'},
+                    "function": {
+                        "name": "get_weather",
+                        "arguments": '{"city":"beijing"}',
+                    },
                 }
             ],
         }
@@ -59,7 +65,12 @@ def test_chat_message_dto_preserves_tool_role_and_tool_calls():
 
     # tool 角色消息携带 tool_call_id / name
     tool_msg = ChatMessageDTO.model_validate(
-        {"role": "tool", "tool_call_id": "call_1", "name": "get_weather", "content": "晴"}
+        {
+            "role": "tool",
+            "tool_call_id": "call_1",
+            "name": "get_weather",
+            "content": "晴",
+        }
     )
     tool_dumped = tool_msg.model_dump(exclude_none=True)
     assert tool_dumped["tool_call_id"] == "call_1"

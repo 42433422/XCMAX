@@ -882,7 +882,7 @@ class TestExecutePrintLabelTool:
             return_value=mock_gen,
         ):
             with patch(
-                "app.utils.path_utils.get_resource_path",
+                "app.utils.path_io.path_utils.get_resource_path",
                 return_value="/tmp/labels",
             ):
                 with patch("os.makedirs"):
@@ -901,7 +901,7 @@ class TestExecutePrintLabelTool:
             return_value=mock_gen,
         ):
             with patch(
-                "app.utils.path_utils.get_resource_path",
+                "app.utils.path_io.path_utils.get_resource_path",
                 return_value="/tmp/labels",
             ):
                 with patch("os.makedirs"):
@@ -918,7 +918,7 @@ class TestExecutePrintLabelTool:
             return_value=mock_gen,
         ):
             with patch(
-                "app.utils.path_utils.get_resource_path",
+                "app.utils.path_io.path_utils.get_resource_path",
                 return_value="/tmp/labels",
             ):
                 with patch("os.makedirs"):
@@ -940,7 +940,7 @@ class TestExecutePrintLabelTool:
 
     def test_value_error_returns_invalid_parameters(self) -> None:
         with patch(
-            "app.utils.path_utils.get_resource_path",
+            "app.utils.path_io.path_utils.get_resource_path",
             side_effect=ValueError("bad"),
         ):
             result = _execute_print_label_tool({"products": [{"name": "P1"}]})
@@ -949,7 +949,7 @@ class TestExecutePrintLabelTool:
 
     def test_type_error_returns_invalid_parameters(self) -> None:
         with patch(
-            "app.utils.path_utils.get_resource_path",
+            "app.utils.path_io.path_utils.get_resource_path",
             side_effect=TypeError("bad"),
         ):
             result = _execute_print_label_tool({"products": [{"name": "P1"}]})
@@ -958,7 +958,7 @@ class TestExecutePrintLabelTool:
 
     def test_oserror_returns_file_io_error(self) -> None:
         with patch(
-            "app.utils.path_utils.get_resource_path",
+            "app.utils.path_io.path_utils.get_resource_path",
             side_effect=OSError("disk full"),
         ):
             result = _execute_print_label_tool({"products": [{"name": "P1"}]})
@@ -967,7 +967,7 @@ class TestExecutePrintLabelTool:
 
     def test_runtime_error_returns_generation_failed(self) -> None:
         with patch(
-            "app.utils.path_utils.get_resource_path",
+            "app.utils.path_io.path_utils.get_resource_path",
             side_effect=RuntimeError("fail"),
         ):
             result = _execute_print_label_tool({"products": [{"name": "P1"}]})
@@ -1095,19 +1095,21 @@ class TestExecuteExcelSchemaTool:
         assert result["success"] is False
         assert result["error_code"] == "missing_file_path"
 
-    def test_successful_via_app_service(self) -> None:
-        mock_svc = MagicMock()
-        mock_svc.analyze_schema.return_value = {"success": True, "fields": []}
-        with patch(
-            "app.bootstrap.get_excel_analysis_app_service", return_value=mock_svc, create=True
-        ):
+    def test_successful_via_openpyxl(self) -> None:
+        mock_wb = MagicMock()
+        mock_ws = MagicMock()
+        mock_cell = MagicMock(value="产品名称", column_letter="A", column=1)
+        mock_ws.iter_rows.return_value = iter([[mock_cell]])
+        mock_ws.max_row = 1
+        mock_wb.sheetnames = ["Sheet1"]
+        mock_wb.__getitem__.return_value = mock_ws
+        with patch("openpyxl.load_workbook", return_value=mock_wb):
             result = _execute_excel_schema_tool(
                 {"file_path": "/tmp/t.xlsx", "sheet_name": "Sheet1"}
             )
             assert result["success"] is True
-            mock_svc.analyze_schema.assert_called_once_with(
-                file_path="/tmp/t.xlsx", sheet_name="Sheet1"
-            )
+            assert result["fields"][0]["label"] == "产品名称"
+            mock_wb.__getitem__.assert_called_once_with("Sheet1")
 
     def test_app_service_import_error_falls_back_to_openpyxl(self) -> None:
         """app_service ImportError 时降级到 openpyxl。"""
@@ -1296,12 +1298,16 @@ class TestExecuteExcelAnalysisTool:
         assert result["success"] is False
         assert result["error_code"] == "missing_file_path"
 
-    def test_successful_via_app_service(self) -> None:
-        mock_svc = MagicMock()
-        mock_svc.analyze_data.return_value = {"success": True, "rows": []}
-        with patch(
-            "app.bootstrap.get_excel_analysis_app_service", return_value=mock_svc, create=True
-        ):
+    def test_successful_via_openpyxl(self) -> None:
+        mock_wb = MagicMock()
+        mock_ws = MagicMock()
+        header = MagicMock(value="产品名称")
+        value = MagicMock(value="螺钉")
+        mock_ws.iter_rows.side_effect = [iter([[header]]), iter([[value]])]
+        mock_ws.max_row = 2
+        mock_wb.sheetnames = ["Sheet1"]
+        mock_wb.__getitem__.return_value = mock_ws
+        with patch("openpyxl.load_workbook", return_value=mock_wb):
             result = _execute_excel_analysis_tool(
                 {
                     "file_path": "/tmp/t.xlsx",
@@ -1311,12 +1317,8 @@ class TestExecuteExcelAnalysisTool:
                 }
             )
             assert result["success"] is True
-            mock_svc.analyze_data.assert_called_once_with(
-                file_path="/tmp/t.xlsx",
-                sheet_name="Sheet1",
-                query="price > 100",
-                columns=["产品名称"],
-            )
+            assert result["rows"] == [{"产品名称": "螺钉"}]
+            mock_wb.__getitem__.assert_called_once_with("Sheet1")
 
     def test_app_service_import_error_falls_back_to_openpyxl(self) -> None:
         mock_wb = MagicMock()

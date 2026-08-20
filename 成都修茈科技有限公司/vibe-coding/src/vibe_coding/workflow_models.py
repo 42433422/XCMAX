@@ -13,8 +13,9 @@ straightforward.
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
-from typing import Any, Iterable, Literal
+from typing import Any, Literal
 
 NodeType = Literal["start", "end", "eskill"]
 NodeLayer = Literal["config", "code"]
@@ -169,7 +170,7 @@ class VibeWorkflowGraph:
                 if v not in color:
                     continue
                 if color[v] == GRAY:
-                    issues.append(f"cycle: {' -> '.join(path[path.index(v):] + [v])}")
+                    issues.append(f"cycle: {' -> '.join([*path[path.index(v) :], v])}")
                 elif color[v] == WHITE:
                     dfs(v, path)
             path.pop()

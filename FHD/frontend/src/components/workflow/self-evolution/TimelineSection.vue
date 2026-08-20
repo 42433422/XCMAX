@@ -30,7 +30,11 @@ defineProps<{
             <template v-if="item.role_label"> · {{ item.role_label }}</template>
             <template v-if="item.status"> · {{ item.status }}</template>
           </span>
-          <small v-if="item.roster_label || item.department_label" class="selp-timeline-roster" :class="{ 'selp-timeline-roster--outside': item.roster_status === 'out_of_roster' }">
+          <small
+            v-if="item.roster_label || item.department_label"
+            class="selp-timeline-roster"
+            :class="{ 'selp-timeline-roster--outside': item.roster_status === 'out_of_roster' }"
+          >
             {{ item.roster_label || item.roster_status || '排班未知' }}
             <template v-if="item.duty_registered_label"> · {{ item.duty_registered_label }}</template>
             <template v-if="item.department_label"> · {{ item.department_label }}</template>
@@ -43,7 +47,11 @@ defineProps<{
             <template v-if="item.created_at"> · {{ item.created_at }}</template>
           </small>
           <div v-if="item.qa_verdict || item.review_max_severity" class="selp-report">
-            <span v-if="item.qa_verdict" class="selp-report-pill" :class="item.qa_verdict === 'PASS' ? 'selp-report-pill--ok' : 'selp-report-pill--bad'">
+            <span
+              v-if="item.qa_verdict"
+              class="selp-report-pill"
+              :class="item.qa_verdict === 'PASS' ? 'selp-report-pill--ok' : 'selp-report-pill--bad'"
+            >
               QA {{ item.qa_verdict }}
             </span>
             <span v-if="item.qa_target_branch_available !== null && item.qa_target_branch_available !== undefined" class="selp-report-pill">
@@ -54,13 +62,19 @@ defineProps<{
             <span v-if="Array.isArray(item.qa_tested_commands) && item.qa_tested_commands.length" class="selp-report-pill">
               测试 {{ item.qa_tested_commands.length }}
             </span>
-            <span v-if="Array.isArray(item.qa_blocking_findings) && item.qa_blocking_findings.length" class="selp-report-pill selp-report-pill--bad">
+            <span
+              v-if="Array.isArray(item.qa_blocking_findings) && item.qa_blocking_findings.length"
+              class="selp-report-pill selp-report-pill--bad"
+            >
               阻断项 {{ item.qa_blocking_findings.length }}
             </span>
             <span v-if="Array.isArray(item.review_findings) && item.review_findings.length" class="selp-report-pill">
               发现 {{ item.review_findings.length }}
             </span>
-            <span v-if="Array.isArray(item.review_blocking_findings) && item.review_blocking_findings.length" class="selp-report-pill selp-report-pill--bad">
+            <span
+              v-if="Array.isArray(item.review_blocking_findings) && item.review_blocking_findings.length"
+              class="selp-report-pill selp-report-pill--bad"
+            >
               审阻断 {{ item.review_blocking_findings.length }}
             </span>
             <template v-if="item.review_dimensions && typeof item.review_dimensions === 'object'">

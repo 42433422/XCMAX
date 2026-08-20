@@ -6,7 +6,14 @@ from typing import Any, Dict, Optional
 
 
 def _ok(summary: str = "", *, meta: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    return {"ok": True, "summary": summary[:4000], "items": [], "warnings": [], "error": "", "meta": dict(meta or {})}
+    return {
+        "ok": True,
+        "summary": summary[:4000],
+        "items": [],
+        "warnings": [],
+        "error": "",
+        "meta": dict(meta or {}),
+    }
 
 
 async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:

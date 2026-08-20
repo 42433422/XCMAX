@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import httpx  # noqa: F401  # tests: ``@patch("modstore_server.app.httpx.Client")``
 
-from modman.repo_config import load_config, save_config
-from modman.store import project_root
+from modman.repo_config import load_config, save_config  # noqa: F401
+from modman.store import project_root  # noqa: F401
 from modstore_server.api.app_factory import create_app, load_default_config
-from modstore_server.api.auth_deps import require_user as _require_user
+from modstore_server.api.auth_deps import require_user as _require_user  # noqa: F401
 from modstore_server.infrastructure import library_paths
 
 app = create_app(load_default_config())

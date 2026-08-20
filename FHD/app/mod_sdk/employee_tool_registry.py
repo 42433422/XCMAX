@@ -34,10 +34,16 @@ def _tool_description(manifest: dict[str, Any], pack_id: str) -> str:
     name = str(manifest.get("name") or pack_id).strip()
     desc = str(manifest.get("description") or "").strip()
     emp = manifest.get("employee") if isinstance(manifest.get("employee"), dict) else {}
+    if not isinstance(emp, dict):
+        emp = {}
     label = str(emp.get("label") or "").strip()
     cfg = parse_employee_config_v2(manifest)
     cog = cfg.get("cognition") if isinstance(cfg.get("cognition"), dict) else {}
+    if not isinstance(cog, dict):
+        cog = {}
     agent = cog.get("agent") if isinstance(cog.get("agent"), dict) else {}
+    if not isinstance(agent, dict):
+        agent = {}
     prompt = str(agent.get("system_prompt") or "")[:240].strip()
     parts = [f"员工包 {name}（{pack_id}）"]
     if label:
@@ -140,9 +146,25 @@ def resolve_tool_to_pack_id(tool_name: str) -> str | None:
     name = str(tool_name or "").strip()
     if not name:
         return None
-    for row in _cached_tool_rows():
-        if name in (row.get("pack_id"), row.get("tool_name"), row.get("legacy_tool_name")):
-            return str(row.get("pack_id") or "")
+
+    def _resolve(rows: tuple[dict[str, Any], ...]) -> str | None:
+        for row in rows:
+            if name in (row.get("pack_id"), row.get("tool_name"), row.get("legacy_tool_name")):
+                return str(row.get("pack_id") or "")
+        return None
+
+    resolved = _resolve(_cached_tool_rows())
+    if resolved:
+        return resolved
+
+    # Employee packs can be installed, reloaded, or temporarily discovered from
+    # a scoped runtime after the registry cache was built.  A miss is rare, so
+    # rebuild once before declaring the tool unknown instead of trusting stale
+    # discovery state for the rest of the process lifetime.
+    _cached_tool_rows.cache_clear()
+    resolved = _resolve(_cached_tool_rows())
+    if resolved:
+        return resolved
     if name.startswith(_LEGACY_PREFIX) and name.endswith(_LEGACY_SUFFIX):
         core = name[len(_LEGACY_PREFIX) : -len(_LEGACY_SUFFIX)]
         return core.replace("_", "-") if core else None
@@ -184,6 +206,8 @@ def _office_output_paths(pack_id: str, result: dict[str, Any]) -> list[str]:
     # ``output.items`` while generators expose it directly.  Walk only the
     # post-action result tree, never the request arguments, so a caller cannot
     # spoof completion with a desired path.
+    if not isinstance(runtime, dict):
+        runtime = {}
     visit(runtime.get("outputs"))
 
     # Generation succeeds only when the artifact declared by that worker

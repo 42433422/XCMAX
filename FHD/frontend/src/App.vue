@@ -6,11 +6,7 @@ import VirtualCursorOverlay from '@/components/aiopen/VirtualCursorOverlay.vue'
 import GlobalTaskCenter from '@/components/task-center/GlobalTaskCenter.vue'
 import { useAppBoot } from '@/composables/useAppBoot'
 
-const {
-  hideChrome,
-  appReady,
-  isAdminConsoleSpa,
-} = useAppBoot()
+const { hideChrome, appReady, isAdminConsoleSpa } = useAppBoot()
 </script>
 
 <template>
@@ -27,12 +23,7 @@ const {
           <keep-alive v-if="!isAdminConsoleSpa()" :max="12">
             <component :is="Component" :key="String(route.name || route.path)" class="route-view-shell" />
           </keep-alive>
-          <component
-            v-else
-            :is="Component"
-            :key="route.fullPath"
-            class="route-view-shell"
-          />
+          <component v-else :is="Component" :key="route.fullPath" class="route-view-shell" />
         </transition>
       </router-view>
     </MainLayout>

@@ -17,6 +17,8 @@ import contextvars
 import threading
 from typing import Any, Dict, TypeVar
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 T = TypeVar("T")
 
 
@@ -33,7 +35,7 @@ def run_coro_sync(coro: Any) -> Any:
     def _runner() -> None:
         try:
             result["value"] = asyncio.run(coro)
-        except Exception as e:  # noqa: PERF203
+        except RECOVERABLE_ERRORS as e:  # noqa: PERF203
             error["err"] = e
 
     # 用 copy_context() 让守护线程继承当前上下文（含平台模型作用域），

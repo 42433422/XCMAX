@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """IM V0 API 冒烟。"""
 
 from __future__ import annotations
@@ -19,7 +20,10 @@ def _im_sqlite_db(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     from app.db.models.user import User
 
     dispose_and_recreate_engine()
-    Base.metadata.create_all(engine, tables=[User.__table__], checkfirst=True)
+    # Lifespan starts background task dispatchers as well as the IM router, so
+    # the isolated database must contain the complete current application
+    # schema (not only the tables directly asserted by this file).
+    Base.metadata.create_all(engine, checkfirst=True)
     init_im_tables(engine)
     ensure_sqlite_im_bootstrap(engine, swallow_errors=False)
     session = SessionLocal()

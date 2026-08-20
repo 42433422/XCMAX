@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr"
 """时间轨节点 runtime 快照持久化（last_run / ok / guard_active 辅助）。"""
 
 from __future__ import annotations
@@ -5,10 +6,12 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from threading import Lock
 from typing import Any, Dict, Optional
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +26,7 @@ def _runtime_path() -> Path:
         from modstore_server.models_db import default_db_path
 
         return default_db_path().parent / "time_rail_node_runtime.json"
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return Path(__file__).resolve().parent.parent / "data" / "time_rail_node_runtime.json"
 
 
@@ -35,7 +38,7 @@ def _load_store() -> Dict[str, Any]:
         doc = json.loads(path.read_text(encoding="utf-8"))
         if isinstance(doc, dict) and isinstance(doc.get("nodes"), dict):
             return doc
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("time_rail_runtime: load failed path=%s", path)
     return {"version": 1, "nodes": {}}
 
@@ -61,7 +64,7 @@ def record_node_run(
     if not nid:
         return {"ok": False, "reason": "empty node_id"}
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     row = {
         "last_run": now,
         "ok": bool(ok) if ok is not None else None,

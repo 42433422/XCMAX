@@ -16,11 +16,7 @@ let desktopSessionRefreshInFlight: Promise<void> | null = null
  * fresh validation happens in the background. API permissions remain enforced
  * server-side; an invalid result immediately returns to the login page.
  */
-export function refreshDesktopSessionInBackground(
-  router: DesktopSessionRouter,
-  profile: DesktopProfileHydrator,
-  redirect: string,
-): void {
+export function refreshDesktopSessionInBackground(router: DesktopSessionRouter, profile: DesktopProfileHydrator, redirect: string): void {
   if (desktopSessionRefreshInFlight) return
   desktopSessionRefreshInFlight = validateEnterpriseSessionCached(true)
     .then(async (valid) => {

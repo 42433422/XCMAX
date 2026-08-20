@@ -11,7 +11,10 @@ from __future__ import annotations
 from typing import Optional
 
 from modstore_server.script_agent.brief import Brief, ContextBundle, PlanResult
-from modstore_server.script_agent.llm_client import SCRIPT_AGENT_PLAN_MAX_TOKENS, LlmClient
+from modstore_server.script_agent.llm_client import (
+    SCRIPT_AGENT_PLAN_MAX_TOKENS,
+    LlmClient,
+)
 
 PLAN_SYSTEM_PROMPT = """\
 你是 Python 编程代理的"计划官"。基于用户的任务描述，输出一份 plan.md（Markdown）。

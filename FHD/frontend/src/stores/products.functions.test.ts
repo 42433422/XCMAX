@@ -208,11 +208,7 @@ describe('products store – deleteProduct 边界与异常', () => {
   it('成功时从本地列表中移除该产品', async () => {
     mockDeleteProduct.mockResolvedValue({ success: true })
     const store = useProductsStore()
-    store.products = [
-      { id: 1, name: 'A' } as never,
-      { id: 5, name: 'B' } as never,
-      { id: 10, name: 'C' } as never,
-    ]
+    store.products = [{ id: 1, name: 'A' } as never, { id: 5, name: 'B' } as never, { id: 10, name: 'C' } as never]
     await store.deleteProduct(5)
     expect(store.products.map((p) => p.id)).toEqual([1, 10])
   })
@@ -269,11 +265,7 @@ describe('products store – batchDelete 边界与异常', () => {
   it('成功时从本地列表中移除多个产品', async () => {
     mockBatchDelete.mockResolvedValue({ success: true })
     const store = useProductsStore()
-    store.products = [
-      { id: 1, name: 'A' } as never,
-      { id: 2, name: 'B' } as never,
-      { id: 3, name: 'C' } as never,
-    ]
+    store.products = [{ id: 1, name: 'A' } as never, { id: 2, name: 'B' } as never, { id: 3, name: 'C' } as never]
     await store.batchDelete([1, 3])
     expect(store.products.map((p) => p.id)).toEqual([2])
   })
@@ -290,10 +282,7 @@ describe('products store – batchDelete 边界与异常', () => {
   it('字符串 id 也能正确过滤', async () => {
     mockBatchDelete.mockResolvedValue({ success: true })
     const store = useProductsStore()
-    store.products = [
-      { id: 'abc', name: 'A' } as never,
-      { id: 'def', name: 'B' } as never,
-    ]
+    store.products = [{ id: 'abc', name: 'A' } as never, { id: 'def', name: 'B' } as never]
     await store.batchDelete(['abc'])
     expect(store.products.map((p) => p.id)).toEqual(['def'])
   })

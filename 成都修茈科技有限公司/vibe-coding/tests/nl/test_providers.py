@@ -34,7 +34,6 @@ from vibe_coding.nl import (
 )
 from vibe_coding.nl.providers import PROVIDER_PRESETS, ProviderInfo, register_provider
 
-
 # ----------------------------------------------------- helpers
 
 
@@ -48,7 +47,7 @@ class _FakeResponse:
     def read(self) -> bytes:
         return self._body
 
-    def __enter__(self) -> "_FakeResponse":
+    def __enter__(self) -> _FakeResponse:
         return self
 
     def __exit__(self, *exc: Any) -> None:
@@ -59,7 +58,7 @@ class _FakeResponse:
 def _patched_urlopen(handler):
     captured: list[Any] = []
 
-    def fake_urlopen(req, timeout=None, context=None):  # noqa: ARG001
+    def fake_urlopen(req, timeout=None, context=None):
         captured.append(req)
         return handler(req)
 
@@ -67,13 +66,11 @@ def _patched_urlopen(handler):
         yield captured
 
 
-def _openai_chat_response(content: str = "{\"ok\":true}") -> str:
+def _openai_chat_response(content: str = '{"ok":true}') -> str:
     return json.dumps(
         {
             "id": "x",
-            "choices": [
-                {"index": 0, "message": {"role": "assistant", "content": content}}
-            ],
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": content}}],
         }
     )
 
@@ -102,9 +99,7 @@ def _openai_chat_response(content: str = "{\"ok\":true}") -> str:
         ("gpt", "openai"),
     ],
 )
-def test_detect_provider_resolves_alias_or_prefix(
-    model_or_alias: str, expected_provider: str
-) -> None:
+def test_detect_provider_resolves_alias_or_prefix(model_or_alias: str, expected_provider: str) -> None:
     info = detect_provider(model_or_alias)
     assert info is not None
     assert info.name == expected_provider
@@ -178,20 +173,18 @@ def test_create_llm_passes_through_temperature_and_max_tokens() -> None:
 
 
 def test_openai_compat_sends_bearer_and_messages() -> None:
-    llm = OpenAICompatibleLLM(
-        api_key="sk-x", model="m1", base_url="https://gw.example/v1"
-    )
+    llm = OpenAICompatibleLLM(api_key="sk-x", model="m1", base_url="https://gw.example/v1")
     seen: dict[str, Any] = {}
 
     def handler(req):
         seen["url"] = req.full_url
         seen["auth"] = req.headers.get("Authorization") or req.headers.get("authorization")
         seen["body"] = json.loads(req.data.decode("utf-8"))
-        return _FakeResponse(_openai_chat_response("{\"hi\":1}"))
+        return _FakeResponse(_openai_chat_response('{"hi":1}'))
 
     with _patched_urlopen(handler):
         out = llm.chat("sys", "user", json_mode=True)
-    assert out == "{\"hi\":1}"
+    assert out == '{"hi":1}'
     assert seen["url"] == "https://gw.example/v1/chat/completions"
     assert seen["auth"] == "Bearer sk-x"
     assert seen["body"]["model"] == "m1"
@@ -216,7 +209,7 @@ def test_openai_compat_extracts_list_content() -> None:
     """Some providers return ``content`` as a list of typed parts."""
     llm = OpenAICompatibleLLM(api_key="k", model="m")
 
-    def handler(req):  # noqa: ARG001
+    def handler(req):
         return _FakeResponse(
             json.dumps(
                 {
@@ -253,9 +246,8 @@ def test_openai_compat_http_error_raises_llm_error() -> None:
             fp=io.BytesIO(b'{"error":"rate_limit"}'),
         )
 
-    with _patched_urlopen(handler):
-        with pytest.raises(LLMError) as exc_info:
-            llm.chat("s", "u")
+    with _patched_urlopen(handler), pytest.raises(LLMError) as exc_info:
+        llm.chat("s", "u")
     assert "429" in str(exc_info.value)
 
 
@@ -339,15 +331,13 @@ def test_anthropic_uses_x_api_key_header() -> None:
 
     def handler(req):
         seen["api_key"] = req.headers.get("X-api-key") or req.headers.get("x-api-key")
-        seen["version"] = req.headers.get("Anthropic-version") or req.headers.get(
-            "anthropic-version"
-        )
+        seen["version"] = req.headers.get("Anthropic-version") or req.headers.get("anthropic-version")
         seen["body"] = json.loads(req.data.decode("utf-8"))
         return _FakeResponse(
             json.dumps(
                 {
                     "content": [
-                        {"type": "text", "text": "{\"ok\":true}"},
+                        {"type": "text", "text": '{"ok":true}'},
                     ]
                 }
             )
@@ -355,7 +345,7 @@ def test_anthropic_uses_x_api_key_header() -> None:
 
     with _patched_urlopen(handler):
         out = llm.chat("system prompt", "user msg", json_mode=True)
-    assert out == "{\"ok\":true}"
+    assert out == '{"ok":true}'
     assert seen["api_key"] == "sk-ant"
     assert seen["version"]
     assert seen["body"]["model"] == "claude-3-5-sonnet-latest"
@@ -367,14 +357,14 @@ def test_anthropic_uses_x_api_key_header() -> None:
 def test_anthropic_trims_markdown_fences_in_json_mode() -> None:
     llm = AnthropicLLM(api_key="sk-ant")
 
-    def handler(req):  # noqa: ARG001
+    def handler(req):
         return _FakeResponse(
             json.dumps(
                 {
                     "content": [
                         {
                             "type": "text",
-                            "text": "Sure, here is the JSON:\n```json\n{\"v\":1}\n```\n",
+                            "text": 'Sure, here is the JSON:\n```json\n{"v":1}\n```\n',
                         }
                     ]
                 }

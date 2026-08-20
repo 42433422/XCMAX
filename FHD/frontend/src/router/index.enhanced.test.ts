@@ -7,7 +7,6 @@
  * afterEach document title
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { createRouter, createWebHistory, type RouteRecordRaw, START_LOCATION } from 'vue-router'
 
 // ── 使用 vi.hoisted 提升在 mock 工厂中引用的 mock 函数 ────
 
@@ -461,7 +460,10 @@ describe('router/index enhanced', () => {
 
     let finishValidation: ((valid: boolean) => void) | undefined
     mockValidateEnterpriseSession.mockImplementationOnce(
-      () => new Promise<boolean>((resolve) => { finishValidation = resolve }),
+      () =>
+        new Promise<boolean>((resolve) => {
+          finishValidation = resolve
+        }),
     )
     mockAccountProfileStore.refreshFromServer.mockImplementationOnce(async () => {
       mockAccountProfileStore.loaded = true
@@ -478,7 +480,7 @@ describe('router/index enhanced', () => {
     expect(mockAccountProfileStore.loaded).toBe(true)
   })
 
-  it('uses Electron\'s persisted-cookie entry hint when localStorage has not restored yet', async () => {
+  it("uses Electron's persisted-cookie entry hint when localStorage has not restored yet", async () => {
     mockIsEnterpriseEdition.mockReturnValue(true)
     mockIsDesktopShell.mockReturnValue(true)
     mockConsumeDesktopSessionBootstrapHint.mockResolvedValue(true)
@@ -487,7 +489,10 @@ describe('router/index enhanced', () => {
 
     let finishValidation: ((valid: boolean) => void) | undefined
     mockValidateEnterpriseSession.mockImplementationOnce(
-      () => new Promise<boolean>((resolve) => { finishValidation = resolve }),
+      () =>
+        new Promise<boolean>((resolve) => {
+          finishValidation = resolve
+        }),
     )
 
     await router.push('/login')

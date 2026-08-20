@@ -1,31 +1,10 @@
 <template>
-  <div
-    class="orbit-rings"
-    :class="[`orbit-rings--${modeClass}`, { 'orbit-rings--lite': lite }]"
-    aria-hidden="true"
-  >
-    <div
-      v-for="ring in wireRings"
-      :key="ring.className"
-      class="orbit-rings__wire"
-      :class="ring.className"
-    ></div>
-    <div
-      v-for="(ring, index) in toolRings"
-      :key="ring.className"
-      class="orbit-rings__tool"
-      :class="ring.className"
-    >
-      <svg
-        class="orbit-rings__tool-svg"
-        viewBox="0 0 520 520"
-        focusable="false"
-      >
+  <div class="orbit-rings" :class="[`orbit-rings--${modeClass}`, { 'orbit-rings--lite': lite }]" aria-hidden="true">
+    <div v-for="ring in wireRings" :key="ring.className" class="orbit-rings__wire" :class="ring.className"></div>
+    <div v-for="(ring, index) in toolRings" :key="ring.className" class="orbit-rings__tool" :class="ring.className">
+      <svg class="orbit-rings__tool-svg" viewBox="0 0 520 520" focusable="false">
         <defs>
-          <path
-            :id="`wbVoiceToolRingPath-${index}`"
-            d="M 260 42 A 218 218 0 1 1 259.9 42"
-          />
+          <path :id="`wbVoiceToolRingPath-${index}`" d="M 260 42 A 218 218 0 1 1 259.9 42" />
         </defs>
         <text class="orbit-rings__tool-text">
           <textPath :href="`#wbVoiceToolRingPath-${index}`" :startOffset="ring.startOffset">
@@ -280,13 +259,12 @@ const modeClass = computed(() => {
 }
 
 .orbit-rings__tool-text {
-  font-family: Consolas, "Courier New", monospace;
+  font-family: Consolas, 'Courier New', monospace;
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 4px;
   fill: var(--orbit-text, rgba(0, 255, 255, 0.9));
-  filter:
-    drop-shadow(0 0 5px var(--orbit-text-glow, rgba(0, 255, 255, 0.8)))
+  filter: drop-shadow(0 0 5px var(--orbit-text-glow, rgba(0, 255, 255, 0.8)))
     drop-shadow(0 0 10px var(--orbit-glow, rgba(0, 255, 255, 0.5)));
   animation: wbVoiceToolNameFlicker 2s ease-in-out infinite;
 }
@@ -322,33 +300,58 @@ const modeClass = computed(() => {
 }
 
 @keyframes wbVoiceRingRotate {
-  0% { transform: translate(-50%, -50%) rotate(0deg); }
-  100% { transform: translate(-50%, -50%) rotate(360deg); }
+  0% {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  100% {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
 }
 
 @keyframes wbVoiceRingRotateTiltX {
-  0% { transform: translate(-50%, -50%) rotateX(68deg) rotateZ(0deg); }
-  100% { transform: translate(-50%, -50%) rotateX(68deg) rotateZ(360deg); }
+  0% {
+    transform: translate(-50%, -50%) rotateX(68deg) rotateZ(0deg);
+  }
+  100% {
+    transform: translate(-50%, -50%) rotateX(68deg) rotateZ(360deg);
+  }
 }
 
 @keyframes wbVoiceRingRotateTiltY {
-  0% { transform: translate(-50%, -50%) rotateY(68deg) rotateZ(360deg); }
-  100% { transform: translate(-50%, -50%) rotateY(68deg) rotateZ(0deg); }
+  0% {
+    transform: translate(-50%, -50%) rotateY(68deg) rotateZ(360deg);
+  }
+  100% {
+    transform: translate(-50%, -50%) rotateY(68deg) rotateZ(0deg);
+  }
 }
 
 @keyframes wbVoiceCodeRingRotate1 {
-  0% { transform: translate(-50%, -50%) rotateX(64deg) rotateZ(0deg) skewY(6deg) skewX(3deg); }
-  100% { transform: translate(-50%, -50%) rotateX(64deg) rotateZ(360deg) skewY(6deg) skewX(3deg); }
+  0% {
+    transform: translate(-50%, -50%) rotateX(64deg) rotateZ(0deg) skewY(6deg) skewX(3deg);
+  }
+  100% {
+    transform: translate(-50%, -50%) rotateX(64deg) rotateZ(360deg) skewY(6deg) skewX(3deg);
+  }
 }
 
 @keyframes wbVoiceCodeRingRotate2 {
-  0% { transform: translate(-50%, -50%) rotateX(72deg) rotateY(12deg) rotateZ(360deg) skewY(-5deg) skewX(-3deg); }
-  100% { transform: translate(-50%, -50%) rotateX(72deg) rotateY(12deg) rotateZ(0deg) skewY(-5deg) skewX(-3deg); }
+  0% {
+    transform: translate(-50%, -50%) rotateX(72deg) rotateY(12deg) rotateZ(360deg) skewY(-5deg) skewX(-3deg);
+  }
+  100% {
+    transform: translate(-50%, -50%) rotateX(72deg) rotateY(12deg) rotateZ(0deg) skewY(-5deg) skewX(-3deg);
+  }
 }
 
 @keyframes wbVoiceToolNameFlicker {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.42; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.42;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

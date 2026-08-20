@@ -16,6 +16,7 @@
 ## 执行步骤
 
 1. **MODstore pytest**
+
    ```bash
    cd MODstore_deploy
    python -m pytest tests/ -q --tb=short --json-report --json-report-file=/tmp/modstore_result.json
@@ -23,6 +24,7 @@
    ```
 
 2. **vibe-coding pytest**
+
    ```bash
    cd vibe-coding
    python -m pytest tests/ -q --tb=short
@@ -30,6 +32,7 @@
    ```
 
 3. **Playwright E2E**（`范围 == all` 或 `e2e` 时执行）
+
    ```bash
    npx playwright test --reporter=json > /tmp/e2e_result.json
    ```

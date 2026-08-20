@@ -12,7 +12,7 @@ import os
 from sqlalchemy import text
 
 from app.db import SessionLocal
-from app.utils.password_hash import generate_password_hash
+from app.utils.security.password_hash import generate_password_hash
 
 logger = logging.getLogger(__name__)
 

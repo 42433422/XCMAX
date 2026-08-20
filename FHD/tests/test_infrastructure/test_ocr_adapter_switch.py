@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment"
 """Tests for app.infrastructure.ocr.ocr_adapter + ocr_service — coverage ramp C3.3-b.
 
 Covers:
@@ -30,6 +31,7 @@ from app.infrastructure.ocr.ocr_adapter import (
     OCRPort,
     get_ocr_adapter,
 )
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 # ---------------------------------------------------------------------------
 # Port / Adapter smoke
@@ -296,7 +298,7 @@ class TestRecognizeTextFromBytes:
             assert out["success"] is True
             assert "abc" in out["text"]
             assert 0 < out["confidence"] <= 1.0
-        except Exception:
+        except BOUNDARY_ERRORS:
             pytest.skip("PIL not available")
 
 

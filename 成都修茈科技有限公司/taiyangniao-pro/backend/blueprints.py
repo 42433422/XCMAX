@@ -9,6 +9,8 @@ from urllib.parse import unquote
 from fastapi import APIRouter, File, Form, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 
+BOUNDARY_ERRORS = (Exception,)
+
 logger = logging.getLogger(__name__)
 DEFAULT_TEMPLATE_RELPATH = "424/考勤-2026-3月份考勤统计表.xlsx"
 
@@ -18,7 +20,7 @@ def _load_products_personnel_roster_from_host() -> list[tuple[str, str, str]]:
     try:
         from app.db.models.product import Product
         from app.db.session import get_db
-    except Exception:
+    except BOUNDARY_ERRORS:
         return []
     out: list[tuple[str, str, str]] = []
     seen: set[str] = set()
@@ -33,7 +35,7 @@ def _load_products_personnel_roster_from_host() -> list[tuple[str, str, str]]:
                 dept = (getattr(p, "unit", None) or "").strip()
                 spec = (getattr(p, "specification", None) or "").strip()
                 out.append((dept, spec, name))
-    except Exception:
+    except BOUNDARY_ERRORS:
         logger.exception("读取主库人员(products)失败")
         return []
     return out
@@ -148,7 +150,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
                     "周六：有打卡则按 13:30-16:00 计正班，其余时间转平常加班",
                     "周日：全部按星期天加班处理",
                 ],
-            }
+            },
         ]
         return {
             "success": True,
@@ -195,7 +197,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
             content = await file.read()
             with src_path.open("wb") as f:
                 f.write(content)
-        except Exception as e:
+        except BOUNDARY_ERRORS as e:
             logger.exception("Failed to save attendance upload")
             return JSONResponse(
                 {"success": False, "error": f"save upload failed: {e}"},
@@ -204,18 +206,25 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
         try:
             out_path = resolve_safe_workspace_relpath(out_rel)
-        except Exception as e:
+        except BOUNDARY_ERRORS as e:
             return JSONResponse({"success": False, "error": str(e)}, status_code=400)
 
         raw_tpl_rel = unquote(template_relpath or "").strip()
         if raw_tpl_rel:
             try:
-                normalized_raw_tpl = _normalize_relpath(raw_tpl_rel, field_name="template_relpath")
+                normalized_raw_tpl = _normalize_relpath(
+                    raw_tpl_rel, field_name="template_relpath"
+                )
             except ValueError as e:
-                return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+                return JSONResponse(
+                    {"success": False, "error": str(e)}, status_code=400
+                )
             if normalized_raw_tpl != DEFAULT_TEMPLATE_RELPATH:
                 return JSONResponse(
-                    {"success": False, "error": f"请使用固定模板: {DEFAULT_TEMPLATE_RELPATH}"},
+                    {
+                        "success": False,
+                        "error": f"请使用固定模板: {DEFAULT_TEMPLATE_RELPATH}",
+                    },
                     status_code=400,
                 )
 
@@ -232,13 +241,16 @@ def register_fastapi_routes(app, mod_id: str) -> None:
                     {"success": False, "error": f"模板路径不是文件: {tpl_rel}"},
                     status_code=400,
                 )
-        except Exception as e:
+        except BOUNDARY_ERRORS as e:
             return JSONResponse({"success": False, "error": str(e)}, status_code=400)
 
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
         use_llm_flag = (unquote(use_llm or "").strip().lower()) in (
-            "1", "true", "yes", "on",
+            "1",
+            "true",
+            "yes",
+            "on",
         )
         use_pr = (unquote(use_personnel_roster or "").strip().lower()) in (
             "1",
@@ -268,7 +280,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
                 use_llm=use_llm_flag or None,  # None -> 交给 env 开关决定
                 personnel_roster=roster,
             )
-        except Exception as e:
+        except BOUNDARY_ERRORS as e:
             logger.exception("Attendance conversion crashed")
             return JSONResponse(
                 {"success": False, "error": f"convert failed: {e}"},
@@ -276,7 +288,10 @@ def register_fastapi_routes(app, mod_id: str) -> None:
             )
         if not result.get("success"):
             return JSONResponse(
-                {"success": False, "error": str(result.get("error") or "convert failed")},
+                {
+                    "success": False,
+                    "error": str(result.get("error") or "convert failed"),
+                },
                 status_code=400,
             )
 
@@ -313,8 +328,12 @@ def register_fastapi_routes(app, mod_id: str) -> None:
                 "output_path": out_display,
                 "output_relpath": out_rel,
                 "rows_in": rows_in,
-                "rows_used_for_template": int(result.get("rows_used_for_template") or 0),
-                "personnel_roster_count": int(result.get("personnel_roster_count") or 0),
+                "rows_used_for_template": int(
+                    result.get("rows_used_for_template") or 0
+                ),
+                "personnel_roster_count": int(
+                    result.get("personnel_roster_count") or 0
+                ),
                 "rows_stats": rows_stats,
                 "template_relpath": tpl_rel,
                 "month": mon,
@@ -335,20 +354,28 @@ def register_fastapi_routes(app, mod_id: str) -> None:
             p = resolve_safe_workspace_relpath(rel)
         except ValueError as e:
             return JSONResponse({"success": False, "error": str(e)}, status_code=400)
-        except Exception as e:
+        except BOUNDARY_ERRORS as e:
             return JSONResponse({"success": False, "error": str(e)}, status_code=400)
 
         if not p.exists() or not p.is_file():
-            return JSONResponse({"success": False, "error": "file not found"}, status_code=404)
+            return JSONResponse(
+                {"success": False, "error": "file not found"}, status_code=404
+            )
 
-        return FileResponse(path=str(p), filename=p.name, media_type="application/octet-stream")
+        return FileResponse(
+            path=str(p), filename=p.name, media_type="application/octet-stream"
+        )
 
     @router.get("/employees", response_model=None)
     async def list_employees(page: int = 1, page_size: int = 50, search: str = ""):
-        import sqlite3, math
+        import sqlite3
+
         db_path = get_database_path()
         if not db_path.exists():
-            return {"success": True, "data": {"items": [], "total": 0, "page": page, "page_size": page_size}}
+            return {
+                "success": True,
+                "data": {"items": [], "total": 0, "page": page, "page_size": page_size},
+            }
         conn = sqlite3.connect(str(db_path))
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
@@ -367,14 +394,26 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         )
         items = [dict(r) for r in cur.fetchall()]
         conn.close()
-        return {"success": True, "data": {"items": items, "total": total, "page": page, "page_size": page_size}}
+        return {
+            "success": True,
+            "data": {
+                "items": items,
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+            },
+        }
 
     @router.get("/departments", response_model=None)
     async def list_departments(page: int = 1, page_size: int = 50, search: str = ""):
         import sqlite3
+
         db_path = get_database_path()
         if not db_path.exists():
-            return {"success": True, "data": {"items": [], "total": 0, "page": page, "page_size": page_size}}
+            return {
+                "success": True,
+                "data": {"items": [], "total": 0, "page": page, "page_size": page_size},
+            }
         conn = sqlite3.connect(str(db_path))
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
@@ -393,7 +432,15 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         )
         items = [dict(r) for r in cur.fetchall()]
         conn.close()
-        return {"success": True, "data": {"items": items, "total": total, "page": page, "page_size": page_size}}
+        return {
+            "success": True,
+            "data": {
+                "items": items,
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+            },
+        }
 
     @router.get("/products/list", response_model=None)
     async def products_list(
@@ -403,6 +450,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         unit: str = "",
     ):
         import sqlite3
+
         db_path = get_database_path()
         if not db_path.exists():
             return {"success": True, "data": [], "total": 0}
@@ -433,9 +481,12 @@ def register_fastapi_routes(app, mod_id: str) -> None:
     @router.get("/products/{product_id}", response_model=None)
     async def products_get(product_id: int):
         import sqlite3
+
         db_path = get_database_path()
         if not db_path.exists():
-            return JSONResponse({"success": False, "error": "not found"}, status_code=404)
+            return JSONResponse(
+                {"success": False, "error": "not found"}, status_code=404
+            )
         conn = sqlite3.connect(str(db_path))
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
@@ -443,12 +494,16 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         row = cur.fetchone()
         conn.close()
         if not row:
-            return JSONResponse({"success": False, "error": "not found"}, status_code=404)
+            return JSONResponse(
+                {"success": False, "error": "not found"}, status_code=404
+            )
         return {"success": True, "data": dict(row)}
 
     @router.post("/products/add", response_model=None)
     async def products_add(data: dict):
-        import sqlite3, datetime
+        import sqlite3
+        import datetime
+
         db_path = get_database_path()
         conn = sqlite3.connect(str(db_path))
         cur = conn.cursor()
@@ -463,7 +518,8 @@ def register_fastapi_routes(app, mod_id: str) -> None:
                 data.get("specification", ""),
                 float(data.get("price") or 0),
                 data.get("unit", ""),
-                now, now,
+                now,
+                now,
             ),
         )
         new_id = cur.lastrowid
@@ -473,7 +529,9 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.post("/products/update", response_model=None)
     async def products_update(data: dict):
-        import sqlite3, datetime
+        import sqlite3
+        import datetime
+
         db_path = get_database_path()
         conn = sqlite3.connect(str(db_path))
         cur = conn.cursor()
@@ -497,6 +555,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
     @router.post("/products/delete", response_model=None)
     async def products_delete(data: dict):
         import sqlite3
+
         db_path = get_database_path()
         conn = sqlite3.connect(str(db_path))
         cur = conn.cursor()
@@ -508,6 +567,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
     @router.post("/products/batch-delete", response_model=None)
     async def products_batch_delete(data: dict):
         import sqlite3
+
         ids = data.get("ids") or []
         if not ids:
             return {"success": True}
@@ -523,6 +583,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
     @router.get("/products/product_names", response_model=None)
     async def products_names():
         import sqlite3
+
         db_path = get_database_path()
         if not db_path.exists():
             return {"success": True, "data": []}
@@ -537,6 +598,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
     @router.get("/products/product_names/search", response_model=None)
     async def products_names_search(keyword: str = ""):
         import sqlite3
+
         db_path = get_database_path()
         if not db_path.exists():
             return {"success": True, "data": []}
@@ -553,7 +615,9 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.post("/products/batch", response_model=None)
     async def products_batch_add(data: dict):
-        import sqlite3, datetime
+        import sqlite3
+        import datetime
+
         products_list = data.get("products") or []
         if not products_list:
             return {"success": True, "data": []}
@@ -563,11 +627,18 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         now = datetime.datetime.now().isoformat()
         rows = []
         for p in products_list:
-            rows.append((
-                "", p.get("model_number", ""), p.get("name", ""),
-                p.get("specification", ""), float(p.get("price") or 0),
-                p.get("unit", ""), now, now,
-            ))
+            rows.append(
+                (
+                    "",
+                    p.get("model_number", ""),
+                    p.get("name", ""),
+                    p.get("specification", ""),
+                    float(p.get("price") or 0),
+                    p.get("unit", ""),
+                    now,
+                    now,
+                )
+            )
         cur.executemany(
             "INSERT INTO products (source_file, model_number, name, specification, price, unit, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
             rows,
@@ -589,6 +660,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         purchase_unit: str = "",
     ):
         import sqlite3
+
         db_path = get_database_path()
         if not db_path.exists():
             return {"success": True, "data": [], "total": 0}
@@ -598,7 +670,9 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         cond = []
         args = []
         if keyword:
-            cond.append("(customer_name LIKE ? OR contact_person LIKE ? OR contact_phone LIKE ?)")
+            cond.append(
+                "(customer_name LIKE ? OR contact_person LIKE ? OR contact_phone LIKE ?)"
+            )
             args.extend([f"%{keyword}%", f"%{keyword}%", f"%{keyword}%"])
         if purchase_unit:
             cond.append("purchase_unit = ?")
@@ -619,9 +693,12 @@ def register_fastapi_routes(app, mod_id: str) -> None:
     @router.get("/customers/{customer_id}", response_model=None)
     async def customers_get(customer_id: int):
         import sqlite3
+
         db_path = get_database_path()
         if not db_path.exists():
-            return JSONResponse({"success": False, "error": "not found"}, status_code=404)
+            return JSONResponse(
+                {"success": False, "error": "not found"}, status_code=404
+            )
         conn = sqlite3.connect(str(db_path))
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
@@ -629,12 +706,16 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         row = cur.fetchone()
         conn.close()
         if not row:
-            return JSONResponse({"success": False, "error": "not found"}, status_code=404)
+            return JSONResponse(
+                {"success": False, "error": "not found"}, status_code=404
+            )
         return {"success": True, "data": dict(row)}
 
     @router.post("/customers", response_model=None)
     async def customers_add(data: dict):
-        import sqlite3, datetime
+        import sqlite3
+        import datetime
+
         db_path = get_database_path()
         conn = sqlite3.connect(str(db_path))
         cur = conn.cursor()
@@ -649,7 +730,8 @@ def register_fastapi_routes(app, mod_id: str) -> None:
                 data.get("contact_phone", ""),
                 data.get("address", ""),
                 data.get("purchase_unit", ""),
-                now, now,
+                now,
+                now,
             ),
         )
         new_id = cur.lastrowid
@@ -659,7 +741,9 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.put("/customers/{customer_id}", response_model=None)
     async def customers_update(customer_id: int, data: dict):
-        import sqlite3, datetime
+        import sqlite3
+        import datetime
+
         db_path = get_database_path()
         conn = sqlite3.connect(str(db_path))
         cur = conn.cursor()
@@ -683,6 +767,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
     @router.delete("/customers/{customer_id}", response_model=None)
     async def customers_delete(customer_id: int):
         import sqlite3
+
         db_path = get_database_path()
         conn = sqlite3.connect(str(db_path))
         cur = conn.cursor()
@@ -694,6 +779,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
     @router.post("/customers/batch-delete", response_model=None)
     async def customers_batch_delete(data: dict):
         import sqlite3
+
         ids = data.get("ids") or []
         if not ids:
             return {"success": True}
@@ -708,11 +794,18 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.post("/customers/import", response_model=None)
     async def customers_import(file: UploadFile = File(...)):
-        import sqlite3, datetime, tempfile, shutil, openpyxl
+        import sqlite3
+        import datetime
+        import tempfile
+        import shutil
+        import openpyxl
+
         db_path = get_database_path()
         suffix = Path(file.filename or "import.xlsx").suffix.lower()
         if suffix not in {".xlsx", ".xlsm", ".xls"}:
-            return JSONResponse({"success": False, "error": "unsupported file type"}, status_code=400)
+            return JSONResponse(
+                {"success": False, "error": "unsupported file type"}, status_code=400
+            )
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
             shutil.copyfileobj(file.file, tmp)
             tmp_path = tmp.name
@@ -732,9 +825,19 @@ def register_fastapi_routes(app, mod_id: str) -> None:
                 name = str(row[name_idx] or "").strip() if name_idx < len(row) else ""
                 if not name:
                     continue
-                contact = str(row[contact_idx]) if contact_idx >= 0 and contact_idx < len(row) else ""
-                phone = str(row[phone_idx]) if phone_idx >= 0 and phone_idx < len(row) else ""
-                addr = str(row[addr_idx]) if addr_idx >= 0 and addr_idx < len(row) else ""
+                contact = (
+                    str(row[contact_idx])
+                    if contact_idx >= 0 and contact_idx < len(row)
+                    else ""
+                )
+                phone = (
+                    str(row[phone_idx])
+                    if phone_idx >= 0 and phone_idx < len(row)
+                    else ""
+                )
+                addr = (
+                    str(row[addr_idx]) if addr_idx >= 0 and addr_idx < len(row) else ""
+                )
                 cur.execute(
                     "INSERT INTO customers (source_file, customer_name, contact_person, contact_phone, address, purchase_unit, created_at, updated_at) "
                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",

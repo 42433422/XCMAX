@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.orm import Session
 
@@ -18,12 +17,14 @@ from app.application.etl.service_support import (
 from app.application.etl.shipment_template_extractor import extract_shipment_template
 from app.db.models.etl import EtlTemplate, EtlTemplateVersion
 from app.infrastructure.tenant_scope import tenant_id_for_write
-from app.utils.path_utils import get_app_data_dir
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.path_io.path_utils import get_app_data_dir
 
 
 def _safe_template_name(value: str, fallback: str) -> str:
-    text = str(value or fallback).strip()[:120]
-    text = re.sub(r"[\\/:*?\"<>|]+", "-", text).strip(" .-")
+    raw = str(value or fallback).strip()[:120]
+    text = "".join(char if char.isalnum() or char in {" ", "-", "_"} else "-" for char in raw)
+    text = text.strip(" .-")
     return text or "发货单版式"
 
 
@@ -150,6 +151,10 @@ def shipment_template_candidates(
 
 
 class ShipmentTemplateServiceMixin:
+    if TYPE_CHECKING:
+        _owned_run: Any
+        _owned_upload: Any
+
     def save_run_shipment_template(
         self,
         db: Session,
@@ -212,7 +217,12 @@ class ShipmentTemplateServiceMixin:
             / "document_templates"
             / str(owner_user_id)
         )
-        destination = (template_dir / f"{base_name}-{run.file_sha256[:12]}.xlsx").resolve()
+        digest_prefix = "".join(
+            char for char in str(run.file_sha256)[:12].lower() if char in "0123456789abcdef"
+        )
+        if len(digest_prefix) != 12:
+            raise EtlError("ETL_SHIPMENT_TEMPLATE_DIGEST_INVALID", "发货单版式来源摘要无效")
+        destination = (template_dir / f"{base_name}-{digest_prefix}.xlsx").resolve()
         if template_dir.resolve() not in destination.parents:
             raise EtlError("ETL_SHIPMENT_TEMPLATE_PATH_INVALID", "发货单版式保存路径无效")
 
@@ -254,7 +264,7 @@ class ShipmentTemplateServiceMixin:
         run.summary_json = dump_json(details)
         try:
             db.commit()
-        except Exception as exc:  # noqa: BLE001 - file must not outlive an unregistered private record
+        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - file must not outlive an unregistered private record
             db.rollback()
             destination.unlink(missing_ok=True)
             raise EtlError(
@@ -266,7 +276,7 @@ class ShipmentTemplateServiceMixin:
             from app.application.shipment_template_resolve import clear_template_list_cache
 
             clear_template_list_cache()
-        except Exception:  # noqa: BLE001 - cache invalidation must not roll back the template
+        except RECOVERABLE_ERRORS:  # noqa: BLE001 - cache invalidation must not roll back the template
             pass
         return result
 

@@ -6,13 +6,13 @@
 
 ## 负责文件
 
-| 类型 | Glob 清单 |
-|------|-----------|
+| 类型                  | Glob 清单                                                                                                                                                                                                                   |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 营销 HTML（构建产物） | `index.html`, `about.html`, `cases.html`, `services.html`, `solutions.html`, `news.html`, `contact.html`, `honors.html`, `case-*.html`, `excel-to-ai.html`；页眉导航由 **`marketing-site` 构建** 注入，请勿在根目录手写导航 |
-| 构建与模板源 | `marketing-site/**`（`data/`、`templates/`、`scripts/build.mjs`） |
-| 样式/脚本 | `styles.css`, `main.js` |
-| 数据 JSON | **`marketing-site/data/news.json`**（源数据）；根的 `news.json` 构建时同步；另有 `activities.json` |
-| 图片资产 | `assets/**` |
+| 构建与模板源          | `marketing-site/**`（`data/`、`templates/`、`scripts/build.mjs`）                                                                                                                                                           |
+| 样式/脚本             | `styles.css`, `main.js`                                                                                                                                                                                                     |
+| 数据 JSON             | **`marketing-site/data/news.json`**（源数据）；根的 `news.json` 构建时同步；另有 `activities.json`                                                                                                                          |
+| 图片资产              | `assets/**`                                                                                                                                                                                                                 |
 
 ## 典型任务
 
@@ -24,12 +24,12 @@
 
 ## KPI
 
-| 指标 | 目标 |
-|------|------|
-| 页面 W3C 校验通过率 | 100% |
-| 图片路径 404 率 | 0% |
-| 内容发布平均周期 | ≤ 1 天 |
-| ESkill 静态路径成功率 | ≥ 95% |
+| 指标                  | 目标   |
+| --------------------- | ------ |
+| 页面 W3C 校验通过率   | 100%   |
+| 图片路径 404 率       | 0%     |
+| 内容发布平均周期      | ≤ 1 天 |
+| ESkill 静态路径成功率 | ≥ 95%  |
 
 ## 禁区（不得操作）
 

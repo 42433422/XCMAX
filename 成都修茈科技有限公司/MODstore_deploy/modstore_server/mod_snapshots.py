@@ -33,7 +33,11 @@ def capture_manifest_snapshot(mod_root: Path, label: str = "") -> Dict[str, Any]
         "manifest": data,
     }
     snap_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    return {"snap_id": sid, "created_at": payload["created_at"], "label": payload["label"]}
+    return {
+        "snap_id": sid,
+        "created_at": payload["created_at"],
+        "label": payload["label"],
+    }
 
 
 def list_manifest_snapshots(mod_root: Path) -> List[Dict[str, Any]]:

@@ -44,7 +44,7 @@ def test_get_passthrough(app):
 
 def test_post_non_json_passthrough(app):
     client = TestClient(app)
-    r = client.post("/api/echo", data="not json", headers={"content-type": "text/plain"})
+    r = client.post("/api/echo", content="not json", headers={"content-type": "text/plain"})
     assert r.status_code == 200
     assert r.json()["raw"] == "not json"
 
@@ -76,7 +76,7 @@ def test_post_invalid_json_passthrough(app):
     """非法 JSON 不抛错，body 原样透传。"""
     client = TestClient(app)
     bad = "{not json"
-    r = client.post("/api/echo", data=bad, headers={"content-type": "application/json"})
+    r = client.post("/api/echo", content=bad, headers={"content-type": "application/json"})
     assert r.status_code == 200
     assert r.json()["raw"] == bad
 
@@ -92,6 +92,7 @@ def test_script_with_attributes(app):
     payload = {"x": "<SCRIPT type='text/javascript'>evil()</SCRIPT>after"}
     r = client.post("/api/echo", json=payload)
     raw = r.json()["raw"]
-    assert "evil" not in raw.lower() or "script" not in raw.lower()
+    assert "<script" not in raw.lower()
+    assert "&lt;script" in raw.lower()
     # 内容片段可保留（不在 <script> 块内）
     assert "after" in raw

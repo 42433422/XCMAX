@@ -35,6 +35,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_TIMED_ATTEMPT_OBSERVER,
     NS_SEP,
 )
+from langgraph._internal._exception_policy import BOUNDARY_ERRORS
 from langgraph._internal._runnable import create_task_in_config_context
 from langgraph._internal._timeout import sync_timeout_unsupported
 from langgraph.errors import (
@@ -410,7 +411,7 @@ def _dispatch_observer(
 ) -> None:
     try:
         callback(event)
-    except Exception:
+    except BOUNDARY_ERRORS:
         logger.warning("Timed attempt observer failed", exc_info=True)
 
 
@@ -638,7 +639,7 @@ def run_with_retry(
             # regular exception so the pregel runner panics the run instead of
             # treating the task as a silent tear-down (LSD-1507).
             raise NodeCancelledError(task.name) from exc
-        except Exception as exc:
+        except BOUNDARY_ERRORS as exc:
             if SUPPORTS_EXC_NOTES:
                 exc.add_note(f"During task with name '{task.name}' and id '{task.id}'")
             if not retry_policy:
@@ -759,7 +760,7 @@ async def arun_with_retry(
                     # this command is for the current graph, handle it
                     for w in task.writers:
                         w.invoke(cmd, config)
-                except Exception as writer_exc:
+                except BOUNDARY_ERRORS as writer_exc:
                     _finish_timed_attempt(config, attempt_ctx, writer_exc)
                     raise
                 _finish_timed_attempt(config, attempt_ctx)
@@ -792,7 +793,7 @@ async def arun_with_retry(
                 raise NodeCancelledError(task.name) from exc
             _finish_timed_attempt(config, attempt_ctx, exc)
             raise
-        except Exception as exc:
+        except BOUNDARY_ERRORS as exc:
             _finish_timed_attempt(config, attempt_ctx, exc)
             if SUPPORTS_EXC_NOTES:
                 exc.add_note(f"During task with name '{task.name}' and id '{task.id}'")

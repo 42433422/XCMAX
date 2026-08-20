@@ -1,18 +1,10 @@
 <template>
   <div class="butler-float-root">
     <!-- 隐私同意弹窗 -->
-    <AgentPermissionDialog
-      v-if="showPermissionDialog"
-      @agree="agentStore.grantConsent()"
-      @dismiss="agentStore.dismissLater()"
-    />
+    <AgentPermissionDialog v-if="showPermissionDialog" @agree="agentStore.grantConsent()" @dismiss="agentStore.dismissLater()" />
 
     <!-- 主动建议气泡 -->
-    <AgentSuggestionToast
-      :suggestion="currentSuggestion"
-      @dismiss="dismiss"
-      @open-panel="agentStore.openPanel()"
-    />
+    <AgentSuggestionToast :suggestion="currentSuggestion" @dismiss="dismiss" @open-panel="agentStore.openPanel()" />
 
     <!-- 悬浮球 -->
     <FloatingAgentBall :is-speaking="isSpeaking" :male-avatar="props.maleAvatar" />
@@ -42,11 +34,7 @@ import { useAgentEngine } from '../../composables/agent/useAgentEngine'
 import { useESkillRuntime } from '../../composables/agent/useESkillRuntime'
 import { useButlerOrchestrator } from '../../composables/agent/useButlerOrchestrator'
 import { registerBuiltinSkills } from '../../composables/agent/skills/index'
-import {
-  subscribeButlerTask,
-  buildButlerTaskPrompt,
-  type ButlerTaskPublishEvent,
-} from '../../utils/agent/butlerTaskBus'
+import { subscribeButlerTask, buildButlerTaskPrompt, type ButlerTaskPublishEvent } from '../../utils/agent/butlerTaskBus'
 import AgentPermissionDialog from './AgentPermissionDialog.vue'
 import AgentSuggestionToast from './AgentSuggestionToast.vue'
 import FloatingAgentBall from './FloatingAgentBall.vue'
@@ -69,9 +57,7 @@ let busTaskQueue = Promise.resolve()
 onMounted(() => {
   registerBuiltinSkills(router)
   unsubscribeTaskBus = subscribeButlerTask((event) => {
-    busTaskQueue = busTaskQueue
-      .then(() => consumeTaskBusEvent(event))
-      .catch(() => undefined)
+    busTaskQueue = busTaskQueue.then(() => consumeTaskBusEvent(event)).catch(() => undefined)
   })
 })
 onBeforeUnmount(() => {

@@ -52,10 +52,7 @@ export function createWorkflowComponentsAliasPlugin(frontendDir) {
     resolveId(source) {
       if (!source.startsWith(prefix)) return null
       const rel = source.slice(prefix.length)
-      return (
-        resolveAtAliasFile(path.join(frontendWorkflow, rel)) ||
-        resolveAtAliasFile(path.join(adminWorkflow, rel))
-      )
+      return resolveAtAliasFile(path.join(frontendWorkflow, rel)) || resolveAtAliasFile(path.join(adminWorkflow, rel))
     },
   }
 }
@@ -63,10 +60,7 @@ export function createWorkflowComponentsAliasPlugin(frontendDir) {
 /** FHD/mods 优先；缺失时回退到 FHD/XCAGI/mods。 */
 export function modViewsDir(frontendDir, modId) {
   const rel = path.join(modId, 'frontend', 'views')
-  const candidates = [
-    path.resolve(frontendDir, '../mods', rel),
-    path.resolve(frontendDir, '../XCAGI/mods', rel),
-  ]
+  const candidates = [path.resolve(frontendDir, '../mods', rel), path.resolve(frontendDir, '../XCAGI/mods', rel)]
   for (const p of candidates) {
     if (fs.existsSync(p)) return p
   }

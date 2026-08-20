@@ -18,13 +18,13 @@
 
 决策矩阵：
 
-| PR 类型 | CI 状态 | 变更范围 | 决策 |
-|---------|---------|---------|------|
-| Dependabot patch/minor | 通过 | 仅依赖文件 | 自动 approve + merge |
-| Dependabot major | 通过 | 仅依赖文件 | 派发 vibe-coding-maintainer 验证 |
-| Dependabot security | 通过 | 仅依赖文件 | 自动 approve + merge（跳过 major 限制） |
-| Dependabot any | 失败 | - | request_changes + 通知 |
-| 人工 PR | - | - | 跑 test-qa-runner 验证 |
+| PR 类型                | CI 状态 | 变更范围   | 决策                                    |
+| ---------------------- | ------- | ---------- | --------------------------------------- |
+| Dependabot patch/minor | 通过    | 仅依赖文件 | 自动 approve + merge                    |
+| Dependabot major       | 通过    | 仅依赖文件 | 派发 vibe-coding-maintainer 验证        |
+| Dependabot security    | 通过    | 仅依赖文件 | 自动 approve + merge（跳过 major 限制） |
+| Dependabot any         | 失败    | -          | request_changes + 通知                  |
+| 人工 PR                | -       | -          | 跑 test-qa-runner 验证                  |
 
 固定输出字段：summary、evidence、risks、next_actions、requires_human。
 输出 JSON 格式：`{ ok, action, pr_number, pr_url, summary, warnings, evidence, requires_human }`，action ∈ {approved, merged, dispatched_verification, requested_changes, commented}。

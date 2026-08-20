@@ -2,13 +2,29 @@
 MOD Package Management - ZIP packaging, signing, and verification
 """
 
-import hashlib
 import json
 import logging
 import os
 import zipfile
 from typing import Any
 
+from app.infrastructure.mods.package_hashing import (
+    SIGNATURE_EXCLUDE_PREFIXES,
+    build_signed_message,
+    compute_members_hash,
+)
+from app.infrastructure.mods.package_hashing import (
+    compute_directory_hash as compute_directory_hash,
+)
+from app.infrastructure.mods.package_hashing import (
+    compute_file_hash as compute_file_hash,
+)
+from app.infrastructure.mods.package_hashing import (
+    is_excluded_rel_path as _is_excluded_rel_path,
+)
+from app.infrastructure.mods.package_hashing import (
+    require_signed_mods as _require_signed_mods,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.time import utc_now_iso_z
 
@@ -21,117 +37,6 @@ class ModPackageError(Exception):
 
 class ModSignatureError(Exception):
     """MOD 签名验证错误"""
-
-
-def _require_signed_mods() -> bool:
-    """是否启用 fail-closed 强制验签（运维开关 XCAGI_REQUIRE_SIGNED_MODS）。
-
-    未设 / "0" / "false" -> False（默认，不破坏现有安装）；
-    "1" / "true" / "yes" / "on" -> True（fail-closed）。
-    """
-    return os.environ.get("XCAGI_REQUIRE_SIGNED_MODS", "0").strip().lower() in (
-        "1",
-        "true",
-        "yes",
-        "on",
-    )
-
-
-def compute_file_hash(file_path: str, algorithm: str = "sha256") -> str:
-    """计算文件哈希值"""
-    hash_func = hashlib.new(algorithm)
-    with open(file_path, "rb") as f:
-        for chunk in iter(lambda: f.read(8192), b""):
-            hash_func.update(chunk)
-    return hash_func.hexdigest()
-
-
-# 算 content_hash 时必须两端一致排除的签名产物：META-INF/ 下的签名文件本身
-# 不能进入它所签名的内容哈希（否则形成自指，签名时算的 hash != 验签时重算的 hash）。
-# 这是 S2 自指 bug 的修复基准——签名/验签两端都用此前缀集合排除。
-SIGNATURE_EXCLUDE_PREFIXES: tuple[str, ...] = ("META-INF/", "META-INF" + os.sep)
-
-
-def _is_excluded_rel_path(rel_path: str, exclude_prefixes: tuple[str, ...]) -> bool:
-    """判断相对路径是否落在需要排除的前缀下（同时兼容 / 与平台分隔符）。"""
-    norm = rel_path.replace(os.sep, "/")
-    for prefix in exclude_prefixes:
-        p = prefix.replace(os.sep, "/")
-        if norm == p.rstrip("/") or norm.startswith(p):
-            return True
-    return False
-
-
-def build_signed_message(manifest_id: str, version: str, content_hash: str) -> bytes:
-    """构造被 Ed25519 签名的规范化字节串。
-
-    绑定 manifest id 与 version（而非仅签 content_hash），可防止把一个合法
-    签名包的内容哈希挪用到另一个 id/version 上的混淆攻击。
-    """
-    return f"{manifest_id}:{version}:{content_hash}".encode()
-
-
-def compute_members_hash(
-    members: list[tuple[str, bytes]],
-    algorithm: str = "sha256",
-    exclude_prefixes: tuple[str, ...] = SIGNATURE_EXCLUDE_PREFIXES,
-) -> str:
-    """基于一组 (arcname, content_bytes) 成员计算规范内容哈希。
-
-    这是签名/验签两端共享的 *权威* 内容哈希算法：
-
-    * 排除 ``META-INF/`` 下的签名产物（修复 S2 自指）；
-    * arcname 统一用 ``/`` 归一并排序，与磁盘/解压布局无关；
-    * 哈希基于 arcname + 文件内容字节，签名时（从 mod 目录读取内容）与验签时
-      （从 zip 成员读取内容）完全一致，因此不受 ``mod_id/`` 前缀差异影响。
-    """
-    norm: list[tuple[str, bytes]] = []
-    for arcname, content in members:
-        rel = arcname.replace(os.sep, "/")
-        if _is_excluded_rel_path(rel, exclude_prefixes):
-            continue
-        if rel.rsplit("/", 1)[-1].startswith("."):
-            continue
-        norm.append((rel, content))
-
-    hash_func = hashlib.new(algorithm)
-    for rel, content in sorted(norm, key=lambda x: x[0]):
-        file_hash = hashlib.new(algorithm)
-        file_hash.update(content)
-        hash_func.update(f"{rel}:{file_hash.hexdigest()}".encode())
-    return hash_func.hexdigest()
-
-
-def compute_directory_hash(
-    dir_path: str,
-    algorithm: str = "sha256",
-    exclude_prefixes: tuple[str, ...] = SIGNATURE_EXCLUDE_PREFIXES,
-) -> str:
-    """计算目录内所有文件的组合哈希值。
-
-    Args:
-        dir_path: 目录路径。
-        algorithm: 哈希算法。
-        exclude_prefixes: 需要从内容哈希中排除的相对路径前缀。默认排除
-            ``META-INF/`` 下的签名产物（``signature.json`` 等），以消除
-            "签名文件被纳入它自己签名的内容哈希"的自指（S2）问题——这样
-            签名时（在原始 mod 目录，无 META-INF）算的 hash 与验签时
-            （在解压目录，含 META-INF/signature.json）重算的 hash 完全一致。
-    """
-    hash_func = hashlib.new(algorithm)
-
-    for root, _, files in os.walk(dir_path):
-        for filename in sorted(files):
-            if filename.startswith("."):
-                continue
-            file_path = os.path.join(root, filename)
-            rel_path = os.path.relpath(file_path, dir_path)
-            if _is_excluded_rel_path(rel_path, exclude_prefixes):
-                continue
-            file_hash = compute_file_hash(file_path, algorithm)
-            hash_func.update(f"{rel_path}:{file_hash}".encode())
-
-    return hash_func.hexdigest()
 
 
 class ModPackage:
@@ -413,10 +318,9 @@ class ModPackage:
            包自带，攻击者可自洽生成，绝不能作为信任依据。
 
         行为开关 ``XCAGI_REQUIRE_SIGNED_MODS``：
-        * 默认（关）：若包无签名 / 无可用受信公钥 / cryptography 缺失，保持历史
-          的不破坏安装行为（放行，但内容哈希仍校验，篡改仍会被拒）。
-        * 开启："1"/"true"/"yes"/"on" -> 上述任一无法完成真实验签的情形一律
+        * 默认：包无签名 / 无可用受信公钥 / cryptography 缺失时一律
           raise（fail-closed）。
+        * 仅显式设置 ``XCAGI_REQUIRE_SIGNED_MODS=0`` 时可兼容未签名开发包。
         """
         try:
             signature_data = json.loads(zipf.read("META-INF/signature.json").decode("utf-8"))

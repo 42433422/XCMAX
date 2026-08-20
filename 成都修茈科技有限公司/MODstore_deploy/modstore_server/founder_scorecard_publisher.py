@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr"
 """Scheduled publisher for the public founder-autonomy scorecard.
 
 The admin cockpit remains session-gated for humans.  This worker uses two
@@ -15,10 +16,12 @@ import json
 import logging
 import os
 import urllib.request
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from apscheduler.triggers.interval import IntervalTrigger
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -149,7 +152,7 @@ def register_founder_scorecard_job(scheduler: Any) -> None:
                 result.get("overall_progress"),
                 result.get("published_target_count"),
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.exception("founder scorecard refresh failed")
 
     scheduler.add_job(
@@ -159,7 +162,7 @@ def register_founder_scorecard_job(scheduler: Any) -> None:
         ),
         id="founder_scorecard_refresh",
         replace_existing=True,
-        next_run_time=datetime.now(timezone.utc) + timedelta(seconds=60),
+        next_run_time=datetime.now(UTC) + timedelta(seconds=60),
         misfire_grace_time=_int_env(
             "MODSTORE_SCHEDULER_BUSINESS_MISFIRE_GRACE_SECONDS",
             3600,

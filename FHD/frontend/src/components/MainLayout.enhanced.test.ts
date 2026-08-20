@@ -4,7 +4,7 @@
  * navigateToView、openSettings、impersonation bar、
  * currentViewTitle、currentRouteName、mobileBottomNav 等
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
@@ -200,10 +200,30 @@ function makeRouter() {
   return createRouter({
     history: createMemoryHistory(),
     routes: [
-      { path: '/', name: 'chat', component: { template: '<div>Chat</div>' }, meta: { title: '智能对话' } },
-      { path: '/settings', name: 'settings', component: { template: '<div>Settings</div>' }, meta: { title: '系统设置' } },
-      { path: '/mod-store', name: 'mod-store', component: { template: '<div>ModStore</div>' }, meta: { title: '能力库' } },
-      { path: '/im', name: 'im', component: { template: '<div>IM</div>' }, meta: { title: '消息' } },
+      {
+        path: '/',
+        name: 'chat',
+        component: { template: '<div>Chat</div>' },
+        meta: { title: '智能对话' },
+      },
+      {
+        path: '/settings',
+        name: 'settings',
+        component: { template: '<div>Settings</div>' },
+        meta: { title: '系统设置' },
+      },
+      {
+        path: '/mod-store',
+        name: 'mod-store',
+        component: { template: '<div>ModStore</div>' },
+        meta: { title: '能力库' },
+      },
+      {
+        path: '/im',
+        name: 'im',
+        component: { template: '<div>IM</div>' },
+        meta: { title: '消息' },
+      },
     ],
   })
 }

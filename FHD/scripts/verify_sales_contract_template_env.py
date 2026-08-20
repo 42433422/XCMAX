@@ -14,6 +14,8 @@ import os
 import sys
 from pathlib import Path
 
+from app.utils.operational_errors import BOUNDARY_ERRORS
+
 REPO = Path(__file__).resolve().parents[1]
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
@@ -32,7 +34,7 @@ def main() -> int:
         from app.infrastructure.db.sync_engine import get_sync_engine
 
         ROLE_SALES_CONTRACT = "sales_contract_docx"
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print("导入失败:", e)
         return 1
 
@@ -55,7 +57,7 @@ def main() -> int:
                 .mappings()
                 .all()
             )
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print("PostgreSQL 查询失败:", e)
         print("请确认 DATABASE_URL 可达，或运行 scripts/docker-postgres-for-fhd.*")
         return 1

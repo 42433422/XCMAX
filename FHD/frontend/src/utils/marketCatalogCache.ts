@@ -20,10 +20,7 @@ export function buildMarketCatalogCacheKey(tab: string, q = ''): string {
   return `${tab}:${q.trim()}`
 }
 
-export function readMarketCatalogCache(
-  key: string,
-  ttlMs = DEFAULT_TTL_MS,
-): MarketCatalogCacheEntry | null {
+export function readMarketCatalogCache(key: string, ttlMs = DEFAULT_TTL_MS): MarketCatalogCacheEntry | null {
   const mem = memory.get(key)
   if (mem && Date.now() - mem.fetchedAt <= ttlMs) {
     return mem
@@ -46,10 +43,7 @@ export function readMarketCatalogCache(
   }
 }
 
-export function isMarketCatalogCacheFresh(
-  entry: MarketCatalogCacheEntry | null,
-  ttlMs = DEFAULT_TTL_MS,
-): boolean {
+export function isMarketCatalogCacheFresh(entry: MarketCatalogCacheEntry | null, ttlMs = DEFAULT_TTL_MS): boolean {
   if (!entry?.items?.length) return false
   return Date.now() - entry.fetchedAt <= ttlMs
 }

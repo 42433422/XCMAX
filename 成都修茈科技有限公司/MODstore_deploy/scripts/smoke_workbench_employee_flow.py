@@ -130,7 +130,6 @@ def main() -> int:
             "model": os.environ.get("SMOKE_LLM_MODEL") or "deepseek-chat",
             "replace": True,
         }
-        import io
         import tempfile
 
         jf = tempfile.NamedTemporaryFile(suffix=".json", delete=False)

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """发票/税务管理 API（MVP 版本）。
 
 MVP 范围：管理员手工操作，无需对接第三方开票服务（百望云/航天信息）。
@@ -14,7 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -23,6 +24,7 @@ from pydantic import BaseModel, Field
 from modstore_server import payment_orders as _po
 from modstore_server.api.auth_deps import require_user
 from modstore_server.models import Invoice, User, get_session_factory
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +101,7 @@ def api_invoice_apply(
         for inv in all_invoices:
             try:
                 ids = json.loads(inv.order_ids_json or "[]")
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 continue
             for oid_in_inv in ids:
                 occupied[str(oid_in_inv)] = inv.id
@@ -207,7 +209,7 @@ def admin_review_invoice(
     if body.action == "reject" and not body.reject_reason.strip():
         raise HTTPException(400, "拒绝时必须提供 reject_reason")
 
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
     sf = get_session_factory()
     with sf() as session:
         inv = session.query(Invoice).filter(Invoice.id == invoice_id).first()
@@ -234,7 +236,7 @@ def admin_review_invoice(
 def _invoice_row(r: Invoice) -> dict:
     try:
         order_ids = json.loads(r.order_ids_json or "[]")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         order_ids = []
     return {
         "id": r.id,

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 from app.application.agent_orchestrator.execution_lease import DurableExecutionLeaseMixin
 from app.application.agent_orchestrator.run_models import AgentRun, utc_now_iso
@@ -9,6 +9,11 @@ from app.application.agent_orchestrator.run_models import AgentRun, utc_now_iso
 class RunLifecycleMixin(DurableExecutionLeaseMixin):
     """Cooperative pause, resume, and cancellation for an agent orchestrator."""
 
+    if TYPE_CHECKING:
+        plan_from_snapshot: Any
+        start_run: Any
+        start_task_from_plan: Any
+
     _repo: Any
 
     def pause_run(self, run_id: str, *, requested_by: str = "") -> AgentRun | None:
@@ -16,7 +21,7 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
         if run is None:
             return None
         if run.status in {"completed", "failed", "cancelled"}:
-            return run
+            return cast("AgentRun | None", run)
         resume_status = "waiting_user" if run.status == "waiting_user" else "running"
         command = self._repo.request_task_control(run_id, "pause", requested_by=requested_by)
         execution = run.metadata.get("execution")
@@ -28,7 +33,7 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
                 "requested_by": requested_by,
                 "command_id": command.command_id,
             }
-            return run
+            return cast("AgentRun | None", run)
         run.status = "paused"
         run.metadata["control"] = {
             "state": "paused",
@@ -47,14 +52,14 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
             "applied",
             applied_at=utc_now_iso(),
         )
-        return stored
+        return cast("AgentRun | None", stored)
 
     def cancel_run(self, run_id: str, *, requested_by: str = "") -> AgentRun | None:
         run = self._repo.get(run_id)
         if run is None:
             return None
         if run.status in {"completed", "failed", "cancelled"}:
-            return run
+            return cast("AgentRun | None", run)
         command = self._repo.request_task_control(run_id, "cancel", requested_by=requested_by)
         execution = run.metadata.get("execution")
         execution_active = isinstance(execution, dict) and execution.get("state") == "active"
@@ -65,7 +70,7 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
                 "requested_by": requested_by,
                 "command_id": command.command_id,
             }
-            return run
+            return cast("AgentRun | None", run)
         self._mark_controlled(
             run,
             "cancel",
@@ -78,7 +83,7 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
             "applied",
             applied_at=utc_now_iso(),
         )
-        return stored
+        return cast("AgentRun | None", stored)
 
     def resume_run(
         self,
@@ -91,7 +96,7 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
         if run is None:
             return None
         if run.status != "paused":
-            return run
+            return cast("AgentRun | None", run)
         control = run.metadata.get("control")
         resume_status = str(control.get("resume_status") or "") if isinstance(control, dict) else ""
         command = self._repo.request_task_control(run_id, "resume", requested_by=requested_by)
@@ -112,9 +117,9 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
         self._repo.save(run)
         self._repo.mark_task_control(command.command_id, "applied", applied_at=utc_now_iso())
         if run.status == "waiting_user":
-            return self._repo.save(run)
+            return cast("AgentRun | None", self._repo.save(run))
         self._execute_with_durable_lease(run, runtime_context=context)
-        return self._repo.save(run)
+        return cast("AgentRun | None", self._repo.save(run))
 
     def retry_run(
         self,
@@ -133,9 +138,9 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
             existing_retry_id = str(event.data.get("retry_run_id") or "").strip()
             existing_retry = self._repo.get(existing_retry_id) if existing_retry_id else None
             if existing_retry is not None:
-                return existing_retry
+                return cast("AgentRun | None", existing_retry)
         if previous.status not in {"failed", "cancelled", "blocked"}:
-            return previous
+            return cast("AgentRun | None", previous)
 
         previous_task = previous.metadata.get("task_context")
         task = dict(previous_task) if isinstance(previous_task, dict) else {}
@@ -183,7 +188,7 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
             {"retry_run_id": retried.run_id, "requested_by": requested_by},
         )
         self._repo.save(previous)
-        return self._repo.save(retried)
+        return cast("AgentRun | None", self._repo.save(retried))
 
     def _apply_requested_control(self, run: AgentRun) -> bool:
         command = self._repo.latest_task_control(run.run_id)

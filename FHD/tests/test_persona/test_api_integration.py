@@ -9,6 +9,7 @@ import pytest
 
 from app.domain.persona.entities import PersonaProfile
 from app.domain.persona.value_objects import PersonaAxes, PersonaIdentity, RapportScore
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 
 class TestApiPersonaIntegration:
@@ -21,7 +22,7 @@ class TestApiPersonaIntegration:
 
         try:
             service = AIConversationService()
-        except Exception as exc:  # 外部依赖缺失时跳过
+        except BOUNDARY_ERRORS as exc:  # 外部依赖缺失时跳过
             pytest.skip(f"AIConversationService 初始化需要外部依赖: {exc}")
         # persona_service 默认为 None（未注入时走 fallback）
         assert hasattr(service, "persona_service")

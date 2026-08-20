@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """等待 PR 合并。"""
+
 from __future__ import annotations
 
 import argparse

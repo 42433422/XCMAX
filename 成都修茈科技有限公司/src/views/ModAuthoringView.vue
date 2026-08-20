@@ -9,10 +9,7 @@
       <header class="page-header">
         <div class="header-top">
           <button type="button" class="btn btn-ghost" @click="goRepo">← Mod 仓库</button>
-          <span
-            class="badge"
-            :class="modData.validation_ok ? 'badge-ok' : 'badge-warn'"
-          >
+          <span class="badge" :class="modData.validation_ok ? 'badge-ok' : 'badge-warn'">
             {{ modData.validation_ok ? 'manifest 校验通过' : 'manifest 待修正' }}
           </span>
         </div>
@@ -23,17 +20,12 @@
         </p>
       </header>
 
-      <div v-if="message" :class="['flash', messageOk ? 'flash-ok' : 'flash-err']">{{ message }}</div>
+      <div v-if="message" :class="['flash', messageOk ? 'flash-ok' : 'flash-err']">
+        {{ message }}
+      </div>
 
       <nav class="tabs">
-        <button
-          v-for="t in tabs"
-          :key="t.id"
-          type="button"
-          class="tab"
-          :class="{ active: tab === t.id }"
-          @click="tab = t.id"
-        >
+        <button v-for="t in tabs" :key="t.id" type="button" class="tab" :class="{ active: tab === t.id }" @click="tab = t.id">
           {{ t.label }}
         </button>
       </nav>
@@ -47,14 +39,20 @@
         </p>
         <ul class="guide-list">
           <li>物理路径 <code class="mono">mods/&lt;mod_id&gt;/</code>，目录名须与 <code class="mono">manifest.id</code> 一致。</li>
-          <li>根目录必须有 <code class="mono">manifest.json</code>；<code class="mono">backend/__init__.py</code> 必须存在（可为空）。</li>
+          <li>
+            根目录必须有 <code class="mono">manifest.json</code>；<code class="mono">backend/__init__.py</code>
+            必须存在（可为空）。
+          </li>
           <li>
             <code class="mono">backend.entry</code> 指向 <code class="mono">backend/&lt;entry&gt;.py</code>，推荐导出
             <code class="mono">register_fastapi_routes(app, mod_id)</code>；禁止新 Mod 使用 Flask
             <code class="mono">register_blueprints</code>。
           </li>
           <li>前端约定：<code class="mono">frontend/routes.js</code> 导出路由与菜单；见指南 §8。</li>
-          <li><code class="mono">hooks</code> / <code class="mono">comms.exports</code> / <code class="mono">workflow_employees</code> / <code class="mono">bundle</code> 见指南 §9–§11、§14。</li>
+          <li>
+            <code class="mono">hooks</code> / <code class="mono">comms.exports</code> / <code class="mono">workflow_employees</code> /
+            <code class="mono">bundle</code> 见指南 §9–§11、§14。
+          </li>
         </ul>
 
         <h3 class="sub-title">本 Mod 结构检查</h3>
@@ -91,9 +89,7 @@
             <option value="">选择路径…</option>
             <option v-for="p in sortedFiles" :key="p" :value="p">{{ p }}</option>
           </select>
-          <button type="button" class="btn" :disabled="!selectedPath || loadingFile" @click="loadSelectedFile">
-            读取
-          </button>
+          <button type="button" class="btn" :disabled="!selectedPath || loadingFile" @click="loadSelectedFile">读取</button>
           <button type="button" class="btn btn-primary" :disabled="!selectedPath || savingFile" @click="saveFile">
             {{ savingFile ? '保存中…' : '保存文件' }}
           </button>
@@ -185,7 +181,9 @@ const loadingSummary = ref(false)
 const modId = computed(() => String(route.params.modId || ''))
 
 function normPath(p) {
-  return String(p || '').replace(/\\/g, '/').replace(/^\//, '')
+  return String(p || '')
+    .replace(/\\/g, '/')
+    .replace(/^\//, '')
 }
 
 const fileSet = computed(() => {
@@ -277,10 +275,7 @@ async function reload() {
   manifestSaveWarnings.value = []
   fileWarnings.value = []
   try {
-    const [detail, sum] = await Promise.all([
-      api.getMod(modId.value),
-      api.getModAuthoringSummary(modId.value).catch(() => null),
-    ])
+    const [detail, sum] = await Promise.all([api.getMod(modId.value), api.getModAuthoringSummary(modId.value).catch(() => null)])
     modData.value = detail
     summary.value = sum
     manifestText.value = JSON.stringify(detail.manifest || {}, null, 2)

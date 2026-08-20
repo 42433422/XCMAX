@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="import-not-found"
 """补拍 P-W 新增页（AI 市场 / 软件下载）并写入 manifest。"""
+
 from __future__ import annotations
 
 import asyncio
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(os.environ.get("MODSTORE_DEPLOY_ROOT", "/root/modstore-git/MODstore_deploy"))
@@ -25,7 +27,7 @@ async def main() -> None:
         _save_dir,
     )
 
-    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    day = datetime.now(UTC).strftime("%Y-%m-%d")
     out_dir = _save_dir(day)
     if out_dir is None:
         raise SystemExit("save dir unavailable")
@@ -70,7 +72,12 @@ async def main() -> None:
 
     manifest["results"] = kept + new_rows
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-    print("DONE added", len(new_rows), "P-W total", len([r for r in manifest["results"] if r.get("lane") == "P-W"]))
+    print(
+        "DONE added",
+        len(new_rows),
+        "P-W total",
+        len([r for r in manifest["results"] if r.get("lane") == "P-W"]),
+    )
 
 
 if __name__ == "__main__":

@@ -1,19 +1,12 @@
 <template>
   <!-- 全屏遮罩：运行中拦截 ESC 和背景点击 -->
-  <div
-    class="butler-overlay"
-    role="dialog"
-    aria-modal="true"
-    aria-label="AI 改造进度"
-    @keydown.esc.prevent
-    @click.self="onBackdropClick"
-  >
+  <div class="butler-overlay" role="dialog" aria-modal="true" aria-label="AI 改造进度" @keydown.esc.prevent @click.self="onBackdropClick">
     <div class="butler-overlay__card" role="status">
       <!-- 头部 -->
       <header class="butler-overlay__head">
         <span class="butler-overlay__icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
           </svg>
         </span>
         <div class="butler-overlay__titles">
@@ -22,11 +15,7 @@
             {{ isDone ? '改造完成，即将刷新页面…' : isFailed ? '改造遇到问题' : '请不要关闭页面' }}
           </p>
         </div>
-        <span
-          v-if="isDone"
-          class="butler-overlay__done-badge"
-          aria-label="完成"
-        >✓</span>
+        <span v-if="isDone" class="butler-overlay__done-badge" aria-label="完成">✓</span>
       </header>
 
       <!-- 全局进度条 -->
@@ -43,12 +32,7 @@
 
       <!-- 步骤列表 -->
       <ol class="butler-overlay__steps" aria-label="改造步骤">
-        <li
-          v-for="step in steps"
-          :key="step.id"
-          class="butler-overlay__step"
-          :class="`butler-overlay__step--${step.status}`"
-        >
+        <li v-for="step in steps" :key="step.id" class="butler-overlay__step" :class="`butler-overlay__step--${step.status}`">
           <span class="butler-overlay__step-icon" aria-hidden="true">
             {{ stepIcon(step.status) }}
           </span>
@@ -73,13 +57,7 @@
         >
           {{ rolling ? '回滚中…' : '回滚到快照' }}
         </button>
-        <button
-          type="button"
-          class="butler-overlay__btn butler-overlay__btn--close"
-          @click="onClose"
-        >
-          关闭
-        </button>
+        <button type="button" class="butler-overlay__btn butler-overlay__btn--close" @click="onClose">关闭</button>
       </div>
     </div>
   </div>
@@ -239,9 +217,14 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown, true))
   color: #818cf8;
 }
 
-.butler-overlay__icon svg { width: 20px; height: 20px; }
+.butler-overlay__icon svg {
+  width: 20px;
+  height: 20px;
+}
 
-.butler-overlay__titles { flex: 1; }
+.butler-overlay__titles {
+  flex: 1;
+}
 
 .butler-overlay__title {
   font-size: 1rem;
@@ -311,18 +294,32 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown, true))
   font-size: 0.85rem;
 }
 
-.butler-overlay__step--pending .butler-overlay__step-icon { color: rgba(255, 255, 255, 0.24); }
-.butler-overlay__step--running .butler-overlay__step-icon { color: #fbbf24; animation: pulse-icon 1s ease-in-out infinite; }
-.butler-overlay__step--done    .butler-overlay__step-icon { color: #4ade80; }
-.butler-overlay__step--error   .butler-overlay__step-icon { color: #f87171; }
+.butler-overlay__step--pending .butler-overlay__step-icon {
+  color: rgba(255, 255, 255, 0.24);
+}
+.butler-overlay__step--running .butler-overlay__step-icon {
+  color: #fbbf24;
+  animation: pulse-icon 1s ease-in-out infinite;
+}
+.butler-overlay__step--done .butler-overlay__step-icon {
+  color: #4ade80;
+}
+.butler-overlay__step--error .butler-overlay__step-icon {
+  color: #f87171;
+}
 
 .butler-overlay__step-label {
   color: rgba(255, 255, 255, 0.78);
   line-height: 1.4;
 }
 
-.butler-overlay__step--pending .butler-overlay__step-label { color: rgba(255, 255, 255, 0.36); }
-.butler-overlay__step--done    .butler-overlay__step-label { color: rgba(255, 255, 255, 0.56); text-decoration: line-through; }
+.butler-overlay__step--pending .butler-overlay__step-label {
+  color: rgba(255, 255, 255, 0.36);
+}
+.butler-overlay__step--done .butler-overlay__step-label {
+  color: rgba(255, 255, 255, 0.56);
+  text-decoration: line-through;
+}
 
 .butler-overlay__step-msg {
   font-size: 0.72rem;
@@ -393,7 +390,12 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown, true))
 }
 
 @keyframes pulse-icon {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.3; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
 }
 </style>

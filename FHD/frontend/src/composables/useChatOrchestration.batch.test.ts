@@ -64,7 +64,10 @@ vi.mock('./useChatPersistence', () => ({
   resolveExcelSheetOptionsFromContext: vi.fn(() => []),
   extractLikelyProductQueryKeyword: vi.fn(() => null),
   clearPersistedTaskPanelState: vi.fn(),
-  useChatHistoryPersistence: () => ({ toPlainText: (s: string) => s, isWelcomeMessage: () => false }),
+  useChatHistoryPersistence: () => ({
+    toPlainText: (s: string) => s,
+    isWelcomeMessage: () => false,
+  }),
   useChatTaskPanelPersistence: () => ({
     persistTaskPanelStateForSession: vi.fn(),
     applyPersistedTaskPanelStateForSession: vi.fn(),
@@ -213,7 +216,11 @@ describe('useChatOrchestration batch/json', () => {
       batch: true,
       results: [
         { success: true, response: 'part-1' },
-        { success: true, response: 'part-2', autoAction: { type: 'show_products_float', query: '5003' } },
+        {
+          success: true,
+          response: 'part-2',
+          autoAction: { type: 'show_products_float', query: '5003' },
+        },
       ],
     })
     requestChatByModeWithTimeout.mockResolvedValue({
@@ -260,10 +267,12 @@ describe('useChatOrchestration batch/json', () => {
     expect(agentListEvents).toHaveBeenCalledWith('run_1', {})
     // A confirmation response has not executed a tool yet. It must remain a
     // queued workflow, rather than showing the user a false "agent success".
-    expect(upsertTask).toHaveBeenCalledWith(expect.objectContaining({
-      id: 'wf-2',
-      source: 'workflow',
-      status: 'queued',
-    }))
+    expect(upsertTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'wf-2',
+        source: 'workflow',
+        status: 'queued',
+      }),
+    )
   })
 })

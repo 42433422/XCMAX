@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentRun } from '@/api/agentRuns'
-import {
-  activeRunIdOfTask,
-  conversationIdOfTask,
-  groupAgentRunsIntoTasks,
-  taskSummariesToTaskItems,
-} from './agentTaskWorkspaceModel'
+import { activeRunIdOfTask, conversationIdOfTask, groupAgentRunsIntoTasks, taskSummariesToTaskItems } from './agentTaskWorkspaceModel'
 
 function run(overrides: Partial<AgentRun> = {}): AgentRun {
   return {
@@ -44,12 +39,22 @@ describe('groupAgentRunsIntoTasks', () => {
       created_at: '2026-08-10T08:02:00Z',
       updated_at: '2026-08-10T08:03:00Z',
       steps: [
-        { step_id: 'step-1', node_id: 'query', tool_id: 'sales', action: 'query', status: 'completed' },
-        { step_id: 'step-2', node_id: 'write', tool_id: 'report', action: 'create', status: 'waiting_user' },
+        {
+          step_id: 'step-1',
+          node_id: 'query',
+          tool_id: 'sales',
+          action: 'query',
+          status: 'completed',
+        },
+        {
+          step_id: 'step-2',
+          node_id: 'write',
+          tool_id: 'report',
+          action: 'create',
+          status: 'waiting_user',
+        },
       ],
-      tool_calls: [
-        { call_id: 'call-1', tool_id: 'sales', action: 'query', status: 'completed' },
-      ],
+      tool_calls: [{ call_id: 'call-1', tool_id: 'sales', action: 'query', status: 'completed' }],
       metadata: {
         task_context: {
           task_id: 'conversation-sales',
@@ -90,10 +95,7 @@ describe('groupAgentRunsIntoTasks', () => {
       }),
     ])
 
-    expect(tasks.map((task) => task.id).sort()).toEqual([
-      'agent_task_conversation-sales',
-      'agent_task_conversation-stock',
-    ])
+    expect(tasks.map((task) => task.id).sort()).toEqual(['agent_task_conversation-sales', 'agent_task_conversation-stock'])
   })
 
   it('does not invent a percentage when a task has no explicit steps', () => {
@@ -117,17 +119,19 @@ describe('groupAgentRunsIntoTasks', () => {
       ['cancelled', 'cancelled', '已中断'],
       ['future_state', 'queued', '状态待同步'],
     ] as const
-    const runs = cases.map(([status], index) => run({
-      run_id: `run-${status}`,
-      status,
-      metadata: {
-        task_context: {
-          task_id: `task-${index}`,
-          title: status,
-          conversation_id: `conversation-${index}`,
+    const runs = cases.map(([status], index) =>
+      run({
+        run_id: `run-${status}`,
+        status,
+        metadata: {
+          task_context: {
+            task_id: `task-${index}`,
+            title: status,
+            conversation_id: `conversation-${index}`,
+          },
         },
-      },
-    }))
+      }),
+    )
 
     const tasks = groupAgentRunsIntoTasks(runs)
 
@@ -176,23 +180,37 @@ describe('groupAgentRunsIntoTasks', () => {
   })
 
   it('keeps array delivery evidence and settles completed, failed, and skipped steps', () => {
-    const [task] = groupAgentRunsIntoTasks([run({
-      metadata: {
-        task_context: {
-          task_id: '',
-          title: '',
-          conversation_id: '',
-          attempt: 0,
+    const [task] = groupAgentRunsIntoTasks([
+      run({
+        metadata: {
+          task_context: {
+            task_id: '',
+            title: '',
+            conversation_id: '',
+            attempt: 0,
+          },
+          delivery: [{ kind: 'commit' }, { kind: 'test' }],
         },
-        delivery: [{ kind: 'commit' }, { kind: 'test' }],
-      },
-      steps: [
-        { step_id: 'done', node_id: 'one', tool_id: 'git', action: 'commit', status: 'completed' },
-        { step_id: 'failed', node_id: 'two', tool_id: 'test', action: 'run', status: 'failed' },
-        { step_id: 'skipped', node_id: 'three', tool_id: 'pr', action: 'open', status: 'skipped' },
-        { step_id: 'running', node_id: 'four', tool_id: 'ci', action: 'wait', status: 'running' },
-      ],
-    })])
+        steps: [
+          {
+            step_id: 'done',
+            node_id: 'one',
+            tool_id: 'git',
+            action: 'commit',
+            status: 'completed',
+          },
+          { step_id: 'failed', node_id: 'two', tool_id: 'test', action: 'run', status: 'failed' },
+          {
+            step_id: 'skipped',
+            node_id: 'three',
+            tool_id: 'pr',
+            action: 'open',
+            status: 'skipped',
+          },
+          { step_id: 'running', node_id: 'four', tool_id: 'ci', action: 'wait', status: 'running' },
+        ],
+      }),
+    ])
 
     expect(task.id).toBe('agent_task_run-1')
     expect(task.title).toBe('核对销售数据')
@@ -203,26 +221,28 @@ describe('groupAgentRunsIntoTasks', () => {
 
   it('shows a durable cooperative control request until the worker applies it', () => {
     const active = run({ status: 'running' })
-    const [task] = taskSummariesToTaskItems([{
-      task_id: 'conversation-sales',
-      user_id: '7',
-      title: '销售核对',
-      source: 'agent',
-      task_type: 'agent',
-      status: 'running',
-      attempt: 1,
-      run_count: 1,
-      active_run_id: active.run_id,
-      runs: [active],
-      active_run: active,
-      control_command: {
-        command_id: 'taskcmd-1',
+    const [task] = taskSummariesToTaskItems([
+      {
         task_id: 'conversation-sales',
-        run_id: active.run_id,
-        action: 'pause',
-        status: 'requested',
+        user_id: '7',
+        title: '销售核对',
+        source: 'agent',
+        task_type: 'agent',
+        status: 'running',
+        attempt: 1,
+        run_count: 1,
+        active_run_id: active.run_id,
+        runs: [active],
+        active_run: active,
+        control_command: {
+          command_id: 'taskcmd-1',
+          task_id: 'conversation-sales',
+          run_id: active.run_id,
+          action: 'pause',
+          status: 'requested',
+        },
       },
-    }])
+    ])
 
     expect(task.status).toBe('running')
     expect(task.stage).toBe('正在请求暂停')
@@ -233,29 +253,31 @@ describe('groupAgentRunsIntoTasks', () => {
   })
 
   it('uses canonical server progress when a lightweight snapshot has no run payload', () => {
-    const [task] = taskSummariesToTaskItems([{
-      task_id: 'server-progress',
-      user_id: '7',
-      title: '服务端进度',
-      source: 'agent',
-      task_type: 'agent',
-      status: 'running',
-      attempt: 1,
-      run_count: 1,
-      progress: {
-        percent: 42,
-        completed_units: 2,
-        settled_units: 2,
-        total_units: 5,
-        current_unit: 3,
-        stage: '执行中',
-        detail: '生成报表',
+    const [task] = taskSummariesToTaskItems([
+      {
+        task_id: 'server-progress',
+        user_id: '7',
+        title: '服务端进度',
+        source: 'agent',
+        task_type: 'agent',
         status: 'running',
         attempt: 1,
-        indeterminate: false,
-        basis: 'steps',
+        run_count: 1,
+        progress: {
+          percent: 42,
+          completed_units: 2,
+          settled_units: 2,
+          total_units: 5,
+          current_unit: 3,
+          stage: '执行中',
+          detail: '生成报表',
+          status: 'running',
+          attempt: 1,
+          indeterminate: false,
+          basis: 'steps',
+        },
       },
-    }])
+    ])
 
     expect(task.progress).toBe(42)
     expect(task.payload?.serverBacked).toBe(true)

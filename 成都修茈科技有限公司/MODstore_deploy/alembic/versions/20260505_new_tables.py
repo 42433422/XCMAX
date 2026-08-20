@@ -8,7 +8,6 @@ Create Date: 2026-05-05
 from __future__ import annotations
 
 import sqlalchemy as sa
-from sqlalchemy import inspect as sa_inspect
 
 from alembic import op
 

@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.utils.system_service import SystemService, get_system_service
+from app.utils.device_system.system_service import SystemService, get_system_service
 
 
 @pytest.fixture
@@ -202,7 +202,9 @@ class TestGetPrinterConfig:
         mock_adapter.get_default_printer.return_value = "Printer1"
         with (
             patch.dict("sys.modules", {}),
-            patch("app.utils.system_service.SystemService.get_printer_config") as mock,
+            patch(
+                "app.utils.device_system.system_service.SystemService.get_printer_config"
+            ) as mock,
         ):
             # Test the import path
             pass

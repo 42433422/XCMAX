@@ -9,6 +9,7 @@
 （含 `[tool.uv.sources]` 重定向到的兄弟包 xcagi_langgraph_checkpoint）。每个被测符号都会断言
 其模块文件路径位于 FHD/packages 下的 vendored 包内，证明解析来自本地吸收副本而非任意 PYTHONPATH。
 """
+
 from __future__ import annotations
 
 import importlib

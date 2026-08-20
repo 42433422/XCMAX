@@ -1,10 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  createEmptyEmployeeConfigV2,
-  applyTemplateV2,
-  upgradeLegacyToV2,
-  validateEmployeeConfigV2,
-} from './employeeConfigV2'
+import { createEmptyEmployeeConfigV2, applyTemplateV2, upgradeLegacyToV2, validateEmployeeConfigV2 } from './employeeConfigV2'
 
 describe('employeeConfigV2', () => {
   it('createEmptyEmployeeConfigV2 returns default structure', () => {

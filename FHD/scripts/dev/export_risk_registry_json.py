@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="no-any-return"
 """One-shot / maintenance: export tools_execution registry dict to risk_actions.registry.json."""
 
 from __future__ import annotations

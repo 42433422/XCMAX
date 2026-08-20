@@ -147,7 +147,12 @@ describe('marketAccount – fetchMarketAccountOverview', () => {
       status: 200,
       json: async () => ({
         success: true,
-        data: { user: { username: 'u' }, market_base_url: 'http://m', wallet: {}, membership: null },
+        data: {
+          user: { username: 'u' },
+          market_base_url: 'http://m',
+          wallet: {},
+          membership: null,
+        },
       }),
     } as Response)
     const data = await fetchMarketAccountOverview('tok')
@@ -273,7 +278,11 @@ describe('marketAccount – fetchSessionMarketHandoff', () => {
       ok: true,
       json: async () => ({
         success: true,
-        data: { market_access_token: 'tok', market_refresh_token: 'refresh_tok', market_base_url: '' },
+        data: {
+          market_access_token: 'tok',
+          market_refresh_token: 'refresh_tok',
+          market_base_url: '',
+        },
       }),
     } as Response)
     await fetchSessionMarketHandoff()
@@ -287,7 +296,11 @@ describe('marketAccount – persistMarketTokensFromHandoff', () => {
   })
 
   it('persists tokens to localStorage', () => {
-    persistMarketTokensFromHandoff({ token: 'access_tok', market_base_url: '', refresh_token: 'refresh_tok' })
+    persistMarketTokensFromHandoff({
+      token: 'access_tok',
+      market_base_url: '',
+      refresh_token: 'refresh_tok',
+    })
     expect(localStorage.getItem(LS_MARKET_ACCESS_TOKEN)).toBe('access_tok')
     expect(localStorage.getItem(LS_MARKET_REFRESH_TOKEN)).toBe('refresh_tok')
   })

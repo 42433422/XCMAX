@@ -206,7 +206,7 @@ class TestTransportErrorMessage:
 
     def test_generic_exception(self, monkeypatch):
         monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "http://localhost:8765")
-        exc = Exception("something")
+        exc = RuntimeError("something")
         msg, code = ma._transport_error_message(exc)
         assert "无法连接" in msg
         assert code == 502

@@ -28,4 +28,10 @@ def require_admin(user: User = Depends(get_current_user)) -> User:
 _get_current_user = get_current_user
 _require_admin = require_admin
 
-__all__ = ["_get_current_user", "_require_admin", "get_current_user", "get_db", "require_admin"]
+__all__ = [
+    "_get_current_user",
+    "_require_admin",
+    "get_current_user",
+    "get_db",
+    "require_admin",
+]

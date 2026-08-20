@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from fastapi.responses import JSONResponse
 
@@ -50,11 +50,11 @@ def redact_internal_errors(value: Any) -> Any:
 
 
 def public_run_dict(run: Any) -> dict[str, Any]:
-    return redact_internal_errors(run.to_dict())
+    return cast("dict[str, Any]", redact_internal_errors(run.to_dict()))
 
 
 def public_event_dict(event: Any) -> dict[str, Any]:
-    return redact_internal_errors(event.to_dict())
+    return cast("dict[str, Any]", redact_internal_errors(event.to_dict()))
 
 
 def internal_error_response(operation: str) -> JSONResponse:

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { orchStepEmployee } from '../../../utils/orchestrationSteps'
+import type { OrchStepLike } from '../../../utils/orchestrationSteps'
 
 const props = defineProps<{
   planSession: {
@@ -19,7 +20,7 @@ const props = defineProps<{
     intentKey?: string
   } | null
   orchestrationSession: {
-    steps?: Array<{ id?: string; label?: string; status?: string }>
+    steps?: OrchStepLike[]
     status?: string
     error?: string
   } | null
@@ -47,26 +48,13 @@ defineEmits<{
 const showPlan = computed(() => Boolean(props.planSession))
 const showHandoff = computed(() => Boolean(props.pendingHandoff))
 const showOrch = computed(
-  () =>
-    props.orchPhase === 'running' ||
-    props.orchPhase === 'estimating' ||
-    (props.orchestrationSession?.steps?.length ?? 0) > 0,
+  () => props.orchPhase === 'running' || props.orchPhase === 'estimating' || (props.orchestrationSession?.steps?.length ?? 0) > 0,
 )
-const orchActive = computed(
-  () =>
-    props.finalizeLoading ||
-    props.orchPhase === 'running' ||
-    props.orchPhase === 'estimating',
-)
+const orchActive = computed(() => props.finalizeLoading || props.orchPhase === 'running' || props.orchPhase === 'estimating')
 const showHandoffActions = computed(() => showHandoff.value && !orchActive.value)
-const orchErrorText = computed(
-  () => props.finalizeError || props.orchestrationSession?.error || '',
-)
+const orchErrorText = computed(() => props.finalizeError || props.orchestrationSession?.error || '')
 const showCompletion = computed(
-  () =>
-    Boolean(props.makeCompletionResult) &&
-    props.orchestrationSession?.status === 'done' &&
-    !props.finalizeLoading,
+  () => Boolean(props.makeCompletionResult) && props.orchestrationSession?.status === 'done' && !props.finalizeLoading,
 )
 </script>
 
@@ -89,7 +77,9 @@ const showCompletion = computed(
         <p class="wb-voice-task-panel__phase">
           {{ planSession.summaryNeedsClarification ? '还需补充' : '摘要确认' }}
         </p>
-        <p v-if="planSession.summaryText" class="wb-voice-task-panel__body">{{ planSession.summaryText }}</p>
+        <p v-if="planSession.summaryText" class="wb-voice-task-panel__body">
+          {{ planSession.summaryText }}
+        </p>
         <p v-if="planSession.summaryNeedsClarification" class="wb-voice-task-panel__hint">
           继续用语音说明职责与目标，或点「关闭」回到纯对话。
         </p>
@@ -107,7 +97,9 @@ const showCompletion = computed(
 
     <section v-if="showHandoff" class="wb-voice-task-panel wb-voice-task-panel--handoff" aria-label="制作草稿">
       <h3 class="wb-voice-task-panel__title">{{ pendingHandoff?.intentTitle || '制作草稿' }}</h3>
-      <p class="wb-voice-task-panel__body wb-voice-task-panel__body--clip">{{ pendingHandoff?.description }}</p>
+      <p class="wb-voice-task-panel__body wb-voice-task-panel__body--clip">
+        {{ pendingHandoff?.description }}
+      </p>
       <p v-if="pendingHandoff?.workflowName" class="wb-voice-task-panel__meta">Skill 组：{{ pendingHandoff.workflowName }}</p>
       <div v-if="showHandoffActions" class="wb-voice-task-panel__actions">
         <button
@@ -137,7 +129,7 @@ const showCompletion = computed(
       <ul v-if="orchestrationSession?.steps?.length" class="wb-voice-task-steps">
         <li
           v-for="st in orchestrationSession.steps"
-          :key="st.id || st.label"
+          :key="String(st.id || st.label || '')"
           class="wb-voice-task-step"
           :class="`wb-voice-task-step--${st.status || 'pending'}`"
         >
@@ -152,13 +144,11 @@ const showCompletion = computed(
 
     <section v-if="showCompletion" class="wb-voice-task-panel wb-voice-task-panel--done" aria-label="制作完成">
       <h3 class="wb-voice-task-panel__title">{{ makeCompletionResult?.title || '制作完成' }}</h3>
-      <p v-if="makeCompletionResult?.subtitle" class="wb-voice-task-panel__body">{{ makeCompletionResult.subtitle }}</p>
+      <p v-if="makeCompletionResult?.subtitle" class="wb-voice-task-panel__body">
+        {{ makeCompletionResult.subtitle }}
+      </p>
       <div class="wb-voice-task-panel__actions">
-        <button
-          type="button"
-          class="wb-voice-task-panel__btn wb-voice-task-panel__btn--primary"
-          @click="$emit('openCompletion')"
-        >
+        <button type="button" class="wb-voice-task-panel__btn wb-voice-task-panel__btn--primary" @click="$emit('openCompletion')">
           {{ makeCompletionResult?.primaryLabel || '打开员工制作' }}
         </button>
       </div>

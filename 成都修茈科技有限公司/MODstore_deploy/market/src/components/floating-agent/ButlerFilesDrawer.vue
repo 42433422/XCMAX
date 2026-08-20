@@ -64,28 +64,15 @@ function goPlans() {
       </h3>
       <p class="butler-files__hint">顶栏仅展示少量卡片，其余收纳在小C助理中。</p>
       <ul class="butler-files__list">
-        <li
-          v-for="f in overflowAttachments"
-          :key="`att-${f.id}`"
-          class="butler-files__item butler-files__item--attachment"
-        >
+        <li v-for="f in overflowAttachments" :key="`att-${f.id}`" class="butler-files__item butler-files__item--attachment">
           <span class="butler-files__kind">{{ directFileKindLabel(directFileKind(f.name)) }}</span>
           <span class="butler-files__name" :title="f.name">{{ f.name }}</span>
           <span class="butler-files__meta">{{ f.status }}</span>
-          <button
-            type="button"
-            class="butler-files__btn butler-files__btn--ghost"
-            aria-label="移除附件"
-            @click="onRemoveAttachment(f.id)"
-          >
+          <button type="button" class="butler-files__btn butler-files__btn--ghost" aria-label="移除附件" @click="onRemoveAttachment(f.id)">
             移除
           </button>
         </li>
-        <li
-          v-for="f in overflowGenerated"
-          :key="f.id"
-          class="butler-files__item butler-files__item--generated"
-        >
+        <li v-for="f in overflowGenerated" :key="f.id" class="butler-files__item butler-files__item--generated">
           <span class="butler-files__kind">已生成</span>
           <button
             type="button"
@@ -95,12 +82,7 @@ function goPlans() {
           >
             {{ f.name }}
           </button>
-          <button
-            type="button"
-            class="butler-files__btn butler-files__btn--ghost"
-            aria-label="移除"
-            @click="onRemoveGenerated(f.id)"
-          >
+          <button type="button" class="butler-files__btn butler-files__btn--ghost" aria-label="移除" @click="onRemoveGenerated(f.id)">
             移除
           </button>
         </li>
@@ -114,16 +96,10 @@ function goPlans() {
         <button type="button" class="butler-files__link" @click="goPlans">会员</button>
         可长期保留全部记录。
       </p>
-      <p v-else class="butler-files__member-hint butler-files__member-hint--ok">
-        会员：下载记录将长期保留。
-      </p>
+      <p v-else class="butler-files__member-hint butler-files__member-hint--ok">会员：下载记录将长期保留。</p>
 
       <ul v-if="activeRecords.length" class="butler-files__list">
-        <li
-          v-for="r in activeRecords"
-          :key="r.id"
-          class="butler-files__item butler-files__item--history"
-        >
+        <li v-for="r in activeRecords" :key="r.id" class="butler-files__item butler-files__item--history">
           <button
             type="button"
             class="butler-files__name butler-files__name--link"
@@ -140,11 +116,7 @@ function goPlans() {
       <template v-if="expiredRecords.length">
         <h4 class="butler-files__subtitle">已过期</h4>
         <ul class="butler-files__list butler-files__list--expired">
-          <li
-            v-for="r in expiredRecords"
-            :key="`exp-${r.id}`"
-            class="butler-files__item butler-files__item--expired"
-          >
+          <li v-for="r in expiredRecords" :key="`exp-${r.id}`" class="butler-files__item butler-files__item--expired">
             <span class="butler-files__name">{{ r.displayName }}</span>
             <span class="butler-files__meta">已过期</span>
           </li>

@@ -1,11 +1,5 @@
 <template>
-  <div
-    class="ctc"
-    :class="{ 'ctc--dragging': dragging }"
-    role="group"
-    aria-labelledby="ctc-lbl"
-    aria-describedby="ctc-hint"
-  >
+  <div class="ctc" :class="{ 'ctc--dragging': dragging }" role="group" aria-labelledby="ctc-lbl" aria-describedby="ctc-hint">
     <span id="ctc-hint" class="ctc__sr">{{ hint }}</span>
     <div class="ctc__head">
       <span id="ctc-lbl" class="ctc__label">消费档位（1–10）</span>
@@ -28,17 +22,9 @@
     >
       <span class="ctc__bar" aria-hidden="true" />
       <span class="ctc__steps" aria-hidden="true">
-        <span
-          v-for="n in 9"
-          :key="`s-${n}`"
-          class="ctc__step"
-          :style="{ left: `${(n / 9) * 100}%` }"
-        />
+        <span v-for="n in 9" :key="`s-${n}`" class="ctc__step" :style="{ left: `${(n / 9) * 100}%` }" />
       </span>
-      <span
-        class="ctc__thumb"
-        :style="{ left: thumbLeft, borderColor: currentColor, boxShadow: thumbShadow }"
-      >
+      <span class="ctc__thumb" :style="{ left: thumbLeft, borderColor: currentColor, boxShadow: thumbShadow }">
         <span class="ctc__thumb-num">{{ clamped }}</span>
       </span>
     </div>
@@ -74,18 +60,7 @@ const emit = defineEmits<{
 const hint = '数值越高效果越好、花费越多；占位控件，后续可依据实时榜单自选'
 
 /** 1→10 的渐变色锚（与轨道 linear-gradient 视觉一致） */
-const TIER_COLORS = [
-  '#38bdf8',
-  '#22d3ee',
-  '#10b981',
-  '#84cc16',
-  '#eab308',
-  '#f59e0b',
-  '#f97316',
-  '#ef4444',
-  '#ec4899',
-  '#a855f7',
-]
+const TIER_COLORS = ['#38bdf8', '#22d3ee', '#10b981', '#84cc16', '#eab308', '#f59e0b', '#f97316', '#ef4444', '#ec4899', '#a855f7']
 
 function clampTier(v: unknown): number {
   const n = Math.round(Number(v) || 1)
@@ -99,9 +74,7 @@ const dragging = ref(false)
 const clamped = computed(() => clampTier(props.modelValue))
 const thumbLeft = computed(() => `${((clamped.value - 1) / 9) * 100}%`)
 const currentColor = computed(() => TIER_COLORS[clamped.value - 1])
-const thumbShadow = computed(
-  () => `0 4px 14px rgba(0, 0, 0, 0.35), 0 0 0 4px ${currentColor.value}26`,
-)
+const thumbShadow = computed(() => `0 4px 14px rgba(0, 0, 0, 0.35), 0 0 0 4px ${currentColor.value}26`)
 
 function setTier(n: number) {
   const v = clampTier(n)
@@ -287,13 +260,17 @@ function onKeydown(e: KeyboardEvent) {
   font-variant-numeric: tabular-nums;
   line-height: 1;
   transform: translate(-50%, -50%);
-  transition: left 0.18s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.18s ease,
+  transition:
+    left 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.18s ease,
     box-shadow 0.18s ease;
   pointer-events: none;
 }
 
 .ctc--dragging .ctc__thumb {
-  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
 }
 
 .ctc__ticks {
@@ -313,7 +290,9 @@ function onKeydown(e: KeyboardEvent) {
   font-variant-numeric: tabular-nums;
   line-height: 1;
   cursor: pointer;
-  transition: color 0.16s ease, background 0.16s ease;
+  transition:
+    color 0.16s ease,
+    background 0.16s ease;
 }
 
 .ctc__tick:hover {
@@ -343,13 +322,34 @@ function onKeydown(e: KeyboardEvent) {
   border: 0;
 }
 
-html[data-workbench-theme='light'] .ctc__label{color:#86868b}
-html[data-workbench-theme='light'] .ctc__bar{box-shadow:inset 0 0 0 1px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.08)}
-html[data-workbench-theme='light'] .ctc__step{background:rgba(255,255,255,.55)}
-html[data-workbench-theme='light'] .ctc__thumb{background:#fff;border-color:rgba(0,0,0,.12);color:#1d1d1f}
-html[data-workbench-theme='light'] .ctc__tick{background:rgba(0,0,0,.03);color:#86868b}
-html[data-workbench-theme='light'] .ctc__tick:hover{color:#1d1d1f;background:rgba(0,0,0,.06)}
-html[data-workbench-theme='light'] .ctc__tick--on{background:rgba(0,113,227,.08)}
-html[data-workbench-theme='light'] .ctc__track:focus-visible{outline-color:rgba(0,113,227,.5)}
-
+html[data-workbench-theme='light'] .ctc__label {
+  color: #86868b;
+}
+html[data-workbench-theme='light'] .ctc__bar {
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.06),
+    0 1px 2px rgba(0, 0, 0, 0.08);
+}
+html[data-workbench-theme='light'] .ctc__step {
+  background: rgba(255, 255, 255, 0.55);
+}
+html[data-workbench-theme='light'] .ctc__thumb {
+  background: #fff;
+  border-color: rgba(0, 0, 0, 0.12);
+  color: #1d1d1f;
+}
+html[data-workbench-theme='light'] .ctc__tick {
+  background: rgba(0, 0, 0, 0.03);
+  color: #86868b;
+}
+html[data-workbench-theme='light'] .ctc__tick:hover {
+  color: #1d1d1f;
+  background: rgba(0, 0, 0, 0.06);
+}
+html[data-workbench-theme='light'] .ctc__tick--on {
+  background: rgba(0, 113, 227, 0.08);
+}
+html[data-workbench-theme='light'] .ctc__track:focus-visible {
+  outline-color: rgba(0, 113, 227, 0.5);
+}
 </style>

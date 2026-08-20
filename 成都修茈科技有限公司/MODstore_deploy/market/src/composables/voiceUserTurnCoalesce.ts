@@ -3,9 +3,7 @@ import { mergeAsrLiveText } from './mergeAsrLiveText'
 export type VoiceTurnMessage = { role: 'user' | 'assistant'; content: string }
 
 /** 去掉末尾空 assistant，便于把连续 ASR 碎片合并到上一条 user。 */
-export function trimTrailingEmptyVoiceAssistants(
-  messages: VoiceTurnMessage[],
-): VoiceTurnMessage[] {
+export function trimTrailingEmptyVoiceAssistants(messages: VoiceTurnMessage[]): VoiceTurnMessage[] {
   const out = [...messages]
   while (out.length) {
     const last = out[out.length - 1]
@@ -55,10 +53,7 @@ export function foldDisplayVoiceMessages(messages: VoiceTurnMessage[]): VoiceTur
   return out
 }
 
-export function appendCoalescedVoiceUserTurn(
-  messages: VoiceTurnMessage[],
-  incoming: string,
-): VoiceTurnMessage[] {
+export function appendCoalescedVoiceUserTurn(messages: VoiceTurnMessage[], incoming: string): VoiceTurnMessage[] {
   const trimmed = incoming.trim()
   if (!trimmed) return messages
 

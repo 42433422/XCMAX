@@ -5,15 +5,17 @@ from __future__ import annotations
 import json
 import threading
 from pathlib import Path
-from typing import Any, Literal, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Literal
+
+from vibe_coding.operational_errors import BOUNDARY_ERRORS
 
 from .exemplars import Exemplar, ExemplarStore
 from .retriever import Retriever
 from .style import StyleProfile
 
 if TYPE_CHECKING:
-    from ..repo_index import RepoIndex
     from ..patch import ProjectPatch
+    from ..repo_index import RepoIndex
 
 _MEMORY_FILENAME = "memory.json"
 _DEFAULT_MAX_EXEMPLARS = 200
@@ -43,7 +45,7 @@ class ProjectMemory:
         *,
         max_exemplars: int = _DEFAULT_MAX_EXEMPLARS,
         prune_strategy: Literal["lru", "oldest", "failures_first"] = "lru",
-        knowledge_base: "Any | None" = None,
+        knowledge_base: Any | None = None,
         project_id: str = "",
         framework: str = "",
         auto_promote: bool = True,
@@ -64,7 +66,7 @@ class ProjectMemory:
 
     # ------------------------------------------------------------------ style
 
-    def rebuild_style(self, index: "RepoIndex") -> StyleProfile:
+    def rebuild_style(self, index: RepoIndex) -> StyleProfile:
         with self._lock:
             self._style = StyleProfile.from_index(index)
             self._save()
@@ -79,7 +81,7 @@ class ProjectMemory:
     def record_success(
         self,
         brief: str,
-        patch: "ProjectPatch",
+        patch: ProjectPatch,
         *,
         tools_passed: list[str] | None = None,
         languages: list[str] | None = None,
@@ -110,7 +112,7 @@ class ProjectMemory:
     def record_failure(
         self,
         brief: str,
-        patch: "ProjectPatch | None" = None,
+        patch: ProjectPatch | None = None,
         *,
         error: str = "",
         tools_failed: list[str] | None = None,
@@ -139,7 +141,7 @@ class ProjectMemory:
                 languages=list(languages or []),
                 outcome="failure",
                 error=error[:1_000],
-                tags=list(tags or []) + ["failure"],
+                tags=[*list(tags or []), "failure"],
                 metadata=dict(metadata or {}),
             )
             self._exemplars.add(ex)
@@ -184,7 +186,7 @@ class ProjectMemory:
                 project_id=self.project_id,
                 framework=self.framework,
             )
-        except Exception:  # noqa: BLE001
+        except BOUNDARY_ERRORS:
             # Promotion never breaks a successful memory write.
             pass
 
@@ -281,7 +283,7 @@ class ProjectMemory:
         )
 
 
-def _render_diff_text(patch: "ProjectPatch") -> str:
+def _render_diff_text(patch: ProjectPatch) -> str:
     """Compact ``+/-`` rendering of a patch for indexing.
 
     We trim each hunk's text and cap the total at ~100 lines so an

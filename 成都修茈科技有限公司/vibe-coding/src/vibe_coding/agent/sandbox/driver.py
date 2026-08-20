@@ -210,7 +210,5 @@ def resolve_workspace(workspace: str | Path | None) -> Path | None:
         raise ValueError(f"workspace_dir {p!r} is not a directory")
     # ``Path.parent == Path`` is true exactly when ``p`` is a filesystem root.
     if p == p.parent:
-        raise ValueError(
-            f"workspace_dir {p!r} is a filesystem root; refusing to sandbox the host"
-        )
+        raise ValueError(f"workspace_dir {p!r} is a filesystem root; refusing to sandbox the host")
     return p

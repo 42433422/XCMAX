@@ -35,9 +35,15 @@ def employee_label(
     pack: dict[str, Any],
     manifest: dict[str, Any],
 ) -> str:
-    employee_meta = manifest.get("employee") if isinstance(manifest.get("employee"), dict) else {}
+    raw_employee_meta = manifest.get("employee")
+    employee_meta: dict[str, Any] = (
+        dict(raw_employee_meta) if isinstance(raw_employee_meta, dict) else {}
+    )
     return str(
-        manifest.get("name") or employee_meta.get("label") or pack.get("pack_id") or employee_id
+        (manifest or {}).get("name")
+        or employee_meta.get("label")
+        or pack.get("pack_id")
+        or employee_id
     ).strip()
 
 

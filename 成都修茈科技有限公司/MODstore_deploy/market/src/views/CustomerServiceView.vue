@@ -27,25 +27,14 @@
                 @click="onBubbleClick($event, msg)"
               />
               <p v-else-if="msg.imageDataUrl" class="cs-bubble__text">已附上图片</p>
-              <img
-                v-if="msg.imageDataUrl"
-                :src="msg.imageDataUrl"
-                alt="补充图片"
-                class="cs-bubble__img"
-              />
+              <img v-if="msg.imageDataUrl" :src="msg.imageDataUrl" alt="补充图片" class="cs-bubble__img" />
             </div>
           </article>
 
           <div v-if="messages.length === 0" class="cs-empty">
             <p class="cs-empty__title">先说说你遇到的问题，也可以点下面的示例开始</p>
             <div class="cs-chips">
-              <button
-                v-for="chip in quickPrompts"
-                :key="chip"
-                type="button"
-                class="cs-chip"
-                @click="usePrompt(chip)"
-              >
+              <button v-for="chip in quickPrompts" :key="chip" type="button" class="cs-chip" @click="usePrompt(chip)">
                 {{ chip }}
               </button>
             </div>
@@ -53,13 +42,7 @@
         </div>
 
         <form class="cs-composer" @submit.prevent="send">
-          <input
-            ref="imageInputRef"
-            type="file"
-            accept="image/*"
-            class="cs-image-input"
-            @change="onImagePicked"
-          />
+          <input ref="imageInputRef" type="file" accept="image/*" class="cs-image-input" @change="onImagePicked" />
           <div v-if="pendingImageDataUrl" class="cs-attach">
             <img :src="pendingImageDataUrl" alt="待发送图片预览" class="cs-attach__preview" />
             <button type="button" class="cs-link" @click="clearPendingImage">移除图片</button>
@@ -74,21 +57,12 @@
           />
           <div class="cs-composer__footer">
             <div class="cs-composer__left">
-              <button
-                type="button"
-                class="cs-btn cs-btn--ghost"
-                :disabled="loading || imagePicking"
-                @click="openImagePicker"
-              >
+              <button type="button" class="cs-btn cs-btn--ghost" :disabled="loading || imagePicking" @click="openImagePicker">
                 {{ imagePicking ? '处理中…' : '图片' }}
               </button>
               <span :class="{ 'cs-error': !!error }">{{ error || 'Enter 换行 · ⌘/Ctrl+Enter 发送' }}</span>
             </div>
-            <button
-              type="submit"
-              class="cs-btn"
-              :disabled="loading || imagePicking || (!draft.trim() && !pendingImageDataUrl)"
-            >
+            <button type="submit" class="cs-btn" :disabled="loading || imagePicking || (!draft.trim() && !pendingImageDataUrl)">
               {{ loading ? '处理中…' : '发送' }}
             </button>
           </div>
@@ -98,14 +72,11 @@
       <aside class="cs-side">
         <section class="cs-side-card cs-side-card--tickets">
           <div class="cs-side-card__head">
-            <h3>我的工单 <small v-if="tickets.length">{{ tickets.length }}</small></h3>
+            <h3>
+              我的工单 <small v-if="tickets.length">{{ tickets.length }}</small>
+            </h3>
             <div class="cs-side-card__actions">
-              <button
-                v-if="tickets.length"
-                type="button"
-                class="cs-link"
-                @click="toggleAllTickets"
-              >
+              <button v-if="tickets.length" type="button" class="cs-link" @click="toggleAllTickets">
                 {{ allTicketsExpanded ? '全部收起' : '全部展开' }}
               </button>
               <button type="button" class="cs-link" @click="loadTickets">刷新</button>
@@ -116,22 +87,11 @@
             还没有工单。普通聊天不会建单；材料齐可自动受理，或点「提交工单」后会出现在这里。
           </div>
           <div v-else class="cs-side-list">
-            <article
-              v-for="ticket in tickets"
-              :key="ticket.id"
-              :class="['cs-ticket', { 'cs-ticket--open': isTicketExpanded(ticket.id) }]"
-            >
+            <article v-for="ticket in tickets" :key="ticket.id" :class="['cs-ticket', { 'cs-ticket--open': isTicketExpanded(ticket.id) }]">
               <div class="cs-ticket__row">
-                <button
-                  type="button"
-                  class="cs-ticket__main"
-                  @click="openTicket(ticket)"
-                >
+                <button type="button" class="cs-ticket__main" @click="openTicket(ticket)">
                   <b>{{ friendlyTicketTitle(ticket) }}</b>
-                  <span
-                    v-if="issueDomainLabel(ticket)"
-                    class="cs-ticket__domain"
-                  >{{ issueDomainLabel(ticket) }}</span>
+                  <span v-if="issueDomainLabel(ticket)" class="cs-ticket__domain">{{ issueDomainLabel(ticket) }}</span>
                   <span class="cs-ticket__stage">{{ ticketLifecycleLabel(ticket) }}</span>
                 </button>
                 <button
@@ -182,12 +142,20 @@ import {
 } from '../utils/csTicketLifecycle'
 import { composeTicketUserMessage, toUserFacingCards } from '../utils/csTicketSummary'
 import { compressImageFileToDataUrl, isImageFileForVision } from '../utils/visionMultimodal'
+import { asUnknownRecord, errorMessage, type UnknownRecord } from '../utils/typeNarrowing'
+
+interface CustomerTicket extends UnknownRecord {
+  id: number | string
+  intent?: unknown
+  status?: unknown
+  title?: unknown
+}
 
 type UiMessage = {
   id: string
   role: 'user' | 'assistant'
   content: string
-  cards?: Record<string, any>[]
+  cards?: UnknownRecord[]
   imageDataUrl?: string | null
 }
 
@@ -197,7 +165,7 @@ const loading = ref(false)
 const error = ref('')
 const activeSessionId = ref<number | null>(null)
 const messages = ref<UiMessage[]>([])
-const tickets = ref<any[]>([])
+const tickets = ref<CustomerTicket[]>([])
 const expandedTicketIds = ref<Set<number>>(new Set())
 const messagesEl = ref<HTMLElement | null>(null)
 const pendingImageDataUrl = ref<string | null>(null)
@@ -205,16 +173,9 @@ const imagePickError = ref('')
 const imagePicking = ref(false)
 const imageInputRef = ref<HTMLInputElement | null>(null)
 
-const allTicketsExpanded = computed(
-  () => tickets.value.length > 0 && expandedTicketIds.value.size >= tickets.value.length,
-)
+const allTicketsExpanded = computed(() => tickets.value.length > 0 && expandedTicketIds.value.size >= tickets.value.length)
 
-const quickPrompts = [
-  '你好，想了解一下会员怎么买',
-  '退款一般需要提供哪些信息？',
-  '商品有问题想先了解怎么投诉',
-  '账号权益没到账是怎么回事',
-]
+const quickPrompts = ['你好，想了解一下会员怎么买', '退款一般需要提供哪些信息？', '商品有问题想先了解怎么投诉', '账号权益没到账是怎么回事']
 
 onMounted(() => {
   hydrateFromQuery()
@@ -267,7 +228,7 @@ function shortLifeLabel(label: string) {
   return map[label] || label
 }
 
-function friendlyTicketTitle(ticket: any) {
+function friendlyTicketTitle(ticket: CustomerTicket) {
   const intent = ticketIntentLabel(ticket?.intent)
   const title = String(ticket?.title || '').trim()
   if (title && !title.includes('CS') && title.length <= 18) return title
@@ -292,12 +253,10 @@ function toggleAllTickets() {
     expandedTicketIds.value = new Set()
     return
   }
-  expandedTicketIds.value = new Set(
-    tickets.value.map((t) => Number(t.id)).filter((n) => n > 0),
-  )
+  expandedTicketIds.value = new Set(tickets.value.map((t) => Number(t.id)).filter((n) => n > 0))
 }
 
-function preferExpandWaitingTickets(items: any[]) {
+function preferExpandWaitingTickets(items: CustomerTicket[]) {
   const waiting = items
     .filter((t) => ticketLifecycleLabel(t) === '待补充')
     .map((t) => Number(t.id))
@@ -393,29 +352,30 @@ async function sendText(raw: string, extras?: { reason?: string }) {
       ...queryContext(),
       ...(extras?.reason ? { reason: extras.reason } : {}),
     }
-    const res: any = await api.customerServiceChat({
-      message: text,
-      session_id: activeSessionId.value,
-      context: ctx,
-      image_data_url: imageDataUrl || undefined,
-    })
-    activeSessionId.value = Number(res?.session?.id || activeSessionId.value || 0) || null
+    const res = asUnknownRecord(
+      await api.customerServiceChat({
+        message: text,
+        session_id: activeSessionId.value,
+        context: ctx,
+        image_data_url: imageDataUrl || undefined,
+      }),
+    )
+    const session = asUnknownRecord(res.session)
+    const responseMessage = asUnknownRecord(res.message)
+    const ticket = Object.keys(asUnknownRecord(res.ticket)).length ? (asUnknownRecord(res.ticket) as CustomerTicket) : null
+    activeSessionId.value = Number(session.id || activeSessionId.value || 0) || null
     // 对话里只用白话正文；不再堆「进度/下一步/已办理」多卡
-    let content = String(res?.message?.content || '已处理。')
-    if (res?.ticket) {
-      const fromCards = Array.isArray(res?.cards) ? res.cards : []
-      const decisionCard = fromCards.find((c: any) => c?.type === 'decision')
-      const actionsCard = fromCards.find((c: any) => c?.type === 'actions')
+    let content = String(responseMessage.content || '已处理。')
+    if (ticket) {
+      const fromCards = Array.isArray(res.cards) ? res.cards.map(asUnknownRecord) : []
+      const decisionCard = fromCards.find((card) => card.type === 'decision')
+      const actionsCard = fromCards.find((card) => card.type === 'actions')
       const composed = composeTicketUserMessage({
-        ticket: res.ticket,
-        decision: decisionCard || res.decision || null,
-        actions: Array.isArray(actionsCard?.items)
-          ? actionsCard.items
-          : Array.isArray(res?.actions)
-            ? res.actions
-            : [],
+        ticket,
+        decision: decisionCard || asUnknownRecord(res.decision),
+        actions: Array.isArray(actionsCard?.items) ? actionsCard.items : Array.isArray(res.actions) ? res.actions : [],
       })
-      const st = String(res.ticket?.status || '').toLowerCase()
+      const st = String(ticket.status || '').toLowerCase()
       // 已结案用侧栏口径摘要；跟进中优先后端话术（含问题复述），避免盖成「已处理完成」
       if (['resolved', 'closed', 'done', 'rejected'].includes(st)) {
         content = composed
@@ -431,12 +391,12 @@ async function sendText(raw: string, extras?: { reason?: string }) {
     })
     // 先结束「处理中」，侧栏刷新失败/慢不得挡住对话
     loading.value = false
-    if (res?.ticket) {
+    if (ticket) {
       void loadTickets()
     }
     await scrollMessagesToEnd()
-  } catch (e: any) {
-    error.value = e?.message || 'AI 客服处理失败'
+  } catch (e: unknown) {
+    error.value = errorMessage(e, 'AI 客服处理失败')
     loading.value = false
   }
 }
@@ -449,8 +409,8 @@ function newSession() {
 
 async function loadTickets() {
   try {
-    const res: any = await api.customerServiceTickets()
-    tickets.value = Array.isArray(res?.items) ? res.items : []
+    const res = asUnknownRecord(await api.customerServiceTickets())
+    tickets.value = Array.isArray(res.items) ? (res.items as CustomerTicket[]) : []
     preferExpandWaitingTickets(tickets.value)
   } catch {
     tickets.value = []
@@ -462,7 +422,7 @@ function visibleCards(msg: UiMessage) {
   return toUserFacingCards(Array.isArray(msg.cards) ? msg.cards : [])
 }
 
-async function openTicket(ticket: any) {
+async function openTicket(ticket: CustomerTicket) {
   const tid = Number(ticket?.id || 0)
   if (tid) {
     const next = new Set(expandedTicketIds.value)
@@ -470,10 +430,10 @@ async function openTicket(ticket: any) {
     expandedTicketIds.value = next
   }
   try {
-    const res: any = await api.customerServiceTicketDetail(ticket.id)
-    const t = res?.ticket || ticket
-    const decision = Array.isArray(res?.decisions) && res.decisions[0] ? res.decisions[0] : null
-    const actions = Array.isArray(res?.actions) ? res.actions : []
+    const res = asUnknownRecord(await api.customerServiceTicketDetail(ticket.id))
+    const t = Object.keys(asUnknownRecord(res.ticket)).length ? asUnknownRecord(res.ticket) : ticket
+    const decision = Array.isArray(res.decisions) && res.decisions[0] ? asUnknownRecord(res.decisions[0]) : null
+    const actions = Array.isArray(res.actions) ? res.actions : []
     messages.value.push({
       id: `t-${Date.now()}`,
       role: 'assistant',
@@ -481,10 +441,11 @@ async function openTicket(ticket: any) {
       cards: [],
     })
     await scrollMessagesToEnd()
-  } catch (e: any) {
-    error.value = e?.message || '打开进度失败'
+  } catch (e: unknown) {
+    error.value = errorMessage(e, '打开进度失败')
   }
 }
+defineExpose({ visibleCards })
 </script>
 
 <style scoped>

@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.db.base import Base
 from app.db.models import User, Permission, Role, role_permissions as role_perm_table
-from app.utils.password_hash import generate_password_hash
+from app.utils.security.password_hash import generate_password_hash
 from app.utils.time import utc_now_naive
 
 

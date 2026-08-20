@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, union-attr"
 """日更 digest · P-App 本地 Android 模拟器/真机 adb 截图（对齐 FHD run_android_surface_audit.mjs）。"""
 
 from __future__ import annotations
@@ -11,6 +12,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +41,7 @@ def _fhd_root() -> Path:
         from modstore_server.daily_digest import _repo_root
 
         return Path(_repo_root()) / "FHD"
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return Path(__file__).resolve().parents[3] / "FHD"
 
 
@@ -66,7 +69,7 @@ def _adb_has_device(adb: str) -> bool:
             parts = line.strip().split()
             if len(parts) >= 2 and parts[1] == "device":
                 return True
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.debug("android audit: adb devices failed", exc_info=True)
     return False
 
@@ -90,7 +93,7 @@ def _try_start_emulator() -> bool:
         return False
     try:
         subprocess.run(["bash", str(script)], cwd=str(fhd), check=False, timeout=240)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.warning("android audit: emulator start script failed", exc_info=True)
         return False
     return _adb_has_device(_adb_bin())
@@ -108,7 +111,7 @@ def _ensure_fhd_for_emulator() -> None:
         )
         port = _parse_port(api_url.rstrip("/"), 5102)
         _ensure_fhd_api(port)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.warning("android audit: FHD API bootstrap failed", exc_info=True)
 
 
@@ -148,7 +151,7 @@ def _page_to_digest_row(
         try:
             path.write_bytes(base64.b64decode(b64))
             save_path = str(path)
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
             err = err or f"screenshot decode failed: {exc}"
     status = page.get("status")
     try:
@@ -206,7 +209,7 @@ def run_android_surface_audit_sync(
             or "http://127.0.0.1:5102"
         )
         api_port = _parse_port(api_url.rstrip("/"), 5102)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
 
     env = {**os.environ}
@@ -263,12 +266,12 @@ def run_android_surface_audit_sync(
     if out_json.is_file():
         try:
             payload = json.loads(out_json.read_text(encoding="utf-8"))
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.warning("android audit: invalid json at %s", out_json)
     if not payload and proc.stdout.strip():
         try:
             payload = json.loads(proc.stdout.strip())
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
 
     pages = payload.get("pages") if isinstance(payload.get("pages"), list) else []

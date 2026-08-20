@@ -1,8 +1,8 @@
 {
   "schema": "xcagi.public_company_hall/v1",
-  "generated_at": "2026-08-07T00:00:58.587437+00:00",
-  "day": "2026-08-07",
-  "calendar_day": "2026-08-07",
+  "generated_at": "2026-08-18T00:05:18.846438+00:00",
+  "day": "2026-08-18",
+  "calendar_day": "2026-08-18",
   "day_stale": false,
   "readonly": true,
   "note": "公司大厅公开投影：编制为 SSOT；状态由行动条目与执行度量推导，无虚构心跳在线。",
@@ -17,9 +17,9 @@
     "idle": "编制内注册、当日无公开活跃任务；含按需触发岗位（非离线）"
   },
   "counts": {
-    "working": 8,
-    "alert": 3,
-    "idle": 44,
+    "working": 5,
+    "alert": 4,
+    "idle": 46,
     "roster": 55
   },
   "departments": [
@@ -29,9 +29,9 @@
       "color": "#22d3ee",
       "employee_count": 12,
       "counts": {
-        "working": 2,
+        "working": 1,
         "alert": 3,
-        "idle": 7
+        "idle": 8
       },
       "employees": [
         {
@@ -44,8 +44,8 @@
           "activity": "[ops.change_request.submitted] write release/VERSION (5 chars)",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T22:01:41.604838+00:00",
-          "runs_24h": 57
+          "last_activity_at": "2026-08-17T22:00:13.821257+00:00",
+          "runs_24h": 12
         },
         {
           "employee_id": "delivery-receipt-officer",
@@ -53,12 +53,12 @@
           "dept_id": "ops_acquisition",
           "dept_label": "O-A 获客部",
           "dept_color": "#22d3ee",
-          "presence": "working",
-          "activity": "[employee.task.done] deploy-release-officer employee.task.done",
+          "presence": "idle",
+          "activity": "待命 · 最近：[employee.task.done] deploy-release-officer employee.task.done",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T22:05:04.446683+00:00",
-          "runs_24h": 15
+          "last_activity_at": "2026-08-17T22:05:03.794763+00:00",
+          "runs_24h": 11
         },
         {
           "employee_id": "deploy-release-officer",
@@ -67,10 +67,10 @@
           "dept_label": "O-A 获客部",
           "dept_color": "#22d3ee",
           "presence": "alert",
-          "activity": "CR#55 窄 CI 未通过（py_compile） 详情：员工 deploy-release-officer 产出的 CR 在自动审批前未通过窄验证。 path=release/VERSION failed_step=py_compile steps=[{'ok': False, 'step': 'py_compile', 'stderr': ' File \"/tmp/tmpxbotoydu.py\", line 1\\n 0.0.1\\n ^^\\nSyntaxError: invalid syntax\\n'}] 建议类型：cr_narrow_ci_failure 上下文：{\"employee_id\": \"deploy-release-officer\"}",
+          "activity": "CR#66 窄 CI 未通过（py_compile） 详情：员工 deploy-release-officer 产出的 CR 在自动审批前未通过窄验证。 path=release/VERSION failed_step=py_compile steps=[{'ok': False, 'step': 'py_compile', 'stderr': ' File \"/tmp/tmpu786v0t0.py\", line 1\\n 0.0.1\\n ^^\\nSyntaxError: invalid syntax\\n'}] 建议类型：cr_narrow_ci_failure 上下文：{\"employee_id\": \"deploy-release-officer\"}",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T22:04:41.735910+00:00",
+          "last_activity_at": "2026-08-17T22:04:25.381223+00:00",
           "runs_24h": 5
         },
         {
@@ -80,11 +80,11 @@
           "dept_label": "O-A 获客部",
           "dept_color": "#22d3ee",
           "presence": "idle",
-          "activity": "待命 · 最近：[duty-burn-in:75f4673c77cb:enterprise-adoption-officer] 执行一次岗位确定性只读子能力回执。岗位：enterprise-adoption-officer。仅使用 manifest 中已审查的 burn…",
+          "activity": "待命 · 最近：[duty-burn-in:c87e2667357c:enterprise-adoption-officer] 执行一次岗位确定性只读子能力回执。岗位：enterprise-adoption-officer。仅使用 manifest 中已审查的 burn…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T07:54:34.238824+00:00",
-          "runs_24h": 2
+          "last_activity_at": "2026-08-17T18:54:34.331848+00:00",
+          "runs_24h": 1
         },
         {
           "employee_id": "intake-dispatcher",
@@ -93,10 +93,10 @@
           "dept_label": "O-A 获客部",
           "dept_color": "#22d3ee",
           "presence": "idle",
-          "activity": "待命 · 最近：[duty-burn-in:a99999151df8:intake-dispatcher] 执行一次岗位确定性只读子能力回执。岗位：intake-dispatcher。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输…",
+          "activity": "待命 · 最近：[duty-burn-in:d0820bac9bcb:intake-dispatcher] 执行一次岗位确定性只读子能力回执。岗位：intake-dispatcher。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T06:54:35.121775+00:00",
+          "last_activity_at": "2026-08-17T17:54:35.081236+00:00",
           "runs_24h": 1
         },
         {
@@ -106,10 +106,10 @@
           "dept_label": "O-A 获客部",
           "dept_color": "#22d3ee",
           "presence": "idle",
-          "activity": "待命 · 最近：[duty-burn-in:ed54b4ef1160:marketing-site-builder] 执行一次岗位确定性只读子能力回执。岗位：marketing-site-builder。仅使用 manifest 中已审查的 burn_in_fixtur…",
+          "activity": "待命 · 最近：岗位任务：构建营销站并验证桌面与移动端产物完整性 执行模式：execute；风险级别：low。 验收回执：构建成功；关键页面与资源存在。 必须使用真实输入与工具结果；缺少数据时明确标记，不得用回显或虚构数据冒充完成。",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T20:54:34.148161+00:00",
+          "last_activity_at": "2026-08-17T18:36:20.352169+00:00",
           "runs_24h": 2
         },
         {
@@ -119,10 +119,10 @@
           "dept_label": "O-A 获客部",
           "dept_color": "#22d3ee",
           "presence": "idle",
-          "activity": "待命 · 最近：[duty-burn-in:39a5561c6d00:modstore-backend-api] 执行一次岗位确定性只读子能力回执。岗位：modstore-backend-api。仅使用 manifest 中已审查的 burn_in_fixture 验证…",
+          "activity": "待命 · 最近：[duty-burn-in:1430bb620729:modstore-backend-api] 执行一次岗位确定性只读子能力回执。岗位：modstore-backend-api。仅使用 manifest 中已审查的 burn_in_fixture 验证…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-07T00:00:58.572292+00:00",
+          "last_activity_at": "2026-08-18T00:05:18.835694+00:00",
           "runs_24h": 1
         },
         {
@@ -131,11 +131,11 @@
           "dept_id": "ops_acquisition",
           "dept_label": "O-A 获客部",
           "dept_color": "#22d3ee",
-          "presence": "working",
-          "activity": "[duty-burn-in:96a7f28b4939:payment-billing-reconciler] 执行一次岗位确定性只读子能力回执。岗位：payment-billing-reconciler。仅使用 manifest 中已审查的 burn_i…",
+          "presence": "idle",
+          "activity": "待命 · 最近：[duty-burn-in:86acf8381520:payment-billing-reconciler] 执行一次岗位确定性只读子能力回执。岗位：payment-billing-reconciler。仅使用 manifest 中已审查的 burn_i…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T22:54:35.191217+00:00",
+          "last_activity_at": "2026-08-17T08:54:35.114815+00:00",
           "runs_24h": 2
         },
         {
@@ -148,7 +148,7 @@
           "activity": "待命 · 最近：岗位任务：巡检 sitemap、robots、页面索引与内部链接完整性 执行模式：execute；风险级别：low。 验收回执：输出断链与索引差异清单；不改业务后端。 必须使用真实输入与工具结果；缺少数据时明确标记，不得用回显或虚构数据冒充完成。",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T18:12:59.480592+00:00",
+          "last_activity_at": "2026-08-17T18:13:33.532089+00:00",
           "runs_24h": 2
         },
         {
@@ -161,7 +161,7 @@
           "activity": "待命 · 最近：你是事故处理小组的 verify。事件类型：change_request.created。问题摘要：write release/VERSION (5 chars)。 回复必须说人话：先给结论/状态，再说原因，再说下一步；不要直接倾倒 JSON、内部字段或…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T22:01:14.277169+00:00",
+          "last_activity_at": "2026-08-17T22:01:08.734721+00:00",
           "runs_24h": 2
         },
         {
@@ -171,11 +171,11 @@
           "dept_label": "O-A 获客部",
           "dept_color": "#22d3ee",
           "presence": "alert",
-          "activity": "你是事故处理小组的 verify。事件类型：git.push。问题摘要：本地 HEAD 由 213716e3de → e6877994b3。 回复必须说人话：先给结论/状态，再说原因，再说下一步；不要直接倾倒 JSON、内部字段或英文模板。你的任务是验证…",
+          "activity": "[duty-burn-in:21697d37a8d0:test-qa-runner] 执行一次岗位确定性只读子能力回执。岗位：test-qa-runner。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契约；不得…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-07T00:00:58.572591+00:00",
-          "runs_24h": 68
+          "last_activity_at": "2026-08-18T00:05:18.835896+00:00",
+          "runs_24h": 14
         },
         {
           "employee_id": "user-customer-service-officer",
@@ -183,11 +183,11 @@
           "dept_id": "ops_acquisition",
           "dept_label": "O-A 获客部",
           "dept_color": "#22d3ee",
-          "presence": "idle",
-          "activity": "待命 · 最近：[duty-burn-in:f1494488b71a:user-customer-service-officer] 执行一次岗位确定性只读子能力回执。岗位：user-customer-service-officer。仅使用 manifest 中已审查的 …",
+          "presence": "working",
+          "activity": "[duty-burn-in:a8313579d053:user-customer-service-officer] 执行一次岗位确定性只读子能力回执。岗位：user-customer-service-officer。仅使用 manifest 中已审查的 …",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T11:54:35.606291+00:00",
+          "last_activity_at": "2026-08-17T23:54:34.508752+00:00",
           "runs_24h": 1
         }
       ]
@@ -210,11 +210,11 @@
           "dept_label": "O-B 伙伴部",
           "dept_color": "#4ade80",
           "presence": "idle",
-          "activity": "待命 · 最近：[duty-burn-in:f160baccc2c2:ecosystem-delivery-reporter] 执行一次岗位确定性只读子能力回执。岗位：ecosystem-delivery-reporter。仅使用 manifest 中已审查的 burn…",
+          "activity": "待命 · 最近：[duty-burn-in:fb9c9e1e5d38:ecosystem-delivery-reporter] 执行一次岗位确定性只读子能力回执。岗位：ecosystem-delivery-reporter。仅使用 manifest 中已审查的 burn…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T15:54:34.250306+00:00",
-          "runs_24h": 2
+          "last_activity_at": "2026-08-17T01:54:34.376217+00:00",
+          "runs_24h": 1
         },
         {
           "employee_id": "ecosystem-investor-portal-officer",
@@ -223,10 +223,10 @@
           "dept_label": "O-B 伙伴部",
           "dept_color": "#4ade80",
           "presence": "idle",
-          "activity": "待命 · 最近：[duty-burn-in:56e044c566d2:ecosystem-investor-portal-officer] 执行一次岗位确定性只读子能力回执。岗位：ecosystem-investor-portal-officer。仅使用 manifes…",
+          "activity": "待命 · 最近：[duty-burn-in:7273897f194c:ecosystem-investor-portal-officer] 执行一次岗位确定性只读子能力回执。岗位：ecosystem-investor-portal-officer。仅使用 manifes…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T04:54:34.304386+00:00",
+          "last_activity_at": "2026-08-17T15:54:34.333962+00:00",
           "runs_24h": 1
         },
         {
@@ -236,10 +236,10 @@
           "dept_label": "O-B 伙伴部",
           "dept_color": "#4ade80",
           "presence": "idle",
-          "activity": "待命 · 最近：[duty-burn-in:f160baccc2c2:ecosystem-joint-catalog-officer] 执行一次岗位确定性只读子能力回执。岗位：ecosystem-joint-catalog-officer。仅使用 manifest 中已…",
+          "activity": "待命 · 最近：[duty-burn-in:fb9c9e1e5d38:ecosystem-joint-catalog-officer] 执行一次岗位确定性只读子能力回执。岗位：ecosystem-joint-catalog-officer。仅使用 manifest 中已…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T15:54:34.539682+00:00",
+          "last_activity_at": "2026-08-17T01:54:34.642771+00:00",
           "runs_24h": 1
         },
         {
@@ -249,11 +249,11 @@
           "dept_label": "O-B 伙伴部",
           "dept_color": "#4ade80",
           "presence": "idle",
-          "activity": "编制待命",
+          "activity": "待命 · 最近：[duty-burn-in:4463b357e2d4:ecosystem-partner-onboard-officer] 执行一次岗位确定性只读子能力回执。岗位：ecosystem-partner-onboard-officer。仅使用 manifes…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": null,
-          "runs_24h": 0
+          "last_activity_at": "2026-08-17T10:54:34.441445+00:00",
+          "runs_24h": 1
         },
         {
           "employee_id": "ecosystem-revenue-share-reconciler",
@@ -262,11 +262,11 @@
           "dept_label": "O-B 伙伴部",
           "dept_color": "#4ade80",
           "presence": "idle",
-          "activity": "待命 · 最近：[duty-burn-in:45d0fa115d05:ecosystem-revenue-share-reconciler] 执行一次岗位确定性只读子能力回执。岗位：ecosystem-revenue-share-reconciler。仅使用 manif…",
+          "activity": "待命 · 最近：[duty-burn-in:61801fed22f3:ecosystem-revenue-share-reconciler] 执行一次岗位确定性只读子能力回执。岗位：ecosystem-revenue-share-reconciler。仅使用 manif…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T16:54:34.275704+00:00",
-          "runs_24h": 2
+          "last_activity_at": "2026-08-17T02:54:34.354087+00:00",
+          "runs_24h": 1
         }
       ]
     },
@@ -276,8 +276,8 @@
       "color": "#fb923c",
       "employee_count": 10,
       "counts": {
-        "working": 1,
-        "alert": 0,
+        "working": 0,
+        "alert": 1,
         "idle": 9
       },
       "employees": [
@@ -287,11 +287,11 @@
           "dept_id": "prod_web",
           "dept_label": "P-W 网站部",
           "dept_color": "#fb923c",
-          "presence": "working",
-          "activity": "[duty-burn-in:bb1d2d0ef660:daily-orchestrator] 执行一次岗位确定性只读子能力回执。岗位：daily-orchestrator。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输…",
+          "presence": "idle",
+          "activity": "待命 · 最近：[schedule.tick] backup-event-subscriber",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T23:54:34.660180+00:00",
+          "last_activity_at": "2026-08-17T20:00:35.555785+00:00",
           "runs_24h": 2
         },
         {
@@ -301,10 +301,10 @@
           "dept_label": "P-W 网站部",
           "dept_color": "#fb923c",
           "presence": "idle",
-          "activity": "待命 · 最近：[duty-burn-in:7a1788d414a2:doc-knowledge-curator] 执行一次岗位确定性只读子能力回执。岗位：doc-knowledge-curator。仅使用 manifest 中已审查的 burn_in_fixture …",
+          "activity": "待命 · 最近：岗位任务：把已验证事实、修复模式和决策沉淀到知识库 执行模式：execute；风险级别：low。 验收回执：只收录有来源事实；知识条目可追溯。 必须使用真实输入与工具结果；缺少数据时明确标记，不得用回显或虚构数据冒充完成。",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T14:54:36.171724+00:00",
+          "last_activity_at": "2026-08-17T07:30:01.825046+00:00",
           "runs_24h": 3
         },
         {
@@ -314,10 +314,10 @@
           "dept_label": "P-W 网站部",
           "dept_color": "#fb923c",
           "presence": "idle",
-          "activity": "待命 · 最近：[duty-burn-in:416ac72835b7:employee-pack-curator] 执行一次岗位确定性只读子能力回执。岗位：employee-pack-curator。仅使用 manifest 中已审查的 burn_in_fixture …",
+          "activity": "待命 · 最近：[duty-burn-in:cfb394021ab0:employee-pack-curator] 执行一次岗位确定性只读子能力回执。岗位：employee-pack-curator。仅使用 manifest 中已审查的 burn_in_fixture …",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T01:54:36.171015+00:00",
+          "last_activity_at": "2026-08-17T12:54:36.571128+00:00",
           "runs_24h": 1
         },
         {
@@ -340,10 +340,10 @@
           "dept_label": "P-W 网站部",
           "dept_color": "#fb923c",
           "presence": "idle",
-          "activity": "待命 · 最近：[duty-burn-in:6e40a0593743:java-payment-bridge-officer] 执行一次岗位确定性只读子能力回执。岗位：java-payment-bridge-officer。仅使用 manifest 中已审查的 burn…",
+          "activity": "待命 · 最近：[duty-burn-in:448ab94b56fb:java-payment-bridge-officer] 执行一次岗位确定性只读子能力回执。岗位：java-payment-bridge-officer。仅使用 manifest 中已审查的 burn…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T18:54:34.389640+00:00",
+          "last_activity_at": "2026-08-17T04:54:34.526819+00:00",
           "runs_24h": 1
         },
         {
@@ -353,10 +353,10 @@
           "dept_label": "P-W 网站部",
           "dept_color": "#fb923c",
           "presence": "idle",
-          "activity": "待命 · 最近：[duty-burn-in:fff68a705b52:market-frontend-dev] 执行一次岗位确定性只读子能力回执。岗位：market-frontend-dev。仅使用 manifest 中已审查的 burn_in_fixture 验证声明…",
+          "activity": "待命 · 最近：[duty-burn-in:d78d52901645:market-frontend-dev] 执行一次岗位确定性只读子能力回执。岗位：market-frontend-dev。仅使用 manifest 中已审查的 burn_in_fixture 验证声明…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T19:54:35.900068+00:00",
+          "last_activity_at": "2026-08-17T05:54:36.205224+00:00",
           "runs_24h": 1
         },
         {
@@ -369,7 +369,7 @@
           "activity": "待命 · 最近：你是事故处理小组的 scout。事件类型：change_request.created。问题摘要：write release/VERSION (5 chars)。 回复必须说人话：先给结论/状态，再说原因，再说下一步；不要直接倾倒 JSON、内部字段或英…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T22:00:15.883988+00:00",
+          "last_activity_at": "2026-08-17T22:00:14.957219+00:00",
           "runs_24h": 2
         },
         {
@@ -379,10 +379,10 @@
           "dept_label": "P-W 网站部",
           "dept_color": "#fb923c",
           "presence": "idle",
-          "activity": "待命 · 最近：[duty-burn-in:3617962e129a:task-router-officer] 执行一次岗位只读巡检回执。岗位：task-router-officer。任务：按能力、风险和负载把任务路由给正确员工。必须至少调用一次工作区只读工具获取真实证…",
+          "activity": "待命 · 最近：[duty-burn-in:f3475e684fd8:task-router-officer] 执行一次岗位只读巡检回执。岗位：task-router-officer。任务：按能力、风险和负载把任务路由给正确员工。必须至少调用一次工作区只读工具获取真实证…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-07T00:00:58.572445+00:00",
+          "last_activity_at": "2026-08-18T00:05:18.835798+00:00",
           "runs_24h": 1
         },
         {
@@ -391,12 +391,12 @@
           "dept_id": "prod_web",
           "dept_label": "P-W 网站部",
           "dept_color": "#fb923c",
-          "presence": "idle",
-          "activity": "待命 · 最近：你是事故处理小组的 fix。事件类型：git.push。问题摘要：本地 HEAD 由 213716e3de → e6877994b3。 回复必须说人话：先给结论/状态，再说原因，再说下一步；不要直接倾倒 JSON、内部字段或英文模板。你的任务是执行或委派…",
+          "presence": "alert",
+          "activity": "你是事故处理小组的 fix。事件类型：log.anomaly。问题摘要：bounded retention completed but storage pressure remains。 回复必须说人话：先给结论/状态，再说原因，再说下一步；不要直接倾倒…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T14:17:01.553897+00:00",
-          "runs_24h": 40
+          "last_activity_at": "2026-08-17T10:55:55.416866+00:00",
+          "runs_24h": 12
         },
         {
           "employee_id": "workbench-ux-stylist",
@@ -405,11 +405,11 @@
           "dept_label": "P-W 网站部",
           "dept_color": "#fb923c",
           "presence": "idle",
-          "activity": "待命 · 最近：岗位任务：检查工作台信息层级、可达性与响应式布局 执行模式：observe_and_propose；风险级别：medium。 验收回执：桌面与移动端无阻断；输出可复现视觉证据。 必须使用真实输入与工具结果；缺少数据时明确标记，不得用回显或虚构数据冒充完成。",
+          "activity": "编制待命",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T06:46:30.705219+00:00",
-          "runs_24h": 1
+          "last_activity_at": null,
+          "runs_24h": 0
         }
       ]
     },
@@ -419,9 +419,9 @@
       "color": "#a78bfa",
       "employee_count": 17,
       "counts": {
-        "working": 5,
+        "working": 3,
         "alert": 0,
-        "idle": 12
+        "idle": 14
       },
       "employees": [
         {
@@ -430,11 +430,11 @@
           "dept_id": "prod_mod",
           "dept_label": "P-M Mod 部",
           "dept_color": "#a78bfa",
-          "presence": "working",
-          "activity": "[duty-burn-in:bb1d2d0ef660:artifact-generator] 执行一次岗位确定性只读子能力回执。岗位：artifact-generator。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输…",
+          "presence": "idle",
+          "activity": "待命 · 最近：[duty-burn-in:38e069eba753:artifact-generator] 执行一次岗位确定性只读子能力回执。岗位：artifact-generator。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T23:54:34.312153+00:00",
+          "last_activity_at": "2026-08-17T09:54:34.364298+00:00",
           "runs_24h": 1
         },
         {
@@ -447,8 +447,8 @@
           "activity": "你是事故处理小组的 fix。事件类型：on_error。问题摘要：预测维护：未来 24h 可能出现 scheduler 类 incident，confidence=0.74。 回复必须说人话：先给结论/状态，再说原因，再说下一步；不要直接倾倒 JSON、…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T23:55:14.915642+00:00",
-          "runs_24h": 5
+          "last_activity_at": "2026-08-17T23:55:05.330299+00:00",
+          "runs_24h": 4
         },
         {
           "employee_id": "employee-interview-assistant",
@@ -457,11 +457,11 @@
           "dept_label": "P-M Mod 部",
           "dept_color": "#a78bfa",
           "presence": "idle",
-          "activity": "待命 · 最近：[duty-burn-in:45d0fa115d05:employee-interview-assistant] 执行一次岗位确定性只读子能力回执。岗位：employee-interview-assistant。仅使用 manifest 中已审查的 bu…",
+          "activity": "待命 · 最近：[duty-burn-in:61801fed22f3:employee-interview-assistant] 执行一次岗位确定性只读子能力回执。岗位：employee-interview-assistant。仅使用 manifest 中已审查的 bu…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T16:54:34.737260+00:00",
-          "runs_24h": 2
+          "last_activity_at": "2026-08-17T02:54:34.785605+00:00",
+          "runs_24h": 1
         },
         {
           "employee_id": "employee-pack-quality-interviewer",
@@ -470,10 +470,10 @@
           "dept_label": "P-M Mod 部",
           "dept_color": "#a78bfa",
           "presence": "idle",
-          "activity": "待命 · 最近：[duty-burn-in:098aa4e88832:employee-pack-quality-interviewer] 执行一次岗位确定性只读子能力回执。岗位：employee-pack-quality-interviewer。仅使用 manifes…",
+          "activity": "待命 · 最近：[duty-burn-in:66b6e328b7ee:employee-pack-quality-interviewer] 执行一次岗位确定性只读子能力回执。岗位：employee-pack-quality-interviewer。仅使用 manifes…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T17:54:34.326083+00:00",
+          "last_activity_at": "2026-08-17T03:54:34.363026+00:00",
           "runs_24h": 1
         },
         {
@@ -483,10 +483,10 @@
           "dept_label": "P-M Mod 部",
           "dept_color": "#a78bfa",
           "presence": "idle",
-          "activity": "待命 · 最近：[duty-burn-in:56e044c566d2:employee-planner] 执行一次岗位确定性只读子能力回执。岗位：employee-planner。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契…",
+          "activity": "待命 · 最近：[duty-burn-in:7273897f194c:employee-planner] 执行一次岗位确定性只读子能力回执。岗位：employee-planner。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T04:54:34.483886+00:00",
+          "last_activity_at": "2026-08-17T15:54:34.512798+00:00",
           "runs_24h": 1
         },
         {
@@ -496,10 +496,10 @@
           "dept_label": "P-M Mod 部",
           "dept_color": "#a78bfa",
           "presence": "idle",
-          "activity": "待命 · 最近：[duty-burn-in:a99999151df8:hex-quality-assessor] 执行一次岗位确定性只读子能力回执。岗位：hex-quality-assessor。仅使用 manifest 中已审查的 burn_in_fixture 验证…",
+          "activity": "待命 · 最近：[duty-burn-in:d0820bac9bcb:hex-quality-assessor] 执行一次岗位确定性只读子能力回执。岗位：hex-quality-assessor。仅使用 manifest 中已审查的 burn_in_fixture 验证…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T06:54:34.398501+00:00",
+          "last_activity_at": "2026-08-17T17:54:34.484574+00:00",
           "runs_24h": 1
         },
         {
@@ -509,10 +509,10 @@
           "dept_label": "P-M Mod 部",
           "dept_color": "#a78bfa",
           "presence": "idle",
-          "activity": "待命 · 最近：[duty-burn-in:098aa4e88832:host-checker] 执行一次岗位确定性只读子能力回执。岗位：host-checker。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契约；不得声称完整…",
+          "activity": "待命 · 最近：[duty-burn-in:66b6e328b7ee:host-checker] 执行一次岗位确定性只读子能力回执。岗位：host-checker。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契约；不得声称完整…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T17:54:34.498298+00:00",
+          "last_activity_at": "2026-08-17T03:54:34.544040+00:00",
           "runs_24h": 1
         },
         {
@@ -522,10 +522,10 @@
           "dept_label": "P-M Mod 部",
           "dept_color": "#a78bfa",
           "presence": "idle",
-          "activity": "待命 · 最近：[duty-burn-in:6e40a0593743:intent-analyst] 执行一次岗位确定性只读子能力回执。岗位：intent-analyst。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契约；不得…",
+          "activity": "待命 · 最近：[duty-burn-in:448ab94b56fb:intent-analyst] 执行一次岗位确定性只读子能力回执。岗位：intent-analyst。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契约；不得…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T18:54:34.135459+00:00",
+          "last_activity_at": "2026-08-17T04:54:34.260037+00:00",
           "runs_24h": 1
         },
         {
@@ -535,10 +535,10 @@
           "dept_label": "P-M Mod 部",
           "dept_color": "#a78bfa",
           "presence": "idle",
-          "activity": "待命 · 最近：[duty-burn-in:3617962e129a:miniapp-builder] 执行一次岗位确定性只读子能力回执。岗位：miniapp-builder。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契约；…",
+          "activity": "待命 · 最近：[duty-burn-in:4af3a5b1e99e:miniapp-builder] 执行一次岗位确定性只读子能力回执。岗位：miniapp-builder。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契约；…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T09:54:34.209707+00:00",
+          "last_activity_at": "2026-08-17T20:54:34.274950+00:00",
           "runs_24h": 1
         },
         {
@@ -548,10 +548,10 @@
           "dept_label": "P-M Mod 部",
           "dept_color": "#a78bfa",
           "presence": "idle",
-          "activity": "待命 · 最近：[duty-burn-in:ed54b4ef1160:mods-and-eskill-curator] 执行一次岗位确定性只读子能力回执。岗位：mods-and-eskill-curator。仅使用 manifest 中已审查的 burn_in_fixt…",
+          "activity": "待命 · 最近：[duty-burn-in:889231e7ae57:mods-and-eskill-curator] 执行一次岗位确定性只读子能力回执。岗位：mods-and-eskill-curator。仅使用 manifest 中已审查的 burn_in_fixt…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T20:54:34.639513+00:00",
+          "last_activity_at": "2026-08-17T06:54:34.649255+00:00",
           "runs_24h": 1
         },
         {
@@ -560,11 +560,11 @@
           "dept_id": "prod_mod",
           "dept_label": "P-M Mod 部",
           "dept_color": "#a78bfa",
-          "presence": "working",
-          "activity": "[duty-burn-in:96a7f28b4939:pack-registrar] 执行一次岗位确定性只读子能力回执。岗位：pack-registrar。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契约；不得…",
+          "presence": "idle",
+          "activity": "待命 · 最近：[duty-burn-in:86acf8381520:pack-registrar] 执行一次岗位确定性只读子能力回执。岗位：pack-registrar。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契约；不得…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T22:54:34.204018+00:00",
+          "last_activity_at": "2026-08-17T08:54:34.094572+00:00",
           "runs_24h": 1
         },
         {
@@ -574,11 +574,11 @@
           "dept_label": "P-M Mod 部",
           "dept_color": "#a78bfa",
           "presence": "idle",
-          "activity": "编制待命",
+          "activity": "待命 · 最近：[duty-burn-in:4463b357e2d4:push-update-context-officer] 执行一次岗位确定性只读子能力回执。岗位：push-update-context-officer。仅使用 manifest 中已审查的 burn…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": null,
-          "runs_24h": 0
+          "last_activity_at": "2026-08-17T10:54:35.626319+00:00",
+          "runs_24h": 1
         },
         {
           "employee_id": "quality-validator",
@@ -587,10 +587,10 @@
           "dept_label": "P-M Mod 部",
           "dept_color": "#a78bfa",
           "presence": "idle",
-          "activity": "待命 · 最近：岗位任务：验证员工包 manifest、Python、资产和一致性 执行模式：execute；风险级别：low。 验收回执：静态校验全部通过；失败产出明确路径。 必须使用真实输入与工具结果；缺少数据时明确标记，不得用回显或虚构数据冒充完成。",
+          "activity": "待命 · 最近：[duty-burn-in:41d9e7eb13a4:quality-validator] 执行一次岗位确定性只读子能力回执。岗位：quality-validator。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T03:30:00.424524+00:00",
+          "last_activity_at": "2026-08-17T11:54:34.315426+00:00",
           "runs_24h": 2
         },
         {
@@ -603,7 +603,7 @@
           "activity": "你是事故处理小组的 verify。事件类型：on_error。问题摘要：预测维护：未来 24h 可能出现 scheduler 类 incident，confidence=0.74。 回复必须说人话：先给结论/状态，再说原因，再说下一步；不要直接倾倒 JS…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T23:55:37.744725+00:00",
+          "last_activity_at": "2026-08-17T23:55:23.942132+00:00",
           "runs_24h": 5
         },
         {
@@ -613,10 +613,10 @@
           "dept_label": "P-M Mod 部",
           "dept_color": "#a78bfa",
           "presence": "idle",
-          "activity": "待命 · 最近：[duty-burn-in:416ac72835b7:script-binder] 执行一次岗位确定性只读子能力回执。岗位：script-binder。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契约；不得声称…",
+          "activity": "待命 · 最近：[duty-burn-in:cfb394021ab0:script-binder] 执行一次岗位确定性只读子能力回执。岗位：script-binder。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契约；不得声称…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T01:54:36.347055+00:00",
+          "last_activity_at": "2026-08-17T12:54:36.764590+00:00",
           "runs_24h": 1
         },
         {
@@ -626,10 +626,10 @@
           "dept_label": "P-M Mod 部",
           "dept_color": "#a78bfa",
           "presence": "idle",
-          "activity": "待命 · 最近：[duty-burn-in:a3528ce0f146:self-checker] 执行一次岗位只读巡检回执。岗位：self-checker。任务：让产物按自身验收标准执行自检并报告缺口。必须至少调用一次工作区只读工具获取真实证据；禁止写文件、运行命令、访…",
+          "activity": "待命 · 最近：[duty-burn-in:4af3a5b1e99e:self-checker] 执行一次岗位只读巡检回执。岗位：self-checker。任务：让产物按自身验收标准执行自检并报告缺口。必须至少调用一次工作区只读工具获取真实证据；禁止写文件、运行命令、访…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T02:56:24.022745+00:00",
+          "last_activity_at": "2026-08-17T20:55:23.603538+00:00",
           "runs_24h": 1
         },
         {
@@ -642,7 +642,7 @@
           "activity": "你是事故处理小组的 scout。事件类型：on_error。问题摘要：预测维护：未来 24h 可能出现 scheduler 类 incident，confidence=0.74。 回复必须说人话：先给结论/状态，再说原因，再说下一步；不要直接倾倒 JSO…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T23:54:57.038194+00:00",
+          "last_activity_at": "2026-08-17T23:54:51.510033+00:00",
           "runs_24h": 5
         }
       ]
@@ -653,9 +653,9 @@
       "color": "#facc15",
       "employee_count": 8,
       "counts": {
-        "working": 0,
+        "working": 1,
         "alert": 0,
-        "idle": 8
+        "idle": 7
       },
       "employees": [
         {
@@ -665,11 +665,11 @@
           "dept_label": "P-S 软件部",
           "dept_color": "#facc15",
           "presence": "idle",
-          "activity": "待命 · 最近：[duty-burn-in:1393c7ee1331:dbops-engineer] 执行一次岗位确定性只读子能力回执。岗位：dbops-engineer。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契约；不得…",
+          "activity": "编制待命",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T13:54:34.945865+00:00",
-          "runs_24h": 1
+          "last_activity_at": null,
+          "runs_24h": 0
         },
         {
           "employee_id": "fhd-core-maintainer",
@@ -691,10 +691,10 @@
           "dept_label": "P-S 软件部",
           "dept_color": "#facc15",
           "presence": "idle",
-          "activity": "待命 · 最近：[duty-burn-in:c2c3453b3b26:github-pr-gatekeeper] 执行一次岗位确定性只读子能力回执。岗位：github-pr-gatekeeper。仅使用 manifest 中已审查的 burn_in_fixture 验证…",
+          "activity": "待命 · 最近：[duty-burn-in:0ef495f05a35:github-pr-gatekeeper] 执行一次岗位确定性只读子能力回执。岗位：github-pr-gatekeeper。仅使用 manifest 中已审查的 burn_in_fixture 验证…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T05:54:34.441949+00:00",
+          "last_activity_at": "2026-08-17T16:54:34.615459+00:00",
           "runs_24h": 1
         },
         {
@@ -704,10 +704,10 @@
           "dept_label": "P-S 软件部",
           "dept_color": "#facc15",
           "presence": "idle",
-          "activity": "待命 · 最近：[duty-burn-in:fff68a705b52:llm-ops-engineer] 执行一次岗位确定性只读子能力回执。岗位：llm-ops-engineer。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契…",
+          "activity": "待命 · 最近：岗位任务：巡检模型可用性、配额、延迟、成本与降级链，并盘点聊天/生图/生视频/CLI 等可用 AI 资产接口 执行模式：execute；风险级别：low。 验收回执：输出 provider/model 健康矩阵；输出 list_available_ai_…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T19:54:34.406107+00:00",
+          "last_activity_at": "2026-08-17T19:31:31.370530+00:00",
           "runs_24h": 2
         },
         {
@@ -717,10 +717,10 @@
           "dept_label": "P-S 软件部",
           "dept_color": "#facc15",
           "presence": "idle",
-          "activity": "待命 · 最近：[duty-burn-in:1ecb67de100c:log-monitor-incident] 执行一次岗位确定性只读子能力回执。岗位：log-monitor-incident。仅使用 manifest 中已审查的 burn_in_fixture 验证…",
+          "activity": "待命 · 最近：[duty-burn-in:9beeb742558a:log-monitor-incident] 执行一次岗位确定性只读子能力回执。岗位：log-monitor-incident。仅使用 manifest 中已审查的 burn_in_fixture 验证…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T08:54:35.621924+00:00",
+          "last_activity_at": "2026-08-17T19:54:35.598181+00:00",
           "runs_24h": 1
         },
         {
@@ -730,10 +730,10 @@
           "dept_label": "P-S 软件部",
           "dept_color": "#facc15",
           "presence": "idle",
-          "activity": "待命 · 最近：[duty-burn-in:8029aac23fc7:mobile-android-release-officer] 执行一次岗位确定性只读子能力回执。岗位：mobile-android-release-officer。仅使用 manifest 中已审查…",
+          "activity": "待命 · 最近：[duty-burn-in:8d5762447722:mobile-android-release-officer] 执行一次岗位确定性只读子能力回执。岗位：mobile-android-release-officer。仅使用 manifest 中已审查…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T10:54:34.491995+00:00",
+          "last_activity_at": "2026-08-17T21:54:34.503039+00:00",
           "runs_24h": 1
         },
         {
@@ -743,10 +743,10 @@
           "dept_label": "P-S 软件部",
           "dept_color": "#facc15",
           "presence": "idle",
-          "activity": "待命 · 最近：[duty-burn-in:8029aac23fc7:mobile-ios-release-officer] 执行一次岗位确定性只读子能力回执。岗位：mobile-ios-release-officer。仅使用 manifest 中已审查的 burn_i…",
+          "activity": "待命 · 最近：[duty-burn-in:8d5762447722:mobile-ios-release-officer] 执行一次岗位确定性只读子能力回执。岗位：mobile-ios-release-officer。仅使用 manifest 中已审查的 burn_i…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T10:54:34.837244+00:00",
+          "last_activity_at": "2026-08-17T21:54:34.844675+00:00",
           "runs_24h": 1
         },
         {
@@ -755,11 +755,11 @@
           "dept_id": "prod_software",
           "dept_label": "P-S 软件部",
           "dept_color": "#facc15",
-          "presence": "idle",
-          "activity": "待命 · 最近：[duty-burn-in:f1494488b71a:top-architect] 执行一次岗位确定性只读子能力回执。岗位：top-architect。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契约；不得声称…",
+          "presence": "working",
+          "activity": "[duty-burn-in:21697d37a8d0:top-architect] 执行一次岗位确定性只读子能力回执。岗位：top-architect。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契约；不得声称…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T11:54:35.267511+00:00",
+          "last_activity_at": "2026-08-17T22:54:35.417707+00:00",
           "runs_24h": 1
         }
       ]
@@ -782,11 +782,11 @@
           "dept_label": "S-R 归档部",
           "dept_color": "#79c0ff",
           "presence": "idle",
-          "activity": "待命 · 最近：[duty-burn-in:75f4673c77cb:legacy-archive-curator] 执行一次岗位确定性只读子能力回执。岗位：legacy-archive-curator。仅使用 manifest 中已审查的 burn_in_fixtur…",
+          "activity": "待命 · 最近：岗位任务：识别遗留入口、重复资产与可归档候选 执行模式：observe_and_propose；风险级别：medium。 验收回执：给出引用证据；归档前保留恢复路径。 必须使用真实输入与工具结果；缺少数据时明确标记，不得用回显或虚构数据冒充完成。",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T07:54:34.739009+00:00",
-          "runs_24h": 1
+          "last_activity_at": "2026-08-17T19:45:00.835866+00:00",
+          "runs_24h": 2
         },
         {
           "employee_id": "retention-officer",
@@ -798,8 +798,8 @@
           "activity": "待命 · 最近：janitor.scheduled.dry_run",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T20:00:00.532994+00:00",
-          "runs_24h": 3
+          "last_activity_at": "2026-08-17T20:00:00.381990+00:00",
+          "runs_24h": 12
         },
         {
           "employee_id": "security-secrets-guard",
@@ -808,10 +808,10 @@
           "dept_label": "S-R 归档部",
           "dept_color": "#79c0ff",
           "presence": "idle",
-          "activity": "待命 · 最近：[duty-burn-in:a3528ce0f146:security-secrets-guard] 执行一次岗位确定性只读子能力回执。岗位：security-secrets-guard。仅使用 manifest 中已审查的 burn_in_fixtur…",
+          "activity": "待命 · 最近：[duty-burn-in:7563bc348a63:security-secrets-guard] 执行一次岗位确定性只读子能力回执。岗位：security-secrets-guard。仅使用 manifest 中已审查的 burn_in_fixtur…",
           "open_action_items": 0,
           "in_progress_action_items": 0,
-          "last_activity_at": "2026-08-06T02:54:35.363808+00:00",
+          "last_activity_at": "2026-08-17T13:54:35.408230+00:00",
           "runs_24h": 1
         }
       ]
@@ -824,11 +824,11 @@
       "dept_id": "prod_mod",
       "dept_label": "P-M Mod 部",
       "dept_color": "#a78bfa",
-      "presence": "working",
-      "activity": "[duty-burn-in:bb1d2d0ef660:artifact-generator] 执行一次岗位确定性只读子能力回执。岗位：artifact-generator。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输…",
+      "presence": "idle",
+      "activity": "待命 · 最近：[duty-burn-in:38e069eba753:artifact-generator] 执行一次岗位确定性只读子能力回执。岗位：artifact-generator。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T23:54:34.312153+00:00",
+      "last_activity_at": "2026-08-17T09:54:34.364298+00:00",
       "runs_24h": 1
     },
     {
@@ -841,8 +841,8 @@
       "activity": "[ops.change_request.submitted] write release/VERSION (5 chars)",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T22:01:41.604838+00:00",
-      "runs_24h": 57
+      "last_activity_at": "2026-08-17T22:00:13.821257+00:00",
+      "runs_24h": 12
     },
     {
       "employee_id": "code-validator",
@@ -854,8 +854,8 @@
       "activity": "你是事故处理小组的 fix。事件类型：on_error。问题摘要：预测维护：未来 24h 可能出现 scheduler 类 incident，confidence=0.74。 回复必须说人话：先给结论/状态，再说原因，再说下一步；不要直接倾倒 JSON、…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T23:55:14.915642+00:00",
-      "runs_24h": 5
+      "last_activity_at": "2026-08-17T23:55:05.330299+00:00",
+      "runs_24h": 4
     },
     {
       "employee_id": "daily-orchestrator",
@@ -863,11 +863,11 @@
       "dept_id": "prod_web",
       "dept_label": "P-W 网站部",
       "dept_color": "#fb923c",
-      "presence": "working",
-      "activity": "[duty-burn-in:bb1d2d0ef660:daily-orchestrator] 执行一次岗位确定性只读子能力回执。岗位：daily-orchestrator。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输…",
+      "presence": "idle",
+      "activity": "待命 · 最近：[schedule.tick] backup-event-subscriber",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T23:54:34.660180+00:00",
+      "last_activity_at": "2026-08-17T20:00:35.555785+00:00",
       "runs_24h": 2
     },
     {
@@ -877,11 +877,11 @@
       "dept_label": "P-S 软件部",
       "dept_color": "#facc15",
       "presence": "idle",
-      "activity": "待命 · 最近：[duty-burn-in:1393c7ee1331:dbops-engineer] 执行一次岗位确定性只读子能力回执。岗位：dbops-engineer。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契约；不得…",
+      "activity": "编制待命",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T13:54:34.945865+00:00",
-      "runs_24h": 1
+      "last_activity_at": null,
+      "runs_24h": 0
     },
     {
       "employee_id": "delivery-receipt-officer",
@@ -889,12 +889,12 @@
       "dept_id": "ops_acquisition",
       "dept_label": "O-A 获客部",
       "dept_color": "#22d3ee",
-      "presence": "working",
-      "activity": "[employee.task.done] deploy-release-officer employee.task.done",
+      "presence": "idle",
+      "activity": "待命 · 最近：[employee.task.done] deploy-release-officer employee.task.done",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T22:05:04.446683+00:00",
-      "runs_24h": 15
+      "last_activity_at": "2026-08-17T22:05:03.794763+00:00",
+      "runs_24h": 11
     },
     {
       "employee_id": "deploy-release-officer",
@@ -903,10 +903,10 @@
       "dept_label": "O-A 获客部",
       "dept_color": "#22d3ee",
       "presence": "alert",
-      "activity": "CR#55 窄 CI 未通过（py_compile） 详情：员工 deploy-release-officer 产出的 CR 在自动审批前未通过窄验证。 path=release/VERSION failed_step=py_compile steps=[{'ok': False, 'step': 'py_compile', 'stderr': ' File \"/tmp/tmpxbotoydu.py\", line 1\\n 0.0.1\\n ^^\\nSyntaxError: invalid syntax\\n'}] 建议类型：cr_narrow_ci_failure 上下文：{\"employee_id\": \"deploy-release-officer\"}",
+      "activity": "CR#66 窄 CI 未通过（py_compile） 详情：员工 deploy-release-officer 产出的 CR 在自动审批前未通过窄验证。 path=release/VERSION failed_step=py_compile steps=[{'ok': False, 'step': 'py_compile', 'stderr': ' File \"/tmp/tmpu786v0t0.py\", line 1\\n 0.0.1\\n ^^\\nSyntaxError: invalid syntax\\n'}] 建议类型：cr_narrow_ci_failure 上下文：{\"employee_id\": \"deploy-release-officer\"}",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T22:04:41.735910+00:00",
+      "last_activity_at": "2026-08-17T22:04:25.381223+00:00",
       "runs_24h": 5
     },
     {
@@ -916,10 +916,10 @@
       "dept_label": "P-W 网站部",
       "dept_color": "#fb923c",
       "presence": "idle",
-      "activity": "待命 · 最近：[duty-burn-in:7a1788d414a2:doc-knowledge-curator] 执行一次岗位确定性只读子能力回执。岗位：doc-knowledge-curator。仅使用 manifest 中已审查的 burn_in_fixture …",
+      "activity": "待命 · 最近：岗位任务：把已验证事实、修复模式和决策沉淀到知识库 执行模式：execute；风险级别：low。 验收回执：只收录有来源事实；知识条目可追溯。 必须使用真实输入与工具结果；缺少数据时明确标记，不得用回显或虚构数据冒充完成。",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T14:54:36.171724+00:00",
+      "last_activity_at": "2026-08-17T07:30:01.825046+00:00",
       "runs_24h": 3
     },
     {
@@ -929,11 +929,11 @@
       "dept_label": "O-B 伙伴部",
       "dept_color": "#4ade80",
       "presence": "idle",
-      "activity": "待命 · 最近：[duty-burn-in:f160baccc2c2:ecosystem-delivery-reporter] 执行一次岗位确定性只读子能力回执。岗位：ecosystem-delivery-reporter。仅使用 manifest 中已审查的 burn…",
+      "activity": "待命 · 最近：[duty-burn-in:fb9c9e1e5d38:ecosystem-delivery-reporter] 执行一次岗位确定性只读子能力回执。岗位：ecosystem-delivery-reporter。仅使用 manifest 中已审查的 burn…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T15:54:34.250306+00:00",
-      "runs_24h": 2
+      "last_activity_at": "2026-08-17T01:54:34.376217+00:00",
+      "runs_24h": 1
     },
     {
       "employee_id": "ecosystem-investor-portal-officer",
@@ -942,10 +942,10 @@
       "dept_label": "O-B 伙伴部",
       "dept_color": "#4ade80",
       "presence": "idle",
-      "activity": "待命 · 最近：[duty-burn-in:56e044c566d2:ecosystem-investor-portal-officer] 执行一次岗位确定性只读子能力回执。岗位：ecosystem-investor-portal-officer。仅使用 manifes…",
+      "activity": "待命 · 最近：[duty-burn-in:7273897f194c:ecosystem-investor-portal-officer] 执行一次岗位确定性只读子能力回执。岗位：ecosystem-investor-portal-officer。仅使用 manifes…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T04:54:34.304386+00:00",
+      "last_activity_at": "2026-08-17T15:54:34.333962+00:00",
       "runs_24h": 1
     },
     {
@@ -955,10 +955,10 @@
       "dept_label": "O-B 伙伴部",
       "dept_color": "#4ade80",
       "presence": "idle",
-      "activity": "待命 · 最近：[duty-burn-in:f160baccc2c2:ecosystem-joint-catalog-officer] 执行一次岗位确定性只读子能力回执。岗位：ecosystem-joint-catalog-officer。仅使用 manifest 中已…",
+      "activity": "待命 · 最近：[duty-burn-in:fb9c9e1e5d38:ecosystem-joint-catalog-officer] 执行一次岗位确定性只读子能力回执。岗位：ecosystem-joint-catalog-officer。仅使用 manifest 中已…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T15:54:34.539682+00:00",
+      "last_activity_at": "2026-08-17T01:54:34.642771+00:00",
       "runs_24h": 1
     },
     {
@@ -968,11 +968,11 @@
       "dept_label": "O-B 伙伴部",
       "dept_color": "#4ade80",
       "presence": "idle",
-      "activity": "编制待命",
+      "activity": "待命 · 最近：[duty-burn-in:4463b357e2d4:ecosystem-partner-onboard-officer] 执行一次岗位确定性只读子能力回执。岗位：ecosystem-partner-onboard-officer。仅使用 manifes…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": null,
-      "runs_24h": 0
+      "last_activity_at": "2026-08-17T10:54:34.441445+00:00",
+      "runs_24h": 1
     },
     {
       "employee_id": "ecosystem-revenue-share-reconciler",
@@ -981,11 +981,11 @@
       "dept_label": "O-B 伙伴部",
       "dept_color": "#4ade80",
       "presence": "idle",
-      "activity": "待命 · 最近：[duty-burn-in:45d0fa115d05:ecosystem-revenue-share-reconciler] 执行一次岗位确定性只读子能力回执。岗位：ecosystem-revenue-share-reconciler。仅使用 manif…",
+      "activity": "待命 · 最近：[duty-burn-in:61801fed22f3:ecosystem-revenue-share-reconciler] 执行一次岗位确定性只读子能力回执。岗位：ecosystem-revenue-share-reconciler。仅使用 manif…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T16:54:34.275704+00:00",
-      "runs_24h": 2
+      "last_activity_at": "2026-08-17T02:54:34.354087+00:00",
+      "runs_24h": 1
     },
     {
       "employee_id": "employee-interview-assistant",
@@ -994,11 +994,11 @@
       "dept_label": "P-M Mod 部",
       "dept_color": "#a78bfa",
       "presence": "idle",
-      "activity": "待命 · 最近：[duty-burn-in:45d0fa115d05:employee-interview-assistant] 执行一次岗位确定性只读子能力回执。岗位：employee-interview-assistant。仅使用 manifest 中已审查的 bu…",
+      "activity": "待命 · 最近：[duty-burn-in:61801fed22f3:employee-interview-assistant] 执行一次岗位确定性只读子能力回执。岗位：employee-interview-assistant。仅使用 manifest 中已审查的 bu…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T16:54:34.737260+00:00",
-      "runs_24h": 2
+      "last_activity_at": "2026-08-17T02:54:34.785605+00:00",
+      "runs_24h": 1
     },
     {
       "employee_id": "employee-pack-curator",
@@ -1007,10 +1007,10 @@
       "dept_label": "P-W 网站部",
       "dept_color": "#fb923c",
       "presence": "idle",
-      "activity": "待命 · 最近：[duty-burn-in:416ac72835b7:employee-pack-curator] 执行一次岗位确定性只读子能力回执。岗位：employee-pack-curator。仅使用 manifest 中已审查的 burn_in_fixture …",
+      "activity": "待命 · 最近：[duty-burn-in:cfb394021ab0:employee-pack-curator] 执行一次岗位确定性只读子能力回执。岗位：employee-pack-curator。仅使用 manifest 中已审查的 burn_in_fixture …",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T01:54:36.171015+00:00",
+      "last_activity_at": "2026-08-17T12:54:36.571128+00:00",
       "runs_24h": 1
     },
     {
@@ -1020,10 +1020,10 @@
       "dept_label": "P-M Mod 部",
       "dept_color": "#a78bfa",
       "presence": "idle",
-      "activity": "待命 · 最近：[duty-burn-in:098aa4e88832:employee-pack-quality-interviewer] 执行一次岗位确定性只读子能力回执。岗位：employee-pack-quality-interviewer。仅使用 manifes…",
+      "activity": "待命 · 最近：[duty-burn-in:66b6e328b7ee:employee-pack-quality-interviewer] 执行一次岗位确定性只读子能力回执。岗位：employee-pack-quality-interviewer。仅使用 manifes…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T17:54:34.326083+00:00",
+      "last_activity_at": "2026-08-17T03:54:34.363026+00:00",
       "runs_24h": 1
     },
     {
@@ -1033,10 +1033,10 @@
       "dept_label": "P-M Mod 部",
       "dept_color": "#a78bfa",
       "presence": "idle",
-      "activity": "待命 · 最近：[duty-burn-in:56e044c566d2:employee-planner] 执行一次岗位确定性只读子能力回执。岗位：employee-planner。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契…",
+      "activity": "待命 · 最近：[duty-burn-in:7273897f194c:employee-planner] 执行一次岗位确定性只读子能力回执。岗位：employee-planner。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T04:54:34.483886+00:00",
+      "last_activity_at": "2026-08-17T15:54:34.512798+00:00",
       "runs_24h": 1
     },
     {
@@ -1046,11 +1046,11 @@
       "dept_label": "O-A 获客部",
       "dept_color": "#22d3ee",
       "presence": "idle",
-      "activity": "待命 · 最近：[duty-burn-in:75f4673c77cb:enterprise-adoption-officer] 执行一次岗位确定性只读子能力回执。岗位：enterprise-adoption-officer。仅使用 manifest 中已审查的 burn…",
+      "activity": "待命 · 最近：[duty-burn-in:c87e2667357c:enterprise-adoption-officer] 执行一次岗位确定性只读子能力回执。岗位：enterprise-adoption-officer。仅使用 manifest 中已审查的 burn…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T07:54:34.238824+00:00",
-      "runs_24h": 2
+      "last_activity_at": "2026-08-17T18:54:34.331848+00:00",
+      "runs_24h": 1
     },
     {
       "employee_id": "fhd-core-maintainer",
@@ -1085,10 +1085,10 @@
       "dept_label": "P-S 软件部",
       "dept_color": "#facc15",
       "presence": "idle",
-      "activity": "待命 · 最近：[duty-burn-in:c2c3453b3b26:github-pr-gatekeeper] 执行一次岗位确定性只读子能力回执。岗位：github-pr-gatekeeper。仅使用 manifest 中已审查的 burn_in_fixture 验证…",
+      "activity": "待命 · 最近：[duty-burn-in:0ef495f05a35:github-pr-gatekeeper] 执行一次岗位确定性只读子能力回执。岗位：github-pr-gatekeeper。仅使用 manifest 中已审查的 burn_in_fixture 验证…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T05:54:34.441949+00:00",
+      "last_activity_at": "2026-08-17T16:54:34.615459+00:00",
       "runs_24h": 1
     },
     {
@@ -1098,10 +1098,10 @@
       "dept_label": "P-M Mod 部",
       "dept_color": "#a78bfa",
       "presence": "idle",
-      "activity": "待命 · 最近：[duty-burn-in:a99999151df8:hex-quality-assessor] 执行一次岗位确定性只读子能力回执。岗位：hex-quality-assessor。仅使用 manifest 中已审查的 burn_in_fixture 验证…",
+      "activity": "待命 · 最近：[duty-burn-in:d0820bac9bcb:hex-quality-assessor] 执行一次岗位确定性只读子能力回执。岗位：hex-quality-assessor。仅使用 manifest 中已审查的 burn_in_fixture 验证…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T06:54:34.398501+00:00",
+      "last_activity_at": "2026-08-17T17:54:34.484574+00:00",
       "runs_24h": 1
     },
     {
@@ -1111,10 +1111,10 @@
       "dept_label": "P-M Mod 部",
       "dept_color": "#a78bfa",
       "presence": "idle",
-      "activity": "待命 · 最近：[duty-burn-in:098aa4e88832:host-checker] 执行一次岗位确定性只读子能力回执。岗位：host-checker。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契约；不得声称完整…",
+      "activity": "待命 · 最近：[duty-burn-in:66b6e328b7ee:host-checker] 执行一次岗位确定性只读子能力回执。岗位：host-checker。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契约；不得声称完整…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T17:54:34.498298+00:00",
+      "last_activity_at": "2026-08-17T03:54:34.544040+00:00",
       "runs_24h": 1
     },
     {
@@ -1124,10 +1124,10 @@
       "dept_label": "O-A 获客部",
       "dept_color": "#22d3ee",
       "presence": "idle",
-      "activity": "待命 · 最近：[duty-burn-in:a99999151df8:intake-dispatcher] 执行一次岗位确定性只读子能力回执。岗位：intake-dispatcher。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输…",
+      "activity": "待命 · 最近：[duty-burn-in:d0820bac9bcb:intake-dispatcher] 执行一次岗位确定性只读子能力回执。岗位：intake-dispatcher。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T06:54:35.121775+00:00",
+      "last_activity_at": "2026-08-17T17:54:35.081236+00:00",
       "runs_24h": 1
     },
     {
@@ -1137,10 +1137,10 @@
       "dept_label": "P-M Mod 部",
       "dept_color": "#a78bfa",
       "presence": "idle",
-      "activity": "待命 · 最近：[duty-burn-in:6e40a0593743:intent-analyst] 执行一次岗位确定性只读子能力回执。岗位：intent-analyst。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契约；不得…",
+      "activity": "待命 · 最近：[duty-burn-in:448ab94b56fb:intent-analyst] 执行一次岗位确定性只读子能力回执。岗位：intent-analyst。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契约；不得…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T18:54:34.135459+00:00",
+      "last_activity_at": "2026-08-17T04:54:34.260037+00:00",
       "runs_24h": 1
     },
     {
@@ -1150,10 +1150,10 @@
       "dept_label": "P-W 网站部",
       "dept_color": "#fb923c",
       "presence": "idle",
-      "activity": "待命 · 最近：[duty-burn-in:6e40a0593743:java-payment-bridge-officer] 执行一次岗位确定性只读子能力回执。岗位：java-payment-bridge-officer。仅使用 manifest 中已审查的 burn…",
+      "activity": "待命 · 最近：[duty-burn-in:448ab94b56fb:java-payment-bridge-officer] 执行一次岗位确定性只读子能力回执。岗位：java-payment-bridge-officer。仅使用 manifest 中已审查的 burn…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T18:54:34.389640+00:00",
+      "last_activity_at": "2026-08-17T04:54:34.526819+00:00",
       "runs_24h": 1
     },
     {
@@ -1163,11 +1163,11 @@
       "dept_label": "S-R 归档部",
       "dept_color": "#79c0ff",
       "presence": "idle",
-      "activity": "待命 · 最近：[duty-burn-in:75f4673c77cb:legacy-archive-curator] 执行一次岗位确定性只读子能力回执。岗位：legacy-archive-curator。仅使用 manifest 中已审查的 burn_in_fixtur…",
+      "activity": "待命 · 最近：岗位任务：识别遗留入口、重复资产与可归档候选 执行模式：observe_and_propose；风险级别：medium。 验收回执：给出引用证据；归档前保留恢复路径。 必须使用真实输入与工具结果；缺少数据时明确标记，不得用回显或虚构数据冒充完成。",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T07:54:34.739009+00:00",
-      "runs_24h": 1
+      "last_activity_at": "2026-08-17T19:45:00.835866+00:00",
+      "runs_24h": 2
     },
     {
       "employee_id": "llm-ops-engineer",
@@ -1176,10 +1176,10 @@
       "dept_label": "P-S 软件部",
       "dept_color": "#facc15",
       "presence": "idle",
-      "activity": "待命 · 最近：[duty-burn-in:fff68a705b52:llm-ops-engineer] 执行一次岗位确定性只读子能力回执。岗位：llm-ops-engineer。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契…",
+      "activity": "待命 · 最近：岗位任务：巡检模型可用性、配额、延迟、成本与降级链，并盘点聊天/生图/生视频/CLI 等可用 AI 资产接口 执行模式：execute；风险级别：low。 验收回执：输出 provider/model 健康矩阵；输出 list_available_ai_…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T19:54:34.406107+00:00",
+      "last_activity_at": "2026-08-17T19:31:31.370530+00:00",
       "runs_24h": 2
     },
     {
@@ -1189,10 +1189,10 @@
       "dept_label": "P-S 软件部",
       "dept_color": "#facc15",
       "presence": "idle",
-      "activity": "待命 · 最近：[duty-burn-in:1ecb67de100c:log-monitor-incident] 执行一次岗位确定性只读子能力回执。岗位：log-monitor-incident。仅使用 manifest 中已审查的 burn_in_fixture 验证…",
+      "activity": "待命 · 最近：[duty-burn-in:9beeb742558a:log-monitor-incident] 执行一次岗位确定性只读子能力回执。岗位：log-monitor-incident。仅使用 manifest 中已审查的 burn_in_fixture 验证…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T08:54:35.621924+00:00",
+      "last_activity_at": "2026-08-17T19:54:35.598181+00:00",
       "runs_24h": 1
     },
     {
@@ -1202,10 +1202,10 @@
       "dept_label": "P-W 网站部",
       "dept_color": "#fb923c",
       "presence": "idle",
-      "activity": "待命 · 最近：[duty-burn-in:fff68a705b52:market-frontend-dev] 执行一次岗位确定性只读子能力回执。岗位：market-frontend-dev。仅使用 manifest 中已审查的 burn_in_fixture 验证声明…",
+      "activity": "待命 · 最近：[duty-burn-in:d78d52901645:market-frontend-dev] 执行一次岗位确定性只读子能力回执。岗位：market-frontend-dev。仅使用 manifest 中已审查的 burn_in_fixture 验证声明…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T19:54:35.900068+00:00",
+      "last_activity_at": "2026-08-17T05:54:36.205224+00:00",
       "runs_24h": 1
     },
     {
@@ -1215,10 +1215,10 @@
       "dept_label": "O-A 获客部",
       "dept_color": "#22d3ee",
       "presence": "idle",
-      "activity": "待命 · 最近：[duty-burn-in:ed54b4ef1160:marketing-site-builder] 执行一次岗位确定性只读子能力回执。岗位：marketing-site-builder。仅使用 manifest 中已审查的 burn_in_fixtur…",
+      "activity": "待命 · 最近：岗位任务：构建营销站并验证桌面与移动端产物完整性 执行模式：execute；风险级别：low。 验收回执：构建成功；关键页面与资源存在。 必须使用真实输入与工具结果；缺少数据时明确标记，不得用回显或虚构数据冒充完成。",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T20:54:34.148161+00:00",
+      "last_activity_at": "2026-08-17T18:36:20.352169+00:00",
       "runs_24h": 2
     },
     {
@@ -1228,10 +1228,10 @@
       "dept_label": "P-M Mod 部",
       "dept_color": "#a78bfa",
       "presence": "idle",
-      "activity": "待命 · 最近：[duty-burn-in:3617962e129a:miniapp-builder] 执行一次岗位确定性只读子能力回执。岗位：miniapp-builder。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契约；…",
+      "activity": "待命 · 最近：[duty-burn-in:4af3a5b1e99e:miniapp-builder] 执行一次岗位确定性只读子能力回执。岗位：miniapp-builder。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契约；…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T09:54:34.209707+00:00",
+      "last_activity_at": "2026-08-17T20:54:34.274950+00:00",
       "runs_24h": 1
     },
     {
@@ -1241,10 +1241,10 @@
       "dept_label": "P-S 软件部",
       "dept_color": "#facc15",
       "presence": "idle",
-      "activity": "待命 · 最近：[duty-burn-in:8029aac23fc7:mobile-android-release-officer] 执行一次岗位确定性只读子能力回执。岗位：mobile-android-release-officer。仅使用 manifest 中已审查…",
+      "activity": "待命 · 最近：[duty-burn-in:8d5762447722:mobile-android-release-officer] 执行一次岗位确定性只读子能力回执。岗位：mobile-android-release-officer。仅使用 manifest 中已审查…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T10:54:34.491995+00:00",
+      "last_activity_at": "2026-08-17T21:54:34.503039+00:00",
       "runs_24h": 1
     },
     {
@@ -1254,10 +1254,10 @@
       "dept_label": "P-S 软件部",
       "dept_color": "#facc15",
       "presence": "idle",
-      "activity": "待命 · 最近：[duty-burn-in:8029aac23fc7:mobile-ios-release-officer] 执行一次岗位确定性只读子能力回执。岗位：mobile-ios-release-officer。仅使用 manifest 中已审查的 burn_i…",
+      "activity": "待命 · 最近：[duty-burn-in:8d5762447722:mobile-ios-release-officer] 执行一次岗位确定性只读子能力回执。岗位：mobile-ios-release-officer。仅使用 manifest 中已审查的 burn_i…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T10:54:34.837244+00:00",
+      "last_activity_at": "2026-08-17T21:54:34.844675+00:00",
       "runs_24h": 1
     },
     {
@@ -1267,10 +1267,10 @@
       "dept_label": "P-M Mod 部",
       "dept_color": "#a78bfa",
       "presence": "idle",
-      "activity": "待命 · 最近：[duty-burn-in:ed54b4ef1160:mods-and-eskill-curator] 执行一次岗位确定性只读子能力回执。岗位：mods-and-eskill-curator。仅使用 manifest 中已审查的 burn_in_fixt…",
+      "activity": "待命 · 最近：[duty-burn-in:889231e7ae57:mods-and-eskill-curator] 执行一次岗位确定性只读子能力回执。岗位：mods-and-eskill-curator。仅使用 manifest 中已审查的 burn_in_fixt…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T20:54:34.639513+00:00",
+      "last_activity_at": "2026-08-17T06:54:34.649255+00:00",
       "runs_24h": 1
     },
     {
@@ -1280,10 +1280,10 @@
       "dept_label": "O-A 获客部",
       "dept_color": "#22d3ee",
       "presence": "idle",
-      "activity": "待命 · 最近：[duty-burn-in:39a5561c6d00:modstore-backend-api] 执行一次岗位确定性只读子能力回执。岗位：modstore-backend-api。仅使用 manifest 中已审查的 burn_in_fixture 验证…",
+      "activity": "待命 · 最近：[duty-burn-in:1430bb620729:modstore-backend-api] 执行一次岗位确定性只读子能力回执。岗位：modstore-backend-api。仅使用 manifest 中已审查的 burn_in_fixture 验证…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-07T00:00:58.572292+00:00",
+      "last_activity_at": "2026-08-18T00:05:18.835694+00:00",
       "runs_24h": 1
     },
     {
@@ -1296,7 +1296,7 @@
       "activity": "待命 · 最近：你是事故处理小组的 scout。事件类型：change_request.created。问题摘要：write release/VERSION (5 chars)。 回复必须说人话：先给结论/状态，再说原因，再说下一步；不要直接倾倒 JSON、内部字段或英…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T22:00:15.883988+00:00",
+      "last_activity_at": "2026-08-17T22:00:14.957219+00:00",
       "runs_24h": 2
     },
     {
@@ -1305,11 +1305,11 @@
       "dept_id": "prod_mod",
       "dept_label": "P-M Mod 部",
       "dept_color": "#a78bfa",
-      "presence": "working",
-      "activity": "[duty-burn-in:96a7f28b4939:pack-registrar] 执行一次岗位确定性只读子能力回执。岗位：pack-registrar。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契约；不得…",
+      "presence": "idle",
+      "activity": "待命 · 最近：[duty-burn-in:86acf8381520:pack-registrar] 执行一次岗位确定性只读子能力回执。岗位：pack-registrar。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契约；不得…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T22:54:34.204018+00:00",
+      "last_activity_at": "2026-08-17T08:54:34.094572+00:00",
       "runs_24h": 1
     },
     {
@@ -1318,11 +1318,11 @@
       "dept_id": "ops_acquisition",
       "dept_label": "O-A 获客部",
       "dept_color": "#22d3ee",
-      "presence": "working",
-      "activity": "[duty-burn-in:96a7f28b4939:payment-billing-reconciler] 执行一次岗位确定性只读子能力回执。岗位：payment-billing-reconciler。仅使用 manifest 中已审查的 burn_i…",
+      "presence": "idle",
+      "activity": "待命 · 最近：[duty-burn-in:86acf8381520:payment-billing-reconciler] 执行一次岗位确定性只读子能力回执。岗位：payment-billing-reconciler。仅使用 manifest 中已审查的 burn_i…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T22:54:35.191217+00:00",
+      "last_activity_at": "2026-08-17T08:54:35.114815+00:00",
       "runs_24h": 2
     },
     {
@@ -1332,11 +1332,11 @@
       "dept_label": "P-M Mod 部",
       "dept_color": "#a78bfa",
       "presence": "idle",
-      "activity": "编制待命",
+      "activity": "待命 · 最近：[duty-burn-in:4463b357e2d4:push-update-context-officer] 执行一次岗位确定性只读子能力回执。岗位：push-update-context-officer。仅使用 manifest 中已审查的 burn…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": null,
-      "runs_24h": 0
+      "last_activity_at": "2026-08-17T10:54:35.626319+00:00",
+      "runs_24h": 1
     },
     {
       "employee_id": "quality-validator",
@@ -1345,10 +1345,10 @@
       "dept_label": "P-M Mod 部",
       "dept_color": "#a78bfa",
       "presence": "idle",
-      "activity": "待命 · 最近：岗位任务：验证员工包 manifest、Python、资产和一致性 执行模式：execute；风险级别：low。 验收回执：静态校验全部通过；失败产出明确路径。 必须使用真实输入与工具结果；缺少数据时明确标记，不得用回显或虚构数据冒充完成。",
+      "activity": "待命 · 最近：[duty-burn-in:41d9e7eb13a4:quality-validator] 执行一次岗位确定性只读子能力回执。岗位：quality-validator。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T03:30:00.424524+00:00",
+      "last_activity_at": "2026-08-17T11:54:34.315426+00:00",
       "runs_24h": 2
     },
     {
@@ -1361,8 +1361,8 @@
       "activity": "待命 · 最近：janitor.scheduled.dry_run",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T20:00:00.532994+00:00",
-      "runs_24h": 3
+      "last_activity_at": "2026-08-17T20:00:00.381990+00:00",
+      "runs_24h": 12
     },
     {
       "employee_id": "sandbox-tester",
@@ -1374,7 +1374,7 @@
       "activity": "你是事故处理小组的 verify。事件类型：on_error。问题摘要：预测维护：未来 24h 可能出现 scheduler 类 incident，confidence=0.74。 回复必须说人话：先给结论/状态，再说原因，再说下一步；不要直接倾倒 JS…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T23:55:37.744725+00:00",
+      "last_activity_at": "2026-08-17T23:55:23.942132+00:00",
       "runs_24h": 5
     },
     {
@@ -1384,10 +1384,10 @@
       "dept_label": "P-M Mod 部",
       "dept_color": "#a78bfa",
       "presence": "idle",
-      "activity": "待命 · 最近：[duty-burn-in:416ac72835b7:script-binder] 执行一次岗位确定性只读子能力回执。岗位：script-binder。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契约；不得声称…",
+      "activity": "待命 · 最近：[duty-burn-in:cfb394021ab0:script-binder] 执行一次岗位确定性只读子能力回执。岗位：script-binder。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契约；不得声称…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T01:54:36.347055+00:00",
+      "last_activity_at": "2026-08-17T12:54:36.764590+00:00",
       "runs_24h": 1
     },
     {
@@ -1397,10 +1397,10 @@
       "dept_label": "S-R 归档部",
       "dept_color": "#79c0ff",
       "presence": "idle",
-      "activity": "待命 · 最近：[duty-burn-in:a3528ce0f146:security-secrets-guard] 执行一次岗位确定性只读子能力回执。岗位：security-secrets-guard。仅使用 manifest 中已审查的 burn_in_fixtur…",
+      "activity": "待命 · 最近：[duty-burn-in:7563bc348a63:security-secrets-guard] 执行一次岗位确定性只读子能力回执。岗位：security-secrets-guard。仅使用 manifest 中已审查的 burn_in_fixtur…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T02:54:35.363808+00:00",
+      "last_activity_at": "2026-08-17T13:54:35.408230+00:00",
       "runs_24h": 1
     },
     {
@@ -1410,10 +1410,10 @@
       "dept_label": "P-M Mod 部",
       "dept_color": "#a78bfa",
       "presence": "idle",
-      "activity": "待命 · 最近：[duty-burn-in:a3528ce0f146:self-checker] 执行一次岗位只读巡检回执。岗位：self-checker。任务：让产物按自身验收标准执行自检并报告缺口。必须至少调用一次工作区只读工具获取真实证据；禁止写文件、运行命令、访…",
+      "activity": "待命 · 最近：[duty-burn-in:4af3a5b1e99e:self-checker] 执行一次岗位只读巡检回执。岗位：self-checker。任务：让产物按自身验收标准执行自检并报告缺口。必须至少调用一次工作区只读工具获取真实证据；禁止写文件、运行命令、访…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T02:56:24.022745+00:00",
+      "last_activity_at": "2026-08-17T20:55:23.603538+00:00",
       "runs_24h": 1
     },
     {
@@ -1426,7 +1426,7 @@
       "activity": "待命 · 最近：岗位任务：巡检 sitemap、robots、页面索引与内部链接完整性 执行模式：execute；风险级别：low。 验收回执：输出断链与索引差异清单；不改业务后端。 必须使用真实输入与工具结果；缺少数据时明确标记，不得用回显或虚构数据冒充完成。",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T18:12:59.480592+00:00",
+      "last_activity_at": "2026-08-17T18:13:33.532089+00:00",
       "runs_24h": 2
     },
     {
@@ -1439,7 +1439,7 @@
       "activity": "待命 · 最近：你是事故处理小组的 verify。事件类型：change_request.created。问题摘要：write release/VERSION (5 chars)。 回复必须说人话：先给结论/状态，再说原因，再说下一步；不要直接倾倒 JSON、内部字段或…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T22:01:14.277169+00:00",
+      "last_activity_at": "2026-08-17T22:01:08.734721+00:00",
       "runs_24h": 2
     },
     {
@@ -1449,10 +1449,10 @@
       "dept_label": "P-W 网站部",
       "dept_color": "#fb923c",
       "presence": "idle",
-      "activity": "待命 · 最近：[duty-burn-in:3617962e129a:task-router-officer] 执行一次岗位只读巡检回执。岗位：task-router-officer。任务：按能力、风险和负载把任务路由给正确员工。必须至少调用一次工作区只读工具获取真实证…",
+      "activity": "待命 · 最近：[duty-burn-in:f3475e684fd8:task-router-officer] 执行一次岗位只读巡检回执。岗位：task-router-officer。任务：按能力、风险和负载把任务路由给正确员工。必须至少调用一次工作区只读工具获取真实证…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-07T00:00:58.572445+00:00",
+      "last_activity_at": "2026-08-18T00:05:18.835798+00:00",
       "runs_24h": 1
     },
     {
@@ -1462,11 +1462,11 @@
       "dept_label": "O-A 获客部",
       "dept_color": "#22d3ee",
       "presence": "alert",
-      "activity": "你是事故处理小组的 verify。事件类型：git.push。问题摘要：本地 HEAD 由 213716e3de → e6877994b3。 回复必须说人话：先给结论/状态，再说原因，再说下一步；不要直接倾倒 JSON、内部字段或英文模板。你的任务是验证…",
+      "activity": "[duty-burn-in:21697d37a8d0:test-qa-runner] 执行一次岗位确定性只读子能力回执。岗位：test-qa-runner。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契约；不得…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-07T00:00:58.572591+00:00",
-      "runs_24h": 68
+      "last_activity_at": "2026-08-18T00:05:18.835896+00:00",
+      "runs_24h": 14
     },
     {
       "employee_id": "top-architect",
@@ -1474,11 +1474,11 @@
       "dept_id": "prod_software",
       "dept_label": "P-S 软件部",
       "dept_color": "#facc15",
-      "presence": "idle",
-      "activity": "待命 · 最近：[duty-burn-in:f1494488b71a:top-architect] 执行一次岗位确定性只读子能力回执。岗位：top-architect。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契约；不得声称…",
+      "presence": "working",
+      "activity": "[duty-burn-in:21697d37a8d0:top-architect] 执行一次岗位确定性只读子能力回执。岗位：top-architect。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契约；不得声称…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T11:54:35.267511+00:00",
+      "last_activity_at": "2026-08-17T22:54:35.417707+00:00",
       "runs_24h": 1
     },
     {
@@ -1487,11 +1487,11 @@
       "dept_id": "ops_acquisition",
       "dept_label": "O-A 获客部",
       "dept_color": "#22d3ee",
-      "presence": "idle",
-      "activity": "待命 · 最近：[duty-burn-in:f1494488b71a:user-customer-service-officer] 执行一次岗位确定性只读子能力回执。岗位：user-customer-service-officer。仅使用 manifest 中已审查的 …",
+      "presence": "working",
+      "activity": "[duty-burn-in:a8313579d053:user-customer-service-officer] 执行一次岗位确定性只读子能力回执。岗位：user-customer-service-officer。仅使用 manifest 中已审查的 …",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T11:54:35.606291+00:00",
+      "last_activity_at": "2026-08-17T23:54:34.508752+00:00",
       "runs_24h": 1
     },
     {
@@ -1500,12 +1500,12 @@
       "dept_id": "prod_web",
       "dept_label": "P-W 网站部",
       "dept_color": "#fb923c",
-      "presence": "idle",
-      "activity": "待命 · 最近：你是事故处理小组的 fix。事件类型：git.push。问题摘要：本地 HEAD 由 213716e3de → e6877994b3。 回复必须说人话：先给结论/状态，再说原因，再说下一步；不要直接倾倒 JSON、内部字段或英文模板。你的任务是执行或委派…",
+      "presence": "alert",
+      "activity": "你是事故处理小组的 fix。事件类型：log.anomaly。问题摘要：bounded retention completed but storage pressure remains。 回复必须说人话：先给结论/状态，再说原因，再说下一步；不要直接倾倒…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T14:17:01.553897+00:00",
-      "runs_24h": 40
+      "last_activity_at": "2026-08-17T10:55:55.416866+00:00",
+      "runs_24h": 12
     },
     {
       "employee_id": "workbench-ux-stylist",
@@ -1514,11 +1514,11 @@
       "dept_label": "P-W 网站部",
       "dept_color": "#fb923c",
       "presence": "idle",
-      "activity": "待命 · 最近：岗位任务：检查工作台信息层级、可达性与响应式布局 执行模式：observe_and_propose；风险级别：medium。 验收回执：桌面与移动端无阻断；输出可复现视觉证据。 必须使用真实输入与工具结果；缺少数据时明确标记，不得用回显或虚构数据冒充完成。",
+      "activity": "编制待命",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T06:46:30.705219+00:00",
-      "runs_24h": 1
+      "last_activity_at": null,
+      "runs_24h": 0
     },
     {
       "employee_id": "workflow-automator",
@@ -1530,7 +1530,7 @@
       "activity": "你是事故处理小组的 scout。事件类型：on_error。问题摘要：预测维护：未来 24h 可能出现 scheduler 类 incident，confidence=0.74。 回复必须说人话：先给结论/状态，再说原因，再说下一步；不要直接倾倒 JSO…",
       "open_action_items": 0,
       "in_progress_action_items": 0,
-      "last_activity_at": "2026-08-06T23:54:57.038194+00:00",
+      "last_activity_at": "2026-08-17T23:54:51.510033+00:00",
       "runs_24h": 5
     }
   ],
@@ -1555,14 +1555,14 @@
   "runtime": {
     "schema": "xcagi.runtime_inventory/v1",
     "ok": false,
-    "generated_at": "2026-08-07T00:00:58.587430+00:00",
-    "failed_must_run": 2,
+    "generated_at": "2026-08-18T00:05:18.846434+00:00",
+    "failed_must_run": 3,
     "counts": {
       "total": 3,
-      "running": 1,
-      "stopped": 2,
+      "running": 0,
+      "stopped": 3,
       "unknown": 0,
-      "must_run_failed": 2
+      "must_run_failed": 3
     },
     "must_run_failed_items": [
       {
@@ -1576,6 +1576,12 @@
         "id": "modstore-scheduler",
         "actual": "stopped",
         "detail": "127.0.0.1:9990"
+      },
+      {
+        "kind": "service",
+        "id": "fhd-api-upstream",
+        "actual": "stopped",
+        "detail": "127.0.0.1:5100"
       }
     ],
     "source": {
@@ -1585,9 +1591,9 @@
   },
   "feed": [
     {
-      "ts": "00:00",
-      "day": "2026-08-07",
-      "occurred_at": "2026-08-07T00:00:58.572591+00:00",
+      "ts": "00:05",
+      "day": "2026-08-18",
+      "occurred_at": "2026-08-18T00:05:18.835896+00:00",
       "employee_id": "test-qa-runner",
       "employee_name": "测试质量运行员",
       "dept_id": "ops_acquisition",
@@ -1602,9 +1608,9 @@
       "source": "action_board"
     },
     {
-      "ts": "00:00",
-      "day": "2026-08-07",
-      "occurred_at": "2026-08-07T00:00:58.572445+00:00",
+      "ts": "00:05",
+      "day": "2026-08-18",
+      "occurred_at": "2026-08-18T00:05:18.835798+00:00",
       "employee_id": "task-router-officer",
       "employee_name": "任务派发员",
       "dept_id": "prod_web",
@@ -1619,9 +1625,9 @@
       "source": "action_board"
     },
     {
-      "ts": "00:00",
-      "day": "2026-08-07",
-      "occurred_at": "2026-08-07T00:00:58.572292+00:00",
+      "ts": "00:05",
+      "day": "2026-08-18",
+      "occurred_at": "2026-08-18T00:05:18.835694+00:00",
       "employee_id": "modstore-backend-api",
       "employee_name": "MODstore 后端 API 员",
       "dept_id": "ops_acquisition",
@@ -1637,8 +1643,8 @@
     },
     {
       "ts": "23:55",
-      "day": "2026-08-06",
-      "occurred_at": "2026-08-06T23:55:37.744725+00:00",
+      "day": "2026-08-17",
+      "occurred_at": "2026-08-17T23:55:23.942132+00:00",
       "employee_id": "sandbox-tester",
       "employee_name": "测试员工",
       "dept_id": "prod_mod",
@@ -1655,8 +1661,8 @@
     },
     {
       "ts": "23:55",
-      "day": "2026-08-06",
-      "occurred_at": "2026-08-06T23:55:14.915642+00:00",
+      "day": "2026-08-17",
+      "occurred_at": "2026-08-17T23:55:05.330299+00:00",
       "employee_id": "code-validator",
       "employee_name": "代码校验员工",
       "dept_id": "prod_mod",
@@ -1673,8 +1679,8 @@
     },
     {
       "ts": "23:54",
-      "day": "2026-08-06",
-      "occurred_at": "2026-08-06T23:54:57.038194+00:00",
+      "day": "2026-08-17",
+      "occurred_at": "2026-08-17T23:54:51.510033+00:00",
       "employee_id": "workflow-automator",
       "employee_name": "流程自动化员工",
       "dept_id": "prod_mod",
@@ -1691,86 +1697,50 @@
     },
     {
       "ts": "23:54",
-      "day": "2026-08-06",
-      "occurred_at": "2026-08-06T23:54:34.660180+00:00",
-      "employee_id": "daily-orchestrator",
-      "employee_name": "每日编排员",
-      "dept_id": "prod_web",
-      "dept_label": "P-W 网站部",
-      "dept_color": "#fb923c",
-      "presence": "working",
-      "status": "success",
-      "status_label": "最近执行",
-      "text": "[duty-burn-in:bb1d2d0ef660:daily-orchestrator] 执行一次岗位确定性只读子能力回执。岗位：daily-orchestrator。仅使用 manif…",
-      "detail": "[duty-burn-in:bb1d2d0ef660:daily-orchestrator] 执行一次岗位确定性只读子能力回执。岗位：daily-orchestrator。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输…",
-      "detail_truncated": true,
-      "href": "",
-      "source": "execution_metric"
-    },
-    {
-      "ts": "23:54",
-      "day": "2026-08-06",
-      "occurred_at": "2026-08-06T23:54:34.312153+00:00",
-      "employee_id": "artifact-generator",
-      "employee_name": "产物生成员工",
-      "dept_id": "prod_mod",
-      "dept_label": "P-M Mod 部",
-      "dept_color": "#a78bfa",
-      "presence": "working",
-      "status": "success",
-      "status_label": "最近执行",
-      "text": "[duty-burn-in:bb1d2d0ef660:artifact-generator] 执行一次岗位确定性只读子能力回执。岗位：artifact-generator。仅使用 manif…",
-      "detail": "[duty-burn-in:bb1d2d0ef660:artifact-generator] 执行一次岗位确定性只读子能力回执。岗位：artifact-generator。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输…",
-      "detail_truncated": true,
-      "href": "",
-      "source": "execution_metric"
-    },
-    {
-      "ts": "22:54",
-      "day": "2026-08-06",
-      "occurred_at": "2026-08-06T22:54:35.191217+00:00",
-      "employee_id": "payment-billing-reconciler",
-      "employee_name": "支付账单对账员",
+      "day": "2026-08-17",
+      "occurred_at": "2026-08-17T23:54:34.508752+00:00",
+      "employee_id": "user-customer-service-officer",
+      "employee_name": "用户客服员工",
       "dept_id": "ops_acquisition",
       "dept_label": "O-A 获客部",
       "dept_color": "#22d3ee",
       "presence": "working",
       "status": "success",
       "status_label": "最近执行",
-      "text": "[duty-burn-in:96a7f28b4939:payment-billing-reconciler] 执行一次岗位确定性只读子能力回执。岗位：payment-billing-reco…",
-      "detail": "[duty-burn-in:96a7f28b4939:payment-billing-reconciler] 执行一次岗位确定性只读子能力回执。岗位：payment-billing-reconciler。仅使用 manifest 中已审查的 burn_i…",
+      "text": "[duty-burn-in:a8313579d053:user-customer-service-officer] 执行一次岗位确定性只读子能力回执。岗位：user-customer-ser…",
+      "detail": "[duty-burn-in:a8313579d053:user-customer-service-officer] 执行一次岗位确定性只读子能力回执。岗位：user-customer-service-officer。仅使用 manifest 中已审查的 …",
       "detail_truncated": true,
       "href": "",
       "source": "execution_metric"
     },
     {
       "ts": "22:54",
-      "day": "2026-08-06",
-      "occurred_at": "2026-08-06T22:54:34.204018+00:00",
-      "employee_id": "pack-registrar",
-      "employee_name": "打包登记员工",
-      "dept_id": "prod_mod",
-      "dept_label": "P-M Mod 部",
-      "dept_color": "#a78bfa",
+      "day": "2026-08-17",
+      "occurred_at": "2026-08-17T22:54:35.417707+00:00",
+      "employee_id": "top-architect",
+      "employee_name": "顶级架构师员工",
+      "dept_id": "prod_software",
+      "dept_label": "P-S 软件部",
+      "dept_color": "#facc15",
       "presence": "working",
       "status": "success",
       "status_label": "最近执行",
-      "text": "[duty-burn-in:96a7f28b4939:pack-registrar] 执行一次岗位确定性只读子能力回执。岗位：pack-registrar。仅使用 manifest 中已审查…",
-      "detail": "[duty-burn-in:96a7f28b4939:pack-registrar] 执行一次岗位确定性只读子能力回执。岗位：pack-registrar。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契约；不得…",
+      "text": "[duty-burn-in:21697d37a8d0:top-architect] 执行一次岗位确定性只读子能力回执。岗位：top-architect。仅使用 manifest 中已审查的 …",
+      "detail": "[duty-burn-in:21697d37a8d0:top-architect] 执行一次岗位确定性只读子能力回执。岗位：top-architect。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契约；不得声称…",
       "detail_truncated": true,
       "href": "",
       "source": "execution_metric"
     },
     {
       "ts": "22:05",
-      "day": "2026-08-06",
-      "occurred_at": "2026-08-06T22:05:04.446683+00:00",
+      "day": "2026-08-17",
+      "occurred_at": "2026-08-17T22:05:03.794763+00:00",
       "employee_id": "delivery-receipt-officer",
       "employee_name": "交付签收员",
       "dept_id": "ops_acquisition",
       "dept_label": "O-A 获客部",
       "dept_color": "#22d3ee",
-      "presence": "working",
+      "presence": "idle",
       "status": "success",
       "status_label": "最近执行",
       "text": "[employee.task.done] deploy-release-officer employee.task.done",
@@ -1781,8 +1751,8 @@
     },
     {
       "ts": "22:04",
-      "day": "2026-08-06",
-      "occurred_at": "2026-08-06T22:04:41.735910+00:00",
+      "day": "2026-08-17",
+      "occurred_at": "2026-08-17T22:04:25.381223+00:00",
       "employee_id": "deploy-release-officer",
       "employee_name": "发布部署主管",
       "dept_id": "ops_acquisition",
@@ -1791,34 +1761,16 @@
       "presence": "alert",
       "status": "orchestrator_failed",
       "status_label": "执行失败",
-      "text": "CR#55 窄 CI 未通过（py_compile） 详情：员工 deploy-release-officer 产出的 CR 在自动审批前未通过窄验证。 path=release/VERSI…",
-      "detail": "CR#55 窄 CI 未通过（py_compile） 详情：员工 deploy-release-officer 产出的 CR 在自动审批前未通过窄验证。 path=release/VERSION failed_step=py_compile steps=[{'ok': False, 'step': 'py_compile', 'stderr': ' File \"/tmp/tmpxbotoydu.py\", line 1\\n 0.0.1\\n ^^\\nSyntaxError: invalid syntax\\n'}] 建议类型：cr_narrow_ci_failure 上下文：{\"employee_id\": \"deploy-release-officer\"}",
+      "text": "CR#66 窄 CI 未通过（py_compile） 详情：员工 deploy-release-officer 产出的 CR 在自动审批前未通过窄验证。 path=release/VERSI…",
+      "detail": "CR#66 窄 CI 未通过（py_compile） 详情：员工 deploy-release-officer 产出的 CR 在自动审批前未通过窄验证。 path=release/VERSION failed_step=py_compile steps=[{'ok': False, 'step': 'py_compile', 'stderr': ' File \"/tmp/tmpu786v0t0.py\", line 1\\n 0.0.1\\n ^^\\nSyntaxError: invalid syntax\\n'}] 建议类型：cr_narrow_ci_failure 上下文：{\"employee_id\": \"deploy-release-officer\"}",
       "detail_truncated": true,
       "href": "",
       "source": "execution_metric"
     },
     {
       "ts": "22:01",
-      "day": "2026-08-06",
-      "occurred_at": "2026-08-06T22:01:41.604838+00:00",
-      "employee_id": "change-request-auditor",
-      "employee_name": "变更评审员",
-      "dept_id": "ops_acquisition",
-      "dept_label": "O-A 获客部",
-      "dept_color": "#22d3ee",
-      "presence": "alert",
-      "status": "handler_failed",
-      "status_label": "执行失败",
-      "text": "[ops.change_request.submitted] write release/VERSION (5 chars)",
-      "detail": "[ops.change_request.submitted] write release/VERSION (5 chars)",
-      "detail_truncated": true,
-      "href": "",
-      "source": "execution_metric"
-    },
-    {
-      "ts": "22:01",
-      "day": "2026-08-06",
-      "occurred_at": "2026-08-06T22:01:14.277169+00:00",
+      "day": "2026-08-17",
+      "occurred_at": "2026-08-17T22:01:08.734721+00:00",
       "employee_id": "site-content-editor",
       "employee_name": "静态站内容编辑员",
       "dept_id": "ops_acquisition",
@@ -1835,8 +1787,8 @@
     },
     {
       "ts": "22:00",
-      "day": "2026-08-06",
-      "occurred_at": "2026-08-06T22:00:15.883988+00:00",
+      "day": "2026-08-17",
+      "occurred_at": "2026-08-17T22:00:14.957219+00:00",
       "employee_id": "nginx-config-engineer",
       "employee_name": "Nginx 配置工程师",
       "dept_id": "prod_web",
@@ -1852,45 +1804,117 @@
       "source": "execution_metric"
     },
     {
-      "ts": "20:54",
-      "day": "2026-08-06",
-      "occurred_at": "2026-08-06T20:54:34.639513+00:00",
-      "employee_id": "mods-and-eskill-curator",
-      "employee_name": "Mods/ESkill 策展员",
+      "ts": "22:00",
+      "day": "2026-08-17",
+      "occurred_at": "2026-08-17T22:00:13.821257+00:00",
+      "employee_id": "change-request-auditor",
+      "employee_name": "变更评审员",
+      "dept_id": "ops_acquisition",
+      "dept_label": "O-A 获客部",
+      "dept_color": "#22d3ee",
+      "presence": "alert",
+      "status": "handler_failed",
+      "status_label": "执行失败",
+      "text": "[ops.change_request.submitted] write release/VERSION (5 chars)",
+      "detail": "[ops.change_request.submitted] write release/VERSION (5 chars)",
+      "detail_truncated": true,
+      "href": "",
+      "source": "execution_metric"
+    },
+    {
+      "ts": "21:54",
+      "day": "2026-08-17",
+      "occurred_at": "2026-08-17T21:54:34.844675+00:00",
+      "employee_id": "mobile-ios-release-officer",
+      "employee_name": "iOS 发版员",
+      "dept_id": "prod_software",
+      "dept_label": "P-S 软件部",
+      "dept_color": "#facc15",
+      "presence": "idle",
+      "status": "success",
+      "status_label": "最近执行",
+      "text": "[duty-burn-in:8d5762447722:mobile-ios-release-officer] 执行一次岗位确定性只读子能力回执。岗位：mobile-ios-release-o…",
+      "detail": "[duty-burn-in:8d5762447722:mobile-ios-release-officer] 执行一次岗位确定性只读子能力回执。岗位：mobile-ios-release-officer。仅使用 manifest 中已审查的 burn_i…",
+      "detail_truncated": true,
+      "href": "",
+      "source": "execution_metric"
+    },
+    {
+      "ts": "21:54",
+      "day": "2026-08-17",
+      "occurred_at": "2026-08-17T21:54:34.503039+00:00",
+      "employee_id": "mobile-android-release-officer",
+      "employee_name": "Android 发版员",
+      "dept_id": "prod_software",
+      "dept_label": "P-S 软件部",
+      "dept_color": "#facc15",
+      "presence": "idle",
+      "status": "success",
+      "status_label": "最近执行",
+      "text": "[duty-burn-in:8d5762447722:mobile-android-release-officer] 执行一次岗位确定性只读子能力回执。岗位：mobile-android-r…",
+      "detail": "[duty-burn-in:8d5762447722:mobile-android-release-officer] 执行一次岗位确定性只读子能力回执。岗位：mobile-android-release-officer。仅使用 manifest 中已审查…",
+      "detail_truncated": true,
+      "href": "",
+      "source": "execution_metric"
+    },
+    {
+      "ts": "20:55",
+      "day": "2026-08-17",
+      "occurred_at": "2026-08-17T20:55:23.603538+00:00",
+      "employee_id": "self-checker",
+      "employee_name": "自检员工",
       "dept_id": "prod_mod",
       "dept_label": "P-M Mod 部",
       "dept_color": "#a78bfa",
       "presence": "idle",
       "status": "success",
       "status_label": "最近执行",
-      "text": "[duty-burn-in:ed54b4ef1160:mods-and-eskill-curator] 执行一次岗位确定性只读子能力回执。岗位：mods-and-eskill-curator…",
-      "detail": "[duty-burn-in:ed54b4ef1160:mods-and-eskill-curator] 执行一次岗位确定性只读子能力回执。岗位：mods-and-eskill-curator。仅使用 manifest 中已审查的 burn_in_fixt…",
+      "text": "[duty-burn-in:4af3a5b1e99e:self-checker] 执行一次岗位只读巡检回执。岗位：self-checker。任务：让产物按自身验收标准执行自检并报告缺口。必须…",
+      "detail": "[duty-burn-in:4af3a5b1e99e:self-checker] 执行一次岗位只读巡检回执。岗位：self-checker。任务：让产物按自身验收标准执行自检并报告缺口。必须至少调用一次工作区只读工具获取真实证据；禁止写文件、运行命令、访…",
       "detail_truncated": true,
       "href": "",
       "source": "execution_metric"
     },
     {
       "ts": "20:54",
-      "day": "2026-08-06",
-      "occurred_at": "2026-08-06T20:54:34.148161+00:00",
-      "employee_id": "marketing-site-builder",
-      "employee_name": "营销站点构建员",
-      "dept_id": "ops_acquisition",
-      "dept_label": "O-A 获客部",
-      "dept_color": "#22d3ee",
+      "day": "2026-08-17",
+      "occurred_at": "2026-08-17T20:54:34.274950+00:00",
+      "employee_id": "miniapp-builder",
+      "employee_name": "小程序员工",
+      "dept_id": "prod_mod",
+      "dept_label": "P-M Mod 部",
+      "dept_color": "#a78bfa",
       "presence": "idle",
       "status": "success",
       "status_label": "最近执行",
-      "text": "[duty-burn-in:ed54b4ef1160:marketing-site-builder] 执行一次岗位确定性只读子能力回执。岗位：marketing-site-builder。仅…",
-      "detail": "[duty-burn-in:ed54b4ef1160:marketing-site-builder] 执行一次岗位确定性只读子能力回执。岗位：marketing-site-builder。仅使用 manifest 中已审查的 burn_in_fixtur…",
+      "text": "[duty-burn-in:4af3a5b1e99e:miniapp-builder] 执行一次岗位确定性只读子能力回执。岗位：miniapp-builder。仅使用 manifest 中已…",
+      "detail": "[duty-burn-in:4af3a5b1e99e:miniapp-builder] 执行一次岗位确定性只读子能力回执。岗位：miniapp-builder。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契约；…",
       "detail_truncated": true,
       "href": "",
       "source": "execution_metric"
     },
     {
       "ts": "20:00",
-      "day": "2026-08-06",
-      "occurred_at": "2026-08-06T20:00:00.532994+00:00",
+      "day": "2026-08-17",
+      "occurred_at": "2026-08-17T20:00:35.555785+00:00",
+      "employee_id": "daily-orchestrator",
+      "employee_name": "每日编排员",
+      "dept_id": "prod_web",
+      "dept_label": "P-W 网站部",
+      "dept_color": "#fb923c",
+      "presence": "alert",
+      "status": "handler_failed",
+      "status_label": "执行失败",
+      "text": "[schedule.tick] backup-event-subscriber",
+      "detail": "[schedule.tick] backup-event-subscriber",
+      "detail_truncated": true,
+      "href": "",
+      "source": "execution_metric"
+    },
+    {
+      "ts": "20:00",
+      "day": "2026-08-17",
+      "occurred_at": "2026-08-17T20:00:00.381990+00:00",
       "employee_id": "retention-officer",
       "employee_name": "档案清理员",
       "dept_id": "shared_retention",
@@ -1907,26 +1931,44 @@
     },
     {
       "ts": "19:54",
-      "day": "2026-08-06",
-      "occurred_at": "2026-08-06T19:54:35.900068+00:00",
-      "employee_id": "market-frontend-dev",
-      "employee_name": "市场前端开发员",
-      "dept_id": "prod_web",
-      "dept_label": "P-W 网站部",
-      "dept_color": "#fb923c",
+      "day": "2026-08-17",
+      "occurred_at": "2026-08-17T19:54:35.598181+00:00",
+      "employee_id": "log-monitor-incident",
+      "employee_name": "日志监控与事故响应员",
+      "dept_id": "prod_software",
+      "dept_label": "P-S 软件部",
+      "dept_color": "#facc15",
       "presence": "idle",
       "status": "success",
       "status_label": "最近执行",
-      "text": "[duty-burn-in:fff68a705b52:market-frontend-dev] 执行一次岗位确定性只读子能力回执。岗位：market-frontend-dev。仅使用 man…",
-      "detail": "[duty-burn-in:fff68a705b52:market-frontend-dev] 执行一次岗位确定性只读子能力回执。岗位：market-frontend-dev。仅使用 manifest 中已审查的 burn_in_fixture 验证声明…",
+      "text": "[duty-burn-in:9beeb742558a:log-monitor-incident] 执行一次岗位确定性只读子能力回执。岗位：log-monitor-incident。仅使用 m…",
+      "detail": "[duty-burn-in:9beeb742558a:log-monitor-incident] 执行一次岗位确定性只读子能力回执。岗位：log-monitor-incident。仅使用 manifest 中已审查的 burn_in_fixture 验证…",
       "detail_truncated": true,
       "href": "",
       "source": "execution_metric"
     },
     {
-      "ts": "19:54",
-      "day": "2026-08-06",
-      "occurred_at": "2026-08-06T19:54:34.406107+00:00",
+      "ts": "19:45",
+      "day": "2026-08-17",
+      "occurred_at": "2026-08-17T19:45:00.835866+00:00",
+      "employee_id": "legacy-archive-curator",
+      "employee_name": "工作区归档管理员",
+      "dept_id": "shared_retention",
+      "dept_label": "S-R 归档部",
+      "dept_color": "#79c0ff",
+      "presence": "idle",
+      "status": "success",
+      "status_label": "最近执行",
+      "text": "识别遗留入口、重复资产与可归档候选",
+      "detail": "识别遗留入口、重复资产与可归档候选",
+      "detail_truncated": true,
+      "href": "",
+      "source": "execution_metric"
+    },
+    {
+      "ts": "19:31",
+      "day": "2026-08-17",
+      "occurred_at": "2026-08-17T19:31:31.370530+00:00",
       "employee_id": "llm-ops-engineer",
       "employee_name": "LLM 运维工程师",
       "dept_id": "prod_software",
@@ -1935,52 +1977,52 @@
       "presence": "idle",
       "status": "success",
       "status_label": "最近执行",
-      "text": "[duty-burn-in:fff68a705b52:llm-ops-engineer] 执行一次岗位确定性只读子能力回执。岗位：llm-ops-engineer。仅使用 manifest …",
-      "detail": "[duty-burn-in:fff68a705b52:llm-ops-engineer] 执行一次岗位确定性只读子能力回执。岗位：llm-ops-engineer。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契…",
+      "text": "巡检模型可用性、配额、延迟、成本与降级链，并盘点聊天/生图/生视频/CLI 等可用 AI 资产接口",
+      "detail": "巡检模型可用性、配额、延迟、成本与降级链，并盘点聊天/生图/生视频/CLI 等可用 AI 资产接口",
       "detail_truncated": true,
       "href": "",
       "source": "execution_metric"
     },
     {
       "ts": "18:54",
-      "day": "2026-08-06",
-      "occurred_at": "2026-08-06T18:54:34.389640+00:00",
-      "employee_id": "java-payment-bridge-officer",
-      "employee_name": "Java 支付桥接员",
-      "dept_id": "prod_web",
-      "dept_label": "P-W 网站部",
-      "dept_color": "#fb923c",
+      "day": "2026-08-17",
+      "occurred_at": "2026-08-17T18:54:34.331848+00:00",
+      "employee_id": "enterprise-adoption-officer",
+      "employee_name": "企业使用跟踪员",
+      "dept_id": "ops_acquisition",
+      "dept_label": "O-A 获客部",
+      "dept_color": "#22d3ee",
       "presence": "idle",
       "status": "success",
       "status_label": "最近执行",
-      "text": "[duty-burn-in:6e40a0593743:java-payment-bridge-officer] 执行一次岗位确定性只读子能力回执。岗位：java-payment-bridge…",
-      "detail": "[duty-burn-in:6e40a0593743:java-payment-bridge-officer] 执行一次岗位确定性只读子能力回执。岗位：java-payment-bridge-officer。仅使用 manifest 中已审查的 burn…",
+      "text": "[duty-burn-in:c87e2667357c:enterprise-adoption-officer] 执行一次岗位确定性只读子能力回执。岗位：enterprise-adoption…",
+      "detail": "[duty-burn-in:c87e2667357c:enterprise-adoption-officer] 执行一次岗位确定性只读子能力回执。岗位：enterprise-adoption-officer。仅使用 manifest 中已审查的 burn…",
       "detail_truncated": true,
       "href": "",
       "source": "execution_metric"
     },
     {
-      "ts": "18:54",
-      "day": "2026-08-06",
-      "occurred_at": "2026-08-06T18:54:34.135459+00:00",
-      "employee_id": "intent-analyst",
-      "employee_name": "需求分析员工",
-      "dept_id": "prod_mod",
-      "dept_label": "P-M Mod 部",
-      "dept_color": "#a78bfa",
+      "ts": "18:36",
+      "day": "2026-08-17",
+      "occurred_at": "2026-08-17T18:36:20.352169+00:00",
+      "employee_id": "marketing-site-builder",
+      "employee_name": "营销站点构建员",
+      "dept_id": "ops_acquisition",
+      "dept_label": "O-A 获客部",
+      "dept_color": "#22d3ee",
       "presence": "idle",
       "status": "success",
       "status_label": "最近执行",
-      "text": "[duty-burn-in:6e40a0593743:intent-analyst] 执行一次岗位确定性只读子能力回执。岗位：intent-analyst。仅使用 manifest 中已审查…",
-      "detail": "[duty-burn-in:6e40a0593743:intent-analyst] 执行一次岗位确定性只读子能力回执。岗位：intent-analyst。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契约；不得…",
+      "text": "构建营销站并验证桌面与移动端产物完整性",
+      "detail": "构建营销站并验证桌面与移动端产物完整性",
       "detail_truncated": true,
       "href": "",
       "source": "execution_metric"
     },
     {
-      "ts": "18:12",
-      "day": "2026-08-06",
-      "occurred_at": "2026-08-06T18:12:59.480592+00:00",
+      "ts": "18:13",
+      "day": "2026-08-17",
+      "occurred_at": "2026-08-17T18:13:33.532089+00:00",
       "employee_id": "seo-sitemap-curator",
       "employee_name": "SEO 站点地图管理员",
       "dept_id": "ops_acquisition",
@@ -1997,314 +2039,278 @@
     },
     {
       "ts": "17:54",
-      "day": "2026-08-06",
-      "occurred_at": "2026-08-06T17:54:34.498298+00:00",
-      "employee_id": "host-checker",
-      "employee_name": "运维员工",
-      "dept_id": "prod_mod",
-      "dept_label": "P-M Mod 部",
-      "dept_color": "#a78bfa",
+      "day": "2026-08-17",
+      "occurred_at": "2026-08-17T17:54:35.081236+00:00",
+      "employee_id": "intake-dispatcher",
+      "employee_name": "需求接入员",
+      "dept_id": "ops_acquisition",
+      "dept_label": "O-A 获客部",
+      "dept_color": "#22d3ee",
       "presence": "idle",
       "status": "success",
       "status_label": "最近执行",
-      "text": "[duty-burn-in:098aa4e88832:host-checker] 执行一次岗位确定性只读子能力回执。岗位：host-checker。仅使用 manifest 中已审查的 bu…",
-      "detail": "[duty-burn-in:098aa4e88832:host-checker] 执行一次岗位确定性只读子能力回执。岗位：host-checker。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契约；不得声称完整…",
+      "text": "[duty-burn-in:d0820bac9bcb:intake-dispatcher] 执行一次岗位确定性只读子能力回执。岗位：intake-dispatcher。仅使用 manifes…",
+      "detail": "[duty-burn-in:d0820bac9bcb:intake-dispatcher] 执行一次岗位确定性只读子能力回执。岗位：intake-dispatcher。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输…",
       "detail_truncated": true,
       "href": "",
       "source": "execution_metric"
     },
     {
       "ts": "17:54",
-      "day": "2026-08-06",
-      "occurred_at": "2026-08-06T17:54:34.326083+00:00",
-      "employee_id": "employee-pack-quality-interviewer",
-      "employee_name": "员工包质询员",
+      "day": "2026-08-17",
+      "occurred_at": "2026-08-17T17:54:34.484574+00:00",
+      "employee_id": "hex-quality-assessor",
+      "employee_name": "六维质检员工",
       "dept_id": "prod_mod",
       "dept_label": "P-M Mod 部",
       "dept_color": "#a78bfa",
       "presence": "idle",
       "status": "success",
       "status_label": "最近执行",
-      "text": "[duty-burn-in:098aa4e88832:employee-pack-quality-interviewer] 执行一次岗位确定性只读子能力回执。岗位：employee-pack…",
-      "detail": "[duty-burn-in:098aa4e88832:employee-pack-quality-interviewer] 执行一次岗位确定性只读子能力回执。岗位：employee-pack-quality-interviewer。仅使用 manifes…",
+      "text": "[duty-burn-in:d0820bac9bcb:hex-quality-assessor] 执行一次岗位确定性只读子能力回执。岗位：hex-quality-assessor。仅使用 m…",
+      "detail": "[duty-burn-in:d0820bac9bcb:hex-quality-assessor] 执行一次岗位确定性只读子能力回执。岗位：hex-quality-assessor。仅使用 manifest 中已审查的 burn_in_fixture 验证…",
       "detail_truncated": true,
       "href": "",
       "source": "execution_metric"
     },
     {
       "ts": "16:54",
-      "day": "2026-08-06",
-      "occurred_at": "2026-08-06T16:54:34.737260+00:00",
-      "employee_id": "employee-interview-assistant",
-      "employee_name": "员工信息访谈员",
+      "day": "2026-08-17",
+      "occurred_at": "2026-08-17T16:54:34.615459+00:00",
+      "employee_id": "github-pr-gatekeeper",
+      "employee_name": "GitHub PR 守门员",
+      "dept_id": "prod_software",
+      "dept_label": "P-S 软件部",
+      "dept_color": "#facc15",
+      "presence": "idle",
+      "status": "success",
+      "status_label": "最近执行",
+      "text": "[duty-burn-in:0ef495f05a35:github-pr-gatekeeper] 执行一次岗位确定性只读子能力回执。岗位：github-pr-gatekeeper。仅使用 m…",
+      "detail": "[duty-burn-in:0ef495f05a35:github-pr-gatekeeper] 执行一次岗位确定性只读子能力回执。岗位：github-pr-gatekeeper。仅使用 manifest 中已审查的 burn_in_fixture 验证…",
+      "detail_truncated": true,
+      "href": "",
+      "source": "execution_metric"
+    },
+    {
+      "ts": "15:54",
+      "day": "2026-08-17",
+      "occurred_at": "2026-08-17T15:54:34.512798+00:00",
+      "employee_id": "employee-planner",
+      "employee_name": "规划设计员工",
       "dept_id": "prod_mod",
       "dept_label": "P-M Mod 部",
       "dept_color": "#a78bfa",
       "presence": "idle",
       "status": "success",
       "status_label": "最近执行",
-      "text": "[duty-burn-in:45d0fa115d05:employee-interview-assistant] 执行一次岗位确定性只读子能力回执。岗位：employee-interview…",
-      "detail": "[duty-burn-in:45d0fa115d05:employee-interview-assistant] 执行一次岗位确定性只读子能力回执。岗位：employee-interview-assistant。仅使用 manifest 中已审查的 bu…",
-      "detail_truncated": true,
-      "href": "",
-      "source": "execution_metric"
-    },
-    {
-      "ts": "16:54",
-      "day": "2026-08-06",
-      "occurred_at": "2026-08-06T16:54:34.275704+00:00",
-      "employee_id": "ecosystem-revenue-share-reconciler",
-      "employee_name": "生态分润对账员",
-      "dept_id": "ops_partner",
-      "dept_label": "O-B 伙伴部",
-      "dept_color": "#4ade80",
-      "presence": "idle",
-      "status": "success",
-      "status_label": "最近执行",
-      "text": "[duty-burn-in:45d0fa115d05:ecosystem-revenue-share-reconciler] 执行一次岗位确定性只读子能力回执。岗位：ecosystem-re…",
-      "detail": "[duty-burn-in:45d0fa115d05:ecosystem-revenue-share-reconciler] 执行一次岗位确定性只读子能力回执。岗位：ecosystem-revenue-share-reconciler。仅使用 manif…",
+      "text": "[duty-burn-in:7273897f194c:employee-planner] 执行一次岗位确定性只读子能力回执。岗位：employee-planner。仅使用 manifest …",
+      "detail": "[duty-burn-in:7273897f194c:employee-planner] 执行一次岗位确定性只读子能力回执。岗位：employee-planner。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契…",
       "detail_truncated": true,
       "href": "",
       "source": "execution_metric"
     },
     {
       "ts": "15:54",
-      "day": "2026-08-06",
-      "occurred_at": "2026-08-06T15:54:34.539682+00:00",
-      "employee_id": "ecosystem-joint-catalog-officer",
-      "employee_name": "联合 Catalog 策展员",
+      "day": "2026-08-17",
+      "occurred_at": "2026-08-17T15:54:34.333962+00:00",
+      "employee_id": "ecosystem-investor-portal-officer",
+      "employee_name": "投资方只读门户员",
       "dept_id": "ops_partner",
       "dept_label": "O-B 伙伴部",
       "dept_color": "#4ade80",
       "presence": "idle",
       "status": "success",
       "status_label": "最近执行",
-      "text": "[duty-burn-in:f160baccc2c2:ecosystem-joint-catalog-officer] 执行一次岗位确定性只读子能力回执。岗位：ecosystem-joint…",
-      "detail": "[duty-burn-in:f160baccc2c2:ecosystem-joint-catalog-officer] 执行一次岗位确定性只读子能力回执。岗位：ecosystem-joint-catalog-officer。仅使用 manifest 中已…",
-      "detail_truncated": true,
-      "href": "",
-      "source": "execution_metric"
-    },
-    {
-      "ts": "15:54",
-      "day": "2026-08-06",
-      "occurred_at": "2026-08-06T15:54:34.250306+00:00",
-      "employee_id": "ecosystem-delivery-reporter",
-      "employee_name": "生态交付回传员",
-      "dept_id": "ops_partner",
-      "dept_label": "O-B 伙伴部",
-      "dept_color": "#4ade80",
-      "presence": "idle",
-      "status": "success",
-      "status_label": "最近执行",
-      "text": "[duty-burn-in:f160baccc2c2:ecosystem-delivery-reporter] 执行一次岗位确定性只读子能力回执。岗位：ecosystem-delivery-…",
-      "detail": "[duty-burn-in:f160baccc2c2:ecosystem-delivery-reporter] 执行一次岗位确定性只读子能力回执。岗位：ecosystem-delivery-reporter。仅使用 manifest 中已审查的 burn…",
-      "detail_truncated": true,
-      "href": "",
-      "source": "execution_metric"
-    },
-    {
-      "ts": "14:54",
-      "day": "2026-08-06",
-      "occurred_at": "2026-08-06T14:54:36.171724+00:00",
-      "employee_id": "doc-knowledge-curator",
-      "employee_name": "文档知识管理员",
-      "dept_id": "prod_web",
-      "dept_label": "P-W 网站部",
-      "dept_color": "#fb923c",
-      "presence": "idle",
-      "status": "success",
-      "status_label": "最近执行",
-      "text": "[duty-burn-in:7a1788d414a2:doc-knowledge-curator] 执行一次岗位确定性只读子能力回执。岗位：doc-knowledge-curator。仅使用…",
-      "detail": "[duty-burn-in:7a1788d414a2:doc-knowledge-curator] 执行一次岗位确定性只读子能力回执。岗位：doc-knowledge-curator。仅使用 manifest 中已审查的 burn_in_fixture …",
-      "detail_truncated": true,
-      "href": "",
-      "source": "execution_metric"
-    },
-    {
-      "ts": "14:17",
-      "day": "2026-08-06",
-      "occurred_at": "2026-08-06T14:17:01.553897+00:00",
-      "employee_id": "vibe-coding-maintainer",
-      "employee_name": "Vibe-Coding 维护员",
-      "dept_id": "prod_web",
-      "dept_label": "P-W 网站部",
-      "dept_color": "#fb923c",
-      "presence": "idle",
-      "status": "success",
-      "status_label": "最近执行",
-      "text": "本地 HEAD 由 213716e3de → e6877994b3",
-      "detail": "本地 HEAD 由 213716e3de → e6877994b3",
+      "text": "[duty-burn-in:7273897f194c:ecosystem-investor-portal-officer] 执行一次岗位确定性只读子能力回执。岗位：ecosystem-inv…",
+      "detail": "[duty-burn-in:7273897f194c:ecosystem-investor-portal-officer] 执行一次岗位确定性只读子能力回执。岗位：ecosystem-investor-portal-officer。仅使用 manifes…",
       "detail_truncated": true,
       "href": "",
       "source": "execution_metric"
     },
     {
       "ts": "13:54",
-      "day": "2026-08-06",
-      "occurred_at": "2026-08-06T13:54:34.945865+00:00",
-      "employee_id": "dbops-engineer",
-      "employee_name": "数据库运维工程师",
-      "dept_id": "prod_software",
-      "dept_label": "P-S 软件部",
-      "dept_color": "#facc15",
-      "presence": "idle",
-      "status": "success",
-      "status_label": "最近执行",
-      "text": "[duty-burn-in:1393c7ee1331:dbops-engineer] 执行一次岗位确定性只读子能力回执。岗位：dbops-engineer。仅使用 manifest 中已审查…",
-      "detail": "[duty-burn-in:1393c7ee1331:dbops-engineer] 执行一次岗位确定性只读子能力回执。岗位：dbops-engineer。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契约；不得…",
-      "detail_truncated": true,
-      "href": "",
-      "source": "execution_metric"
-    },
-    {
-      "ts": "11:54",
-      "day": "2026-08-06",
-      "occurred_at": "2026-08-06T11:54:35.606291+00:00",
-      "employee_id": "user-customer-service-officer",
-      "employee_name": "用户客服员工",
-      "dept_id": "ops_acquisition",
-      "dept_label": "O-A 获客部",
-      "dept_color": "#22d3ee",
-      "presence": "idle",
-      "status": "success",
-      "status_label": "最近执行",
-      "text": "[duty-burn-in:f1494488b71a:user-customer-service-officer] 执行一次岗位确定性只读子能力回执。岗位：user-customer-ser…",
-      "detail": "[duty-burn-in:f1494488b71a:user-customer-service-officer] 执行一次岗位确定性只读子能力回执。岗位：user-customer-service-officer。仅使用 manifest 中已审查的 …",
-      "detail_truncated": true,
-      "href": "",
-      "source": "execution_metric"
-    },
-    {
-      "ts": "11:54",
-      "day": "2026-08-06",
-      "occurred_at": "2026-08-06T11:54:35.267511+00:00",
-      "employee_id": "top-architect",
-      "employee_name": "顶级架构师员工",
-      "dept_id": "prod_software",
-      "dept_label": "P-S 软件部",
-      "dept_color": "#facc15",
-      "presence": "idle",
-      "status": "success",
-      "status_label": "最近执行",
-      "text": "[duty-burn-in:f1494488b71a:top-architect] 执行一次岗位确定性只读子能力回执。岗位：top-architect。仅使用 manifest 中已审查的 …",
-      "detail": "[duty-burn-in:f1494488b71a:top-architect] 执行一次岗位确定性只读子能力回执。岗位：top-architect。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契约；不得声称…",
-      "detail_truncated": true,
-      "href": "",
-      "source": "execution_metric"
-    },
-    {
-      "ts": "10:54",
-      "day": "2026-08-06",
-      "occurred_at": "2026-08-06T10:54:34.837244+00:00",
-      "employee_id": "mobile-ios-release-officer",
-      "employee_name": "iOS 发版员",
-      "dept_id": "prod_software",
-      "dept_label": "P-S 软件部",
-      "dept_color": "#facc15",
-      "presence": "idle",
-      "status": "success",
-      "status_label": "最近执行",
-      "text": "[duty-burn-in:8029aac23fc7:mobile-ios-release-officer] 执行一次岗位确定性只读子能力回执。岗位：mobile-ios-release-o…",
-      "detail": "[duty-burn-in:8029aac23fc7:mobile-ios-release-officer] 执行一次岗位确定性只读子能力回执。岗位：mobile-ios-release-officer。仅使用 manifest 中已审查的 burn_i…",
-      "detail_truncated": true,
-      "href": "",
-      "source": "execution_metric"
-    },
-    {
-      "ts": "10:54",
-      "day": "2026-08-06",
-      "occurred_at": "2026-08-06T10:54:34.491995+00:00",
-      "employee_id": "mobile-android-release-officer",
-      "employee_name": "Android 发版员",
-      "dept_id": "prod_software",
-      "dept_label": "P-S 软件部",
-      "dept_color": "#facc15",
-      "presence": "idle",
-      "status": "success",
-      "status_label": "最近执行",
-      "text": "[duty-burn-in:8029aac23fc7:mobile-android-release-officer] 执行一次岗位确定性只读子能力回执。岗位：mobile-android-r…",
-      "detail": "[duty-burn-in:8029aac23fc7:mobile-android-release-officer] 执行一次岗位确定性只读子能力回执。岗位：mobile-android-release-officer。仅使用 manifest 中已审查…",
-      "detail_truncated": true,
-      "href": "",
-      "source": "execution_metric"
-    },
-    {
-      "ts": "09:54",
-      "day": "2026-08-06",
-      "occurred_at": "2026-08-06T09:54:34.209707+00:00",
-      "employee_id": "miniapp-builder",
-      "employee_name": "小程序员工",
-      "dept_id": "prod_mod",
-      "dept_label": "P-M Mod 部",
-      "dept_color": "#a78bfa",
-      "presence": "idle",
-      "status": "success",
-      "status_label": "最近执行",
-      "text": "[duty-burn-in:3617962e129a:miniapp-builder] 执行一次岗位确定性只读子能力回执。岗位：miniapp-builder。仅使用 manifest 中已…",
-      "detail": "[duty-burn-in:3617962e129a:miniapp-builder] 执行一次岗位确定性只读子能力回执。岗位：miniapp-builder。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契约；…",
-      "detail_truncated": true,
-      "href": "",
-      "source": "execution_metric"
-    },
-    {
-      "ts": "08:54",
-      "day": "2026-08-06",
-      "occurred_at": "2026-08-06T08:54:35.621924+00:00",
-      "employee_id": "log-monitor-incident",
-      "employee_name": "日志监控与事故响应员",
-      "dept_id": "prod_software",
-      "dept_label": "P-S 软件部",
-      "dept_color": "#facc15",
-      "presence": "idle",
-      "status": "success",
-      "status_label": "最近执行",
-      "text": "[duty-burn-in:1ecb67de100c:log-monitor-incident] 执行一次岗位确定性只读子能力回执。岗位：log-monitor-incident。仅使用 m…",
-      "detail": "[duty-burn-in:1ecb67de100c:log-monitor-incident] 执行一次岗位确定性只读子能力回执。岗位：log-monitor-incident。仅使用 manifest 中已审查的 burn_in_fixture 验证…",
-      "detail_truncated": true,
-      "href": "",
-      "source": "execution_metric"
-    },
-    {
-      "ts": "07:54",
-      "day": "2026-08-06",
-      "occurred_at": "2026-08-06T07:54:34.739009+00:00",
-      "employee_id": "legacy-archive-curator",
-      "employee_name": "工作区归档管理员",
+      "day": "2026-08-17",
+      "occurred_at": "2026-08-17T13:54:35.408230+00:00",
+      "employee_id": "security-secrets-guard",
+      "employee_name": "安全密钥守卫",
       "dept_id": "shared_retention",
       "dept_label": "S-R 归档部",
       "dept_color": "#79c0ff",
       "presence": "idle",
       "status": "success",
       "status_label": "最近执行",
-      "text": "[duty-burn-in:75f4673c77cb:legacy-archive-curator] 执行一次岗位确定性只读子能力回执。岗位：legacy-archive-curator。仅…",
-      "detail": "[duty-burn-in:75f4673c77cb:legacy-archive-curator] 执行一次岗位确定性只读子能力回执。岗位：legacy-archive-curator。仅使用 manifest 中已审查的 burn_in_fixtur…",
+      "text": "[duty-burn-in:7563bc348a63:security-secrets-guard] 执行一次岗位确定性只读子能力回执。岗位：security-secrets-guard。仅…",
+      "detail": "[duty-burn-in:7563bc348a63:security-secrets-guard] 执行一次岗位确定性只读子能力回执。岗位：security-secrets-guard。仅使用 manifest 中已审查的 burn_in_fixtur…",
       "detail_truncated": true,
       "href": "",
       "source": "execution_metric"
     },
     {
-      "ts": "07:54",
-      "day": "2026-08-06",
-      "occurred_at": "2026-08-06T07:54:34.238824+00:00",
-      "employee_id": "enterprise-adoption-officer",
-      "employee_name": "企业使用跟踪员",
+      "ts": "12:54",
+      "day": "2026-08-17",
+      "occurred_at": "2026-08-17T12:54:36.764590+00:00",
+      "employee_id": "script-binder",
+      "employee_name": "配置绑定员工",
+      "dept_id": "prod_mod",
+      "dept_label": "P-M Mod 部",
+      "dept_color": "#a78bfa",
+      "presence": "idle",
+      "status": "success",
+      "status_label": "最近执行",
+      "text": "[duty-burn-in:cfb394021ab0:script-binder] 执行一次岗位确定性只读子能力回执。岗位：script-binder。仅使用 manifest 中已审查的 …",
+      "detail": "[duty-burn-in:cfb394021ab0:script-binder] 执行一次岗位确定性只读子能力回执。岗位：script-binder。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契约；不得声称…",
+      "detail_truncated": true,
+      "href": "",
+      "source": "execution_metric"
+    },
+    {
+      "ts": "12:54",
+      "day": "2026-08-17",
+      "occurred_at": "2026-08-17T12:54:36.571128+00:00",
+      "employee_id": "employee-pack-curator",
+      "employee_name": "员工包策展员",
+      "dept_id": "prod_web",
+      "dept_label": "P-W 网站部",
+      "dept_color": "#fb923c",
+      "presence": "idle",
+      "status": "success",
+      "status_label": "最近执行",
+      "text": "[duty-burn-in:cfb394021ab0:employee-pack-curator] 执行一次岗位确定性只读子能力回执。岗位：employee-pack-curator。仅使用…",
+      "detail": "[duty-burn-in:cfb394021ab0:employee-pack-curator] 执行一次岗位确定性只读子能力回执。岗位：employee-pack-curator。仅使用 manifest 中已审查的 burn_in_fixture …",
+      "detail_truncated": true,
+      "href": "",
+      "source": "execution_metric"
+    },
+    {
+      "ts": "11:54",
+      "day": "2026-08-17",
+      "occurred_at": "2026-08-17T11:54:34.315426+00:00",
+      "employee_id": "quality-validator",
+      "employee_name": "质检员工",
+      "dept_id": "prod_mod",
+      "dept_label": "P-M Mod 部",
+      "dept_color": "#a78bfa",
+      "presence": "idle",
+      "status": "success",
+      "status_label": "最近执行",
+      "text": "[duty-burn-in:41d9e7eb13a4:quality-validator] 执行一次岗位确定性只读子能力回执。岗位：quality-validator。仅使用 manifes…",
+      "detail": "[duty-burn-in:41d9e7eb13a4:quality-validator] 执行一次岗位确定性只读子能力回执。岗位：quality-validator。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输…",
+      "detail_truncated": true,
+      "href": "",
+      "source": "execution_metric"
+    },
+    {
+      "ts": "10:55",
+      "day": "2026-08-17",
+      "occurred_at": "2026-08-17T10:55:55.416866+00:00",
+      "employee_id": "vibe-coding-maintainer",
+      "employee_name": "Vibe-Coding 维护员",
+      "dept_id": "prod_web",
+      "dept_label": "P-W 网站部",
+      "dept_color": "#fb923c",
+      "presence": "alert",
+      "status": "handler_failed",
+      "status_label": "执行失败",
+      "text": "bounded retention completed but storage pressure remains",
+      "detail": "bounded retention completed but storage pressure remains",
+      "detail_truncated": true,
+      "href": "",
+      "source": "execution_metric"
+    },
+    {
+      "ts": "10:54",
+      "day": "2026-08-17",
+      "occurred_at": "2026-08-17T10:54:35.626319+00:00",
+      "employee_id": "push-update-context-officer",
+      "employee_name": "推送更新员工",
+      "dept_id": "prod_mod",
+      "dept_label": "P-M Mod 部",
+      "dept_color": "#a78bfa",
+      "presence": "idle",
+      "status": "success",
+      "status_label": "最近执行",
+      "text": "[duty-burn-in:4463b357e2d4:push-update-context-officer] 执行一次岗位确定性只读子能力回执。岗位：push-update-context…",
+      "detail": "[duty-burn-in:4463b357e2d4:push-update-context-officer] 执行一次岗位确定性只读子能力回执。岗位：push-update-context-officer。仅使用 manifest 中已审查的 burn…",
+      "detail_truncated": true,
+      "href": "",
+      "source": "execution_metric"
+    },
+    {
+      "ts": "10:54",
+      "day": "2026-08-17",
+      "occurred_at": "2026-08-17T10:54:34.441445+00:00",
+      "employee_id": "ecosystem-partner-onboard-officer",
+      "employee_name": "生态伙伴接入员",
+      "dept_id": "ops_partner",
+      "dept_label": "O-B 伙伴部",
+      "dept_color": "#4ade80",
+      "presence": "idle",
+      "status": "success",
+      "status_label": "最近执行",
+      "text": "[duty-burn-in:4463b357e2d4:ecosystem-partner-onboard-officer] 执行一次岗位确定性只读子能力回执。岗位：ecosystem-par…",
+      "detail": "[duty-burn-in:4463b357e2d4:ecosystem-partner-onboard-officer] 执行一次岗位确定性只读子能力回执。岗位：ecosystem-partner-onboard-officer。仅使用 manifes…",
+      "detail_truncated": true,
+      "href": "",
+      "source": "execution_metric"
+    },
+    {
+      "ts": "09:54",
+      "day": "2026-08-17",
+      "occurred_at": "2026-08-17T09:54:34.364298+00:00",
+      "employee_id": "artifact-generator",
+      "employee_name": "产物生成员工",
+      "dept_id": "prod_mod",
+      "dept_label": "P-M Mod 部",
+      "dept_color": "#a78bfa",
+      "presence": "idle",
+      "status": "success",
+      "status_label": "最近执行",
+      "text": "[duty-burn-in:38e069eba753:artifact-generator] 执行一次岗位确定性只读子能力回执。岗位：artifact-generator。仅使用 manif…",
+      "detail": "[duty-burn-in:38e069eba753:artifact-generator] 执行一次岗位确定性只读子能力回执。岗位：artifact-generator。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输…",
+      "detail_truncated": true,
+      "href": "",
+      "source": "execution_metric"
+    },
+    {
+      "ts": "08:54",
+      "day": "2026-08-17",
+      "occurred_at": "2026-08-17T08:54:35.114815+00:00",
+      "employee_id": "payment-billing-reconciler",
+      "employee_name": "支付账单对账员",
       "dept_id": "ops_acquisition",
       "dept_label": "O-A 获客部",
       "dept_color": "#22d3ee",
       "presence": "idle",
       "status": "success",
       "status_label": "最近执行",
-      "text": "[duty-burn-in:75f4673c77cb:enterprise-adoption-officer] 执行一次岗位确定性只读子能力回执。岗位：enterprise-adoption…",
-      "detail": "[duty-burn-in:75f4673c77cb:enterprise-adoption-officer] 执行一次岗位确定性只读子能力回执。岗位：enterprise-adoption-officer。仅使用 manifest 中已审查的 burn…",
+      "text": "[duty-burn-in:86acf8381520:payment-billing-reconciler] 执行一次岗位确定性只读子能力回执。岗位：payment-billing-reco…",
+      "detail": "[duty-burn-in:86acf8381520:payment-billing-reconciler] 执行一次岗位确定性只读子能力回执。岗位：payment-billing-reconciler。仅使用 manifest 中已审查的 burn_i…",
+      "detail_truncated": true,
+      "href": "",
+      "source": "execution_metric"
+    },
+    {
+      "ts": "08:54",
+      "day": "2026-08-17",
+      "occurred_at": "2026-08-17T08:54:34.094572+00:00",
+      "employee_id": "pack-registrar",
+      "employee_name": "打包登记员工",
+      "dept_id": "prod_mod",
+      "dept_label": "P-M Mod 部",
+      "dept_color": "#a78bfa",
+      "presence": "idle",
+      "status": "success",
+      "status_label": "最近执行",
+      "text": "[duty-burn-in:86acf8381520:pack-registrar] 执行一次岗位确定性只读子能力回执。岗位：pack-registrar。仅使用 manifest 中已审查…",
+      "detail": "[duty-burn-in:86acf8381520:pack-registrar] 执行一次岗位确定性只读子能力回执。岗位：pack-registrar。仅使用 manifest 中已审查的 burn_in_fixture 验证声明的输入输出契约；不得…",
       "detail_truncated": true,
       "href": "",
       "source": "execution_metric"
     }
   ],
   "last_activity": {
-    "ts": "00:00",
-    "day": "2026-08-07",
+    "ts": "00:05",
+    "day": "2026-08-18",
     "employee_name": "测试质量运行员",
     "text": "增加回归断言：template fallback 发生时必须进入 action-items、产线执行和 AI 交流圈，不能只留下会议纪要",
     "source": "action_board"
@@ -2324,9 +2330,9 @@
         "owner": "任务派发员",
         "employee_id": "task-router-officer",
         "kind": "patch",
-        "day": "2026-08-07",
-        "updated_at": "2026-08-07T00:00:58.572445+00:00",
-        "ts": "00:00"
+        "day": "2026-08-18",
+        "updated_at": "2026-08-18T00:05:18.835798+00:00",
+        "ts": "00:05"
       },
       {
         "title": "修复 Vibe 预备任务生成断点：LLM 未返回有效 JSON（缺少 updates_markdown / patches_markdown）；确保 Bench LLM 输出合法 JSON，或解析器能提取 updates_markdown / patches_markdown",
@@ -2338,9 +2344,9 @@
         "owner": "MODstore 后端 API 员",
         "employee_id": "modstore-backend-api",
         "kind": "patch",
-        "day": "2026-08-07",
-        "updated_at": "2026-08-07T00:00:58.572292+00:00",
-        "ts": "00:00"
+        "day": "2026-08-18",
+        "updated_at": "2026-08-18T00:05:18.835694+00:00",
+        "ts": "00:05"
       },
       {
         "title": "增加回归断言：template fallback 发生时必须进入 action-items、产线执行和 AI 交流圈，不能只留下会议纪要",
@@ -2352,9 +2358,9 @@
         "owner": "测试质量运行员",
         "employee_id": "test-qa-runner",
         "kind": "patch",
-        "day": "2026-08-07",
-        "updated_at": "2026-08-07T00:00:58.572591+00:00",
-        "ts": "00:00"
+        "day": "2026-08-18",
+        "updated_at": "2026-08-18T00:05:18.835896+00:00",
+        "ts": "00:05"
       }
     ],
     "goals": []
@@ -2363,14 +2369,14 @@
     "busiest_dept": {
       "id": "ops_acquisition",
       "label": "O-A 获客部",
-      "working": 2,
+      "working": 1,
       "alert": 3
     },
     "mvp": {
       "employee_id": "test-qa-runner",
       "name": "测试质量运行员",
       "open_action_items": 0,
-      "runs_24h": 68
+      "runs_24h": 14
     }
   }
 }

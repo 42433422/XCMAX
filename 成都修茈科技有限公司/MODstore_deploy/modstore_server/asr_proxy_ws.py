@@ -14,8 +14,11 @@ import json
 import logging
 import os
 import socket
+import ssl
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +38,16 @@ def _funasr_scheme() -> str:
     return "wss" if FUNASR_USE_SSL else "ws"
 
 
+def create_funasr_ssl_context() -> ssl.SSLContext | None:
+    """Use normal certificate validation, with an optional private CA bundle."""
+    if not FUNASR_USE_SSL:
+        return None
+    ca_bundle = str(os.environ.get("FUNASR_CA_BUNDLE") or "").strip()
+    if ca_bundle:
+        return ssl.create_default_context(cafile=ca_bundle)
+    return ssl.create_default_context()
+
+
 def _detect_funasr_host() -> list[str]:
     """Detect reachable FunASR host addresses from inside/outside Docker."""
     scheme = _funasr_scheme()
@@ -46,7 +59,7 @@ def _detect_funasr_host() -> list[str]:
     try:
         socket.gethostbyname("host.docker.internal")
         candidates.append("host.docker.internal")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     candidates.extend(["172.17.0.1", "127.0.0.1"])
     return [f"{scheme}://{h}:{FUNASR_PORT}" for h in candidates]
@@ -67,7 +80,7 @@ async def _try_connect_funasr(
             websockets.connect(funasr_url, **connect_kw),
             timeout=timeout + 0.5,
         )
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         logger.info("FunASR connect failed to %s: %s", funasr_url, e)
         return None
 
@@ -100,21 +113,15 @@ async def _connect_funasr_parallel(funasr_urls: list[str], ssl_ctx):
 
 
 async def _proxy_to_funasr(client_ws: WebSocket) -> None:
-    import ssl as _ssl
-
     funasr_urls = _detect_funasr_host()
-    ssl_ctx = None
-    if FUNASR_USE_SSL:
-        ssl_ctx = _ssl.SSLContext(_ssl.PROTOCOL_TLS_CLIENT)
-        ssl_ctx.check_hostname = False
-        ssl_ctx.verify_mode = _ssl.CERT_NONE
+    ssl_ctx = create_funasr_ssl_context()
 
     connect_result = await _connect_funasr_parallel(funasr_urls, ssl_ctx)
     if connect_result is None:
         logger.warning("FunASR 不可达，已尝试: %s", funasr_urls)
         try:
             await client_ws.send_text(json.dumps({"type": "error", "message": "FunASR 服务未启动"}))
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
         return
 
@@ -123,7 +130,7 @@ async def _proxy_to_funasr(client_ws: WebSocket) -> None:
     try:
         try:
             await client_ws.send_text(json.dumps({"type": "connected"}))
-        except Exception:
+        except RECOVERABLE_ERRORS:
             return
 
         async def client_to_funasr():
@@ -143,7 +150,7 @@ async def _proxy_to_funasr(client_ws: WebSocket) -> None:
                             )
                         try:
                             await funasr_ws.send(data)
-                        except Exception:
+                        except RECOVERABLE_ERRORS:
                             break
                     elif "bytes" in msg:
                         bytes_count += 1
@@ -155,11 +162,11 @@ async def _proxy_to_funasr(client_ws: WebSocket) -> None:
                             )
                         try:
                             await funasr_ws.send(msg["bytes"])
-                        except Exception:
+                        except RECOVERABLE_ERRORS:
                             break
             except WebSocketDisconnect:
                 pass
-            except Exception as e:
+            except RECOVERABLE_ERRORS as e:
                 logger.info("client_to_funasr error: %s", e)
             finally:
                 logger.info(
@@ -170,7 +177,7 @@ async def _proxy_to_funasr(client_ws: WebSocket) -> None:
                 try:
                     await funasr_ws.send(json.dumps({"is_speaking": False}))
                     logger.info("sent is_speaking=false to funasr")
-                except Exception:
+                except RECOVERABLE_ERRORS:
                     pass
 
         async def funasr_to_client():
@@ -186,7 +193,7 @@ async def _proxy_to_funasr(client_ws: WebSocket) -> None:
                         )
                         try:
                             await client_ws.send_bytes(raw)
-                        except Exception:
+                        except RECOVERABLE_ERRORS:
                             break
                     else:
                         logger.info(
@@ -196,9 +203,9 @@ async def _proxy_to_funasr(client_ws: WebSocket) -> None:
                         )
                         try:
                             await client_ws.send_text(raw)
-                        except Exception:
+                        except RECOVERABLE_ERRORS:
                             break
-            except Exception as e:
+            except RECOVERABLE_ERRORS as e:
                 logger.info("funasr_to_client error: %s", e)
             finally:
                 logger.info(
@@ -216,7 +223,7 @@ async def _proxy_to_funasr(client_ws: WebSocket) -> None:
         if client_task in done and not funasr_task.done():
             try:
                 await asyncio.wait_for(funasr_task, timeout=12.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 funasr_task.cancel()
                 try:
                     await funasr_task
@@ -232,7 +239,7 @@ async def _proxy_to_funasr(client_ws: WebSocket) -> None:
     finally:
         try:
             await funasr_ws.close()
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
 
 
@@ -256,7 +263,7 @@ async def asr_funasr_ws(
     if not token:
         try:
             await ws.send_text(json.dumps({"type": "error", "message": "请先登录后再使用语音识别"}))
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
         await ws.close()
         return
@@ -268,14 +275,14 @@ async def asr_funasr_ws(
         if not payload or not payload.get("sub"):
             try:
                 await ws.send_text(json.dumps({"type": "error", "message": "认证无效"}))
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 pass
             await ws.close()
             return
-    except Exception:
+    except RECOVERABLE_ERRORS:
         try:
             await ws.send_text(json.dumps({"type": "error", "message": "认证失败"}))
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
         await ws.close()
         return

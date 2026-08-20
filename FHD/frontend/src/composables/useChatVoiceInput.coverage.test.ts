@@ -19,8 +19,7 @@ if (typeof globalThis.BlobEvent === 'undefined') {
       this.data = init.data
     }
   }
-  ;(globalThis as unknown as { BlobEvent: typeof BlobEventPolyfill }).BlobEvent =
-    BlobEventPolyfill
+  ;(globalThis as unknown as { BlobEvent: typeof BlobEventPolyfill }).BlobEvent = BlobEventPolyfill
 }
 
 // ── helpers ──────────────────────────────────────────────────────────
@@ -40,8 +39,12 @@ function createMockMediaRecorder(stream: unknown, options?: { mimeType?: string 
   const listeners: Record<string, Array<(e: Event) => void>> = {}
   const stateRef = { value: 'inactive' as string }
   const recorder = {
-    get state() { return stateRef.value },
-    set state(v: string) { stateRef.value = v },
+    get state() {
+      return stateRef.value
+    },
+    set state(v: string) {
+      stateRef.value = v
+    },
     stream,
     mimeType: options?.mimeType || '',
     start: vi.fn(() => {
@@ -65,9 +68,7 @@ function createMockMediaRecorder(stream: unknown, options?: { mimeType?: string 
     },
     dispatchError: (message: string) => {
       const handlers = listeners['error'] || []
-      handlers.forEach((h) =>
-        h(Object.assign(new Event('error'), { error: { message } })),
-      )
+      handlers.forEach((h) => h(Object.assign(new Event('error'), { error: { message } })))
     },
   }
   return recorder
@@ -76,9 +77,15 @@ function createMockMediaRecorder(stream: unknown, options?: { mimeType?: string 
 /** 创建一个 MediaRecorder mock 类，state 通过 getter/setter 共享 */
 function makeMediaRecorderClass(mockRecorder: ReturnType<typeof createMockMediaRecorder>) {
   return class {
-    static isTypeSupported() { return true }
-    get state() { return mockRecorder.state }
-    set state(v: string) { mockRecorder.state = v }
+    static isTypeSupported() {
+      return true
+    }
+    get state() {
+      return mockRecorder.state
+    }
+    set state(v: string) {
+      mockRecorder.state = v
+    }
     start = mockRecorder.start
     stop = mockRecorder.stop
     addEventListener = mockRecorder.addEventListener
@@ -94,15 +101,23 @@ async function flushVoiceAsyncWork() {
 }
 
 /** 简单的 MediaRecorder mock 类（用于权限拒绝等不会真正录音的场景） */
-function makeSimpleMediaRecorderClass(options: {
-  isTypeSupported?: () => boolean
-  startImpl?: () => void
-} = {}) {
+function makeSimpleMediaRecorderClass(
+  options: {
+    isTypeSupported?: () => boolean
+    startImpl?: () => void
+  } = {},
+) {
   return class {
     static isTypeSupported = options.isTypeSupported || (() => true)
     state = 'inactive'
-    start = options.startImpl || function () { (this as any).state = 'recording' }
-    stop() { (this as any).state = 'inactive' }
+    start =
+      options.startImpl ||
+      function () {
+        ;(this as any).state = 'recording'
+      }
+    stop() {
+      ;(this as any).state = 'inactive'
+    }
     addEventListener() {}
     removeEventListener() {}
   }
@@ -112,7 +127,6 @@ function makeSimpleMediaRecorderClass(options: {
 
 describe('useChatVoiceInput – coverage ramp', () => {
   let origMediaRecorder: unknown
-  let origGetUserMedia: unknown
   let origMediaDevices: unknown
 
   beforeEach(() => {
@@ -121,7 +135,6 @@ describe('useChatVoiceInput – coverage ramp', () => {
     // 保存原始值
     origMediaRecorder = (window as unknown as Record<string, unknown>).MediaRecorder
     origMediaDevices = navigator.mediaDevices
-    origGetUserMedia = navigator.mediaDevices?.getUserMedia
   })
 
   afterEach(() => {
@@ -192,7 +205,6 @@ describe('useChatVoiceInput – coverage ramp', () => {
   // ── startVoiceRecording：权限拒绝 ────────────────────────────────
 
   it('NotAllowedError 权限被拒绝', async () => {
-    const stream = makeMockStream()
     Object.defineProperty(navigator, 'mediaDevices', {
       configurable: true,
       value: {
@@ -284,8 +296,12 @@ describe('useChatVoiceInput – coverage ramp', () => {
     Object.defineProperty(window, 'MediaRecorder', {
       configurable: true,
       value: class {
-        static isTypeSupported() { return true }
-        constructor() { throw new Error('构造失败') }
+        static isTypeSupported() {
+          return true
+        }
+        constructor() {
+          throw new Error('构造失败')
+        }
       },
     })
     const api = useChatVoiceInput({ messageInput: ref(''), isLoading: ref(false) })
@@ -307,7 +323,11 @@ describe('useChatVoiceInput – coverage ramp', () => {
     })
     Object.defineProperty(window, 'MediaRecorder', {
       configurable: true,
-      value: makeSimpleMediaRecorderClass({ startImpl: () => { throw new Error('启动失败') } }),
+      value: makeSimpleMediaRecorderClass({
+        startImpl: () => {
+          throw new Error('启动失败')
+        },
+      }),
     })
     const api = useChatVoiceInput({ messageInput: ref(''), isLoading: ref(false) })
     await api.startVoiceRecording()
@@ -358,10 +378,7 @@ describe('useChatVoiceInput – coverage ramp', () => {
     await nextTick()
 
     // 验证 fetch 被调用
-    expect(fetchSpy).toHaveBeenCalledWith(
-      '/api/voice/transcribe',
-      expect.objectContaining({ method: 'POST' }),
-    )
+    expect(fetchSpy).toHaveBeenCalledWith('/api/voice/transcribe', expect.objectContaining({ method: 'POST' }))
 
     // 验证转录文字填入
     expect(messageInput.value).toBe('你好世界')
@@ -998,7 +1015,9 @@ describe('useChatVoiceInput – coverage ramp', () => {
     Object.defineProperty(window, 'MediaRecorder', {
       configurable: true,
       value: makeSimpleMediaRecorderClass({
-        isTypeSupported: () => { throw new Error('not supported') },
+        isTypeSupported: () => {
+          throw new Error('not supported')
+        },
       }),
     })
 

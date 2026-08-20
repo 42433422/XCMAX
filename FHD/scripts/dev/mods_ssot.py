@@ -15,6 +15,7 @@ sync-enterprise-mod-seeds.sh 已删除。
   python scripts/dev/mods_ssot.py sync --mod xcagi-erp-domain-bridge
   python scripts/dev/mods_ssot.py check             # 检查漂移（CI / 发版前）
 """
+
 from __future__ import annotations
 
 import argparse
@@ -153,7 +154,9 @@ def cmd_check(mod_ids: list[str]) -> int:
     for mod_id in targets:
         issues.extend(compare_mod(mod_id))
 
-    export_only = sorted(set(list_mod_ids(EXPORT_ROOT)) - set(list_mod_ids(SSOT_ROOT)) - EXPORT_ONLY_MODS)
+    export_only = sorted(
+        set(list_mod_ids(EXPORT_ROOT)) - set(list_mod_ids(SSOT_ROOT)) - EXPORT_ONLY_MODS
+    )
     for mod_id in export_only:
         issues.append(f"{mod_id}: 仅存在于 XCAGI/mods（SSOT 中无此 Mod，应删除或移回 mods/）")
 
@@ -163,7 +166,9 @@ def cmd_check(mod_ids: list[str]) -> int:
             print(f"  - {line}", file=sys.stderr)
         return 1
 
-    print(f"Mod SSOT 一致：{len(targets)} 个 Mod（{SSOT_ROOT.name} → {EXPORT_ROOT.relative_to(ROOT)}）")
+    print(
+        f"Mod SSOT 一致：{len(targets)} 个 Mod（{SSOT_ROOT.name} → {EXPORT_ROOT.relative_to(ROOT)}）"
+    )
     return 0
 
 
@@ -187,14 +192,20 @@ def cmd_sync(mod_ids: list[str], *, dry_run: bool, prune: bool) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="FHD Mod SSOT：mods/ 为唯一编辑源，XCAGI/mods 为导出副本。")
+    parser = argparse.ArgumentParser(
+        description="FHD Mod SSOT：mods/ 为唯一编辑源，XCAGI/mods 为导出副本。"
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     check_p = sub.add_parser("check", help="检查 SSOT 与导出副本是否一致")
-    check_p.add_argument("--mod", action="append", dest="mods", metavar="MOD_ID", help="仅检查指定 Mod")
+    check_p.add_argument(
+        "--mod", action="append", dest="mods", metavar="MOD_ID", help="仅检查指定 Mod"
+    )
 
     sync_p = sub.add_parser("sync", help="将 FHD/mods 同步到 FHD/XCAGI/mods")
-    sync_p.add_argument("--mod", action="append", dest="mods", metavar="MOD_ID", help="仅同步指定 Mod")
+    sync_p.add_argument(
+        "--mod", action="append", dest="mods", metavar="MOD_ID", help="仅同步指定 Mod"
+    )
     sync_p.add_argument("--dry-run", action="store_true", help="只打印将变更的文件")
     sync_p.add_argument(
         "--prune",

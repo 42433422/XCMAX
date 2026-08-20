@@ -45,6 +45,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Iterable, Optional
 
+BOUNDARY_ERRORS: tuple[type[Exception], ...] = (Exception,)
+
 HERE = Path(__file__).resolve().parent
 PROVENANCE_PATH = HERE / "PROVENANCE.json"
 MANIFEST_PATH = HERE / "source_manifest.json"
@@ -506,7 +508,7 @@ def verify_online(
                 continue
             try:
                 data = fetcher(path)
-            except Exception as exc:  # noqa: BLE001 - fail closed on any fetch error
+            except BOUNDARY_ERRORS as exc:  # noqa: BLE001 - fail closed on any fetch error
                 errors.append(f"fetch failed {path}: {exc}")
                 continue
             actual = sha256_of_bytes(data)

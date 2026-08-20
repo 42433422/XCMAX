@@ -12,17 +12,19 @@ export type CoreMenuCatalogItem = {
 /** 侧栏默认置顶项（行业 Mod 场景下仍保持在业务菜单之上） */
 export const PRIMARY_CHAT_MENU_KEY = 'chat'
 
-export function pinMenuKeyFirst<T extends { key: string }>(
-  items: T[],
-  key: string = PRIMARY_CHAT_MENU_KEY,
-): T[] {
+export function pinMenuKeyFirst<T extends { key: string }>(items: T[], key: string = PRIMARY_CHAT_MENU_KEY): T[] {
   const hit = items.find((i) => String(i.key) === key)
   if (!hit) return items
   return [hit, ...items.filter((i) => String(i.key) !== key)]
 }
 
 export const EMPLOYEE_WORKFLOW_MENU_CHILDREN: CoreMenuCatalogItem[] = [
-  { key: 'workflow-employee-space', name: '员工空间', iconClass: 'fa-th-large', description: '看工位实况与员工上岗状态' },
+  {
+    key: 'workflow-employee-space',
+    name: '员工空间',
+    iconClass: 'fa-th-large',
+    description: '看工位实况与员工上岗状态',
+  },
 ]
 
 /** 管理端「员工工作台」额外子项（企业端不可见） */
@@ -93,7 +95,12 @@ export const INDUSTRY_DELIVERY_CORE_ITEMS: CoreMenuCatalogItem[] = [
   { key: 'materials', name: '资源库', iconClass: 'fa-archive' },
   { key: 'inventory', name: '库存管理', iconClass: 'fa-cubes' },
   { key: 'approval-hub', name: '审批工作台', iconClass: 'fa-check-square-o' },
-  { key: 'business-docking', name: '数据对接中心', iconClass: 'fa-exchange', description: 'Excel ETL：预演、确认并写入业务数据' },
+  {
+    key: 'business-docking',
+    name: '数据对接中心',
+    iconClass: 'fa-exchange',
+    description: 'Excel ETL：预演、确认并写入业务数据',
+  },
   { key: 'data-sources', name: '数据来源', iconClass: 'fa-database' },
   { key: 'print', name: '模板与打印', iconClass: 'fa-print' },
   { key: 'printer-list', name: '打印机列表', iconClass: 'fa-print' },
@@ -121,12 +128,7 @@ export const CORE_NAV_KEYS = [
   SETTINGS_MENU_ITEM.key,
 ]
 
-export const SANDBOX_MENU_KEYS = new Set([
-  'chat',
-  'ai-ecosystem',
-  'employee-workflow',
-  'workflow-employee-space',
-])
+export const SANDBOX_MENU_KEYS = new Set(['chat', 'ai-ecosystem', 'employee-workflow', 'workflow-employee-space'])
 
 export function flattenNavKeys(items: Array<{ key: string; children?: Array<{ key: string }> }>): string[] {
   const out: string[] = []
@@ -142,10 +144,7 @@ export function flattenNavKeys(items: Array<{ key: string; children?: Array<{ ke
 }
 
 export function sidebarLayoutSeedKeys(): string[] {
-  const keys = [
-    ...CORE_MENU_ITEMS_BASE.map((m) => m.key),
-    ...CORE_MENU_ITEMS_TRAILING.map((m) => m.key),
-  ]
+  const keys = [...CORE_MENU_ITEMS_BASE.map((m) => m.key), ...CORE_MENU_ITEMS_TRAILING.map((m) => m.key)]
   return pinMenuKeyFirst(
     keys.map((key) => ({ key })),
     PRIMARY_CHAT_MENU_KEY,

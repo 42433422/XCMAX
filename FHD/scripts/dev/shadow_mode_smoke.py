@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """影子模式启动验证：跑 13 类真实事件，确认 NN 决策被记录且不影响实际路由。"""
+
+import json
 import os
 import time
-import json
 from pathlib import Path
 
 print("=== 影子模式启动 ===")
@@ -11,8 +12,8 @@ print(f"XCAGI_ROUTING_POLICY_ENABLED={os.environ.get('XCAGI_ROUTING_POLICY_ENABL
 log_path = Path("resources/routing_policies/routing_decisions.jsonl")
 size_before = log_path.stat().st_size if log_path.exists() else 0
 
-from app.neuro_bus.routing.policy_router import decide_processor_with_policy
 from app.neuro_bus.events import NeuroEvent
+from app.neuro_bus.routing.policy_router import decide_processor_with_policy
 
 test_cases = [
     ("你好", "greeting"),
@@ -46,14 +47,14 @@ elapsed = (time.perf_counter() - t0) * 1000
 size_after = log_path.stat().st_size if log_path.exists() else 0
 new_bytes = size_after - size_before
 
-print(f"\n=== 影子模式验证结果 ===")
+print("\n=== 影子模式验证结果 ===")
 print(f"  总事件数：{len(test_cases)}")
 print(f"  返回 None（不影响路由）：{null_returns}/{len(test_cases)}")
 print(f"  实际路由影响：{shadow_decisions}（应为 0）")
-print(f"  总耗时：{elapsed:.2f}ms（均值 {elapsed/len(test_cases):.3f}ms/条）")
+print(f"  总耗时：{elapsed:.2f}ms（均值 {elapsed / len(test_cases):.3f}ms/条）")
 print(f"  日志增长：{new_bytes} bytes（NN 决策已记录）")
 
-print(f"\n=== 影子日志样本（最后 13 条）===")
+print("\n=== 影子日志样本（最后 13 条）===")
 with log_path.open() as f:
     lines = f.readlines()
 shadow_lines = []
@@ -71,4 +72,4 @@ for obj in shadow_lines[-13:]:
         f"conf={extra.get('confidence', 0):.3f} source={extra.get('source')}"
     )
 
-print(f"\n=== 影子模式启动成功，NN 决策已记录，不影响实际路由 ===")
+print("\n=== 影子模式启动成功，NN 决策已记录，不影响实际路由 ===")

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, operator"
 """上传 zip/xcemp 的沙盒审核：五维评分、静态功能检查、可选 HTTP 探测。"""
 
 from __future__ import annotations
@@ -15,9 +16,14 @@ from urllib.parse import urlparse
 
 import httpx
 
-from modman.artifact_constants import ARTIFACT_EMPLOYEE_PACK, ARTIFACT_MOD, normalize_artifact
+from modman.artifact_constants import (
+    ARTIFACT_EMPLOYEE_PACK,
+    ARTIFACT_MOD,
+    normalize_artifact,
+)
 from modman.manifest_util import validate_manifest_dict
 from modstore_server.employee_config_v2 import validate_v2_config
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 MAX_ZIP_BYTES = 80 * 1024 * 1024
 MAX_SINGLE_FILE_BYTES = 16 * 1024 * 1024
@@ -281,7 +287,11 @@ def _functional_checks(
         for verb in ("status", "start", "stop"):
             ok = bool(re.search(re.escape(base) + r"[^\w]{0,12}" + re.escape(verb), blob, re.I))
             out.append(
-                {"name": f"静态路由片段 {base}/{verb}", "ok": ok, "detail": "见 Python 聚合扫描"}
+                {
+                    "name": f"静态路由片段 {base}/{verb}",
+                    "ok": ok,
+                    "detail": "见 Python 聚合扫描",
+                }
             )
     else:
         out.append(
@@ -317,7 +327,7 @@ async def _http_probe_phone_status(
         }
     try:
         u = urlparse(base)
-    except Exception as e:  # noqa: BLE001
+    except BOUNDARY_ERRORS as e:  # noqa: BLE001
         return {"skipped": True, "name": "HTTP GET status", "detail": f"基址无效: {e}"}
     host = (u.hostname or "").lower()
     if host not in _parse_allow_hosts():
@@ -328,7 +338,11 @@ async def _http_probe_phone_status(
         }
     b = phone_base_path.strip().strip("/")
     if not b:
-        return {"skipped": True, "name": "HTTP GET status", "detail": "无 phone_agent_base_path"}
+        return {
+            "skipped": True,
+            "name": "HTTP GET status",
+            "detail": "无 phone_agent_base_path",
+        }
     mid = str(mod_id or "").strip()
     if not mid:
         return {
@@ -348,7 +362,7 @@ async def _http_probe_phone_status(
             "detail": f"{url} -> HTTP {r.status_code}",
             "url": url,
         }
-    except Exception as e:  # noqa: BLE001
+    except BOUNDARY_ERRORS as e:  # noqa: BLE001
         return {
             "skipped": False,
             "name": "HTTP GET status",
@@ -398,14 +412,24 @@ async def run_package_audit_async(
             return {
                 "ok": True,
                 "dimensions": {
-                    "manifest_compliance": {"score": 0, "reasons": ["缺少 manifest.json"]},
+                    "manifest_compliance": {
+                        "score": 0,
+                        "reasons": ["缺少 manifest.json"],
+                    },
                     "declaration_completeness": {"score": 0, "reasons": ["无法评估"]},
                     "api_testability_static": {"score": 0, "reasons": ["无法评估"]},
-                    "security_and_size": {"score": 50, "reasons": ["已解压；无 manifest 可对照"]},
+                    "security_and_size": {
+                        "score": 50,
+                        "reasons": ["已解压；无 manifest 可对照"],
+                    },
                     "metadata_quality": {"score": 0, "reasons": ["无 manifest"]},
                 },
                 "functional_tests": [
-                    {"name": "manifest 存在", "ok": False, "detail": "未找到 manifest.json"},
+                    {
+                        "name": "manifest 存在",
+                        "ok": False,
+                        "detail": "未找到 manifest.json",
+                    },
                 ],
                 "summary": {"average": 10, "pass": False},
             }

@@ -4,54 +4,26 @@
     {
       "id": "artifact-generator",
       "area": "craft-workshop",
-      "scope_globs": [
-        "workbench/sessions/*",
-        "workbench/artifacts/*",
-        "yuangon/**"
-      ],
-      "forbidden_globs": [
-        "*.py",
-        "*.vue",
-        "*.ts"
-      ],
+      "scope_globs": ["workbench/sessions/*", "workbench/artifacts/*", "yuangon/**"],
+      "forbidden_globs": ["*.py", "*.vue", "*.ts"],
       "subscribes": [],
-      "depends_on": [
-        "employee-planner"
-      ]
+      "depends_on": ["employee-planner"]
     },
     {
       "id": "code-validator",
       "area": "craft-workshop",
-      "scope_globs": [
-        "workbench/sessions/*",
-        "workbench/validation/*"
-      ],
-      "forbidden_globs": [
-        "*.py",
-        "*.vue",
-        "*.ts"
-      ],
+      "scope_globs": ["workbench/sessions/*", "workbench/validation/*"],
+      "forbidden_globs": ["*.py", "*.vue", "*.ts"],
       "subscribes": [],
-      "depends_on": [
-        "sandbox-tester"
-      ]
+      "depends_on": ["sandbox-tester"]
     },
     {
       "id": "employee-planner",
       "area": "craft-workshop",
-      "scope_globs": [
-        "workbench/sessions/*",
-        "workbench/plans/*"
-      ],
-      "forbidden_globs": [
-        "*.py",
-        "*.vue",
-        "*.ts"
-      ],
+      "scope_globs": ["workbench/sessions/*", "workbench/plans/*"],
+      "forbidden_globs": ["*.py", "*.vue", "*.ts"],
       "subscribes": [],
-      "depends_on": [
-        "intent-analyst"
-      ]
+      "depends_on": ["intent-analyst"]
     },
     {
       "id": "hex-quality-assessor",
@@ -62,166 +34,81 @@
         "workbench/sessions/*",
         "workbench/validation/*"
       ],
-      "forbidden_globs": [
-        "*.py",
-        "*.vue",
-        "*.ts"
-      ],
+      "forbidden_globs": ["*.py", "*.vue", "*.ts"],
       "subscribes": [],
-      "depends_on": [
-        "quality-validator"
-      ]
+      "depends_on": ["quality-validator"]
     },
     {
       "id": "host-checker",
       "area": "craft-workshop",
-      "scope_globs": [
-        "workbench/sessions/*",
-        "workbench/hostcheck/*"
-      ],
-      "forbidden_globs": [
-        "*.py",
-        "*.vue",
-        "*.ts"
-      ],
+      "scope_globs": ["workbench/sessions/*", "workbench/hostcheck/*"],
+      "forbidden_globs": ["*.py", "*.vue", "*.ts"],
       "subscribes": [],
-      "depends_on": [
-        "self-checker"
-      ]
+      "depends_on": ["self-checker"]
     },
     {
       "id": "intent-analyst",
       "area": "craft-workshop",
-      "scope_globs": [
-        "workbench/sessions/*",
-        "workbench/intent/*"
-      ],
-      "forbidden_globs": [
-        "*.py",
-        "*.vue",
-        "*.ts"
-      ],
+      "scope_globs": ["workbench/sessions/*", "workbench/intent/*"],
+      "forbidden_globs": ["*.py", "*.vue", "*.ts"],
       "subscribes": [],
       "depends_on": []
     },
     {
       "id": "miniapp-builder",
       "area": "craft-workshop",
-      "scope_globs": [
-        "workbench/sessions/*",
-        "workbench/scripts/*"
-      ],
-      "forbidden_globs": [
-        "*.py",
-        "*.vue",
-        "*.ts"
-      ],
+      "scope_globs": ["workbench/sessions/*", "workbench/scripts/*"],
+      "forbidden_globs": ["*.py", "*.vue", "*.ts"],
       "subscribes": [],
-      "depends_on": [
-        "quality-validator"
-      ]
+      "depends_on": ["quality-validator"]
     },
     {
       "id": "pack-registrar",
       "area": "craft-workshop",
-      "scope_globs": [
-        "workbench/sessions/*",
-        "catalog/*"
-      ],
-      "forbidden_globs": [
-        "*.py",
-        "*.vue",
-        "*.ts"
-      ],
+      "scope_globs": ["workbench/sessions/*", "catalog/*"],
+      "forbidden_globs": ["*.py", "*.vue", "*.ts"],
       "subscribes": [],
-      "depends_on": [
-        "workflow-automator"
-      ]
+      "depends_on": ["workflow-automator"]
     },
     {
       "id": "quality-validator",
       "area": "craft-workshop",
-      "scope_globs": [
-        "workbench/sessions/*",
-        "workbench/validation/*"
-      ],
-      "forbidden_globs": [
-        "*.py",
-        "*.vue",
-        "*.ts"
-      ],
+      "scope_globs": ["workbench/sessions/*", "workbench/validation/*"],
+      "forbidden_globs": ["*.py", "*.vue", "*.ts"],
       "subscribes": [],
-      "depends_on": [
-        "artifact-generator"
-      ]
+      "depends_on": ["artifact-generator"]
     },
     {
       "id": "sandbox-tester",
       "area": "craft-workshop",
-      "scope_globs": [
-        "workbench/sessions/*",
-        "workbench/sandbox/*"
-      ],
-      "forbidden_globs": [
-        "*.py",
-        "*.vue",
-        "*.ts"
-      ],
+      "scope_globs": ["workbench/sessions/*", "workbench/sandbox/*"],
+      "forbidden_globs": ["*.py", "*.vue", "*.ts"],
       "subscribes": [],
-      "depends_on": [
-        "pack-registrar"
-      ]
+      "depends_on": ["pack-registrar"]
     },
     {
       "id": "script-binder",
       "area": "craft-workshop",
-      "scope_globs": [
-        "workbench/sessions/*",
-        "yuangon/**"
-      ],
-      "forbidden_globs": [
-        "*.py",
-        "*.vue",
-        "*.ts"
-      ],
+      "scope_globs": ["workbench/sessions/*", "yuangon/**"],
+      "forbidden_globs": ["*.py", "*.vue", "*.ts"],
       "subscribes": [],
-      "depends_on": [
-        "miniapp-builder"
-      ]
+      "depends_on": ["miniapp-builder"]
     },
     {
       "id": "self-checker",
       "area": "craft-workshop",
-      "scope_globs": [
-        "workbench/sessions/*",
-        "workbench/selfcheck/*"
-      ],
-      "forbidden_globs": [
-        "*.py",
-        "*.vue",
-        "*.ts"
-      ],
+      "scope_globs": ["workbench/sessions/*", "workbench/selfcheck/*"],
+      "forbidden_globs": ["*.py", "*.vue", "*.ts"],
       "subscribes": [],
-      "depends_on": [
-        "code-validator"
-      ]
+      "depends_on": ["code-validator"]
     },
     {
       "id": "workflow-automator",
       "area": "craft-workshop",
-      "scope_globs": [
-        "workbench/sessions/*",
-        "workbench/workflows/*"
-      ],
-      "forbidden_globs": [
-        "*.py",
-        "*.vue",
-        "*.ts"
-      ],
+      "scope_globs": ["workbench/sessions/*", "workbench/workflows/*"],
+      "forbidden_globs": ["*.py", "*.vue", "*.ts"],
       "subscribes": [],
-      "depends_on": [
-        "script-binder"
-      ]
+      "depends_on": ["script-binder"]
     },
     {
       "id": "employee-pack-curator",
@@ -254,18 +141,9 @@
         "docs/adr/0003-artifacts-bundles-employee-packs.md",
         "yuangon/modstore-backend/employee-pack-curator/**"
       ],
-      "forbidden_globs": [
-        "MODstore_deploy/modstore_server/payment_*.py",
-        "MODstore_deploy/market/src/**",
-        "_local_secrets/**"
-      ],
-      "subscribes": [
-        "employee.task.done:vibe-coding-maintainer"
-      ],
-      "depends_on": [
-        "mods-and-eskill-curator",
-        "vibe-coding-maintainer"
-      ]
+      "forbidden_globs": ["MODstore_deploy/modstore_server/payment_*.py", "MODstore_deploy/market/src/**", "_local_secrets/**"],
+      "subscribes": ["employee.task.done:vibe-coding-maintainer"],
+      "depends_on": ["mods-and-eskill-curator", "vibe-coding-maintainer"]
     },
     {
       "id": "java-payment-bridge-officer",
@@ -275,15 +153,9 @@
         "MODstore_deploy/modstore_server/payment_*.py",
         "MODstore_deploy/docs/PAYMENT_CONTRACT.md"
       ],
-      "forbidden_globs": [
-        "_local_secrets/**",
-        "*.env*"
-      ],
+      "forbidden_globs": ["_local_secrets/**", "*.env*"],
       "subscribes": [],
-      "depends_on": [
-        "modstore-backend-api",
-        "payment-billing-reconciler"
-      ]
+      "depends_on": ["modstore-backend-api", "payment-billing-reconciler"]
     },
     {
       "id": "modstore-backend-api",
@@ -327,11 +199,7 @@
         "vibe-coding/**"
       ],
       "subscribes": [],
-      "depends_on": [
-        "log-monitor-incident",
-        "deploy-release-officer",
-        "dbops-engineer"
-      ]
+      "depends_on": ["log-monitor-incident", "deploy-release-officer", "dbops-engineer"]
     },
     {
       "id": "payment-billing-reconciler",
@@ -357,9 +225,7 @@
         "vibe-coding/**"
       ],
       "subscribes": [],
-      "depends_on": [
-        "security-secrets-guard"
-      ]
+      "depends_on": ["security-secrets-guard"]
     },
     {
       "id": "market-frontend-dev",
@@ -397,9 +263,7 @@
         "react"
       ],
       "subscribes": [],
-      "depends_on": [
-        "modstore-backend-api"
-      ]
+      "depends_on": ["modstore-backend-api"]
     },
     {
       "id": "workbench-ux-stylist",
@@ -424,9 +288,7 @@
         "react"
       ],
       "subscribes": [],
-      "depends_on": [
-        "market-frontend-dev"
-      ]
+      "depends_on": ["market-frontend-dev"]
     },
     {
       "id": "ecosystem-delivery-reporter",
@@ -436,14 +298,9 @@
         "MODstore_deploy/modstore_server/**/operations*",
         "FHD/app/**/telemetry/**"
       ],
-      "forbidden_globs": [
-        "_local_secrets/**"
-      ],
+      "forbidden_globs": ["_local_secrets/**"],
       "subscribes": [],
-      "depends_on": [
-        "enterprise-adoption-officer",
-        "deploy-release-officer"
-      ]
+      "depends_on": ["enterprise-adoption-officer", "deploy-release-officer"]
     },
     {
       "id": "ecosystem-investor-portal-officer",
@@ -453,14 +310,9 @@
         "MODstore_deploy/market/src/views/**/Investor*",
         "MODstore_deploy/modstore_server/**/investor*"
       ],
-      "forbidden_globs": [
-        "_local_secrets/**"
-      ],
+      "forbidden_globs": ["_local_secrets/**"],
       "subscribes": [],
-      "depends_on": [
-        "market-frontend-dev",
-        "ecosystem-delivery-reporter"
-      ]
+      "depends_on": ["market-frontend-dev", "ecosystem-delivery-reporter"]
     },
     {
       "id": "ecosystem-joint-catalog-officer",
@@ -470,14 +322,9 @@
         "MODstore_deploy/modstore_server/**/packages.json",
         "MODstore_deploy/market/src/**/catalog*"
       ],
-      "forbidden_globs": [
-        "_local_secrets/**"
-      ],
+      "forbidden_globs": ["_local_secrets/**"],
       "subscribes": [],
-      "depends_on": [
-        "employee-pack-curator",
-        "modstore-backend-api"
-      ]
+      "depends_on": ["employee-pack-curator", "modstore-backend-api"]
     },
     {
       "id": "ecosystem-partner-onboard-officer",
@@ -487,14 +334,9 @@
         "MODstore_deploy/modstore_server/**/tenant**",
         "FHD/app/**/external_crm*"
       ],
-      "forbidden_globs": [
-        "_local_secrets/**",
-        "*.env*"
-      ],
+      "forbidden_globs": ["_local_secrets/**", "*.env*"],
       "subscribes": [],
-      "depends_on": [
-        "modstore-backend-api"
-      ]
+      "depends_on": ["modstore-backend-api"]
     },
     {
       "id": "ecosystem-revenue-share-reconciler",
@@ -504,15 +346,9 @@
         "MODstore_deploy/java_payment_service/**/Order*",
         "FHD/app/**/payment*"
       ],
-      "forbidden_globs": [
-        "_local_secrets/**",
-        "*.env*"
-      ],
+      "forbidden_globs": ["_local_secrets/**", "*.env*"],
       "subscribes": [],
-      "depends_on": [
-        "payment-billing-reconciler",
-        "java-payment-bridge-officer"
-      ]
+      "depends_on": ["payment-billing-reconciler", "java-payment-bridge-officer"]
     },
     {
       "id": "change-request-auditor",
@@ -532,15 +368,8 @@
         "MODstore_deploy/modstore_server/employee_*.py",
         "_local_secrets/**"
       ],
-      "subscribes": [
-        "ops.change_request.submitted",
-        "employee.task.done:test-qa-runner"
-      ],
-      "depends_on": [
-        "test-qa-runner",
-        "employee-pack-quality-interviewer",
-        "security-secrets-guard"
-      ]
+      "subscribes": ["ops.change_request.submitted", "employee.task.done:test-qa-runner"],
+      "depends_on": ["test-qa-runner", "employee-pack-quality-interviewer", "security-secrets-guard"]
     },
     {
       "id": "daily-orchestrator",
@@ -562,10 +391,7 @@
         "_local_secrets/**"
       ],
       "subscribes": [],
-      "depends_on": [
-        "test-qa-runner",
-        "dbops-engineer"
-      ]
+      "depends_on": ["test-qa-runner", "dbops-engineer"]
     },
     {
       "id": "delivery-receipt-officer",
@@ -575,33 +401,17 @@
         "FHD/mods/xcagi-workflow-employee-receipt-confirm/**",
         "MODstore_deploy/modstore_server/**/delivery**"
       ],
-      "forbidden_globs": [
-        "_local_secrets/**"
-      ],
-      "subscribes": [
-        "ops.delivery.milestone_ready"
-      ],
-      "depends_on": [
-        "test-qa-runner",
-        "change-request-auditor"
-      ]
+      "forbidden_globs": ["_local_secrets/**"],
+      "subscribes": ["ops.delivery.milestone_ready"],
+      "depends_on": ["test-qa-runner", "change-request-auditor"]
     },
     {
       "id": "enterprise-adoption-officer",
       "area": "platform-core",
-      "scope_globs": [
-        "FHD/app/**/telemetry/**",
-        "FHD/app/**/crm/**",
-        "MODstore_deploy/modstore_server/**/tenant**"
-      ],
-      "forbidden_globs": [
-        "_local_secrets/**",
-        "*.env*"
-      ],
+      "scope_globs": ["FHD/app/**/telemetry/**", "FHD/app/**/crm/**", "MODstore_deploy/modstore_server/**/tenant**"],
+      "forbidden_globs": ["_local_secrets/**", "*.env*"],
       "subscribes": [],
-      "depends_on": [
-        "user-customer-service-officer"
-      ]
+      "depends_on": ["user-customer-service-officer"]
     },
     {
       "id": "fhd-core-maintainer",
@@ -617,20 +427,9 @@
         "FHD/mods/_employees/fhd-core-maintainer/**",
         "yuangon/platform-core/fhd-core-maintainer/**"
       ],
-      "forbidden_globs": [
-        "MODstore_deploy/**",
-        "成都修茈科技有限公司/**",
-        "vibe-coding/**",
-        "_local_secrets/**",
-        "*.vue"
-      ],
-      "subscribes": [
-        "telemetry.backlog.created",
-        "employee.task.failed:test-qa-runner"
-      ],
-      "depends_on": [
-        "test-qa-runner"
-      ]
+      "forbidden_globs": ["MODstore_deploy/**", "成都修茈科技有限公司/**", "vibe-coding/**", "_local_secrets/**", "*.vue"],
+      "subscribes": ["telemetry.backlog.created", "employee.task.failed:test-qa-runner"],
+      "depends_on": ["test-qa-runner"]
     },
     {
       "id": "github-pr-gatekeeper",
@@ -651,14 +450,8 @@
         "MODstore_deploy/modstore_server/migrations/**",
         "_local_secrets/**"
       ],
-      "subscribes": [
-        "dependabot.pr.opened",
-        "dependabot.autofix.triggered"
-      ],
-      "depends_on": [
-        "change-request-auditor",
-        "test-qa-runner"
-      ]
+      "subscribes": ["dependabot.pr.opened", "dependabot.autofix.triggered"],
+      "depends_on": ["change-request-auditor", "test-qa-runner"]
     },
     {
       "id": "intake-dispatcher",
@@ -687,9 +480,7 @@
         "ops.intake.customer_ticket",
         "ops.intake.candidate_pack"
       ],
-      "depends_on": [
-        "doc-knowledge-curator"
-      ]
+      "depends_on": ["doc-knowledge-curator"]
     },
     {
       "id": "mobile-android-release-officer",
@@ -700,14 +491,9 @@
         "FHD/.github/workflows/release-android.yml",
         "release-apk/**"
       ],
-      "forbidden_globs": [
-        "_local_secrets/**"
-      ],
+      "forbidden_globs": ["_local_secrets/**"],
       "subscribes": [],
-      "depends_on": [
-        "test-qa-runner",
-        "deploy-release-officer"
-      ]
+      "depends_on": ["test-qa-runner", "deploy-release-officer"]
     },
     {
       "id": "mobile-ios-release-officer",
@@ -718,14 +504,9 @@
         "FHD/.github/workflows/release-ios.yml",
         "FHD/XCAGI/resources/**"
       ],
-      "forbidden_globs": [
-        "_local_secrets/**"
-      ],
+      "forbidden_globs": ["_local_secrets/**"],
       "subscribes": [],
-      "depends_on": [
-        "deploy-release-officer",
-        "mobile-android-release-officer"
-      ]
+      "depends_on": ["deploy-release-officer", "mobile-android-release-officer"]
     },
     {
       "id": "mods-and-eskill-curator",
@@ -745,10 +526,7 @@
         "MODstore_deploy/market/src/**",
         "vibe-coding/src/**"
       ],
-      "subscribes": [
-        "employee.task.done:employee-pack-curator",
-        "change_request.applied"
-      ],
+      "subscribes": ["employee.task.done:employee-pack-curator", "change_request.applied"],
       "depends_on": []
     },
     {
@@ -770,14 +548,8 @@
         "MODstore_deploy/modstore_server/employee_*.py",
         "_local_secrets/**"
       ],
-      "subscribes": [
-        "ops.intake.task.queued",
-        "ops.yuangon.resync.done"
-      ],
-      "depends_on": [
-        "intake-dispatcher",
-        "employee-pack-curator"
-      ]
+      "subscribes": ["ops.intake.task.queued", "ops.yuangon.resync.done"],
+      "depends_on": ["intake-dispatcher", "employee-pack-curator"]
     },
     {
       "id": "top-architect",
@@ -797,25 +569,14 @@
         "成都修茈科技有限公司/MODstore_deploy/market/src/**",
         "成都修茈科技有限公司/yuangon/**"
       ],
-      "forbidden_globs": [
-        "_local_secrets/**",
-        "**/.env",
-        "**/.env.*",
-        "**/secrets/**",
-        "**/node_modules/**",
-        "**/build/**",
-        "**/dist/**"
-      ],
+      "forbidden_globs": ["_local_secrets/**", "**/.env", "**/.env.*", "**/secrets/**", "**/node_modules/**", "**/build/**", "**/dist/**"],
       "subscribes": [
         "architecture.question.created",
         "employee.task.failed:fhd-core-maintainer",
         "employee.task.failed:mobile-ios-release-officer",
         "employee.task.failed:modstore-backend-api"
       ],
-      "depends_on": [
-        "doc-knowledge-curator",
-        "test-qa-runner"
-      ]
+      "depends_on": ["doc-knowledge-curator", "test-qa-runner"]
     },
     {
       "id": "user-customer-service-officer",
@@ -826,19 +587,9 @@
         "FHD/mods/_employees/user-customer-service-officer/**",
         "yuangon/platform-core/user-customer-service-officer/**"
       ],
-      "forbidden_globs": [
-        "FHD/app/**",
-        "FHD/tests/**",
-        "MODstore_deploy/**",
-        "_local_secrets/**",
-        "*.env*"
-      ],
-      "subscribes": [
-        "ops.intake.customer_ticket"
-      ],
-      "depends_on": [
-        "intake-dispatcher"
-      ]
+      "forbidden_globs": ["FHD/app/**", "FHD/tests/**", "MODstore_deploy/**", "_local_secrets/**", "*.env*"],
+      "subscribes": ["ops.intake.customer_ticket"],
+      "depends_on": ["intake-dispatcher"]
     },
     {
       "id": "vibe-coding-maintainer",
@@ -859,16 +610,8 @@
         "vibe-coding/.dockerignore",
         "vibe-coding/test_vibe_*.py"
       ],
-      "forbidden_globs": [
-        "MODstore_deploy/modstore_server/**",
-        "MODstore_deploy/market/src/**",
-        "_local_secrets/**",
-        "*.vue"
-      ],
-      "subscribes": [
-        "employee.task.failed:test-qa-runner",
-        "employee.task.done:modstore-backend-api"
-      ],
+      "forbidden_globs": ["MODstore_deploy/modstore_server/**", "MODstore_deploy/market/src/**", "_local_secrets/**", "*.vue"],
+      "subscribes": ["employee.task.failed:test-qa-runner", "employee.task.done:modstore-backend-api"],
       "depends_on": []
     },
     {
@@ -919,11 +662,7 @@
         "employee.task.done:site-content-editor",
         "employee.task.done:payment-billing-reconciler"
       ],
-      "depends_on": [
-        "mods-and-eskill-curator",
-        "vibe-coding-maintainer",
-        "employee-pack-curator"
-      ]
+      "depends_on": ["mods-and-eskill-curator", "vibe-coding-maintainer", "employee-pack-curator"]
     },
     {
       "id": "employee-interview-assistant",
@@ -935,36 +674,17 @@
         "yuangon/**/skills/*.md",
         "yuangon/**/tasks/**"
       ],
-      "forbidden_globs": [
-        "_local_secrets/**",
-        "*.key",
-        ".env",
-        "payments/**"
-      ],
+      "forbidden_globs": ["_local_secrets/**", "*.key", ".env", "payments/**"],
       "subscribes": [],
-      "depends_on": [
-        "doc-knowledge-curator",
-        "employee-pack-curator"
-      ]
+      "depends_on": ["doc-knowledge-curator", "employee-pack-curator"]
     },
     {
       "id": "employee-pack-quality-interviewer",
       "area": "quality-and-docs",
-      "scope_globs": [
-        "yuangon/**/employee.yaml",
-        "yuangon/**/prompts/*.md",
-        "yuangon/**/skills/*.md"
-      ],
-      "forbidden_globs": [
-        "_local_secrets/**",
-        "*.key",
-        ".env"
-      ],
+      "scope_globs": ["yuangon/**/employee.yaml", "yuangon/**/prompts/*.md", "yuangon/**/skills/*.md"],
+      "forbidden_globs": ["_local_secrets/**", "*.key", ".env"],
       "subscribes": [],
-      "depends_on": [
-        "employee-interview-assistant",
-        "employee-pack-curator"
-      ]
+      "depends_on": ["employee-interview-assistant", "employee-pack-curator"]
     },
     {
       "id": "test-qa-runner",
@@ -992,23 +712,13 @@
         "MODstore_deploy/tests/test_coverage_gates.py",
         "MODstore_deploy/scripts/coverage_audit.py"
       ],
-      "forbidden_globs": [
-        "MODstore_deploy/modstore_server/**",
-        "vibe-coding/src/**",
-        "_local_secrets/**",
-        "nginx-*.conf"
-      ],
+      "forbidden_globs": ["MODstore_deploy/modstore_server/**", "vibe-coding/src/**", "_local_secrets/**", "nginx-*.conf"],
       "subscribes": [
         "employee.task.done:modstore-backend-api",
         "employee.task.done:market-frontend-dev",
         "employee.task.failed:modstore-backend-api"
       ],
-      "depends_on": [
-        "modstore-backend-api",
-        "vibe-coding-maintainer",
-        "market-frontend-dev",
-        "deploy-release-officer"
-      ]
+      "depends_on": ["modstore-backend-api", "vibe-coding-maintainer", "market-frontend-dev", "deploy-release-officer"]
     },
     {
       "id": "dbops-engineer",
@@ -1033,13 +743,8 @@
         "MODstore_deploy/modstore_server/catalog_data/**",
         "MODstore_deploy/modstore_server/library/**"
       ],
-      "subscribes": [
-        "employee.task.done:modstore-backend-api",
-        "employee.task.escalate:daily-orchestrator"
-      ],
-      "depends_on": [
-        "security-secrets-guard"
-      ]
+      "subscribes": ["employee.task.done:modstore-backend-api", "employee.task.escalate:daily-orchestrator"],
+      "depends_on": ["security-secrets-guard"]
     },
     {
       "id": "deploy-release-officer",
@@ -1084,13 +789,8 @@
         "MODstore_deploy/scripts/audit_*.py",
         "MODstore_deploy/scripts/db_*.py"
       ],
-      "subscribes": [
-        "employee.task.done:test-qa-runner"
-      ],
-      "depends_on": [
-        "nginx-config-engineer",
-        "security-secrets-guard"
-      ]
+      "subscribes": ["employee.task.done:test-qa-runner"],
+      "depends_on": ["nginx-config-engineer", "security-secrets-guard"]
     },
     {
       "id": "legacy-archive-curator",
@@ -1102,13 +802,9 @@
         "scripts/cleanup_archive_secrets.py",
         "scripts/build-xcmax-tree-data.py"
       ],
-      "forbidden_globs": [
-        "_local_secrets/**"
-      ],
+      "forbidden_globs": ["_local_secrets/**"],
       "subscribes": [],
-      "depends_on": [
-        "retention-officer"
-      ]
+      "depends_on": ["retention-officer"]
     },
     {
       "id": "llm-ops-engineer",
@@ -1134,14 +830,8 @@
         "MODstore_deploy/modstore_server/catalog_data/**",
         "MODstore_deploy/modstore_server/library/**"
       ],
-      "subscribes": [
-        "employee.task.escalate:security-secrets-guard",
-        "employee.task.escalate:daily-orchestrator"
-      ],
-      "depends_on": [
-        "security-secrets-guard",
-        "dbops-engineer"
-      ]
+      "subscribes": ["employee.task.escalate:security-secrets-guard", "employee.task.escalate:daily-orchestrator"],
+      "depends_on": ["security-secrets-guard", "dbops-engineer"]
     },
     {
       "id": "log-monitor-incident",
@@ -1167,13 +857,7 @@
         "MODstore_deploy/perf/**",
         "MODstore_deploy/docs/runbooks/exercises/**"
       ],
-      "forbidden_globs": [
-        "MODstore_deploy/modstore_server/**/*.py",
-        "*.vue",
-        "*.ts",
-        "nginx-*.conf",
-        "_local_secrets/**"
-      ],
+      "forbidden_globs": ["MODstore_deploy/modstore_server/**/*.py", "*.vue", "*.ts", "nginx-*.conf", "_local_secrets/**"],
       "subscribes": [],
       "depends_on": []
     },
@@ -1190,17 +874,9 @@
         "MODstore_deploy/docs/runbooks/nginx-*.md",
         "MODstore_deploy/market/nginx.conf"
       ],
-      "forbidden_globs": [
-        "*.py",
-        "*.vue",
-        "*.ts",
-        "vibe-coding/**",
-        "_local_secrets/**"
-      ],
+      "forbidden_globs": ["*.py", "*.vue", "*.ts", "vibe-coding/**", "_local_secrets/**"],
       "subscribes": [],
-      "depends_on": [
-        "security-secrets-guard"
-      ]
+      "depends_on": ["security-secrets-guard"]
     },
     {
       "id": "push-update-context-officer",
@@ -1228,12 +904,8 @@
         "yuangon/**/skills/**",
         "yuangon/**/prompts/**"
       ],
-      "subscribes": [
-        "yuangon.def.changed"
-      ],
-      "depends_on": [
-        "deploy-release-officer"
-      ]
+      "subscribes": ["yuangon.def.changed"],
+      "depends_on": ["deploy-release-officer"]
     },
     {
       "id": "retention-officer",
@@ -1289,9 +961,7 @@
         "**/secrets/**"
       ],
       "subscribes": [],
-      "depends_on": [
-        "log-monitor-incident"
-      ]
+      "depends_on": ["log-monitor-incident"]
     },
     {
       "id": "security-secrets-guard",
@@ -1317,38 +987,17 @@
         "MODstore_deploy/runtime_allowlist.json",
         "MODstore_deploy/deploy-target.local.ps1.example"
       ],
-      "forbidden_globs": [
-        "*.vue",
-        "*.ts",
-        "MODstore_deploy/modstore_server/*.py",
-        "vibe-coding/**"
-      ],
+      "forbidden_globs": ["*.vue", "*.ts", "MODstore_deploy/modstore_server/*.py", "vibe-coding/**"],
       "subscribes": [],
       "depends_on": []
     },
     {
       "id": "flask-entry-keeper",
       "area": "site-and-marketing",
-      "scope_globs": [
-        "./app.py",
-        "./requirements.txt",
-        "./public/**",
-        "./uploads/**",
-        "./site/**",
-        "./excel-to-ai.html"
-      ],
-      "forbidden_globs": [
-        "nginx-*.conf",
-        "MODstore_deploy/**",
-        "vibe-coding/**",
-        "_local_secrets/**",
-        "docker/**",
-        "deploy/**"
-      ],
+      "scope_globs": ["./app.py", "./requirements.txt", "./public/**", "./uploads/**", "./site/**", "./excel-to-ai.html"],
+      "forbidden_globs": ["nginx-*.conf", "MODstore_deploy/**", "vibe-coding/**", "_local_secrets/**", "docker/**", "deploy/**"],
       "subscribes": [],
-      "depends_on": [
-        "nginx-config-engineer"
-      ]
+      "depends_on": ["nginx-config-engineer"]
     },
     {
       "id": "marketing-site-builder",
@@ -1359,39 +1008,17 @@
         "marketing-assets/xc-brand-film/scripts/**",
         "marketing-assets/xc-brand-film/assets/**"
       ],
-      "forbidden_globs": [
-        "_local_secrets/**",
-        "MODstore_deploy/**",
-        "site/**"
-      ],
+      "forbidden_globs": ["_local_secrets/**", "MODstore_deploy/**", "site/**"],
       "subscribes": [],
-      "depends_on": [
-        "site-content-editor",
-        "seo-sitemap-curator"
-      ]
+      "depends_on": ["site-content-editor", "seo-sitemap-curator"]
     },
     {
       "id": "seo-sitemap-curator",
       "area": "site-and-marketing",
-      "scope_globs": [
-        "./sitemap.xml",
-        "./robots.txt",
-        "./baidu_urls.txt",
-        "./BingSiteAuth.xml",
-        "./baidu_verify_*.html"
-      ],
-      "forbidden_globs": [
-        "*.py",
-        "nginx-*.conf",
-        "MODstore_deploy/**",
-        "_local_secrets/**",
-        "styles.css",
-        "main.js"
-      ],
+      "scope_globs": ["./sitemap.xml", "./robots.txt", "./baidu_urls.txt", "./BingSiteAuth.xml", "./baidu_verify_*.html"],
+      "forbidden_globs": ["*.py", "nginx-*.conf", "MODstore_deploy/**", "_local_secrets/**", "styles.css", "main.js"],
       "subscribes": [],
-      "depends_on": [
-        "site-content-editor"
-      ]
+      "depends_on": ["site-content-editor"]
     },
     {
       "id": "site-content-editor",

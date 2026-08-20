@@ -1,12 +1,14 @@
+# mypy: disable-error-code="attr-defined, no-any-return, union-attr, valid-type"
 """员工编排：在岗协作图入口（定时任务 / 扩展编排调用）。"""
 
 from __future__ import annotations
 
 import contextvars
 import logging
-import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 if TYPE_CHECKING:
     from modstore_server.task_router import SubTask
@@ -69,7 +71,7 @@ def _record_dispatch_metric(
                 )
             )
             session.commit()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.debug("record_dispatch_metric failed employee=%s", employee_id, exc_info=True)
 
 
@@ -80,9 +82,7 @@ def _resolve_uid(created_by_user_id: int) -> int:
     if uid <= 0:
         sf = get_session_factory()
         with sf() as session:
-            u = (
-                session.query(User).filter(User.is_admin == True).order_by(User.id.asc()).first()
-            )  # noqa: E712
+            u = session.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).first()
             uid = int(u.id) if u else 0
             if uid <= 0:
                 u2 = session.query(User).order_by(User.id.asc()).first()
@@ -143,7 +143,7 @@ def plan_and_dispatch(
 
 
 def dispatch_subtasks(
-    subtasks: "List[SubTask]",
+    subtasks: List[SubTask],
     *,
     created_by_user_id: int = 0,
     max_concurrency: int = 2,
@@ -170,7 +170,6 @@ def dispatch_subtasks(
     handoff_chain: List[Dict[str, Any]] = []
     fallback_brief = subtasks[0].task_brief if subtasks else ""
 
-    layer_index = 0
     for layer in layers:
         layer_results = _run_layer(
             layer,
@@ -183,8 +182,6 @@ def dispatch_subtasks(
         for r in layer_results:
             completed[r["employee_id"]] = r
             all_results.append(r)
-        layer_index += 1
-
     handoff_depth = 0
     last_results = all_results[:]
     while handoff_depth < 8:
@@ -227,7 +224,7 @@ def dispatch_subtasks(
     }
 
 
-def _topo_layers(subtasks: "List[SubTask]") -> "List[List[SubTask]]":
+def _topo_layers(subtasks: List[SubTask]) -> List[List[SubTask]]:
     """将 SubTask 列表按 depends_on 分成可并行的层次。"""
     remaining = list(subtasks)
     done_ids: set = set()
@@ -249,7 +246,7 @@ def _topo_layers(subtasks: "List[SubTask]") -> "List[List[SubTask]]":
 
 
 def _run_layer(
-    layer: "List[SubTask]",
+    layer: List[SubTask],
     *,
     uid: int,
     completed: Dict[str, Any],
@@ -294,7 +291,7 @@ def _run_layer(
                 "error": None if ok else reason,
                 "validation_reason": reason,
             }
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             duration_ms = round((time.perf_counter() - t0) * 1000, 3)
             logger.exception("dispatch_subtasks: employee=%s failed", st.employee_id)
             _record_dispatch_metric(

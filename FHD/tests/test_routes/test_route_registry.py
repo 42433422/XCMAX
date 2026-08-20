@@ -8,8 +8,8 @@ import pytest
 from fastapi import FastAPI
 
 from app.fastapi_routes import register_all_routes
-from app.fastapi_routes.openapi_route_compat import iter_effective_routes
 from app.fastapi_routes.registry import RouteRegistry
+from app.legacy.routes.openapi_route_compat import iter_effective_routes
 
 
 @pytest.fixture
@@ -29,10 +29,6 @@ def test_no_duplicate_registry_mount_names():
     assert len(names) == len(set(names))
 
 
-@pytest.mark.xfail(
-    reason="既有问题：auth 路由在 legacy compat routes 中注册，XCAGI_SKIP_LEGACY_COMPAT_ROUTES=1 时未注册",
-    strict=False,
-)
 def test_auth_session_validate_not_fallback(app: FastAPI):
     paths = [route.path for route in iter_effective_routes(app.routes) if route.path]
     assert "/api/auth/session/validate" in paths or any("session/validate" in p for p in paths)

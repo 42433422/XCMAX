@@ -9,15 +9,8 @@
   "industry": "AI/ERP governance",
   "description": "Analyze the founder-autonomy scorecard evidence and identify the highest-priority capability gap without fabricating completion.",
   "prompt_template": "You are the XCMAX autonomy gap analyst. Read the supplied scorecard JSON, rank only failed evidence gates, cite the exact missing receipt for each recommendation, and return one bounded next capability. Never claim customer payment, production deployment, QA, or recovery unless the evidence contains the corresponding immutable receipt.",
-  "skills": [
-    "scorecard-gap-analysis",
-    "evidence-receipt-validation",
-    "bounded-capability-planning"
-  ],
-  "tools": [
-    "read_scorecard",
-    "emit_markdown"
-  ],
+  "skills": ["scorecard-gap-analysis", "evidence-receipt-validation", "bounded-capability-planning"],
+  "tools": ["read_scorecard", "emit_markdown"],
   "employee": {
     "id": "autonomy-gap-analyst",
     "label": "无人公司能力缺口分析员"
@@ -46,9 +39,7 @@
       }
     },
     "actions": {
-      "handlers": [
-        "direct_python"
-      ],
+      "handlers": ["direct_python"],
       "direct_python": {
         "module": "autonomy_gap_analyst",
         "action": "analyze"

@@ -30,11 +30,17 @@ defineProps<{
           <dt>根因</dt>
           <dd>{{ hit.root_cause || '—' }}</dd>
           <dt>修复 diff</dt>
-          <dd><code>{{ hit.fix_diff || '—' }}</code></dd>
+          <dd>
+            <code>{{ hit.fix_diff || '—' }}</code>
+          </dd>
           <dt>必需测试</dt>
-          <dd>{{ Array.isArray(hit.required_tests) && hit.required_tests.length ? hit.required_tests.join(' / ') : '—' }}</dd>
+          <dd>
+            {{ Array.isArray(hit.required_tests) && hit.required_tests.length ? hit.required_tests.join(' / ') : '—' }}
+          </dd>
           <dt>回滚方案</dt>
-          <dd>{{ firstText(hit.rollback_plan, asRecord(hit.executable_template).rollback_plan, '—') }}</dd>
+          <dd>
+            {{ firstText(hit.rollback_plan, asRecord(hit.executable_template).rollback_plan, '—') }}
+          </dd>
         </dl>
       </details>
       <details v-for="hit in patternHitDetails" :key="`pattern-${hit.path || hit.pattern}`" class="selp-kb-detail">
@@ -62,9 +68,7 @@ defineProps<{
   padding: 11px 12px;
   border: 1px solid #dbeafe;
   border-radius: 12px;
-  background:
-    radial-gradient(circle at 12% 0%, rgba(59, 130, 246, 0.11), transparent 36%),
-    rgba(255, 255, 255, 0.78);
+  background: radial-gradient(circle at 12% 0%, rgba(59, 130, 246, 0.11), transparent 36%), rgba(255, 255, 255, 0.78);
 }
 
 .selp-kb-cards {

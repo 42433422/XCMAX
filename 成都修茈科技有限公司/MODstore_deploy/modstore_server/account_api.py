@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """Account bootstrap API for wallet, auth, membership, and BYOK status."""
 
 from __future__ import annotations
@@ -16,7 +17,11 @@ from modstore_server.account_lifecycle import (
     lifecycle_for_user_id,
 )
 from modstore_server.api.deps import _get_current_user
-from modstore_server.auth_service import create_access_token, create_refresh_token, register_user
+from modstore_server.auth_service import (
+    create_access_token,
+    create_refresh_token,
+    register_user,
+)
 from modstore_server.llm_api import _membership_meta, _provider_labels
 from modstore_server.llm_crypto import fernet_configured
 from modstore_server.llm_key_resolver import KNOWN_PROVIDERS, credential_status
@@ -69,7 +74,12 @@ def api_market_open_register(body: OpenRegisterDTO):
         "ok": True,
         "access_token": access_token,
         "refresh_token": refresh_token,
-        "user": {"id": user.id, "username": user.username, "email": user.email, **lifecycle},
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            **lifecycle,
+        },
         **lifecycle,
     }
 

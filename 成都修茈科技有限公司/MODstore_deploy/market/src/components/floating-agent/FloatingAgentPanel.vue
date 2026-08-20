@@ -283,7 +283,7 @@ const props = withDefaults(
     handleInput: AgentHandleInputFn
     runIntakeTask?: (action: QuickAction) => Promise<void>
   }>(),
-  { corpMode: false },
+  { corpMode: false, runIntakeTask: undefined },
 )
 
 const emit = defineEmits<{

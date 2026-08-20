@@ -1,5 +1,7 @@
-import sqlite3
 import os
+import sqlite3
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 def check_databases():
@@ -28,16 +30,16 @@ def check_databases():
 
                 # 检查是否有 materials 表
                 if "materials" in [table[0] for table in tables]:
-                    print(f"  ✅ 包含 materials 表")
+                    print("  ✅ 包含 materials 表")
                     cursor.execute("SELECT COUNT(*) FROM materials WHERE is_active = 1")
                     count = cursor.fetchone()[0]
                     print(f"  活跃原材料数量：{count}")
                 else:
-                    print(f"  ❌ 不包含 materials 表")
+                    print("  ❌ 不包含 materials 表")
 
                 conn.close()
 
-            except Exception as e:
+            except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
                 print(f"  ❌ 检查失败：{e}")
         else:
             print(f"\n❌ 数据库不存在：{db_path}")
@@ -55,7 +57,7 @@ def check_sqlalchemy_config():
     if os.path.exists(config_file):
         print(f"\n📄 配置文件：{config_file}")
 
-        with open(config_file, "r", encoding="utf-8") as f:
+        with open(config_file, encoding="utf-8") as f:
             content = f.read()
 
             # 查找数据库路径配置
@@ -134,7 +136,7 @@ def create_materials_table():
         conn.close()
         return True
 
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 创建 materials 表失败：{e}")
         return False
 

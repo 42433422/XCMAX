@@ -213,7 +213,9 @@ def _absorbed_token_rules(
         line = (
             int(added[index]["line"] or 0)
             if 0 <= index < len(added)
-            else int(added[0]["line"] or 0) if added else 0
+            else int(added[0]["line"] or 0)
+            if added
+            else 0
         )
         resolved.append({**finding, "line": line})
     return resolved

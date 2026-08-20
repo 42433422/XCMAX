@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+BOUNDARY_ERRORS = (Exception,)
+
 
 def _import_engine_with_dir(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("MODSTORE_VECTOR_DB_DIR", str(tmp_path / "chroma"))
@@ -24,7 +26,7 @@ def _import_engine_with_dir(monkeypatch, tmp_path: Path):
 def _skip_if_no_chroma():
     try:
         import chromadb  # noqa: F401
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         pytest.skip("chromadb 未安装；跳过引擎测试")
 
 

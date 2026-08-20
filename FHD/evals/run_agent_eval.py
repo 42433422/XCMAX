@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment, attr-defined, exit-return, operator, union-attr"
 from __future__ import annotations
 
 import argparse
@@ -175,9 +176,7 @@ def _run_agent_plan_task(task: dict[str, Any]) -> dict[str, Any]:
     dispatches: list[dict[str, Any]] = []
     market_calls: list[dict[str, Any]] = []
     mock_results = [
-        dict(item)
-        for item in list(task.get("mock_results") or [])
-        if isinstance(item, dict)
+        dict(item) for item in list(task.get("mock_results") or []) if isinstance(item, dict)
     ]
 
     def fake_execute(tool_id: str, action: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -366,7 +365,9 @@ def _run_agent_plan_task(task: dict[str, Any]) -> dict[str, Any]:
     _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
     _check_step_attempts(checks, run.steps, list(expected.get("step_attempt_counts") or []))
     _check_final_step_params(checks, run.steps, dict(expected.get("final_step_params") or {}))
-    _check_final_node_outputs(checks, run.final_output, dict(expected.get("final_node_outputs") or {}))
+    _check_final_node_outputs(
+        checks, run.final_output, dict(expected.get("final_node_outputs") or {})
+    )
     if run.artifacts and "artifact_type" in expected:
         _check_equal(
             checks,
@@ -477,7 +478,9 @@ class _EvalMarketWalletResponse:
 
 
 class _EvalMarketWalletClient:
-    def __init__(self, responses: list[_EvalMarketWalletResponse], calls: list[dict[str, Any]]) -> None:
+    def __init__(
+        self, responses: list[_EvalMarketWalletResponse], calls: list[dict[str, Any]]
+    ) -> None:
         self._responses = responses
         self._calls = calls
 
@@ -553,7 +556,11 @@ def _minimal_pdf_bytes(text: str) -> bytes:
             b"/Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>"
         ),
         b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-        b"<< /Length " + str(len(stream)).encode("ascii") + b" >>\nstream\n" + stream + b"endstream",
+        b"<< /Length "
+        + str(len(stream)).encode("ascii")
+        + b" >>\nstream\n"
+        + stream
+        + b"endstream",
     ]
     pdf = b"%PDF-1.4\n"
     offsets = [0]
@@ -627,7 +634,9 @@ def _run_dataset_rag_document_qa_task(task: dict[str, Any]) -> dict[str, Any]:
         reload_status_result = reloaded_service.status(str(task.get("dataset_id") or "eval"))
 
     _check_equal(checks, "ingest.success", ingest_result.get("success"), True)
-    document = ingest_result.get("document") if isinstance(ingest_result.get("document"), dict) else {}
+    document = (
+        ingest_result.get("document") if isinstance(ingest_result.get("document"), dict) else {}
+    )
     _check_equal(
         checks,
         "document.parser",
@@ -650,14 +659,15 @@ def _run_dataset_rag_document_qa_task(task: dict[str, Any]) -> dict[str, Any]:
         checks.append(
             {
                 "name": "answer_contains",
-                "passed": str(expected.get("answer_contains") or "") in str(
-                    answer_result.get("answer") or ""
-                ),
+                "passed": str(expected.get("answer_contains") or "")
+                in str(answer_result.get("answer") or ""),
                 "actual": answer_result.get("answer"),
                 "expected": expected.get("answer_contains"),
             }
         )
-    citations = answer_result.get("citations") if isinstance(answer_result.get("citations"), list) else []
+    citations = (
+        answer_result.get("citations") if isinstance(answer_result.get("citations"), list) else []
+    )
     if "citation_count_min" in expected:
         checks.append(
             {
@@ -695,9 +705,8 @@ def _run_dataset_rag_document_qa_task(task: dict[str, Any]) -> dict[str, Any]:
         checks.append(
             {
                 "name": "reload_answer_contains",
-                "passed": str(expected.get("reload_answer_contains") or "") in str(
-                    reload_answer_result.get("answer") or ""
-                ),
+                "passed": str(expected.get("reload_answer_contains") or "")
+                in str(reload_answer_result.get("answer") or ""),
                 "actual": reload_answer_result.get("answer"),
                 "expected": expected.get("reload_answer_contains"),
             }
@@ -711,9 +720,8 @@ def _run_dataset_rag_document_qa_task(task: dict[str, Any]) -> dict[str, Any]:
         checks.append(
             {
                 "name": "reload_citation_count_min",
-                "passed": len(reload_citations) >= int(
-                    expected.get("reload_citation_count_min") or 0
-                ),
+                "passed": len(reload_citations)
+                >= int(expected.get("reload_citation_count_min") or 0),
                 "actual": len(reload_citations),
                 "expected": expected.get("reload_citation_count_min"),
             }
@@ -799,9 +807,8 @@ def _run_dataset_rag_governance_task(task: dict[str, Any]) -> dict[str, Any]:
         checks.append(
             {
                 "name": "latest_answer_contains",
-                "passed": str(expected.get("latest_answer_contains") or "") in str(
-                    latest_answer.get("answer") or ""
-                ),
+                "passed": str(expected.get("latest_answer_contains") or "")
+                in str(latest_answer.get("answer") or ""),
                 "actual": latest_answer.get("answer"),
                 "expected": expected.get("latest_answer_contains"),
             }
@@ -810,9 +817,8 @@ def _run_dataset_rag_governance_task(task: dict[str, Any]) -> dict[str, Any]:
         checks.append(
             {
                 "name": "latest_answer_not_contains",
-                "passed": str(expected.get("latest_answer_not_contains") or "") not in str(
-                    latest_answer.get("answer") or ""
-                ),
+                "passed": str(expected.get("latest_answer_not_contains") or "")
+                not in str(latest_answer.get("answer") or ""),
                 "actual": latest_answer.get("answer"),
                 "expected": expected.get("latest_answer_not_contains"),
             }
@@ -844,7 +850,9 @@ def _run_dataset_rag_governance_task(task: dict[str, Any]) -> dict[str, Any]:
         True,
     )
     index = status.get("index") if isinstance(status.get("index"), dict) else {}
-    reload_index = reload_status.get("index") if isinstance(reload_status.get("index"), dict) else {}
+    reload_index = (
+        reload_status.get("index") if isinstance(reload_status.get("index"), dict) else {}
+    )
     _check_equal(
         checks,
         "status.index.embedding_persisted",
@@ -862,9 +870,8 @@ def _run_dataset_rag_governance_task(task: dict[str, Any]) -> dict[str, Any]:
         checks.append(
             {
                 "name": "reload_answer_contains",
-                "passed": str(expected.get("reload_answer_contains") or "") in str(
-                    reload_answer.get("answer") or ""
-                ),
+                "passed": str(expected.get("reload_answer_contains") or "")
+                in str(reload_answer.get("answer") or ""),
                 "actual": reload_answer.get("answer"),
                 "expected": expected.get("reload_answer_contains"),
             }
@@ -1004,9 +1011,8 @@ def _run_dataset_rag_version_ops_task(task: dict[str, Any]) -> dict[str, Any]:
         checks.append(
             {
                 "name": "latest_after_rollback_contains",
-                "passed": str(expected.get("latest_after_rollback_contains") or "") in str(
-                    latest_answer.get("answer") or ""
-                ),
+                "passed": str(expected.get("latest_after_rollback_contains") or "")
+                in str(latest_answer.get("answer") or ""),
                 "actual": latest_answer.get("answer"),
                 "expected": expected.get("latest_after_rollback_contains"),
             }
@@ -1167,9 +1173,8 @@ def _run_dataset_rag_rbac_task(task: dict[str, Any]) -> dict[str, Any]:
         checks.append(
             {
                 "name": "own_answer_contains",
-                "passed": str(expected.get("own_answer_contains") or "") in str(
-                    own_answer.get("answer") or ""
-                ),
+                "passed": str(expected.get("own_answer_contains") or "")
+                in str(own_answer.get("answer") or ""),
                 "actual": own_answer.get("answer"),
                 "expected": expected.get("own_answer_contains"),
             }
@@ -1178,9 +1183,8 @@ def _run_dataset_rag_rbac_task(task: dict[str, Any]) -> dict[str, Any]:
         checks.append(
             {
                 "name": "own_answer_not_contains",
-                "passed": str(expected.get("own_answer_not_contains") or "") not in str(
-                    own_answer.get("answer") or ""
-                ),
+                "passed": str(expected.get("own_answer_not_contains") or "")
+                not in str(own_answer.get("answer") or ""),
                 "actual": own_answer.get("answer"),
                 "expected": expected.get("own_answer_not_contains"),
             }
@@ -1327,10 +1331,18 @@ def _run_dataset_rag_rebuild_queue_task(task: dict[str, Any]) -> dict[str, Any]:
 
     _check_equal(checks, "ingest.success", ingest.get("success"), True)
     _check_equal(checks, "first.job.status", (first.get("job") or {}).get("status"), "queued")
-    _check_equal(checks, "first.job.queue_position", (first.get("job") or {}).get("queue_position"), 1)
+    _check_equal(
+        checks, "first.job.queue_position", (first.get("job") or {}).get("queue_position"), 1
+    )
     _check_equal(checks, "second.job.status", (second.get("job") or {}).get("status"), "queued")
-    _check_equal(checks, "second.job.queue_position", (second.get("job") or {}).get("queue_position"), 2)
-    queue = queued_status.get("rebuild_queue") if isinstance(queued_status.get("rebuild_queue"), dict) else {}
+    _check_equal(
+        checks, "second.job.queue_position", (second.get("job") or {}).get("queue_position"), 2
+    )
+    queue = (
+        queued_status.get("rebuild_queue")
+        if isinstance(queued_status.get("rebuild_queue"), dict)
+        else {}
+    )
     _check_equal(checks, "queued_status.rebuild_queue.queued", queue.get("queued"), 2)
     _check_equal(
         checks,
@@ -1363,9 +1375,23 @@ def _run_dataset_rag_rebuild_queue_task(task: dict[str, Any]) -> dict[str, Any]:
         (second_job.get("job") or {}).get("status"),
         expected.get("cancelled_status"),
     )
-    final_queue = final_status.get("rebuild_queue") if isinstance(final_status.get("rebuild_queue"), dict) else {}
-    _check_equal(checks, "final_queue.completed", final_queue.get("completed"), expected.get("completed_count"))
-    _check_equal(checks, "final_queue.cancelled", final_queue.get("cancelled"), expected.get("cancelled_count"))
+    final_queue = (
+        final_status.get("rebuild_queue")
+        if isinstance(final_status.get("rebuild_queue"), dict)
+        else {}
+    )
+    _check_equal(
+        checks,
+        "final_queue.completed",
+        final_queue.get("completed"),
+        expected.get("completed_count"),
+    )
+    _check_equal(
+        checks,
+        "final_queue.cancelled",
+        final_queue.get("cancelled"),
+        expected.get("cancelled_count"),
+    )
     _check_equal(checks, "final_queue.queued", final_queue.get("queued"), 0)
     reload_queue = (
         reload_status.get("rebuild_queue")
@@ -1500,9 +1526,8 @@ def _run_dataset_rag_vector_backend_task(task: dict[str, Any]) -> dict[str, Any]
         checks.append(
             {
                 "name": "answer_contains",
-                "passed": str(expected.get("answer_contains") or "") in str(
-                    answer.get("answer") or ""
-                ),
+                "passed": str(expected.get("answer_contains") or "")
+                in str(answer.get("answer") or ""),
                 "actual": answer.get("answer"),
                 "expected": expected.get("answer_contains"),
             }
@@ -1511,9 +1536,8 @@ def _run_dataset_rag_vector_backend_task(task: dict[str, Any]) -> dict[str, Any]
         checks.append(
             {
                 "name": "answer_not_contains",
-                "passed": str(expected.get("answer_not_contains") or "") not in str(
-                    answer.get("answer") or ""
-                ),
+                "passed": str(expected.get("answer_not_contains") or "")
+                not in str(answer.get("answer") or ""),
                 "actual": answer.get("answer"),
                 "expected": expected.get("answer_not_contains"),
             }
@@ -1574,14 +1598,15 @@ def _run_dataset_rag_vector_backend_task(task: dict[str, Any]) -> dict[str, Any]
         checks.append(
             {
                 "name": "reload_answer_contains",
-                "passed": str(expected.get("reload_answer_contains") or "") in str(
-                    reload_answer.get("answer") or ""
-                ),
+                "passed": str(expected.get("reload_answer_contains") or "")
+                in str(reload_answer.get("answer") or ""),
                 "actual": reload_answer.get("answer"),
                 "expected": expected.get("reload_answer_contains"),
             }
         )
-    reload_index = reload_status.get("index") if isinstance(reload_status.get("index"), dict) else {}
+    reload_index = (
+        reload_status.get("index") if isinstance(reload_status.get("index"), dict) else {}
+    )
     _check_equal(
         checks,
         "reload_status.index.vector_backend_chunk_count",
@@ -1808,7 +1833,9 @@ def _run_agent_run_llm_trace_task(task: dict[str, Any]) -> dict[str, Any]:
                 expected.get("wallet_debit_settle_status"),
             )
     _check_event_types(checks, run.events, list(expected.get("event_types") or []))
-    return _result(task, checks, {"run": run.to_dict(), "payload": result, "market_calls": market_calls})
+    return _result(
+        task, checks, {"run": run.to_dict(), "payload": result, "market_calls": market_calls}
+    )
 
 
 def _run_agent_run_rag_trace_task(task: dict[str, Any]) -> dict[str, Any]:
@@ -1849,15 +1876,24 @@ def _run_agent_run_rag_trace_task(task: dict[str, Any]) -> dict[str, Any]:
         run.metadata.get("retrieval_chunk_count"),
         expected.get("retrieval_chunk_count"),
     )
-    _check_equal(checks, "citation_count", run.metadata.get("citation_count"), expected.get("citation_count"))
+    _check_equal(
+        checks, "citation_count", run.metadata.get("citation_count"), expected.get("citation_count")
+    )
     if run.retrieval_calls:
         call = run.retrieval_calls[0]
         for key in ("query", "retriever", "source", "top_k", "status"):
             if key in expected:
-                _check_equal(checks, f"retrieval_calls[0].{key}", getattr(call, key), expected.get(key))
+                _check_equal(
+                    checks, f"retrieval_calls[0].{key}", getattr(call, key), expected.get(key)
+                )
         if "first_citation_source" in expected:
             first_source = str((call.citations[0] if call.citations else {}).get("source") or "")
-            _check_equal(checks, "retrieval_calls[0].citations[0].source", first_source, expected.get("first_citation_source"))
+            _check_equal(
+                checks,
+                "retrieval_calls[0].citations[0].source",
+                first_source,
+                expected.get("first_citation_source"),
+            )
     _check_event_types(checks, run.events, list(expected.get("event_types") or []))
     return _result(task, checks, {"run": run.to_dict(), "payload": result})
 
@@ -1941,10 +1977,19 @@ def _run_agent_run_artifact_trace_task(task: dict[str, Any]) -> dict[str, Any]:
         artifact = run.artifacts[0]
         for key in ("artifact_type", "source", "uri", "mime_type"):
             if key in expected:
-                _check_equal(checks, f"artifacts[0].{key}", getattr(artifact, key), expected.get(key))
+                _check_equal(
+                    checks, f"artifacts[0].{key}", getattr(artifact, key), expected.get(key)
+                )
         if "first_field_name" in expected:
-            first_field_name = str((artifact.fields[0] if artifact.fields else {}).get("name") or "")
-            _check_equal(checks, "artifacts[0].fields[0].name", first_field_name, expected.get("first_field_name"))
+            first_field_name = str(
+                (artifact.fields[0] if artifact.fields else {}).get("name") or ""
+            )
+            _check_equal(
+                checks,
+                "artifacts[0].fields[0].name",
+                first_field_name,
+                expected.get("first_field_name"),
+            )
     _check_equal(
         checks,
         "metadata.dataset_ingest_count",
@@ -1959,11 +2004,7 @@ def _run_agent_run_artifact_trace_task(task: dict[str, Any]) -> dict[str, Any]:
         expected.get("dataset_ids"),
         skip_when_expected_missing=True,
     )
-    ingests = [
-        item
-        for item in run.metadata.get("dataset_ingests", [])
-        if isinstance(item, dict)
-    ]
+    ingests = [item for item in run.metadata.get("dataset_ingests", []) if isinstance(item, dict)]
     if ingests:
         for key in ("dataset_id", "parser", "source"):
             expected_key = f"dataset_ingest_{key}"
@@ -1978,9 +2019,8 @@ def _run_agent_run_artifact_trace_task(task: dict[str, Any]) -> dict[str, Any]:
         checks.append(
             {
                 "name": "dataset_answer_contains",
-                "passed": str(expected.get("dataset_answer_contains") or "") in str(
-                    answer_result.get("answer") or ""
-                ),
+                "passed": str(expected.get("dataset_answer_contains") or "")
+                in str(answer_result.get("answer") or ""),
                 "actual": answer_result.get("answer"),
                 "expected": expected.get("dataset_answer_contains"),
             }
@@ -1989,9 +2029,8 @@ def _run_agent_run_artifact_trace_task(task: dict[str, Any]) -> dict[str, Any]:
         checks.append(
             {
                 "name": "dataset_reload_answer_contains",
-                "passed": str(expected.get("dataset_reload_answer_contains") or "") in str(
-                    reload_answer_result.get("answer") or ""
-                ),
+                "passed": str(expected.get("dataset_reload_answer_contains") or "")
+                in str(reload_answer_result.get("answer") or ""),
                 "actual": reload_answer_result.get("answer"),
                 "expected": expected.get("dataset_reload_answer_contains"),
             }
@@ -2143,7 +2182,9 @@ def _run_multimodal_autonomous_plan_task(task: dict[str, Any]) -> dict[str, Any]
     _check_equal(checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count"))
     _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
     _check_final_step_params(checks, run.steps, dict(expected.get("final_step_params") or {}))
-    _check_final_node_outputs(checks, run.final_output, dict(expected.get("final_node_outputs") or {}))
+    _check_final_node_outputs(
+        checks, run.final_output, dict(expected.get("final_node_outputs") or {})
+    )
     if "tool_answer_contains" in expected:
         answer = str((run.tool_calls[0].output if run.tool_calls else {}).get("answer") or "")
         checks.append(
@@ -2158,9 +2199,8 @@ def _run_multimodal_autonomous_plan_task(task: dict[str, Any]) -> dict[str, Any]
         checks.append(
             {
                 "name": "dataset_answer_contains",
-                "passed": str(expected.get("dataset_answer_contains") or "") in str(
-                    answer_result.get("answer") or ""
-                ),
+                "passed": str(expected.get("dataset_answer_contains") or "")
+                in str(answer_result.get("answer") or ""),
                 "actual": answer_result.get("answer"),
                 "expected": expected.get("dataset_answer_contains"),
             }
@@ -2169,9 +2209,8 @@ def _run_multimodal_autonomous_plan_task(task: dict[str, Any]) -> dict[str, Any]
         checks.append(
             {
                 "name": "dataset_reload_answer_contains",
-                "passed": str(expected.get("dataset_reload_answer_contains") or "") in str(
-                    reload_answer_result.get("answer") or ""
-                ),
+                "passed": str(expected.get("dataset_reload_answer_contains") or "")
+                in str(reload_answer_result.get("answer") or ""),
                 "actual": reload_answer_result.get("answer"),
                 "expected": expected.get("dataset_reload_answer_contains"),
             }
@@ -2236,8 +2275,7 @@ def _run_excel_vector_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
                 response = client.post(
                     "/api/excel/vector/query",
                     json=dict(
-                        task.get("body")
-                        or {"index_id": "idx-eval", "query": "5003", "top_k": 3}
+                        task.get("body") or {"index_id": "idx-eval", "query": "5003", "top_k": 3}
                     ),
                     headers={"X-User-Id": str(task.get("user_id") or "eval-user")},
                 )
@@ -2286,7 +2324,9 @@ def _run_excel_vector_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     if run is not None:
         _check_equal(checks, "run.status", run.status, expected.get("run_status"))
         _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
-        _check_equal(checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count"))
+        _check_equal(
+            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
+        )
         _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
     return _result(
         task,
@@ -2349,8 +2389,7 @@ def _run_ocr_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
                 response = client.post(
                     "/api/ocr/analyze",
                     json=dict(
-                        task.get("body")
-                        or {"text": "订单编号：SO-1\n购货单位：ACME Trading"}
+                        task.get("body") or {"text": "订单编号：SO-1\n购货单位：ACME Trading"}
                     ),
                     headers={"X-User-Id": str(task.get("user_id") or "eval-user")},
                 )
@@ -2361,7 +2400,11 @@ def _run_ocr_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
                     headers={"X-User-Id": str(task.get("user_id") or "eval-user")},
                 )
             else:
-                path = "/api/ocr/recognize-and-extract" if action == "recognize_and_extract" else "/api/ocr/recognize"
+                path = (
+                    "/api/ocr/recognize-and-extract"
+                    if action == "recognize_and_extract"
+                    else "/api/ocr/recognize"
+                )
                 response = client.post(
                     path,
                     data=dict(task.get("form") or {"file_path": "/tmp/label.png"}),
@@ -2384,7 +2427,9 @@ def _run_ocr_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     if run is not None:
         _check_equal(checks, "run.status", run.status, expected.get("run_status"))
         _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
-        _check_equal(checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count"))
+        _check_equal(
+            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
+        )
         _check_equal(
             checks,
             "artifact_count",
@@ -2467,7 +2512,9 @@ def _run_business_ocr_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     if run is not None:
         _check_equal(checks, "run.status", run.status, expected.get("run_status"))
         _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
-        _check_equal(checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count"))
+        _check_equal(
+            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
+        )
         _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
     return _result(
         task,
@@ -2538,7 +2585,9 @@ def _run_business_event_route_agent_task(task: dict[str, Any]) -> dict[str, Any]
                 )
             )
             stack.enter_context(
-                patch("app.neuro_bus.domains.print_domain.get_print_domain", return_value=print_domain)
+                patch(
+                    "app.neuro_bus.domains.print_domain.get_print_domain", return_value=print_domain
+                )
             )
             stack.enter_context(
                 patch(
@@ -2576,7 +2625,9 @@ def _run_business_event_route_agent_task(task: dict[str, Any]) -> dict[str, Any]
     if run is not None:
         _check_equal(checks, "run.status", run.status, expected.get("run_status"))
         _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
-        _check_equal(checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count"))
+        _check_equal(
+            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
+        )
         _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
         _check_event_types(checks, run.events, list(expected.get("event_types") or []))
     return _result(
@@ -2686,11 +2737,14 @@ def _run_system_maintenance_route_agent_task(task: dict[str, Any]) -> dict[str, 
                 )
             )
             stack.enter_context(
-                patch("app.utils.performance_initializer.get_performance_optimizer", return_value=optimizer)
+                patch(
+                    "app.utils.performance.performance_initializer.get_performance_optimizer",
+                    return_value=optimizer,
+                )
             )
             stack.enter_context(
                 patch(
-                    "app.utils.performance_initializer.init_performance_optimization",
+                    "app.utils.performance.performance_initializer.init_performance_optimization",
                     return_value=optimizer,
                 )
             )
@@ -2711,7 +2765,9 @@ def _run_system_maintenance_route_agent_task(task: dict[str, Any]) -> dict[str, 
     checks: list[dict[str, Any]] = []
     _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
     _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
-    _check_equal(checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status"))
+    _check_equal(
+        checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status")
+    )
     _check_equal(
         checks,
         "payload.run_id_present",
@@ -2723,7 +2779,9 @@ def _run_system_maintenance_route_agent_task(task: dict[str, Any]) -> dict[str, 
     if run is not None:
         _check_equal(checks, "run.status", run.status, expected.get("run_status"))
         _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
-        _check_equal(checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count"))
+        _check_equal(
+            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
+        )
         _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
         _check_event_types(checks, run.events, list(expected.get("event_types") or []))
     return _result(
@@ -2865,7 +2923,9 @@ def _run_dataset_rag_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     checks: list[dict[str, Any]] = []
     _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
     _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
-    _check_equal(checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status"))
+    _check_equal(
+        checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status")
+    )
     _check_equal(
         checks,
         "payload.run_id_present",
@@ -2877,7 +2937,9 @@ def _run_dataset_rag_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     if run is not None:
         _check_equal(checks, "run.status", run.status, expected.get("run_status"))
         _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
-        _check_equal(checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count"))
+        _check_equal(
+            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
+        )
         _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
         _check_event_types(checks, run.events, list(expected.get("event_types") or []))
     return _result(
@@ -2989,11 +3051,15 @@ def _run_memory_v2_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     payload = response.json()
     run = repo.get(str(payload.get("run_id") or payload.get("agent_run_id") or ""))
     memory_payload = payload.get("memory") if isinstance(payload.get("memory"), dict) else {}
-    candidate_payload = payload.get("candidate") if isinstance(payload.get("candidate"), dict) else {}
+    candidate_payload = (
+        payload.get("candidate") if isinstance(payload.get("candidate"), dict) else {}
+    )
     checks: list[dict[str, Any]] = []
     _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
     _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
-    _check_equal(checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status"))
+    _check_equal(
+        checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status")
+    )
     _check_equal(
         checks,
         "payload.run_id_present",
@@ -3012,7 +3078,9 @@ def _run_memory_v2_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     if run is not None:
         _check_equal(checks, "run.status", run.status, expected.get("run_status"))
         _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
-        _check_equal(checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count"))
+        _check_equal(
+            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
+        )
         _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
         _check_event_types(checks, run.events, list(expected.get("event_types") or []))
     return _result(
@@ -3098,7 +3166,9 @@ def _run_materials_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     checks: list[dict[str, Any]] = []
     _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
     _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
-    _check_equal(checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status"))
+    _check_equal(
+        checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status")
+    )
     _check_equal(
         checks,
         "payload.run_id_present",
@@ -3117,7 +3187,9 @@ def _run_materials_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     if run is not None:
         _check_equal(checks, "run.status", run.status, expected.get("run_status"))
         _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
-        _check_equal(checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count"))
+        _check_equal(
+            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
+        )
         _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
         _check_event_types(checks, run.events, list(expected.get("event_types") or []))
     return _result(
@@ -3231,7 +3303,9 @@ def _run_inventory_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     checks: list[dict[str, Any]] = []
     _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
     _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
-    _check_equal(checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status"))
+    _check_equal(
+        checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status")
+    )
     _check_equal(
         checks,
         "payload.run_id_present",
@@ -3243,7 +3317,9 @@ def _run_inventory_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     if run is not None:
         _check_equal(checks, "run.status", run.status, expected.get("run_status"))
         _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
-        _check_equal(checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count"))
+        _check_equal(
+            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
+        )
         _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
         _check_event_types(checks, run.events, list(expected.get("event_types") or []))
     return _result(
@@ -3359,7 +3435,9 @@ def _run_purchase_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     checks: list[dict[str, Any]] = []
     _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
     _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
-    _check_equal(checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status"))
+    _check_equal(
+        checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status")
+    )
     _check_equal(
         checks,
         "payload.run_id_present",
@@ -3371,7 +3449,9 @@ def _run_purchase_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     if run is not None:
         _check_equal(checks, "run.status", run.status, expected.get("run_status"))
         _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
-        _check_equal(checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count"))
+        _check_equal(
+            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
+        )
         _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
         _check_event_types(checks, run.events, list(expected.get("event_types") or []))
     return _result(
@@ -3462,7 +3542,9 @@ def _run_finance_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     checks: list[dict[str, Any]] = []
     _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
     _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
-    _check_equal(checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status"))
+    _check_equal(
+        checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status")
+    )
     _check_equal(
         checks,
         "payload.run_id_present",
@@ -3474,7 +3556,9 @@ def _run_finance_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     if run is not None:
         _check_equal(checks, "run.status", run.status, expected.get("run_status"))
         _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
-        _check_equal(checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count"))
+        _check_equal(
+            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
+        )
         _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
         _check_event_types(checks, run.events, list(expected.get("event_types") or []))
     return _result(
@@ -3556,7 +3640,9 @@ def _run_products_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     checks: list[dict[str, Any]] = []
     _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
     _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
-    _check_equal(checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status"))
+    _check_equal(
+        checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status")
+    )
     _check_equal(
         checks,
         "payload.run_id_present",
@@ -3568,7 +3654,9 @@ def _run_products_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     if run is not None:
         _check_equal(checks, "run.status", run.status, expected.get("run_status"))
         _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
-        _check_equal(checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count"))
+        _check_equal(
+            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
+        )
         _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
         _check_event_types(checks, run.events, list(expected.get("event_types") or []))
     return _result(
@@ -3592,7 +3680,7 @@ def _run_products_compat_route_agent_task(task: dict[str, Any]) -> dict[str, Any
 
     import app.application.excel_imports as excel_imports
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
-    from app.fastapi_routes.domains.product import compat_routes as product_compat_routes
+    from app.legacy.routes.product import compat_routes as product_compat_routes
 
     expected = dict(task.get("expected") or {})
     action = str(task.get("route_action") or "create").strip().lower()
@@ -3645,31 +3733,29 @@ def _run_products_compat_route_agent_task(task: dict[str, Any]) -> dict[str, Any
                     )
                 )
                 stack.enter_context(
-                    patch(
-                        "app.fastapi_routes.domains.product.compat_routes._products_write_raise"
-                    )
+                    patch("app.legacy.routes.product.compat_routes._products_write_raise")
                 )
                 stack.enter_context(
                     patch(
-                        "app.fastapi_routes.domains.product.compat_routes._business_mod_json_block",
+                        "app.legacy.routes.product.compat_routes._business_mod_json_block",
                         return_value=None,
                     )
                 )
                 insert_row = stack.enter_context(
                     patch(
-                        "app.fastapi_routes.domains.product.compat_routes.products_pg_insert_row",
+                        "app.legacy.routes.product.compat_routes.products_pg_insert_row",
                         return_value=7,
                     )
                 )
                 update_row = stack.enter_context(
-                    patch("app.fastapi_routes.domains.product.compat_routes.products_pg_update_row")
+                    patch("app.legacy.routes.product.compat_routes.products_pg_update_row")
                 )
                 delete_row = stack.enter_context(
-                    patch("app.fastapi_routes.domains.product.compat_routes.products_pg_delete_row")
+                    patch("app.legacy.routes.product.compat_routes.products_pg_delete_row")
                 )
                 batch_delete_rows = stack.enter_context(
                     patch(
-                        "app.fastapi_routes.domains.product.compat_routes.products_pg_batch_delete_rows",
+                        "app.legacy.routes.product.compat_routes.products_pg_batch_delete_rows",
                         return_value=(2, []),
                     )
                 )
@@ -3682,7 +3768,9 @@ def _run_products_compat_route_agent_task(task: dict[str, Any]) -> dict[str, Any
     checks: list[dict[str, Any]] = []
     _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
     _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
-    _check_equal(checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status"))
+    _check_equal(
+        checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status")
+    )
     _check_equal(
         checks,
         "payload.run_id_present",
@@ -3694,7 +3782,9 @@ def _run_products_compat_route_agent_task(task: dict[str, Any]) -> dict[str, Any
     if run is not None:
         _check_equal(checks, "run.status", run.status, expected.get("run_status"))
         _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
-        _check_equal(checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count"))
+        _check_equal(
+            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
+        )
         _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
         _check_event_types(checks, run.events, list(expected.get("event_types") or []))
     return _result(
@@ -3799,7 +3889,9 @@ def _run_customers_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
                 )
             )
             stack.enter_context(
-                patch.object(customer_routes, "_customer_delete_unified", side_effect=_delete_customer)
+                patch.object(
+                    customer_routes, "_customer_delete_unified", side_effect=_delete_customer
+                )
             )
             headers = {"X-User-Id": user_id}
             if method == "DELETE":
@@ -3814,7 +3906,9 @@ def _run_customers_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     checks: list[dict[str, Any]] = []
     _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
     _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
-    _check_equal(checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status"))
+    _check_equal(
+        checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status")
+    )
     _check_equal(
         checks,
         "payload.run_id_present",
@@ -3826,7 +3920,9 @@ def _run_customers_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     if run is not None:
         _check_equal(checks, "run.status", run.status, expected.get("run_status"))
         _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
-        _check_equal(checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count"))
+        _check_equal(
+            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
+        )
         _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
         _check_event_types(checks, run.events, list(expected.get("event_types") or []))
     return _result(
@@ -3908,7 +4004,9 @@ def _run_shipment_records_route_agent_task(task: dict[str, Any]) -> dict[str, An
     checks: list[dict[str, Any]] = []
     _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
     _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
-    _check_equal(checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status"))
+    _check_equal(
+        checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status")
+    )
     _check_equal(
         checks,
         "payload.run_id_present",
@@ -3920,7 +4018,9 @@ def _run_shipment_records_route_agent_task(task: dict[str, Any]) -> dict[str, An
     if run is not None:
         _check_equal(checks, "run.status", run.status, expected.get("run_status"))
         _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
-        _check_equal(checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count"))
+        _check_equal(
+            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
+        )
         _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
         _check_event_types(checks, run.events, list(expected.get("event_types") or []))
     return _result(
@@ -3955,7 +4055,9 @@ def _run_shipment_orders_route_agent_task(task: dict[str, Any]) -> dict[str, Any
     method = "POST"
     path = "/api/shipment/generate"
     with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp_dir:
-        shipment_file = Path(tmp_dir) / "shipment.xlsx"
+        shipment_output_dir = Path(tmp_dir) / "shipment_outputs"
+        shipment_output_dir.mkdir()
+        shipment_file = shipment_output_dir / "shipment.xlsx"
         shipment_file.write_bytes(b"fake")
         service.generate_shipment_document.return_value = {
             "success": True,
@@ -4006,6 +4108,7 @@ def _run_shipment_orders_route_agent_task(task: dict[str, Any]) -> dict[str, Any
         client = TestClient(app, raise_server_exceptions=False)
 
         env_patch = {
+            "XCAGI_DATA_DIR": str(Path(tmp_dir)),
             "MODEL_USAGE_LEDGER_PATH": str(Path(tmp_dir) / "usage.json"),
             "MODEL_USAGE_WALLET_BACKEND": "audit",
             "MODEL_USAGE_WALLET_REQUIRED": "",
@@ -4027,7 +4130,9 @@ def _run_shipment_orders_route_agent_task(task: dict[str, Any]) -> dict[str, Any
     checks: list[dict[str, Any]] = []
     _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
     _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
-    _check_equal(checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status"))
+    _check_equal(
+        checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status")
+    )
     _check_equal(
         checks,
         "payload.run_id_present",
@@ -4039,7 +4144,9 @@ def _run_shipment_orders_route_agent_task(task: dict[str, Any]) -> dict[str, Any
     if run is not None:
         _check_equal(checks, "run.status", run.status, expected.get("run_status"))
         _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
-        _check_equal(checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count"))
+        _check_equal(
+            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
+        )
         _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
         _check_event_types(checks, run.events, list(expected.get("event_types") or []))
     return _result(
@@ -4141,6 +4248,7 @@ def _run_print_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
         client = TestClient(app, raise_server_exceptions=False)
 
         env_patch = {
+            "XCAGI_PRINT_ALLOWED_ROOTS": str(Path(tmp_dir)),
             "MODEL_USAGE_LEDGER_PATH": str(Path(tmp_dir) / "usage.json"),
             "MODEL_USAGE_WALLET_BACKEND": "audit",
             "MODEL_USAGE_WALLET_REQUIRED": "",
@@ -4171,7 +4279,9 @@ def _run_print_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     checks: list[dict[str, Any]] = []
     _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
     _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
-    _check_equal(checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status"))
+    _check_equal(
+        checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status")
+    )
     _check_equal(
         checks,
         "payload.run_id_present",
@@ -4183,7 +4293,9 @@ def _run_print_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     if run is not None:
         _check_equal(checks, "run.status", run.status, expected.get("run_status"))
         _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
-        _check_equal(checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count"))
+        _check_equal(
+            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
+        )
         _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
         _check_event_types(checks, run.events, list(expected.get("event_types") or []))
     return _result(
@@ -4263,7 +4375,9 @@ def _run_tools_execute_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     checks: list[dict[str, Any]] = []
     _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
     _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
-    _check_equal(checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status"))
+    _check_equal(
+        checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status")
+    )
     _check_equal(
         checks,
         "payload.run_id_present",
@@ -4275,7 +4389,9 @@ def _run_tools_execute_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     if run is not None:
         _check_equal(checks, "run.status", run.status, expected.get("run_status"))
         _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
-        _check_equal(checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count"))
+        _check_equal(
+            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
+        )
         _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
     return _result(
         task,
@@ -4332,8 +4448,7 @@ def _run_templates_analyze_route_agent_task(task: dict[str, Any]) -> dict[str, A
                 patch(
                     "app.services.document_templates_service._extract_excel_grid_preview",
                     return_value=dict(
-                        task.get("mock_grid_preview")
-                        or {"rows": [["客户"], ["ACME Trading"]]}
+                        task.get("mock_grid_preview") or {"rows": [["客户"], ["ACME Trading"]]}
                     ),
                 )
             )
@@ -4365,8 +4480,7 @@ def _run_templates_analyze_route_agent_task(task: dict[str, Any]) -> dict[str, A
                     )
                 },
                 data=dict(
-                    task.get("form")
-                    or {"template_name": "发货模板", "template_scope": "shipment"}
+                    task.get("form") or {"template_name": "发货模板", "template_scope": "shipment"}
                 ),
                 headers={"X-User-Id": str(task.get("user_id") or "eval-user")},
             )
@@ -4394,7 +4508,9 @@ def _run_templates_analyze_route_agent_task(task: dict[str, Any]) -> dict[str, A
             expected.get("artifact_count"),
             skip_when_expected_missing=True,
         )
-        _check_equal(checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count"))
+        _check_equal(
+            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
+        )
         _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
     return _result(
         task,
@@ -4457,7 +4573,9 @@ def _run_excel_skill_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     checks: list[dict[str, Any]] = []
     _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
     _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
-    _check_equal(checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status"))
+    _check_equal(
+        checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status")
+    )
     _check_equal(
         checks,
         "payload.run_id_present",
@@ -4469,7 +4587,9 @@ def _run_excel_skill_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     if run is not None:
         _check_equal(checks, "run.status", run.status, expected.get("run_status"))
         _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
-        _check_equal(checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count"))
+        _check_equal(
+            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
+        )
         _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
     return _result(
         task,
@@ -4553,7 +4673,9 @@ def _run_label_template_route_agent_task(task: dict[str, Any]) -> dict[str, Any]
     checks: list[dict[str, Any]] = []
     _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
     _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
-    _check_equal(checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status"))
+    _check_equal(
+        checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status")
+    )
     _check_equal(
         checks,
         "payload.run_id_present",
@@ -4565,7 +4687,9 @@ def _run_label_template_route_agent_task(task: dict[str, Any]) -> dict[str, Any]
     if run is not None:
         _check_equal(checks, "run.status", run.status, expected.get("run_status"))
         _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
-        _check_equal(checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count"))
+        _check_equal(
+            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
+        )
         _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
     return _result(
         task,
@@ -4615,7 +4739,7 @@ def _run_document_template_route_agent_task(task: dict[str, Any]) -> dict[str, A
                     "template": {"id": "db:1", "db_id": 1, "name": body.get("name")},
                 }
             )
-            patch_target = "app.fastapi_routes.document_templates_compat.run_archive_template_update"
+            patch_target = "app.legacy.routes.document_templates_compat.run_archive_template_update"
         elif action == "delete":
             body.setdefault("id", "db:1")
             mocked_response = dict(
@@ -4626,7 +4750,7 @@ def _run_document_template_route_agent_task(task: dict[str, Any]) -> dict[str, A
                     "deleted": {"id": body.get("id"), "db_id": 1},
                 }
             )
-            patch_target = "app.fastapi_routes.document_templates_compat.run_archive_template_delete"
+            patch_target = "app.legacy.routes.document_templates_compat.run_archive_template_delete"
         else:
             body.setdefault("name", "发货模板")
             body.setdefault("template_type", "Excel")
@@ -4638,7 +4762,7 @@ def _run_document_template_route_agent_task(task: dict[str, Any]) -> dict[str, A
                     "template": {"id": "db:1", "db_id": 1, "name": body.get("name")},
                 }
             )
-            patch_target = "app.fastapi_routes.document_templates_compat.run_archive_template_create"
+            patch_target = "app.legacy.routes.document_templates_compat.run_archive_template_create"
         mocked_status = int(task.get("mock_status_code") or 200)
         with (
             patch.dict(os.environ, env_patch, clear=False),
@@ -4659,7 +4783,9 @@ def _run_document_template_route_agent_task(task: dict[str, Any]) -> dict[str, A
     checks: list[dict[str, Any]] = []
     _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
     _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
-    _check_equal(checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status"))
+    _check_equal(
+        checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status")
+    )
     _check_equal(
         checks,
         "payload.run_id_present",
@@ -4671,7 +4797,9 @@ def _run_document_template_route_agent_task(task: dict[str, Any]) -> dict[str, A
     if run is not None:
         _check_equal(checks, "run.status", run.status, expected.get("run_status"))
         _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
-        _check_equal(checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count"))
+        _check_equal(
+            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
+        )
         _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
         _check_event_types(checks, run.events, list(expected.get("event_types") or []))
     return _result(
@@ -4747,7 +4875,9 @@ def _run_agent_run_memory_trace_task(task: dict[str, Any]) -> dict[str, Any]:
                     expected.get(key),
                 )
         if "first_hit_chunk_id" in expected:
-            first_chunk_id = str((reference.hits[0] if reference.hits else {}).get("chunk_id") or "")
+            first_chunk_id = str(
+                (reference.hits[0] if reference.hits else {}).get("chunk_id") or ""
+            )
             _check_equal(
                 checks,
                 "memory_references[0].hits[0].chunk_id",
@@ -4835,7 +4965,9 @@ def _run_memory_v2_lifecycle_task(task: dict[str, Any]) -> dict[str, Any]:
         corrected_value,
     )
     _check_equal(checks, "preference_after_correct", preference_after_correct, corrected_value)
-    _check_equal(checks, "deleted_status", dict(deleted.get("memory") or {}).get("status"), "deleted")
+    _check_equal(
+        checks, "deleted_status", dict(deleted.get("memory") or {}).get("status"), "deleted"
+    )
     _check_equal(checks, "summary.total", summary.get("total"), expected.get("total"))
     _check_equal(
         checks,
@@ -4927,7 +5059,9 @@ def _run_memory_v2_planner_context_task(task: dict[str, Any]) -> dict[str, Any]:
             "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
             return_value="full",
         ),
-        patch("app.services.user_memory_service.get_user_memory_service", return_value=memory_service),
+        patch(
+            "app.services.user_memory_service.get_user_memory_service", return_value=memory_service
+        ),
     ):
         planner = LLMWorkflowPlanner()
         with patch.object(planner, "_plan_with_react_multiagent", side_effect=fake_react):
@@ -5049,8 +5183,15 @@ def _run_memory_v2_governance_task(task: dict[str, Any]) -> dict[str, Any]:
 
     trusted_candidate = dict(trusted.get("candidate") or {})
     unverified_candidate = dict(unverified.get("candidate") or {})
-    _check_equal(checks, "trusted.source_policy", trusted_candidate.get("source_policy"), "trusted_pending")
-    _check_equal(checks, "trusted.confirmed_status", dict(confirmed.get("memory") or {}).get("status"), "active")
+    _check_equal(
+        checks, "trusted.source_policy", trusted_candidate.get("source_policy"), "trusted_pending"
+    )
+    _check_equal(
+        checks,
+        "trusted.confirmed_status",
+        dict(confirmed.get("memory") or {}).get("status"),
+        "active",
+    )
     _check_equal(checks, "blocked.status", blocked_candidate.get("status"), "rejected")
     _check_equal(checks, "blocked.source_policy", blocked_candidate.get("source_policy"), "blocked")
     _check_equal(checks, "blocked.confirm_success", blocked_confirm.get("success"), False)
@@ -5188,7 +5329,9 @@ def _check_equal(
     )
 
 
-def _check_tool_calls(checks: list[dict[str, Any]], tool_calls: list[Any], expected: list[dict[str, Any]]) -> None:
+def _check_tool_calls(
+    checks: list[dict[str, Any]], tool_calls: list[Any], expected: list[dict[str, Any]]
+) -> None:
     for index, expected_call in enumerate(expected):
         actual_call = tool_calls[index] if index < len(tool_calls) else None
         for key, expected_value in expected_call.items():
@@ -5196,10 +5339,14 @@ def _check_tool_calls(checks: list[dict[str, Any]], tool_calls: list[Any], expec
             _check_equal(checks, f"tool_calls[{index}].{key}", actual_value, expected_value)
 
 
-def _check_step_attempts(checks: list[dict[str, Any]], steps: list[Any], expected: list[int]) -> None:
+def _check_step_attempts(
+    checks: list[dict[str, Any]], steps: list[Any], expected: list[int]
+) -> None:
     for index, expected_count in enumerate(expected):
         actual_step = steps[index] if index < len(steps) else None
-        actual_value = getattr(actual_step, "attempt_count", None) if actual_step is not None else None
+        actual_value = (
+            getattr(actual_step, "attempt_count", None) if actual_step is not None else None
+        )
         _check_equal(checks, f"steps[{index}].attempt_count", actual_value, expected_count)
 
 
@@ -5213,7 +5360,9 @@ def _check_final_step_params(
             (step for step in steps if str(getattr(step, "node_id", "")) == str(node_id)),
             None,
         )
-        actual_params = dict(getattr(actual_step, "params", {}) or {}) if actual_step is not None else {}
+        actual_params = (
+            dict(getattr(actual_step, "params", {}) or {}) if actual_step is not None else {}
+        )
         for key, expected_value in dict(expected_params or {}).items():
             _check_equal(
                 checks,
@@ -5242,7 +5391,9 @@ def _check_final_node_outputs(
             )
 
 
-def _check_event_types(checks: list[dict[str, Any]], events: list[Any], expected: list[str]) -> None:
+def _check_event_types(
+    checks: list[dict[str, Any]], events: list[Any], expected: list[str]
+) -> None:
     actual = [str(getattr(event, "event_type", "")) for event in events]
     for event_type in expected:
         checks.append(
@@ -5255,7 +5406,9 @@ def _check_event_types(checks: list[dict[str, Any]], events: list[Any], expected
         )
 
 
-def _check_step_errors(checks: list[dict[str, Any]], steps: list[Any], expected_fragments: list[str]) -> None:
+def _check_step_errors(
+    checks: list[dict[str, Any]], steps: list[Any], expected_fragments: list[str]
+) -> None:
     if not expected_fragments:
         return
     errors = [str(getattr(step, "error", "")) for step in steps]
@@ -5270,7 +5423,9 @@ def _check_step_errors(checks: list[dict[str, Any]], steps: list[Any], expected_
         )
 
 
-def _result(task: dict[str, Any], checks: list[dict[str, Any]], details: dict[str, Any]) -> dict[str, Any]:
+def _result(
+    task: dict[str, Any], checks: list[dict[str, Any]], details: dict[str, Any]
+) -> dict[str, Any]:
     failed_checks = [check for check in checks if not check["passed"]]
     return {
         "id": str(task.get("id") or ""),

@@ -14,7 +14,7 @@ import os
 import threading
 import urllib.error
 import urllib.request
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 logger = logging.getLogger(__name__)
 
@@ -73,19 +73,18 @@ def resolve_mode() -> Literal["online", "offline"]:
 
 def set_mode(mode: str, model: str | None = None) -> None:
     """切换 ``online`` / ``offline``；offline 时可传入 Ollama 模型名。"""
-    global _mode, _offline_model, _openai_client
+    global _mode, _offline_model
     if mode not in ("online", "offline"):
         raise ValueError("mode must be 'online' or 'offline'")
     with _mode_lock:
-        _mode = mode
+        _mode = cast('Literal["online", "offline"]', mode)
         if mode == "offline":
             if model is not None:
                 s = str(model).strip()
                 _offline_model = s or None
         else:
             _offline_model = None
-    with _client_lock:
-        _openai_client = None
+    dispose_llm_client()
 
 
 def _first_api_key() -> tuple[str, str | None]:
@@ -135,9 +134,17 @@ def get_llm_client() -> Any | None:
 
 
 def dispose_llm_client() -> None:
+    """Close and clear the process-wide OpenAI-compatible client."""
     global _openai_client
     with _client_lock:
+        client = _openai_client
         _openai_client = None
+    close = getattr(client, "close", None)
+    if callable(close):
+        try:
+            close()
+        except (OSError, RuntimeError, TypeError, ValueError):
+            logger.debug("LLM client close failed", exc_info=True)
 
 
 def get_offline_status() -> dict[str, Any]:

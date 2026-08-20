@@ -26,23 +26,14 @@ vi.mock('@/utils/apiBase', () => ({
 
 import AiGroupChatView from './AiGroupChatView.vue'
 
-const {
-  fetchAiGroups,
-  fetchAiGroupMessages,
-  postAiGroupMessage,
-  createAiGroup,
-  removeAiGroupMember,
-  apiFetch: apiFetchMock,
-} = mocks
+const { fetchAiGroups, fetchAiGroupMessages, postAiGroupMessage, createAiGroup, removeAiGroupMember, apiFetch: apiFetchMock } = mocks
 
 const sampleGroup = {
   id: 'g1',
   name: '测试群',
   member_count: 2,
   last_message_preview: '你好',
-  members: [
-    { employee_id: 'e1', name: 'AI助手A', avatar: '', summary: '' },
-  ],
+  members: [{ employee_id: 'e1', name: 'AI助手A', avatar: '', summary: '' }],
 }
 
 const sampleMessage = {
@@ -188,14 +179,14 @@ describe('AiGroupChatView', () => {
       id: 'd1',
       kind: 'discussion',
       body: '我建议先对齐需求边界，再定负责人。',
-    };
-    fetchAiGroups.mockResolvedValue([sampleGroup]);
-    fetchAiGroupMessages.mockResolvedValue([discussionMsg]);
-    const wrapper = mountView();
-    await flushPromises();
-    expect(wrapper.find('.aigc-msg__badge').text()).toBe('讨论');
-    expect(wrapper.find('.aigc-msg').classes()).toContain('is-discussion');
-  });
+    }
+    fetchAiGroups.mockResolvedValue([sampleGroup])
+    fetchAiGroupMessages.mockResolvedValue([discussionMsg])
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.find('.aigc-msg__badge').text()).toBe('讨论')
+    expect(wrapper.find('.aigc-msg').classes()).toContain('is-discussion')
+  })
 
   it('shows needs-review badge for false acceptance', async () => {
     const acceptanceMsg = {
@@ -204,14 +195,14 @@ describe('AiGroupChatView', () => {
       kind: 'work_acceptance',
       status: 'needs_review',
       body: '【小C验收】需要复核 0/2',
-    };
-    fetchAiGroups.mockResolvedValue([sampleGroup]);
-    fetchAiGroupMessages.mockResolvedValue([acceptanceMsg]);
-    const wrapper = mountView();
-    await flushPromises();
-    expect(wrapper.find('.aigc-msg__badge').text()).toBe('待复核');
-    expect(wrapper.find('.aigc-msg__badge').classes()).toContain('is-review');
-  });
+    }
+    fetchAiGroups.mockResolvedValue([sampleGroup])
+    fetchAiGroupMessages.mockResolvedValue([acceptanceMsg])
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.find('.aigc-msg__badge').text()).toBe('待复核')
+    expect(wrapper.find('.aigc-msg__badge').classes()).toContain('is-review')
+  })
 
   it('sends message in dispatch mode when dispatch toggle is active', async () => {
     fetchAiGroups.mockResolvedValue([sampleGroup])
@@ -233,7 +224,9 @@ describe('AiGroupChatView', () => {
     await wrapper.find('.aigc-input').setValue('整理客户数据')
     await wrapper.find('.aigc-send').trigger('click')
     await flushPromises()
-    expect(postAiGroupMessage).toHaveBeenCalledWith('g1', '整理客户数据', [], 'admin', { dispatch: true })
+    expect(postAiGroupMessage).toHaveBeenCalledWith('g1', '整理客户数据', [], 'admin', {
+      dispatch: true,
+    })
     expect(wrapper.text()).toContain('执行汇报')
   })
 

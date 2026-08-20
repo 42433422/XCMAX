@@ -61,7 +61,7 @@ describe('PaymentPlansView', () => {
       history: createMemoryHistory(),
       routes: [{ path: '/plans', name: 'plans', component: PaymentPlansView }],
     })
-    const pushSpy = vi.spyOn(router, 'push').mockResolvedValue(undefined as any)
+    const pushSpy = vi.spyOn(router, 'push').mockResolvedValue(undefined as UnsafeTestValue)
     const pinia = createPinia()
     const wrapper = mount(PaymentPlansView, {
       global: { plugins: [pinia, router] },

@@ -85,7 +85,10 @@ def test_resolved_self_maintenance_followups_are_not_reopened(tmp_path):
     )
 
     assert employee_memory["open_followups"] == []
-    assert employee_memory["next_self_maintenance_focus"] == {"open_count": 0, "status": "clear"}
+    assert employee_memory["next_self_maintenance_focus"] == {
+        "open_count": 0,
+        "status": "clear",
+    }
     assert any(
         item["source_run_id"] == "failed-review-run"
         and item["step"] == "review"

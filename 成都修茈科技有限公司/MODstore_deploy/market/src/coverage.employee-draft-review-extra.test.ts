@@ -88,7 +88,13 @@ describe('EmployeeAiDraftReview coverage extras', () => {
     })
     wb.employeeDraftProgressMessages = ['解析完成', '草稿完成']
     wb.employeeDraftReviewMessages = [
-      { id: 'm1', role: 'assistant', content: '请确认客服边界', ts: Date.now(), kind: 'clarification_question' },
+      {
+        id: 'm1',
+        role: 'assistant',
+        content: '请确认客服边界',
+        ts: Date.now(),
+        kind: 'clarification_question',
+      },
     ]
     return wb
   }
@@ -101,10 +107,13 @@ describe('EmployeeAiDraftReview coverage extras', () => {
         return new Response(JSON.stringify({ reply: '已收到审核意见' }), { status: 200 })
       }
       if (u.includes('/refine-prompt')) {
-        return new Response(JSON.stringify({
-          improved_prompt: '你是客服员工。请明确拒绝越权退款。',
-          diff_explanation: '增加退款边界',
-        }), { status: 200 })
+        return new Response(
+          JSON.stringify({
+            improved_prompt: '你是客服员工。请明确拒绝越权退款。',
+            diff_explanation: '增加退款边界',
+          }),
+          { status: 200 },
+        )
       }
       if (u.includes('/ai-scaffold')) {
         return new Response(JSON.stringify({ id: 'published-customer-agent' }), { status: 200 })
@@ -115,7 +124,7 @@ describe('EmployeeAiDraftReview coverage extras', () => {
 
     const wrapper = mount(EmployeeAiDraftReview)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
     expect(wrapper.text()).toContain('草稿已就绪')
     expect(wrapper.text()).toContain('所选工作流尚未通过沙箱测试')
@@ -175,7 +184,11 @@ describe('EmployeeAiDraftReview coverage extras', () => {
       fatalError: 'LLM failed',
       manifest: null,
     })
-    Object.assign(wb.employeeDraftStages.parse_intent, { status: 'error', data: null, error: 'parse failed' })
+    Object.assign(wb.employeeDraftStages.parse_intent, {
+      status: 'error',
+      data: null,
+      error: 'parse failed',
+    })
 
     const wrapper = mount(EmployeeAiDraftReview, { props: { embedded: true } })
     await flushPromises()

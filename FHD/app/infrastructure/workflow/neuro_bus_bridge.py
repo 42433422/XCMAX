@@ -18,6 +18,7 @@ from typing import Any
 from app.application.workflow.ports.events import StateUpdateEvent, StateUpdatePayload
 from app.neuro_bus.bus import NeuroBus, get_neuro_bus
 from app.neuro_bus.events.base import EventPriority, NeuroEvent
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +93,7 @@ class NeuroBusEventBridge:
                     "NeuroBusEventBridge publish rejected/dropped node=%s",
                     payload.get("node_id"),
                 )
-        except Exception:  # noqa: BLE001 — fail-soft 端口契约：绝不外抛
+        except BOUNDARY_ERRORS:
             logger.exception(
                 "NeuroBusEventBridge publish failed node=%s",
                 payload.get("node_id"),

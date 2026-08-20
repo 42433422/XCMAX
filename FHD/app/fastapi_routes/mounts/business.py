@@ -72,9 +72,7 @@ def _load_taiyangniao_attendance_compat_router():
             "Skip taiyangniao_attendance_compat routes: taiyangniao-pro mod already exposes attendance API"
         )
         return APIRouter(tags=["sunbird-attendance-compat-skipped"])
-    return __import__(
-        "app.fastapi_routes.taiyangniao_attendance_compat", fromlist=["router"]
-    ).router
+    return __import__("app.legacy.routes.taiyangniao_attendance_compat", fromlist=["router"]).router
 
 
 def _mount(
@@ -114,9 +112,9 @@ def _mount(
                 f"business_route:{name}",
                 ok=False,
                 required=name in _DESKTOP_REQUIRED_ROUTES,
-                detail=str(exc),
+                detail=f"business route unavailable: {name}",
             )
-        logger.warning("%s not available: %s", name, exc)
+        logger.exception("business route unavailable: %s", name)
 
 
 def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:

@@ -12,12 +12,7 @@
           <p class="store-sub">浏览并安装 AI 员工包；分类与修茈 AI 市场同源，安装后自动上岗至企业四部门编制。</p>
         </div>
         <form class="store-search" @submit.prevent="searchMods">
-          <input
-            v-model="searchQuery"
-            type="search"
-            class="store-search__input"
-            placeholder="搜索名称、包名…"
-          />
+          <input v-model="searchQuery" type="search" class="store-search__input" placeholder="搜索名称、包名…" />
           <button type="submit" class="btn btn-primary store-search__btn">
             <i class="fa fa-search"></i>
             搜索
@@ -35,12 +30,7 @@
         <i class="fa fa-download" :class="{ 'fa-spin': bootstrapBusy }"></i>
         安装宿主基础员工包
       </button>
-      <button
-        v-if="route.query.onboarding === '1'"
-        type="button"
-        class="btn btn-ghost"
-        @click="finishOnboardingFromStore"
-      >
+      <button v-if="route.query.onboarding === '1'" type="button" class="btn btn-ghost" @click="finishOnboardingFromStore">
         完成引导，进入对话
       </button>
     </div>
@@ -60,9 +50,7 @@
       <span v-else-if="currentTab !== 'all' && oneClickPendingCount > 0" class="store-toolbar__hint muted">
         将装齐「{{ mainListTitle }}」全部 {{ oneClickPendingCount }} 个员工并入驻
       </span>
-      <span v-else-if="!deliverableOk" class="store-toolbar__hint muted">
-        将先装齐宿主基础员工包，再安装当前分类员工
-      </span>
+      <span v-else-if="!deliverableOk" class="store-toolbar__hint muted"> 将先装齐宿主基础员工包，再安装当前分类员工 </span>
       <span class="store-toolbar__spacer" aria-hidden="true"></span>
       <a :href="modstoreWebUrl" target="_blank" rel="noopener noreferrer" class="btn btn-ghost btn-sm">
         <i class="fa fa-external-link"></i> 打开工作台
@@ -112,9 +100,7 @@
             <h2 id="store-results-heading" class="store-main__title">{{ mainListTitle }}</h2>
             <p v-if="!loading || filteredMods.length" class="store-main__meta">
               共 {{ filteredMods.length }} 件
-              <span v-if="refreshing" class="store-sync-hint">
-                <i class="fa fa-refresh fa-spin" aria-hidden="true"></i> 同步中…
-              </span>
+              <span v-if="refreshing" class="store-sync-hint"> <i class="fa fa-refresh fa-spin" aria-hidden="true"></i> 同步中… </span>
               <span v-else-if="fromCache" class="store-cache-hint muted">已缓存</span>
             </p>
           </div>
@@ -131,21 +117,14 @@
           <i class="fa fa-exclamation-triangle"></i> {{ loadError }}
         </div>
 
-        <div v-else-if="filteredMods.length === 0" class="state-msg muted">
-          暂无商品，可切换左侧分类或调整搜索条件。
-        </div>
+        <div v-else-if="filteredMods.length === 0" class="state-msg muted">暂无商品，可切换左侧分类或调整搜索条件。</div>
 
         <div v-if="loadError && filteredMods.length" class="state-msg store-load-warn">
           <i class="fa fa-info-circle"></i> {{ loadError }}
         </div>
 
         <div v-if="filteredMods.length" class="store-grid">
-          <article
-            v-for="mod in filteredMods"
-            :key="mod.id"
-            class="store-card"
-            :class="{ 'store-card--installed': mod.is_installed }"
-          >
+          <article v-for="mod in filteredMods" :key="mod.id" class="store-card" :class="{ 'store-card--installed': mod.is_installed }">
             <template v-if="isMobileViewport">
               <div class="mod-card-compact">
                 <div class="store-card__avatar"><i :class="modIconClass(mod)"></i></div>
@@ -173,11 +152,9 @@
               <div class="card-badges">
                 <span v-if="isEmployeePackItem(mod)" class="tag tag-employee-pack">员工包</span>
                 <span v-if="enterpriseModLabel(mod)" class="tag tag-enterprise-mod">{{ enterpriseModLabel(mod) }}</span>
-                <span
-                  v-if="enterpriseLayerLabel(mod)"
-                  class="tag tag-enterprise-layer"
-                  :style="enterpriseLayerTagStyle(mod)"
-                >{{ enterpriseLayerLabel(mod) }}</span>
+                <span v-if="enterpriseLayerLabel(mod)" class="tag tag-enterprise-layer" :style="enterpriseLayerTagStyle(mod)">{{
+                  enterpriseLayerLabel(mod)
+                }}</span>
                 <span v-if="collectionLabel(mod)" class="tag tag-industry">{{ collectionLabel(mod) }}</span>
                 <span class="tag" :class="mod.source === 'remote' ? 'tag-remote' : 'tag-local'">
                   {{ mod.source === 'remote' ? '远端 Catalog' : '本机' }}
@@ -212,7 +189,8 @@
                     :href="marketModUrl(mod)"
                     target="_blank"
                     rel="noopener noreferrer"
-                  >网页查看</a>
+                    >网页查看</a
+                  >
                   <button
                     v-if="hasUpdate(mod)"
                     type="button"
@@ -237,10 +215,10 @@
 </template>
 
 <script>
-import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
-import { apiFetch } from '@/utils/apiBase';
-import { fetchMarketCatalog, installHostFoundation, reloadEmployeePacks } from '@/api/modStore';
+import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { apiFetch } from '@/utils/apiBase'
+import { fetchMarketCatalog, installHostFoundation, reloadEmployeePacks } from '@/api/modStore'
 import {
   catalogStoreCollection,
   HOST_FOUNDATION_EMPLOYEE_PACK_ID,
@@ -251,36 +229,31 @@ import {
   STORE_COLLECTION_OFFICE_AUX,
   STORE_COLLECTION_OFFICE_EMPLOYEE,
   STORE_COLLECTION_WORKFLOW_EMPLOYEE,
-} from '@/constants/genericModPack';
+} from '@/constants/genericModPack'
 import {
   isOfficeAuxPack1Pkg,
   isOfficeEmployeePkg,
   OFFICE_AUX_PACK_1_COLLECTION,
   OFFICE_EMPLOYEE_COLLECTION,
-} from '@/constants/officeEmployeePack';
-import { markProductFlowCompleted, markHostPackAcknowledged } from '@/constants/productFlow';
-import { fetchDeliverableStatus } from '@/utils/platformShellApi';
-import { useModsStore } from '@/stores/mods';
-import Modal from '@/components/Modal.vue';
-import ModDetails from './ModDetails.vue';
-import { appAlert, appConfirm } from '@/utils/appDialog';
-import {
-  promptAdvancedTutorialAfterInstall,
-  resolveRouteNameFromPath,
-} from '@/tutorial/promptAdvancedTutorial';
-import { useTutorialCatalog } from '@/composables/useTutorialCatalog';
+} from '@/constants/officeEmployeePack'
+import { markProductFlowCompleted, markHostPackAcknowledged } from '@/constants/productFlow'
+import { fetchDeliverableStatus } from '@/utils/platformShellApi'
+import { useModsStore } from '@/stores/mods'
+import Modal from '@/components/Modal.vue'
+import ModDetails from './ModDetails.vue'
+import { appAlert, appConfirm } from '@/utils/appDialog'
+import { promptAdvancedTutorialAfterInstall, resolveRouteNameFromPath } from '@/tutorial/promptAdvancedTutorial'
+import { useTutorialCatalog } from '@/composables/useTutorialCatalog'
 import {
   buildMarketCatalogCacheKey,
   isMarketCatalogCacheFresh,
   readMarketCatalogCache,
   writeMarketCatalogCache,
-} from '@/utils/marketCatalogCache';
-import {
-  resolveEnterpriseOrgLayerForCatalogItem,
-} from '@/constants/enterpriseWorkflowEstablishment';
-import { autoOnboardInstalledMarketItem } from '@/utils/workflowEmployeeOnboard';
-import { resolveEnterpriseModStack } from '@/utils/enterpriseModStackApi';
-import { productErrorMessage } from '@/utils/productErrorMessage';
+} from '@/utils/marketCatalogCache'
+import { resolveEnterpriseOrgLayerForCatalogItem } from '@/constants/enterpriseWorkflowEstablishment'
+import { autoOnboardInstalledMarketItem } from '@/utils/workflowEmployeeOnboard'
+import { resolveEnterpriseModStack } from '@/utils/enterpriseModStackApi'
+import { productErrorMessage } from '@/utils/productErrorMessage'
 
 export default {
   name: 'ModStore',
@@ -289,60 +262,51 @@ export default {
     ModDetails,
   },
   setup() {
-    const route = useRoute();
-    const router = useRouter();
-    const modstoreWebUrl = String(
-      import.meta.env.VITE_MODSTORE_WEB_URL ||
-        'https://xiu-ci.com/market/workbench/unified',
-    ).replace(/\/$/, '');
-    const marketBaseUrl = String(
-      import.meta.env.VITE_MARKET_BASE || 'https://xiu-ci.com/market',
-    ).replace(/\/$/, '');
-    const modsStore = useModsStore();
-    const enterpriseStackLabel = ref('');
-    const { buildContext: tutorialBuildContext } = useTutorialCatalog();
+    const route = useRoute()
+    const router = useRouter()
+    const modstoreWebUrl = String(import.meta.env.VITE_MODSTORE_WEB_URL || 'https://xiu-ci.com/market/workbench/unified').replace(/\/$/, '')
+    const marketBaseUrl = String(import.meta.env.VITE_MARKET_BASE || 'https://xiu-ci.com/market').replace(/\/$/, '')
+    const modsStore = useModsStore()
+    const enterpriseStackLabel = ref('')
+    const { buildContext: tutorialBuildContext } = useTutorialCatalog()
 
     function refreshHostMods() {
       void modsStore.refresh().catch((e) => {
-        console.warn('[ModStore] modsStore.refresh:', e);
-      });
+        console.warn('[ModStore] modsStore.refresh:', e)
+      })
     }
 
-    const allMods = ref([]);
-    const filteredMods = ref([]);
-    const searchQuery = ref('');
-    const filterInstalled = ref(false);
-    const sortBy = ref('name');
-    const currentTab = ref('all');
-    const loading = ref(false);
-    const refreshing = ref(false);
-    const fromCache = ref(false);
-    const loadError = ref('');
-    const catalogSnapshot = ref([]);
-    let catalogSnapshotPromise = null;
-    const selectedMod = ref(null);
-    const deliverableOk = ref(true);
-    const missingModIds = ref([]);
-    const bootstrapBusy = ref(false);
-    const oneClickProgress = ref('');
-    const isMobileViewport = ref(false);
-    let mobileMedia = null;
+    const allMods = ref([])
+    const filteredMods = ref([])
+    const searchQuery = ref('')
+    const filterInstalled = ref(false)
+    const sortBy = ref('name')
+    const currentTab = ref('all')
+    const loading = ref(false)
+    const refreshing = ref(false)
+    const fromCache = ref(false)
+    const loadError = ref('')
+    const catalogSnapshot = ref([])
+    let catalogSnapshotPromise = null
+    const selectedMod = ref(null)
+    const deliverableOk = ref(true)
+    const missingModIds = ref([])
+    const bootstrapBusy = ref(false)
+    const oneClickProgress = ref('')
+    const isMobileViewport = ref(false)
+    let mobileMedia = null
 
     const onMobileViewportChange = (event) => {
-      isMobileViewport.value = event.matches;
-    };
+      isMobileViewport.value = event.matches
+    }
 
-    const onboardingBanner = computed(
-      () => route.query.onboarding === '1' || deliverableOk.value === false,
-    );
-    const missingModHint = computed(() =>
-      missingModIds.value.length ? missingModIds.value.join(', ') : '',
-    );
+    const onboardingBanner = computed(() => route.query.onboarding === '1' || deliverableOk.value === false)
+    const missingModHint = computed(() => (missingModIds.value.length ? missingModIds.value.join(', ') : ''))
 
     const onboardingRedirect = () => {
-      const redirect = typeof route.query.redirect === 'string' ? route.query.redirect.trim() : '';
-      return redirect.startsWith('/') ? redirect : '/';
-    };
+      const redirect = typeof route.query.redirect === 'string' ? route.query.redirect.trim() : ''
+      return redirect.startsWith('/') ? redirect : '/'
+    }
 
     const storeNavTabs = [
       { id: 'all', label: '全部商品', icon: 'fa-th-large' },
@@ -353,7 +317,7 @@ export default {
       { id: 'ai_employee', label: 'AI 员工', icon: 'fa-user-circle' },
       { id: 'industry_mod', label: '行业扩展', icon: 'fa-industry' },
       { id: 'installed', label: '已安装', icon: 'fa-check-circle' },
-    ];
+    ]
 
     const MARKET_TAB_QUERY = {
       host_foundation: {
@@ -379,73 +343,73 @@ export default {
       ai_employee: {
         material_category: 'ai_employee',
       },
-    };
+    }
 
-    const isMarketCollectionTab = (tab) => Boolean(MARKET_TAB_QUERY[tab]);
+    const isMarketCollectionTab = (tab) => Boolean(MARKET_TAB_QUERY[tab])
 
     const mainListTitle = computed(() => {
-      if (currentTab.value === 'host_foundation') return '宿主基础能力（预装员工）';
-      if (currentTab.value === 'office') return '办公员工包';
-      if (currentTab.value === 'office_aux') return '办公员工附属包1';
-      if (currentTab.value === 'workflow') return '工作流员工';
-      if (currentTab.value === 'ai_employee') return 'AI 员工';
-      if (currentTab.value === 'industry_mod') return '行业扩展';
-      if (currentTab.value === 'installed') return '已安装';
-      return '全部商品';
-    });
+      if (currentTab.value === 'host_foundation') return '宿主基础能力（预装员工）'
+      if (currentTab.value === 'office') return '办公员工包'
+      if (currentTab.value === 'office_aux') return '办公员工附属包1'
+      if (currentTab.value === 'workflow') return '工作流员工'
+      if (currentTab.value === 'ai_employee') return 'AI 员工'
+      if (currentTab.value === 'industry_mod') return '行业扩展'
+      if (currentTab.value === 'installed') return '已安装'
+      return '全部商品'
+    })
 
     const modIconClass = (mod) => {
-      const sc = catalogStoreCollection(mod);
-      if (sc === STORE_COLLECTION_HOST_FOUNDATION) return 'fa fa-cubes';
-      if (sc === STORE_COLLECTION_OFFICE_EMPLOYEE) return 'fa fa-file-text-o';
-      if (sc === STORE_COLLECTION_OFFICE_AUX) return 'fa fa-bar-chart';
-      if (sc === STORE_COLLECTION_WORKFLOW_EMPLOYEE) return 'fa fa-users';
-      if (sc === STORE_COLLECTION_INDUSTRY_MOD) return 'fa fa-industry';
-      return mod?.icon || 'fa fa-puzzle-piece';
-    };
+      const sc = catalogStoreCollection(mod)
+      if (sc === STORE_COLLECTION_HOST_FOUNDATION) return 'fa fa-cubes'
+      if (sc === STORE_COLLECTION_OFFICE_EMPLOYEE) return 'fa fa-file-text-o'
+      if (sc === STORE_COLLECTION_OFFICE_AUX) return 'fa fa-bar-chart'
+      if (sc === STORE_COLLECTION_WORKFLOW_EMPLOYEE) return 'fa fa-users'
+      if (sc === STORE_COLLECTION_INDUSTRY_MOD) return 'fa fa-industry'
+      return mod?.icon || 'fa fa-puzzle-piece'
+    }
 
     const refreshDeliverable = async () => {
       try {
-        const st = await fetchDeliverableStatus(true);
-        deliverableOk.value = st.deliverable !== false;
-        missingModIds.value = st.missing_mod_ids || [];
+        const st = await fetchDeliverableStatus(true)
+        deliverableOk.value = st.deliverable !== false
+        missingModIds.value = st.missing_mod_ids || []
       } catch {
-        deliverableOk.value = true;
+        deliverableOk.value = true
       }
-    };
+    }
 
     const onboardDestinationForTab = (tab) => {
-      const redirect = onboardingRedirect();
-      if (redirect !== '/') return redirect;
-      if (tab === 'office' || tab === 'office_aux') return '/workflow-employee-space';
-      if (tab === 'workflow') return '/employee-workspace';
-      return '/';
-    };
+      const redirect = onboardingRedirect()
+      if (redirect !== '/') return redirect
+      if (tab === 'office' || tab === 'office_aux') return '/workflow-employee-space'
+      if (tab === 'workflow') return '/employee-workspace'
+      return '/'
+    }
 
     const finishOnboardingFromStore = (dest) => {
-      markProductFlowCompleted();
-      markHostPackAcknowledged();
-      void router.replace(dest || onboardDestinationForTab(currentTab.value));
-    };
+      markProductFlowCompleted()
+      markHostPackAcknowledged()
+      void router.replace(dest || onboardDestinationForTab(currentTab.value))
+    }
 
     const goBackFromStore = () => {
-      const redirect = typeof route.query.redirect === 'string' ? route.query.redirect.trim() : '';
+      const redirect = typeof route.query.redirect === 'string' ? route.query.redirect.trim() : ''
       if (redirect.startsWith('/')) {
-        void router.push(redirect);
-        return;
+        void router.push(redirect)
+        return
       }
       if (typeof window !== 'undefined' && window.history.length > 1) {
-        router.back();
-        return;
+        router.back()
+        return
       }
-      void router.push({ name: 'ai-ecosystem' });
-    };
+      void router.push({ name: 'ai-ecosystem' })
+    }
 
     const installModSilent = async (mod) => {
       if (isHostFoundationEmployeePackId(mod.pkg_id || mod.id)) {
-        const edition = readBuildEdition();
-        const data = await installHostFoundation(edition === 'minimal' ? 'minimal' : 'generic');
-        return { success: Boolean(data.success), message: data.message || '' };
+        const edition = readBuildEdition()
+        const data = await installHostFoundation(edition === 'minimal' ? 'minimal' : 'generic')
+        return { success: Boolean(data.success), message: data.message || '' }
       }
       const payload = {
         pkg_id: mod.pkg_id || mod.id,
@@ -453,487 +417,469 @@ export default {
         package_file: mod.package_file,
         activate: true,
         verify_signature: false,
-      };
+      }
       const response = await apiFetch('/api/mod-store/install', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
-      });
-      const data = await response.json();
-      const ok = Boolean(data.success);
+      })
+      const data = await response.json()
+      const ok = Boolean(data.success)
       if (ok) {
         try {
-          await autoOnboardInstalledMarketItem(mod);
+          await autoOnboardInstalledMarketItem(mod)
         } catch (e) {
-          console.warn('[ModStore] silent auto onboard failed:', e);
+          console.warn('[ModStore] silent auto onboard failed:', e)
         }
       }
       return {
         success: ok,
         message: data.error || data.detail || data.message || '',
-      };
-    };
+      }
+    }
 
     const ensureHostFoundationIfNeeded = async () => {
-      if (deliverableOk.value) return;
-      oneClickProgress.value = '正在安装宿主基础员工包…';
-      const edition = readBuildEdition();
-      const res = await installHostFoundation(edition === 'minimal' ? 'minimal' : 'generic');
-      await refreshDeliverable();
-      refreshHostMods();
+      if (deliverableOk.value) return
+      oneClickProgress.value = '正在安装宿主基础员工包…'
+      const edition = readBuildEdition()
+      const res = await installHostFoundation(edition === 'minimal' ? 'minimal' : 'generic')
+      await refreshDeliverable()
+      refreshHostMods()
       if (!res.success || !deliverableOk.value) {
-        throw new Error(res.message || '宿主基础员工包未装齐，请检查本机 mods 种子目录。');
+        throw new Error(res.message || '宿主基础员工包未装齐，请检查本机 mods 种子目录。')
       }
-    };
+    }
 
     const completePackOnboard = async (tab) => {
-      markProductFlowCompleted();
-      markHostPackAcknowledged();
-      const label = mainListTitle.value || '员工包';
-      const dest = onboardDestinationForTab(tab);
+      markProductFlowCompleted()
+      markHostPackAcknowledged()
+      const label = mainListTitle.value || '员工包'
+      const dest = onboardDestinationForTab(tab)
       const promptResult = await promptAdvancedTutorialAfterInstall({
         router,
         buildContext: tutorialBuildContext.value,
         message: `${label}已装齐，正在入驻。\n\n是否现在观看进阶教程，快速熟悉菜单与智能对话？`,
         returnContext: { routeName: resolveRouteNameFromPath(router, dest) },
-      });
-      if (promptResult === 'started') return;
+      })
+      if (promptResult === 'started') return
       if (promptResult === 'already_completed') {
-        await appAlert(`${label}已装齐，正在入驻…`);
+        await appAlert(`${label}已装齐，正在入驻…`)
       }
-      await router.replace(dest);
-    };
+      await router.replace(dest)
+    }
 
     const runOneClickInstallAndOnboard = async () => {
-      const tab = currentTab.value;
+      const tab = currentTab.value
 
       if (tab === 'all') {
-        await appAlert('请先在左侧选择具体员工包分类（如办公员工包），再一键安装并入驻。');
-        return;
+        await appAlert('请先在左侧选择具体员工包分类（如办公员工包），再一键安装并入驻。')
+        return
       }
 
       if (oneClickPendingCount.value === 0) {
-        finishOnboardingFromStore();
-        return;
+        finishOnboardingFromStore()
+        return
       }
 
-      bootstrapBusy.value = true;
-      const errors = [];
+      bootstrapBusy.value = true
+      const errors = []
       try {
-        await ensureHostFoundationIfNeeded();
+        await ensureHostFoundationIfNeeded()
 
         if (tab === 'host_foundation') {
-          await completePackOnboard(tab);
-          return;
+          await completePackOnboard(tab)
+          return
         }
 
-        const targets = filterByCollectionTab([...allMods.value]).filter((m) => !m.is_installed);
+        const targets = filterByCollectionTab([...allMods.value]).filter((m) => !m.is_installed)
         if (!targets.length) {
-          await completePackOnboard(tab);
-          return;
+          await completePackOnboard(tab)
+          return
         }
 
-        const label = mainListTitle.value || '员工包';
+        const label = mainListTitle.value || '员工包'
         for (let i = 0; i < targets.length; i += 1) {
-          const mod = targets[i];
-          oneClickProgress.value = `正在安装 ${label} ${i + 1}/${targets.length}：${mod.name}`;
-          mod.installationInProgress = true;
+          const mod = targets[i]
+          oneClickProgress.value = `正在安装 ${label} ${i + 1}/${targets.length}：${mod.name}`
+          mod.installationInProgress = true
           try {
-            const res = await installModSilent(mod);
+            const res = await installModSilent(mod)
             if (res.success) {
-              mod.is_installed = true;
+              mod.is_installed = true
             } else {
-              errors.push(`${mod.name}：${res.message || '安装失败'}`);
+              errors.push(`${mod.name}：${res.message || '安装失败'}`)
             }
           } catch (e) {
-            errors.push(`${mod.name}：${e instanceof Error ? e.message : '安装失败'}`);
+            errors.push(`${mod.name}：${e instanceof Error ? e.message : '安装失败'}`)
           } finally {
-            mod.installationInProgress = false;
+            mod.installationInProgress = false
           }
         }
 
-        await loadMods(false);
-        refreshHostMods();
-        await refreshDeliverable();
+        await loadMods(false)
+        refreshHostMods()
+        await refreshDeliverable()
 
         if (tab === 'office' || tab === 'office_aux') {
           try {
-            await reloadEmployeePacks();
+            await reloadEmployeePacks()
           } catch (e) {
-            console.warn('[ModStore] reloadEmployeePacks:', e);
+            console.warn('[ModStore] reloadEmployeePacks:', e)
           }
         }
 
-        const remaining = filterByCollectionTab([...allMods.value]).filter((m) => !m.is_installed);
+        const remaining = filterByCollectionTab([...allMods.value]).filter((m) => !m.is_installed)
         if (!remaining.length && !errors.length) {
-          await completePackOnboard(tab);
+          await completePackOnboard(tab)
         } else if (!errors.length && remaining.length) {
-          await appAlert(
-            `${label} 仍有 ${remaining.length} 项未安装，请点「刷新目录」后重试或单独安装。`,
-          );
+          await appAlert(`${label} 仍有 ${remaining.length} 项未安装，请点「刷新目录」后重试或单独安装。`)
         } else {
-          const detail = errors.slice(0, 6).join('\n');
+          const detail = errors.slice(0, 6).join('\n')
           await appAlert(
-            `部分员工安装失败${remaining.length ? `，仍有 ${remaining.length} 项未装` : ''}：\n${detail}${
-              errors.length > 6 ? '\n…' : ''
-            }`,
-          );
+            `部分员工安装失败${remaining.length ? `，仍有 ${remaining.length} 项未装` : ''}：\n${detail}${errors.length > 6 ? '\n…' : ''}`,
+          )
         }
       } catch (e) {
-        await appAlert(e instanceof Error ? e.message : '装包失败');
+        await appAlert(e instanceof Error ? e.message : '装包失败')
       } finally {
-        bootstrapBusy.value = false;
-        oneClickProgress.value = '';
+        bootstrapBusy.value = false
+        oneClickProgress.value = ''
       }
-    };
+    }
 
     const collectionLabel = (mod) => {
-      const sc = catalogStoreCollection(mod);
-      if (sc === STORE_COLLECTION_HOST_FOUNDATION) return '宿主基础员工';
-      if (sc === STORE_COLLECTION_OFFICE_EMPLOYEE) return '办公员工包';
-      if (sc === STORE_COLLECTION_OFFICE_AUX) return '办公附属包1';
-      if (sc === STORE_COLLECTION_WORKFLOW_EMPLOYEE) return '工作流员工';
-      if (sc === STORE_COLLECTION_INDUSTRY_MOD) return '行业扩展';
-      return '';
-    };
+      const sc = catalogStoreCollection(mod)
+      if (sc === STORE_COLLECTION_HOST_FOUNDATION) return '宿主基础员工'
+      if (sc === STORE_COLLECTION_OFFICE_EMPLOYEE) return '办公员工包'
+      if (sc === STORE_COLLECTION_OFFICE_AUX) return '办公附属包1'
+      if (sc === STORE_COLLECTION_WORKFLOW_EMPLOYEE) return '工作流员工'
+      if (sc === STORE_COLLECTION_INDUSTRY_MOD) return '行业扩展'
+      return ''
+    }
 
-    const enterpriseLayerForMod = (mod) => resolveEnterpriseOrgLayerForCatalogItem(mod || {});
+    const enterpriseLayerForMod = (mod) => resolveEnterpriseOrgLayerForCatalogItem(mod || {})
 
     const enterpriseLayerLabel = (mod) => {
-      const layer = enterpriseLayerForMod(mod);
-      return layer ? `${layer.code} ${layer.label}` : '';
-    };
+      const layer = enterpriseLayerForMod(mod)
+      return layer ? `${layer.code} ${layer.label}` : ''
+    }
 
     const isEmployeePackItem = (mod) =>
-      String(mod?.artifact || '').trim().toLowerCase() === 'employee_pack';
+      String(mod?.artifact || '')
+        .trim()
+        .toLowerCase() === 'employee_pack'
 
     const enterpriseModLabel = (mod) => {
-      const art = String(mod?.artifact || '').trim().toLowerCase();
-      if (art !== 'employee_pack' && art !== 'mod') return '';
-      const label = enterpriseStackLabel.value;
-      return label ? `企业 Mod：${label}` : '';
-    };
+      const art = String(mod?.artifact || '')
+        .trim()
+        .toLowerCase()
+      if (art !== 'employee_pack' && art !== 'mod') return ''
+      const label = enterpriseStackLabel.value
+      return label ? `企业 Mod：${label}` : ''
+    }
 
-    const marketItemKindLabel = (mod) =>
-      isEmployeePackItem(mod) ? '员工' : '扩展 Mod';
+    const marketItemKindLabel = (mod) => (isEmployeePackItem(mod) ? '员工' : '扩展 Mod')
 
     const installSuccessMessage = (mod, onboardNote = '') => {
-      const kind = marketItemKindLabel(mod);
-      return `${kind} ${mod.name} 安装成功！${onboardNote}`;
-    };
+      const kind = marketItemKindLabel(mod)
+      return `${kind} ${mod.name} 安装成功！${onboardNote}`
+    }
 
     const enterpriseLayerTagStyle = (mod) => {
-      const layer = enterpriseLayerForMod(mod);
-      if (!layer) return {};
+      const layer = enterpriseLayerForMod(mod)
+      if (!layer) return {}
       return {
         color: layer.color,
         borderColor: `${layer.color}66`,
         background: `${layer.color}14`,
-      };
-    };
+      }
+    }
 
     const refineMarketItems = (items, tab) => {
       if (tab === 'office') {
-        return items.filter((m) => isOfficeEmployeePkg(m.pkg_id || m.id));
+        return items.filter((m) => isOfficeEmployeePkg(m.pkg_id || m.id))
       }
       if (tab === 'office_aux') {
-        return items.filter((m) => isOfficeAuxPack1Pkg(m.pkg_id || m.id));
+        return items.filter((m) => isOfficeAuxPack1Pkg(m.pkg_id || m.id))
       }
-      return items;
-    };
+      return items
+    }
 
     const filterByCollectionTab = (mods) => {
       if (currentTab.value === 'host_foundation') {
-        return mods.filter((m) => catalogStoreCollection(m) === STORE_COLLECTION_HOST_FOUNDATION);
+        return mods.filter((m) => catalogStoreCollection(m) === STORE_COLLECTION_HOST_FOUNDATION)
       }
       if (currentTab.value === 'office') {
-        return mods.filter((m) => isOfficeEmployeePkg(m.pkg_id || m.id));
+        return mods.filter((m) => isOfficeEmployeePkg(m.pkg_id || m.id))
       }
       if (currentTab.value === 'office_aux') {
-        return mods.filter((m) => isOfficeAuxPack1Pkg(m.pkg_id || m.id));
+        return mods.filter((m) => isOfficeAuxPack1Pkg(m.pkg_id || m.id))
       }
       if (currentTab.value === 'workflow') {
-        return mods.filter((m) => catalogStoreCollection(m) === STORE_COLLECTION_WORKFLOW_EMPLOYEE);
+        return mods.filter((m) => catalogStoreCollection(m) === STORE_COLLECTION_WORKFLOW_EMPLOYEE)
       }
       if (currentTab.value === 'ai_employee') {
         return mods.filter((m) => {
-          const sc = catalogStoreCollection(m);
-          return sc !== STORE_COLLECTION_INDUSTRY_MOD;
-        });
+          const sc = catalogStoreCollection(m)
+          return sc !== STORE_COLLECTION_INDUSTRY_MOD
+        })
       }
       if (currentTab.value === 'industry_mod') {
-        return mods.filter((m) => catalogStoreCollection(m) === STORE_COLLECTION_INDUSTRY_MOD);
+        return mods.filter((m) => catalogStoreCollection(m) === STORE_COLLECTION_INDUSTRY_MOD)
       }
-      return mods;
-    };
+      return mods
+    }
 
     const oneClickPendingCount = computed(() => {
-      const tab = currentTab.value;
-      if (tab === 'all' || tab === 'installed') return 0;
+      const tab = currentTab.value
+      if (tab === 'all' || tab === 'installed') return 0
       if (tab === 'host_foundation') {
-        return deliverableOk.value ? 0 : 1;
+        return deliverableOk.value ? 0 : 1
       }
-      return filterByCollectionTab([...allMods.value]).filter((m) => !m.is_installed).length;
-    });
+      return filterByCollectionTab([...allMods.value]).filter((m) => !m.is_installed).length
+    })
     const oneClickCtaLabel = computed(() => {
-      if (currentTab.value === 'all') return '一键安装并入驻';
-      const pending = oneClickPendingCount.value;
-      if (pending === 0) return '完成入驻';
-      return `一键安装并入驻 (${pending})`;
-    });
+      if (currentTab.value === 'all') return '一键安装并入驻'
+      const pending = oneClickPendingCount.value
+      if (pending === 0) return '完成入驻'
+      return `一键安装并入驻 (${pending})`
+    })
 
     const loadCatalogAvailable = async () => {
-      const response = await apiFetch('/api/mod-store/catalog', { timeoutMs: 90_000 });
-      const data = await response.json();
+      const response = await apiFetch('/api/mod-store/catalog', { timeoutMs: 90_000 })
+      const data = await response.json()
       if (!data.success) {
-        throw new Error(data.message || data.error || '获取本地目录失败');
+        throw new Error(data.message || data.error || '获取本地目录失败')
       }
-      const rows = data.data.available || [];
-      catalogSnapshot.value = rows;
-      return rows;
-    };
+      const rows = data.data.available || []
+      catalogSnapshot.value = rows
+      return rows
+    }
 
     const warmCatalogSnapshot = () => {
       if (catalogSnapshot.value.length) {
-        return Promise.resolve(catalogSnapshot.value);
+        return Promise.resolve(catalogSnapshot.value)
       }
       if (!catalogSnapshotPromise) {
         catalogSnapshotPromise = loadCatalogAvailable().catch((err) => {
-          catalogSnapshotPromise = null;
-          console.warn('[ModStore] catalog snapshot prefetch failed:', err);
-          return [];
-        });
+          catalogSnapshotPromise = null
+          console.warn('[ModStore] catalog snapshot prefetch failed:', err)
+          return []
+        })
       }
-      return catalogSnapshotPromise;
-    };
+      return catalogSnapshotPromise
+    }
 
     const applyCatalogWarmStart = (tab) => {
-      if (!catalogSnapshot.value.length) return false;
-      const warmed = refineMarketItems(
-        filterByCollectionTab([...catalogSnapshot.value]),
-        tab,
-      );
-      if (!warmed.length) return false;
-      allMods.value = warmed;
-      applyFilters();
+      if (!catalogSnapshot.value.length) return false
+      const warmed = refineMarketItems(filterByCollectionTab([...catalogSnapshot.value]), tab)
+      if (!warmed.length) return false
+      allMods.value = warmed
+      applyFilters()
       if (filteredMods.value.length > 0) {
-        loading.value = false;
-        refreshing.value = true;
-        return true;
+        loading.value = false
+        refreshing.value = true
+        return true
       }
-      return false;
-    };
+      return false
+    }
 
     const fetchMarketTabRemote = async (tab) => {
-      const query = MARKET_TAB_QUERY[tab];
-      if (!query) return false;
+      const query = MARKET_TAB_QUERY[tab]
+      if (!query) return false
       const result = await fetchMarketCatalog({
         ...query,
         q: searchQuery.value.trim() || undefined,
         limit: 80,
-      });
-      const items = refineMarketItems(result.items || [], tab);
-      allMods.value = items;
-      writeMarketCatalogCache(
-        buildMarketCatalogCacheKey(tab, searchQuery.value),
-        tab,
-        items,
-      );
-      fromCache.value = false;
-      loadError.value = '';
-      return true;
-    };
+      })
+      const items = refineMarketItems(result.items || [], tab)
+      allMods.value = items
+      writeMarketCatalogCache(buildMarketCatalogCacheKey(tab, searchQuery.value), tab, items)
+      fromCache.value = false
+      loadError.value = ''
+      return true
+    }
 
     const loadMarketTab = async (tab, { force = false } = {}) => {
-      const cacheKey = buildMarketCatalogCacheKey(tab, searchQuery.value);
-      const cached = !force ? readMarketCatalogCache(cacheKey) : null;
+      const cacheKey = buildMarketCatalogCacheKey(tab, searchQuery.value)
+      const cached = !force ? readMarketCatalogCache(cacheKey) : null
 
       if (cached?.items?.length) {
-        allMods.value = cached.items;
-        applyFilters();
-        fromCache.value = true;
+        allMods.value = cached.items
+        applyFilters()
+        fromCache.value = true
         if (isMarketCatalogCacheFresh(cached) && !force) {
-          loadError.value = '';
-          return true;
+          loadError.value = ''
+          return true
         }
       } else {
-        fromCache.value = false;
-        await warmCatalogSnapshot();
-        applyCatalogWarmStart(tab);
+        fromCache.value = false
+        await warmCatalogSnapshot()
+        applyCatalogWarmStart(tab)
       }
 
       try {
-        return await fetchMarketTabRemote(tab);
+        return await fetchMarketTabRemote(tab)
       } catch (error) {
-        console.warn('[ModStore] market-catalog failed, fallback to /catalog:', error);
+        console.warn('[ModStore] market-catalog failed, fallback to /catalog:', error)
         try {
-          await loadCatalogAvailable();
-          allMods.value = refineMarketItems(
-            filterByCollectionTab([...catalogSnapshot.value]),
-            tab,
-          );
+          await loadCatalogAvailable()
+          allMods.value = refineMarketItems(filterByCollectionTab([...catalogSnapshot.value]), tab)
           if (allMods.value.length) {
-            loadError.value =
-              '市场分类接口较慢或暂不可用，已显示本地目录。可点「刷新目录」重试。';
-            return true;
+            loadError.value = '市场分类接口较慢或暂不可用，已显示本地目录。可点「刷新目录」重试。'
+            return true
           }
-          throw error;
+          throw error
         } catch (fallbackError) {
           if (filteredMods.value.length) {
-            loadError.value =
-              '市场同步失败，当前为缓存/本地目录。可点「刷新目录」重试。';
-            return true;
+            loadError.value = '市场同步失败，当前为缓存/本地目录。可点「刷新目录」重试。'
+            return true
           }
-          loadError.value = productErrorMessage(
-            error ?? fallbackError,
-            '加载市场目录失败，请检查网络后刷新。',
-          );
-          allMods.value = [];
-          return false;
+          loadError.value = productErrorMessage(error ?? fallbackError, '加载市场目录失败，请检查网络后刷新。')
+          allMods.value = []
+          return false
         }
       }
-    };
+    }
 
     const loadMods = async (force = false) => {
-      const tab = currentTab.value;
-      const cacheKey = buildMarketCatalogCacheKey(tab, searchQuery.value);
-      const cached = !force && isMarketCollectionTab(tab)
-        ? readMarketCatalogCache(cacheKey)
-        : null;
-      const canShowInstant = Boolean(cached?.items?.length) || catalogSnapshot.value.length;
+      const tab = currentTab.value
+      const cacheKey = buildMarketCatalogCacheKey(tab, searchQuery.value)
+      const cached = !force && isMarketCollectionTab(tab) ? readMarketCatalogCache(cacheKey) : null
+      const canShowInstant = Boolean(cached?.items?.length) || catalogSnapshot.value.length
 
-      loading.value = !canShowInstant;
-      refreshing.value = canShowInstant;
-      loadError.value = '';
-      if (force) fromCache.value = false;
+      loading.value = !canShowInstant
+      refreshing.value = canShowInstant
+      loadError.value = ''
+      if (force) fromCache.value = false
 
       try {
         if (isMarketCollectionTab(tab)) {
-          await loadMarketTab(tab, { force });
-          applyFilters();
-          return;
+          await loadMarketTab(tab, { force })
+          applyFilters()
+          return
         }
 
-        const response = await apiFetch('/api/mod-store/catalog', { timeoutMs: 90_000 });
-        const data = await response.json();
+        const response = await apiFetch('/api/mod-store/catalog', { timeoutMs: 90_000 })
+        const data = await response.json()
 
         if (data.success) {
-          catalogSnapshot.value = data.data.available || [];
-          allMods.value = catalogSnapshot.value;
-          applyFilters();
+          catalogSnapshot.value = data.data.available || []
+          allMods.value = catalogSnapshot.value
+          applyFilters()
         }
       } catch (error) {
-        console.error('Failed to load mods:', error);
+        console.error('Failed to load mods:', error)
         if (!filteredMods.value.length) {
-          loadError.value = error instanceof Error ? error.message : '加载目录失败';
+          loadError.value = error instanceof Error ? error.message : '加载目录失败'
         }
       } finally {
-        loading.value = false;
-        refreshing.value = false;
+        loading.value = false
+        refreshing.value = false
       }
-    };
+    }
 
     const searchMods = async () => {
-      loading.value = true;
-      refreshing.value = false;
+      loading.value = true
+      refreshing.value = false
       try {
-        const tab = currentTab.value;
+        const tab = currentTab.value
         if (isMarketCollectionTab(tab)) {
-          await loadMarketTab(tab, { force: true });
-          applyFilters();
-          return;
+          await loadMarketTab(tab, { force: true })
+          applyFilters()
+          return
         }
 
         if (!searchQuery.value.trim()) {
-          await loadMods();
-          return;
+          await loadMods()
+          return
         }
 
         const params = new URLSearchParams({
           q: searchQuery.value,
           installed: filterInstalled.value,
           limit: 50,
-        });
+        })
 
-        const response = await apiFetch(`/api/mod-store/search?${params}`);
-        const data = await response.json();
+        const response = await apiFetch(`/api/mod-store/search?${params}`)
+        const data = await response.json()
 
         if (data.success) {
-          allMods.value = data.data || [];
-          applyFilters();
+          allMods.value = data.data || []
+          applyFilters()
         }
       } catch (error) {
-        console.error('Search failed:', error);
+        console.error('Search failed:', error)
       } finally {
-        loading.value = false;
+        loading.value = false
       }
-    };
+    }
 
     const applyFilters = () => {
-      let mods = [...allMods.value];
+      let mods = [...allMods.value]
 
       if (filterInstalled.value) {
-        mods = mods.filter(mod => mod.is_installed);
+        mods = mods.filter((mod) => mod.is_installed)
       }
 
-      mods = filterByCollectionTab(mods);
+      mods = filterByCollectionTab(mods)
 
       if (sortBy.value === 'downloads') {
-        mods.sort((a, b) => (b.total_downloads || b.download_count || 0) - (a.total_downloads || a.download_count || 0));
+        mods.sort((a, b) => (b.total_downloads || b.download_count || 0) - (a.total_downloads || a.download_count || 0))
       } else if (sortBy.value === 'rating') {
-        mods.sort((a, b) => (b.avg_rating || 0) - (a.avg_rating || 0));
+        mods.sort((a, b) => (b.avg_rating || 0) - (a.avg_rating || 0))
       } else if (sortBy.value === 'created_at') {
-        mods.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+        mods.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
       } else {
-        mods.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        mods.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
       }
 
-      filteredMods.value = mods;
-    };
+      filteredMods.value = mods
+    }
 
     const switchTab = async (tab) => {
-      currentTab.value = tab;
-      const cacheKey = buildMarketCatalogCacheKey(tab, searchQuery.value);
-      const cached = isMarketCollectionTab(tab) ? readMarketCatalogCache(cacheKey) : null;
-      const instant = Boolean(cached?.items?.length);
-      loading.value = !instant;
-      refreshing.value = instant;
+      currentTab.value = tab
+      const cacheKey = buildMarketCatalogCacheKey(tab, searchQuery.value)
+      const cached = isMarketCollectionTab(tab) ? readMarketCatalogCache(cacheKey) : null
+      const instant = Boolean(cached?.items?.length)
+      loading.value = !instant
+      refreshing.value = instant
 
       try {
         if (tab !== 'installed') {
-          filterInstalled.value = false;
+          filterInstalled.value = false
         }
         if (tab === 'installed') {
-          filterInstalled.value = true;
+          filterInstalled.value = true
           if (!allMods.value.length) {
-            await loadMods(false);
+            await loadMods(false)
           } else {
-            const response = await apiFetch('/api/mod-store/catalog', { timeoutMs: 90_000 });
-            const data = await response.json();
+            const response = await apiFetch('/api/mod-store/catalog', { timeoutMs: 90_000 })
+            const data = await response.json()
             if (data.success) {
-              catalogSnapshot.value = data.data.available || [];
-              allMods.value = catalogSnapshot.value;
+              catalogSnapshot.value = data.data.available || []
+              allMods.value = catalogSnapshot.value
             }
           }
-          applyFilters();
+          applyFilters()
         } else {
-          await loadMods(false);
+          await loadMods(false)
         }
       } catch (error) {
-        console.error('Failed to switch tab:', error);
+        console.error('Failed to switch tab:', error)
       } finally {
-        loading.value = false;
-        refreshing.value = false;
+        loading.value = false
+        refreshing.value = false
       }
-    };
+    }
 
     const installMod = async (mod) => {
-      mod.installationInProgress = true;
+      mod.installationInProgress = true
       try {
-        let data;
+        let data
         if (isHostFoundationEmployeePackId(mod.pkg_id || mod.id)) {
-          const edition = readBuildEdition();
-          data = await installHostFoundation(edition === 'minimal' ? 'minimal' : 'generic');
+          const edition = readBuildEdition()
+          data = await installHostFoundation(edition === 'minimal' ? 'minimal' : 'generic')
         } else {
           const payload = {
             pkg_id: mod.pkg_id || mod.id,
@@ -941,82 +887,78 @@ export default {
             package_file: mod.package_file,
             activate: true,
             verify_signature: false,
-          };
+          }
           const response = await apiFetch('/api/mod-store/install', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
-          });
-          data = await response.json();
+          })
+          data = await response.json()
         }
 
         if (data.success) {
-          mod.is_installed = true;
-          await loadMods();
-          refreshHostMods();
-          let onboardNote = '';
+          mod.is_installed = true
+          await loadMods()
+          refreshHostMods()
+          let onboardNote = ''
           try {
-            const {
-              onboardedIds,
-              plannerRefreshed,
-              enterpriseStackLabel: stackLabel,
-            } = await autoOnboardInstalledMarketItem(mod);
+            const { onboardedIds, plannerRefreshed, enterpriseStackLabel: stackLabel } = await autoOnboardInstalledMarketItem(mod)
             if (onboardedIds.length) {
-              onboardNote = `，已上岗至企业 Mod「${stackLabel}」`;
+              onboardNote = `，已上岗至企业 Mod「${stackLabel}」`
             } else if (plannerRefreshed && isEmployeePackItem(mod)) {
-              onboardNote = `，已注册至企业 Mod「${stackLabel}」`;
+              onboardNote = `，已注册至企业 Mod「${stackLabel}」`
             }
           } catch (e) {
-            console.warn('[ModStore] auto onboard failed:', e);
+            console.warn('[ModStore] auto onboard failed:', e)
           }
-          await appAlert(installSuccessMessage(mod, onboardNote));
+          await appAlert(installSuccessMessage(mod, onboardNote))
         } else {
-          await appAlert(`安装失败：${data.error || data.detail}`);
+          await appAlert(`安装失败：${data.error || data.detail}`)
         }
       } catch (error) {
-        console.error('Installation failed:', error);
-        await appAlert('安装失败，请重试');
+        console.error('Installation failed:', error)
+        await appAlert('安装失败，请重试')
       } finally {
-        mod.installationInProgress = false;
+        mod.installationInProgress = false
       }
-    };
+    }
 
     const uninstallMod = async (mod) => {
       if (!(await appConfirm(`确定要卸载 MOD "${mod.name}" 吗？`, { danger: true }))) {
-        return;
+        return
       }
 
-      mod.uninstallationInProgress = true;
+      mod.uninstallationInProgress = true
       try {
-        const formData = new FormData();
-        formData.append('mod_id', mod.id);
-        formData.append('remove_files', 'true');
+        const formData = new FormData()
+        formData.append('mod_id', mod.id)
+        formData.append('remove_files', 'true')
 
         const response = await apiFetch('/api/mod-store/uninstall', {
           method: 'POST',
           body: formData,
-        });
+        })
 
-        const data = await response.json();
+        const data = await response.json()
 
         if (data.success) {
-          mod.is_installed = false;
-          await appAlert(`MOD ${mod.name} 卸载成功！`);
-          await loadMods();
-          refreshHostMods();
+          mod.is_installed = false
+          await appAlert(`MOD ${mod.name} 卸载成功！`)
+          await loadMods()
+          refreshHostMods()
         } else {
-          await appAlert(`卸载失败：${data.error || data.detail}`);
+          await appAlert(`卸载失败：${data.error || data.detail}`)
         }
       } catch (error) {
-        console.error('Uninstallation failed:', error);
-        await appAlert('卸载失败，请重试');
+        console.error('Uninstallation failed:', error)
+        await appAlert('卸载失败，请重试')
       } finally {
-        mod.uninstallationInProgress = false;
+        mod.uninstallationInProgress = false
       }
-    };
+    }
 
     const updateMod = async (mod) => {
-      mod.updateInProgress = true;
+      mod.updateInProgress = true
       try {
         const payload = {
           mod_id: mod.id,
@@ -1024,55 +966,55 @@ export default {
           version: mod.new_version || mod.version,
           package_file: mod.package_file,
           verify_signature: false,
-        };
+        }
 
         const response = await apiFetch('/api/mod-store/update', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
-        });
+        })
 
-        const data = await response.json();
+        const data = await response.json()
 
         if (data.success) {
-          mod.version = data.data.version;
-          await appAlert(`MOD ${mod.name} 更新成功！`);
-          await loadMods();
-          refreshHostMods();
+          mod.version = data.data.version
+          await appAlert(`MOD ${mod.name} 更新成功！`)
+          await loadMods()
+          refreshHostMods()
         } else {
-          await appAlert(`更新失败：${data.error || data.detail}`);
+          await appAlert(`更新失败：${data.error || data.detail}`)
         }
       } catch (error) {
-        console.error('Update failed:', error);
-        await appAlert('更新失败，请重试');
+        console.error('Update failed:', error)
+        await appAlert('更新失败，请重试')
       } finally {
-        mod.updateInProgress = false;
+        mod.updateInProgress = false
       }
-    };
+    }
 
     const hasUpdate = (mod) => {
-      return mod.is_installed && mod.new_version && mod.new_version !== mod.version;
-    };
+      return mod.is_installed && mod.new_version && mod.new_version !== mod.version
+    }
 
     const viewDetails = (mod) => {
-      selectedMod.value = mod;
-    };
+      selectedMod.value = mod
+    }
 
     const onMobileUse = async (mod) => {
       if (mod.is_installed) {
-        viewDetails(mod);
-        return;
+        viewDetails(mod)
+        return
       }
-      await installMod(mod);
-    };
+      await installMod(mod)
+    }
 
     const marketModUrl = (mod) => {
-      const id = encodeURIComponent(mod.pkg_id || mod.id || '');
-      return `${marketBaseUrl}/mods/${id}`;
-    };
+      const id = encodeURIComponent(mod.pkg_id || mod.id || '')
+      return `${marketBaseUrl}/mods/${id}`
+    }
 
     onMounted(() => {
-      const tabQuery = typeof route.query.tab === 'string' ? route.query.tab.trim() : '';
+      const tabQuery = typeof route.query.tab === 'string' ? route.query.tab.trim() : ''
       const allowedTabs = new Set([
         'all',
         'host_foundation',
@@ -1082,31 +1024,31 @@ export default {
         'ai_employee',
         'industry_mod',
         'installed',
-      ]);
-      currentTab.value = allowedTabs.has(tabQuery) ? tabQuery : 'host_foundation';
-      void warmCatalogSnapshot();
-      void loadMods(false);
-      void refreshDeliverable();
+      ])
+      currentTab.value = allowedTabs.has(tabQuery) ? tabQuery : 'host_foundation'
+      void warmCatalogSnapshot()
+      void loadMods(false)
+      void refreshDeliverable()
       void resolveEnterpriseModStack().then((stack) => {
-        enterpriseStackLabel.value = stack.stackLabel;
-      });
-      mobileMedia = window.matchMedia('(max-width: 768px)');
-      onMobileViewportChange(mobileMedia);
+        enterpriseStackLabel.value = stack.stackLabel
+      })
+      mobileMedia = window.matchMedia('(max-width: 768px)')
+      onMobileViewportChange(mobileMedia)
       if (typeof mobileMedia.addEventListener === 'function') {
-        mobileMedia.addEventListener('change', onMobileViewportChange);
+        mobileMedia.addEventListener('change', onMobileViewportChange)
       } else if (typeof mobileMedia.addListener === 'function') {
-        mobileMedia.addListener(onMobileViewportChange);
+        mobileMedia.addListener(onMobileViewportChange)
       }
-    });
+    })
 
     onBeforeUnmount(() => {
-      if (!mobileMedia) return;
+      if (!mobileMedia) return
       if (typeof mobileMedia.removeEventListener === 'function') {
-        mobileMedia.removeEventListener('change', onMobileViewportChange);
+        mobileMedia.removeEventListener('change', onMobileViewportChange)
       } else if (typeof mobileMedia.removeListener === 'function') {
-        mobileMedia.removeListener(onMobileViewportChange);
+        mobileMedia.removeListener(onMobileViewportChange)
       }
-    });
+    })
 
     return {
       route,
@@ -1156,9 +1098,9 @@ export default {
       storeNavTabs,
       mainListTitle,
       modIconClass,
-    };
+    }
   },
-};
+}
 </script>
 
 <style scoped>
@@ -1468,7 +1410,10 @@ export default {
   border: 1px solid #e2e8f0;
   border-radius: 16px;
   padding: 16px;
-  transition: box-shadow 0.2s, border-color 0.2s, transform 0.2s;
+  transition:
+    box-shadow 0.2s,
+    border-color 0.2s,
+    transform 0.2s;
 }
 
 .store-card:hover {

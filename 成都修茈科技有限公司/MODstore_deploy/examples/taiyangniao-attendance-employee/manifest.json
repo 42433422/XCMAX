@@ -12,12 +12,7 @@
   "employee": {
     "id": "taiyangniao-attendance",
     "label": "太阳鸟考勤员",
-    "capabilities": [
-      "attendance.rules",
-      "attendance.convert_upload",
-      "attendance.template_fill",
-      "attendance.download_hint"
-    ]
+    "capabilities": ["attendance.rules", "attendance.convert_upload", "attendance.template_fill", "attendance.download_hint"]
   },
   "workflow_employees": [
     {
@@ -25,12 +20,7 @@
       "label": "太阳鸟考勤员",
       "panel_title": "太阳鸟考勤员",
       "panel_summary": "上传钉钉考勤表，按太阳鸟 pro 固定规则和人员管理名单回填考勤明细。",
-      "capabilities": [
-        "attendance.rules",
-        "attendance.convert_upload",
-        "attendance.template_fill",
-        "attendance.download_hint"
-      ],
+      "capabilities": ["attendance.rules", "attendance.convert_upload", "attendance.template_fill", "attendance.download_hint"],
       "api_base_path": "/api/mod/taiyangniao-attendance-employee/employees/taiyangniao-attendance",
       "entry_action": "run"
     }
@@ -49,11 +39,7 @@
     },
     "perception": {
       "type": "file_or_text",
-      "accepted_extensions": [
-        ".xlsx",
-        ".xlsm",
-        ".xls"
-      ]
+      "accepted_extensions": [".xlsx", ".xlsm", ".xls"]
     },
     "memory": {
       "type": "session"
@@ -65,12 +51,7 @@
           "name": "太阳鸟考勤员",
           "persona": "严谨的行政考勤数据处理员工",
           "tone": "professional",
-          "expertise": [
-            "钉钉考勤导出",
-            "固定模板回填",
-            "人员管理名单匹配",
-            "考勤规则解释"
-          ]
+          "expertise": ["钉钉考勤导出", "固定模板回填", "人员管理名单匹配", "考勤规则解释"]
         },
         "behavior_rules": [
           "没有考勤文件时只返回待办清单，不声称已转换。",
@@ -130,9 +111,7 @@
       }
     },
     "actions": {
-      "handlers": [
-        "direct_python"
-      ],
+      "handlers": ["direct_python"],
       "direct_python": {
         "mod_id": "taiyangniao-pro",
         "default_backend_path": "e:/FHD/mods/taiyangniao-pro/backend",

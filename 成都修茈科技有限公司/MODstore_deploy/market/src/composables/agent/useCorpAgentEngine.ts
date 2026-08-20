@@ -3,25 +3,11 @@ import { serializeVisibleDom } from '../../utils/agent/pageSerializer'
 import type { AgentContext, AgentMessage } from '../../types/agent'
 import type { QuickAction } from '../../content/siteKnowledge'
 import { matchCorpSiteIntent } from './skills/corpSiteSkill'
-import {
-  executeCorpIntakeMatch,
-  matchCorpIntakeIntent,
-  runIntakeFillFromMessage,
-  runCorpQuickTask,
-} from './skills/corpIntakeSkill'
-import {
-  CORP_LINKS,
-  getCorpPageKnowledge,
-  getStructuredPageSummary,
-  resolveCorpPageId,
-} from '../../content/siteKnowledge'
+import { executeCorpIntakeMatch, matchCorpIntakeIntent, runIntakeFillFromMessage, runCorpQuickTask } from './skills/corpIntakeSkill'
+import { CORP_LINKS, getCorpPageKnowledge, getStructuredPageSummary, resolveCorpPageId } from '../../content/siteKnowledge'
 import { api } from '../../api'
 import { getBridge } from '../../corp-butler/contactIntakeBridge'
-import {
-  getCorpVisitorLabel,
-  getOrCreateCorpVisitorId,
-  setCorpVisitorLabel,
-} from '../../corp-butler/corpVisitorId'
+import { getCorpVisitorLabel, getOrCreateCorpVisitorId, setCorpVisitorLabel } from '../../corp-butler/corpVisitorId'
 import { intakeFormPlacementHint } from '../../corp-butler/corpViewport'
 import { buildUserMultimodalContent } from '../../utils/visionMultimodal'
 import type { AgentHandleInputFn } from './agentEngineInjection'
@@ -188,10 +174,7 @@ async function tryCorpLlmChat(
       // ignore
     }
     const visitorLabel = getCorpVisitorLabel()
-    const userContent = buildUserMultimodalContent(
-      userText,
-      imageDataUrl ? [imageDataUrl] : [],
-    )
+    const userContent = buildUserMultimodalContent(userText, imageDataUrl ? [imageDataUrl] : [])
 
     const res = (await api.agentCorpChat({
       messages: [...historyMsgs, { role: 'user', content: userContent }],

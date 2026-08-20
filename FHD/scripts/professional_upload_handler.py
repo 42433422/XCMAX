@@ -3,10 +3,12 @@
 用于处理购买单位和产品数据的导入，确保上下文正确识别
 """
 
-import sqlite3
 import os
-from datetime import datetime
 import re
+import sqlite3
+from datetime import datetime
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 class ProfessionalUploadHandler:
@@ -83,7 +85,7 @@ class ProfessionalUploadHandler:
             conn.close()
             return analysis_result
 
-        except Exception as e:
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             return {"error": str(e)}
 
     def process_upload_response(self, user_response, file_path):
@@ -100,7 +102,7 @@ class ProfessionalUploadHandler:
             analysis = self.analyze_sqlite_database(file_path)
 
             if "error" in analysis:
-                return {"success": False, "message": f'数据库分析失败: {analysis["error"]}'}
+                return {"success": False, "message": f"数据库分析失败: {analysis['error']}"}
 
             # 检查是否有产品表
             if analysis.get("suggested_action") == "import_products":
@@ -243,7 +245,7 @@ class ProfessionalUploadHandler:
                 "purchase_unit": purchase_unit,
             }
 
-        except Exception as e:
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             return {"success": False, "message": f"导入失败: {str(e)}"}
 
     def _ensure_target_table_exists(self, cursor):

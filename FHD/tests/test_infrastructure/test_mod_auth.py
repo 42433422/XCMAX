@@ -394,7 +394,7 @@ class TestMiddlewareCall:
         }
         with patch(
             "app.infrastructure.mods.mod_manager.ensure_mod_api_ready",
-            side_effect=Exception("unexpected"),
+            side_effect=RuntimeError("unexpected"),
         ):
             await middleware(scope, MagicMock(), MagicMock())
 

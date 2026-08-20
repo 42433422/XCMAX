@@ -38,7 +38,10 @@ def load_employee_manifest_meta() -> dict[str, dict[str, str]]:
             emp_id = str(data.get("id") or "").strip()
             if not emp_id:
                 continue
-            employee_meta = data.get("employee") if isinstance(data.get("employee"), dict) else {}
+            raw_employee_meta = data.get("employee")
+            employee_meta: dict[str, Any] = (
+                dict(raw_employee_meta) if isinstance(raw_employee_meta, dict) else {}
+            )
             name = str(data.get("name") or employee_meta.get("label") or "").strip()
             desc = str(data.get("description") or "").strip()
             row: dict[str, str] = {}

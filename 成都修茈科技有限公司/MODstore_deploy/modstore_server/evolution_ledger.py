@@ -11,7 +11,7 @@ import json
 import os
 import threading
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -39,7 +39,7 @@ def append_event(event: Dict[str, Any]) -> Dict[str, Any]:
     """追加一个事件到 ledger。返回写入的完整记录（含 event_id / timestamp）。"""
     record: Dict[str, Any] = {
         "event_id": str(uuid.uuid4()),
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
     record.update(event)
     record.setdefault("owner_audit", {"audited": False, "audited_at": None, "verdict": None})
@@ -65,7 +65,7 @@ def list_events(
         return []
     cutoff: Optional[datetime] = None
     if since_days is not None:
-        cutoff = datetime.now(timezone.utc) - timedelta(days=since_days)
+        cutoff = datetime.now(UTC) - timedelta(days=since_days)
 
     out: List[Dict[str, Any]] = []
     with path.open("r", encoding="utf-8") as f:
@@ -113,7 +113,7 @@ def mark_audited(event_id: str, verdict: str) -> bool:
                 if evt.get("event_id") == event_id:
                     evt["owner_audit"] = {
                         "audited": True,
-                        "audited_at": datetime.now(timezone.utc).isoformat(),
+                        "audited_at": datetime.now(UTC).isoformat(),
                         "verdict": verdict,
                     }
                     lines_out.append(json.dumps(evt, ensure_ascii=False, sort_keys=True))

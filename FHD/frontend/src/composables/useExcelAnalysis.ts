@@ -1,12 +1,6 @@
 import { ref } from 'vue'
 import type { ChatMessageExtras } from './useChatMessages'
-import type {
-  ExcelAnalysisResult,
-  ExcelExtractGridResponse,
-  ExcelFieldInfo,
-  ExcelSheetDetail,
-  ExcelTableSlice,
-} from '@/types/excel'
+import type { ExcelAnalysisResult, ExcelExtractGridResponse, ExcelFieldInfo, ExcelSheetDetail, ExcelTableSlice } from '@/types/excel'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
 import { primeCsrfCookie } from '@/api/core'
 import { apiFetch } from '@/utils/apiBase'
@@ -37,10 +31,7 @@ async function ensureCsrfReady(): Promise<void> {
 async function readResponseJsonWithTimeout(response: Response, ms: number): Promise<ExcelExtractGridResponse> {
   let to = 0
   const timeoutP = new Promise<never>((_, rej) => {
-    to = window.setTimeout(
-      () => rej(new Error(`响应读取超时（${Math.round(ms / 1000)} 秒），请缩小文件或稍后重试`)),
-      ms
-    )
+    to = window.setTimeout(() => rej(new Error(`响应读取超时（${Math.round(ms / 1000)} 秒），请缩小文件或稍后重试`)), ms)
   })
   try {
     const text = await Promise.race([response.text(), timeoutP])
@@ -59,20 +50,12 @@ async function readResponseJsonWithTimeout(response: Response, ms: number): Prom
 
 /** Excel 分析流程用：先同步写入 UI，再后台持久化，避免服务端重载时 saveMessage 长时间挂起导致「分析中…」永不解除 */
 interface UseChatMessagesReturn {
-  addMessage: (
-    content: string,
-    role?: 'user' | 'ai' | 'task',
-    extras?: ChatMessageExtras
-  ) => void
+  addMessage: (content: string, role?: 'user' | 'ai' | 'task', extras?: ChatMessageExtras) => void
   saveMessage: (role: 'user' | 'ai' | 'task', content: string) => Promise<void>
 }
 
 interface UseExcelAnalysisOptions {
-  onAnalyzed?: (payload: {
-    fileName: string
-    summary: string
-    result: ExcelAnalysisResult
-  }) => void
+  onAnalyzed?: (payload: { fileName: string; summary: string; result: ExcelAnalysisResult }) => void
   onAnalyzeStart?: (payload: { fileName: string }) => void
   onAnalyzeProgress?: (payload: { fileName: string; step: string; progress?: number }) => void
   onAnalyzeDone?: (payload: { fileName: string; success: boolean; message?: string }) => void
@@ -91,7 +74,7 @@ async function extractSingleSheetDetail(file: File, sheetName: string): Promise<
       const response = await apiFetch(EXTRACT_GRID_PATH, {
         method: 'POST',
         body: formData,
-        signal: controller.signal
+        signal: controller.signal,
       })
       const data = await readResponseJsonWithTimeout(response, 60_000)
       if (!response.ok || !data?.success) return null
@@ -117,11 +100,7 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
   const excelAnalyzeInputRef = ref<HTMLInputElement | null>(null)
   let onMultimodalFileChangeCallback: ((ev: Event) => void | Promise<void>) | null = null
 
-  function appendChatLine(
-    content: string,
-    role: 'user' | 'ai' | 'task' = 'ai',
-    extras?: ChatMessageExtras
-  ): void {
+  function appendChatLine(content: string, role: 'user' | 'ai' | 'task' = 'ai', extras?: ChatMessageExtras): void {
     messages.addMessage(content, role, extras)
     void messages.saveMessage(role, content).catch(() => {})
   }
@@ -142,7 +121,9 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
   function summarizeExcelAnalysisResult(result: ExcelAnalysisResult): string {
     const sheetList: ExcelSheetDetail[] = Array.isArray(result?.sheets)
       ? result.sheets
-      : (Array.isArray(result?.preview_data?.all_sheets) ? result.preview_data.all_sheets : [])
+      : Array.isArray(result?.preview_data?.all_sheets)
+        ? result.preview_data.all_sheets
+        : []
     const sheetNames = asArray(result?.preview_data?.sheet_names)
       .map((x) => asString(x).trim())
       .filter(Boolean)
@@ -160,15 +141,13 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
       .filter(Boolean)
       .slice(0, 40)
 
-    const sheetSummaryLines = sheetList
-      .slice(0, 12)
-      .map((sheet, idx) => {
-        const no = Number(sheet?.sheet_index) || idx + 1
-        const name = asString(sheet?.sheet_name || `Sheet${no}`)
-        const rowCount = asArray(sheet?.grid_preview?.rows).length
-        const fieldCount = asArray(sheet?.fields).length
-        return `Sheet ${no}（${name}）：词条${fieldCount}，网格行${rowCount}`
-      })
+    const sheetSummaryLines = sheetList.slice(0, 12).map((sheet, idx) => {
+      const no = Number(sheet?.sheet_index) || idx + 1
+      const name = asString(sheet?.sheet_name || `Sheet${no}`)
+      const rowCount = asArray(sheet?.grid_preview?.rows).length
+      const fieldCount = asArray(sheet?.fields).length
+      return `Sheet ${no}（${name}）：词条${fieldCount}，网格行${rowCount}`
+    })
 
     const totalStyleCellsFromSheets = sheetList.reduce((acc, sheet) => {
       const refs = sheet?.style_cache?.cell_style_refs
@@ -195,13 +174,19 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
       })
       .slice(0, 12)
 
-    const detailSheets = (sheetList.length ? sheetList : [{
-      sheet_index: 1,
-      sheet_name: sheetName,
-      fields: fields as ExcelFieldInfo[],
-      sample_rows: sampleRows,
-      grid_preview: { rows: asArray(result?.preview_data?.grid_preview?.rows) }
-    }]).slice(0, 8)
+    const detailSheets = (
+      sheetList.length
+        ? sheetList
+        : [
+            {
+              sheet_index: 1,
+              sheet_name: sheetName,
+              fields: fields as ExcelFieldInfo[],
+              sample_rows: sampleRows,
+              grid_preview: { rows: asArray(result?.preview_data?.grid_preview?.rows) },
+            },
+          ]
+    ).slice(0, 8)
 
     const sheetDetailLines = detailSheets.flatMap((sheet, idx) => {
       const no = Number(sheet?.sheet_index) || idx + 1
@@ -226,7 +211,7 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
         `- 词条：${sheetFields.length ? sheetFields.join('、') : '无'}`,
         `- 网格行数：${sheetRows}`,
         `- 样例数据：`,
-        ...(sheetSamples.length ? sheetSamples : ['  无样例行'])
+        ...(sheetSamples.length ? sheetSamples : ['  无样例行']),
       ]
     })
 
@@ -243,7 +228,7 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
       ...(tableSummaryLines.length ? ['逻辑表块分类：', ...tableSummaryLines] : []),
       `分表详细分析：`,
       ...sheetDetailLines,
-      ...(sheetList.length > 8 ? [`（仅展示前8个工作表，剩余 ${sheetList.length - 8} 个）`] : [])
+      ...(sheetList.length > 8 ? [`（仅展示前8个工作表，剩余 ${sheetList.length - 8} 个）`] : []),
     ].join('\n')
   }
 
@@ -263,7 +248,7 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
         options.onAnalyzeProgress?.({
           fileName: file.name,
           step: '正在上传并请求解析…',
-          progress: 12
+          progress: 12,
         })
 
         try {
@@ -276,21 +261,16 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
           options.onAnalyzeProgress?.({
             fileName: file.name,
             step: '服务器正在解析工作簿（多表时可能需数十秒）…',
-            progress: 28
+            progress: 28,
           })
           if (import.meta.env.DEV) {
-            console.debug(
-              '[excel-analysis] POST',
-              EXTRACT_GRID_PATH,
-              'page=',
-              typeof window !== 'undefined' ? window.location.origin : ''
-            )
+            console.debug('[excel-analysis] POST', EXTRACT_GRID_PATH, 'page=', typeof window !== 'undefined' ? window.location.origin : '')
           }
           try {
             const response = await apiFetch(EXTRACT_GRID_PATH, {
               method: 'POST',
               body: formData,
-              signal: controller.signal
+              signal: controller.signal,
             })
             const data: ExcelExtractGridResponse = await readResponseJsonWithTimeout(response, 120_000)
 
@@ -301,12 +281,12 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
             options.onAnalyzeProgress?.({
               fileName: file.name,
               step: '正在整理分表与字段摘要…',
-              progress: 58
+              progress: 58,
             })
 
             const hasMultiSheetDetails =
-              Array.isArray(data?.sheets) && data.sheets.length > 0
-                || (Array.isArray(data?.preview_data?.all_sheets) && data.preview_data.all_sheets.length > 0)
+              (Array.isArray(data?.sheets) && data.sheets.length > 0) ||
+              (Array.isArray(data?.preview_data?.all_sheets) && data.preview_data.all_sheets.length > 0)
             const sheetNames = asArray<string>(data?.preview_data?.sheet_names)
             if (!hasMultiSheetDetails && sheetNames.length > 1) {
               const detailedSheets: ExcelSheetDetail[] = []
@@ -316,13 +296,13 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
                 options.onAnalyzeProgress?.({
                   fileName: file.name,
                   step: `补全分表详情 ${i + 1}/${sheetNames.length}`,
-                  progress: Math.floor(((i + 1) / sheetNames.length) * 100)
+                  progress: Math.floor(((i + 1) / sheetNames.length) * 100),
                 })
                 const detail = await extractSingleSheetDetail(file, name)
                 if (detail) {
                   detailedSheets.push({
                     sheet_index: i + 1,
-                    ...detail
+                    ...detail,
                   })
                 }
               }
@@ -336,14 +316,14 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
             options.onAnalyzeProgress?.({
               fileName: file.name,
               step: '正在生成对话摘要…',
-              progress: 82
+              progress: 82,
             })
             const summary = summarizeExcelAnalysisResult(data as ExcelAnalysisResult)
             appendChatLine(summary, 'ai')
             options.onAnalyzed?.({
               fileName: file.name,
               summary,
-              result: data as ExcelAnalysisResult
+              result: data as ExcelAnalysisResult,
             })
             options.onAnalyzeDone?.({ fileName: file.name, success: true })
           } finally {
@@ -353,8 +333,7 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
           const errObj = err as { name?: string; message?: string }
           const isAbort = errObj?.name === 'AbortError'
           const raw = String(errObj?.message || err || '')
-          const netFail =
-            /Failed to fetch|NetworkError|Load failed|网络/i.test(raw) || errObj?.name === 'TypeError'
+          const netFail = /Failed to fetch|NetworkError|Load failed|网络/i.test(raw) || errObj?.name === 'TypeError'
           let hint = ''
           if (netFail && !isAbort) {
             hint =
@@ -385,6 +364,6 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
     triggerUpload,
     triggerExcelAnalyzeUpload,
     onExcelAnalyzeFileChange,
-    setOnMultimodalFileChangeCallback
+    setOnMultimodalFileChangeCallback,
   }
 }

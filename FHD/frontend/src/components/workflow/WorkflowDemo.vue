@@ -1,7 +1,7 @@
 <template>
   <div class="workflow-demo">
     <h2>真实电话业务员工作流示例</h2>
-    
+
     <div class="workflow-section">
       <h3>员工开关控制</h3>
       <div class="employee-list">
@@ -12,23 +12,18 @@
           @change="handleEmployeeChange"
           @toggle="handleEmployeeToggle"
         />
-        
+
         <WorkflowEmployeeRow
           label="在线客服业务员"
           employee-id="online_service"
           v-model="isOnlineServiceActive"
           @change="handleEmployeeChange"
         />
-        
-        <WorkflowEmployeeRow
-          label="邮件业务员"
-          employee-id="email_service"
-          v-model="isEmailServiceActive"
-          @change="handleEmployeeChange"
-        />
+
+        <WorkflowEmployeeRow label="邮件业务员" employee-id="email_service" v-model="isEmailServiceActive" @change="handleEmployeeChange" />
       </div>
     </div>
-    
+
     <div class="workflow-section">
       <h3>工作流分支可视化</h3>
       <div class="branch-cards">
@@ -45,7 +40,7 @@
             固定行 id=real_phone；副窗启用 → ADB 设备连通检查 → 来电检测/接听 → 语音转写与回复（与状态轮询同步）
           </template>
         </WfVizBranchCard>
-        
+
         <WfVizBranchCard
           title="在线客服扩展"
           badge-text="动态扩展"
@@ -57,7 +52,7 @@
         />
       </div>
     </div>
-    
+
     <div class="workflow-section">
       <h3>状态日志</h3>
       <div class="status-log">
@@ -80,88 +75,88 @@ export default defineComponent({
   name: 'WorkflowDemo',
   components: {
     WorkflowEmployeeRow,
-    WfVizBranchCard
+    WfVizBranchCard,
   },
   setup() {
     const isRealPhoneActive = ref(false)
     const isOnlineServiceActive = ref(false)
     const isEmailServiceActive = ref(false)
-    
+
     const logs = ref<Array<{ time: string; message: string }>>([])
-    
+
     const realPhoneTriggers: BranchTrigger[] = [
       {
         id: 'adb_check',
         name: 'ADB 设备连通检查',
         type: 'fixed',
         status: 'active',
-        order: 1
+        order: 1,
       },
       {
         id: 'call_detection',
         name: '来电检测/接听',
         type: 'fixed',
         status: 'active',
-        order: 2
+        order: 2,
       },
       {
         id: 'voice_transcription',
         name: '语音转写',
         type: 'fixed',
         status: 'active',
-        order: 3
+        order: 3,
       },
       {
         id: 'voice_reply',
         name: '语音回复',
         type: 'fixed',
         status: 'active',
-        order: 4
-      }
+        order: 4,
+      },
     ]
-    
+
     const onlineServiceTriggers: BranchTrigger[] = [
       {
         id: 'chat_init',
         name: '聊天初始化',
         type: 'dynamic',
         status: 'active',
-        order: 1
+        order: 1,
       },
       {
         id: 'message_handler',
         name: '消息处理',
         type: 'dynamic',
         status: 'pending',
-        order: 2
-      }
+        order: 2,
+      },
     ]
-    
+
     const addLog = (message: string) => {
       logs.value.unshift({
         time: new Date().toLocaleTimeString('zh-CN'),
-        message
+        message,
       })
     }
-    
+
     const handleEmployeeChange = (isActive: boolean) => {
       addLog(`员工状态变更：${isActive ? '启用' : '禁用'}`)
     }
-    
+
     const handleEmployeeToggle = ({ employeeId, active }: { employeeId: string; active: boolean }) => {
       addLog(`员工切换：${employeeId} -> ${active ? '启用' : '禁用'}`)
     }
-    
+
     const handleBranchConfigure = ({ branchId }: { branchId: string }) => {
       addLog(`配置分支：${branchId}`)
       console.log('Configure branch:', branchId)
     }
-    
+
     const handleBranchViewDetails = ({ branchId }: { branchId: string }) => {
       addLog(`查看详情：${branchId}`)
       console.log('View details:', branchId)
     }
-    
+
     return {
       isRealPhoneActive,
       isOnlineServiceActive,
@@ -172,9 +167,9 @@ export default defineComponent({
       handleEmployeeChange,
       handleEmployeeToggle,
       handleBranchConfigure,
-      handleBranchViewDetails
+      handleBranchViewDetails,
     }
-  }
+  },
 })
 </script>
 

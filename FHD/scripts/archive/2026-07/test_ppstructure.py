@@ -1,13 +1,11 @@
-# -*- coding: utf-8 -*-
 """
 使用 PaddleOCR PP-Structure 表格检测 + OCR
 """
 
-from paddleocr import PPStructure
-import cv2
-import numpy as np
-import json
 import glob
+import json
+
+from paddleocr import PPStructure
 
 # 读取图片
 files = glob.glob(r"e:\FHD\26-0300001A*.png")
@@ -27,7 +25,7 @@ if result is None or len(result) == 0:
     print("❌ 未检测到任何内容")
     exit(1)
 
-print(f"\n" + "=" * 70)
+print("\n" + "=" * 70)
 print("PP-Structure 结果")
 print("=" * 70)
 
@@ -37,14 +35,14 @@ for i, item in enumerate(result):
     print(f"内容 keys：{item.keys()}")
 
     if "table" in item:
-        print(f"\n表格结构：")
+        print("\n表格结构：")
         table_result = item["table"]
         if isinstance(table_result, list):
             for row_idx, row in enumerate(table_result):
                 print(f"  行 {row_idx}: {row}")
 
     if "img" in item:
-        print(f"\n检测到图片区域")
+        print("\n检测到图片区域")
 
     if "layout" in item:
         print(f"\n版面分析结果：{item['layout']}")

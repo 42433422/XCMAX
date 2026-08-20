@@ -14,18 +14,8 @@ export interface LayoutOptions {
   nodeSep?: number
 }
 
-export function computeAutoLayout(
-  nodes: Node[],
-  edges: Edge[],
-  opts: LayoutOptions = {},
-): Map<string, { x: number; y: number }> {
-  const {
-    direction = 'LR',
-    nodeWidth = 220,
-    nodeHeight = 92,
-    rankSep = 80,
-    nodeSep = 48,
-  } = opts
+export function computeAutoLayout(nodes: Node[], edges: Edge[], opts: LayoutOptions = {}): Map<string, { x: number; y: number }> {
+  const { direction = 'LR', nodeWidth = 220, nodeHeight = 92, rankSep = 80, nodeSep = 48 } = opts
 
   const g = new dagre.graphlib.Graph()
   g.setDefaultEdgeLabel(() => ({}))

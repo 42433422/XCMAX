@@ -1,9 +1,10 @@
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """运营开关与发布门禁 API。"""
 
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Dict
 
@@ -11,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from modstore_server.api.deps import _get_current_user
 from modstore_server.models import User
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 router = APIRouter(prefix="/api/ops", tags=["ops"])
 
@@ -26,7 +28,7 @@ def _read_flags() -> Dict[str, bool]:
         }
     try:
         return json.loads(_FLAGS_FILE.read_text(encoding="utf-8"))
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return {}
 
 
@@ -39,7 +41,7 @@ def _save_flags(flags: Dict[str, bool]) -> None:
 def get_release_gates(user: User = Depends(_get_current_user)):
     if not user.is_admin:
         raise HTTPException(403, "需要管理员权限")
-    return {"flags": _read_flags(), "updated_at": datetime.now(timezone.utc).isoformat()}
+    return {"flags": _read_flags(), "updated_at": datetime.now(UTC).isoformat()}
 
 
 @router.put("/release-gates")

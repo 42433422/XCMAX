@@ -7,9 +7,11 @@ class IntentCachePort(Protocol):
     def get_or_compute(
         self,
         text: str,
-        mod_id: str,
-        compute_fn: Callable[[], dict[str, Any]],
-    ) -> dict[str, Any]: ...
+        compute_fn: Callable[[], Any],
+        mod_id: str | None = None,
+        ttl: int | None = None,
+        should_cache: Callable[[Any], bool] | None = None,
+    ) -> Any: ...
 
 
 _cache_instance: IntentCachePort | None = None

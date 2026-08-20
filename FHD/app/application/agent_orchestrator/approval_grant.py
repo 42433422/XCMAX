@@ -14,6 +14,7 @@ from typing import Any
 import jwt
 
 from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -118,7 +119,7 @@ def consume_approval_grant(token: str, *, run: AgentRun, principal_id: str) -> d
         if jti in _CONSUMED_JTIS:
             raise ApprovalGrantError("approval_grant 已使用")
         try:
-            from app.utils.redis_cache import get_redis_cache
+            from app.utils.performance.redis_cache import get_redis_cache
 
             cache = get_redis_cache()
             if getattr(cache, "is_available", False):
@@ -133,7 +134,7 @@ def consume_approval_grant(token: str, *, run: AgentRun, principal_id: str) -> d
                     raise ApprovalGrantError("approval_grant 已使用")
         except ApprovalGrantError:
             raise
-        except Exception:  # noqa: BLE001 - Redis is optional; local replay guard remains
+        except RECOVERABLE_ERRORS:  # noqa: BLE001 - Redis is optional; local replay guard remains
             logger.debug("approval grant Redis replay guard unavailable", exc_info=True)
         _CONSUMED_JTIS.add(jti)
     return claims

@@ -20,6 +20,8 @@ import types
 
 import pytest
 
+from app.utils.operational_errors import BOUNDARY_ERRORS
+
 
 def _make_customer_db(path) -> None:
     conn = sqlite3.connect(path)
@@ -233,7 +235,7 @@ def test_phase90c_import_and_exercise_safe_app_modules():
     def invoke(fn, bound=False):
         try:
             sig = inspect.signature(fn)
-        except Exception:
+        except BOUNDARY_ERRORS:
             return False
         args = []
         kwargs = {}
@@ -263,7 +265,7 @@ def test_phase90c_import_and_exercise_safe_app_modules():
             if inspect.iscoroutine(result):
                 result.close()
             return True
-        except Exception:
+        except BOUNDARY_ERRORS:
             return False
 
     imported = 0
@@ -276,7 +278,7 @@ def test_phase90c_import_and_exercise_safe_app_modules():
             module = importlib.import_module(name)
             imported += 1
             continue
-        except Exception:
+        except BOUNDARY_ERRORS:
             continue
 
         for attr_name, value in list(vars(module).items())[:200]:
@@ -314,7 +316,7 @@ def test_phase90c_import_and_exercise_safe_app_modules():
                         else:
                             ctor_args.append(value_arg)
                     instance = value(*ctor_args, **ctor_kwargs)
-                except Exception:
+                except BOUNDARY_ERRORS:
                     continue
                 for method_name, method in list(vars(value).items())[:80]:
                     if skip_callable.search(method_name) or not callable(method):

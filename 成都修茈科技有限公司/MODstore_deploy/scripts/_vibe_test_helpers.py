@@ -13,6 +13,8 @@ from typing import Any, Dict, Optional
 
 import requests
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 BASE_URL = os.environ.get("MODSTORE_BASE_URL", "http://127.0.0.1:8765")
 
 
@@ -55,7 +57,7 @@ def poll_session(
         st = str(s.get("status") or "")
         if st != last_status:
             print(
-                f"[poll t+{int(time.time()-start)}s] status={st} steps={len(s.get('steps') or [])}",
+                f"[poll t+{int(time.time() - start)}s] status={st} steps={len(s.get('steps') or [])}",
                 flush=True,
             )
             last_status = st
@@ -83,7 +85,7 @@ def execute_employee(
             print(
                 "[execute] HTTP", r.status_code, json.dumps(r.json(), ensure_ascii=False, indent=2)
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             print("[execute] HTTP", r.status_code, r.text[:500])
         r.raise_for_status()
     return r.json()

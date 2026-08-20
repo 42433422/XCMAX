@@ -5,10 +5,10 @@
 自动将现有的 App Service 转换为事件驱动版本。
 """
 
-import os
-import re
 from pathlib import Path
-from typing import List, Dict, Tuple
+from typing import List
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 class V2ServiceGenerator:
@@ -133,7 +133,7 @@ class {class_name}V2:
                 "message": f"{{command_type}} 命令已提交"
             }}
             
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             logger.exception(f"[{class_name}V2] 执行命令失败: {{e}}")
             return {{"success": False, "message": str(e)}}
 '''
@@ -208,7 +208,7 @@ def get_{service_name}_v2() -> {class_name}V2:
             try:
                 v2_file = self.generate_v2_service(py_file)
                 generated_files.append(v2_file)
-            except Exception as e:
+            except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
                 print(f"  [ERROR] 生成失败: {e}")
 
         return generated_files

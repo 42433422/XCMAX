@@ -1,15 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentRunEvent } from '@/api/agentRuns'
-import {
-  buildAgentRunTraceFromEvents,
-  isTrivialChatTrace,
-  shouldShowAgentRunPlanGraph,
-} from './agentRunTraceModel'
+import { buildAgentRunTraceFromEvents, isTrivialChatTrace, shouldShowAgentRunPlanGraph } from './agentRunTraceModel'
 
-function ev(
-  event_type: AgentRunEvent['event_type'],
-  overrides: Partial<AgentRunEvent> = {},
-): AgentRunEvent {
+function ev(event_type: AgentRunEvent['event_type'], overrides: Partial<AgentRunEvent> = {}): AgentRunEvent {
   return {
     event_id: `evt_${Math.random().toString(36).slice(2, 8)}`,
     run_id: 'run_test',
@@ -36,7 +29,12 @@ describe('buildAgentRunTraceFromEvents', () => {
         created_at: '2026-07-31T00:00:01Z',
       }),
       ev('tool.started', {
-        data: { node_id: 'n1', tool_id: 'query_inventory', action: 'query', params: { sku: 'X-100' } },
+        data: {
+          node_id: 'n1',
+          tool_id: 'query_inventory',
+          action: 'query',
+          params: { sku: 'X-100' },
+        },
         created_at: '2026-07-31T00:00:02Z',
       }),
       ev('tool.completed', {
@@ -208,10 +206,7 @@ describe('buildAgentRunTraceFromEvents', () => {
   })
 
   it('treats planner.blocked as terminal failure', () => {
-    const events: AgentRunEvent[] = [
-      ev('planner.started'),
-      ev('planner.blocked', { message: '无法生成计划' }),
-    ]
+    const events: AgentRunEvent[] = [ev('planner.started'), ev('planner.blocked', { message: '无法生成计划' })]
 
     const trace = buildAgentRunTraceFromEvents(events, 'run_blocked')
     expect(trace.status).toBe('failed')
@@ -239,9 +234,7 @@ describe('buildAgentRunTraceFromEvents', () => {
   })
 
   it('parses intent from event data when present', () => {
-    const events: AgentRunEvent[] = [
-      ev('planner.started', { data: { intent: 'shipment_query' } }),
-    ]
+    const events: AgentRunEvent[] = [ev('planner.started', { data: { intent: 'shipment_query' } })]
     const trace = buildAgentRunTraceFromEvents(events, 'run_intent')
     expect(trace.intent).toBe('shipment_query')
   })

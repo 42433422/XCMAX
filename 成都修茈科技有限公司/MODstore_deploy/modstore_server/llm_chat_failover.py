@@ -18,6 +18,7 @@ from modstore_server.llm_failure_classifier import (
     is_transient_failure,
 )
 from modstore_server.llm_key_resolver import KNOWN_PROVIDERS, resolve_api_key
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +83,7 @@ async def list_chat_failover_candidates(
     async def first_model_id(provider: str) -> str:
         try:
             block = await get_models_for_provider(db, user_id, provider, force_refresh=False)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             return ""
         mids = list(block.get("runtime_models") or block.get("models") or [])
         return str(mids[0]).strip() if mids else ""
@@ -108,7 +109,7 @@ async def list_chat_failover_candidates(
             m0 = await first_model_id(pref_p)
             if m0:
                 _add(pref_p, m0)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.debug("list_chat_failover_candidates prefs skipped", exc_info=True)
 
     for p in KNOWN_PROVIDERS:

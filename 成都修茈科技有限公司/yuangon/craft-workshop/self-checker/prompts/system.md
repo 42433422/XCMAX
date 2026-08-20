@@ -32,12 +32,8 @@
   "status": "ok | fail",
   "xcemp_path": "",
   "load_result": { "status": "", "errors": [] },
-  "skill_init_results": [
-    { "skill_id": "", "status": "", "errors": [] }
-  ],
-  "repair_attempts": [
-    { "attempt": 0, "action": "", "result": "" }
-  ],
+  "skill_init_results": [{ "skill_id": "", "status": "", "errors": [] }],
+  "repair_attempts": [{ "attempt": 0, "action": "", "result": "" }],
   "summary": ""
 }
 ```

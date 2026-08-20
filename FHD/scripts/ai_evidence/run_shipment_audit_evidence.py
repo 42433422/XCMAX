@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="attr-defined"
 """发货单审单 evidence — 写入样例事件并输出 JSON。"""
+
 from __future__ import annotations
 
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -15,9 +17,9 @@ def main() -> int:
     if str(ROOT) not in sys.path:
         sys.path.insert(0, str(ROOT))
 
+    from app.application.shipment_audit_app_service import ShipmentAuditAppService
     from app.db import engine
     from app.db.init_db import init_ai_business_evidence_tables
-    from app.application.shipment_audit_app_service import ShipmentAuditAppService
     from app.infrastructure.persistence.shipment_audit_repository import ShipmentAuditRepository
 
     init_ai_business_evidence_tables(engine)
@@ -39,12 +41,12 @@ def main() -> int:
 
     counts = ShipmentAuditRepository().count_by_decision()
     payload = {
-        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "samples": samples,
         "counts": counts,
     }
     METRICS.mkdir(parents=True, exist_ok=True)
-    out = METRICS / f"shipment-audit-evidence-{datetime.now(timezone.utc).strftime('%Y%m%d')}.json"
+    out = METRICS / f"shipment-audit-evidence-{datetime.now(UTC).strftime('%Y%m%d')}.json"
     out.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     print(f"evidence: {out}")

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { useOfficeEmployeePackReady } from '@/composables/useOfficeEmployeePackReady'
 
 vi.mock('@/utils/platformShellApi', () => ({
@@ -40,7 +40,12 @@ describe('useOfficeEmployeePackReady', () => {
 
   it('refresh sets loading during request', async () => {
     let resolvePromise!: (v: any) => void
-    ;(fetchEmployeePlannerStatus as any).mockImplementation(() => new Promise(r => { resolvePromise = r }))
+    ;(fetchEmployeePlannerStatus as any).mockImplementation(
+      () =>
+        new Promise((r) => {
+          resolvePromise = r
+        }),
+    )
     const { refresh, loading } = useOfficeEmployeePackReady()
     const promise = refresh(true)
     expect(loading.value).toBe(true)
@@ -95,7 +100,7 @@ describe('useOfficeEmployeePackReady', () => {
 
   it('starts polling when pollMs > 0', async () => {
     vi.useFakeTimers()
-    const { ready } = useOfficeEmployeePackReady(1500)
+    useOfficeEmployeePackReady(1500)
     // Wait for initial refresh
     await vi.advanceTimersByTimeAsync(100)
     expect(fetchEmployeePlannerStatus).toHaveBeenCalled()

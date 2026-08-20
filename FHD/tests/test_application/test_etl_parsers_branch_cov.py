@@ -1,3 +1,4 @@
+# mypy: disable-error-code="index, union-attr"
 """Branch/behaviour coverage for the deterministic ETL parsing modules.
 
 Covers:

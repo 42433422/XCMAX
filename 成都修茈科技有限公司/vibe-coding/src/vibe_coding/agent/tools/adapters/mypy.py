@@ -37,12 +37,12 @@ class MypyAdapter:
             SandboxJob(
                 kind="command",
                 workspace_dir=str(root),
-                command=["mypy"] + list(self._args),
+                command=["mypy", *list(self._args)],
             ),
             policy=pol,
         )
         output = res.stdout + res.stderr
-        issues = [l.strip() for l in output.splitlines() if l.strip() and ": error:" in l]
+        issues = [line.strip() for line in output.splitlines() if line.strip() and ": error:" in line]
         return ToolReport(
             tool=self.name,
             passed=res.success,

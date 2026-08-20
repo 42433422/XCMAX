@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { ref, nextTick } from 'vue'
+import { ref } from 'vue'
 
 vi.mock('@/utils/sanitizeHtml', () => ({
   sanitizeChatBubbleMarkdown: vi.fn((s: string) => s),
+  plainTextFromChatHtml: vi.fn((s: string) => s?.replace(/<[^>]*>/g, '') || ''),
+  plainTextFromChatMarkdown: vi.fn((s: string) => s?.replace(/<[^>]*>/g, '') || ''),
 }))
 
 vi.mock('@/utils/chatBubbleDisplay', () => ({

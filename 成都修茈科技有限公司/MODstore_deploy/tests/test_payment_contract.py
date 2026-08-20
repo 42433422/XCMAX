@@ -24,6 +24,8 @@ from modstore_server.eventing.contracts import (
     WALLET_BALANCE_CHANGED,
 )
 
+BOUNDARY_ERRORS = (Exception,)
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -60,7 +62,7 @@ def test_payment_gateway_default_python_does_not_proxy(monkeypatch):
 
 
 def _sign_dto(**overrides):
-    from modstore_server.payment_api import CheckoutDTO
+    from modstore_server.api.payment_routes import CheckoutDTO
 
     base = dict(
         plan_id="",
@@ -77,7 +79,7 @@ def _sign_dto(**overrides):
 
 
 def test_canonical_sign_data_keys_match_contract():
-    from modstore_server.payment_api import canonical_checkout_sign_data
+    from modstore_server.api.payment_routes import canonical_checkout_sign_data
 
     canonical = canonical_checkout_sign_data(_sign_dto(plan_id="plan_basic"))
     assert tuple(sorted(canonical.keys())) == payment_contract.SIGN_FIELDS
@@ -94,7 +96,7 @@ def test_canonical_sign_data_string_normalisation_matches_java():
     - ``wallet_recharge``: ``"true"`` / ``"false"``
     """
 
-    from modstore_server.payment_api import canonical_checkout_sign_data
+    from modstore_server.api.payment_routes import canonical_checkout_sign_data
 
     canonical = canonical_checkout_sign_data(
         _sign_dto(
@@ -138,9 +140,9 @@ def test_amount_sign_str_matches_contract(amount, expected):
 
 
 def test_replay_window_matches_contract():
-    from modstore_server import payment_api
+    from modstore_server.api import payment_routes
 
-    assert payment_api.REPLAY_WINDOW == payment_contract.REPLAY_WINDOW_SECONDS
+    assert payment_routes.REPLAY_WINDOW == payment_contract.REPLAY_WINDOW_SECONDS
 
 
 def test_notify_idempotency_ttl_matches_java_security_service():
@@ -335,10 +337,18 @@ def _all_routes(app) -> set[tuple[str, str]]:
         schema = app.openapi()
         for path, methods_dict in schema.get("paths", {}).items():
             for method in methods_dict:
-                if method.upper() in {"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"}:
+                if method.upper() in {
+                    "GET",
+                    "POST",
+                    "PUT",
+                    "DELETE",
+                    "PATCH",
+                    "HEAD",
+                    "OPTIONS",
+                }:
                     routes.add((method.upper(), path))
         return routes
-    except Exception:
+    except BOUNDARY_ERRORS:
         pass
     # Fallback: recursive traversal (handles _IncludedRouter in Starlette 1.x)
     from fastapi.routing import APIRoute

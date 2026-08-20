@@ -180,20 +180,13 @@ describe('enterpriseWorkflowEstablishment constants and functions', () => {
     })
 
     it('returns max count across layers', () => {
-      const desks = [
-        { empId: 'label_print' },
-        { empId: 'shipment_mgmt' },
-        { empId: 'wechat_msg' },
-      ]
+      const desks = [{ empId: 'label_print' }, { empId: 'shipment_mgmt' }, { empId: 'wechat_msg' }]
       // label_print and shipment_mgmt are both execution → count 2
       expect(countEnterpriseEstablishmentMaxSlots(desks)).toBe(2)
     })
 
     it('returns 1 when all desks in different layers', () => {
-      const desks = [
-        { empId: 'label_print' },
-        { empId: 'wechat_msg' },
-      ]
+      const desks = [{ empId: 'label_print' }, { empId: 'wechat_msg' }]
       expect(countEnterpriseEstablishmentMaxSlots(desks)).toBe(1)
     })
   })

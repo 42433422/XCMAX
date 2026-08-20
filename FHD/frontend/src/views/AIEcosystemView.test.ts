@@ -30,8 +30,22 @@ async function mountView() {
       plugins: [router],
       stubs: {
         AiOpenLauncherIcon: { template: '<i class="icon-aiopen" />' },
+        AIOpenPanel: {
+          name: 'AIOpenPanel',
+          emits: ['back'],
+          template: '<div class="aiopen-panel-stub" />',
+        },
         KittenLauncherIcon: { template: '<i class="icon-kitten" />' },
+        KittenAnalyzerView: {
+          name: 'KittenAnalyzerView',
+          emits: ['back'],
+          template: '<div class="kitten-analyzer-stub" />',
+        },
         ProductionEmployeeLauncherIcon: { template: '<i class="icon-prod" />' },
+        PrivateModDeliveryPanel: {
+          name: 'PrivateModDeliveryPanel',
+          template: '<div class="private-mod-delivery-stub" />',
+        },
         ModStoreLauncherIcon: { template: '<i class="icon-modstore" />' },
       },
     },
@@ -74,12 +88,7 @@ describe('AIEcosystemView.vue', () => {
   it('renders launcher names', async () => {
     const { wrapper } = await mountView()
     const names = wrapper.findAll('.app-launcher-name')
-    expect(names.map((n) => n.text())).toEqual([
-      '智慧分析',
-      'AIOPEN 开放智控',
-      '生产员工',
-      '员工商店',
-    ])
+    expect(names.map((n) => n.text())).toEqual(['智慧分析', 'AIOPEN 开放智控', '生产员工', '员工商店'])
   })
 
   it('modstore launcher has data-tour attribute', async () => {

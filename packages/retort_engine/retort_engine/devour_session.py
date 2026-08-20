@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 ExternalProjectProfile = Callable[[Path | None], dict[str, bool]]
 
@@ -87,10 +87,11 @@ def devour_session_status(
 def assessment_panel(
     role: str, title: str, assessment: dict[str, Any], *, source: str
 ) -> dict[str, Any]:
-    metadata = (
+    metadata = cast(
+        dict[str, Any],
         assessment.get("metadata")
         if isinstance(assessment.get("metadata"), dict)
-        else {}
+        else {},
     )
     scores = [item for item in assessment.get("scores") or [] if isinstance(item, dict)]
     return {
@@ -118,10 +119,11 @@ def assessment_panel(
 
 
 def assessment_score_status(assessment: dict[str, Any]) -> str:
-    metadata = (
+    metadata = cast(
+        dict[str, Any],
         assessment.get("metadata")
         if isinstance(assessment.get("metadata"), dict)
-        else {}
+        else {},
     )
     source = str(metadata.get("score_source") or "")
     if assessment_score(assessment) is not None and source == "paibi_llm":
@@ -163,8 +165,9 @@ def evidence_highlights(assessment: dict[str, Any], *, limit: int = 8) -> list[s
 
 
 def feature_highlights(metadata: dict[str, Any], *, limit: int = 6) -> list[str]:
-    features = (
-        metadata.get("features") if isinstance(metadata.get("features"), dict) else {}
+    features = cast(
+        dict[str, Any],
+        metadata.get("features") if isinstance(metadata.get("features"), dict) else {},
     )
     return [str(key) for key, value in features.items() if value][:limit]
 
@@ -222,16 +225,21 @@ def improvement_proof(
     after_score = assessment_score(own_assessment)
     changed_files = [str(item) for item in execution.get("changed_files") or []]
     gates = [item for item in execution.get("gates") or [] if isinstance(item, dict)]
-    proof = (
+    proof = cast(
+        dict[str, Any],
         absorption_state.get("closed_loop_proof")
         if isinstance(absorption_state.get("closed_loop_proof"), dict)
-        else {}
+        else {},
     )
-    flags = proof.get("flags") if isinstance(proof.get("flags"), dict) else {}
-    audit = (
+    flags = cast(
+        dict[str, Any],
+        proof.get("flags") if isinstance(proof.get("flags"), dict) else {},
+    )
+    audit = cast(
+        dict[str, Any],
         (own_assessment.get("metadata") or {}).get("capability_absorption_audit")
         if isinstance(own_assessment.get("metadata"), dict)
-        else {}
+        else {},
     )
     if not isinstance(audit, dict):
         audit = {}
@@ -296,15 +304,17 @@ def improvement_proof_status(execution: dict[str, Any], flags: dict[str, Any]) -
 def final_self_review(
     own_assessment: dict[str, Any], llm_review: dict[str, Any]
 ) -> dict[str, Any]:
-    metadata = (
+    metadata = cast(
+        dict[str, Any],
         own_assessment.get("metadata")
         if isinstance(own_assessment.get("metadata"), dict)
-        else {}
+        else {},
     )
-    dispatch = (
+    dispatch = cast(
+        dict[str, Any],
         llm_review.get("dispatch")
         if isinstance(llm_review.get("dispatch"), dict)
-        else {}
+        else {},
     )
     return {
         "status": assessment_score_status(own_assessment),
@@ -334,7 +344,7 @@ def assessment_score(assessment: dict[str, Any]) -> float | None:
         for score in scores:
             if isinstance(score, dict) and score.get("dimension") == dimension:
                 try:
-                    return round(float(score.get("value")), 1)
+                    return round(float(cast(Any, score.get("value"))), 1)
                 except (TypeError, ValueError):
                     return None
     return None

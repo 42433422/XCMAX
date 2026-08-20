@@ -26,9 +26,7 @@ let toDataURLSpy: ReturnType<typeof vi.spyOn>
 beforeEach(() => {
   mockCtx = createMockCtx()
   getContextSpy = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(mockCtx)
-  toDataURLSpy = vi
-    .spyOn(HTMLCanvasElement.prototype, 'toDataURL')
-    .mockReturnValue('data:image/png;base64,mockdata')
+  toDataURLSpy = vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/png;base64,mockdata')
 })
 
 afterEach(() => {
@@ -210,9 +208,7 @@ describe('LabelPreview.vue functions', () => {
       mockCtx.fillText.mockClear()
       // @ts-expect-error access internal method
       wrapper.vm.renderFields(mockCtx, 300, 100)
-      const labelCalls = mockCtx.fillText.mock.calls.filter((c) =>
-        String(c[0]).includes('字段'),
-      )
+      const labelCalls = mockCtx.fillText.mock.calls.filter((c) => String(c[0]).includes('字段'))
       expect(labelCalls.length).toBeLessThan(50)
     })
   })

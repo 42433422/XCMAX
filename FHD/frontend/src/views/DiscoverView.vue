@@ -40,23 +40,21 @@
 </template>
 
 <script setup lang="ts">
-import { useRouter } from 'vue-router';
+import { useRouter } from 'vue-router'
 
-const router = useRouter();
-const modstoreWebUrl = String(
-  import.meta.env.VITE_MODSTORE_WEB_URL || 'https://xiu-ci.com/market/workbench/unified',
-).replace(/\/$/, '');
+const router = useRouter()
+const modstoreWebUrl = String(import.meta.env.VITE_MODSTORE_WEB_URL || 'https://xiu-ci.com/market/workbench/unified').replace(/\/$/, '')
 
 function openWorkbench() {
-  window.open(modstoreWebUrl, '_blank', 'noopener,noreferrer');
+  window.open(modstoreWebUrl, '_blank', 'noopener,noreferrer')
 }
 
 function goMods() {
-  void router.push({ name: 'mod-store' });
+  void router.push({ name: 'mod-store' })
 }
 
 function goTools() {
-  void router.push({ name: 'tools' });
+  void router.push({ name: 'tools' })
 }
 </script>
 

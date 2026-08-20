@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="arg-type, assignment, index, no-any-return, operator"
 """Render M0 SLO panel preview PNGs (Grafana-style, no fake metrics).
 
 Outputs to docs/evidence/slo/ and updates docs/evidence/m0-evidence-manifest.json.
 Local previews read live /metrics when FastAPI is up; otherwise show scaffold text.
 """
+
 from __future__ import annotations
 
 import json
 import re
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -68,9 +70,13 @@ MOD_STEPS = [
 
 def _font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     candidates = [
-        "/System/Library/Fonts/Supplemental/Arial Bold.ttf" if bold else "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
+        if bold
+        else "/System/Library/Fonts/Supplemental/Arial.ttf",
         "/System/Library/Fonts/PingFang.ttc",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+        if bold
+        else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     ]
     for path in candidates:
         p = Path(path)
@@ -203,7 +209,9 @@ def _format_stat(value: float | int, panel: dict) -> tuple[str, str]:
     return str(value), "#d8d9da"
 
 
-def _panel_stat_value(panel: dict, metrics: dict[str, float | int | None]) -> tuple[str, str] | None:
+def _panel_stat_value(
+    panel: dict, metrics: dict[str, float | int | None]
+) -> tuple[str, str] | None:
     suffix = panel.get("suffix", "")
     if suffix == "api-availability" and metrics.get("api_availability") is not None:
         return _format_stat(float(metrics["api_availability"]), panel)
@@ -216,7 +224,9 @@ def _panel_stat_value(panel: dict, metrics: dict[str, float | int | None]) -> tu
     return None
 
 
-def render_slo_preview(panel: dict, dest: Path, *, mode: str = "local", metrics: dict | None = None) -> None:
+def render_slo_preview(
+    panel: dict, dest: Path, *, mode: str = "local", metrics: dict | None = None
+) -> None:
     w, h = 1200, 600
     img = Image.new("RGB", (w, h), "#111217")
     draw = ImageDraw.Draw(img)
@@ -228,10 +238,12 @@ def render_slo_preview(panel: dict, dest: Path, *, mode: str = "local", metrics:
     draw.rectangle([0, 0, w, 52], fill="#181b1f", outline="#2c3235")
     draw.text((16, 14), panel["title"], fill="#d8d9da", font=title_font)
 
-    badge = f'{panel["uid"]}:{panel["panel_id"]}'
+    badge = f"{panel['uid']}:{panel['panel_id']}"
     bbox = draw.textbbox((0, 0), badge, font=small_font)
     bw = bbox[2] - bbox[0] + 16
-    draw.rounded_rectangle([w - bw - 12, 12, w - 12, 40], radius=4, fill="#2c3235", outline="#464c54")
+    draw.rounded_rectangle(
+        [w - bw - 12, 12, w - 12, 40], radius=4, fill="#2c3235", outline="#464c54"
+    )
     draw.text((w - bw - 4, 16), badge, fill="#8e8e8e", font=small_font)
 
     draw.line([(24, 80), (w - 24, 80)], fill="#2c3235", width=1)
@@ -260,7 +272,12 @@ def render_slo_preview(panel: dict, dest: Path, *, mode: str = "local", metrics:
             fill="#484f58",
             font=mono_font,
         )
-    draw.text((w // 2 - 80, h // 2 + 32 if stat else h // 2 + 32), f'Target: {panel["target"]}', fill="#58e2c2", font=mono_font)
+    draw.text(
+        (w // 2 - 80, h // 2 + 32 if stat else h // 2 + 32),
+        f"Target: {panel['target']}",
+        fill="#58e2c2",
+        font=mono_font,
+    )
 
     draw.rectangle([0, h - 36, w, h], fill="#0b0c0e")
     footer = (
@@ -268,7 +285,9 @@ def render_slo_preview(panel: dict, dest: Path, *, mode: str = "local", metrics:
         if mode == "staging"
         else "LOCAL PREVIEW · /metrics or SSOT baseline · NOT staging T36–T37 acceptance"
     )
-    draw.text((16, h - 26), footer, fill="#ffa657" if mode == "staging" else "#e3b341", font=small_font)
+    draw.text(
+        (16, h - 26), footer, fill="#ffa657" if mode == "staging" else "#e3b341", font=small_font
+    )
     dest.parent.mkdir(parents=True, exist_ok=True)
     img.save(dest, "PNG", optimize=True)
 
@@ -293,7 +312,9 @@ def render_mod_preview(step: dict, dest: Path) -> None:
     draw.text((w // 2 - 120, cy + 96), step["action"], fill="#8b949e", font=mono_font)
 
     draw.rectangle([40, 140, w - 40, h - 48], outline="#30363d", width=1)
-    draw.text((56, 156), "Runbook checkpoint (not merchant screenshot)", fill="#484f58", font=mono_font)
+    draw.text(
+        (56, 156), "Runbook checkpoint (not merchant screenshot)", fill="#484f58", font=mono_font
+    )
     draw.text((56, 184), f"Evidence file: {step['file']}", fill="#58a6ff", font=mono_font)
     draw.text(
         (56, 212),
@@ -320,13 +341,17 @@ def file_status(path: Path) -> dict:
 
 
 def build_manifest(local_pngs: list[dict], staging_pngs: list[dict], mod_pngs: list[dict]) -> dict:
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     local_ok = sum(1 for p in local_pngs if p["present"])
     staging_ok = sum(1 for p in staging_pngs if p["present"])
     mod_ok = sum(1 for p in mod_pngs if p["present"])
-    staging_scaffold = sum(1 for p in staging_pngs if p.get("preview") == "scaffold" and p["present"])
+    staging_scaffold = sum(
+        1 for p in staging_pngs if p.get("preview") == "scaffold" and p["present"]
+    )
     mod_scaffold = sum(1 for p in mod_pngs if p.get("preview") == "path" and p["present"])
-    staging_accepted = sum(1 for p in staging_pngs if p.get("preview") == "accepted" and p["present"])
+    staging_accepted = sum(
+        1 for p in staging_pngs if p.get("preview") == "accepted" and p["present"]
+    )
     mod_verified = sum(1 for p in mod_pngs if p.get("preview") == "verified" and p["present"])
 
     def staging_status() -> str:
@@ -375,14 +400,14 @@ def build_manifest(local_pngs: list[dict], staging_pngs: list[dict], mod_pngs: l
         },
         "display": {
             "staging_slo_headline": (
-                f"✅ staging SLO 四图 · 4/4 · 7d 验收"
+                "✅ staging SLO 四图 · 4/4 · 7d 验收"
                 if staging_accepted == 4
                 else f"⏳ staging SLO 四图 · 脚手架 {staging_ok}/4 · 7d 验收 {staging_accepted}/4"
                 if staging_ok == 4
                 else f"❌ staging SLO 四图 · {staging_ok}/4"
             ),
             "mod_pilot_headline": (
-                f"✅ Mod 四图 · 商家流水 4/4"
+                "✅ Mod 四图 · 商家流水 4/4"
                 if mod_verified == 4
                 else f"⏳ Mod 四图 · 路径预览 {mod_ok}/4 · 流水 {mod_verified}/4"
                 if mod_ok == 4

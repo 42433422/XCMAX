@@ -37,12 +37,14 @@ afterEach(() => {
 describe('llm stream extra coverage', () => {
   it('streams SSE delta/done frames and refreshes billing when charged', async () => {
     const { streamLLMChat } = await import('./utils/llmStream')
-    mockApi.llmChatStream.mockResolvedValueOnce(streamResponse([
-      'event: meta\ndata: {"billed":true}\n\n',
-      'event: delta\ndata: {"delta":"你"}\n\n',
-      'event: delta\ndata: {"delta":"好"}\n\n',
-      'event: done\ndata: {"content":"你好啊","charge_amount":1}\n\n',
-    ]))
+    mockApi.llmChatStream.mockResolvedValueOnce(
+      streamResponse([
+        'event: meta\ndata: {"billed":true}\n\n',
+        'event: delta\ndata: {"delta":"你"}\n\n',
+        'event: delta\ndata: {"delta":"好"}\n\n',
+        'event: done\ndata: {"content":"你好啊","charge_amount":1}\n\n',
+      ]),
+    )
     const onToken = vi.fn()
     const onDone = vi.fn()
 
@@ -92,9 +94,7 @@ describe('llm stream extra coverage', () => {
 
   it('reports fallback errors and normalizes aborts', async () => {
     const { streamLLMChat } = await import('./utils/llmStream')
-    mockApi.llmChatStream.mockResolvedValueOnce(streamResponse([
-      'event: error\ndata: {"error":"stream failed"}\n\n',
-    ]))
+    mockApi.llmChatStream.mockResolvedValueOnce(streamResponse(['event: error\ndata: {"error":"stream failed"}\n\n']))
     mockApi.llmChat.mockRejectedValueOnce(new Error('fallback failed'))
     const onError = vi.fn()
 
@@ -211,12 +211,14 @@ describe('llm stream extra coverage', () => {
 
   it('covers SSE parser edge cases for empty events, empty deltas, and implicit final content', async () => {
     const { streamLLMChat } = await import('./utils/llmStream')
-    mockApi.llmChatStream.mockResolvedValueOnce(streamResponse([
-      'event:\n\n',
-      'event: delta\ndata: {"delta":""}\n\n',
-      'event: delta\ndata: {"delta":"A"}\n\n',
-      'event: done\ndata: {}\n\n',
-    ]))
+    mockApi.llmChatStream.mockResolvedValueOnce(
+      streamResponse([
+        'event:\n\n',
+        'event: delta\ndata: {"delta":""}\n\n',
+        'event: delta\ndata: {"delta":"A"}\n\n',
+        'event: done\ndata: {}\n\n',
+      ]),
+    )
     const onToken = vi.fn()
     const onDone = vi.fn()
 
@@ -237,9 +239,7 @@ describe('llm stream extra coverage', () => {
   it('falls back after empty streams and raw SSE errors, then normalizes non-error fallback failures', async () => {
     const { streamLLMChat } = await import('./utils/llmStream')
 
-    mockApi.llmChatStream.mockResolvedValueOnce(streamResponse([
-      'event: meta\ndata: {"billed":false}\n\n',
-    ]))
+    mockApi.llmChatStream.mockResolvedValueOnce(streamResponse(['event: meta\ndata: {"billed":false}\n\n']))
     mockApi.llmChat.mockRejectedValueOnce('fallback string failed')
     const onError = vi.fn()
     const emptyStream = streamLLMChat({
@@ -253,9 +253,7 @@ describe('llm stream extra coverage', () => {
     expect(onError).toHaveBeenCalled()
 
     vi.useFakeTimers()
-    mockApi.llmChatStream.mockResolvedValueOnce(streamResponse([
-      'event: error\ndata: plain stream failed\n\n',
-    ]))
+    mockApi.llmChatStream.mockResolvedValueOnce(streamResponse(['event: error\ndata: plain stream failed\n\n']))
     mockApi.llmChat.mockResolvedValueOnce({ content: 'raw error fallback' })
     const rawError = streamLLMChat({
       provider: 'p',
@@ -271,13 +269,12 @@ describe('llm stream extra coverage', () => {
   it('normalizes aborts before fallback output and while stream or fallback promises fail', async () => {
     const { streamLLMChat } = await import('./utils/llmStream')
 
-    let beforeFallbackAbort: ReturnType<typeof streamLLMChat>
     mockApi.llmChatStream.mockRejectedValueOnce(new Error('stream down'))
     mockApi.llmChat.mockImplementationOnce(async () => {
       beforeFallbackAbort.abort()
       return { content: 'late fallback' }
     })
-    beforeFallbackAbort = streamLLMChat({
+    const beforeFallbackAbort = streamLLMChat({
       provider: 'p',
       model: 'm',
       messages: [{ role: 'user', content: 'hi' }],
@@ -285,16 +282,16 @@ describe('llm stream extra coverage', () => {
     })
     await expect(beforeFallbackAbort.done).resolves.toEqual({ content: '', aborted: true })
 
-    let streamAbort: ReturnType<typeof streamLLMChat>
     mockApi.llmChatStream.mockImplementationOnce(
-      () => new Promise((_resolve, reject) => {
-        queueMicrotask(() => {
-          streamAbort.abort()
-          reject(new Error('late stream fail'))
-        })
-      }),
+      () =>
+        new Promise((_resolve, reject) => {
+          queueMicrotask(() => {
+            streamAbort.abort()
+            reject(new Error('late stream fail'))
+          })
+        }),
     )
-    streamAbort = streamLLMChat({
+    const streamAbort = streamLLMChat({
       provider: 'p',
       model: 'm',
       messages: [{ role: 'user', content: 'hi' }],
@@ -302,17 +299,17 @@ describe('llm stream extra coverage', () => {
     })
     await expect(streamAbort.done).resolves.toEqual({ content: '', aborted: true })
 
-    let fallbackAbort: ReturnType<typeof streamLLMChat>
     mockApi.llmChatStream.mockRejectedValueOnce(new Error('stream down'))
     mockApi.llmChat.mockImplementationOnce(
-      () => new Promise((_resolve, reject) => {
-        queueMicrotask(() => {
-          fallbackAbort.abort()
-          reject(new Error('late fallback fail'))
-        })
-      }),
+      () =>
+        new Promise((_resolve, reject) => {
+          queueMicrotask(() => {
+            fallbackAbort.abort()
+            reject(new Error('late fallback fail'))
+          })
+        }),
     )
-    fallbackAbort = streamLLMChat({
+    const fallbackAbort = streamLLMChat({
       provider: 'p',
       model: 'm',
       messages: [{ role: 'user', content: 'hi' }],

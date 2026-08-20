@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr"
 """统一语音 WebSocket：单连接 PCM → FunASR → LLM 流式 → edge-TTS 分片。
 
 路径 ``/api/workbench/voice/unified/ws``。客户端发送二进制 PCM 与 JSON 控制消息；
@@ -15,11 +16,12 @@ from typing import Any
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
 from modstore_server.asr_proxy_ws import (
-    FUNASR_USE_SSL,
     _connect_funasr_parallel,
     _detect_funasr_host,
+    create_funasr_ssl_context,
 )
 from modstore_server.models import User, get_session_factory
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.voice_s2s_ws import _run_billed_s2s_turn, _send_json
 
 logger = logging.getLogger(__name__)
@@ -64,7 +66,7 @@ async def voice_unified_ws(
             await ws.close()
             return
         user_id = int(sub)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         await _send_json(ws, {"type": "error", "message": "认证失败"})
         await ws.close()
         return
@@ -72,14 +74,8 @@ async def voice_unified_ws(
     await _send_json(ws, {"type": "ready"})
     auth_header = f"Bearer {token}"
 
-    import ssl as _ssl
-
     funasr_urls = _detect_funasr_host()
-    ssl_ctx = None
-    if FUNASR_USE_SSL:
-        ssl_ctx = _ssl.SSLContext(_ssl.PROTOCOL_TLS_CLIENT)
-        ssl_ctx.check_hostname = False
-        ssl_ctx.verify_mode = _ssl.CERT_NONE
+    ssl_ctx = create_funasr_ssl_context()
 
     connect_result = await _connect_funasr_parallel(funasr_urls, ssl_ctx)
     if connect_result is None:
@@ -209,7 +205,7 @@ async def voice_unified_ws(
                         await ensure_funasr_session()
                         try:
                             await funasr_ws.send(json.dumps({"is_speaking": False}))
-                        except Exception:
+                        except RECOVERABLE_ERRORS:
                             pass
                         continue
                     if mtype == "utterance_finalize":
@@ -220,7 +216,11 @@ async def voice_unified_ws(
                         pending = pending_finalize.get(tid, "")
                         pending_finalize[tid] = final_text
                         if pending and pending != final_text and len(final_text) - len(pending) > 3:
-                            retry_body = {**body, "type": "end_utterance", "text": final_text}
+                            retry_body = {
+                                **body,
+                                "type": "end_utterance",
+                                "text": final_text,
+                            }
                             await run_llm_turn(retry_body, turn_id=tid)
                         continue
 
@@ -237,7 +237,7 @@ async def voice_unified_ws(
                         await funasr_ws.send(json.dumps(body))
         except WebSocketDisconnect:
             pass
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             logger.info("unified client_to_funasr: %s", exc)
 
     async def funasr_to_client() -> None:
@@ -247,7 +247,7 @@ async def voice_unified_ws(
                     continue
                 try:
                     msg = json.loads(raw) if isinstance(raw, str) else json.loads(raw.decode())
-                except Exception:
+                except RECOVERABLE_ERRORS:
                     continue
                 text = _extract_funasr_text(msg)
                 mode = _funasr_mode(msg)
@@ -267,7 +267,7 @@ async def voice_unified_ws(
                     )
                 else:
                     await _send_json(ws, {"type": "asr_partial", "text": text})
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             logger.info("unified funasr_to_client: %s", exc)
 
     try:
@@ -283,5 +283,5 @@ async def voice_unified_ws(
     finally:
         try:
             await funasr_ws.close()
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass

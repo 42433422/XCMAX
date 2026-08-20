@@ -137,12 +137,7 @@ export const useWorkbenchStore = defineStore('workbench', () => {
       }
       return
     }
-    applyEmployeeDraftPipelineEventCore(
-      employeeDraftStages,
-      employeeDraftStatus,
-      employeeDraftProgressMessages,
-      ev,
-    )
+    applyEmployeeDraftPipelineEventCore(employeeDraftStages, employeeDraftStatus, employeeDraftProgressMessages, ev)
   }
 
   /** POST /api/workbench/employee-ai/draft/review-chat — backend optional; falls back to UX hint on failure. */
@@ -173,8 +168,7 @@ export const useWorkbenchStore = defineStore('workbench', () => {
         throw new Error((body as { detail?: string }).detail || `HTTP ${res.status}`)
       }
       const data = (await res.json().catch(() => ({}))) as { reply?: string; message?: string }
-      const reply =
-        typeof data.reply === 'string' ? data.reply : typeof data.message === 'string' ? data.message : ''
+      const reply = typeof data.reply === 'string' ? data.reply : typeof data.message === 'string' ? data.message : ''
       if (reply) {
         employeeDraftReviewMessages.value.push({
           id: reviewDraftMsgId(),
@@ -221,9 +215,7 @@ export const useWorkbenchStore = defineStore('workbench', () => {
   }
   const selectedNode = computed(getSelectedNode)
 
-  const currentRun = computed<AgentRun | null>(() =>
-    agentRuns.value.find((r) => r.id === currentRunId.value) ?? null,
-  )
+  const currentRun = computed<AgentRun | null>(() => agentRuns.value.find((r) => r.id === currentRunId.value) ?? null)
 
   // ── Actions ───────────────────────────────────────────────────────────────
 
@@ -327,11 +319,12 @@ export const useWorkbenchStore = defineStore('workbench', () => {
   async function loadEligibleWorkflows() {
     workflowGateLoading.value = true
     try {
-      const res = (await api.listEmployeeEligibleWorkflows()) as { workflows?: unknown[]; all_workflows?: unknown[] }
+      const res = (await api.listEmployeeEligibleWorkflows()) as {
+        workflows?: unknown[]
+        all_workflows?: unknown[]
+      }
       eligibleWorkflows.value = Array.isArray(res?.workflows) ? res.workflows : []
-      allWorkflowOptions.value = Array.isArray(res?.all_workflows)
-        ? res.all_workflows
-        : eligibleWorkflows.value
+      allWorkflowOptions.value = Array.isArray(res?.all_workflows) ? res.all_workflows : eligibleWorkflows.value
     } catch {
       eligibleWorkflows.value = []
       allWorkflowOptions.value = []

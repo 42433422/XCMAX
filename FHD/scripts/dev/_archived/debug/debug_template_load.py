@@ -1,6 +1,8 @@
-import openpyxl
-from openpyxl import load_workbook
 import os
+
+from openpyxl import load_workbook
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 # 直接测试加载模板
 template_file = r"e:\FHD\424\考勤 -2026-3 月份考勤统计表.xlsx"
@@ -11,7 +13,7 @@ print(f"文件大小：{os.path.getsize(template_file)} bytes")
 try:
     wb = load_workbook(template_file)
     print(f"成功加载！工作表：{wb.sheetnames}")
-except Exception as e:
+except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"加载失败：{e}")
 
 # 检查生成的文件

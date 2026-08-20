@@ -7,6 +7,7 @@ import logging
 from typing import Any
 
 from app.enterprise import mod_entitlements as entitlements
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +63,7 @@ def load_session_private_delivery_binding(session_id: str) -> dict[str, Any]:
             username = str(getattr(row, "impersonating_username", None) or "").strip()
             if not username:
                 username = company_brand
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("load_session_private_delivery_binding failed")
         return {
             "mod_ids": mod_ids,

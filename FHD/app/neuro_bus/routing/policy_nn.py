@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -14,8 +15,8 @@ try:
     import torch
     import torch.nn as nn
 except ImportError:  # pragma: no cover
-    torch = None
-    nn = None
+    torch = None  # type: ignore[assignment]
+    nn = None  # type: ignore[assignment]
 
 
 FEATURE_DIM = 16
@@ -23,7 +24,10 @@ NUM_ACTIONS = 3
 
 # Import-safe base: fall back to ``object`` when torch is absent so the module
 # can be imported (and the rest of the API degrade to no-op) without PyTorch.
-_NNModule = nn.Module if nn is not None else object
+if TYPE_CHECKING:
+    from torch.nn import Module as _NNModule
+else:
+    _NNModule = nn.Module if nn is not None else object
 
 
 class RoutingMLP(_NNModule):

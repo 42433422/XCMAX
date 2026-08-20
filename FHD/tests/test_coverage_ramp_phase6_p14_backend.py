@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment, func-returns-value, misc"
 """COVERAGE_RAMP Phase 6 round 14: backend low-coverage modules.
 
 Targets:
@@ -790,7 +791,9 @@ class TestUserPublicDict:
             is_active=True,
             wx_avatar_url=None,
         )
-        with patch("app.utils.user_avatar_storage.public_avatar_url", return_value="/avatar.png"):
+        with patch(
+            "app.utils.path_io.user_avatar_storage.public_avatar_url", return_value="/avatar.png"
+        ):
             result = _user_public_dict(user)
         assert result["id"] == 1
         assert result["username"] == "alice"
@@ -809,7 +812,7 @@ class TestUserPublicDict:
             role="user",
             is_active=False,
         )
-        with patch("app.utils.user_avatar_storage.public_avatar_url", return_value=None):
+        with patch("app.utils.path_io.user_avatar_storage.public_avatar_url", return_value=None):
             result = _user_public_dict(user)
         assert result["id"] == 2
         assert result["is_active"] is False
@@ -842,7 +845,7 @@ class TestMobileAuthRefresh:
     def test_valid_refresh_token_returns_new_tokens(
         self, mobile_client: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("SECRET_KEY", "test_secret_for_jwt_12345")
+        monkeypatch.setenv("SECRET_KEY", "test_secret_for_jwt_at_least_32_bytes")
         from app.security.mobile_jwt import issue_mobile_tokens
 
         tokens = issue_mobile_tokens(
@@ -862,7 +865,7 @@ class TestMobileAuthRefresh:
     def test_reused_refresh_token_returns_401(
         self, mobile_client: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("SECRET_KEY", "test_secret_for_jwt_12345")
+        monkeypatch.setenv("SECRET_KEY", "test_secret_for_jwt_at_least_32_bytes")
         from app.security.mobile_jwt import issue_mobile_tokens
 
         tokens = issue_mobile_tokens(
@@ -934,7 +937,7 @@ class TestMobileAuthLogin:
         mobile_client: TestClient,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        monkeypatch.setenv("SECRET_KEY", "test_secret_for_jwt_12345")
+        monkeypatch.setenv("SECRET_KEY", "test_secret_for_jwt_at_least_32_bytes")
 
         async def fake_auth_login(request, payload):
             return JSONResponse(
@@ -1007,7 +1010,7 @@ class TestMobileAuthLogin:
         mobile_client: TestClient,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        monkeypatch.setenv("SECRET_KEY", "test_secret_for_jwt_12345")
+        monkeypatch.setenv("SECRET_KEY", "test_secret_for_jwt_at_least_32_bytes")
 
         async def fake_auth_login(request, payload):
             return JSONResponse(
@@ -1068,7 +1071,7 @@ class TestMobileAuthLoginWithPhoneCode:
         mobile_client: TestClient,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        monkeypatch.setenv("SECRET_KEY", "test_secret_for_jwt_12345")
+        monkeypatch.setenv("SECRET_KEY", "test_secret_for_jwt_at_least_32_bytes")
 
         async def fake_phone_login(request, payload):
             return JSONResponse(
@@ -1124,7 +1127,7 @@ class TestMobileAuthLoginWithPhoneCode:
         mobile_client: TestClient,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        monkeypatch.setenv("SECRET_KEY", "test_secret_for_jwt_12345")
+        monkeypatch.setenv("SECRET_KEY", "test_secret_for_jwt_at_least_32_bytes")
 
         async def fake_phone_login(request, payload):
             return JSONResponse(
@@ -1201,7 +1204,7 @@ class TestGetMobileUser:
     ) -> None:
         from app.fastapi_routes.mobile_api import get_mobile_user
 
-        monkeypatch.setenv("SECRET_KEY", "test_secret_for_jwt_12345")
+        monkeypatch.setenv("SECRET_KEY", "test_secret_for_jwt_at_least_32_bytes")
         from app.security.mobile_jwt import issue_mobile_tokens
 
         tokens = issue_mobile_tokens(
@@ -1248,7 +1251,7 @@ class TestGetMobileUser:
     ) -> None:
         from app.fastapi_routes.mobile_api import get_mobile_user
 
-        monkeypatch.setenv("SECRET_KEY", "test_secret_for_jwt_12345")
+        monkeypatch.setenv("SECRET_KEY", "test_secret_for_jwt_at_least_32_bytes")
         from app.security.mobile_jwt import issue_mobile_tokens
 
         tokens = issue_mobile_tokens(
@@ -1295,7 +1298,7 @@ class TestGetMobileUser:
     ) -> None:
         from app.fastapi_routes.mobile_api import get_mobile_user
 
-        monkeypatch.setenv("SECRET_KEY", "test_secret_for_jwt_12345")
+        monkeypatch.setenv("SECRET_KEY", "test_secret_for_jwt_at_least_32_bytes")
         from app.security.mobile_jwt import issue_mobile_tokens
 
         tokens = issue_mobile_tokens(

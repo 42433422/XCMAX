@@ -97,12 +97,7 @@ describe('PersyKnowledgeGraph', () => {
     const series = option.series[0]
     expect(series.type).toBe('graph')
     expect(series.data.map((node: { id: string }) => node.id)).toEqual(
-      expect.arrayContaining([
-        'persy:persy-knowledge',
-        'document:policy',
-        'knowledge:approval',
-        'recall:current-query',
-      ]),
+      expect.arrayContaining(['persy:persy-knowledge', 'document:policy', 'knowledge:approval', 'recall:current-query']),
     )
     expect(series.labelLayout).toEqual({ hideOverlap: true })
     expect(series.links.some((edge: { type?: string }) => edge.lineStyle.color === '#d39a29')).toBe(true)
@@ -125,9 +120,7 @@ describe('PersyKnowledgeGraph', () => {
     await flushPromises()
 
     const option = mocks.chart.setOption.mock.calls.at(-1)?.[0]
-    const uploadNode = option.series[0].data.find(
-      (node: { id: string }) => node.id === 'onboarding:upload',
-    )
+    const uploadNode = option.series[0].data.find((node: { id: string }) => node.id === 'onboarding:upload')
     const clickHandler = mocks.chart.on.mock.calls.find((call) => call[0] === 'click')?.[1]
     clickHandler({ dataType: 'node', data: uploadNode })
 
@@ -141,9 +134,7 @@ describe('PersyKnowledgeGraph', () => {
     await flushPromises()
 
     const option = mocks.chart.setOption.mock.calls.at(-1)?.[0]
-    const knowledgeNode = option.series[0].data.find(
-      (node: { id: string }) => node.id === 'knowledge:approval',
-    )
+    const knowledgeNode = option.series[0].data.find((node: { id: string }) => node.id === 'knowledge:approval')
     const clickHandler = mocks.chart.on.mock.calls.find((call) => call[0] === 'click')?.[1]
     clickHandler({ dataType: 'node', data: knowledgeNode })
 
@@ -184,12 +175,9 @@ describe('PersyKnowledgeGraph', () => {
     await flushPromises()
 
     const option = mocks.chart.setOption.mock.calls.at(-1)?.[0]
-    const memoryNode = option.series[0].data.find(
-      (node: { id: string }) => node.id === 'memory:mem-1',
-    )
+    const memoryNode = option.series[0].data.find((node: { id: string }) => node.id === 'memory:mem-1')
     const recallLink = option.series[0].links.find(
-      (edge: { source: string; target: string }) =>
-        edge.source === 'recall:current-query' && edge.target === 'memory:mem-1',
+      (edge: { source: string; target: string }) => edge.source === 'recall:current-query' && edge.target === 'memory:mem-1',
     )
     expect(memoryNode.itemStyle.borderType).toBe('dashed')
     expect(memoryNode.itemStyle.borderColor).toBe('#f7c84a')

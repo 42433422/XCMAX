@@ -99,7 +99,7 @@ function storeItem(overrides: Record<string, unknown> = {}) {
   }
 }
 
-function makeSseResponse(events: any[]) {
+function makeSseResponse(events: UnsafeTestValue[]) {
   const enc = new TextEncoder()
   const chunks = events.map((ev) => enc.encode(`data: ${JSON.stringify(ev)}\n\n`))
   let i = 0
@@ -127,7 +127,10 @@ beforeEach(() => {
   authMock.user = { id: 1, is_admin: true }
   ensureAdminDigestUnlockedMock.mockResolvedValue(true)
 
-  apiMock.catalog.mockResolvedValue({ items: [storeItem(), storeItem({ id: 11, pkg_id: 'other_pkg', price: 0 })], total: 2 })
+  apiMock.catalog.mockResolvedValue({
+    items: [storeItem(), storeItem({ id: 11, pkg_id: 'other_pkg', price: 0 })],
+    total: 2,
+  })
   apiMock.catalogFacets.mockResolvedValue({
     industries: ['retail'],
     artifacts: ['employee_pack', 'mod'],
@@ -145,7 +148,11 @@ beforeEach(() => {
   apiMock.adminDeleteCatalog.mockResolvedValue({})
 
   apiMock.commitScriptWorkflowSession.mockResolvedValue({ id: 22 })
-  apiMock.sandboxRunScriptWorkflow.mockResolvedValue({ id: 33, status: 'success', outputs: [{ filename: 'out.json' }] })
+  apiMock.sandboxRunScriptWorkflow.mockResolvedValue({
+    id: 33,
+    status: 'success',
+    outputs: [{ filename: 'out.json' }],
+  })
   apiMock.downloadScriptWorkflowRunFile.mockResolvedValue(new Blob(['out']))
   apiMock.activateScriptWorkflow.mockResolvedValue({})
   apiMock.getScriptWorkflow.mockResolvedValue({
@@ -156,15 +163,30 @@ beforeEach(() => {
   })
   apiMock.listScriptWorkflowRuns.mockResolvedValue([{ id: 55, status: 'success', payload: { stdout_tail: 'ok' } }])
 
-  vi.stubGlobal('confirm', vi.fn(() => true))
+  vi.stubGlobal(
+    'confirm',
+    vi.fn(() => true),
+  )
   vi.stubGlobal('alert', vi.fn())
-  vi.stubGlobal('fetch', vi.fn(async () => makeSseResponse([
-    { type: 'session_started', iteration: 0, payload: { session_id: 'sess_1' } },
-    { type: 'code', iteration: 0, payload: { code: 'print(1)' } },
-    { type: 'run', iteration: 0, payload: { stdout_tail: 'stdout', stderr_tail: '', outputs: [{ filename: 'a.txt' }] } },
-    { type: 'done', iteration: 0, payload: { outcome: { ok: true, final_code: 'print(2)' } } },
-  ])))
-  Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:script') })
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () =>
+      makeSseResponse([
+        { type: 'session_started', iteration: 0, payload: { session_id: 'sess_1' } },
+        { type: 'code', iteration: 0, payload: { code: 'print(1)' } },
+        {
+          type: 'run',
+          iteration: 0,
+          payload: { stdout_tail: 'stdout', stderr_tail: '', outputs: [{ filename: 'a.txt' }] },
+        },
+        { type: 'done', iteration: 0, payload: { outcome: { ok: true, final_code: 'print(2)' } } },
+      ]),
+    ),
+  )
+  Object.defineProperty(URL, 'createObjectURL', {
+    configurable: true,
+    value: vi.fn(() => 'blob:script'),
+  })
   Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
   vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
 })
@@ -182,7 +204,7 @@ describe('AI store view coverage', () => {
     routeMock.query = { attachModId: 'mod_1' }
     const wrapper = mount(AiStoreView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
     const item = vm.items[0]
 
     expect(vm.artifactLabel('employee_pack')).toBe('AI 员工包')
@@ -211,8 +233,14 @@ describe('AI store view coverage', () => {
 
     await vm.attachCardToMod(item)
     expect(apiMock.buyItem).toHaveBeenCalledWith(10)
-    expect(apiMock.attachCatalogEmployeeToMod).toHaveBeenCalledWith('mod_1', { pkg_id: 'emp_customer_service', catalog_item_id: 10 })
-    expect(routerMock.push).toHaveBeenCalledWith({ name: 'mod-authoring', params: { modId: 'mod_1' } })
+    expect(apiMock.attachCatalogEmployeeToMod).toHaveBeenCalledWith('mod_1', {
+      pkg_id: 'emp_customer_service',
+      catalog_item_id: 10,
+    })
+    expect(routerMock.push).toHaveBeenCalledWith({
+      name: 'mod-authoring',
+      params: { modId: 'mod_1' },
+    })
 
     vm.setIndustry('retail')
     vm.setArtifact('employee_pack')
@@ -241,14 +269,18 @@ describe('AI store view coverage', () => {
 
     expect(vm.customerServiceLink(item, 'refund')).toEqual({
       name: 'customer-service',
-      query: expect.objectContaining({ scene: 'refund', catalog_id: '10', pkg_id: 'emp_customer_service' }),
+      query: expect.objectContaining({
+        scene: 'refund',
+        catalog_id: '10',
+        pkg_id: 'emp_customer_service',
+      }),
     })
   })
 
   it('covers AI store unauthenticated and API failure branches', async () => {
     const wrapper = mount(AiStoreView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
     const item = vm.items[0]
 
     authMock.isLoggedIn = false
@@ -276,7 +308,7 @@ describe('AI store view coverage', () => {
     routeMock.query = { attachModId: 'mod_1' }
     const attachWrapper = mount(AiStoreView, globalMount)
     await flushPromises()
-    const attachVm = attachWrapper.vm as any
+    const attachVm = attachWrapper.vm as UnsafeTestValue
     apiMock.attachCatalogEmployeeToMod.mockRejectedValueOnce(new Error('attach failed'))
     await attachVm.attachCardToMod(attachVm.items[0])
     expect(attachVm.err).toContain('attach failed')
@@ -304,7 +336,7 @@ describe('AI store view coverage', () => {
   it('covers AI store delist guard, cancel, success and failure branches', async () => {
     const wrapper = mount(AiStoreView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
     const item = vm.items[0]
 
     ensureAdminDigestUnlockedMock.mockResolvedValueOnce(false)
@@ -312,11 +344,10 @@ describe('AI store view coverage', () => {
     expect(apiMock.adminDeleteCatalog).not.toHaveBeenCalled()
 
     ensureAdminDigestUnlockedMock.mockResolvedValueOnce(true)
-    ;(window.confirm as any).mockReturnValueOnce(false)
+    ;(window.confirm as UnsafeTestValue).mockReturnValueOnce(false)
     await vm.delistItem(item)
     expect(apiMock.adminDeleteCatalog).not.toHaveBeenCalled()
-
-    ;(window.confirm as any).mockReturnValueOnce(true)
+    ;(window.confirm as UnsafeTestValue).mockReturnValueOnce(true)
     await vm.delistItem(item)
     expect(apiMock.adminDeleteCatalog).toHaveBeenCalledWith(10)
 
@@ -329,7 +360,7 @@ describe('AI store view coverage', () => {
     routeMock.query = { attachModId: 'mod_1' }
     const wrapper = mount(AiStoreView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
     authMock.isLoggedIn = false
     await vm.attachCardToMod(vm.items[0])
@@ -350,10 +381,7 @@ describe('AI store view coverage', () => {
     expect(vm.displayGroups.some((g: { items: unknown[] }) => g.items.length)).toBe(true)
 
     apiMock.catalog.mockResolvedValueOnce({
-      items: [
-        storeItem({ id: 201, pkg_id: 'word-full-read-employee' }),
-        storeItem({ id: 202, pkg_id: 'emp_customer_service' }),
-      ],
+      items: [storeItem({ id: 201, pkg_id: 'word-full-read-employee' }), storeItem({ id: 202, pkg_id: 'emp_customer_service' })],
       total: 2,
     })
     vm.setStoreNav('office')
@@ -361,10 +389,7 @@ describe('AI store view coverage', () => {
     expect(vm.items.map((it: { pkg_id: string }) => it.pkg_id)).toEqual(['word-full-read-employee'])
 
     apiMock.catalog.mockResolvedValueOnce({
-      items: [
-        storeItem({ id: 301, pkg_id: 'json-report-employee' }),
-        storeItem({ id: 302, pkg_id: 'word-full-read-employee' }),
-      ],
+      items: [storeItem({ id: 301, pkg_id: 'json-report-employee' }), storeItem({ id: 302, pkg_id: 'word-full-read-employee' })],
       total: 2,
     })
     vm.setStoreNav('office_aux')
@@ -386,7 +411,7 @@ describe('script workflow composer coverage', () => {
   it('covers brief helpers, file inputs, event handling and SSE loop', async () => {
     const wrapper = mount(ScriptWorkflowComposerView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
     expect(vm.stageRank).toBe(1)
     expect(vm.headTitle).toBe('新建脚本工作流')
@@ -403,7 +428,9 @@ describe('script workflow composer coverage', () => {
     expect(vm.brief.inputs[0].filename).toBe('a.csv')
     vm.removeFile(0)
     expect(vm.uploadedFiles).toHaveLength(0)
-    await vm.onSandboxFilesPicked({ target: Object.assign(document.createElement('input'), { files: [file] }) })
+    await vm.onSandboxFilesPicked({
+      target: Object.assign(document.createElement('input'), { files: [file] }),
+    })
     expect(vm.sandboxFiles).toHaveLength(1)
 
     expect(vm.planMdHasMermaid('```mermaid\na-->b\n```')).toBe(true)
@@ -415,11 +442,23 @@ describe('script workflow composer coverage', () => {
     expect(vm.tail('abcdef', 3)).toBe('def')
     expect(vm.eventLabel({ type: 'code', iteration: 1, payload: {} })).toContain('第 2 轮')
 
-    vm.handleEvent({ type: 'session_started', iteration: 0, payload: { session_id: 'manual_sess' } })
+    vm.handleEvent({
+      type: 'session_started',
+      iteration: 0,
+      payload: { session_id: 'manual_sess' },
+    })
     expect(vm.sessionId).toBe('manual_sess')
-    vm.handleEvent({ type: 'run', iteration: 0, payload: { stdout_tail: 'stdout', outputs: [{ filename: 'x' }] } })
+    vm.handleEvent({
+      type: 'run',
+      iteration: 0,
+      payload: { stdout_tail: 'stdout', outputs: [{ filename: 'x' }] },
+    })
     expect(vm.tab).toBe('output')
-    vm.handleEvent({ type: 'done', iteration: 0, payload: { outcome: { ok: true }, code: 'final' } })
+    vm.handleEvent({
+      type: 'done',
+      iteration: 0,
+      payload: { outcome: { ok: true }, code: 'final' },
+    })
     expect(vm.loopRunning).toBe(false)
     expect(vm.currentCode).toBe('final')
     expect(vm.lastRun.type).toBe('run')
@@ -436,7 +475,7 @@ describe('script workflow composer coverage', () => {
     vi.useFakeTimers()
     const wrapper = mount(ScriptWorkflowComposerView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
     vm.workflowId = 22
     await vm.startEditWithAi('improve')
@@ -454,7 +493,10 @@ describe('script workflow composer coverage', () => {
 
     vm.workflowName = 'Committed Workflow'
     await vm.commitToWorkflow()
-    expect(apiMock.commitScriptWorkflowSession).toHaveBeenCalledWith('sess_1', { name: 'Committed Workflow', schema_in: {} })
+    expect(apiMock.commitScriptWorkflowSession).toHaveBeenCalledWith('sess_1', {
+      name: 'Committed Workflow',
+      schema_in: {},
+    })
     expect(vm.stage).toBe('sandbox')
     expect(vm.canActivate).toBe(false)
 
@@ -469,7 +511,10 @@ describe('script workflow composer coverage', () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:script')
 
     await vm.activate()
-    expect(routerMock.push).toHaveBeenCalledWith({ name: 'workbench-script-workflow-detail', params: { id: 22 } })
+    expect(routerMock.push).toHaveBeenCalledWith({
+      name: 'workbench-script-workflow-detail',
+      params: { id: 22 },
+    })
     vm.goList()
     expect(routerMock.push).toHaveBeenCalledWith({ name: 'workbench-script-workflows' })
   })
@@ -477,14 +522,19 @@ describe('script workflow composer coverage', () => {
   it('covers script workflow API and SSE error branches', async () => {
     const wrapper = mount(ScriptWorkflowComposerView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
-    ;(fetch as any).mockResolvedValueOnce({ ok: false, status: 500, body: null, text: vi.fn(async () => 'bad') })
+    ;(fetch as UnsafeTestValue).mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      body: null,
+      text: vi.fn(async () => 'bad'),
+    })
     await vm.startAgentLoop()
     expect(vm.events.at(-1).payload.reason).toContain('HTTP 500')
 
     vm.workflowId = 22
-    ;(fetch as any).mockRejectedValueOnce(new Error('sse failed'))
+    ;(fetch as UnsafeTestValue).mockRejectedValueOnce(new Error('sse failed'))
     await vm.startEditWithAi('bad')
     expect(vm.events.at(-1).payload.reason).toContain('sse failed')
 
@@ -512,7 +562,7 @@ describe('script workflow composer coverage', () => {
     routeMock.params = { id: '44' }
     const wrapper = mount(ScriptWorkflowComposerView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
     expect(vm.headTitle).toBe('改进脚本工作流')
     expect(apiMock.getScriptWorkflow).toHaveBeenCalledWith('44')
     expect(vm.workflowId).toBe(44)

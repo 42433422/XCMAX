@@ -6,7 +6,11 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from modstore_server import models, self_maintenance_loop_api, self_maintenance_loop_runner
+from modstore_server import (
+    models,
+    self_maintenance_loop_api,
+    self_maintenance_loop_runner,
+)
 from modstore_server.self_maintenance_deploy_receipts import (
     BuildIdentity,
     DeploymentReceiptError,
@@ -59,7 +63,16 @@ def test_git_is_ancestor_fetches_missing_exact_commit_before_compare(tmp_path, m
     assert self_maintenance_loop_api._git_is_ancestor(ancestor, descendant) is True
     assert calls == [
         ["git", "-C", str(tmp_path), "cat-file", "-e", f"{ancestor}^{{commit}}"],
-        ["git", "-C", str(tmp_path), "fetch", "--quiet", "--no-tags", "origin", ancestor],
+        [
+            "git",
+            "-C",
+            str(tmp_path),
+            "fetch",
+            "--quiet",
+            "--no-tags",
+            "origin",
+            ancestor,
+        ],
         ["git", "-C", str(tmp_path), "cat-file", "-e", f"{ancestor}^{{commit}}"],
         ["git", "-C", str(tmp_path), "cat-file", "-e", f"{descendant}^{{commit}}"],
         [

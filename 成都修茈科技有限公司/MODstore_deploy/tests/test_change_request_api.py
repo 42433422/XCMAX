@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import types
 import uuid
 from pathlib import Path
@@ -56,7 +55,9 @@ def test_change_request_approve_applies_file(admin_client):
     target = tmp_path / rel
     target.parent.mkdir(parents=True, exist_ok=True)
 
-    from modstore_server.employee_change_request_service import defer_write_as_change_request
+    from modstore_server.employee_change_request_service import (
+        defer_write_as_change_request,
+    )
 
     cid = defer_write_as_change_request(
         "modstore-backend-api", str(tmp_path), rel, "approved-content"
@@ -71,10 +72,11 @@ def test_change_request_reject(admin_client):
     ws = str(tmp_path / "ws2")
     Path(ws).mkdir(parents=True, exist_ok=True)
 
-    from modstore_server.employee_change_request_service import defer_write_as_change_request
+    from modstore_server.employee_change_request_service import (
+        defer_write_as_change_request,
+    )
     from modstore_server.models import EmployeeChangeRequest, get_session_factory
 
-    db_path = os.environ.get("MODSTORE_DB_PATH", "")
     cid = defer_write_as_change_request("x", ws, "nope.txt", "x")
     r = client.post(
         f"/api/admin/change-requests/{cid}/reject",
@@ -88,7 +90,7 @@ def test_change_request_reject(admin_client):
         assert row.status == "rejected"
 
 
-def test_high_risk_change_request_auto_applies_through_autonomy_ssot(
+def test_high_risk_change_request_waits_for_human_through_autonomy_ssot(
     admin_client, tmp_path, monkeypatch
 ):
     _client, workspace = admin_client
@@ -99,7 +101,9 @@ def test_high_risk_change_request_auto_applies_through_autonomy_ssot(
     monkeypatch.setenv("XCAGI_AUTONOMY_AUDIT_DB_PATH", str(tmp_path / "autonomy.sqlite3"))
     monkeypatch.setenv("XCAGI_AUTONOMY_AUDIT_LOG_PATH", str(tmp_path / "autonomy.jsonl"))
 
-    from modstore_server.employee_change_request_service import defer_write_as_change_request
+    from modstore_server.employee_change_request_service import (
+        defer_write_as_change_request,
+    )
     from modstore_server.models import EmployeeChangeRequest, get_session_factory
 
     target = workspace / ".env.production"
@@ -110,12 +114,12 @@ def test_high_risk_change_request_auto_applies_through_autonomy_ssot(
         "SAFE_TEST_VALUE=1\n",
     )
 
-    assert target.read_text(encoding="utf-8") == "SAFE_TEST_VALUE=1\n"
+    assert not target.exists()
     with get_session_factory()() as session:
         row = session.get(EmployeeChangeRequest, cid)
         assert row is not None
         assert row.risk_level == "high"
-        assert row.status == "applied"
+        assert row.status == "pending"
 
     from modstore_server.autonomy_guard_delegate import ensure_fhd_on_path
 
@@ -125,5 +129,5 @@ def test_high_risk_change_request_auto_applies_through_autonomy_ssot(
     audit_rows = list_autonomy_audit(action_id=f"change-request:{cid}:apply")
     assert audit_rows and audit_rows[0]["action"] == "code_write"
     audit = audit_rows[0]
-    assert audit["decision"] == "auto_approve"
+    assert audit["decision"] == "require_human"
     assert audit["approver"] is None

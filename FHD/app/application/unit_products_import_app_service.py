@@ -21,9 +21,9 @@ from app.infrastructure.db.sql_identifiers import (
     quote_sqlite_identifier,
     resolve_products_table,
 )
-from app.utils.external_sqlite import sqlite_conn
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.utils.path_utils import get_upload_dir
+from app.utils.path_io.external_sqlite import sqlite_conn
+from app.utils.path_io.path_utils import get_upload_dir
 
 logger = logging.getLogger(__name__)
 
@@ -276,22 +276,22 @@ class UnitProductsImportService:
                 .all()
             )
 
-        existing_keys = set()
+        existing_keys: set[tuple[str, str, str]] = set()
         for mnum, pname, spec in existing:
             m = (mnum or "").strip() if mnum is not None else ""
             if m:
-                existing_keys.add(("model", m))
+                existing_keys.add(("model", m, ""))
             else:
                 existing_keys.add(("name_spec", (pname or "").strip(), (spec or "").strip()))
 
-        import_keys = set()
+        import_keys: set[tuple[str, str, str]] = set()
         deduped = []
         skipped = 0
 
         for item in products_rows:
             m = (item.get("model_number") or "").strip()
             if m:
-                key = ("model", m)
+                key = ("model", m, "")
             else:
                 key = (
                     "name_spec",

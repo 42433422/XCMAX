@@ -1,6 +1,5 @@
-# -*- coding: utf-8 -*-
-import sqlite3
 import os
+import sqlite3
 
 db_path = r"E:\FHD\XCAGI\data\app.db"
 print(f"数据库路径: {db_path}")

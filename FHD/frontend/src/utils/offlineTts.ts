@@ -44,11 +44,7 @@ function isOfficialHuggingFaceRemoteHost(host: string): boolean {
   if (!h) return true
   try {
     const { hostname } = new URL(h)
-    return (
-      hostname === 'huggingface.co'
-      || hostname === 'www.huggingface.co'
-      || hostname === 'hf.co'
-    )
+    return hostname === 'huggingface.co' || hostname === 'www.huggingface.co' || hostname === 'hf.co'
   } catch {
     return false
   }
@@ -57,10 +53,7 @@ function isOfficialHuggingFaceRemoteHost(host: string): boolean {
 /** transformers.js 将 Hub 401/403 映射为英文文案 */
 function isHubAuthOrForbiddenError(e: unknown): boolean {
   const msg = e instanceof Error ? e.message : String(e)
-  return (
-    /Unauthorized access to file/i.test(msg)
-    || /Forbidden access to file/i.test(msg)
-  )
+  return /Unauthorized access to file/i.test(msg) || /Forbidden access to file/i.test(msg)
 }
 
 function formatOfflineDownloadError(original: unknown, afterMirrorRetry: boolean): Error {
@@ -110,10 +103,18 @@ function getAudioContext(): AudioContext {
   return audioCtx
 }
 
-export function isOfflineReady(): boolean { return readyState === 'ready' }
-export function isOfflineLoading(): boolean { return readyState === 'loading' }
-export function getOfflineProgress(): number { return progress }
-export function getOfflineError(): unknown { return lastError }
+export function isOfflineReady(): boolean {
+  return readyState === 'ready'
+}
+export function isOfflineLoading(): boolean {
+  return readyState === 'loading'
+}
+export function getOfflineProgress(): number {
+  return progress
+}
+export function getOfflineError(): unknown {
+  return lastError
+}
 
 /**
  * 加载/下载离线模型。进度回调 0..1。
@@ -125,7 +126,10 @@ export async function ensureOfflineReady(onProgress?: (p: number) => void): Prom
     // 等待上一次加载完成
     await new Promise<void>((resolve) => {
       const t = setInterval(() => {
-        if ((readyState as string) !== 'loading') { clearInterval(t); resolve() }
+        if ((readyState as string) !== 'loading') {
+          clearInterval(t)
+          resolve()
+        }
       }, 200)
     })
     if ((readyState as string) === 'ready') return
@@ -138,7 +142,7 @@ export async function ensureOfflineReady(onProgress?: (p: number) => void): Prom
 
   try {
     // 动态加载，避免主 bundle 体积过大
-    const mod = await import('@huggingface/transformers') as TransformersModule
+    const mod = (await import('@huggingface/transformers')) as TransformersModule
 
     if (mod.env) {
       mod.env.allowRemoteModels = true
@@ -152,11 +156,7 @@ export async function ensureOfflineReady(onProgress?: (p: number) => void): Prom
       }
     }
 
-    const pipeline = mod.pipeline as (
-      task: string,
-      model: string,
-      opts?: Record<string, unknown>
-    ) => Promise<TtsPipeline>
+    const pipeline = mod.pipeline as (task: string, model: string, opts?: Record<string, unknown>) => Promise<TtsPipeline>
 
     const pipelineOpts: Record<string, unknown> = {
       dtype: 'q8',
@@ -216,11 +216,18 @@ function splitForSynthesis(text: string, maxLen = 80): string[] {
       parts.push(seg)
     } else {
       // 按逗号继续切
-      const sub = seg.split(/[，,、]/).map((s) => s.trim()).filter(Boolean)
+      const sub = seg
+        .split(/[，,、]/)
+        .map((s) => s.trim())
+        .filter(Boolean)
       let buf = ''
       for (const s of sub) {
-        if ((buf + s).length > maxLen && buf) { parts.push(buf); buf = s }
-        else { buf = buf ? `${buf}，${s}` : s }
+        if ((buf + s).length > maxLen && buf) {
+          parts.push(buf)
+          buf = s
+        } else {
+          buf = buf ? `${buf}，${s}` : s
+        }
       }
       if (buf) parts.push(buf)
     }
@@ -246,14 +253,20 @@ export async function synthesizeOffline(text: string): Promise<{ audio: Float32A
   const total = chunks.reduce((sum, c) => sum + c.length, 0)
   const merged = new Float32Array(total)
   let off = 0
-  for (const c of chunks) { merged.set(c, off); off += c.length }
+  for (const c of chunks) {
+    merged.set(c, off)
+    off += c.length
+  }
   return { audio: merged, samplingRate }
 }
 
 /** 用 Web Audio 播放 PCM；返回 Promise 在 ended 时 resolve。 */
 export function playOfflinePcm(pcm: Float32Array, samplingRate: number): Promise<void> {
   return new Promise((resolve) => {
-    if (!pcm || !pcm.length) { resolve(); return }
+    if (!pcm || !pcm.length) {
+      resolve()
+      return
+    }
     try {
       const ctx = getAudioContext()
       const buffer = ctx.createBuffer(1, pcm.length, samplingRate)
@@ -278,7 +291,12 @@ export function playOfflinePcm(pcm: Float32Array, samplingRate: number): Promise
 
 export function stopOffline(): void {
   try {
-    if (currentSource) { currentSource.stop(); currentSource.disconnect() }
-  } catch { /* ignore */ }
+    if (currentSource) {
+      currentSource.stop()
+      currentSource.disconnect()
+    }
+  } catch {
+    /* ignore */
+  }
   currentSource = null
 }

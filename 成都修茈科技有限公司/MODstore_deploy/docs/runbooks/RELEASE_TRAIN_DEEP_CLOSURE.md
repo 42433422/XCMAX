@@ -5,14 +5,14 @@
 
 ## 闭环阶段一览
 
-| 阶段 | 时间 | 自动化状态 | 切 primary 后仍需人工 |
-|------|------|------------|----------------------|
-| 03:15 归档 | cron | ✅ 代码就绪 | 生产 cron 与 DB 持久化 |
-| 08:00 摘要 | cron | ✅ 含三端截图段落 | Playwright + SMTP（见下） |
-| 08:15 Phase A | cron | ✅ P-S Runner | Bench LLM / Tavily（岗位简报） |
-| 08:25 Phase B/C | cron | ⚠️ shadow 默认 | 切 primary + GitHub + 审批 |
-| installer/major 日 | 门禁 | ✅ 员工链已接 | COS 上传 + 签名 secret |
-| 应用商店 | — | ❌ 未入日更链 | 软著 + 小米/华为开发者账号 |
+| 阶段               | 时间 | 自动化状态        | 切 primary 后仍需人工          |
+| ------------------ | ---- | ----------------- | ------------------------------ |
+| 03:15 归档         | cron | ✅ 代码就绪       | 生产 cron 与 DB 持久化         |
+| 08:00 摘要         | cron | ✅ 含三端截图段落 | Playwright + SMTP（见下）      |
+| 08:15 Phase A      | cron | ✅ P-S Runner     | Bench LLM / Tavily（岗位简报） |
+| 08:25 Phase B/C    | cron | ⚠️ shadow 默认    | 切 primary + GitHub + 审批     |
+| installer/major 日 | 门禁 | ✅ 员工链已接     | COS 上传 + 签名 secret         |
+| 应用商店           | —    | ❌ 未入日更链     | 软著 + 小米/华为开发者账号     |
 
 ---
 
@@ -22,26 +22,26 @@
 
 在 `/root/成都修茈科技有限公司/MODstore_deploy/.env`（或 systemd 引用的 env 文件）确认：
 
-| 变量 | 建议值 | 说明 |
-|------|--------|------|
-| `MODSTORE_DAILY_ORCHESTRATOR_DIGEST_MODE` | **`primary`** | 关闭 07:00 盲跑，08:25 真编排 |
-| `MODSTORE_DAILY_ORCHESTRATOR_ENABLED` | `1` | 编排总开关 |
-| `MODSTORE_RELEASE_TRAIN_ENABLED` | `1` | release_train SSOT |
-| `MODSTORE_RELEASE_TRAIN_JSON` | 指向 `FHD/config/release_train.json` | 四段版本 |
-| `MODSTORE_INBOX_POLL_ENABLED` | `1` | 邮件回信审批 |
-| `MODSTORE_SMTP_*` | QQ 邮箱 + 授权码 | 发 08:00 摘要 |
-| `MODSTORE_APPROVAL_AUTHORIZED_FROM` | 与 SMTP 发件一致 | 回信白名单 |
-| `MODSTORE_EMPLOYEE_BENCH_PROVIDER` / `MODEL` | 如 xiaomi/deepseek | 员工大会 + Vibe |
-| `MODSTORE_EMPLOYEE_PLATFORM_FALLBACK_*` | `minimax` / `MiniMax-M2.7` / `20` | 平台 AI 员工主路由超时或错误时自动降级，不消耗用户 BYOK |
-| `FHD_EMPLOYEE_LLM_FALLBACK_PROVIDER` / `MODEL` | `minimax` / `MiniMax-M2.7` | FHD 员工认知主模型限额或故障时切换平台 MiniMax |
-| `MODSTORE_GITHUB_TOKEN` | `repo` 权限 PAT | auto/daily 分支 + PR |
-| `MODSTORE_AUTO_PR_ENABLED` | `1` | 日更 PR |
-| `MODSTORE_CR_GIT_AUTO_PR` | `1`（可选） | CR 自动开 PR |
-| `MODSTORE_OPS_STAGED_AUTO_APPROVE` | `0` 起步 | 信任后改 `1` + 设 `AUTO_MAX_FILES` |
-| `MODSTORE_REPO_ROOT` | 含 yuangon 的 git clone | 岗位简报锚定 |
-| `MODSTORE_DAILY_SURFACE_AUDIT_ENABLED` | `1` | 三端截图 |
-| `XCAGI_ANDROID_APP_FILING_APPROVED` | `1` | 备案展示 |
-| `XCAGI_ICP_NUMBER` | 蜀ICP备… | 官网/App 一致 |
+| 变量                                           | 建议值                               | 说明                                                    |
+| ---------------------------------------------- | ------------------------------------ | ------------------------------------------------------- |
+| `MODSTORE_DAILY_ORCHESTRATOR_DIGEST_MODE`      | **`primary`**                        | 关闭 07:00 盲跑，08:25 真编排                           |
+| `MODSTORE_DAILY_ORCHESTRATOR_ENABLED`          | `1`                                  | 编排总开关                                              |
+| `MODSTORE_RELEASE_TRAIN_ENABLED`               | `1`                                  | release_train SSOT                                      |
+| `MODSTORE_RELEASE_TRAIN_JSON`                  | 指向 `FHD/config/release_train.json` | 四段版本                                                |
+| `MODSTORE_INBOX_POLL_ENABLED`                  | `1`                                  | 邮件回信审批                                            |
+| `MODSTORE_SMTP_*`                              | QQ 邮箱 + 授权码                     | 发 08:00 摘要                                           |
+| `MODSTORE_APPROVAL_AUTHORIZED_FROM`            | 与 SMTP 发件一致                     | 回信白名单                                              |
+| `MODSTORE_EMPLOYEE_BENCH_PROVIDER` / `MODEL`   | 如 xiaomi/deepseek                   | 员工大会 + Vibe                                         |
+| `MODSTORE_EMPLOYEE_PLATFORM_FALLBACK_*`        | `minimax` / `MiniMax-M2.7` / `20`    | 平台 AI 员工主路由超时或错误时自动降级，不消耗用户 BYOK |
+| `FHD_EMPLOYEE_LLM_FALLBACK_PROVIDER` / `MODEL` | `minimax` / `MiniMax-M2.7`           | FHD 员工认知主模型限额或故障时切换平台 MiniMax          |
+| `MODSTORE_GITHUB_TOKEN`                        | `repo` 权限 PAT                      | auto/daily 分支 + PR                                    |
+| `MODSTORE_AUTO_PR_ENABLED`                     | `1`                                  | 日更 PR                                                 |
+| `MODSTORE_CR_GIT_AUTO_PR`                      | `1`（可选）                          | CR 自动开 PR                                            |
+| `MODSTORE_OPS_STAGED_AUTO_APPROVE`             | `0` 起步                             | 信任后改 `1` + 设 `AUTO_MAX_FILES`                      |
+| `MODSTORE_REPO_ROOT`                           | 含 yuangon 的 git clone              | 岗位简报锚定                                            |
+| `MODSTORE_DAILY_SURFACE_AUDIT_ENABLED`         | `1`                                  | 三端截图                                                |
+| `XCAGI_ANDROID_APP_FILING_APPROVED`            | `1`                                  | 备案展示                                                |
+| `XCAGI_ICP_NUMBER`                             | 蜀ICP备…                             | 官网/App 一致                                           |
 
 **人工操作**：编辑 `.env` → `systemctl restart modstore`（或 `./deploy.sh` 对应服务名）。
 
@@ -67,12 +67,12 @@ playwright install-deps chromium
 
 ### A3 · SSH / 部署凭据（本机 → CVM）
 
-| 用途 | 配置位置 | 您需完成 |
-|------|----------|----------|
-| market 前端 | `market/.deploy-ssh.local` | `DEPLOY_SSH_KEY` 或 `DEPLOY_SSH_PASSWORD` |
-| 营销静态站 `index.html` | 同上或 nginx 根目录 rsync | 上次 SCP **Permission denied** — 补密钥 |
-| MODstore Python 代码 | git pull on CVM 或 CI | 确保 CVM clone 与 origin 同步 |
-| release COS | `/root/.xcagi-cos.env` | `COS_SECRET_ID` / `COS_SECRET_KEY`（见 `setup-xcagi-cos-upload-on-cvm.sh`） |
+| 用途                    | 配置位置                   | 您需完成                                                                    |
+| ----------------------- | -------------------------- | --------------------------------------------------------------------------- |
+| market 前端             | `market/.deploy-ssh.local` | `DEPLOY_SSH_KEY` 或 `DEPLOY_SSH_PASSWORD`                                   |
+| 营销静态站 `index.html` | 同上或 nginx 根目录 rsync  | 上次 SCP **Permission denied** — 补密钥                                     |
+| MODstore Python 代码    | git pull on CVM 或 CI      | 确保 CVM clone 与 origin 同步                                               |
+| release COS             | `/root/.xcagi-cos.env`     | `COS_SECRET_ID` / `COS_SECRET_KEY`（见 `setup-xcagi-cos-upload-on-cvm.sh`） |
 
 market 推送（公网需显式允许）：
 
@@ -108,12 +108,12 @@ CVM 或编排宿主需：
 
 ### A6 · 安装包 / 签名 / COS（installer 日 ×.×.N0.0）
 
-| 平台 | Secret / 账号 | 文档 |
-|------|---------------|------|
-| Windows/macOS/Android 构建 | GitHub Actions secrets | `release-desktop.yml` |
-| macOS 公证 | `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / 证书 | 可选，未配则 allow_unsigned |
-| Android 签名 | keystore 在 CI secrets | `RELEASE_TWO_SKUS.md` |
-| COS + CDN | 腾讯云 CAM + `dl.xiu-ci.com` 预热 | `deploy/docs/runbooks/xcagi-download-cdn.md` |
+| 平台                       | Secret / 账号                                     | 文档                                         |
+| -------------------------- | ------------------------------------------------- | -------------------------------------------- |
+| Windows/macOS/Android 构建 | GitHub Actions secrets                            | `release-desktop.yml`                        |
+| macOS 公证                 | `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / 证书 | 可选，未配则 allow_unsigned                  |
+| Android 签名               | keystore 在 CI secrets                            | `RELEASE_TWO_SKUS.md`                        |
+| COS + CDN                  | 腾讯云 CAM + `dl.xiu-ci.com` 预热                 | `deploy/docs/runbooks/xcagi-download-cdn.md` |
 
 **人工**：installer 日后在 CDN 控制台对 `dl.xiu-ci.com` 做**缓存预热**（脚本输出会提示路径）。
 
@@ -121,13 +121,13 @@ CVM 或编排宿主需：
 
 ### A7 · 应用商店（不在日更链内）
 
-| 项 | 状态 | 您需完成 |
-|----|------|----------|
-| APP 备案 | ✅ 已通过 | 维持主体/包名三一致 |
-| 软著 | ⏳ 材料在 `FHD/XCAGI/软著申请/` | [中国版权保护中心](https://www.ccopyright.com.cn) 提交 |
-| 小米/华为等开发者 | ❌ | 注册开发者账号、上架素材、隐私 URL 可点击 |
-| About 页备案链接 | ⚠️ | App 内备案号需可跳转 beian.miit.gov.cn（商店审核） |
-| Firebase / 极光 | 可选 | `MOBILE_ANDROID_STORE_COMPLIANCE.md` |
+| 项                | 状态                            | 您需完成                                               |
+| ----------------- | ------------------------------- | ------------------------------------------------------ |
+| APP 备案          | ✅ 已通过                       | 维持主体/包名三一致                                    |
+| 软著              | ⏳ 材料在 `FHD/XCAGI/软著申请/` | [中国版权保护中心](https://www.ccopyright.com.cn) 提交 |
+| 小米/华为等开发者 | ❌                              | 注册开发者账号、上架素材、隐私 URL 可点击              |
+| About 页备案链接  | ⚠️                              | App 内备案号需可跳转 beian.miit.gov.cn（商店审核）     |
+| Firebase / 极光   | 可选                            | `MOBILE_ANDROID_STORE_COMPLIANCE.md`                   |
 
 官网 APK 分发 **`https://xiu-ci.com/market/download`** 不依赖商店，可并行。
 
@@ -194,11 +194,11 @@ ls -la playwright-report/digest-surfaces/ 2>/dev/null | tail
 
 ## E. 相关文件
 
-| 文件 | 作用 |
-|------|------|
-| `modstore_server/daily_digest.py` | 08:00 摘要 |
-| `modstore_server/daily_release_train_orchestrator_job.py` | 08:25 编排 |
-| `modstore_server/digest_daily_line_chain.py` | Phase B/C |
-| `XCAGI-Full-Pipeline.html` § 断点清单 | 可视化 gap |
-| `.env.example` | 全量 env 注释 |
-| `FHD/docs/guides/MOBILE_ANDROID_STORE_COMPLIANCE.md` | 商店合规 |
+| 文件                                                      | 作用          |
+| --------------------------------------------------------- | ------------- |
+| `modstore_server/daily_digest.py`                         | 08:00 摘要    |
+| `modstore_server/daily_release_train_orchestrator_job.py` | 08:25 编排    |
+| `modstore_server/digest_daily_line_chain.py`              | Phase B/C     |
+| `XCAGI-Full-Pipeline.html` § 断点清单                     | 可视化 gap    |
+| `.env.example`                                            | 全量 env 注释 |
+| `FHD/docs/guides/MOBILE_ANDROID_STORE_COMPLIANCE.md`      | 商店合规      |

@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import logging
-import os
 
 from fastapi import APIRouter, Body, Request
 from fastapi.responses import StreamingResponse
+
+from app.mod_sdk.errors import BOUNDARY_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -102,20 +103,23 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         data = execute_planner_tool(body)
         ok = bool(data.get("success"))
         code = 200 if ok else 400
+        if not ok:
+            data = {
+                "success": False,
+                "error": "工具执行失败，请检查输入后重试",
+                "error_code": str(data.get("error_code") or "planner_tool_failed")[:64],
+                "tool_name": str(data.get("tool_name") or "")[:128],
+            }
         return JSONResponse({"success": ok, "data": data}, status_code=code)
 
     @router.get("/host-capabilities")
     async def host_capabilities():
         try:
-            import httpx
+            from app.mod_sdk.platform_shell import build_runtime_platform_shell_payload
 
-            base = os.environ.get("XCAGI_HOST_BASE_URL", "http://127.0.0.1:5000").rstrip("/")
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                r = await client.get(f"{base}/api/platform-shell/capabilities")
-                if r.status_code < 400:
-                    return r.json()
-        except Exception as exc:
-            logger.warning("host-capabilities proxy failed: %s", exc)
+            return {"success": True, "data": build_runtime_platform_shell_payload()}
+        except BOUNDARY_ERRORS:
+            logger.exception("host-capabilities local inventory failed")
         return {"success": False, "error": "platform-shell unavailable"}
 
     app.include_router(router)

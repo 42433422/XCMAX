@@ -9,10 +9,10 @@ import { nextTick } from 'vue'
 
 // ─── 共享 mock 状态（vi.hoisted 确保 vi.mock 中可访问） ──────────
 const mocks = vi.hoisted(() => ({
-  renderMarkdown: vi.fn((s: string): string => ''),
+  renderMarkdown: vi.fn((_s: string): string => ''),
   sanitizeMermaid: vi.fn((s: string): string => s),
   mermaidInitialize: vi.fn((): void => {}),
-  mermaidRun: vi.fn(async (opts?: Record<string, unknown>): Promise<void> => {}),
+  mermaidRun: vi.fn(async (_opts?: Record<string, unknown>): Promise<void> => {}),
 }))
 
 vi.mock('@/utils/lightMarkdown', () => ({
@@ -56,7 +56,7 @@ function flushRaf() {
 let clipboardWriteText: ReturnType<typeof vi.fn>
 
 function setupClipboardMock() {
-  clipboardWriteText = vi.fn(async (text: string): Promise<void> => {})
+  clipboardWriteText = vi.fn(async (_text: string): Promise<void> => {})
   Object.defineProperty(navigator, 'clipboard', {
     value: { writeText: clipboardWriteText },
     configurable: true,
@@ -460,9 +460,7 @@ describe('MessageBody watchers', () => {
 
   it('非 streaming 时 content 变化通过 RAF 触发后处理', async () => {
     // 使用内容相关的 HTML，确保 v-html 在 content 变化时重新渲染
-    mocks.renderMarkdown.mockImplementation(
-      (s: string) => `<div class="md-mermaid" data-source="graph TD;${s}"></div>`,
-    )
+    mocks.renderMarkdown.mockImplementation((s: string) => `<div class="md-mermaid" data-source="graph TD;${s}"></div>`)
     const wrapper = mount(MessageBody, { props: { content: 'initial' } })
     await waitForFlush()
     mocks.mermaidRun.mockClear()
@@ -498,9 +496,7 @@ describe('MessageBody watchers', () => {
   })
 
   it('streaming 变 false 且有 pending RAF 时取消并 flush', async () => {
-    mocks.renderMarkdown.mockImplementation(
-      (s: string) => `<div class="md-mermaid" data-source="graph TD;${s}"></div>`,
-    )
+    mocks.renderMarkdown.mockImplementation((s: string) => `<div class="md-mermaid" data-source="graph TD;${s}"></div>`)
     const wrapper = mount(MessageBody, { props: { content: 'initial' } })
     await waitForFlush()
     // 触发 content watcher 调度 RAF
@@ -551,9 +547,7 @@ describe('MessageBody hashStr', () => {
 
   it('不同 source 产生不同 hash（触发重渲染）', async () => {
     let source = 'graph TD;A-->B'
-    mocks.renderMarkdown.mockImplementation(
-      () => `<div class="md-mermaid" data-source="${source}"></div>`,
-    )
+    mocks.renderMarkdown.mockImplementation(() => `<div class="md-mermaid" data-source="${source}"></div>`)
     const wrapper = mount(MessageBody, { props: { content: 'test' } })
     await waitForFlush()
     const firstHash = (wrapper.find('.md-mermaid').element as HTMLElement).dataset.srcHash

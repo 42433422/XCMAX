@@ -54,7 +54,10 @@ describe('GlobalSearch', () => {
   it('shows loading state during search', async () => {
     let resolveSearch: (v: any) => void
     vi.mocked(searchApi.searchV0).mockImplementation(
-      () => new Promise((resolve) => { resolveSearch = resolve })
+      () =>
+        new Promise((resolve) => {
+          resolveSearch = resolve
+        }),
     )
     const wrapper = mount(GlobalSearch)
     await wrapper.find('.global-search-trigger').trigger('click')
@@ -115,7 +118,7 @@ describe('GlobalSearch', () => {
     await wrapper.find('input').setValue('cust')
     await wrapper.find('input').trigger('keydown.enter')
     await wrapper.vm.$nextTick()
-    expect(wrapper.findAll('.result-group-title').some(el => el.text() === '客户')).toBe(true)
+    expect(wrapper.findAll('.result-group-title').some((el) => el.text() === '客户')).toBe(true)
   })
 
   it('shows no results message when search returns empty', async () => {

@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any
 
 from app.db.models import Product as ProductModel
@@ -18,8 +19,8 @@ def product_to_domain(db_model: ProductModel) -> Product:
         brand=db_model.brand or "",
         unit=db_model.unit or "个",
         is_active=bool(db_model.is_active),
-        created_at=db_model.created_at,
-        updated_at=db_model.updated_at,
+        created_at=db_model.created_at or datetime.now(),
+        updated_at=db_model.updated_at or datetime.now(),
     )
 
 

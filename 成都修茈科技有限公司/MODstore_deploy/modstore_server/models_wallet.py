@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     Boolean,
@@ -23,7 +23,7 @@ class Wallet(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
     balance = Column(Numeric(12, 2), default=0)
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
 
 class Transaction(Base):
@@ -35,7 +35,7 @@ class Transaction(Base):
     txn_type = Column(String(32), nullable=False)
     status = Column(String(16), default="completed")
     description = Column(Text, default="")
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
 
 class AccountExperienceLedger(Base):
@@ -53,7 +53,7 @@ class AccountExperienceLedger(Base):
     amount = Column(Numeric(12, 2), nullable=False)
     xp_delta = Column(Integer, nullable=False)
     description = Column(Text, default="")
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
 
 class Quota(Base):
@@ -68,8 +68,8 @@ class Quota(Base):
     reset_at = Column(DateTime, nullable=True)
     updated_at = Column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
 
@@ -82,7 +82,7 @@ class Entitlement(Base):
     entitlement_type = Column(String(32), nullable=False, index=True)
     source_order_id = Column(String(64), default="", index=True)
     metadata_json = Column(Text, default="{}")
-    granted_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    granted_at = Column(DateTime, default=lambda: datetime.now(UTC))
     expires_at = Column(DateTime, nullable=True)
     is_active = Column(Boolean, default=True, index=True)
 
@@ -97,4 +97,4 @@ class RiskEvent(Base):
     provider = Column(String(64), default="")
     model = Column(String(256), default="")
     detail = Column(Text, default="")
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))

@@ -50,7 +50,9 @@ async function mountFloat() {
         ExcelPreview: true,
         Teleport: true,
         KittenAnalyzerView: true,
-        TutorialCourseCatalog: { template: '<div data-testid="v2-course-catalog">V2 课程目录</div>' },
+        TutorialCourseCatalog: {
+          template: '<div data-testid="v2-course-catalog">V2 课程目录</div>',
+        },
       },
     },
   })

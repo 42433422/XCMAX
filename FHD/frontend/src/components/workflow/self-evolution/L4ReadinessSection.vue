@@ -11,10 +11,7 @@ defineProps<{
 </script>
 
 <template>
-  <section
-    class="selp-l4"
-    aria-label="通往 L4 成熟度"
-  >
+  <section class="selp-l4" aria-label="通往 L4 成熟度">
     <div class="selp-l4__head">
       <div>
         <p class="selp-kicker">L4 Readiness · 管理端</p>
@@ -35,11 +32,7 @@ defineProps<{
       </li>
     </ol>
     <ul class="selp-l4__gaps">
-      <li
-        v-for="gap in gaps"
-        :key="gap.id"
-        :class="`selp-l4__gap--${gapTone(gap.status)}`"
-      >
+      <li v-for="gap in gaps" :key="gap.id" :class="`selp-l4__gap--${gapTone(gap.status)}`">
         <div class="selp-l4__gap-top">
           <span class="selp-report-pill">{{ gap.severity }}</span>
           <strong>{{ gap.title }}</strong>
@@ -48,13 +41,9 @@ defineProps<{
         <p>{{ gap.impact }}</p>
         <p class="selp-l4__next">下一步：{{ gap.nextStep }}</p>
         <div v-if="gap.actions?.length" class="selp-l4__actions">
-          <a
-            v-for="action in gap.actions"
-            :key="action.label"
-            :href="action.href"
-            target="_blank"
-            rel="noopener noreferrer"
-          >{{ action.label }}</a>
+          <a v-for="action in gap.actions" :key="action.label" :href="action.href" target="_blank" rel="noopener noreferrer">{{
+            action.label
+          }}</a>
         </div>
       </li>
     </ul>

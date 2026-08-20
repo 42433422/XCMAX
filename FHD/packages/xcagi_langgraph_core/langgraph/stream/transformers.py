@@ -12,6 +12,7 @@ from langchain_core.messages import AIMessageChunk, BaseMessage, ToolMessage
 from langchain_protocol.protocol import LifecycleCause, MessagesData
 from typing_extensions import NotRequired, TypedDict
 
+from langgraph._internal._exception_policy import BOUNDARY_ERRORS, TERMINATION_ERRORS
 from langgraph.errors import GraphDrained, GraphInterrupt
 from langgraph.stream._types import ProtocolEvent, StreamTransformer
 from langgraph.stream.run_stream import AsyncSubgraphRunStream, SubgraphRunStream
@@ -850,7 +851,7 @@ class SubgraphTransformer(_TasksLifecycleBase):
         for ns in list(self._open):
             try:
                 self._on_terminal(ns, "completed", None)
-            except BaseException as e:
+            except TERMINATION_ERRORS as e:
                 if first_error is None:
                     first_error = e
         self._open.clear()
@@ -858,7 +859,7 @@ class SubgraphTransformer(_TasksLifecycleBase):
             if self._mark_terminal(handle, "completed", None):
                 try:
                     self._close_or_fail_handle(handle, "completed", None)
-                except BaseException as e:
+                except TERMINATION_ERRORS as e:
                     if first_error is None:
                         first_error = e
         return first_error
@@ -868,7 +869,7 @@ class SubgraphTransformer(_TasksLifecycleBase):
         for ns in list(self._open):
             try:
                 await self._aon_terminal(ns, "completed", None)
-            except BaseException as e:
+            except TERMINATION_ERRORS as e:
                 if first_error is None:
                     first_error = e
         self._open.clear()
@@ -876,7 +877,7 @@ class SubgraphTransformer(_TasksLifecycleBase):
             if self._mark_terminal(handle, "completed", None):
                 try:
                     await self._aclose_or_fail_handle(handle, "completed", None)
-                except BaseException as e:
+                except TERMINATION_ERRORS as e:
                     if first_error is None:
                         first_error = e
         return first_error
@@ -899,7 +900,7 @@ class SubgraphTransformer(_TasksLifecycleBase):
             if handle._mux is not None and not handle._mux._events._closed:
                 try:
                     handle._mux.fail(err)
-                except Exception:
+                except BOUNDARY_ERRORS:
                     _logger.warning(
                         "Error failing subgraph mini-mux at %s; "
                         "subscribers may not see the terminal error.",
@@ -915,7 +916,7 @@ class SubgraphTransformer(_TasksLifecycleBase):
             if handle._mux is not None and not handle._mux._events._closed:
                 try:
                     await handle._mux.afail(err)
-                except Exception:
+                except BOUNDARY_ERRORS:
                     _logger.warning(
                         "Error failing subgraph mini-mux at %s; "
                         "subscribers may not see the terminal error.",

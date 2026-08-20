@@ -3,18 +3,19 @@
 from __future__ import annotations
 
 import logging
-import os
-from datetime import datetime
-from typing import Any
+from pathlib import Path
+from typing import Any, cast
+from uuid import uuid4
 
-from fastapi import APIRouter, Body, Request
+from fastapi import APIRouter, Body, Request, UploadFile
 from fastapi.responses import JSONResponse
 
 from app.application import get_excel_vector_ingest_app_service, get_excel_vector_search_app_service
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.utils.path_utils import get_upload_dir
+from app.utils.path_io.path_utils import get_upload_dir
 
 logger = logging.getLogger(__name__)
+_EXCEL_VECTOR_UNAVAILABLE = "Excel 向量服务暂时不可用，请稍后重试"
 
 router = APIRouter(prefix="/api/excel/vector", tags=["excel-vector"])
 
@@ -91,8 +92,8 @@ def _agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
                 break
     if not output:
         output = {"success": getattr(run, "status", "") == "completed"}
-    if not output.get("success") and getattr(run, "error", "") and not output.get("message"):
-        output["message"] = getattr(run, "error", "")
+    if not output.get("success") and getattr(run, "error", False) and not output.get("message"):
+        output["message"] = getattr(run, "error", False)
     run_id = str(getattr(run, "run_id", "") or "")
     if run_id:
         output["run_id"] = run_id
@@ -111,26 +112,28 @@ def _excel_vector_status(payload: dict[str, Any]) -> int:
 
 @router.post("/ingest")
 async def ingest_excel_vector(request: Request):
+    upload_file: UploadFile | None = None
+    file_path = ""
+    cleanup_path: Path | None = None
     try:
         payload: dict[str, Any] = {}
-        file_path: str = ""
-        should_cleanup = False
 
         ct = (request.headers.get("content-type") or "").lower()
         if "multipart/form-data" in ct:
             form = await request.form()
             upload = form.get("excel_file")
             if upload is not None and hasattr(upload, "filename") and upload.filename:
-                if not str(upload.filename).lower().endswith((".xlsx", ".xls")):
+                upload_file = cast("UploadFile", upload)
+                if not str(upload_file.filename).lower().endswith((".xlsx", ".xls")):
                     return JSONResponse(
                         {"success": False, "message": "只支持 .xlsx/.xls 文件"}, status_code=400
                     )
-                filename = f"vector_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{upload.filename}"
-                file_path = os.path.join(get_upload_dir(), filename)
-                body = await upload.read()
-                with open(file_path, "wb") as f:
+                suffix = ".xls" if str(upload_file.filename).lower().endswith(".xls") else ".xlsx"
+                cleanup_path = Path(get_upload_dir()).resolve() / f"vector_{uuid4().hex}{suffix}"
+                file_path = str(cleanup_path)
+                body = await upload_file.read()
+                with cleanup_path.open("wb") as f:
                     f.write(body)
-                should_cleanup = True
                 payload = {
                     k: v for k, v in form.items() if k != "excel_file" and isinstance(v, str)
                 }
@@ -165,13 +168,25 @@ async def ingest_excel_vector(request: Request):
             },
         )
         result = _agent_node_output(run, "excel_vector_ingest")
-        if should_cleanup and os.path.exists(file_path):
-            os.remove(file_path)
         status = _excel_vector_status(result)
         return JSONResponse(result, status_code=status)
-    except RECOVERABLE_ERRORS as err:
-        logger.exception("Excel 向量化 ingest 失败: %s", err)
-        return JSONResponse({"success": False, "message": str(err)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("Excel 向量化 ingest 失败")
+        return JSONResponse(
+            {"success": False, "message": "Excel 向量化服务暂时不可用，请稍后重试"},
+            status_code=500,
+        )
+    finally:
+        if cleanup_path is not None:
+            try:
+                cleanup_path.unlink(missing_ok=True)
+            except OSError:
+                logger.warning("清理 Excel 向量上传临时文件失败")
+        if upload_file is not None:
+            try:
+                await upload_file.close()
+            except RECOVERABLE_ERRORS:
+                logger.warning("关闭 Excel 向量上传文件失败", exc_info=True)
 
 
 @router.post("/query")
@@ -190,9 +205,11 @@ def query_excel_vector(request: Request, data: dict[str, Any] = Body(default_fac
         result = _agent_node_output(run, "excel_vector_query")
         status = _excel_vector_status(result)
         return JSONResponse(result, status_code=status)
-    except RECOVERABLE_ERRORS as err:
-        logger.exception("Excel 向量 query 失败: %s", err)
-        return JSONResponse({"success": False, "message": str(err)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("Excel 向量 query 失败")
+        return JSONResponse(
+            {"success": False, "message": _EXCEL_VECTOR_UNAVAILABLE}, status_code=500
+        )
 
 
 @router.get("/indexes")
@@ -200,9 +217,11 @@ def list_excel_vector_indexes():
     try:
         search_service = get_excel_vector_search_app_service()
         return JSONResponse(search_service.list_indexes())
-    except RECOVERABLE_ERRORS as err:
-        logger.exception("获取向量索引失败: %s", err)
-        return JSONResponse({"success": False, "message": str(err)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("获取向量索引失败")
+        return JSONResponse(
+            {"success": False, "message": _EXCEL_VECTOR_UNAVAILABLE}, status_code=500
+        )
 
 
 @router.delete("/indexes/{index_id}")
@@ -212,6 +231,8 @@ def delete_excel_vector_index(index_id: str):
         result = search_service.delete_index(index_id=index_id)
         status = 200 if result.get("success") else 404
         return JSONResponse(result, status_code=status)
-    except RECOVERABLE_ERRORS as err:
-        logger.exception("删除向量索引失败: %s", err)
-        return JSONResponse({"success": False, "message": str(err)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("删除向量索引失败")
+        return JSONResponse(
+            {"success": False, "message": _EXCEL_VECTOR_UNAVAILABLE}, status_code=500
+        )

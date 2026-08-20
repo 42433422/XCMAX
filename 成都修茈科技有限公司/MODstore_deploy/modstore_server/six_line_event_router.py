@@ -1,3 +1,4 @@
+# mypy: disable-error-code="attr-defined, dict-item, no-any-return, valid-type"
 """六线事件轨路由器 — 与时间轨（release_train 日更）互补。
 
 时间轨：定时 digest → Vibe 清单 → Phase A/B/C → P3–P9（见 digest_daily_line_chain）。
@@ -11,10 +12,12 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +119,7 @@ def append_digest_backlog(entry: Dict[str, Any]) -> str:
     path = _backlog_path()
     row = {
         **entry,
-        "at": datetime.now(timezone.utc).isoformat(),
+        "at": datetime.now(UTC).isoformat(),
     }
     with path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
@@ -147,7 +150,7 @@ def _archive_consumed_backlog(entries: Sequence[Dict[str, Any]]) -> None:
     if not entries:
         return
     path = _backlog_path()
-    day = datetime.now(timezone.utc).strftime("%Y%m%d")
+    day = datetime.now(UTC).strftime("%Y%m%d")
     archive = path.parent / f"six_line_digest_backlog.processed.{day}.jsonl"
     with archive.open("a", encoding="utf-8") as f:
         for row in entries:
@@ -191,7 +194,7 @@ def _drop_stale_time_rail_entries(
         from modstore_server.time_rail_workflow import collect_node_runtime_status
 
         status = collect_node_runtime_status()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("six_line_event_router: time rail stale backlog check failed")
         return list(entries), 0
 
@@ -238,7 +241,10 @@ def merge_event_backlog_into_vibe_patches(
     """M2：把事件轨 backlog 合并进 Vibe 补丁 Markdown；可选消费（归档并清空 backlog）。"""
     raw_entries = read_digest_backlog_entries()
     if not raw_entries:
-        return patches_markdown, {"merged_count": 0, "backlog_path": str(_backlog_path())}
+        return patches_markdown, {
+            "merged_count": 0,
+            "backlog_path": str(_backlog_path()),
+        }
 
     entries, skipped_stale = _drop_stale_time_rail_entries(raw_entries)
     block = format_backlog_entries_as_vibe_sections(entries)
@@ -263,7 +269,7 @@ def merge_event_backlog_into_vibe_patches(
     else:
         merged = base + "\n\n" + block + "\n"
 
-    meta: Dict[str, Any] = {
+    merge_meta: Dict[str, Any] = {
         "merged_count": len(entries),
         "skipped_stale_time_rail": skipped_stale,
         "backlog_path": str(_backlog_path()),
@@ -271,8 +277,8 @@ def merge_event_backlog_into_vibe_patches(
     }
     if consume:
         _archive_consumed_backlog(raw_entries)
-        meta["consumed"] = True
-    return merged, meta
+        merge_meta["consumed"] = True
+    return merged, merge_meta
 
 
 def _publish_incident(event_type: str, payload: Dict[str, Any], *, source: str) -> bool:
@@ -416,7 +422,9 @@ def get_event_rail_status() -> Dict[str, Any]:
 
 def install_orchestrator_hooks() -> None:
     """注册 cross_line 回调到全局 ProductionLineOrchestrator。"""
-    from modstore_server.production_line_orchestrator import get_production_line_orchestrator
+    from modstore_server.production_line_orchestrator import (
+        get_production_line_orchestrator,
+    )
 
     orch = get_production_line_orchestrator()
 

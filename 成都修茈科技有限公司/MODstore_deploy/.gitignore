@@ -56,6 +56,9 @@ modstore_server/workbench_script_runs/
 modstore_server/data/event_outbox.jsonl
 modstore_server/data/event_outbox_*.jsonl
 modstore_server/data/payment_orders/
+# Legacy store location retained locally for existing installations. Keep the
+# README tracked, but never recommit individual order records.
+modstore_server/payment_orders/*.json
 modstore_server/data/chroma/
 modstore_server/data/*.jsonl
 # 静态数据文件（如 llm_official_prices.json）是源码的一部分，应追踪入库

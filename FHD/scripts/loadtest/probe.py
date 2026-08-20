@@ -15,6 +15,8 @@ import urllib.error
 import urllib.request
 from urllib.parse import urljoin
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 
 def one_get(url: str, timeout: float) -> tuple[int, float]:
     t0 = time.perf_counter()
@@ -25,7 +27,7 @@ def one_get(url: str, timeout: float) -> tuple[int, float]:
             code = resp.status
     except urllib.error.HTTPError as e:
         code = e.code
-    except Exception:
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
         code = -1
     dt = time.perf_counter() - t0
     return code, dt

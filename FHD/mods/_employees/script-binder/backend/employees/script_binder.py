@@ -40,7 +40,11 @@ def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     pack_id = str(manifest.get("id") or "").strip()[:160]
     workflow_pack_id = str(workflow.get("employee_pack_id") or "").strip()[:160]
     skills = workflow.get("skills") if isinstance(workflow.get("skills"), list) else []
-    declared = manifest.get("employee", {}).get("capabilities", []) if isinstance(manifest.get("employee"), dict) else []
+    declared = (
+        manifest.get("employee", {}).get("capabilities", [])
+        if isinstance(manifest.get("employee"), dict)
+        else []
+    )
     declared_labels = {
         str(item.get("label") or "").strip()
         for item in declared
@@ -60,9 +64,13 @@ def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         if not skill_id:
             issues.append({"code": "missing_skill_id", "path": f"workflow.skills[{index}].id"})
         if not _safe_relative(script_path):
-            issues.append({"code": "unsafe_script_path", "path": f"workflow.skills[{index}].script_path"})
+            issues.append(
+                {"code": "unsafe_script_path", "path": f"workflow.skills[{index}].script_path"}
+            )
         if skill_id and skill_id not in declared_labels:
-            issues.append({"code": "capability_not_declared", "path": f"workflow.skills[{index}].id"})
+            issues.append(
+                {"code": "capability_not_declared", "path": f"workflow.skills[{index}].id"}
+            )
         if skill_id and _safe_relative(script_path):
             binding_plan.append({"skill_id": skill_id, "script_path": script_path})
     status = "approved" if not issues else "rejected"

@@ -1,12 +1,11 @@
-# -*- coding: utf-8 -*-
 """
 详细解释合并检测逻辑
 """
 
+import glob
+
 import cv2
 import numpy as np
-import json
-import glob
 
 # 读取图片
 files = glob.glob(r"e:\FHD\26-0300001A*.png")
@@ -80,8 +79,8 @@ def merge_lines(lines, threshold=50):
     return merged
 
 
-horizontal_lines = sorted(list(set(horizontal_lines)))
-vertical_lines = sorted(list(set(vertical_lines)))
+horizontal_lines = sorted(set(horizontal_lines))
+vertical_lines = sorted(set(vertical_lines))
 horizontal_lines = merge_very_close(horizontal_lines, threshold=5)
 vertical_lines = merge_very_close(vertical_lines, threshold=5)
 horizontal_lines = merge_lines(horizontal_lines, threshold=50)
@@ -145,7 +144,7 @@ for cell in cells:
         status = "✓ 合并" if cell["should_merge_with_next"] else "✗ 独立"
         print(
             f"  单元格[{cell['row']},{cell['col']}]: 右侧边框黑色占比 "
-            f"{cell['right_border_black_ratio']*100:.1f}% → {status}"
+            f"{cell['right_border_black_ratio'] * 100:.1f}% → {status}"
         )
 
 print("\n【第三步：实际合并单元格】")

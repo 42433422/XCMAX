@@ -9,8 +9,8 @@ requires-python = ">=3.11"
 dependencies = [
     "langgraph==1.2.10",
     "langgraph-checkpoint==4.1.1",
-    "langgraph-checkpoint-sqlite==3.1.0",
-    "langgraph-checkpoint-postgres==3.1.0",
+    "langgraph-checkpoint-sqlite==3.1.1",
+    "langgraph-checkpoint-postgres==3.1.1",
     "langgraph-prebuilt==1.1.0",
     "langgraph-sdk==0.4.2",
 ]
@@ -29,7 +29,7 @@ server-api = [
     "python-docx>=1.1.0",
     "python-pptx>=1.0.2",
     "pdfplumber>=0.11.0",
-    "pypdf>=6.14,<7",
+    "pypdf>=6.15,<7",
     "reportlab>=5,<6",
     "Pillow>=12.3.0",
     "gunicorn>=22.0.0",
@@ -100,6 +100,7 @@ dev = [
     "celery-types",
     "safety>=3.0",
     "bandit>=1.7",
+    "httpx2>=2.9,<3",
 ]
 
 # LG-W1-T1：LangGraph 运行时根依赖来源 — 全部可编辑(editable)安装到本地 XCAGI vendored 包目录，
@@ -121,10 +122,12 @@ exclude = [
     "venv",
     "node_modules",
     "frontend",
+    "(^|/)build/",
     "build",
     "dist",
     "migrations",
     "alembic/versions",
+    "third_party",
     "*.ipynb"
 ]
 
@@ -210,26 +213,62 @@ python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 ignore_missing_imports = false
+explicit_package_bases = true
 exclude = [
     "venv",
     ".venv",
     "node_modules",
     "frontend",
+    "XCAGI/data",
+    "XCAGI/mods",
     "migrations",
     "alembic/versions",
     "app/infrastructure/skills/sidebar-menu-manager",
     "app/infrastructure/skills/skill-maker",
 ]
 
-# Phase 9：全 app/ 默认严格；仅 tests 保留 ignore_errors
-[[tool.mypy.overrides]]
-module = "tests.*"
-ignore_errors = true
-
 # modstore_server 为可选外部包（MODstore 部署时安装），路由层 try/except 回退到本地 JSON，
 # 故对 mypy 标记为 ignore_missing_imports 而非在代码中散布 # type: ignore。
 [[tool.mypy.overrides]]
 module = "modstore_server.*"
+ignore_missing_imports = true
+
+# Optional heavyweight/platform adapters are imported behind runtime feature
+# probes.  Their availability is validated by the owning capability, while the
+# core type gate remains independent of platform-only or ML-only distributions.
+[[tool.mypy.overrides]]
+module = [
+    "alipay.*",
+    "barcode.*",
+    "cv2.*",
+    "easyocr.*",
+    "faster_whisper.*",
+    "google.*",
+    "jsonschema.*",
+    "keyring.*",
+    "onnxruntime.*",
+    "paddleocr.*",
+    "pandas.*",
+    "pdf2image.*",
+    "prophet.*",
+    "pypdfium2.*",
+    "pypinyin.*",
+    "pytesseract.*",
+    "pythoncom.*",
+    "rasa.*",
+    "sentence_transformers.*",
+    "shipment_document.*",
+    "sklearn.*",
+    "statsmodels.*",
+    "torch.*",
+    "transformers.*",
+    "win32api.*",
+    "win32com.*",
+    "win32con.*",
+    "win32gui.*",
+    "win32print.*",
+    "xlrd.*",
+]
 ignore_missing_imports = true
 
 # pytest 配置唯一真相源（2026-05-04 整合）：
@@ -252,10 +291,9 @@ markers = [
     "release_gate: release train hard gate subset",
     "coverage_ramp: 行覆盖率填充 stub（断言弱、杀变体能力低；非行为契约测试）。由 conftest 按文件名自动打标，可用 -m 'not coverage_ramp' 测真实行为套件",
 ]
-filterwarnings = [
-    "ignore::DeprecationWarning",
-    "ignore::PendingDeprecationWarning",
-]
+# Warnings are release-gate failures: resource leaks, stale dependency APIs and
+# un-awaited coroutines must not disappear behind a global ignore policy.
+filterwarnings = ["error"]
 
 [tool.coverage.run]
 # 全量 app/ 口径（2026-06-13 技术债清偿）；禁止再用窄 include 凑门禁

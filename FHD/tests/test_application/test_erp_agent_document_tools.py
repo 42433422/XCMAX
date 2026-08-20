@@ -37,6 +37,24 @@ def test_all_ten_built_in_document_workers_are_registered_and_runnable() -> None
     assert expected <= names
 
 
+def test_employee_tool_lookup_self_heals_after_scoped_discovery_cache(monkeypatch) -> None:
+    """A temporary one-pack discovery must not poison later desktop lookups."""
+    from app.mod_sdk import employee_tool_registry as registry
+
+    installed = registry.list_installed_pack_records()
+    narrow = [row for row in installed if row.get("pack_id") == "csv-full-read-employee"]
+    assert len(narrow) == 1
+
+    registry.invalidate_employee_tool_cache()
+    with monkeypatch.context() as scoped:
+        scoped.setattr(registry, "list_installed_pack_records", lambda: narrow)
+        assert (
+            registry.resolve_tool_to_pack_id("csv-full-read-employee") == "csv-full-read-employee"
+        )
+
+    assert registry.resolve_tool_to_pack_id("excel-generate-employee") == "excel-generate-employee"
+
+
 def test_word_generator_writes_an_actual_document_from_a_chat_request(
     tmp_path, monkeypatch
 ) -> None:

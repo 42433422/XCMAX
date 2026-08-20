@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import sqlite3
 
 db_path = r"E:\FHD\XCAGI\app.db"

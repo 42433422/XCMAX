@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 数据导出工具 - 将 SQLite 数据导出为 JSON 格式
 用于同步到微信云开发数据库
@@ -12,6 +11,8 @@ python scripts/export_to_cloud.py
 import json
 import os
 from datetime import datetime
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 def export_customers():
@@ -41,7 +42,7 @@ def export_customers():
             return data
         finally:
             session.close()
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"导出客户数据失败: {e}")
         return []
 
@@ -78,7 +79,7 @@ def export_products():
             return data
         finally:
             session.close()
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"导出产品数据失败: {e}")
         return []
 
@@ -118,7 +119,7 @@ def export_shipments():
             return data
         finally:
             session.close()
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"导出发货记录失败: {e}")
         return []
 
@@ -158,7 +159,7 @@ def export_materials():
             return data
         finally:
             session.close()
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"导出素材数据失败: {e}")
         return []
 
@@ -207,7 +208,7 @@ def main():
         json.dump(export_data, f, ensure_ascii=False, indent=2)
 
     print("\n" + "=" * 50)
-    print(f"导出完成！")
+    print("导出完成！")
     print(f"导出文件: {json_file}")
     print("=" * 50)
 

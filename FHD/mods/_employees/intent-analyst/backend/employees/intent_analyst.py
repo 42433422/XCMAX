@@ -19,12 +19,16 @@ def run(payload: dict[str, Any], _ctx: dict[str, Any]) -> dict[str, Any]:
     for field in required_lists:
         values = spec.get(field)
         if not isinstance(values, list) or not [item for item in values if str(item).strip()]:
-            issues.append({"code": f"missing_{field}", "detail": f"{field} must contain at least one item"})
+            issues.append(
+                {"code": f"missing_{field}", "detail": f"{field} must contain at least one item"}
+            )
     approved = not issues
     return {
         "ok": True,
         "status": "approved" if approved else "needs_review",
-        "summary": "intent is testable and bounded" if approved else "intent structure is incomplete",
+        "summary": "intent is testable and bounded"
+        if approved
+        else "intent structure is incomplete",
         "goal": str(spec.get("goal") or ""),
         "issues": issues,
         "evidence": ["fixture_only", "structured_fields_only", "no_llm_inference"],

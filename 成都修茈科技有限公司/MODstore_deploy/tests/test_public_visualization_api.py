@@ -44,7 +44,10 @@ def _configure_sources(monkeypatch, tmp_path):
                 "version_lock": "1.0.0.0",
                 "release_ready": True,
                 "release_history": [
-                    {"version": "1.0.0.0", "platforms": ["Windows", "macOS", "Android"]},
+                    {
+                        "version": "1.0.0.0",
+                        "platforms": ["Windows", "macOS", "Android"],
+                    },
                     {"version": "10.0.0"},
                 ],
             }

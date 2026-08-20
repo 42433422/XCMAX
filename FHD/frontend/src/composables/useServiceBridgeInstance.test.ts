@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useServiceBridgeInstance } from './useServiceBridgeInstance'
 
@@ -36,28 +36,19 @@ describe('useServiceBridgeInstance', () => {
   })
 
   it('instanceId uses market user id when present', () => {
-    localStorage.setItem(
-      LS_MARKET_USER_JSON,
-      JSON.stringify({ id: 42, username: 'alice' }),
-    )
+    localStorage.setItem(LS_MARKET_USER_JSON, JSON.stringify({ id: 42, username: 'alice' }))
     const inst = useServiceBridgeInstance()
     expect(inst.instanceId.value).toBe('enterprise-42')
   })
 
   it('instanceId uses market user username when id missing', () => {
-    localStorage.setItem(
-      LS_MARKET_USER_JSON,
-      JSON.stringify({ username: 'bob' }),
-    )
+    localStorage.setItem(LS_MARKET_USER_JSON, JSON.stringify({ username: 'bob' }))
     const inst = useServiceBridgeInstance()
     expect(inst.instanceId.value).toBe('enterprise-bob')
   })
 
   it('instanceId prefers id over username', () => {
-    localStorage.setItem(
-      LS_MARKET_USER_JSON,
-      JSON.stringify({ id: 'uid-99', username: 'charlie' }),
-    )
+    localStorage.setItem(LS_MARKET_USER_JSON, JSON.stringify({ id: 'uid-99', username: 'charlie' }))
     const inst = useServiceBridgeInstance()
     expect(inst.instanceId.value).toBe('enterprise-uid-99')
   })
@@ -70,10 +61,7 @@ describe('useServiceBridgeInstance', () => {
 
   it('instanceId prefers market user over cached value', () => {
     localStorage.setItem(LS_INSTANCE_ID, 'cached-instance-id')
-    localStorage.setItem(
-      LS_MARKET_USER_JSON,
-      JSON.stringify({ id: 7 }),
-    )
+    localStorage.setItem(LS_MARKET_USER_JSON, JSON.stringify({ id: 7 }))
     const inst = useServiceBridgeInstance()
     expect(inst.instanceId.value).toBe('enterprise-7')
   })
@@ -97,19 +85,13 @@ describe('useServiceBridgeInstance', () => {
   })
 
   it('instanceId handles market user with empty id and username', () => {
-    localStorage.setItem(
-      LS_MARKET_USER_JSON,
-      JSON.stringify({ id: '', username: '' }),
-    )
+    localStorage.setItem(LS_MARKET_USER_JSON, JSON.stringify({ id: '', username: '' }))
     const inst = useServiceBridgeInstance()
     expect(inst.instanceId.value).toBe('enterprise-local')
   })
 
   it('instanceId handles market user with whitespace-only id', () => {
-    localStorage.setItem(
-      LS_MARKET_USER_JSON,
-      JSON.stringify({ id: '   ', username: 'dave' }),
-    )
+    localStorage.setItem(LS_MARKET_USER_JSON, JSON.stringify({ id: '   ', username: 'dave' }))
     const inst = useServiceBridgeInstance()
     expect(inst.instanceId.value).toBe('enterprise-dave')
   })
@@ -121,10 +103,7 @@ describe('useServiceBridgeInstance', () => {
   })
 
   it('instanceName uses market username when no brand and no cache', () => {
-    localStorage.setItem(
-      LS_MARKET_USER_JSON,
-      JSON.stringify({ username: 'eve' }),
-    )
+    localStorage.setItem(LS_MARKET_USER_JSON, JSON.stringify({ username: 'eve' }))
     const inst = useServiceBridgeInstance()
     expect(inst.instanceName.value).toBe('eve')
   })
@@ -137,10 +116,7 @@ describe('useServiceBridgeInstance', () => {
   })
 
   it('persistInstanceSnapshot writes with market user', () => {
-    localStorage.setItem(
-      LS_MARKET_USER_JSON,
-      JSON.stringify({ id: 100, username: 'frank' }),
-    )
+    localStorage.setItem(LS_MARKET_USER_JSON, JSON.stringify({ id: 100, username: 'frank' }))
     const inst = useServiceBridgeInstance()
     inst.persistInstanceSnapshot()
     expect(localStorage.getItem(LS_INSTANCE_ID)).toBe('enterprise-100')
@@ -153,28 +129,19 @@ describe('useServiceBridgeInstance', () => {
   })
 
   it('marketUserKey handles undefined id', () => {
-    localStorage.setItem(
-      LS_MARKET_USER_JSON,
-      JSON.stringify({ id: undefined, username: 'grace' }),
-    )
+    localStorage.setItem(LS_MARKET_USER_JSON, JSON.stringify({ id: undefined, username: 'grace' }))
     const inst = useServiceBridgeInstance()
     expect(inst.instanceId.value).toBe('enterprise-grace')
   })
 
   it('marketUserKey handles null id', () => {
-    localStorage.setItem(
-      LS_MARKET_USER_JSON,
-      JSON.stringify({ id: null, username: 'heidi' }),
-    )
+    localStorage.setItem(LS_MARKET_USER_JSON, JSON.stringify({ id: null, username: 'heidi' }))
     const inst = useServiceBridgeInstance()
     expect(inst.instanceId.value).toBe('enterprise-heidi')
   })
 
   it('marketUserKey handles numeric id', () => {
-    localStorage.setItem(
-      LS_MARKET_USER_JSON,
-      JSON.stringify({ id: 0, username: 'ivan' }),
-    )
+    localStorage.setItem(LS_MARKET_USER_JSON, JSON.stringify({ id: 0, username: 'ivan' }))
     // id=0 → String(0).trim() = '0' which is truthy as a string
     const inst = useServiceBridgeInstance()
     expect(inst.instanceId.value).toBe('enterprise-0')

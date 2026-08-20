@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, index, operator"
 """COVERAGE_RAMP Phase 2 (p2-p2): persistence, conversation handlers, kitten_report,
 domain session_context, infrastructure rag/payment, ai_engines helpers (mocked I/O)."""
 

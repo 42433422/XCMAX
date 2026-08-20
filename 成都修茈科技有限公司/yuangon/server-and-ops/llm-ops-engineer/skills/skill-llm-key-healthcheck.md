@@ -36,7 +36,7 @@
   ],
   "warnings": ["..."],
   "error": null,
-  "meta": {"checked_at": "...", "checked_by": "llm-ops-engineer"}
+  "meta": { "checked_at": "...", "checked_by": "llm-ops-engineer" }
 }
 ```
 

@@ -21,9 +21,7 @@ vi.mock('@/utils/typeGuards', () => ({
 
 function makeDeps() {
   return {
-    messages: ref([
-      { role: 'user', content: 'previous message', time: '10:00' },
-    ]),
+    messages: ref([{ role: 'user', content: 'previous message', time: '10:00' }]),
     sessionId: ref('session-1'),
     lastRequestContextSummary: ref(''),
     plannerWriteUnlockResumeDraft: ref(''),
@@ -107,9 +105,7 @@ describe('useChatRequest', () => {
 
   it('buildPlannerChatRequestPayload strips HTML from history', () => {
     const deps = makeDeps()
-    deps.messages.value = [
-      { role: 'user', content: '<b>bold</b> text', time: '10:00' },
-    ]
+    deps.messages.value = [{ role: 'user', content: '<b>bold</b> text', time: '10:00' }]
     const req = useChatRequest(deps)
     const { body } = req.buildPlannerChatRequestPayload('hello')
     const ctx = body.context as Record<string, unknown>
@@ -241,9 +237,7 @@ describe('useChatRequest', () => {
   it('requestChatByModeWithTimeout rejects on timeout', async () => {
     vi.useFakeTimers()
     const chatApi = (await import('@/api/chat')).default
-    vi.mocked(chatApi.sendUnifiedChat).mockImplementation(
-      () => new Promise((resolve) => setTimeout(() => resolve({} as any), 60000)),
-    )
+    vi.mocked(chatApi.sendUnifiedChat).mockImplementation(() => new Promise((resolve) => setTimeout(() => resolve({} as any), 60000)))
     const promise = request.requestChatByModeWithTimeout('hello', 100)
     vi.advanceTimersByTime(200)
     await expect(promise).rejects.toThrow('请求超时')
@@ -253,9 +247,7 @@ describe('useChatRequest', () => {
   it('requestChatByModeBatchWithTimeout rejects on timeout', async () => {
     vi.useFakeTimers()
     const chatApi = (await import('@/api/chat')).default
-    vi.mocked(chatApi.sendUnifiedChatBatch).mockImplementation(
-      () => new Promise((resolve) => setTimeout(() => resolve({} as any), 60000)),
-    )
+    vi.mocked(chatApi.sendUnifiedChatBatch).mockImplementation(() => new Promise((resolve) => setTimeout(() => resolve({} as any), 60000)))
     const promise = request.requestChatByModeBatchWithTimeout(['msg1'], 100)
     vi.advanceTimersByTime(200)
     await expect(promise).rejects.toThrow('批量请求超时')

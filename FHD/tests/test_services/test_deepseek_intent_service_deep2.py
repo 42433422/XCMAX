@@ -35,7 +35,7 @@ class TestGetApiKeyDeep:
     def test_api_key_no_env_no_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
         with patch(
-            "app.utils.path_utils.get_resource_path",
+            "app.utils.path_io.path_utils.get_resource_path",
             return_value=None,
         ):
             r = DeepSeekIntentRecognizer(api_key=None)
@@ -45,7 +45,7 @@ class TestGetApiKeyDeep:
         monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
         with (
             patch(
-                "app.utils.path_utils.get_resource_path",
+                "app.utils.path_io.path_utils.get_resource_path",
                 return_value="/fake/config.py",
             ),
             patch("os.path.exists", return_value=False),
@@ -57,7 +57,7 @@ class TestGetApiKeyDeep:
         monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
         with (
             patch(
-                "app.utils.path_utils.get_resource_path",
+                "app.utils.path_io.path_utils.get_resource_path",
                 return_value="/fake/config.py",
             ),
             patch("os.path.exists", return_value=True),
@@ -72,7 +72,7 @@ class TestGetApiKeyDeep:
         mock_spec.loader = None
         with (
             patch(
-                "app.utils.path_utils.get_resource_path",
+                "app.utils.path_io.path_utils.get_resource_path",
                 return_value="/fake/config.py",
             ),
             patch("os.path.exists", return_value=True),
@@ -89,7 +89,7 @@ class TestGetApiKeyDeep:
         mock_spec.loader = MagicMock()
         with (
             patch(
-                "app.utils.path_utils.get_resource_path",
+                "app.utils.path_io.path_utils.get_resource_path",
                 return_value="/fake/config.py",
             ),
             patch("os.path.exists", return_value=True),
@@ -593,7 +593,7 @@ class TestGetDeepseekApiKeyDeep:
     def test_no_env_no_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
         with patch(
-            "app.utils.path_utils.get_resource_path",
+            "app.utils.path_io.path_utils.get_resource_path",
             return_value=None,
         ):
             assert get_deepseek_api_key() == ""
@@ -602,7 +602,7 @@ class TestGetDeepseekApiKeyDeep:
         monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
         with (
             patch(
-                "app.utils.path_utils.get_resource_path",
+                "app.utils.path_io.path_utils.get_resource_path",
                 return_value="/fake/config.py",
             ),
             patch("os.path.exists", return_value=False),
@@ -613,7 +613,7 @@ class TestGetDeepseekApiKeyDeep:
         monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
         with (
             patch(
-                "app.utils.path_utils.get_resource_path",
+                "app.utils.path_io.path_utils.get_resource_path",
                 return_value="/fake/config.py",
             ),
             patch("os.path.exists", return_value=True),
@@ -627,7 +627,7 @@ class TestGetDeepseekApiKeyDeep:
         mock_spec.loader = None
         with (
             patch(
-                "app.utils.path_utils.get_resource_path",
+                "app.utils.path_io.path_utils.get_resource_path",
                 return_value="/fake/config.py",
             ),
             patch("os.path.exists", return_value=True),

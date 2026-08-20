@@ -26,8 +26,8 @@ from __future__ import annotations
 
 import os
 import re
+from collections.abc import Iterable
 from pathlib import Path, PurePosixPath
-from typing import Iterable
 
 # Reject any path with a NUL byte; some kernels truncate at the NUL which
 # would let ``foo\x00/../etc/passwd`` slip past textual checks.
@@ -140,9 +140,7 @@ def resolve_within_root(
                     str(rel), f"resolved path escapes root: {candidate} not under {root_resolved}"
                 ) from exc
             return root_p / safe_rel
-        raise PathSafetyError(
-            str(rel), f"resolved path escapes root: {candidate} not under {root_resolved}"
-        ) from exc
+        raise PathSafetyError(str(rel), f"resolved path escapes root: {candidate} not under {root_resolved}") from exc
     return candidate
 
 

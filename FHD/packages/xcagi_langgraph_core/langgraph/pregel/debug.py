@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import asdict
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from langchain_core.runnables import RunnableConfig
@@ -112,20 +112,23 @@ def map_debug_task_results(
         [stream_keys] if isinstance(stream_keys, str) else stream_keys
     )
     task, writes = task_tup
-    yield {
-        "id": task.id,
-        "name": task.name,
-        "error": next((w[1] for w in writes if w[0] == ERROR), None),
-        "result": map_task_result_writes(
-            [w for w in writes if w[0] in stream_channels_list or w[0] == RETURN]
-        ),
-        "interrupts": [
-            asdict(v)
-            for w in writes
-            if w[0] == INTERRUPT
-            for v in (w[1] if isinstance(w[1], Sequence) else [w[1]])
-        ],
-    }
+    yield cast(
+        TaskResultPayload,
+        {
+            "id": task.id,
+            "name": task.name,
+            "error": next((w[1] for w in writes if w[0] == ERROR), None),
+            "result": map_task_result_writes(
+                [w for w in writes if w[0] in stream_channels_list or w[0] == RETURN]
+            ),
+            "interrupts": [
+                asdict(v)
+                for w in writes
+                if w[0] == INTERRUPT
+                for v in (w[1] if isinstance(w[1], Sequence) else [w[1]])
+            ],
+        },
+    )
 
 
 def rm_pregel_keys(config: RunnableConfig | None) -> RunnableConfig | None:
@@ -173,37 +176,42 @@ def map_debug_checkpoint(
             }
         }
 
-    yield {
-        "config": rm_pregel_keys(patch_checkpoint_map(config, metadata)),
-        "parent_config": rm_pregel_keys(patch_checkpoint_map(parent_config, metadata)),
-        "values": read_channels(channels, stream_channels),
-        "metadata": metadata,
-        "next": [t.name for t in tasks],
-        "tasks": [
-            {
-                "id": t.id,
-                "name": t.name,
-                "error": t.error,
-                "state": t.state,
-            }
-            if t.error
-            else {
-                "id": t.id,
-                "name": t.name,
-                "result": t.result,
-                "interrupts": tuple(asdict(i) for i in t.interrupts),
-                "state": t.state,
-            }
-            if t.result
-            else {
-                "id": t.id,
-                "name": t.name,
-                "interrupts": tuple(asdict(i) for i in t.interrupts),
-                "state": t.state,
-            }
-            for t in tasks_w_writes(tasks, pending_writes, task_states, output_keys)
-        ],
-    }
+    yield cast(
+        CheckpointPayload,
+        {
+            "config": rm_pregel_keys(patch_checkpoint_map(config, metadata)),
+            "parent_config": rm_pregel_keys(
+                patch_checkpoint_map(parent_config, metadata)
+            ),
+            "values": read_channels(channels, stream_channels),
+            "metadata": metadata,
+            "next": [t.name for t in tasks],
+            "tasks": [
+                {
+                    "id": t.id,
+                    "name": t.name,
+                    "error": t.error,
+                    "state": t.state,
+                }
+                if t.error
+                else {
+                    "id": t.id,
+                    "name": t.name,
+                    "result": t.result,
+                    "interrupts": tuple(asdict(i) for i in t.interrupts),
+                    "state": t.state,
+                }
+                if t.result
+                else {
+                    "id": t.id,
+                    "name": t.name,
+                    "interrupts": tuple(asdict(i) for i in t.interrupts),
+                    "state": t.state,
+                }
+                for t in tasks_w_writes(tasks, pending_writes, task_states, output_keys)
+            ],
+        },
+    )
 
 
 def tasks_w_writes(

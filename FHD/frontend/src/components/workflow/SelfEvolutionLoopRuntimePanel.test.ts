@@ -394,9 +394,7 @@ describe('SelfEvolutionLoopRuntimePanel.vue', () => {
   it('有 department_coverage 时渲染部门覆盖列表', async () => {
     statusMock.mockResolvedValue({
       roster_alignment: {
-        department_coverage: [
-          { key: 'tools', label: '工具层', count: 5, total: 10, ids: ['a', 'b'] },
-        ],
+        department_coverage: [{ key: 'tools', label: '工具层', count: 5, total: 10, ids: ['a', 'b'] }],
       },
     })
     const wrapper = mountComponent()
@@ -436,7 +434,13 @@ describe('SelfEvolutionLoopRuntimePanel.vue', () => {
     statusMock.mockResolvedValue({
       contract_validation: {
         surface_incidents: [
-          { id: 'inc-1', surface: 'employee_space', severity: 'bad', title: '断点A', action: 'fix' },
+          {
+            id: 'inc-1',
+            surface: 'employee_space',
+            severity: 'bad',
+            title: '断点A',
+            action: 'fix',
+          },
         ],
         surface_incident_summary: { total: 1, status: 'bad' },
       },
@@ -452,7 +456,12 @@ describe('SelfEvolutionLoopRuntimePanel.vue', () => {
       governance_audit: {
         summary: { health: 'ok', success_count: 5, failure_count: 0, consecutive_failures: 0 },
         recent: [
-          { action: 'onboard', status: 'success', created_at: '2026-01-01', onboard_summary: { onboarded: 1, skipped: 0, failed: 0 } },
+          {
+            action: 'onboard',
+            status: 'success',
+            created_at: '2026-01-01',
+            onboard_summary: { onboarded: 1, skipped: 0, failed: 0 },
+          },
         ],
       },
     })
@@ -465,9 +474,7 @@ describe('SelfEvolutionLoopRuntimePanel.vue', () => {
   it('有 open_items 时渲染待处理审批项', async () => {
     statusMock.mockResolvedValue({
       memory: {
-        open_items: [
-          { kind: 'approval', reason: '待审批', run_id: 'r1', created_at: '2026-01-01' },
-        ],
+        open_items: [{ kind: 'approval', reason: '待审批', run_id: 'r1', created_at: '2026-01-01' }],
       },
     })
     const wrapper = mountComponent()
@@ -661,7 +668,11 @@ describe('SelfEvolutionLoopRuntimePanel.vue', () => {
 
   it('非 compact 时渲染底部策略区含自动合并与分支信息', async () => {
     statusMock.mockResolvedValue({
-      policy: { auto_merge_low_risk: true, auto_merge_max_risk_score: 30, auto_merge_min_safety_score_v2: 70 },
+      policy: {
+        auto_merge_low_risk: true,
+        auto_merge_max_risk_score: 30,
+        auto_merge_min_safety_score_v2: 70,
+      },
       memory: { last_run: { branch: 'fix/bug-1', action: 'merged' } },
     })
     const wrapper = mountComponent({ compact: false })

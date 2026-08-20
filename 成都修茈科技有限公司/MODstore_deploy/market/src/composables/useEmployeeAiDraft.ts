@@ -17,8 +17,4 @@ export type {
   WorkflowData,
 } from '../domain/employeeDraftPipeline'
 
-export {
-  applyEmployeeDraftPipelineEvent,
-  makePipelineStatus,
-  makeStages,
-} from '../domain/employeeDraftPipeline'
+export { applyEmployeeDraftPipelineEvent, makePipelineStatus, makeStages } from '../domain/employeeDraftPipeline'

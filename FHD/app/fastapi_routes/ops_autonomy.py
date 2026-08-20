@@ -20,6 +20,7 @@ from app.application.autonomy.approval_resume import (
     resume_action,
 )
 from app.domain.autonomy.autonomy_guard import ProhibitedActionError, evaluate_risk
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 router = APIRouter(prefix="/api/ops/autonomy", tags=["ops-autonomy"])
 
@@ -64,7 +65,7 @@ def _auth(
 
             if is_admin_account_session():
                 return
-        except Exception:  # noqa: BLE001 - 旁路失败走 webhook token
+        except RECOVERABLE_ERRORS:  # noqa: BLE001 - 旁路失败走 webhook token
             pass
     expected = _expected_token()
     supplied = str(x_autonomy_token or "").strip()
@@ -134,7 +135,8 @@ async def request_autonomy_action(
     if not workflow_action:
         raise HTTPException(status_code=400, detail="action has no GitHub deploy executor")
     action_id = _validated_action_id(body.get("action_id"))
-    payload = body.get("payload") if isinstance(body.get("payload"), dict) else {}
+    raw_payload = body.get("payload")
+    payload: dict[str, Any] = dict(raw_payload) if isinstance(raw_payload, dict) else {}
     source = str(body.get("source") or "").strip() or "ops_autonomy.request"
     decision, pending = request_action(
         action,
@@ -180,7 +182,8 @@ async def ingest_autonomy_action(
     if not action:
         raise HTTPException(status_code=400, detail="action is required")
     action_id = _validated_action_id(body.get("action_id"))
-    payload = body.get("payload") if isinstance(body.get("payload"), dict) else {}
+    raw_payload = body.get("payload")
+    payload: dict[str, Any] = dict(raw_payload) if isinstance(raw_payload, dict) else {}
     source = str(body.get("source") or "").strip() or "ops_autonomy.ingest"
     decision, pending = request_action(
         action,
@@ -216,19 +219,26 @@ async def github_approval_callback(
     body = await request.json()
     if not isinstance(body, dict):
         raise HTTPException(status_code=400, detail="json object required")
-    review = body.get("review") if isinstance(body.get("review"), dict) else {}
-    reviewer = review.get("reviewer") if isinstance(review.get("reviewer"), dict) else {}
+    raw_review = body.get("review")
+    review: dict[str, Any] = dict(raw_review) if isinstance(raw_review, dict) else {}
+    raw_reviewer = review.get("reviewer")
+    reviewer: dict[str, Any] = dict(raw_reviewer) if isinstance(raw_reviewer, dict) else {}
     action_id = _validated_action_id(body.get("action_id"), required=True)
+    if action_id is None:  # defensive: ``required=True`` raises before this branch
+        raise HTTPException(status_code=400, detail="action_id is required")
     decision = (
         str(body.get("decision") or review.get("state") or body.get("state") or "").strip().lower()
     )
-    approver = str(body.get("approver") or x_github_actor or reviewer.get("login") or "").strip()
+    approver = str(
+        (body or {}).get("approver") or x_github_actor or reviewer.get("login") or ""
+    ).strip()
     approval_id = str(body.get("approval_id") or body.get("deployment_id") or "").strip()
     if not decision or not approver:
         raise HTTPException(status_code=400, detail="action_id, decision and approver are required")
     current = get_action_state(action_id)
+    current_data: dict[str, Any] = dict(current) if isinstance(current, dict) else {}
     workflow_action = str(body.get("workflow_action") or "").strip()
-    expected = _WORKFLOW_ACTIONS.get(str((current or {}).get("action") or ""))
+    expected = _WORKFLOW_ACTIONS.get(str(current_data.get("action") or ""))
     try:
         if (
             expected

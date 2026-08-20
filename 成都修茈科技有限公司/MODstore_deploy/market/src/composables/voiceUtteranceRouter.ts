@@ -37,8 +37,7 @@ export const VOICE_PUSHBACK_RE =
 const VOICE_NON_TASK_RE =
   /^(你好|嗨|在吗|听得到|听得见|试试|测试)|怎么.*(做|规划|生成)|为什么.*(做|规划|生成)|什么.*(做|规划)|你就.*(做|规划|生成)/
 
-const WORK_INTENT_RE =
-  /做\s*(个|一个|款|下|点)?|生成|制作|规划|开始任务|帮我做|帮我生成|创建|开发|定制|mod|skill|工作流|组件|插件/i
+const WORK_INTENT_RE = /做\s*(个|一个|款|下|点)?|生成|制作|规划|开始任务|帮我做|帮我生成|创建|开发|定制|mod|skill|工作流|组件|插件/i
 
 const EMPLOYEE_EXPLICIT_TASK_RE =
   /帮我(做|创建|生成|规划|设计|定义)|开始(做|生成|规划|制作)|做一个|生成一个|创建.{0,16}员工|设计.{0,16}员工|规划.{0,8}员工|员工职责|员工包|提示词|工具配置|employee_pack|执行清单|生成执行清单|确认任务|开始任务/i
@@ -48,10 +47,7 @@ export function looksLikeEmployeeTaskDescription(text: string): boolean {
   const t = text.trim()
   if (!t || t.length < 6) return false
   if (EMPLOYEE_EXPLICIT_TASK_RE.test(t)) return true
-  return (
-    /员工|employee/i.test(t) &&
-    /做|创建|生成|提取|负责|需要|word|docx|文档|json|全量/i.test(t)
-  )
+  return /员工|employee/i.test(t) && /做|创建|生成|提取|负责|需要|word|docx|文档|json|全量/i.test(t)
 }
 
 export function isVoiceEmployeeWorkContext(ctx: VoiceRouteContext): boolean {
@@ -64,10 +60,7 @@ export function isLikelyShortProceedFragment(text: string): boolean {
   return t.length > 0 && t.length <= 10 && !looksLikeEmployeeTaskDescription(t)
 }
 
-export function inferUserGoalFromVoiceMessages(
-  messages: Array<{ role: string; content: string }>,
-  excludeUtterance?: string,
-): string {
+export function inferUserGoalFromVoiceMessages(messages: Array<{ role: string; content: string }>, excludeUtterance?: string): string {
   const ex = String(excludeUtterance || '').trim()
   const chunks = messages
     .filter((m) => m.role === 'user')
@@ -90,10 +83,7 @@ export function hasEmployeePlanContext(
   return inferUserGoalFromVoiceMessages(messages, excludeUtterance).length >= 8
 }
 
-export function hasVoiceWorkIntent(
-  text: string,
-  opts?: { composerIntent?: string },
-): boolean {
+export function hasVoiceWorkIntent(text: string, opts?: { composerIntent?: string }): boolean {
   const t = text.trim()
   if (!t) return false
   if (VOICE_PUSHBACK_RE.test(t) || VOICE_NON_TASK_RE.test(t)) return false
@@ -136,9 +126,7 @@ export function routeVoiceUtterance(ctx: VoiceRouteContext): VoiceRouteAction {
     return { type: 'plan_reply' }
   }
   if (!ctx.hasPlanSession && !ctx.hasPendingHandoff) {
-    return hasVoiceWorkIntent(t, { composerIntent: ctx.composerIntent })
-      ? { type: 'new_task' }
-      : { type: 'chat' }
+    return hasVoiceWorkIntent(t, { composerIntent: ctx.composerIntent }) ? { type: 'new_task' } : { type: 'chat' }
   }
   return { type: 'chat' }
 }
@@ -150,7 +138,13 @@ export function appendVoiceInject(existing: string, text: string): string {
 }
 
 export function buildOrchestrationStatusSummary(
-  steps: Array<{ label?: string; status?: string; message?: string }> | undefined,
+  steps:
+    | Array<{
+        label?: string | null
+        status?: string | null
+        message?: unknown
+      }>
+    | undefined,
 ): string {
   if (!Array.isArray(steps) || !steps.length) return '当前还没有制作步骤。'
   const running = steps.find((s) => s.status === 'running')

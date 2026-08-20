@@ -58,6 +58,17 @@ ALLOWED_LEGACY_FILES: frozenset[str] = frozenset(
     }
 )
 
+# Implementation companions extracted from the three approved compatibility
+# facades above.  They are not independently supported route entrypoints and
+# therefore must not expand ALLOWED_LEGACY_FILES.
+COMPAT_IMPLEMENTATION_FILES: frozenset[str] = frozenset(
+    {
+        "xcagi_compat_chat_models.py",
+        "xcagi_compat_chat_stream.py",
+        "xcagi_compat_product_actions.py",
+    }
+)
+
 
 @dataclass(frozen=True)
 class LegacyRoute:
@@ -141,7 +152,7 @@ def verify_registry_integrity() -> list[str]:
         if p.name.startswith("legacy_") or p.name.startswith("xcagi_compat"):
             on_disk_legacy.add(p.name)
 
-    unexpected = on_disk_legacy - ALLOWED_LEGACY_FILES
+    unexpected = on_disk_legacy - ALLOWED_LEGACY_FILES - COMPAT_IMPLEMENTATION_FILES
     if unexpected:
         errors.append(f"未允许的 legacy_/compat_ 顶栏文件: {sorted(unexpected)}")
 

@@ -20,6 +20,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 FHD_WF = ROOT / "FHD" / ".github" / "workflows"
 MOD_WF = ROOT / "成都修茈科技有限公司" / "MODstore_deploy" / ".github" / "workflows"
+CORP_WF = ROOT / "成都修茈科技有限公司" / ".github" / "workflows"
 OUT = ROOT / ".github" / "workflows"
 
 DEFAULTS_FHD = """
@@ -32,6 +33,12 @@ DEFAULTS_MOD = """
 defaults:
   run:
     working-directory: 成都修茈科技有限公司/MODstore_deploy
+""".strip()
+
+DEFAULTS_CORP = """
+defaults:
+  run:
+    working-directory: 成都修茈科技有限公司
 """.strip()
 
 WORKFLOW_RENAMES = {
@@ -58,6 +65,16 @@ MOD_RENAMES = {
     "ci-backend-python.yml": "modstore-ci-backend-python.yml",
     "market-e2e.yml": "modstore-market-e2e.yml",
     "prod-deploy.yml": "modstore-prod-deploy.yml",
+}
+
+# These source workflows live below the monorepo root, where GitHub would
+# otherwise ignore them. Publish component gates without a root counterpart.
+CORP_RENAMES = {
+    "ci-root-frontend.yml": "corp-root-frontend.yml",
+    "ci-vibe-coding.yml": "corp-vibe-coding.yml",
+    "ci-marketing-site.yml": "corp-marketing-site.yml",
+    "ci-payment-java.yml": "corp-payment-java.yml",
+    "ci-runtime-artifacts-guard.yml": "corp-runtime-artifacts-guard.yml",
 }
 
 
@@ -132,6 +149,11 @@ def _prefix_fhd_paths(content: str, out_name: str) -> str:
         "working-directory: mobile-flutter-poc",
         "working-directory: FHD/mobile-flutter-poc",
     )
+    if out_name == "fhd-langgraph-packages.yml":
+        content = content.replace(
+            'path: "packages/xcagi_langgraph_',
+            'path: "FHD/packages/xcagi_langgraph_',
+        )
     content = content.replace(
         "path: mobile-flutter-poc/build/",
         "path: FHD/mobile-flutter-poc/build/",
@@ -263,6 +285,77 @@ def _render_mod(src: Path) -> tuple[str, str] | None:
     return out_name, header + body + "\n"
 
 
+def _prefix_trigger_paths(content: str, out_name: str) -> str:
+    """Prefix only ``on.*.paths`` entries for a nested workflow."""
+    result: list[str] = []
+    paths_indent: int | None = None
+    item_re = re.compile(r"^(\s*)-\s+(['\"])([^'\"]+)\2\s*$")
+    for line in content.splitlines():
+        stripped = line.strip()
+        indent = len(line) - len(line.lstrip())
+        if stripped == "paths:":
+            paths_indent = indent
+        elif paths_indent is not None and stripped and indent <= paths_indent:
+            paths_indent = None
+        if paths_indent is not None and indent > paths_indent:
+            match = item_re.match(line)
+            if match:
+                raw = match.group(3)
+                if raw.startswith(".github/workflows/"):
+                    raw = f".github/workflows/{out_name}"
+                elif not raw.startswith("成都修茈科技有限公司/"):
+                    raw = f"成都修茈科技有限公司/{raw}"
+                line = f"{match.group(1)}- {match.group(2)}{raw}{match.group(2)}"
+        result.append(line)
+    return "\n".join(result)
+
+
+def _render_corp(src: Path) -> tuple[str, str] | None:
+    """Render selected corporate component CI workflows at repository root."""
+    out_name = CORP_RENAMES.get(src.name)
+    if out_name is None:
+        return None
+    body = src.read_text(encoding="utf-8").strip()
+    if not body or "jobs:" not in body:
+        return None
+    body = _prefix_trigger_paths(body, out_name)
+    if src.name in {"ci-root-frontend.yml", "ci-marketing-site.yml"}:
+        body = _insert_defaults(body, DEFAULTS_CORP)
+    body = body.replace(
+        "working-directory: vibe-coding",
+        "working-directory: 成都修茈科技有限公司/vibe-coding",
+    )
+    body = body.replace(
+        "working-directory: MODstore_deploy/java_payment_service",
+        "working-directory: 成都修茈科技有限公司/MODstore_deploy/java_payment_service",
+    )
+    if src.name == "ci-root-frontend.yml":
+        body = body.replace(
+            "cache-dependency-path: package-lock.json",
+            "cache-dependency-path: 成都修茈科技有限公司/package-lock.json",
+        )
+        body = body.replace(
+            "hashFiles('package-lock.json')",
+            "hashFiles('成都修茈科技有限公司/package-lock.json')",
+        )
+        body = body.replace("path: coverage/", "path: 成都修茈科技有限公司/coverage/")
+        body = body.replace(
+            "path: playwright-report/",
+            "path: 成都修茈科技有限公司/playwright-report/",
+        )
+    if src.name == "ci-runtime-artifacts-guard.yml":
+        body = body.replace(
+            "'MODstore_deploy/",
+            "'成都修茈科技有限公司/MODstore_deploy/",
+        )
+    header = (
+        f"# CI SSOT: generated from 成都修茈科技有限公司/.github/workflows/{src.name} "
+        "— DO NOT edit here.\n"
+        "# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py\n"
+    )
+    return out_name, header + body + "\n"
+
+
 def _diff_one(out_name: str, expected: str) -> str:
     """对比根仓现有副本与期望内容，返回 diff 字符串（无差异返回空串）。"""
     dst = OUT / out_name
@@ -320,6 +413,25 @@ def publish_mod(apply: bool = True) -> tuple[list[str], list[str]]:
     return written, drifts
 
 
+def publish_corp(apply: bool = True) -> tuple[list[str], list[str]]:
+    written: list[str] = []
+    drifts: list[str] = []
+    for src_name in sorted(CORP_RENAMES):
+        rendered = _render_corp(CORP_WF / src_name)
+        if rendered is None:
+            continue
+        out_name, content = rendered
+        diff = _diff_one(out_name, content)
+        if diff:
+            drifts.append(diff)
+            if apply:
+                (OUT / out_name).write_text(content, encoding="utf-8")
+                written.append(out_name)
+        else:
+            written.append(out_name)
+    return written, drifts
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group()
@@ -333,12 +445,14 @@ def main() -> int:
 
     fhd_written, fhd_drifts = publish_fhd(apply=apply_mode)
     mod_written, mod_drifts = publish_mod(apply=apply_mode)
+    corp_written, corp_drifts = publish_corp(apply=apply_mode)
 
     print(f"FHD ({len(fhd_written)} 文件):", ", ".join(fhd_written))
     print(f"MODstore ({len(mod_written)} 文件):", ", ".join(mod_written))
+    print(f"Corporate ({len(corp_written)} 文件):", ", ".join(corp_written))
     print()
 
-    all_drifts = fhd_drifts + mod_drifts
+    all_drifts = fhd_drifts + mod_drifts + corp_drifts
     if all_drifts:
         if apply_mode:
             print(f"已写入 {len(all_drifts)} 个漂移文件。下一步：")

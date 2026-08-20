@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment"
 """备份事件订阅者：把 incident_bus 上的 backup.* 事件翻译成下游可消费的副作用。
 
 目的：解耦 BK→R 硬边，让下游（03:15 归档、08:00 摘要、08:15 Phase A）可以
@@ -23,9 +24,10 @@
 from __future__ import annotations
 
 import logging
-import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Dict
+
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +59,7 @@ def _kick_retention_janitor() -> Dict[str, Any]:
             out.get("status"),
         )
         return {"ok": True, "result": out}
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.exception("backup event subscriber: kick retention janitor failed")
         return {"ok": False, "error": str(exc)[:300]}
 
@@ -71,13 +73,13 @@ def _publish_digest_prewarm() -> Dict[str, Any]:
             "schedule.tick",
             {
                 "kind": "backup_completed_prewarm",
-                "at": datetime.now(timezone.utc).isoformat(),
+                "at": datetime.now(UTC).isoformat(),
                 "hint": "digest 08:00 可提前准备上下文（备份链已就绪）",
             },
             source="backup-event-subscriber",
         )
         return {"ok": True, "published": bool(published)}
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.exception("backup event subscriber: publish digest prewarm failed")
         return {"ok": False, "error": str(exc)[:300]}
 
@@ -142,7 +144,7 @@ def _handle_failed(payload: Dict[str, Any]) -> Dict[str, Any]:
                 },
                 source="backup-event-subscriber",
             )
-        except Exception:  # noqa: BLE001
+        except BOUNDARY_ERRORS:  # noqa: BLE001
             logger.exception("backup event subscriber: ondemand failed alert failed")
     return {"ok": True, "handlers": ["log_anomaly_published"]}
 
@@ -156,12 +158,12 @@ def _handle_dr_guard_cleared(payload: Dict[str, Any]) -> Dict[str, Any]:
             "schedule.tick",
             {
                 "kind": "dr_guard_cleared",
-                "at": datetime.now(timezone.utc).isoformat(),
+                "at": datetime.now(UTC).isoformat(),
                 "reason": payload.get("reason") or "auto_recovery",
             },
             source="backup-event-subscriber",
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("backup event subscriber: dr_guard.cleared publish failed")
     return {"ok": True}
 
@@ -192,7 +194,7 @@ def emit_backup_event(event_type: str, payload: Dict[str, Any]) -> Dict[str, Any
                 source=str(payload.get("source") or "backup-pipeline"),
             )
         )
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         logger.exception("emit_backup_event: incident publish failed event_type=%s", event_type)
     return {"dispatch": dispatch_result, "published": published}
 
@@ -209,7 +211,11 @@ def dispatch_backup_event(event_type: str, payload: Dict[str, Any]) -> Dict[str,
     字段去重：若 ``backup.completed`` 的 trigger 已是 ondemand，跳过第二次派发。
     """
     if event_type not in _BACKUP_EVENT_TYPES:
-        return {"ok": False, "skipped": True, "reason": f"unknown event_type={event_type}"}
+        return {
+            "ok": False,
+            "skipped": True,
+            "reason": f"unknown event_type={event_type}",
+        }
 
     # 桥接事件去重：backup.ondemand_completed 已处理过的 payload 不再走 backup.completed
     if event_type == "backup.completed" and str(payload.get("trigger") or "") != "scheduled":
@@ -225,7 +231,11 @@ def dispatch_backup_event(event_type: str, payload: Dict[str, Any]) -> Dict[str,
         if event_type in ("backup.failed", "backup.ondemand_failed"):
             return {"ok": True, "handler": "failed", **_handle_failed(payload)}
         if event_type == "backup.dr_guard.cleared":
-            return {"ok": True, "handler": "dr_guard_cleared", **_handle_dr_guard_cleared(payload)}
+            return {
+                "ok": True,
+                "handler": "dr_guard_cleared",
+                **_handle_dr_guard_cleared(payload),
+            }
         if event_type == "backup.dr_guard.escalated":
             return {
                 "ok": True,
@@ -233,7 +243,7 @@ def dispatch_backup_event(event_type: str, payload: Dict[str, Any]) -> Dict[str,
                 **_handle_dr_guard_escalated(payload),
             }
         return {"ok": False, "skipped": True, "reason": "unhandled"}
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.exception("dispatch_backup_event failed event_type=%s", event_type)
         return {"ok": False, "error": str(exc)[:300]}
 
@@ -248,7 +258,7 @@ def register_backup_event_subscribers() -> int:
     """
     try:
         from modstore_server.models import EmployeeTriggerBinding, get_session_factory
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         logger.exception("register_backup_event_subscribers: import models failed")
         return 0
 

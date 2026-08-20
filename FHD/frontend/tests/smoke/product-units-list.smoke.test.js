@@ -13,7 +13,7 @@ describe('productUnitsArrayFromApi (购买单位)', () => {
         success: true,
         data: ['成都客户', '惠州厂'],
         count: 2,
-      })
+      }),
     ).toEqual(['成都客户', '惠州厂'])
   })
 
@@ -23,7 +23,7 @@ describe('productUnitsArrayFromApi (购买单位)', () => {
         success: true,
         units: ['单位甲', '单位乙'],
         count: 2,
-      })
+      }),
     ).toEqual(['单位甲', '单位乙'])
   })
 
@@ -32,7 +32,7 @@ describe('productUnitsArrayFromApi (购买单位)', () => {
       productUnitsArrayFromApi({
         success: true,
         data: { units: ['A', 'B'] },
-      })
+      }),
     ).toEqual(['A', 'B'])
   })
 

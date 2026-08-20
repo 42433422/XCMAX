@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="attr-defined"
 """OCR 单据结构化 evidence — 样例文本 + 审单决策。"""
+
 from __future__ import annotations
 
 import json
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -16,11 +18,11 @@ def main() -> int:
     if str(ROOT) not in sys.path:
         sys.path.insert(0, str(ROOT))
 
-    from app.services.ocr_service import OCRService
     from app.application.shipment_audit_app_service import ShipmentAuditAppService
-    from app.infrastructure.persistence.shipment_audit_repository import ShipmentAuditRepository
     from app.db import engine
     from app.db.init_db import init_ai_business_evidence_tables
+    from app.infrastructure.persistence.shipment_audit_repository import ShipmentAuditRepository
+    from app.services.ocr_service import OCRService
 
     init_ai_business_evidence_tables(engine)
     sample_text = """
@@ -43,7 +45,7 @@ def main() -> int:
     )
 
     payload = {
-        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "text_preview": sample_text.strip()[:200],
         "structured_fields": structured,
         "confidence": 0.88,
@@ -52,7 +54,7 @@ def main() -> int:
     }
     out_dir = EVIDENCE / "ocr-shipment-audit"
     out_dir.mkdir(parents=True, exist_ok=True)
-    out = out_dir / f"ocr-shipment-audit-{datetime.now(timezone.utc).strftime('%Y%m%d')}.json"
+    out = out_dir / f"ocr-shipment-audit-{datetime.now(UTC).strftime('%Y%m%d')}.json"
     out.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     print(f"evidence: {out}")

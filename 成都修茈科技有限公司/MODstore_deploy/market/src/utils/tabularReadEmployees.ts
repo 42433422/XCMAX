@@ -134,18 +134,13 @@ export type EmployeeExecuteDiagnostics = {
   warnings: string[]
 }
 
-function mergeOutputDownloadsField(
-  ...candidates: unknown[]
-): unknown[] | undefined {
+function mergeOutputDownloadsField(...candidates: unknown[]): unknown[] | undefined {
   const merged: unknown[] = []
   const seen = new Set<string>()
   for (const raw of candidates) {
     if (!Array.isArray(raw)) continue
     for (const item of raw) {
-      const key =
-        item && typeof item === 'object'
-          ? JSON.stringify(item)
-          : String(item)
+      const key = item && typeof item === 'object' ? JSON.stringify(item) : String(item)
       if (seen.has(key)) continue
       seen.add(key)
       merged.push(item)
@@ -217,15 +212,7 @@ function findPresentationFullObject(node: unknown, depth = 0): Record<string, un
   if (typeof node !== 'object') return null
   const o = node as Record<string, unknown>
   if (isPresentationFullShape(o)) return o
-  for (const key of [
-    'presentation_full',
-    'presentation',
-    'ppt',
-    'data',
-    'output',
-    'items',
-    'payload',
-  ]) {
+  for (const key of ['presentation_full', 'presentation', 'ppt', 'data', 'output', 'items', 'payload']) {
     if (key in o) {
       const hit = findPresentationFullObject(o[key], depth + 1)
       if (hit) return hit
@@ -379,7 +366,11 @@ export function extractPresentationFullJsonText(result: unknown): string | null 
   return null
 }
 
-export function extractWordReadStats(result: unknown): { paragraphCount?: number; tableCount?: number; title?: string } {
+export function extractWordReadStats(result: unknown): {
+  paragraphCount?: number
+  tableCount?: number
+  title?: string
+} {
   const payload = extractDirectPythonPayload(result)
   if (!payload) return {}
   let paragraphCount = payload.paragraph_count as number | undefined
@@ -435,7 +426,7 @@ export function extractEmployeeExecuteDiagnostics(result: unknown): EmployeeExec
       const os = String(o.summary || '').trim()
       if (oe) error = error || oe
       if (os && !summary) summary = os
-      for (const w of o.warnings || []) {
+      for (const w of Array.isArray(o.warnings) ? o.warnings : []) {
         if (typeof w === 'string' && w.trim()) warnings.push(w.trim())
       }
     }
@@ -448,20 +439,13 @@ export function extractEmployeeExecuteDiagnostics(result: unknown): EmployeeExec
   return { success: false, error, summary, warnings }
 }
 
-export function pickDocumentFullJsonDownload(
-  items: EmployeeOutputDownload[],
-): EmployeeOutputDownload | undefined {
+export function pickDocumentFullJsonDownload(items: EmployeeOutputDownload[]): EmployeeOutputDownload | undefined {
   return items.find(
-    (d) =>
-      d.filename === 'document_full.json' ||
-      d.filename.endsWith('/document_full.json') ||
-      d.filename.includes('document_full.json'),
+    (d) => d.filename === 'document_full.json' || d.filename.endsWith('/document_full.json') || d.filename.includes('document_full.json'),
   )
 }
 
-export function pickPresentationFullJsonDownload(
-  items: EmployeeOutputDownload[],
-): EmployeeOutputDownload | undefined {
+export function pickPresentationFullJsonDownload(items: EmployeeOutputDownload[]): EmployeeOutputDownload | undefined {
   return items.find(
     (d) =>
       d.filename === 'presentation_full.json' ||
@@ -470,9 +454,7 @@ export function pickPresentationFullJsonDownload(
   )
 }
 
-export function pickQuantitativeReportDownload(
-  items: EmployeeOutputDownload[],
-): EmployeeOutputDownload | undefined {
+export function pickQuantitativeReportDownload(items: EmployeeOutputDownload[]): EmployeeOutputDownload | undefined {
   return items.find(
     (d) =>
       d.filename === 'quantitative_report.html' ||
@@ -481,18 +463,14 @@ export function pickQuantitativeReportDownload(
   )
 }
 
-function summarizeDocumentFullJson(text: string): string {
+function _summarizeDocumentFullJson(text: string): string {
   try {
     const data = JSON.parse(text) as Record<string, unknown>
     const paragraphs = Array.isArray(data.paragraphs) ? data.paragraphs.length : 0
     const tables = Array.isArray(data.tables) ? data.tables.length : 0
     const meta = data.metadata && typeof data.metadata === 'object' ? (data.metadata as Record<string, unknown>) : {}
     const title = String(meta.title || data.title || '').trim()
-    const lines = [
-      `段落数：${paragraphs}`,
-      `表格数：${tables}`,
-      title ? `标题：${title}` : '',
-    ].filter(Boolean)
+    const lines = [`段落数：${paragraphs}`, `表格数：${tables}`, title ? `标题：${title}` : ''].filter(Boolean)
     return lines.join('\n')
   } catch {
     return ''
@@ -512,13 +490,7 @@ type DownloadRow = {
   files?: unknown[]
 }
 
-function pushParsedDownload(
-  out: EmployeeOutputDownload[],
-  seen: Set<string>,
-  jobId: string,
-  filename: string,
-  label?: string,
-) {
+function pushParsedDownload(out: EmployeeOutputDownload[], seen: Set<string>, jobId: string, filename: string, label?: string) {
   const jid = jobId.trim()
   const fn = filename.trim()
   if (!jid || !fn) return
@@ -532,12 +504,7 @@ function pushParsedDownload(
   })
 }
 
-function parseDownloadRow(
-  item: unknown,
-  out: EmployeeOutputDownload[],
-  seen: Set<string>,
-  fallbackJobId?: string,
-) {
+function parseDownloadRow(item: unknown, out: EmployeeOutputDownload[], seen: Set<string>, fallbackJobId?: string) {
   if (!item || typeof item !== 'object') return
   const row = item as DownloadRow
   const jobId = String(row.job_id || row.jobId || fallbackJobId || '').trim()
@@ -558,9 +525,7 @@ export function parseEmployeeOutputDownloads(result: unknown): EmployeeOutputDow
   if (!result || typeof result !== 'object') return []
   const root = result as Record<string, unknown>
   const nested =
-    root.result && typeof root.result === 'object' && !Array.isArray(root.result)
-      ? (root.result as Record<string, unknown>)
-      : null
+    root.result && typeof root.result === 'object' && !Array.isArray(root.result) ? (root.result as Record<string, unknown>) : null
   const env = normalizeEmployeeExecuteEnvelope(result)
   const arrays: unknown[][] = []
   for (const src of [root, nested, env]) {
@@ -706,8 +671,7 @@ export function formatEmployeeReadResultSummary(
       lines.push(`- ${d.label || d.filename}`)
     }
   }
-  const hasDocForReport =
-    pickDocumentFullJsonDownload(downloads) || Boolean(extractDocumentFullJsonText(result))
+  const hasDocForReport = pickDocumentFullJsonDownload(downloads) || Boolean(extractDocumentFullJsonText(result))
   if (employeeId === 'word-full-read-employee' && hasDocForReport) {
     lines.push(
       '\n**考试报告：** 试跑成功后将**自动**调用 JSON 量化报告员生成 HTML 报告（约 30 秒–2 分钟）；若未自动开始，可点 **重新生成报告**。',

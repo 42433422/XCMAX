@@ -10,8 +10,7 @@ export function bindTutorialRouter(router: Router) {
 
 export const NEVER_AUTO_SKIP_STEP_IDS = new Set(['starter-pack-demo-3-start-print'])
 
-export const shouldNeverAutoSkipStep = (step: TutorialStep | null) =>
-  !!step && NEVER_AUTO_SKIP_STEP_IDS.has(step.id)
+export const shouldNeverAutoSkipStep = (step: TutorialStep | null) => !!step && NEVER_AUTO_SKIP_STEP_IDS.has(step.id)
 
 export const resolveElementRect = (selector: string) => {
   const el = document.querySelector(selector)
@@ -43,11 +42,7 @@ export const resolveStepHighlightRect = (step: TutorialStep | null) => {
   const sel = (step.highlightSelector || step.targetSelector).trim()
   const base = resolveElementRect(sel)
   if (!base) return null
-  if (
-    sel.includes('assistant-panel') ||
-    sel.includes('tutorial-assistant-body') ||
-    sel === '#taskPanel'
-  ) {
+  if (sel.includes('assistant-panel') || sel.includes('tutorial-assistant-body') || sel === '#taskPanel') {
     const pad = 6
     return {
       top: base.top - pad,

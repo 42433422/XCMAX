@@ -8,21 +8,20 @@
 4. Alembic 迁移测试
 """
 
-import sys
 import os
+import sys
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
-from app.db.base import Base
+
 from app.db.init_db import get_db_path
-from app.db.models.user import User, Session as UserSession
-from app.db.models.ai import AIToolCategory, AITool, AIConversation, AIConversationSession
-from app.db.models.wechat import WechatContact, WechatTask, WechatContactContext
-from app.db.models.shipment import ShipmentRecord
-from app.db.models.purchase_unit import PurchaseUnit
+from app.db.models.user import Session as UserSession
+from app.db.models.user import User
 
 
 def get_test_engine():
@@ -69,7 +68,7 @@ def test_foreign_keys_exist():
             else:
                 print(f"✗ {table}.{column} -> {parent_table}.id - 不存在")
                 all_passed = False
-        except Exception as e:
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             print(f"✗ 检查表 {table} 失败：{e}")
             all_passed = False
 
@@ -112,7 +111,7 @@ def test_indexes_exist():
             else:
                 print(f"✗ {index_name} - 不存在")
                 all_passed = False
-        except Exception as e:
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             print(f"✗ 检查索引 {index_name} 失败：{e}")
             all_passed = False
 
@@ -166,7 +165,7 @@ def test_cascade_delete():
                 print("✗ 级联删除测试失败 - 会话未被删除")
                 return False
 
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"✗ 级联删除测试异常：{e}")
         return False
     finally:
@@ -182,21 +181,22 @@ def test_alembic_migration():
     print("\n=== 测试 Alembic 迁移状态 ===")
 
     try:
-        from alembic.config import Config
-        from alembic.command import current, upgrade, downgrade
         from io import StringIO
+
+        from alembic.command import current
+        from alembic.config import Config
 
         alembic_cfg = Config("alembic.ini")
 
         # 检查当前版本
         print("当前 Alembic 版本:")
-        output = StringIO()
+        StringIO()
         current(alembic_cfg)
 
         print("\n✓ Alembic 配置正确")
         return True
 
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"✗ Alembic 测试失败：{e}")
         return False
 

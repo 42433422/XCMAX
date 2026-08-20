@@ -12,6 +12,8 @@ import os
 import sys
 from typing import Any
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 try:
     import httpx
 except ImportError:  # pragma: no cover
@@ -98,6 +100,6 @@ def notify_boss_im(
                 file=sys.stderr,
             )
         return ok
-    except Exception as exc:  # pragma: no cover - fail-open
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover - fail-open
         print(f"[im-notify] http error ({source}): {exc!r}", file=sys.stderr)
         return False

@@ -114,3 +114,6 @@ class TargetAdapter:
         context: dict[str, Any],
     ) -> None:
         raise EtlError("ETL_TARGET_NOT_REVERSIBLE", f"{self.label}不可撤销")
+
+    def execute_batch(self, rows: Any, context: dict[str, Any]) -> dict[str, Any]:
+        raise EtlError("ETL_TARGET_NOT_IMPLEMENTED", f"{self.label}不支持批量执行")

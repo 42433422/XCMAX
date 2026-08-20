@@ -23,7 +23,7 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 REPO_ROOT_DEFAULT = Path(__file__).resolve().parents[2]
@@ -122,8 +122,7 @@ def _git_paths(repo_root: Path, *args: str) -> list[str]:
     result = subprocess.run(
         ["git", "-C", str(repo_root), *args, "-z"],
         check=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
     )
     return [
         item.decode("utf-8", errors="surrogateescape")
@@ -308,7 +307,7 @@ def baseline_payload(current: dict) -> dict:
             "debt may only shrink; generated/derived roots are excluded."
         ),
         "schema_version": 1,
-        "updated_at": datetime.now(timezone.utc).date().isoformat(),
+        "updated_at": datetime.now(UTC).date().isoformat(),
         "oversized_files": {
             item["file"]: {
                 "stack": item["stack"],
@@ -345,8 +344,7 @@ def evaluate(current: dict, baseline: dict) -> tuple[list[str], list[str]]:
             )
         elif item["lines"] > old["lines"]:
             errors.append(
-                f"oversized file grew: {item['file']} "
-                f"({old['lines']} -> {item['lines']} lines)"
+                f"oversized file grew: {item['file']} ({old['lines']} -> {item['lines']} lines)"
             )
 
     for item in current["oversized_routers"]:

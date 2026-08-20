@@ -1,10 +1,7 @@
 {
   "brief": "头像生成员：覆盖人类常用头像类型，为 AI 员工生成头像方案、提示词和可选生图结果。",
   "mode": "direct_python_avatar_generation",
-  "accepted_extensions": [
-    ".json",
-    ".txt"
-  ],
+  "accepted_extensions": [".json", ".txt"],
   "default_action": "generate",
   "default_output_relpath": "outputs/avatar_profile.json",
   "default_template_relpath": "",

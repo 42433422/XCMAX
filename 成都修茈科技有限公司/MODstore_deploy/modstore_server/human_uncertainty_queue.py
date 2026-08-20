@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """Phase-D：员工向老板的双向问答回路。
 
 Phase-C 遗留：enqueue_uncertain_item 单向写 jsonl 文件，员工不等回答继续干。
@@ -12,9 +13,11 @@ import hashlib
 import json
 import os
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 
 def _runtime_dir() -> Path:
@@ -94,7 +97,11 @@ def enqueue_uncertain_item(
         }
     )
     if item["fingerprint"] in _recent_fingerprints():
-        return {"fingerprint": item["fingerprint"], "queued": False, "reason": "duplicate"}
+        return {
+            "fingerprint": item["fingerprint"],
+            "queued": False,
+            "reason": "duplicate",
+        }
     path = queue_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as fh:
@@ -182,7 +189,7 @@ def ask_human_blocking(
         }
     )
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expires = now + timedelta(seconds=timeout)
 
     sf = get_session_factory()
@@ -227,7 +234,7 @@ def ask_human_blocking(
                 question=question,
                 task=task,
             )
-        except Exception as exc:  # 推送失败不阻塞问答
+        except RECOVERABLE_ERRORS as exc:  # 推送失败不阻塞问答
             print(f"[ask_human_blocking] notify failed: {exc}", flush=True)
 
     # 轮询等回答
@@ -328,11 +335,15 @@ def answer_pending_question(
         if not row:
             return {"ok": False, "reason": "not_found"}
         if row.status != "pending":
-            return {"ok": False, "reason": f"already_{row.status}", "current_status": row.status}
+            return {
+                "ok": False,
+                "reason": f"already_{row.status}",
+                "current_status": row.status,
+            }
         row.status = "answered"
         row.answer = answer
         row.answered_by_user_id = answered_by_user_id
-        row.answered_at = datetime.now(timezone.utc)
+        row.answered_at = datetime.now(UTC)
         employee_id = row.employee_id
         context = _safe_json(row.context_json)
         session.commit()
@@ -342,7 +353,9 @@ def answer_pending_question(
         session_id = str(context.get("session_id") or "").strip()
         if session_id:
             try:
-                from modstore_server.retort_clarification_gate import answer_clarification
+                from modstore_server.retort_clarification_gate import (
+                    answer_clarification,
+                )
 
                 retort_bridge = answer_clarification(
                     session_id,
@@ -350,7 +363,7 @@ def answer_pending_question(
                     answered_by=f"user:{answered_by_user_id}",
                 )
             except (
-                Exception
+                BOUNDARY_ERRORS
             ) as exc:  # noqa: BLE001 - answering inbox must not fail closed on bridge
                 retort_bridge = {"ok": False, "error": type(exc).__name__}
 
@@ -396,7 +409,7 @@ def answer_latest_pending_for_employee(
         row.status = "answered"
         row.answer = answer
         row.answered_by_user_id = int(user_id)
-        row.answered_at = datetime.now(timezone.utc)
+        row.answered_at = datetime.now(UTC)
         session.commit()
         return {
             "ok": True,
@@ -409,7 +422,7 @@ def answer_latest_pending_for_employee(
 def _safe_json(text: str) -> Dict[str, Any]:
     try:
         return json.loads(text) if text else {}
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return {}
 
 

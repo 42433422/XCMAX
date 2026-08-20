@@ -168,6 +168,19 @@ def test_eskill_runtime_patch_can_add_pipeline_steps(tmp_path, monkeypatch):
         assert json.loads(active.static_logic_json)["type"] == "pipeline"
 
 
+def test_rule_based_adapter_keeps_employee_details_placeholder_literal():
+    from modstore_server.eskill_runtime import RuleBasedESkillAdapter
+
+    patch = RuleBasedESkillAdapter().propose_patch(
+        reason="quality_gate",
+        logic={"type": "employee_task", "task": "审阅合同"},
+        input_data={"details": "重点检查违约条款"},
+        history=[],
+    )
+
+    assert patch["changes"]["task_template"] == "审阅合同\n请适配当前特殊场景：${details}"
+
+
 def test_workflow_eskill_node_sandbox_mock(tmp_path, monkeypatch):
     models = _bootstrap(tmp_path, monkeypatch)
     from modstore_server.workflow_engine import WorkflowEngine

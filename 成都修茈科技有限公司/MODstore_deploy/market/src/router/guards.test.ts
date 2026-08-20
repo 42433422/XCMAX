@@ -12,12 +12,12 @@ vi.mock('../api', () => ({
 import { api } from '../api'
 
 function installAndGetGuard() {
-  let guard: any
+  let guard: UnsafeTestValue
   installAuthGuards({
-    beforeEach(fn: any) {
+    beforeEach(fn: UnsafeTestValue) {
       guard = fn
     },
-  } as any)
+  } as UnsafeTestValue)
   return guard
 }
 
@@ -38,9 +38,10 @@ describe('auth router guards', () => {
   it('redirects protected routes to login when there is no token', async () => {
     const guard = installAndGetGuard()
 
-    await expect(
-      guard({ name: 'wallet', hash: '', meta: { auth: true }, query: {}, fullPath: '/wallet' }),
-    ).resolves.toEqual({ name: 'login', query: { redirect: '/wallet' } })
+    await expect(guard({ name: 'wallet', hash: '', meta: { auth: true }, query: {}, fullPath: '/wallet' })).resolves.toEqual({
+      name: 'login',
+      query: { redirect: '/wallet' },
+    })
   })
 
   it('validates guest redirects and blocks open redirects', async () => {
@@ -91,7 +92,13 @@ describe('auth router guards', () => {
     const guard = installAndGetGuard()
 
     await expect(
-      guard({ name: 'admin-database', hash: '', meta: { admin: true }, query: {}, fullPath: '/admin/database' }),
+      guard({
+        name: 'admin-database',
+        hash: '',
+        meta: { admin: true },
+        query: {},
+        fullPath: '/admin/database',
+      }),
     ).resolves.toEqual({ name: 'home' })
   })
 })

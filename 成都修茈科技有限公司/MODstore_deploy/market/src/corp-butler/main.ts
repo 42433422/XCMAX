@@ -7,8 +7,7 @@ import { loadCorpBallPosition } from './corpBallPosition'
 
 document.documentElement.dataset.workbenchTheme = 'light'
 
-const initialPath =
-  typeof window !== 'undefined' ? window.location.pathname + window.location.search : '/'
+const initialPath = typeof window !== 'undefined' ? window.location.pathname + window.location.search : '/'
 
 /** AgentChatHistory 等组件使用 useRoute()，官网独立 bundle 须挂载 memory router */
 const corpRouter = createRouter({

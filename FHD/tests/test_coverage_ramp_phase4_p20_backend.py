@@ -1,3 +1,4 @@
+# mypy: disable-error-code="attr-defined"
 """COVERAGE_RAMP Phase 4 round 20: service_optimizers (0%→) — cache/monitor/dedup wrappers."""
 
 from __future__ import annotations
@@ -130,7 +131,7 @@ def test_chat_async_submits() -> None:
     task.task_id = "T1"
     task.status.value = "queued"
     manager.submit.return_value = task
-    with patch("app.utils.async_tasks.get_async_task_manager", return_value=manager):
+    with patch("app.utils.async_task.async_tasks.get_async_task_manager", return_value=manager):
         out = opt.chat_async("u1", "hello")
     assert out["task_id"] == "T1"
     assert out["_async"] is True
@@ -141,7 +142,8 @@ def test_chat_async_fallback_to_sync() -> None:
     opt._service = MagicMock()
     opt._service.chat.return_value = {"text": "sync"}
     with patch(
-        "app.utils.async_tasks.get_async_task_manager", side_effect=RuntimeError("no queue")
+        "app.utils.async_task.async_tasks.get_async_task_manager",
+        side_effect=RuntimeError("no queue"),
     ):
         out = opt.chat_async("u1", "hello")
     assert out["text"] == "sync"

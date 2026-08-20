@@ -9,6 +9,7 @@
 
 import logging
 import os
+from importlib import import_module
 from typing import Any, cast
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -51,59 +52,43 @@ class UnifiedIntentRecognizer:
         try:
             # 首选 ai_engines 版本（提供统一的 load_model() 契约）。
             try:
-                from app.ai_engines.bert.intent_service import BertIntentClassifier
+                bert_module = import_module("app.ai_engines.bert.intent_service")
             except RECOVERABLE_ERRORS:
-                from app.services.bert_intent_service import BertIntentClassifier
-            self.bert_recognizer = BertIntentClassifier()
+                bert_module = import_module("app.services.bert_intent_service")
+            self.bert_recognizer = bert_module.BertIntentClassifier()
             loader = getattr(self.bert_recognizer, "load_model", None)
             if callable(loader):
                 loader()
             logger.info("BERT识别器已加载")
-        except RECOVERABLE_ERRORS as e:
-            logger.warning("BERT识别器加载失败：%s", e)
-            self._engine_errors["bert"] = str(e)
+        except RECOVERABLE_ERRORS:
+            logger.exception("BERT识别器加载失败")
+            self._engine_errors["bert"] = "engine_unavailable"
 
         try:
-            # distilled_intent_service 当前只暴露工厂 get_distilled_recognizer，
-            # 直接 import DistilledIntentClassifier 会失败；这里做兼容。
-            try:
-                from app.services.distilled_intent_service import (
-                    get_distilled_recognizer,
-                )
+            from app.services.distilled_intent_service import get_distilled_recognizer
 
-                self.distilled_recognizer = get_distilled_recognizer()
-            except RECOVERABLE_ERRORS:
-                from app.services.distilled_intent_service import (
-                    DistilledIntentClassifier,
-                )
-
-                self.distilled_recognizer = DistilledIntentClassifier()
-                loader = getattr(self.distilled_recognizer, "load_model", None)
-                if callable(loader):
-                    loader()
+            self.distilled_recognizer = get_distilled_recognizer()
             logger.info("蒸馏模型识别器已加载")
-        except RECOVERABLE_ERRORS as e:
-            logger.warning("蒸馏模型加载失败：%s", e)
-            self._engine_errors["distilled"] = str(e)
+        except RECOVERABLE_ERRORS:
+            logger.exception("蒸馏模型加载失败")
+            self._engine_errors["distilled"] = "engine_unavailable"
 
         try:
             # 兼容两套命名：ai_engines 用 DeepseekIntentClassifier；services 用 DeepSeekIntentRecognizer。
             try:
-                from app.ai_engines.deepseek.intent_service import (
-                    DeepseekIntentClassifier as _DeepseekImpl,
-                )
+                deepseek_module = import_module("app.ai_engines.deepseek.intent_service")
+                deepseek_cls = deepseek_module.DeepseekIntentClassifier
             except RECOVERABLE_ERRORS:
-                from app.services.deepseek_intent_service import (
-                    DeepSeekIntentRecognizer as _DeepseekImpl,
-                )
-            self.deepseek_recognizer = _DeepseekImpl()
+                deepseek_module = import_module("app.services.deepseek_intent_service")
+                deepseek_cls = deepseek_module.DeepSeekIntentRecognizer
+            self.deepseek_recognizer = deepseek_cls()
             loader = getattr(self.deepseek_recognizer, "load_model", None)
             if callable(loader):
                 loader()
             logger.info("DeepSeek识别器已加载")
-        except RECOVERABLE_ERRORS as e:
-            logger.warning("DeepSeek识别器加载失败：%s", e)
-            self._engine_errors["deepseek"] = str(e)
+        except RECOVERABLE_ERRORS:
+            logger.exception("DeepSeek识别器加载失败")
+            self._engine_errors["deepseek"] = "engine_unavailable"
 
         try:
             # 首选深度落地版（app.ai_engines.rasa）；保留旧入口作为兼容 fallback。
@@ -114,9 +99,9 @@ class UnifiedIntentRecognizer:
             self.rasa_recognizer = RasaNLUService()
             self.rasa_recognizer.load_model()
             logger.info("RASA NLU已加载")
-        except RECOVERABLE_ERRORS as e:
-            logger.warning("RASA NLU加载失败：%s", e)
-            self._engine_errors["rasa"] = str(e)
+        except RECOVERABLE_ERRORS:
+            logger.exception("RASA NLU加载失败")
+            self._engine_errors["rasa"] = "engine_unavailable"
 
         self._initialized = True
         logger.info("混合意图服务已加载")
@@ -137,10 +122,13 @@ class UnifiedIntentRecognizer:
             if cache is None:
                 return self._recognize_uncached(text)
             mod_id = get_request_active_mod_id()
-            return cache.get_or_compute(
-                text=text,
-                mod_id=mod_id,
-                compute_fn=lambda: self._recognize_uncached(text),
+            return cast(
+                "dict[str, Any]",
+                cache.get_or_compute(
+                    text=text,
+                    mod_id=mod_id,
+                    compute_fn=lambda: self._recognize_uncached(text),
+                ),
             )
         except RECOVERABLE_ERRORS as e:
             logger.debug("IntentCache path failed, falling back: %s", e)
@@ -242,8 +230,8 @@ class UnifiedIntentRecognizer:
         if callable(getter):
             try:
                 entry.update(getter())
-            except RECOVERABLE_ERRORS as e:
-                entry["status_error"] = str(e)
+            except RECOVERABLE_ERRORS:
+                entry["status_error"] = "unavailable"
         return entry
 
 

@@ -134,7 +134,8 @@ class TestUserPublicDict:
         user.is_active = True
         user.wx_avatar_url = None
         with patch(
-            "app.utils.user_avatar_storage.public_avatar_url", return_value="/avatar/default.png"
+            "app.utils.path_io.user_avatar_storage.public_avatar_url",
+            return_value="/avatar/default.png",
         ):
             result = _user_public_dict(user)
         assert result["id"] == 1
@@ -152,7 +153,7 @@ class TestUserPublicDict:
         user.is_active = True
         user.wx_avatar_url = "https://example.com/avatar.jpg"
         with patch(
-            "app.utils.user_avatar_storage.public_avatar_url",
+            "app.utils.path_io.user_avatar_storage.public_avatar_url",
             return_value="https://example.com/avatar.jpg",
         ):
             result = _user_public_dict(user)
@@ -248,7 +249,7 @@ class TestMobileHostDiscoverHint:
                 return_value=mock_info,
             ),
             patch(
-                "app.utils.listen_port.resolve_listen_port",
+                "app.utils.device_system.listen_port.resolve_listen_port",
                 return_value=5100,
             ),
         ):
@@ -298,7 +299,7 @@ class TestMobileAuthLoginRoute:
     def test_admin_login_retries_with_admin_account_kind(self, client: TestClient, monkeypatch):
         from fastapi.responses import JSONResponse
 
-        monkeypatch.setenv("SECRET_KEY", "test_secret_for_jwt_12345")
+        monkeypatch.setenv("SECRET_KEY", "test_secret_for_jwt_at_least_32_bytes")
         seen: list[str] = []
 
         async def fake_auth_login(request, payload):
@@ -475,7 +476,8 @@ class TestMobileMeLogic:
         user.is_active = True
         user.wx_avatar_url = None
         with patch(
-            "app.utils.user_avatar_storage.public_avatar_url", return_value="/avatar/default.png"
+            "app.utils.path_io.user_avatar_storage.public_avatar_url",
+            return_value="/avatar/default.png",
         ):
             result = _user_public_dict(user)
         assert result["id"] == 1

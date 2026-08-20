@@ -263,9 +263,14 @@ def execute_planner_tool_from_body(body: dict[str, Any] | None) -> dict[str, Any
             workspace_root,
             db_write_token=db_write_token,
         )
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("planner tool execute failed: %s", name)
-        return {"success": False, "error": str(exc), "tool_name": name}
+        return {
+            "success": False,
+            "error": "工具执行失败，请稍后重试",
+            "error_code": "planner_tool_execution_failed",
+            "tool_name": name,
+        }
 
     execution_path = "host.workflow"
     handler_mod: str | None = None
@@ -275,7 +280,8 @@ def execute_planner_tool_from_body(body: dict[str, Any] | None) -> dict[str, Any
         probe = json.loads(raw)
         if isinstance(probe, dict):
             tool_success = bool(probe.get("success"))
-            tool_error = str(probe.get("error") or probe.get("message") or tool_error)
+            if not tool_success:
+                tool_error = "工具执行失败，请检查输入后重试"
             src = str(probe.get("source") or "")
             if src.startswith("mod:"):
                 execution_path = "mod_native"
@@ -292,7 +298,9 @@ def execute_planner_tool_from_body(body: dict[str, Any] | None) -> dict[str, Any
         # completed task merely because dispatch itself returned normally.
         "success": tool_success,
         "tool_name": name,
-        "result": raw,
+        "result": raw
+        if tool_success
+        else '{"success": false, "error_code": "planner_tool_failed"}',
         "execution_path": execution_path,
         "mod_id": handler_mod,
         "delegate": "host.workflow" if execution_path != "mod_native" else None,

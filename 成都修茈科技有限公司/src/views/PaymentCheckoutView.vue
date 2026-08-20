@@ -35,18 +35,9 @@
         <div v-if="qrCode && order.status === 'pending'" class="qr-section">
           <p class="qr-hint">打开支付宝扫码支付</p>
           <div class="qr-wrapper">
-            <img
-              v-if="qrImageUrl"
-              class="qr-img"
-              :src="qrImageUrl"
-              width="280"
-              height="280"
-              alt="支付宝支付二维码"
-            />
+            <img v-if="qrImageUrl" class="qr-img" :src="qrImageUrl" width="280" height="280" alt="支付宝支付二维码" />
           </div>
-          <p v-if="isExpired" class="qr-expired-hint">
-            订单已超时未支付，<router-link to="/plans">重新下单</router-link>
-          </p>
+          <p v-if="isExpired" class="qr-expired-hint">订单已超时未支付，<router-link to="/plans">重新下单</router-link></p>
           <p v-else class="qr-waiting">等待支付中，支付成功后自动跳转...</p>
         </div>
 
@@ -107,7 +98,7 @@ const isExpired = computed(() => {
   if (!order.value || order.value.status !== 'pending') return false
   const created = new Date(order.value.created_at).getTime()
   const now = Date.now()
-  return (now - created) > 15 * 60 * 1000
+  return now - created > 15 * 60 * 1000
 })
 
 onMounted(async () => {
@@ -174,7 +165,11 @@ function statusText(status) {
   min-height: 100vh;
   background: #0a0a0a;
   color: #ffffff;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family:
+    'Inter',
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
   display: flex;
   justify-content: center;
   padding-top: 80px;
@@ -194,7 +189,8 @@ function statusText(status) {
   letter-spacing: -0.02em;
 }
 
-.loading, .not-found {
+.loading,
+.not-found {
   text-align: center;
   padding: 48px 0;
   color: rgba(255, 255, 255, 0.5);
@@ -331,12 +327,14 @@ function statusText(status) {
   flex-wrap: wrap;
 }
 
-.failed-section, .closed-section {
+.failed-section,
+.closed-section {
   text-align: center;
   padding: 48px 24px;
 }
 
-.failed-section p, .closed-section p {
+.failed-section p,
+.closed-section p {
   font-size: 16px;
   color: #ff6b6b;
   margin: 0 0 24px;
@@ -387,7 +385,9 @@ function statusText(status) {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (max-width: 768px) {

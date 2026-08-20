@@ -494,4 +494,3 @@ export interface AnalyticsDashboardResponse {
   }
   [extra: string]: unknown
 }
-

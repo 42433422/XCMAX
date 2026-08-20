@@ -10,7 +10,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.pr_review import review_diff
 
@@ -68,11 +68,12 @@ def build_competitor_runtime_comparison(
         )
         for profile in COMPETITOR_PROFILES
     ]
-    primary_runtime = runtimes[0] if runtimes else {}
-    primary_output = (
+    primary_runtime = cast(dict[str, Any], runtimes[0] if runtimes else {})
+    primary_output = cast(
+        dict[str, Any],
         primary_runtime.get("output")
         if isinstance(primary_runtime.get("output"), dict)
-        else {}
+        else {},
     )
     competitor_output_path = lab / "competitor_outputs.json"
     retort_output_path = lab / "retort_output.json"
@@ -97,10 +98,11 @@ def build_competitor_runtime_comparison(
         json.dumps(retort_output, ensure_ascii=False, indent=2, sort_keys=True),
         encoding="utf-8",
     )
-    retort_summary = (
+    retort_summary = cast(
+        dict[str, Any],
         retort_output.get("summary")
         if isinstance(retort_output.get("summary"), dict)
-        else {}
+        else {},
     )
     comments = [
         item for item in retort_output.get("comments") or [] if isinstance(item, dict)
@@ -288,10 +290,11 @@ def _run_competitor_profile(
     else:
         competitor = root / profile["cache_path"]
     source = competitor / profile["source"]
-    live = (
+    live = cast(
+        dict[str, Any],
         _probe_live_source(profile, lab=lab)
         if live_upstream
-        else {"requested": False, "verified": False, "materialized": False}
+        else {"requested": False, "verified": False, "materialized": False},
     )
     live_source = (
         Path(str(live.get("materialized_path") or ""))
@@ -395,8 +398,9 @@ def _external_diagnostics_from_runtimes(
 ) -> list[dict[str, Any]]:
     diagnostics: list[dict[str, Any]] = []
     for runtime in runtimes:
-        output = (
-            runtime.get("output") if isinstance(runtime.get("output"), dict) else {}
+        output = cast(
+            dict[str, Any],
+            runtime.get("output") if isinstance(runtime.get("output"), dict) else {},
         )
         project = str(runtime.get("project") or "external")
         kind = str(runtime.get("kind") or "external_runtime")
@@ -427,8 +431,11 @@ def _probe_live_source(profile: dict[str, str], *, lab: Path) -> dict[str, Any]:
         (repo_result.get("json") or {}).get("default_branch") or "HEAD"
     )
     source_result = _gh_api(f"repos/{repo}/contents/{source}?ref={default_branch}")
-    payload = (
-        source_result.get("json") if isinstance(source_result.get("json"), dict) else {}
+    payload = cast(
+        dict[str, Any],
+        source_result.get("json")
+        if isinstance(source_result.get("json"), dict)
+        else {},
     )
     sha = str(payload.get("sha") or "")
     materialized_path = lab / "live_upstream" / repo.replace("/", "__") / source

@@ -43,7 +43,11 @@ vi.mock('@/workflow/coreWorkflowMonitor', () => ({
   buildCoreWorkflowMonitorLine: vi.fn(() => 'monitor line'),
   buildCoreWorkflowStepsForEmployee: vi.fn(() => []),
   computeCoreWorkflowCurrentHint: vi.fn(() => 'hint'),
-  computeCoreWorkflowProgressState: vi.fn(() => ({ progressPct: 0, progressLabel: '', workflowProgressStarted: false })),
+  computeCoreWorkflowProgressState: vi.fn(() => ({
+    progressPct: 0,
+    progressLabel: '',
+    workflowProgressStarted: false,
+  })),
   computeCoreWorkflowStageLine: vi.fn(() => 'stage'),
   computeWorkflowProgressFromSteps: vi.fn(() => ({ pct: 50, label: '进行中' })),
   mergeCorePayloadFromExisting: vi.fn((_id, opts) => opts || {}),
@@ -163,9 +167,7 @@ describe('useChatWorkflowPanel - extended', () => {
     panel.unmountWorkflowPanel()
     expect(deps.showTaskConfirm).toHaveBeenCalled()
     expect(deps.maybeCloseAssistantFloatForShipmentTask).toHaveBeenCalled()
-    expect(deps.emitAssistantPush).toHaveBeenCalledWith(
-      expect.objectContaining({ title: '微信发货单预览' }),
-    )
+    expect(deps.emitAssistantPush).toHaveBeenCalledWith(expect.objectContaining({ title: '微信发货单预览' }))
     const confirmArg = deps.showTaskConfirm.mock.calls[0][0]
     expect(confirmArg.title).toContain('微信')
     expect(confirmArg.description).toContain('可在左侧对话发送')
@@ -176,9 +178,7 @@ describe('useChatWorkflowPanel - extended', () => {
     enabledState.value = { label_print: false }
     const panel = useChatWorkflowPanel(deps)
     panel.mountWorkflowPanel()
-    window.dispatchEvent(
-      new CustomEvent('xcagi:workflow-label-print-signal', { detail: {} }),
-    )
+    window.dispatchEvent(new CustomEvent('xcagi:workflow-label-print-signal', { detail: {} }))
     panel.unmountWorkflowPanel()
     // No dispatchCoreWorkflowModRun since not enabled
   })
@@ -188,9 +188,7 @@ describe('useChatWorkflowPanel - extended', () => {
     enabledState.value = { receipt_confirm: false }
     const panel = useChatWorkflowPanel(deps)
     panel.mountWorkflowPanel()
-    window.dispatchEvent(
-      new CustomEvent('xcagi:workflow-receipt-feedback-signal', { detail: {} }),
-    )
+    window.dispatchEvent(new CustomEvent('xcagi:workflow-receipt-feedback-signal', { detail: {} }))
     panel.unmountWorkflowPanel()
     // No action expected
   })
@@ -210,9 +208,7 @@ describe('useChatWorkflowPanel - extended', () => {
 
   it('syncWorkflowEmployeePanelTasks removes disabled tasks', () => {
     const deps = makeDeps()
-    deps.taskList.value = [
-      { id: 'workflow_emp_wechat_msg', type: 'workflow_employee' },
-    ]
+    deps.taskList.value = [{ id: 'workflow_emp_wechat_msg', type: 'workflow_employee' }]
     const panel = useChatWorkflowPanel(deps)
     panel.syncWorkflowEmployeePanelTasks({ wechat_msg: false })
     expect(deps.taskList.value.some((t) => t.id === 'workflow_emp_wechat_msg')).toBe(false)
@@ -235,9 +231,7 @@ describe('useChatWorkflowPanel - extended', () => {
     const deps = makeDeps()
     const panel = useChatWorkflowPanel(deps)
     panel.mountWorkflowPanel()
-    window.dispatchEvent(
-      new CustomEvent('xcagi:workflow-ai-employees-changed', { detail: {} }),
-    )
+    window.dispatchEvent(new CustomEvent('xcagi:workflow-ai-employees-changed', { detail: {} }))
     panel.unmountWorkflowPanel()
     // Should not throw
   })

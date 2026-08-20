@@ -31,8 +31,11 @@ import math
 import os
 import urllib.error
 import urllib.request
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Iterable, Protocol, Sequence, runtime_checkable
+from typing import Protocol, runtime_checkable
+
+from vibe_coding.operational_errors import BOUNDARY_ERRORS
 
 DEFAULT_DIM = 256
 
@@ -136,7 +139,7 @@ class OpenAIEmbedder:
             return self._fallback.embed(texts)
         try:
             return self._embed_remote(list(texts))
-        except Exception:  # noqa: BLE001
+        except BOUNDARY_ERRORS:
             return self._fallback.embed(texts)
 
     def _embed_remote(self, texts: list[str]) -> list[list[float]]:
@@ -183,25 +186,25 @@ class SentenceTransformerEmbedder:
     def dim(self) -> int:
         try:
             self._ensure_model()
-        except Exception:  # noqa: BLE001
+        except BOUNDARY_ERRORS:
             return self._fallback.dim
         if self._model is None:
             return self._fallback.dim
         try:
             return int(self._model.get_sentence_embedding_dimension())  # type: ignore[union-attr]
-        except Exception:  # noqa: BLE001
+        except BOUNDARY_ERRORS:
             return self._fallback.dim
 
     def embed(self, texts: Sequence[str]) -> list[list[float]]:
         try:
             self._ensure_model()
-        except Exception:  # noqa: BLE001
+        except BOUNDARY_ERRORS:
             return self._fallback.embed(texts)
         if self._model is None:
             return self._fallback.embed(texts)
         try:
             vectors = self._model.encode(list(texts), convert_to_numpy=False)  # type: ignore[union-attr]
-        except Exception:  # noqa: BLE001
+        except BOUNDARY_ERRORS:
             return self._fallback.embed(texts)
         return [list(map(float, v)) for v in vectors]
 
@@ -227,7 +230,7 @@ def cosine_similarity(a: Iterable[float], b: Iterable[float]) -> float:
     n = min(len(a_list), len(b_list))
     a_list = a_list[:n]
     b_list = b_list[:n]
-    dot = sum(x * y for x, y in zip(a_list, b_list))
+    dot = sum(x * y for x, y in zip(a_list, b_list, strict=False))
     na = math.sqrt(sum(x * x for x in a_list))
     nb = math.sqrt(sum(x * x for x in b_list))
     if na == 0 or nb == 0:

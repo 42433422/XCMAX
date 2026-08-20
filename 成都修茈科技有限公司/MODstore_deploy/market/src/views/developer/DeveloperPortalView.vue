@@ -48,9 +48,7 @@ const activeMeta = computed(() => tabs.value.find((t) => t.key === activeTab.val
           {{ activeMeta.description }}
         </p>
       </div>
-      <a class="dev-portal__doc-link" href="/docs" target="_blank" rel="noreferrer">
-        Swagger UI ↗
-      </a>
+      <a class="dev-portal__doc-link" href="/docs" target="_blank" rel="noreferrer"> Swagger UI ↗ </a>
     </header>
 
     <nav class="dev-portal__tabs" aria-label="Developer sections">

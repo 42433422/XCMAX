@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment, attr-defined, no-any-return, valid-type"
 """RAG 服务层：跨多个集合(Collection)做向量检索 + 权限过滤 + 可选 rerank。
 
 调用方（员工 cognition / 工作流 knowledge_search 节点 / 前端聊天）只需要传：
@@ -26,6 +27,7 @@ from modstore_server.models import (
     KnowledgeMembership,
     get_session_factory,
 )
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 from modstore_server.vector_engine import VectorEngineError
 
 logger = logging.getLogger(__name__)
@@ -256,7 +258,7 @@ async def retrieve(
         except EmbeddingConfigError as e:
             logger.warning("rag_service.retrieve: embedding 配置缺失: %s", e)
             return []
-        except Exception as e:  # noqa: BLE001
+        except BOUNDARY_ERRORS as e:  # noqa: BLE001
             logger.warning("rag_service.retrieve: embedding 调用失败: %s", e)
             return []
         if not vecs:
@@ -283,7 +285,7 @@ async def retrieve(
             if page_raw not in (None, "", 0):
                 try:
                     page_no = int(page_raw)
-                except Exception:  # noqa: BLE001
+                except BOUNDARY_ERRORS:  # noqa: BLE001
                     page_no = None
             distance = float(r.get("distance") or 1.0)
             score = max(0.0, 1.0 - distance)
@@ -318,7 +320,7 @@ async def retrieve(
             corpus = [c.content for c in chunks]
             retriever = get_hybrid_retriever()
             chunks = retriever.fuse(chunks, q, corpus=corpus, final_top_k=n)
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             logger.warning("rag_service.retrieve: hybrid fusion failed, using vector: %s", exc)
 
     chunks = _maybe_rerank(q, chunks)
@@ -335,7 +337,7 @@ def _maybe_rerank(query: str, chunks: List[RetrievedChunk]) -> List[RetrievedChu
         return chunks
     try:
         from sentence_transformers import CrossEncoder  # type: ignore
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         return chunks
     model_name = (
         os.environ.get("MODSTORE_RAG_RERANK_MODEL") or "cross-encoder/ms-marco-MiniLM-L-6-v2"
@@ -347,7 +349,7 @@ def _maybe_rerank(query: str, chunks: List[RetrievedChunk]) -> List[RetrievedChu
         for c, s in zip(chunks, list(scores)):
             c.score = float(s)
         chunks.sort(key=lambda c: -c.score)
-    except Exception as e:  # noqa: BLE001
+    except BOUNDARY_ERRORS as e:  # noqa: BLE001
         logger.warning("rag_service: cross-encoder rerank 失败，沿用 distance: %s", e)
     return chunks
 

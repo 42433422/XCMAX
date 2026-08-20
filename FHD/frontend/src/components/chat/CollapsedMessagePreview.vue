@@ -33,9 +33,7 @@ const isError = computed(() => isCollapsedPreviewError(props.preview))
 function isCollapsedPreviewError(text: string): boolean {
   const raw = String(text || '').trim()
   if (!raw) return false
-  return /处理失败|请求失败|对话失败|超时|限流|余额不足|failed to fetch|network error|timeout|429|502|503|504/i.test(
-    raw,
-  )
+  return /处理失败|请求失败|对话失败|超时|限流|余额不足|failed to fetch|network error|timeout|429|502|503|504/i.test(raw)
 }
 </script>
 
@@ -90,7 +88,9 @@ function isCollapsedPreviewError(text: string): boolean {
   line-height: 1.4;
   cursor: pointer;
   white-space: nowrap;
-  transition: color 0.15s ease, opacity 0.15s ease;
+  transition:
+    color 0.15s ease,
+    opacity 0.15s ease;
 }
 
 .msg-fold__action:hover {

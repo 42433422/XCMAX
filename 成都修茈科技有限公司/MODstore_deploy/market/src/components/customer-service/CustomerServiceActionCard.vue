@@ -19,7 +19,7 @@
     </div>
 
     <div v-else-if="card.type === 'actions'" class="cs-actions">
-      <div v-for="item in visibleActions" :key="item.id || item.action_type" class="cs-action-row">
+      <div v-for="item in visibleActions" :key="String(item.id || item.action_type || '')" class="cs-action-row">
         <span>{{ actionLabel(item.action_type) }}</span>
         <span :class="['cs-card__status', `cs-card__status--${displayActionStatus(item)}`]">
           {{ actionStatusText(displayActionStatus(item)) }}
@@ -33,8 +33,30 @@
 import { computed } from 'vue'
 import { ticketIntentLabel, ticketLifecycleLabel } from '../../utils/csTicketLifecycle'
 
+interface CustomerServiceAction {
+  id?: unknown
+  action_type?: unknown
+  status?: unknown
+  [key: string]: unknown
+}
+
+interface CustomerServiceCard {
+  type?: unknown
+  intent?: unknown
+  subject_type?: unknown
+  subject_id?: unknown
+  decision?: unknown
+  rationale?: unknown
+  status?: unknown
+  decision_status?: unknown
+  lifecycle_stage?: unknown
+  lifecycle_label?: unknown
+  items?: unknown[]
+  [key: string]: unknown
+}
+
 const props = defineProps<{
-  card: Record<string, any>
+  card: CustomerServiceCard
 }>()
 
 const CUSTOMER_FACING = new Set(['ticket', 'decision', 'actions'])
@@ -86,7 +108,9 @@ const decisionLabel = computed(() => {
 const humanRationale = computed(() => humanizeUserText(String(props.card.rationale || '')))
 
 const statusKey = computed(() => {
-  const raw = String(props.card.status || props.card.decision || '').toLowerCase().replace(/\s+/g, '_')
+  const raw = String(props.card.status || props.card.decision || '')
+    .toLowerCase()
+    .replace(/\s+/g, '_')
   return raw || 'pending'
 })
 
@@ -121,17 +145,19 @@ const visibleActions = computed(() => {
   const items = Array.isArray(props.card.items) ? props.card.items : []
   // 同类型只保留最近一条，避免三次回写叠三条失败行
   const seen = new Set<string>()
-  const out: Record<string, any>[] = []
+  const out: CustomerServiceAction[] = []
   for (const item of [...items].reverse()) {
-    const key = String(item?.action_type || item?.id || '')
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) continue
+    const action = item as CustomerServiceAction
+    const key = String(action.action_type || action.id || '')
     if (!key || seen.has(key)) continue
     seen.add(key)
-    out.push(item)
+    out.push(action)
   }
   return out.reverse()
 })
 
-function displayActionStatus(item: Record<string, any>) {
+function displayActionStatus(item: CustomerServiceAction) {
   const type = String(item?.action_type || '')
   const status = String(item?.status || '').toLowerCase()
   if (type === 'employee.dispatch' && status === 'failed') return 'running'

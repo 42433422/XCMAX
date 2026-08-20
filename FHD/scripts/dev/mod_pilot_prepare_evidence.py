@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Mod 试点前置：仅创建商家/管理员账号 + FHD JIT（禁止伪造支付入账）。"""
+
 from __future__ import annotations
 
 import subprocess

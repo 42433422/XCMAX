@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="arg-type, attr-defined, index"
 """自造打单案例：演练模版解析 → generate 用例编排。
 
 用法（在 FHD 根目录）::
@@ -24,7 +25,6 @@ from app.application.shipment_template_resolve import (
     clear_template_list_cache,
     resolve_shipment_template,
 )
-
 
 FIXTURE = ROOT / "tests/fixtures/shipment_etl/闭环测试_送货单模板.xlsx"
 
@@ -203,11 +203,7 @@ def _run_generate_cases(store: MagicMock, catalog: list[dict]) -> list[dict]:
 
             def _default_for_type(ttype: str, _catalog=catalog):
                 return next(
-                    (
-                        r
-                        for r in _catalog
-                        if r["template_type"] == ttype and r.get("is_active", 1)
-                    ),
+                    (r for r in _catalog if r["template_type"] == ttype and r.get("is_active", 1)),
                     None,
                 )
 
@@ -283,15 +279,19 @@ def main() -> int:
 
         store.resolve_template_file.side_effect = _resolve
 
-        with patch(
-            "app.application.shipment_template_resolve._get_template_store",
-            return_value=store,
-        ), patch(
-            "app.application.shipment_template_resolve.log_template_usage",
-            return_value=None,
-        ), patch(
-            "app.application.shipment_template_resolve._log_template_usage",
-            return_value=None,
+        with (
+            patch(
+                "app.application.shipment_template_resolve._get_template_store",
+                return_value=store,
+            ),
+            patch(
+                "app.application.shipment_template_resolve.log_template_usage",
+                return_value=None,
+            ),
+            patch(
+                "app.application.shipment_template_resolve._log_template_usage",
+                return_value=None,
+            ),
         ):
             resolve_rows = _run_resolve_cases(store)
             generate_rows = _run_generate_cases(store, catalog)
@@ -323,7 +323,9 @@ def main() -> int:
     assert resolve_rows[5]["ok"] is False and resolve_rows[5]["error_code"]
     assert generate_rows[0]["success"] and generate_rows[0]["template_resolution"]
     assert generate_rows[3]["success"] is False
-    assert generate_rows[4]["success"] and generate_rows[4]["products_source"] == "db_latest_shipment"
+    assert (
+        generate_rows[4]["success"] and generate_rows[4]["products_source"] == "db_latest_shipment"
+    )
     print("ALL DEMO ASSERTIONS PASSED")
     return 0
 

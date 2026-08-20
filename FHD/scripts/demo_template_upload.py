@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, union-attr"
 """
 演示脚本：展示模板上传功能的使用
 
@@ -6,11 +7,12 @@
 2. 已安装 requests 库 (pip install requests)
 """
 
-import requests
 import tempfile
 from pathlib import Path
-from openpyxl import Workbook
+
+import requests
 from docx import Document
+from openpyxl import Workbook
 
 BASE_URL = "http://localhost:8000"
 
@@ -102,16 +104,16 @@ def demo_upload_excel():
 
         if response.status_code == 201:
             result = response.json()
-            print(f"✓ 上传成功!")
+            print("✓ 上传成功!")
             print(f"  模板 ID: {result['template_id']}")
             print(f"  模板类型：{result['type']}")
             print(f"  状态：{result['status']}")
             print(f"  识别的字段数：{len(result['fields'])}")
 
             if result["fields"]:
-                print(f"\n  前 3 个字段:")
+                print("\n  前 3 个字段:")
                 for i, field in enumerate(result["fields"][:3]):
-                    print(f"    {i+1}. {field['display_name']} ({field['field_type']})")
+                    print(f"    {i + 1}. {field['display_name']} ({field['field_type']})")
 
             if "metadata" in result and "placeholders" in result["metadata"]:
                 placeholders = result["metadata"]["placeholders"]
@@ -146,16 +148,16 @@ def demo_upload_word():
 
         if response.status_code == 201:
             result = response.json()
-            print(f"✓ 上传成功!")
+            print("✓ 上传成功!")
             print(f"  模板 ID: {result['template_id']}")
             print(f"  模板类型：{result['type']}")
             print(f"  状态：{result['status']}")
             print(f"  识别的字段数：{len(result['fields'])}")
 
             if result["fields"]:
-                print(f"\n  字段列表:")
+                print("\n  字段列表:")
                 for i, field in enumerate(result["fields"][:5]):
-                    print(f"    {i+1}. {field['display_name']} ({field['field_type']})")
+                    print(f"    {i + 1}. {field['display_name']} ({field['field_type']})")
 
             return result["template_id"]
         else:
@@ -179,12 +181,12 @@ def demo_list_templates():
         result = response.json()
         templates = result["templates"]
 
-        print(f"✓ 获取成功!")
+        print("✓ 获取成功!")
         print(f"  模板总数：{result['total']}")
         print(f"  返回数量：{len(templates)}")
 
         if templates:
-            print(f"\n  模板列表:")
+            print("\n  模板列表:")
             for i, t in enumerate(templates[:3], 1):
                 print(f"    {i}. {t['name']} ({t['type']}) - {t['status']}")
     else:
@@ -199,7 +201,7 @@ def demo_get_template(template_id: str):
 
     if response.status_code == 200:
         template = response.json()
-        print(f"✓ 获取成功!")
+        print("✓ 获取成功!")
         print(f"  名称：{template['name']}")
         print(f"  类型：{template['type']}")
         print(f"  状态：{template['status']}")
@@ -212,7 +214,7 @@ def demo_get_template(template_id: str):
 
 def demo_update_template(template_id: str):
     """演示更新模板信息"""
-    print(f"\n=== 演示 5: 更新模板信息 ===")
+    print("\n=== 演示 5: 更新模板信息 ===")
 
     update_data = {
         "name": "更新后的模板名称",
@@ -224,7 +226,7 @@ def demo_update_template(template_id: str):
 
     if response.status_code == 200:
         result = response.json()
-        print(f"✓ 更新成功!")
+        print("✓ 更新成功!")
         print(f"  新名称：{result['name']}")
         print(f"  新描述：{result['description']}")
         print(f"  新状态：{result['status']}")
@@ -255,7 +257,7 @@ def main():
 
     # 执行演示
     excel_template_id = demo_upload_excel()
-    word_template_id = demo_upload_word()
+    demo_upload_word()
 
     demo_list_templates()
 

@@ -4,10 +4,12 @@
 使用customer数据库存储购买单位信息
 """
 
-import sqlite3
 import os
-from datetime import datetime
 import re
+import sqlite3
+from datetime import datetime
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 class ProfessionalUploadHandlerFixed:
@@ -83,7 +85,7 @@ class ProfessionalUploadHandlerFixed:
             conn.close()
             return analysis_result
 
-        except Exception as e:
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             return {"error": str(e)}
 
     def ensure_purchase_units_table(self, cursor):
@@ -150,7 +152,7 @@ class ProfessionalUploadHandlerFixed:
             conn.close()
             return True
 
-        except Exception as e:
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             print(f"❌ 添加购买单位到customer数据库时出错: {e}")
             return False
 
@@ -168,7 +170,7 @@ class ProfessionalUploadHandlerFixed:
             analysis = self.analyze_sqlite_database(file_path)
 
             if "error" in analysis:
-                return {"success": False, "message": f'数据库分析失败: {analysis["error"]}'}
+                return {"success": False, "message": f"数据库分析失败: {analysis['error']}"}
 
             # 检查是否有产品表
             if analysis.get("suggested_action") == "import_products":
@@ -222,10 +224,10 @@ class ProfessionalUploadHandlerFixed:
             unit_added = self.add_purchase_unit_to_customer_db(purchase_unit)
 
             if not unit_added:
-                return {"success": False, "message": f"添加购买单位到customer数据库失败"}
+                return {"success": False, "message": "添加购买单位到customer数据库失败"}
 
             # 第二步：导入产品数据到products数据库
-            print(f"📝 第二步：导入产品数据到products数据库")
+            print("📝 第二步：导入产品数据到products数据库")
 
             # 连接源数据库
             source_conn = sqlite3.connect(source_db)
@@ -322,7 +324,7 @@ class ProfessionalUploadHandlerFixed:
                 "customer_db_updated": True,
             }
 
-        except Exception as e:
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             return {"success": False, "message": f"导入失败: {str(e)}"}
 
     def _ensure_products_table_exists(self, cursor):

@@ -64,7 +64,10 @@ defineProps<{
       <div role="listitem">
         <span>当前操作</span>
         <strong>{{ firstText(uiBridgeGovernanceAction.label, uiBridge.primary_action, '观察') }}</strong>
-        <small>{{ firstText(uiBridgeGovernanceAction.status, uiBridge.primary_surface, '自进化循环') }} · {{ firstText(uiBridgeGovernanceAction.view, uiBridge.primary_view, '部门') }}</small>
+        <small
+          >{{ firstText(uiBridgeGovernanceAction.status, uiBridge.primary_surface, '自进化循环') }} ·
+          {{ firstText(uiBridgeGovernanceAction.view, uiBridge.primary_view, '部门') }}</small
+        >
       </div>
       <div role="listitem">
         <span>目标员工</span>
@@ -74,12 +77,23 @@ defineProps<{
     </div>
     <div v-if="uiBridgeActions.length || uiBridgeTargets.length" class="selp-ui-bridge-foot">
       <span v-if="uiBridgePath.length">路径: {{ uiBridgePath.join(' -> ') }}</span>
-      <span v-if="uiBridgeGovernanceAction.id">治理: {{ uiBridgeGovernanceAction.id }} · {{ uiBridgeGovernanceAction.requires_admin === true ? '仅管理员' : (uiBridgeGovernanceAction.executable === false ? '仅查看' : '可执行') }}</span>
+      <span v-if="uiBridgeGovernanceAction.id"
+        >治理: {{ uiBridgeGovernanceAction.id }} ·
+        {{
+          uiBridgeGovernanceAction.requires_admin === true
+            ? '仅管理员'
+            : uiBridgeGovernanceAction.executable === false
+              ? '仅查看'
+              : '可执行'
+        }}</span
+      >
       <span v-if="uiBridgeActions.length">{{ uiBridgeActions.slice(0, 4).join(' / ') }}</span>
       <small v-if="uiBridgeBlockedIds.length">已隔离: {{ uiBridgeBlockedIds.slice(0, 8).join(' / ') }}</small>
       <small v-if="uiBridgeTargets.length">目标: {{ uiBridgeTargets.slice(0, 8).join(' / ') }}</small>
       <small v-if="governanceAuditLast.action">
-        最近治理: {{ governanceAuditLast.action }} · {{ governanceAuditLast.status || (governanceAuditLast.ok === false ? '失败' : '成功') }}<template v-if="governanceAuditLastSummary"> · {{ governanceAuditLastSummary }}</template><template v-if="governanceAuditLastTargets.length"> · {{ governanceAuditLastTargets.slice(0, 4).join(' / ') }}</template>
+        最近治理: {{ governanceAuditLast.action }} · {{ governanceAuditLast.status || (governanceAuditLast.ok === false ? '失败' : '成功')
+        }}<template v-if="governanceAuditLastSummary"> · {{ governanceAuditLastSummary }}</template
+        ><template v-if="governanceAuditLastTargets.length"> · {{ governanceAuditLastTargets.slice(0, 4).join(' / ') }}</template>
       </small>
     </div>
   </div>

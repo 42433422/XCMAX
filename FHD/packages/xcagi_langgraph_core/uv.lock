@@ -480,6 +480,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
+    { name = "ty" },
 ]
 test = [
     { name = "pytest" },

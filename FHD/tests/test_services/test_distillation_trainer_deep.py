@@ -1,3 +1,4 @@
+# mypy: disable-error-code="attr-defined"
 """Deep coverage tests for app.services.distillation_trainer.
 
 Root cause of near-zero coverage: the source module imports ``torch`` and

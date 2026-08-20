@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="var-annotated"
 """
 Offline training for routing MLP from JSONL logs (features + action index + reward).
 
@@ -10,9 +11,9 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import sys
 import hashlib
 import json
+import sys
 import time
 from pathlib import Path
 
@@ -26,7 +27,6 @@ if str(_ROOT) not in sys.path:
 
 from app.neuro_bus.routing.policy_nn import (
     FEATURE_DIM,
-    NUM_ACTIONS,
     RoutingMLP,
     save_policy_state_dict,
 )

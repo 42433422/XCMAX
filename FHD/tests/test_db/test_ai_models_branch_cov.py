@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """Branch-coverage tests for app.db.models.ai.
 
 Focuses on UserMemory helper properties, update_from_dict branching,

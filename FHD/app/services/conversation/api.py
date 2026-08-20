@@ -1,11 +1,10 @@
 import logging
-import time
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
+from app.services.conversation.api_llm import ConversationLlmMixin
 from app.services.conversation.context import ConversationContext
-from app.utils.cache_manager import get_ai_response_cache
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.performance.cache_manager import get_ai_response_cache
 
 logger = logging.getLogger(__name__)
 
@@ -105,26 +104,19 @@ def _build_llm_trace(
     return trace
 
 
-class ApiMixin(NeuroEventPublisherMixin):
-    async def _get_deepseek_async_client(self):
-        import asyncio
+class ApiMixin(ConversationLlmMixin, NeuroEventPublisherMixin):
+    modstore_adapter: Any
 
-        import httpx
-
-        loop = asyncio.get_running_loop()
-        if self._deepseek_async_loop is not loop:
-            if self._deepseek_async_client is not None:
-                try:
-                    await self._deepseek_async_client.aclose()
-                except RECOVERABLE_ERRORS:
-                    logger.debug("suppressed exception", exc_info=True)
-                self._deepseek_async_client = None
-            self._deepseek_async_loop = loop
-            self._deepseek_async_client = httpx.AsyncClient(
-                timeout=httpx.Timeout(30.0, connect=10.0),
-                limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
-            )
-        return self._deepseek_async_client
+    if TYPE_CHECKING:
+        _build_context_prompt: Any
+        _check_habit_suggestion: Any
+        _metadata_cache_hash: Any
+        add_to_history: Any
+        api_key: Any
+        api_url: Any
+        confirmation_service: Any
+        model: Any
+        persona_service: Any
 
     async def _call_ai_offline(
         self,
@@ -154,255 +146,6 @@ class ApiMixin(NeuroEventPublisherMixin):
                 "mode": "offline",
             },
         }
-
-    def _ensure_modstore_from_session(self) -> None:
-        """按当前 session 自动补齐修茈市场适配器（登录即自动可用）。
-
-        对话服务是启动时创建的单例，其 ``modstore_adapter`` 仅按环境变量初始化
-        （通常无 Token，导致 LLM 路由为空、智能对话不可用）。这里在每次 LLM
-        调用前，若尚未配置则从当前登录 session 获取市场 Token 并重建适配器。
-        """
-        try:
-            if getattr(self, "modstore_adapter", None) is not None and getattr(
-                self.modstore_adapter, "auth_token", ""
-            ):
-                return
-            session_id = getattr(self, "_active_session_id", None) or ""
-            if not session_id:
-                return
-            from app.services.conversation.modstore_adapter import (
-                ModstorePlatformAdapter,
-            )
-
-            adapter = ModstorePlatformAdapter.from_session(session_id=session_id)
-            if adapter is not None and getattr(adapter, "auth_token", ""):
-                self.modstore_adapter = adapter
-                logger.info(
-                    "已从 session 自动配置修茈市场平台 Token（%s chars, url=%s）",
-                    len(adapter.auth_token),
-                    adapter.platform_url,
-                )
-        except RECOVERABLE_ERRORS as e:
-            logger.warning("从 session 配置市场适配器失败: %s", e)
-
-    async def call_llm_api(
-        self,
-        messages: list[dict[str, str]],
-        temperature: float = 0.7,
-        max_tokens: int = 2000,
-        **kwargs,
-    ) -> dict[str, Any] | None:
-        """
-        通用LLM API调用 - 三级自动路由
-
-        优先级：
-        1. 平台代理模式 (modstore_adapter) - 通过修茈市场统一接口
-        2. 直连模式 (llm_adapter) - 直接调用厂商API
-        3. 降级模式 (legacy DeepSeek) - 向后兼容
-        """
-        t0 = time.perf_counter()
-
-        try:
-            # 登录即自动可用：对话服务是启动时创建的单例，其 modstore 适配器按环境
-            # 变量初始化（通常无 Token）。这里在每次调用前按当前 session 补齐，使
-            # 登录市场后绑定的 Token 自动生效，无需手动配置 LLM API Key。
-            self._ensure_modstore_from_session()
-
-            from app.infrastructure.llm.providers.registry import get_active_provider
-
-            provider = get_active_provider(conversation_service=self)
-            if provider is None:
-                logger.error("❌ 无可用的 LLM Provider（检查 LLM_ROUTING_ORDER / 密钥）")
-                return None
-
-            logger.info("🤖 [LLM] provider=%s", provider.provider_id)
-
-            # 上下文压缩：调 LLM 前按 token 预算裁剪 + 必要时摘要旧轮次
-            # 失败不阻断主对话（manager 内部已捕获，最坏情况返回 noop）
-            from app.application.agent_orchestrator.context_window_manager import (
-                get_context_window_manager,
-            )
-
-            cwm = get_context_window_manager()
-            compression = await cwm.compress(
-                messages,
-                user_id=str(getattr(getattr(self, "modstore_adapter", None), "user_id", "") or ""),
-                provider=provider,
-            )
-            messages = compression.messages
-
-            result = await provider.chat_completion(
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                **kwargs,
-            )
-            if result:
-                latency_ms = (time.perf_counter() - t0) * 1000.0
-                trace = _build_llm_trace(provider, result, latency_ms, compression=compression)
-                result["_xcagi_trace"] = trace
-                self._last_llm_trace = trace
-                # 持久化 token 用量到本地账本（供 llm-ops-engineer 查询）
-                try:
-                    from app.infrastructure.billing.model_usage import (
-                        record_model_usage,
-                    )
-
-                    record_model_usage(
-                        provider_id=trace["provider_id"],
-                        provider=trace["provider"],
-                        model=trace["model"],
-                        prompt_tokens=trace["prompt_tokens"],
-                        completion_tokens=trace["completion_tokens"],
-                        total_tokens=trace["total_tokens"],
-                        cost_units=trace["cost_units"],
-                        billing_status=trace["billing_status"],
-                        billing_source=trace["billing_source"],
-                        source="conversation_service",
-                        user_id=str(
-                            getattr(
-                                getattr(self, "modstore_adapter", None),
-                                "user_id",
-                                "",
-                            )
-                            or ""
-                        ),
-                    )
-                except RECOVERABLE_ERRORS:
-                    logger.debug("record_model_usage failed", exc_info=True)
-                try:
-                    from app.neuro_bus.application_neuro_bridge import (
-                        neuro_notify_ai_model_roundtrip,
-                    )
-
-                    neuro_notify_ai_model_roundtrip(
-                        model=trace["model"] or trace["provider_id"],
-                        latency_ms=latency_ms,
-                        token_count=trace["total_tokens"],
-                        user_id=str(
-                            getattr(getattr(self, "modstore_adapter", None), "user_id", "") or ""
-                        ),
-                    )
-                except RECOVERABLE_ERRORS:
-                    pass
-                # 可观测性：压缩节省 token 时通知 NeuroBus（独立于主调用 roundtrip）
-                if compression.tokens_saved > 0:
-                    try:
-                        from app.neuro_bus.application_neuro_bridge import (
-                            neuro_notify_ai_model_roundtrip,
-                        )
-
-                        neuro_notify_ai_model_roundtrip(
-                            model="context-window-manager",
-                            latency_ms=compression.compression_latency_ms,
-                            token_count=compression.tokens_saved,
-                            user_id=str(
-                                getattr(getattr(self, "modstore_adapter", None), "user_id", "")
-                                or ""
-                            ),
-                        )
-                    except RECOVERABLE_ERRORS:
-                        pass
-            return result
-
-        except RECOVERABLE_ERRORS as e:
-            logger.error("❌ LLM API调用异常: %s", e, exc_info=True)
-            return None
-
-    async def _call_deepseek_legacy(
-        self,
-        messages: list[dict[str, str]],
-        temperature: float = 0.7,
-        max_tokens: int = 2000,
-        **kwargs,
-    ) -> dict[str, Any] | None:
-        """保留原有DeepSeek逻辑作为降级方案"""
-        import httpx
-
-        if not self.api_key:
-            logger.error("DeepSeek API Key 未配置")
-            return None
-
-        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
-
-        payload = {
-            "model": self.model,
-            "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-            **kwargs,
-        }
-
-        t0 = time.perf_counter()
-        try:
-            client = await self._get_deepseek_async_client()
-            response = await client.post(
-                self.api_url,
-                headers=headers,
-                json=payload,
-            )
-            response.raise_for_status()
-            result = response.json()
-
-            if result.get("choices") and len(result["choices"]) > 0:
-                latency_ms = (time.perf_counter() - t0) * 1000.0
-                # 解析真实 token 用量（之前硬编码 token_count=0）
-                usage = result.get("usage") if isinstance(result.get("usage"), dict) else {}
-                prompt_tokens = _coerce_int(usage.get("prompt_tokens"))
-                completion_tokens = _coerce_int(usage.get("completion_tokens"))
-                total_tokens = _coerce_int(usage.get("total_tokens"))
-                # 持久化 token 用量到本地账本
-                try:
-                    from app.infrastructure.billing.model_usage import (
-                        estimate_llm_cost_units,
-                        record_model_usage,
-                    )
-
-                    cost_units = estimate_llm_cost_units(
-                        prompt_tokens=prompt_tokens,
-                        completion_tokens=completion_tokens,
-                        total_tokens=total_tokens,
-                    )
-                    record_model_usage(
-                        provider_id="deepseek-legacy",
-                        provider="deepseek",
-                        model=str(self.model or ""),
-                        prompt_tokens=prompt_tokens,
-                        completion_tokens=completion_tokens,
-                        total_tokens=total_tokens,
-                        cost_units=cost_units,
-                        billing_status="metered" if cost_units else "unmetered",
-                        billing_source="estimated_token_units",
-                        source="conversation_service.deepseek_legacy",
-                    )
-                except RECOVERABLE_ERRORS:
-                    logger.debug("record_model_usage failed", exc_info=True)
-                try:
-                    from app.neuro_bus.application_neuro_bridge import (
-                        neuro_notify_ai_model_roundtrip,
-                    )
-
-                    neuro_notify_ai_model_roundtrip(
-                        model=self.model,
-                        latency_ms=latency_ms,
-                        token_count=total_tokens,
-                        user_id="",
-                    )
-                except RECOVERABLE_ERRORS:
-                    logger.debug("neuro_notify_ai_model_roundtrip skipped", exc_info=True)
-                return cast("dict[str, Any] | None", result)
-            logger.warning("DeepSeek API 返回空响应：%s", result)
-            return None
-
-        except httpx.HTTPError as e:
-            logger.error("DeepSeek API 请求失败：%s", e)
-            return None
-        except RECOVERABLE_ERRORS as e:
-            logger.error("调用 DeepSeek API 异常：%s", e)
-            return None
-
-    # 向后兼容别名
-    call_deepseek_api = call_llm_api
 
     def _maybe_attach_kitten_web(
         self,
@@ -554,7 +297,7 @@ class ApiMixin(NeuroEventPublisherMixin):
 
         # 同步路径：直接调用 build_prompt 生成 prompt
         # 注意：异步完整流程（含 persona 更新）请使用 build_prompt_from_message
-        return self.persona_service.build_prompt(None, context_prompt)
+        return cast("str", self.persona_service.build_prompt(None, context_prompt))
 
     async def _call_ai(
         self, message: str, context: ConversationContext, intent_result: dict[str, Any]

@@ -171,7 +171,7 @@ describe('HomeView', () => {
       })
       await flushPromises()
 
-      const vm = wrapper.vm as any
+      const vm = wrapper.vm as UnsafeTestValue
       expect(vm.userLabel).toBe('alice')
         expect(vm.contactForm.name).toBe('张三')
         expect(vm.contactForm.message).toContain('售后退款')

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Callable, Mapping
 
 from sqlalchemy import select
@@ -32,7 +32,7 @@ ESCALATION_ACTION = "external announce customer-value recovery plan"
 ESCALATION_ACTION_ID = "act-customer-value-zero-v1"
 ESCALATION_OWNER = "daily-orchestrator"
 ESCALATION_BLOCK_REASON = "customer_value_recovery_requires_human_strategy_approval"
-UTC = timezone.utc
+UTC = UTC
 
 
 def _int(value: Any) -> int:

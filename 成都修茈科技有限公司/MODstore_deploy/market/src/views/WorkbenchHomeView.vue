@@ -343,7 +343,6 @@
                         name="wb-direct-file-card"
                         tag="div"
                         class="wb-direct-file-stack wb-composer-file-stack"
-                        aria-label="待发送附件"
                       >
                         <article
                           v-for="(f, i) in directComposerVisibleFiles"
@@ -793,7 +792,7 @@
                 取消
               </button>
             </div>
-            <TransitionGroup v-if="planSession.phase !== 'summary'" name="wb-plan-msg" tag="ul" class="wb-plan-thread" aria-live="polite">
+            <TransitionGroup v-if="planSession.phase !== 'summary'" name="wb-plan-msg" tag="ul" class="wb-plan-thread">
               <li
                 v-for="(m, idx) in planSession.messages"
                 :key="`${m.role}-${idx}`"
@@ -810,7 +809,7 @@
                   <div class="wb-plan-msg-assistant-grid">
                     <div class="wb-plan-diagram-col">
                       <button
-                        v-if="planAssistantParts(m.content).hasDiagram && !planDiagramError[idx]"
+                        v-if="planAssistantParts(m.content).hasDiagram && !planDiagramError[String(idx)]"
                         type="button"
                         class="wb-plan-diagram-preview-open"
                         title="完整查看架构图（可滚动）"
@@ -830,12 +829,12 @@
                         class="wb-plan-diagram-host"
                         :class="{
                           'wb-plan-diagram-host--with-preview':
-                            planAssistantParts(m.content).hasDiagram && !planDiagramError[idx],
+                            planAssistantParts(m.content).hasDiagram && !planDiagramError[String(idx)],
                         }"
                         aria-hidden="false"
                       />
-                      <p v-if="planDiagramError[idx]" class="wb-plan-diagram-err" role="alert">
-                        {{ planDiagramError[idx] }}
+                      <p v-if="planDiagramError[String(idx)]" class="wb-plan-diagram-err" role="alert">
+                        {{ planDiagramError[String(idx)] }}
                       </p>
                     </div>
                     <aside class="wb-plan-aside-col">
@@ -1044,7 +1043,7 @@
         <ul class="wb-orch-flow-thread">
           <li
             v-for="st in orchestrationSession.steps"
-            :key="st.id"
+            :key="String(st.id || st.label || '')"
             class="wb-orch-flow-msg"
             :class="`wb-orch-flow-msg--${st.status}`"
           >
@@ -1608,7 +1607,6 @@
             name="wb-direct-file-card"
             tag="div"
             class="wb-direct-file-stack wb-composer-file-stack"
-            aria-label="二档附件"
           >
             <article
               v-for="(f, i) in directVisibleAttachedFiles"
@@ -1927,6 +1925,8 @@
 import './workbench-home-v7.css'
 import './workbench-home-ux.css'
 import {
+  type ComputedRef,
+  type Ref,
   ref,
   computed,
   reactive,
@@ -1939,7 +1939,7 @@ import {
   watch,
 } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { YUANGON_PKG_ROLE_LABELS } from '../domain/yuangonDutyRoster'
+import type { RouteLocationRaw } from 'vue-router'
 import { parseWbGearQuery } from '../domain/clientWorkshops'
 import {
   readPlatformChatModePreference,
@@ -1956,6 +1956,7 @@ import VoiceTaskPanels from '../components/workbench/voice/VoiceTaskPanels.vue'
 import VoiceFlowPanel from '../components/workbench/voice/VoiceFlowPanel.vue'
 import VoiceDock from '../components/workbench/voice/VoiceDock.vue'
 import EmployeeSixDimModal from '../components/workbench/EmployeeSixDimModal.vue'
+import type { SixDimensionReport } from '../types/sixDimension'
 import PersonalSettings from '../components/workbench/PersonalSettings.vue'
 import AgentMarket from '../components/workbench/AgentMarket.vue'
 import MediaGenPanel from '../components/workbench/MediaGenPanel.vue'
@@ -1978,7 +1979,7 @@ import {
 } from '../utils/personalSettings'
 import { api } from '../api'
 import { clearAuthTokens, getAccessToken } from '../infrastructure/storage/tokenStore'
-import type { ChatMessage, Conversation } from '../utils/conversationStore'
+import type { ChatAttachmentMeta, ChatMessage, Conversation } from '../utils/conversationStore'
 import {
   loadConversations,
   saveConversations,
@@ -2004,9 +2005,11 @@ import {
   orchStepColor,
   orchStepEmployee,
 } from '../utils/orchestrationSteps'
+import type { OrchStepLike, StructuredStepMessage } from '../utils/orchestrationSteps'
+import type { LlmProviderBlock } from '../composables/llmCatalogModelHelpers'
 import { requestMicInUserGesture } from '../composables/asr/micPreflight'
 import { useSpeechRecognition } from '../composables/useSpeechRecognition'
-import type { ASRBackendId, ASRResult } from '../composables/asr/types'
+import type {  ASRResult } from '../composables/asr/types'
 import { useStreamingTts, ttsConfigFromPersonalSettings } from '../composables/useStreamingTts'
 import { useVoiceS2SSession } from '../composables/useVoiceS2SSession'
 import { useVoiceUnifiedSession, createUnifiedAsrBridge } from '../composables/useVoiceUnifiedSession'
@@ -2017,11 +2020,11 @@ import { unlockVoiceAudioPlayback } from '../composables/voiceDevice'
 import { createVoiceWorkbenchState } from '../composables/useVoiceWorkbench'
 import { useVoiceContinuousChat } from '../composables/useVoiceContinuousChat'
 import { appendCoalescedVoiceUserTurn } from '../composables/voiceUserTurnCoalesce'
+import type { VoiceTurnMessage } from '../composables/voiceUserTurnCoalesce'
 import {
   appendVoiceInject,
   buildOrchestrationStatusSummary,
   hasEmployeePlanContext,
-  hasVoiceWorkIntent,
   inferUserGoalFromVoiceMessages,
   isLikelyShortProceedFragment,
   looksLikeEmployeeTaskDescription,
@@ -2030,7 +2033,6 @@ import {
 import {
   applyVoiceSessionPatch,
   buildAgentAwarePrompt,
-  buildPlanBriefFromSessionState,
   buildPlanBriefFromVoiceMessages,
   classifyVoiceTurn,
   sanitizeVoiceUtteranceText,
@@ -2083,6 +2085,7 @@ import {
   resolveDirectAttachmentOutcome,
   resolveReadEmployeeForExtension,
 } from '../utils/directAttachments'
+import type { DirectAttachmentKind } from '../utils/directAttachments'
 import {
   buildUserMultimodalContent,
   compressImageFileToDataUrl,
@@ -2105,9 +2108,7 @@ import {
   classifyOfficeTask,
   collectOfficeAttachmentNamesFromMessages,
   collectRecentUserIntentText,
-  detectOfficeDocumentCreateIntent,
   detectOfficeEnhanceAttachedIntent,
-  detectOfficeGenerateIntent,
   detectUserMissingDeliverableComplaint,
   mergeOfficeAttachmentNames,
   officeEmployeeCapabilitySystemHint,
@@ -2155,37 +2156,261 @@ const wbSidebar = useWorkbenchSidebarStore()
 const wbNav = useWorkbenchNavStore()
 const draft = ref('')
 const displayName = ref('')
-const inputRef = ref(null)
-const handoffPanelRef = ref(null)
+interface WorkbenchStateRecord {
+  [key: string]: unknown
+  id?: string | number
+  k?: string
+  role?: string
+  content?: string
+  status?: string
+  phase?: string
+  intent?: string
+  intentKey?: string
+  intentTitle?: string
+  title?: string
+  subtitle?: string
+  label?: string
+  name?: string
+  description?: string
+  provider?: string
+  model?: string
+  category?: string
+  error?: string
+  message?: string
+  fullBrief?: string
+  displayBrief?: string
+  initialBrief?: string
+  summaryTitle?: string
+  summaryText?: string
+  planError?: string
+  streamingText?: string
+  checklistText?: string
+  workflowName?: string
+  workflow_name?: string
+  employeeWorkflowName?: string
+  planNotes?: string
+  suggestedModId?: string
+  employeeTarget?: string
+  fhdBaseUrl?: string
+  employeeRoutingBrief?: string
+  mod_id?: string
+  pack_id?: string | number
+  skill_group_name?: string
+  primaryLabel?: string
+  secondaryLabel?: string
+  execution_mode?: string
+  loading?: boolean
+  summaryNeedsClarification?: boolean
+  generateFrontend?: boolean
+  sandboxOk?: boolean
+  sandbox_ok?: boolean
+  passed?: boolean
+  critical_failed?: boolean
+  runnable?: boolean
+  configured?: boolean
+  fernet_configured?: boolean
+  messages?: WorkbenchStateRecord[]
+  planningMessages?: WorkbenchStateRecord[]
+  checklistLines?: string[]
+  files?: WorkbenchStateRecord[]
+  steps?: OrchStepLike[]
+  providers?: WorkbenchStateRecord[]
+  models?: string[]
+  models_detailed?: WorkbenchStateRecord[]
+  items?: WorkbenchStateRecord[]
+  outputs?: WorkbenchStateRecord[]
+  usageLines?: string[]
+  validationErrors?: string[]
+  llmWarnings?: string[]
+  validation_errors?: string[]
+  llm_warnings?: string[]
+  artifact?: WorkbenchStateRecord | string
+  quality_report?: WorkbenchStateRecord
+  workflow_attachment?: WorkbenchStateRecord
+  manifest?: WorkbenchStateRecord
+  embedding?: WorkbenchStateRecord
+  preferences?: { provider?: string; model?: string }
+  category_labels?: Record<string, string>
+  dimensions?: WorkbenchStateRecord
+  entries?: WorkbenchStateRecord[]
+  workflow_id?: string | number
+  skill_group_id?: string | number
+  script_workflow_id?: string | number
+  primaryRoute?: RouteLocationRaw | null
+  secondaryRoute?: RouteLocationRaw | null
+}
+
+interface CachedWorkbenchFile {
+  name: string
+  size: number
+  type: string
+  cachedOnly: true
+}
+
+interface PlanMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+interface PlanSession {
+  intentKey: string
+  intentTitle: string
+  phase: string
+  initialBrief: string
+  fullBrief: string
+  displayBrief: string
+  generateFrontend: boolean
+  summaryTitle: string
+  summaryText: string
+  summaryNeedsClarification: boolean
+  files: File[]
+  messages: PlanMessage[]
+  checklistText: string
+  checklistLines: string[]
+  planError: string
+  loading: boolean
+  streamingText: string
+}
+
+interface PendingHandoff {
+  description: string
+  employeeRoutingBrief?: string
+  planningContext?: string
+  intentTitle: string
+  intentKey: string
+  workflowName: string
+  planNotes: string
+  suggestedModId: string
+  generateFrontend: boolean
+  employeeTarget: string
+  employeeWorkflowName: string
+  fhdBaseUrl: string
+  planningMessages: PlanMessage[]
+  executionChecklist?: string[]
+  sourceDocuments?: Record<string, unknown>[]
+  files?: File[]
+}
+
+interface WorkbenchLlmProvider extends LlmProviderBlock {
+  provider: string
+  title?: string
+  items?: WorkbenchLlmProvider[]
+}
+
+interface WorkbenchLlmCatalog {
+  providers: WorkbenchLlmProvider[]
+  preferences?: { provider?: string; model?: string }
+  category_labels?: Record<string, string>
+  fernet_configured?: boolean
+}
+
+interface WorkbenchScriptOutput {
+  filename: string
+  download_url: string
+}
+
+interface WorkbenchScriptResult {
+  outputs?: WorkbenchScriptOutput[]
+  stderr?: string
+  stdout?: string
+}
+
+interface WorkbenchOrchestrationSession {
+  [key: string]: unknown
+  session_id?: string
+  status?: string
+  error?: string
+  intent?: string
+  workflow_name?: string
+  steps?: OrchStepLike[]
+  artifact?: WorkbenchStateRecord
+  script_result?: WorkbenchScriptResult
+  validate_warnings?: string[]
+}
+
+interface WorkbenchCompletionResult {
+  intent: string
+  title: string
+  subtitle: string
+  usageLines: string[]
+  primaryLabel: string
+  primaryRoute: RouteLocationRaw | null
+  secondaryLabel: string
+  secondaryRoute: RouteLocationRaw | null
+}
+
+interface WorkflowLinkOffer {
+  workflowId: string | number
+  workflowName: string
+  validationErrors: string[]
+  llmWarnings: string[]
+  sandboxOk: boolean
+}
+
+interface OpenPlanSessionInput {
+  fullBrief?: string
+  displayBrief?: string
+  files?: File[]
+  generateFrontend?: boolean
+}
+function workbenchErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function workbenchHttpStatus(error: unknown): number {
+  if (!error || typeof error !== 'object') return 0
+  const status = (error as { status?: unknown }).status
+  return typeof status === 'number' ? status : 0
+}
+
+type DirectAttachment = {
+  id: string
+  name: string
+  size: number
+  status: ChatAttachmentMeta['status']
+  purpose?: string
+  docId?: string
+  imageDataUrl?: string
+  extractedText?: string
+  error?: string
+  ingesting?: boolean
+  ingestError?: string
+  readEmployeeId?: string
+  embedding?: Record<string, unknown> | null
+  file: File
+}
+
+const inputRef = ref<HTMLInputElement | HTMLTextAreaElement | null>(null)
+const handoffPanelRef = ref<HTMLElement | null>(null)
 /** 发送后暂存在页顶；补全并创建成功后才跳转画布 */
-const pendingHandoff = ref(null)
-const makeCompletionResult = ref(null)
+const pendingHandoff = ref<PendingHandoff | null>(null)
+const makeCompletionResult = ref<WorkbenchCompletionResult | null>(null)
 const employeeSixDimModalOpen = ref(false)
-const employeeSixDimReport = ref(null)
-const makeCompletionRef = ref(null)
+const employeeSixDimReport = ref<SixDimensionReport | null>(null)
+const makeCompletionRef = ref<HTMLElement | null>(null)
 const finalizeLoading = ref(false)
 const finalizeError = ref('')
 /** 编排轮询中的会话快照（含 steps） */
-const orchestrationSession = ref(null)
+const orchestrationSession = ref<WorkbenchOrchestrationSession | null>(null)
 const orchestrationSessionId = ref('')
 const pollStop = ref(false)
 /** 编排：估算耗时阶段 → 正式执行（估算结束后才开始「已用」计时） */
 const orchPhase = ref('idle')
-const orchestrationEtaSeconds = ref(null)
+const orchestrationEtaSeconds = ref<number | null>(null)
 const orchestrationEtaReason = ref('')
-let orchElapsedTimer = null
-const orchTimingStartMs = ref(null)
+let orchElapsedTimer: ReturnType<typeof setInterval> | null = null
+const orchTimingStartMs = ref<number | null>(null)
 /** 每 500ms 递增，驱动已用时间的 computed 刷新 */
 const orchElapsedTick = ref(0)
 /** 工作流编排成功后的「关联 Mod」卡片 */
-const workflowLinkOffer = ref(null)
-const linkMods = ref([])
+const workflowLinkOffer = ref<WorkflowLinkOffer | null>(null)
+const linkMods = ref<WorkbenchStateRecord[]>([])
 const linkModId = ref('')
 const linkBusy = ref(false)
 const linkError = ref('')
 
 /** 需求规划：多轮澄清 → 执行清单 → 再进入制作草稿 */
-const planSession = ref(null)
+const planSession = ref<PlanSession | null>(null)
 const planReplyDraft = ref('')
 /** 「AI 自主全部进行」：从 summary 一路串到 runOrchestration 结束的互斥锁 */
 const autoPilotRunning = ref(false)
@@ -2193,18 +2418,18 @@ const autoPilotError = ref('')
 /** 用户 pause_checklist 后跳过清单自动开跑 */
 const voiceChecklistPaused = ref(false)
 /** 快捷选项：题目 id -> 选中的 choice id（含 UI 专用「其他」） */
-const planOptionSelections = ref({})
+const planOptionSelections = ref<Record<string, string>>({})
 /** 「其他」在提交与 canSend 中使用的保留 choice id（勿与模型返回的 id 重复） */
 const PLAN_OPTION_OTHER_ID = '__plan_ui_other__'
 /** 题目 id -> 「其他」时的自定义文案 */
-const planOptionOtherText = reactive({})
+const planOptionOtherText = reactive<Record<string, string>>({})
 
 function clearPlanOptionOtherText() {
   for (const k of Object.keys(planOptionOtherText)) {
     delete planOptionOtherText[k]
   }
 }
-const planPanelRef = ref(null)
+const planPanelRef = ref<HTMLElement | null>(null)
 /** 每次打开规划会话递增，用于 Transition 内层 :key 触发动画 */
 const planSurfaceKey = ref(0)
 
@@ -2227,7 +2452,7 @@ const planLoadingStepsChat = Object.freeze([
   '写入本条助手回复',
 ])
 const planLoadingAdvance = ref(0)
-let planLoadingIntervalId = null
+let planLoadingIntervalId: ReturnType<typeof setInterval> | number | null = null
 
 const planLoadingStepLabelsForUi = computed(() => {
   if (!planSession.value?.loading) return []
@@ -2247,20 +2472,19 @@ const llmMobilePickerSummary = computed(() => {
   return `模型 · ${currentProviderLabel.value} / ${model}`
 })
 
-const knowledgeStatus = ref(null)
-const knowledgeDocs = ref([])
+const knowledgeStatus = ref<WorkbenchStateRecord | null>(null)
+const knowledgeDocs = ref<WorkbenchStateRecord[]>([])
 const knowledgeLoading = ref(false)
 const knowledgeUploading = ref(false)
 const knowledgeError = ref('')
-const knowledgeFileInputRef = ref(null)
+const knowledgeFileInputRef = ref<HTMLInputElement | null>(null)
 const knowledgeDragActive = ref(false)
 
 /** 调 /api/knowledge/search 之前的预检：未配置 Embedding Key 时直接跳过 RAG，
  *  避免一档对话 / 二档制作发送时连带产生 503 与「未配置可用 Embedding Key」横幅，
  *  这条横幅原本只是提示性的，但放在 catch 里会让用户误以为业务流程失败。 */
 function isEmbeddingConfigured(): boolean {
-  const st = knowledgeStatus.value as any
-  return Boolean(st?.embedding?.configured)
+  return Boolean(knowledgeStatus.value?.embedding?.configured)
 }
 /** 与下方 starter 同步：仅标记制作类型，不写入输入框（画布 Skill 组 intent 为 `skill`） */
 const CANVAS_SKILL_INTENT = 'skill'
@@ -2436,14 +2660,14 @@ const directPlaceholder = computed(() => {
   if (wbSidebar.activeMode === 'make') return '描述需求…'
   return '输入问题…'
 })
-const directFileInputRef = ref(null)
+const directFileInputRef = ref<HTMLInputElement | null>(null)
 /**
  * 直接聊天待发送的本地附件。每项形如：
  *   { id, name, size, status: 'uploading'|'ready'|'error'|'skipped', docId, error, file }
  * - status='ready' 的文档已上传到当前用户知识库（doc_id），发送时会做向量检索并拼到 system prompt。
  * - status='skipped'/'error' 的文件不上传，只在消息中附带文件名说明。
  */
-const directAttachedFiles = ref([])
+const directAttachedFiles = ref<DirectAttachment[]>([])
 const directGeneratedFiles = ref<DirectGeneratedFile[]>([])
 /** 按会话缓存读取员工 raw 结果，供追问「做动画」时生成员复用（附件发送后已从输入区移除）。 */
 const officeReadCacheByConversation = new Map<
@@ -2604,7 +2828,7 @@ const activeBot = computed<AgentBot | null>(
   () => allBots.value.find((b) => b.id === activeBotId.value) || null,
 )
 /** 对话进行中：左上角一行当前主题（会话标题或最近用户提问摘要） */
-const directTaskLine = computed(() => {
+const _directTaskLine = computed(() => {
   const convTitle = String(activeConversation.value?.title || '').trim()
   if (convTitle && convTitle !== '新对话') return convTitle
   const latestUser = [...directMessages.value].reverse().find((m) => m.role === 'user')
@@ -2738,7 +2962,12 @@ const empTriggerRef = ref<HTMLElement | null>(null)
 const tierPanelAnchorStyle = ref<Record<string, string>>({})
 const empPanelAnchorStyle = ref<Record<string, string>>({})
 
-const homeStarterCards = [
+const homeStarterCards: ReadonlyArray<{
+  label: string
+  desc: string
+  prompt: string
+  requiresAttachment: boolean
+}> = [
   {
     label: '总结文档',
     desc: '上传 Word/PDF 等，由读取员工解析后总结',
@@ -2757,9 +2986,19 @@ const homeStarterCards = [
     prompt: '请生成一份可下载的 Word（docx）文档，标题为季度总结，正文包含三个要点',
     requiresAttachment: false,
   },
-  { label: '写方案', desc: '从大纲到完整方案，一键生成', prompt: '请帮我写一份可执行的方案' },
-  { label: '调员工', desc: '选择 AI 员工，按岗位能力回答', prompt: '帮我选择合适的 AI 员工并说明能做什么' },
-] as const
+  {
+    label: '写方案',
+    desc: '从大纲到完整方案，一键生成',
+    prompt: '请帮我写一份可执行的方案',
+    requiresAttachment: false,
+  },
+  {
+    label: '调员工',
+    desc: '选择 AI 员工，按岗位能力回答',
+    prompt: '帮我选择合适的 AI 员工并说明能做什么',
+    requiresAttachment: false,
+  },
+]
 
 const homeSuggestionChips = computed(() => loadPersonalSettings().suggestions.slice(0, 3))
 
@@ -2979,7 +3218,7 @@ watch(consumptionTier, (v) => {
     /* ignore */
   }
 })
-const voiceMessages = ref([])
+const voiceMessages = ref<VoiceTurnMessage[]>([])
 const voiceSessionState = ref(createDefaultVoiceSessionState('employee'))
 const voiceError = ref('')
 const voiceMicFallbackHint = ref('')
@@ -3008,16 +3247,6 @@ const VOICE_TTS_FEED_OPTS = {
   browserLeadIn: true,
 }
 const voiceAutoSend = computed(() => wbSidebar.activeMode === 'voice')
-
-// voiceDraft / voiceListening 等由 useVoiceContinuousChat 在 inlineAsr 之后初始化
-let voiceDraft: ReturnType<typeof useVoiceContinuousChat>['voiceDraft']
-let voiceTranscript: ReturnType<typeof useVoiceContinuousChat>['voiceTranscript']
-let voiceLivePreview: ReturnType<typeof useVoiceContinuousChat>['voiceLivePreview']
-let voiceListening: ReturnType<typeof useVoiceContinuousChat>['voiceListening']
-let voiceAudioLevel: ReturnType<typeof useVoiceContinuousChat>['voiceAudioLevel']
-let voiceMicPausedByUser: ReturnType<typeof useVoiceContinuousChat>['micPausedByUser']
-let voiceSpeculating: ReturnType<typeof useVoiceContinuousChat>['isSpeculating']
-let voiceChat: ReturnType<typeof useVoiceContinuousChat>
 
 // 声波可视化绘制
 const WAVE_BAR_COUNT = 40
@@ -3139,8 +3368,8 @@ watch(directVoiceListening, (v) => {
 const voiceProgress = computed(() => {
   const steps = Array.isArray(orchestrationSession.value?.steps) ? orchestrationSession.value.steps : []
   if (!steps.length) return 0
-  const done = steps.filter((s: { status?: string }) => s.status === 'done').length
-  const running = steps.some((s: { status?: string }) => s.status === 'running') ? 0.45 : 0
+  const done = steps.filter((s) => s.status === 'done').length
+  const running = steps.some((s) => s.status === 'running') ? 0.45 : 0
   return Math.min(100, Math.round(((done + running) / steps.length) * 100))
 })
 
@@ -3228,14 +3457,11 @@ const voiceAsrAdapter = {
     onResult: (r: ASRResult) => void,
     onError: (msg: string) => void,
     onLevel?: (level: number) => void,
-    onReady?: () => void,
-    onMic?: () => void,
-    stream?: MediaStream,
     opts?: { continuous?: boolean },
   ) =>
     voiceUseUnified.value
-      ? unifiedAsrBridge.startListening(onResult, onError, onLevel, onReady, onMic, stream, opts)
-      : inlineAsr.startListening(onResult, onError, onLevel, onReady, onMic, stream, opts),
+      ? unifiedAsrBridge.startListening(onResult, onError, onLevel, opts)
+      : inlineAsr.startListening(onResult, onError, onLevel, opts),
   flushListening: () =>
     voiceUseUnified.value ? unifiedAsrBridge.flushListening() : inlineAsr.flushListening(),
   signalEndOfSpeech: () => {
@@ -3342,6 +3568,22 @@ function handlePhoneUtteranceFinalize(text: string, turnId: string) {
   }
 }
 
+/** 只有明确的员工制作指令才从语音闲聊进入规划面板。 */
+async function tryOpenEmployeePlanFromExplicitCommand(
+  text: string,
+  _options: { userAlreadyInThread?: boolean } = {},
+): Promise<boolean> {
+  const normalized = String(text || '').trim()
+  const explicit =
+    /(?:创建|制作|生成|规划|新建|开始做).{0,12}(?:AI\s*)?员工|员工包/.test(
+      normalized,
+    )
+  if (!explicit || !hasWorkflow.value || planSession.value) return false
+  composerIntent.value = 'employee'
+  await openPlanSession({ fullBrief: normalized, displayBrief: normalized, files: [] })
+  return true
+}
+
 async function handleVoiceUtteranceReady(
   text: string,
   ctx: { speculativePartial: string | null },
@@ -3437,7 +3679,7 @@ function triggerVoiceBargeIn() {
   })
 }
 
-voiceChat = useVoiceContinuousChat({
+const voiceChat = useVoiceContinuousChat({
   asr: voiceAsrAdapter as ReturnType<typeof useSpeechRecognition>,
   isAsrReady: () => voiceAsrAdapter.sessionReady.value,
   getAsrBackendId: () =>
@@ -3491,13 +3733,15 @@ voiceChat = useVoiceContinuousChat({
   isChatBusy: () => voiceChatBusy.value,
 })
 
-voiceDraft = voiceChat.voiceDraft
-voiceTranscript = voiceChat.voiceTranscript
-voiceLivePreview = voiceChat.voiceLivePreview
-voiceListening = voiceChat.voiceListening
-voiceAudioLevel = voiceChat.voiceAudioLevel
-voiceMicPausedByUser = voiceChat.micPausedByUser
-voiceSpeculating = voiceChat.isSpeculating
+const {
+  voiceDraft,
+  voiceTranscript,
+  voiceLivePreview,
+  voiceListening,
+  voiceAudioLevel,
+  micPausedByUser: voiceMicPausedByUser,
+  isSpeculating: voiceSpeculating,
+} = voiceChat
 
 /** let 赋值的 ref 在模板中不会自动解包，需 computed 桥接 VoiceDock v-model */
 const voiceDockDraft = computed({
@@ -3686,12 +3930,13 @@ async function activateVoiceContinuous(opts?: { submitPending?: boolean }) {
 }
 
 /** 语音球模式：听/说/播报期间保持可见动画，勿误降级为 idle */
-const voiceOrbMode = computed(() => {
+type SiriOrbMode = 'idle' | 'listening' | 'processing' | 'reporting'
+const voiceOrbMode = computed<SiriOrbMode>(() => {
   if (voiceError.value) return 'idle'
   if (voiceListening.value || voiceState.value === 'listening') return 'listening'
   if (voiceAssistantSpeaking.value && wbSidebar.activeMode === 'voice') return 'reporting'
   if (voiceState.value === 'processing' || voiceState.value === 'reporting') return voiceState.value
-  return voiceState.value
+  return 'idle'
 })
 
 const voiceOrbHint = computed(() => {
@@ -3771,7 +4016,7 @@ function isGearAxisLocked() {
   return hasInput || hasTask
 }
 
-function directFileChipTitle(f) {
+function directFileChipTitle(f: DirectAttachment | null | undefined): string {
   if (!f) return ''
   const emb = formatEmbeddingLabel(f.embedding)
   if (f.purpose === 'vision') {
@@ -3791,7 +4036,7 @@ function directFileChipTitle(f) {
   return f.name
 }
 
-function formatEmbeddingLabel(embedding) {
+function formatEmbeddingLabel(embedding: WorkbenchStateRecord | null | undefined): string {
   if (!embedding || typeof embedding !== 'object') return ''
   const provider = String(embedding.provider || '').trim()
   const model = String(embedding.model || '').trim()
@@ -3800,15 +4045,15 @@ function formatEmbeddingLabel(embedding) {
   return `${provider || '默认'} / ${model || '默认模型'}${dim ? ` · ${dim}维` : ''}`
 }
 
-function directAttachmentKind(f) {
+function directAttachmentKind(f: DirectAttachment | null | undefined): DirectAttachmentKind {
   return directFileKind(f?.name || '', f?.file?.type || '')
 }
 
-function directAttachmentKindLabel(f) {
+function directAttachmentKindLabel(f: DirectAttachment | null | undefined): string {
   return directFileKindLabel(directAttachmentKind(f))
 }
 
-function directAttachmentStatusText(f) {
+function directAttachmentStatusText(f: DirectAttachment | null | undefined): string {
   if (!f) return ''
   if (f.purpose === 'vision') {
     if (f.status === 'uploading') return '压缩中'
@@ -3826,7 +4071,7 @@ function directAttachmentStatusText(f) {
   return '读取失败'
 }
 
-function directAttachmentNote(files) {
+function directAttachmentNote(files: DirectAttachment[] | null | undefined): string {
   const list = Array.isArray(files) ? files : []
   if (!list.length) return ''
   const parts = list.map((f, idx) => {
@@ -3879,7 +4124,7 @@ function applyDirectReadEmployeePick(readEmployeeId: string) {
   }
 }
 
-function buildDirectAttachItem(file: File) {
+function buildDirectAttachItem(file: File): DirectAttachment {
   if (isImageFileForVision(file)) {
     const maxBytes = 20 * 1024 * 1024
     const tooBig = Number(file.size || 0) > maxBytes
@@ -4001,7 +4246,7 @@ function appendAttachmentMentions(files: File[], target: 'direct' | 'make') {
   r.value = `${current}${joiner}${mentions} `
 }
 
-async function uploadDirectAttachedFile(item) {
+async function uploadDirectAttachedFile(item: DirectAttachment): Promise<void> {
   let extractedText = ''
   try {
     const extractRes = await api.knowledgeExtractText(item.file)
@@ -4081,7 +4326,7 @@ async function uploadDirectAttachedFile(item) {
   }
 }
 
-async function prepareDirectVisionFile(item) {
+async function prepareDirectVisionFile(item: DirectAttachment): Promise<void> {
   try {
     const imageDataUrl = await compressImageFileToDataUrl(item.file, {
       maxEdge: 2048,
@@ -4112,7 +4357,7 @@ async function prepareDirectVisionFile(item) {
   }
 }
 
-function onDirectFilesChange(e) {
+function onDirectFilesChange(e: Event): void {
   const input = e?.target as HTMLInputElement | null
   if (!input || typeof input.files === 'undefined') return
   const picked: File[] = Array.from(input.files || [])
@@ -4196,7 +4441,7 @@ async function downloadGeneratedOutput(f: DirectGeneratedFile) {
   await downloadOutput(f.jobId, f.filename, f.name)
 }
 
-async function removeDirectAttachedFile(id) {
+async function removeDirectAttachedFile(id: string): Promise<void> {
   const item = directAttachedFiles.value.find((f) => f.id === id)
   if (!item) return
   if (item.status === 'uploading') return
@@ -4360,7 +4605,7 @@ function buildSystemPrompt(
   return parts.join('\n\n')
 }
 
-function rebuildContextMessages(forSendUpToIndex?: number): Array<{ role: string; content: string }> {
+function _rebuildContextMessages(forSendUpToIndex?: number): Array<{ role: string; content: string }> {
   const msgs = directMessages.value
   const sliceEnd = typeof forSendUpToIndex === 'number' ? forSendUpToIndex + 1 : msgs.length
   return msgs.slice(0, sliceEnd).map((m) => ({ role: m.role, content: m.content }))
@@ -4421,6 +4666,22 @@ type DirectKbResult = {
   citations: Array<{ title: string; snippet?: string; url?: string }>
 }
 
+interface KnowledgeChunk {
+  text?: string
+  content?: string
+  snippet?: string
+  source?: string
+  document_id?: string
+  filename?: string
+  page_no?: number
+  pageNo?: number
+}
+
+interface KnowledgeRetrieveResponse {
+  chunks?: KnowledgeChunk[]
+  items?: KnowledgeChunk[]
+}
+
 async function retrieveKnowledgeForDirect(
   userText: string,
   provider: string,
@@ -4432,19 +4693,19 @@ async function retrieveKnowledgeForDirect(
   // AI 客服 Bot：优先管理端 persy 知识库（小C SSOT）
   if (String(activeBot.value?.id || '') === 'customer-service') {
     try {
-      const res: any = await withRequestTimeout(
+      const res: KnowledgeRetrieveResponse = await withRequestTimeout(
         api.csSsotRetrieve({ query: userText, top_k: 6 }),
         DIRECT_KB_RETRIEVE_MS,
       )
       const chunks = Array.isArray(res?.chunks) ? res.chunks : []
       if (chunks.length > 0) {
-        const lines = chunks.slice(0, 6).map((c: any, i: number) => {
+        const lines = chunks.slice(0, 6).map((c, i) => {
           const text = String(c?.text || c?.content || c?.snippet || '').trim()
           const source = String(c?.source || c?.document_id || c?.filename || 'persy').trim()
           return `[${i + 1}] (${source}) ${text.slice(0, 500)}`
         })
         knowledgePack = `【管理端知识库·persy-knowledge】\n${lines.join('\n')}`
-        citations = chunks.slice(0, 6).map((c: any, i: number) => ({
+        citations = chunks.slice(0, 6).map((c, i) => ({
           title: `${i + 1}. ${String(c?.source || c?.filename || '管理端知识库')}`,
           snippet: String(c?.text || c?.content || '').trim().slice(0, 200),
         }))
@@ -4458,7 +4719,7 @@ async function retrieveKnowledgeForDirect(
     const pickedEmp = String(directChatEmployeeId.value || '').trim()
     const botEmp = String(activeBot.value?.id || '').trim()
     const employeeId = pickedEmp || botEmp
-    const res: any = await withRequestTimeout(
+    const res: KnowledgeRetrieveResponse = await withRequestTimeout(
       api.knowledgeV2Retrieve({
         query: userText,
         top_k: 6,
@@ -4471,7 +4732,7 @@ async function retrieveKnowledgeForDirect(
     const items = Array.isArray(res?.items) ? res.items : []
     if (items.length > 0) {
       knowledgePack = formatKnowledgeContext(items)
-      citations = items.slice(0, 6).map((it: any, i: number) => {
+      citations = items.slice(0, 6).map((it, i) => {
         const filename = String(it?.filename || '资料')
         const pageNo = Number(it?.page_no || it?.pageNo || 0) || 0
         const snippet = String(it?.content || '').trim().slice(0, 200)
@@ -4485,7 +4746,7 @@ async function retrieveKnowledgeForDirect(
         (m) => Array.isArray(m.attachments) && m.attachments.some((a) => a.status === 'ready'),
       )
       if ((ready || hasUserUploads) && isEmbeddingConfigured()) {
-        const res: any = await withRequestTimeout(
+        const res: KnowledgeRetrieveResponse = await withRequestTimeout(
           api.knowledgeSearch(userText, 6, {
             embeddingProvider: provider,
             embeddingModel: model,
@@ -4494,7 +4755,7 @@ async function retrieveKnowledgeForDirect(
         )
         const items = Array.isArray(res?.items) ? res.items : []
         knowledgePack = formatKnowledgeContext(items)
-        citations = items.slice(0, 6).map((it: any, i: number) => {
+        citations = items.slice(0, 6).map((it, i) => {
           const filename = String(it?.filename || '资料')
           const pageNo = Number(it?.page_no || it?.pageNo || 0) || 0
           const snippet = String(it?.content || '').trim().slice(0, 200)
@@ -4568,16 +4829,18 @@ async function runDirectChatTurn(opts: {
 
     const { provider, model } = await resolvePromise
     await Promise.all([kbPromise, webPromise])
+    const resolvedKb = kbResult as DirectKbResult | null
+    const resolvedWeb = webResult as DirectWebSearchResult | null
 
-    const readNoteParts = [opts.readPhaseNote, webResult?.note].filter(Boolean)
+    const readNoteParts = [opts.readPhaseNote, resolvedWeb?.note].filter(Boolean)
     const sys = buildSystemPrompt(
       activeBot.value?.persona || '',
-      kbResult?.knowledgePack || '',
+      resolvedKb?.knowledgePack || '',
       opts.inlineFiles,
       directEmployeeSystemHint(),
       readNoteParts.length ? readNoteParts.join('；') : undefined,
       opts.userText,
-      webResult?.contextPack,
+      resolvedWeb?.contextPack,
     )
     const ctx = directMessages.value
       .filter((m) => m.id !== opts.assistantId)
@@ -4621,7 +4884,7 @@ async function runDirectChatTurn(opts: {
         })
       },
       onDone: (full, aborted) => {
-        const cits = kbResult?.citations ?? []
+        const cits = resolvedKb?.citations ?? []
         updateAssistantMessage(opts.assistantId, (m) => {
           m.pending = false
           if (aborted) {
@@ -4652,13 +4915,13 @@ async function runDirectChatTurn(opts: {
     currentStreamHandle = handle
     await handle.done
     await kbPromise
-    const lateCits = kbResult?.citations ?? []
+    const lateCits = resolvedKb?.citations ?? []
     if (lateCits.length) {
       updateAssistantMessage(opts.assistantId, (m) => {
         if (!m.citations?.length) m.citations = lateCits
       })
     }
-  } catch (e: any) {
+  } catch (e: unknown) {
     const msg = formatDirectChatError(e)
     if (msg.includes('登录已过期')) handleDirectChatAuthFailure()
     directError.value = msg
@@ -4783,17 +5046,17 @@ async function sendDirectChat(text = '') {
   const userMsg = makeMessage('user', userContent, {
     skills: [],
     ...(Array.isArray(multimodalContent) ? { multimodalContent } : {}),
-    attachments: filesSnapshot.map((f) => ({
+    attachments: filesSnapshot.map((f): ChatAttachmentMeta => ({
       name: f.name,
       size: f.size,
       status: f.status,
       docId: f.docId,
-      kind: f.purpose === 'vision' ? 'vision' : undefined,
+      kind: f.purpose === 'vision' ? 'vision' : 'file',
     })),
   })
   const inlineFiles = knowledgeFiles
-    .filter((f: any) => (f.status === 'inline' || f.status === 'ready') && f.extractedText)
-    .map((f: any) => ({ name: f.name, text: f.extractedText as string }))
+    .filter((f) => (f.status === 'inline' || f.status === 'ready') && f.extractedText)
+    .map((f) => ({ name: f.name, text: f.extractedText as string }))
 
   const placeholder = makeMessage('assistant', '', { pending: true })
   appendUserAndAssistant(userMsg, placeholder)
@@ -5239,7 +5502,7 @@ async function downloadOutput(jobId: string, filename: string, label?: string) {
       label || filename.split(/[/\\]/).pop() || filename,
       directChatEmployeeId.value || undefined,
     )
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('下载失败', e)
     const msg = e instanceof Error ? e.message : String(e)
     directError.value = `下载失败：${msg}。若对话中只有文字「下载」链接而无上方「已生成」卡片，请先发送「生成带动画的 pptx」或重新附上 PPT 后点发送。`
@@ -5451,7 +5714,7 @@ function pickConversation(id: string) {
   setActiveConversation(id)
 }
 
-function convTimeFormat(t) {
+function convTimeFormat(t: number | string | null | undefined): string {
   if (!t) return ''
   const d = new Date(t)
   const diff = Date.now() - d.getTime()
@@ -5462,11 +5725,11 @@ function convTimeFormat(t) {
   return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
 }
 
-function isFileEmployeePurposeToggle(f) {
+function isFileEmployeePurposeToggle(f: DirectAttachment): boolean {
   return isEmployeeSpreadsheetExt(directFileExt(String(f.name || '')))
 }
 
-function isFileAutoReadEmployee(f) {
+function isFileAutoReadEmployee(f: DirectAttachment): boolean {
   const ext = directFileExt(String(f.name || ''))
   return isEmployeeExecuteFileExt(ext) && !isEmployeeSpreadsheetExt(ext)
 }
@@ -5493,27 +5756,27 @@ function setFilePurpose(fileId: string, purpose: string) {
   }
 }
 
-function pinConversation(id: string) {
+function _pinConversation(id: string) {
   conversations.value = conversations.value.map((c) =>
     c.id === id ? { ...c, pinned: !c.pinned, updatedAt: Date.now() } : c,
   )
   persistConversations()
 }
 
-function renameConversation(id: string, title: string) {
+function _renameConversation(id: string, title: string) {
   conversations.value = conversations.value.map((c) =>
     c.id === id ? { ...c, title: title.slice(0, 60), updatedAt: Date.now() } : c,
   )
   persistConversations()
 }
 
-function exportConversation(id: string) {
+function _exportConversation(id: string) {
   const c = conversations.value.find((x) => x.id === id)
   if (!c) return
   copyConversationLink(c)
 }
 
-function removeConversation(id: string) {
+function _removeConversation(id: string) {
   if (!window.confirm('确定删除这个对话？删除后无法恢复。')) return
   conversations.value = conversations.value.filter((c) => c.id !== id)
   if (activeConversationId.value === id) {
@@ -5524,7 +5787,7 @@ function removeConversation(id: string) {
   persistConversations()
 }
 
-function clearAllConversations() {
+function _clearAllConversations() {
   if (!window.confirm('清空全部对话？此操作不可恢复。')) return
   conversations.value = []
   activeConversationId.value = ''
@@ -5745,7 +6008,9 @@ async function loadUsableMediaCatalog() {
     const fernetOk = Boolean(statusPayload?.fernet_configured)
     const rows = Array.isArray(statusPayload?.providers) ? statusPayload.providers : []
     const usableProviders = new Set(
-      rows.filter((r) => _providerRowHasUsableKey(r, fernetOk)).map((r) => String(r.provider || '').trim()),
+      rows
+        .filter((r: WorkbenchStateRecord) => _providerRowHasUsableKey(r, fernetOk))
+        .map((r: WorkbenchStateRecord) => String(r.provider || '').trim()),
     )
     const providers = Array.isArray(catalog.providers)
       ? catalog.providers.filter((b) => usableProviders.has(String(b.provider || '').trim()))
@@ -5852,7 +6117,7 @@ async function handleVoicePhoneTurn(userText: string): Promise<string> {
   return stripInternalMarkers(m?.content || '')
 }
 
-function onDirectKeydown(e) {
+function onDirectKeydown(e: KeyboardEvent): void {
   if (e.key !== 'Enter' || e.shiftKey) return
   e.preventDefault()
   void sendDirectChat()
@@ -5906,7 +6171,7 @@ async function speakTextAndListen(text: string) {
   }
 }
 
-function toggleVoiceListening() {
+function _toggleVoiceListening() {
   if (voiceListening.value) {
     void stopVoiceRecognition()
     return
@@ -5919,7 +6184,7 @@ async function stopVoiceAsr(): Promise<string> {
   return voiceChat.stopAsr()
 }
 
-function onVoiceAsrError(msg: string) {
+function _onVoiceAsrError(msg: string) {
   const result = voiceChat.onAsrError(msg)
   if (!result) return
   if (result.msg && !result.retry) {
@@ -6848,8 +7113,8 @@ async function runVoiceChatTurn(
       },
     })
     await voiceStreamHandle.done
-  } catch (e) {
-    voiceError.value = e?.message || String(e)
+  } catch (e: unknown) {
+    voiceError.value = e instanceof Error ? e.message : String(e)
   } finally {
     voiceStreamHandle = null
     const s2sStillActive =
@@ -6902,20 +7167,20 @@ async function speakVoiceShort(text: string) {
 }
 
 /** @deprecated use dispatchVoiceUtterance */
-async function submitVoiceTurn() {
+async function _submitVoiceTurn() {
   const content = voiceDraft.value.trim()
   if (!content) return
   await dispatchVoiceUtterance(content)
 }
 
-function speakText(text: string) {
+function _speakText(text: string) {
   voiceState.value = 'reporting'
   void streamingTts.speak(text).finally(() => {
     if (voiceState.value === 'reporting') voiceState.value = 'idle'
   })
 }
 
-function speakTextAndContinue(text: string) {
+function _speakTextAndContinue(text: string) {
   voiceState.value = 'reporting'
   void streamingTts.speak(text).finally(() => {
     voiceState.value = 'idle'
@@ -6933,7 +7198,7 @@ function syncVoiceWorkPhase() {
   })
 }
 
-function confirmVoiceAndOpenHandoff() {
+function _confirmVoiceAndOpenHandoff() {
   if (!voiceMessages.value.length) return
   const text = formatPlanMessagesForBrief(voiceMessages.value)
   const intentKey = composerIntent.value
@@ -6973,7 +7238,7 @@ function requireLoginForWorkbenchUse() {
   return false
 }
 
-const llmCatalog = ref(null)
+const llmCatalog = ref<WorkbenchLlmCatalog | null>(null)
 const llmCatalogLoading = ref(false)
 const llmCatalogError = ref('')
 const selectedProvider = ref('openai')
@@ -6981,7 +7246,7 @@ const selectedModel = ref('')
 /** auto：发送时用账户 preferences；manual：用下方自选并写回 preferences */
 const modelMode = ref('auto')
 /** 自选时厂商/模型自定义下拉：'provider' | 'model' | null（避免原生 select 白底弹层） */
-const llmDdOpen = ref(null)
+const llmDdOpen = ref<'provider' | 'model' | 'directProvider' | 'directModel' | null>(null)
 const llmMobileSheetOpen = ref(false)
 let planSummaryStreamHandle: StreamHandle | null = null
 
@@ -6989,7 +7254,7 @@ const _canvasSkillMeta = {
   title: '生成 Skill 组',
   sub: '按描述生成可复用 Skill，并在画布上编排成 Skill 组（调度图）。要「可运行程序本体」请走脚本工作流。',
 }
-const INTENT_META = {
+const INTENT_META: Record<string, { title: string; sub: string }> = {
   mod: {
     title: '做 Mod',
     sub: '可先生成仓库与名片骨架，也可以继续补齐员工包登记、工作流绑定和真实执行验证。只有名片不等于可工作的员工。',
@@ -7015,21 +7280,21 @@ const intentGuideCollapsed = ref(true)
 
 const showIntentGuide = computed(() => !intentRepoPickShow.value || !intentGuideCollapsed.value)
 
-const catalogEmployeeRows = ref([])
-const catalogModRows = ref([])
+const catalogEmployeeRows = ref<WorkbenchStateRecord[]>([])
+const catalogModRows = ref<WorkbenchStateRecord[]>([])
 const pickEmployeeKey = ref('')
 const pickModId = ref('')
 
-const catalogEmployeesForPick = computed(() => catalogEmployeeRows.value)
+const _catalogEmployeesForPick = computed(() => catalogEmployeeRows.value)
 
-const catalogModsForPick = computed(() =>
+const _catalogModsForPick = computed(() =>
   (catalogModRows.value || []).map((r) => ({
     id: r.id,
     label: `${r.id}${r.manifest?.name ? ` · ${r.manifest.name}` : ''}`,
   })),
 )
 
-const pickedEmployeeRow = computed(() => {
+const _pickedEmployeeRow = computed(() => {
   const k = (pickEmployeeKey.value || '').trim()
   if (!k) return null
   return catalogEmployeeRows.value.find((r) => r.k === k) || null
@@ -7041,28 +7306,28 @@ const pickedModRow = computed(() => {
   return (catalogModRows.value || []).find((r) => String(r.id) === id) || null
 })
 
-const pickedModManifestVersion = computed(() => {
+const _pickedModManifestVersion = computed(() => {
   const v = pickedModRow.value?.manifest?.version
   return typeof v === 'string' && v.trim() ? v.trim() : '?'
 })
 
-const pickedModManifestName = computed(() => {
+const _pickedModManifestName = computed(() => {
   const n = pickedModRow.value?.manifest?.name
   return typeof n === 'string' && n.trim() ? n.trim() : ''
 })
 
-const pickedModManifestDescription = computed(() => {
+const _pickedModManifestDescription = computed(() => {
   const d = pickedModRow.value?.manifest?.description
   return typeof d === 'string' ? d : ''
 })
 
-function truncateWorkbenchText(text, max = 280) {
+function truncateWorkbenchText(text: unknown, max = 280): string {
   const s = typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : ''
   if (!s) return ''
   return s.length <= max ? s : `${s.slice(0, max)}…`
 }
 
-function releaseChannelLabel(ch) {
+function _releaseChannelLabel(ch: unknown): string {
   const x = String(ch || 'stable').toLowerCase()
   return x === 'draft' ? '测试通道' : '正式通道'
 }
@@ -7175,7 +7440,7 @@ async function loadWorkbenchRepoPicks() {
   await loadDirectEmployeeOptions()
 }
 
-function goEditEmployeeFromPick() {
+function _goEditEmployeeFromPick() {
   if (!requireLoginForWorkbenchUse()) return
   const v = pickEmployeeKey.value
   if (!v) return
@@ -7186,7 +7451,7 @@ function goEditEmployeeFromPick() {
   router.push({ name: 'workbench-employee', query: { edit_pkg: id, edit_ver: ver } })
 }
 
-function goEditModFromPick() {
+function _goEditModFromPick() {
   if (!requireLoginForWorkbenchUse()) return
   const id = (pickModId.value || '').trim()
   if (!id) return
@@ -7201,13 +7466,13 @@ watch(composerIntent, (intent) => {
 })
 
 /** 侧栏与输入脚「当前」主标题：{name} Skill 组 / Mod / AI 员工 */
-const composerMainTitle = computed(() => {
+const _composerMainTitle = computed(() => {
   if (workflowLinkOffer.value?.workflowName) {
     return `${workflowLinkOffer.value.workflowName} Skill 组`
   }
   const ph = pendingHandoff.value
   if (isCanvasSkillIntent(ph?.intentKey)) {
-    const n = (ph.workflowName || '').trim()
+    const n = (ph?.workflowName || '').trim()
     if (n) return `${n} Skill 组`
   }
   if (ph?.intentKey === 'mod') {
@@ -7260,7 +7525,7 @@ const makeHasActiveTask = computed(() =>
   ),
 )
 
-const makeComposerRows = computed(() => {
+const _makeComposerRows = computed(() => {
   if (planSession.value?.phase === 'chat') return 2
   return makeHasActiveTask.value ? 1 : 4
 })
@@ -7273,7 +7538,14 @@ const orchQualityReport = computed(() => {
   const art = orchestrationSession.value?.artifact
   if (!art || typeof art !== 'object') return []
   const qr = (art as Record<string, unknown>).quality_report as Record<string, unknown> | unknown[] | undefined
-  if (Array.isArray(qr)) return qr
+  if (Array.isArray(qr)) {
+    return qr as Array<{
+      check?: string
+      ok?: boolean | null
+      note?: string
+      critical?: boolean
+    }>
+  }
   if (qr && typeof qr === 'object' && Array.isArray((qr as Record<string, unknown>).items)) {
     return (qr as Record<string, unknown>).items as Array<{ check?: string; ok?: boolean | null; note?: string; critical?: boolean }>
   }
@@ -7314,11 +7586,11 @@ const orchVibecodingMeta = computed(() => {
 })
 
 /** 制作草稿执行中：紧邻按钮的可读状态，避免只看到「执行中…」误以为卡住 */
-const handoffRunStatusLine = computed(() => {
+const _handoffRunStatusLine = computed(() => {
   if (!finalizeLoading.value) return ''
   const s = orchestrationSession.value
   const steps = Array.isArray(s?.steps) ? s.steps : []
-  const running = steps.find((x: { status?: string }) => x.status === 'running')
+  const running = steps.find((x) => x.status === 'running')
   if (running) {
     const lab = String(running.label || '编排').trim() || '编排'
     const msg = typeof running.message === 'string' && running.message.trim() ? ` — ${running.message.trim()}` : ''
@@ -7327,8 +7599,8 @@ const handoffRunStatusLine = computed(() => {
     return `进行中：${lab}${msg}${elapsed}`
   }
   if (steps.length) {
-    const done = steps.filter((x: { status?: string }) => x.status === 'done').length
-    const next = steps.find((x: { status?: string }) => x.status === 'pending')
+    const done = steps.filter((x) => x.status === 'done').length
+    const next = steps.find((x) => x.status === 'pending')
     if (next && done < steps.length) {
       const nl = String(next.label || '下一步').trim() || '下一步'
       return `排队中：${nl}（已完成 ${done}/${steps.length}）`
@@ -7340,7 +7612,7 @@ const handoffRunStatusLine = computed(() => {
   return '已提交，正在连接编排服务并拉取步骤…'
 })
 
-function formatWallClockSec(sec) {
+function formatWallClockSec(sec: unknown): string {
   const s = Math.max(0, Math.floor(Number(sec) || 0))
   const m = Math.floor(s / 60)
   const r = s % 60
@@ -7375,7 +7647,7 @@ const ORCH_ESTIMATE_SYSTEM = [
   '字段：estimated_seconds（整数，通常 120～3600，极端不超过 7200），confidence（"low"|"medium"|"high"），one_line_reason（一句中文，≤80 字）。',
 ].join('')
 
-function parseOrchestrationEtaFromLlmText(text) {
+function parseOrchestrationEtaFromLlmText(text: unknown): { seconds: number | null; reason: string } {
   let s = String(text || '').trim()
   if (!s) return { seconds: null, reason: '' }
   if (s.startsWith('```')) {
@@ -7424,7 +7696,14 @@ function fallbackOrchestrationSecondsEstimate(ctx: {
   return Math.round(Math.min(7200, Math.max(120, n)))
 }
 
-async function estimateOrchestrationSeconds(ctx) {
+async function estimateOrchestrationSeconds(ctx: {
+  intent: string
+  checklistLen: number
+  generateFrontend?: boolean
+  employeeTarget?: string
+  scriptFileCount?: number
+  brief: string
+}): Promise<{ seconds: number | null; reason: string }> {
   try {
     const { provider, model } = await resolveChatProviderModel()
     const lines = [
@@ -7528,22 +7807,22 @@ const handoffAssetNote = computed(() => {
 const hasRepo = computed(() => router.hasRoute('workbench-repository'))
 const hasWorkflow = computed(() => router.hasRoute('workbench-workflow'))
 /** Teleport 到 body；keep-alive 下切到统一工作台等路由时首页仍缓存，需按当前路由隐藏 FAB */
-const showDirectTierFab = computed(() => {
+const _showDirectTierFab = computed(() => {
   if (!hasWorkflow.value) return false
   const n = String(route.name || '')
   return n === 'home' || n === 'workbench-home'
 })
-const hasScriptWorkflowRoute = computed(() => router.hasRoute('script-workflow-new'))
+const _hasScriptWorkflowRoute = computed(() => router.hasRoute('script-workflow-new'))
 const hasEmployee = computed(() => router.hasRoute('workbench-employee'))
-const hasPlans = computed(() => router.hasRoute('plans'))
+const _hasPlans = computed(() => router.hasRoute('plans'))
 
 /** 一档有聊天记录时默认锁定挡位切换，需用户显式解锁（同一会话内保持） */
 const gearNavUserUnlocked = ref(false)
-const gearNavHardLocked = computed(
+const _gearNavHardLocked = computed(
   () => Boolean(hasWorkflow.value && directMessages.value.length && !gearNavUserUnlocked.value),
 )
 
-function unlockGearNav() {
+function _unlockGearNav() {
   gearNavUserUnlocked.value = true
 }
 
@@ -7631,7 +7910,7 @@ const makeComposerInput = computed({
   },
 })
 
-const makeComposerInputLabel = computed(() =>
+const _makeComposerInputLabel = computed(() =>
   planSession.value?.phase === 'chat' ? '补充或追问' : '描述想法',
 )
 
@@ -7648,20 +7927,20 @@ const composerSendDisabled = computed(() => {
   if (ps) return true
   if (!hasWorkflow.value) return true
   const text = String(draft.value || '').trim()
-  const uploading = directAttachedFiles.value.some((f: any) => f.status === 'uploading')
+  const uploading = directAttachedFiles.value.some((f) => f.status === 'uploading')
   if (uploading) return true
   return !text && !directAttachedFiles.value.length
 })
 
 const currentLlmBlock = computed(() => {
   if (!llmCatalog.value?.providers) return null
-  return llmCatalog.value.providers.find((p) => p.provider === selectedProvider.value) || null
+  return llmCatalog.value.providers.find((p: WorkbenchStateRecord) => p.provider === selectedProvider.value) || null
 })
 
 const currentProviderLabel = computed(() => {
   const list = llmCatalog.value?.providers
   if (!Array.isArray(list)) return '厂商'
-  const b = list.find((p) => p.provider === selectedProvider.value)
+  const b = list.find((p: WorkbenchStateRecord) => p.provider === selectedProvider.value)
   const lab = typeof b?.label === 'string' ? b.label.trim() : ''
   const id = typeof b?.provider === 'string' ? b.provider.trim() : ''
   return lab || id || '厂商'
@@ -7682,18 +7961,18 @@ const modelPickerEnabled = computed(() => {
   return Boolean(block && Array.isArray(block.models) && block.models.length)
 })
 
-function categoryLabel(cat) {
+function categoryLabel(cat: string): string {
   return llmCatalog.value?.category_labels?.[cat] || cat
 }
 
-function modelsForWorkbenchCategory(cat) {
+function modelsForWorkbenchCategory(cat: string): WorkbenchStateRecord[] {
   const block = currentLlmBlock.value
   const detailed = block?.models_detailed
   if (detailed && detailed.length) {
-    return detailed.filter((r) => r.category === cat)
+    return detailed.filter((r: WorkbenchStateRecord) => r.category === cat)
   }
   if (cat === 'llm' && block?.models?.length) {
-    return block.models.map((id) => ({ id, category: 'llm' }))
+    return block.models.map((id: string) => ({ id, category: 'llm' }))
   }
   return []
 }
@@ -7703,11 +7982,11 @@ function syncManualSelectionFromPreferences() {
   if (!res?.providers?.length) return
   const pref = res.preferences || {}
   let p = pref.provider || 'openai'
-  if (!res.providers.some((x) => x.provider === p)) {
+  if (!res.providers.some((x: WorkbenchStateRecord) => x.provider === p)) {
     p = res.providers[0]?.provider || 'openai'
   }
   selectedProvider.value = p
-  const block = res.providers.find((x) => x.provider === p)
+  const block = res.providers.find((x: WorkbenchStateRecord) => x.provider === p)
   const mids = block?.models || []
   let m = pref.model || ''
   if (!m || !mids.includes(m)) m = mids[0] || ''
@@ -7722,9 +8001,9 @@ async function loadLlmCatalogForWorkbench() {
     const res = await api.llmCatalog(false)
     llmCatalog.value = res
     syncManualSelectionFromPreferences()
-  } catch (e) {
+  } catch (e: unknown) {
     llmCatalog.value = null
-    llmCatalogError.value = e.message || String(e)
+    llmCatalogError.value = e instanceof Error ? e.message : String(e)
   } finally {
     llmCatalogLoading.value = false
   }
@@ -7741,35 +8020,35 @@ function onWorkbenchProviderChange() {
   selectedModel.value = mids[0] || ''
 }
 
-function toggleLlmDd(which) {
+function toggleLlmDd(which: 'provider' | 'model' | 'directProvider' | 'directModel'): void {
   llmDdOpen.value = llmDdOpen.value === which ? null : which
 }
 
-function pickProvider(p) {
+function pickProvider(p: unknown): void {
   if (typeof p !== 'string' || !p) return
   selectedProvider.value = p
   onWorkbenchProviderChange()
   llmDdOpen.value = null
 }
 
-function pickModel(id) {
+function pickModel(id: unknown): void {
   if (typeof id !== 'string' || !id) return
   selectedModel.value = id
   llmDdOpen.value = null
 }
 
-function onLlmDocPointerDown(ev) {
+function onLlmDocPointerDown(ev: PointerEvent): void {
   if (!llmDdOpen.value) return
-  const t = ev.target
+  const t = ev.target as Element | null
   if (t && typeof t.closest === 'function' && t.closest('.wb-llm-dd')) return
   llmDdOpen.value = null
 }
 
-function onLlmEscape(ev) {
+function onLlmEscape(ev: KeyboardEvent): void {
   if (ev.key === 'Escape') llmDdOpen.value = null
 }
 
-async function retryOrchStep(_st: any) {
+async function retryOrchStep(_st: OrchStepLike) {
   const sid = String(orchestrationSessionId.value || '').trim()
   if (!sid) return
   try {
@@ -7787,12 +8066,12 @@ async function retryOrchStep(_st: any) {
         finalizeError.value = final.error || '编排失败'
       }
     }
-  } catch (e: any) {
-    finalizeError.value = String(e?.message || e || '重试失败')
+  } catch (e: unknown) {
+    finalizeError.value = workbenchErrorMessage(e) || '重试失败'
   }
 }
 
-function orchStepClass(st) {
+function _orchStepClass(st: OrchStepLike): Record<string, boolean> {
   return {
     'wb-step--done': st.status === 'done',
     'wb-step--running': st.status === 'running',
@@ -7804,7 +8083,7 @@ function orchStepClass(st) {
 
 /** 返回某步骤已运行的秒数（仅 running 状态 + 有 started_at 时），null 表示不展示。
  *  orchElapsedTick 作为响应式依赖使其每 0.5 秒刷新一次。*/
-function orchStepRunningSec(st) {
+function orchStepRunningSec(st: OrchStepLike): number | null {
   orchElapsedTick.value // 依赖订阅，使每次 tick 重新计算
   if (st.status !== 'running' || !st.started_at) return null
   const t0 = new Date(st.started_at).getTime()
@@ -7815,25 +8094,27 @@ function orchStepRunningSec(st) {
 /** 跟踪各步骤最近一次 message 变化时间，用于「响应较慢」提示（B3）。*/
 const _stepLastMsgChange: Record<string, { msg: string; ts: number }> = {}
 
-function orchStepSlowHint(st) {
+function orchStepSlowHint(st: OrchStepLike): boolean {
   orchElapsedTick.value // 响应式订阅
   if (st.status !== 'running') return false
   const sec = orchStepRunningSec(st)
   if (sec === null || sec < 60) return false
-  const tracked = _stepLastMsgChange[st.id]
+  const tracked = _stepLastMsgChange[String(st.id || st.label || 'unknown')]
   if (!tracked) return true // 从未记录过，说明消息一直没来
   return (Date.now() - tracked.ts) >= 30000
 }
 
 /** 每次轮询后调用，更新 message 变化时间戳。 */
-function _trackStepMessages(steps: Array<{ id: string; message?: any }>) {
+function _trackStepMessages(steps: OrchStepLike[]) {
   for (const st of steps || []) {
-    const cur = typeof st.message === 'object' && st.message
-      ? String(st.message.summary || JSON.stringify(st.message))
+    const message = st.message as Record<string, unknown> | string | null | undefined
+    const cur = typeof message === 'object' && message
+      ? String(message.summary || JSON.stringify(message))
       : String(st.message || '')
-    const prev = _stepLastMsgChange[st.id]
+    const stepId = String(st.id || st.label || 'unknown')
+    const prev = _stepLastMsgChange[stepId]
     if (!prev || prev.msg !== cur) {
-      _stepLastMsgChange[st.id] = { msg: cur, ts: Date.now() }
+      _stepLastMsgChange[stepId] = { msg: cur, ts: Date.now() }
     }
   }
 }
@@ -7841,59 +8122,87 @@ function _trackStepMessages(steps: Array<{ id: string; message?: any }>) {
 // ---------------------------------------------------------------- AgentLoop v2 message helpers
 
 /** Returns the display summary string from a step's message (str or dict). */
-function stepMsgSummary(st: any): string {
+function structuredStepMessage(st: OrchStepLike): StructuredStepMessage | null {
+  const msg = st?.message
+  if (!msg || typeof msg !== 'object') return null
+  return msg as StructuredStepMessage
+}
+
+function stepMsgSummary(st: OrchStepLike): string {
   const msg = st?.message
   if (!msg) return ''
   if (typeof msg === 'string') return msg
-  if (typeof msg === 'object') return String(msg.summary || '')
+  const structured = structuredStepMessage(st)
+  if (structured) return String(structured.summary || '')
   return ''
 }
 
 /** Returns the current tool name from a structured message, or empty string. */
-function stepMsgCurrentTool(st: any): string {
-  const msg = st?.message
-  if (!msg || typeof msg !== 'object') return ''
-  return String(msg.current_tool || '')
+function stepMsgCurrentTool(st: OrchStepLike): string {
+  return String(structuredStepMessage(st)?.current_tool || '')
 }
 
 /** Returns the todo list from a structured message, or empty array. */
-function stepMsgTodos(st: any): Array<{ id: string; content: string; status: string }> {
-  const msg = st?.message
-  if (!msg || typeof msg !== 'object') return []
-  const todos = msg.todos
+function stepMsgTodos(st: OrchStepLike): Array<{ id: string; content: string; status: string }> {
+  const todos = structuredStepMessage(st)?.todos
   if (!Array.isArray(todos)) return []
-  return todos.filter((t: any) => t && typeof t === 'object')
+  return todos.filter((todo) => Boolean(todo && typeof todo === 'object'))
 }
 
 /** Returns true if the structured message indicates a slow-model hint. */
-function stepMsgSlowHint(st: any): boolean {
-  const msg = st?.message
-  if (!msg || typeof msg !== 'object') return false
-  return Boolean(msg.slow_hint)
+function stepMsgSlowHint(st: OrchStepLike): boolean {
+  return Boolean(structuredStepMessage(st)?.slow_hint)
 }
 
-function serializablePlanSession(ps) {
-  if (!ps || typeof ps !== 'object') return null
+function cachedFileMetadata(file: File): CachedWorkbenchFile {
   return {
-    ...ps,
-    files: Array.isArray(ps.files)
-      ? ps.files.map((f) => ({
-          name: String(f?.name || ''),
-          size: Number(f?.size || 0),
-          type: String(f?.type || ''),
-          cachedOnly: true,
-        }))
-      : [],
+    name: file.name,
+    size: file.size,
+    type: file.type,
+    cachedOnly: true,
   }
 }
 
-function restorePlanSession(ps) {
-  if (!ps || typeof ps !== 'object') return null
-  const out = {
+function normalizePlanMessages(value: unknown): PlanMessage[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item): PlanMessage[] => {
+    if (!item || typeof item !== 'object') return []
+    const row = item as Record<string, unknown>
+    if (row.role !== 'user' && row.role !== 'assistant') return []
+    return [{ role: row.role, content: String(row.content || '') }]
+  })
+}
+
+function serializablePlanSession(ps: PlanSession | null): Record<string, unknown> | null {
+  if (!ps) return null
+  return {
     ...ps,
-    files: Array.isArray(ps.files) ? ps.files : [],
-    messages: Array.isArray(ps.messages) ? ps.messages : [],
-    checklistLines: Array.isArray(ps.checklistLines) ? ps.checklistLines : [],
+    files: ps.files.map(cachedFileMetadata),
+  }
+}
+
+function restorePlanSession(value: unknown): PlanSession | null {
+  if (!value || typeof value !== 'object') return null
+  const ps = value as Record<string, unknown>
+  const out: PlanSession = {
+    intentKey: String(ps.intentKey || CANVAS_SKILL_INTENT),
+    intentTitle: String(ps.intentTitle || '需求规划'),
+    phase: String(ps.phase || 'summary'),
+    initialBrief: String(ps.initialBrief || ''),
+    fullBrief: String(ps.fullBrief || ''),
+    displayBrief: String(ps.displayBrief || ''),
+    generateFrontend: Boolean(ps.generateFrontend),
+    summaryTitle: String(ps.summaryTitle || ''),
+    summaryText: String(ps.summaryText || ''),
+    summaryNeedsClarification: Boolean(ps.summaryNeedsClarification),
+    // File 对象不能跨 sessionStorage 恢复；避免把元数据对象误传到上传接口。
+    files: [],
+    messages: normalizePlanMessages(ps.messages),
+    checklistText: String(ps.checklistText || ''),
+    checklistLines: Array.isArray(ps.checklistLines) ? ps.checklistLines.map((line) => String(line)) : [],
+    planError: String(ps.planError || ''),
+    loading: Boolean(ps.loading),
+    streamingText: '',
   }
   if (out.loading) {
     out.loading = false
@@ -7904,34 +8213,42 @@ function restorePlanSession(ps) {
   return out
 }
 
-function serializablePendingHandoff(h) {
-  if (!h || typeof h !== 'object') return null
+function serializablePendingHandoff(h: PendingHandoff | null): Record<string, unknown> | null {
+  if (!h) return null
   return {
     ...h,
-    files: Array.isArray(h.files)
-      ? h.files.map((f) => ({
-          name: String(f?.name || ''),
-          size: Number(f?.size || 0),
-          type: String(f?.type || ''),
-          cachedOnly: true,
-        }))
-      : [],
-    planningMessages: Array.isArray(h.planningMessages)
-      ? h.planningMessages.map((m) => ({ role: m.role, content: m.content }))
-      : [],
-    executionChecklist: Array.isArray(h.executionChecklist) ? [...h.executionChecklist] : [],
-    sourceDocuments: Array.isArray(h.sourceDocuments) ? [...h.sourceDocuments] : [],
+    files: (h.files || []).map(cachedFileMetadata),
+    planningMessages: h.planningMessages.map((m) => ({ role: m.role, content: m.content })),
+    executionChecklist: [...(h.executionChecklist || [])],
+    sourceDocuments: [...(h.sourceDocuments || [])],
   }
 }
 
-function restorePendingHandoff(h) {
-  if (!h || typeof h !== 'object') return null
+function restorePendingHandoff(value: unknown): PendingHandoff | null {
+  if (!value || typeof value !== 'object') return null
+  const h = value as Record<string, unknown>
   return {
-    ...h,
-    files: Array.isArray(h.files) ? h.files : [],
-    planningMessages: Array.isArray(h.planningMessages) ? h.planningMessages : [],
-    executionChecklist: Array.isArray(h.executionChecklist) ? h.executionChecklist : [],
-    sourceDocuments: Array.isArray(h.sourceDocuments) ? h.sourceDocuments : [],
+    description: String(h.description || ''),
+    employeeRoutingBrief: typeof h.employeeRoutingBrief === 'string' ? h.employeeRoutingBrief : undefined,
+    planningContext: typeof h.planningContext === 'string' ? h.planningContext : undefined,
+    intentTitle: String(h.intentTitle || '制作草稿'),
+    intentKey: String(h.intentKey || CANVAS_SKILL_INTENT),
+    workflowName: String(h.workflowName || ''),
+    planNotes: String(h.planNotes || ''),
+    suggestedModId: String(h.suggestedModId || ''),
+    generateFrontend: Boolean(h.generateFrontend),
+    employeeTarget: String(h.employeeTarget || 'pack_only'),
+    employeeWorkflowName: String(h.employeeWorkflowName || ''),
+    fhdBaseUrl: String(h.fhdBaseUrl || ''),
+    planningMessages: normalizePlanMessages(h.planningMessages),
+    executionChecklist: Array.isArray(h.executionChecklist)
+      ? h.executionChecklist.map((line) => String(line))
+      : [],
+    sourceDocuments: Array.isArray(h.sourceDocuments)
+      ? h.sourceDocuments.filter((doc): doc is WorkbenchStateRecord => Boolean(doc && typeof doc === 'object'))
+      : [],
+    // 浏览器 File 无法从 JSON 恢复，必须由用户重新选择。
+    files: [],
   }
 }
 
@@ -8830,7 +9147,10 @@ function clearWorkbenchHandoffSession() {
 }
 
 /** 做 Mod 时屏蔽「选语言 / 选 API 风格 / 选 UI 库」等通用脚手架题（旧回复或误遵指令时兜底） */
-function isModHostStackSurveyQuestion(q) {
+type PlanChoice = { id: string; label: string }
+type PlanQuestion = { id: string; title: string; choices: PlanChoice[] }
+
+function isModHostStackSurveyQuestion(q: PlanQuestion): boolean {
   const t = String(q?.title || '').trim()
   if (!t) return false
   if (/员工包.*语言|后端.*语言|^语言$/i.test(t)) return true
@@ -8839,8 +9159,8 @@ function isModHostStackSurveyQuestion(q) {
   return false
 }
 
-function normalizePlanOptions(raw) {
-  const out = []
+function normalizePlanOptions(raw: unknown): PlanQuestion[] {
+  const out: PlanQuestion[] = []
   if (!Array.isArray(raw)) return out
   for (const item of raw) {
     if (!item || typeof item !== 'object') continue
@@ -8864,13 +9184,18 @@ function normalizePlanOptions(raw) {
 }
 
 /** 解析规划助手回复：Mermaid + <<<PLAN_DETAILS>>> + <<<PLAN_OPTIONS>>> JSON（与 buildPlanSystemPrompt 约定一致） */
-function parsePlanAssistantContent(raw) {
+function parsePlanAssistantContent(raw: unknown): {
+  diagram: string
+  details: string
+  hasDiagram: boolean
+  options: PlanQuestion[]
+} {
   const s = String(raw || '')
   const mer = s.match(/```mermaid\s*([\s\S]*?)```/i)
   const diagram = mer ? mer[1].trim() : ''
   const det = s.match(/<<<PLAN_DETAILS>>>([\s\S]*?)<<<END_PLAN_DETAILS>>>/i)
   const opt = s.match(/<<<PLAN_OPTIONS>>>([\s\S]*?)<<<END_PLAN_OPTIONS>>>/i)
-  let options = []
+  let options: PlanQuestion[] = []
   if (opt) {
     const rawJson = opt[1].trim()
     try {
@@ -8923,9 +9248,9 @@ const planChecklistFlowMarkdown = computed(() => {
   return buildChecklistFlowMarkdown(lines)
 })
 
-function mermaidChecklistLabel(text, max = 30) {
+function mermaidChecklistLabel(text: unknown, max = 30): string {
   const s = String(text || '')
-    .replace(/^\s*\d+[\.)、]\s*/, '')
+    .replace(/^\s*\d+[.)、]\s*/, '')
     .replace(/[<>]/g, '')
     .replace(/["[\]{}]/g, '')
     .replace(/\s+/g, ' ')
@@ -8934,7 +9259,7 @@ function mermaidChecklistLabel(text, max = 30) {
   return s.length > max ? `${s.slice(0, max)}…` : s
 }
 
-function buildChecklistFlowMarkdown(lines) {
+function buildChecklistFlowMarkdown(lines: unknown): string {
   const list = Array.isArray(lines) ? lines.filter((x) => String(x || '').trim()).slice(0, 18) : []
   if (!list.length) {
     return '```mermaid\nflowchart TD\n  start["开始"] --> done["完成"]\n```'
@@ -8960,7 +9285,7 @@ function cancelPlanSummary() {
   showAppToast('已取消任务摘要生成', { variant: 'info' })
 }
 
-function compactPlanVisibleText(text, max = 260) {
+function compactPlanVisibleText(text: unknown, max = 260): string {
   const s = stripInternalMarkers(String(text || ''))
     .replace(/【本次上传附件全文】[\s\S]*?(?=\n\n---\n|$)/g, '【本次上传附件全文已读取，界面不展开】')
     .replace(/【我的文件资料库命中片段】[\s\S]*?(?=\n\n---\n|$)/g, '【资料库片段已读取，界面不展开】')
@@ -8971,7 +9296,7 @@ function compactPlanVisibleText(text, max = 260) {
 }
 
 /** 制作区大标题：从交接描述里优先取「初始想法」段，否则整段压缩 */
-function extractInitialIdeaFromHandoff(description) {
+function extractInitialIdeaFromHandoff(description: unknown): string {
   const s = String(description || '')
   const m = s.match(/【初始想法】\s*\n+([\s\S]*?)(?=\n\n---|\n【|$)/)
   const chunk = m?.[1]?.trim() ? m[1].trim() : s.trim()
@@ -8991,7 +9316,7 @@ const makeHeroTitle = computed(() => {
       const body = String(ps.summaryText || '').replace(/\s+/g, ' ').trim()
       if (body) return truncateWorkbenchText(body, MAKE_HERO_TITLE_MAX)
     }
-    const firstUser = ps.messages?.find((m) => m.role === 'user')
+    const firstUser = ps.messages?.find((m: WorkbenchStateRecord) => m.role === 'user')
     if (firstUser?.content) {
       return truncateWorkbenchText(compactPlanVisibleText(String(firstUser.content), 800), MAKE_HERO_TITLE_MAX)
     }
@@ -9055,10 +9380,10 @@ const makeKickerTw = useTypewriter(makeKickerText, 40, activeModeReset)
 const makeTitleTw = useTypewriter(makeTitleText, 40, activeModeReset)
 const voiceKickerText = computed(() => voiceState.value === 'idle' ? '' : voiceStatusText.value)
 const voiceTitleText = computed(() => voiceTitle.value)
-const voiceKickerTw = useTypewriter(voiceKickerText, 40, activeModeReset)
-const voiceTitleTw = useTypewriter(voiceTitleText, 55, activeModeReset)
+const _voiceKickerTw = useTypewriter(voiceKickerText, 40, activeModeReset)
+const _voiceTitleTw = useTypewriter(voiceTitleText, 55, activeModeReset)
 
-function buildPlanSummarySystemPrompt(intentTitle, mode?: string) {
+function buildPlanSummarySystemPrompt(intentTitle: unknown, mode?: string): string {
   const lines = [
     '你是需求摘要助手。你只负责把用户上传文件和输入内容总结成一个简短、准确的任务摘要，供用户确认。',
     `当前制作类型：${intentTitle || '未指定'}`,
@@ -9085,7 +9410,7 @@ function buildPlanSummarySystemPrompt(intentTitle, mode?: string) {
   return lines.join('\n')
 }
 
-function parsePlanSummary(raw, fallback) {
+function parsePlanSummary(raw: unknown, fallback: unknown): { title: string; summary: string } {
   const text = String(raw || '').trim()
   const titleMatch = text.match(/^TITLE:\s*(.+)$/im)
   const summaryMatch = text.match(/^SUMMARY:\s*([\s\S]+)$/im)
@@ -9125,22 +9450,22 @@ watch(
   },
 )
 
-function planAssistantParts(raw) {
+function planAssistantParts(raw: unknown) {
   return parsePlanAssistantContent(raw)
 }
 
 /** 助手气泡 Mermaid 渲染错误（按消息下标） */
-const planDiagramError = ref({})
+const planDiagramError = ref<Record<string, string>>({})
 
 /** 规划流程图：完整预览浮层（消息下标，null 为关闭） */
-const planDiagramPreviewIdx = ref(null)
-const planDiagramPreviewMountRef = ref(null)
-const planDiagramPreviewViewportRef = ref(null)
+const planDiagramPreviewIdx = ref<number | null>(null)
+const planDiagramPreviewMountRef = ref<HTMLElement | null>(null)
+const planDiagramPreviewViewportRef = ref<HTMLElement | null>(null)
 const planPreviewScale = ref(1)
 const planPreviewTx = ref(0)
 const planPreviewTy = ref(0)
-let planDiagramPreviewEscUnlisten = null
-let planDiagramPreviewPointerCleanup = null
+let planDiagramPreviewEscUnlisten: (() => void) | null = null
+let planDiagramPreviewPointerCleanup: (() => void) | null = null
 
 const planDiagramPreviewPanStyle = computed(() => ({
   transform: `translate(${planPreviewTx.value}px, ${planPreviewTy.value}px) scale(${planPreviewScale.value})`,
@@ -9252,8 +9577,9 @@ async function planDiagramPreviewFitView() {
   planPreviewTy.value = (vp.clientHeight - bh) / 2
 }
 
-async function openPlanDiagramPreview(idx) {
-  planDiagramPreviewIdx.value = idx
+async function openPlanDiagramPreview(idx: string | number): Promise<void> {
+  const diagramIndex = Number(idx)
+  planDiagramPreviewIdx.value = diagramIndex
   planPreviewScale.value = 1
   planPreviewTx.value = 0
   planPreviewTy.value = 0
@@ -9268,7 +9594,7 @@ async function openPlanDiagramPreview(idx) {
   planDiagramPreviewEscUnlisten = () => window.removeEventListener('keydown', onKey)
   await nextTick()
   await nextTick()
-  const host = document.getElementById(`wb-plan-mer-${idx}`)
+  const host = document.getElementById(`wb-plan-mer-${diagramIndex}`)
   const svg = host?.querySelector('svg')
   const target = planDiagramPreviewMountRef.value
   if (!target) return
@@ -9299,7 +9625,7 @@ function closePlanDiagramPreview() {
   planDiagramPreviewIdx.value = null
 }
 
-let mermaidApi = null
+let mermaidApi: (typeof import('mermaid'))['default'] | null = null
 let mermaidInitDone = false
 
 async function getMermaidSingleton() {
@@ -9325,7 +9651,7 @@ async function flushPlanMermaidDiagrams() {
     planDiagramError.value = {}
     return
   }
-  const nextErr = {}
+  const nextErr: Record<string, string> = {}
   let mer
   try {
     mer = await getMermaidSingleton()
@@ -9373,7 +9699,7 @@ watch(
   () => {
     const ps = planSession.value
     if (!ps?.messages) return ''
-    return ps.messages.map((m) => `${m.role}\t${m.content}`).join('\n')
+    return ps.messages.map((m: WorkbenchStateRecord) => `${m.role}\t${m.content}`).join('\n')
   },
   async () => {
     await nextTick()
@@ -9437,8 +9763,8 @@ async function loadKnowledgeDocuments(requireLogin = false) {
     ])
     knowledgeStatus.value = st
     knowledgeDocs.value = Array.isArray(docs?.documents) ? docs.documents : []
-  } catch (e) {
-    knowledgeError.value = e?.message || String(e)
+  } catch (e: unknown) {
+    knowledgeError.value = workbenchErrorMessage(e)
     knowledgeDocs.value = []
   } finally {
     knowledgeLoading.value = false
@@ -9451,22 +9777,22 @@ function openKnowledgeFilePicker() {
   knowledgeFileInputRef.value?.click?.()
 }
 
-async function uploadKnowledgeFiles(files) {
+async function uploadKnowledgeFiles(files: FileList | File[] | null | undefined): Promise<void> {
   const list = Array.from(files || []).filter(Boolean)
   if (!list.length || knowledgeUploading.value) return
   if (!requireLoginForWorkbenchUse()) return
   knowledgeError.value = ''
   try {
     await ingestComposerFiles(list as File[], 'make')
-  } catch (err) {
-    knowledgeError.value = err?.message || String(err)
+  } catch (err: unknown) {
+    knowledgeError.value = workbenchErrorMessage(err)
   } finally {
     if (knowledgeFileInputRef.value) knowledgeFileInputRef.value.value = ''
   }
 }
 
-async function onKnowledgeFileChange(e) {
-  await uploadKnowledgeFiles(e?.target?.files)
+async function onKnowledgeFileChange(e: Event): Promise<void> {
+  await uploadKnowledgeFiles((e.target as HTMLInputElement | null)?.files)
 }
 
 function onKnowledgeDragEnter() {
@@ -9474,26 +9800,26 @@ function onKnowledgeDragEnter() {
   knowledgeDragActive.value = true
 }
 
-function onKnowledgeDragLeave(e) {
-  const current = e?.currentTarget
-  const related = e?.relatedTarget
+function onKnowledgeDragLeave(e: DragEvent): void {
+  const current = e.currentTarget as HTMLElement | null
+  const related = e.relatedTarget as Node | null
   if (current && related && current.contains?.(related)) return
   knowledgeDragActive.value = false
 }
 
-async function onKnowledgeDrop(e) {
+async function onKnowledgeDrop(e: DragEvent): Promise<void> {
   knowledgeDragActive.value = false
   if (knowledgeUploading.value || planSession.value) return
   if (!requireLoginForWorkbenchUse()) return
   await uploadKnowledgeFiles(e?.dataTransfer?.files)
 }
 
-function fileExtension(filename) {
+function fileExtension(filename: unknown): string {
   const ext = String(filename || '').split('.').pop()?.toLowerCase() || 'file'
   return ext.length > 5 ? ext.slice(0, 5) : ext
 }
 
-function fileKind(doc) {
+function fileKind(doc: WorkbenchStateRecord): string {
   const ext = fileExtension(doc?.filename)
   if (ext === 'pdf') return 'pdf'
   if (ext === 'docx') return 'doc'
@@ -9503,11 +9829,11 @@ function fileKind(doc) {
   return 'text'
 }
 
-function fileKindClass(doc) {
+function fileKindClass(doc: WorkbenchStateRecord): string {
   return `wb-kb-card--${fileKind(doc)}`
 }
 
-function fileKindLabel(doc) {
+function fileKindLabel(doc: WorkbenchStateRecord): string {
   const m = {
     pdf: 'PDF 文档',
     doc: 'Word 文档',
@@ -9516,10 +9842,10 @@ function fileKindLabel(doc) {
     md: 'Markdown',
     text: '文本资料',
   }
-  return m[fileKind(doc)] || '文件'
+  return m[fileKind(doc) as keyof typeof m] || '文件'
 }
 
-function formatBytes(value) {
+function formatBytes(value: unknown): string {
   const n = Number(value || 0)
   if (!Number.isFinite(n) || n <= 0) return '0 B'
   if (n < 1024) return `${Math.round(n)} B`
@@ -9527,23 +9853,23 @@ function formatBytes(value) {
   return `${(n / 1024 / 1024).toFixed(1)} MB`
 }
 
-async function deleteKnowledgeDocument(docId) {
+async function deleteKnowledgeDocument(docId: string): Promise<void> {
   if (!docId) return
   if (!requireLoginForWorkbenchUse()) return
   try {
     await api.knowledgeDeleteDocument(docId)
     await loadKnowledgeDocuments()
-  } catch (e) {
-    knowledgeError.value = e?.message || String(e)
+  } catch (e: unknown) {
+    knowledgeError.value = workbenchErrorMessage(e)
   }
 }
 
-function formatKnowledgeContext(items) {
+function formatKnowledgeContext(items: unknown): string {
   const rows = Array.isArray(items) ? items : []
   if (!rows.length) return ''
   return rows
     .slice(0, 6)
-    .map((it, i) => {
+    .map((it: WorkbenchStateRecord, i: number) => {
       const filename = it?.filename || '资料'
       const pageNo = Number(it?.page_no || it?.pageNo || 0) || 0
       const content = String(it?.content || '').trim()
@@ -9590,8 +9916,8 @@ async function confirmWorkflowModLink() {
     const mid = linkModId.value
     dismissWorkflowLinkOffer()
     await router.push({ name: 'mod-authoring', params: { modId: mid } })
-  } catch (e) {
-    linkError.value = e.message || String(e)
+  } catch (e: unknown) {
+    linkError.value = workbenchErrorMessage(e)
   } finally {
     linkBusy.value = false
   }
@@ -9614,12 +9940,16 @@ function dismissPendingHandoff() {
   clearWorkbenchHandoffSession()
 }
 
-function buildMakeCompletionResult(final, intent, handoffSnapshot) {
+function buildMakeCompletionResult(
+  final: WorkbenchOrchestrationSession,
+  intent: string,
+  handoffSnapshot: PendingHandoff,
+): WorkbenchCompletionResult {
   const art = final?.artifact || {}
   const finIntent = final?.intent || intent
   if (finIntent === 'employee') {
     const packId = art.pack_id != null ? String(art.pack_id) : ''
-    const q = {
+    const q: Record<string, string> = {
       focus: 'employee',
       fromAi: '1',
       packId,
@@ -9715,7 +10045,7 @@ async function openMakeCompletionPrimary() {
     return
   }
   try {
-    await router.push(r.primaryRoute)
+    await router.push(r.primaryRoute as RouteLocationRaw)
   } catch {
     finalizeError.value = '无法打开目标页面，请从左侧导航进入对应功能。'
   }
@@ -9725,7 +10055,7 @@ async function openMakeCompletionSecondary() {
   const r = makeCompletionResult.value
   if (!r?.secondaryRoute) return
   try {
-    await router.push(r.secondaryRoute)
+    await router.push(r.secondaryRoute as RouteLocationRaw)
   } catch {
     finalizeError.value = '无法打开 Skill 组画布，请从工作流列表进入。'
   }
@@ -9817,7 +10147,7 @@ function openSixDimTestPreview() {
   employeeSixDimModalOpen.value = true
 }
 
-function tryOpenEmployeeSixDimModal(final) {
+function tryOpenEmployeeSixDimModal(final: WorkbenchOrchestrationSession): void {
   const art = final?.artifact
   if (!art || typeof art !== 'object') return
   const rep =
@@ -9825,18 +10155,24 @@ function tryOpenEmployeeSixDimModal(final) {
     ((art as Record<string, unknown>).quality_report as Record<string, unknown> | undefined)
       ?.six_dimension_report
   if (!rep || typeof rep !== 'object' || !(rep as Record<string, unknown>).dimensions) return
-  employeeSixDimReport.value = rep
+  employeeSixDimReport.value = rep as SixDimensionReport
   employeeSixDimModalOpen.value = true
 }
 
-function applyMakeCompletion(final, intent, handoffSnapshot) {
-  makeCompletionResult.value = buildMakeCompletionResult(final, intent, handoffSnapshot)
+function applyMakeCompletion(
+  final: WorkbenchOrchestrationSession,
+  intent: string,
+  handoffSnapshot: PendingHandoff,
+): WorkbenchCompletionResult {
+  const completion = buildMakeCompletionResult(final, intent, handoffSnapshot)
+  makeCompletionResult.value = completion
   pendingHandoff.value = null
   if (intent === 'employee') {
     tryOpenEmployeeSixDimModal(final)
   }
   void scrollMakeFlowToEnd()
   void maybeAutoOpenMakeCompletionInVoiceMode()
+  return completion
 }
 
 /** 说模式：14/14 完成后自动跳进员工画布（带 packId），避免停在语音页不知道下一步 */
@@ -9861,8 +10197,8 @@ async function persistManualLlmIfNeeded() {
   }
 }
 
-async function pollWorkbenchSession(sessionId) {
-  const delay = (ms) => new Promise((r) => setTimeout(r, ms))
+async function pollWorkbenchSession(sessionId: string): Promise<WorkbenchOrchestrationSession | null> {
+  const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
   /**
    * 轮询策略：基础 1500ms（约 40 次/分钟），落在后端 RateLimiterMiddleware
    * 默认 60 次/60 秒的限额内，避免「开始生成员工包」长时间运行被 429 截断。
@@ -9883,7 +10219,7 @@ async function pollWorkbenchSession(sessionId) {
       if (s.status === 'done' || s.status === 'error') {
         if (s.status === 'done') {
           const nonTerminal = (mergedSteps || []).filter(
-            (x: { status?: string }) =>
+            (x: OrchStepLike) =>
               x.status !== 'done' && x.status !== 'error' && x.status !== 'skipped',
           )
           if (nonTerminal.length > 0) {
@@ -9891,14 +10227,14 @@ async function pollWorkbenchSession(sessionId) {
               await delay(800)
               try {
                 const s2 = await api.workbenchGetSession(sessionId)
-                const merged2 = mergeOrchStepsMonotonic(
+                const merged2: OrchStepLike[] = mergeOrchStepsMonotonic(
                   orchestrationSession.value?.steps,
                   s2.steps || [],
                 )
                 orchestrationSession.value = { ...s2, steps: merged2 }
                 _trackStepMessages(merged2)
                 const stillPending = (merged2 || []).filter(
-                  (x: { status?: string }) =>
+                  (x: OrchStepLike) =>
                     x.status !== 'done' && x.status !== 'error' && x.status !== 'skipped',
                 )
                 if (stillPending.length === 0) break
@@ -9912,7 +10248,7 @@ async function pollWorkbenchSession(sessionId) {
       }
       backoffMs = 0
     } catch (e) {
-      const status = e && typeof e === 'object' && typeof (e as any).status === 'number' ? (e as any).status : 0
+      const status = workbenchHttpStatus(e)
       // 429（限流）/ 503（短暂不可用）属于可恢复抖动：指数退避后继续轮询，
       // 而非把整个编排会话标记为失败。其余错误按原行为向上抛出。
       if (status === 429 || status === 503) {
@@ -9953,8 +10289,8 @@ async function resumeCachedOrchestration() {
     if (final.status === 'error') {
       finalizeError.value = final.error || '编排失败'
     }
-  } catch (e: any) {
-    const m = e?.message || String(e)
+  } catch (e: unknown) {
+    const m = workbenchErrorMessage(e)
     finalizeError.value = m
   } finally {
     stopOrchestrationElapsedTicker()
@@ -9967,7 +10303,7 @@ async function resumeCachedOrchestration() {
 async function runOrchestration(): Promise<boolean> {
   const h = pendingHandoff.value
   if (!h || !hasWorkflow.value || finalizeLoading.value) return false
-  if (!requireLoginForWorkbenchUse()) return
+  if (!requireLoginForWorkbenchUse()) return false
   if (!canRunOrchestration.value) {
     if (isCanvasSkillIntent(h.intentKey)) finalizeError.value = '请填写 Skill 组名称与描述'
     else finalizeError.value = '请填写描述'
@@ -10102,17 +10438,15 @@ async function runOrchestration(): Promise<boolean> {
     }
     if (art.execution_mode === 'script') {
       const scriptWorkflowId = Number(art.script_workflow_id || 0)
-      applyMakeCompletion(final, finIntent, handoffSnapshot)
+      const completion = applyMakeCompletion(final, finIntent, handoffSnapshot)
       if (Number.isFinite(scriptWorkflowId) && scriptWorkflowId > 0) {
-        makeCompletionResult.value = {
-          ...makeCompletionResult.value,
-          primaryLabel: '打开脚本工作流沙箱',
-          primaryRoute: { path: `/script-workflows/${scriptWorkflowId}/edit`, query: { tab: 'sandbox' } },
-          usageLines: [
-            '脚本工作流已生成，可在沙箱页上传同类文件反复验证输出。',
-            '确认脚本正确后，可保存并发布为可复用工作流。',
-          ],
-        }
+        completion.primaryLabel = '打开脚本工作流沙箱'
+        completion.primaryRoute = { path: `/script-workflows/${scriptWorkflowId}/edit`, query: { tab: 'sandbox' } }
+        completion.usageLines = [
+          '脚本工作流已生成，可在沙箱页上传同类文件反复验证脚本输出。',
+          '确认脚本正确后，可保存并发布为可复用工作流。',
+        ]
+        makeCompletionResult.value = completion
       }
       return true
     }
@@ -10149,8 +10483,8 @@ async function runOrchestration(): Promise<boolean> {
     orchestrationSession.value = null
     orchestrationSessionId.value = ''
     return true
-  } catch (e: any) {
-    const m = e?.message || String(e)
+  } catch (e: unknown) {
+    const m = workbenchErrorMessage(e)
     const low = m.toLowerCase()
     if (
       low.includes('not found') ||
@@ -10176,7 +10510,7 @@ async function runOrchestration(): Promise<boolean> {
   return false
 }
 
-function applyStarter(kind) {
+function _applyStarter(kind: string): void {
   if (hasWorkflow.value) {
     if (!INTENT_META[kind]) return
     dismissPlanSession()
@@ -10187,18 +10521,18 @@ function applyStarter(kind) {
     })
     return
   }
-  const fallback = {
+  const fallback = ({
     mod: hasRepo.value ? 'workbench-repository' : null,
     employee: hasEmployee.value ? 'workbench-employee' : null,
     skill: hasWorkflow.value ? 'workbench-workflow' : null,
     workflow: hasWorkflow.value ? 'workbench-workflow' : null,
-  }[kind]
+  } as Record<string, string | null>)[kind]
   if (fallback && router.hasRoute(fallback)) {
     router.push({ name: fallback })
   }
 }
 
-function buildPlanSystemPrompt(intentKey, intentTitle) {
+function buildPlanSystemPrompt(intentKey: string, intentTitle: string): string {
   const typeHint =
     isCanvasSkillIntent(intentKey)
       ? '区分两类产物：（1）Skill 组合工作流＝先把需求拆成可复用 ESkill/Skill，再把这些 Skill 组合成画布工作流；（2）脚本工作流＝可运行程序、直接完成任务。规划时若用户要「程序本体」，引导其需求规划结束后去「脚本工作流」新建；此处必须先识别业务能力边界，拆出多个 Skill，说明每个 Skill 的输入、输出、质量门和触发策略，再描述 Skill 之间的顺序、条件与失败重试。流程图用 flowchart LR 或 TD；节点 id 仅用英文字母；子图写 subgraph sg1["中文标题"]，结束用单独一行 end（禁止 endsubgraph）；含冒号/括号的中文标签必须加双引号。'
@@ -10248,7 +10582,7 @@ function buildPlanSystemPrompt(intentKey, intentTitle) {
 }
 
 /** 仅用于「生成执行清单」单次请求：不得沿用对话里的 Mermaid/PLAN_* 格式，否则模型会拒写 <<<CHECKLIST>>> */
-function buildChecklistGenerationSystemPrompt(intentKey, intentTitle) {
+function buildChecklistGenerationSystemPrompt(intentKey: string, intentTitle: string): string {
   const scope =
     isCanvasSkillIntent(intentKey)
       ? '每条任务应可执行、可验证。若用户要「程序本体」，清单中应出现脚本工作流（编写/运行/沙箱）相关条目；否则必须围绕 Skill 生成闭环：拆分 Skill 蓝图、定义每个 Skill 的输入输出契约、静态逻辑、质量门、动态触发策略、固化策略、Skill 间数据映射、组合工作流与沙盒校验。普通画布节点只作为 start/end/condition 等控制节点。'
@@ -10270,20 +10604,20 @@ function buildChecklistGenerationSystemPrompt(intentKey, intentTitle) {
   ].join('\n')
 }
 
-function formatPlanMessagesForBrief(msgs) {
+function formatPlanMessagesForBrief(msgs: VoiceTurnMessage[]): string {
   if (!Array.isArray(msgs) || !msgs.length) return ''
-  const topicHint = msgs.map((m) => m.content).join(' ')
+  const topicHint = msgs.map((m: VoiceTurnMessage) => m.content).join(' ')
   return formatFilteredPlanMessagesForBrief(msgs, topicHint)
 }
 
 /** 编排前净化员工 handoff brief，去掉 ASR 噪声与占位符 */
-function enrichEmployeeHandoffBeforeOrchestration(h) {
+function enrichEmployeeHandoffBeforeOrchestration(h: PendingHandoff): void {
   if (!h || h.intentKey !== 'employee') return
   const msgs = Array.isArray(h.planningMessages) && h.planningMessages.length
     ? h.planningMessages
     : voiceMessages.value
   const best = pickBestEmployeeBriefFromVoice(voiceSessionState.value, msgs)
-  const topicHint = [best, h.description, ...msgs.map((m) => m.content)].join(' ')
+  const topicHint = [best, h.description, ...msgs.map((m: VoiceTurnMessage) => m.content)].join(' ')
   const qaText = formatFilteredPlanMessagesForBrief(msgs, topicHint)
   const initialFromDesc = String(h.description || '').split('【澄清对话】')[0].replace('【初始想法】', '').trim()
   const initial = best || initialFromDesc || String(h.description || '').trim()
@@ -10295,7 +10629,7 @@ function enrichEmployeeHandoffBeforeOrchestration(h) {
     descChunks.push(`【执行清单】\n${checklistMatch[1].trim()}`)
   } else if (Array.isArray(h.executionChecklist) && h.executionChecklist.length) {
     descChunks.push(
-      `【执行清单】\n${h.executionChecklist.map((l, i) => `${i + 1}. ${l}`).join('\n')}`,
+      `【执行清单】\n${h.executionChecklist.map((line: unknown, index: number) => `${index + 1}. ${line}`).join('\n')}`,
     )
   }
   h.planningContext = descChunks.join('\n\n---\n\n')
@@ -10303,8 +10637,8 @@ function enrichEmployeeHandoffBeforeOrchestration(h) {
 }
 
 /** 规划面板：把 nginx 504 HTML 等转成可读中文，避免整页 HTML 贴在 planError 里 */
-function friendlyPlanPanelApiError(err) {
-  const raw = err && typeof err === 'object' && 'message' in err ? String(err.message) : String(err || '')
+function friendlyPlanPanelApiError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err || '')
   const s = raw.trim()
   if (!s) return '请求失败，请稍后重试。'
   if (/504|Gateway Time-out|网关超时/i.test(s) || /<title>\s*504/i.test(s)) {
@@ -10316,30 +10650,30 @@ function friendlyPlanPanelApiError(err) {
   return s.length > 900 ? `${s.slice(0, 900)}…` : s
 }
 
-function _checklistBodyToResult(body) {
+function _checklistBodyToResult(body: unknown): { text: string; lines: string[] } | null {
   const lines = String(body || '')
     .split(/\r?\n/)
-    .map((l) => l.replace(/^\s*\d+[\.)]\s*/, '').trim())
-    .filter((l) => l && !/^<<<[\s\S]*>>>$/.test(l))
+    .map((line: string) => line.replace(/^\s*\d+[.)]\s*/, '').trim())
+    .filter((line: string) => line && !/^<<<[\s\S]*>>>$/.test(line))
   if (!lines.length) return null
-  const text = lines.map((l, i) => `${i + 1}. ${l}`).join('\n')
+  const text = lines.map((line: string, index: number) => `${index + 1}. ${line}`).join('\n')
   return { text, lines }
 }
 
 /** 模型漏写结束标签时：取文末连续「数字. 」行作为清单（仅当正文含 <<<CHECKLIST>>> 时由上层调用） */
-function parseChecklistNumberedTail(raw) {
+function parseChecklistNumberedTail(raw: unknown): { text: string; lines: string[] } | null {
   const lines = String(raw || '')
     .split(/\r?\n/)
-    .map((l) => l.trim())
+    .map((line: string) => line.trim())
     .filter(Boolean)
   while (lines.length && /^```/.test(lines[lines.length - 1])) {
     lines.pop()
   }
-  const collected = []
+  const collected: string[] = []
   for (let i = lines.length - 1; i >= 0; i -= 1) {
     const l = lines[i]
-    if (/^\d+[\.)]\s+\S/.test(l)) {
-      collected.unshift(l.replace(/^\d+[\.)]\s+/, '').trim())
+    if (/^\d+[.)]\s+\S/.test(l)) {
+      collected.unshift(l.replace(/^\d+[.)]\s+/, '').trim())
     } else if (collected.length) {
       break
     }
@@ -10348,7 +10682,7 @@ function parseChecklistNumberedTail(raw) {
   return _checklistBodyToResult(collected.join('\n'))
 }
 
-function parseChecklistBlock(raw) {
+function parseChecklistBlock(raw: unknown): { text: string; lines: string[] } | null {
   let s = String(raw || '').trim()
   const fullFence = s.match(/^```(?:\w*)?\s*\n([\s\S]*?)\n```\s*$/m)
   if (fullFence) s = fullFence[1].trim()
@@ -10362,7 +10696,7 @@ function parseChecklistBlock(raw) {
   s = s.replace(/<<<\s*END\s*CHECKLIST\s*>>>/gi, '<<<END>>>')
   s = s.replace(/<<<\s*END_CHECKLIST\s*>>>/gi, '<<<END>>>')
   s = s.replace(/<<<\s*END\s*>>>/gi, '<<<END>>>')
-  const tryBodies = []
+  const tryBodies: string[] = []
   let m = s.match(/<<<CHECKLIST>>>([\s\S]*?)<<<END>>>/i)
   if (m) tryBodies.push(m[1])
   if (!tryBodies.length) {
@@ -10380,7 +10714,7 @@ function parseChecklistBlock(raw) {
   return null
 }
 
-function _providerRowHasUsableKey(row, fernetOk) {
+function _providerRowHasUsableKey(row: WorkbenchStateRecord | null | undefined, fernetOk: boolean): boolean {
   if (!row) return false
   if (row.provider === 'xiaomi' && row.has_platform_key) return true
   if (row.has_user_override && fernetOk) return true
@@ -10390,13 +10724,17 @@ function _providerRowHasUsableKey(row, fernetOk) {
 const RESOLVE_CHAT_CACHE_MS = 5 * 60 * 1000
 let resolveChatCache: { at: number; mode: string; provider: string; model: string } | null = null
 
-function pickVisionModelFromBlock(block): string {
+function pickVisionModelFromBlock(block: WorkbenchStateRecord | null | undefined): string {
   if (!block) return ''
   const detailed = Array.isArray(block.models_detailed) ? block.models_detailed : []
-  const byCategory = detailed.find((m) => m?.category === 'vlm' && String(m?.id || '').trim())
+  const byCategory = detailed.find((m: WorkbenchStateRecord) => m?.category === 'vlm' && String(m?.id || '').trim())
   if (byCategory) return String(byCategory.id).trim()
-  const ids = Array.isArray(block.models) ? block.models : detailed.map((m) => m?.id).filter(Boolean)
-  const byHint = ids.find((id) => modelSupportsVisionInput(block.provider, String(id || ''), llmCatalog.value))
+  const ids = Array.isArray(block.models)
+    ? block.models
+    : detailed.map((m: WorkbenchStateRecord) => m?.id).filter(Boolean)
+  const byHint = ids.find((id: unknown) =>
+    modelSupportsVisionInput(String(block.provider || ''), String(id || ''), llmCatalog.value),
+  )
   return byHint ? String(byHint).trim() : ''
 }
 
@@ -10413,14 +10751,18 @@ async function pickUsableVisionProviderModel() {
   const fernetOk = Boolean(statusPayload?.fernet_configured)
   const rows = Array.isArray(statusPayload?.providers) ? statusPayload.providers : []
   const usableProviders = new Set(
-    rows.filter((r) => _providerRowHasUsableKey(r, fernetOk)).map((r) => String(r.provider || '').trim()),
+    rows
+      .filter((r: WorkbenchStateRecord) => _providerRowHasUsableKey(r, fernetOk))
+      .map((r: WorkbenchStateRecord) => String(r.provider || '').trim()),
   )
-  const providers = Array.isArray(llmCatalog.value?.providers) ? llmCatalog.value.providers : []
+  const providers: WorkbenchStateRecord[] = Array.isArray(llmCatalog.value?.providers)
+    ? llmCatalog.value.providers
+    : []
   const pref = llmCatalog.value?.preferences || {}
   const prefP = typeof pref.provider === 'string' ? pref.provider.trim() : ''
   const ordered = [
-    ...providers.filter((b) => b.provider === prefP),
-    ...providers.filter((b) => b.provider !== prefP),
+    ...providers.filter((block: WorkbenchStateRecord) => block.provider === prefP),
+    ...providers.filter((block: WorkbenchStateRecord) => block.provider !== prefP),
   ]
   for (const block of ordered) {
     const provider = String(block?.provider || '').trim()
@@ -10428,7 +10770,7 @@ async function pickUsableVisionProviderModel() {
     const model = pickVisionModelFromBlock(block)
     if (model) return { provider, model }
   }
-  if (!fernetOk && rows.some((r) => r.has_user_override)) {
+  if (!fernetOk && rows.some((r: WorkbenchStateRecord) => r.has_user_override)) {
     throw new Error('已保存 BYOK，但服务端未配置 MODSTORE_LLM_MASTER_KEY，无法解密使用视觉模型。')
   }
   throw new Error('当前未配置支持识图的视觉模型。请在「资金与记录 → 大模型 API」配置 VLM/多模态模型，或切到「自选」选择支持图片输入的模型。')
@@ -10474,8 +10816,8 @@ async function resolveChatProviderModel(opts: { needVision?: boolean } = {}) {
           return { provider: rp, model: rm }
         }
       }
-    } catch (e) {
-      const msg = e?.message || String(e)
+    } catch (e: unknown) {
+      const msg = workbenchErrorMessage(e)
       if (/404|Not Found/i.test(msg)) {
         /* 旧服务端无此路由时回退到下方本地推断 */
       } else {
@@ -10506,17 +10848,17 @@ async function resolveChatProviderModel(opts: { needVision?: boolean } = {}) {
   }
   const fernetOk = Boolean(statusPayload?.fernet_configured)
   const rows = Array.isArray(statusPayload?.providers) ? statusPayload.providers : []
-  const rowP = rows.find((r) => r.provider === p)
+  const rowP = rows.find((row: WorkbenchStateRecord) => row.provider === p)
 
   if (!_providerRowHasUsableKey(rowP, fernetOk)) {
-    const withModels = rows.filter((r) => {
-      if (!_providerRowHasUsableKey(r, fernetOk)) return false
-      const b = llmCatalog.value?.providers?.find((x) => x.provider === r.provider)
+    const withModels = rows.filter((row: WorkbenchStateRecord) => {
+      if (!_providerRowHasUsableKey(row, fernetOk)) return false
+      const b = llmCatalog.value?.providers?.find((item: WorkbenchStateRecord) => item.provider === row.provider)
       return b && Array.isArray(b.models) && b.models.length
     })
-    const fallback = withModels[0] || rows.find((r) => _providerRowHasUsableKey(r, fernetOk))
+    const fallback = withModels[0] || rows.find((row: WorkbenchStateRecord) => _providerRowHasUsableKey(row, fernetOk))
     if (!fallback) {
-      if (!fernetOk && rows.some((r) => r.has_user_override)) {
+      if (!fernetOk && rows.some((row: WorkbenchStateRecord) => row.has_user_override)) {
         throw new Error(
           '已保存 BYOK，但服务端未配置 MODSTORE_LLM_MASTER_KEY，无法解密使用。请在部署环境设置主密钥，或改用平台环境变量密钥。',
         )
@@ -10526,7 +10868,7 @@ async function resolveChatProviderModel(opts: { needVision?: boolean } = {}) {
       )
     }
     const newP = fallback.provider
-    const block = llmCatalog.value?.providers?.find((b) => b.provider === newP)
+    const block = llmCatalog.value?.providers?.find((item: WorkbenchStateRecord) => item.provider === newP)
     const models = block?.models
     const newM = Array.isArray(models) && models.length ? models[0] : ''
     if (!newM) {
@@ -10551,14 +10893,14 @@ function scrollPlanIntoView() {
   })
 }
 
-async function appendUserAndAssistantPlanTurn(userText, displayText = userText) {
+async function appendUserAndAssistantPlanTurn(userText: string, displayText = userText): Promise<void> {
   const ps = planSession.value
   if (!ps) return
   ps.messages.push({ role: 'user', content: displayText })
   ps.planError = ''
   const { provider, model } = await resolveChatProviderModel()
   const sys = buildPlanSystemPrompt(ps.intentKey, ps.intentTitle)
-  const mappedMessages = ps.messages.map((m, idx) => {
+  const mappedMessages = ps.messages.map((m: VoiceTurnMessage, idx: number) => {
     if (idx === ps.messages.length - 1 && m.role === 'user') {
       return { role: 'user', content: String(userText || displayText || '') }
     }
@@ -10587,7 +10929,7 @@ async function appendUserAndAssistantPlanTurn(userText, displayText = userText) 
     if (ps.intentKey === 'employee') {
       const brief = pickBestEmployeeBriefFromVoice(
         voiceSessionState.value,
-        ps.messages.filter((m) => m.role === 'user'),
+        ps.messages.filter((m: VoiceTurnMessage) => m.role === 'user'),
       )
       assistantContent = buildDefaultEmployeePlanAssistantReply(brief || ps.fullBrief || '')
     } else {
@@ -10638,12 +10980,15 @@ async function summarizePlanSession() {
   ps.initialBrief = `${parsed.title}\n${parsed.summary}`
 }
 
-async function openPlanSession(input) {
+async function openPlanSession(input: string | OpenPlanSessionInput): Promise<void> {
   planSurfaceKey.value += 1
   const effectiveIntent = composerIntent.value || CANVAS_SKILL_INTENT
   const meta = INTENT_META[effectiveIntent] || INTENT_META.workflow
-  const fullBrief = typeof input === 'object' && input ? String(input.fullBrief || '') : String(input || '')
-  const displayBrief = typeof input === 'object' && input ? String(input.displayBrief || '') : compactPlanVisibleText(fullBrief)
+  const inputRecord = typeof input === 'object' && input ? input : null
+  const fullBrief = inputRecord ? String(inputRecord.fullBrief || '') : String(input || '')
+  const displayBrief = inputRecord
+    ? String(inputRecord.displayBrief || '')
+    : compactPlanVisibleText(fullBrief)
   planSession.value = {
     intentKey: effectiveIntent,
     intentTitle: meta.title,
@@ -10651,11 +10996,11 @@ async function openPlanSession(input) {
     initialBrief: displayBrief,
     fullBrief,
     displayBrief,
-    generateFrontend: effectiveIntent === 'mod' ? input?.generateFrontend !== false : false,
+    generateFrontend: effectiveIntent === 'mod' ? inputRecord?.generateFrontend !== false : false,
     summaryTitle: '',
     summaryText: '',
     summaryNeedsClarification: false,
-    files: Array.isArray(input?.files) ? input.files : [],
+    files: Array.isArray(inputRecord?.files) ? inputRecord.files : [],
     messages: [],
     checklistText: '',
     checklistLines: [],
@@ -10889,7 +11234,7 @@ async function runAutoPilotFromChat() {
   }
 }
 
-function pickPlanOption(qid, cid) {
+function pickPlanOption(qid: string, cid: string): void {
   planOptionSelections.value = { ...planOptionSelections.value, [qid]: cid }
 }
 
@@ -10908,7 +11253,7 @@ function autoPickPlanQuickOptions() {
   planOptionSelections.value = sel
 }
 
-async function submitPlanUserMessage(userText) {
+async function submitPlanUserMessage(userText: string): Promise<void> {
   const ps = planSession.value
   const t = String(userText || '').trim()
   if (!t || !ps || ps.loading || ps.phase !== 'chat') return
@@ -10940,13 +11285,13 @@ async function sendPlanReplyFromQuickPicks() {
   const opts = planQuickOptions.value
   if (!opts.length || !canSendPlanQuickPicks.value) return
   const sel = planOptionSelections.value
-  const lines = []
+  const lines: string[] = []
   for (const q of opts) {
     const cid = sel[q.id]
     if (cid === PLAN_OPTION_OTHER_ID) {
       lines.push(`【${q.title}】${String(planOptionOtherText[q.id] || '').trim()}`)
     } else {
-      const c = (q.choices || []).find((x) => x.id === cid)
+      const c = (q.choices || []).find((choice: PlanChoice) => choice.id === cid)
       lines.push(`【${q.title}】${c ? c.label : cid}`)
     }
   }
@@ -10985,7 +11330,7 @@ async function requestExecutionChecklist() {
     const apiMsgs = [
       { role: 'system', content: sys },
       ...(ps.fullBrief ? [{ role: 'user', content: `【完整隐藏上下文，供生成清单使用；不要原样输出】\n${ps.fullBrief}` }] : []),
-      ...ps.messages.map((m) => ({ role: m.role, content: m.content })),
+      ...ps.messages.map((m: VoiceTurnMessage) => ({ role: m.role, content: m.content })),
       tail,
     ]
     ps.streamingText = ''
@@ -11056,7 +11401,11 @@ function confirmPlanAndOpenHandoff() {
   const ps = planSession.value
   if (!ps || ps.phase !== 'checklist') return
   const isEmployee = ps.intentKey === 'employee'
-  const topicHint = [ps.initialBrief, ps.fullBrief, ...ps.messages.map((m) => m.content)].join(' ')
+  const topicHint = [
+    ps.initialBrief,
+    ps.fullBrief,
+    ...ps.messages.map((m: VoiceTurnMessage) => m.content),
+  ].join(' ')
   const qaText = formatFilteredPlanMessagesForBrief(ps.messages, topicHint)
   let initialChunk = ps.initialBrief
   let employeeBrief = ''
@@ -11140,8 +11489,8 @@ async function submitDraft() {
   const filesSnapshot = [...directAttachedFiles.value]
   const note = directAttachmentNote(filesSnapshot)
   const inlineBlocks = filesSnapshot
-    .filter((f: any) => (f.status === 'inline' || f.status === 'ready') && f.extractedText)
-    .map((f: any, idx: number) => `### @附件${idx + 1}：${f.name}\n\n${f.extractedText}`)
+    .filter((f) => (f.status === 'inline' || f.status === 'ready') && f.extractedText)
+    .map((f, idx) => `### @附件${idx + 1}：${f.name}\n\n${f.extractedText}`)
     .join('\n\n---\n\n')
   let knowledgePack = ''
   if (text && isEmbeddingConfigured()) {
@@ -11152,8 +11501,8 @@ async function submitDraft() {
         embeddingModel: embeddingChoice.model,
       })
       knowledgePack = formatKnowledgeContext(res?.items)
-    } catch (e) {
-      knowledgeError.value = e?.message || String(e)
+    } catch (e: unknown) {
+      knowledgeError.value = workbenchErrorMessage(e)
     }
   }
   const payloadParts = [text]
@@ -11176,7 +11525,7 @@ async function submitDraft() {
   await openPlanSession({
     fullBrief: payload,
     displayBrief: displayPayload,
-    files: filesSnapshot.map((f: any) => f.file).filter(Boolean),
+    files: filesSnapshot.map((f) => f.file),
     generateFrontend: wantsModFrontend,
   })
 }
@@ -11189,7 +11538,7 @@ async function onComposerSendClick() {
   await submitDraft()
 }
 
-function onComposerKeydown(e) {
+function onComposerKeydown(e: KeyboardEvent): void {
   if (e.key !== 'Enter' || e.shiftKey) return
   const ps = planSession.value
   if (ps?.phase === 'chat') {
@@ -11222,7 +11571,7 @@ const coverageHooks = {
       planPreviewTy.value = Number(v.y) || 0
       return true
     }
-    const refs: Record<string, { value: any }> = {
+    const refs = {
       activeBotId,
       activeConversationId,
       allBots,
@@ -11310,7 +11659,7 @@ const coverageHooks = {
       voiceState,
       waveformCanvas,
       workflowLinkOffer,
-    }
+    } as Record<string, Ref<unknown>>
     const target = refs[key]
     if (!target) return false
     target.value = value
@@ -11435,11 +11784,15 @@ const coverageHooks = {
 }
 
 defineExpose({
+  isGearAxisLocked,
   __coverage: coverageHooks,
 })
 
 if (import.meta.env.MODE === 'test') {
-  ;(globalThis as any).__WORKBENCH_HOME_COVERAGE_HOOKS__ = coverageHooks
+  const testGlobal = globalThis as typeof globalThis & {
+    __WORKBENCH_HOME_COVERAGE_HOOKS__?: typeof coverageHooks
+  }
+  testGlobal.__WORKBENCH_HOME_COVERAGE_HOOKS__ = coverageHooks
 }
 </script>
 
