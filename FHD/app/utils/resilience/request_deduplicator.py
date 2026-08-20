@@ -163,7 +163,7 @@ class RequestDeduplicator:
 
                 if record.result is not None:
                     self._stats["cache_hits"] += 1
-                    return (True, record.record)
+                    return (True, record.result)
 
                 return (False, None)
 
@@ -185,7 +185,7 @@ class RequestDeduplicator:
                     del self._records[key]
             raise e
 
-    def invalidate(self, func: Callable = None, *args, **kwargs) -> int:
+    def invalidate(self, func: Callable | None = None, *args, **kwargs) -> int:
         """使缓存失效"""
         if func:
             key = self._make_key(func.__name__, *args, **kwargs)

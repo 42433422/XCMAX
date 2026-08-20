@@ -6,6 +6,8 @@ import logging
 
 from fastapi import FastAPI
 
+from sandbox_app.operational_errors import BOUNDARY_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -31,7 +33,7 @@ def _safe_include(app, loader, name: str, prefix: str | None = None) -> None:
         else:
             app.include_router(router)
         logger.info("sandbox whitelist: mounted %s", name)
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         logger.warning("sandbox whitelist: skip %s: %s", name, e)
 
 

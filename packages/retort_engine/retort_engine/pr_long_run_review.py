@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 
 def build_pr_long_run_review(
@@ -82,13 +82,21 @@ def _publish_safety_matrix(root: Path) -> dict[str, Any]:
     low = _read_json(root / "docs" / "retort_pr_low_permission_probe.json")
     readonly = _read_json(root / "docs" / "retort_pr_readonly_degradation_probe.json")
     sandbox = _read_json(root / "docs" / "retort_pr_publish_sandbox.json")
-    live_summary = live.get("summary") if isinstance(live.get("summary"), dict) else {}
-    low_summary = low.get("summary") if isinstance(low.get("summary"), dict) else {}
-    readonly_summary = (
-        readonly.get("summary") if isinstance(readonly.get("summary"), dict) else {}
+    live_summary = cast(
+        dict[str, Any],
+        live.get("summary") if isinstance(live.get("summary"), dict) else {},
     )
-    sandbox_summary = (
-        sandbox.get("summary") if isinstance(sandbox.get("summary"), dict) else {}
+    low_summary = cast(
+        dict[str, Any],
+        low.get("summary") if isinstance(low.get("summary"), dict) else {},
+    )
+    readonly_summary = cast(
+        dict[str, Any],
+        readonly.get("summary") if isinstance(readonly.get("summary"), dict) else {},
+    )
+    sandbox_summary = cast(
+        dict[str, Any],
+        sandbox.get("summary") if isinstance(sandbox.get("summary"), dict) else {},
     )
     checks = {
         "live_write_rolled_back": bool(

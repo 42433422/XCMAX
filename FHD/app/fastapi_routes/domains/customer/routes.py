@@ -5,29 +5,38 @@ XCAGI 前端兼容 API — 客户管理路由。
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Body, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import JSONResponse
 
-from app.fastapi_routes.domains.db.base import (
+from app.fastapi_routes.domains.customer.agent_helpers import (
+    agent_node_output as _agent_node_output,
+)
+from app.fastapi_routes.domains.customer.agent_helpers import (
+    customers_agent_user_id as _customers_agent_user_id,
+)
+from app.fastapi_routes.domains.customer.agent_helpers import (
+    run_customers_agent as _run_customers_agent,
+)
+from app.infrastructure.auth.db_token import verify_db_read_token_header
+from app.infrastructure.persistence.compat_db.base import (
     _business_mod_json_block,
     _customer_body_name_contact,
     _customers_write_raise,
 )
-from app.fastapi_routes.domains.db.queries import (
+from app.infrastructure.persistence.compat_db.queries import (
     _customer_find_by_id,
     _customer_row_for_api,
     _customer_row_matches_keyword,
     _customers_schema_hint_if_empty,
     _load_customers_rows,
 )
-from app.fastapi_routes.domains.db.writes import (
+from app.infrastructure.persistence.compat_db.writes import (
     _customer_delete_unified,
     _customer_pg_insert,
     _customer_pg_update,
 )
-from app.infrastructure.auth.db_token import verify_db_read_token_header
 from app.neuro_bus.route_event_publisher import (
     RouteEvents,
     publish_route_event,
@@ -35,106 +44,15 @@ from app.neuro_bus.route_event_publisher import (
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
+__all__ = [
+    "_agent_node_output",
+    "_customers_agent_user_id",
+    "_run_customers_agent",
+    "router",
+]
+
 router = APIRouter(tags=["xcagi-compat"])
 logger = logging.getLogger(__name__)
-
-
-def _agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
-    final_output = getattr(run, "final_output", None)
-    node_outputs = dict((final_output or {}).get("node_outputs") or {})
-    output = dict(node_outputs.get(node_id) or {})
-    if not output:
-        for step in getattr(run, "steps", []) or []:
-            if str(getattr(step, "node_id", "")) == node_id:
-                output = dict(getattr(step, "output", {}) or {})
-                break
-    if not output:
-        output = {"success": getattr(run, "status", "") == "completed"}
-    if not output.get("success") and getattr(run, "error", "") and not output.get("message"):
-        output["message"] = getattr(run, "error", "")
-    run_id = str(getattr(run, "run_id", "") or "")
-    if run_id:
-        output["run_id"] = run_id
-        output["agent_run_id"] = run_id
-    output["agent_status"] = str(getattr(run, "status", "") or "")
-    return output
-
-
-def _customers_agent_user_id(request: Request, payload: dict[str, Any]) -> str:
-    return str(
-        request.headers.get("X-User-Id")
-        or request.headers.get("X-User-ID")
-        or payload.get("user_id")
-        or payload.get("userId")
-        or "customers-route"
-    ).strip()
-
-
-def _run_customers_agent(
-    *,
-    request: Request,
-    action: str,
-    params: dict[str, Any],
-    route_path: str,
-) -> dict[str, Any]:
-    from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.workflow.types import PlanGraph, WorkflowNode
-    from app.application.workflow_registry_app import get_workflow_tool_registry
-
-    registry = get_workflow_tool_registry()
-    action_meta = dict((registry.get("customers") or {}).get("actions") or {}).get(action)
-    if not isinstance(action_meta, dict):
-        return {
-            "success": False,
-            "message": f"未注册的 customers 动作: {action}",
-            "agent_status": "failed",
-        }
-
-    node_id = f"customers_{action}"
-    user_id = _customers_agent_user_id(request, params)
-    plan = PlanGraph(
-        plan_id=node_id,
-        intent=node_id,
-        todo_steps=[f"通过 AgentOrchestrator 执行 customers.{action}"],
-        nodes=[
-            WorkflowNode(
-                node_id=node_id,
-                tool_id="customers",
-                action=action,
-                params=dict(params or {}),
-                risk=str(action_meta.get("risk") or "medium"),
-                idempotent=bool(action_meta.get("idempotent", False)),
-                description=f"Execute customers.{action} through the unified Agent runtime.",
-            )
-        ],
-        risk_level=str(action_meta.get("risk") or "medium"),
-        metadata={"source": "customers_route", "route": route_path},
-    )
-    runtime_context = {
-        "source": "customers_route",
-        "route": route_path,
-        "request_path": str(request.url.path),
-        "user_id": user_id,
-        "route_confirmed": True,
-        "service_source": "fastapi_customer_route",
-    }
-    orchestrator = AgentOrchestrator()
-    run = orchestrator.start_run_from_plan(
-        user_id=user_id,
-        message=str(params.get("message") or f"Customers {action}"),
-        plan=plan,
-        runtime_context=runtime_context,
-    )
-    if run.status in {"waiting_user", "running"}:
-        continued = orchestrator.continue_run(
-            run.run_id,
-            approved_by=user_id or "customers-route",
-            approved_step_id=node_id,
-            runtime_context=runtime_context,
-        )
-        if continued is not None:
-            run = continued
-    return _agent_node_output(run, node_id)
 
 
 def _execute_customers_route_action(action: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -308,7 +226,7 @@ def customers_list(
                 keyword=keyword,
             )
             if mod_out is not None:
-                return mod_out
+                return cast("dict[Any, Any]", mod_out)
     except RECOVERABLE_ERRORS:
         logger.debug("erp domain customers.list dispatch skipped", exc_info=True)
     try:
@@ -495,11 +413,12 @@ async def customers_import(request: Request, file: UploadFile = File(...)) -> di
     _customers_write_raise(request)
     gate = _business_mod_json_block()
     if gate:
-        return gate
+        return cast("dict[Any, Any]", gate)
     try:
         content = await file.read()
-    except RECOVERABLE_ERRORS as e:
-        raise HTTPException(status_code=400, detail=f"读取上传文件失败：{e}") from e
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("customer import upload read failed")
+        raise HTTPException(status_code=400, detail="读取上传文件失败") from exc
     from app.application.excel_imports import run_customers_excel_import_bytes
 
     out = run_customers_excel_import_bytes(content)

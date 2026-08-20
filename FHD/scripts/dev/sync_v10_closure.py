@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """v10 全量版本收口：Mod manifest 版本与宿主/Mod 间依赖对齐 VERSION.md。"""
+
 from __future__ import annotations
 
 import argparse
 import json
 import re
-import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]

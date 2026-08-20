@@ -8,8 +8,7 @@
   border-left: 4px solid #0f766e;
   border-radius: 12px;
   background:
-    radial-gradient(circle at 8% 0%, rgba(20, 184, 166, 0.13), transparent 34%),
-    linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    radial-gradient(circle at 8% 0%, rgba(20, 184, 166, 0.13), transparent 34%), linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
 }
 
 .ews-loop-console-head,
@@ -95,7 +94,7 @@
 
 .ews-loop-card--run {
   background: #ecfeff;
-  border-color: rgba(20, 184, 166, 0.20);
+  border-color: rgba(20, 184, 166, 0.2);
 }
 
 .ews-loop-card--ok {
@@ -167,8 +166,8 @@
   min-width: 0;
   padding: 8px 9px;
   border-radius: 10px;
-  border: 1px dashed rgba(15, 118, 110, 0.20);
-  background: rgba(240, 253, 250, 0.70);
+  border: 1px dashed rgba(15, 118, 110, 0.2);
+  background: rgba(240, 253, 250, 0.7);
 }
 
 .ews-loop-role-group span,
@@ -208,7 +207,7 @@
   padding: 8px 9px;
   border-radius: 10px;
   border: 1px solid rgba(15, 23, 42, 0.06);
-  background: rgba(255, 255, 255, 0.70);
+  background: rgba(255, 255, 255, 0.7);
 }
 
 .ews-loop-isolation-card--run {
@@ -365,7 +364,9 @@
 
 .ews-loop-role-map-node--route {
   border-color: rgba(14, 165, 233, 0.38);
-  box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.1), 0 14px 32px rgba(14, 165, 233, 0.1);
+  box-shadow:
+    0 0 0 2px rgba(14, 165, 233, 0.1),
+    0 14px 32px rgba(14, 165, 233, 0.1);
 }
 
 .ews-loop-role-map-node span,
@@ -855,9 +856,7 @@
 
 .ews-loop-truth-card--primary {
   grid-column: span 2;
-  background:
-    radial-gradient(circle at 0% 0%, rgba(20, 184, 166, 0.16), transparent 34%),
-    rgba(255, 255, 255, 0.94);
+  background: radial-gradient(circle at 0% 0%, rgba(20, 184, 166, 0.16), transparent 34%), rgba(255, 255, 255, 0.94);
 }
 
 .ews-loop-incident-list {
@@ -874,16 +873,12 @@
   padding: 10px;
   border: 1px solid rgba(239, 68, 68, 0.2);
   border-radius: 14px;
-  background:
-    radial-gradient(circle at 0% 0%, rgba(239, 68, 68, 0.12), transparent 34%),
-    rgba(254, 242, 242, 0.9);
+  background: radial-gradient(circle at 0% 0%, rgba(239, 68, 68, 0.12), transparent 34%), rgba(254, 242, 242, 0.9);
 }
 
 .ews-loop-incident--warn {
   border-color: rgba(245, 158, 11, 0.24);
-  background:
-    radial-gradient(circle at 0% 0%, rgba(245, 158, 11, 0.12), transparent 34%),
-    rgba(255, 251, 235, 0.9);
+  background: radial-gradient(circle at 0% 0%, rgba(245, 158, 11, 0.12), transparent 34%), rgba(255, 251, 235, 0.9);
 }
 
 .ews-loop-incident span,
@@ -1088,9 +1083,7 @@
   padding: 11px;
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 15px;
-  background:
-    radial-gradient(circle at 0% 0%, rgba(14, 165, 233, 0.12), transparent 30%),
-    rgba(255, 255, 255, 0.9);
+  background: radial-gradient(circle at 0% 0%, rgba(14, 165, 233, 0.12), transparent 30%), rgba(255, 255, 255, 0.9);
 }
 
 .ews-loop-focus-card span,
@@ -1145,16 +1138,12 @@
 
 .ews-loop-focus-card--bad {
   border-color: rgba(239, 68, 68, 0.2);
-  background:
-    radial-gradient(circle at 0% 0%, rgba(239, 68, 68, 0.12), transparent 30%),
-    rgba(254, 242, 242, 0.9);
+  background: radial-gradient(circle at 0% 0%, rgba(239, 68, 68, 0.12), transparent 30%), rgba(254, 242, 242, 0.9);
 }
 
 .ews-loop-focus-card--warn {
   border-color: rgba(245, 158, 11, 0.24);
-  background:
-    radial-gradient(circle at 0% 0%, rgba(245, 158, 11, 0.12), transparent 30%),
-    rgba(255, 251, 235, 0.9);
+  background: radial-gradient(circle at 0% 0%, rgba(245, 158, 11, 0.12), transparent 30%), rgba(255, 251, 235, 0.9);
 }
 
 .ews-loop-pipeline,
@@ -1180,7 +1169,7 @@
 }
 
 .ews-loop-stage::before {
-  content: "";
+  content: '';
   position: absolute;
   top: 13px;
   right: -18px;
@@ -1257,9 +1246,7 @@
   padding: 10px;
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 13px;
-  background:
-    radial-gradient(circle at 12% 0%, rgba(20, 184, 166, 0.14), transparent 34%),
-    rgba(255, 255, 255, 0.88);
+  background: radial-gradient(circle at 12% 0%, rgba(20, 184, 166, 0.14), transparent 34%), rgba(255, 255, 255, 0.88);
   color: inherit;
   text-decoration: none;
 }
@@ -1313,9 +1300,7 @@
 
 .ews-loop-task-card--bad {
   border-color: rgba(239, 68, 68, 0.2);
-  background:
-    radial-gradient(circle at 12% 0%, rgba(239, 68, 68, 0.14), transparent 34%),
-    rgba(254, 242, 242, 0.9);
+  background: radial-gradient(circle at 12% 0%, rgba(239, 68, 68, 0.14), transparent 34%), rgba(254, 242, 242, 0.9);
 }
 
 .ews-loop-task-card--idle {
@@ -1334,9 +1319,7 @@
   padding: 10px;
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 13px;
-  background:
-    radial-gradient(circle at 100% 0%, rgba(14, 165, 233, 0.12), transparent 34%),
-    rgba(248, 250, 252, 0.9);
+  background: radial-gradient(circle at 100% 0%, rgba(14, 165, 233, 0.12), transparent 34%), rgba(248, 250, 252, 0.9);
   color: inherit;
   text-decoration: none;
 }
@@ -1389,16 +1372,12 @@
 
 .ews-loop-work-order--ok {
   border-color: rgba(34, 197, 94, 0.18);
-  background:
-    radial-gradient(circle at 100% 0%, rgba(34, 197, 94, 0.12), transparent 34%),
-    rgba(240, 253, 244, 0.9);
+  background: radial-gradient(circle at 100% 0%, rgba(34, 197, 94, 0.12), transparent 34%), rgba(240, 253, 244, 0.9);
 }
 
 .ews-loop-work-order--bad {
   border-color: rgba(239, 68, 68, 0.2);
-  background:
-    radial-gradient(circle at 100% 0%, rgba(239, 68, 68, 0.14), transparent 34%),
-    rgba(254, 242, 242, 0.9);
+  background: radial-gradient(circle at 100% 0%, rgba(239, 68, 68, 0.14), transparent 34%), rgba(254, 242, 242, 0.9);
 }
 
 .ews-loop-work-orders-empty {
@@ -1447,9 +1426,7 @@
   padding: 10px;
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 13px;
-  background:
-    linear-gradient(135deg, rgba(15, 23, 42, 0.03), rgba(20, 184, 166, 0.05)),
-    rgba(255, 255, 255, 0.9);
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.03), rgba(20, 184, 166, 0.05)), rgba(255, 255, 255, 0.9);
 }
 
 .ews-loop-separation-cell span,

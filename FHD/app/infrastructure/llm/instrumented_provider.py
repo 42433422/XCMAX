@@ -127,7 +127,7 @@ class InstrumentedProvider:
             return result
         except RECOVERABLE_ERRORS:
             raise
-        except Exception:  # noqa: BLE001 — 装饰层自身异常不得阻断业务
+        except RECOVERABLE_ERRORS:  # noqa: BLE001 — 装饰层自身异常不得阻断业务
             logger.error("instrumented provider failure, passthrough", exc_info=True)
             return await self._inner.chat_completion(
                 messages, temperature=temperature, max_tokens=max_tokens, **kwargs

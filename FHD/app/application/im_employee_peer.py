@@ -10,7 +10,7 @@ AI 员工以「合成 User」（username=``emp:<employee_id>``）形态成为 1:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import select
 
@@ -19,6 +19,12 @@ from app.utils.time import utc_now_naive
 
 
 class EmployeePeerMixin:
+    if TYPE_CHECKING:
+        _db: Any
+        _direct_peer_id: Any
+        get_or_create_direct: Any
+        send_message: Any
+
     @staticmethod
     def employee_im_username(employee_id: str) -> str:
         return f"emp:{str(employee_id or '').strip()[:120]}"
@@ -50,7 +56,7 @@ class EmployeePeerMixin:
             row.display_name = nice
             self._db.commit()
             self._db.refresh(row)
-        return row
+        return cast("User | None", row)
 
     def post_employee_message(
         self,

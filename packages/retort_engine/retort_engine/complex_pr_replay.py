@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.pr_dry_run import review_pr_url
 
@@ -25,14 +25,15 @@ def build_complex_pr_replay_report(
 ) -> dict[str, Any]:
     root = Path(project).expanduser().resolve()
     urls = tuple(pr_urls or DEFAULT_COMPLEX_PR_URLS)
-    replayed = []
+    replayed: list[dict[str, Any]] = []
     review_call = reviewer or (
         lambda url: review_pr_url(url, max_comments=max_comments, max_bytes=max_bytes)
     )
     for url in urls:
         review = review_call(url)
-        summary = (
-            review.get("summary") if isinstance(review.get("summary"), dict) else {}
+        summary = cast(
+            dict[str, Any],
+            review.get("summary") if isinstance(review.get("summary"), dict) else {},
         )
         comments = [
             item

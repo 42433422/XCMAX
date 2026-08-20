@@ -72,7 +72,12 @@ describe('promptAdvancedTutorial', () => {
   describe('launchAdvancedDriverTour', () => {
     it('opens the V2 course catalog without starting the timed driver tour', async () => {
       const router = makeRouter()
-      const buildContext = { industryId: 'retail', mods: [], visibleNav: [], modMenuKeys: new Set() }
+      const buildContext = {
+        industryId: 'retail',
+        mods: [],
+        visibleNav: [],
+        modMenuKeys: new Set(),
+      }
       const listener = vi.fn()
       window.addEventListener('xcagi:open-assistant-float', listener)
 
@@ -88,7 +93,12 @@ describe('promptAdvancedTutorial', () => {
     })
 
     it('returns store.active value', async () => {
-      const buildContext = { industryId: 'retail', mods: [], visibleNav: [], modMenuKeys: new Set() }
+      const buildContext = {
+        industryId: 'retail',
+        mods: [],
+        visibleNav: [],
+        modMenuKeys: new Set(),
+      }
       const result = await launchAdvancedDriverTour({
         router: makeRouter(),
         buildContext,
@@ -98,7 +108,12 @@ describe('promptAdvancedTutorial', () => {
     })
 
     it('does not synthesize clicks or timed navigation when return context is absent', async () => {
-      const buildContext = { industryId: 'retail', mods: [], visibleNav: [], modMenuKeys: new Set() }
+      const buildContext = {
+        industryId: 'retail',
+        mods: [],
+        visibleNav: [],
+        modMenuKeys: new Set(),
+      }
       const router = makeRouter()
       await launchAdvancedDriverTour({
         router,
@@ -112,7 +127,12 @@ describe('promptAdvancedTutorial', () => {
   describe('promptAdvancedTutorialAfterInstall', () => {
     it('ignores the old local completion boolean because it is not V2 evidence', async () => {
       mockAppConfirm.mockResolvedValueOnce(false)
-      const buildContext = { industryId: 'retail', mods: [], visibleNav: [], modMenuKeys: new Set() }
+      const buildContext = {
+        industryId: 'retail',
+        mods: [],
+        visibleNav: [],
+        modMenuKeys: new Set(),
+      }
       const result = await promptAdvancedTutorialAfterInstall({
         router: makeRouter(),
         buildContext,
@@ -123,7 +143,12 @@ describe('promptAdvancedTutorial', () => {
 
     it('returns "dismissed" when user declines confirm', async () => {
       mockAppConfirm.mockResolvedValueOnce(false)
-      const buildContext = { industryId: 'retail', mods: [], visibleNav: [], modMenuKeys: new Set() }
+      const buildContext = {
+        industryId: 'retail',
+        mods: [],
+        visibleNav: [],
+        modMenuKeys: new Set(),
+      }
       const result = await promptAdvancedTutorialAfterInstall({
         router: makeRouter(),
         buildContext,
@@ -133,7 +158,12 @@ describe('promptAdvancedTutorial', () => {
 
     it('calls appConfirm with default message', async () => {
       mockAppConfirm.mockResolvedValueOnce(false)
-      const buildContext = { industryId: 'retail', mods: [], visibleNav: [], modMenuKeys: new Set() }
+      const buildContext = {
+        industryId: 'retail',
+        mods: [],
+        visibleNav: [],
+        modMenuKeys: new Set(),
+      }
       await promptAdvancedTutorialAfterInstall({
         router: makeRouter(),
         buildContext,
@@ -150,7 +180,12 @@ describe('promptAdvancedTutorial', () => {
 
     it('calls appConfirm with custom message when provided', async () => {
       mockAppConfirm.mockResolvedValueOnce(false)
-      const buildContext = { industryId: 'retail', mods: [], visibleNav: [], modMenuKeys: new Set() }
+      const buildContext = {
+        industryId: 'retail',
+        mods: [],
+        visibleNav: [],
+        modMenuKeys: new Set(),
+      }
       await promptAdvancedTutorialAfterInstall({
         router: makeRouter(),
         buildContext,
@@ -161,7 +196,12 @@ describe('promptAdvancedTutorial', () => {
 
     it('does not skip when skipIfCompleted is false', async () => {
       mockAppConfirm.mockResolvedValueOnce(false)
-      const buildContext = { industryId: 'retail', mods: [], visibleNav: [], modMenuKeys: new Set() }
+      const buildContext = {
+        industryId: 'retail',
+        mods: [],
+        visibleNav: [],
+        modMenuKeys: new Set(),
+      }
       const result = await promptAdvancedTutorialAfterInstall({
         router: makeRouter(),
         buildContext,

@@ -3,12 +3,7 @@
     <h2 class="corp-welcome__title">{{ title }}</h2>
     <p class="corp-welcome__subtitle">{{ subtitle }}</p>
 
-    <button
-      v-if="isMobileContact"
-      type="button"
-      class="corp-welcome__cta btn btn-primary"
-      @click="onIntakeCtaClick"
-    >
+    <button v-if="isMobileContact" type="button" class="corp-welcome__cta btn btn-primary" @click="onIntakeCtaClick">
       {{ intakeTriggerLabel }}
     </button>
 
@@ -22,19 +17,14 @@
       </li>
     </ul>
     <p v-if="!isMobileContact && tasks.length" class="corp-welcome__hint">{{ hintText }}</p>
-    <p v-else-if="isMobileContact && intakeCtaUsed" class="corp-welcome__hint">
-      也可在下方输入框用文字描述场景
-    </p>
+    <p v-else-if="isMobileContact && intakeCtaUsed" class="corp-welcome__hint">也可在下方输入框用文字描述场景</p>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { QuickAction } from '../../content/siteKnowledge'
-import {
-  contactIntakeFillCompleted,
-  openContactIntakeModal,
-} from '../../corp-butler/useContactIntakeModal'
+import { contactIntakeFillCompleted, openContactIntakeModal } from '../../corp-butler/useContactIntakeModal'
 
 const props = withDefaults(
   defineProps<{
@@ -60,11 +50,7 @@ const intakeTriggerLabel = computed(() => {
   return 'AI 一键填表'
 })
 
-const hintText = computed(() =>
-  props.isContactPage
-    ? '也可在下方输入框直接描述您的场景'
-    : '选择上方任务，或在下方输入您的问题',
-)
+const hintText = computed(() => (props.isContactPage ? '也可在下方输入框直接描述您的场景' : '选择上方任务，或在下方输入您的问题'))
 
 function onIntakeCtaClick() {
   intakeCtaUsed.value = true
@@ -138,7 +124,9 @@ function onIntakeCtaClick() {
   background: rgba(255, 255, 255, 0.95);
   cursor: pointer;
   text-align: left;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .corp-task-card:hover {

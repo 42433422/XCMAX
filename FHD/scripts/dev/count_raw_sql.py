@@ -26,12 +26,21 @@ ALLOWLIST_SUFFIXES = (
     "app/infrastructure/skills/template_manager/template_manager.py",
     "app/infrastructure/templates/template_store_impl.py",
     "app/services/document_templates/crud.py",
+    # 迁移后 legacy compat 保有其原始 DDL 引导豁免。
+    "app/legacy/routes/document_templates_compat.py",
+    # init_db 拆分 part 与其母文件同类（schema/列引导 DDL）。
+    "app/db/init_db_part03.py",
+    "app/db/init_db_part03_part01.py",
+    # Postgres schema 引导（CREATE SCHEMA / SHOW search_path，schema_name 来自可信参数）。
+    "app/infrastructure/database/mod_schema_router.py",
 )
 
 TEXT_F_PATTERN = re.compile(r"\btext\s*\(\s*f[\"']", re.MULTILINE)
+# 仅匹配单行 f-string 中的 SQL 关键字（[^"'\n] 不跨行），
+# 避免误报 f"..." 后跨行撞上 Python 代码中的 from/where 等标识符。
 FSQL_PATTERN = re.compile(
-    r'f["\'][^"\']*\b(SELECT|INSERT|UPDATE|DELETE|FROM|WHERE)\b',
-    re.IGNORECASE | re.MULTILINE,
+    r'f["\'][^"\'\n]*\b(SELECT|INSERT|UPDATE|DELETE|FROM|WHERE)\b',
+    re.IGNORECASE,
 )
 
 

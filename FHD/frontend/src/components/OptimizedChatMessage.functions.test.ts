@@ -85,19 +85,25 @@ describe('OptimizedChatMessage additional functions', () => {
   })
 
   it('contextSummaryText returns trimmed string for string contextSummary', () => {
-    const wrapper = mountComponent({ message: { ...baseMessage, contextSummary: '  hello world  ' } })
+    const wrapper = mountComponent({
+      message: { ...baseMessage, contextSummary: '  hello world  ' },
+    })
     const vm = wrapper.vm as any
     expect(vm.contextSummaryText).toBe('hello world')
   })
 
   it('contextSummaryText joins items array with + separator', () => {
-    const wrapper = mountComponent({ message: { ...baseMessage, contextSummary: { items: ['item1', 'item2', 'item3'] } } })
+    const wrapper = mountComponent({
+      message: { ...baseMessage, contextSummary: { items: ['item1', 'item2', 'item3'] } },
+    })
     const vm = wrapper.vm as any
     expect(vm.contextSummaryText).toBe('item1 + item2 + item3')
   })
 
   it('contextSummaryText filters empty items from array', () => {
-    const wrapper = mountComponent({ message: { ...baseMessage, contextSummary: { items: ['item1', '', '  ', 'item2'] } } })
+    const wrapper = mountComponent({
+      message: { ...baseMessage, contextSummary: { items: ['item1', '', '  ', 'item2'] } },
+    })
     const vm = wrapper.vm as any
     expect(vm.contextSummaryText).toBe('item1 + item2')
   })
@@ -140,7 +146,7 @@ describe('OptimizedChatMessage additional functions', () => {
     const vm = wrapper.vm as any
     await wrapper.vm.$nextTick()
     // Wait for setTimeout to fire
-    await new Promise(resolve => setTimeout(resolve, 10))
+    await new Promise((resolve) => setTimeout(resolve, 10))
     expect(vm.measureResult).toBeTruthy()
     // Restore working mock
     ;(window as any).requestIdleCallback = savedRIC
@@ -163,7 +169,9 @@ describe('OptimizedChatMessage additional functions', () => {
   })
 
   it('collapsedPreview strips HTML tags', () => {
-    const wrapper = mountComponent({ message: { ...baseMessage, content: '<div><span>Test</span></div>' } })
+    const wrapper = mountComponent({
+      message: { ...baseMessage, content: '<div><span>Test</span></div>' },
+    })
     const vm = wrapper.vm as any
     expect(vm.collapsedPreview).toBe('Test')
   })
@@ -241,16 +249,18 @@ describe('OptimizedChatMessage additional functions', () => {
     const wrapper = mountComponent({
       message: {
         ...baseMessage,
-        nodeResults: [{
-          node_id: 'n1',
-          tool_id: 't1',
-          action: 'run',
-          success: false,
-          error: 'Connection failed',
-          recovery_hint: 'Check network',
-          retries: 2,
-          duration_ms: 150,
-        }],
+        nodeResults: [
+          {
+            node_id: 'n1',
+            tool_id: 't1',
+            action: 'run',
+            success: false,
+            error: 'Connection failed',
+            recovery_hint: 'Check network',
+            retries: 2,
+            duration_ms: 150,
+          },
+        ],
       },
     })
     const vm = wrapper.vm as any
@@ -268,12 +278,14 @@ describe('OptimizedChatMessage additional functions', () => {
     const wrapper = mountComponent({
       message: {
         ...baseMessage,
-        nodeResults: [{
-          node_id: 'n2',
-          tool_id: 't2',
-          action: 'execute',
-          success: true,
-        }],
+        nodeResults: [
+          {
+            node_id: 'n2',
+            tool_id: 't2',
+            action: 'execute',
+            success: true,
+          },
+        ],
       },
     })
     const vm = wrapper.vm as any

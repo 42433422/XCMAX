@@ -29,6 +29,7 @@ from app.domain.services.conversation.context import (
     get_context_facade,
 )
 from app.domain.services.conversation.context import PendingIntent as ContextPendingIntent
+from app.domain.services.conversation.slot_validator import SlotValidator
 
 logger = logging.getLogger(__name__)
 
@@ -152,7 +153,7 @@ class UnifiedConversationCoordinator:
         return cast("ContextFacade", self._context_facade)
 
     def process(
-        self, user_id: str, message: str, context_data: dict[str, Any] = None
+        self, user_id: str, message: str, context_data: dict[str, Any] | None = None
     ) -> ProcessingResult:
         """
         处理用户消息的唯一入口
@@ -167,7 +168,7 @@ class UnifiedConversationCoordinator:
 
         pending = self._get_pending(user_id)
 
-        intent_result = self._recognize_intent(message, context_data)
+        intent_result = self._recognize_intent(message, context_data or {})
 
         if intent_result.is_confirmation and pending:
             return self._handle_confirmation(user_id, message, pending)
@@ -355,8 +356,9 @@ class UnifiedConversationCoordinator:
         self, user_id: str, message: str, intent_result: IntentResult, missing: list[str]
     ) -> ProcessingResult:
         """处理槽位缺失"""
+        intent = intent_result.primary_intent or intent_result.tool_key or "unknown"
         pending = PendingIntent(
-            intent=intent_result.primary_intent,
+            intent=intent,
             slots=intent_result.slots,
             missing_slots=missing,
             source=intent_result.source,
@@ -370,9 +372,7 @@ class UnifiedConversationCoordinator:
         )
         self.context_facade.intent_context.set_pending(user_id, ctx_pending)
 
-        question = self.slot_validator.build_followup(
-            intent_result.primary_intent, missing, intent_result.slots
-        )
+        question = self.slot_validator.build_followup(intent, missing, intent_result.slots)
 
         return ProcessingResult(
             action=ProcessingAction.SLOT_FILL,
@@ -389,11 +389,12 @@ class UnifiedConversationCoordinator:
         self, user_id: str, message: str, intent_result: IntentResult
     ) -> ProcessingResult:
         """处理执行"""
-        result = self._execute_plan(intent_result.tool_key, intent_result.slots)
+        tool_key = intent_result.tool_key or intent_result.primary_intent or "unknown"
+        result = self._execute_plan(tool_key, intent_result.slots)
 
         return ProcessingResult(
             action=ProcessingAction.TOOL_CALL,
-            text=self._get_action_description(intent_result.tool_key, intent_result.slots),
+            text=self._get_action_description(tool_key, intent_result.slots),
             data=result,
             pending_intent=None,
         )
@@ -418,91 +419,6 @@ class UnifiedConversationCoordinator:
             "wechat_send": "正在发送微信消息",
         }
         return descriptions.get(intent, f"正在处理 {intent}")
-
-
-class SlotValidator:
-    """槽位验证器（配置化）"""
-
-    REQUIRED_SLOTS = {
-        "shipment_generate": {
-            "required": ["unit_name", "model_number", "tin_spec", "quantity_tins"],
-            "optional": ["contact_phone"],
-        },
-        "product_query": {
-            "required": [],
-            "optional": ["keyword", "model_number", "tin_spec"],
-        },
-        "customer_query": {
-            "required": [],
-            "optional": ["keyword", "customer_name"],
-        },
-        "customer_supplement": {
-            "required": ["field_name", "field_value"],
-            "optional": [],
-        },
-        "print_label": {
-            "required": ["unit_name"],
-            "optional": ["quantity_tins"],
-        },
-        "price_list": {
-            "required": ["customer_name"],
-            "optional": ["keyword"],
-        },
-        "wechat_send": {
-            "required": ["unit_name"],
-            "optional": ["contact_person"],
-        },
-    }
-
-    SLOT_LABELS = {
-        "unit_name": "客户",
-        "model_number": "编号",
-        "tin_spec": "规格",
-        "quantity_tins": "桶数",
-        "contact_phone": "联系电话",
-        "keyword": "关键词",
-        "customer_name": "客户名称",
-        "field_name": "字段名",
-        "field_value": "字段值",
-    }
-
-    def validate(self, intent: str, slots: dict[str, Any]) -> tuple[bool, list[str]]:
-        """验证槽位"""
-        if intent not in self.REQUIRED_SLOTS:
-            return True, []
-
-        required = self.REQUIRED_SLOTS[intent].get("required", [])
-        missing = [s for s in required if not slots.get(s)]
-
-        return len(missing) == 0, missing
-
-    def build_followup(
-        self, intent: str, missing_slots: list[str], current_slots: dict[str, Any] = None
-    ) -> str:
-        """生成追问文本"""
-        if not missing_slots:
-            return ""
-
-        priority_order = ["unit_name", "model_number", "tin_spec", "quantity_tins"]
-
-        for slot in priority_order:
-            if slot in missing_slots:
-                return self._build_single_question(intent, slot)
-
-        return f"请问{missing_slots[0]}是多少？"
-
-    def _build_single_question(self, intent: str, slot: str) -> str:
-        """生成单个追问"""
-        if intent == "shipment_generate":
-            questions = {
-                "unit_name": "请问要发货给哪个客户呢？",
-                "model_number": "编号是多少呢？",
-                "tin_spec": "规格是多少呢？",
-                "quantity_tins": "这次需要多少桶呢？",
-            }
-            return questions.get(slot, f"请问{slot}是多少呢？")
-
-        return f"请问{self.SLOT_LABELS.get(slot, slot)}是多少呢？"
 
 
 _coordinator: UnifiedConversationCoordinator | None = None

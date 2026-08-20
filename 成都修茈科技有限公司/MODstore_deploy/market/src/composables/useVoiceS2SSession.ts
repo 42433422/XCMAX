@@ -163,7 +163,11 @@ export function useVoiceS2SSession() {
     if (type === 'audio_sentence') {
       const b64 = String(msg.data_b64 || '')
       if (b64) {
-        legacyAudioQueue.push(new Blob([bytesToArrayBuffer(b64ToBytes(b64))], { type: String(msg.mime || 'audio/mpeg') }))
+        legacyAudioQueue.push(
+          new Blob([bytesToArrayBuffer(b64ToBytes(b64))], {
+            type: String(msg.mime || 'audio/mpeg'),
+          }),
+        )
         playLegacyNext()
       }
       return

@@ -7,6 +7,17 @@
 
 from __future__ import annotations
 
-from app.infrastructure.mods.mod_manager import import_mod_backend_py  # noqa: F401
+from typing import cast
 
-__all__ = ["import_mod_backend_py"]
+from app.infrastructure.mods.mod_manager import (
+    get_mod_manager,
+    import_mod_backend_py,
+)
+
+
+def resolve_mod_directory(mod_id: str) -> str | None:
+    """Resolve an installed MOD directory without exposing host internals to packs."""
+    return cast("str | None", get_mod_manager().resolve_mod_directory(mod_id))
+
+
+__all__ = ["import_mod_backend_py", "resolve_mod_directory"]

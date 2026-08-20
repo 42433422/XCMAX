@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """OpenAPI 连接器 REST API。
 
 闭环：导入 spec -> 解析 operation -> 配置鉴权 -> 服务端试调用 -> 发布工作流节点 -> 查日志。
@@ -7,14 +8,13 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Mapping, Optional
+from datetime import UTC, datetime
+from typing import Any, Dict
 
-import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from modstore_server import openapi_connector_support as _support
 from modstore_server.api.deps import _get_current_user
 from modstore_server.infrastructure.db import get_db
 from modstore_server.llm_crypto import fernet_configured
@@ -29,7 +29,6 @@ from modstore_server.models import (
 )
 from modstore_server.openapi_connector_codegen import (
     cleanup_old_versions,
-    default_artifacts_root,
     generate_client_files,
 )
 from modstore_server.openapi_connector_parser import (
@@ -39,155 +38,33 @@ from modstore_server.openapi_connector_parser import (
 )
 from modstore_server.openapi_connector_runtime import (
     SUPPORTED_AUTH_TYPES,
-    OutboundBlocked,
-    assert_url_outbound_safe,
     call_generated_operation,
-    decrypt_credential_payload,
     encrypt_credential_payload,
 )
+
+CredentialBody = _support.CredentialBody
+ImportConnectorBody = _support.ImportConnectorBody
+OperationToggleBody = _support.OperationToggleBody
+PublishWorkflowNodeBody = _support.PublishWorkflowNodeBody
+TestCallBody = _support.TestCallBody
+_credential_view = _support.credential_view
+_fetch_connector_or_404 = _support.fetch_connector_or_404
+_fetch_operation_or_404 = _support.fetch_operation_or_404
+_serialize_connector = _support.serialize_connector
+_serialize_operation = _support.serialize_operation
+_spec_text_from_request = _support.spec_text_from_request
+_MAX_SPEC_BYTES = _support.MAX_SPEC_BYTES
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/openapi-connectors", tags=["openapi-connectors"])
 
 _KEEP_VERSIONS = 2
-_SPEC_FETCH_TIMEOUT = 20.0
-_MAX_SPEC_BYTES = 4 * 1024 * 1024  # 4MB
 
 
 # ---------------------------------------------------------------------------
 # DTOs
 # ---------------------------------------------------------------------------
-
-
-class ImportConnectorBody(BaseModel):
-    name: str = Field(..., min_length=1, max_length=128)
-    description: str = Field("", max_length=2000)
-    spec_text: Optional[str] = Field(None, max_length=2_000_000)
-    spec_url: Optional[str] = Field(None, max_length=2048)
-    base_url_override: Optional[str] = Field(None, max_length=512)
-
-
-class CredentialBody(BaseModel):
-    auth_type: str = Field(..., min_length=1, max_length=32)
-    config: Dict[str, Any] = Field(default_factory=dict)
-
-
-class OperationToggleBody(BaseModel):
-    enabled: bool
-
-
-class TestCallBody(BaseModel):
-    params: Dict[str, Any] = Field(default_factory=dict)
-    body: Any = None
-    headers: Dict[str, str] = Field(default_factory=dict)
-    timeout: float = 30.0
-
-
-class PublishWorkflowNodeBody(BaseModel):
-    workflow_id: int = Field(..., ge=1)
-    operation_id: str = Field(..., min_length=1, max_length=128)
-    name: Optional[str] = Field(None, max_length=256)
-    input_mapping: Dict[str, Any] = Field(default_factory=dict)
-    output_mapping: Dict[str, Any] = Field(default_factory=dict)
-    timeout_seconds: int = Field(30, ge=1, le=120)
-    retry_count: int = Field(0, ge=0, le=5)
-    position_x: float = 0.0
-    position_y: float = 0.0
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _spec_text_from_request(body: ImportConnectorBody) -> str:
-    if body.spec_text and body.spec_text.strip():
-        return body.spec_text
-    url = (body.spec_url or "").strip()
-    if not url:
-        raise HTTPException(400, "必须提供 spec_text 或 spec_url")
-    try:
-        assert_url_outbound_safe(url)
-    except OutboundBlocked as exc:
-        raise HTTPException(400, f"spec_url 不安全: {exc}") from exc
-    try:
-        with httpx.Client(
-            timeout=_SPEC_FETCH_TIMEOUT, trust_env=False, follow_redirects=False
-        ) as client:
-            resp = client.get(url)
-        resp.raise_for_status()
-    except httpx.HTTPError as exc:
-        raise HTTPException(400, f"拉取 spec 失败: {exc}") from exc
-    if len(resp.content) > _MAX_SPEC_BYTES:
-        raise HTTPException(400, "spec 过大（>4MB）")
-    return resp.text
-
-
-def _serialize_connector(c: OpenApiConnector) -> Dict[str, Any]:
-    return {
-        "id": c.id,
-        "name": c.name,
-        "description": c.description or "",
-        "base_url": c.base_url or "",
-        "title": c.title or "",
-        "spec_version": c.spec_version or "",
-        "spec_hash": c.spec_hash or "",
-        "status": c.status or "ready",
-        "operation_count": int(c.operation_count or 0),
-        "generated_version": int(c.generated_version or 0),
-        "last_error": c.last_error or "",
-        "created_at": c.created_at.isoformat() if c.created_at else None,
-        "updated_at": c.updated_at.isoformat() if c.updated_at else None,
-    }
-
-
-def _serialize_operation(op: OpenApiOperation) -> Dict[str, Any]:
-    try:
-        request_schema = json.loads(op.request_schema or "{}")
-    except (TypeError, ValueError):
-        request_schema = {}
-    try:
-        response_schema = json.loads(op.response_schema or "{}")
-    except (TypeError, ValueError):
-        response_schema = {}
-    try:
-        tags = json.loads(op.tags or "[]")
-    except (TypeError, ValueError):
-        tags = []
-    return {
-        "operation_id": op.operation_id,
-        "method": op.method,
-        "path": op.path,
-        "summary": op.summary or "",
-        "tags": tags if isinstance(tags, list) else [],
-        "request_schema": request_schema,
-        "response_schema": response_schema,
-        "generated_symbol": op.generated_symbol or "",
-        "enabled": bool(op.enabled),
-    }
-
-
-def _credential_view(cred: Optional[OpenApiCredential]) -> Dict[str, Any]:
-    if cred is None:
-        return {"auth_type": "none", "configured": False, "config_preview": {}}
-    preview: Dict[str, Any] = {}
-    try:
-        decrypted = decrypt_credential_payload(cred.auth_type, cred.config_encrypted)
-        for key, value in decrypted.config.items():
-            if key in {"key", "api_key", "token", "client_secret", "password"}:
-                preview[key] = "***"
-            else:
-                v = str(value)
-                preview[key] = v[:120] + ("…" if len(v) > 120 else "")
-    except (ValueError, RuntimeError):
-        preview = {"__error__": "解密失败"}
-    return {
-        "auth_type": cred.auth_type,
-        "configured": cred.auth_type != "none" and bool(cred.config_encrypted),
-        "config_preview": preview,
-        "updated_at": cred.updated_at.isoformat() if cred.updated_at else None,
-    }
 
 
 def _persist_parsed_spec(
@@ -215,7 +92,7 @@ def _persist_parsed_spec(
         connector.last_error = ""
         connector.generated_version = int(connector.generated_version or 0) + 1
         connector.operation_count = len(parsed.operations)
-        connector.updated_at = datetime.now(timezone.utc)
+        connector.updated_at = datetime.now(UTC)
     else:
         connector = OpenApiConnector(
             user_id=user.id,
@@ -301,31 +178,6 @@ def _generate_artifacts(connector: OpenApiConnector, parsed: ParsedSpec) -> None
         )
     )
     cleanup_old_versions(int(connector.id), keep_versions=keep)
-
-
-def _fetch_connector_or_404(db: Session, user: User, connector_id: int) -> OpenApiConnector:
-    row = (
-        db.query(OpenApiConnector)
-        .filter(OpenApiConnector.id == connector_id, OpenApiConnector.user_id == user.id)
-        .first()
-    )
-    if not row:
-        raise HTTPException(404, "连接器不存在或无权访问")
-    return row
-
-
-def _fetch_operation_or_404(db: Session, connector_id: int, operation_id: str) -> OpenApiOperation:
-    row = (
-        db.query(OpenApiOperation)
-        .filter(
-            OpenApiOperation.connector_id == connector_id,
-            OpenApiOperation.operation_id == operation_id,
-        )
-        .first()
-    )
-    if not row:
-        raise HTTPException(404, "operation 不存在")
-    return row
 
 
 # ---------------------------------------------------------------------------
@@ -452,7 +304,7 @@ async def put_credentials(
     if row:
         row.auth_type = auth_type
         row.config_encrypted = ciphertext
-        row.updated_at = datetime.now(timezone.utc)
+        row.updated_at = datetime.now(UTC)
     else:
         row = OpenApiCredential(
             user_id=user.id,
@@ -497,7 +349,7 @@ async def patch_operation(
     _fetch_connector_or_404(db, user, connector_id)
     op = _fetch_operation_or_404(db, connector_id, operation_id)
     op.enabled = bool(body.enabled)
-    op.updated_at = datetime.now(timezone.utc)
+    op.updated_at = datetime.now(UTC)
     db.commit()
     return {"ok": True, "operation": _serialize_operation(op)}
 

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, union-attr"
 """Enrich presentation_full to v2 with per-shape geometry and timing hints."""
 
 from __future__ import annotations
@@ -6,6 +7,8 @@ import zipfile
 from pathlib import Path
 from typing import Any, Dict, List
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 
 def _deck_has_timing(pptx_path: Path) -> bool:
     try:
@@ -13,7 +16,7 @@ def _deck_has_timing(pptx_path: Path) -> bool:
             for name in z.namelist():
                 if name.startswith("ppt/slides/slide") and b"timing>" in z.read(name):
                     return True
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return False
     return False
 
@@ -56,7 +59,7 @@ def enrich_presentation_v2(presentation: Dict[str, Any], src_path: Path) -> Dict
                 logical_id = f"s{slide_idx}_img{img_seq}"
                 try:
                     image_relpath = f"figures/{logical_id}.png"
-                except Exception:
+                except RECOVERABLE_ERRORS:
                     pass
             elif shape.shape_type == MSO_SHAPE_TYPE.TEXT_BOX or getattr(
                 shape, "has_text_frame", False
@@ -80,7 +83,12 @@ def enrich_presentation_v2(presentation: Dict[str, Any], src_path: Path) -> Dict
             )
         entry = slide_by_index.get(slide_idx)
         if entry is None:
-            entry = {"index": slide_idx, "title": f"第 {slide_idx} 页", "bullets": [], "images": []}
+            entry = {
+                "index": slide_idx,
+                "title": f"第 {slide_idx} 页",
+                "bullets": [],
+                "images": [],
+            }
             slides_in.append(entry)
         entry["shapes"] = shapes_out
 

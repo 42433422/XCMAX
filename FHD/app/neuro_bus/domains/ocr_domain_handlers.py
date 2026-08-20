@@ -128,7 +128,7 @@ class OCRServiceDomainHandlers:
 
 
 # 全局处理器实例
-_handlers: OCRServiceDomainHandlers = None
+_handlers: OCRServiceDomainHandlers | None = None
 
 
 def get_ocr_handlers() -> OCRServiceDomainHandlers:

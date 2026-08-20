@@ -7,26 +7,29 @@
         ## 上游 Handoff 契约
 
         ### handoff: employee-pack-curator → 本岗
+
 - **触发条件**：`employee.task.done:employee-pack-curator`
 - **输入**：待补充（参见 `yuangon/**/employee-pack-curator/runbook.md`）
 - **门禁**：依赖完成前本岗不得继续
 
 ### handoff: modstore-backend-api → 本岗
+
 - **触发条件**：`employee.task.done:modstore-backend-api`
 - **输入**：API 端点变更 diff、OpenAPI schema 增量
 - **门禁**：schema 破坏性变更需 change-request-auditor 审批后才继续
 
+          ## Handlers
 
-        ## Handlers
+          | Handler | 说明 |
+          |---------|------|
+          | `llm_md` | 接收 Markdown 任务描述，调用 LLM 输出结构化结果 |
 
-        | Handler | 说明 |
-        |---------|------|
-        | `llm_md` | 接收 Markdown 任务描述，调用 LLM 输出结构化结果 |
-| `echo` | 调试用：原样返回输入，用于 smoke 测试 |
+  | `echo` | 调试用：原样返回输入，用于 smoke 测试 |
 
-        ## 核心 Scope
+          ## 核心 Scope
 
-        - `MODstore_deploy/modstore_server/catalog*`
+          - `MODstore_deploy/modstore_server/catalog*`
+
 - `MODstore_deploy/modstore_server/**/packages.json`
 - `MODstore_deploy/market/src/**/catalog*`
 - `yuangon/partner-ecosystem/ecosystem-joint-catalog-officer/**`

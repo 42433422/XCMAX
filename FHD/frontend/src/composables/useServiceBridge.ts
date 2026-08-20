@@ -48,10 +48,7 @@ const STATUS_LABELS: Record<string, string> = {
 export function formatServiceBridgeTime(ts: unknown): string {
   if (!ts) return ''
   try {
-    const d =
-      typeof ts === 'number'
-        ? new Date(ts < 1e12 ? ts * 1000 : ts)
-        : new Date(String(ts))
+    const d = typeof ts === 'number' ? new Date(ts < 1e12 ? ts * 1000 : ts) : new Date(String(ts))
     return d.toLocaleString('zh-CN', {
       month: '2-digit',
       day: '2-digit',
@@ -83,7 +80,10 @@ export function useServiceBridge() {
   async function loadRequests(params: Record<string, unknown> = {}) {
     loadingRequests.value = true
     try {
-      const res = await get<{ data?: ServiceRequestRecord[] }>('/api/service-bridge/requests', { per_page: 50, ...params })
+      const res = await get<{ data?: ServiceRequestRecord[] }>('/api/service-bridge/requests', {
+        per_page: 50,
+        ...params,
+      })
       requests.value = (res?.data || []) as ServiceRequestRecord[]
     } catch {
       requests.value = []
@@ -164,10 +164,7 @@ export function useServiceBridge() {
     }
   }
 
-  async function respondToRequest(
-    requestId: number,
-    payload: { response: string; status: string; responded_by?: string },
-  ) {
+  async function respondToRequest(requestId: number, payload: { response: string; status: string; responded_by?: string }) {
     submitting.value = true
     try {
       const res = await put<{ data?: ServiceRequestRecord }>(`/api/service-bridge/requests/${requestId}/respond`, payload)

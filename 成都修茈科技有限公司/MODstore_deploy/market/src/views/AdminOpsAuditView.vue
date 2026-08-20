@@ -58,7 +58,9 @@ async function load() {
   try {
     const employeeId = typeof route.query.employee_id === 'string' ? route.query.employee_id.trim() : ''
     const [r, s, t] = await Promise.all([
-      api.adminOpsAuditLogs({ limit: 100, employee_id: employeeId || undefined }) as Promise<{ items?: typeof items.value }>,
+      api.adminOpsAuditLogs({ limit: 100, employee_id: employeeId || undefined }) as Promise<{
+        items?: typeof items.value
+      }>,
       api.adminOpsStagedChanges({ limit: 80 }) as Promise<{ items?: typeof staged.value }>,
       api.adminOpsApprovalTokens({ limit: 80 }) as Promise<{ items?: typeof tokens.value }>,
     ])
@@ -73,7 +75,12 @@ async function load() {
 }
 
 onMounted(() => void load())
-watch(() => route.query.employee_id, () => { void load() })
+watch(
+  () => route.query.employee_id,
+  () => {
+    void load()
+  },
+)
 </script>
 
 <template>
@@ -112,7 +119,9 @@ watch(() => route.query.employee_id, () => { void load() })
         <tbody>
           <tr v-for="row in staged" :key="'s' + row.id">
             <td>{{ row.id }}</td>
-            <td><code>{{ row.branch }}</code></td>
+            <td>
+              <code>{{ row.branch }}</code>
+            </td>
             <td>{{ row.status }}</td>
             <td>{{ row.files_changed_count }}</td>
             <td class="muted">{{ row.created_at || '—' }}</td>
@@ -139,8 +148,12 @@ watch(() => route.query.employee_id, () => { void load() })
         <tbody>
           <tr v-for="row in tokens" :key="'t' + row.id">
             <td>{{ row.id }}</td>
-            <td><code>{{ row.kind }}</code></td>
-            <td><code>{{ row.token_hash_prefix }}</code></td>
+            <td>
+              <code>{{ row.kind }}</code>
+            </td>
+            <td>
+              <code>{{ row.token_hash_prefix }}</code>
+            </td>
             <td>{{ row.authorized_email }}</td>
             <td class="muted">{{ row.expires_at || '—' }}</td>
             <td class="muted">{{ row.used_at || '—' }}</td>
@@ -167,9 +180,13 @@ watch(() => route.query.employee_id, () => { void load() })
         <tbody>
           <tr v-for="row in items" :key="row.id">
             <td class="muted">{{ row.created_at || '—' }}</td>
-            <td><code>{{ row.employee_id }}</code></td>
+            <td>
+              <code>{{ row.employee_id }}</code>
+            </td>
             <td>{{ row.handler }}</td>
-            <td><code>{{ row.command_id }}</code></td>
+            <td>
+              <code>{{ row.command_id }}</code>
+            </td>
             <td>{{ row.exit_code ?? '—' }}</td>
             <td>
               <span v-if="row.approval_required" class="pill warn">审批</span>
@@ -281,11 +298,29 @@ code {
   font-size: 0.78rem;
   word-break: break-all;
 }
-html[data-workbench-theme='light'] .btn{background:#fff;color:#1a1a1a;border-color:#d1d5db}
-html[data-workbench-theme='light'] .ops-audit-err{color:#dc2626}
-html[data-workbench-theme='light'] .ops-audit-table th,html[data-workbench-theme='light'] .ops-audit-table td{border-color:#e2e8f0}
-html[data-workbench-theme='light'] .ops-audit-table th{background:#f8f9fa}
-html[data-workbench-theme='light'] .muted{color:#94a3b8}
-html[data-workbench-theme='light'] .pill{background:rgba(99,102,241,0.08)}
-html[data-workbench-theme='light'] .pill.warn{background:rgba(217,119,6,0.08);color:#d97706}
+html[data-workbench-theme='light'] .btn {
+  background: #fff;
+  color: #1a1a1a;
+  border-color: #d1d5db;
+}
+html[data-workbench-theme='light'] .ops-audit-err {
+  color: #dc2626;
+}
+html[data-workbench-theme='light'] .ops-audit-table th,
+html[data-workbench-theme='light'] .ops-audit-table td {
+  border-color: #e2e8f0;
+}
+html[data-workbench-theme='light'] .ops-audit-table th {
+  background: #f8f9fa;
+}
+html[data-workbench-theme='light'] .muted {
+  color: #94a3b8;
+}
+html[data-workbench-theme='light'] .pill {
+  background: rgba(99, 102, 241, 0.08);
+}
+html[data-workbench-theme='light'] .pill.warn {
+  background: rgba(217, 119, 6, 0.08);
+  color: #d97706;
+}
 </style>

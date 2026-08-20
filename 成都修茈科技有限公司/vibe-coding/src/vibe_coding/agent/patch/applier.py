@@ -20,6 +20,7 @@ present for ``modify`` / ``delete`` / ``rename`` (configurable via
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import shutil
@@ -29,6 +30,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
+
+from vibe_coding.operational_errors import BOUNDARY_ERRORS
 
 from ..security.paths import PathSafetyError, resolve_within_root, safe_relative_path
 from .file_edit import FileEdit, ProjectPatch
@@ -135,7 +138,7 @@ class PatchApplier:
             backup_path = self.backup_dir / f"{patch.patch_id}-{uuid4().hex[:6]}"
             try:
                 self._commit(staged, backup_path=backup_path, summary=patch.summary)
-            except Exception as exc:  # noqa: BLE001
+            except BOUNDARY_ERRORS as exc:
                 self._rollback(backup_path)
                 result.error = f"commit_failed:{type(exc).__name__}:{exc}"
                 result.completed_at = time.time()
@@ -163,7 +166,7 @@ class PatchApplier:
 
     # ------------------------------------------------------------------ stage
 
-    def _stage(self, patch: ProjectPatch) -> list["_StagedFile"]:
+    def _stage(self, patch: ProjectPatch) -> list[_StagedFile]:
         staged: list[_StagedFile] = []
         seen_paths: set[str] = set()
         for edit in patch.edits:
@@ -171,9 +174,7 @@ class PatchApplier:
             if edit.new_path:
                 self._reject_unsafe(edit.new_path)
             if edit.path in seen_paths:
-                raise PatchConflict(
-                    file=edit.path, reason="duplicate edit for path within one patch"
-                )
+                raise PatchConflict(file=edit.path, reason="duplicate edit for path within one patch")
             seen_paths.add(edit.path)
 
             if edit.operation == "create":
@@ -186,7 +187,7 @@ class PatchApplier:
                 staged.append(self._stage_modify(edit))
         return staged
 
-    def _stage_modify(self, edit: FileEdit) -> "_StagedFile":
+    def _stage_modify(self, edit: FileEdit) -> _StagedFile:
         target = self._abs(edit.path)
         if not target.is_file():
             raise PatchConflict(file=edit.path, reason="modify target does not exist")
@@ -208,7 +209,7 @@ class PatchApplier:
             ),
         )
 
-    def _stage_create(self, edit: FileEdit) -> "_StagedFile":
+    def _stage_create(self, edit: FileEdit) -> _StagedFile:
         target = self._abs(edit.path)
         if target.exists():
             raise PatchConflict(file=edit.path, reason="create target already exists")
@@ -229,7 +230,7 @@ class PatchApplier:
             ),
         )
 
-    def _stage_delete(self, edit: FileEdit) -> "_StagedFile":
+    def _stage_delete(self, edit: FileEdit) -> _StagedFile:
         target = self._abs(edit.path)
         if not target.exists():
             raise PatchConflict(file=edit.path, reason="delete target does not exist")
@@ -250,7 +251,7 @@ class PatchApplier:
             ),
         )
 
-    def _stage_rename(self, edit: FileEdit) -> "_StagedFile":
+    def _stage_rename(self, edit: FileEdit) -> _StagedFile:
         if not edit.new_path:
             raise PatchConflict(file=edit.path, reason="rename missing new_path")
         target = self._abs(edit.path)
@@ -285,7 +286,7 @@ class PatchApplier:
 
     def _commit(
         self,
-        staged: list["_StagedFile"],
+        staged: list[_StagedFile],
         *,
         backup_path: Path,
         summary: str,
@@ -303,13 +304,13 @@ class PatchApplier:
                 json.dumps(manifest, ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
-        except Exception:
+        except BOUNDARY_ERRORS:
             # Caller is expected to invoke _rollback; re-raise to bubble up.
             raise
 
     def _backup_one(
         self,
-        item: "_StagedFile",
+        item: _StagedFile,
         backup_path: Path,
         manifest: dict[str, Any],
     ) -> None:
@@ -326,7 +327,7 @@ class PatchApplier:
             entry["backup_file"] = str(backup_file.relative_to(backup_path).as_posix())
         manifest["entries"].append(entry)
 
-    def _write_one(self, item: "_StagedFile") -> None:
+    def _write_one(self, item: _StagedFile) -> None:
         op = item.edit.operation
         if op == "delete":
             item.target.unlink()
@@ -336,10 +337,8 @@ class PatchApplier:
             item.new_target.parent.mkdir(parents=True, exist_ok=True)
             self._atomic_write(item.new_target, item.new_bytes)
             if item.target.resolve() != item.new_target.resolve():
-                try:
+                with contextlib.suppress(FileNotFoundError):
                     item.target.unlink()
-                except FileNotFoundError:
-                    pass
             return
         # create / modify
         assert item.new_bytes is not None
@@ -379,10 +378,8 @@ class PatchApplier:
 
         if op == "create":
             if target.exists():
-                try:
+                with contextlib.suppress(OSError):
                     target.unlink()
-                except OSError:
-                    pass
             return
         if op == "delete":
             if backup_file:
@@ -393,10 +390,8 @@ class PatchApplier:
             if new_path:
                 new_target = self._abs(str(new_path))
                 if new_target.exists() and new_target.resolve() != target.resolve():
-                    try:
+                    with contextlib.suppress(OSError):
                         new_target.unlink()
-                    except OSError:
-                        pass
             if existed and backup_file:
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(backup_path / backup_file, target)
@@ -474,6 +469,7 @@ class PatchApplier:
             ) from exc
         strategy = outcome.results[0].strategy
         return outcome.source, strategy != "strict"
+
 
 @dataclass(slots=True)
 class _StagedFile:

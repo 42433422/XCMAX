@@ -5,11 +5,7 @@ import { resolveHostBusinessPageRedirect } from '@/utils/hostBusinessPageRedirec
 import { customerServiceHostPathFromModPath } from '@/utils/customerServicePagePaths'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import { isDesktopShell } from '@/utils/desktopShell'
-import {
-  isEnterpriseProductSkuBuild,
-  isPlatformShellModeEnabled,
-  INDUSTRY_DELIVERY_ERP_MENU_KEYS,
-} from '@/constants/platformShellMode'
+import { isEnterpriseProductSkuBuild, isPlatformShellModeEnabled, INDUSTRY_DELIVERY_ERP_MENU_KEYS } from '@/constants/platformShellMode'
 import { useModsStore } from '@/stores/mods'
 
 export type SidebarModMenuItem = {
@@ -57,7 +53,10 @@ function readModMenuItems(override?: SidebarModMenuItem[]): SidebarModMenuItem[]
 }
 
 function resolveLegacyRouteFromModPath(router: Router, modPath: string) {
-  const pathOnly = String(modPath || '').split('?')[0]?.split('#')[0] || ''
+  const pathOnly =
+    String(modPath || '')
+      .split('?')[0]
+      ?.split('#')[0] || ''
   if (!pathOnly) return null
   if (pathOnly.includes('/approval-hub/workspace') && router.hasRoute('approval-workspace')) {
     return { name: 'approval-workspace' }
@@ -75,13 +74,11 @@ function resolveLegacyRouteFromModPath(router: Router, modPath: string) {
 /** Enterprise 桌面：宿主 route 已注册时优先直跳，避免 Mod 门面未就绪被守卫打回对话页 */
 function preferHostSidebarRoute(router: Router, routeName: string): boolean {
   if (isAdminConsoleSpa()) return false
-  const name = String(routeName || '').replace(/^mod-/, '').trim()
+  const name = String(routeName || '')
+    .replace(/^mod-/, '')
+    .trim()
   if (!name.length || !router.hasRoute(name)) return false
-  if (
-    isDesktopShell() &&
-    isEnterpriseProductSkuBuild() &&
-    (INDUSTRY_DELIVERY_ERP_MENU_KEYS as readonly string[]).includes(name)
-  ) {
+  if (isDesktopShell() && isEnterpriseProductSkuBuild() && (INDUSTRY_DELIVERY_ERP_MENU_KEYS as readonly string[]).includes(name)) {
     return true
   }
   if (!isEnterpriseProductSkuBuild() || isPlatformShellModeEnabled()) return false
@@ -89,9 +86,7 @@ function preferHostSidebarRoute(router: Router, routeName: string): boolean {
 }
 
 async function ensureModRoutesRegistered(router: Router, getModRoutes?: () => unknown[] | undefined) {
-  const { registerAllModRoutesFromGlob, registerModRoutes } = await import(
-    '@/router/registerModRoutes'
-  )
+  const { registerAllModRoutesFromGlob, registerModRoutes } = await import('@/router/registerModRoutes')
   await registerAllModRoutesFromGlob(router)
   const routes = getModRoutes?.()
   if (routes?.length) {
@@ -111,13 +106,9 @@ async function performSidebarNavigation(
   const routeNameMap = options.routeNameMap || SIDEBAR_ROUTE_NAME_MAP
 
   const modItem = modMenuItems.find((m) => m.key === viewKey)
-  const routeName =
-    typeof viewKey === 'string'
-      ? resolveNavRouteName(viewKey, modItem?.path) || viewKey
-      : viewKey
+  const routeName = typeof viewKey === 'string' ? resolveNavRouteName(viewKey, modItem?.path) || viewKey : viewKey
 
-  const nameCandidate =
-    typeof routeName === 'string' ? routeName.replace(/^mod-/, '') : routeName
+  const nameCandidate = typeof routeName === 'string' ? routeName.replace(/^mod-/, '') : routeName
 
   if (typeof nameCandidate === 'string' && preferHostSidebarRoute(router, nameCandidate)) {
     if (isStale()) return false
@@ -153,8 +144,7 @@ async function performSidebarNavigation(
 
   if (typeof routeName === 'string') {
     const stripped = routeName.replace(/^mod-/, '')
-    const modBusinessPath =
-      resolveHostBusinessPageRedirect(stripped) || resolveHostBusinessPageRedirect(routeName)
+    const modBusinessPath = resolveHostBusinessPageRedirect(stripped) || resolveHostBusinessPageRedirect(routeName)
     if (modBusinessPath) {
       if (router.resolve(modBusinessPath).matched.length === 0) {
         try {
@@ -226,11 +216,7 @@ async function drainSidebarNavigationQueue(router: Router): Promise<boolean> {
 /**
  * 侧栏 / xcagi:switch-view 统一导航：单队列 drain + 合并连点 + Enterprise 宿主路由优先。
  */
-export function navigateFromSidebarKey(
-  router: Router,
-  viewKey: string,
-  options: NavigateFromSidebarOptions = {},
-): Promise<boolean> {
+export function navigateFromSidebarKey(router: Router, viewKey: string, options: NavigateFromSidebarOptions = {}): Promise<boolean> {
   const normalized = String(viewKey || '').trim()
   if (!normalized) return Promise.resolve(false)
 

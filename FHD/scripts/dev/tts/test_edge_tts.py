@@ -1,6 +1,7 @@
 import asyncio
-import edge_tts
 import base64
+
+import edge_tts
 
 
 async def test_full():

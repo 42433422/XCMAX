@@ -169,9 +169,7 @@ describe('ChatInputToolbar', () => {
   it('TTS checkbox reflects ttsEnabled prop', () => {
     const wrapper = mountToolbar({ ttsEnabled: true })
     const checkboxes = wrapper.findAll('input[type="checkbox"]')
-    const ttsCheckbox = checkboxes.find(
-      (c) => (c.element as HTMLInputElement).checked === true
-    )
+    const ttsCheckbox = checkboxes.find((c) => (c.element as HTMLInputElement).checked === true)
     expect(ttsCheckbox).toBeTruthy()
   })
 

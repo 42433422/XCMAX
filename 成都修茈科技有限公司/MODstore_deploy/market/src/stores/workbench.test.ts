@@ -106,7 +106,14 @@ describe('useWorkbenchStore', () => {
     expect(store.currentRunId).toBe('run-1')
     expect(store.inspectorMode).toBe('run')
 
-    store.pushRunEvent('run-1', { id: 'ev-1', stage: 'parse_intent', label: '解析意图', payload: null, status: 'done', ts: Date.now() })
+    store.pushRunEvent('run-1', {
+      id: 'ev-1',
+      stage: 'parse_intent',
+      label: '解析意图',
+      payload: null,
+      status: 'done',
+      ts: Date.now(),
+    })
     expect(store.agentRuns[0].events[0].stage).toBe('parse_intent')
 
     const manifest = { identity: { id: 'x', name: '测试' } }
@@ -120,7 +127,7 @@ describe('useWorkbenchStore', () => {
 
   it('setTarget with null id defaults to null', () => {
     const store = useWorkbenchStore()
-    store.setTarget('employee', undefined as any, undefined, undefined)
+    store.setTarget('employee', undefined as UnsafeTestValue, undefined, undefined)
     expect(store.target.id).toBeNull()
     expect(store.target.name).toBe('新员工')
   })
@@ -170,15 +177,36 @@ describe('useWorkbenchStore', () => {
       endedAt: null,
     }
     store.startRun(run)
-    store.pushRunEvent('run-1', { id: 'ev-1', stage: 'parse_intent', label: '解析', payload: null, status: 'running' as const, ts: Date.now() })
-    store.pushRunEvent('run-1', { id: 'ev-2', stage: 'parse_intent', label: '解析完成', payload: { data: 1 }, status: 'done' as const, ts: Date.now() })
+    store.pushRunEvent('run-1', {
+      id: 'ev-1',
+      stage: 'parse_intent',
+      label: '解析',
+      payload: null,
+      status: 'running' as const,
+      ts: Date.now(),
+    })
+    store.pushRunEvent('run-1', {
+      id: 'ev-2',
+      stage: 'parse_intent',
+      label: '解析完成',
+      payload: { data: 1 },
+      status: 'done' as const,
+      ts: Date.now(),
+    })
     expect(store.agentRuns[0].events).toHaveLength(1)
     expect(store.agentRuns[0].events[0].status).toBe('done')
   })
 
   it('pushRunEvent ignores non-existent run', () => {
     const store = useWorkbenchStore()
-    store.pushRunEvent('non-existent', { id: 'ev-1', stage: 's', label: 'l', payload: null, status: 'done' as const, ts: Date.now() })
+    store.pushRunEvent('non-existent', {
+      id: 'ev-1',
+      stage: 's',
+      label: 'l',
+      payload: null,
+      status: 'done' as const,
+      ts: Date.now(),
+    })
     expect(store.agentRuns).toHaveLength(0)
   })
 
@@ -190,7 +218,7 @@ describe('useWorkbenchStore', () => {
 
   it('finishRun without manifest does not auto-apply', () => {
     const store = useWorkbenchStore()
-    const originalManifest = { ...store.target.manifest }
+    const _originalManifest = { ...store.target.manifest }
     const run = {
       id: 'run-1',
       source: 'employee-draft' as const,

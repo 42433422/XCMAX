@@ -5,9 +5,10 @@ from __future__ import annotations
 
 import json
 import sys
-import tempfile
 import uuid
 from pathlib import Path
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 MODSTORE_ROOT = Path(__file__).resolve().parents[1]
 if str(MODSTORE_ROOT) not in sys.path:
@@ -56,7 +57,7 @@ def _simulate_execute(employee_id: str, payload: bytes, filename: str, user_id: 
             "session_dir": session_dir,
             "outputs": outputs,
         }
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         return {"ok": False, "error": str(exc)[:800]}
     finally:
         import shutil
@@ -187,7 +188,7 @@ def main() -> int:
 
             prs = Presentation(io.BytesIO(rebuilt))
             report["roundtrip"]["slide_count_pptx"] = len(prs.slides)
-        except Exception as e:
+        except RECOVERABLE_ERRORS as e:
             report["roundtrip"]["pptx_parse_error"] = str(e)[:200]
     else:
         # 兜底：直接用共享函数验证 schema 可写出
@@ -198,7 +199,7 @@ def main() -> int:
                 "via": "pptx_export.build_pptx_from_presentation_json",
                 "pptx_bytes": len(blob),
             }
-        except Exception as e:
+        except RECOVERABLE_ERRORS as e:
             report["roundtrip"] = {"ok": False, "error": str(e)[:300]}
 
     ok = bool(read_res.get("ok") and (gen_res.get("ok") or report.get("roundtrip", {}).get("ok")))

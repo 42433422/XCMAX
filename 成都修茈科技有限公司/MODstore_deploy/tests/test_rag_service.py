@@ -8,11 +8,13 @@ from pathlib import Path
 
 import pytest
 
+BOUNDARY_ERRORS = (Exception,)
+
 
 def _bootstrap(tmp_path: Path, monkeypatch):
     try:
         import chromadb  # noqa: F401
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         pytest.skip("chromadb 未安装；跳过 rag_service 测试")
 
     monkeypatch.setenv("MODSTORE_VECTOR_BACKEND", "chroma")
@@ -61,7 +63,10 @@ def test_visible_collections_owner_and_grantee(tmp_path, monkeypatch):
             session.refresh(x)
         session.add(
             KnowledgeMembership(
-                collection_id=c.id, grantee_kind="user", grantee_id="1", permission="read"
+                collection_id=c.id,
+                grantee_kind="user",
+                grantee_id="1",
+                permission="read",
             )
         )
         session.commit()

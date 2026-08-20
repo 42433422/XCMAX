@@ -40,7 +40,7 @@ test.describe('Cross-device session reuse @cross_session', () => {
 
     const firstValidate = await page1.evaluate(async () => {
       const r = await fetch('/api/auth/session/validate')
-      const json = await r.json().catch(() => ({} as any))
+      const json = await r.json().catch(() => ({}) as any)
       return { status: r.status, body: json }
     })
     expect(firstValidate.status, `first validate status`).toBe(200)
@@ -70,7 +70,7 @@ test.describe('Cross-device session reuse @cross_session', () => {
 
     const secondValidate = await page2.evaluate(async () => {
       const r = await fetch('/api/auth/session/validate')
-      const json = await r.json().catch(() => ({} as any))
+      const json = await r.json().catch(() => ({}) as any)
       return { status: r.status, body: json }
     })
     expect(secondValidate.status, `second validate status`).toBe(200)
@@ -82,7 +82,7 @@ test.describe('Cross-device session reuse @cross_session', () => {
 
     expect(
       seenSessionIds.some((sid) => sid === 'e2e-cross-session-001'),
-      `seen session ids: ${JSON.stringify(seenSessionIds)}`
+      `seen session ids: ${JSON.stringify(seenSessionIds)}`,
     ).toBe(true)
 
     await page1.close()

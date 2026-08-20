@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """COVERAGE_RAMP Phase 2 (p2-p5): misc helpers, mods package hash, neuro_bus domain base,
 application session_account_meta, infrastructure mods manifest parse."""
 

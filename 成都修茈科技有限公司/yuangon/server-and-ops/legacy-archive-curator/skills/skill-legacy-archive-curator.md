@@ -1,6 +1,6 @@
 # 工作区归档管理员技能
 
-职责：S-R R3 工作区与 legacy 归档：_archive/、FHD/.archive/、LEGACY_CLEANUP_TRACKING、xcmax-tree 排除项治理。
+职责：S-R R3 工作区与 legacy 归档：\_archive/、FHD/.archive/、LEGACY_CLEANUP_TRACKING、xcmax-tree 排除项治理。
 
 ## 执行步骤
 

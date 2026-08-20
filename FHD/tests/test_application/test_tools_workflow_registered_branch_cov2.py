@@ -763,7 +763,7 @@ class TestSystemMaintenanceRouter:
         mock_opt = MagicMock()
         mock_opt.redis_cache = None
         with patch(
-            "app.utils.performance_initializer.get_performance_optimizer",
+            "app.utils.performance.performance_initializer.get_performance_optimizer",
             return_value=mock_opt,
         ):
             result = _registered_router_system_maintenance(
@@ -776,7 +776,7 @@ class TestSystemMaintenanceRouter:
         mock_opt = MagicMock()
         mock_opt.redis_cache.clear_pattern.return_value = 5
         with patch(
-            "app.utils.performance_initializer.get_performance_optimizer",
+            "app.utils.performance.performance_initializer.get_performance_optimizer",
             return_value=mock_opt,
         ):
             result = _registered_router_system_maintenance(
@@ -789,7 +789,7 @@ class TestSystemMaintenanceRouter:
         mock_opt = MagicMock()
         mock_opt.redis_cache.clear_local_cache = MagicMock()
         with patch(
-            "app.utils.performance_initializer.get_performance_optimizer",
+            "app.utils.performance.performance_initializer.get_performance_optimizer",
             return_value=mock_opt,
         ):
             result = _registered_router_system_maintenance(
@@ -802,7 +802,7 @@ class TestSystemMaintenanceRouter:
         mock_opt = MagicMock()
         mock_opt.redis_cache = None
         with patch(
-            "app.utils.performance_initializer.get_performance_optimizer",
+            "app.utils.performance.performance_initializer.get_performance_optimizer",
             return_value=mock_opt,
         ):
             result = _registered_router_system_maintenance(
@@ -814,7 +814,7 @@ class TestSystemMaintenanceRouter:
         mock_opt = MagicMock()
         mock_opt.redis_cache.delete.return_value = 3
         with patch(
-            "app.utils.performance_initializer.get_performance_optimizer",
+            "app.utils.performance.performance_initializer.get_performance_optimizer",
             return_value=mock_opt,
         ):
             result = _registered_router_system_maintenance(
@@ -827,7 +827,7 @@ class TestSystemMaintenanceRouter:
         mock_opt = MagicMock()
         mock_opt.get_status.return_value = {"status": "ok"}
         with patch(
-            "app.utils.performance_initializer.init_performance_optimization",
+            "app.utils.performance.performance_initializer.init_performance_optimization",
             return_value=mock_opt,
         ):
             result = _registered_router_system_maintenance(
@@ -903,7 +903,7 @@ class TestDocumentTemplateRouter:
 
     def test_create(self) -> None:
         with patch(
-            "app.fastapi_routes.document_templates_compat.run_archive_template_create"
+            "app.legacy.routes.document_templates_compat.run_archive_template_create"
         ) as mock_fn:
             mock_fn.return_value = ({"success": True}, 200)
             result = _registered_router_document_template(
@@ -914,7 +914,7 @@ class TestDocumentTemplateRouter:
 
     def test_update(self) -> None:
         with patch(
-            "app.fastapi_routes.document_templates_compat.run_archive_template_update"
+            "app.legacy.routes.document_templates_compat.run_archive_template_update"
         ) as mock_fn:
             mock_fn.return_value = ({"success": False}, 400)
             result = _registered_router_document_template("update", {"id": 1}, _ctx(), "normal", "")
@@ -922,7 +922,7 @@ class TestDocumentTemplateRouter:
 
     def test_delete_with_base_dir(self) -> None:
         with patch(
-            "app.fastapi_routes.document_templates_compat.run_archive_template_delete"
+            "app.legacy.routes.document_templates_compat.run_archive_template_delete"
         ) as mock_fn:
             mock_fn.return_value = ({"success": True}, 200)
             result = _registered_router_document_template(
@@ -933,7 +933,7 @@ class TestDocumentTemplateRouter:
 
     def test_delete_without_base_dir(self) -> None:
         with patch(
-            "app.fastapi_routes.document_templates_compat.run_archive_template_delete"
+            "app.legacy.routes.document_templates_compat.run_archive_template_delete"
         ) as mock_fn:
             mock_fn.return_value = ({"success": True}, 200)
             _registered_router_document_template("delete", {"id": 1}, _ctx(), "normal", "")
@@ -945,7 +945,7 @@ class TestDocumentTemplateRouter:
 
     def test_status_code_fallback_when_none(self) -> None:
         with patch(
-            "app.fastapi_routes.document_templates_compat.run_archive_template_create"
+            "app.legacy.routes.document_templates_compat.run_archive_template_create"
         ) as mock_fn:
             mock_fn.return_value = ({"success": True}, None)
             result = _registered_router_document_template("create", {}, _ctx(), "normal", "")

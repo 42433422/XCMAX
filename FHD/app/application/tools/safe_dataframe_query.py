@@ -87,13 +87,13 @@ def _evaluate(node: ast.AST, df: pd.DataFrame) -> Any:
             return operand
         raise ValueError("unsupported unary operator")
     if isinstance(node, ast.BinOp):
-        operation = _ARITHMETIC_OPERATORS.get(type(node.op))
-        if operation is None:
+        arithmetic_operation = _ARITHMETIC_OPERATORS.get(type(node.op))
+        if arithmetic_operation is None:
             raise ValueError("unsupported arithmetic operator")
-        return operation(_evaluate(node.left, df), _evaluate(node.right, df))
+        return arithmetic_operation(_evaluate(node.left, df), _evaluate(node.right, df))
     if isinstance(node, ast.Compare):
         left = _evaluate(node.left, df)
-        result: Any = True
+        compare_result: Any = True
         for operation_node, comparator_node in zip(node.ops, node.comparators):
             right = _evaluate(comparator_node, df)
             if isinstance(operation_node, (ast.In, ast.NotIn)):
@@ -106,13 +106,13 @@ def _evaluate(node: ast.AST, df: pd.DataFrame) -> Any:
                 if isinstance(operation_node, ast.NotIn):
                     current = operator.invert(current)
             else:
-                operation = _COMPARE_OPERATORS.get(type(operation_node))
-                if operation is None:
+                comparison_operation = _COMPARE_OPERATORS.get(type(operation_node))
+                if comparison_operation is None:
                     raise ValueError("unsupported comparison operator")
-                current = operation(left, right)
-            result = operator.and_(result, current)
+                current = comparison_operation(left, right)
+            compare_result = operator.and_(compare_result, current)
             left = right
-        return result
+        return compare_result
     raise ValueError(f"unsupported query construct: {type(node).__name__}")
 
 

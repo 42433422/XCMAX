@@ -258,7 +258,7 @@ class TestInboundFailurePublishesFailedEvent:
             "app.neuro_bus.domains.inventory_domain_handlers.PurchaseService"
         ) as MockPurchase:
             mock_instance = MockPurchase.return_value
-            mock_instance.create_purchase_inbound.side_effect = Exception("DB connection lost")
+            mock_instance.create_purchase_inbound.side_effect = RuntimeError("DB connection lost")
             # 不应抛异常
             result = await handle_auto_inbound_requested(event)
 

@@ -88,14 +88,7 @@ const contracts: DocLink[] = [
     <section class="docs__section">
       <h2 class="docs__h2">交互式 API 文档</h2>
       <div class="docs__grid">
-        <a
-          v-for="d in interactive"
-          :key="d.href"
-          class="docs-card"
-          :href="d.href"
-          target="_blank"
-          rel="noreferrer"
-        >
+        <a v-for="d in interactive" :key="d.href" class="docs-card" :href="d.href" target="_blank" rel="noreferrer">
           <h3 class="docs-card__title">{{ d.title }} <span class="docs-card__arrow">↗</span></h3>
           <p class="docs-card__desc">{{ d.description }}</p>
         </a>
@@ -105,14 +98,7 @@ const contracts: DocLink[] = [
     <section class="docs__section">
       <h2 class="docs__h2">开发者手册</h2>
       <div class="docs__grid">
-        <a
-          v-for="d in guides"
-          :key="d.href"
-          class="docs-card"
-          :href="d.href"
-          target="_blank"
-          rel="noreferrer"
-        >
+        <a v-for="d in guides" :key="d.href" class="docs-card" :href="d.href" target="_blank" rel="noreferrer">
           <h3 class="docs-card__title">
             {{ d.title }}
             <span v-if="d.badge" class="docs-card__badge">{{ d.badge }}</span>
@@ -126,14 +112,7 @@ const contracts: DocLink[] = [
     <section class="docs__section">
       <h2 class="docs__h2">机器可读契约</h2>
       <div class="docs__grid">
-        <a
-          v-for="d in contracts"
-          :key="d.href"
-          class="docs-card"
-          :href="d.href"
-          target="_blank"
-          rel="noreferrer"
-        >
+        <a v-for="d in contracts" :key="d.href" class="docs-card" :href="d.href" target="_blank" rel="noreferrer">
           <h3 class="docs-card__title">{{ d.title }} <span class="docs-card__arrow">↗</span></h3>
           <p class="docs-card__desc">{{ d.description }}</p>
         </a>
@@ -142,9 +121,8 @@ const contracts: DocLink[] = [
 
     <section class="docs__tip">
       <strong>更新文档：</strong>
-      改完 API 后，跑 <code>python scripts/export_openapi.py</code> 刷新 OpenAPI 快照；
-      改完事件契约后，跑 <code>python scripts/generate_event_reference.py</code> 重新生成事件参考页。
-      CI 通过 <code>--check</code> 模式拦截过期快照。
+      改完 API 后，跑 <code>python scripts/export_openapi.py</code> 刷新 OpenAPI 快照； 改完事件契约后，跑
+      <code>python scripts/generate_event_reference.py</code> 重新生成事件参考页。 CI 通过 <code>--check</code> 模式拦截过期快照。
     </section>
   </div>
 </template>
@@ -178,7 +156,10 @@ const contracts: DocLink[] = [
   padding: 14px 16px;
   text-decoration: none;
   color: inherit;
-  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .docs-card:hover {

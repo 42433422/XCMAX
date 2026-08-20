@@ -15,7 +15,8 @@ def _now_iso() -> str:
 
 def ensure_delivery_on_doc(doc: dict[str, Any]) -> dict[str, Any]:
     doc = dict(doc)
-    delivery = doc.get("delivery") if isinstance(doc.get("delivery"), dict) else {}
+    raw_delivery = doc.get("delivery")
+    delivery: dict[str, Any] = raw_delivery if isinstance(raw_delivery, dict) else {}
     delivery.setdefault("milestones", [])
     delivery.setdefault("status", "planned")
     doc["delivery"] = delivery
@@ -66,13 +67,15 @@ def apply_contract_snapshot_to_doc(doc: dict[str, Any], values: dict[str, Any]) 
 def build_delivery_progress_message(doc: dict[str, Any], *, client_name: str = "") -> str:
     delivery = doc.get("delivery") if isinstance(doc.get("delivery"), dict) else {}
     client = client_name or str(doc.get("erp_customer_name") or doc.get("username") or "客户")
+    if not isinstance(delivery, dict):
+        delivery = {}
     status = str(delivery.get("status") or "planned")
     expected = str(delivery.get("expected_delivery_at") or "").strip()
     lines = [f"【交付进度】{client}", f"当前状态：{status}"]
     if expected:
         lines.append(f"预计交付：{expected[:10]}")
     milestones = delivery.get("milestones") if isinstance(delivery.get("milestones"), list) else []
-    done = sum(1 for m in milestones if isinstance(m, dict) and m.get("done"))
+    done = sum(1 for m in (milestones or []) if isinstance(m, dict) and m.get("done"))
     if milestones:
         lines.append(f"里程碑：{done}/{len(milestones)} 已完成")
     return "\n".join(lines)

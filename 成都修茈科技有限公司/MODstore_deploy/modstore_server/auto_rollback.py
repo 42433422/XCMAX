@@ -16,14 +16,21 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Dict, Optional
+
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 logger = logging.getLogger(__name__)
 
 
 def _env_bool(name: str, default: str = "1") -> bool:
-    return (os.environ.get(name, default) or "").strip().lower() in ("1", "true", "yes", "on")
+    return (os.environ.get(name, default) or "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
 
 
 def _publish_alert(
@@ -53,7 +60,7 @@ def _publish_alert(
             source=f"auto-rollback:{gate.lower()}",
         )
         return {"ok": True, "published": bool(published)}
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.exception("auto_rollback: alert publish failed gate=%s", gate)
         return {"ok": False, "error": str(exc)[:300]}
 
@@ -67,7 +74,11 @@ def _stage_postmortem(
     rollback: Dict[str, Any],
 ) -> Dict[str, Any]:
     if not _env_bool("MODSTORE_AUTO_ROLLBACK_STAGE_REVIEW", "1"):
-        return {"ok": True, "skipped": True, "reason": "MODSTORE_AUTO_ROLLBACK_STAGE_REVIEW=0"}
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "MODSTORE_AUTO_ROLLBACK_STAGE_REVIEW=0",
+        }
     try:
         from modstore_server.models import OpsStagedChange, get_session_factory
 
@@ -95,7 +106,7 @@ def _stage_postmortem(
             staged_id = int(row.id)
             session.commit()
         return {"ok": True, "staged_id": staged_id}
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.exception("auto_rollback: stage postmortem failed gate=%s", gate)
         return {"ok": False, "error": str(exc)[:300]}
 
@@ -113,7 +124,7 @@ def auto_rollback_on_gate_failure(
     ``gate`` 取 ``FASTGATE`` / ``CANARY``。返回 {ok, rollback, alert, staged_change, ...}。
     ``ok`` 反映回退是否成功（关闭开关时为 True+skipped）。
     """
-    at = datetime.now(timezone.utc).isoformat()
+    at = datetime.now(UTC).isoformat()
     out: Dict[str, Any] = {
         "gate": gate,
         "release_train": release_train,
@@ -123,7 +134,13 @@ def auto_rollback_on_gate_failure(
         "at": at,
     }
     if not _env_bool("MODSTORE_AUTO_ROLLBACK_ENABLED", "1"):
-        out.update({"ok": True, "skipped": True, "reason_skip": "MODSTORE_AUTO_ROLLBACK_ENABLED=0"})
+        out.update(
+            {
+                "ok": True,
+                "skipped": True,
+                "reason_skip": "MODSTORE_AUTO_ROLLBACK_ENABLED=0",
+            }
+        )
         return out
 
     try:
@@ -133,7 +150,7 @@ def auto_rollback_on_gate_failure(
             trigger=f"auto_rollback:{gate}",
             reason=str(reason)[:500],
         )
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.exception("auto_rollback: ondemand backup failed gate=%s", gate)
         out["ondemand_backup"] = {"ok": False, "error": str(exc)[:300]}
 
@@ -141,7 +158,7 @@ def auto_rollback_on_gate_failure(
         from modstore_server.release_train import rollback_release_train
 
         rollback = rollback_release_train(reason=f"auto_rollback:{gate}")
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.exception("auto_rollback: rollback_release_train failed gate=%s", gate)
         rollback = {"ok": False, "error": str(exc)[:300]}
     out["rollback"] = rollback

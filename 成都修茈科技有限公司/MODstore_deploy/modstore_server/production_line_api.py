@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter
 from pydantic import BaseModel
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -56,10 +58,15 @@ async def api_pipeline_run(body: PipelineRunRequest = PipelineRunRequest()):
 
 @router.post("/steps/{step_id}/approve")
 async def api_step_approve(step_id: str, body: StepApprovalRequest = StepApprovalRequest()):
-    from modstore_server.production_line_orchestrator import approve_production_line_step
+    from modstore_server.production_line_orchestrator import (
+        approve_production_line_step,
+    )
 
     result = await approve_production_line_step(step_id, admin_user_id=body.admin_user_id)
-    return {"ok": True, "data": {"step_id": result.step_id, "status": result.status.value}}
+    return {
+        "ok": True,
+        "data": {"step_id": result.step_id, "status": result.status.value},
+    }
 
 
 @router.post("/steps/{step_id}/reject")
@@ -69,12 +76,17 @@ async def api_step_reject(step_id: str, body: StepRejectionRequest = StepRejecti
     result = await reject_production_line_step(
         step_id, admin_user_id=body.admin_user_id, reason=body.reason
     )
-    return {"ok": True, "data": {"step_id": result.step_id, "status": result.status.value}}
+    return {
+        "ok": True,
+        "data": {"step_id": result.step_id, "status": result.status.value},
+    }
 
 
 @router.post("/stop")
 async def api_pipeline_stop():
-    from modstore_server.production_line_orchestrator import get_production_line_orchestrator
+    from modstore_server.production_line_orchestrator import (
+        get_production_line_orchestrator,
+    )
 
     orch = get_production_line_orchestrator()
     orch.stop_pipeline()
@@ -98,7 +110,7 @@ async def api_operations_health():
                 data = resp.json()
                 if isinstance(data, dict) and data.get("success"):
                     return {"ok": True, "source": "fhd", "data": data.get("data")}
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.debug("FHD operations-health fetch failed", exc_info=True)
     from modstore_server.production_line_orchestrator import get_production_line_status
 
@@ -154,7 +166,7 @@ async def api_operations_incident(body: Dict[str, Any]):
                 ),
             )
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("production-line incident publish failed")
     logger.info(
         "production-line incident: event_type=%s published=%s routed=%s",

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Patch MODstore surface-audit/lane: compact=1 returns one preview PNG b64."""
+
 from __future__ import annotations
 
 import sys
@@ -11,7 +12,7 @@ TARGET = Path(
     else "/root/modstore-git/MODstore_deploy/modstore_server/xcmax_admin_api.py"
 )
 
-HELPERS = '''
+HELPERS = """
 
 def _pick_hero_page_index(pages: list) -> int:
     for i, row in enumerate(pages):
@@ -40,7 +41,7 @@ def _attach_screenshot_b64(pages: list, *, compact: bool) -> None:
         row["screenshot_b64"] = thumb_b64
         if compact and i == hero_i and thumb_b64:
             row["preview_only"] = True
-'''
+"""
 
 text = TARGET.read_text(encoding="utf-8")
 
@@ -50,14 +51,14 @@ if "_attach_screenshot_b64" not in text:
         raise SystemExit("anchor not found")
     text = text.replace(anchor, HELPERS.strip() + "\n\n\n" + anchor, 1)
 
-if 'compact: bool = Query(True)' not in text:
+if "compact: bool = Query(True)" not in text:
     text = text.replace(
-        '    refresh: bool = Query(False),\n) -> dict[str, Any]:',
-        '    refresh: bool = Query(False),\n    compact: bool = Query(True),\n) -> dict[str, Any]:',
+        "    refresh: bool = Query(False),\n) -> dict[str, Any]:",
+        "    refresh: bool = Query(False),\n    compact: bool = Query(True),\n) -> dict[str, Any]:",
         1,
     )
 
-old_inner = '''        pages: list[dict[str, Any]] = []
+old_inner = """        pages: list[dict[str, Any]] = []
         for row in report.get("results") if isinstance(report.get("results"), list) else []:
             if row.get("lane") != lane:
                 continue
@@ -81,9 +82,9 @@ old_inner = '''        pages: list[dict[str, Any]] = []
                     "screenshot_b64": thumb_b64,
                     "screenshot_saved": saved,
                 }
-            )'''
+            )"""
 
-new_inner = '''        pages: list[dict[str, Any]] = []
+new_inner = """        pages: list[dict[str, Any]] = []
         for row in report.get("results") if isinstance(report.get("results"), list) else []:
             if row.get("lane") != lane:
                 continue
@@ -99,7 +100,7 @@ new_inner = '''        pages: list[dict[str, Any]] = []
                     "screenshot_saved": str(row.get("screenshot_saved") or "").strip(),
                 }
             )
-        _attach_screenshot_b64(pages, compact=compact)'''
+        _attach_screenshot_b64(pages, compact=compact)"""
 
 if old_inner not in text:
     if "_attach_screenshot_b64(pages, compact=compact)" in text:
@@ -124,7 +125,7 @@ text = text.replace(
     'return {"success": True, "data": await _lane_payload(report_stub, cached=True, compact=compact)}',
 )
 
-glob_b64 = '''        raw = png.read_bytes()
+glob_b64 = """        raw = png.read_bytes()
         thumb_b64 = base64.b64encode(raw).decode("ascii") if len(raw) <= 1_600_000 else ""
         pages.append(
             {
@@ -139,9 +140,9 @@ glob_b64 = '''        raw = png.read_bytes()
                 "screenshot_b64": thumb_b64,
                 "screenshot_saved": str(png),
             }
-        )'''
+        )"""
 
-glob_no_b64 = '''        pages.append(
+glob_no_b64 = """        pages.append(
             {
                 "lane": lane,
                 "name": name,
@@ -153,7 +154,7 @@ glob_no_b64 = '''        pages.append(
                 "error": None,
                 "screenshot_saved": str(png),
             }
-        )'''
+        )"""
 
 if glob_b64 in text:
     text = text.replace(glob_b64, glob_no_b64, 1)

@@ -1,10 +1,10 @@
 # Runbook — Mods/ESkill 策展员
 
-| 字段 | 值 |
-|------|----|
-| 员工 ID | `mods-and-eskill-curator` |
-| 最后更新 | 2026-05-08 |
-| 应急联系 | admin |
+| 字段     | 值                        |
+| -------- | ------------------------- |
+| 员工 ID  | `mods-and-eskill-curator` |
+| 最后更新 | 2026-05-08                |
+| 应急联系 | admin                     |
 
 ## 日常巡检
 
@@ -122,6 +122,7 @@ for cls in classes_in_code:
 
 **排查**：运行巡检 1，检查 REGISTRY.json 中 `deprecated=true` 的包。
 **修复**：
+
 1. 标记废弃包（文件名追加 `.deprecated`）
 2. 更新 REGISTRY.json 中的 `deprecated` 字段为 `true`
 3. 通知 `employee-pack-curator` 更新注册表
@@ -130,6 +131,7 @@ for cls in classes_in_code:
 
 **排查**：运行巡检 5，对比文档引用与代码实现。
 **修复**：
+
 1. 更新 `ESkill.md` 对应章节
 2. 在 §10 变更记录中追加本次同步记录
 3. 通知 `doc-knowledge-curator` 同步文档库
@@ -138,6 +140,7 @@ for cls in classes_in_code:
 
 **排查**：检查 `MODstore_deploy/modstore_server/market_files/REGISTRY.json` 是否存在且可解析。
 **修复**：
+
 1. 若文件不存在，扫描 `market_files/*.xcemp` 重新生成初始 REGISTRY.json
 2. 若格式损坏，尝试从备份恢复或重新生成
 3. 所有包的 `review_status` 设为 `pending`
@@ -146,6 +149,7 @@ for cls in classes_in_code:
 
 **排查**：运行巡检 1，检查 `orphaned` 输出。
 **修复**：
+
 1. 确认孤儿包是否为合法包
 2. 若合法，在 REGISTRY.json 中补全记录
 3. 若不合法或来源不明，标记 `.deprecated` 并更新 REGISTRY.json
@@ -154,6 +158,7 @@ for cls in classes_in_code:
 
 **排查**：检查 `eskill-prototype/experiments/<id>/results/` 下的实验结果。
 **修复**：
+
 1. 分析失败原因（逻辑类型不支持、secret 泄露、质量不达标等）
 2. 生成修复建议返回给开发员工
 3. 若多次失败，标记实验为 `abandoned`
@@ -161,5 +166,5 @@ for cls in classes_in_code:
 ## ESkill 动态阶段触发记录
 
 | 日期 | 触发原因 | patch_id | 结果 | 是否固化 |
-|------|----------|----------|------|----------|
-| — | — | — | — | — |
+| ---- | -------- | -------- | ---- | -------- |
+| —    | —        | —        | —    | —        |

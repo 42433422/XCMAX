@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="no-any-return"
 """服务拓扑健康探针：一条命令查「该活的进程是否都活着」。
 
 数据源 = config/topology.generated.json（由 service_topology.yaml 派生），

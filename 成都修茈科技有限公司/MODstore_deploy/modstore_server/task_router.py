@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +24,6 @@ class SubTask:
 def _load_all_employee_profiles() -> List[Dict[str, Any]]:
     """从 catalog 读取所有已注册员工包的 manifest 摘要（id / name / description / domain / skills）。"""
     try:
-        import io
         import zipfile
 
         from modstore_server.models import CatalogItem, get_session_factory
@@ -58,11 +59,11 @@ def _load_all_employee_profiles() -> List[Dict[str, Any]]:
                                     profile["scope_globs"] = list(
                                         (mf.get("workspace") or {}).get("scope_globs") or []
                                     )
-                    except Exception:
+                    except RECOVERABLE_ERRORS:
                         pass
                 profiles.append(profile)
         return profiles
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("task_router: failed to load employee profiles")
         return []
 
@@ -154,7 +155,7 @@ def decompose_task(
                     priority=int(item.get("priority") or 5),
                 )
             )
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("task_router: LLM output parse failed: %s\nraw=%s", exc, raw_json[:500])
 
     if not subtasks:
@@ -221,7 +222,7 @@ def _call_llm(prompt: str, *, llm_provider: str, llm_model: str) -> str:
             return str(result.get("content") or "")
 
         raw = run_coro_sync(_inner())
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("task_router LLM call failed: %s", exc)
         return "[]"
 

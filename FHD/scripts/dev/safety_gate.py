@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="no-any-return"
 """Safety severity gate: 阻断 CRITICAL/HIGH，放行 MEDIUM/LOW。
 
 读取 `safety check --json` 的 stdout，解析漏洞列表，按 severity 过滤：

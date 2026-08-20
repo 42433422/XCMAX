@@ -1,11 +1,13 @@
+# mypy: disable-error-code="import-not-found"
 # FHD/scripts/dev/tests/test_implement_employee_pack.py
 """implement_employee_pack 单元测试。"""
+
 from __future__ import annotations
 
 import json
 import sys
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 
@@ -13,9 +15,9 @@ SCRIPTS_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SCRIPTS_DIR))
 
 from implement_employee_pack import (
-    implement_pack,
-    count_generated_files,
     TooManyFilesError,
+    count_generated_files,
+    implement_pack,
 )
 
 
@@ -42,8 +44,8 @@ def test_implement_pack_returns_generated_files(tmp_path):
         mock_llm.return_value = {
             "files": [
                 {"path": "prompt.txt", "content": "You are..."},
-                {"path": "skills.json", "content": "[\"intent-benchmark\"]"},
-                {"path": "manifest.json", "content": "{\"name\":\"intent-clerk\"}"},
+                {"path": "skills.json", "content": '["intent-benchmark"]'},
+                {"path": "manifest.json", "content": '{"name":"intent-clerk"}'},
             ]
         }
         files = implement_pack(proposal, output_dir=output_dir)
@@ -57,9 +59,7 @@ def test_implement_pack_rejects_more_than_5_files(tmp_path):
     proposal = _make_proposal()
     output_dir = tmp_path / "out"
     with patch("implement_employee_pack._call_llm") as mock_llm:
-        mock_llm.return_value = {
-            "files": [{"path": f"f{i}.txt", "content": "x"} for i in range(6)]
-        }
+        mock_llm.return_value = {"files": [{"path": f"f{i}.txt", "content": "x"} for i in range(6)]}
         with pytest.raises(TooManyFilesError):
             implement_pack(proposal, output_dir=output_dir)
 
@@ -81,9 +81,7 @@ def test_implement_pack_writes_ledger_event(tmp_path, monkeypatch):
     monkeypatch.setenv("MODSTORE_EVOLUTION_LEDGER_PATH", str(ledger_path))
 
     with patch("implement_employee_pack._call_llm") as mock_llm:
-        mock_llm.return_value = {
-            "files": [{"path": "prompt.txt", "content": "x"}]
-        }
+        mock_llm.return_value = {"files": [{"path": "prompt.txt", "content": "x"}]}
         implement_pack(proposal, output_dir=output_dir)
 
     lines = ledger_path.read_text(encoding="utf-8").strip().splitlines()

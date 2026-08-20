@@ -18,6 +18,8 @@ import secrets
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
+from modstore_server.operational_errors import BOUNDARY_ERRORS
+
 logger = logging.getLogger(__name__)
 
 RPC_TIMEOUT_SECONDS = 120.0
@@ -86,7 +88,7 @@ class SandboxRpcServer:
         self._server.close()
         try:
             await self._server.wait_closed()
-        except Exception:  # noqa: BLE001 — 关闭路径不要因小错失败
+        except BOUNDARY_ERRORS:  # noqa: BLE001 — 关闭路径不要因小错失败
             pass
         self._server = None
 
@@ -103,7 +105,7 @@ class SandboxRpcServer:
                 writer.write(json.dumps({"ok": False, "error": "invalid token"}).encode() + b"\n")
                 try:
                     await writer.drain()
-                except Exception:  # noqa: BLE001
+                except BOUNDARY_ERRORS:  # noqa: BLE001
                     pass
                 return
             writer.write(json.dumps({"ok": True}).encode() + b"\n")
@@ -113,21 +115,21 @@ class SandboxRpcServer:
                 if not line:
                     break
                 await self._dispatch(line, writer)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("sandbox rpc handshake timeout")
-        except Exception as e:  # noqa: BLE001
+        except BOUNDARY_ERRORS as e:  # noqa: BLE001
             logger.warning("sandbox rpc connection error: %s", e)
         finally:
             try:
                 writer.close()
                 await writer.wait_closed()
-            except Exception:  # noqa: BLE001
+            except BOUNDARY_ERRORS:  # noqa: BLE001
                 pass
 
     async def _dispatch(self, line: bytes, writer: asyncio.StreamWriter) -> None:
         try:
             req = json.loads(line.decode("utf-8"))
-        except Exception:  # noqa: BLE001
+        except BOUNDARY_ERRORS:  # noqa: BLE001
             return
         req_id = req.get("id")
         method = str(req.get("method") or "")
@@ -143,17 +145,17 @@ class SandboxRpcServer:
                 result = await asyncio.wait_for(handler(params), timeout=RPC_TIMEOUT_SECONDS)
                 resp = {"id": req_id, "ok": True, "result": result}
                 self.ctx.sdk_calls.append({"method": method, "ok": True})
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 resp = {"id": req_id, "ok": False, "error": f"{method} timeout"}
                 self.ctx.sdk_calls.append({"method": method, "ok": False, "error": "timeout"})
-            except Exception as e:  # noqa: BLE001
+            except BOUNDARY_ERRORS as e:  # noqa: BLE001
                 msg = str(e)[:500]
                 resp = {"id": req_id, "ok": False, "error": msg}
                 self.ctx.sdk_calls.append({"method": method, "ok": False, "error": msg[:200]})
         try:
             writer.write((json.dumps(resp, ensure_ascii=False) + "\n").encode("utf-8"))
             await writer.drain()
-        except Exception as e:  # noqa: BLE001
+        except BOUNDARY_ERRORS as e:  # noqa: BLE001
             logger.warning("sandbox rpc write error: %s", e)
 
     # ---------------------- handlers ---------------------- #

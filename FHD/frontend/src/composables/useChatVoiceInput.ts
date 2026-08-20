@@ -3,14 +3,7 @@ import { apiFetch } from '@/utils/apiBase'
 
 const MIN_RECORD_MS = 300
 const MAX_RECORD_MS = 60_000
-const VOICE_PREFERRED_MIME_TYPES = [
-  'audio/webm;codecs=opus',
-  'audio/webm',
-  'audio/ogg;codecs=opus',
-  'audio/ogg',
-  'audio/mp4',
-  'audio/wav',
-]
+const VOICE_PREFERRED_MIME_TYPES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg', 'audio/mp4', 'audio/wav']
 
 type VoiceState = 'idle' | 'recording' | 'transcribing' | 'error'
 
@@ -73,9 +66,7 @@ export function useChatVoiceInput(deps: UseChatVoiceInputDeps) {
   })
 
   /** 独立于按钮文案的可访问反馈，避免识别失败后用户只看到按钮恢复原状。 */
-  const voiceFeedbackText = computed(() => (
-    voiceState.value === 'error' ? (voiceErrorText.value || '语音识别失败，请重试') : ''
-  ))
+  const voiceFeedbackText = computed(() => (voiceState.value === 'error' ? voiceErrorText.value || '语音识别失败，请重试' : ''))
 
   const pickSupportedMimeType = (): string => {
     const MR = (window as unknown as { MediaRecorder?: typeof MediaRecorder }).MediaRecorder
@@ -143,15 +134,20 @@ export function useChatVoiceInput(deps: UseChatVoiceInputDeps) {
       form.append('file', blob, `chat-voice.${ext}`)
       const resp = await apiFetch('/api/voice/transcribe', { method: 'POST', body: form })
       const raw = await resp.text()
-      let data: { success?: boolean; detail?: string; message?: string; error?: string; data?: { text?: string } } | null = null
+      let data: {
+        success?: boolean
+        detail?: string
+        message?: string
+        error?: string
+        data?: { text?: string }
+      } | null = null
       try {
         data = raw ? JSON.parse(raw) : null
       } catch {
         data = null
       }
       if (!resp.ok || !data || data.success === false) {
-        const detail =
-          (data && (data.detail || data.message || data.error)) || raw || `HTTP ${resp.status}`
+        const detail = (data && (data.detail || data.message || data.error)) || raw || `HTTP ${resp.status}`
         throw new Error(String(detail))
       }
       const text = String(data?.data?.text || '').trim()
@@ -214,9 +210,7 @@ export function useChatVoiceInput(deps: UseChatVoiceInputDeps) {
     const mime = pickSupportedMimeType()
     voiceMimeType = mime
     try {
-      voiceMediaRecorder = mime
-        ? new MediaRecorder(voiceMediaStream, { mimeType: mime })
-        : new MediaRecorder(voiceMediaStream)
+      voiceMediaRecorder = mime ? new MediaRecorder(voiceMediaStream, { mimeType: mime }) : new MediaRecorder(voiceMediaStream)
     } catch (err: unknown) {
       const e = err as { message?: string }
       setVoiceError(`无法创建录音器：${e?.message || '未知错误'}`)

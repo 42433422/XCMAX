@@ -24,14 +24,14 @@ docker exec modstore_deploy-payment-service-1 sh -c \
 
 一次真实排查样例（脱敏）：
 
-| 项 | 值 |
-|----|-----|
-| `ALIPAY_APP_ID` | `2021006146622799` |
-| `ALIPAY_DEBUG` | `0`（走正式网关 `https://openapi.alipay.com/gateway.do`） |
-| `ALIPAY_GATEWAY_URL` | 空（由 `AlipayConfig` 按 debug 选择网关） |
-| `ALIPAY_NOTIFY_URL` | `https://xiu-ci.com/api/payment/notify/alipay` |
-| 公钥两变量长度 | `ALIPAY_PUBLIC_KEY` 与 `ALIPAY_ALIPAY_PUBLIC_KEY` 均为 **392**（内容通常为同一串） |
-| 私钥两变量长度 | `ALIPAY_PRIVATE_KEY` 与 `ALIPAY_APP_PRIVATE_KEY` 均为 **1624** |
+| 项                   | 值                                                                                 |
+| -------------------- | ---------------------------------------------------------------------------------- |
+| `ALIPAY_APP_ID`      | `2021006146622799`                                                                 |
+| `ALIPAY_DEBUG`       | `0`（走正式网关 `https://openapi.alipay.com/gateway.do`）                          |
+| `ALIPAY_GATEWAY_URL` | 空（由 `AlipayConfig` 按 debug 选择网关）                                          |
+| `ALIPAY_NOTIFY_URL`  | `https://xiu-ci.com/api/payment/notify/alipay`                                     |
+| 公钥两变量长度       | `ALIPAY_PUBLIC_KEY` 与 `ALIPAY_ALIPAY_PUBLIC_KEY` 均为 **392**（内容通常为同一串） |
+| 私钥两变量长度       | `ALIPAY_PRIVATE_KEY` 与 `ALIPAY_APP_PRIVATE_KEY` 均为 **1624**                     |
 
 说明：`application.yml` 中 `alipay.public-key` 解析顺序为 **`ALIPAY_PUBLIC_KEY` 优先于 `ALIPAY_ALIPAY_PUBLIC_KEY`**。两个都配置时，以 **`ALIPAY_PUBLIC_KEY`** 为准。
 
@@ -50,10 +50,10 @@ docker exec modstore_deploy-payment-service-1 sh -c \
 
 ### 沙箱 / 正式一致性
 
-| 环境 | `ALIPAY_DEBUG` | 网关 |
-|------|----------------|------|
-| 正式 | `0` / `false` | `https://openapi.alipay.com/gateway.do` |
-| 沙箱 | `1` / `true` | `https://openapi-sandbox.dl.alipaydev.com/gateway.do`（或可配 `ALIPAY_GATEWAY_URL`） |
+| 环境 | `ALIPAY_DEBUG` | 网关                                                                                 |
+| ---- | -------------- | ------------------------------------------------------------------------------------ |
+| 正式 | `0` / `false`  | `https://openapi.alipay.com/gateway.do`                                              |
+| 沙箱 | `1` / `true`   | `https://openapi-sandbox.dl.alipaydev.com/gateway.do`（或可配 `ALIPAY_GATEWAY_URL`） |
 
 **沙箱 APP_ID + 沙箱支付宝公钥 + 沙箱应用私钥** 必须成套；正式同理。混用会导致两类验签同时失败。
 

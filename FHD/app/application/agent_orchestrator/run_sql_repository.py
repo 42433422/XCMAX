@@ -8,7 +8,9 @@ import logging
 import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from typing import cast
 
+from sqlalchemy import Table
 from sqlalchemy.orm import Session
 
 from app.application.agent_orchestrator.run_models import (
@@ -204,13 +206,13 @@ class SQLAlchemyAgentRunRepository:
         with self._session_scope() as db:
             from app.db.models.agent import AgentTaskRecord
 
-            record = db.query(AgentTaskRecord).filter(
+            query = db.query(AgentTaskRecord).filter(
                 AgentTaskRecord.user_id == str(user_id or ""),
                 AgentTaskRecord.task_id == str(task_id or ""),
             )
             if tenant_id is not None:
-                record = record.filter(AgentTaskRecord.tenant_id == str(tenant_id))
-            records = record.limit(2).all()
+                query = query.filter(AgentTaskRecord.tenant_id == str(tenant_id))
+            records = query.limit(2).all()
             if len(records) != 1:
                 return None
             record = records[0]
@@ -350,9 +352,9 @@ class SQLAlchemyAgentRunRepository:
                 Base.metadata.create_all(
                     bind=db.get_bind(),
                     tables=[
-                        AgentRunRecord.__table__,
-                        AgentTaskRecord.__table__,
-                        AgentTaskCommandRecord.__table__,
+                        cast(Table, AgentRunRecord.__table__),
+                        cast(Table, AgentTaskRecord.__table__),
+                        cast(Table, AgentTaskCommandRecord.__table__),
                     ],
                     checkfirst=True,
                 )

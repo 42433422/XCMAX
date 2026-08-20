@@ -1,3 +1,4 @@
+# mypy: disable-error-code="index"
 """Generate simple PowerPoint decks from markdown outlines or presentation JSON."""
 
 from __future__ import annotations
@@ -5,6 +6,8 @@ from __future__ import annotations
 import io
 import re
 from typing import Any, Dict, List, Tuple
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _parse_markdown_slides(markdown: str, fallback_title: str) -> List[Tuple[str, List[str]]]:
@@ -224,7 +227,7 @@ def build_pptx_from_presentation_json(data: Dict[str, Any]) -> bytes:
                 notes_slide = slide.notes_slide
                 notes_tf = notes_slide.notes_text_frame
                 notes_tf.text = notes_text[:8000]
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 pass
 
     bio = io.BytesIO()

@@ -10,10 +10,7 @@ export interface VirtualCursorClickOptions {
 }
 
 export interface VirtualCursorApi {
-  moveTo(
-    target: HTMLElement | { x: number; y: number },
-    options?: VirtualCursorMoveOptions,
-  ): void
+  moveTo(target: HTMLElement | { x: number; y: number }, options?: VirtualCursorMoveOptions): void
   click(target: HTMLElement, options?: VirtualCursorClickOptions): void
   hide(): void
   show(): void

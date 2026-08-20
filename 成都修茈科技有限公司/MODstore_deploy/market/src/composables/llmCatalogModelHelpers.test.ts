@@ -38,7 +38,7 @@ describe('modelOptionLabel', () => {
   })
 
   it('returns id when capability is not an object', () => {
-    expect(modelOptionLabel({ id: 'gpt-4', capability: 'string' as any })).toBe('gpt-4')
+    expect(modelOptionLabel({ id: 'gpt-4', capability: 'string' as UnsafeTestValue })).toBe('gpt-4')
   })
 
   it('shows L3 approved tag', () => {

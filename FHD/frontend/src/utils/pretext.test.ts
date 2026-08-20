@@ -69,10 +69,7 @@ describe('pretext text measurement', () => {
   })
 
   it('batchEstimateMessageHeights', () => {
-    const heights = batchEstimateMessageHeights(
-      [{ content: 'msg1' }, { content: 'msg2', fontSize: 12 }],
-      200,
-    )
+    const heights = batchEstimateMessageHeights([{ content: 'msg1' }, { content: 'msg2', fontSize: 12 }], 200)
     expect(heights).toEqual([40, 40])
   })
 

@@ -7,7 +7,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class LoginRequest(BaseModel):
@@ -46,15 +46,14 @@ class TokenRefreshResponse(BaseModel):
 
 
 class UserInfo(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     username: str
     email: str | None = None
     full_name: str | None = None
-    roles: list[str] = []
+    roles: list[str] = Field(default_factory=list)
     created_at: datetime | None = None
-
-    class Config:
-        from_attributes = True
 
 
 class PasswordChangeRequest(BaseModel):

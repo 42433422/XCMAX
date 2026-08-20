@@ -1,18 +1,10 @@
 <template>
   <div class="ai-test-layout">
     <nav class="ai-test-tabs" aria-label="AI 测试">
-      <router-link
-        :to="{ name: 'ai-test-sandbox' }"
-        class="ai-test-tab"
-        :class="{ 'ai-test-tab--active': activeTab === 'sandbox' }"
-      >
+      <router-link :to="{ name: 'ai-test-sandbox' }" class="ai-test-tab" :class="{ 'ai-test-tab--active': activeTab === 'sandbox' }">
         沙箱
       </router-link>
-      <router-link
-        :to="{ name: 'ai-test-exam' }"
-        class="ai-test-tab"
-        :class="{ 'ai-test-tab--active': activeTab === 'exam' }"
-      >
+      <router-link :to="{ name: 'ai-test-exam' }" class="ai-test-tab" :class="{ 'ai-test-tab--active': activeTab === 'exam' }">
         AI 员工考试
       </router-link>
     </nav>
@@ -59,7 +51,9 @@ const activeTab = computed(() => (route.name === 'ai-test-exam' ? 'exam' : 'sand
   border: 0.5px solid transparent;
   border-bottom: none;
   margin-bottom: -0.5px;
-  transition: color 0.15s, background 0.15s;
+  transition:
+    color 0.15s,
+    background 0.15s;
 }
 
 .ai-test-tab:hover {

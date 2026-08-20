@@ -209,9 +209,7 @@ describe('ShipmentPrintPreview', () => {
     it('handles products with string numeric values', () => {
       const wrapper = mountComponent()
       const vm = wrapper.vm as any
-      vm.localData.products = [
-        { quantity: '5', unit_price: '100' },
-      ]
+      vm.localData.products = [{ quantity: '5', unit_price: '100' }]
       vm.recalculate()
       expect(vm.localData.total_quantity).toBe(5)
       expect(vm.localData.total_amount).toBe(500)
@@ -376,9 +374,7 @@ describe('ShipmentPrintPreview', () => {
       const vm = wrapper.vm as any
       await wrapper.setProps({
         shipmentData: makeShipmentData({
-          products: [
-            { quantity: 10, unit_price: 50 },
-          ],
+          products: [{ quantity: 10, unit_price: 50 }],
         }),
       })
       expect(vm.localData.total_quantity).toBe(10)

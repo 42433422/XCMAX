@@ -3,14 +3,15 @@ import { createPinia, setActivePinia } from 'pinia'
 import { useOnboardingTutorialStore } from './onboardingTutorial'
 
 vi.mock('@/tutorial/resolveSteps', () => ({
-  resolveTrackSteps: vi.fn().mockReturnValue([
-    { id: 'step1', target: '#el', content: 'Hello' },
-  ]),
+  resolveTrackSteps: vi.fn().mockReturnValue([{ id: 'step1', target: '#el', content: 'Hello' }]),
 }))
 
 vi.mock('@/tutorial/buildDriverSchedule', () => ({
   buildDriverScheduleFromTutorialSteps: vi.fn().mockReturnValue([
-    { stepId: 'step1', driverStep: { element: '#el', popover: { title: 'Hi', description: 'Test' } } },
+    {
+      stepId: 'step1',
+      driverStep: { element: '#el', popover: { title: 'Hi', description: 'Test' } },
+    },
   ]),
 }))
 

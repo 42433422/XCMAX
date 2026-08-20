@@ -148,6 +148,33 @@ class UserMemoryVectorIngestApplicationService:
             },
         )
 
+    def build_chat_turn_chunk(
+        self,
+        *,
+        user_id: str,
+        user_message: str,
+        assistant_message: str,
+        session_id: str = "",
+        source: str = "chat",
+    ) -> UserMemoryVectorChunk:
+        """Build a recallable, tenant-scoped conversation turn chunk."""
+        ts = datetime.now().isoformat()
+        user_text = str(user_message or "").strip()
+        assistant_text = str(assistant_message or "").strip()
+        return UserMemoryVectorChunk(
+            chunk_id=uuid.uuid4().hex,
+            content=(f"[chat_turn] user={user_text[:500]}; assistant={assistant_text[:1000]}"),
+            metadata={
+                "source": str(source or "chat"),
+                "session_id": str(session_id or ""),
+                "user_id": user_id,
+                "user_message_preview": user_text[:200],
+                "assistant_message_preview": assistant_text[:300],
+                "last_used": ts,
+                "ts": ts,
+            },
+        )
+
 
 class UserMemoryRagApplicationService:
     """用户记忆 RAG：基于用户向量库做语义检索。"""
@@ -187,15 +214,18 @@ class UserMemoryRagApplicationService:
         for idx, hit in enumerate(hits[:max_hits], start=1):
             score = float(hit.get("score") or 0.0)
             md = hit.get("metadata") if isinstance(hit.get("metadata"), dict) else {}
+            if not isinstance(md, dict):
+                md = {}
             source = str(md.get("source") or "-")
             intent = md.get("intent") or md.get("recognized_intent") or ""
             user_feedback = md.get("user_feedback") or ""
             corrected_intent = md.get("corrected_intent") or ""
             last_used = md.get("last_used") or ""
-            slots = md.get("slots") if isinstance(md.get("slots"), dict) else {}
+            raw_slots = md.get("slots")
+            slots: dict[str, Any] = dict(raw_slots) if isinstance(raw_slots, dict) else {}
 
             # slots 可能含较多键，做轻量展示。
-            slot_str = ", ".join([f"{k}={slots[k]}" for k in list(slots.keys())[:6]])
+            slot_str = ", ".join([f"{k}={slots[k]}" for k in list((slots or {}).keys())[:6]])
             preview = str(hit.get("content") or "").strip()
             if len(preview) > 240:
                 preview = preview[:240] + "…"

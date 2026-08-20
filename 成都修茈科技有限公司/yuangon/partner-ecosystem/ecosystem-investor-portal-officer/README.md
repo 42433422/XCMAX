@@ -1,6 +1,6 @@
         # 投资方只读门户员 (`ecosystem-investor-portal-officer`)
 
-        **area**：`partner-ecosystem`  
+        **area**：`partner-ecosystem`
         **yuangon 路径**：`成都修茈科技有限公司/yuangon/partner-ecosystem/ecosystem-investor-portal-officer/`
 
         ## 职责
@@ -10,16 +10,19 @@
         ## 上游依赖 (`depends_on`)
 
         - `market-frontend-dev`
+
 - `ecosystem-delivery-reporter`
 
         ## 支持的 Handlers
 
         - `llm_md`：接收 Markdown 任务描述，调用 LLM 输出结构化结果
+
 - `echo`：调试用：原样返回输入，用于 smoke 测试
 
         ## Scope（核心文件范围）
 
         - `MODstore_deploy/market/src/**/admin/**`
+
 - `MODstore_deploy/market/src/views/**/Investor*`
 - `MODstore_deploy/modstore_server/**/investor*`
 - `yuangon/partner-ecosystem/ecosystem-investor-portal-officer/**`

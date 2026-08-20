@@ -1,4 +1,4 @@
-import { api } from './core';
+import { api } from './core'
 
 export const kittenApi = {
   getBusinessSnapshot: () => api.get('/api/ai/kitten/business-snapshot'),
@@ -15,8 +15,7 @@ export const kittenApi = {
 
   getInventoryChart: () => api.get('/api/ai/kitten/charts/inventory'),
 
-  generateFinancialReport: (metadata = {}) =>
-    api.post('/api/ai/kitten/financial/report', { metadata }),
+  generateFinancialReport: (metadata = {}) => api.post('/api/ai/kitten/financial/report', { metadata }),
 
   exportReport: (payload: Record<string, unknown> = {}): Promise<Response> =>
     api.post<Response>('/api/ai/kitten/report/export', payload, { responseType: 'blob' }),
@@ -27,13 +26,11 @@ export const kittenApi = {
   generateDocument: (payload: { prompt: string; format: 'docx' | 'xlsx' }): Promise<Response> =>
     api.post<Response>('/api/ai/kitten/document/generate', payload, { responseType: 'blob' }),
 
-  getSavedAnalyses: (type?: string) =>
-    api.get(`/api/ai/kitten/saved/list${type ? `?type=${type}` : ''}`),
+  getSavedAnalyses: (type?: string) => api.get(`/api/ai/kitten/saved/list${type ? `?type=${type}` : ''}`),
 
   getSavedAnalysis: (id: string) => api.get(`/api/ai/kitten/saved/${id}`),
 
-  exportSavedAnalysis: (id: string) =>
-    api.get(`/api/ai/kitten/saved/${id}/export`, { responseType: 'blob' }),
+  exportSavedAnalysis: (id: string) => api.get(`/api/ai/kitten/saved/${id}/export`, { responseType: 'blob' }),
 
   deleteSavedAnalysis: (id: string) => api.delete(`/api/ai/kitten/saved/${id}`),
 }

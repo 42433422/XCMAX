@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 import copy
 import logging
 from collections.abc import AsyncIterator, Collection, Iterator, Mapping, Sequence
@@ -10,6 +11,7 @@ from typing import (
     NamedTuple,
     TypedDict,
     TypeVar,
+    cast,
 )
 
 from langchain_core.runnables import RunnableConfig
@@ -118,7 +120,9 @@ class Checkpoint(TypedDict):
     This keeps track of the versions of the channels that each node has seen.
     Used to determine which nodes to execute next.
     """
-    updated_channels: list[str] | None
+    pending_sends: NotRequired[list[Any]]
+    """Legacy sends retained while checkpoints from format versions before v4 migrate."""
+    updated_channels: NotRequired[list[str] | None]
     """The channels that were updated in this checkpoint.
     """
 
@@ -216,7 +220,7 @@ class BaseCheckpointSaver(Generic[V]):
         self.serde = maybe_add_typed_methods(serde or self.serde)
 
     @property
-    def config_specs(self) -> list:
+    def config_specs(self) -> builtins.list[Any]:
         """Define the configuration options for the checkpoint saver.
 
         Returns:
@@ -758,7 +762,7 @@ def get_checkpoint_metadata(
     config: RunnableConfig, metadata: CheckpointMetadata
 ) -> CheckpointMetadata:
     """Get checkpoint metadata in a backwards-compatible manner."""
-    metadata = {
+    metadata_values: dict[str, Any] = {
         k: v.replace("\u0000", "") if isinstance(v, str) else v
         for k, v in metadata.items()
     }
@@ -766,13 +770,17 @@ def get_checkpoint_metadata(
         if not obj:
             continue
         for key, v in obj.items():
-            if key in metadata or key in EXCLUDED_METADATA_KEYS or key.startswith("__"):
+            if (
+                key in metadata_values
+                or key in EXCLUDED_METADATA_KEYS
+                or key.startswith("__")
+            ):
                 continue
             elif isinstance(v, str):
-                metadata[key] = v.replace("\u0000", "")
+                metadata_values[key] = v.replace("\u0000", "")
             elif isinstance(v, (int, bool, float)):
-                metadata[key] = v
-    return metadata
+                metadata_values[key] = v
+    return cast(CheckpointMetadata, metadata_values)
 
 
 def get_serializable_checkpoint_metadata(

@@ -18,6 +18,8 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 TABLES = [
     "users",
     "verification_codes",
@@ -112,26 +114,24 @@ def _migrate_table(sq: sqlite3.Connection, pg, table: str) -> dict[str, int]:
 
 
 def _json_order_row(doc: dict[str, Any]) -> tuple[Any, ...]:
-    return tuple(
-        [
-            doc.get("out_trade_no"),
-            doc.get("trade_no"),
-            int(doc.get("user_id") or 0),
-            doc.get("subject") or "XC AGI 订单",
-            _money(doc.get("total_amount")),
-            doc.get("order_kind")
-            or ("item" if doc.get("item_id") else "plan" if doc.get("plan_id") else "wallet"),
-            int(doc.get("item_id") or 0) or None,
-            doc.get("plan_id") or None,
-            doc.get("status") or "pending",
-            doc.get("buyer_id"),
-            doc.get("paid_at"),
-            bool(doc.get("fulfilled")),
-            doc.get("qr_code"),
-            doc.get("pay_type"),
-            doc.get("created_at"),
-            doc.get("updated_at"),
-        ]
+    return (
+        doc.get("out_trade_no"),
+        doc.get("trade_no"),
+        int(doc.get("user_id") or 0),
+        doc.get("subject") or "XC AGI 订单",
+        _money(doc.get("total_amount")),
+        doc.get("order_kind")
+        or ("item" if doc.get("item_id") else "plan" if doc.get("plan_id") else "wallet"),
+        int(doc.get("item_id") or 0) or None,
+        doc.get("plan_id") or None,
+        doc.get("status") or "pending",
+        doc.get("buyer_id"),
+        doc.get("paid_at"),
+        bool(doc.get("fulfilled")),
+        doc.get("qr_code"),
+        doc.get("pay_type"),
+        doc.get("created_at"),
+        doc.get("updated_at"),
     )
 
 
@@ -148,7 +148,7 @@ def _migrate_json_orders(pg) -> dict[str, int]:
                 skipped += 1
                 continue
             rows.append(_json_order_row(doc))
-        except Exception:
+        except RECOVERABLE_ERRORS:
             skipped += 1
     inserted = _insert_rows(pg, "orders", ORDER_COLUMNS, rows)
     return {"source": len(rows), "inserted": inserted, "skipped": skipped}
@@ -159,7 +159,7 @@ def _count_pg(pg, table: str) -> int:
         with pg.cursor() as cur:
             cur.execute(f'SELECT COUNT(*) FROM "{table}"')
             return int(cur.fetchone()[0])
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pg.rollback()
         return -1
 
@@ -185,14 +185,14 @@ def main() -> None:
         try:
             report[table] = _migrate_table(sq, pg, table)
             pg.commit()
-        except Exception as e:
+        except RECOVERABLE_ERRORS as e:
             pg.rollback()
             report[table] = {"source": 0, "inserted": 0, "skipped": 1}
             print(f"  {table}: error {e}")
     try:
         report["orders_json"] = _migrate_json_orders(pg)
         pg.commit()
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         pg.rollback()
         report["orders_json"] = {"source": 0, "inserted": 0, "skipped": 1}
         print(f"  orders_json: error {e}")

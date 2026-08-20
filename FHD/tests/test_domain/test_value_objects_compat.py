@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.domain.value_objects_compat import (
+from app.legacy.domain.value_objects_compat import (
     ContactInfo,
     ModelNumber,
     Money,

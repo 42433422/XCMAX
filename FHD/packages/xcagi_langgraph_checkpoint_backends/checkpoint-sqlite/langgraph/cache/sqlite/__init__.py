@@ -9,6 +9,8 @@ from collections.abc import Mapping, Sequence
 from langgraph.cache.base import BaseCache, FullKey, Namespace, ValueT
 from langgraph.checkpoint.serde.base import SerializerProtocol
 
+from langgraph.store.sqlite._exception_policy import BOUNDARY_ERRORS
+
 
 class SqliteCache(BaseCache[ValueT]):
     """File-based cache using SQLite."""
@@ -75,11 +77,11 @@ class SqliteCache(BaseCache[ValueT]):
         """Asynchronously get the cached values for the given keys."""
         return await asyncio.to_thread(self.get, keys)
 
-    def set(self, mapping: Mapping[FullKey, tuple[ValueT, int | None]]) -> None:
+    def set(self, pairs: Mapping[FullKey, tuple[ValueT, int | None]]) -> None:
         """Set the cached values for the given keys and TTLs."""
         with self._lock, self._conn:
             now = datetime.datetime.now(datetime.timezone.utc)
-            for key, (value, ttl) in mapping.items():
+            for key, (value, ttl) in pairs.items():
                 if ttl is not None:
                     delta = datetime.timedelta(seconds=ttl)
                     expiry: float | None = (now + delta).timestamp()
@@ -91,9 +93,9 @@ class SqliteCache(BaseCache[ValueT]):
                     (",".join(key[0]), key[1], expiry, encoding, raw),
                 )
 
-    async def aset(self, mapping: Mapping[FullKey, tuple[ValueT, int | None]]) -> None:
+    async def aset(self, pairs: Mapping[FullKey, tuple[ValueT, int | None]]) -> None:
         """Asynchronously set the cached values for the given keys and TTLs."""
-        await asyncio.to_thread(self.set, mapping)
+        await asyncio.to_thread(self.set, pairs)
 
     def clear(self, namespaces: Sequence[Namespace] | None = None) -> None:
         """Delete the cached values for the given namespaces.
@@ -116,5 +118,5 @@ class SqliteCache(BaseCache[ValueT]):
     def __del__(self) -> None:
         try:
             self._conn.close()
-        except Exception:
+        except BOUNDARY_ERRORS:
             pass

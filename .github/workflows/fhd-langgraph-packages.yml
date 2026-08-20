@@ -1,0 +1,66 @@
+# CI SSOT: generated from FHD/.github/workflows/langgraph-packages.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
+name: LangGraph Embedded Packages
+
+on:
+  pull_request:
+    paths:
+      - "FHD/packages/xcagi_langgraph_*/**"
+      - ".github/workflows/fhd-langgraph-packages.yml"
+  push:
+    branches: [main]
+    paths:
+      - "FHD/packages/xcagi_langgraph_*/**"
+      - ".github/workflows/fhd-langgraph-packages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: langgraph-embedded-${{ github.ref }}
+  cancel-in-progress: true
+
+
+defaults:
+  run:
+    working-directory: FHD
+
+jobs:
+  package:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: core
+            path: "FHD/packages/xcagi_langgraph_core"
+          - name: checkpoint
+            path: "FHD/packages/xcagi_langgraph_checkpoint"
+          - name: prebuilt
+            path: "FHD/packages/xcagi_langgraph_prebuilt"
+          - name: checkpoint-sqlite
+            path: "FHD/packages/xcagi_langgraph_checkpoint_backends/checkpoint-sqlite"
+          - name: checkpoint-postgres
+            path: "FHD/packages/xcagi_langgraph_checkpoint_backends/checkpoint-postgres"
+          - name: sdk
+            path: "FHD/packages/xcagi_langgraph_sdk"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install locked dependencies
+        working-directory: ${{ matrix.path }}
+        run: uv sync --frozen --group dev
+      - name: Run native type checking
+        working-directory: ${{ matrix.path }}
+        run: uv run ty check
+      - name: Run tests with warnings as errors
+        working-directory: ${{ matrix.path }}
+        run: uv run pytest -q -W error

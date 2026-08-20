@@ -36,17 +36,25 @@ __all__ = [
 
 def _register_platform_shell_bootstrap(app: FastAPI) -> None:
     """验收 API 须在 deferred 路由前可用，避免 SPA fallback 对 /api/* 返回 404。"""
+    if bool(getattr(app.state, "platform_shell_routes_registered", False)):
+        logger.debug("Platform shell bootstrap routes already registered")
+        return
     try:
         from app.fastapi_routes.platform_shell_routes import router as platform_shell_router
 
         app.include_router(platform_shell_router)
+        app.state.platform_shell_routes_registered = True
         record_runtime_component(app, "platform_shell_routes", ok=True, required=True)
         logger.info("Registered platform_shell bootstrap routes")
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         record_runtime_component(
-            app, "platform_shell_routes", ok=False, required=True, detail=str(exc)
+            app,
+            "platform_shell_routes",
+            ok=False,
+            required=True,
+            detail="platform shell routes unavailable",
         )
-        logger.warning("Platform shell bootstrap routes skipped: %s", exc)
+        logger.exception("Platform shell bootstrap routes skipped")
 
 
 def register_bootstrap_routes(app: FastAPI) -> None:

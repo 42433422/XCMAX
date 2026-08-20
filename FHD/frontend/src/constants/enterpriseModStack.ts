@@ -25,19 +25,12 @@ export function buildEnterpriseModStack(plan: IndustryBaselinePlan): EnterpriseM
   const industryModIds = [...(plan.industry_mod_ids || [])]
   const customModIds = [...(plan.account_custom_mod_ids || [])]
   const packageModIds = [
-    ...new Set([
-      ...industryModIds,
-      ...customModIds,
-      ...(plan.custom_mod_ids || []).filter((id) => id && !customModIds.includes(id)),
-    ]),
+    ...new Set([...industryModIds, ...customModIds, ...(plan.custom_mod_ids || []).filter((id) => id && !customModIds.includes(id))]),
   ]
 
-  const hostLineModIds = [
-    ...new Set([...(plan.required_mod_ids || []), ...(plan.optional_mod_ids || [])]),
-  ]
+  const hostLineModIds = [...new Set([...(plan.required_mod_ids || []), ...(plan.optional_mod_ids || [])])]
 
-  const industryLabel =
-    String(plan.industry_package?.product_name || '').trim() || plan.industry_id || '通用'
+  const industryLabel = String(plan.industry_package?.product_name || '').trim() || plan.industry_id || '通用'
   const customLabels: Record<string, string> = {}
   for (const g of plan.groups || []) {
     if (g.id !== 'account_custom') continue
@@ -47,13 +40,10 @@ export function buildEnterpriseModStack(plan: IndustryBaselinePlan): EnterpriseM
   }
 
   const customNames = customModIds.map((id) => customLabels[id] || id)
-  const stackLabel = customNames.length
-    ? `${industryLabel} + ${customNames.join(' + ')}`
-    : industryLabel
+  const stackLabel = customNames.length ? `${industryLabel} + ${customNames.join(' + ')}` : industryLabel
   const stackShortLabel = customNames.length ? `${industryLabel}·定制` : industryLabel
 
-  const industryModId =
-    industryModIds[0] || String(plan.industry_package?.mod_id || '').trim() || null
+  const industryModId = industryModIds[0] || String(plan.industry_package?.mod_id || '').trim() || null
 
   return {
     industryId: plan.industry_id,
@@ -87,10 +77,7 @@ export function modBelongsToEnterpriseStack(modId: string, stack: EnterpriseModS
   return false
 }
 
-export function employeeBelongsToEnterpriseStack(
-  hostModId: string | undefined | null,
-  stack: EnterpriseModStack,
-): boolean {
+export function employeeBelongsToEnterpriseStack(hostModId: string | undefined | null, stack: EnterpriseModStack): boolean {
   return Boolean(hostModId && modBelongsToEnterpriseStack(hostModId, stack))
 }
 
@@ -99,9 +86,7 @@ export function defaultHostModIdForMarketEmployee(
   stack: EnterpriseModStack,
   catalogItem?: { host_mod_id?: string; enterprise_mod_id?: string },
 ): string {
-  const explicit = String(
-    catalogItem?.host_mod_id || catalogItem?.enterprise_mod_id || '',
-  ).trim()
+  const explicit = String(catalogItem?.host_mod_id || catalogItem?.enterprise_mod_id || '').trim()
   if (explicit && modBelongsToEnterpriseStack(explicit, stack)) return explicit
   if (stack.customModIds.length === 1) return stack.customModIds[0]
   if (stack.industryModId) return stack.industryModId

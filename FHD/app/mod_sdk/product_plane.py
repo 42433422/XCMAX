@@ -33,7 +33,11 @@ def is_control_plane_employee(employee_id: str, manifest: dict[str, Any] | None 
         return True
     data = manifest if isinstance(manifest, dict) else {}
     v2 = data.get("employee_config_v2") if isinstance(data.get("employee_config_v2"), dict) else {}
+    if not isinstance(v2, dict):
+        v2 = {}
     identity = v2.get("identity") if isinstance(v2.get("identity"), dict) else {}
+    if not isinstance(identity, dict):
+        identity = {}
     area = str(identity.get("area") or data.get("area") or "").strip().lower()
     owner = str(identity.get("owner") or data.get("owner") or "").strip().lower()
     return owner == "admin" and area in CONTROL_PLANE_AREAS

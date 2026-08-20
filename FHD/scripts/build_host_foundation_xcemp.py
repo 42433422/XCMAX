@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """打包「宿主基础能力（预装员工）」为 .xcemp，供 MODstore / 离线分发。"""
 
 from __future__ import annotations

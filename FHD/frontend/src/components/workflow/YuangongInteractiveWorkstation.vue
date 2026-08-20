@@ -29,7 +29,7 @@ const props = withDefaults(
     workflowFullName: '—',
     enabled: false,
     busy: false,
-  }
+  },
 )
 
 const router = useRouter()
@@ -59,7 +59,7 @@ watch(
   () => [props.enabled, props.busy] as const,
   () => {
     sceneSrc.value = primarySvg()
-  }
+  },
 )
 
 function onSceneError() {
@@ -74,9 +74,7 @@ function onSceneError() {
 <template>
   <div class="yiw" role="region" aria-labelledby="yiw-heading">
     <h4 id="yiw-heading" class="yiw-title">工位示意 · 快捷入口</h4>
-    <p class="yiw-lead">
-      工位画面随上方所选工位的「副窗启用 / 忙碌」状态联动；图右下侧可点击进入对应单位数据库。
-    </p>
+    <p class="yiw-lead">工位画面随上方所选工位的「副窗启用 / 忙碌」状态联动；图右下侧可点击进入对应单位数据库。</p>
     <div class="yiw-frame" :class="{ 'yiw-frame--idle': !enabled, 'yiw-frame--busy': enabled && busy }" aria-label="员工工位示意图">
       <img
         class="yiw-img"
@@ -145,7 +143,9 @@ function onSceneError() {
   border-radius: 8px;
   overflow: hidden;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
-  transition: filter 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    filter 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .yiw-frame--idle {
@@ -153,7 +153,9 @@ function onSceneError() {
 }
 
 .yiw-frame--busy {
-  box-shadow: 0 4px 24px rgba(56, 189, 248, 0.32), inset 0 0 0 2px rgba(56, 189, 248, 0.32);
+  box-shadow:
+    0 4px 24px rgba(56, 189, 248, 0.32),
+    inset 0 0 0 2px rgba(56, 189, 248, 0.32);
 }
 
 .yiw-img {
@@ -191,11 +193,7 @@ function onSceneError() {
   gap: 2px;
   padding: 6px 8px;
   pointer-events: none;
-  background: linear-gradient(
-    180deg,
-    rgba(15, 23, 42, 0.88) 0%,
-    rgba(15, 23, 42, 0.72) 100%
-  );
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.88) 0%, rgba(15, 23, 42, 0.72) 100%);
   color: rgba(248, 250, 252, 0.95);
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
   border: 1px solid rgba(148, 163, 184, 0.25);
@@ -212,11 +210,7 @@ function onSceneError() {
   bottom: 0;
   border-radius: 6px 6px 0 0;
   border-bottom: none;
-  background: linear-gradient(
-    0deg,
-    rgba(15, 23, 42, 0.92) 0%,
-    rgba(15, 23, 42, 0.78) 100%
-  );
+  background: linear-gradient(0deg, rgba(15, 23, 42, 0.92) 0%, rgba(15, 23, 42, 0.78) 100%);
 }
 
 .yiw-ribbon__k {
@@ -278,7 +272,10 @@ function onSceneError() {
   border-radius: 4px;
   border: 1px dashed rgba(180, 220, 255, 0.45);
   opacity: 0.25;
-  transition: opacity 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  transition:
+    opacity 0.15s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease;
   pointer-events: none;
 }
 </style>

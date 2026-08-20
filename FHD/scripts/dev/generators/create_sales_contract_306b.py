@@ -1,6 +1,8 @@
-from docx import Document
+# mypy: disable-error-code="assignment"
 import os
 from datetime import datetime
+
+from docx import Document
 
 
 def create_sales_contract(

@@ -129,7 +129,7 @@ class TestApiCallErrorBranches:
         import httpx
 
         mock_resp = MagicMock()
-        mock_resp.json.side_effect = Exception("parse error")
+        mock_resp.json.side_effect = RuntimeError("parse error")
         mock_resp.text = "plain text body"
         mock_resp.is_success = True
         mock_resp.status_code = 200

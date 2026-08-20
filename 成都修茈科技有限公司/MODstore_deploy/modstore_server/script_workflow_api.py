@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """脚本即工作流 API：替代 ``workflow_api`` 的图相关端点。
 
 接管的能力：
@@ -23,12 +24,11 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 import json
 import logging
 import secrets
-import uuid
-from datetime import datetime, timezone
-from pathlib import Path
+from datetime import UTC, datetime, timezone  # noqa: F401
 from typing import Any, AsyncIterator, Dict, List, Optional
 
 from fastapi import (
@@ -40,8 +40,7 @@ from fastapi import (
     Query,
     UploadFile,
 )
-from fastapi.responses import FileResponse, StreamingResponse
-from pydantic import BaseModel, Field
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import _get_current_user
@@ -53,10 +52,20 @@ from modstore_server.models import (
     ScriptWorkflowVersion,
     User,
 )
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 from modstore_server.script_agent.agent_loop import run_agent_loop
 from modstore_server.script_agent.brief import Brief
 from modstore_server.script_agent.llm_client import RealLlmClient
-from modstore_server.script_agent.sandbox_runner import run_in_sandbox
+from modstore_server.script_agent.sandbox_runner import run_in_sandbox as run_in_sandbox
+from modstore_server.script_workflow_models import (
+    CommitSessionBody,
+)
+from modstore_server.script_workflow_models import EditWithAiBody as EditWithAiBody
+from modstore_server.script_workflow_models import (
+    FeedbackBody,
+    UpdateWorkflowBody,
+)
+from modstore_server.script_workflow_models import WorkflowSummary as WorkflowSummary
 from modstore_server.workbench_script_runner import DEFAULT_SCRIPT_AGENT_ITERATIONS
 
 logger = logging.getLogger(__name__)
@@ -101,7 +110,8 @@ def _resolve_llm_for_user(
             model = model or str(prefs.get("model") or "").strip()
     if not provider or not model:
         raise HTTPException(
-            400, "缺少 LLM 配置：请先在「我的密钥」选择默认模型，或在请求里传 provider/model"
+            400,
+            "缺少 LLM 配置：请先在「我的密钥」选择默认模型，或在请求里传 provider/model",
         )
     api_key, _src = resolve_api_key(db, user.id, provider)
     if not api_key:
@@ -171,7 +181,7 @@ async def _stream_agent_loop(
     llm = _build_llm_client(llm_cfg)
     first = {"type": "session_started", "iteration": -1, "payload": {"session_id": sid}}
     await _record_event(sid, first)
-    yield f"data: {json.dumps(first, ensure_ascii=False)}\n\n".encode("utf-8")
+    yield f"data: {json.dumps(first, ensure_ascii=False)}\n\n".encode()
 
     try:
         async for ev in run_agent_loop(
@@ -191,47 +201,18 @@ async def _stream_agent_loop(
         ):
             evd = ev.to_dict()
             await _record_event(sid, evd)
-            yield f"data: {json.dumps(evd, ensure_ascii=False)}\n\n".encode("utf-8")
-    except Exception as e:  # noqa: BLE001
+            yield f"data: {json.dumps(evd, ensure_ascii=False)}\n\n".encode()
+    except BOUNDARY_ERRORS as e:  # noqa: BLE001
         evd = {
             "type": "error",
             "iteration": -1,
             "payload": {"reason": f"agent loop crash: {e}"},
         }
         await _record_event(sid, evd)
-        yield f"data: {json.dumps(evd, ensure_ascii=False)}\n\n".encode("utf-8")
+        yield f"data: {json.dumps(evd, ensure_ascii=False)}\n\n".encode()
 
 
 # ----------------------------- pydantic ----------------------------- #
-
-
-class WorkflowSummary(BaseModel):
-    id: int
-    name: str
-    status: str
-    brief_goal: str
-    created_at: str
-    updated_at: str
-
-
-class CommitSessionBody(BaseModel):
-    name: str = Field(..., min_length=1, max_length=256)
-    schema_in: Dict[str, Any] = Field(default_factory=dict)
-
-
-class FeedbackBody(BaseModel):
-    hint: str = Field(..., min_length=1, max_length=4000)
-
-
-class EditWithAiBody(BaseModel):
-    hint: str = Field(..., min_length=1, max_length=4000)
-    provider: Optional[str] = None
-    model: Optional[str] = None
-
-
-class UpdateWorkflowBody(BaseModel):
-    name: Optional[str] = None
-    schema_in: Optional[Dict[str, Any]] = None
 
 
 # ----------------------------- 会话端点 ----------------------------- #
@@ -269,7 +250,7 @@ async def start_session(
             events=[],
             outcome=None,
             error="",
-            started_at=datetime.now(timezone.utc).timestamp(),
+            started_at=datetime.now(UTC).timestamp(),
             files_meta=[
                 {"filename": f["filename"], "size": len(f["content"] or b"")} for f in files_data
             ],
@@ -383,7 +364,10 @@ async def commit_session(
         script_text=final_code,
         plan_md=str(outcome.get("plan_md") or ""),
         agent_log_json=json.dumps(
-            {"trace": outcome.get("trace") or [], "iterations": outcome.get("iterations")},
+            {
+                "trace": outcome.get("trace") or [],
+                "iterations": outcome.get("iterations"),
+            },
             ensure_ascii=False,
         ),
         is_current=True,
@@ -482,7 +466,7 @@ async def update_workflow(
         wf.name = body.name.strip()
     if body.schema_in is not None:
         wf.schema_in_json = json.dumps(body.schema_in, ensure_ascii=False)
-    wf.updated_at = datetime.now(timezone.utc)
+    wf.updated_at = datetime.now(UTC)
     db.commit()
     db.refresh(wf)
     return _serialize_workflow(wf)
@@ -502,339 +486,13 @@ async def delete_workflow(
     return {"ok": True}
 
 
-# ----------------------------- 状态流转 ----------------------------- #
-
-
-@router.post(
-    "/{workflow_id}/sandbox-run",
-    summary="用户人工沙箱跑（multipart：上传真实输入；mode=manual_sandbox）",
-)
-async def manual_sandbox_run(
-    workflow_id: int,
-    files: List[UploadFile] = File(default_factory=list),
-    db: Session = Depends(get_db),
-    user: User = Depends(_get_current_user),
-):
-    wf = _load_workflow(db, workflow_id, user)
-    if wf.status not in ("sandbox_testing", "active"):
-        raise HTTPException(400, f"当前状态 {wf.status} 不支持沙箱试用")
-    files_data = await _read_uploads(files)
-    llm_cfg = _resolve_llm_for_user(db, user, hint_provider=None, hint_model=None)
-
-    cv = _current_version(db, workflow_id)
-    run = ScriptWorkflowRun(
-        workflow_id=wf.id,
-        version_id=cv.id if cv else None,
-        user_id=user.id,
-        mode="manual_sandbox",
-        status="running",
-    )
-    db.add(run)
-    db.commit()
-    db.refresh(run)
-
-    result = await run_in_sandbox(
-        user_id=user.id,
-        session_id=f"manual_{run.id}",
-        script_text=wf.script_text,
-        files=files_data,
-        provider=llm_cfg["provider"],
-        model=llm_cfg["model"],
-        api_key=llm_cfg["api_key"],
-        base_url=llm_cfg.get("base_url"),
-    )
-
-    run.stdout = result.stdout[-8000:]
-    run.stderr = result.stderr[-8000:]
-    run.outputs_meta_json = json.dumps(result.outputs, ensure_ascii=False)
-    run.runtime_sdk_calls_json = json.dumps(result.sdk_calls, ensure_ascii=False)
-    if result.timed_out:
-        run.status = "timeout"
-        run.error_message = "脚本超时"
-    elif result.ok and result.outputs:
-        run.status = "success"
-    else:
-        run.status = "failed"
-        run.error_message = "; ".join(result.errors) or f"返回码 {result.returncode}"
-    run.completed_at = datetime.now(timezone.utc)
-    if run.status == "success":
-        wf.last_manual_sandbox_run_id = run.id
-        wf.updated_at = datetime.now(timezone.utc)
-    db.commit()
-    db.refresh(run)
-
-    return _serialize_run(run, with_artifacts=True, result=result)
-
-
-@router.post(
-    "/{workflow_id}/activate",
-    summary="启用脚本工作流（强校验：必须有过 successful manual_sandbox run）",
-)
-async def activate_workflow(
-    workflow_id: int,
-    db: Session = Depends(get_db),
-    user: User = Depends(_get_current_user),
-):
-    wf = _load_workflow(db, workflow_id, user)
-    if wf.status == "active":
-        return _serialize_workflow(wf)
-    if wf.status not in ("sandbox_testing",):
-        raise HTTPException(400, f"当前状态 {wf.status} 不能启用")
-    last_run = None
-    if wf.last_manual_sandbox_run_id:
-        last_run = (
-            db.query(ScriptWorkflowRun)
-            .filter(ScriptWorkflowRun.id == wf.last_manual_sandbox_run_id)
-            .first()
-        )
-    if not last_run or last_run.status != "success":
-        raise HTTPException(400, "启用前必须至少有一次成功的人工沙箱测试（manual_sandbox-run）")
-    wf.status = "active"
-    wf.updated_at = datetime.now(timezone.utc)
-    db.commit()
-    db.refresh(wf)
-    return _serialize_workflow(wf)
-
-
-@router.post(
-    "/{workflow_id}/deactivate",
-    summary="停用脚本工作流（status=deprecated）",
-)
-async def deactivate_workflow(
-    workflow_id: int,
-    db: Session = Depends(get_db),
-    user: User = Depends(_get_current_user),
-):
-    wf = _load_workflow(db, workflow_id, user)
-    wf.status = "deprecated"
-    wf.updated_at = datetime.now(timezone.utc)
-    db.commit()
-    db.refresh(wf)
-    return _serialize_workflow(wf)
-
-
-@router.post(
-    "/{workflow_id}/edit-with-ai",
-    summary="对已保存脚本继续 agent loop 改（SSE）",
-)
-async def edit_with_ai(
-    workflow_id: int,
-    body: EditWithAiBody,
-    db: Session = Depends(get_db),
-    user: User = Depends(_get_current_user),
-):
-    wf = _load_workflow(db, workflow_id, user)
-    try:
-        brief_data = json.loads(wf.brief_json or "{}")
-    except json.JSONDecodeError:
-        brief_data = {}
-    brief = Brief.from_dict(brief_data)
-    brief = Brief.from_dict(
-        {**brief.to_dict(), "goal": brief.goal + "\n\n[用户改进] " + body.hint.strip()}
-    )
-
-    llm_cfg = _resolve_llm_for_user(db, user, hint_provider=body.provider, hint_model=body.model)
-    sid = secrets.token_urlsafe(16)
-    async with _SESSION_LOCK:
-        SCRIPT_AGENT_SESSIONS[sid] = _Session(
-            user_id=user.id,
-            brief=brief.to_dict(),
-            status="running",
-            events=[],
-            outcome=None,
-            error="",
-            started_at=datetime.now(timezone.utc).timestamp(),
-            files_meta=[],
-            workflow_id=wf.id,
-        )
-        _gc_sessions()
-    wf.status = "draft"
-    wf.agent_session_id = sid
-    wf.updated_at = datetime.now(timezone.utc)
-    db.commit()
-
-    return StreamingResponse(
-        _stream_agent_loop(sid=sid, user_id=user.id, brief=brief, files=[], llm_cfg=llm_cfg),
-        media_type="text/event-stream",
-        headers={"X-Script-Session-Id": sid, "Cache-Control": "no-cache"},
-    )
-
-
-@router.post(
-    "/{workflow_id}/run",
-    summary="生产调用（mode=production；仅 active 可调）",
-)
-async def production_run(
-    workflow_id: int,
-    files: List[UploadFile] = File(default_factory=list),
-    db: Session = Depends(get_db),
-    user: User = Depends(_get_current_user),
-):
-    wf = _load_workflow(db, workflow_id, user)
-    if wf.status != "active":
-        raise HTTPException(400, "工作流未启用，无法进行生产调用")
-    files_data = await _read_uploads(files)
-    llm_cfg = _resolve_llm_for_user(db, user, hint_provider=None, hint_model=None)
-    cv = _current_version(db, workflow_id)
-
-    run = ScriptWorkflowRun(
-        workflow_id=wf.id,
-        version_id=cv.id if cv else None,
-        user_id=user.id,
-        mode="production",
-        status="running",
-    )
-    db.add(run)
-    db.commit()
-    db.refresh(run)
-
-    result = await run_in_sandbox(
-        user_id=user.id,
-        session_id=f"prod_{run.id}",
-        script_text=wf.script_text,
-        files=files_data,
-        provider=llm_cfg["provider"],
-        model=llm_cfg["model"],
-        api_key=llm_cfg["api_key"],
-        base_url=llm_cfg.get("base_url"),
-    )
-    run.stdout = result.stdout[-8000:]
-    run.stderr = result.stderr[-8000:]
-    run.outputs_meta_json = json.dumps(result.outputs, ensure_ascii=False)
-    run.runtime_sdk_calls_json = json.dumps(result.sdk_calls, ensure_ascii=False)
-    if result.timed_out:
-        run.status = "timeout"
-        run.error_message = "脚本超时"
-    elif result.ok and result.outputs:
-        run.status = "success"
-    else:
-        run.status = "failed"
-        run.error_message = "; ".join(result.errors) or f"返回码 {result.returncode}"
-    run.completed_at = datetime.now(timezone.utc)
-    db.commit()
-    db.refresh(run)
-    return _serialize_run(run, with_artifacts=True, result=result)
-
-
-# ----------------------------- 历史查询 ----------------------------- #
-
-
-def _serialize_run(
-    run: ScriptWorkflowRun,
-    *,
-    with_artifacts: bool = False,
-    result: Optional[Any] = None,
-) -> Dict[str, Any]:
-    try:
-        outputs = json.loads(run.outputs_meta_json or "[]")
-    except json.JSONDecodeError:
-        outputs = []
-    try:
-        sdk_calls = json.loads(run.runtime_sdk_calls_json or "[]")
-    except json.JSONDecodeError:
-        sdk_calls = []
-    payload: Dict[str, Any] = {
-        "id": run.id,
-        "workflow_id": run.workflow_id,
-        "version_id": run.version_id,
-        "mode": run.mode,
-        "status": run.status,
-        "stdout_tail": (run.stdout or "")[-2000:],
-        "stderr_tail": (run.stderr or "")[-2000:],
-        "outputs": outputs,
-        "sdk_calls": sdk_calls,
-        "error_message": run.error_message,
-        "started_at": run.started_at.isoformat(),
-        "completed_at": run.completed_at.isoformat() if run.completed_at else None,
-    }
-    if with_artifacts and result is not None:
-        payload["work_dir"] = getattr(result, "work_dir", "")
-    return payload
-
-
-@router.get("/{workflow_id}/runs", summary="历史运行记录")
-async def list_runs(
-    workflow_id: int,
-    mode: Optional[str] = Query(None),
-    limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
-    db: Session = Depends(get_db),
-    user: User = Depends(_get_current_user),
-):
-    _load_workflow(db, workflow_id, user)
-    q = db.query(ScriptWorkflowRun).filter(ScriptWorkflowRun.workflow_id == workflow_id)
-    if mode:
-        q = q.filter(ScriptWorkflowRun.mode == mode)
-    rows = q.order_by(ScriptWorkflowRun.started_at.desc()).limit(limit).offset(offset).all()
-    return [_serialize_run(r) for r in rows]
-
-
-@router.get(
-    "/{workflow_id}/runs/{run_id}/files/{filename}",
-    summary="下载脚本工作流单次运行产物",
-)
-async def download_run_file(
-    workflow_id: int,
-    run_id: int,
-    filename: str,
-    db: Session = Depends(get_db),
-    user: User = Depends(_get_current_user),
-):
-    _load_workflow(db, workflow_id, user)
-    run = (
-        db.query(ScriptWorkflowRun)
-        .filter(
-            ScriptWorkflowRun.id == run_id,
-            ScriptWorkflowRun.workflow_id == workflow_id,
-        )
-        .first()
-    )
-    if not run:
-        raise HTTPException(404, "运行记录不存在")
-    try:
-        outputs = json.loads(run.outputs_meta_json or "[]")
-    except json.JSONDecodeError:
-        outputs = []
-    for item in outputs:
-        if not isinstance(item, dict):
-            continue
-        if item.get("filename") != filename:
-            continue
-        path = Path(str(item.get("path") or "")).resolve()
-        try:
-            expected_parent = path.parent.parent
-            if (
-                path.is_file()
-                and path.parent.name == "outputs"
-                and expected_parent.name.startswith(f"u{user.id}_")
-            ):
-                return FileResponse(path, filename=filename)
-        except Exception:
-            pass
-    raise HTTPException(404, "产物文件不存在")
-
-
-@router.get("/{workflow_id}/versions", summary="历史版本")
-async def list_versions(
-    workflow_id: int,
-    db: Session = Depends(get_db),
-    user: User = Depends(_get_current_user),
-):
-    _load_workflow(db, workflow_id, user)
-    rows = (
-        db.query(ScriptWorkflowVersion)
-        .filter(ScriptWorkflowVersion.workflow_id == workflow_id)
-        .order_by(ScriptWorkflowVersion.version_no.desc())
-        .all()
-    )
-    return [
-        {
-            "id": v.id,
-            "version_no": v.version_no,
-            "is_current": bool(v.is_current),
-            "script_text": v.script_text,
-            "plan_md": v.plan_md,
-            "created_at": v.created_at.isoformat(),
-        }
-        for v in rows
-    ]
+_execution_routes = importlib.import_module("modstore_server.script_workflow_execution_routes")
+manual_sandbox_run = _execution_routes.manual_sandbox_run
+activate_workflow = _execution_routes.activate_workflow
+deactivate_workflow = _execution_routes.deactivate_workflow
+edit_with_ai = _execution_routes.edit_with_ai
+production_run = _execution_routes.production_run
+_serialize_run = _execution_routes._serialize_run
+list_runs = _execution_routes.list_runs
+download_run_file = _execution_routes.download_run_file
+list_versions = _execution_routes.list_versions

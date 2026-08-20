@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { ref } from 'vue'
 import { mount } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
 import ProductsView from './ProductsView.vue'
 
-const mockFetchProducts = vi.fn().mockResolvedValue({ success: true, data: [{ id: 1, model_number: 'A1', name: 'P1', price: 10 }] })
+const mockFetchProducts = vi.fn().mockResolvedValue({
+  success: true,
+  data: [{ id: 1, model_number: 'A1', name: 'P1', price: 10 }],
+})
 
 vi.mock('@/stores/products', async () => {
   const { ref } = await import('vue')

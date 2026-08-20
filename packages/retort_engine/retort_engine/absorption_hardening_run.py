@@ -7,7 +7,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.capability_audit import (
     is_behavior_test_file,
@@ -73,25 +73,29 @@ def record_post_absorption_hardening_run(
     )
     gates.append(employee_gate)
     aggregate_payload = _read_json(employee_result_path)
-    aggregate_results = (
+    aggregate_results = cast(
+        list[Any],
         aggregate_payload.get("results")
         if isinstance(aggregate_payload.get("results"), list)
-        else []
+        else [],
     )
-    multi_worker = (
+    multi_worker = cast(
+        dict[str, Any],
         aggregate_payload.get("runtime_evidence", {}).get("multi_worker")
         if isinstance(aggregate_payload.get("runtime_evidence"), dict)
-        else {}
+        else {},
     )
-    worker_review = (
+    worker_review = cast(
+        dict[str, Any],
         aggregate_payload.get("runtime_evidence", {}).get("worker_review")
         if isinstance(aggregate_payload.get("runtime_evidence"), dict)
-        else {}
+        else {},
     )
-    process_isolation = (
+    process_isolation = cast(
+        dict[str, Any],
         multi_worker.get("process_isolation")
         if isinstance(multi_worker.get("process_isolation"), dict)
-        else {}
+        else {},
     )
     result = {
         "run_id": run_id,
@@ -260,7 +264,10 @@ def _post_merge_changed_files(root: Path, merge_commit: str) -> list[str]:
 
 def _quality_gate_from_report(root: Path) -> dict[str, Any]:
     report = _read_json(root / "docs" / "retort_quality_gate_bundle.json")
-    summary = report.get("summary") if isinstance(report.get("summary"), dict) else {}
+    summary = cast(
+        dict[str, Any],
+        report.get("summary") if isinstance(report.get("summary"), dict) else {},
+    )
     ok = report.get("status") == "ready" and summary.get("all_gates_passed") is True
     return {
         "command": ["retort", "quality-gates", "--project", str(root)],
@@ -292,7 +299,7 @@ def _run_employee_workers(
     request_dir.mkdir(parents=True, exist_ok=True)
     result_dir.mkdir(parents=True, exist_ok=True)
     task_batches = _split_tasks(tasks, max(1, min(worker_count, len(tasks) or 1)))
-    payloads = []
+    payloads: list[dict[str, Any]] = []
     for index, task_batch in enumerate(task_batches, start=1):
         payload_path = request_dir / f"{run_id}-worker-{index:02d}.json"
         output_path = result_dir / f"{run_id}-worker-{index:02d}.json"
@@ -328,7 +335,9 @@ def _run_employee_workers(
         )
     started = time.monotonic()
     worker_results = _run_worker_processes(
-        root, python_executable, [Path(item["payload_path"]) for item in payloads]
+        root,
+        python_executable,
+        [Path(str(item["payload_path"])) for item in payloads],
     )
     aggregate = _aggregate_worker_results(
         root, run_id, source, payloads, worker_results, aggregate_output_path
@@ -364,7 +373,9 @@ def _run_employee_workers(
 def _split_tasks(
     tasks: list[dict[str, Any]], worker_count: int
 ) -> list[list[dict[str, Any]]]:
-    batches = [[] for _ in range(max(1, min(worker_count, len(tasks) or 1)))]
+    batches: list[list[dict[str, Any]]] = [
+        [] for _ in range(max(1, min(worker_count, len(tasks) or 1)))
+    ]
     for index, task in enumerate(tasks):
         batches[index % len(batches)].append(task)
     return [batch for batch in batches if batch]
@@ -374,7 +385,7 @@ def _run_worker_processes(
     root: Path, python_executable: str, payload_paths: list[Path]
 ) -> list[dict[str, Any]]:
     env = {**os.environ, "PYTHONPATH": _worker_pythonpath(root)}
-    processes = []
+    processes: list[dict[str, Any]] = []
     for payload_path in payload_paths:
         command = [
             python_executable,
@@ -403,12 +414,14 @@ def _run_worker_processes(
                 "started_monotonic": started_monotonic,
             }
         )
-    results = []
+    results: list[dict[str, Any]] = []
     for item in processes:
-        process = item["process"]
+        process = cast(subprocess.Popen[str], item["process"])
         try:
             stdout, stderr = process.communicate(timeout=240)
-            returncode = int(process.returncode)
+            returncode = int(
+                process.returncode if process.returncode is not None else -1
+            )
         except subprocess.TimeoutExpired:
             process.kill()
             stdout, stderr = process.communicate()
@@ -422,7 +435,9 @@ def _run_worker_processes(
                 "ended_at": datetime.now(timezone.utc).isoformat(),
                 "duration_sec": round(
                     time.monotonic()
-                    - float(item.get("started_monotonic") or time.monotonic()),
+                    - float(
+                        cast(Any, item.get("started_monotonic") or time.monotonic())
+                    ),
                     3,
                 ),
                 "returncode": returncode,
@@ -449,15 +464,17 @@ def _aggregate_worker_results(
         combined_results.extend(
             item for item in payload.get("results") or [] if isinstance(item, dict)
         )
-        runtime = (
+        runtime = cast(
+            dict[str, Any],
             payload.get("runtime_evidence")
             if isinstance(payload.get("runtime_evidence"), dict)
-            else {}
+            else {},
         )
-        review = (
+        review = cast(
+            dict[str, Any],
             runtime.get("worker_review")
             if isinstance(runtime.get("worker_review"), dict)
-            else {}
+            else {},
         )
         if review:
             reviews.append(review)
@@ -558,15 +575,17 @@ def _process_isolation_evidence(
         command = [str(part) for part in result.get("command") or []]
         output_path = Path(str(payload.get("output_path") or ""))
         worker_payload = _read_json(output_path)
-        runtime = (
+        runtime = cast(
+            dict[str, Any],
             worker_payload.get("runtime_evidence")
             if isinstance(worker_payload.get("runtime_evidence"), dict)
-            else {}
+            else {},
         )
-        boundary = (
+        boundary = cast(
+            dict[str, Any],
             runtime.get("process_boundary")
             if isinstance(runtime.get("process_boundary"), dict)
-            else {}
+            else {},
         )
         worker_reported_pid = int(boundary.get("worker_pid") or 0)
         pid_cross_checked = worker_reported_pid > 0 and worker_reported_pid == int(
@@ -582,10 +601,11 @@ def _process_isolation_evidence(
             pid_cross_check_count += 1
         if crash_verified:
             crash_verified_count += 1
-        crash_probe = (
+        crash_probe = cast(
+            dict[str, Any],
             boundary.get("crash_isolation_probe")
             if isinstance(boundary.get("crash_isolation_probe"), dict)
-            else {}
+            else {},
         )
         traces.append(
             {

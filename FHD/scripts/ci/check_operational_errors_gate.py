@@ -33,11 +33,7 @@ ALLOWLIST = {SSOT_MODULE}
 
 
 def _iter_app_py_files() -> list[Path]:
-    return [
-        p
-        for p in APP_DIR.rglob("*.py")
-        if "__pycache__" not in p.parts
-    ]
+    return [p for p in APP_DIR.rglob("*.py") if "__pycache__" not in p.parts]
 
 
 def check_no_legacy_symbol() -> list[str]:
@@ -76,8 +72,10 @@ def main() -> int:
         return 0
 
     if offenders:
-        print("[operational-errors-gate] 检测到已废弃的 OPERATIONAL_ERRORS（请改用 "
-              "INFRA_TRANSIENT / DATA_SHAPE / RECOVERABLE_ERRORS）：")
+        print(
+            "[operational-errors-gate] 检测到已废弃的 OPERATIONAL_ERRORS（请改用 "
+            "INFRA_TRANSIENT / DATA_SHAPE / RECOVERABLE_ERRORS）："
+        )
         for line in offenders:
             print(f"  - {line}")
     if export_problems:

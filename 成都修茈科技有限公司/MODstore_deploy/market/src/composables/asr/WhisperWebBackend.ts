@@ -48,10 +48,9 @@ export class WhisperWebBackend implements ASRBackend {
 
   private ensureWorker(): Worker {
     if (this.worker) return this.worker
-    this.worker = new Worker(
-      new URL('../../workers/whisper-asr-worker.ts', import.meta.url),
-      { type: 'module' },
-    )
+    this.worker = new Worker(new URL('../../workers/whisper-asr-worker.ts', import.meta.url), {
+      type: 'module',
+    })
     this.worker.onmessage = (e: MessageEvent<WorkerMsg>) => {
       const msg = e.data
       if (msg.type === 'ready') {
@@ -194,7 +193,7 @@ export class WhisperWebBackend implements ASRBackend {
   private transcribeBuffer(merged: Float32Array, jobId: number): Promise<string> {
     return new Promise<string>((resolve) => {
       const handler = (e: MessageEvent<WorkerMsg>) => {
-        if (e.data.jobId != null && e.data.jobId !== jobId) return
+        if ('jobId' in e.data && e.data.jobId != null && e.data.jobId !== jobId) return
         if (e.data.type === 'result') {
           this.worker?.removeEventListener('message', handler)
           resolve((e.data.data || '').trim())

@@ -25,7 +25,11 @@ function makeRouter() {
     routes: [
       { path: '/forgot-password', name: 'forgot-password', component: ForgotPasswordView },
       { path: '/login', name: 'login', component: { template: '<div />' } },
-      { path: '/login-forgot-account', name: 'login-forgot-account', component: { template: '<div />' } },
+      {
+        path: '/login-forgot-account',
+        name: 'login-forgot-account',
+        component: { template: '<div />' },
+      },
     ],
   })
 }

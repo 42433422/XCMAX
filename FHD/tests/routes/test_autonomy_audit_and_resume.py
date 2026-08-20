@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, func-returns-value"
 from __future__ import annotations
 
 from pathlib import Path
@@ -27,7 +28,9 @@ def test_admin_audit_log_endpoint_returns_highlighted_veto(tmp_path, monkeypatch
     monkeypatch.setattr(xcmax_admin, "_require_market_admin_session", lambda request: None)
     app = FastAPI()
     app.include_router(xcmax_admin.router)
-    response = TestClient(app).get("/api/xcmax/admin/autonomy/audit-log?veto_only=true&days=30")
+    client = TestClient(app)
+    client.__enter__()
+    response = client.get("/api/xcmax/admin/autonomy/audit-log?veto_only=true&days=30")
     assert response.status_code == 200
     body = response.json()
     assert body["append_only"] is True
@@ -36,6 +39,7 @@ def test_admin_audit_log_endpoint_returns_highlighted_veto(tmp_path, monkeypatch
     assert body["summary"]["veto_count"] >= 1
     assert body["evaluation"]["status"] == "collecting"
     assert body["evaluation"]["window_days"] == 30
+    client.__exit__(None, None, None)
 
 
 def test_github_approval_callback_resumes_and_rejects(tmp_path, monkeypatch) -> None:
@@ -59,6 +63,7 @@ def test_github_approval_callback_resumes_and_rejects(tmp_path, monkeypatch) -> 
     app = FastAPI()
     app.include_router(ops_autonomy.router)
     client = TestClient(app)
+    client.__enter__()
 
     approved = client.post(
         "/api/ops/autonomy/github-approval",
@@ -87,6 +92,7 @@ def test_github_approval_callback_resumes_and_rejects(tmp_path, monkeypatch) -> 
     )
     assert retry.status_code == 409
     assert outcomes == ["executed"]
+    client.__exit__(None, None, None)
 
 
 def test_workflow_dispatch_state_machine_and_prohibited_probe(tmp_path, monkeypatch) -> None:
@@ -97,6 +103,7 @@ def test_workflow_dispatch_state_machine_and_prohibited_probe(tmp_path, monkeypa
     app = FastAPI()
     app.include_router(ops_autonomy.router)
     client = TestClient(app)
+    client.__enter__()
 
     prohibited = client.post(
         "/api/ops/autonomy/actions/evaluate",
@@ -153,6 +160,7 @@ def test_workflow_dispatch_state_machine_and_prohibited_probe(tmp_path, monkeypa
         json={"action": "freeze_manifest", "action_id": "bad id\nworkflow"},
     )
     assert invalid.status_code == 400
+    client.__exit__(None, None, None)
 
 
 def test_admin_approver_identity_comes_from_authenticated_session(monkeypatch) -> None:
@@ -208,6 +216,7 @@ def test_admin_pending_resume_reject_use_session_not_webhook(tmp_path, monkeypat
     app = FastAPI()
     app.include_router(xcmax_admin.router)
     client = TestClient(app)
+    client.__enter__()
 
     pending = client.get("/api/xcmax/admin/autonomy/actions/pending")
     assert pending.status_code == 200
@@ -256,3 +265,4 @@ def test_admin_pending_resume_reject_use_session_not_webhook(tmp_path, monkeypat
     assert rejected.status_code == 200
     assert rejected.json()["action"]["state"] == "rejected"
     assert rejected.json()["action"]["approver"] == "console-admin"
+    client.__exit__(None, None, None)

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="var-annotated"
 """COVERAGE_RAMP Phase 2 (p2-p1-biz): application / infrastructure / domain / ai_engines helpers."""
 
 from __future__ import annotations

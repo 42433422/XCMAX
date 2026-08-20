@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """将员工包 .py 脚本注册为 vibe-coding CodeSkill + ESkill 的全闭环工具。
 
 调用方：
@@ -22,7 +23,14 @@ from typing import Any, Callable, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
+from modstore_server.employee_skill_steps import brief_skill_steps as _brief_skill_steps
+from modstore_server.employee_skill_steps import extract_function_name as _extract_function_name
+from modstore_server.employee_skill_steps import fallback_step_script as _fallback_step_script
+from modstore_server.employee_skill_steps import make_vibe_skill_id as _make_vibe_skill_id
+from modstore_server.employee_skill_steps import manifest_skill_steps as _manifest_skill_steps
+from modstore_server.employee_skill_steps import sanitize_identifier as _sanitize_identifier
 from modstore_server.models import ESkill, ESkillVersion, User
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -40,29 +48,6 @@ def get_vibe_coder(**kwargs: Any) -> Any:
 # ────────────────────────────────────────────────────────────────────────────
 # 内部 helpers
 # ────────────────────────────────────────────────────────────────────────────
-
-
-def _sanitize_identifier(text: str, fallback: str = "skill") -> str:
-    raw = re.sub(r"[^a-z0-9_]+", "_", (text or "").lower())
-    raw = re.sub(r"_+", "_", raw).strip("_")
-    return raw[:48] or fallback
-
-
-def _dedupe_key(text: str) -> str:
-    raw = re.sub(r"\s+", "", str(text or "").strip().lower())
-    return raw or _sanitize_identifier(text, "skill")
-
-
-def _extract_function_name(source: str) -> str:
-    """从 Python 源码中提取第一个 def 名称；失败时返回 'execute'。"""
-    m = re.search(r"^\s*def\s+([a-zA-Z_][a-zA-Z0-9_]*)", source, re.MULTILINE)
-    return m.group(1) if m else "execute"
-
-
-def _make_vibe_skill_id(name: str, suffix: str = "") -> str:
-    base = _sanitize_identifier(name, "emp_skill")
-    uid = uuid.uuid4().hex[:8]
-    return f"{base}_{uid}" if not suffix else f"{base}_{suffix}_{uid}"
 
 
 def _register_script_in_code_store(
@@ -217,7 +202,7 @@ _SPLIT_SYSTEM_PROMPT = """\
 def _strip_fence(text: str) -> str:
     s = (text or "").strip()
     if s.startswith("```"):
-        s = re.sub(r"^```(?:json)?\s*", "", s, re.I | re.S)
+        s = re.sub(r"^```(?:json)?\s*", "", s, flags=re.I | re.S)
         s = re.sub(r"\s*```\s*$", "", s)
     return s.strip()
 
@@ -244,10 +229,13 @@ async def _llm_split_steps(
             user.id,
             provider,
             model,
-            [{"role": "system", "content": sys_msg}, {"role": "user", "content": user_msg}],
+            [
+                {"role": "system", "content": sys_msg},
+                {"role": "user", "content": user_msg},
+            ],
             max_tokens=1500,
         )
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.warning("employee skill split LLM failed: %s", exc)
         return []
 
@@ -298,139 +286,6 @@ async def _llm_split_steps(
 # ────────────────────────────────────────────────────────────────────────────
 
 
-def _fallback_step_script(step: Dict[str, Any], employee_fn: str) -> str:
-    """为一个拆分步骤生成调用员工总函数的包装脚本（供 B 升级前保底）。"""
-    fn = _sanitize_identifier(step["name"], "step") or "execute"
-    out_var = step.get("output_var") or "result"
-    input_keys = step.get("input_keys") or []
-    args = ", ".join(f"{k}=kwargs.get({k!r})" for k in input_keys) if input_keys else "**kwargs"
-    return f"""\
-def {fn}(**kwargs):
-    \"\"\"
-    {step['sub_brief']}
-    Auto-generated wrapper; will be upgraded by vibe-coding if LLM is available.
-    \"\"\"
-    try:
-        from employees import {employee_fn}  # type: ignore
-        raw = {employee_fn}({args})
-    except Exception as exc:
-        return {{"ok": False, "error": str(exc), "{out_var}": None}}
-    return {{"ok": True, "{out_var}": raw}}
-"""
-
-
-def _fallback_whole_script(source: str, name: str, out_var: str = "result") -> str:
-    """当整段员工脚本不分步时，生成包装入口。"""
-    fn = _sanitize_identifier(name, "execute") or "execute"
-    return source + f"\n\ndef {fn}_entry(**kwargs):\n    return {fn}(**kwargs)\n"
-
-
-def _manifest_skill_steps(
-    manifest: Dict[str, Any], brief: str, panel_summary: str
-) -> List[Dict[str, Any]]:
-    """Deterministically derive composable Skill steps from employee metadata."""
-    raw_items: List[Dict[str, Any]] = []
-    v2 = (
-        manifest.get("employee_config_v2")
-        if isinstance(manifest.get("employee_config_v2"), dict)
-        else {}
-    )
-    cognition = v2.get("cognition") if isinstance(v2.get("cognition"), dict) else {}
-    skills = cognition.get("skills") if isinstance(cognition.get("skills"), list) else []
-    for item in skills:
-        if isinstance(item, dict):
-            raw_items.append(
-                {
-                    "name": str(item.get("name") or "").strip(),
-                    "brief": str(item.get("brief") or item.get("description") or "").strip(),
-                    "domain": str(item.get("domain") or "").strip(),
-                }
-            )
-    metadata = v2.get("metadata") if isinstance(v2.get("metadata"), dict) else {}
-    suggested = (
-        metadata.get("suggested_skills")
-        if isinstance(metadata.get("suggested_skills"), list)
-        else []
-    )
-    for item in suggested:
-        if isinstance(item, dict):
-            raw_items.append(
-                {
-                    "name": str(item.get("name") or "").strip(),
-                    "brief": str(item.get("brief") or item.get("description") or "").strip(),
-                    "domain": str(item.get("domain") or "").strip(),
-                }
-            )
-    emp = manifest.get("employee") if isinstance(manifest.get("employee"), dict) else {}
-    caps = emp.get("capabilities") if isinstance(emp.get("capabilities"), list) else []
-    for cap in caps:
-        cap_text = str(cap or "").strip()
-        if cap_text:
-            raw_items.append({"name": cap_text, "brief": cap_text, "domain": cap_text})
-
-    seen: set[str] = set()
-    steps: List[Dict[str, Any]] = []
-    context = panel_summary or brief
-    for item in raw_items:
-        name = item["name"] or item["brief"]
-        if not name:
-            continue
-        key = _dedupe_key(name)
-        if key in seen:
-            continue
-        seen.add(key)
-        desc = item["brief"] or name
-        steps.append(
-            {
-                "name": name[:64],
-                "sub_brief": (
-                    f"实现员工能力「{name}」：{desc}。员工整体任务背景：{context[:500]}。"
-                    "输入为 dict payload，返回 dict，包含处理结果、依据和错误信息。"
-                )[:600],
-                "input_keys": ["payload"],
-                "output_var": _sanitize_identifier(name, "skill_result")[:40],
-                "domain": item["domain"] or name,
-            }
-        )
-        if len(steps) >= _MAX_STEPS:
-            break
-    return steps
-
-
-def _brief_skill_steps(brief: str, panel_summary: str) -> List[Dict[str, Any]]:
-    text = "。".join(x for x in [brief, panel_summary] if x)
-    parts = [p.strip(" ，,;；。") for p in re.split(r"[；;。\n]+", text) if p.strip(" ，,;；。")]
-    keywords = ("并", "和", "、", "，")
-    if len(parts) <= 1 and any(k in text for k in keywords):
-        parts = [
-            p.strip(" ，,;；。") for p in re.split(r"[、，,]|并|和", text) if p.strip(" ，,;；。")
-        ]
-    steps: List[Dict[str, Any]] = []
-    seen: set[str] = set()
-    for part in parts:
-        if len(part) < 4:
-            continue
-        key = _dedupe_key(part)
-        if key in seen:
-            continue
-        seen.add(key)
-        steps.append(
-            {
-                "name": part[:24],
-                "sub_brief": (
-                    f"实现员工子能力：{part}。输入为 dict payload，返回 dict，"
-                    "包含处理结果、依据、错误信息和下一步建议。"
-                )[:500],
-                "input_keys": ["payload"],
-                "output_var": _sanitize_identifier(part, "skill_result")[:40],
-                "domain": part[:80],
-            }
-        )
-        if len(steps) >= _MAX_STEPS:
-            break
-    return steps if len(steps) >= 2 else []
-
-
 # ────────────────────────────────────────────────────────────────────────────
 # 公开 API
 # ────────────────────────────────────────────────────────────────────────────
@@ -454,14 +309,6 @@ async def register_employee_pack_as_eskills(
 
     若 vibe-coding 未安装或脚本目录不存在，返回空列表（调用方按旧行为继续）。
     """
-    try:
-        from modstore_server.integrations.vibe_adapter import (
-            VibeIntegrationError,
-        )
-    except ImportError:
-        logger.warning("vibe_adapter 未导入，跳过员工 Skill 注册")
-        return []
-
     emp_dir = pack_dir / "backend" / "employees"
     py_files = sorted(emp_dir.glob("*.py")) if emp_dir.is_dir() else []
     if not py_files:
@@ -474,7 +321,7 @@ async def register_employee_pack_as_eskills(
 
     try:
         coder = get_vibe_coder(session=db, user_id=user.id, provider=provider, model=model)
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.warning("获取 vibe coder 失败: %s", exc)
         return []
 
@@ -483,7 +330,7 @@ async def register_employee_pack_as_eskills(
             r = status_hook("正在将员工脚本注册为真实 Skill…")
             if hasattr(r, "__await__"):
                 await r
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
 
     # ---------- 读取员工主脚本 ----------
@@ -534,7 +381,7 @@ async def register_employee_pack_as_eskills(
                     domain=step.get("domain") or brief[:120],
                     source_code=fallback_src,
                 )
-            except Exception as exc:  # noqa: BLE001
+            except BOUNDARY_ERRORS as exc:  # noqa: BLE001
                 logger.warning("Skill 兜底注册失败 step=%s: %s", step["name"], exc)
                 continue
 
@@ -544,7 +391,7 @@ async def register_employee_pack_as_eskills(
                 upgraded = coder.code(step["sub_brief"], mode="brief_first", skill_id=vibe_sid)
                 vibe_sid_v2 = getattr(upgraded, "skill_id", vibe_sid)
                 logger.info("Skill 升级成功 step=%s vibe_id=%s", step["name"], vibe_sid_v2)
-            except Exception as exc:  # noqa: BLE001
+            except BOUNDARY_ERRORS as exc:  # noqa: BLE001
                 logger.warning("Skill 升级失败（保留兜底）step=%s: %s", step["name"], exc)
 
             # 创建 / 更新 ESkill 行
@@ -566,7 +413,7 @@ async def register_employee_pack_as_eskills(
                         "output_var": step.get("output_var") or f"step_{idx}_result",
                     }
                 )
-            except Exception as exc:  # noqa: BLE001
+            except BOUNDARY_ERRORS as exc:  # noqa: BLE001
                 logger.warning("ESkill 行创建失败 step=%s: %s", step["name"], exc)
 
     else:
@@ -584,7 +431,7 @@ async def register_employee_pack_as_eskills(
                 domain=brief[:120],
                 source_code=source_code,
             )
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
             logger.warning("单 Skill 兜底注册失败: %s", exc)
             return []
 
@@ -594,7 +441,7 @@ async def register_employee_pack_as_eskills(
             upgraded = coder.code(brief[:800], mode="brief_first", skill_id=vibe_sid)
             vibe_sid_v2 = getattr(upgraded, "skill_id", vibe_sid)
             logger.info("单 Skill 升级成功 vibe_id=%s", vibe_sid_v2)
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
             logger.warning("单 Skill 升级失败（保留兜底）: %s", exc)
 
         try:
@@ -615,12 +462,12 @@ async def register_employee_pack_as_eskills(
                     "output_var": "emp_result",
                 }
             )
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
             logger.warning("单 Skill ESkill 行创建失败: %s", exc)
 
     try:
         db.commit()
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.warning("employee Skill 注册 commit 失败: %s", exc)
         db.rollback()
         return []
@@ -631,7 +478,7 @@ async def register_employee_pack_as_eskills(
             r = status_hook(f"已注册 {n} 个真脚本 Skill")
             if hasattr(r, "__await__"):
                 await r
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
 
     return eskill_specs

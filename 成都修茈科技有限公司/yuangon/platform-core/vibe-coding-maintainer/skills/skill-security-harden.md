@@ -2,12 +2,12 @@
 
 ## 元信息
 
-| 字段 | 值 |
-|------|----|
-| skill_id | `skill-security-harden` |
-| 所属员工 | `vibe-coding-maintainer` |
-| 业务域 | vibe-coding 安全规则与沙箱隔离维护 |
-| 版本 | 1.0.0 |
+| 字段     | 值                                 |
+| -------- | ---------------------------------- |
+| skill_id | `skill-security-harden`            |
+| 所属员工 | `vibe-coding-maintainer`           |
+| 业务域   | vibe-coding 安全规则与沙箱隔离维护 |
+| 版本     | 1.0.0                              |
 
 ---
 
@@ -28,6 +28,7 @@
 ```
 
 **输出 schema**：
+
 ```json
 {
   "status": "ok | warning | error",
@@ -41,6 +42,7 @@
 ```
 
 **工具绑定**：
+
 - `python -m pytest tests/agent/test_security_*.py` — 安全测试
 - `python -c "import ast; ..."` — AST 分析危险调用
 - `grep` — 搜索潜在危险模式
@@ -49,21 +51,23 @@
 
 ## 2. 动态触发条件
 
-| 触发类型 | 具体规则 | 阈值 |
-|----------|----------|------|
+| 触发类型   | 具体规则                                                    | 阈值   |
+| ---------- | ----------------------------------------------------------- | ------ |
 | 结果不达标 | `dangerous_imports_not_blocked` 非空 或 `audit_score < 0.9` | 即触发 |
-| 安全事件 | 外部报告新安全漏洞 | 即触发 |
-| 代码变更 | `validator.py` 或 `agent/security/` 变更 | 即触发 |
+| 安全事件   | 外部报告新安全漏洞                                          | 即触发 |
+| 代码变更   | `validator.py` 或 `agent/security/` 变更                    | 即触发 |
 
 ---
 
 ## 3. 动态自适应阶段
 
 **预算限制**：
+
 - 最大 token：5000
 - 最大步数：6
 
 **允许改动的模块白名单**：
+
 - `vibe-coding/src/vibe_coding/runtime/validator.py`
 - `vibe-coding/src/vibe_coding/agent/security/**`
 - `vibe-coding/tests/agent/test_security_*.py`
@@ -75,6 +79,7 @@
 ## 4. 固化
 
 **验收标准**：
+
 - `dangerous_imports_not_blocked` 为空
 - `sandbox_escape_vectors` 为空
 - `env_leak_risks` 为空
@@ -86,9 +91,9 @@
 
 ## 5. 评估指标
 
-| 指标 | 目标值 |
-|------|--------|
-| 安全审计通过率 | 100% |
-| 已知危险调用拦截率 | 100% |
-| 沙箱逃逸向量数 | 0 |
-| 静态路径成功率 | ≥ 95% |
+| 指标               | 目标值 |
+| ------------------ | ------ |
+| 安全审计通过率     | 100%   |
+| 已知危险调用拦截率 | 100%   |
+| 沙箱逃逸向量数     | 0      |
+| 静态路径成功率     | ≥ 95%  |

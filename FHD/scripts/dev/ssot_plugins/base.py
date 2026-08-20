@@ -1,4 +1,5 @@
 """SSOT plugin 基础设施：注册表加载 + 命令执行。"""
+
 from __future__ import annotations
 
 import subprocess
@@ -22,7 +23,12 @@ def load_registry(path: Path | None = None, *, enabled_only: bool = False) -> li
         path = ROOT / "config" / "ssot.yaml"
     with path.open(encoding="utf-8") as fh:
         data = yaml.safe_load(fh)
+    if not isinstance(data, dict):
+        return []
     domains = data.get("domains", [])
+    if not isinstance(domains, list):
+        return []
+    domains = [domain for domain in domains if isinstance(domain, dict)]
     if enabled_only:
         domains = [d for d in domains if d.get("enabled", True)]
     return domains

@@ -13,6 +13,7 @@ from typing import Any
 
 from langchain_core.runnables import RunnableConfig
 
+from langgraph.checkpoint._exception_policy import BOUNDARY_ERRORS
 from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
     BaseCheckpointSaver,
@@ -662,7 +663,7 @@ class PersistentDict(defaultdict):
         fileobj = open(tempname, "wb" if self.format == "pickle" else "w")
         try:
             self.dump(fileobj)
-        except Exception:
+        except BOUNDARY_ERRORS:
             os.remove(tempname)
             raise
         finally:
@@ -698,7 +699,7 @@ class PersistentDict(defaultdict):
                     return self.update(loader(fileobj))
                 except EOFError:
                     return
-                except Exception:
+                except BOUNDARY_ERRORS:
                     logger.error(f"Failed to load file: {fileobj.name}")
                     raise
             raise ValueError("File not in a supported format")

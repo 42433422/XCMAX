@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-  dutyEmployeesFromEmployeeSsot,
-  type EmployeeSsotPayload,
-} from './employeeSsotContacts'
+import { dutyEmployeesFromEmployeeSsot, type EmployeeSsotPayload } from './employeeSsotContacts'
 
 describe('dutyEmployeesFromEmployeeSsot', () => {
   it('prefers unified contacts with display_name and skips super builtins', () => {

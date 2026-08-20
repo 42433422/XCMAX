@@ -25,14 +25,15 @@
 from __future__ import annotations
 
 import http.cookiejar
+import importlib
 import json
 import logging
 import os
 import urllib.error
 import urllib.request
-from typing import Any
+from typing import Any, cast
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 _NODE_ID = os.environ.get("XCMAX_NODE_ID", "local")
@@ -75,7 +76,7 @@ def _prime_csrf_cookie(
         req = urllib.request.Request(f"{base_url}/api/health", method="GET")
         with _open_sync_request(opener, req, timeout=10) as resp:
             resp.read(4096)
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.debug("prime sync csrf cookie failed: %s", exc)
     return _csrf_token_from_jar(jar)
 
@@ -104,7 +105,7 @@ def _read_sync_meta(key: str) -> dict[str, Any]:
     if not row:
         return {}
     try:
-        return json.loads(row[0] or "{}")
+        return cast("dict[str, Any]", json.loads(row[0] or "{}"))
     except (json.JSONDecodeError, TypeError):
         return {}
 
@@ -146,17 +147,19 @@ def record_change(
         from app.db.xcmax_sync import SyncDb
 
         db = SyncDb()
-        return db.append_change(
-            entity_type=entity_type,
-            entity_id=str(entity_id),
-            operation=operation,
-            payload=payload,
-            version=version,
-            actor=actor,
-            origin_node=_NODE_ID,
-            enqueue_outbox=True,
+        return int(
+            db.append_change(
+                entity_type=entity_type,
+                entity_id=str(entity_id),
+                operation=operation,
+                payload=payload,
+                version=version,
+                actor=actor,
+                origin_node=_NODE_ID,
+                enqueue_outbox=True,
+            )
         )
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("record_change failed (entity=%s id=%s): %s", entity_type, entity_id, exc)
         return -1
 
@@ -210,7 +213,7 @@ def push_outbox(
             logger.warning("outbox push item %s failed: %s", outbox_id, err_msg)
             db.mark_outbox_failed(outbox_id, err_msg, retry=exc.code >= 500)
             failed += 1
-        except OPERATIONAL_ERRORS as exc:
+        except RECOVERABLE_ERRORS as exc:
             err_msg = str(exc)
             logger.warning("outbox push item %s failed: %s", outbox_id, err_msg)
             db.mark_outbox_failed(outbox_id, err_msg, retry=True)
@@ -249,7 +252,7 @@ def pull_from_remote(
             db.enqueue_inbox(changes, remote_cursor=int(changes[-1].get("id") or 0))
             db.update_remote_cursor(int(changes[-1].get("id") or 0))
         return {"pulled": len(changes), "since_cursor": cursor}
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("pull_from_remote failed: %s", exc)
         return {"pulled": 0, "error": str(exc)}
 
@@ -271,570 +274,22 @@ def register_entity_applier(entity_type: str):
     return decorator
 
 
-@register_entity_applier("personnel")
-def _apply_personnel(item: dict[str, Any]) -> None:
-    """人员变更：写入 taiyangniao-pro attendance_employees / products。"""
-    payload = item.get("payload") or {}
-    name = str(payload.get("name") or payload.get("employee_name") or "").strip()
-    if not name:
-        return
-    try:
-        import sqlite3
-        from datetime import datetime
-
-        from app.mod_sdk.private_sqlite import resolve_mod_private_sqlite_path
-
-        db_path = resolve_mod_private_sqlite_path("taiyangniao_pro.db")
-        conn = sqlite3.connect(str(db_path))
-        now = datetime.now().isoformat(timespec="seconds")
-        dept = str(payload.get("department") or "").strip()
-        conn.execute(
-            """
-            INSERT OR IGNORE INTO attendance_employees
-                (source_file, employee_name, department, main_department,
-                 attendance_group, employee_no, position, user_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                "xcmax_sync",
-                name,
-                dept,
-                dept,
-                payload.get("attendance_group") or "XCmax",
-                payload.get("employee_no") or "",
-                payload.get("position") or "",
-                payload.get("user_id") or "",
-            ),
-        )
-        conn.execute(
-            """
-            INSERT INTO products (source_file, model_number, name, specification, price, unit, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                "xcmax_sync",
-                payload.get("employee_id") or name,
-                name,
-                payload.get("position") or "",
-                0.0,
-                dept,
-                now,
-                now,
-            ),
-        )
-        conn.commit()
-        conn.close()
-    except OPERATIONAL_ERRORS as exc:
-        logger.warning("apply_personnel failed for %s: %s", name, exc)
-
-
-@register_entity_applier("department")
-def _apply_department(item: dict[str, Any]) -> None:
-    """部门变更：写入 attendance_departments / customers。"""
-    payload = item.get("payload") or {}
-    dept = str(payload.get("department") or payload.get("customer_name") or "").strip()
-    if not dept:
-        return
-    try:
-        import sqlite3
-        from datetime import datetime
-
-        from app.mod_sdk.private_sqlite import resolve_mod_private_sqlite_path
-
-        db_path = resolve_mod_private_sqlite_path("taiyangniao_pro.db")
-        conn = sqlite3.connect(str(db_path))
-        now = datetime.now().isoformat(timespec="seconds")
-        conn.execute(
-            """
-            INSERT OR IGNORE INTO attendance_departments
-                (source_file, department, main_department, attendance_group)
-            VALUES (?, ?, ?, ?)
-            """,
-            ("xcmax_sync", dept, dept, payload.get("attendance_group") or "XCmax"),
-        )
-        conn.execute(
-            """
-            INSERT INTO customers (source_file, customer_name, contact_person, contact_phone,
-                                   address, purchase_unit, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            ("xcmax_sync", dept, "", "", "", "", now, now),
-        )
-        conn.commit()
-        conn.close()
-    except OPERATIONAL_ERRORS as exc:
-        logger.warning("apply_department failed for %s: %s", dept, exc)
-
-
-@register_entity_applier("attendance")
-def _apply_attendance(item: dict[str, Any]) -> None:
-    """考勤记录变更：写入主库 shipment_records 表（考勤行业语义）。"""
-    payload = item.get("payload") or {}
-    operation = item.get("operation", "sync")
-    try:
-        from datetime import datetime as _dt
-
-        from app.db import get_db
-        from app.db.models.shipment import ShipmentRecord
-
-        with get_db() as db:
-            record_id = payload.get("id")
-            if operation == "delete" and record_id:
-                obj = db.query(ShipmentRecord).filter(ShipmentRecord.id == record_id).first()
-                if obj:
-                    db.delete(obj)
-                    db.commit()
-                return
-
-            purchase_unit = str(
-                payload.get("purchase_unit") or payload.get("employee_name") or ""
-            ).strip()
-            product_name = str(
-                payload.get("product_name") or payload.get("attendance_group") or ""
-            ).strip()
-            if not purchase_unit or not product_name:
-                return
-
-            if record_id:
-                obj = db.query(ShipmentRecord).filter(ShipmentRecord.id == record_id).first()
-            else:
-                obj = None
-
-            if obj:
-                for col in ("purchase_unit", "product_name", "model_number", "status", "raw_text"):
-                    if col in payload:
-                        setattr(obj, col, payload[col])
-                obj.updated_at = _dt.now()
-            else:
-                obj = ShipmentRecord(
-                    purchase_unit=purchase_unit,
-                    product_name=product_name,
-                    model_number=str(payload.get("model_number") or ""),
-                    quantity_kg=float(payload.get("quantity_kg") or 0),
-                    quantity_tins=int(payload.get("quantity_tins") or 0),
-                    status=str(payload.get("status") or "pending"),
-                    created_at=_dt.now(),
-                    updated_at=_dt.now(),
-                )
-                db.add(obj)
-            db.commit()
-    except OPERATIONAL_ERRORS as exc:
-        logger.warning("apply_attendance failed: %s", exc)
-
-
-@register_entity_applier("approval")
-def _apply_approval(item: dict[str, Any]) -> None:
-    """审批请求变更：更新 approval_requests 表的状态字段。"""
-    payload = item.get("payload") or {}
-    operation = item.get("operation", "sync")
-    try:
-        from datetime import datetime as _dt
-
-        from app.db import get_db
-        from app.db.models.approval import ApprovalRequest
-
-        with get_db() as db:
-            record_id = payload.get("id")
-            if not record_id:
-                return
-            obj = db.query(ApprovalRequest).filter(ApprovalRequest.id == record_id).first()
-            if not obj:
-                return
-            if operation == "delete":
-                db.delete(obj)
-            else:
-                for col in ("status", "title", "description", "priority", "applicant_name"):
-                    if col in payload:
-                        setattr(obj, col, payload[col])
-                obj.updated_at = _dt.now()
-            db.commit()
-    except OPERATIONAL_ERRORS as exc:
-        logger.warning("apply_approval failed: %s", exc)
-
-
-@register_entity_applier("approval_flow")
-def _apply_approval_flow(item: dict[str, Any]) -> None:
-    """审批流程定义变更：同步 approval_flows 表的 is_active 和配置字段。"""
-    payload = item.get("payload") or {}
-    try:
-        from datetime import datetime as _dt
-
-        from app.db import get_db
-        from app.db.models.approval import ApprovalFlow
-
-        with get_db() as db:
-            flow_key = str(payload.get("flow_key") or "").strip()
-            if not flow_key:
-                return
-            obj = db.query(ApprovalFlow).filter(ApprovalFlow.flow_key == flow_key).first()
-            if obj:
-                for col in ("flow_name", "description", "is_active", "timeout_hours"):
-                    if col in payload:
-                        setattr(obj, col, payload[col])
-                obj.updated_at = _dt.now()
-                db.commit()
-    except OPERATIONAL_ERRORS as exc:
-        logger.warning("apply_approval_flow failed: %s", exc)
-
-
-@register_entity_applier("print_job")
-def _apply_print_job(item: dict[str, Any]) -> None:
-    """打印任务变更：写入打印作业日志表（若存在），否则记录结构化日志。"""
-    payload = item.get("payload") or {}
-    operation = item.get("operation", "sync")
-    try:
-        from app.db import get_db
-
-        # 尝试写入打印作业表，若无此表则降级记录结构化日志
-        with get_db() as db:
-            from sqlalchemy import text
-
-            db.execute(
-                text(
-                    """
-                INSERT INTO print_jobs (entity_id, template, status, payload_json, created_at)
-                VALUES (:eid, :tpl, :status, :payload, NOW())
-                ON CONFLICT (entity_id) DO UPDATE SET
-                    status = EXCLUDED.status,
-                    payload_json = EXCLUDED.payload_json
-            """
-                ),
-                {
-                    "eid": item.get("entity_id") or "",
-                    "tpl": str(payload.get("template") or ""),
-                    "status": str(payload.get("status") or operation),
-                    "payload": json.dumps(payload, ensure_ascii=False, default=str),
-                },
-            )
-            db.commit()
-    except OPERATIONAL_ERRORS:
-        # 降级：仅写结构化日志
-        logger.info(
-            "print_job sync [%s] entity=%s status=%s",
-            operation,
-            item.get("entity_id"),
-            payload.get("status"),
-        )
-
-
-@register_entity_applier("template")
-def _apply_template(item: dict[str, Any]) -> None:
-    """文档/打印模板变更：更新 document_templates 表或本地模板文件路径记录。"""
-    payload = item.get("payload") or {}
-    operation = item.get("operation", "sync")
-    try:
-        from sqlalchemy import text
-
-        from app.db import get_db
-
-        template_id = str(payload.get("template_id") or item.get("entity_id") or "").strip()
-        if not template_id:
-            return
-        with get_db() as db:
-            if operation == "delete":
-                db.execute(
-                    text("DELETE FROM document_templates WHERE slug = :s"), {"s": template_id}
-                )
-            else:
-                db.execute(
-                    text(
-                        """
-                    INSERT INTO document_templates (slug, name, category, is_active, created_at)
-                    VALUES (:slug, :name, :cat, true, NOW())
-                    ON CONFLICT (slug) DO UPDATE SET
-                        name = EXCLUDED.name,
-                        category = EXCLUDED.category
-                """
-                    ),
-                    {
-                        "slug": template_id,
-                        "name": str(payload.get("name") or template_id),
-                        "cat": str(payload.get("category") or "word"),
-                    },
-                )
-            db.commit()
-    except OPERATIONAL_ERRORS as exc:
-        logger.debug("apply_template non-fatal: %s", exc)
-
-
-@register_entity_applier("model_config")
-def _apply_model_config(item: dict[str, Any]) -> None:
-    """模型服务配置变更：更新用户默认 LLM 配置（写入 users.default_llm_json）。"""
-    payload = item.get("payload") or {}
-    try:
-        from app.db import get_db
-        from app.db.models.user import User
-
-        with get_db() as db:
-            user_id = payload.get("user_id")
-            if not user_id:
-                return
-            user = db.query(User).filter(User.id == user_id).first()
-            if user:
-                user.default_llm_json = json.dumps(
-                    payload.get("llm_config") or {}, ensure_ascii=False
-                )
-                db.commit()
-    except OPERATIONAL_ERRORS as exc:
-        logger.warning("apply_model_config failed: %s", exc)
-
-
-@register_entity_applier("ecosystem")
-def _apply_ecosystem(item: dict[str, Any]) -> None:
-    """智能生态配置变更：记录生态组件启停状态（写入 sync_meta 供前端查询）。"""
-    payload = item.get("payload") or {}
-    try:
-        import sqlite3 as _sqlite3
-
-        from app.db.xcmax_sync import _resolve_db_path
-
-        conn = _sqlite3.connect(str(_resolve_db_path()))
-        key = f"ecosystem:{item.get('entity_id', 'default')}"
-        conn.execute(
-            "INSERT OR REPLACE INTO sync_meta (key, value) VALUES (?, ?)",
-            (key, json.dumps(payload, ensure_ascii=False, default=str)),
-        )
-        conn.commit()
-        conn.close()
-    except OPERATIONAL_ERRORS as exc:
-        logger.debug("apply_ecosystem non-fatal: %s", exc)
-
-
-@register_entity_applier("im_message")
-def _apply_im_message(item: dict[str, Any]) -> None:
-    """IM 消息变更：写入 im_messages（insert/update，LWW by meta.updated_at_ms）。"""
-    payload = item.get("payload") or {}
-    operation = item.get("operation", "insert")
-    message_id = int(payload.get("id") or item.get("entity_id") or 0)
-    conversation_id = int(payload.get("conversation_id") or 0)
-    if operation == "delete":
-        if not message_id:
-            return
-        try:
-            from app.db import get_db
-            from app.db.models.im import ImMessage
-
-            with get_db() as db:
-                obj = db.query(ImMessage).filter(ImMessage.id == message_id).first()
-                if obj:
-                    db.delete(obj)
-                    db.commit()
-        except OPERATIONAL_ERRORS as exc:
-            logger.warning("apply_im_message delete failed id=%s: %s", message_id, exc)
-        return
-    if not conversation_id:
-        return
-    body = str(payload.get("body") or "").strip()
-    if not body:
-        return
-    incoming_ms = _payload_updated_at_ms(payload)
-    meta_key = f"im_message:{message_id}" if message_id else ""
-    if message_id and meta_key:
-        stored = _read_sync_meta(meta_key)
-        stored_ms = int(stored.get("updated_at_ms") or 0)
-        if incoming_ms and stored_ms and incoming_ms < stored_ms:
-            return
-    try:
-        from app.db import get_db
-        from app.db.models.im import ImConversation, ImMessage
-        from app.utils.time import utc_now_naive
-
-        sender_user_id = int(payload.get("sender_user_id") or 0)
-        if not sender_user_id:
-            return
-        with get_db() as db:
-            obj = (
-                db.query(ImMessage).filter(ImMessage.id == message_id).first()
-                if message_id
-                else None
-            )
-            if obj:
-                if incoming_ms:
-                    stored_ms = int((_read_sync_meta(meta_key) or {}).get("updated_at_ms") or 0)
-                    if stored_ms and incoming_ms < stored_ms:
-                        return
-                obj.body = body[:4000]
-                if sender_user_id:
-                    obj.sender_user_id = sender_user_id
-            else:
-                obj = ImMessage(
-                    id=message_id if message_id else None,
-                    conversation_id=conversation_id,
-                    sender_user_id=sender_user_id,
-                    body=body[:4000],
-                )
-                db.add(obj)
-            conv = db.get(ImConversation, conversation_id)
-            if conv:
-                conv.last_message_at = utc_now_naive()
-            db.commit()
-            db.refresh(obj)
-            if meta_key:
-                _write_sync_meta(
-                    meta_key,
-                    {"updated_at_ms": incoming_ms or utc_now_ms(), "id": int(obj.id)},
-                )
-    except OPERATIONAL_ERRORS as exc:
-        logger.warning("apply_im_message failed conv=%s: %s", conversation_id, exc)
-
-
-@register_entity_applier("im_read_state")
-def _apply_im_read_state(item: dict[str, Any]) -> None:
-    """IM 已读游标：更新 ImConversationMember.last_read_message_id（LWW）。"""
-    payload = item.get("payload") or {}
-    conversation_id = int(payload.get("conversation_id") or 0)
-    user_id = int(payload.get("user_id") or 0)
-    incoming_read = int(payload.get("last_read_message_id") or 0)
-    if not conversation_id or not user_id:
-        parts = str(item.get("entity_id") or "").split(":", 1)
-        if len(parts) == 2:
-            conversation_id = conversation_id or int(parts[0] or 0)
-            user_id = user_id or int(parts[1] or 0)
-    if not conversation_id or not user_id:
-        return
-    incoming_ms = _payload_updated_at_ms(payload)
-    meta_key = f"im_read_state:{conversation_id}:{user_id}"
-    stored = _read_sync_meta(meta_key)
-    stored_ms = int(stored.get("updated_at_ms") or 0)
-    stored_read = int(stored.get("last_read_message_id") or 0)
-    if incoming_ms and stored_ms and incoming_ms < stored_ms:
-        return
-    if incoming_ms and stored_ms and incoming_ms == stored_ms and incoming_read <= stored_read:
-        return
-    new_read = max(incoming_read, stored_read)
-    try:
-        from sqlalchemy import select
-
-        from app.db import get_db
-        from app.db.models.im import ImConversationMember
-
-        with get_db() as db:
-            member = db.execute(
-                select(ImConversationMember).where(
-                    ImConversationMember.conversation_id == conversation_id,
-                    ImConversationMember.user_id == user_id,
-                )
-            ).scalar_one_or_none()
-            if not member:
-                return
-            applied_read = max(int(member.last_read_message_id or 0), new_read)
-            member.last_read_message_id = applied_read
-            db.commit()
-        _write_sync_meta(
-            meta_key,
-            {
-                "updated_at_ms": max(incoming_ms, stored_ms) if incoming_ms else stored_ms,
-                "last_read_message_id": applied_read,
-            },
-        )
-    except OPERATIONAL_ERRORS as exc:
-        logger.warning(
-            "apply_im_read_state failed conv=%s user=%s: %s", conversation_id, user_id, exc
-        )
-
-
-@register_entity_applier("workflow_employee")
-def _apply_workflow_employee(item: dict[str, Any]) -> None:
-    """员工工作流节点变更：更新本地 Mod manifest 的 workflow_employees 状态快照。"""
-    payload = item.get("payload") or {}
-    operation = item.get("operation", "sync")
-    employee_id = str(payload.get("employee_id") or item.get("entity_id") or "").strip()
-    if not employee_id:
-        return
-    try:
-        import sqlite3 as _sqlite3
-
-        from app.db.xcmax_sync import _resolve_db_path
-
-        conn = _sqlite3.connect(str(_resolve_db_path()))
-        key = f"workflow_employee:{employee_id}"
-        if operation == "delete":
-            conn.execute("DELETE FROM sync_meta WHERE key=?", (key,))
-        else:
-            conn.execute(
-                "INSERT OR REPLACE INTO sync_meta (key, value) VALUES (?, ?)",
-                (key, json.dumps(payload, ensure_ascii=False, default=str)),
-            )
-        conn.commit()
-        conn.close()
-    except OPERATIONAL_ERRORS as exc:
-        logger.debug("apply_workflow_employee non-fatal: %s", exc)
-
-
-def _sync_payload_list(value: Any) -> list[str]:
-    if not isinstance(value, list):
-        return []
-    result: list[str] = []
-    for item in value:
-        text = str(item or "").strip()
-        if text and text not in result:
-            result.append(text)
-    return result
-
-
-@register_entity_applier("account_entitlements")
-def _apply_account_entitlements(item: dict[str, Any]) -> None:
-    """账号权益快照：写入 sync_meta，并同步本地 User 核心权益字段。
-
-    管理端强制推送的是一次完整快照，企业端收到后即使暂时没有市场 API，也能从本地
-    User 表和 sync_meta 读到账号等级、行业、绑定 Mod、余额等状态。
-    """
-    payload = item.get("payload") or {}
-    if not isinstance(payload, dict):
-        return
-
-    entity_id = str(payload.get("market_user_id") or item.get("entity_id") or "").strip()
-    if not entity_id:
-        return
-
-    profile = payload.get("profile") if isinstance(payload.get("profile"), dict) else {}
-    username = str(payload.get("username") or profile.get("username") or "").strip()
-    if not username:
-        return
-
-    try:
-        stored_payload = {
-            **payload,
-            "market_user_id": entity_id,
-            "mod_ids": _sync_payload_list(payload.get("mod_ids")),
-        }
-        _write_sync_meta(f"account_entitlements:{entity_id}", stored_payload)
-        _write_sync_meta(f"account_entitlements:username:{username}", stored_payload)
-
-        from app.db.models.user import User
-        from app.db.session import get_db
-
-        tier = str(profile.get("tier") or payload.get("tier") or "").strip().lower()
-        if tier not in {"personal", "enterprise", "admin"}:
-            tier = "enterprise" if bool(payload.get("is_enterprise")) else "personal"
-
-        industry_id = str(
-            profile.get("industry_id") or payload.get("industry_id") or "通用"
-        ).strip()
-        account_tier = str(profile.get("account_tier") or "").strip() or None
-        budget_range = str(profile.get("budget_range") or "").strip() or None
-        entitled_industries = _sync_payload_list(profile.get("entitled_industries"))
-        if industry_id and industry_id not in entitled_industries:
-            entitled_industries.append(industry_id)
-
-        with get_db() as db:
-            user = db.query(User).filter(User.username == username).first()
-            if user is None:
-                user = User(username=username, password="", role="user")
-                db.add(user)
-                db.flush()
-            user.tier = tier
-            user.industry_id = industry_id or "通用"
-            user.account_tier = account_tier if tier == "enterprise" else None
-            user.budget_range = budget_range
-            user.entitled_industries = entitled_industries or [user.industry_id]
-            if payload.get("email"):
-                user.email = str(payload.get("email") or "").strip()
-            db.commit()
-    except OPERATIONAL_ERRORS as exc:
-        logger.warning(
-            "apply_account_entitlements failed user=%s id=%s: %s", username, entity_id, exc
-        )
+_basic_appliers = importlib.import_module("app.services.xcmax_sync_basic_appliers")
+_extended_appliers = importlib.import_module("app.services.xcmax_sync_extended_appliers")
+_apply_personnel = _basic_appliers._apply_personnel
+_apply_department = _basic_appliers._apply_department
+_apply_attendance = _basic_appliers._apply_attendance
+_apply_approval = _basic_appliers._apply_approval
+_apply_approval_flow = _basic_appliers._apply_approval_flow
+_apply_print_job = _basic_appliers._apply_print_job
+_apply_template = _basic_appliers._apply_template
+_apply_model_config = _extended_appliers._apply_model_config
+_apply_ecosystem = _extended_appliers._apply_ecosystem
+_apply_im_message = _extended_appliers._apply_im_message
+_apply_im_read_state = _extended_appliers._apply_im_read_state
+_apply_workflow_employee = _extended_appliers._apply_workflow_employee
+_sync_payload_list = _extended_appliers._sync_payload_list
+_apply_account_entitlements = _extended_appliers._apply_account_entitlements
 
 
 from app.application.private_mod_delivery_sync import apply_private_mod_delivery
@@ -861,7 +316,7 @@ def apply_inbox(limit: int = 200) -> dict[str, Any]:
             (limit,),
         ).fetchall()
         conn.close()
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("apply_inbox read failed: %s", exc)
         return {"applied": 0, "errors": 1}
 
@@ -886,7 +341,7 @@ def apply_inbox(limit: int = 200) -> dict[str, Any]:
                 logger.debug("no applier for entity_type=%s, skipping", entity_type)
                 db.mark_inbox_applied(inbox_id)
                 applied += 1
-        except OPERATIONAL_ERRORS as exc:
+        except RECOVERABLE_ERRORS as exc:
             db.mark_inbox_conflict(inbox_id, str(exc))
             conflicts += 1
             errors += 1

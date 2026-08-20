@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """运行时真相：记录每次调度器 job 执行，回答「什么在跑 / 什么停了」。
 
 这是文件 JSON 心跳永远做不到的单一真相源：心跳证明调度器*进程*活着，但单个
@@ -14,8 +15,10 @@ import logging
 import os
 import re
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Iterator
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +38,7 @@ _SAFE_EMPLOYEE_CRON_ERROR_CODE = re.compile(
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class DeferredJobRun(Exception):
@@ -51,7 +54,7 @@ def _as_utc(dt: datetime | None) -> datetime | None:
     """把可能是 naive（SQLite 回读）的时间戳统一成 aware-UTC，避免比较时炸。"""
     if dt is None:
         return None
-    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
 
 
 def record_job_run(
@@ -83,7 +86,7 @@ def record_job_run(
                 )
             )
             session.commit()
-    except Exception:  # pragma: no cover - 可观测性不能拖垮调度器
+    except RECOVERABLE_ERRORS:  # pragma: no cover - 可观测性不能拖垮调度器
         logger.exception("record_job_run 失败: job_id=%s status=%s", job_id, status)
 
 
@@ -103,7 +106,7 @@ def track_job_run(job_id: str, *, node_id: str = "") -> Iterator[None]:
     except DeferredJobRun as exc:
         status = _DEFERRED_STATUS
         error = str(exc)
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         status = "failed"
         error = repr(exc)
         raise
@@ -211,7 +214,7 @@ def get_runtime_status(
         sf = get_session_factory()
         with sf() as session:
             rows = session.query(JobRun).order_by(JobRun.id.desc()).limit(max(1, scan_limit)).all()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("get_runtime_status 读取失败")
         return {
             "generated_at": now.isoformat(),

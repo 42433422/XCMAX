@@ -8,6 +8,8 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from modstore_server.operational_errors import BOUNDARY_ERRORS
+
 MARKER_STATUS_FILENAME = "self_maintenance_loop_status.py"
 _INDETERMINATE_MERGE_REVIEW_CODES = frozenset({"indeterminate-review", "indeterminate_review"})
 _DIFF_TOO_LARGE_MERGE_REVIEW_CODE = "diff-too-large"
@@ -270,7 +272,7 @@ def load_loop_memory(path: Optional[Path] = None) -> Dict[str, Any]:
             if isinstance(parsed, dict):
                 return parsed
             return {"_parse_error": "memory json is not an object"}
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
             return {"_parse_error": str(exc)}
 
     p = path or default_loop_memory_path()
@@ -281,7 +283,7 @@ def load_loop_memory(path: Optional[Path] = None) -> Dict[str, Any]:
         if isinstance(parsed, dict):
             return parsed
         return {"_parse_error": f"memory file is not an object: {p}"}
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         return {"_parse_error": f"{p}: {exc}"}
 
 
@@ -415,7 +417,10 @@ def loop_memory_requires_executable_change(
                     "required": True,
                     "reason": "recent self-maintenance run required human strategy approval",
                 }
-    return {"required": False, "reason": "no executable-change requirement in loop memory"}
+    return {
+        "required": False,
+        "reason": "no executable-change requirement in loop memory",
+    }
 
 
 def parse_diff_stat_paths(diff_summary: str) -> List[str]:
@@ -444,7 +449,11 @@ def should_block_marker_only_diff_summary(
     if not paths:
         return {"blocked": False, "reason": "no parsed diff stat paths", "paths": paths}
     if not all(is_marker_status_path(path) for path in paths):
-        return {"blocked": False, "reason": "diff includes executable paths", "paths": paths}
+        return {
+            "blocked": False,
+            "reason": "diff includes executable paths",
+            "paths": paths,
+        }
     requirement = loop_memory_requires_executable_change(memory)
     if not requirement.get("required"):
         return {

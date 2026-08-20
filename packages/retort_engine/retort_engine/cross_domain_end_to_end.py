@@ -5,7 +5,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.cross_domain_absorption_replay import (
     build_cross_domain_absorption_replay,
@@ -37,7 +37,10 @@ def build_cross_domain_end_to_end(
     _write_json(lab / "source_replay.json", replay)
     (lab / "integrated_diff.patch").write_text(diff, encoding="utf-8")
     _write_json(lab / "linked_review.json", review)
-    summary = review.get("summary") if isinstance(review.get("summary"), dict) else {}
+    summary = cast(
+        dict[str, Any],
+        review.get("summary") if isinstance(review.get("summary"), dict) else {},
+    )
     comments = [item for item in review.get("comments") or [] if isinstance(item, dict)]
     domains = sorted({str(stage["domain"]) for stage in stages if stage.get("domain")})
     direct_modules = sorted(

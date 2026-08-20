@@ -1,11 +1,7 @@
 import { computed, onBeforeUnmount, ref, type Ref } from 'vue'
 import type { Router } from 'vue-router'
 
-import {
-  etlApi,
-  type EtlCapabilities,
-  type EtlRun,
-} from '@/api/etl'
+import { etlApi, type EtlCapabilities, type EtlRun } from '@/api/etl'
 import {
   ETL_MAX_FILE_BYTES,
   formatEtlBytes,
@@ -55,18 +51,9 @@ type EtlFolderBatchOptions = {
   loadRows: () => Promise<void>
 }
 
-const PARSE_DONE_STATUSES = new Set<BatchFileStatus>([
-  'preview_ready',
-  'completed',
-  'failed',
-  'interrupted',
-])
+const PARSE_DONE_STATUSES = new Set<BatchFileStatus>(['preview_ready', 'completed', 'failed', 'interrupted'])
 
-const WRITE_TERMINAL_STATUSES = new Set<BatchFileStatus>([
-  'completed',
-  'failed',
-  'interrupted',
-])
+const WRITE_TERMINAL_STATUSES = new Set<BatchFileStatus>(['completed', 'failed', 'interrupted'])
 
 function newBatchId(): string {
   if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID()
@@ -78,29 +65,30 @@ function newBatchId(): string {
 }
 
 export function batchFileStatusLabel(status: BatchFileStatus) {
-  return ({
-    waiting: '等待上传',
-    uploading: '上传中',
-    creating: '创建任务',
-    queued: '已排队',
-    previewing: '解析中',
-    preview_ready: '待写入',
-    executing: '写入中',
-    completed: '已写入',
-    failed: '失败',
-    interrupted: '已中断',
-  } as Record<BatchFileStatus, string>)[status]
+  return (
+    {
+      waiting: '等待上传',
+      uploading: '上传中',
+      creating: '创建任务',
+      queued: '已排队',
+      previewing: '解析中',
+      preview_ready: '待写入',
+      executing: '写入中',
+      completed: '已写入',
+      failed: '失败',
+      interrupted: '已中断',
+    } as Record<BatchFileStatus, string>
+  )[status]
 }
 
-export function ignoredReasonLabel(
-  reason: EtlIgnoredSourceFile['reason'],
-  maxFileBytes = ETL_MAX_FILE_BYTES,
-) {
-  return ({
-    unsupported: '文件类型不支持',
-    too_large: `单文件超过 ${formatEtlBytes(maxFileBytes)}`,
-    duplicate: '重复文件',
-  } as Record<EtlIgnoredSourceFile['reason'], string>)[reason]
+export function ignoredReasonLabel(reason: EtlIgnoredSourceFile['reason'], maxFileBytes = ETL_MAX_FILE_BYTES) {
+  return (
+    {
+      unsupported: '文件类型不支持',
+      too_large: `单文件超过 ${formatEtlBytes(maxFileBytes)}`,
+      duplicate: '重复文件',
+    } as Record<EtlIgnoredSourceFile['reason'], string>
+  )[reason]
 }
 
 export function useEtlFolderBatch(options: EtlFolderBatchOptions) {
@@ -112,34 +100,18 @@ export function useEtlFolderBatch(options: EtlFolderBatchOptions) {
   const folderInput = ref<HTMLInputElement | null>(null)
   let batchPollTimer: ReturnType<typeof setTimeout> | null = null
 
-  const maxFileBytes = computed(
-    () => options.capabilities.value?.limits.max_file_bytes || ETL_MAX_FILE_BYTES,
-  )
-  const selectedTotalBytes = computed(
-    () => selectedFiles.value.reduce((sum, item) => sum + item.file.size, 0),
-  )
-  const knowledgeOnlyFiles = computed(
-    () => selectedFiles.value.filter((item) => (
-      ['.doc', '.docx', '.ppt', '.pptx'].includes(item.suffix)
-    )),
-  )
-  const incompatibleFiles = computed(
-    () => ['auto', 'knowledge'].includes(options.targetType.value) ? [] : knowledgeOnlyFiles.value,
-  )
+  const maxFileBytes = computed(() => options.capabilities.value?.limits.max_file_bytes || ETL_MAX_FILE_BYTES)
+  const selectedTotalBytes = computed(() => selectedFiles.value.reduce((sum, item) => sum + item.file.size, 0))
+  const knowledgeOnlyFiles = computed(() => selectedFiles.value.filter((item) => ['.doc', '.docx', '.ppt', '.pptx'].includes(item.suffix)))
+  const incompatibleFiles = computed(() => (['auto', 'knowledge'].includes(options.targetType.value) ? [] : knowledgeOnlyFiles.value))
   function terminalStatuses() {
     return options.autoWriteEnabled.value ? WRITE_TERMINAL_STATUSES : PARSE_DONE_STATUSES
   }
 
-  const batchFinishedCount = computed(
-    () => selectedFiles.value.filter((item) => terminalStatuses().has(item.status)).length,
-  )
-  const batchFailedCount = computed(
-    () => selectedFiles.value.filter((item) => item.status === 'failed').length,
-  )
+  const batchFinishedCount = computed(() => selectedFiles.value.filter((item) => terminalStatuses().has(item.status)).length)
+  const batchFailedCount = computed(() => selectedFiles.value.filter((item) => item.status === 'failed').length)
   const batchSubmittedCount = computed(
-    () => selectedFiles.value.filter((item) => (
-      !['waiting', 'uploading', 'creating'].includes(item.status)
-    )).length,
+    () => selectedFiles.value.filter((item) => !['waiting', 'uploading', 'creating'].includes(item.status)).length,
   )
   const batchProgress = computed(() => {
     if (!selectedFiles.value.length) return 0
@@ -179,10 +151,7 @@ export function useEtlFolderBatch(options: EtlFolderBatchOptions) {
     ignoredFiles.value = selection.ignored
     selectionFolderName.value = selection.folderName
     batchId.value = selectedFiles.value.length ? newBatchId() : ''
-    if (
-      knowledgeOnlyFiles.value.length === selectedFiles.value.length
-      && selectedFiles.value.length
-    ) {
+    if (knowledgeOnlyFiles.value.length === selectedFiles.value.length && selectedFiles.value.length) {
       options.targetType.value = 'knowledge'
     }
   }
@@ -222,15 +191,10 @@ export function useEtlFolderBatch(options: EtlFolderBatchOptions) {
       const run = byId.get(item.runId)
       if (!run) continue
       item.status = run.status as BatchFileStatus
-      item.progress = terminalStatuses().has(item.status)
-        ? 100
-        : Math.max(item.progress, run.progress)
+      item.progress = terminalStatuses().has(item.status) ? 100 : Math.max(item.progress, run.progress)
       item.message = run.error?.message || ''
     }
-    options.runs.value = [
-      ...latest,
-      ...options.runs.value.filter((run) => !byId.has(run.id)),
-    ]
+    options.runs.value = [...latest, ...options.runs.value.filter((run) => !byId.has(run.id))]
     if (options.currentRun.value) {
       options.currentRun.value = byId.get(options.currentRun.value.id) || options.currentRun.value
     }
@@ -238,9 +202,7 @@ export function useEtlFolderBatch(options: EtlFolderBatchOptions) {
 
   function scheduleBatchPoll() {
     if (batchPollTimer) clearTimeout(batchPollTimer)
-    const pending = selectedFiles.value.some(
-      (item) => item.runId && !terminalStatuses().has(item.status),
-    )
+    const pending = selectedFiles.value.some((item) => item.runId && !terminalStatuses().has(item.status))
     if (!pending || !batchId.value) return
     batchPollTimer = setTimeout(async () => {
       try {
@@ -253,9 +215,7 @@ export function useEtlFolderBatch(options: EtlFolderBatchOptions) {
           }
         }
       } catch (error) {
-        options.pageError.value = error instanceof Error
-          ? error.message
-          : '读取文件夹写入进度失败'
+        options.pageError.value = error instanceof Error ? error.message : '读取文件夹写入进度失败'
       }
       scheduleBatchPoll()
     }, 1500)
@@ -267,9 +227,7 @@ export function useEtlFolderBatch(options: EtlFolderBatchOptions) {
     options.pageError.value = ''
     const createdRuns: EtlRun[] = []
     try {
-      const queue = selectedFiles.value.filter(
-        (item) => ['waiting', 'failed'].includes(item.status),
-      )
+      const queue = selectedFiles.value.filter((item) => ['waiting', 'failed'].includes(item.status))
       let cursor = 0
       async function worker() {
         while (cursor < queue.length) {
@@ -303,17 +261,12 @@ export function useEtlFolderBatch(options: EtlFolderBatchOptions) {
           }
         }
       }
-      const workers = Array.from(
-        { length: Math.min(3, Math.max(1, queue.length)) },
-        () => worker(),
-      )
+      const workers = Array.from({ length: Math.min(3, Math.max(1, queue.length)) }, () => worker())
       await Promise.all(workers)
       if (createdRuns.length) {
         options.runs.value = [
           ...createdRuns,
-          ...options.runs.value.filter(
-            (item) => !createdRuns.some((created) => created.id === item.id),
-          ),
+          ...options.runs.value.filter((item) => !createdRuns.some((created) => created.id === item.id)),
         ]
         options.currentRun.value = createdRuns[0]
         if (selectedFiles.value.length === 1 && options.targetType.value === 'auto') {
@@ -339,8 +292,7 @@ export function useEtlFolderBatch(options: EtlFolderBatchOptions) {
         }
       }
       if (batchFailedCount.value) {
-        options.pageError.value =
-          `${batchFailedCount.value} 个文件提交失败；可在文件清单中查看原因并重试。`
+        options.pageError.value = `${batchFailedCount.value} 个文件提交失败；可在文件清单中查看原因并重试。`
       }
     } finally {
       options.busy.value = false

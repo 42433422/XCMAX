@@ -19,8 +19,11 @@ class RuleInferResult:
 
 # 语气词/emoji 模式
 _MODAL_PARTICLES = re.compile(r"[哈呢呀哦嘛啦哇呗]")
-_EMOJI_PATTERN = re.compile(
-    "[\U0001f600-\U0001f64f\U0001f300-\U0001f5ff\U0001f680-\U0001f6ff\U0001f1e0-\U0001f1ff]"
+_EMOJI_RANGES = (
+    (0x1F600, 0x1F64F),
+    (0x1F300, 0x1F5FF),
+    (0x1F680, 0x1F6FF),
+    (0x1F1E0, 0x1F1FF),
 )
 # 祈使句模式
 _IMPERATIVE_PATTERN = re.compile(
@@ -29,6 +32,12 @@ _IMPERATIVE_PATTERN = re.compile(
 # 详细/简洁请求
 _DETAIL_REQUEST = re.compile(r"(详细|展开|具体|说说|讲讲|解释)")
 _BRIEF_REQUEST = re.compile(r"(简单|简洁|长话短说|少说|概括|摘要)")
+
+
+def _count_emoji(value: str) -> int:
+    return sum(
+        1 for char in value if any(start <= ord(char) <= end for start, end in _EMOJI_RANGES)
+    )
 
 
 class RuleInferencer:
@@ -56,6 +65,7 @@ class RuleInferencer:
                 signals=[],
             )
 
+        message = message.strip()[:4096]
         signals: list[str] = []
         warmth_score = 0.5
         detail_score = 0.5
@@ -63,7 +73,7 @@ class RuleInferencer:
         structure_score = 0.5
 
         # === warmth 规则 ===
-        emoji_count = len(_EMOJI_PATTERN.findall(message))
+        emoji_count = _count_emoji(message)
         modal_count = len(_MODAL_PARTICLES.findall(message))
         is_imperative = bool(_IMPERATIVE_PATTERN.match(message.strip()))
 
@@ -105,7 +115,7 @@ class RuleInferencer:
             signals.append("statement")
 
         # === structure 规则（编号/列表）===
-        has_list = bool(re.search(r"\d+[.、)]", message))
+        has_list = bool(re.search(r"\d{1,12}[.、)]", message))
         if has_list:
             structure_score = 0.8
             signals.append("list_format")

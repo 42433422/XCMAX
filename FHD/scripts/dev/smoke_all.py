@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """聚合冒烟：一次跑完 Mod 边界 / werkzeug shim / FastAPI 启动 / GET 路由扫描。
 
 用法：
@@ -16,6 +15,8 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -74,7 +75,7 @@ def step_fastapi_boot() -> int:
         from app.fastapi_app import get_fastapi_app
 
         app = get_fastapi_app()
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"[FastAPI boot] FAILED: {type(e).__name__}: {e}")
         return 1
     dt = time.time() - t0

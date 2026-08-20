@@ -50,7 +50,11 @@ describe('modStore computeds', () => {
 
 describe('modStore actions success', () => {
   it('loadCatalog stores result', async () => {
-    apiMock.getModCatalog.mockResolvedValue({ installed: [], available: [{ id: 'x' }], indexed_count: 1 })
+    apiMock.getModCatalog.mockResolvedValue({
+      installed: [],
+      available: [{ id: 'x' }],
+      indexed_count: 1,
+    })
     const store = useModStoreStore()
     await store.loadCatalog()
     expect(store.availableMods).toHaveLength(1)

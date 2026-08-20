@@ -8,9 +8,7 @@
           <span v-if="loading" class="kitten-viz-strip__loading">同步中…</span>
         </div>
       </div>
-      <button type="button" class="kitten-viz-strip__market" @click="goMarket">
-        去 AI 市场安装
-      </button>
+      <button type="button" class="kitten-viz-strip__market" @click="goMarket">去 AI 市场安装</button>
     </div>
 
     <div class="kitten-viz-strip__grid" role="list">
@@ -141,7 +139,9 @@ function goMarket() {
   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05);
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.15s, transform 0.15s;
+  transition:
+    border-color 0.15s,
+    transform 0.15s;
 }
 
 .kitten-viz-card:hover {

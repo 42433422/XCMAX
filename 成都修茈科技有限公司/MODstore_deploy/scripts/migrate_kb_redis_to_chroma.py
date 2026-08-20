@@ -27,6 +27,8 @@ import struct
 import sys
 from typing import Any, Dict, Iterable, List, Tuple
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 logger = logging.getLogger("migrate_kb")
 
 
@@ -38,7 +40,7 @@ def _decode_hash(row: Dict[Any, Any]) -> Dict[str, Any]:
             try:
                 n = len(v) // 4
                 out[ks] = list(struct.unpack(f"{n}f", bytes(v)))
-            except Exception:  # noqa: BLE001
+            except RECOVERABLE_ERRORS:  # noqa: BLE001
                 out[ks] = []
         elif isinstance(v, bytes):
             out[ks] = v.decode("utf-8", errors="ignore")
@@ -69,7 +71,7 @@ def _scan_user_chunks(redis_client) -> Iterable[Tuple[int, str, List[Dict[str, A
             chunk_idx = 0
         try:
             data = _decode_hash(redis_client.hgetall(key))
-        except Exception as e:  # noqa: BLE001
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001
             logger.warning("读取 %s 失败: %s", key, e)
             continue
         data["__chunk_index__"] = chunk_idx
@@ -106,17 +108,11 @@ def main(argv: List[str] | None = None) -> int:
     try:
         from modstore_server import vector_engine
         from modstore_server.knowledge_vector_store import (
-            DEFAULT_USER_COLLECTION_NAME,
             _ensure_user_default_collection,
         )
         from modstore_server.knowledge_vector_store_redis import (
-            CHUNK_PREFIX,
-            DOC_PREFIX,
-            INDEX_NAME,
-            USER_DOCS_PREFIX,
             get_redis,
             redis_url,
-            vector_dim,
         )
         from modstore_server.models import (
             KnowledgeDocument,
@@ -188,13 +184,13 @@ def main(argv: List[str] | None = None) -> int:
                 try:
                     if page_no not in (None, "", 0):
                         meta["page_no"] = int(page_no)
-                except Exception:  # noqa: BLE001
+                except RECOVERABLE_ERRORS:  # noqa: BLE001
                     pass
                 created_at_v = c.get("created_at")
                 try:
                     if created_at_v not in (None, "", 0):
                         meta["created_at"] = int(created_at_v)
-                except Exception:  # noqa: BLE001
+                except RECOVERABLE_ERRORS:  # noqa: BLE001
                     pass
                 metadatas.append(meta)
 
@@ -209,7 +205,7 @@ def main(argv: List[str] | None = None) -> int:
                     vector_engine.kb_collection_name(int(coll.id)),
                     where={"doc_id": str(doc_id)},
                 )
-            except Exception:  # noqa: BLE001
+            except RECOVERABLE_ERRORS:  # noqa: BLE001
                 pass
             vector_engine.upsert(
                 vector_engine.kb_collection_name(int(coll.id)),

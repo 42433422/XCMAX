@@ -1,3 +1,4 @@
+# mypy: disable-error-code="attr-defined"
 """EmbeddingService 补充单元测试，聚焦未覆盖分支。
 
 覆盖目标：
@@ -28,6 +29,7 @@ from app.infrastructure.llm.embedding_service import (
     EmbeddingService,
     get_default_embedding_service,
 )
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 
 @pytest.fixture(autouse=True)
@@ -480,7 +482,7 @@ class TestEmbedLocal:
         def _worker() -> None:
             try:
                 results.append(svc._get_local_model())
-            except BaseException as e:  # noqa: BLE001
+            except BOUNDARY_ERRORS as e:  # thread boundary captures worker failures
                 errors.append(e)
 
         threads = [threading.Thread(target=_worker) for _ in range(8)]
@@ -696,7 +698,7 @@ class TestSingleton:
         def _worker() -> None:
             try:
                 results.append(EmbeddingService.get_singleton())
-            except BaseException as e:  # noqa: BLE001
+            except BOUNDARY_ERRORS as e:  # thread boundary captures worker failures
                 errors.append(e)
 
         threads = [threading.Thread(target=_worker) for _ in range(16)]

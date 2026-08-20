@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Upload a single local file to xcagi-releases COS. Usage: upload-one-xcagi-cos.py <edition> <filename>"""
+
 import os
 import sys
 from pathlib import Path

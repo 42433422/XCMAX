@@ -69,7 +69,7 @@ cd MODstore_deploy
 **本机侧大致步骤**（[`scripts/sync-modstore-to-server.ps1`](../../scripts/sync-modstore-to-server.ps1)）：
 
 1. 在公司仓库根用 **tar** 打 **`modstore_deploy_sync.tgz`**（排除 `.venv`、`node_modules`、`dist`、Java `target`、本地库与运行时目录等）。
-2. 若存在与公司根同级的 **`yuangon/``，会一并打进包。
+2. 若存在与公司根同级的 \*\*`yuangon/``，会一并打进包。
 3. **scp**：`tgz` + **`remote_sync_extract.sh`** + **`remote_sync_bootstrap.sh`** + 远程基底路径（Base64 单行文件）。
 4. **ssh** 执行 **`remote_sync_bootstrap.sh`** → 设置 **`MODSTORE_ALLOW_LEGACY_FULLCHAIN=1`** 后调用 **`remote_sync_extract.sh`**。
 
@@ -100,12 +100,12 @@ cd MODstore_deploy
 
 ## 常用环境与动作速查
 
-| 变量 / 脚本 | 作用 |
-| --- | --- |
-| `DEPLOY_SSH` | SSH 目标，如 `root@x.x.x.x` 或 `Host` 别名 |
-| `DEPLOY_REMOTE_REPO` / `RemoteRepo` | 服务器上 Git 仓库根目录（内含 `MODstore_deploy`） |
-| `DEPLOY_GIT_BRANCH` / `Branch` | `deploy`、`push-market` 使用的分支 |
-| `DEPLOY_REMOTE_BASE` | `sync-modstore-to-server.ps1` 的服务器解压父路径 |
+| 变量 / 脚本                                                         | 作用                                                                   |
+| ------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `DEPLOY_SSH`                                                        | SSH 目标，如 `root@x.x.x.x` 或 `Host` 别名                             |
+| `DEPLOY_REMOTE_REPO` / `RemoteRepo`                                 | 服务器上 Git 仓库根目录（内含 `MODstore_deploy`）                      |
+| `DEPLOY_GIT_BRANCH` / `Branch`                                      | `deploy`、`push-market` 使用的分支                                     |
+| `DEPLOY_REMOTE_BASE`                                                | `sync-modstore-to-server.ps1` 的服务器解压父路径                       |
 | `remote-sre.ps1 -Action preflight\|smoke\|backup\|deploy\|rollback` | [remote-server-operations](./remote-server-operations.md) 中的标准动作 |
 
 ---

@@ -69,12 +69,8 @@ export function isUserFacingDeliverableFilename(filename: string): boolean {
 }
 
 /** 生成员/读取员工响应里仅保留用户可见的下载项。 */
-export function filterUserFacingOfficeDownloads(
-  downloads: EmployeeOutputDownload[],
-): EmployeeOutputDownload[] {
-  return (downloads || []).filter(
-    (d) => d?.jobId && d?.filename && isUserFacingDeliverableFilename(d.filename),
-  )
+export function filterUserFacingOfficeDownloads(downloads: EmployeeOutputDownload[]): EmployeeOutputDownload[] {
+  return (downloads || []).filter((d) => d?.jobId && d?.filename && isUserFacingDeliverableFilename(d.filename))
 }
 
 export function displayNameForOfficeDownload(d: EmployeeOutputDownload): string {
@@ -88,9 +84,7 @@ export function displayNameForOfficeDownload(d: EmployeeOutputDownload): string 
 
 let generatedIdSeq = 0
 
-export function employeeDownloadsToGeneratedFiles(
-  downloads: EmployeeOutputDownload[],
-): DirectGeneratedFile[] {
+export function employeeDownloadsToGeneratedFiles(downloads: EmployeeOutputDownload[]): DirectGeneratedFile[] {
   return filterUserFacingOfficeDownloads(downloads).map((d) => {
     generatedIdSeq += 1
     return {
@@ -104,8 +98,7 @@ export function employeeDownloadsToGeneratedFiles(
   })
 }
 
-const INTERNAL_DOWNLOAD_LINK =
-  /presentation_(?:full|meta)\.json|images_index\.json|\.vlm\.json|document_full\.json|speaker_notes\.md/i
+const INTERNAL_DOWNLOAD_LINK = /presentation_(?:full|meta)\.json|images_index\.json|\.vlm\.json|document_full\.json|speaker_notes\.md/i
 
 /** LLM 常输出 sandbox: 伪链接；底栏已有真实下载卡片时改为简短提示。 */
 export function softenSandboxDownloadLinks(text: string): string {
@@ -121,10 +114,7 @@ export function softenSandboxDownloadLinks(text: string): string {
 
   s = s.replace(/^\s*[-*+]\s*.*sandbox:[^\n]*$/gim, '')
   s = s.replace(/^\s*\d+[.)]\s*.*sandbox:[^\n]*$/gim, '')
-  s = s.replace(
-    /^\s*[-*+]\s*\[[^\]]*(?:presentation_|\.vlm\.json|images_index)[^\]]*\]\([^)]+\)\s*$/gim,
-    '',
-  )
+  s = s.replace(/^\s*[-*+]\s*\[[^\]]*(?:presentation_|\.vlm\.json|images_index)[^\]]*\]\([^)]+\)\s*$/gim, '')
   s = s.replace(/\n{3,}/g, '\n\n').trim()
 
   if (hadSandbox && !/sandbox:/i.test(s) && !/见下方文件卡片/.test(s)) {
@@ -133,10 +123,7 @@ export function softenSandboxDownloadLinks(text: string): string {
   return s
 }
 
-export function mergeGeneratedFiles(
-  existing: DirectGeneratedFile[],
-  incoming: DirectGeneratedFile[],
-): DirectGeneratedFile[] {
+export function mergeGeneratedFiles(existing: DirectGeneratedFile[], incoming: DirectGeneratedFile[]): DirectGeneratedFile[] {
   if (!incoming.length) return existing
   const seen = new Set(existing.map((f) => `${f.jobId}:${f.filename}`))
   const merged = [...existing]

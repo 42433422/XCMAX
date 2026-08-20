@@ -40,7 +40,7 @@ jobs:
           pip install -r deploy/requirements-dev.txt
       - name: Run employee risk smoke
         run: |
-          pytest -q \
+          python -m pytest -q \
             tests/application/test_employee_runtime_write_approval.py \
             tests/test_application/test_write_approval_flow.py \
             tests/domain/test_autonomy_guard.py

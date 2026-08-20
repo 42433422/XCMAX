@@ -1248,7 +1248,7 @@ class TestProcessChatDeepErrors:
         ):
             result = service.process_chat("u1", "hello")
         assert result["success"] is False
-        assert "API Key" in result.get("message", "") or "API Key" in result.get("response", "")
+        assert "AI 服务暂时不可用" in result.get("message", "")
 
     def test_connection_string_error(self):
         async def raise_conn_str(*a, **kw):
@@ -1265,7 +1265,7 @@ class TestProcessChatDeepErrors:
         ):
             result = service.process_chat("u1", "hello")
         assert result["success"] is False
-        assert "无法连接" in result.get("message", "") or "无法连接" in result.get("response", "")
+        assert "AI 服务暂时不可用" in result.get("message", "")
 
     def test_generic_runtime_error(self):
         async def raise_generic(*a, **kw):

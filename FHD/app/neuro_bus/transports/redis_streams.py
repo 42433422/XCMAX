@@ -12,6 +12,8 @@ import os
 import uuid
 from typing import TYPE_CHECKING, Any
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
@@ -49,7 +51,7 @@ class RedisStreamsBridge:
         try:
             self._redis.xgroup_create(STREAM_KEY, CONSUMER_GROUP, id="$", mkstream=True)
             logger.info("created consumer group %s on %s", CONSUMER_GROUP, STREAM_KEY)
-        except Exception as e:  # noqa: BLE001 - transport boundary: handle all redis errors gracefully
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - transport boundary: handle all redis errors gracefully
             # BUSYGROUP 表示已存在
             if "BUSYGROUP" not in str(e):
                 logger.debug("xgroup create: %s", e)

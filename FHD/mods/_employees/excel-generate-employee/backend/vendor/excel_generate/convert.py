@@ -4,11 +4,13 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from app.mod_sdk.errors import RECOVERABLE_ERRORS
+
 try:
-    from app.application.office_plaintext_generate import (
+    from app.mod_sdk.host_services import (
         resolve_table_spec as _shared_resolve_table_spec,
     )
-except Exception:  # noqa: BLE001 - employee packs must remain self-contained outside MODstore.
+except RECOVERABLE_ERRORS:  # noqa: BLE001 - employee packs must remain self-contained outside MODstore.
     _shared_resolve_table_spec = None
 
 

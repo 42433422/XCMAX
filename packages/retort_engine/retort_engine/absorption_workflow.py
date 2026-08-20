@@ -5,11 +5,14 @@ import os
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 PythonResolver = Callable[[], str]
 GitRootResolver = Callable[[Path], Path | None]
-GitCommand = Callable[[Path, str], str]
+
+
+class GitCommand(Protocol):
+    def __call__(self, root: Path, *args: str) -> str: ...
 
 
 def run_real_absorption_cli(

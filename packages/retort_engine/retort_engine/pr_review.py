@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from collections import Counter
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.absorbed_capabilities import (
     ranked_capabilities,
@@ -797,8 +797,8 @@ def _intent_alignment_comment(
 ) -> dict[str, Any]:
     first_file = files[0]
     file_path = str(first_file.get("path") or "")
-    first_hunk = next(iter(first_file.get("hunks") or []), {})
-    first_add = next(
+    first_hunk: dict[str, Any] = next(iter(first_file.get("hunks") or []), {})
+    first_add: dict[str, Any] = next(
         (
             change
             for change in first_hunk.get("changes") or []
@@ -841,7 +841,7 @@ def _info_comment(
     capabilities: list[str],
     review_context: str,
 ) -> dict[str, Any]:
-    first_add = next(
+    first_add: dict[str, Any] = next(
         (change for change in hunk.get("changes") or [] if change.get("type") == "add"),
         {},
     )
@@ -1034,7 +1034,10 @@ def _large_diff_review_needed(files: list[dict[str, Any]], diff_text: str) -> bo
 def _feedback_context_weights(feedback: list[dict[str, Any]]) -> dict[str, int]:
     weights: dict[str, int] = {}
     for item in feedback:
-        task = item.get("task") if isinstance(item.get("task"), dict) else {}
+        task = cast(
+            dict[str, Any],
+            item.get("task") if isinstance(item.get("task"), dict) else {},
+        )
         dimension = str(item.get("dimension") or task.get("dimension") or "")
         status = str(item.get("status") or item.get("result") or "").lower()
         if status and status not in {
@@ -1079,7 +1082,7 @@ def _core_review_score_summary(comments: list[dict[str, Any]]) -> dict[str, Any]
         for comment in comments
         if comment.get("capability") == "hunk_semantic_review"
     ]
-    top_comment = comments[0] if comments else {}
+    top_comment = cast(dict[str, Any], comments[0] if comments else {})
     return {
         "model": "severity_context_transfer_publishability_v5_external_diagnostics",
         "max_rank_score": max(scores) if scores else 0,

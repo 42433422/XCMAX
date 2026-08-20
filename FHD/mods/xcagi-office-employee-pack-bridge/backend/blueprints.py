@@ -6,6 +6,8 @@ import json
 import logging
 from pathlib import Path
 
+from app.mod_sdk.errors import RECOVERABLE_ERRORS
+
 logger = logging.getLogger(__name__)
 
 OFFICE_PACK_MOD_ID = "xcagi-office-employee-pack-bridge"
@@ -24,7 +26,7 @@ def load_office_pack_catalog() -> dict:
     try:
         data = json.loads(p.read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else {"pack_ids": []}
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return {"pack_ids": [], "collection": "office_employee_pack"}
 
 

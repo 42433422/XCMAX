@@ -8,25 +8,25 @@
 
 ## 修复总览
 
-| 编号 | 严重度 | 问题 | 涉及文件 | 修复类型 |
-|------|--------|------|----------|----------|
+| 编号 | 严重度  | 问题                                               | 涉及文件                               | 修复类型 |
+| ---- | ------- | -------------------------------------------------- | -------------------------------------- | -------- |
 | F-01 | 🔴 严重 | `_call_llm` 无回退机制，`call_llm=None` 时静默失败 | `employee_pack_blueprints_template.py` | 代码修复 |
-| F-02 | 🔴 严重 | `ctx['http_get']`/`ctx['http_post']` 未注入实现 | `employee_pack_blueprints_template.py` | 代码修复 |
-| F-03 | 🔴 严重 | LLM 生成代码无 AST 安全审查 | `mod_employee_impl_scaffold.py` | 代码修复 |
-| F-04 | 🟡 中等 | FHD 宿主侧 LLM 硬编码 DeepSeek | `mod_employee_llm.py` | 代码修复 |
-| F-05 | 🟡 中等 | 无流水线回滚/清理机制 | `workbench_api.py` | 代码修复 |
-| F-06 | 🟡 中等 | 员工脚本仅语法校验，无行为校验 | `mod_employee_impl_scaffold.py` | 代码修复 |
-| F-07 | 🟡 中等 | 员工脚本串行生成，无并行化 | `mod_employee_impl_scaffold.py` | 代码修复 |
-| F-08 | 🟡 中等 | 工作流图校验不充分（环路/断连） | `workflow_nl_graph.py` | 代码修复 |
-| F-09 | 🟡 中等 | LLM 调用无速率限制/成本控制 | `workbench_api.py` | 代码修复 |
-| F-10 | 🟡 中等 | 单次修复重试可能不足 | `mod_employee_impl_scaffold.py` | 代码修复 |
-| F-11 | 🟡 中等 | `host_check` 验证深度不足 | `workbench_api.py` | 代码修复 |
-| D-01 | ❌ 文档 | `_call_llm` 回退机制描述错误 | 流程文档 §9.2 | 文档修正 |
-| D-02 | ❌ 文档 | `resolve_api_key`/`resolve_base_url` 签名错误 | 流程文档 §五 | 文档修正 |
-| D-03 | ❌ 文档 | `chat_dispatch` 签名错误 | 流程文档 §五 | 文档修正 |
-| D-04 | ❌ 文档 | `run_employee_ai_scaffold_async` 文件位置错误 | 流程文档 §十 | 文档修正 |
-| D-05 | ❌ 文档 | 缺少 `script` intent 文档 | 流程文档 §十一 | 文档修正 |
-| D-06 | ⚠️ 轻微 | 超时时间描述过于简化 | 流程文档 §十二 | 文档修正 |
+| F-02 | 🔴 严重 | `ctx['http_get']`/`ctx['http_post']` 未注入实现    | `employee_pack_blueprints_template.py` | 代码修复 |
+| F-03 | 🔴 严重 | LLM 生成代码无 AST 安全审查                        | `mod_employee_impl_scaffold.py`        | 代码修复 |
+| F-04 | 🟡 中等 | FHD 宿主侧 LLM 硬编码 DeepSeek                     | `mod_employee_llm.py`                  | 代码修复 |
+| F-05 | 🟡 中等 | 无流水线回滚/清理机制                              | `workbench_api.py`                     | 代码修复 |
+| F-06 | 🟡 中等 | 员工脚本仅语法校验，无行为校验                     | `mod_employee_impl_scaffold.py`        | 代码修复 |
+| F-07 | 🟡 中等 | 员工脚本串行生成，无并行化                         | `mod_employee_impl_scaffold.py`        | 代码修复 |
+| F-08 | 🟡 中等 | 工作流图校验不充分（环路/断连）                    | `workflow_nl_graph.py`                 | 代码修复 |
+| F-09 | 🟡 中等 | LLM 调用无速率限制/成本控制                        | `workbench_api.py`                     | 代码修复 |
+| F-10 | 🟡 中等 | 单次修复重试可能不足                               | `mod_employee_impl_scaffold.py`        | 代码修复 |
+| F-11 | 🟡 中等 | `host_check` 验证深度不足                          | `workbench_api.py`                     | 代码修复 |
+| D-01 | ❌ 文档 | `_call_llm` 回退机制描述错误                       | 流程文档 §9.2                          | 文档修正 |
+| D-02 | ❌ 文档 | `resolve_api_key`/`resolve_base_url` 签名错误      | 流程文档 §五                           | 文档修正 |
+| D-03 | ❌ 文档 | `chat_dispatch` 签名错误                           | 流程文档 §五                           | 文档修正 |
+| D-04 | ❌ 文档 | `run_employee_ai_scaffold_async` 文件位置错误      | 流程文档 §十                           | 文档修正 |
+| D-05 | ❌ 文档 | 缺少 `script` intent 文档                          | 流程文档 §十一                         | 文档修正 |
+| D-06 | ⚠️ 轻微 | 超时时间描述过于简化                               | 流程文档 §十二                         | 文档修正 |
 
 ---
 
@@ -76,6 +76,7 @@ except Exception:
 ```
 
 **效果**：
+
 - `call_llm` 永远不会是 `None`，员工脚本不会因 `TypeError` 崩溃
 - 返回明确的错误信息，而非不可理解的 `NoneType is not callable`
 - 日志中记录导入失败原因，便于排查
@@ -125,6 +126,7 @@ except Exception:
 ```
 
 **效果**：
+
 - 员工脚本可正常发起 HTTP 请求，与 system prompt 声明的能力一致
 - `httpx` 不可用时返回明确错误而非 `TypeError`
 
@@ -235,6 +237,7 @@ def _security_check(src: str) -> Optional[str]:
 ```
 
 **效果**：
+
 - 拦截 `import os`、`subprocess`、`eval()`、`exec()` 等危险调用
 - 强制 `app.*` 导入只能走 `app.mod_sdk` 契约层
 - 安全审查未通过时降级为 `_fallback_employee_py`
@@ -354,6 +357,7 @@ async def mod_employee_complete(
 ```
 
 **新增环境变量**：
+
 - `XCAGI_LLM_PROVIDER`：指定运行时 LLM 供应商（如 `openai`、`siliconflow` 等），不设则默认 `deepseek`
 - `{PROVIDER}_API_KEY`：对应供应商的密钥
 - `{PROVIDER}_BASE_URL`：对应供应商的 base URL（可选）
@@ -859,6 +863,7 @@ except Exception as e:
 ### 文档修正
 
 **原文**（§9.2）：
+
 ```
 ctx["call_llm"]
   → blueprints.py 中的 _call_llm
@@ -869,6 +874,7 @@ ctx["call_llm"]
 ```
 
 **修正为**：
+
 ```
 ctx["call_llm"]
   → blueprints.py 中的 _call_llm
@@ -887,12 +893,14 @@ ctx["call_llm"]
 ### 文档修正
 
 **原文**（§五）：
+
 ```python
 def resolve_api_key(provider: str) -> Optional[str]
 def resolve_base_url(provider: str) -> Optional[str]
 ```
 
 **修正为**：
+
 ```python
 def resolve_api_key(session: Session, user_id: int, provider: str) -> Tuple[Optional[str], str]
     """返回 (api_key, source)；source 为 user_override | platform | none"""
@@ -910,6 +918,7 @@ def resolve_base_url(session: Session, user_id: int, provider: str) -> Optional[
 ### 文档修正
 
 **原文**（§五）：
+
 ```python
 async def chat_dispatch(
     provider: str,
@@ -923,6 +932,7 @@ async def chat_dispatch(
 ```
 
 **修正为**：
+
 ```python
 async def chat_dispatch(
     provider: str,
@@ -936,6 +946,7 @@ async def chat_dispatch(
 ```
 
 关键差异：
+
 - `api_key` 及之后均为 **keyword-only** 参数
 - `max_tokens` 默认为 `None`（非 3072），由各 provider 函数自行处理默认值
 
@@ -946,9 +957,11 @@ async def chat_dispatch(
 ### 文档修正
 
 **原文**（§十）：
+
 > 员工包LLM生成 → `modstore_server/employee_ai_scaffold.py`
 
 **修正为**：
+
 > 员工包LLM生成 → `modstore_server/mod_scaffold_runner.py`（主入口 `run_employee_ai_scaffold_async` 在第 1137 行）
 
 补充说明：`employee_ai_scaffold.py` 仅提供底层工具函数（`parse_employee_pack_llm_json`、`build_employee_pack_zip`），被 `mod_scaffold_runner.py` 调用。
@@ -961,13 +974,13 @@ async def chat_dispatch(
 
 在§十一「三种 Intent 对比」表中追加第四行：
 
-| 维度 | script |
-|------|--------|
-| **产物** | Python 处理脚本 + 输出文件（outputs/） |
-| **LLM 调用次数** | 1次（生成脚本） |
-| **步骤数** | 5步（spec → generate → validate → run → complete） |
-| **沙箱测试** | validate（安全检查） |
-| **部署目标** | 不持久化，一次性执行 |
+| 维度             | script                                             |
+| ---------------- | -------------------------------------------------- |
+| **产物**         | Python 处理脚本 + 输出文件（outputs/）             |
+| **LLM 调用次数** | 1次（生成脚本）                                    |
+| **步骤数**       | 5步（spec → generate → validate → run → complete） |
+| **沙箱测试**     | validate（安全检查）                               |
+| **部署目标**     | 不持久化，一次性执行                               |
 
 触发方式：`execution_mode: 'script'`（非 intent 字段）。
 
@@ -978,18 +991,20 @@ async def chat_dispatch(
 ### 文档修正
 
 **原文**（§十二.2）：
+
 > MODstore服务端：`chat_dispatch` 默认 120秒
 
 **修正为**：
+
 > MODstore服务端超时因 provider 和调用模式而异：
 >
-> | 调用类型 | 超时 |
-> |----------|------|
-> | OpenAI 兼容（chat） | 120s |
-> | Anthropic（chat） | 120s |
-> | Google Gemini（chat） | 120s |
+> | 调用类型              | 超时                     |
+> | --------------------- | ------------------------ |
+> | OpenAI 兼容（chat）   | 120s                     |
+> | Anthropic（chat）     | 120s                     |
+> | Google Gemini（chat） | 120s                     |
 > | OpenAI 兼容（stream） | 无超时（`timeout=None`） |
-> | OpenAI 兼容（image） | 180s |
+> | OpenAI 兼容（image）  | 180s                     |
 
 ---
 
@@ -997,30 +1012,30 @@ async def chat_dispatch(
 
 ### 第一批（立即修复）
 
-| 编号 | 原因 |
-|------|------|
-| F-01 | `call_llm=None` 导致运行时 TypeError，影响所有员工脚本 |
+| 编号 | 原因                                                        |
+| ---- | ----------------------------------------------------------- |
+| F-01 | `call_llm=None` 导致运行时 TypeError，影响所有员工脚本      |
 | F-02 | `http_get`/`http_post` 未实现，system prompt 与运行时不一致 |
-| F-03 | LLM 生成代码无安全审查，存在代码注入风险 |
+| F-03 | LLM 生成代码无安全审查，存在代码注入风险                    |
 
 ### 第二批（近期修复）
 
-| 编号 | 原因 |
-|------|------|
-| F-04 | 宿主锁定 DeepSeek，限制部署灵活性 |
-| F-06 | 行为校验缺失，可能生成无法运行的代码 |
-| F-10 | 单次修复重试成功率不足 |
-| D-01~D-06 | 文档与代码不同步，影响团队协作 |
+| 编号      | 原因                                 |
+| --------- | ------------------------------------ |
+| F-04      | 宿主锁定 DeepSeek，限制部署灵活性    |
+| F-06      | 行为校验缺失，可能生成无法运行的代码 |
+| F-10      | 单次修复重试成功率不足               |
+| D-01~D-06 | 文档与代码不同步，影响团队协作       |
 
 ### 第三批（中期优化）
 
-| 编号 | 原因 |
-|------|------|
-| F-05 | 流水线回滚机制，提升用户体验 |
-| F-07 | 员工并行生成，提升性能 |
-| F-08 | 工作流图校验，减少人工修正 |
+| 编号 | 原因                           |
+| ---- | ------------------------------ |
+| F-05 | 流水线回滚机制，提升用户体验   |
+| F-07 | 员工并行生成，提升性能         |
+| F-08 | 工作流图校验，减少人工修正     |
 | F-09 | LLM 调用预算控制，防止成本失控 |
-| F-11 | 宿主检查增强，提前发现问题 |
+| F-11 | 宿主检查增强，提前发现问题     |
 
 ---
 

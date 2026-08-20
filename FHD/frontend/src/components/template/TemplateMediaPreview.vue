@@ -11,9 +11,7 @@
     />
     <div v-else-if="isVirtualPlaceholder" class="tp-card-placeholder">
       <span class="tp-placeholder-title">待上传模板</span>
-      <span v-if="requiredTerms.length" class="tp-placeholder-terms">
-        必备词条：{{ requiredTerms.join('、') }}
-      </span>
+      <span v-if="requiredTerms.length" class="tp-placeholder-terms"> 必备词条：{{ requiredTerms.join('、') }} </span>
       <span v-else class="tp-placeholder-terms muted">{{ uploadHint }}</span>
     </div>
     <div v-else-if="resolvedMediaKind === 'label'" class="tp-card-placeholder">
@@ -117,11 +115,21 @@ export default {
   opacity: 0.88;
 }
 
-.tp-card-placeholder--excel .fa { color: #15803d; }
-.tp-card-placeholder--word .fa { color: #2b579a; }
-.tp-card-placeholder--csv .fa { color: #0369a1; }
-.tp-card-placeholder--ppt .fa { color: #c2410c; }
-.tp-card-placeholder--pdf .fa { color: #b91c1c; }
+.tp-card-placeholder--excel .fa {
+  color: #15803d;
+}
+.tp-card-placeholder--word .fa {
+  color: #2b579a;
+}
+.tp-card-placeholder--csv .fa {
+  color: #0369a1;
+}
+.tp-card-placeholder--ppt .fa {
+  color: #c2410c;
+}
+.tp-card-placeholder--pdf .fa {
+  color: #b91c1c;
+}
 
 .tmp-file-name {
   font-weight: 500;

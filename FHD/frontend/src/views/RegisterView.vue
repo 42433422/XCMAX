@@ -1,156 +1,148 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
-import { ApiError } from '@/api';
-import { authApi } from '@/api/auth';
-import { applyMarketTokensAfterFhdLogin } from '@/api/marketAccount';
-import { loginPageTitle, purchaseAuthorizationUrl } from '@/constants/loginBranding';
-import { fetchProductSku } from '@/utils/productSku';
+import { computed, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ApiError } from '@/api'
+import { authApi } from '@/api/auth'
+import { applyMarketTokensAfterFhdLogin } from '@/api/marketAccount'
+import { loginPageTitle, purchaseAuthorizationUrl } from '@/constants/loginBranding'
+import { fetchProductSku } from '@/utils/productSku'
 
-const route = useRoute();
-const router = useRouter();
+const route = useRoute()
+const router = useRouter()
 
-const username = ref('');
-const email = ref('');
-const password = ref('');
-const confirmPassword = ref('');
-const showPassword = ref(false);
-const loading = ref(false);
-const errorMessage = ref('');
-const verificationCode = ref('');
-const sendingCode = ref(false);
-const registrationComplete = ref(false);
-const pendingPurchaseUrl = ref('');
+const username = ref('')
+const email = ref('')
+const password = ref('')
+const confirmPassword = ref('')
+const showPassword = ref(false)
+const loading = ref(false)
+const errorMessage = ref('')
+const verificationCode = ref('')
+const sendingCode = ref(false)
+const registrationComplete = ref(false)
+const pendingPurchaseUrl = ref('')
 
-const productSku = ref<string>('generic');
-const isEnterpriseEdition = computed(() => productSku.value === 'enterprise');
-const requiresEmailVerification = computed(
-  () => isEnterpriseEdition.value && Boolean(email.value.trim()),
-);
+const productSku = ref<string>('generic')
+const isEnterpriseEdition = computed(() => productSku.value === 'enterprise')
+const requiresEmailVerification = computed(() => isEnterpriseEdition.value && Boolean(email.value.trim()))
 
 const loginBackRoute = computed(() => ({
   name: 'login' as const,
   query: route.query,
-}));
+}))
 
 function peelNestedLoginRedirect(raw: string): string {
-  let v = raw.trim();
+  let v = raw.trim()
   for (let i = 0; i < 5 && v.startsWith('/login'); i++) {
-    const q = v.indexOf('?');
-    if (q < 0) return '/';
-    const nested = new URLSearchParams(v.slice(q + 1)).get('redirect');
-    v = nested ? decodeURIComponent(nested.trim()) : '/';
+    const q = v.indexOf('?')
+    if (q < 0) return '/'
+    const nested = new URLSearchParams(v.slice(q + 1)).get('redirect')
+    v = nested ? decodeURIComponent(nested.trim()) : '/'
   }
-  const pathOnly = v.split('?')[0].split('#')[0];
-  return pathOnly;
+  const pathOnly = v.split('?')[0].split('#')[0]
+  return pathOnly
 }
 
 const redirectPath = computed(() => {
-  const raw = route.query.redirect;
-  const value = Array.isArray(raw) ? raw[0] : raw;
-  if (!value || typeof value !== 'string') return '/';
-  let v = value.trim();
+  const raw = route.query.redirect
+  const value = Array.isArray(raw) ? raw[0] : raw
+  if (!value || typeof value !== 'string') return '/'
+  let v = value.trim()
   try {
-    v = decodeURIComponent(v);
+    v = decodeURIComponent(v)
   } catch {
     /* keep */
   }
-  v = peelNestedLoginRedirect(v);
-  if (!v.startsWith('/') || v.startsWith('//') || v.startsWith('/login')) return '/';
-  return v;
-});
+  v = peelNestedLoginRedirect(v)
+  if (!v.startsWith('/') || v.startsWith('//') || v.startsWith('/login')) return '/'
+  return v
+})
 
 const canSubmit = computed(() => {
-  if (loading.value) return false;
-  if (!username.value.trim() || password.value.length < 6) return false;
-  if (password.value !== confirmPassword.value) return false;
-  if (requiresEmailVerification.value && verificationCode.value.trim().length < 4) return false;
-  return true;
-});
+  if (loading.value) return false
+  if (!username.value.trim() || password.value.length < 6) return false
+  if (password.value !== confirmPassword.value) return false
+  if (requiresEmailVerification.value && verificationCode.value.trim().length < 4) return false
+  return true
+})
 
 async function sendVerificationCode() {
-  if (!email.value.trim() || sendingCode.value) return;
-  sendingCode.value = true;
-  errorMessage.value = '';
+  if (!email.value.trim() || sendingCode.value) return
+  sendingCode.value = true
+  errorMessage.value = ''
   try {
-    await authApi.sendRegisterVerificationCode(email.value.trim());
+    await authApi.sendRegisterVerificationCode(email.value.trim())
   } catch (error) {
-    errorMessage.value = formatRegisterError(error);
+    errorMessage.value = formatRegisterError(error)
   } finally {
-    sendingCode.value = false;
+    sendingCode.value = false
   }
 }
 
 onMounted(async () => {
-  productSku.value = await fetchProductSku();
-  document.title = `注册 · ${loginPageTitle(productSku.value).replace(' · 登录', '')}`;
-});
+  productSku.value = await fetchProductSku()
+  document.title = `注册 · ${loginPageTitle(productSku.value).replace(' · 登录', '')}`
+})
 
 function formatRegisterError(error: unknown): string {
   if (error instanceof ApiError) {
-    const d = error.data && typeof error.data === 'object' ? (error.data as Record<string, unknown>) : {};
-    const errObj = d.error && typeof d.error === 'object' ? (d.error as Record<string, unknown>) : null;
+    const d = error.data && typeof error.data === 'object' ? (error.data as Record<string, unknown>) : {}
+    const errObj = d.error && typeof d.error === 'object' ? (d.error as Record<string, unknown>) : null
     return (
       (typeof d.message === 'string' && d.message) ||
       (errObj && typeof errObj.message === 'string' && (errObj.message as string)) ||
       error.message ||
       '注册失败'
-    );
+    )
   }
-  const err = error as { message?: string };
-  return err.message || '注册失败，请稍后再试';
+  const err = error as { message?: string }
+  return err.message || '注册失败，请稍后再试'
 }
 
 async function submitRegister() {
   if (password.value !== confirmPassword.value) {
-    errorMessage.value = '两次输入的密码不一致';
-    return;
+    errorMessage.value = '两次输入的密码不一致'
+    return
   }
   if (!canSubmit.value) {
-    errorMessage.value = requiresEmailVerification.value
-      ? '填写邮箱后，请先获取并填写验证码'
-      : '请填写用户名和密码（至少 6 位）';
-    return;
+    errorMessage.value = requiresEmailVerification.value ? '填写邮箱后，请先获取并填写验证码' : '请填写用户名和密码（至少 6 位）'
+    return
   }
 
-  loading.value = true;
-  errorMessage.value = '';
+  loading.value = true
+  errorMessage.value = ''
   try {
     const result = await authApi.register({
       username: username.value.trim(),
       password: password.value,
       email: email.value.trim() || undefined,
       verification_code: verificationCode.value.trim() || undefined,
-    });
-    const raw = result as unknown as Record<string, unknown>;
-    const ok = raw?.success === true;
+    })
+    const raw = result as unknown as Record<string, unknown>
+    const ok = raw?.success === true
     if (!ok) {
-      const errObj = raw.error && typeof raw.error === 'object' ? (raw.error as Record<string, unknown>) : {};
+      const errObj = raw.error && typeof raw.error === 'object' ? (raw.error as Record<string, unknown>) : {}
       errorMessage.value =
-        (typeof raw.message === 'string' && raw.message) ||
-        (typeof errObj.message === 'string' && (errObj.message as string)) ||
-        '注册失败';
-      return;
+        (typeof raw.message === 'string' && raw.message) || (typeof errObj.message === 'string' && (errObj.message as string)) || '注册失败'
+      return
     }
 
-    await applyMarketTokensAfterFhdLogin(raw);
+    await applyMarketTokensAfterFhdLogin(raw)
 
     if (isEnterpriseEdition.value) {
       if (raw.desktop_access !== true) {
         pendingPurchaseUrl.value =
-          (typeof raw.purchase_url === 'string' && raw.purchase_url.trim())
-            ? raw.purchase_url.trim()
-            : purchaseAuthorizationUrl();
-        registrationComplete.value = true;
-        return;
+          typeof raw.purchase_url === 'string' && raw.purchase_url.trim() ? raw.purchase_url.trim() : purchaseAuthorizationUrl()
+        registrationComplete.value = true
+        return
       }
     }
 
-    await router.replace(redirectPath.value);
+    await router.replace(redirectPath.value)
   } catch (error: unknown) {
-    errorMessage.value = formatRegisterError(error);
+    errorMessage.value = formatRegisterError(error)
   } finally {
-    loading.value = false;
+    loading.value = false
   }
 }
 </script>
@@ -162,108 +154,92 @@ async function submitRegister() {
 
       <template v-if="registrationComplete">
         <h1 id="register-heading" class="login-heading">账号注册成功</h1>
-        <p class="register-hint" role="status">
-          账号创建成功。选择适合的 XCAGI 方案并完成支付，随后回到桌面端登录即可。
-        </p>
-        <a
-          class="login-submit register-purchase-link"
-          :href="pendingPurchaseUrl"
-          target="_blank"
-          rel="noopener noreferrer"
-        >选择 XCAGI 方案</a>
+        <p class="register-hint" role="status">账号创建成功。选择适合的 XCAGI 方案并完成支付，随后回到桌面端登录即可。</p>
+        <a class="login-submit register-purchase-link" :href="pendingPurchaseUrl" target="_blank" rel="noopener noreferrer"
+          >选择 XCAGI 方案</a
+        >
       </template>
 
       <template v-else>
         <h1 id="register-heading" class="login-heading">账号注册</h1>
         <p class="register-hint" role="note">
-          {{
-            isEnterpriseEdition
-              ? '创建 XCAGI 账号后，即可选择适合的方案。'
-              : '在本机服务器数据库创建账号，注册成功后自动登录。'
-          }}
+          {{ isEnterpriseEdition ? '创建 XCAGI 账号后，即可选择适合的方案。' : '在本机服务器数据库创建账号，注册成功后自动登录。' }}
         </p>
 
-      <form class="login-form" @submit.prevent="submitRegister">
-        <div class="login-field-line">
-          <input
-            v-model="username"
-            type="text"
-            name="username"
-            autocomplete="username"
-            placeholder="用户名"
-            :disabled="loading"
-            autofocus
-          />
-        </div>
+        <form class="login-form" @submit.prevent="submitRegister">
+          <div class="login-field-line">
+            <input
+              v-model="username"
+              type="text"
+              name="username"
+              autocomplete="username"
+              placeholder="用户名"
+              :disabled="loading"
+              autofocus
+            />
+          </div>
 
-        <div class="login-field-line">
-          <input
-            v-model="email"
-            type="email"
-            name="email"
-            autocomplete="email"
-            placeholder="邮箱（选填）"
-            :disabled="loading"
-          />
-        </div>
+          <div class="login-field-line">
+            <input v-model="email" type="email" name="email" autocomplete="email" placeholder="邮箱（选填）" :disabled="loading" />
+          </div>
 
-        <div v-if="requiresEmailVerification" class="login-field-line register-code-line">
-          <input
-            v-model="verificationCode"
-            type="text"
-            name="verification-code"
-            autocomplete="one-time-code"
-            placeholder="邮箱验证码"
-            :disabled="loading"
-          />
-          <button type="button" :disabled="sendingCode" @click="sendVerificationCode">
-            {{ sendingCode ? '发送中…' : '获取验证码' }}
+          <div v-if="requiresEmailVerification" class="login-field-line register-code-line">
+            <input
+              v-model="verificationCode"
+              type="text"
+              name="verification-code"
+              autocomplete="one-time-code"
+              placeholder="邮箱验证码"
+              :disabled="loading"
+            />
+            <button type="button" :disabled="sendingCode" @click="sendVerificationCode">
+              {{ sendingCode ? '发送中…' : '获取验证码' }}
+            </button>
+          </div>
+
+          <div class="login-field-line login-field-line--password">
+            <input
+              v-model="password"
+              :type="showPassword ? 'text' : 'password'"
+              name="password"
+              autocomplete="new-password"
+              placeholder="密码（至少 6 位）"
+              :disabled="loading"
+            />
+            <button
+              type="button"
+              class="login-password-toggle"
+              :disabled="loading"
+              :aria-label="showPassword ? '隐藏密码' : '显示密码'"
+              @click="showPassword = !showPassword"
+            >
+              <i class="fa" :class="showPassword ? 'fa-eye-slash' : 'fa-eye'" aria-hidden="true"></i>
+            </button>
+          </div>
+
+          <div class="login-field-line">
+            <input
+              v-model="confirmPassword"
+              :type="showPassword ? 'text' : 'password'"
+              name="confirm-password"
+              autocomplete="new-password"
+              placeholder="确认密码"
+              :disabled="loading"
+            />
+          </div>
+
+          <p v-if="errorMessage" class="login-error" role="alert">{{ errorMessage }}</p>
+
+          <button class="login-submit" type="submit" :disabled="!canSubmit">
+            <span>{{ loading ? '正在注册...' : isEnterpriseEdition ? '注册并选择方案' : '注册并登录' }}</span>
+            <i class="fa fa-long-arrow-right" aria-hidden="true"></i>
           </button>
-        </div>
+        </form>
 
-        <div class="login-field-line login-field-line--password">
-          <input
-            v-model="password"
-            :type="showPassword ? 'text' : 'password'"
-            name="password"
-            autocomplete="new-password"
-            placeholder="密码（至少 6 位）"
-            :disabled="loading"
-          />
-          <button
-            type="button"
-            class="login-password-toggle"
-            :disabled="loading"
-            :aria-label="showPassword ? '隐藏密码' : '显示密码'"
-            @click="showPassword = !showPassword"
-          >
-            <i class="fa" :class="showPassword ? 'fa-eye-slash' : 'fa-eye'" aria-hidden="true"></i>
-          </button>
-        </div>
-
-        <div class="login-field-line">
-          <input
-            v-model="confirmPassword"
-            :type="showPassword ? 'text' : 'password'"
-            name="confirm-password"
-            autocomplete="new-password"
-            placeholder="确认密码"
-            :disabled="loading"
-          />
-        </div>
-
-        <p v-if="errorMessage" class="login-error" role="alert">{{ errorMessage }}</p>
-
-        <button class="login-submit" type="submit" :disabled="!canSubmit">
-          <span>{{ loading ? '正在注册...' : (isEnterpriseEdition ? '注册并选择方案' : '注册并登录') }}</span>
-          <i class="fa fa-long-arrow-right" aria-hidden="true"></i>
-        </button>
-      </form>
-
-      <p class="register-footer-link">
-        已有账号？
-        <router-link :to="loginBackRoute">返回登录</router-link>
-      </p>
+        <p class="register-footer-link">
+          已有账号？
+          <router-link :to="loginBackRoute">返回登录</router-link>
+        </p>
       </template>
     </section>
   </main>

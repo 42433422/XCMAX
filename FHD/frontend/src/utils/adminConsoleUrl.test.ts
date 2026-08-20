@@ -36,7 +36,12 @@ describe('adminConsoleUrl', () => {
     const original = window.location
     Object.defineProperty(window, 'location', {
       configurable: true,
-      value: { protocol: 'http:', hostname: 'localhost', port: '5001', origin: 'http://localhost:5001' },
+      value: {
+        protocol: 'http:',
+        hostname: 'localhost',
+        port: '5001',
+        origin: 'http://localhost:5001',
+      },
     })
     try {
       expect(resolveAdminConsoleHomeUrl()).toBe('http://localhost:5011/admin/xcmax-admin')

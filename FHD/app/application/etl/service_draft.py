@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy.orm import Session
 
@@ -25,11 +25,19 @@ from app.application.etl.targets import TargetAdapter, get_adapter
 from app.application.etl.transforms import ALLOWED_TRANSFORMS, apply_mapping
 from app.db.models.etl import EtlRun, EtlRunRow
 from app.infrastructure.tenant_scope import tenant_id_for_write, tenant_scope
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
 
 class DraftServiceMixin:
+    if TYPE_CHECKING:
+        _adviser: Any
+        _owned_run: Any
+        _owned_upload_record: Any
+        _row_context: Any
+        get_run: Any
+
     def update_draft(
         self,
         db: Session,
@@ -56,7 +64,9 @@ class DraftServiceMixin:
             if isinstance(overrides, dict) and overrides:
                 self._apply_row_overrides(db, run.id, owner_user_id, overrides)
                 self._record_correction_metrics(mapping_changed=False, overrides=overrides)
-            return self.get_run(db, run_id=run.id, owner_user_id=owner_user_id)
+            return cast(
+                "dict[str, Any]", self.get_run(db, run_id=run.id, owner_user_id=owner_user_id)
+            )
 
         draft = load_json(run.draft_json, {})
         for key in draft_keys:
@@ -82,7 +92,7 @@ class DraftServiceMixin:
             overrides=overrides if isinstance(overrides, dict) else {},
         )
         db.expire_all()
-        return self.get_run(db, run_id=run.id, owner_user_id=owner_user_id)
+        return cast("dict[str, Any]", self.get_run(db, run_id=run.id, owner_user_id=owner_user_id))
 
     @staticmethod
     def _record_correction_metrics(*, mapping_changed: bool, overrides: dict[str, Any]) -> None:
@@ -93,7 +103,7 @@ class DraftServiceMixin:
                 etl_manual_corrections_total.labels("mapping").inc()
             if overrides:
                 etl_manual_corrections_total.labels("row_action").inc(len(overrides))
-        except Exception:  # noqa: BLE001
+        except RECOVERABLE_ERRORS:  # noqa: BLE001
             logger.debug("ETL correction metrics unavailable", exc_info=True)
 
     def _submit_revalidation(
@@ -115,7 +125,7 @@ class DraftServiceMixin:
                     self._revalidate_existing_rows(db, run_id, owner_user_id)
                     if overrides:
                         self._apply_row_overrides(db, run_id, owner_user_id, overrides)
-            except Exception as exc:  # noqa: BLE001
+            except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
                 db.rollback()
                 code, message = safe_error(exc)
                 try:
@@ -126,7 +136,7 @@ class DraftServiceMixin:
                         run.error_code = code
                         run.error_message = message[:500]
                         db.commit()
-                except Exception:  # noqa: BLE001
+                except RECOVERABLE_ERRORS:  # noqa: BLE001
                     db.rollback()
                     logger.exception("Unable to persist ETL revalidation failure for %s", run_id)
             finally:

@@ -2,12 +2,12 @@
 
 ## 元信息
 
-| 字段 | 值 |
-|------|----|
-| skill_id | `skill-log-triage` |
+| 字段     | 值                     |
+| -------- | ---------------------- |
+| skill_id | `skill-log-triage`     |
 | 所属员工 | `log-monitor-incident` |
-| 业务域 | 日志分析与事故响应 |
-| 版本 | 1.1.0 |
+| 业务域   | 日志分析与事故响应     |
+| 版本     | 1.1.0                  |
 
 ## 契约
 
@@ -17,6 +17,7 @@
 ## 1. 静态阶段
 
 **执行逻辑**：
+
 ```
 1. 读取 coverage/、playwright-report/、test-results/、.cursor_*_log.txt（及任务 input.sources）
 2. 粗筛：保留 error/fail/exception/FAILED 等行（可与 grep 等价）
@@ -44,13 +45,13 @@
   "employee_id": "log-monitor-incident",
   "employee_version": "1.2.0",
   "data_sources": [
-    {"path": "coverage/", "sha256": "..."},
-    {"path": "playwright-report/", "sha256": "..."},
-    {"path": ".cursor_*_log.txt", "files": 3, "sha256_combined": "..."}
+    { "path": "coverage/", "sha256": "..." },
+    { "path": "playwright-report/", "sha256": "..." },
+    { "path": ".cursor_*_log.txt", "files": 3, "sha256_combined": "..." }
   ],
   "data_sources_hash": "<sha256 of sorted per-source hashes>",
   "error_code_map_version": "<copy from error-code-map.yaml version>",
-  "summary_counts": {"p0": 0, "p1": 0, "p2": 0, "unmapped": 0}
+  "summary_counts": { "p0": 0, "p1": 0, "p2": 0, "unmapped": 0 }
 }
 ```
 ````
@@ -58,7 +59,8 @@
 **解析约定**：下游取 `report_md` 内**首个** info string 为 `modstore-report-meta` 的 fenced JSON 块；缺失或 JSON 无效则视为 **schema 不合规**。
 
 **输出 schema（顶层 JSON，与 system.md 一致）**：
-```json
+
+````json
 {
   "status": "ok | warning | critical",
   "p0_incidents": [],
@@ -76,19 +78,17 @@
       "matched_line": ""
     }
   ],
-  "unmapped_entries": [
-    { "evidence_path": "", "snippet": "", "reason": "no_pattern_match" }
-  ],
+  "unmapped_entries": [{ "evidence_path": "", "snippet": "", "reason": "no_pattern_match" }],
   "mapping_coverage_rate": 1.0,
   "report_md": "```json modstore-report-meta\n{...}\n```\n\n## 摘要\n..."
 }
-```
+````
 
 ## 2. 动态触发条件
 
-| 触发类型 | 规则 |
-|----------|------|
-| 执行报错 | 日志文件不可读；`error-code-map.yaml` 缺失或 YAML 损坏 |
+| 触发类型   | 规则                                                                                                           |
+| ---------- | -------------------------------------------------------------------------------------------------------------- |
+| 执行报错   | 日志文件不可读；`error-code-map.yaml` 缺失或 YAML 损坏                                                         |
 | 结果不达标 | `p0_incidents` 非空；`coverage_delta_pct < -5`；`mapping_coverage_rate < 0.8` 且 `unmapped_entries.length > 0` |
 
 ## 3. 动态阶段
@@ -103,6 +103,6 @@
 
 ## 5. 评估指标
 
-| 指标 | 目标值 |
-|------|--------|
+| 指标                  | 目标值                              |
+| --------------------- | ----------------------------------- |
 | mapping_coverage_rate | ≥ 80%（当存在 unmapped 时触发复核） |

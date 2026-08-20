@@ -127,7 +127,6 @@ def _format_handoff(result: Dict[str, Any]) -> str:
     if not isinstance(h, dict):
         return ""
     tgt = _safe_str(h.get("to"), 60)
-    src = _safe_str(h.get("from"), 60)
     reason = _safe_str(h.get("reason"), 120)
     skipped = h.get("skipped")
     skip_reason = _safe_str(h.get("skip_reason"), 120)
@@ -373,7 +372,7 @@ def build_human_report(
             tid = ho.get("thread_id") or 0
             mid = ho.get("message_id") or 0
             remainders.append(
-                f"- ✅ 已 @{tgt} 转交任务（协作线程 #{tid}，消息 #{mid}），" "等对方判断是否接手"
+                f"- ✅ 已 @{tgt} 转交任务（协作线程 #{tid}，消息 #{mid}），等对方判断是否接手"
             )
         else:
             remainders.append(f"- ❌ 转交 @{tgt} 失败：{_safe_str(ho.get('skip_reason'), 100)}")

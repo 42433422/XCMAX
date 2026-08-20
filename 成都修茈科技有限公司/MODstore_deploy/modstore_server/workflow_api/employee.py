@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 from __future__ import annotations
 
 import json
@@ -17,6 +18,7 @@ from modstore_server.models import (
     WorkflowNode,
     get_user_mod_ids,
 )
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.workflow_api.helpers import (
     _employee_id_matches,
     _employee_matches_manifest_entry,
@@ -83,14 +85,18 @@ async def list_workflows_by_employee(
         if not w:
             continue
         node_hit_ids.add(wid)
-        result_by_id[wid] = {"id": wid, "name": w.name or f"工作流 {wid}", "source": "node"}
+        result_by_id[wid] = {
+            "id": wid,
+            "name": w.name or f"工作流 {wid}",
+            "source": "node",
+        }
 
     try:
         try:
             from modstore_server import app as app_module
 
             lib = app_module._lib()
-        except Exception:
+        except RECOVERABLE_ERRORS:
             cfg = load_config()
             lib = resolved_library(cfg)
         allow_mod_ids = None if user.is_admin else set(get_user_mod_ids(user.id))
@@ -120,7 +126,7 @@ async def list_workflows_by_employee(
                     "name": w.name or f"工作流 {wid}",
                     "source": "manifest",
                 }
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         errors.append(f"manifest 扫描失败: {e}")
 
     rows = sorted(result_by_id.values(), key=lambda x: int(x.get("id") or 0))

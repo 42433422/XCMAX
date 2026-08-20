@@ -13,15 +13,7 @@
       <span class="desktop-update-chip__dot" aria-hidden="true" />
       <span>{{ badgeLabel }}</span>
     </button>
-    <button
-      type="button"
-      class="desktop-update-dismiss"
-      aria-label="稍后提醒"
-      title="稍后提醒"
-      @click.stop="dismiss"
-    >
-      ×
-    </button>
+    <button type="button" class="desktop-update-dismiss" aria-label="稍后提醒" title="稍后提醒" @click.stop="dismiss">×</button>
   </div>
 
   <!-- 角标仍挂侧栏；弹窗由 Modal 统一 Teleport 到 body，相对整窗居中 -->
@@ -69,13 +61,7 @@
         </p>
 
         <div v-if="mediaSlides.length > 1" class="desktop-update-media__nav">
-          <button
-            type="button"
-            class="desktop-update-media__arrow"
-            aria-label="上一张"
-            :disabled="slideIndex <= 0"
-            @click="prevSlide"
-          >
+          <button type="button" class="desktop-update-media__arrow" aria-label="上一张" :disabled="slideIndex <= 0" @click="prevSlide">
             ‹
           </button>
           <div class="desktop-update-media__dots" role="tablist" aria-label="更新亮点页">
@@ -108,9 +94,7 @@
           新版本 <strong>{{ updateInfo.version }}</strong> 可用
         </template>
         <template v-else>有新版本可用</template>
-        <span v-if="updateInfo?.buildSha" class="muted">
-          · 构建 {{ updateInfo.buildSha.slice(0, 12) }}
-        </span>
+        <span v-if="updateInfo?.buildSha" class="muted"> · 构建 {{ updateInfo.buildSha.slice(0, 12) }} </span>
       </p>
 
       <div class="desktop-update-notes" aria-label="更新说明">
@@ -123,14 +107,10 @@
       </div>
 
       <p v-if="errorMessage" class="desktop-update-error">{{ errorMessage }}</p>
-      <p v-if="selfUpdateBlockReason" class="desktop-update-error">
-        {{ selfUpdateBlockReason }} 已保存的数据和登录状态不会被清除。
-      </p>
+      <p v-if="selfUpdateBlockReason" class="desktop-update-error">{{ selfUpdateBlockReason }} 已保存的数据和登录状态不会被清除。</p>
     </div>
     <template #footer>
-      <button type="button" class="btn btn-secondary btn-sm" :disabled="busy" @click="closeModal">
-        稍后
-      </button>
+      <button type="button" class="btn btn-secondary btn-sm" :disabled="busy" @click="closeModal">稍后</button>
       <button
         type="button"
         class="btn btn-primary btn-sm"
@@ -430,7 +410,11 @@ watch(modalOpen, (open) => {
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
-  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    sans-serif;
   font-size: 13px;
   line-height: 1.55;
   color: #0f172a;

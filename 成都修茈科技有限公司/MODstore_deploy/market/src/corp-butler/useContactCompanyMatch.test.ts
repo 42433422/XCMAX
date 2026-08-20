@@ -83,25 +83,28 @@ describe('useContactCompanyMatch branch coverage', () => {
     const hidden = installHiddenCompanyInput()
     const fetchMock = vi.mocked(fetch)
     fetchMock
-      .mockResolvedValueOnce(jsonResponse({
-        found: true,
-        web_used: true,
-        matched: { name: '成都修茈科技有限公司', source: 'web' },
-        suggestions: [],
-      }))
-      .mockResolvedValueOnce(jsonResponse({
-        found: true,
-        matched: { name: '成都修茈科技有限公司', source: 'crm' },
-        suggestions: [],
-      }))
-      .mockResolvedValueOnce(jsonResponse({
-        found: true,
-        matched: { name: '成都修茈科技有限公司', source: 'web' },
-        suggestions: [
-          { name: '成都修茈科技有限公司' },
-          { name: '成都修茈科技服务有限公司' },
-        ],
-      }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          found: true,
+          web_used: true,
+          matched: { name: '成都修茈科技有限公司', source: 'web' },
+          suggestions: [],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          found: true,
+          matched: { name: '成都修茈科技有限公司', source: 'crm' },
+          suggestions: [],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          found: true,
+          matched: { name: '成都修茈科技有限公司', source: 'web' },
+          suggestions: [{ name: '成都修茈科技有限公司' }, { name: '成都修茈科技服务有限公司' }],
+        }),
+      )
       .mockResolvedValueOnce(jsonResponse(null))
 
     const webMatched = useContactCompanyMatch('workbench')
@@ -133,19 +136,23 @@ describe('useContactCompanyMatch branch coverage', () => {
     await picked.selectSuggestion({ name: '成都修茈科技有限公司 | 企查查' }, ' 成都修茈 ')
     expect(picked.hint.value).toContain('系统类型')
     expect(hidden.value).toBe('成都修茈')
-    expect(bridgeState.selectAiCompany).toHaveBeenCalledWith(expect.objectContaining({
-      name: '成都修茈科技有限公司',
-      exact: true,
-    }))
+    expect(bridgeState.selectAiCompany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: '成都修茈科技有限公司',
+        exact: true,
+      }),
+    )
   })
 
   it('covers debounce clearing, cached payload reuse, and unlocked same-query hints', async () => {
     const fetchMock = vi.mocked(fetch)
-    fetchMock.mockResolvedValueOnce(jsonResponse({
-      found: true,
-      matched: { name: '成都修茈科技有限公司', source: 'crm' },
-      suggestions: [],
-    }))
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        found: true,
+        matched: { name: '成都修茈科技有限公司', source: 'crm' },
+        suggestions: [],
+      }),
+    )
 
     const matcher = useContactCompanyMatch('contact')
     matcher.unlockMatchUi()

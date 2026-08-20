@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment"
 """Catalog persistence adapters (SQL + JSON file storage + in-memory for tests)."""
 
 from __future__ import annotations

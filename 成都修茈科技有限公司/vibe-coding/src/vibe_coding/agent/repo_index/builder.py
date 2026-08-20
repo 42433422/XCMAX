@@ -18,15 +18,15 @@ from __future__ import annotations
 
 import fnmatch
 import hashlib
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Sequence
 
 from .adapters import LanguageAdapter
 from .adapters.python import PythonLanguageAdapter
 from .adapters.typescript import TypeScriptLanguageAdapter
 from .adapters.vue import VueLanguageAdapter
-from .index import FileEntry, RepoIndex, Symbol, Reference
+from .index import FileEntry, Reference, RepoIndex, Symbol
 
 DEFAULT_MAX_FILE_BYTES = 512 * 1024
 DEFAULT_INDEX_FILENAME = "repo_index.json"
@@ -44,6 +44,7 @@ def _default_adapters() -> list[LanguageAdapter]:
         TypeScriptLanguageAdapter(),
         VueLanguageAdapter(),
     ]
+
 
 # Always-skip directory names — applied even before ``.gitignore`` lookup so
 # we never wander into ``.git``-internal blobs.
@@ -195,7 +196,7 @@ def build_index(
 # ---------------------------------------------------------------------- walking
 
 
-def _walk(root: Path, *, ignore: "_GitignoreMatcher", follow_symlinks: bool) -> Iterable[Path]:
+def _walk(root: Path, *, ignore: _GitignoreMatcher, follow_symlinks: bool) -> Iterable[Path]:
     stack: list[Path] = [root]
     while stack:
         current = stack.pop()

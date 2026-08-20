@@ -30,9 +30,13 @@ caller code knowing the difference.
 
 from __future__ import annotations
 
+import contextlib
 import importlib
 import threading
-from typing import Any, Callable, Iterable
+from collections.abc import Callable, Iterable
+from typing import Any
+
+from vibe_coding.operational_errors import BOUNDARY_ERRORS
 
 # Lazy globals — populated by :func:`_init_treesitter` on first use.
 _LOCK = threading.Lock()
@@ -118,10 +122,8 @@ def load_language(name: str) -> Any | None:
         # 1. Custom resolver wins.
         custom = _CUSTOM_RESOLVERS.get(name)
         if custom is not None:
-            try:
+            with contextlib.suppress(*BOUNDARY_ERRORS):
                 candidates.append(custom())
-            except Exception:  # noqa: BLE001
-                pass
         # 2. Walk the default resolver table.
         for pkg_name, attr in _DEFAULT_LANGUAGE_RESOLVERS.get(name, []):
             try:
@@ -133,7 +135,7 @@ def load_language(name: str) -> Any | None:
                 continue
             try:
                 value = attr_value() if callable(attr_value) else attr_value
-            except Exception:  # noqa: BLE001
+            except BOUNDARY_ERRORS:
                 continue
             candidates.append(value)
         for raw in candidates:
@@ -160,7 +162,7 @@ def _coerce_language(Language: Any, raw: Any) -> Any | None:
         return raw
     try:
         return Language(raw)
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:
         return None
 
 
@@ -181,13 +183,13 @@ def get_parser(name: str) -> Any | None:
     # ``set_language``. Try both.
     try:
         parser.language = language
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:
         try:
             parser.set_language(language)
-        except Exception:  # noqa: BLE001
+        except BOUNDARY_ERRORS:
             try:
                 parser = Parser(language)  # type: ignore[call-arg]
-            except Exception:  # noqa: BLE001
+            except BOUNDARY_ERRORS:
                 return None
     _PARSER_CACHE[name] = parser
     return parser
@@ -229,7 +231,7 @@ class TreeSitterAdapter:
             return None
         try:
             return parser.parse(source.encode("utf-8"))
-        except Exception:  # noqa: BLE001
+        except BOUNDARY_ERRORS:
             return None
 
     @staticmethod
@@ -248,10 +250,8 @@ class TreeSitterAdapter:
     def text_for(node: Any, source: bytes) -> str:
         """Pull the original source text covered by ``node``."""
         try:
-            return source[node.start_byte : node.end_byte].decode(
-                "utf-8", errors="replace"
-            )
-        except Exception:  # noqa: BLE001
+            return source[node.start_byte : node.end_byte].decode("utf-8", errors="replace")
+        except BOUNDARY_ERRORS:
             return ""
 
     @staticmethod
@@ -259,7 +259,7 @@ class TreeSitterAdapter:
         """1-based start line for ``node``; 1 when unknown."""
         try:
             return int(getattr(node, "start_point", (0, 0))[0]) + 1
-        except Exception:  # noqa: BLE001
+        except BOUNDARY_ERRORS:
             return 1
 
 

@@ -13,13 +13,30 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from datetime import date
-from pathlib import Path
 from typing import Any, cast
 
 from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 
+from app.application.aibiz_surface_images import (
+    compact_surface_pages as _compact_surface_pages,  # noqa: F401
+)
+from app.application.aibiz_surface_images import crop_png_top as _crop_png_top  # noqa: F401
+from app.application.aibiz_surface_images import load_surface_png_bytes as _load_surface_png_bytes
+from app.application.aibiz_surface_images import png_http_response as _png_http_response
+from app.application.aibiz_surface_images import resize_png_thumb as _resize_png_thumb  # noqa: F401
+from app.application.aibiz_surface_images import (
+    strip_b64_attach_image_urls as _strip_b64_attach_image_urls,
+)
+from app.application.aibiz_surface_images import (
+    surface_cache_token as _surface_cache_token,  # noqa: F401
+)
+from app.application.aibiz_surface_images import (
+    surface_image_url as _surface_image_url,  # noqa: F401
+)
+from app.application.aibiz_surface_images import (
+    transform_png_view as _transform_png_view,  # noqa: F401
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -45,7 +62,7 @@ async def _resolve_market_authorization(request: Request) -> str:
     if sid:
         auth = _authorization_from_request(request, {})
         if auth:
-            return auth
+            return str(auth)
 
     creds: list[tuple[str, str]] = []
     env_user = (os.environ.get("XCAGI_AIBIZ_MARKET_USER") or "").strip()
@@ -84,237 +101,6 @@ def _unwrap(payload: Any) -> dict[str, Any]:
     return {}
 
 
-def _surface_cache_token(surface: dict[str, Any]) -> str:
-    raw = str(surface.get("captured_at") or surface.get("cached_at") or "").strip()
-    if raw:
-        return raw.replace(":", "").replace("-", "").replace(".", "").replace("Z", "")[:14]
-    return date.today().isoformat().replace("-", "")
-
-
-def _surface_image_url(terminal: str, index: int, *, view: str = "", v: str = "") -> str:
-    url = f"/api/xcmax/aibiz/surface-image?terminal={terminal}&index={index}"
-    if view:
-        url += f"&view={view}"
-    if v:
-        url += f"&v={v}"
-    return url
-
-
-_VIEWPORT_CROP_HEIGHT = 720
-_THUMB_MAX_WIDTH = 96
-
-
-def _crop_png_top(raw: bytes, height: int = _VIEWPORT_CROP_HEIGHT) -> bytes:
-    if not raw:
-        return raw
-    try:
-        import io
-
-        from PIL import Image
-
-        img = Image.open(io.BytesIO(raw))
-        w, h = img.size
-        crop_h = min(max(1, height), h)
-        if crop_h >= h:
-            return raw
-        cropped = img.crop((0, 0, w, crop_h))
-        buf = io.BytesIO()
-        cropped.save(buf, format="PNG", optimize=True)
-        return buf.getvalue()
-    except RECOVERABLE_ERRORS:
-        logger.debug("surface png viewport crop failed", exc_info=True)
-        return raw
-
-
-def _resize_png_thumb(raw: bytes, *, max_width: int = _THUMB_MAX_WIDTH) -> bytes:
-    if not raw:
-        return raw
-    try:
-        import io
-
-        from PIL import Image
-
-        img = Image.open(io.BytesIO(raw))
-        w, h = img.size
-        if w <= max_width:
-            buf = io.BytesIO()
-            img.save(buf, format="PNG", optimize=True)
-            return buf.getvalue()
-        nh = max(1, int(h * max_width / w))
-        thumb = img.resize((max_width, nh), Image.Resampling.LANCZOS)
-        buf = io.BytesIO()
-        thumb.save(buf, format="PNG", optimize=True)
-        return buf.getvalue()
-    except RECOVERABLE_ERRORS:
-        logger.debug("surface png thumb resize failed", exc_info=True)
-        return raw
-
-
-def _transform_png_view(raw: bytes, view: str) -> bytes:
-    if view == "viewport":
-        return _crop_png_top(raw)
-    if view == "thumb":
-        return _resize_png_thumb(raw)
-    return raw
-
-
-def _png_http_response(raw: bytes, *, view: str = "") -> Response:
-    body = _transform_png_view(raw, view)
-    cacheable = view in ("thumb", "viewport", "")
-    return Response(
-        content=body,
-        media_type="image/png",
-        headers={
-            "Cache-Control": (
-                "public, max-age=86400, immutable" if cacheable else "no-cache, must-revalidate"
-            )
-        },
-    )
-
-
-async def _load_surface_png_bytes(
-    lane: str,
-    index: int,
-    *,
-    prefer_remote: bool,
-    authorization: str,
-) -> bytes | None:
-    def _page_bytes(page: dict[str, Any] | None) -> bytes | None:
-        if not page:
-            return None
-        # adb 真机截图优先于同页 Playwright Web 回退文件（merge 后两者可能并存）
-        if page.get("android_capture"):
-            b64 = str(page.get("screenshot_b64") or "").strip()
-            if b64:
-                import base64
-
-                return base64.b64decode(b64)
-        saved = str(page.get("screenshot_saved") or "").strip()
-        if saved:
-            png_path = Path(saved)
-            if png_path.is_file():
-                return png_path.read_bytes()
-        from app.application.surface_audit_service import resolve_lane_page_png_path
-
-        resolved = resolve_lane_page_png_path(lane, index, page if isinstance(page, dict) else None)
-        if resolved is not None:
-            return resolved.read_bytes()
-        b64 = str(page.get("screenshot_b64") or "").strip()
-        if b64:
-            import base64
-
-            return base64.b64decode(b64)
-        return None
-
-    if not prefer_remote:
-        page = await _local_surface_page(lane, index)
-        raw = _page_bytes(page if isinstance(page, dict) else None)
-        if raw:
-            return raw
-
-    if authorization and prefer_remote:
-        import httpx
-
-        from app.fastapi_routes.market_account import _market_base_url
-
-        url = (
-            f"{_market_base_url().rstrip('/')}/api/xcmax/admin/surface-audit/image"
-            f"?lane={lane}&index={index}"
-        )
-        async with httpx.AsyncClient(timeout=120.0, trust_env=False) as client:
-            r = await client.get(url, headers={"Authorization": f"Bearer {authorization}"})
-        if r.status_code == 200:
-            return r.content
-
-    page = await _local_surface_page(lane, index)
-    raw = _page_bytes(page if isinstance(page, dict) else None)
-    if raw:
-        return raw
-    return None
-
-
-def _strip_b64_attach_image_urls(surface: dict[str, Any], *, terminal: str) -> dict[str, Any]:
-    """API 只返回页面元数据 + image_url；PNG 由 /surface-image 直出文件流。"""
-    if not isinstance(surface, dict):
-        return surface
-    pages = surface.get("pages")
-    if not isinstance(pages, list) or not pages:
-        return surface
-
-    hero_i = 0
-    for i, page in enumerate(pages):
-        if not isinstance(page, dict) or not page.get("preview"):
-            continue
-        pid = str(page.get("id") or "")
-        if terminal == "software" and pid.startswith("admin_"):
-            continue
-        hero_i = i
-        break
-    else:
-        if terminal == "app":
-            preferred_ids = ("home_hub", "approval", "erp_overview", "chat", "workbench")
-            for want in preferred_ids:
-                for i, page in enumerate(pages):
-                    if isinstance(page, dict) and str(page.get("id") or "") == want:
-                        hero_i = i
-                        break
-                else:
-                    continue
-                break
-        else:
-            for i, page in enumerate(pages):
-                if not isinstance(page, dict):
-                    continue
-                pid = str(page.get("id") or "")
-                name = str(page.get("name") or "")
-                str(page.get("path") or page.get("url") or "")
-                if terminal == "software":
-                    if pid.startswith("admin_"):
-                        continue
-                    if pid in ("chat", "home_hub") or name in ("智能对话", "首页"):
-                        hero_i = i
-                        break
-                    continue
-                if pid.startswith("mod_") or pid.startswith("admin_"):
-                    hero_i = i
-                    break
-                if (
-                    pid in ("home", "home_hub")
-                    or "官网" in name
-                    or "首页" in name
-                    or name.lower() in {"home", "index"}
-                ):
-                    hero_i = i
-                    break
-
-    cache_token = _surface_cache_token(surface)
-
-    out_pages: list[Any] = []
-    for i, page in enumerate(pages):
-        if not isinstance(page, dict):
-            out_pages.append(page)
-            continue
-        row = {k: v for k, v in page.items() if k not in ("screenshot_b64", "screenshot_saved")}
-        row["image_url"] = _surface_image_url(terminal, i, v=cache_token)
-        if i == hero_i:
-            row["preview"] = True
-            row["preview_image_url"] = _surface_image_url(
-                terminal, i, view="viewport", v=cache_token
-            )
-        out_pages.append(row)
-
-    out = dict(surface)
-    out["pages"] = out_pages
-    out["preview_index"] = hero_i
-    return out
-
-
-def _compact_surface_pages(surface: dict[str, Any], *, compact: bool) -> dict[str, Any]:
-    """兼容旧 compact 参数；实际不再 inline base64。"""
-    _ = compact
-    return surface
-
-
 async def _local_surface_page(lane: str, index: int) -> dict[str, Any] | None:
     try:
         pages = await _local_lane_pages(lane)
@@ -331,7 +117,8 @@ _local_lane_pages_cache: dict[str, tuple[str, list[Any]]] = {}
 
 async def _local_lane_pages(lane: str) -> list[Any]:
     local = await asyncio.to_thread(_load_local_lane_surface, lane)
-    return local.get("pages") if isinstance(local.get("pages"), list) else []
+    pages = local.get("pages")
+    return list(pages) if isinstance(pages, list) else []
 
 
 def _load_local_lane_surface(lane: str) -> dict[str, Any]:
@@ -342,9 +129,11 @@ def _load_local_lane_surface(lane: str) -> dict[str, Any]:
     cached = _local_lane_pages_cache.get(lane)
     if cached and cached[0] == token:
         return {"pages": cached[1]}
-    pages = local.get("pages") if isinstance(local.get("pages"), list) else []
+    pages: list[Any] = (
+        list(local.get("pages") or []) if isinstance(local.get("pages"), list) else []
+    )
     _local_lane_pages_cache[lane] = (token, pages)
-    return local
+    return cast("dict[str, Any]", local)
 
 
 async def serve_surface_image(
@@ -362,8 +151,9 @@ async def serve_surface_image(
 
     try:
         authorization = await _resolve_market_authorization(request)
-    except RuntimeError as exc:
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+    except RuntimeError:
+        logger.exception("market authorization resolution failed")
+        return JSONResponse({"success": False, "message": "市场授权暂不可用"}, status_code=500)
 
     raw = await _load_surface_png_bytes(
         lane, index, prefer_remote=prefer_remote, authorization=authorization
@@ -390,16 +180,18 @@ async def build_terminal_payload(
         from app.fastapi_routes.market_account import (
             _market_base_url,
         )
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
+        logger.exception("market surface proxy unavailable")
         return JSONResponse(
-            {"success": False, "message": f"market proxy unavailable: {exc}"},
+            {"success": False, "message": "市场代理暂不可用"},
             status_code=500,
         )
 
     try:
         authorization = await _resolve_market_authorization(request)
-    except RuntimeError as exc:
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+    except RuntimeError:
+        logger.exception("market authorization resolution failed")
+        return JSONResponse({"success": False, "message": "市场授权暂不可用"}, status_code=500)
 
     surface, surface_note = await _resolve_surface_audit(
         lane, refresh=refresh, authorization=authorization, compact=compact
@@ -407,7 +199,7 @@ async def build_terminal_payload(
 
     if not authorization:
         if surface.get("pages"):
-            data: dict[str, Any] = {
+            guest_data: dict[str, Any] = {
                 "terminal": terminal,
                 "lane": lane,
                 "workflow_node": workflow_node,
@@ -421,7 +213,7 @@ async def build_terminal_payload(
                 "surface_audit_note": surface_note,
                 "android_audit": surface.get("android_audit"),
             }
-            return {"success": True, "data": data}
+            return {"success": True, "data": guest_data}
         return JSONResponse(
             {
                 "success": False,
@@ -436,7 +228,7 @@ async def build_terminal_payload(
             status_code=401,
         )
 
-    data: dict[str, Any] = {
+    authorized_data: dict[str, Any] = {
         "terminal": terminal,
         "lane": lane,
         "workflow_node": workflow_node,
@@ -450,7 +242,7 @@ async def build_terminal_payload(
         "surface_audit_note": surface_note,
         "android_audit": surface.get("android_audit"),
     }
-    return {"success": True, "data": data}
+    return {"success": True, "data": authorized_data}
 
 
 async def fetch_surface_page_payload(
@@ -465,16 +257,19 @@ async def fetch_surface_page_payload(
 
     try:
         authorization = await _resolve_market_authorization(request)
-    except RuntimeError as exc:
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+    except RuntimeError:
+        logger.exception("market authorization resolution failed")
+        return JSONResponse({"success": False, "message": "市场授权暂不可用"}, status_code=500)
 
     if lane in ("P-App", "P-S") or not authorization:
         try:
             from app.application.surface_audit_service import run_surface_audit_lane
 
             local = await asyncio.to_thread(run_surface_audit_lane, lane, refresh=False)
-            pages = local.get("pages") if isinstance(local.get("pages"), list) else []
-            if index >= len(pages):
+            pages: list[Any] = (
+                list(local.get("pages") or []) if isinstance(local.get("pages"), list) else []
+            )
+            if index >= len(pages or []):
                 return JSONResponse(
                     {"success": False, "message": "index out of range"}, status_code=404
                 )
@@ -484,7 +279,7 @@ async def fetch_surface_page_payload(
                 "data": {
                     "lane": lane,
                     "index": index,
-                    "total": len(pages),
+                    "total": len(pages or []),
                     **{
                         k: page.get(k)
                         for k in (
@@ -499,8 +294,9 @@ async def fetch_surface_page_payload(
                     },
                 },
             }
-        except RECOVERABLE_ERRORS as exc:
-            return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+        except RECOVERABLE_ERRORS:
+            logger.exception("surface audit capture failed")
+            return JSONResponse({"success": False, "message": "界面巡检暂不可用"}, status_code=500)
 
     from app.fastapi_routes.market_account import _proxy_json
 

@@ -297,11 +297,11 @@ class TestOutputsRoute:
         app = _create_app()
         client = TestClient(app)
         with patch(
-            "app.utils.path_utils.get_app_data_dir",
+            "app.utils.path_io.path_utils.get_app_data_dir",
             return_value="/nonexistent",
         ):
             with patch(
-                "app.utils.path_utils.get_resource_path",
+                "app.utils.path_io.path_utils.get_resource_path",
                 return_value="/nonexistent2",
             ):
                 with patch(
@@ -318,7 +318,7 @@ class TestOutputsRoute:
             app = _create_app()
             client = TestClient(app)
             with patch(
-                "app.utils.path_utils.get_app_data_dir",
+                "app.utils.path_io.path_utils.get_app_data_dir",
                 return_value=tmpdir,
             ):
                 resp = client.get("/outputs/missing.pdf")
@@ -333,7 +333,7 @@ class TestOutputsRoute:
             app = _create_app()
             client = TestClient(app)
             with patch(
-                "app.utils.path_utils.get_app_data_dir",
+                "app.utils.path_io.path_utils.get_app_data_dir",
                 return_value=tmpdir,
             ):
                 resp = client.get("/outputs/report.pdf")

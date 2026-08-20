@@ -60,8 +60,7 @@ export const BUTLER_PROFILE = {
         name: '数字管家',
         version: '1.0.0',
         artifact: 'butler_runtime',
-        description:
-          '前端常驻 AI 智能体。监听 vue-router、读取当前页面 DOM，可串接 vibe-coding 编排与员工任务总线。',
+        description: '前端常驻 AI 智能体。监听 vue-router、读取当前页面 DOM，可串接 vibe-coding 编排与员工任务总线。',
       },
       cognition: {
         agent: {
@@ -188,9 +187,7 @@ export function describeHandler(name: string): string {
  * - 兼容老版 manifest（无 ``employee_config_v2``）：从顶层 ``actions``、
  *   ``description`` 兜底。
  */
-export function extractEmployeeCapabilityView(
-  manifest: Record<string, unknown> | null | undefined,
-): EmployeeCapabilityView {
+export function extractEmployeeCapabilityView(manifest: Record<string, unknown> | null | undefined): EmployeeCapabilityView {
   const empty: EmployeeCapabilityView = {
     persona: '',
     expertise: [],
@@ -238,9 +235,7 @@ export function extractEmployeeCapabilityView(
 
   const dependsTopRaw = Array.isArray(manifest.depends_on) ? (manifest.depends_on as unknown[]) : []
   const dependsV2Raw = Array.isArray(collab?.depends_on) ? (collab?.depends_on as unknown[]) : []
-  const dependsOn = (dependsTopRaw.length ? dependsTopRaw : dependsV2Raw)
-    .map((x) => String(x ?? '').trim())
-    .filter(Boolean)
+  const dependsOn = (dependsTopRaw.length ? dependsTopRaw : dependsV2Raw).map((x) => String(x ?? '').trim()).filter(Boolean)
 
   return {
     persona: String(role?.persona ?? agent?.system_prompt ?? '').trim(),

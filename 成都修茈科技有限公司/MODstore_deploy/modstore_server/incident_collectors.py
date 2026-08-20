@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import logging
 import os
+from datetime import UTC
 from pathlib import Path
 
 from modstore_server.incident_bus import publish
 from modstore_server.integrations.ops_action_handlers import repo_root
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +116,7 @@ def collect_cursor_log_spike() -> bool:
                 ):
                     low = line.lower()
                     if any(x in low for x in ("error", "fail", "exception")):
-                        lines.append(f"{f.name}:{i+1}:{line[:400]}")
+                        lines.append(f"{f.name}:{i + 1}:{line[:400]}")
             except OSError:
                 continue
     except OSError:
@@ -149,7 +151,7 @@ def collect_git_push_event() -> bool:
             timeout=10,
             shell=False,
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return False
     if proc.returncode != 0:
         return False
@@ -206,13 +208,13 @@ def collect_ci_failure_log() -> bool:
 def collect_incident_bus_unknown_alarm() -> bool:
     """``incident.unknown`` 在最近一小时内出现多次 → 派发 ``security.alert`` 提示运维登记。"""
     try:
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         from modstore_server.models import IncidentEvent, get_session_factory
 
         sf = get_session_factory()
         with sf() as session:
-            cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
+            cutoff = datetime.now(UTC) - timedelta(hours=1)
             n = (
                 session.query(IncidentEvent)
                 .filter(
@@ -231,6 +233,6 @@ def collect_incident_bus_unknown_alarm() -> bool:
                 source="incident_bus_self_check",
             )
         return False
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("collect_incident_bus_unknown_alarm failed")
         return False

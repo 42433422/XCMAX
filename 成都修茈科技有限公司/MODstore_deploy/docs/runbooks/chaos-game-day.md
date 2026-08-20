@@ -16,13 +16,13 @@
 
 ## 场景预期
 
-| 场景 | 预期影响 | 恢复标准 |
-| --- | --- | --- |
-| `redis-stop` | Redis target down，部分缓存/防重放相关功能报错或降级 | Redis healthy，FastAPI/Java 5xx 恢复基线 |
-| `rabbitmq-stop` | RabbitMQ target down，Java 预留消息链路告警 | RabbitMQ healthy，payment-service 无持续错误 |
-| `payment-restart` | 支付代理短暂 502，Java target 短暂 down | `/actuator/health` UP，支付代理 5xx 归零 |
-| `postgres-stop` | API health database degraded，Java 数据库连接失败 | PostgreSQL healthy，Hikari 连接恢复 |
-| `api-restart` | FastAPI target 短暂 down，前端 API 请求失败 | `/api/health` 与 `/health/ready` 恢复 |
+| 场景              | 预期影响                                             | 恢复标准                                     |
+| ----------------- | ---------------------------------------------------- | -------------------------------------------- |
+| `redis-stop`      | Redis target down，部分缓存/防重放相关功能报错或降级 | Redis healthy，FastAPI/Java 5xx 恢复基线     |
+| `rabbitmq-stop`   | RabbitMQ target down，Java 预留消息链路告警          | RabbitMQ healthy，payment-service 无持续错误 |
+| `payment-restart` | 支付代理短暂 502，Java target 短暂 down              | `/actuator/health` UP，支付代理 5xx 归零     |
+| `postgres-stop`   | API health database degraded，Java 数据库连接失败    | PostgreSQL healthy，Hikari 连接恢复          |
+| `api-restart`     | FastAPI target 短暂 down，前端 API 请求失败          | `/api/health` 与 `/health/ready` 恢复        |
 
 ## 复盘模板
 

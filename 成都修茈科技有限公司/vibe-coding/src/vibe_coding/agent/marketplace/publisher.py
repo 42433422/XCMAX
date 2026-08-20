@@ -16,9 +16,10 @@ Three failure modes are surfaced loudly so CI / scripts can react:
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from ..._internals import CodeSkill
 from .client import (
@@ -185,13 +186,9 @@ class SkillPublisher:
         if not skills:
             raise PackagingError("publish_workflow needs at least one skill")
         if not options.pkg_id:
-            raise PackagingError(
-                "PublishOptions.pkg_id is required when bundling a workflow"
-            )
+            raise PackagingError("PublishOptions.pkg_id is required when bundling a workflow")
         head, tail = skills[0], skills[1:]
-        return self.publish_skill(
-            head, options=options, siblings=tail, dry_run=dry_run
-        )
+        return self.publish_skill(head, options=options, siblings=tail, dry_run=dry_run)
 
 
 __all__ = [

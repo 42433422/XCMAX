@@ -13,7 +13,9 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from typing import Any, cast
+
+from sqlalchemy import Table
 
 from app.application.workflow.types import PlanGraph, plan_from_dict, plan_to_dict
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -55,9 +57,11 @@ class WorkflowPlanStore:
             from app.db.models.workflow import WorkflowPlan
 
             Base.metadata.create_all(
-                bind=session.get_bind(), tables=[WorkflowPlan.__table__], checkfirst=True
+                bind=session.get_bind(),
+                tables=[cast("Table", WorkflowPlan.__table__)],
+                checkfirst=True,
             )
-        except Exception:  # noqa: BLE001 - 建表失败不阻断主流程，仅告警
+        except RECOVERABLE_ERRORS:  # noqa: BLE001 - 建表失败不阻断主流程，仅告警
             logger.warning("workflow_plans 建表失败，计划持久化降级", exc_info=True)
         finally:
             self._schema_ensured = True

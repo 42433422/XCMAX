@@ -16,11 +16,13 @@ from app.errors import (
 
 
 class AuthenticationError(AuthError):
-    pass
+    def __init__(self, message: str = "", detail: dict | None = None):
+        super().__init__(ErrorCode.AUTH_TOKEN_INVALID, message, detail)
 
 
 class PermissionDeniedError(AuthPermissionError):
-    pass
+    def __init__(self, message: str = "", detail: dict | None = None):
+        super().__init__(ErrorCode.AUTH_PERMISSION_DENIED, message, detail)
 
 
 class NotFoundError(AppError):

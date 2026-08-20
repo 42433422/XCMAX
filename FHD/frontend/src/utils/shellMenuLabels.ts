@@ -13,14 +13,15 @@ export type ShellModLike = {
   shellTagline?: string
   primary?: boolean
   /** manifest 常见写法：与 frontend.menu 同级 */
-  frontend?: { shell_menu_preset?: string; shellMenuPreset?: string; shell_tagline?: string; shellTagline?: string }
+  frontend?: {
+    shell_menu_preset?: string
+    shellMenuPreset?: string
+    shell_tagline?: string
+    shellTagline?: string
+  }
 }
 
-function pickShellStr(
-  mod: unknown,
-  snake: 'shell_menu_preset' | 'shell_tagline' | 'library_blurb',
-  camel: string
-): string {
+function pickShellStr(mod: unknown, snake: 'shell_menu_preset' | 'shell_tagline' | 'library_blurb', camel: string): string {
   if (!mod || typeof mod !== 'object') return ''
   const tryPair = (src: Record<string, unknown>) => {
     const a = src[snake]
@@ -82,7 +83,7 @@ export const SHELL_VIEW_TITLE_BASE: Record<string, string> = {
   'batch-analyze': '批量分析',
   'kitten-finance': '财务分析',
   'chat-debug': '对话调试',
-  'mod-store': '能力库'
+  'mod-store': '能力库',
 }
 
 /**
@@ -97,7 +98,7 @@ export const SHELL_INDUSTRY_MENU_OVERRIDES: Record<string, Record<string, string
     'materials-list': '原材料列表',
     'shipment-records': '出货记录',
     customers: '客户管理',
-    print: '标签打印'
+    print: '标签打印',
   },
   电商: {
     products: '商品管理',
@@ -105,7 +106,7 @@ export const SHELL_INDUSTRY_MENU_OVERRIDES: Record<string, Record<string, string
     'materials-list': '商品列表',
     'shipment-records': '出货记录',
     customers: '买家管理',
-    print: '面单打印'
+    print: '面单打印',
   },
   餐饮: {
     products: '食材管理',
@@ -113,7 +114,7 @@ export const SHELL_INDUSTRY_MENU_OVERRIDES: Record<string, Record<string, string
     'materials-list': '食材列表',
     'shipment-records': '出货记录',
     customers: '供应商管理',
-    print: '食材标签'
+    print: '食材标签',
   },
   物流: {
     products: '货物管理',
@@ -121,7 +122,7 @@ export const SHELL_INDUSTRY_MENU_OVERRIDES: Record<string, Record<string, string
     'materials-list': '货物列表',
     'shipment-records': '出货记录',
     customers: '收发方管理',
-    print: '运单打印'
+    print: '运单打印',
   },
   考勤: {
     products: '人员管理',
@@ -130,7 +131,7 @@ export const SHELL_INDUSTRY_MENU_OVERRIDES: Record<string, Record<string, string
     orders: '考勤单管理',
     'shipment-records': '考勤记录',
     customers: '部门管理',
-    print: '考勤表打印'
+    print: '考勤表打印',
   },
   员工管理: {
     products: '员工与档案',
@@ -141,8 +142,8 @@ export const SHELL_INDUSTRY_MENU_OVERRIDES: Record<string, Record<string, string
     print: '标签打印',
     'business-docking': '数据对接中心',
     'other-tools': '员工视图',
-    'approval-rules': '审批流程规则'
-  }
+    'approval-rules': '审批流程规则',
+  },
 }
 
 export function getActiveShellMod(modList: ShellModLike[], activeExtensionModId: string): ShellModLike | null {
@@ -157,11 +158,7 @@ export function getActiveShellMod(modList: ShellModLike[], activeExtensionModId:
 }
 
 /** 与 Sidebar effectiveMenuIndustryId 一致 */
-export function effectiveShellMenuIndustryId(
-  currentIndustryId: string,
-  modList: ShellModLike[],
-  activeExtensionModId: string
-): string {
+export function effectiveShellMenuIndustryId(currentIndustryId: string, modList: ShellModLike[], activeExtensionModId: string): string {
   const mod = getActiveShellMod(modList, activeExtensionModId)
   const preset = readShellMenuPreset(mod)
   if (preset && SHELL_INDUSTRY_MENU_OVERRIDES[preset]) return preset
@@ -172,10 +169,9 @@ export function effectiveShellMenuIndustryId(
 export function mergeShellViewTitles(
   currentIndustryId: string,
   modList: ShellModLike[],
-  activeExtensionModId: string
+  activeExtensionModId: string,
 ): Record<string, string> {
   const ind = effectiveShellMenuIndustryId(currentIndustryId, modList, activeExtensionModId)
-  const layer =
-    SHELL_INDUSTRY_MENU_OVERRIDES[ind] || SHELL_INDUSTRY_MENU_OVERRIDES[DEFAULT_INDUSTRY_ID] || {}
+  const layer = SHELL_INDUSTRY_MENU_OVERRIDES[ind] || SHELL_INDUSTRY_MENU_OVERRIDES[DEFAULT_INDUSTRY_ID] || {}
   return { ...SHELL_VIEW_TITLE_BASE, ...layer }
 }

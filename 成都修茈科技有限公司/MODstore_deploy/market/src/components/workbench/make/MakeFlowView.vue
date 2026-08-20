@@ -37,13 +37,17 @@
           @keydown.enter.exact.prevent="onSend"
           @input="autoResize"
         />
-        <button
-          type="button"
-          class="mf-input-bar__send"
-          :disabled="!inputText.trim()"
-          @click="onSend"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <button type="button" class="mf-input-bar__send" :disabled="!inputText.trim()" @click="onSend">
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
             <line x1="22" y1="2" x2="11" y2="13" />
             <polygon points="22 2 15 22 11 13 2 9 22 2" />
           </svg>
@@ -51,9 +55,7 @@
       </div>
     </div>
 
-    <footer class="mf-foot">
-      选择类型后输入想法：Enter 先进入需求规划（多轮问答与清单），确认后再在制作草稿中启动生成。
-    </footer>
+    <footer class="mf-foot">选择类型后输入想法：Enter 先进入需求规划（多轮问答与清单），确认后再在制作草稿中启动生成。</footer>
   </div>
 </template>
 
@@ -336,7 +338,9 @@ function autoResize(e: Event) {
   color: #121212;
   background: #fff;
   transform: translateZ(0);
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
 }
 
 .mf-input-bar__send:hover:not(:disabled) {
@@ -397,7 +401,9 @@ html[data-workbench-theme='light'] .mf-starter--active {
 html[data-workbench-theme='light'] .mf-starter--active:hover {
   background: rgba(0, 113, 227, 0.12);
   border-color: #0071e3;
-  box-shadow: 0 0 0 1px rgba(0, 113, 227, 0.15), 0 4px 16px rgba(0, 0, 0, 0.08);
+  box-shadow:
+    0 0 0 1px rgba(0, 113, 227, 0.15),
+    0 4px 16px rgba(0, 0, 0, 0.08);
 }
 
 html[data-workbench-theme='light'] .mf-starter__title {
@@ -441,7 +447,9 @@ html[data-workbench-theme='light'] .mf-input-bar {
 
 html[data-workbench-theme='light'] .mf-input-bar:focus-within {
   border-color: rgba(0, 113, 227, 0.4);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06), 0 0 0 2px rgba(0, 113, 227, 0.1);
+  box-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.06),
+    0 0 0 2px rgba(0, 113, 227, 0.1);
 }
 
 html[data-workbench-theme='light'] .mf-input-bar__field {

@@ -6,11 +6,7 @@ import { getWorkflowEmployeeModIds } from '@/constants/workflowEmployeeMods'
 import { isOfficeAuxPack1Pkg, isOfficeEmployeePkg } from '@/constants/officeEmployeePack'
 
 /** 空壳发行（里程碑 Q）：对话 + NeuroBus + 办公 pack，无 ERP/审批等行业 Mod */
-export const MINIMAL_HOST_MOD_IDS = [
-  'xcagi-planner-bridge',
-  'xcagi-neuro-bus-bridge',
-  'xcagi-office-employee-pack-bridge',
-] as const
+export const MINIMAL_HOST_MOD_IDS = ['xcagi-planner-bridge', 'xcagi-neuro-bus-bridge', 'xcagi-office-employee-pack-bridge'] as const
 
 /** 完整通用行业包（里程碑 I） */
 export const GENERIC_HOST_MOD_IDS = [
@@ -31,7 +27,9 @@ export const CLIENT_PRIMARY_ERP_MOD_ID = 'attendance-industry'
 export type HostEdition = 'minimal' | 'generic' | 'full'
 
 export function readBuildEdition(): HostEdition {
-  const raw = String(import.meta.env.VITE_XCAGI_EDITION || '').trim().toLowerCase()
+  const raw = String(import.meta.env.VITE_XCAGI_EDITION || '')
+    .trim()
+    .toLowerCase()
   if (raw === 'minimal') return 'minimal'
   if (raw === 'generic') return 'generic'
   return 'full'
@@ -57,10 +55,7 @@ export function hasInstalledSelectableExtensionMod(installedModIds: Iterable<str
  * 客户 ERP / 考勤侧栏：隐藏与宿主重复的 bridge Mod 入口。
  * 除「已装主 ERP」外，当前选中行业扩展包或「扩展 + 无通用 ERP 门面」亦视为该场景。
  */
-export function isClientErpSidebarContext(
-  installedModIds: Iterable<string>,
-  activeModId?: string | null,
-): boolean {
+export function isClientErpSidebarContext(installedModIds: Iterable<string>, activeModId?: string | null): boolean {
   const ids = installedSet(Array.from(installedModIds))
   if (hasInstalledClientPrimaryErpMod(ids)) return true
   if (shouldRespectClientFullErp(ids)) return true
@@ -74,11 +69,7 @@ export function isClientErpSidebarContext(
 }
 
 /** Planner bridge 侧栏项与宿主「智能对话 / 智能生态 / 智脑」重复，客户 ERP 场景不展示 */
-export const REDUNDANT_PLANNER_BRIDGE_MENU_IDS = new Set([
-  'mod-planner-chat',
-  'mod-planner-ai-ecosystem',
-  'mod-planner-brain',
-])
+export const REDUNDANT_PLANNER_BRIDGE_MENU_IDS = new Set(['mod-planner-chat', 'mod-planner-ai-ecosystem', 'mod-planner-brain'])
 
 /**
  * 已装客户主 ERP（太阳鸟等）时，宿主 bridge 的 Mod 侧栏入口与 core/trailing 重复，一律不展示。
@@ -127,7 +118,9 @@ function isSandboxSidebarMode(): boolean {
 }
 
 function isPlatformShellSidebarMode(): boolean {
-  const sku = String(import.meta.env.VITE_XCAGI_PRODUCT_SKU || '').trim().toLowerCase()
+  const sku = String(import.meta.env.VITE_XCAGI_PRODUCT_SKU || '')
+    .trim()
+    .toLowerCase()
   const edition = readBuildEdition()
   if (sku === 'enterprise' && edition === 'full') return false
   if (typeof window !== 'undefined') {
@@ -148,10 +141,14 @@ function isPlatformShellSidebarMode(): boolean {
       /* ignore */
     }
   }
-  const env = String(import.meta.env.VITE_XCAGI_PLATFORM_SHELL || '').trim().toLowerCase()
+  const env = String(import.meta.env.VITE_XCAGI_PLATFORM_SHELL || '')
+    .trim()
+    .toLowerCase()
   if (env === '1' || env === 'true' || env === 'yes') return true
   if (edition === 'minimal' || edition === 'generic') return true
-  const def = String(import.meta.env.VITE_XCAGI_DEFAULT_PLATFORM_SHELL || '').trim().toLowerCase()
+  const def = String(import.meta.env.VITE_XCAGI_DEFAULT_PLATFORM_SHELL || '')
+    .trim()
+    .toLowerCase()
   return def === '1' || def === 'true' || def === 'yes'
 }
 
@@ -162,11 +159,7 @@ export function shouldSuppressRedundantModMenuInFullHostSidebar(menuId: string):
   return FULL_HOST_SIDEBAR_SUPPRESSED_MOD_MENU_IDS.has(id)
 }
 
-export function shouldSuppressClientErpModMenuId(
-  menuId: string,
-  installedModIds: Iterable<string>,
-  activeModId?: string | null,
-): boolean {
+export function shouldSuppressClientErpModMenuId(menuId: string, installedModIds: Iterable<string>, activeModId?: string | null): boolean {
   if (shouldSuppressRedundantModMenuInFullHostSidebar(menuId)) return true
   if (!isClientErpSidebarContext(installedModIds, activeModId)) return false
   const id = normalizeModSidebarNavKey(String(menuId || '').trim())
@@ -224,8 +217,8 @@ export const MOD_MENU_ID_TO_HOST_NAV_KEY: Readonly<Record<string, string>> = {
 
 /** 归一化侧栏 key（兼容历史错误的 mod-mod- 双前缀） */
 export function normalizeModSidebarNavKey(key: string): string {
-  const k = String(key || '').trim();
-  return k.replace(/^mod-mod-/, 'mod-');
+  const k = String(key || '').trim()
+  return k.replace(/^mod-mod-/, 'mod-')
 }
 
 /** 账号定制 Mod（侧栏菜单应在企业端展示） */
@@ -262,7 +255,9 @@ export function shouldHideAttendanceModSidebarMenu(menuKey: string): boolean {
   const key = normalizeModSidebarNavKey(String(menuKey || '').trim())
   if (ACCOUNT_CUSTOM_SIDEBAR_MENU_KEYS.has(key)) return false
   if (!ATTENDANCE_MOD_SIDEBAR_MENU_KEYS.has(key)) return false
-  const sku = String(import.meta.env.VITE_XCAGI_PRODUCT_SKU || '').trim().toLowerCase()
+  const sku = String(import.meta.env.VITE_XCAGI_PRODUCT_SKU || '')
+    .trim()
+    .toLowerCase()
   if (sku === 'enterprise') return true
   if (String(import.meta.env.VITE_XCMAX_ADMIN_CONSOLE || '').trim() === '1') return true
   return false
@@ -271,18 +266,15 @@ export function shouldHideAttendanceModSidebarMenu(menuKey: string): boolean {
 /**
  * 员工包 / bridge 复用宿主路由的 menu.path（如 /wechat-contacts、/chat），非 /mod/{id}/ 前缀。
  */
-export function isHostMountedModMenuPath(
-  path: string,
-  proEntryPath?: string | null,
-): boolean {
-  const p = String(path || '').trim();
-  if (!p) return false;
-  const pro = String(proEntryPath || '').trim();
-  if (pro && (p === pro || p.startsWith(`${pro}/`))) return true;
+export function isHostMountedModMenuPath(path: string, proEntryPath?: string | null): boolean {
+  const p = String(path || '').trim()
+  if (!p) return false
+  const pro = String(proEntryPath || '').trim()
+  if (pro && (p === pro || p.startsWith(`${pro}/`))) return true
   for (const hostKey of Object.values(MOD_MENU_ID_TO_HOST_NAV_KEY)) {
-    if (p === `/${hostKey}` || p.startsWith(`/${hostKey}/`)) return true;
+    if (p === `/${hostKey}` || p.startsWith(`/${hostKey}/`)) return true
   }
-  return false;
+  return false
 }
 
 export function shouldRespectClientFullErp(ids: Set<string>): boolean {
@@ -338,9 +330,7 @@ export function isWorkflowEmployeeModId(modId: string): boolean {
 }
 
 /** 商店「AI 员工」上架的触点/授权类扩展（非 workflow-employee 前缀） */
-export const AUX_EMPLOYEE_PACK_MOD_IDS = [
-  'lan-gate-ai-employee',
-] as const
+export const AUX_EMPLOYEE_PACK_MOD_IDS = ['lan-gate-ai-employee'] as const
 
 export function isAuxEmployeePackModId(modId: string): boolean {
   const id = String(modId || '').trim()
@@ -394,7 +384,9 @@ export function catalogStoreCollection(row: {
 }): string {
   const sc = String(row?.store_collection || '').trim()
   if (sc) return sc
-  const art = String(row?.artifact || '').trim().toLowerCase()
+  const art = String(row?.artifact || '')
+    .trim()
+    .toLowerCase()
   if (art === 'employee_pack') {
     if (row?.config?.host_foundation_pack) return STORE_COLLECTION_HOST_FOUNDATION
     return STORE_COLLECTION_WORKFLOW_EMPLOYEE

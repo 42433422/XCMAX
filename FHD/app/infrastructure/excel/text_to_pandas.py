@@ -49,8 +49,6 @@ _ALLOWED_AST_NODES = (
     ast.Slice,
     ast.ExtSlice,
     ast.Starred,
-    ast.Num,
-    ast.Str,
     ast.FormattedValue,
     ast.JoinedStr,
 )

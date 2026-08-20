@@ -9,6 +9,8 @@ import types
 from pathlib import Path
 from typing import Any
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -52,7 +54,11 @@ def _candidate_fhd_roots() -> list[Path]:
         raw = (os.environ.get(key) or "").strip()
         if raw:
             add(Path(raw))
-    for key in ("XCMAX_MONOREPO_ROOT", "MODSTORE_GIT_REPO_ROOT", "MODSTORE_DAILY_XCMAX_ROOT"):
+    for key in (
+        "XCMAX_MONOREPO_ROOT",
+        "MODSTORE_GIT_REPO_ROOT",
+        "MODSTORE_DAILY_XCMAX_ROOT",
+    ):
         raw = (os.environ.get(key) or "").strip()
         if raw:
             add(Path(raw) / "FHD")
@@ -122,7 +128,7 @@ def evaluate_risk(
 
     try:
         decision = domain_evaluate_risk(action, context, action_id=action_id, source=source)
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         if exc.__class__.__name__ == "ProhibitedActionError" and getattr(exc, "action_id", None):
             try:
                 from modstore_server.autonomy_decision_audit import (
@@ -135,7 +141,7 @@ def evaluate_risk(
                     context=context,
                     source=source,
                 )
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 # Preserve the hard policy exception; an audit outage must not
                 # accidentally turn a prohibited action into an allowed one.
                 logger.exception("failed to mirror prohibited autonomy decision")

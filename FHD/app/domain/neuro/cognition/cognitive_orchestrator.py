@@ -64,6 +64,8 @@ class CognitiveOrchestrator:
             intervention = self._pick_intervention(raw, out)
             observed = {}
             slots = out.get("slots") if isinstance(out.get("slots"), dict) else {}
+            if not isinstance(slots, dict):
+                slots = {}
             if "缺货" in raw or slots.get("shortage"):
                 observed["inventory.shortage"] = True
             cf_block = self._cf.probe(intervention, observed=observed).to_dict()

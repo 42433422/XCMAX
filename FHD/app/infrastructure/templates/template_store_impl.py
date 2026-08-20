@@ -11,8 +11,13 @@ from sqlalchemy import text
 
 from app.application.ports.template_store import TemplateStorePort
 from app.db.session import get_db
+from app.infrastructure.templates.template_discovery import (
+    business_scope,
+    discovery_directories,
+    infer_template_type_from_filename,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.utils.path_utils import get_app_data_dir
+from app.utils.path_io.path_utils import get_app_data_dir
 
 logger = logging.getLogger(__name__)
 
@@ -57,49 +62,18 @@ class FileSystemTemplateStore(TemplateStorePort):
         return out
 
     def _infer_template_type_from_filename(self, filename: str) -> str:
-        name = (filename or "").lower()
-        if "考勤" in name:
-            return "考勤记录"
-        if "客户" in name:
-            return "客户"
-        if "原材料" in name or "材料" in name:
-            return "原材料"
-        if "产品" in name:
-            return "产品"
-        if "出货记录" in name:
-            return "出货记录"
-        if "发货" in name or "出货单" in name:
-            return "发货单"
-        return "Excel"
+        return infer_template_type_from_filename(filename)
 
     @staticmethod
     def _business_scope(template_type: str | None) -> str | None:
-        if (template_type or "").strip() in {"考勤记录", "出货记录"}:
-            return "shipmentRecords"
-        return None
+        return business_scope(template_type)
 
     def _discovery_directories(self) -> list[str]:
-        """代码内置目录 + 当前租户私有目录（不再扫共享 runtime，避免跨租户串数据）。"""
-        from app.infrastructure.tenant_scope import current_tenant_id
-
-        runtime_root = get_app_data_dir()
-        candidates = [
+        return discovery_directories(
             self._base_dir,
             self._template_dir,
-            os.path.join(self._base_dir, "resources", "templates"),
-        ]
-        tid = current_tenant_id()
-        if tid is not None:
-            candidates.append(os.path.join(runtime_root, "tenants", str(tid), "templates"))
-            candidates.append(os.path.join(runtime_root, "tenants", str(tid), "document_templates"))
-        deduped: list[str] = []
-        seen: set[str] = set()
-        for folder in candidates:
-            key = os.path.normcase(os.path.abspath(folder))
-            if key not in seen:
-                seen.add(key)
-                deduped.append(folder)
-        return deduped
+            runtime_root=get_app_data_dir(),
+        )
 
     def _discover_excel_templates(self) -> list[dict]:
         """从内置/租户私有目录自动发现 Excel 模板。"""

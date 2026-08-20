@@ -2,16 +2,17 @@
 
 ## 元信息
 
-| 字段 | 值 |
-|------|----|
-| skill_id | `skill-payment-reconcile` |
+| 字段     | 值                           |
+| -------- | ---------------------------- |
+| skill_id | `skill-payment-reconcile`    |
 | 所属员工 | `payment-billing-reconciler` |
-| 业务域 | 支付账单对账与报告 |
-| 版本 | 1.1.0 |
+| 业务域   | 支付账单对账与报告           |
+| 版本     | 1.1.0                        |
 
 ## 1. 静态阶段
 
 **执行逻辑**：
+
 ```
 读取本地订单数据 → 读取 LLM 计费记录 → 对比支付宝账单数据（API 或 CSV）
 → 计算差异 → 生成对账报告（Markdown）
@@ -19,6 +20,7 @@
 ```
 
 **输出 schema**：
+
 ```json
 {
   "status": "ok | warning | error",
@@ -49,18 +51,18 @@
 }
 ```
 
-- `platform_snapshot` / `local_book_total_cny`：与后端 `POST /api/admin/reconciliation/preview` 对齐（只读，不落库）。  
-- `history_vs_previous_period`：相对最近一份 **已确认** 快照的 GMV 变动；无历史时为 `null`。  
-- `llm_narrative`：动态阶段填入差异归因摘要（假设须标注）；静态流水可为 `null`。  
+- `platform_snapshot` / `local_book_total_cny`：与后端 `POST /api/admin/reconciliation/preview` 对齐（只读，不落库）。
+- `history_vs_previous_period`：相对最近一份 **已确认** 快照的 GMV 变动；无历史时为 `null`。
+- `llm_narrative`：动态阶段填入差异归因摘要（假设须标注）；静态流水可为 `null`。
 - `doc_archive_hint`：定稿后交由 `doc-knowledge-curator` 归档，`report_md` 勿含密钥。
 
 **约束**：不写 DB，不打印密钥明文，所有金额操作只读。
 
 ## 2. 动态触发条件
 
-| 触发类型 | 规则 |
-|----------|------|
-| 执行报错 | 账单 API 不可达；数据格式解析失败 |
+| 触发类型   | 规则                                         |
+| ---------- | -------------------------------------------- |
+| 执行报错   | 账单 API 不可达；数据格式解析失败            |
 | 结果不达标 | `diff_count > 0` 或 `diff_amount_cny > 0.01` |
 
 ## 3. 动态阶段

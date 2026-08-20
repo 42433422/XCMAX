@@ -4,12 +4,12 @@
 
 ## 仓库边界（2026-06-08 起 · XCMAX 根仓 SSOT）
 
-| 路径 | 角色 | 远端 |
-|---|---|---|
-| **XCMAX/**（仓根） | FHD + MODstore + specs 单仓起源 | [`github.com/42433422/XCMAX`](https://github.com/42433422/XCMAX)（`main`） |
-| **MODstore_deploy/**（本目录） | 姊妹栈 MODstore 部署源码 | 同上（子路径 `成都修茈科技有限公司/MODstore_deploy/`） |
-| **FHD/**（`../../FHD`） | XCAGI 主产品 | 同上（子路径 `FHD/`） |
-| 服务器 `/root/modstore-git` | 生产部署镜像 | 与根仓 `main` 对齐 |
+| 路径                           | 角色                            | 远端                                                                       |
+| ------------------------------ | ------------------------------- | -------------------------------------------------------------------------- |
+| **XCMAX/**（仓根）             | FHD + MODstore + specs 单仓起源 | [`github.com/42433422/XCMAX`](https://github.com/42433422/XCMAX)（`main`） |
+| **MODstore_deploy/**（本目录） | 姊妹栈 MODstore 部署源码        | 同上（子路径 `成都修茈科技有限公司/MODstore_deploy/`）                     |
+| **FHD/**（`../../FHD`）        | XCAGI 主产品                    | 同上（子路径 `FHD/`）                                                      |
+| 服务器 `/root/modstore-git`    | 生产部署镜像                    | 与根仓 `main` 对齐                                                         |
 
 > 历史独立仓 **xcagi-modstore** / **ai-excel-helper** 已退役；旧 `.git` 备份：`~/XCMAX-archives/nested-git-backup-20260608/`。CI 见 [`docs/CI_SSOT.md`](../../../docs/CI_SSOT.md)。
 
@@ -32,12 +32,12 @@ main                 ← 受保护，仅经 PR 合入；CI 绿 + 审批
 
 ## 环境变量（日更 git 行为开关）
 
-| 变量 | 默认 | 作用 |
-|---|---|---|
-| `MODSTORE_REPO_ROOT` | 本仓路径 | 日更 git 操作根（务必指向本 git 仓） |
-| `MODSTORE_DAILY_BRANCH` | `auto/daily` | 长期日更集成分支名 |
-| `MODSTORE_DEPLOY_PUSH_BRANCH_PREFIX` | `auto/daily-` | 每日汇总分支前缀 |
-| `MODSTORE_AUTO_PR_BASE_BRANCH` | 自动探测 | PR base 分支 |
-| `MODSTORE_CR_GIT_AUTO_PR` | `1` | CR 是否逐个开 PR（建议 `0`，走每日汇总 PR） |
-| `MODSTORE_CR_BRANCH_PREFIX` | `cr` | CR 短分支前缀 |
-| `MODSTORE_BRANCH_CLEANUP_KEEP_DAYS` | `7` | 自动清理保留天数 |
+| 变量                                 | 默认          | 作用                                        |
+| ------------------------------------ | ------------- | ------------------------------------------- |
+| `MODSTORE_REPO_ROOT`                 | 本仓路径      | 日更 git 操作根（务必指向本 git 仓）        |
+| `MODSTORE_DAILY_BRANCH`              | `auto/daily`  | 长期日更集成分支名                          |
+| `MODSTORE_DEPLOY_PUSH_BRANCH_PREFIX` | `auto/daily-` | 每日汇总分支前缀                            |
+| `MODSTORE_AUTO_PR_BASE_BRANCH`       | 自动探测      | PR base 分支                                |
+| `MODSTORE_CR_GIT_AUTO_PR`            | `1`           | CR 是否逐个开 PR（建议 `0`，走每日汇总 PR） |
+| `MODSTORE_CR_BRANCH_PREFIX`          | `cr`          | CR 短分支前缀                               |
+| `MODSTORE_BRANCH_CLEANUP_KEEP_DAYS`  | `7`           | 自动清理保留天数                            |

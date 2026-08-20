@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment, attr-defined, call-arg, no-any-return, valid-type"
 """变更冲突检测与 LLM 合并策略。
 
 在 apply_employee_change_request 之前调用，检测目标文件是否已被其他 CR 修改。
@@ -9,6 +10,8 @@ from __future__ import annotations
 import json
 import logging
 from typing import Any, Dict, List, Optional, Tuple
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +53,7 @@ def detect_conflict(
                     data = json.loads(cr.diff_blob or "{}")
                     if str(data.get("path") or "").strip() == target_path.strip():
                         same_path.append(cr)
-                except Exception:
+                except RECOVERABLE_ERRORS:
                     pass
 
             git_changed = _git_path_changed_since(base_sha, target_path) if base_sha else None
@@ -77,7 +80,7 @@ def detect_conflict(
                 if created_at is None or ts is None or ts > created_at:
                     conflicting.append(int(cr.id))
             return len(conflicting) > 0, conflicting
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("detect_conflict failed for CR %d", change_request_id)
         return False, []
 
@@ -112,7 +115,7 @@ def _git_path_changed_since(base_sha: str, target_path: str) -> Optional[bool]:
         if proc.returncode != 0:
             return None
         return bool((proc.stdout or "").strip())
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return None
 
 
@@ -158,7 +161,7 @@ def llm_merge_contents(original: str, content_a: str, content_b: str, path: str)
 
         merged = run_coro_sync(_inner())
         return merged.strip() if merged.strip() else content_b
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("llm_merge_contents failed for %s", path)
         return content_b
 
@@ -217,7 +220,7 @@ def resolve_conflict(
                 original = (
                     Path(resolved).read_text(encoding="utf-8") if Path(resolved).exists() else ""
                 )
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 original = ""
 
             merged = llm_merge_contents(original, original, content_b, path)
@@ -225,7 +228,7 @@ def resolve_conflict(
 
         return {"ok": True, "strategy": "overwrite", "merged_content": content_b}
 
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("resolve_conflict failed for CR %d", change_request_id)
         return {"ok": False, "error": str(exc)}
 

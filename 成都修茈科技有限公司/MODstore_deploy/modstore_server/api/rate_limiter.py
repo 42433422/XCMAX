@@ -9,6 +9,8 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 logger = logging.getLogger(__name__)
 
 _EXEMPT_PATHS = {"/health", "/metrics", "/docs", "/openapi.json", "/redoc"}
@@ -134,7 +136,7 @@ class RateLimiterMiddleware:
                 bucket = _RedisBucket(redis_url)
                 bucket._client.ping()
                 return bucket
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 logger.warning("Redis unavailable, falling back to in-memory rate limiter")
         return _InMemoryBucket()
 

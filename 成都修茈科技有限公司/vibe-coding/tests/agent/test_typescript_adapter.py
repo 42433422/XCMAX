@@ -169,9 +169,7 @@ def test_tolerant_partial_parse(adapter: TypeScriptLanguageAdapter) -> None:
 
 def test_repo_index_picks_up_typescript(tmp_path: Path) -> None:
     (tmp_path / "src").mkdir()
-    (tmp_path / "src" / "a.ts").write_text(
-        "export function foo() { return 1; }\n", encoding="utf-8"
-    )
+    (tmp_path / "src" / "a.ts").write_text("export function foo() { return 1; }\n", encoding="utf-8")
     (tmp_path / "src" / "b.tsx").write_text(
         "import {foo} from './a';\nexport const Component = () => foo();\n",
         encoding="utf-8",

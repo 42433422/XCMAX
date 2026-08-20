@@ -167,8 +167,99 @@ def test_outbound_safety_blocks_loopback_and_schemes() -> None:
         assert_url_outbound_safe("https://user:password@example.com/path")
 
 
+def test_outbound_target_pins_validated_ip_and_preserves_tls_authority() -> None:
+    from modstore_server.openapi_connector_runtime import pin_url_outbound_safe
+
+    with patch.object(
+        socket,
+        "getaddrinfo",
+        return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 8443))],
+    ):
+        target = pin_url_outbound_safe("https://docs.example:8443/openapi.json?version=1")
+
+    assert target.request_url == "https://8.8.8.8:8443/openapi.json?version=1"
+    assert target.host_header == "docs.example:8443"
+    assert target.server_hostname == "docs.example"
+
+
+def test_outbound_target_rejects_mixed_public_and_private_dns_answers() -> None:
+    from modstore_server.openapi_connector_runtime import (
+        OutboundBlocked,
+        pin_url_outbound_safe,
+    )
+
+    answers = [
+        (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 443)),
+        (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 443)),
+    ]
+    with patch.object(socket, "getaddrinfo", return_value=answers):
+        with pytest.raises(OutboundBlocked, match="禁用 IP"):
+            pin_url_outbound_safe("https://docs.example/openapi.json")
+
+
+def test_spec_url_fetch_connects_to_pinned_ip_without_second_dns_lookup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from modstore_server import openapi_connector_support as support
+
+    captured: Dict[str, Any] = {}
+
+    class _Response:
+        encoding = "utf-8"
+
+        def close(self) -> None:
+            return None
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def iter_bytes(self) -> Iterator[bytes]:
+            yield b'{"openapi":"3.0.3"}'
+
+    class _Client:
+        def __init__(self, **kwargs: Any) -> None:
+            captured["client_kwargs"] = kwargs
+
+        def __enter__(self) -> "_Client":
+            return self
+
+        def __exit__(self, *_args: Any) -> None:
+            return None
+
+        def build_request(self, method: str, url: str, **kwargs: Any) -> object:
+            captured.update(method=method, url=url, request_kwargs=kwargs)
+            return object()
+
+        def send(self, _request: object, *, stream: bool) -> _Response:
+            captured["stream"] = stream
+            return _Response()
+
+    monkeypatch.setattr(support.httpx, "Client", _Client)
+    with patch.object(
+        socket,
+        "getaddrinfo",
+        return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.4.4", 443))],
+    ):
+        result = support.spec_text_from_request(
+            support.ImportConnectorBody(
+                name="docs", spec_url="https://docs.example/openapi.json?version=1"
+            )
+        )
+
+    assert result == '{"openapi":"3.0.3"}'
+    assert captured["url"] == "https://8.8.4.4/openapi.json?version=1"
+    assert captured["request_kwargs"]["headers"] == {"Host": "docs.example"}
+    assert captured["request_kwargs"]["extensions"] == {"sni_hostname": "docs.example"}
+    assert captured["stream"] is True
+
+
 def test_split_params_validates_required() -> None:
-    from modstore_server.openapi_connector_runtime import _apply_path_params, _split_params
+    from modstore_server.openapi_connector_runtime import (
+        OutboundBlocked,
+        _apply_path_params,
+        _resolve_full_url,
+        _split_params,
+    )
 
     spec_params = [
         {"name": "project", "in": "path", "required": True},
@@ -188,6 +279,16 @@ def test_split_params_validates_required() -> None:
 
     new_path = _apply_path_params("/projects/{project}/issues", dict(path_params), spec_params)
     assert new_path == "/projects/ABC/issues"
+
+    hostile_path = _apply_path_params(
+        "/{project}", {"project": "https://attacker.example/steal"}, spec_params
+    )
+    assert hostile_path == "/https%3A%2F%2Fattacker.example%2Fsteal"
+    assert _resolve_full_url("https://api.example/v1", hostile_path) == (
+        "https://api.example/v1/https%3A%2F%2Fattacker.example%2Fsteal"
+    )
+    with pytest.raises(OutboundBlocked, match="不得覆盖"):
+        _resolve_full_url("https://api.example/v1", "https://attacker.example/steal")
 
 
 def test_redact_headers_masks_sensitive_values() -> None:
@@ -235,7 +336,6 @@ def authed(client):
 
     from modstore_server.api import deps as api_deps
     from modstore_server.app import _require_user, app
-    from modstore_server.infrastructure import db as db_infra
     from modstore_server.models import User, get_session_factory
 
     sf = get_session_factory()
@@ -283,8 +383,12 @@ def _patched_outbound(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(
         runtime,
-        "assert_url_outbound_safe",
-        lambda url: None,
+        "pin_url_outbound_safe",
+        lambda url: runtime.PinnedOutboundTarget(
+            request_url=url,
+            host_header="example-api.invalid",
+            server_hostname="example-api.invalid",
+        ),
     )
 
 
@@ -308,10 +412,13 @@ def _stub_httpx_client(monkeypatch: pytest.MonkeyPatch, status: int, body: Dict[
         def __exit__(self, *_args: Any) -> None:
             return None
 
-        def request(self, method: str, url: str, **kwargs: Any) -> _Resp:
+        def build_request(self, method: str, url: str, **kwargs: Any) -> Dict[str, Any]:
             captured["method"] = method
             captured["url"] = url
             captured["kwargs"] = kwargs
+            return {"method": method, "url": url, "kwargs": kwargs}
+
+        def send(self, _request: Dict[str, Any]) -> _Resp:
             return _Resp()
 
     from modstore_server import openapi_connector_runtime as runtime

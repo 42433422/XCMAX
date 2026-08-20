@@ -284,7 +284,7 @@ def synthesize_to_data_uri(
             return payload
     except RECOVERABLE_ERRORS as exc:
         logger.info("MiMo TTS unavailable, falling back to Edge: %s", exc)
-    except Exception as exc:  # noqa: BLE001
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
         logger.warning("MiMo TTS failed, falling back to Edge: %s", exc)
 
     # 2) Edge neural

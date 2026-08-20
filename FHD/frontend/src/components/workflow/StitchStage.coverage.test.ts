@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import { nextTick, ref } from 'vue'
+import { ref } from 'vue'
 import StitchStage from './StitchStage.vue'
 import type { WorkflowEmployeeDeskRow } from '@/composables/useWorkflowEmployeeDesks'
 import type { YuangongStitchHotspot } from '@/constants/yuangongStitchHotspots'
@@ -365,7 +365,7 @@ describe('StitchStage.vue - 覆盖率补齐', () => {
 
     it('渲染多排工位（超过 8 人触发多排）', () => {
       const desks: WorkflowEmployeeDeskRow[] = Array.from({ length: 10 }, (_, i) =>
-        makeDeskRow({ empId: `emp-${i}`, shortName: `员工${i}`, panelTitle: `工作流·员工${i}` })
+        makeDeskRow({ empId: `emp-${i}`, shortName: `员工${i}`, panelTitle: `工作流·员工${i}` }),
       )
       const wrapper = mount(StitchStage, {
         props: {
@@ -520,9 +520,7 @@ describe('StitchStage.vue - 覆盖率补齐', () => {
     })
 
     it('右组工位存在时渲染过道', () => {
-      const desks: WorkflowEmployeeDeskRow[] = Array.from({ length: 6 }, (_, i) =>
-        makeDeskRow({ empId: `emp-${i}`, shortName: `E${i}` })
-      )
+      const desks: WorkflowEmployeeDeskRow[] = Array.from({ length: 6 }, (_, i) => makeDeskRow({ empId: `emp-${i}`, shortName: `E${i}` }))
       const wrapper = mount(StitchStage, {
         props: {
           mode: 'composed',
@@ -538,9 +536,7 @@ describe('StitchStage.vue - 覆盖率补齐', () => {
     })
 
     it('只有左组（≤4人）时无过道', () => {
-      const desks: WorkflowEmployeeDeskRow[] = Array.from({ length: 3 }, (_, i) =>
-        makeDeskRow({ empId: `emp-${i}`, shortName: `E${i}` })
-      )
+      const desks: WorkflowEmployeeDeskRow[] = Array.from({ length: 3 }, (_, i) => makeDeskRow({ empId: `emp-${i}`, shortName: `E${i}` }))
       const wrapper = mount(StitchStage, {
         props: {
           mode: 'composed',
@@ -877,7 +873,12 @@ describe('StitchStage.vue - 覆盖率补齐', () => {
         global: { stubs: { YuangongStation: true } },
       })
       const viewport = wrapper.find('.stitch-stage-viewport')
-      await viewport.trigger('pointerdown', { button: 1, pointerId: 1, clientX: 100, clientY: 100 })
+      await viewport.trigger('pointerdown', {
+        button: 1,
+        pointerId: 1,
+        clientX: 100,
+        clientY: 100,
+      })
       await flushPromises()
       // 平移启动后应有 grabbing 样式
       expect(viewport.classes()).toContain('stitch-stage-viewport--grabbing')
@@ -895,7 +896,12 @@ describe('StitchStage.vue - 覆盖率补齐', () => {
         global: { stubs: { YuangongStation: true } },
       })
       const viewport = wrapper.find('.stitch-stage-viewport')
-      await viewport.trigger('pointerdown', { button: 0, pointerId: 1, clientX: 100, clientY: 100 })
+      await viewport.trigger('pointerdown', {
+        button: 0,
+        pointerId: 1,
+        clientX: 100,
+        clientY: 100,
+      })
       expect(viewport.classes()).not.toContain('stitch-stage-viewport--grabbing')
     })
 
@@ -911,8 +917,18 @@ describe('StitchStage.vue - 覆盖率补齐', () => {
         global: { stubs: { YuangongStation: true } },
       })
       const viewport = wrapper.find('.stitch-stage-viewport')
-      await viewport.trigger('pointerdown', { button: 1, pointerId: 1, clientX: 100, clientY: 100 })
-      await viewport.trigger('pointermove', { button: 1, pointerId: 1, clientX: 120, clientY: 110 })
+      await viewport.trigger('pointerdown', {
+        button: 1,
+        pointerId: 1,
+        clientX: 100,
+        clientY: 100,
+      })
+      await viewport.trigger('pointermove', {
+        button: 1,
+        pointerId: 1,
+        clientX: 120,
+        clientY: 110,
+      })
       await flushPromises()
       // 平移后仍在 grabbing 状态
       expect(viewport.classes()).toContain('stitch-stage-viewport--grabbing')
@@ -930,7 +946,12 @@ describe('StitchStage.vue - 覆盖率补齐', () => {
         global: { stubs: { YuangongStation: true } },
       })
       const viewport = wrapper.find('.stitch-stage-viewport')
-      await viewport.trigger('pointerdown', { button: 1, pointerId: 1, clientX: 100, clientY: 100 })
+      await viewport.trigger('pointerdown', {
+        button: 1,
+        pointerId: 1,
+        clientX: 100,
+        clientY: 100,
+      })
       await viewport.trigger('pointerup', { button: 1, pointerId: 1, clientX: 100, clientY: 100 })
       await flushPromises()
       expect(viewport.classes()).not.toContain('stitch-stage-viewport--grabbing')
@@ -948,8 +969,18 @@ describe('StitchStage.vue - 覆盖率补齐', () => {
         global: { stubs: { YuangongStation: true } },
       })
       const viewport = wrapper.find('.stitch-stage-viewport')
-      await viewport.trigger('pointerdown', { button: 1, pointerId: 1, clientX: 100, clientY: 100 })
-      await viewport.trigger('pointercancel', { button: 1, pointerId: 1, clientX: 100, clientY: 100 })
+      await viewport.trigger('pointerdown', {
+        button: 1,
+        pointerId: 1,
+        clientX: 100,
+        clientY: 100,
+      })
+      await viewport.trigger('pointercancel', {
+        button: 1,
+        pointerId: 1,
+        clientX: 100,
+        clientY: 100,
+      })
       await flushPromises()
       expect(viewport.classes()).not.toContain('stitch-stage-viewport--grabbing')
     })
@@ -967,7 +998,12 @@ describe('StitchStage.vue - 覆盖率补齐', () => {
       })
       const viewport = wrapper.find('.stitch-stage-viewport')
       // 未先 pointerdown，直接 pointermove 不应崩溃
-      await viewport.trigger('pointermove', { button: 1, pointerId: 1, clientX: 100, clientY: 100 })
+      await viewport.trigger('pointermove', {
+        button: 1,
+        pointerId: 1,
+        clientX: 100,
+        clientY: 100,
+      })
       expect(viewport.classes()).not.toContain('stitch-stage-viewport--grabbing')
     })
 

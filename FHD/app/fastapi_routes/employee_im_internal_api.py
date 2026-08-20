@@ -11,11 +11,13 @@ from __future__ import annotations
 
 import logging
 import secrets
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Body, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +67,7 @@ def _resolve_boss_uid(svc, payload: EmployeeImSendRequest) -> int:
         return bid
     bid = svc.get_employee_owner(payload.employee_id)
     if bid > 0:
-        return bid
+        return cast("int", bid)
     raw = (os_get_env("FHD_BOSS_USER_ID") or "").strip()
     try:
         bid = int(raw) if raw else 0
@@ -95,11 +97,9 @@ async def employee_im_send(request: Request, payload: EmployeeImSendRequest = Bo
         from app.db import SessionLocal
 
         db = SessionLocal()
-    except ImportError as exc:
-        logger.exception("employee_im_send 缺少依赖：%s", exc)
-        return JSONResponse(
-            {"success": False, "message": f"server misconfigured: {exc}"}, status_code=500
-        )
+    except ImportError:
+        logger.exception("employee_im_send 缺少依赖")
+        return JSONResponse({"success": False, "message": "server misconfigured"}, status_code=500)
 
     try:
         svc = ImApplicationService(db)
@@ -147,7 +147,7 @@ async def employee_im_send(request: Request, payload: EmployeeImSendRequest = Bo
                     continue
                 await im_ws_hub.send_to_user(member_id, legacy_payload)
                 await im_ws_hub.send_to_user(member_id, sync_payload)
-        except Exception:  # noqa: BLE001 - websocket fanout is best-effort after DB write
+        except RECOVERABLE_ERRORS:  # noqa: BLE001 - websocket fanout is best-effort after DB write
             logger.debug("employee_im_send ws push skipped", exc_info=True)
 
         # 离线推送:老板 App 未在线(WS 未连)时,把员工主动汇报写进自建推送离线队列
@@ -163,32 +163,23 @@ async def employee_im_send(request: Request, payload: EmployeeImSendRequest = Bo
             await _notify_offline_im_members(
                 off_member_ids, off_sender_uid, payload.body, title=emp_title
             )
-        except Exception:  # noqa: BLE001 - offline push is best-effort after DB write
+        except RECOVERABLE_ERRORS:  # noqa: BLE001 - offline push is best-effort after DB write
             logger.debug("employee_im_send offline push skipped", exc_info=True)
 
-        logger.info(
-            "employee_im_send ok: boss=%s employee=%s hook=%s conv=%s",
-            boss_uid,
-            payload.employee_id,
-            payload.hook,
-            result.get("conversation_id"),
-        )
+        logger.info("employee_im_send ok: conv=%s", result.get("conversation_id"))
         return JSONResponse({"success": True, "data": result, "boss_user_id": boss_uid})
-    except ValueError as exc:
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
-    except Exception as exc:
-        logger.exception(
-            "employee_im_send failed: boss=%s employee=%s hook=%s err=%s",
-            payload.boss_user_id,
-            payload.employee_id,
-            payload.hook,
-            exc,
+    except ValueError:
+        return JSONResponse({"success": False, "message": "员工消息参数无效"}, status_code=400)
+    except RECOVERABLE_ERRORS:
+        logger.exception("employee_im_send failed")
+        return JSONResponse(
+            {"success": False, "message": "员工消息推送服务暂时不可用，请稍后重试"},
+            status_code=500,
         )
-        return JSONResponse({"success": False, "message": f"推送失败：{exc}"}, status_code=500)
     finally:
         try:
             db.close()
-        except Exception:  # noqa: BLE001 - closing a request-scoped DB session must not mask response
+        except RECOVERABLE_ERRORS:  # noqa: BLE001 - closing a request-scoped DB session must not mask response
             pass
 
 
@@ -210,9 +201,9 @@ def employee_im_set_owner(request: Request, payload: EmployeeImSetOwnerRequest =
         from app.db import SessionLocal
 
         db = SessionLocal()
-    except ImportError as exc:
+    except ImportError:
         return JSONResponse(
-            {"success": False, "message": f"server misconfigured: {exc}"}, status_code=500
+            {"success": False, "message": "员工消息服务配置不完整"}, status_code=500
         )
     try:
         svc = ImApplicationService(db)
@@ -226,13 +217,16 @@ def employee_im_set_owner(request: Request, payload: EmployeeImSetOwnerRequest =
                 status_code=404,
             )
         return JSONResponse({"success": True})
-    except ValueError as exc:
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
-    except Exception as exc:
-        logger.exception("employee_im_set_owner failed: %s", exc)
-        return JSONResponse({"success": False, "message": f"设置失败：{exc}"}, status_code=500)
+    except ValueError:
+        return JSONResponse({"success": False, "message": "员工归属参数无效"}, status_code=400)
+    except RECOVERABLE_ERRORS:
+        logger.exception("employee_im_set_owner failed")
+        return JSONResponse(
+            {"success": False, "message": "员工归属设置服务暂时不可用，请稍后重试"},
+            status_code=500,
+        )
     finally:
         try:
             db.close()
-        except Exception:  # noqa: BLE001 - closing a request-scoped DB session must not mask response
+        except RECOVERABLE_ERRORS:  # noqa: BLE001 - closing a request-scoped DB session must not mask response
             pass

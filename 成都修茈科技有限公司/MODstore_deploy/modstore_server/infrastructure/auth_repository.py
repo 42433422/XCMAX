@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
@@ -24,7 +24,7 @@ class SqlPatRepository:
         if not row:
             return False
         if row.revoked_at is None:
-            row.revoked_at = datetime.now(timezone.utc)
+            row.revoked_at = datetime.now(UTC)
         return True
 
 

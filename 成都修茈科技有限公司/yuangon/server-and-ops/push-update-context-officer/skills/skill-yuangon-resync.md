@@ -2,18 +2,19 @@
 
 ## 元信息
 
-| 字段 | 值 |
-|------|----|
-| skill_id | `skill-yuangon-resync` |
-| 所属员工 | `push-update-context-officer` |
-| 业务域 | yuangon → MODstore（.xcemp + onboard + trigger bindings）自动回流 |
-| 版本 | 1.0.0 |
+| 字段     | 值                                                                |
+| -------- | ----------------------------------------------------------------- |
+| skill_id | `skill-yuangon-resync`                                            |
+| 所属员工 | `push-update-context-officer`                                     |
+| 业务域   | yuangon → MODstore（.xcemp + onboard + trigger bindings）自动回流 |
+| 版本     | 1.0.0                                                             |
 
 ## 1. 静态阶段
 
 **触发条件**：监听到 `yuangon/**/employee.yaml`、`yuangon/**/skills/*.md` 或 `yuangon/**/prompts/*.md` 改动。
 
 **执行图**：
+
 ```
 1. git diff 取出本次改动的 employee_id 列表
 2. 对每个 id：
@@ -25,12 +26,13 @@
 ```
 
 **输出 schema**：
+
 ```json
 {
   "status": "ok | partial | error",
   "onboarded": ["..."],
   "skipped": ["..."],
-  "failed": [{"id": "...", "reason": "..."}],
+  "failed": [{ "id": "...", "reason": "..." }],
   "trigger_bindings_synced": true,
   "routing_table_rebuilt": true
 }
@@ -52,8 +54,8 @@
 
 ## 5. 评估指标
 
-| 指标 | 目标 |
-|------|------|
+| 指标                                  | 目标  |
+| ------------------------------------- | ----- |
 | yuangon 改动 → onboard 完成的中位延迟 | < 60s |
-| onboard 失败的人工介入率 | ≤ 10% |
-| trigger bindings 漂移导致的告警数 | 0 |
+| onboard 失败的人工介入率              | ≤ 10% |
+| trigger bindings 漂移导致的告警数     | 0     |

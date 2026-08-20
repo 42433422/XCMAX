@@ -18,6 +18,10 @@ test.describe('direct chat composer mobile width', () => {
         await route.fulfill({ json: { items: [], unread_count: 0 } })
         return
       }
+      if (pathname === '/api/wallet/balance') {
+        await route.fulfill({ json: { balance: 0 } })
+        return
+      }
       if (pathname.startsWith('/api/')) {
         await route.fulfill({ json: {} })
         return

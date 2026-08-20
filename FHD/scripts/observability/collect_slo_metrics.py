@@ -9,7 +9,7 @@ import os
 import sys
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -25,8 +25,7 @@ QUERIES = {
         '(rate(api_request_duration_seconds_bucket{{endpoint="/api/auth/login"}}[{w}]))) * 1000'
     ),
     "SLO-API-03": (
-        'sum(rate(api_requests_total{{status=~"5.."}}[{w}])) '
-        "/ sum(rate(api_requests_total[{w}]))"
+        'sum(rate(api_requests_total{{status=~"5.."}}[{w}])) / sum(rate(api_requests_total[{w}]))'
     ),
     "SLO-AI-01": (
         "histogram_quantile(0.95, sum by (le) "
@@ -97,12 +96,14 @@ def meets_target(slo_id: str, value: float | None) -> bool | None:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--prom-url", default=os.environ.get("PROMETHEUS_URL", "http://127.0.0.1:9091"))
+    parser.add_argument(
+        "--prom-url", default=os.environ.get("PROMETHEUS_URL", "http://127.0.0.1:9091")
+    )
     parser.add_argument("--window", default="30d", choices=["7d", "30d", "15m", "1h"])
     parser.add_argument("--out", default="")
     args = parser.parse_args()
 
-    day = datetime.now(timezone.utc).strftime("%Y%m%d")
+    day = datetime.now(UTC).strftime("%Y%m%d")
     out_path = Path(args.out) if args.out else METRICS_DIR / f"slo-measured-{day}.json"
 
     readings: dict[str, dict] = {}
@@ -118,7 +119,7 @@ def main() -> int:
         }
 
     payload = {
-        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "prometheus_url": args.prom_url,
         "window": args.window,
         "readings": readings,
@@ -136,7 +137,9 @@ def main() -> int:
                 slo["baseline_measured"] = readings[sid]["reading"]
                 slo["baseline_window"] = args.window
         snap["last_prometheus_collect"] = payload["generated_at"]
-        snapshot_path.write_text(json.dumps(snap, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        snapshot_path.write_text(
+            json.dumps(snap, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
 
     return 0
 

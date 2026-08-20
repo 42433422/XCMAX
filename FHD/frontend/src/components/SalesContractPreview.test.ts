@@ -109,7 +109,7 @@ describe('SalesContractPreview', () => {
     const wrapper = mountComponent()
     const headers = wrapper.findAll('th')
     expect(headers.length).toBe(7)
-    expect(headers.map(h => h.text())).toEqual(['编号', '品名', '规格', '单位', '数量', '单价', '金额'])
+    expect(headers.map((h) => h.text())).toEqual(['编号', '品名', '规格', '单位', '数量', '单价', '金额'])
   })
 
   it('renders product rows', () => {

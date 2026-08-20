@@ -48,7 +48,7 @@ onMounted(async () => {
   try {
     const res = await api.paymentPlans()
     plans.value = res.plans || []
-    
+
     // 如果API没有返回套餐数据，使用默认套餐
     if (plans.value.length === 0) {
       plans.value = [
@@ -57,40 +57,22 @@ onMounted(async () => {
           name: '体验版',
           price: 10,
           description: '适合个人用户体验AI员工',
-          features: [
-            '基础AI员工能力',
-            '每月100次AI任务执行',
-            '基本工作流程',
-            '邮件支持'
-          ]
+          features: ['基础AI员工能力', '每月100次AI任务执行', '基本工作流程', '邮件支持'],
         },
         {
           id: 2,
           name: '普通版',
           price: 99,
           description: '适合小型企业日常运营',
-          features: [
-            '高级AI员工能力',
-            '每月1000次AI任务执行',
-            '复杂工作流程',
-            '优先邮件支持',
-            '数据导出功能'
-          ]
+          features: ['高级AI员工能力', '每月1000次AI任务执行', '复杂工作流程', '优先邮件支持', '数据导出功能'],
         },
         {
           id: 3,
           name: '高级版',
           price: 199,
           description: '适合中型企业智能转型',
-          features: [
-            '专业AI员工能力',
-            '无限AI任务执行',
-            '高级工作流程',
-            '24小时在线支持',
-            '高级数据导出',
-            'API接口访问'
-          ]
-        }
+          features: ['专业AI员工能力', '无限AI任务执行', '高级工作流程', '24小时在线支持', '高级数据导出', 'API接口访问'],
+        },
       ]
     }
   } catch (e) {
@@ -102,40 +84,22 @@ onMounted(async () => {
         name: '体验版',
         price: 10,
         description: '适合个人用户体验AI员工',
-        features: [
-          '基础AI员工能力',
-          '每月100次AI任务执行',
-          '基本工作流程',
-          '邮件支持'
-        ]
+        features: ['基础AI员工能力', '每月100次AI任务执行', '基本工作流程', '邮件支持'],
       },
       {
         id: 2,
         name: '普通版',
         price: 99,
         description: '适合小型企业日常运营',
-        features: [
-          '高级AI员工能力',
-          '每月1000次AI任务执行',
-          '复杂工作流程',
-          '优先邮件支持',
-          '数据导出功能'
-        ]
+        features: ['高级AI员工能力', '每月1000次AI任务执行', '复杂工作流程', '优先邮件支持', '数据导出功能'],
       },
       {
         id: 3,
         name: '高级版',
         price: 199,
         description: '适合中型企业智能转型',
-        features: [
-          '专业AI员工能力',
-          '无限AI任务执行',
-          '高级工作流程',
-          '24小时在线支持',
-          '高级数据导出',
-          'API接口访问'
-        ]
-      }
+        features: ['专业AI员工能力', '无限AI任务执行', '高级工作流程', '24小时在线支持', '高级数据导出', 'API接口访问'],
+      },
     ]
   } finally {
     loading.value = false
@@ -181,7 +145,11 @@ async function handleBuy(plan) {
   min-height: 100vh;
   background: #0a0a0a;
   color: #ffffff;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family:
+    'Inter',
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
   padding: 80px 24px;
 }
 

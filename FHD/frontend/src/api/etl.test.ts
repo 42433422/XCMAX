@@ -112,11 +112,7 @@ describe('etlApi', () => {
   })
 
   it('sends the explicitly selected shipment layout region to the save API', async () => {
-    await etlApi.saveShipmentTemplate(
-      'run/1',
-      '金汉武家私-发货单版式',
-      '侯雪梅!R29C1:10',
-    )
+    await etlApi.saveShipmentTemplate('run/1', '金汉武家私-发货单版式', '侯雪梅!R29C1:10')
 
     expect(apiFetchMock).toHaveBeenCalledWith(
       '/api/etl/runs/run%2F1/shipment-template',

@@ -120,10 +120,7 @@ export function applyDraftSafe(draft: Partial<ContactIntakeState>): boolean {
 }
 
 /** 联系页：公司与系统类型 → 一键预填（供移动端 AI 管家调用） */
-export async function runContactAiAssistFill(
-  company: string,
-  system: string,
-): Promise<AiAssistFillResult> {
+export async function runContactAiAssistFill(company: string, system: string): Promise<AiAssistFillResult> {
   const bridge = await waitForBridge(8000)
   if (!bridge) {
     scrollToIntake()

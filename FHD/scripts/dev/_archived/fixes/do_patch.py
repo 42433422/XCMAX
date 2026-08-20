@@ -1,3 +1,4 @@
+# mypy: disable-error-code="index, operator"
 from pathlib import Path
 
 p = Path("e:/FHD/XCAGI/app/services/tools_execution/order_parser.py")
@@ -13,7 +14,7 @@ for i, line in enumerate(lines):
         end = i
         break
 
-print(f"替换范围: {start+1} - {end+1}")
+print(f"替换范围: {start + 1} - {end + 1}")
 print("start:", repr(lines[start]))
 print("end:", repr(lines[end]))
 

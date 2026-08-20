@@ -2,6 +2,7 @@ import { computed, ref, type Ref } from 'vue'
 import type { ChatMessage } from './useChatMessages'
 import chatApi from '../api/chat'
 import type { ChatPlannerPayload, ChatRequest } from '@/types/chat'
+import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
 export type ChatRequestScope = { sessionId: string; messages: ChatMessage[] }
 export interface UseChatRequestDeps {
   messages: Ref<ChatMessage[]>
@@ -39,22 +40,19 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     body: Record<string, unknown>
   } {
     const user_id = resolveChatUserId(scope)
-    const compactHistory = (scope?.messages || messages.value || [])
-      .slice(-6)
-      .map((m) => ({
-        role: m.role,
-        content: String(m.content || '')
-          .replace(/<br\s*\/?>/gi, '\n')
-          .replace(/<[^>]*>/g, '')
-          .slice(0, 500)
-      }))
+    const compactHistory = (scope?.messages || messages.value || []).slice(-6).map((m) => ({
+      role: m.role,
+      content: plainTextFromChatHtml(m.content).slice(0, 500),
+    }))
     const scopedSessionId = String(scope?.sessionId || sessionId?.value || '').trim()
     const contextPayload: Record<string, unknown> = {
       recent_messages: compactHistory,
       conversation_id: scopedSessionId,
       session_id: scopedSessionId,
       task_id: scopedSessionId,
-      task_title: String(message || '').trim().slice(0, 80),
+      task_title: String(message || '')
+        .trim()
+        .slice(0, 80),
     }
     // industry 由后端根据 session account_kind 自动派生（单一真相源），前端不传
     const contextParts: string[] = []
@@ -80,8 +78,8 @@ export function useChatRequest(deps: UseChatRequestDeps) {
         mode: 'basic',
         user_id,
         context: contextPayload,
-        ...resolveChatDbTokensForPayload()
-      }
+        ...resolveChatDbTokensForPayload(),
+      },
     }
   }
 
@@ -102,24 +100,25 @@ export function useChatRequest(deps: UseChatRequestDeps) {
   }
 
   /** 与单条请求相同的 context / user_id，用于 unified_chat/batch */
-  async function requestChatByModeBatch(batchTexts: string[], fetchOptions: RequestInit = {}, scope?: ChatRequestScope): Promise<ChatPlannerPayload> {
+  async function requestChatByModeBatch(
+    batchTexts: string[],
+    fetchOptions: RequestInit = {},
+    scope?: ChatRequestScope,
+  ): Promise<ChatPlannerPayload> {
     const user_id = resolveChatUserId(scope)
-    const compactHistory = (scope?.messages || messages.value || [])
-      .slice(-6)
-      .map((m) => ({
-        role: m.role,
-        content: String(m.content || '')
-          .replace(/<br\s*\/?>/gi, '\n')
-          .replace(/<[^>]*>/g, '')
-          .slice(0, 500)
-      }))
+    const compactHistory = (scope?.messages || messages.value || []).slice(-6).map((m) => ({
+      role: m.role,
+      content: plainTextFromChatHtml(m.content).slice(0, 500),
+    }))
     const scopedSessionId = String(scope?.sessionId || sessionId?.value || '').trim()
     const contextPayload: Record<string, unknown> = {
       recent_messages: compactHistory,
       conversation_id: scopedSessionId,
       session_id: scopedSessionId,
       task_id: scopedSessionId,
-      task_title: String(batchTexts[0] || '').trim().slice(0, 80),
+      task_title: String(batchTexts[0] || '')
+        .trim()
+        .slice(0, 80),
     }
     const contextParts: string[] = []
     contextParts.push(`最近对话 ${compactHistory.length} 条`)
@@ -134,7 +133,7 @@ export function useChatRequest(deps: UseChatRequestDeps) {
       context: contextPayload,
       source: 'normal' as const,
       mode: 'basic' as const,
-      ...resolveChatDbTokensForPayload()
+      ...resolveChatDbTokensForPayload(),
     }
     return (await chatApi.sendUnifiedChatBatch(batchBody as ChatRequest & { messages: string[] }, reqOpts)) as unknown as ChatPlannerPayload
   }
@@ -149,7 +148,10 @@ export function useChatRequest(deps: UseChatRequestDeps) {
 
   function setLoadingProgress(step: string, targetSessionId?: string) {
     const key = progressKey(targetSessionId)
-    progressBySession.value = { ...progressBySession.value, [key]: String(step || '').trim() || '处理中...' }
+    progressBySession.value = {
+      ...progressBySession.value,
+      [key]: String(step || '').trim() || '处理中...',
+    }
   }
 
   function startWaitProgressTimer(targetSessionId?: string) {
@@ -157,14 +159,14 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     const startedAt = Date.now()
     const existing = waitProgressTickers.get(key)
     if (existing) window.clearInterval(existing)
-    waitProgressTickers.set(key, window.setInterval(() => {
-      const elapsedSec = Math.max(1, Math.floor((Date.now() - startedAt) / 1000))
-      const hint =
-        elapsedSec >= 8
-          ? ' 若持续无响应，请确认后端已启动，且 VITE_API_BASE_URL（如有）与浏览器能访问的地址一致。'
-          : ''
-      setLoadingProgress(`已发送请求，正在等待服务端响应（${elapsedSec}s）...${hint}`, key)
-    }, 1000))
+    waitProgressTickers.set(
+      key,
+      window.setInterval(() => {
+        const elapsedSec = Math.max(1, Math.floor((Date.now() - startedAt) / 1000))
+        const hint = elapsedSec >= 8 ? ' 若持续无响应，请确认后端已启动，且 VITE_API_BASE_URL（如有）与浏览器能访问的地址一致。' : ''
+        setLoadingProgress(`已发送请求，正在等待服务端响应（${elapsedSec}s）...${hint}`, key)
+      }, 1000),
+    )
   }
 
   function stopLoadingProgress(targetSessionId?: string) {
@@ -190,16 +192,17 @@ export function useChatRequest(deps: UseChatRequestDeps) {
       }, timeoutMs)
     })
     try {
-      return await Promise.race([
-        requestChatByMode(message, { signal: controller.signal }, plannerOpts, scope),
-        timeoutPromise
-      ])
+      return await Promise.race([requestChatByMode(message, { signal: controller.signal }, plannerOpts, scope), timeoutPromise])
     } finally {
       if (timeoutId != null) window.clearTimeout(timeoutId)
     }
   }
 
-  async function requestChatByModeBatchWithTimeout(batchTexts: string[], timeoutMs: number = 90_000, scope?: ChatRequestScope): Promise<ChatPlannerPayload> {
+  async function requestChatByModeBatchWithTimeout(
+    batchTexts: string[],
+    timeoutMs: number = 90_000,
+    scope?: ChatRequestScope,
+  ): Promise<ChatPlannerPayload> {
     const controller = new AbortController()
     let timeoutId: number | null = null
     const timeoutPromise = new Promise<never>((_, reject) => {
@@ -209,10 +212,7 @@ export function useChatRequest(deps: UseChatRequestDeps) {
       }, timeoutMs)
     })
     try {
-      return await Promise.race([
-        requestChatByModeBatch(batchTexts, { signal: controller.signal }, scope),
-        timeoutPromise
-      ])
+      return await Promise.race([requestChatByModeBatch(batchTexts, { signal: controller.signal }, scope), timeoutPromise])
     } finally {
       if (timeoutId != null) window.clearTimeout(timeoutId)
     }
@@ -224,11 +224,7 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     return isComplexTask ? 180_000 : 90_000
   }
 
-  function enqueueChatBatchMessage(
-    message: string,
-    debounceMs: number,
-    onFlush: (messages: string[]) => void,
-  ): void {
+  function enqueueChatBatchMessage(message: string, debounceMs: number, onFlush: (messages: string[]) => void): void {
     chatBatchQueue.push(message)
     if (chatBatchTimer != null) {
       window.clearTimeout(chatBatchTimer)

@@ -18,29 +18,22 @@ export async function fetchDbTokensStatus(apiBase = ""): Promise<DbTokensStatus>
 }
 
 export function readStoredDbTokens(): { read: string; write: string } {
-  if (typeof localStorage === "undefined") return { read: "", write: "" };
-  return {
-    read: (localStorage.getItem(LS_DB_READ_TOKEN) || "").trim(),
-    write: (localStorage.getItem(LS_DB_WRITE_TOKEN) || "").trim(),
-  };
+  return { read: "", write: "" };
 }
 
 export function saveStoredDbTokens(read: string, write: string): void {
   if (typeof localStorage === "undefined") return;
-  const rt = read.trim();
-  const wt = write.trim();
-  if (rt) localStorage.setItem(LS_DB_READ_TOKEN, rt);
-  else localStorage.removeItem(LS_DB_READ_TOKEN);
-  if (wt) localStorage.setItem(LS_DB_WRITE_TOKEN, wt);
-  else localStorage.removeItem(LS_DB_WRITE_TOKEN);
+  void read;
+  void write;
+  localStorage.removeItem(LS_DB_READ_TOKEN);
+  localStorage.removeItem(LS_DB_WRITE_TOKEN);
 }
 
 /** 产品页解锁用：只更新一级令牌，不改动二级。 */
 export function saveStoredReadToken(read: string): void {
   if (typeof localStorage === "undefined") return;
-  const rt = read.trim();
-  if (rt) localStorage.setItem(LS_DB_READ_TOKEN, rt);
-  else localStorage.removeItem(LS_DB_READ_TOKEN);
+  void read;
+  localStorage.removeItem(LS_DB_READ_TOKEN);
 }
 
 const _listProbeUrl = (apiBase: string) =>

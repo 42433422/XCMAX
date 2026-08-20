@@ -6,7 +6,7 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 from app.mod_sdk.erp_domain_compat import ERP_DOMAIN_BRIDGE_MOD_ID
 from app.mod_sdk.host_profile import (
@@ -79,7 +79,7 @@ def normalize_product_sku(raw: str | None) -> ProductSku | None:
         return None
     key = raw.strip().lower()
     if key in ("personal", "enterprise"):
-        return key
+        return cast("ProductSku", key)
     return None
 
 

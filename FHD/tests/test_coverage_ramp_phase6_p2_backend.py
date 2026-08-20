@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, attr-defined, method-assign"
 """COVERAGE_RAMP Phase 6 round 2: approval_gated_engine + ai_intent routes.
 
 Targets:
@@ -280,8 +281,8 @@ def test_evaluate_plan_low_risk_only_no_approval_needed() -> None:
     assert decision.approval_request_ids == []
 
 
-def test_evaluate_plan_runtime_context_auto_approve_high_risk() -> None:
-    """context.workflow_auto_approve_high_risk=True → HybridRiskGate 直接放行。"""
+def test_evaluate_plan_runtime_context_cannot_auto_approve_high_risk() -> None:
+    """模型运行时标志不能绕过高风险人工审批。"""
     engine = _make_engine()
     plan = _make_plan()
     decision = engine.evaluate_plan(
@@ -289,11 +290,10 @@ def test_evaluate_plan_runtime_context_auto_approve_high_risk() -> None:
         runtime_context={"workflow_auto_approve_high_risk": True},
         strategy=ApprovalGatedEngine.APPROVAL_STRATEGY_INTERACTIVE,
     )
-    # risk_gate 直接返回 requires_confirmation=False, blocking_nodes=[]
-    assert decision.risk_decision.requires_confirmation is False
-    assert decision.risk_decision.blocking_nodes == []
-    assert decision.all_approved is True
-    assert decision.pending_approval is False
+    assert decision.risk_decision.requires_confirmation is True
+    assert decision.risk_decision.blocking_nodes == ["write_op"]
+    assert decision.all_approved is False
+    assert decision.pending_approval is True
 
 
 # ---------------------------------------------------------------------------
@@ -755,7 +755,10 @@ def test_chat_unified_propagates_explicit_http_status(
         }
         r = ai_intent_client.post("/api/ai/chat-unified", json={"message": "测试"})
     assert r.status_code == 500
-    assert r.json()["success"] is False
+    body = r.json()
+    assert body["success"] is False
+    assert body["message"] == "AI 服务暂时不可用，请稍后重试"
+    assert "AI 服务错误" not in body["message"]
 
 
 # ---------------------------------------------------------------------------

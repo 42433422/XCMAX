@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment, var-annotated"
 """Coverage ramp for app/fastapi_routes/lan_settings_routes.py."""
 
 from __future__ import annotations

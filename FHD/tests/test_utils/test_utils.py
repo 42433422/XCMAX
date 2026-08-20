@@ -17,7 +17,7 @@ from app.utils.excel.excel_utils import (
     merged_cell_value,
     normalize_unit_name,
 )
-from app.utils.path_utils import (
+from app.utils.path_io.path_utils import (
     ensure_dir,
     get_app_data_dir,
     get_base_dir,
@@ -169,8 +169,8 @@ class TestExcelUtils:
 class TestPathUtils:
     """路径工具函数测试"""
 
-    @patch("app.utils.path_utils.sys")
-    @patch("app.utils.path_utils.os")
+    @patch("app.utils.path_io.path_utils.sys")
+    @patch("app.utils.path_io.path_utils.os")
     def test_get_base_dir_development(self, mock_os, mock_sys):
         """测试开发环境获取基础目录"""
         delattr(mock_sys, "_MEIPASS")
@@ -181,7 +181,7 @@ class TestPathUtils:
 
         assert result is not None
 
-    @patch("app.utils.path_utils.sys")
+    @patch("app.utils.path_io.path_utils.sys")
     def test_get_base_dir_production(self, mock_sys):
         """测试生产环境（打包后）获取基础目录"""
         mock_sys._MEIPASS = "/path/to/bundle"
@@ -190,7 +190,7 @@ class TestPathUtils:
 
         assert result == "/path/to/bundle"
 
-    @patch("app.utils.path_utils.os")
+    @patch("app.utils.path_io.path_utils.os")
     def test_ensure_dir(self, mock_os):
         """测试确保目录存在"""
         mock_os.makedirs = Mock()

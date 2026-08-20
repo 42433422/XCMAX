@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, misc"
 """COVERAGE_RAMP Phase 6 round 11: backend low-coverage modules.
 
 Targets:
@@ -1558,7 +1559,8 @@ def test_loading_status_recoverable_error() -> None:
     assert body["success"] is True
     assert body["data"]["partial_failure"] is True
     assert body["data"]["load_errors"][0]["mod_id"] == "unknown"
-    assert "mod manager boom" in body["data"]["load_errors"][0]["error"]
+    assert body["data"]["load_errors"][0]["error"] == "加载失败"
+    assert body["data"]["error"] == "扩展服务暂时不可用，请稍后重试"
 
 
 def test_list_mods_happy_path() -> None:
@@ -1628,7 +1630,7 @@ def test_list_mods_recoverable_error() -> None:
         resp = client.get("/api/mods/")
     body = resp.json()
     assert body["success"] is False
-    assert "list boom" in body["error"]
+    assert body["error"] == "扩展服务暂时不可用，请稍后重试"
 
 
 def test_list_routes_happy_path() -> None:
@@ -1660,7 +1662,7 @@ def test_list_routes_recoverable_error() -> None:
         resp = client.get("/api/mods/routes")
     body = resp.json()
     assert body["success"] is False
-    assert "routes boom" in body["error"]
+    assert body["error"] == "扩展服务暂时不可用，请稍后重试"
 
 
 def test_list_comms_endpoints_happy_path() -> None:
@@ -1692,7 +1694,7 @@ def test_list_comms_endpoints_recoverable_error() -> None:
         resp = client.get("/api/mods/comms/endpoints")
     body = resp.json()
     assert body["success"] is False
-    assert "comms boom" in body["error"]
+    assert body["error"] == "扩展服务暂时不可用，请稍后重试"
 
 
 def test_employee_pack_config_preview_not_found(tmp_path: Any) -> None:

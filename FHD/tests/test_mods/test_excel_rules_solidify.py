@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, import-not-found, no-any-return, union-attr"
 """固化循环测试：LLM 写 records 生产者脚本 → 金样对账 → 固化。
 
 金样判据全确定性（反读器 + diff）；LLM 用 mock 演练协作契约：

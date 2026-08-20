@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="arg-type"
 """
 生成 desktop/resources 下 NSIS 安装包位图与应用图标（icon.png / icon.ico）。
 在 macOS 上若存在 iconutil/sips，同时生成 icon.icns。
@@ -8,6 +9,7 @@
 
 依赖：Pillow（与仓库 requirements 一致）。从仓库根目录执行。
 """
+
 from __future__ import annotations
 
 import shutil
@@ -296,7 +298,9 @@ def main() -> None:
     if BRAND_SOURCE.is_file():
         print(f"[generate-desktop-resources] using brand source: {BRAND_SOURCE}")
     else:
-        print(f"[generate-desktop-resources] brand source not found: {BRAND_SOURCE}; using placeholder icon")
+        print(
+            f"[generate-desktop-resources] brand source not found: {BRAND_SOURCE}; using placeholder icon"
+        )
     write_installer_sidebar()
     write_installer_header()
     write_installer_hero()

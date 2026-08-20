@@ -95,12 +95,18 @@ def _base_tool_specs() -> dict[str, dict[str, Any]]:
 
 def _explicit_allowlist(config: dict[str, Any], manifest: dict[str, Any]) -> list[str] | None:
     actions = config.get("actions") if isinstance(config.get("actions"), dict) else {}
+    if not isinstance(actions, dict):
+        actions = {}
     agent = actions.get("agent") if isinstance(actions.get("agent"), dict) else {}
     v2 = (
         manifest.get("employee_config_v2")
         if isinstance(manifest.get("employee_config_v2"), dict)
         else {}
     )
+    if not isinstance(agent, dict):
+        agent = {}
+    if not isinstance(v2, dict):
+        v2 = {}
     for candidate in (
         config.get("tools"),
         actions.get("tools"),
@@ -118,6 +124,8 @@ def _explicit_allowlist(config: dict[str, Any], manifest: dict[str, Any]) -> lis
 def _capability_text(manifest: dict[str, Any], config: dict[str, Any]) -> str:
     parts: list[str] = []
     emp = manifest.get("employee") if isinstance(manifest.get("employee"), dict) else {}
+    if not isinstance(emp, dict):
+        emp = {}
     for cap in emp.get("capabilities") or []:
         if isinstance(cap, dict):
             parts.append(str(cap.get("label") or ""))
@@ -125,8 +133,14 @@ def _capability_text(manifest: dict[str, Any], config: dict[str, Any]) -> str:
         else:
             parts.append(str(cap))
     cog = config.get("cognition") if isinstance(config.get("cognition"), dict) else {}
+    if not isinstance(cog, dict):
+        cog = {}
     agent = cog.get("agent") if isinstance(cog.get("agent"), dict) else {}
+    if not isinstance(agent, dict):
+        agent = {}
     role = agent.get("role") if isinstance(agent.get("role"), dict) else {}
+    if not isinstance(role, dict):
+        role = {}
     for exp in role.get("expertise") or []:
         parts.append(str(exp))
     for skill in cog.get("skills") or []:
@@ -137,6 +151,8 @@ def _capability_text(manifest: dict[str, Any], config: dict[str, Any]) -> str:
             parts.append(str(skill))
     identity = config.get("identity") if isinstance(config.get("identity"), dict) else {}
     for key in ("domain", "area", "description", "name"):
+        if not isinstance(identity, dict):
+            identity = {}
         parts.append(str(identity.get(key) or ""))
     parts.append(str(manifest.get("description") or ""))
     return " ".join(p for p in parts if p).lower()
@@ -144,8 +160,14 @@ def _capability_text(manifest: dict[str, Any], config: dict[str, Any]) -> str:
 
 def is_read_only(manifest: dict[str, Any], config: dict[str, Any]) -> bool:
     actions = config.get("actions") if isinstance(config.get("actions"), dict) else {}
+    if not isinstance(actions, dict):
+        actions = {}
     agent = actions.get("agent") if isinstance(actions.get("agent"), dict) else {}
+    if not isinstance(agent, dict):
+        agent = {}
     ws = agent.get("workspace") if isinstance(agent.get("workspace"), dict) else {}
+    if not isinstance(ws, dict):
+        ws = {}
     if bool(ws.get("read_only")):
         return True
     v2 = (
@@ -153,7 +175,11 @@ def is_read_only(manifest: dict[str, Any], config: dict[str, Any]) -> bool:
         if isinstance(manifest.get("employee_config_v2"), dict)
         else {}
     )
+    if not isinstance(v2, dict):
+        v2 = {}
     wp = v2.get("workspace_policy") if isinstance(v2.get("workspace_policy"), dict) else {}
+    if not isinstance(wp, dict):
+        wp = {}
     return bool(wp.get("read_only"))
 
 
@@ -166,8 +192,8 @@ def resolve_employee_tools(
 
     allow = _explicit_allowlist(config, manifest)
     if allow is not None:
-        selected = [n for n in allow if n in base]
-        return [base[n] for n in selected] or None
+        allowlisted = [name for name in allow if name in base]
+        return [base[name] for name in allowlisted] or None
 
     text = _capability_text(manifest, config)
     read_only = is_read_only(manifest, config)

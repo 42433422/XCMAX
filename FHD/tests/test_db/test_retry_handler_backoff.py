@@ -32,7 +32,7 @@ class TestIsDatabaseLockedError:
         assert is_database_locked_error(err) is True
 
     def test_message_database_locked(self) -> None:
-        err = Exception("database locked for write")
+        err = RuntimeError("database locked for write")
         assert is_database_locked_error(err) is True
 
     def test_type_name_contains_operationalerror(self) -> None:
@@ -48,7 +48,7 @@ class TestIsDatabaseLockedError:
         assert is_database_locked_error(err) is True
 
     def test_str_with_locked_keyword(self) -> None:
-        err = Exception("table is locked")
+        err = RuntimeError("table is locked")
         assert is_database_locked_error(err) is True
 
 

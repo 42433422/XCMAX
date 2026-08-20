@@ -20,7 +20,9 @@ def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         allowed = path.endswith((".html", ".json", ".md", ".png", ".jpg", ".svg"))
         forbidden = any(token in path.lower() for token in ("nginx", "backend/", ".env"))
         if not allowed or forbidden or path.startswith("/") or ".." in path.split("/"):
-            issues.append({"code": "file_outside_content_scope", "path": f"content_change.files[{index}]"})
+            issues.append(
+                {"code": "file_outside_content_scope", "path": f"content_change.files[{index}]"}
+            )
         else:
             clean_files.append(path)
     if not clean_files:
@@ -29,7 +31,11 @@ def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         issues.append({"code": "missing_locales", "path": "content_change.locales"})
     if not validations:
         issues.append({"code": "missing_validations", "path": "content_change.validations"})
-    broken = [str(item.get("url") or "") for item in links if isinstance(item, dict) and item.get("status") not in {200, 204}]
+    broken = [
+        str(item.get("url") or "")
+        for item in links
+        if isinstance(item, dict) and item.get("status") not in {200, 204}
+    ]
     if broken:
         issues.append({"code": "broken_links", "path": "content_change.links"})
     return {
@@ -39,11 +45,24 @@ def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         "files": clean_files,
         "issues": issues,
         "ready_for_edit": not issues,
-        "evidence": ["input.content_change.files", "input.content_change.links", "input.content_change.locales", "input.content_change.validations"],
+        "evidence": [
+            "input.content_change.files",
+            "input.content_change.links",
+            "input.content_change.locales",
+            "input.content_change.validations",
+        ],
         "read_only": True,
         "side_effects": [],
     }
 
 
 def _failed(message: str, code: str) -> dict[str, Any]:
-    return {"ok": False, "status": "failed", "summary": message, "error_code": code, "evidence": [], "read_only": True, "side_effects": []}
+    return {
+        "ok": False,
+        "status": "failed",
+        "summary": message,
+        "error_code": code,
+        "evidence": [],
+        "read_only": True,
+        "side_effects": [],
+    }

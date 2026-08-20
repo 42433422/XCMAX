@@ -11,10 +11,7 @@ describe('tabForRunStatus', () => {
     expect(tabForRunStatus('preview_ready')).toBe('preview')
   })
 
-  it.each(['executing', 'completed', 'failed', 'interrupted'])(
-    'opens %s runs in history so the receipt stays visible',
-    (status) => {
-      expect(tabForRunStatus(status)).toBe('history')
-    },
-  )
+  it.each(['executing', 'completed', 'failed', 'interrupted'])('opens %s runs in history so the receipt stays visible', (status) => {
+    expect(tabForRunStatus(status)).toBe('history')
+  })
 })

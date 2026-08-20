@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 导出当前 FastAPI 路由集合（规范化路径）。
 

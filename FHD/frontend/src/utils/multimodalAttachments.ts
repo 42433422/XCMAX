@@ -46,7 +46,7 @@ function readAsDataURL(file: File): Promise<string> {
 }
 
 export async function filesToMultimodalRows(
-  files: FileList | File[]
+  files: FileList | File[],
 ): Promise<{ ok: true; rows: MultimodalAttachmentRow[] } | { ok: false; error: string }> {
   const arr = Array.from(files as FileList)
   if (!arr.length) return { ok: false, error: '未选择文件' }
@@ -56,13 +56,19 @@ export async function filesToMultimodalRows(
   const rows: MultimodalAttachmentRow[] = []
   for (const file of arr) {
     if (file.size > MAX_BYTES_PER_FILE) {
-      return { ok: false, error: `「${file.name}」超过 ${Math.round(MAX_BYTES_PER_FILE / (1024 * 1024))}MB 上限` }
+      return {
+        ok: false,
+        error: `「${file.name}」超过 ${Math.round(MAX_BYTES_PER_FILE / (1024 * 1024))}MB 上限`,
+      }
     }
     const mime = resolveMime(file)
     const ext = extOf(file.name)
     const allowedExt = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.pdf'])
     if (!allowedExt.has(ext)) {
-      return { ok: false, error: `不支持的扩展名: ${ext || '(无)'}（允许: ${[...allowedExt].join(', ')}）` }
+      return {
+        ok: false,
+        error: `不支持的扩展名: ${ext || '(无)'}（允许: ${[...allowedExt].join(', ')}）`,
+      }
     }
     if (mime !== 'application/pdf' && !mime.startsWith('image/')) {
       return { ok: false, error: `不支持的类型: ${mime}（${file.name}）` }

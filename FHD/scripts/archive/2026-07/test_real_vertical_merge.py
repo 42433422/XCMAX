@@ -1,11 +1,11 @@
-# -*- coding: utf-8 -*-
 """
 测试真实标签图片的垂直合并检测
 """
 
+import glob
+
 import cv2
 import numpy as np
-import glob
 
 # 读取真实标签图片
 files = glob.glob(r"e:\FHD\26-0300001A*.png")
@@ -83,14 +83,14 @@ def merge_lines(lines, threshold=50):
     return merged
 
 
-horizontal_lines = sorted(list(set(horizontal_lines)))
-vertical_lines = sorted(list(set(vertical_lines)))
+horizontal_lines = sorted(set(horizontal_lines))
+vertical_lines = sorted(set(vertical_lines))
 horizontal_lines = merge_very_close(horizontal_lines, threshold=5)
 vertical_lines = merge_very_close(vertical_lines, threshold=5)
 horizontal_lines = merge_lines(horizontal_lines, threshold=50)
 vertical_lines = merge_lines(vertical_lines, threshold=50)
 
-print(f"\n检测到的网格线：")
+print("\n检测到的网格线：")
 print(f"  水平线 Y：{horizontal_lines}")
 print(f"  垂直线 X：{vertical_lines}")
 
@@ -146,13 +146,13 @@ for i in range(rows):
 
         cells.append(cell)
 
-print(f"\n单元格边框检测详情：")
+print("\n单元格边框检测详情：")
 print(f"{'单元格':<10} {'右侧边框':<15} {'底部边框':<15} {'状态'}")
 print("-" * 60)
 
 for cell in cells:
-    right_info = f"{cell['right_border_ratio']*100:.1f}%"
-    bottom_info = f"{cell['bottom_border_ratio']*100:.1f}%"
+    right_info = f"{cell['right_border_ratio'] * 100:.1f}%"
+    bottom_info = f"{cell['bottom_border_ratio'] * 100:.1f}%"
 
     status = []
     if cell["should_merge_right"]:

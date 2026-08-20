@@ -9,23 +9,17 @@ describe('sanitizeMermaidSource', () => {
 
   it('quotes bracket labels with parentheses', () => {
     const src = 'flowchart LR\nA[Foo (Bar)] --> B[Done]'
-    expect(sanitizeMermaidSource(src)).toBe(
-      'flowchart LR\nA["Foo (Bar)"] --> B[Done]',
-    )
+    expect(sanitizeMermaidSource(src)).toBe('flowchart LR\nA["Foo (Bar)"] --> B[Done]')
   })
 
   it('quotes round-shape labels with colons', () => {
     const src = 'flowchart TB\nA(开始: register) --> B(结束)'
-    expect(sanitizeMermaidSource(src)).toBe(
-      'flowchart TB\nA("开始: register") --> B("结束")',
-    )
+    expect(sanitizeMermaidSource(src)).toBe('flowchart TB\nA("开始: register") --> B("结束")')
   })
 
   it('escapes inner quotes via #quot;', () => {
     const src = 'flowchart LR\nA[Hello "world"]'
-    expect(sanitizeMermaidSource(src)).toBe(
-      'flowchart LR\nA["Hello #quot;world#quot;"]',
-    )
+    expect(sanitizeMermaidSource(src)).toBe('flowchart LR\nA["Hello #quot;world#quot;"]')
   })
 
   it('keeps already-quoted labels untouched', () => {
@@ -34,11 +28,7 @@ describe('sanitizeMermaidSource', () => {
   })
 
   it('does not touch edge pipe labels or styles', () => {
-    const src = [
-      'flowchart LR',
-      'A -->|click: go| B',
-      'style A fill:#fff,stroke:#333',
-    ].join('\n')
+    const src = ['flowchart LR', 'A -->|click: go| B', 'style A fill:#fff,stroke:#333'].join('\n')
     expect(sanitizeMermaidSource(src)).toBe(src)
   })
 
@@ -49,16 +39,12 @@ describe('sanitizeMermaidSource', () => {
 
   it('quotes ASCII-id labels with CJK text', () => {
     const src = 'flowchart LR\nB[解析工具] --> C[保存 txt]'
-    expect(sanitizeMermaidSource(src)).toBe(
-      'flowchart LR\nB["解析工具"] --> C["保存 txt"]',
-    )
+    expect(sanitizeMermaidSource(src)).toBe('flowchart LR\nB["解析工具"] --> C["保存 txt"]')
   })
 
   it('quotes ASCII-id labels with semicolons', () => {
     const src = 'flowchart LR\nA[step; next] --> B[end]'
-    expect(sanitizeMermaidSource(src)).toBe(
-      'flowchart LR\nA["step; next"] --> B[end]',
-    )
+    expect(sanitizeMermaidSource(src)).toBe('flowchart LR\nA["step; next"] --> B[end]')
   })
 
   it('fixes endsubgraph typo and unquoted subgraph titles', () => {
@@ -84,8 +70,6 @@ describe('sanitizeMermaidSource', () => {
 
 describe('friendlyMermaidRenderError', () => {
   it('maps lexical errors to Chinese hint', () => {
-    expect(
-      friendlyMermaidRenderError(new Error('Lexical error on line 5. Unrecognized text.')),
-    ).toContain('流程图语法有误')
+    expect(friendlyMermaidRenderError(new Error('Lexical error on line 5. Unrecognized text.'))).toContain('流程图语法有误')
   })
 })

@@ -57,9 +57,7 @@ body:not(.pro-mode-active) .sidebar {
 }
 
 body:not(.pro-mode-active) .sidebar-header {
-  background:
-    radial-gradient(circle at 20% 0%, rgba(14, 116, 217, 0.1), transparent 42%),
-    rgba(255, 255, 255, 0.82);
+  background: radial-gradient(circle at 20% 0%, rgba(14, 116, 217, 0.1), transparent 42%), rgba(255, 255, 255, 0.82);
   border-bottom: 1px solid rgba(213, 222, 235, 0.78);
 }
 
@@ -497,7 +495,7 @@ textarea:focus,
  * 系统设置「样式选择」：整侧栏深色主题（header / menu / footer）
  * body[data-sidebar-theme] 由 sidebarTheme.ts 写入；未设置时保持上文 Office 普通版样式。
  */
-body[data-sidebar-theme="dark-navy"] {
+body[data-sidebar-theme='dark-navy'] {
   --sb-shell: #1a1f33;
   --sb-header: #151b2e;
   --sb-footer: #151b2e;
@@ -512,7 +510,7 @@ body[data-sidebar-theme="dark-navy"] {
   --sb-accent: #5b8ff9;
 }
 
-body[data-sidebar-theme="dark-slate"] {
+body[data-sidebar-theme='dark-slate'] {
   --sb-shell: #0f172a;
   --sb-header: #0b1120;
   --sb-footer: #0b1120;
@@ -527,7 +525,7 @@ body[data-sidebar-theme="dark-slate"] {
   --sb-accent: #38bdf8;
 }
 
-body[data-sidebar-theme="dark-indigo"] {
+body[data-sidebar-theme='dark-indigo'] {
   --sb-shell: #1e1b4b;
   --sb-header: #17143d;
   --sb-footer: #17143d;
@@ -542,7 +540,7 @@ body[data-sidebar-theme="dark-indigo"] {
   --sb-accent: #a78bfa;
 }
 
-body[data-sidebar-theme="dark-steel"] {
+body[data-sidebar-theme='dark-steel'] {
   --sb-shell: #2c2c2e;
   --sb-header: #232325;
   --sb-footer: #232325;
@@ -557,109 +555,109 @@ body[data-sidebar-theme="dark-steel"] {
   --sb-accent: #0a84ff;
 }
 
-body[data-sidebar-theme^="dark-"] .sidebar {
+body[data-sidebar-theme^='dark-'] .sidebar {
   background: var(--sb-shell);
   color: var(--sb-text);
   border-right: 1px solid var(--sb-border);
 }
 
-body[data-sidebar-theme^="dark-"] .sidebar-header {
+body[data-sidebar-theme^='dark-'] .sidebar-header {
   background-color: var(--sb-header);
   border-bottom: 1px solid var(--sb-border);
 }
 
-body[data-sidebar-theme^="dark-"] .sidebar-header h4,
-body[data-sidebar-theme^="dark-"] .sidebar-header small {
+body[data-sidebar-theme^='dark-'] .sidebar-header h4,
+body[data-sidebar-theme^='dark-'] .sidebar-header small {
   color: var(--sb-text);
 }
 
-body[data-sidebar-theme^="dark-"] .sidebar .sidebar-menu {
+body[data-sidebar-theme^='dark-'] .sidebar .sidebar-menu {
   background: linear-gradient(180deg, var(--sb-menu-top) 0%, var(--sb-menu-bot) 100%);
   border-top: 1px solid var(--sb-border);
   border-bottom: 1px solid var(--sb-border);
 }
 
-body[data-sidebar-theme^="dark-"] .sidebar .sidebar-menu .menu-item {
+body[data-sidebar-theme^='dark-'] .sidebar .sidebar-menu .menu-item {
   color: var(--sb-item);
 }
 
-body[data-sidebar-theme^="dark-"] .sidebar .sidebar-menu .menu-item:hover {
+body[data-sidebar-theme^='dark-'] .sidebar .sidebar-menu .menu-item:hover {
   background: var(--sb-item-hover-bg);
   color: #ffffff;
 }
 
-body[data-sidebar-theme^="dark-"] .sidebar .sidebar-menu .menu-item.active {
+body[data-sidebar-theme^='dark-'] .sidebar .sidebar-menu .menu-item.active {
   background: var(--sb-item-active-bg);
   color: #ffffff;
   border-left-color: var(--sb-accent);
 }
 
-body[data-sidebar-theme^="dark-"] .sidebar .sidebar-menu-bottom {
+body[data-sidebar-theme^='dark-'] .sidebar .sidebar-menu-bottom {
   background: linear-gradient(180deg, var(--sb-menu-top) 0%, var(--sb-menu-bot) 100%);
   border-top: none;
   padding: 4px 10px 6px;
 }
 
-body[data-sidebar-theme^="dark-"] .sidebar .sidebar-menu-bottom .menu-item {
+body[data-sidebar-theme^='dark-'] .sidebar .sidebar-menu-bottom .menu-item {
   color: var(--sb-item);
 }
 
-body[data-sidebar-theme^="dark-"] .sidebar .sidebar-menu-bottom .menu-item:hover {
+body[data-sidebar-theme^='dark-'] .sidebar .sidebar-menu-bottom .menu-item:hover {
   background: var(--sb-item-hover-bg);
   color: #ffffff;
 }
 
-body[data-sidebar-theme^="dark-"] .sidebar .sidebar-menu-bottom .menu-item.active {
+body[data-sidebar-theme^='dark-'] .sidebar .sidebar-menu-bottom .menu-item.active {
   background: var(--sb-item-active-bg);
   color: #ffffff;
   border-left-color: transparent;
   box-shadow: none;
 }
 
-body[data-sidebar-theme^="dark-"] .sidebar .sidebar-menu-bottom .menu-item.active::before {
+body[data-sidebar-theme^='dark-'] .sidebar .sidebar-menu-bottom .menu-item.active::before {
   display: none;
 }
 
-body[data-sidebar-theme^="dark-"] .sidebar-footer {
+body[data-sidebar-theme^='dark-'] .sidebar-footer {
   background: var(--sb-footer);
   border-top: 1px solid var(--sb-border);
 }
 
-body[data-sidebar-theme^="dark-"] .sidebar .status-indicator {
+body[data-sidebar-theme^='dark-'] .sidebar .status-indicator {
   color: var(--sb-text);
 }
 
-body[data-sidebar-theme^="dark-"] .mode-label {
+body[data-sidebar-theme^='dark-'] .mode-label {
   color: var(--sb-item);
 }
 
-body[data-sidebar-theme^="dark-"] .sidebar .current-mode-text {
+body[data-sidebar-theme^='dark-'] .sidebar .current-mode-text {
   color: var(--sb-muted);
   opacity: 1;
 }
 
 /* 深色侧栏 + 普通版：模式切换按钮与底栏一致，避免 Office 浅色块 */
-body[data-sidebar-theme^="dark-"]:not(.pro-mode-active) .sidebar .mode-switch {
+body[data-sidebar-theme^='dark-']:not(.pro-mode-active) .sidebar .mode-switch {
   background: var(--sb-item-hover-bg);
   border: 1px solid var(--sb-border);
   box-shadow: none;
 }
 
-body[data-sidebar-theme^="dark-"]:not(.pro-mode-active) .sidebar .mode-switch:hover {
+body[data-sidebar-theme^='dark-']:not(.pro-mode-active) .sidebar .mode-switch:hover {
   background: rgba(255, 255, 255, 0.12);
   border-color: rgba(255, 255, 255, 0.14);
 }
 
-body[data-sidebar-theme^="dark-"]:not(.pro-mode-active) .sidebar .mode-switch:focus-visible {
+body[data-sidebar-theme^='dark-']:not(.pro-mode-active) .sidebar .mode-switch:focus-visible {
   outline: 2px solid var(--sb-accent);
   outline-offset: 2px;
 }
 
-body[data-sidebar-theme^="dark-"]:not(.pro-mode-active) .sidebar .mode-label {
+body[data-sidebar-theme^='dark-']:not(.pro-mode-active) .sidebar .mode-label {
   color: var(--sb-text);
 }
 
-body[data-sidebar-theme^="dark-"] .sidebar-mod-chip {
+body[data-sidebar-theme^='dark-'] .sidebar-mod-chip {
   color: #ddd6fe;
   background: rgba(139, 92, 246, 0.22);
   border-color: rgba(167, 139, 250, 0.45);

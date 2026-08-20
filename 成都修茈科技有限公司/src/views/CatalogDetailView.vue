@@ -7,7 +7,8 @@
         <div>
           <h1>{{ item.name }}</h1>
           <p class="meta">
-            {{ item.pkg_id }} · v{{ item.version }} · {{ item.industry || '通用' }} · {{ item.artifact }}
+            {{ item.pkg_id }} · v{{ item.version }} · {{ item.industry || '通用' }} ·
+            {{ item.artifact }}
           </p>
           <p v-if="item.description" class="desc">{{ item.description }}</p>
         </div>
@@ -83,13 +84,51 @@ async function doDownload() {
 </script>
 
 <style scoped>
-.detail-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; }
-.detail-header h1 { font-size: 24px; color: #ffffff; margin-bottom: 8px; }
-.meta { font-size: 13px; color: rgba(255,255,255,0.3); margin-bottom: 8px; }
-.desc { font-size: 14px; color: rgba(255,255,255,0.5); max-width: 600px; }
-.detail-actions { display: flex; gap: 12px; align-items: center; flex-shrink: 0; }
-.price-tag { font-size: 20px; font-weight: 700; color: #ff6b6b; }
-.price-tag.free { color: #4ade80; }
-.owned-badge { font-size: 14px; color: #4ade80; background: rgba(74,222,128,0.1); padding: 6px 14px; border-radius: 12px; }
-.loading { text-align: center; padding: 40px; color: rgba(255,255,255,0.4); }
+.detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+}
+.detail-header h1 {
+  font-size: 24px;
+  color: #ffffff;
+  margin-bottom: 8px;
+}
+.meta {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.3);
+  margin-bottom: 8px;
+}
+.desc {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.5);
+  max-width: 600px;
+}
+.detail-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-shrink: 0;
+}
+.price-tag {
+  font-size: 20px;
+  font-weight: 700;
+  color: #ff6b6b;
+}
+.price-tag.free {
+  color: #4ade80;
+}
+.owned-badge {
+  font-size: 14px;
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.1);
+  padding: 6px 14px;
+  border-radius: 12px;
+}
+.loading {
+  text-align: center;
+  padding: 40px;
+  color: rgba(255, 255, 255, 0.4);
+}
 </style>

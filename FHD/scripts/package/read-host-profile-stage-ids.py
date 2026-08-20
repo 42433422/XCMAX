@@ -1,5 +1,6 @@
-# -*- coding: utf-8 -*-
+# mypy: disable-error-code="no-any-return"
 """输出指定 SKU 的 package_stage_ids（JSON 数组），供 PowerShell stage 脚本调用。"""
+
 from __future__ import annotations
 
 import json

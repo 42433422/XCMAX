@@ -1,8 +1,5 @@
 import { describe, expect, it, afterEach } from 'vitest'
-import {
-  resolveWorkflowPageRedirectForRouteName,
-  useWorkflowModPages,
-} from './workflowPagePaths'
+import { resolveWorkflowPageRedirectForRouteName, useWorkflowModPages } from './workflowPagePaths'
 
 const LS = 'xcagi_workflow_viz_mod_pages_enabled'
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="import-not-found, no-any-return"
 """显式 autonomy callback（SSOT）。
 
 契约符号（供搜索与验收）:
@@ -11,12 +12,15 @@
   - github-approval：推进终态（executed / execution_failed / rejected / approval_requested）
   - fail-open：网络/鉴权/依赖缺失只打 stderr，不阻断主流程
 """
+
 from __future__ import annotations
 
 import os
 import sys
 from pathlib import Path
 from typing import Any, Optional
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _CI_SCRIPTS = Path(__file__).resolve().parents[1] / "ci"
 if str(_CI_SCRIPTS) not in sys.path:
@@ -63,7 +67,7 @@ def autonomy_callback(
             source=source,
             action_id=action_id,
         )
-    except Exception as exc:  # pragma: no cover
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover
         print(f"[autonomy_callback] error: {exc!r}", file=sys.stderr)
         return None
 
@@ -110,9 +114,7 @@ def _resolve_github_approval_endpoint() -> Optional[str]:
 
 
 def _resolve_token() -> Optional[str]:
-    return os.environ.get("AUTONOMY_WEBHOOK_TOKEN") or os.environ.get(
-        "MODSTORE_OPS_INGEST_TOKEN"
-    )
+    return os.environ.get("AUTONOMY_WEBHOOK_TOKEN") or os.environ.get("MODSTORE_OPS_INGEST_TOKEN")
 
 
 def _post_github_decision(
@@ -168,7 +170,7 @@ def _post_github_decision(
             },
             timeout=10.0,
         )
-    except Exception as exc:  # pragma: no cover
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover
         print(f"[autonomy_callback] http error: {exc!r}", file=sys.stderr)
         return None
 
@@ -182,7 +184,7 @@ def _post_github_decision(
 
     try:
         data = resp.json()
-    except Exception as exc:  # pragma: no cover
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover
         print(f"[autonomy_callback] json decode error: {exc!r}", file=sys.stderr)
         return None
     if not isinstance(data, dict):

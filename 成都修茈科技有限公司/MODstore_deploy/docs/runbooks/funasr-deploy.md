@@ -42,11 +42,11 @@ docker compose --profile app up -d funasr
 
 在 `MODstore_deploy/.env` 中配置（API 进程须能读取）：
 
-| 变量 | 说明 | 示例 |
-|------|------|------|
-| `FUNASR_HOST` | FunASR 地址；留空则自动尝试 `host.docker.internal` / `172.17.0.1` / `127.0.0.1` | `127.0.0.1` |
-| `FUNASR_PORT` | WebSocket 端口 | `10095` |
-| `FUNASR_USE_SSL` | `1` 使用 wss（FunASR 默认自签名证书）；`0` 使用 ws（`--certfile 0` 时） | `0` |
+| 变量             | 说明                                                                            | 示例        |
+| ---------------- | ------------------------------------------------------------------------------- | ----------- |
+| `FUNASR_HOST`    | FunASR 地址；留空则自动尝试 `host.docker.internal` / `172.17.0.1` / `127.0.0.1` | `127.0.0.1` |
+| `FUNASR_PORT`    | WebSocket 端口                                                                  | `10095`     |
+| `FUNASR_USE_SSL` | `1` 使用 wss（FunASR 默认自签名证书）；`0` 使用 ws（`--certfile 0` 时）         | `0`         |
 
 **systemd modstore（:9999）+ 宿主机 FunASR：**
 
@@ -111,14 +111,14 @@ docker logs -f funasr --tail 50
 
 ## 故障排查
 
-| 现象 | 可能原因 | 处理 |
-|------|----------|------|
-| 「服务端语音识别不可用」 | systemd API 用了 `FUNASR_USE_SSL=1` 但 FunASR 为 ws；或 `FUNASR_HOST=funasr` 在宿主机无法解析 | 安装 `modstore-funasr.conf` drop-in，`FUNASR_HOST=127.0.0.1`、`FUNASR_USE_SSL=0`，`systemctl restart modstore` |
-| 「FunASR 服务未启动」 | 未部署 / 端口不通 / `FUNASR_USE_SSL` 与 FunASR 协议不一致 | 检查 `ss -tlnp`、`.env`、`docker logs funasr` |
-| 「语音识别无响应」 | nginx 缺 Upgrade；麦克风无权限；模型仍在下载 | 检查 nginx location；浏览器麦克风权限；等待模型下载完成 |
-| Whisper `Failed to fetch` / CORS | 浏览器直连 hf-mirror 被 CORS 拦截 | 配置 nginx `location /hf-hub/` 反代 hf-mirror；前端经 `https://host/hf-hub/...` 拉模型 |
-| 连接后立即断开 | JWT token 缺失或无效 | 确认已登录，`localStorage.modstore_token` 存在 |
-| 首次启动极慢 | 模型下载 | 查看 `docker logs funasr`，确保磁盘 ≥ 5GB |
+| 现象                             | 可能原因                                                                                      | 处理                                                                                                           |
+| -------------------------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| 「服务端语音识别不可用」         | systemd API 用了 `FUNASR_USE_SSL=1` 但 FunASR 为 ws；或 `FUNASR_HOST=funasr` 在宿主机无法解析 | 安装 `modstore-funasr.conf` drop-in，`FUNASR_HOST=127.0.0.1`、`FUNASR_USE_SSL=0`，`systemctl restart modstore` |
+| 「FunASR 服务未启动」            | 未部署 / 端口不通 / `FUNASR_USE_SSL` 与 FunASR 协议不一致                                     | 检查 `ss -tlnp`、`.env`、`docker logs funasr`                                                                  |
+| 「语音识别无响应」               | nginx 缺 Upgrade；麦克风无权限；模型仍在下载                                                  | 检查 nginx location；浏览器麦克风权限；等待模型下载完成                                                        |
+| Whisper `Failed to fetch` / CORS | 浏览器直连 hf-mirror 被 CORS 拦截                                                             | 配置 nginx `location /hf-hub/` 反代 hf-mirror；前端经 `https://host/hf-hub/...` 拉模型                         |
+| 连接后立即断开                   | JWT token 缺失或无效                                                                          | 确认已登录，`localStorage.modstore_token` 存在                                                                 |
+| 首次启动极慢                     | 模型下载                                                                                      | 查看 `docker logs funasr`，确保磁盘 ≥ 5GB                                                                      |
 
 ## 资源要求
 

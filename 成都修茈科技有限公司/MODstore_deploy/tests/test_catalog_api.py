@@ -1,7 +1,6 @@
 """Catalog /v1 路由冒烟（内存临时目录）。"""
 
 import json
-import os
 from pathlib import Path
 from unittest.mock import AsyncMock
 
@@ -12,7 +11,7 @@ pytest.importorskip("fastapi")
 
 def test_catalog_index_empty(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("MODSTORE_CATALOG_DIR", str(tmp_path))
-    from modstore_server.catalog_store import load_store, save_store
+    from modstore_server.catalog_store import save_store
 
     save_store({"packages": []})
     from fastapi.testclient import TestClient
@@ -41,7 +40,7 @@ def test_catalog_upload_with_token(monkeypatch, tmp_path: Path):
         ),
     )
     monkeypatch.setattr(
-        "modstore_server.catalog_api.insert_embedding",
+        "modstore_server.api.catalog_public_routes.insert_embedding",
         lambda *args, **kwargs: "",
     )
     from modstore_server.catalog_store import save_store

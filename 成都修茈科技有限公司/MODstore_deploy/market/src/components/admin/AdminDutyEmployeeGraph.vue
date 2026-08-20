@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { VueFlow, useVueFlow, type Node, type Edge } from '@vue-flow/core'
+import { MarkerType, VueFlow, useVueFlow, type Node, type Edge } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
 import { MiniMap } from '@vue-flow/minimap'
@@ -18,7 +18,6 @@ import {
   SIX_LINE_DEPARTMENTS,
   DEPARTMENT_ORDER,
   DEPARTMENT_COLORS,
-  CRAFT_SUBZONE_ID,
 } from '../../domain/yuangonDutyRoster'
 import { publishButlerTask } from '../../utils/agent/butlerTaskBus'
 import {
@@ -31,7 +30,6 @@ import {
   describeHandler,
   extractEmployeeCapabilityView,
   type EmployeeCapabilityView,
-  type EmployeeSkillView,
 } from '../../domain/butlerEmployeeProfile'
 import MessageBody from '../workbench/MessageBody.vue'
 import {
@@ -502,7 +500,7 @@ const allHandsProgress = ref<AllHandsProgress>({
   updated_at: '',
 })
 
-async function openAllHandsPanel() {
+async function _openAllHandsPanel() {
   togglePanel('allhands')
   if (!showAllHandsPanel.value) return
   if (allHandsReport.value || allHandsBusy.value) return
@@ -524,9 +522,9 @@ function parseAllHandsReportFromArtifact(artifact: Record<string, unknown> | nul
   if (!artifact || typeof artifact !== 'object') return null
   const raw = (artifact as Record<string, unknown>).all_hands_report
   if (!raw || typeof raw !== 'object') return null
-  const report = raw as AllHandsReport
-  if (!Array.isArray((report as any).employees)) return null
-  return report
+  const report = raw as Partial<AllHandsReport>
+  if (!Array.isArray(report.employees)) return null
+  return report as AllHandsReport
 }
 
 function resetAllHandsProgress(total = 0) {
@@ -1324,7 +1322,7 @@ function buildCraftPipelineEdgesForDept(deptId: string, idSet: Set<string>): Edg
         style: { stroke: '#4ade80', strokeWidth: 2 },
         labelStyle: { fill: '#4ade80', fontSize: '10px' },
         animated: true,
-        markerEnd: { type: 'arrowclosed', color: '#4ade80' } as any,
+        markerEnd: { type: MarkerType.ArrowClosed, color: '#4ade80' },
       })
     }
   }
@@ -1346,7 +1344,7 @@ function buildDepEdges(idSet: Set<string>): Edge[] {
         style: { stroke: '#818cf8', strokeWidth: 1.5, strokeDasharray: '5,3' },
         labelStyle: { fill: '#818cf8', fontSize: '10px' },
         animated: true,
-        markerEnd: { type: 'arrowclosed', color: '#818cf8' } as any,
+        markerEnd: { type: MarkerType.ArrowClosed, color: '#818cf8' },
       })
     }
   }
@@ -1363,7 +1361,7 @@ function buildDepEdges(idSet: Set<string>): Edge[] {
         style: { stroke: '#4ade80', strokeWidth: 2 },
         labelStyle: { fill: '#4ade80', fontSize: '10px' },
         animated: true,
-        markerEnd: { type: 'arrowclosed', color: '#4ade80' } as any,
+        markerEnd: { type: MarkerType.ArrowClosed, color: '#4ade80' },
       })
     }
   }
@@ -1786,46 +1784,46 @@ async function loadCapabilities(emps: EmpRow[]) {
           ? row.declared_dependencies.map((x) => String(x ?? ''))
           : [],
         llm: {
-          provider: String((row as any)?.llm?.provider ?? 'auto'),
-          model: String((row as any)?.llm?.model ?? 'auto'),
-          needs_llm: Boolean((row as any)?.llm?.needs_llm),
-          activated: Boolean((row as any)?.llm?.activated),
-          key_source: String((row as any)?.llm?.key_source ?? 'none'),
+          provider: String(row.llm?.provider ?? 'auto'),
+          model: String(row.llm?.model ?? 'auto'),
+          needs_llm: Boolean(row.llm?.needs_llm),
+          activated: Boolean(row.llm?.activated),
+          key_source: String(row.llm?.key_source ?? 'none'),
         },
         risk: {
-          high_risk: Boolean((row as any)?.risk?.high_risk),
-          requires_confirmation: Boolean((row as any)?.risk?.requires_confirmation),
-          details: Array.isArray((row as any)?.risk?.details)
-            ? ((row as any).risk.details as unknown[]).map((d) => ({
-                handler: String((d as any)?.handler ?? ''),
-                reason: String((d as any)?.reason ?? ''),
-                command_id: String((d as any)?.command_id ?? ''),
-                requires_approval: Boolean((d as any)?.requires_approval),
+          high_risk: Boolean(row.risk?.high_risk),
+          requires_confirmation: Boolean(row.risk?.requires_confirmation),
+          details: Array.isArray(row.risk?.details)
+            ? row.risk.details.map((d) => ({
+                handler: String(d?.handler ?? ''),
+                reason: String(d?.reason ?? ''),
+                command_id: String(d?.command_id ?? ''),
+                requires_approval: Boolean(d?.requires_approval),
               }))
             : [],
         },
-        recent_execution: (row as any)?.recent_execution
+        recent_execution: row.recent_execution
           ? {
-              id: Number((row as any).recent_execution.id) || 0,
-              status: String((row as any).recent_execution.status ?? ''),
-              task: String((row as any).recent_execution.task ?? ''),
-              duration_ms: Number((row as any).recent_execution.duration_ms) || 0,
-              llm_tokens: Number((row as any).recent_execution.llm_tokens) || 0,
-              error: String((row as any).recent_execution.error ?? ''),
-              created_at: typeof (row as any).recent_execution.created_at === 'string'
-                ? (row as any).recent_execution.created_at
+              id: Number(row.recent_execution.id) || 0,
+              status: String(row.recent_execution.status ?? ''),
+              task: String(row.recent_execution.task ?? ''),
+              duration_ms: Number(row.recent_execution.duration_ms) || 0,
+              llm_tokens: Number(row.recent_execution.llm_tokens) || 0,
+              error: String(row.recent_execution.error ?? ''),
+              created_at: typeof row.recent_execution.created_at === 'string'
+                ? row.recent_execution.created_at
                 : null,
             }
           : null,
-        recent_ops_audits: Array.isArray((row as any)?.recent_ops_audits)
-          ? ((row as any).recent_ops_audits as unknown[]).map((a) => ({
-              id: Number((a as any)?.id) || 0,
-              handler: String((a as any)?.handler ?? ''),
-              command_id: String((a as any)?.command_id ?? ''),
-              exit_code: (a as any)?.exit_code == null ? null : Number((a as any).exit_code),
-              dry_run: Boolean((a as any)?.dry_run),
-              approval_required: Boolean((a as any)?.approval_required),
-              created_at: typeof (a as any)?.created_at === 'string' ? (a as any).created_at : null,
+        recent_ops_audits: Array.isArray(row.recent_ops_audits)
+          ? row.recent_ops_audits.map((a) => ({
+              id: Number(a?.id) || 0,
+              handler: String(a?.handler ?? ''),
+              command_id: String(a?.command_id ?? ''),
+              exit_code: a?.exit_code == null ? null : Number(a.exit_code),
+              dry_run: Boolean(a?.dry_run),
+              approval_required: Boolean(a?.approval_required),
+              created_at: typeof a?.created_at === 'string' ? a.created_at : null,
             }))
           : [],
       }
@@ -2018,7 +2016,7 @@ onUnmounted(() => {
 const gapRows = computed(() => {
   const rows: Array<{ id: string; name: string; area: string; state: GapState }> = []
 
-  for (const [area, { label, ids }] of Object.entries(ALL_AREAS)) {
+  for (const [_area, { label, ids }] of Object.entries(ALL_AREAS)) {
     for (const id of ids) {
       const row = employees.value.find((e) => e.id === id)
       const name = row?.name || YUANGON_PKG_ROLE_LABELS[id] || id
@@ -2370,6 +2368,7 @@ function openGapPanel() {
 }
 
 defineExpose({
+  capabilityLabel,
   openGapPanel,
   focusEmployee,
   __coverage: {

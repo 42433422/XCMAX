@@ -6,13 +6,13 @@ import os
 from pathlib import Path
 from typing import Protocol
 
+from sqlalchemy import Column, MetaData, String, Table, create_engine, inspect, text
+from sqlalchemy.engine import Engine
+
 from alembic import command
 from alembic.config import Config
 from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
-from sqlalchemy import Column, MetaData, String, Table, create_engine, inspect, text
-from sqlalchemy.engine import Engine
-
 
 LEGACY_BASELINE_REVISION = "20260512_consolidate_init_db_columns"
 LEGACY_BASELINE_COLUMNS: dict[str, frozenset[str]] = {
@@ -72,16 +72,12 @@ def legacy_baseline_gaps(schema: SchemaInspector) -> list[str]:
             gaps.append(table)
             continue
         actual_columns = {str(item["name"]) for item in schema.get_columns(table)}
-        gaps.extend(
-            f"{table}.{column}" for column in sorted(required_columns - actual_columns)
-        )
+        gaps.extend(f"{table}.{column}" for column in sorted(required_columns - actual_columns))
     return gaps
 
 
 def _database_url() -> str:
-    url = (
-        os.environ.get("MODSTORE_DATABASE_URL") or os.environ.get("DATABASE_URL") or ""
-    ).strip()
+    url = (os.environ.get("MODSTORE_DATABASE_URL") or os.environ.get("DATABASE_URL") or "").strip()
     if not url:
         raise RuntimeError("database_url_missing")
     if url.startswith("postgres://"):
@@ -102,10 +98,7 @@ def _ensure_version_table_capacity(engine: Engine) -> None:
     if engine.dialect.name == "postgresql":
         with engine.begin() as connection:
             connection.execute(
-                text(
-                    "ALTER TABLE alembic_version "
-                    "ALTER COLUMN version_num TYPE VARCHAR(128)"
-                )
+                text("ALTER TABLE alembic_version ALTER COLUMN version_num TYPE VARCHAR(128)")
             )
 
 
@@ -113,9 +106,7 @@ def upgrade_database(config_path: Path) -> tuple[str, ...]:
     """Adopt a verified legacy baseline, upgrade all heads, and prove the result."""
 
     configuration = Config(str(config_path))
-    configuration.set_main_option(
-        "script_location", str(config_path.parent / "alembic")
-    )
+    configuration.set_main_option("script_location", str(config_path.parent / "alembic"))
     expected_heads = set(ScriptDirectory.from_config(configuration).get_heads())
     engine = create_engine(_database_url())
     try:
@@ -131,9 +122,7 @@ def upgrade_database(config_path: Path) -> tuple[str, ...]:
 
         command.upgrade(configuration, "heads")
         with engine.connect() as connection:
-            current_heads = set(
-                MigrationContext.configure(connection).get_current_heads()
-            )
+            current_heads = set(MigrationContext.configure(connection).get_current_heads())
     finally:
         engine.dispose()
 

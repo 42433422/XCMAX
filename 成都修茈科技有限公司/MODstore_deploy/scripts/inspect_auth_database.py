@@ -22,6 +22,8 @@ from urllib.parse import urlparse, urlunparse
 
 from sqlalchemy import or_
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 
 def _redact_database_url(url: str) -> str:
     if not url.startswith(("postgresql://", "postgres://")):
@@ -34,7 +36,7 @@ def _redact_database_url(url: str) -> str:
             netloc = re.sub(r":([^:@]+)@", r":***@", parsed.netloc, count=1)
             parsed = parsed._replace(netloc=netloc)
         return urlunparse(parsed)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return "postgresql://***"
 
 
@@ -68,7 +70,7 @@ def main() -> int:
         with engine.connect() as conn:
             one = conn.exec_driver_sql("SELECT 1").scalar()
             print("connectivity: ok", f"(SELECT 1 -> {one!r})")
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         print("connectivity: FAILED", str(e), file=sys.stderr)
         return 1
 
@@ -103,7 +105,7 @@ def main() -> int:
                 for u in rows:
                     em = u.email or ""
                     print(f"  id={u.id} username={u.username!r} email={em!r} is_admin={u.is_admin}")
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         print("query_users: FAILED", str(e), file=sys.stderr)
         return 1
 

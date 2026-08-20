@@ -1,11 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { useRouter, type RouteLocationRaw } from 'vue-router'
-import {
-  DEPARTMENT_COLORS,
-  DEPARTMENT_ORDER,
-  SIX_LINE_DEPARTMENTS,
-} from '@/domain/yuangonDutyRoster'
+import { DEPARTMENT_COLORS, DEPARTMENT_ORDER, SIX_LINE_DEPARTMENTS } from '@/domain/yuangonDutyRoster'
 import { useDutyRoster } from '@/composables/useDutyRoster'
 import { useDutyRosterLoopStatus } from '@/composables/useDutyRosterLoopStatus'
 
@@ -16,13 +12,16 @@ type EmployeeFlowPlacement = {
   color: string
 }
 
-const props = withDefaults(defineProps<{
-  surface?: 'employee-space' | 'workflow-visualization'
-  compact?: boolean
-}>(), {
-  surface: 'workflow-visualization',
-  compact: false,
-})
+const props = withDefaults(
+  defineProps<{
+    surface?: 'employee-space' | 'workflow-visualization'
+    compact?: boolean
+  }>(),
+  {
+    surface: 'workflow-visualization',
+    compact: false,
+  },
+)
 
 const router = useRouter()
 // SSOT 派生：运行时从后端 /api/system/duty-roster 获取编制矩阵
@@ -135,11 +134,7 @@ const employeeCards = computed(() => {
     const primary = flows[0]
     const missingLocal = status.value.missingLocalIds.includes(employeeId)
     const missingCatalog = status.value.missingCatalogIds.includes(employeeId)
-    const statusLabel = missingLocal
-      ? '本机缺包'
-      : missingCatalog
-        ? 'Catalog 缺岗'
-        : '已对齐'
+    const statusLabel = missingLocal ? '本机缺包' : missingCatalog ? 'Catalog 缺岗' : '已对齐'
 
     return {
       id: employeeId,
@@ -158,9 +153,21 @@ const employeeCards = computed(() => {
 
 const healthCards = computed(() => [
   { label: '编制员工', value: status.value.plannedCount, sub: '编制主索引' },
-  { label: '本机安装', value: `${status.value.localInstalledCount}/${status.value.plannedCount}`, sub: 'mods/_employees' },
-  { label: 'Catalog', value: `${status.value.catalogRegisteredCount}/${status.value.plannedCount}`, sub: '员工包登记' },
-  { label: '缺口', value: status.value.missingLocalCount + status.value.missingCatalogCount, sub: '本机 + Catalog' },
+  {
+    label: '本机安装',
+    value: `${status.value.localInstalledCount}/${status.value.plannedCount}`,
+    sub: 'mods/_employees',
+  },
+  {
+    label: 'Catalog',
+    value: `${status.value.catalogRegisteredCount}/${status.value.plannedCount}`,
+    sub: '员工包登记',
+  },
+  {
+    label: '缺口',
+    value: status.value.missingLocalCount + status.value.missingCatalogCount,
+    sub: '本机 + Catalog',
+  },
 ])
 
 const riskLine = computed(() => {
@@ -195,13 +202,7 @@ const riskLine = computed(() => {
     </div>
 
     <div class="drlv-loop" role="list" aria-label="编制员工闭环">
-      <router-link
-        v-for="node in loopNodes"
-        :key="node.key"
-        :to="node.to"
-        class="drlv-node"
-        role="listitem"
-      >
+      <router-link v-for="node in loopNodes" :key="node.key" :to="node.to" class="drlv-node" role="listitem">
         <span class="drlv-node-title">{{ node.title }}</span>
         <strong class="drlv-node-meta">{{ node.meta }}</strong>
         <span class="drlv-node-text">{{ node.text }}</span>
@@ -215,13 +216,7 @@ const riskLine = computed(() => {
     </div>
 
     <div class="drlv-depts" role="list" aria-label="六部门编制流转">
-      <div
-        v-for="dept in departments"
-        :key="dept.id"
-        class="drlv-dept"
-        role="listitem"
-        :style="{ '--dept-color': dept.color }"
-      >
+      <div v-for="dept in departments" :key="dept.id" class="drlv-dept" role="listitem" :style="{ '--dept-color': dept.color }">
         <div class="drlv-dept-head">
           <strong>{{ dept.label }}</strong>
           <span>{{ dept.count }} 员工</span>
@@ -231,30 +226,18 @@ const riskLine = computed(() => {
         </div>
         <p class="drlv-dept-sub">
           {{ dept.subzoneCount }} 个子区
-          <template v-if="dept.missingLocal || dept.missingCatalog">
-            · 缺口 {{ dept.missingLocal + dept.missingCatalog }}
-          </template>
-          <template v-else>
-            · 已对齐
-          </template>
+          <template v-if="dept.missingLocal || dept.missingCatalog"> · 缺口 {{ dept.missingLocal + dept.missingCatalog }} </template>
+          <template v-else> · 已对齐 </template>
         </p>
       </div>
     </div>
 
-    <section
-      v-if="!compact && surface === 'workflow-visualization'"
-      class="drlv-employees"
-      aria-labelledby="drlv-employees-title"
-    >
+    <section v-if="!compact && surface === 'workflow-visualization'" class="drlv-employees" aria-labelledby="drlv-employees-title">
       <div class="drlv-employees-head">
         <div>
           <p class="drlv-kicker">员工说明</p>
-          <h4 id="drlv-employees-title" class="drlv-employees-title">
-            52 个编制员工如何进入流程
-          </h4>
-          <p class="drlv-employees-sub">
-            每张卡对应一个本机员工包 manifest 的岗位说明，并标出它参与的六部门流程节点。
-          </p>
+          <h4 id="drlv-employees-title" class="drlv-employees-title">52 个编制员工如何进入流程</h4>
+          <p class="drlv-employees-sub">每张卡对应一个本机员工包 manifest 的岗位说明，并标出它参与的六部门流程节点。</p>
         </div>
         <strong class="drlv-employees-count">{{ employeeCards.length }} 员工</strong>
       </div>
@@ -269,10 +252,7 @@ const riskLine = computed(() => {
         >
           <div class="drlv-employee-top">
             <span class="drlv-employee-index">#{{ employee.index }}</span>
-            <span
-              class="drlv-employee-status"
-              :class="'drlv-employee-status--' + employee.statusKind"
-            >
+            <span class="drlv-employee-status" :class="'drlv-employee-status--' + employee.statusKind">
               {{ employee.statusLabel }}
             </span>
           </div>
@@ -284,11 +264,7 @@ const riskLine = computed(() => {
             <strong>{{ employee.primarySubzoneLabel }}</strong>
           </div>
           <div class="drlv-employee-flows" aria-label="参与流程节点">
-            <span
-              v-for="flow in employee.flows"
-              :key="flow.deptId + flow.subzoneLabel"
-              class="drlv-employee-flow"
-            >
+            <span v-for="flow in employee.flows" :key="flow.deptId + flow.subzoneLabel" class="drlv-employee-flow">
               {{ flow.subzoneLabel }}
             </span>
           </div>

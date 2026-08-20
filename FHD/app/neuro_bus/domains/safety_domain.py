@@ -103,7 +103,7 @@ class SafetyNeuroDomain(NeuroDomain):
         action: str,
         resource: str,
         result: str,
-        metadata: dict[str, Any] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> bool:
         return self.emit(
             "security.audit.log",

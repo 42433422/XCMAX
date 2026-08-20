@@ -723,7 +723,7 @@ class TestToolApiCallExt:
             try:
                 result = _tool_api_call(MagicMock(), {"path": "/api/products"})
                 assert result["success"] is False
-                assert "boom" in result["message"]
+                assert result["message"] == "请求执行失败"
             finally:
                 AIOPEN_STATE["whitelist"] = saved_whitelist
 
@@ -952,8 +952,7 @@ class TestOpenclawChatProxyExt:
             assert payload["success"] is False
             assert status == 502
             assert payload["status_code"] == 503
-            # Empty body -> message falls back to str(err)
-            assert "Service Unavailable" in payload["message"] or "503" in payload["message"]
+            assert payload["message"] == "上游服务请求失败"
 
     def test_runtime_error_returns_502(self):
         with patch(
@@ -963,7 +962,7 @@ class TestOpenclawChatProxyExt:
             payload, status = openclaw_chat_proxy("hi")
             assert payload["success"] is False
             assert status == 502
-            assert "runtime fail" in payload["message"]
+            assert payload["message"] == "上游服务请求失败"
 
     def test_target_url_construction(self):
         mock_resp = MagicMock()

@@ -25,7 +25,12 @@ describe('employees api', () => {
   })
 
   it('getEmployeeManifest returns manifest on success', async () => {
-    vi.mocked(req).mockResolvedValue({ pack_id: 'emp1', name: 'emp1', version: '1.0.0', manifest: {} })
+    vi.mocked(req).mockResolvedValue({
+      pack_id: 'emp1',
+      name: 'emp1',
+      version: '1.0.0',
+      manifest: {},
+    })
     const res = await employees.getEmployeeManifest('emp1')
     expect(res.pack_id).toBe('emp1')
   })
@@ -69,7 +74,10 @@ describe('employees api', () => {
   it('employeeExecuteFile calls req with FormData', async () => {
     vi.mocked(req).mockResolvedValue({})
     const file = new File(['content'], 'test.txt')
-    await employees.employeeExecuteFile('emp1', file, { task: 'analyze', inputData: { key: 'val' } })
+    await employees.employeeExecuteFile('emp1', file, {
+      task: 'analyze',
+      inputData: { key: 'val' },
+    })
     expect(req).toHaveBeenCalledWith('/api/employees/emp1/execute-file', expect.objectContaining({ method: 'POST' }))
   })
 

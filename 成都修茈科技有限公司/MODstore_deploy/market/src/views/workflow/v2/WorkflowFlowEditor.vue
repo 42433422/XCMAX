@@ -1,13 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import {
-  VueFlow,
-  useVueFlow,
-  type Connection,
-  type EdgeChange,
-  type NodeChange,
-  type NodeTypesObject,
-} from '@vue-flow/core'
+import { VueFlow, useVueFlow, type Connection, type EdgeChange, type NodeChange, type NodeTypesObject } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
 import { MiniMap } from '@vue-flow/minimap'
@@ -133,7 +126,9 @@ async function addNodeAt(kind: NodeKind, clientX?: number, clientY?: number) {
   if (typeof clientX === 'number' && typeof clientY === 'number') {
     try {
       position = projectFromClient(clientX, clientY) || position
-    } catch {}
+    } catch {
+      /* empty */
+    }
   } else {
     position = { x: 120 + Math.random() * 60, y: 120 + Math.random() * 60 }
   }
@@ -186,9 +181,7 @@ async function onAutoLayout() {
     if (!p) continue
     graph.updateNodePositionLocally(n.id, p)
   }
-  await Promise.allSettled(
-    graph.nodes.value.map((n) => graph.flushNodePosition(n.id)),
-  )
+  await Promise.allSettled(graph.nodes.value.map((n) => graph.flushNodePosition(n.id)))
   if (typeof flowInstance.fitView === 'function') {
     flowInstance.fitView({ padding: 0.18 })
   }
@@ -211,7 +204,7 @@ async function onSandbox() {
 async function onExecute() {
   if (!confirm('立即执行当前工作流？将真实调用员工和外部资源。')) return
   try {
-    const r: any = await api.executeWorkflow(props.workflowId, {})
+    const r = (await api.executeWorkflow(props.workflowId, {})) as { id?: number | string }
     showFlash('ok', `执行已提交（execution #${r?.id ?? '?'}）`)
   } catch (e) {
     showFlash('err', '执行失败：' + explainError(e))
@@ -245,7 +238,9 @@ async function onPublish() {
   const note = prompt('为本次发布写一段备注（可留空）', '')
   if (note === null) return
   try {
-    const r: any = await api.publishWorkflowVersion(props.workflowId, note.trim())
+    const r = (await api.publishWorkflowVersion(props.workflowId, note.trim())) as {
+      version_no?: number | string
+    }
     showFlash('ok', `已发布 v${r?.version_no ?? '?'}`)
   } catch (e) {
     showFlash('err', '发布失败：' + explainError(e))
@@ -293,9 +288,7 @@ function onSaveAsTemplate() {
     return
   }
   saveAsTemplateModal.value.open = true
-  saveAsTemplateModal.value.name = graph.meta.value?.name
-    ? `${graph.meta.value.name} 模板`
-    : ''
+  saveAsTemplateModal.value.name = graph.meta.value?.name ? `${graph.meta.value.name} 模板` : ''
   saveAsTemplateModal.value.description = graph.meta.value?.description || ''
 }
 
@@ -307,14 +300,14 @@ async function submitSaveAsTemplate() {
   }
   m.busy = true
   try {
-    const r: any = await api.saveWorkflowAsTemplate(props.workflowId, {
+    const r = (await api.saveWorkflowAsTemplate(props.workflowId, {
       name: m.name.trim(),
       description: m.description.trim(),
       template_category: m.template_category,
       template_difficulty: m.template_difficulty,
       is_public: m.is_public,
       price: 0,
-    })
+    })) as { id?: number | string }
     m.open = false
     showFlash('ok', `已发布为模板（id ${r?.id ?? '?'}）`)
   } catch (e) {
@@ -342,12 +335,7 @@ async function submitSaveAsTemplate() {
       @save-as-template="onSaveAsTemplate"
     />
 
-    <VersionsPanel
-      :workflow-id="workflowId"
-      :open="versionsOpen"
-      @close="versionsOpen = false"
-      @rolled-back="onRolledBack"
-    />
+    <VersionsPanel :workflow-id="workflowId" :open="versionsOpen" @close="versionsOpen = false" @rolled-back="onRolledBack" />
 
     <div v-if="flash" class="wf2-flash" :class="`wf2-flash--${flash.kind}`">
       {{ flash.text }}
@@ -375,12 +363,7 @@ async function submitSaveAsTemplate() {
         >
           <Background pattern-color="rgba(148,163,184,0.10)" :gap="20" />
           <Controls position="bottom-left" />
-          <MiniMap
-            position="bottom-right"
-            :node-color="(n: any) => n?.data?.kind ? '#6366f1' : '#94a3b8'"
-            pannable
-            zoomable
-          />
+          <MiniMap position="bottom-right" :node-color="(n: any) => (n?.data?.kind ? '#6366f1' : '#94a3b8')" pannable zoomable />
         </VueFlow>
 
         <div v-if="graph.loading.value" class="wf2-canvas-overlay">加载中...</div>
@@ -392,11 +375,7 @@ async function submitSaveAsTemplate() {
         </div>
       </div>
 
-      <PropertiesPanel
-        :selected="selectedNode"
-        @patch="onPatchNode"
-        @delete="onDeleteSelected"
-      />
+      <PropertiesPanel :selected="selectedNode" @patch="onPatchNode" @delete="onDeleteSelected" />
 
       <div class="wf2-right-panels">
         <VariablesPanel :nodes="graph.nodes.value" />
@@ -413,20 +392,11 @@ async function submitSaveAsTemplate() {
     </aside>
 
     <transition name="wf2-fade">
-      <div
-        v-if="saveAsTemplateModal.open"
-        class="wf2-tplmask"
-        @click.self="saveAsTemplateModal.open = saveAsTemplateModal.busy"
-      >
+      <div v-if="saveAsTemplateModal.open" class="wf2-tplmask" @click.self="saveAsTemplateModal.open = saveAsTemplateModal.busy">
         <div class="wf2-tplcard">
           <header class="wf2-tplcard__head">
             <h3>发布为模板</h3>
-            <button
-              class="wf2-tb-btn"
-              type="button"
-              :disabled="saveAsTemplateModal.busy"
-              @click="saveAsTemplateModal.open = false"
-            >
+            <button class="wf2-tb-btn" type="button" :disabled="saveAsTemplateModal.busy" @click="saveAsTemplateModal.open = false">
               关闭
             </button>
           </header>
@@ -461,20 +431,10 @@ async function submitSaveAsTemplate() {
             </label>
           </div>
           <footer class="wf2-tplcard__foot">
-            <button
-              class="wf2-tb-btn"
-              type="button"
-              :disabled="saveAsTemplateModal.busy"
-              @click="saveAsTemplateModal.open = false"
-            >
+            <button class="wf2-tb-btn" type="button" :disabled="saveAsTemplateModal.busy" @click="saveAsTemplateModal.open = false">
               取消
             </button>
-            <button
-              class="wf2-tb-btn wf2-tb-btn--primary"
-              type="button"
-              :disabled="saveAsTemplateModal.busy"
-              @click="submitSaveAsTemplate"
-            >
+            <button class="wf2-tb-btn wf2-tb-btn--primary" type="button" :disabled="saveAsTemplateModal.busy" @click="submitSaveAsTemplate">
               {{ saveAsTemplateModal.busy ? '发布中…' : '发布' }}
             </button>
           </footer>
@@ -489,7 +449,7 @@ async function submitSaveAsTemplate() {
 .wf2 {
   --wf-canvas-bg: #0b1120;
   --wf-panel-bg: rgba(15, 23, 42, 0.88);
-  --wf-panel-border: rgba(148, 163, 184, 0.10);
+  --wf-panel-border: rgba(148, 163, 184, 0.1);
   --wf-text-primary: #f1f5f9;
   --wf-text-secondary: #94a3b8;
   --wf-text-muted: #64748b;
@@ -733,7 +693,7 @@ async function submitSaveAsTemplate() {
   justify-content: space-between;
   align-items: center;
   padding: 16px 20px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.10);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
 }
 
 .wf2-tplcard__head h3 {
@@ -752,7 +712,7 @@ async function submitSaveAsTemplate() {
   justify-content: flex-end;
   gap: 10px;
   padding: 14px 20px;
-  border-top: 1px solid rgba(148, 163, 184, 0.10);
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
 }
 
 .wf2-tplfield {

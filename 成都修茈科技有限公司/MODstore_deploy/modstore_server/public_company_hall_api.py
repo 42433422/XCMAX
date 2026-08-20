@@ -7,6 +7,8 @@ from typing import Optional
 
 from fastapi import APIRouter, Query
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/public/company-hall", tags=["public"])
@@ -21,6 +23,6 @@ async def get_public_company_hall(
     try:
         data = build_public_company_hall(day=day)
         return {"ok": True, "data": data}
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("public company hall failed")
         return {"ok": False, "error": str(exc), "data": None}

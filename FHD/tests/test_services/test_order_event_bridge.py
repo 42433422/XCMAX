@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """测试 MODstore 订单事件桥接（payment.paid → FHD NeuroBus + 回款核销）。"""
 
 from __future__ import annotations

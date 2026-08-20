@@ -1,3 +1,4 @@
+# ruff: noqa: E402, F401, F403, I001
 """移动端 API 扩展：代理列表、设备注册、QR 配对。
 
 本模块为路由处理入口，纯计算辅助函数与模型已按业务领域拆分至
@@ -6,7 +7,6 @@
 """
 
 from __future__ import annotations
-
 import asyncio
 import json
 import logging
@@ -15,11 +15,9 @@ import re
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any
-
+from typing import TYPE_CHECKING, Any, cast
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
-
 from app.application.ai_group_chat_service import AiGroupChatService as AiGroupChatService
 from app.application.claude_super_employee_service import (
     ClaudeSuperEmployeeService as ClaudeSuperEmployeeService,
@@ -56,9 +54,7 @@ from app.fastapi_routes.mobile_extensions.admin_helpers import (
 from app.fastapi_routes.mobile_extensions.admin_helpers import (
     _require_mobile_admin_or_enterprise as _require_mobile_admin_or_enterprise,
 )
-from app.fastapi_routes.mobile_extensions.constants import (
-    ADMIN_MOBILE_FEATURES,
-)
+from app.fastapi_routes.mobile_extensions.constants import ADMIN_MOBILE_FEATURES
 from app.fastapi_routes.mobile_extensions.cs_helpers import (
     _mobile_cs_source_id,
     _mobile_cs_source_name,
@@ -66,60 +62,9 @@ from app.fastapi_routes.mobile_extensions.cs_helpers import (
     _safe_user_text,
 )
 
-# ── 子模块导入 ──
-from app.fastapi_routes.mobile_extensions.models import (
-    AiCircleCommentBody,
-    AiCirclePostBody,
-    DeviceRegisterBody,
-    MobileServiceBridgeRespondBody,
-    PairingExchangeBody,
-    PairingIssueBody,
-    PairingLookupBody,
-    RelayDesktopCompleteBody,
-    RelayDesktopPollBody,
-    RelayDesktopRegisterBody,
-    RelayMobileBindAccountBody,
-    RelayTaskCreateBody,
-)
-from app.fastapi_routes.mobile_extensions.models import (
-    AiGroupCreateBody as AiGroupCreateBody,
-)
-from app.fastapi_routes.mobile_extensions.models import (
-    AiGroupMemberBody as AiGroupMemberBody,
-)
-from app.fastapi_routes.mobile_extensions.models import (
-    AiGroupMessageBody as AiGroupMessageBody,
-)
-from app.fastapi_routes.mobile_extensions.models import (
-    AuthQrConfirmBody as AuthQrConfirmBody,
-)
-from app.fastapi_routes.mobile_extensions.models import (
-    ClaudeSuperEmployeeMobileMessageBody as ClaudeSuperEmployeeMobileMessageBody,
-)
-from app.fastapi_routes.mobile_extensions.models import (
-    CodexSuperEmployeeMobileMessageBody as CodexSuperEmployeeMobileMessageBody,
-)
-from app.fastapi_routes.mobile_extensions.models import (
-    CursorSuperEmployeeMobileMessageBody as CursorSuperEmployeeMobileMessageBody,
-)
-from app.fastapi_routes.mobile_extensions.models import (
-    OidcExchangeBody as OidcExchangeBody,
-)
-from app.fastapi_routes.mobile_extensions.models import (
-    SyncAckBody as SyncAckBody,
-)
-from app.fastapi_routes.mobile_extensions.models import (
-    SyncPullBody as SyncPullBody,
-)
-from app.fastapi_routes.mobile_extensions.models import (
-    SyncPushBody as SyncPushBody,
-)
-from app.fastapi_routes.mobile_extensions.models import (
-    SyncPushItem as SyncPushItem,
-)
-from app.fastapi_routes.mobile_extensions.models import (
-    TraeSuperEmployeeMobileMessageBody as TraeSuperEmployeeMobileMessageBody,
-)
+if TYPE_CHECKING:
+    from sqlalchemy import Table
+from app.fastapi_routes.mobile_extensions.models import *  # noqa: F403
 from app.fastapi_routes.mobile_extensions.pairing_helpers import (
     _enrich_pairing_payload,
     _guess_lan_ipv4,
@@ -140,2314 +85,224 @@ from app.security.mobile_pairing import (
     issue_pairing_nonce,
     lookup_by_shortcode,
 )
-from app.utils.mobile_api import format_mobile_response, paginate_list
+from app.utils.device_system.mobile_api import format_mobile_response, paginate_list
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-OPERATIONAL_ERRORS = RECOVERABLE_ERRORS
-
 logger = logging.getLogger(__name__)
-
 extension_router = APIRouter(tags=["mobile-api-ext"])
-
-
-def _mobile_session_id_from_request(request: Request) -> str:
-    auth_raw = request.headers.get("Authorization") or ""
-    auth_hdr = auth_raw if isinstance(auth_raw, str) else ""
-    if auth_hdr.startswith("Bearer "):
-        try:
-            from app.security.mobile_jwt import verify_mobile_jwt
-
-            payload = verify_mobile_jwt(auth_hdr[7:].strip()) or {}
-            sid = str(payload.get("session_id") or "").strip()
-            if sid:
-                return sid
-        except OPERATIONAL_ERRORS:
-            logger.exception("mobile session id parse failed")
-    sid_raw = request.headers.get("X-Session-ID") or ""
-    return sid_raw.strip() if isinstance(sid_raw, str) else ""
-
-
-def _mobile_market_authorization(request: Request, user: Any | None = None) -> str:
-    from app.fastapi_routes.market_account import (
-        _auth_header,
-        latest_session_market_token,
-        session_market_token,
-    )
-
-    sid = _mobile_session_id_from_request(request)
-    token = session_market_token(sid) if sid else ""
-    if not token:
-        token = latest_session_market_token(user_id=getattr(user, "id", None))
-    return _auth_header(token)
-
-
-def _mobile_unauthorized_response() -> JSONResponse:
-    return JSONResponse(
-        format_mobile_response(None, "未授权", success=False, code=401),
-        status_code=401,
-    )
-
-
-def _ai_circle_user(user: Any) -> tuple[int, str, str | None]:
-    uid = int(getattr(user, "id", 0) or 0)
-    name = str(
-        getattr(user, "display_name", "") or getattr(user, "username", "") or "企业成员"
-    ).strip()
-    avatar = getattr(user, "wx_avatar_url", None)
-    return uid, name, str(avatar).strip() if avatar else None
-
-
-def _ai_circle_employee_profiles() -> dict[str, dict[str, str]]:
-    profiles: dict[str, dict[str, str]] = {}
-    for mod in _mobile_mod_items():
-        mod_avatar = str(mod.get("avatar_url") or "").strip()
-        for employee in mod.get("workflow_employees") or []:
-            if not isinstance(employee, dict):
-                continue
-            employee_id = str(employee.get("id") or "").strip()
-            if not employee_id:
-                continue
-            profiles[employee_id] = {
-                "name": str(
-                    employee.get("label") or employee.get("panel_title") or employee_id
-                ).strip(),
-                "avatar": str(employee.get("market_avatar") or mod_avatar).strip(),
-            }
-    return profiles
-
-
-# ── 设备表初始化 ──
-
-
-def _ensure_mobile_device_table() -> None:
-    try:
-        from sqlalchemy import inspect
-
-        from app.db.models.mobile_device import MobileDeviceToken
-        from app.db.session import get_db
-
-        with get_db() as db:
-            bind = db.get_bind()
-            insp = inspect(bind)
-            if not insp.has_table(MobileDeviceToken.__tablename__):
-                MobileDeviceToken.__table__.create(bind, checkfirst=True)
-    except OPERATIONAL_ERRORS as exc:
-        logger.warning("mobile_device_tokens ensure: %s", exc)
-
-
-def _ensure_outbox_table() -> None:
-    try:
-        from sqlalchemy import inspect
-
-        from app.db.models.mobile_notification import MobileNotificationOutbox
-        from app.db.session import get_db
-
-        with get_db() as db:
-            bind = db.get_bind()
-            insp = inspect(bind)
-            if not insp.has_table(MobileNotificationOutbox.__tablename__):
-                MobileNotificationOutbox.__table__.create(bind, checkfirst=True)
-    except OPERATIONAL_ERRORS as exc:
-        logger.warning("mobile_notification_outbox ensure: %s", exc)
-
-
-# ── 中继用户解析（使用 RECOVERABLE_ERRORS，需留在主模块以支持测试 patch） ──
-
-
-def _resolve_mobile_relay_user(user: Any, *, prefer_admin: bool = False) -> dict[str, Any]:
-    """Resolve the mobile user for physical QR/device-code relay binding.
-
-    A relay pairing code already proves physical access to the desktop settings
-    screen, so first-time mobile binding must not require a pre-existing mobile
-    JWT. Prefer an existing admin account; create a local relay admin only when
-    the database has no active users yet.
-    """
-    uid, _ = _mobile_user_identity(user)
-    role = str(getattr(user, "role", "") or "").strip()
-    if uid > 0 and (not prefer_admin or role in {"admin", "super_admin", "owner"}):
-        return _mobile_user_public_dict(user)
-
-    from app.db.models import User
-    from app.db.session import get_db
-
-    try:
-        with get_db() as db:
-            row = None
-            if prefer_admin or uid <= 0:
-                row = (
-                    db.query(User)
-                    .filter(User.is_active == True)  # noqa: E712
-                    .filter(User.role.in_(["admin", "super_admin", "owner"]))
-                    .order_by(User.id.asc())
-                    .first()
-                )
-            if row is None:
-                row = (
-                    db.query(User)
-                    .filter(User.is_active == True)  # noqa: E712
-                    .order_by(User.id.asc())
-                    .first()
-                )
-            if row is None:
-                now = datetime.utcnow()
-                row = User(
-                    username=f"mobile_relay_{uuid.uuid4().hex[:8]}",
-                    password=uuid.uuid4().hex,
-                    display_name="移动端设备绑定",
-                    email="",
-                    role="admin",
-                    is_active=True,
-                    created_at=now,
-                    last_login=now,
-                )
-                db.add(row)
-                db.flush()
-            public = _mobile_user_public_dict(row)
-            if hasattr(db, "expunge"):
-                db.expunge(row)
-            return public
-    except RECOVERABLE_ERRORS as exc:
-        logger.warning("mobile relay admin fallback: %s", exc)
-        if prefer_admin:
-            return _relay_admin_fallback_user()
-        raise
-
-
-def _register_desktop_relay_for_pairing(host: str, port: int) -> dict[str, Any] | None:
-    enabled = (os.environ.get("XCAGI_RELAY_PAIRING_ENABLED") or "1").strip().lower()
-    if enabled in {"0", "false", "off", "no"}:
-        return None
-    if not _host_is_private_or_loopback(host):
-        return None
-    try:
-        from app.application.facades.mobile_relay_facade import register_desktop_relay
-
-        relay = register_desktop_relay(host=host, port=port)
-    except RECOVERABLE_ERRORS as exc:
-        logger.warning("desktop relay registration skipped: %s", exc)
-        return None
-    except Exception as exc:  # noqa: BLE001 — pairing must never block mobile login
-        logger.warning("desktop relay registration skipped after unexpected failure: %s", exc)
-        return None
-    if not relay:
-        return None
-    public_relay = dict(relay)
-    public_relay.pop("desktop_token", None)
-    return public_relay
-
-
-def _cached_desktop_relay_for_account_binding() -> dict[str, Any] | None:
-    """Return the local desktop's cloud relay id for account-auth binding."""
-    try:
-        from app.application.facades.mobile_relay_facade import cached_desktop_relay_payload
-
-        relay = cached_desktop_relay_payload()
-    except RECOVERABLE_ERRORS as exc:
-        logger.warning("cached desktop relay unavailable: %s", exc)
-        return None
-    if not relay:
-        return None
-    if relay.get("paired") is not True:
-        return None
-    relay_id = str(relay.get("relay_id") or "").strip()
-    if not relay_id:
-        return None
-    return {
-        "relay_id": relay_id,
-        "relay_base_url": str(relay.get("relay_base_url") or "").strip(),
-        "expires_at": str(relay.get("expires_at") or "").strip(),
-        "exp": int(relay.get("exp") or 0),
-        "binding_mode": "account_auth",
-    }
-
-
-# ── 配对主机解析（调用被测试 patch 的 _guess_lan_ipv4，须留在主模块） ──
-
-
-def _pairing_issue_host(requested: str) -> str:
-    host = str(requested or "").strip() or "127.0.0.1"
-    if host in ("127.0.0.1", "localhost", "0.0.0.0"):
-        return _guess_lan_ipv4()
-    return host
-
-
-# ── 服务桥接状态 ──
-
-
-def _mobile_bridge_request_statuses() -> tuple[str, ...]:
-    return ("pending", "processing", "resolved", "closed")
-
-
-# ── 同步辅助函数（被测试 patch，须留在主模块） ──
-
-
-def _approval_items(limit: int = 100) -> list[dict[str, Any]]:
-    from app.db.models.approval import ApprovalRequest
-    from app.db.session import get_db
-
-    with get_db() as db:
-        rows = (
-            db.query(ApprovalRequest).order_by(ApprovalRequest.created_at.desc()).limit(limit).all()
-        )
-        return [
-            {
-                "id": r.id,
-                "title": r.title,
-                "status": r.status,
-                "request_no": r.request_no,
-            }
-            for r in rows
-        ]
-
-
-def _shipment_items(limit: int = 100) -> list[dict[str, Any]]:
-    from app.db.models.shipment import ShipmentRecord
-    from app.db.session import get_db
-
-    with get_db() as db:
-        rows = db.query(ShipmentRecord).order_by(ShipmentRecord.id.desc()).limit(limit).all()
-        return [
-            {
-                "id": r.id,
-                "order_number": getattr(r, "order_number", None) or getattr(r, "shipment_no", None),
-                "status": getattr(r, "status", None),
-            }
-            for r in rows
-        ]
-
-
-def _safe_mobile_sync_items(name: str, loader) -> list[dict[str, Any]]:
-    try:
-        return loader()
-    except Exception as exc:  # noqa: BLE001 - 单个业务表缺失不能拖垮手机拉同步
-        logger.warning("mobile sync: %s skipped: %s", name, exc)
-        return []
-
-
-def _ai_conversation_changes(user: Any, limit: int = 100) -> list[dict[str, Any]]:
-    """查询当前用户最近的 AI 对话消息，供移动端增量同步。"""
-    uid = int(getattr(user, "id", 0) or 0)
-    if uid <= 0:
-        return []
-    try:
-        from app.db.models.ai import AIConversation, AIConversationSession
-        from app.db.session import get_db
-
-        with get_db() as db:
-            rows = (
-                db.query(AIConversation)
-                .join(
-                    AIConversationSession,
-                    AIConversation.session_id == AIConversationSession.session_id,
-                )
-                .filter(AIConversationSession.user_id == uid)
-                .order_by(AIConversation.id.desc())
-                .limit(limit)
-                .all()
-            )
-            return [
-                {
-                    "id": r.id,
-                    "session_id": r.session_id,
-                    "role": r.role,
-                    "content": r.content,
-                    "intent": r.intent or "",
-                    "created_at": r.created_at.isoformat() if r.created_at else "",
-                }
-                for r in reversed(rows)
-            ]
-    except Exception as exc:  # noqa: BLE001 - AI 对话表缺失不能拖垮手机拉同步
-        logger.warning("ai_conversation_changes: %s", exc)
-        return []
-
-
-# ── MOD 列表（被测试 patch，须留在主模块） ──
-
-
-def _mobile_mod_items(
-    market_profiles: dict[str, dict[str, Any]] | None = None,
-    *,
-    market_connected: bool = False,
-) -> list[dict[str, Any]]:
-    try:
-        from app.infrastructure.mods.mod_manager import get_mod_manager
-
-        items: list[dict[str, Any]] = []
-        for m in get_mod_manager().list_all_mods() or []:
-            if isinstance(m, dict):
-                mid = str(m.get("id") or m.get("mod_id") or "").strip()
-                name = str(m.get("name") or m.get("title") or mid).strip()
-                employees = (
-                    m.get("workflow_employees")
-                    if isinstance(m.get("workflow_employees"), list)
-                    else []
-                )
-                menu = m.get("frontend_menu") or m.get("menu") or m.get("menus")
-                menu_overrides = m.get("menu_overrides")
-                item = {
-                    "id": mid,
-                    "name": name,
-                    "version": m.get("version") or "",
-                    "author": m.get("author") or "",
-                    "description": m.get("description") or "",
-                    "primary": bool(m.get("primary")),
-                    "industry": m.get("industry") if isinstance(m.get("industry"), dict) else {},
-                    "avatar_url": m.get("avatar") or m.get("logo") or m.get("icon") or "",
-                    "frontend_menu": menu if isinstance(menu, list) else [],
-                    "menu": menu if isinstance(menu, list) else [],
-                    "menu_overrides": menu_overrides if isinstance(menu_overrides, list) else [],
-                    "workflow_employees": _enrich_workflow_employees(
-                        mid,
-                        employees,
-                        market_profiles,
-                        market_connected=market_connected,
-                    ),
-                }
-            else:
-                mid = str(getattr(m, "id", None) or getattr(m, "mod_id", "") or "").strip()
-                name = str(getattr(m, "name", None) or getattr(m, "title", None) or mid).strip()
-                employees = getattr(m, "workflow_employees", [])
-                if not isinstance(employees, list):
-                    employees = []
-                menu = getattr(m, "frontend_menu", [])
-                menu_overrides = getattr(m, "frontend_menu_overrides", [])
-                item = {
-                    "id": mid,
-                    "name": name,
-                    "version": str(getattr(m, "version", "") or ""),
-                    "author": str(getattr(m, "author", "") or ""),
-                    "description": str(getattr(m, "description", "") or ""),
-                    "primary": bool(getattr(m, "primary", False)),
-                    "industry": getattr(m, "industry", {})
-                    if isinstance(getattr(m, "industry", {}), dict)
-                    else {},
-                    "avatar_url": str(
-                        getattr(m, "avatar", "")
-                        or getattr(m, "logo", "")
-                        or getattr(m, "icon", "")
-                        or ""
-                    ),
-                    "frontend_menu": menu if isinstance(menu, list) else [],
-                    "menu": menu if isinstance(menu, list) else [],
-                    "menu_overrides": menu_overrides if isinstance(menu_overrides, list) else [],
-                    "workflow_employees": _enrich_workflow_employees(
-                        mid,
-                        employees,
-                        market_profiles,
-                        market_connected=market_connected,
-                    ),
-                }
-            if mid:
-                items.append(item)
-        _upsert_admin_duty_mod_item(
-            items,
-            market_profiles,
-            market_connected=market_connected,
-        )
-        return items[:100]
-    except OPERATIONAL_ERRORS as exc:
-        logger.warning("mobile mods list: %s", exc)
-        items: list[dict[str, Any]] = []
-        _upsert_admin_duty_mod_item(
-            items,
-            market_profiles,
-            market_connected=market_connected,
-        )
-        return items
-
-
-# ── 管理端编制员工（调用被测试 patch 的 _load_admin_duty_records，须留在主模块） ──
-
-
-def _admin_roster_ids_by_department_order() -> list[str]:
-    try:
-        from app.mod_sdk.employee_ssot import derive_admin_duty_roster
-
-        admin = derive_admin_duty_roster()
-    except RECOVERABLE_ERRORS:
-        return []
-    seen: set[str] = set()
-    out: list[str] = []
-    for dept in admin.get("departments") or []:
-        if not isinstance(dept, dict):
-            continue
-        for employee in dept.get("employees") or []:
-            if not isinstance(employee, dict):
-                continue
-            eid = str(employee.get("id") or "").strip()
-            if eid and eid not in seen:
-                seen.add(eid)
-                out.append(eid)
-    for eid in admin.get("planned_employee_ids") or []:
-        eid = str(eid or "").strip()
-        if eid and eid not in seen:
-            seen.add(eid)
-            out.append(eid)
-    return out
-
-
-def _admin_roster_area_labels() -> dict[str, str]:
-    try:
-        from app.mod_sdk.duty_roster import load_duty_roster_document
-
-        doc = load_duty_roster_document()
-    except RECOVERABLE_ERRORS:
-        return {}
-    out: dict[str, str] = {}
-    areas = doc.get("areas") if isinstance(doc, dict) else {}
-    if not isinstance(areas, dict):
-        return out
-    for _area_key, area in areas.items():
-        if not isinstance(area, dict):
-            continue
-        label = _compact_text(area.get("label"))
-        for eid in area.get("ids") or []:
-            sid = str(eid or "").strip()
-            if sid and label and sid not in out:
-                out[sid] = label
-    return out
-
-
-def _admin_employee_manifest(employee_id: str) -> dict[str, Any]:
-    eid = str(employee_id or "").strip()
-    if not eid:
-        return {}
-    manifest = Path(__file__).resolve().parents[2] / "mods" / "_employees" / eid / "manifest.json"
-    try:
-        raw = json.loads(manifest.read_text(encoding="utf-8"))
-        return raw if isinstance(raw, dict) else {}
-    except (OSError, json.JSONDecodeError):
-        return {}
-
-
-def _admin_duty_records_from_roster() -> list[dict[str, Any]]:
-    registry = _load_admin_duty_records()
-    roster_ids = _admin_roster_ids_by_department_order()
-    if not roster_ids:
-        return registry
-    registry_by_id: dict[str, dict[str, Any]] = {}
-    for raw in registry:
-        eid = str(raw.get("id") or raw.get("pkg_id") or "").strip()
-        if eid and eid not in registry_by_id:
-            registry_by_id[eid] = raw
-
-    registry_ids = set(registry_by_id)
-    roster_id_set = set(roster_ids)
-    if registry_ids and not (registry_ids & roster_id_set):
-        # Compatibility for direct unit tests that patch only the registry seam.
-        return registry
-
-    area_labels = _admin_roster_area_labels()
-    records: list[dict[str, Any]] = []
-    for eid in roster_ids:
-        raw = dict(registry_by_id.get(eid) or {})
-        manifest = _admin_employee_manifest(eid)
-        employee_meta = (
-            manifest.get("employee") if isinstance(manifest.get("employee"), dict) else {}
-        )
-        raw.setdefault("id", eid)
-        raw.setdefault("pkg_id", eid)
-        raw.setdefault("name", manifest.get("name") or employee_meta.get("label") or eid)
-        raw.setdefault("description", manifest.get("description") or "")
-        raw.setdefault("version", manifest.get("version") or "")
-        raw.setdefault("yuangon_area", area_labels.get(eid, ""))
-        raw.setdefault("employee_scope", "duty")
-        raw.setdefault("employee_source", "duty_roster")
-        raw.setdefault("is_duty_employee", True)
-        raw.setdefault("is_store_employee", False)
-        records.append(raw)
-    return records
-
-
-def _admin_employee_items(
-    market_profiles: dict[str, dict[str, Any]] | None = None,
-    *,
-    market_connected: bool = False,
-    im_summary: dict[str, dict[str, Any]] | None = None,
-) -> list[dict[str, Any]]:
-    items: list[dict[str, Any]] = []
-    for raw in _admin_duty_records_from_roster():
-        employee_id = str(raw.get("id") or raw.get("pkg_id") or "").strip()
-        if not employee_id:
-            continue
-        name = _compact_text(raw.get("name") or employee_id)
-        area = _compact_text(raw.get("yuangon_area") or raw.get("industry"))
-        item = {
-            "id": employee_id,
-            "name": name,
-            "label": name,
-            "title": name,
-            "panel_title": name,
-            "description": _compact_text(raw.get("description")),
-            "panel_summary": _compact_text(raw.get("description")),
-            "version": str(raw.get("version") or "").strip(),
-            "industry": _compact_text(raw.get("industry")),
-            "yuangon_area": area,
-            "employee_scope": _compact_text(raw.get("employee_scope") or "duty"),
-            "employee_source": _compact_text(raw.get("employee_source") or "duty_roster"),
-            "is_duty_employee": bool(raw.get("is_duty_employee", True)),
-            "is_store_employee": bool(raw.get("is_store_employee", False)),
-            "status": "on_duty",
-            "api_base_path": f"/api/admin/employees/{employee_id}",
-            "phone_channel": "admin-duty",
-            "workflow_placeholder": False,
-            "stored_filename": _compact_text(raw.get("stored_filename")),
-            "file_size": raw.get("file_size") or 0,
-        }
-        profile = None
-        if market_profiles:
-            for key in _admin_employee_match_keys(raw, employee_id, name):
-                profile = market_profiles.get(key)
-                if profile:
-                    break
-        _apply_market_profile(item, profile, market_connected=market_connected)
-        if im_summary:
-            summary = im_summary.get(employee_id)
-            if summary:
-                item.update(summary)
-        items.append(item)
-    return items
-
-
-def _admin_duty_mod_item(
-    market_profiles: dict[str, dict[str, Any]] | None = None,
-    *,
-    market_connected: bool = False,
-) -> dict[str, Any] | None:
-    employees = _admin_employee_items(market_profiles, market_connected=market_connected)
-    if not employees:
-        return None
-    return {
-        "id": "admin-duty-employees",
-        "name": "管理端编制员工",
-        "version": "local",
-        "author": "XCAGI 管理端",
-        "description": f"{len(employees)} 位管理端编制 AI 员工，来自 duty_roster.json。",
-        "primary": True,
-        "industry": {"id": "管理端", "name": "管理端"},
-        "frontend_menu": [],
-        "menu": [],
-        "menu_overrides": [],
-        "workflow_employees": employees,
-    }
-
-
-def _upsert_admin_duty_mod_item(
-    items: list[dict[str, Any]],
-    market_profiles: dict[str, dict[str, Any]] | None = None,
-    *,
-    market_connected: bool = False,
-) -> None:
-    duty_mod = _admin_duty_mod_item(market_profiles, market_connected=market_connected)
-    if not duty_mod:
-        return
-    duty_id = str(duty_mod.get("id") or "")
-    for item in items:
-        if str(item.get("id") or "") != duty_id:
-            continue
-        if not item.get("workflow_employees"):
-            item["workflow_employees"] = duty_mod["workflow_employees"]
-        return
-    items.insert(0, duty_mod)
-
-
-# ── 客服持久化（使用 OPERATIONAL_ERRORS，须留在主模块） ──
-
-
-def _persist_mobile_cs_request(
-    user: Any,
-    *,
-    message_id: str,
-    msg_body: str,
-    reply: str,
-    backend: str,
-    employee_result: dict[str, Any],
-) -> tuple[int, bool, str]:
-    from app.db.models.service_request import ServiceRequest
-    from app.db.session import get_db
-
-    username = _safe_user_text(user, "username")
-    extra = {
-        "message_id": message_id,
-        "mobile_user_id": _safe_user_id(user),
-        "username": username,
-        "ai_reply": reply,
-        "backend": backend,
-        "employee_result": employee_result,
-    }
-    try:
-        with get_db() as db:
-            ServiceRequest.__table__.create(db.get_bind(), checkfirst=True)
-            row = ServiceRequest(
-                source_instance_id=_mobile_cs_source_id(user),
-                source_instance_name=_mobile_cs_source_name(user),
-                request_type="mobile_ai_customer_service",
-                title=msg_body[:80] or f"{dedicated_cs_label()}咨询",
-                description=msg_body,
-                priority="normal",
-                status="pending",
-                extra_data=json.dumps(extra, ensure_ascii=False),
-            )
-            db.add(row)
-            db.flush()
-            return int(row.id), True, ""
-    except OPERATIONAL_ERRORS as exc:
-        logger.warning("mobile cs service request persist skipped: %s", exc)
-        return 0, False, "服务请求保存失败"
-
-
-# ════════════════════════════════════════════════════════════════════
-# 路由处理函数
-# ════════════════════════════════════════════════════════════════════
-
-
-# ── 审批 / 客户 / 发货 ──
-
-
-@extension_router.get("/approval/requests")
-async def mobile_approval_list(
-    request: Request,
-    status: str | None = None,
-    page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=200),
-    user=Depends(get_mobile_user),
-):
-    if user is None:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    from app.db.models.approval import ApprovalRequest
-    from app.db.session import get_db
-
-    with get_db() as db:
-        q = db.query(ApprovalRequest)
-        if status:
-            q = q.filter(ApprovalRequest.status == status)
-        total = q.count()
-        rows = (
-            q.order_by(ApprovalRequest.created_at.desc())
-            .offset((page - 1) * page_size)
-            .limit(page_size)
-            .all()
-        )
-        items = [
-            {
-                "id": r.id,
-                "title": r.title,
-                "status": r.status,
-                "request_no": r.request_no,
-                "applicant_id": r.applicant_id,
-            }
-            for r in rows
-        ]
-    return format_mobile_response(data=paginate_list(items, total, page, page_size))
-
-
-@extension_router.get("/customers")
-async def mobile_customers(
-    page: int = Query(1, ge=1),
-    per_page: int = Query(20, ge=1, le=100),
-    user=Depends(get_mobile_user),
-):
-    if user is None:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    from app.db.models import Customer
-    from app.db.session import get_db
-    from app.infrastructure.tenant_scope import apply_tenant_filter
-
-    with get_db() as db:
-        q = apply_tenant_filter(db.query(Customer), Customer)
-        total = q.count()
-        rows = q.offset((page - 1) * per_page).limit(per_page).all()
-        items = [
-            {
-                "id": c.id,
-                "name": c.customer_name,
-                "phone": c.contact_phone,
-            }
-            for c in rows
-        ]
-    return format_mobile_response(data=paginate_list(items, total, page, per_page))
-
-
-@extension_router.get("/shipments")
-async def mobile_shipments(
-    page: int = Query(1, ge=1),
-    per_page: int = Query(20, ge=1, le=100),
-    user=Depends(get_mobile_user),
-):
-    if user is None:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    from app.db.models.shipment import ShipmentRecord
-    from app.db.session import get_db
-
-    with get_db() as db:
-        q = db.query(ShipmentRecord)
-        total = q.count()
-        rows = (
-            q.order_by(ShipmentRecord.id.desc()).offset((page - 1) * per_page).limit(per_page).all()
-        )
-        items = [
-            {
-                "id": r.id,
-                "order_number": getattr(r, "order_number", None) or getattr(r, "shipment_no", None),
-                "status": getattr(r, "status", None),
-            }
-            for r in rows
-        ]
-    return format_mobile_response(data=paginate_list(items, total, page, per_page))
-
-
-# ── 员工 & 部门 SSOT（手机端只读派生，与桌面/网页同一份 config/duty_roster.json）──
-def _employee_ssot_payload() -> dict[str, Any]:
-    """管理端 6 部门上岗 + 企业端 4 部门上架/未上架，自动派生自 SSOT。"""
-    from app.application.ops_closure_status import _installed_employee_pack_ids
-    from app.mod_sdk.employee_ssot import derive_employee_ssot
-
-    installed: set[str] = set()
-    try:
-        installed = _installed_employee_pack_ids()
-    except OPERATIONAL_ERRORS as exc:
-        logger.warning("mobile employee-ssot: 读取已安装 employee_pack 失败: %s", exc)
-    return derive_employee_ssot(installed_ids=installed)
-
-
-@extension_router.get("/employee-ssot")
-async def mobile_employee_ssot(user=Depends(get_mobile_user)):
-    if user is None:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    return format_mobile_response(data=_employee_ssot_payload())
-
-
-# ── 设备管理 ──
-
-
-@extension_router.post("/devices/register")
-async def mobile_device_register(body: DeviceRegisterBody, user=Depends(get_mobile_user)):
-    if user is None:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    _ensure_mobile_device_table()
-    from app.db.models.mobile_device import MobileDeviceToken
-    from app.db.session import get_db
-    from app.utils.time import utc_now_naive
-
-    token = (body.push_token or body.fcm_token).strip()
-    provider = (body.push_provider or "fcm").strip().lower()[:16]
-    if not token:
-        return JSONResponse(
-            format_mobile_response(None, "缺少 push_token", success=False, code=400),
-            status_code=400,
-        )
-    with get_db() as db:
-        row = (
-            db.query(MobileDeviceToken)
-            .filter(
-                MobileDeviceToken.user_id == user.id,
-                MobileDeviceToken.fcm_token == body.fcm_token.strip(),
-            )
-            .first()
-        )
-        if row:
-            row.device_label = body.device_label[:200]
-            row.platform = body.platform[:32]
-            row.fcm_token = body.fcm_token.strip()[:512]
-            row.push_provider = provider
-            row.push_token = token
-            row.product_sku = (body.product_sku or "personal")[:32]
-            row.updated_at = utc_now_naive()
-        else:
-            db.add(
-                MobileDeviceToken(
-                    user_id=user.id,
-                    fcm_token=body.fcm_token.strip(),
-                    push_provider=provider,
-                    push_token=token,
-                    product_sku=(body.product_sku or "personal")[:32],
-                    platform=body.platform[:32],
-                    device_label=body.device_label[:200],
-                )
-            )
-    return format_mobile_response(data={"registered": True})
-
-
-@extension_router.delete("/devices/unregister")
-async def mobile_device_unregister(
-    fcm_token: str = Query(..., min_length=8),
-    user=Depends(get_mobile_user),
-):
-    if user is None:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    _ensure_mobile_device_table()
-    from app.db.models.mobile_device import MobileDeviceToken
-    from app.db.session import get_db
-
-    with get_db() as db:
-        db.query(MobileDeviceToken).filter(
-            MobileDeviceToken.user_id == user.id,
-            MobileDeviceToken.fcm_token == fcm_token.strip(),
-        ).delete()
-    return format_mobile_response(data={"unregistered": True})
-
-
-@extension_router.get("/notifications/pending")
-async def mobile_notifications_pending(
-    limit: int = Query(50, ge=1, le=200),
-    user=Depends(get_mobile_user),
-):
-    """自建推送后台通道:返回未送达的离线通知并标记 delivered（客户端 WorkManager 轮询）。"""
-    if user is None:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    _ensure_outbox_table()
-    import json as _json
-
-    from app.db.models.mobile_notification import MobileNotificationOutbox
-    from app.db.session import get_db
-    from app.utils.time import utc_now_naive
-
-    items: list[dict] = []
-    with get_db() as db:
-        rows = (
-            db.query(MobileNotificationOutbox)
-            .filter(
-                MobileNotificationOutbox.user_id == user.id,
-                MobileNotificationOutbox.delivered.is_(False),
-            )
-            .order_by(MobileNotificationOutbox.created_at.asc())
-            .limit(limit)
-            .all()
-        )
-        now = utc_now_naive()
-        for r in rows:
-            try:
-                data = _json.loads(r.data_json or "{}")
-            except (ValueError, TypeError):
-                data = {}
-            items.append(
-                {
-                    "id": r.id,
-                    "title": r.title,
-                    "body": r.body,
-                    "route": r.route,
-                    "channel": r.channel,
-                    "data": data,
-                }
-            )
-            r.delivered = True
-            r.delivered_at = now
-    return format_mobile_response(data={"notifications": items})
-
-
-# ── 配对 ──
-
-
-@extension_router.post("/pairing/issue")
-async def mobile_pairing_issue(body: PairingIssueBody, request: Request):
-    """桌面或运维签发配对 QR 载荷（开发/内网）。"""
-    host = _pairing_issue_host(body.host or (request.url.hostname or ""))
-    api_port = _pairing_issue_port(request, int(body.port))
-    port = _pairing_reachable_port(request, api_port)
-    payload = issue_pairing_nonce(host, port)
-    data = _enrich_pairing_payload(payload, request)
-    relay = _register_desktop_relay_for_pairing(host, port)
-    if relay:
-        data["relay"] = relay
-        data["relay_id"] = relay.get("relay_id")
-        data["relay_base_url"] = relay.get("relay_base_url")
-        data["relay_binding_mode"] = "account_auth"
-    return format_mobile_response(data=data)
-
-
-@extension_router.post("/pairing/lookup")
-async def mobile_pairing_lookup(body: PairingLookupBody):
-    code = body.code.strip()
-    rec = lookup_by_shortcode(code)
-    if not rec:
-        return JSONResponse(
-            format_mobile_response(None, "配对码不存在或已过期", success=False, code=404),
-            status_code=404,
-        )
-    return format_mobile_response(
-        data=_enrich_pairing_payload(
-            {
-                "host": rec.get("host"),
-                "port": rec.get("port"),
-                "nonce": rec.get("nonce"),
-                "shortCode": code,
-                "exp": rec.get("exp") or 0,
-            }
-        ),
-    )
-
-
-@extension_router.post("/pairing/exchange")
-async def mobile_pairing_exchange(body: PairingExchangeBody, user=Depends(get_mobile_user)):
-    nonce = body.nonce.strip()
-    code = body.code.strip()
-    if not nonce and not code:
-        return JSONResponse(
-            format_mobile_response(None, "缺少配对码", success=False, code=400),
-            status_code=400,
-        )
-    rec = consume_by_shortcode(code) if code else consume_pairing_nonce(nonce)
-    if not rec:
-        return JSONResponse(
-            format_mobile_response(
-                None, "配对码无效或已过期，请刷新二维码", success=False, code=400
-            ),
-            status_code=400,
-        )
-    user_public = _resolve_mobile_relay_user(user, prefer_admin=True)
-    data = {
-        **_enrich_pairing_payload(rec),
-        **_relay_mobile_auth_payload(user_public),
-        "hint": "已返回可保存的 api_base_url，手机端可直接绑定该设备。",
-    }
-    relay = _cached_desktop_relay_for_account_binding()
-    if relay:
-        data["relay"] = relay
-        data["relay_id"] = relay.get("relay_id")
-        data["relay_base_url"] = relay.get("relay_base_url")
-        data["relay_binding_mode"] = "account_auth"
-    return format_mobile_response(data=data)
-
-
-# ── 服务桥接 ──
-
-
-@extension_router.get("/service-bridge/requests")
-async def mobile_service_bridge_requests(
-    request: Request,
-    status: str | None = None,
-    source_instance_id: str | None = None,
-    request_type: str | None = None,
-    page: int = Query(1, ge=1),
-    per_page: int = Query(20, ge=1, le=100),
-    user=Depends(get_mobile_user),
-):
-    if user is None:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    from app.db.session import get_db
-
-    with get_db() as db:
-        from app.db.models.service_request import ServiceRequest
-
-        q = db.query(ServiceRequest)
-        if status:
-            q = q.filter(ServiceRequest.status == status)
-        if source_instance_id:
-            q = q.filter(ServiceRequest.source_instance_id == source_instance_id)
-        if request_type:
-            q = q.filter(ServiceRequest.request_type == request_type)
-        total = q.count()
-        items = (
-            q.order_by(ServiceRequest.created_at.desc())
-            .offset((page - 1) * per_page)
-            .limit(per_page)
-            .all()
-        )
-        return format_mobile_response(
-            data=paginate_list([r.to_dict() for r in items], total, page, per_page)
-        )
-
-
-@extension_router.put("/service-bridge/requests/{request_id}/respond")
-async def mobile_service_bridge_request_respond(
-    request_id: int,
-    body: MobileServiceBridgeRespondBody,
-    user=Depends(get_mobile_user),
-):
-    if request_id <= 0:
-        return JSONResponse(
-            format_mobile_response(None, "请求 ID 无效", success=False, code=400),
-            status_code=400,
-        )
-    if body.status not in _mobile_bridge_request_statuses():
-        return JSONResponse(
-            format_mobile_response(None, "状态值非法", success=False, code=400),
-            status_code=400,
-        )
-    if user is None:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    from app.db.session import get_db
-
-    try:
-        with get_db() as db:
-            from app.db.models.service_request import ServiceRequest
-
-            req = db.query(ServiceRequest).filter(ServiceRequest.id == request_id).first()
-            if not req:
-                return JSONResponse(
-                    format_mobile_response(None, "请求不存在", success=False, code=404),
-                    status_code=404,
-                )
-            req.response = body.response
-            req.responded_by = body.responded_by
-            req.responded_at = datetime.utcnow()
-            req.status = body.status
-            db.flush()
-        return format_mobile_response(data=req.to_dict())
-    except HTTPException:
-        raise
-    except RECOVERABLE_ERRORS:
-        logger.exception("mobile_service_bridge_request_respond")
-        return JSONResponse(
-            format_mobile_response(None, "服务响应失败", success=False, code=500),
-            status_code=500,
-        )
-    except Exception:
-        logger.exception("mobile service-bridge respond failed")
-        return JSONResponse(
-            format_mobile_response(None, "服务响应失败", success=False, code=500),
-            status_code=500,
-        )
-
-
-# ── 中继服务 ──
-
-
-@extension_router.post("/relay/desktop/register")
-async def mobile_relay_desktop_register(body: RelayDesktopRegisterBody):
-    """Desktop runtime registers a long-lived cloud relay binding session."""
-    try:
-        data = MobileRelayService().register_desktop(
-            label=body.label,
-            device_id=body.device_id,
-            capabilities=body.capabilities,
-            relay_base_url=body.relay_base_url,
-        )
-        return format_mobile_response(data=data)
-    except RECOVERABLE_ERRORS:
-        logger.exception("mobile_relay_desktop_register")
-        return JSONResponse(
-            format_mobile_response(None, "桌面端注册失败", success=False, code=500),
-            status_code=500,
-        )
-
-
-@extension_router.post("/relay/mobile/bind-account")
-async def mobile_relay_bind_account(
-    body: RelayMobileBindAccountBody,
-    user=Depends(get_mobile_user),
-):
-    uid, username = _mobile_user_identity(user)
-    if uid <= 0:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401),
-            status_code=401,
-        )
-    try:
-        desktop = MobileRelayService().bind_mobile_by_account(
-            user_id=uid,
-            username=username,
-            relay_id=body.relay_id,
-        )
-        if not desktop:
-            return JSONResponse(
-                format_mobile_response(None, "未找到可绑定的电脑执行端", success=False, code=404),
-                status_code=404,
-            )
-        user_public = _mobile_user_public_dict(user)
-        return format_mobile_response(
-            data={
-                "desktop": desktop,
-                "relay_id": desktop.get("relay_id"),
-                **_relay_mobile_auth_payload(user_public, desktop),
-            }
-        )
-    except RECOVERABLE_ERRORS:
-        logger.exception("mobile_relay_bind_account")
-        return JSONResponse(
-            format_mobile_response(None, "账号绑定失败", success=False, code=500),
-            status_code=500,
-        )
-
-
-@extension_router.get("/relay/mobile/desktops")
-async def mobile_relay_desktops(user=Depends(get_mobile_user)):
-    uid, _ = _mobile_user_identity(user)
-    if uid <= 0:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401),
-            status_code=401,
-        )
-    try:
-        items = MobileRelayService().list_desktops(user_id=uid)
-        return format_mobile_response(data={"items": items, "count": len(items)})
-    except RECOVERABLE_ERRORS:
-        logger.exception("mobile_relay_desktops")
-        return JSONResponse(
-            format_mobile_response(None, "暂时无法获取桌面端", success=False, code=500),
-            status_code=500,
-        )
-
-
-@extension_router.post("/relay/tasks")
-async def mobile_relay_create_task(body: RelayTaskCreateBody, user=Depends(get_mobile_user)):
-    uid, _ = _mobile_user_identity(user)
-    if uid <= 0:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401),
-            status_code=401,
-        )
-    try:
-        payload = dict(body.payload or {})
-        payload.setdefault("user_id", uid)
-        task = MobileRelayService().create_task(
-            user_id=uid,
-            relay_id=body.relay_id,
-            kind=body.kind,
-            payload=payload,
-        )
-        if not task:
-            return JSONResponse(
-                format_mobile_response(None, "未找到已绑定的电脑执行端", success=False, code=404),
-                status_code=404,
-            )
-        return format_mobile_response(data={"task": task})
-    except RECOVERABLE_ERRORS:
-        logger.exception("mobile_relay_create_task")
-        return JSONResponse(
-            format_mobile_response(None, "任务创建失败", success=False, code=500),
-            status_code=500,
-        )
-
-
-@extension_router.get("/relay/tasks/{task_id}")
-async def mobile_relay_task_status(task_id: str, user=Depends(get_mobile_user)):
-    uid, _ = _mobile_user_identity(user)
-    if uid <= 0:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401),
-            status_code=401,
-        )
-    task = MobileRelayService().get_task(user_id=uid, task_id=task_id)
-    if not task:
-        return JSONResponse(
-            format_mobile_response(None, "任务不存在", success=False, code=404),
-            status_code=404,
-        )
-    return format_mobile_response(data={"task": task})
-
-
-@extension_router.post("/relay/tasks/{task_id}/cancel")
-async def mobile_relay_task_cancel(task_id: str, user=Depends(get_mobile_user)):
-    uid, _ = _mobile_user_identity(user)
-    if uid <= 0:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401),
-            status_code=401,
-        )
-    task = MobileRelayService().cancel_task(user_id=uid, task_id=task_id)
-    if not task:
-        return JSONResponse(
-            format_mobile_response(None, "任务不存在", success=False, code=404),
-            status_code=404,
-        )
-    return format_mobile_response(data={"task": task})
-
-
-@extension_router.post("/relay/desktop/poll")
-async def mobile_relay_desktop_poll(body: RelayDesktopPollBody):
-    try:
-        data = MobileRelayService().poll_desktop(
-            relay_id=body.relay_id,
-            desktop_token=body.desktop_token,
-            max_tasks=body.max_tasks,
-        )
-        if not data:
-            return JSONResponse(
-                format_mobile_response(None, "中继桌面凭证无效", success=False, code=404),
-                status_code=404,
-            )
-        return format_mobile_response(data=data)
-    except RECOVERABLE_ERRORS:
-        logger.exception("mobile_relay_desktop_poll")
-        return JSONResponse(
-            format_mobile_response(None, "轮询桌面任务失败", success=False, code=500),
-            status_code=500,
-        )
-
-
-@extension_router.post("/relay/desktop/tasks/{task_id}/complete")
-async def mobile_relay_desktop_complete(task_id: str, body: RelayDesktopCompleteBody):
-    try:
-        task = MobileRelayService().complete_desktop_task(
-            relay_id=body.relay_id,
-            desktop_token=body.desktop_token,
-            task_id=task_id,
-            status=body.status,
-            result=body.result,
-        )
-        if not task:
-            return JSONResponse(
-                format_mobile_response(None, "任务或桌面凭证无效", success=False, code=404),
-                status_code=404,
-            )
-        return format_mobile_response(data={"task": task})
-    except RECOVERABLE_ERRORS:
-        logger.exception("mobile_relay_desktop_complete")
-        return JSONResponse(
-            format_mobile_response(None, "任务完成回传失败", success=False, code=500),
-            status_code=500,
-        )
-
-
-# ── 管理端 ──
-
-
-@extension_router.get("/admin/employees")
-async def mobile_admin_employees(request: Request, user=Depends(get_mobile_user)):
-    _, err = _require_mobile_admin(request, user)
-    if err is not None:
-        return err
-    market_profiles, market_connected, market_error = await _load_market_ai_employee_profile_index()
-    uid = _mobile_request_user_id(request, user)
-    im_summary: dict[str, dict[str, Any]] = {}
-    if uid > 0:
-        try:
-            from app.application.im_app_service import ImApplicationService
-            from app.db import SessionLocal
-
-            db = SessionLocal()
-            try:
-                raw_items = _admin_employee_items(
-                    market_profiles, market_connected=market_connected
-                )
-                im_summary = ImApplicationService(db).employee_im_summary(uid, raw_items)
-            finally:
-                db.close()
-        except RECOVERABLE_ERRORS:
-            logger.debug("employee_im_summary skipped for /admin/employees", exc_info=True)
-    items = _admin_employee_items(
-        market_profiles, market_connected=market_connected, im_summary=im_summary
-    )
-    return format_mobile_response(
-        data={
-            "items": items,
-            "count": len(items),
-            "market_connected": market_connected,
-            "market_profile_count": len(market_profiles),
-            "market_error": market_error,
-        }
-    )
-
-
-@extension_router.get("/admin/features")
-async def mobile_admin_features(request: Request, user=Depends(get_mobile_user)):
-    _, err = _require_mobile_admin(request, user)
-    if err is not None:
-        return err
-    return format_mobile_response(
-        data={"items": ADMIN_MOBILE_FEATURES, "count": len(ADMIN_MOBILE_FEATURES)}
-    )
-
-
-# ── 管理端客服收件箱(企业客户↔企业专属客服,手机 Bearer + admin 守卫)──
-
-
-@extension_router.get("/im/cs/inbox")
-async def mobile_im_cs_inbox(request: Request, user=Depends(get_mobile_user)):
-    """运营者手机:列出所有企业客户的专属客服会话。"""
-    _, err = _require_mobile_admin(request, user)
-    if err is not None:
-        return err
-    from app.application.im_app_service import ImApplicationService
-    from app.db.session import get_db
-
-    try:
-        with get_db() as db:
-            items = ImApplicationService(db).list_cs_inbox()
-        conversations = [
-            {
-                "conversationId": c.get("id"),
-                "customerName": c.get("customer_name") or f"用户{c.get('customer_user_id')}",
-                "lastMessageAt": str(c.get("last_message_at") or ""),
-                "unreadCount": int(c.get("unread_count") or 0),
-            }
-            for c in items
-        ]
-        return format_mobile_response(data={"conversations": conversations})
-    except RECOVERABLE_ERRORS:
-        logger.exception("mobile cs inbox failed")
-        return JSONResponse(
-            format_mobile_response(None, "客服收件箱加载失败", success=False, code=500),
-            status_code=500,
-        )
-
-
-@extension_router.get("/im/cs/inbox/{conversation_id}/messages")
-async def mobile_im_cs_inbox_messages(
-    conversation_id: int, request: Request, user=Depends(get_mobile_user)
-):
-    """运营者手机:读某客服会话历史(fromCustomer 区分客户/客服)。"""
-    _, err = _require_mobile_admin(request, user)
-    if err is not None:
-        return err
-    from app.application.im_app_service import ImApplicationService
-    from app.db.session import get_db
-
-    try:
-        with get_db() as db:
-            svc = ImApplicationService(db)
-            cs_id = int(svc.enterprise_cs_user_id() or 0)
-            raw = svc.cs_inbox_messages(conversation_id)
-        messages = [
-            {
-                "messageId": str(m.get("id") or ""),
-                "fromCustomer": int(m.get("sender_user_id") or 0) != cs_id,
-                "senderName": str(m.get("sender_display_name") or ""),
-                "body": str(m.get("body") or ""),
-                "timestamp": str(m.get("created_at") or ""),
-            }
-            for m in raw
-        ]
-        return format_mobile_response(data={"messages": messages})
-    except RECOVERABLE_ERRORS:
-        logger.exception("mobile cs inbox messages failed")
-        return JSONResponse(
-            format_mobile_response(None, "客服消息加载失败", success=False, code=500),
-            status_code=500,
-        )
-
-
-@extension_router.post("/im/cs/inbox/{conversation_id}/reply")
-async def mobile_im_cs_inbox_reply(
-    conversation_id: int, body: dict, request: Request, user=Depends(get_mobile_user)
-):
-    """运营者手机:以「企业专属客服」身份回复客户。"""
-    _, err = _require_mobile_admin(request, user)
-    if err is not None:
-        return err
-    text = str(body.get("body") or "").strip()
-    if not text:
-        return JSONResponse(
-            format_mobile_response(None, "消息不能为空", success=False, code=400), status_code=400
-        )
-    from app.application.im_app_service import ImApplicationService
-    from app.db.session import get_db
-
-    try:
-        with get_db() as db:
-            result = ImApplicationService(db).cs_reply(conversation_id, text)
-        sent = result.get("message") or {}
-        return format_mobile_response(
-            data={
-                "messageId": str(sent.get("id") or ""),
-                "timestamp": str(sent.get("created_at") or ""),
-            }
-        )
-    except (ValueError, PermissionError):
-        return JSONResponse(
-            format_mobile_response(None, "回复内容无效", success=False, code=400), status_code=400
-        )
-    except RECOVERABLE_ERRORS:
-        logger.exception("mobile cs inbox reply failed")
-        return JSONResponse(
-            format_mobile_response(None, "客服回复失败", success=False, code=500), status_code=500
-        )
-
-
-@extension_router.get("/admin/home")
-async def mobile_admin_home(request: Request, user=Depends(get_mobile_user)):
-    meta, err = _require_mobile_admin(request, user)
-    if err is not None:
-        return err
-    market_profiles, market_connected, market_error = await _load_market_ai_employee_profile_index()
-    employees = _admin_employee_items(market_profiles, market_connected=market_connected)
-    # 把员工与老板的 direct IM 会话摘要合并进员工项，让 App 在现有员工列表里直接看到/点进 IM 会话。
-    # employee_im_summary 会自动为尚无 IM 用户/会话的员工 ensure 虚拟用户 + 创建空 direct 会话，
-    # 确保老板首次点击员工聊天页时 im_conv_id > 0，前端能正常走 IM 消息通道。
-    uid = _mobile_request_user_id(request, user)
-    im_summary: dict[str, dict[str, Any]] = {}
-    if uid > 0 and employees:
-        try:
-            from app.application.im_app_service import ImApplicationService
-            from app.db import SessionLocal
-
-            db = SessionLocal()
-            try:
-                im_summary = ImApplicationService(db).employee_im_summary(uid, employees)
-            finally:
-                db.close()
-        except RECOVERABLE_ERRORS:
-            logger.debug("employee_im_summary skipped", exc_info=True)
-    employees = _admin_employee_items(
-        market_profiles, market_connected=market_connected, im_summary=im_summary
-    )
-    return format_mobile_response(
-        data={
-            "account_kind": meta.get("account_kind") or "admin",
-            "employees": employees,
-            "employee_count": len(employees),
-            "features": ADMIN_MOBILE_FEATURES,
-            "feature_count": len(ADMIN_MOBILE_FEATURES),
-            "market_connected": market_connected,
-            "market_profile_count": len(market_profiles),
-            "market_error": market_error,
-        }
-    )
-
-
-# ── MOD / 平台 / 首页 ──
-
-
-@extension_router.get("/circle/posts")
-async def mobile_ai_circle_posts(
-    limit: int = Query(default=50, ge=1, le=100),
-    user=Depends(get_mobile_user),
-):
-    if user is None:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    from app.application.ai_circle_service import list_posts
-
-    try:
-        import importlib
-
-        employee_circle_sync = importlib.import_module("app.application.employee_circle_sync")
-
-        await employee_circle_sync.sync_modstore_reports()
-    except Exception:  # noqa: BLE001 - 同步失败不影响交流圈展示
-        logger.warning("circle: modstore report sync skipped", exc_info=True)
-
-    uid, _, _ = _ai_circle_user(user)
-    posts = list_posts(user_id=uid, limit=limit)
-    profiles = _ai_circle_employee_profiles()
-    for post in posts:
-        profile = profiles.get(str(post.get("employee_id") or ""))
-        if profile:
-            post["author_name"] = profile["name"]
-            post["author_avatar"] = profile["avatar"] or post.get("author_avatar")
-    return format_mobile_response(data={"items": posts, "count": len(posts)})
-
-
-@extension_router.post("/circle/posts")
-async def mobile_ai_circle_create_post(
-    body: AiCirclePostBody,
-    user=Depends(get_mobile_user),
-):
-    if user is None:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    from app.application.ai_circle_service import create_user_post
-
-    uid, name, avatar = _ai_circle_user(user)
-    try:
-        post_id = create_user_post(user_id=uid, author_name=name, avatar=avatar, body=body.body)
-        return format_mobile_response(data={"id": post_id}, message="发布成功")
-    except ValueError:
-        return JSONResponse(
-            format_mobile_response(None, "动态内容无效", success=False, code=400), status_code=400
-        )
-
-
-@extension_router.post("/circle/posts/{post_id}/like")
-async def mobile_ai_circle_toggle_like(post_id: int, user=Depends(get_mobile_user)):
-    if user is None:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    from app.application.ai_circle_service import toggle_like
-
-    uid, _, _ = _ai_circle_user(user)
-    try:
-        liked = toggle_like(post_id=post_id, user_id=uid)
-        return format_mobile_response(data={"liked": liked})
-    except LookupError:
-        return JSONResponse(
-            format_mobile_response(None, "动态不存在", success=False, code=404), status_code=404
-        )
-
-
-@extension_router.post("/circle/posts/{post_id}/comments")
-async def mobile_ai_circle_add_comment(
-    post_id: int,
-    body: AiCircleCommentBody,
-    user=Depends(get_mobile_user),
-):
-    if user is None:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    from app.application.ai_circle_service import add_comment
-
-    uid, name, _ = _ai_circle_user(user)
-    try:
-        comment_id = add_comment(post_id=post_id, user_id=uid, author_name=name, body=body.body)
-        return format_mobile_response(data={"id": comment_id}, message="评论成功")
-    except ValueError:
-        return JSONResponse(
-            format_mobile_response(None, "评论内容无效", success=False, code=400), status_code=400
-        )
-    except LookupError:
-        return JSONResponse(
-            format_mobile_response(None, "动态不存在", success=False, code=404), status_code=404
-        )
-
-
-@extension_router.get("/mods")
-async def mobile_mods_summary(user=Depends(get_mobile_user)):
-    if user is None:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    market_profiles, market_connected, market_error = await _load_market_ai_employee_profile_index()
-    return format_mobile_response(
-        data={
-            "items": _mobile_mod_items(market_profiles, market_connected=market_connected),
-            "market_connected": market_connected,
-            "market_profile_count": len(market_profiles),
-            "market_error": market_error,
-        }
-    )
-
-
-@extension_router.get("/platform-shell")
-async def mobile_platform_shell(user=Depends(get_mobile_user)):
-    if user is None:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    installed = [m["id"] for m in _mobile_mod_items()]
-    from app.mod_sdk.platform_shell import build_platform_shell_payload
-
-    return format_mobile_response(data=build_platform_shell_payload(installed))
-
-
-@extension_router.get("/onboarding/industries", response_model=dict[str, Any])
-async def mobile_onboarding_industries(request: Request, user=Depends(get_mobile_user)):
-    """返回移动端首次开通可选行业目录。"""
-    if user is None:
-        return _mobile_unauthorized_response()
-    try:
-        from app.mod_sdk.industry_baseline import build_onboarding_industry_catalog_for_request
-
-        data = await build_onboarding_industry_catalog_for_request(request)
-        return format_mobile_response(data=data)
-    except RECOVERABLE_ERRORS:
-        logger.exception("mobile onboarding industries failed")
-        return JSONResponse(
-            format_mobile_response(None, "行业目录加载失败", success=False, code=500),
-            status_code=500,
-        )
-
-
-@extension_router.get("/onboarding/industry-baseline", response_model=dict[str, Any])
-async def mobile_industry_baseline(
-    request: Request,
-    industry_id: str = Query(default="通用"),
-    user=Depends(get_mobile_user),
-):
-    """返回指定行业的移动端初始化方案。"""
-    if user is None:
-        return _mobile_unauthorized_response()
-    try:
-        from app.mod_sdk.industry_baseline import build_industry_baseline_plan_for_request
-
-        data = await build_industry_baseline_plan_for_request(request, industry_id)
-        return format_mobile_response(data=data)
-    except RECOVERABLE_ERRORS:
-        logger.exception("mobile industry baseline failed")
-        return JSONResponse(
-            format_mobile_response(None, "行业基线加载失败", success=False, code=500),
-            status_code=500,
-        )
-
-
-@extension_router.post("/onboarding/select-industry", response_model=dict[str, Any])
-async def mobile_select_onboarding_industry(
-    body: dict[str, Any],
-    request: Request,
-    user=Depends(get_mobile_user),
-):
-    """Persist the mobile onboarding industry selection to the shared workspace SSOT."""
-    if user is None:
-        return _mobile_unauthorized_response()
-    industry_id = str(body.get("industry_id") or body.get("industryId") or "").strip()
-    industry_mod_id = str(body.get("industry_mod_id") or body.get("industryModId") or "").strip()
-    if not industry_id:
-        return JSONResponse(
-            format_mobile_response(None, "缺少 industry_id", success=False, code=400),
-            status_code=400,
-        )
-    try:
-        from app.application.tenant_workspace_prefs import bind_selected_industry_for_user
-        from app.fastapi_routes.market_account import (
-            grant_market_enterprise_entitlements_for_session,
-        )
-
-        data = bind_selected_industry_for_user(
-            user,
-            industry_id,
-            industry_mod_id=industry_mod_id,
-        )
-        try:
-            market_entitlements = await grant_market_enterprise_entitlements_for_session(
-                _mobile_session_id_from_request(request),
-                industry_id,
-            )
-        except RECOVERABLE_ERRORS:
-            logger.exception("mobile select onboarding industry market sync failed")
-            market_entitlements = {"success": False, "message": "市场权益同步失败"}
-        if not market_entitlements.get("success"):
-            logger.warning(
-                "mobile onboarding industry saved while market entitlement sync failed: "
-                "industry=%s message=%s",
-                industry_id,
-                market_entitlements.get("message"),
-            )
-        return format_mobile_response(
-            data={**(data or {}), "market_entitlements": market_entitlements},
-            message="行业已绑定到当前账号",
-        )
-    except RECOVERABLE_ERRORS:
-        logger.exception("mobile select onboarding industry failed")
-        return JSONResponse(
-            format_mobile_response(None, "行业绑定失败", success=False, code=500),
-            status_code=500,
-        )
-
-
-@extension_router.post("/mod-store/install-host-foundation", response_model=dict[str, Any])
-async def mobile_install_host_foundation(
-    edition: str | None = Query(default=None),
-    user=Depends(get_mobile_user),
-):
-    """为移动端账号安装宿主基础能力包。"""
-    if user is None:
-        return _mobile_unauthorized_response()
-    try:
-        from app.fastapi_routes.mod_store_routes import _install_host_foundation_internal
-
-        result = await _install_host_foundation_internal(edition)
-        return format_mobile_response(
-            data=result.data,
-            message=result.message,
-            success=bool(result.success),
-            code=200 if result.success else 409,
-        )
-    except RECOVERABLE_ERRORS:
-        logger.exception("mobile install host foundation failed")
-        return JSONResponse(
-            format_mobile_response(None, "基础员工包安装失败", success=False, code=500),
-            status_code=500,
-        )
-
-
-@extension_router.post("/mod-store/install-industry-seed", response_model=dict[str, Any])
-async def mobile_install_industry_seed(body: dict[str, Any], user=Depends(get_mobile_user)):
-    """按行业安装移动端初始化种子包。"""
-    if user is None:
-        return _mobile_unauthorized_response()
-    raw = str(body.get("industry_id") or body.get("industryId") or body.get("mod_id") or "").strip()
-    if not raw:
-        return JSONResponse(
-            format_mobile_response(None, "缺少 industry_id", success=False, code=400),
-            status_code=400,
-        )
-    try:
-        from app.mod_sdk.industry_seed import install_industry_seed_with_fallback
-
-        data = await install_industry_seed_with_fallback(raw)
-        if data.get("success"):
-            # 选行业即把所选行业持久化到账号(否则账号 industry_id 停留在注册默认「通用」)。
-            selected_industry = str(data.get("industry_id") or "").strip()
-            if selected_industry:
-                from app.application.account_registration import set_account_industry
-
-                set_account_industry(str(getattr(user, "username", "") or ""), selected_industry)
-        return format_mobile_response(
-            data=data,
-            message=str(data.get("message") or ""),
-            success=bool(data.get("success")),
-            code=200 if data.get("success") else 409,
-        )
-    except RECOVERABLE_ERRORS:
-        logger.exception("mobile install industry seed failed")
-        return JSONResponse(
-            format_mobile_response(None, "行业种子安装失败", success=False, code=500),
-            status_code=500,
-        )
-
-
-@extension_router.post("/mod-store/install", response_model=dict[str, Any])
-async def mobile_install_mod(body: dict[str, Any], user=Depends(get_mobile_user)):
-    """从移动端安装指定市场 Mod。"""
-    if user is None:
-        return _mobile_unauthorized_response()
-    mod_id = str(body.get("mod_id") or body.get("pkg_id") or body.get("package_file") or "").strip()
-    if not mod_id:
-        return JSONResponse(
-            format_mobile_response(None, "缺少 mod_id", success=False, code=400),
-            status_code=400,
-        )
-    try:
-        from app.fastapi_routes.mod_store_routes import _install_from_catalog
-
-        result = await _install_from_catalog(mod_id, "", activate=True)
-        return format_mobile_response(
-            data=result.data,
-            message=result.message,
-            success=bool(result.success),
-            code=200 if result.success else 409,
-        )
-    except RECOVERABLE_ERRORS:
-        logger.exception("mobile install mod failed")
-        return JSONResponse(
-            format_mobile_response(None, "MOD 安装失败", success=False, code=500),
-            status_code=500,
-        )
-
-
-@extension_router.post(
-    "/mod-store/install-customer-delivery-seed",
-    response_model=dict[str, Any],
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _admin_duty_mod_item as _admin_duty_mod_item,
 )
-async def mobile_install_customer_delivery_seed(
-    body: dict[str, Any],
-    user=Depends(get_mobile_user),
-):
-    """安装客户交付场景的移动端种子包。"""
-    if user is None:
-        return _mobile_unauthorized_response()
-    mod_id = str(body.get("mod_id") or body.get("pkg_id") or "").strip()
-    industry_id = str(body.get("industry_id") or body.get("industryId") or "").strip()
-    if not mod_id:
-        return JSONResponse(
-            format_mobile_response(None, "缺少 mod_id", success=False, code=400),
-            status_code=400,
-        )
-    try:
-        from app.mod_sdk.customer_delivery_seed import install_customer_delivery_seed_package
-
-        data = await install_customer_delivery_seed_package(
-            mod_id=mod_id,
-            industry_id=industry_id,
-            market_token=str(
-                body.get("market_access_token")
-                or body.get("market_token")
-                or body.get("token")
-                or ""
-            ),
-        )
-        return format_mobile_response(
-            data=data,
-            message=str(data.get("message") or ""),
-            success=bool(data.get("success")),
-            code=200 if data.get("success") else 409,
-        )
-    except RECOVERABLE_ERRORS:
-        logger.exception("mobile install customer delivery seed failed")
-        return JSONResponse(
-            format_mobile_response(None, "客户交付包安装失败", success=False, code=500),
-            status_code=500,
-        )
-
-
-@extension_router.get("/home")
-async def mobile_home(user=Depends(get_mobile_user)):
-    if user is None:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    market_profiles, market_connected, market_error = await _load_market_ai_employee_profile_index()
-    mod_items = _mobile_mod_items(market_profiles, market_connected=market_connected)
-    installed = [m["id"] for m in mod_items]
-    from app.mod_sdk.platform_shell import build_platform_shell_payload
-
-    sync_data: dict[str, Any] = {}
-    try:
-        from app.db.xcmax_sync import SyncDb
-
-        sync_data = SyncDb().get_status()
-    except OPERATIONAL_ERRORS:
-        sync_data = {"error": "市场同步失败"}
-    return format_mobile_response(
-        data={
-            "mods": mod_items,
-            "market_connected": market_connected,
-            "market_profile_count": len(market_profiles),
-            "market_error": market_error,
-            "platform_shell": build_platform_shell_payload(installed),
-            "sync": sync_data,
-        },
-    )
-
-
-# ── 侧栏菜单对齐（探索 Tab 配对后动态显示桌面端工具） ──
-
-_CORE_NAV_ITEMS: list[dict[str, str]] = [
-    {"key": "chat", "name": "智能对话", "icon": "fa-comments-o", "path": "/chat"},
-    {"key": "im", "name": "信息", "icon": "fa-envelope-o", "path": "/im"},
-    {"key": "ai-ecosystem", "name": "智能生态", "icon": "fa-sitemap", "path": "/ai-ecosystem"},
-    {
-        "key": "employee-workflow",
-        "name": "员工工作台",
-        "icon": "fa-users",
-        "path": "/employee-workflow",
-    },
-    {"key": "products", "name": "业务对象", "icon": "fa-cubes", "path": "/products"},
-    {"key": "customers", "name": "组织管理", "icon": "fa-users", "path": "/customers"},
-    {"key": "orders", "name": "业务单据", "icon": "fa-file-text-o", "path": "/orders"},
-    {
-        "key": "shipment-records",
-        "name": "业务记录",
-        "icon": "fa-industry",
-        "path": "/shipment-records",
-    },
-    {"key": "materials", "name": "资源库", "icon": "fa-archive", "path": "/materials"},
-    {"key": "data-sources", "name": "数据来源", "icon": "fa-database", "path": "/data-sources"},
-    {"key": "print", "name": "模板与打印", "icon": "fa-print", "path": "/print"},
-    {"key": "settings", "name": "系统设置", "icon": "fa-cog", "path": "/settings"},
-]
-
-_ADMIN_NAV_ITEM = {
-    "key": "admin-entitlements",
-    "name": "用户管理",
-    "icon": "fa-shield",
-    "path": "/admin-entitlements",
-}
-
-# 角色 → 可见核心 key 白名单（None 表示全部可见）
-_ROLE_VISIBLE_KEYS: dict[str, set[str] | None] = {
-    "admin": None,  # 全部
-    "enterprise": {
-        "chat",
-        "im",
-        "ai-ecosystem",
-        "employee-workflow",
-        "products",
-        "customers",
-        "orders",
-        "shipment-records",
-        "materials",
-        "data-sources",
-        "print",
-        "settings",
-    },
-    "personal": {"chat", "im", "ai-ecosystem", "settings"},
-}
-
-
-@extension_router.get("/nav-menu")
-async def mobile_nav_menu(user=Depends(get_mobile_user)):
-    """返回当前用户可见的侧栏菜单项（核心菜单 + Mod 菜单）。
-
-    供手机端"探索"Tab 配对后动态渲染工具列表，与桌面端侧栏对齐。
-    """
-    if user is None:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-
-    # 判断角色
-    user_role = str(getattr(user, "role", "") or "").strip().lower()
-    is_admin = user_role in {"admin", "super_admin", "owner"}
-    account_kind = "admin" if is_admin else "enterprise"
-
-    # 也可以从 session 获取 account_kind，这里简化用 role 判断
-    visible_keys = _ROLE_VISIBLE_KEYS.get(account_kind)
-
-    # 核心菜单
-    items: list[dict[str, Any]] = []
-    for item in _CORE_NAV_ITEMS:
-        if visible_keys is not None and item["key"] not in visible_keys:
-            continue
-        items.append({**item, "source": "core"})
-
-    # 管理员追加用户管理
-    if is_admin:
-        items.append({**_ADMIN_NAV_ITEM, "source": "core"})
-
-    # Mod 菜单
-    try:
-        mod_items = _mobile_mod_items()
-        for mod in mod_items:
-            mod_id = str(mod.get("id") or "").strip()
-            mod_name = str(mod.get("name") or mod_id).strip()
-            frontend_menu = mod.get("frontend_menu") or mod.get("menu") or []
-            if not isinstance(frontend_menu, list):
-                continue
-            for menu_entry in frontend_menu:
-                if not isinstance(menu_entry, dict):
-                    continue
-                menu_id = str(menu_entry.get("id") or menu_entry.get("key") or "").strip()
-                if not menu_id:
-                    continue
-                menu_label = str(
-                    menu_entry.get("label") or menu_entry.get("name") or mod_name
-                ).strip()
-                menu_path = str(
-                    menu_entry.get("path") or menu_entry.get("url") or f"/mod/{mod_id}"
-                ).strip()
-                menu_icon = str(
-                    menu_entry.get("icon") or menu_entry.get("iconClass") or "fa-cube"
-                ).strip()
-                items.append(
-                    {
-                        "key": f"mod-{menu_id}" if not menu_id.startswith("mod-") else menu_id,
-                        "name": menu_label,
-                        "icon": menu_icon,
-                        "path": menu_path,
-                        "source": "mod",
-                        "mod_id": mod_id,
-                    }
-                )
-    except OPERATIONAL_ERRORS as exc:
-        logger.warning("nav-menu mod items failed: %s", exc)
-
-    return format_mobile_response(data={"items": items, "account_kind": account_kind})
-
-
-# ──────────────────────────────────────────────────────────────────────
-# 员工任务中心：手机端拉员工 Phase-D 主动提问 + 老板回答
-# 通过 httpx 代理调 MODstore 后端 admin_employee_autonomy_api：
-#   GET  /api/admin/employee-autonomy/questions
-#   POST /api/admin/employee-autonomy/questions/{id}/answer
-# 认证：MODSTORE_AUTH_TOKEN 环境变量（与 ModstoreAdapter 一致）
-# ──────────────────────────────────────────────────────────────────────
-
-
-def _modstore_platform_base() -> str:
-    """获取 MODstore 后端 base url（如 http://127.0.0.1:8765）。"""
-    return os.environ.get("MODSTORE_PLATFORM_URL", "http://localhost:8000").rstrip("/")
-
-
-def _modstore_admin_token() -> str:
-    """获取调 MODstore admin API 用的 Bearer token。"""
-    return os.environ.get("MODSTORE_AUTH_TOKEN", "").strip()
-
-
-async def _modstore_admin_proxy(
-    method: str,
-    path: str,
-    *,
-    params: dict[str, Any] | None = None,
-    json_body: dict[str, Any] | None = None,
-    timeout: float = 10.0,
-) -> dict[str, Any]:
-    """通用代理：调 MODstore 后端 admin API。
-
-    返回 {"ok": bool, "status": int, "data": ..., "error": str}。
-    """
-    import httpx
-
-    url = f"{_modstore_platform_base()}{path}"
-    headers = {"Accept": "application/json"}
-    token = _modstore_admin_token()
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-    try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            resp = await client.request(method, url, params=params, json=json_body, headers=headers)
-        try:
-            data = resp.json()
-        except Exception:  # noqa: BLE001
-            data = {"raw": resp.text[:500]}
-        if resp.is_success:
-            return {"ok": True, "status": resp.status_code, "data": data}
-        return {
-            "ok": False,
-            "status": resp.status_code,
-            "error": str(data.get("detail") or data.get("error") or resp.text[:200])[:300],
-        }
-    except Exception as exc:  # noqa: BLE001
-        return {
-            "ok": False,
-            "status": 0,
-            "error": f"无法连接 MODstore 后端：{_compact_text(exc)[:200]}",
-        }
-
-
-@extension_router.get("/admin/employee-pending-questions")
-async def mobile_admin_employee_pending_questions(
-    request: Request,
-    limit: int = Query(default=50, ge=1, le=200),
-    include_history: bool = Query(default=False),
-    employee_id: str | None = Query(default=None),
-    user=Depends(get_mobile_user),
-):
-    """拉员工 Phase-D 主动提问列表（pending 优先）。
-
-    GET /api/mobile/v1/admin/employee-pending-questions
-      ?limit=50&include_history=false&employee_id=llm-ops-engineer
-
-    返回 {"items": [...], "count": N, "market_connected": bool}
-    每个 item 含：id / employee_id / task / question / status / asked_at / answer / answered_at
-    """
-    meta, err = _require_mobile_admin(request, user)
-    if err is not None:
-        return err
-
-    params: dict[str, Any] = {"limit": limit, "include_expired": bool(include_history)}
-    if employee_id:
-        params["employee_id"] = employee_id
-
-    out = await _modstore_admin_proxy(
-        "GET",
-        "/api/admin/employee-autonomy/questions",
-        params=params,
-    )
-    if not out.get("ok"):
-        return format_mobile_response(
-            None,
-            f"拉员工提问失败：{out.get('error') or '未知错误'}",
-            success=False,
-            code=out.get("status") or 502,
-        )
-    data = out.get("data") if isinstance(out.get("data"), dict) else {}
-    items = data.get("items") if isinstance(data.get("items"), list) else []
-    return format_mobile_response(
-        data={
-            "items": items,
-            "count": int(data.get("count") or len(items)),
-            "market_connected": bool(out.get("ok")),
-        }
-    )
-
-
-@extension_router.post("/admin/employee-pending-questions/{question_id}/answer")
-async def mobile_admin_employee_pending_question_answer(
-    question_id: int,
-    body: dict[str, Any],
-    request: Request,
-    user=Depends(get_mobile_user),
-):
-    """老板回答员工的 Phase-D 提问。
-
-    POST /api/mobile/v1/admin/employee-pending-questions/{id}/answer
-    body: {"answer": "先做 A，因为..."}
-
-    成功后员工执行管道被阻塞的 ask_human_blocking() 会拿到答案继续执行。
-    """
-    meta, err = _require_mobile_admin(request, user)
-    if err is not None:
-        return err
-
-    answer_text = str((body or {}).get("answer") or "").strip()
-    if not answer_text:
-        return format_mobile_response(None, "answer 字段不能为空", success=False, code=400)
-
-    out = await _modstore_admin_proxy(
-        "POST",
-        f"/api/admin/employee-autonomy/questions/{int(question_id)}/answer",
-        json_body={"answer": answer_text},
-    )
-    if not out.get("ok"):
-        return format_mobile_response(
-            None,
-            f"回答失败：{out.get('error') or '未知错误'}",
-            success=False,
-            code=out.get("status") or 502,
-        )
-    data = out.get("data") if isinstance(out.get("data"), dict) else {}
-    return format_mobile_response(data=data)
-
-
-# ──────────────────────────────────────────────────────────────────────
-# 员工 chat（手机端流式）：让老板在 app 里直接和员工对话
-# ──────────────────────────────────────────────────────────────────────
-
-
-def _sse_line(payload: dict) -> bytes:
-    """构造 SSE event line：data: {json}\\n\\n"""
-    return ("data: " + json.dumps(payload, ensure_ascii=False) + "\n\n").encode("utf-8")
-
-
-def _chunk_employee_reply(text: str) -> list[str]:
-    """把员工完整回复切成 SSE chunk（按句号/换行，每块 <= 120 字）。"""
-    if not text:
-        return []
-    parts = re.split(r"(?<=[。！？!?\n])", text)
-    chunks: list[str] = []
-    buf = ""
-    for p in parts:
-        p = p.strip()
-        if not p:
-            continue
-        if len(buf) + len(p) > 120:
-            if buf:
-                chunks.append(buf)
-            if len(p) > 120:
-                chunks.append(p)
-                buf = ""
-            else:
-                buf = p
-        else:
-            buf += p
-    if buf:
-        chunks.append(buf)
-    return chunks or [text]
-
-
-def _extract_employee_reply_text(result: dict) -> str:
-    """从 execute_employee_task_local 返回值里提取回复文本。
-
-    返回结构（参考 executor.py 范式）：{success: bool, result: {outputs: [...]}}
-    """
-    if not isinstance(result, dict):
-        return ""
-    if not result.get("success"):
-        msg = _extract_employee_failure_text(result)
-        return f"⚠️ 员工执行失败：{msg or '未知错误'}"
-    r = result.get("result") or {}
-    if not isinstance(r, dict):
-        return str(r) if r else ""
-    outputs = r.get("outputs") or []
-    if isinstance(outputs, list):
-        for out in outputs:
-            if not isinstance(out, dict):
-                continue
-            text = out.get("output") or out.get("summary") or out.get("text")
-            if text:
-                return str(text)
-    for k in ("response", "output", "message", "text", "answer"):
-        v = r.get(k)
-        if v:
-            return str(v)
-    return str(r) if r else ""
-
-
-def _extract_employee_failure_text(result: dict) -> str:
-    for key in ("message", "error"):
-        value = result.get(key)
-        if value:
-            return str(value)
-    payload = result.get("result")
-    if not isinstance(payload, dict):
-        return ""
-    for key in ("message", "error", "summary", "cognition_error"):
-        value = payload.get(key)
-        if value:
-            return str(value)
-    outputs = payload.get("outputs")
-    if isinstance(outputs, list):
-        for out in outputs:
-            if not isinstance(out, dict):
-                continue
-            for key in ("error", "summary", "message", "text"):
-                value = out.get(key)
-                if value:
-                    return str(value)
-            nested = out.get("output")
-            if isinstance(nested, dict):
-                for key in ("error", "summary", "message", "text"):
-                    value = nested.get(key)
-                    if value:
-                        return str(value)
-            elif nested:
-                return str(nested)
-    return ""
-
-
-@extension_router.post("/employees/{employee_id}/chat/stream")
-async def mobile_employee_chat_stream(
-    employee_id: str,
-    request: Request,
-    user=Depends(get_mobile_user),
-    body: dict[str, Any] = Body(default_factory=dict),
-):
-    """员工 chat 流式接口（手机端）。
-
-    POST /api/mobile/v1/employees/{employee_id}/chat/stream
-    body: {"message": "...", "conversation_id": "employee:modId:employeeId"}
-
-    内部调 execute_employee_task_local 跑员工 agent loop，
-    然后把完整结果按句号 chunk emit 成 SSE token 流（伪流式）。
-    """
-    pid = str(employee_id or "").strip()
-    if not pid:
-        return JSONResponse(
-            format_mobile_response(None, "employee_id 必填", success=False, code=400),
-            status_code=400,
-        )
-    message = str((body or {}).get("message") or "").strip()
-    if not message:
-        return JSONResponse(
-            format_mobile_response(None, "message 必填", success=False, code=400),
-            status_code=400,
-        )
-
-    user_id = 0
-    try:
-        user_id = int(getattr(user, "id", 0) or 0)
-    except (TypeError, ValueError):
-        user_id = 0
-
-    conversation_id = str((body or {}).get("conversation_id") or "").strip()
-    payload = {
-        "trigger": "mobile_chat",
-        "invoke_mode": "interactive_chat",
-        "source": "mobile_app",
-        "conversation_id": conversation_id,
-        "client_surface": "mobile_app",
-        "mod_id": str((body or {}).get("mod_id") or "").strip(),
-        "employee_id": pid,
-    }
-
-    async def sse_gen():
-        try:
-            yield _sse_line({"type": "token", "text": f"已连接员工 {pid}，正在思考..."})
-            from app.application.employee_runtime.executor import execute_employee_task_local
-
-            result = await asyncio.to_thread(
-                execute_employee_task_local,
-                pid,
-                message,
-                payload,
-                user_id=user_id,
-                workspace_root=None,
-                session_id=f"mobile_chat_{user_id}",
-            )
-            final_text = _extract_employee_reply_text(result)
-            if not final_text:
-                final_text = "（员工未返回内容）"
-            for chunk in _chunk_employee_reply(final_text):
-                yield _sse_line({"type": "token", "text": chunk})
-                await asyncio.sleep(0.05)
-            yield _sse_line({"type": "done", "result": {"response": final_text}})
-        except Exception as exc:
-            logger.exception("mobile_employee_chat_stream failed: %s", exc)
-            yield _sse_line({"type": "error", "message": "员工对话失败，请稍后重试"})
-
-    return StreamingResponse(
-        sse_gen(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )
-
-
-# ── Strangler: domain sub-routers (helpers above must be defined first) ──
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _admin_duty_records_from_roster as _admin_duty_records_from_roster,
+)
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _admin_employee_items as _admin_employee_items,
+)
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _admin_employee_manifest as _admin_employee_manifest,
+)
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _admin_roster_area_labels as _admin_roster_area_labels,
+)
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _admin_roster_ids_by_department_order as _admin_roster_ids_by_department_order,
+)
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _ai_circle_employee_profiles as _ai_circle_employee_profiles,
+)
+from app.fastapi_routes.mobile_api_extensions_part01 import _ai_circle_user as _ai_circle_user
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _ai_conversation_changes as _ai_conversation_changes,
+)
+from app.fastapi_routes.mobile_api_extensions_part01 import _approval_items as _approval_items
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _cached_desktop_relay_for_account_binding as _cached_desktop_relay_for_account_binding,
+)
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _ensure_mobile_device_table as _ensure_mobile_device_table,
+)
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _ensure_outbox_table as _ensure_outbox_table,
+)
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _mobile_bridge_request_statuses as _mobile_bridge_request_statuses,
+)
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _mobile_market_authorization as _mobile_market_authorization,
+)
+from app.fastapi_routes.mobile_api_extensions_part01 import _mobile_mod_items as _mobile_mod_items
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _mobile_session_id_from_request as _mobile_session_id_from_request,
+)
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _mobile_unauthorized_response as _mobile_unauthorized_response,
+)
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _pairing_issue_host as _pairing_issue_host,
+)
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _persist_mobile_cs_request as _persist_mobile_cs_request,
+)
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _register_desktop_relay_for_pairing as _register_desktop_relay_for_pairing,
+)
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _resolve_mobile_relay_user as _resolve_mobile_relay_user,
+)
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _safe_mobile_sync_items as _safe_mobile_sync_items,
+)
+from app.fastapi_routes.mobile_api_extensions_part01 import _shipment_items as _shipment_items
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    _upsert_admin_duty_mod_item as _upsert_admin_duty_mod_item,
+)
+from app.fastapi_routes.mobile_api_extensions_part01 import (
+    mobile_approval_list as mobile_approval_list,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    _employee_ssot_payload as _employee_ssot_payload,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_admin_employees as mobile_admin_employees,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_admin_features as mobile_admin_features,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import mobile_customers as mobile_customers
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_device_register as mobile_device_register,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_device_unregister as mobile_device_unregister,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_employee_ssot as mobile_employee_ssot,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import mobile_im_cs_inbox as mobile_im_cs_inbox
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_im_cs_inbox_messages as mobile_im_cs_inbox_messages,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_im_cs_inbox_reply as mobile_im_cs_inbox_reply,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_notifications_pending as mobile_notifications_pending,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_pairing_exchange as mobile_pairing_exchange,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_pairing_issue as mobile_pairing_issue,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_pairing_lookup as mobile_pairing_lookup,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_relay_bind_account as mobile_relay_bind_account,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_relay_create_task as mobile_relay_create_task,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_relay_desktop_complete as mobile_relay_desktop_complete,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_relay_desktop_poll as mobile_relay_desktop_poll,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_relay_desktop_register as mobile_relay_desktop_register,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_relay_desktops as mobile_relay_desktops,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_relay_task_cancel as mobile_relay_task_cancel,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_relay_task_status as mobile_relay_task_status,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_service_bridge_request_respond as mobile_service_bridge_request_respond,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import (
+    mobile_service_bridge_requests as mobile_service_bridge_requests,
+)
+from app.fastapi_routes.mobile_api_extensions_part02 import mobile_shipments as mobile_shipments
+from app.fastapi_routes.mobile_api_extensions_part03 import (
+    _chunk_employee_reply as _chunk_employee_reply,
+)
+from app.fastapi_routes.mobile_api_extensions_part03 import (
+    _modstore_admin_proxy as _modstore_admin_proxy,
+)
+from app.fastapi_routes.mobile_api_extensions_part03 import (
+    _modstore_admin_token as _modstore_admin_token,
+)
+from app.fastapi_routes.mobile_api_extensions_part03 import (
+    _modstore_platform_base as _modstore_platform_base,
+)
+from app.fastapi_routes.mobile_api_extensions_part03 import _sse_line as _sse_line
+from app.fastapi_routes.mobile_api_extensions_part03 import (
+    mobile_admin_employee_pending_question_answer as mobile_admin_employee_pending_question_answer,
+)
+from app.fastapi_routes.mobile_api_extensions_part03 import (
+    mobile_admin_employee_pending_questions as mobile_admin_employee_pending_questions,
+)
+from app.fastapi_routes.mobile_api_extensions_part03 import mobile_admin_home as mobile_admin_home
+from app.fastapi_routes.mobile_api_extensions_part03 import (
+    mobile_ai_circle_add_comment as mobile_ai_circle_add_comment,
+)
+from app.fastapi_routes.mobile_api_extensions_part03 import (
+    mobile_ai_circle_create_post as mobile_ai_circle_create_post,
+)
+from app.fastapi_routes.mobile_api_extensions_part03 import (
+    mobile_ai_circle_posts as mobile_ai_circle_posts,
+)
+from app.fastapi_routes.mobile_api_extensions_part03 import (
+    mobile_ai_circle_toggle_like as mobile_ai_circle_toggle_like,
+)
+from app.fastapi_routes.mobile_api_extensions_part03 import mobile_home as mobile_home
+from app.fastapi_routes.mobile_api_extensions_part03 import (
+    mobile_industry_baseline as mobile_industry_baseline,
+)
+from app.fastapi_routes.mobile_api_extensions_part03 import (
+    mobile_install_customer_delivery_seed as mobile_install_customer_delivery_seed,
+)
+from app.fastapi_routes.mobile_api_extensions_part03 import (
+    mobile_install_host_foundation as mobile_install_host_foundation,
+)
+from app.fastapi_routes.mobile_api_extensions_part03 import (
+    mobile_install_industry_seed as mobile_install_industry_seed,
+)
+from app.fastapi_routes.mobile_api_extensions_part03 import mobile_install_mod as mobile_install_mod
+from app.fastapi_routes.mobile_api_extensions_part03 import (
+    mobile_mods_summary as mobile_mods_summary,
+)
+from app.fastapi_routes.mobile_api_extensions_part03 import mobile_nav_menu as mobile_nav_menu
+from app.fastapi_routes.mobile_api_extensions_part03 import (
+    mobile_onboarding_industries as mobile_onboarding_industries,
+)
+from app.fastapi_routes.mobile_api_extensions_part03 import (
+    mobile_platform_shell as mobile_platform_shell,
+)
+from app.fastapi_routes.mobile_api_extensions_part03 import (
+    mobile_select_onboarding_industry as mobile_select_onboarding_industry,
+)
+from app.fastapi_routes.mobile_api_extensions_part04 import (
+    _extract_employee_failure_text as _extract_employee_failure_text,
+)
+from app.fastapi_routes.mobile_api_extensions_part04 import (
+    _extract_employee_reply_text as _extract_employee_reply_text,
+)
+from app.fastapi_routes.mobile_api_extensions_part04 import (
+    mobile_employee_chat_stream as mobile_employee_chat_stream,
+)
 from app.fastapi_routes.mobile_extensions.routes_ai_groups import router as _ai_groups_router
 from app.fastapi_routes.mobile_extensions.routes_auth import router as _auth_router
 from app.fastapi_routes.mobile_extensions.routes_conversations import (
     router as _conversations_router,
 )
-from app.fastapi_routes.mobile_extensions.routes_cs_contacts import (
-    router as _cs_contacts_router,
-)
+from app.fastapi_routes.mobile_extensions.routes_cs_contacts import router as _cs_contacts_router
 from app.fastapi_routes.mobile_extensions.routes_payment import router as _payment_router
 from app.fastapi_routes.mobile_extensions.routes_super_employee import (
     router as _super_employee_router,
@@ -2461,173 +316,166 @@ extension_router.include_router(_sync_router)
 extension_router.include_router(_auth_router)
 extension_router.include_router(_cs_contacts_router)
 extension_router.include_router(_payment_router)
-
-# ── Re-export extracted route handlers (tests patch parent module paths) ──
-from app.fastapi_routes.mobile_extensions.routes_ai_groups import (  # noqa: E402
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
     _mobile_group_mode as _mobile_group_mode,
 )
-from app.fastapi_routes.mobile_extensions.routes_ai_groups import (  # noqa: E402
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
     _mobile_group_uid as _mobile_group_uid,
 )
 from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
-    mobile_ai_group_add_member as mobile_ai_group_add_member,  # noqa: E402,F401
+    mobile_ai_group_add_member as mobile_ai_group_add_member,
 )
 from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
-    mobile_ai_group_candidates as mobile_ai_group_candidates,  # noqa: E402,F401
+    mobile_ai_group_candidates as mobile_ai_group_candidates,
 )
 from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
-    mobile_ai_group_delete as mobile_ai_group_delete,  # noqa: E402,F401
+    mobile_ai_group_delete as mobile_ai_group_delete,
 )
 from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
-    mobile_ai_group_mark_read as mobile_ai_group_mark_read,  # noqa: E402,F401
+    mobile_ai_group_mark_read as mobile_ai_group_mark_read,
 )
 from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
-    mobile_ai_group_mark_unread as mobile_ai_group_mark_unread,  # noqa: E402,F401
+    mobile_ai_group_mark_unread as mobile_ai_group_mark_unread,
 )
 from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
-    mobile_ai_group_messages as mobile_ai_group_messages,  # noqa: E402,F401
+    mobile_ai_group_messages as mobile_ai_group_messages,
 )
 from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
-    mobile_ai_group_post as mobile_ai_group_post,  # noqa: E402,F401
+    mobile_ai_group_post as mobile_ai_group_post,
 )
 from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
-    mobile_ai_group_remove_member as mobile_ai_group_remove_member,  # noqa: E402,F401
+    mobile_ai_group_remove_member as mobile_ai_group_remove_member,
 )
 from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
-    mobile_ai_group_toggle_followed as mobile_ai_group_toggle_followed,  # noqa: E402,F401
+    mobile_ai_group_toggle_followed as mobile_ai_group_toggle_followed,
 )
 from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
-    mobile_ai_group_toggle_hidden as mobile_ai_group_toggle_hidden,  # noqa: E402,F401
+    mobile_ai_group_toggle_hidden as mobile_ai_group_toggle_hidden,
 )
 from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
-    mobile_ai_group_toggle_pin as mobile_ai_group_toggle_pin,  # noqa: E402,F401
+    mobile_ai_group_toggle_pin as mobile_ai_group_toggle_pin,
 )
 from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
-    mobile_ai_groups_create as mobile_ai_groups_create,  # noqa: E402,F401
+    mobile_ai_groups_create as mobile_ai_groups_create,
 )
 from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
-    mobile_ai_groups_list as mobile_ai_groups_list,  # noqa: E402,F401
+    mobile_ai_groups_list as mobile_ai_groups_list,
 )
 from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
-    mobile_git_branches as mobile_git_branches,  # noqa: E402,F401
+    mobile_git_branches as mobile_git_branches,
 )
 from app.fastapi_routes.mobile_extensions.routes_auth import (
-    mobile_auth_oidc_exchange as mobile_auth_oidc_exchange,  # noqa: E402,F401
+    mobile_auth_oidc_exchange as mobile_auth_oidc_exchange,
 )
 from app.fastapi_routes.mobile_extensions.routes_auth import (
-    mobile_auth_qr_confirm as mobile_auth_qr_confirm,  # noqa: E402,F401
+    mobile_auth_qr_confirm as mobile_auth_qr_confirm,
 )
-
-# Extracted private helpers remain part of the legacy module contract. Tests and
-# downstream integrations still import or patch these parent-module paths.
-from app.fastapi_routes.mobile_extensions.routes_conversations import (  # noqa: E402
+from app.fastapi_routes.mobile_extensions.routes_conversations import (
     _conversation_state_uid as _conversation_state_uid,
 )
 from app.fastapi_routes.mobile_extensions.routes_conversations import (
-    mobile_conversation_delete as mobile_conversation_delete,  # noqa: E402,F401
+    mobile_conversation_delete as mobile_conversation_delete,
 )
 from app.fastapi_routes.mobile_extensions.routes_conversations import (
-    mobile_conversation_mark_read as mobile_conversation_mark_read,  # noqa: E402,F401
+    mobile_conversation_mark_read as mobile_conversation_mark_read,
 )
 from app.fastapi_routes.mobile_extensions.routes_conversations import (
-    mobile_conversation_mark_unread as mobile_conversation_mark_unread,  # noqa: E402,F401
+    mobile_conversation_mark_unread as mobile_conversation_mark_unread,
 )
 from app.fastapi_routes.mobile_extensions.routes_conversations import (
-    mobile_conversation_toggle_followed as mobile_conversation_toggle_followed,  # noqa: E402,F401
+    mobile_conversation_toggle_followed as mobile_conversation_toggle_followed,
 )
 from app.fastapi_routes.mobile_extensions.routes_conversations import (
-    mobile_conversation_toggle_hidden as mobile_conversation_toggle_hidden,  # noqa: E402,F401
+    mobile_conversation_toggle_hidden as mobile_conversation_toggle_hidden,
 )
 from app.fastapi_routes.mobile_extensions.routes_conversations import (
-    mobile_conversation_toggle_pin as mobile_conversation_toggle_pin,  # noqa: E402,F401
+    mobile_conversation_toggle_pin as mobile_conversation_toggle_pin,
+)
+from app.fastapi_routes.mobile_extensions.routes_cs_contacts import get_cs_info as get_cs_info
+from app.fastapi_routes.mobile_extensions.routes_cs_contacts import (
+    get_cs_messages as get_cs_messages,
 )
 from app.fastapi_routes.mobile_extensions.routes_cs_contacts import (
-    get_cs_info as get_cs_info,  # noqa: E402,F401
+    get_mobile_fixed_contacts as get_mobile_fixed_contacts,
 )
 from app.fastapi_routes.mobile_extensions.routes_cs_contacts import (
-    get_cs_messages as get_cs_messages,  # noqa: E402,F401
+    post_cs_message as post_cs_message,
 )
-from app.fastapi_routes.mobile_extensions.routes_cs_contacts import (
-    get_mobile_fixed_contacts as get_mobile_fixed_contacts,  # noqa: E402,F401
-)
-from app.fastapi_routes.mobile_extensions.routes_cs_contacts import (
-    post_cs_message as post_cs_message,  # noqa: E402,F401
-)
-from app.fastapi_routes.mobile_extensions.routes_payment import (  # noqa: E402
+from app.fastapi_routes.mobile_extensions.routes_payment import (
     _mobile_checkout_sign_body as _mobile_checkout_sign_body,
 )
-from app.fastapi_routes.mobile_extensions.routes_payment import (  # noqa: E402
+from app.fastapi_routes.mobile_extensions.routes_payment import (
     _normalize_mobile_payment_channel as _normalize_mobile_payment_channel,
 )
 from app.fastapi_routes.mobile_extensions.routes_payment import (
-    mobile_payment_checkout as mobile_payment_checkout,  # noqa: E402,F401
+    mobile_payment_checkout as mobile_payment_checkout,
 )
 from app.fastapi_routes.mobile_extensions.routes_payment import (
-    mobile_payment_plans as mobile_payment_plans,  # noqa: E402,F401
+    mobile_payment_plans as mobile_payment_plans,
 )
 from app.fastapi_routes.mobile_extensions.routes_payment import (
-    mobile_payment_query as mobile_payment_query,  # noqa: E402,F401
+    mobile_payment_query as mobile_payment_query,
 )
 from app.fastapi_routes.mobile_extensions.routes_payment import (
-    mobile_wallet_balance as mobile_wallet_balance,  # noqa: E402,F401
+    mobile_wallet_balance as mobile_wallet_balance,
 )
 from app.fastapi_routes.mobile_extensions.routes_super_employee import (
-    _stream_super_employee_invoke as _stream_super_employee_invoke,  # noqa: E402,F401
+    _stream_super_employee_invoke as _stream_super_employee_invoke,
 )
 from app.fastapi_routes.mobile_extensions.routes_super_employee import (
-    mobile_admin_claude_super_employee_invoke as mobile_admin_claude_super_employee_invoke,  # noqa: E402,F401
+    mobile_admin_claude_super_employee_invoke as mobile_admin_claude_super_employee_invoke,
 )
 from app.fastapi_routes.mobile_extensions.routes_super_employee import (
-    mobile_admin_claude_super_employee_messages as mobile_admin_claude_super_employee_messages,  # noqa: E402,F401
+    mobile_admin_claude_super_employee_messages as mobile_admin_claude_super_employee_messages,
 )
 from app.fastapi_routes.mobile_extensions.routes_super_employee import (
-    mobile_admin_claude_super_employee_stream as mobile_admin_claude_super_employee_stream,  # noqa: E402,F401
+    mobile_admin_claude_super_employee_stream as mobile_admin_claude_super_employee_stream,
 )
 from app.fastapi_routes.mobile_extensions.routes_super_employee import (
-    mobile_admin_codex_super_employee_invoke as mobile_admin_codex_super_employee_invoke,  # noqa: E402,F401
+    mobile_admin_codex_super_employee_invoke as mobile_admin_codex_super_employee_invoke,
 )
 from app.fastapi_routes.mobile_extensions.routes_super_employee import (
-    mobile_admin_codex_super_employee_messages as mobile_admin_codex_super_employee_messages,  # noqa: E402,F401
+    mobile_admin_codex_super_employee_messages as mobile_admin_codex_super_employee_messages,
 )
 from app.fastapi_routes.mobile_extensions.routes_super_employee import (
-    mobile_admin_codex_super_employee_stream as mobile_admin_codex_super_employee_stream,  # noqa: E402,F401
+    mobile_admin_codex_super_employee_stream as mobile_admin_codex_super_employee_stream,
 )
 from app.fastapi_routes.mobile_extensions.routes_super_employee import (
-    mobile_admin_cursor_super_employee_invoke as mobile_admin_cursor_super_employee_invoke,  # noqa: E402,F401
+    mobile_admin_cursor_super_employee_invoke as mobile_admin_cursor_super_employee_invoke,
 )
 from app.fastapi_routes.mobile_extensions.routes_super_employee import (
-    mobile_admin_cursor_super_employee_messages as mobile_admin_cursor_super_employee_messages,  # noqa: E402,F401
+    mobile_admin_cursor_super_employee_messages as mobile_admin_cursor_super_employee_messages,
 )
 from app.fastapi_routes.mobile_extensions.routes_super_employee import (
-    mobile_admin_cursor_super_employee_stream as mobile_admin_cursor_super_employee_stream,  # noqa: E402,F401
+    mobile_admin_cursor_super_employee_stream as mobile_admin_cursor_super_employee_stream,
 )
 from app.fastapi_routes.mobile_extensions.routes_super_employee import (
-    mobile_admin_trae_super_employee_invoke as mobile_admin_trae_super_employee_invoke,  # noqa: E402,F401
+    mobile_admin_trae_super_employee_invoke as mobile_admin_trae_super_employee_invoke,
 )
 from app.fastapi_routes.mobile_extensions.routes_super_employee import (
-    mobile_admin_trae_super_employee_messages as mobile_admin_trae_super_employee_messages,  # noqa: E402,F401
+    mobile_admin_trae_super_employee_messages as mobile_admin_trae_super_employee_messages,
 )
 from app.fastapi_routes.mobile_extensions.routes_super_employee import (
-    mobile_admin_trae_super_employee_stream as mobile_admin_trae_super_employee_stream,  # noqa: E402,F401
+    mobile_admin_trae_super_employee_stream as mobile_admin_trae_super_employee_stream,
 )
-from app.fastapi_routes.mobile_extensions.routes_sync import (  # noqa: E402
+from app.fastapi_routes.mobile_extensions.routes_sync import (
     _mobile_sync_circle_posts as _mobile_sync_circle_posts,
 )
-from app.fastapi_routes.mobile_extensions.routes_sync import (  # noqa: E402
+from app.fastapi_routes.mobile_extensions.routes_sync import (
     _mobile_sync_runtime_contract as _mobile_sync_runtime_contract,
 )
+from app.fastapi_routes.mobile_extensions.routes_sync import mobile_sync_ack as mobile_sync_ack
 from app.fastapi_routes.mobile_extensions.routes_sync import (
-    mobile_sync_ack as mobile_sync_ack,  # noqa: E402,F401
+    mobile_sync_conflicts as mobile_sync_conflicts,
 )
+from app.fastapi_routes.mobile_extensions.routes_sync import mobile_sync_pull as mobile_sync_pull
+from app.fastapi_routes.mobile_extensions.routes_sync import mobile_sync_push as mobile_sync_push
 from app.fastapi_routes.mobile_extensions.routes_sync import (
-    mobile_sync_conflicts as mobile_sync_conflicts,  # noqa: E402,F401
+    mobile_sync_status as mobile_sync_status,
 )
-from app.fastapi_routes.mobile_extensions.routes_sync import (
-    mobile_sync_pull as mobile_sync_pull,  # noqa: E402,F401
-)
-from app.fastapi_routes.mobile_extensions.routes_sync import (
-    mobile_sync_push as mobile_sync_push,  # noqa: E402,F401
-)
-from app.fastapi_routes.mobile_extensions.routes_sync import (
-    mobile_sync_status as mobile_sync_status,  # noqa: E402,F401
+
+from app.fastapi_routes.mobile_extensions.navigation_constants import (
+    _CORE_NAV_ITEMS as _CORE_NAV_ITEMS,
+    _ADMIN_NAV_ITEM as _ADMIN_NAV_ITEM,
+    _ROLE_VISIBLE_KEYS as _ROLE_VISIBLE_KEYS,
 )

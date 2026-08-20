@@ -13,7 +13,7 @@ from app.infrastructure.lookups import resolve_purchase_unit
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
-_QUERY_ERRORS = (*RECOVERABLE_ERRORS, Exception)
+_QUERY_ERRORS = RECOVERABLE_ERRORS
 
 
 def _record_to_dict(record: Any) -> dict[str, Any]:

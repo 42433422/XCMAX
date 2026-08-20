@@ -29,7 +29,7 @@ function parseCreatedMs(row: ShipmentRecordRow): number | null {
 export function summarizeShipmentRecordsForAudit(
   rows: ShipmentRecordRow[],
   purchaseUnit: string,
-  orderId: number | null
+  orderId: number | null,
 ): {
   total: number
   todayCount: number
@@ -66,7 +66,7 @@ export function summarizeShipmentRecordsForAudit(
     detailLines.push(
       matched && Number(matched.id) === Number(orderId)
         ? `已匹配本次任务 record_id=${orderId}，与列表一致。`
-        : `本次任务 record_id=${orderId}；若列表顶部 id 不一致，请在出货记录页按单位筛选后人工核对。`
+        : `本次任务 record_id=${orderId}；若列表顶部 id 不一致，请在出货记录页按单位筛选后人工核对。`,
     )
   } else {
     detailLines.push('本次任务未带回 record_id，请到出货记录页按单位与时间筛选核对。')
@@ -80,7 +80,7 @@ export function summarizeShipmentRecordsForAudit(
 
   detailLines.push(
     '保存建议：数据库已持久化；若需离线存档请在「出货记录」页导出 Excel。',
-    '推送建议：可将导出文件或本段摘要通过微信等渠道发给仓库/财务；亦可在副窗查看本次助手推送。'
+    '推送建议：可将导出文件或本段摘要通过微信等渠道发给仓库/财务；亦可在副窗查看本次助手推送。',
   )
 
   return {

@@ -7,6 +7,8 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from app.utils.operational_errors import BOUNDARY_ERRORS
+
 
 def _load_mobile_relay_service_module():
     path = Path(__file__).resolve().parents[1] / "app" / "services" / "mobile_relay_service.py"
@@ -29,7 +31,7 @@ def test_mobile_relay_account_auth_binding(monkeypatch, tmp_path):
         try:
             yield db
             db.commit()
-        except Exception:
+        except BOUNDARY_ERRORS:
             db.rollback()
             raise
         finally:

@@ -17,7 +17,9 @@ from pathlib import Path
 from typing import Iterable, List, Optional, Set
 
 from modstore_server.script_agent.package_allowlist import allowed_packages
-from modstore_server.script_agent.semantic_quality import oversized_string_literal_errors
+from modstore_server.script_agent.semantic_quality import (
+    oversized_string_literal_errors,
+)
 
 
 def _syntax_error_is_llm_prose_not_python(code: str, exc: SyntaxError) -> bool:

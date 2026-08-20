@@ -1,12 +1,13 @@
-# -*- coding: utf-8 -*-
+# mypy: disable-error-code="arg-type, assignment"
 """
 测试修复后的合并单元格检测
 """
 
+import glob
+import json
+
 import cv2
 import numpy as np
-import json
-import glob
 
 # 读取图片
 files = glob.glob(r"e:\FHD\26-0300001A*.png")
@@ -84,8 +85,8 @@ def merge_lines(lines, threshold=50):
     return merged
 
 
-horizontal_lines = sorted(list(set(horizontal_lines)))
-vertical_lines = sorted(list(set(vertical_lines)))
+horizontal_lines = sorted(set(horizontal_lines))
+vertical_lines = sorted(set(vertical_lines))
 
 horizontal_lines = merge_very_close(horizontal_lines, threshold=5)
 vertical_lines = merge_very_close(vertical_lines, threshold=5)
@@ -93,7 +94,7 @@ vertical_lines = merge_very_close(vertical_lines, threshold=5)
 horizontal_lines = merge_lines(horizontal_lines, threshold=50)
 vertical_lines = merge_lines(vertical_lines, threshold=50)
 
-print(f"\n网格线：")
+print("\n网格线：")
 print(f"  水平线：{horizontal_lines}")
 print(f"  垂直线：{vertical_lines}")
 
@@ -142,7 +143,7 @@ for cell in cells:
         # 如果右侧边框少于 50% 是黑色，认为是水平合并（边框缺失）
         if border_black_count < cell["height"] * 0.5:
             cell["is_merged_horizontally"] = True
-            print(f"  → 判定为水平合并！")
+            print("  → 判定为水平合并！")
 
 # 检测垂直合并
 for cell in cells:
@@ -159,7 +160,7 @@ for cell in cells:
         if border_black_count < cell["width"] * 0.5:
             cell["is_merged_vertically"] = True
 
-print(f"\n" + "=" * 70)
+print("\n" + "=" * 70)
 print("单元格分析结果")
 print("=" * 70)
 
@@ -230,8 +231,8 @@ for cell in cells:
     status_str = "正常" if not status_text else ", ".join(status_text)
 
     html_content += f"""                <div class="cell {status_class}">
-                    <div class="cell-num">#[{cell['row']},{cell['col']}] {status_str}</div>
-                    <div>位置: ({cell['x']}, {cell['y']}) 尺寸: {cell['width']}×{cell['height']}</div>
+                    <div class="cell-num">#[{cell["row"]},{cell["col"]}] {status_str}</div>
+                    <div>位置: ({cell["x"]}, {cell["y"]}) 尺寸: {cell["width"]}×{cell["height"]}</div>
                 </div>
 """
 

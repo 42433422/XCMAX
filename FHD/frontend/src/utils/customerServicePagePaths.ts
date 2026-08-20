@@ -38,7 +38,10 @@ export function resolveCustomerServicePageRedirectForRouteName(routeName: string
 
 /** Mod 客服路径 → 宿主路径（路由尚未注册时的回退） */
 export function customerServiceHostPathFromModPath(modPath: string): string | null {
-  const pathOnly = String(modPath || '').split('?')[0]?.split('#')[0] || ''
+  const pathOnly =
+    String(modPath || '')
+      .split('?')[0]
+      ?.split('#')[0] || ''
   if (pathOnly.startsWith(`${MOD_PREFIX}/enterprise-customer-service`)) {
     return '/enterprise-customer-service'
   }

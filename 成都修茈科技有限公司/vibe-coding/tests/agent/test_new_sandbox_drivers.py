@@ -8,7 +8,6 @@ is fully in-memory.
 
 from __future__ import annotations
 
-import io
 import json
 from contextlib import contextmanager
 from typing import Any
@@ -29,7 +28,6 @@ from vibe_coding.agent.sandbox import (
     create_cloud_driver,
 )
 
-
 # ----------------------------------------------------- helpers
 
 
@@ -43,7 +41,7 @@ class _FakeResponse:
     def read(self) -> bytes:
         return self._body
 
-    def __enter__(self) -> "_FakeResponse":
+    def __enter__(self) -> _FakeResponse:
         return self
 
     def __exit__(self, *exc: Any) -> None:
@@ -54,7 +52,7 @@ class _FakeResponse:
 def _patched_urlopen(handler):
     captured: list[Any] = []
 
-    def fake_urlopen(req, timeout=None, context=None):  # noqa: ARG001
+    def fake_urlopen(req, timeout=None, context=None):
         captured.append(req)
         return handler(req)
 
@@ -112,7 +110,7 @@ def test_webcontainer_unavailable_when_health_fails() -> None:
     bridge = WebContainerBridge(base_url="http://127.0.0.1:9/api/sandbox")
     drv = WebContainerSandboxDriver(bridge)
 
-    def handler(req):  # noqa: ARG001
+    def handler(req):
         raise OSError("connection refused")
 
     with _patched_urlopen(handler):
@@ -165,7 +163,7 @@ def test_webcontainer_executes_command_through_bridge() -> None:
 # ----------------------------------------------------- cloud http backend
 
 
-def test_http_cloud_backend_proxies_command(tmp_path) -> None:  # noqa: ARG001
+def test_http_cloud_backend_proxies_command(tmp_path) -> None:
     backend = HTTPCloudBackend(base_url="https://exec.example.com")
 
     def handler(req):
@@ -203,9 +201,7 @@ def test_http_cloud_backend_function_round_trip() -> None:
         body = json.loads(req.data.decode("utf-8"))
         assert body["kind"] == "function"
         assert body["function_name"] == "run"
-        return _FakeResponse(
-            json.dumps({"success": True, "output": {"x": body["input_data"]["x"] * 2}})
-        )
+        return _FakeResponse(json.dumps({"success": True, "output": {"x": body["input_data"]["x"] * 2}}))
 
     drv = CloudSandboxDriver(backend)
     with _patched_urlopen(handler):
@@ -227,17 +223,11 @@ def test_cloud_driver_failed_command_propagates() -> None:
     def handler(req):
         if req.full_url.endswith("/health"):
             return _FakeResponse("ok")
-        return _FakeResponse(
-            json.dumps(
-                {"success": False, "stderr": "no such command", "exit_code": 127}
-            )
-        )
+        return _FakeResponse(json.dumps({"success": False, "stderr": "no such command", "exit_code": 127}))
 
     drv = CloudSandboxDriver(backend)
     with _patched_urlopen(handler):
-        res = drv.execute(
-            SandboxJob(kind="command", command=["nope"], workspace_dir="/tmp")
-        )
+        res = drv.execute(SandboxJob(kind="command", command=["nope"], workspace_dir="/tmp"))
     assert res.success is False
     assert res.exit_code == 127
 

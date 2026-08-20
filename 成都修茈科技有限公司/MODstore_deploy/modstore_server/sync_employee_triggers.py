@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +19,7 @@ def _get_event_types() -> frozenset:
         from modstore_server.integrations.ops_action_handlers import EVENT_TYPES
 
         return EVENT_TYPES
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return frozenset()
 
 
@@ -155,7 +157,7 @@ def sync_all_employee_triggers() -> int:
     try:
         import zipfile
 
-        from modstore_server.models import CatalogItem, EmployeeTriggerBinding, get_session_factory
+        from modstore_server.models import CatalogItem, get_session_factory
 
         sf = get_session_factory()
         total = 0
@@ -163,7 +165,10 @@ def sync_all_employee_triggers() -> int:
             rows = session.query(CatalogItem).filter(CatalogItem.artifact == "employee_pack").all()
             for row in rows:
                 try:
-                    manifest: Dict[str, Any] = {"id": str(row.pkg_id or ""), "triggers": {}}
+                    manifest: Dict[str, Any] = {
+                        "id": str(row.pkg_id or ""),
+                        "triggers": {},
+                    }
                     fn = (row.stored_filename or "").strip()
                     if fn:
                         from modstore_server.catalog_store import files_dir
@@ -175,13 +180,13 @@ def sync_all_employee_triggers() -> int:
                                     manifest = json.loads(z.read("manifest.json").decode("utf-8"))
                     n = sync_triggers_for_manifest(manifest, session=session)
                     total += n
-                except Exception:
+                except RECOVERABLE_ERRORS:
                     logger.exception("sync_triggers: failed for pack %s", row.pkg_id)
             total += sync_duty_contract_event_bindings(session=session)
             session.commit()
         logger.info("sync_all_employee_triggers: upserted %d bindings", total)
         return total
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("sync_all_employee_triggers failed")
         return 0
 

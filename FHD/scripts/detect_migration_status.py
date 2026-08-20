@@ -11,11 +11,11 @@ Neuro-DDD 迁移状态全面检测脚本
 
 import os
 import re
-import ast
-from pathlib import Path
 from dataclasses import dataclass, field
-from typing import List, Dict, Set, Optional, Tuple
-from collections import defaultdict
+from pathlib import Path
+from typing import List, Optional
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 @dataclass
@@ -155,7 +155,7 @@ class MigrationDetector:
                     if status.has_event_publish or status.has_event_handler:
                         self.report.event_driven_services += 1
 
-        except Exception as e:
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             print(f"[WARN] 分析文件失败 {file_path}: {e}")
 
     def scan_application_services(self) -> None:
@@ -209,7 +209,7 @@ class MigrationDetector:
                         if status.has_event_publish:
                             self.report.event_driven_app_services += 1
 
-        except Exception as e:
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             print(f"[WARN] 分析文件失败 {file_path}: {e}")
 
     def scan_routes(self) -> None:
@@ -258,7 +258,7 @@ class MigrationDetector:
                 if status.has_event_publish:
                     self.report.event_driven_routes += 1
 
-        except Exception as e:
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             print(f"[WARN] 分析文件失败 {file_path}: {e}")
 
     def generate_report(self) -> str:
@@ -268,22 +268,22 @@ class MigrationDetector:
             "Neuro-DDD 迁移状态检测报告",
             "=" * 80,
             "",
-            f"[SUMMARY] 总体统计",
-            f"  Services 层:",
+            "[SUMMARY] 总体统计",
+            "  Services 层:",
             f"    总服务数: {self.report.total_services}",
             f"    已 Instrument: {self.report.instrumented_services} ({self.report.instrument_rate:.1f}%)",
             f"    事件驱动: {self.report.event_driven_services} ({self.report.service_migration_rate:.1f}%)",
-            f"",
-            f"  Application 层:",
+            "",
+            "  Application 层:",
             f"    总服务数: {self.report.total_app_services}",
             f"    事件驱动: {self.report.event_driven_app_services} ({self.report.app_service_migration_rate:.1f}%)",
-            f"",
-            f"  Routes 层:",
+            "",
+            "  Routes 层:",
             f"    总路由数: {self.report.total_routes}",
             f"    事件驱动: {self.report.event_driven_routes} ({self.report.routes_migration_rate:.1f}%)",
-            f"",
+            "",
             "-" * 80,
-            f"[DETAIL] Services 层详情",
+            "[DETAIL] Services 层详情",
             "-" * 80,
         ]
 
@@ -309,7 +309,7 @@ class MigrationDetector:
             [
                 "",
                 "-" * 80,
-                f"[DETAIL] Application Services 详情",
+                "[DETAIL] Application Services 详情",
                 "-" * 80,
             ]
         )
@@ -327,7 +327,7 @@ class MigrationDetector:
             [
                 "",
                 "=" * 80,
-                f"[PRIORITY] 迁移优先级建议",
+                "[PRIORITY] 迁移优先级建议",
                 "=" * 80,
                 "",
                 "P0 (立即迁移):",
@@ -371,7 +371,6 @@ class MigrationDetector:
 def main():
     """主函数"""
     import json
-    import os
     import sys
 
     # Project root: CLI arg > env > auto-derived FHD/ (never a hardcoded path).

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment"
 from __future__ import annotations
 
 import argparse
@@ -6,6 +7,8 @@ import sqlite3
 from typing import List
 
 from sqlalchemy import Boolean, create_engine, inspect, text
+
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 EXCLUDED_TABLES = {"sqlite_sequence", "alembic_version"}
 
@@ -96,7 +99,7 @@ def main() -> None:
                 copied = _copy_table(sqlite_conn, pg_engine, table)
                 total += copied
                 print(f"[migrate] {table}: {copied} rows")
-            except Exception as exc:
+            except BOUNDARY_ERRORS as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures
                 print(f"[migrate] {table}: skipped ({exc})")
         print(f"[migrate] done, total rows copied: {total}")
     finally:

@@ -1,35 +1,34 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue'
 
-const appId = computed(() => (import.meta.env.VITE_AGORA_APP_ID as string) || '');
-const channel = ref('xcagi-demo-1v1');
-const token = ref('');
-const uid = ref(String(Math.floor(Math.random() * 9000) + 1000));
-const status = ref('未连接');
-const errorMessage = ref('');
-const localVideoRef = ref<HTMLDivElement | null>(null);
-const remoteVideoRef = ref<HTMLDivElement | null>(null);
+const appId = computed(() => (import.meta.env.VITE_AGORA_APP_ID as string) || '')
+const channel = ref('xcagi-demo-1v1')
+const token = ref('')
+const uid = ref(String(Math.floor(Math.random() * 9000) + 1000))
+const status = ref('未连接')
+const errorMessage = ref('')
+const localVideoRef = ref<HTMLDivElement | null>(null)
+const remoteVideoRef = ref<HTMLDivElement | null>(null)
 
 async function joinRoom() {
-  errorMessage.value = '';
+  errorMessage.value = ''
   if (!appId.value) {
-    errorMessage.value = '请配置 VITE_AGORA_APP_ID（声网 PoC）';
-    return;
+    errorMessage.value = '请配置 VITE_AGORA_APP_ID（声网 PoC）'
+    return
   }
-  status.value = '待接入';
+  status.value = '待接入'
   errorMessage.value =
-    'PoC 壳页已就绪。接入步骤：cd frontend && npm install agora-rtc-sdk-ng，在此页实现 join/publish（见 integration-suite-roadmap.md）。';
+    'PoC 壳页已就绪。接入步骤：cd frontend && npm install agora-rtc-sdk-ng，在此页实现 join/publish（见 integration-suite-roadmap.md）。'
 }
 
 async function leaveRoom() {
-  status.value = '已离开';
-  errorMessage.value = '';
+  status.value = '已离开'
+  errorMessage.value = ''
 }
 
 onMounted(() => {
-  document.title = '会议 PoC · 声网';
-});
-
+  document.title = '会议 PoC · 声网'
+})
 </script>
 
 <template>

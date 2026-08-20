@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 批量迁移所有剩余的 Services 到 Neuro-DDD
 
@@ -9,9 +8,9 @@
 - _publish_event() 方法
 """
 
-import os
 from pathlib import Path
-from typing import List, Tuple
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 class BulkServiceMigrator:
@@ -43,7 +42,7 @@ class BulkServiceMigrator:
     def migrate_service(self, file_path: Path) -> bool:
         """迁移单个 Service"""
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 lines = f.readlines()
 
             # 找到最后一个 import 的位置
@@ -124,7 +123,7 @@ class BulkServiceMigrator:
 
             return True
 
-        except Exception as e:
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             self.log(f"迁移失败 {file_path.name}: {e}", "ERROR")
             return False
 

@@ -1,27 +1,9 @@
 <template>
   <div class="vwp">
-    <div
-      v-for="(step, i) in steps"
-      :key="i"
-      class="vwp-step"
-      :class="'vwp-step--' + step.status"
-    >
+    <div v-for="(step, i) in steps" :key="i" class="vwp-step" :class="'vwp-step--' + step.status">
       <span class="vwp-icon">
-        <svg
-          v-if="step.status === 'done'"
-          width="14"
-          height="14"
-          viewBox="0 0 14 14"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          <path
-            d="M3 7.5L5.8 10.3L11 4.7"
-            stroke="currentColor"
-            stroke-width="1.6"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
+        <svg v-if="step.status === 'done'" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M3 7.5L5.8 10.3L11 4.7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
         <svg
           v-else-if="step.status === 'active'"
@@ -32,28 +14,10 @@
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
         >
-          <path
-            d="M7 1.5a5.5 5.5 0 1 1-4.78 2.77"
-            stroke="currentColor"
-            stroke-width="1.6"
-            stroke-linecap="round"
-          />
+          <path d="M7 1.5a5.5 5.5 0 1 1-4.78 2.77" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
         </svg>
-        <svg
-          v-else
-          width="14"
-          height="14"
-          viewBox="0 0 14 14"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          <circle
-            cx="7"
-            cy="7"
-            r="4.5"
-            stroke="currentColor"
-            stroke-width="1.2"
-          />
+        <svg v-else width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.2" />
         </svg>
       </span>
       <span class="vwp-label">{{ step.label }}</span>
@@ -65,8 +29,8 @@
 defineProps({
   steps: {
     type: Array,
-    default: () => []
-  }
+    default: () => [],
+  },
 })
 </script>
 

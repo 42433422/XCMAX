@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     Boolean,
@@ -28,7 +28,7 @@ class Notification(Base):
     content = Column(Text, nullable=False)
     data_json = Column(Text, default="{}")
     is_read = Column(Boolean, default=False, index=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
 
 class RiskEvent(Base):
@@ -41,7 +41,7 @@ class RiskEvent(Base):
     provider = Column(String(64), default="")
     model = Column(String(256), default="")
     detail = Column(Text, default="")
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
 
 class OutboxEvent(Base):
@@ -59,7 +59,7 @@ class OutboxEvent(Base):
     status = Column(String(16), default="pending", index=True)
     attempts = Column(Integer, default=0, nullable=False)
     last_error = Column(Text, default="")
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
     dispatched_at = Column(DateTime, nullable=True)
 
 
@@ -77,8 +77,8 @@ class OutboxDeadLetter(Base):
     payload_json = Column(Text, default="{}")
     attempts = Column(Integer, default=0, nullable=False)
     last_error = Column(Text, default="")
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
-    moved_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
+    moved_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
     # Resolution is append-only operational evidence.  Rows are retained even
     # when replay is unsafe (payment/refund etc.) so fault debt can be closed
     # without deleting the audit trail.

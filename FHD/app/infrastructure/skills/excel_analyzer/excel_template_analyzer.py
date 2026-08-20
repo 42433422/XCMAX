@@ -46,9 +46,12 @@ def analyze_template(
                     "message": f"Sheet '{sheet_name}' 不存在，可用Sheet: {wb.sheetnames}",
                 }
         else:
-            ws = wb.active
+            active_ws = wb.active
+            if active_ws is None:
+                return {"success": False, "message": "工作簿不包含工作表"}
+            ws = active_ws
 
-        result = {
+        result: dict[str, Any] = {
             "success": True,
             "file": Path(file_path).name,
             "sheet": ws.title,

@@ -5,7 +5,6 @@ import {
   isSalesContractCommandText,
   isPriceListCommandText,
   loadBuffer,
-  saveBuffer,
   recordCommandHit,
   findRunnableCachedCommand,
   compactBuffer,
@@ -67,15 +66,27 @@ describe('commandBuffer deep branches', () => {
   })
 
   it('recordCommandHit increments hitCount on repeat', () => {
-    recordCommandHit({ intent: 'price_list', handlerKey: 'handlePriceListCommand', message: '生成价格表' })
-    recordCommandHit({ intent: 'price_list', handlerKey: 'handlePriceListCommand', message: '生成价格表' })
+    recordCommandHit({
+      intent: 'price_list',
+      handlerKey: 'handlePriceListCommand',
+      message: '生成价格表',
+    })
+    recordCommandHit({
+      intent: 'price_list',
+      handlerKey: 'handlePriceListCommand',
+      message: '生成价格表',
+    })
     const buf = loadBuffer()
     const entry = buf.find((e) => e.normalizedText === '生成价格表')
     expect(entry?.hitCount).toBe(2)
   })
 
   it('recordCommandHit ignores empty normalized text', () => {
-    recordCommandHit({ intent: 'price_list', handlerKey: 'handlePriceListCommand', message: '   ' })
+    recordCommandHit({
+      intent: 'price_list',
+      handlerKey: 'handlePriceListCommand',
+      message: '   ',
+    })
     expect(loadBuffer()).toHaveLength(0)
   })
 
@@ -83,8 +94,22 @@ describe('commandBuffer deep branches', () => {
     const old = Date.now() - 60 * 24 * 60 * 60 * 1000
     const fresh = Date.now()
     const result = compactBuffer([
-      { intent: 'price_list', handlerKey: 'handlePriceListCommand', normalizedText: 'old', hitCount: 1, createdAt: old, lastUsedAt: old },
-      { intent: 'price_list', handlerKey: 'handlePriceListCommand', normalizedText: 'fresh', hitCount: 1, createdAt: fresh, lastUsedAt: fresh },
+      {
+        intent: 'price_list',
+        handlerKey: 'handlePriceListCommand',
+        normalizedText: 'old',
+        hitCount: 1,
+        createdAt: old,
+        lastUsedAt: old,
+      },
+      {
+        intent: 'price_list',
+        handlerKey: 'handlePriceListCommand',
+        normalizedText: 'fresh',
+        hitCount: 1,
+        createdAt: fresh,
+        lastUsedAt: fresh,
+      },
     ])
     expect(result.map((r) => r.normalizedText)).toEqual(['fresh'])
   })
@@ -95,10 +120,7 @@ describe('commandBuffer deep branches', () => {
   })
 
   it('loadBuffer drops entries missing required fields', () => {
-    localStorage.setItem(
-      'xcagi_command_buffer_v1',
-      JSON.stringify([{ intent: '', handlerKey: '', normalizedText: '' }]),
-    )
+    localStorage.setItem('xcagi_command_buffer_v1', JSON.stringify([{ intent: '', handlerKey: '', normalizedText: '' }]))
     expect(loadBuffer()).toEqual([])
   })
 })

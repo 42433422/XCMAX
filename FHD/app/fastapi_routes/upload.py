@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 
 from app.infrastructure.auth.dependencies import get_logged_in_user
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.utils.secure_filename import secure_filename
+from app.utils.security.secure_filename import secure_filename
 
 logger = logging.getLogger(__name__)
 
@@ -84,9 +84,11 @@ async def upload_temp(
                 "size": os.path.getsize(file_path),
             }
         )
-    except RECOVERABLE_ERRORS as e:
-        logger.error("文件上传失败：%s", e, exc_info=True)
-        return JSONResponse({"success": False, "message": f"上传失败：{str(e)}"}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("文件上传失败")
+        return JSONResponse(
+            {"success": False, "message": "文件上传服务暂时不可用"}, status_code=500
+        )
 
 
 @router.delete("/temp/{filename}")
@@ -104,9 +106,11 @@ def delete_temp_file(filename: str, _user=Depends(get_logged_in_user)):
             return JSONResponse({"success": False, "message": "文件不存在"}, status_code=404)
         os.remove(file_path)
         return JSONResponse({"success": True, "message": "文件已删除"})
-    except RECOVERABLE_ERRORS as e:
-        logger.error("删除文件失败：%s", e)
-        return JSONResponse({"success": False, "message": f"删除失败：{str(e)}"}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("删除文件失败")
+        return JSONResponse(
+            {"success": False, "message": "文件删除服务暂时不可用"}, status_code=500
+        )
 
 
 @router.get("/config")

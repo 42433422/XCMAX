@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 新 PostgreSQL 库一次性准备：启用 pgvector 扩展。
 
@@ -12,6 +11,7 @@
 随后请执行:
   python -m alembic upgrade head
 """
+
 from __future__ import annotations
 
 import os

@@ -5,13 +5,7 @@ const emit = defineEmits<{
   skip: []
 }>()
 
-const {
-  frontendEntryPath,
-  frontendBrief,
-  frontendBusy,
-  regenerateFrontend,
-  fileSet,
-} = useModAuthoringContext()
+const { frontendEntryPath, frontendBrief, frontendBusy, regenerateFrontend, fileSet } = useModAuthoringContext()
 </script>
 
 <template>

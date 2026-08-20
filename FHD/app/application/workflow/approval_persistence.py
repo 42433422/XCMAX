@@ -5,9 +5,15 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import text as text
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.application.workflow.approval_persistence_writes import (
+    mark_durable_outcome as mark_durable_outcome,
+)
+from app.application.workflow.approval_persistence_writes import (
+    persist_workflow_approval as persist_workflow_approval,
+)
 from app.application.workflow.types import (
     ApprovalRequest,
     PlanGraph,
@@ -17,6 +23,8 @@ from app.application.workflow.types import (
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+_APPROVAL_STORAGE_ERRORS: tuple[type[Exception], ...] = RECOVERABLE_ERRORS + (SQLAlchemyError,)
 
 # 可靠工作流快照在 ``business_data`` 中的键：用于在进程重启后重建/续跑获批计划。
 # 仅凭 DB 的 request/status/text 不足以证明存在可执行工作流，必须依赖本快照。
@@ -146,181 +154,6 @@ def _resolve_applicant(db, runtime_context: dict[str, Any] | None):
     return matches[0] if len(matches) == 1 else None
 
 
-def persist_workflow_approval(
-    request: ApprovalRequest,
-    runtime_context: dict[str, Any] | None,
-    *,
-    flow_key: str,
-    plan: PlanGraph | None = None,
-) -> dict[str, Any] | None:
-    """Persist an interactive AI approval with complete foreign keys and audit linkage.
-
-    一并持久化绑定 ``request_no`` 的可靠工作流快照（完整计划 + 安全运行上下文），
-    使进程重启后仍可据此重建/续跑获批计划。
-    """
-    try:
-        from app.db.models.approval import (
-            ApprovalFlow,
-            ApprovalFlowNode,
-        )
-        from app.db.models.approval import (
-            ApprovalRequest as ApprovalRequestModel,
-        )
-        from app.db.session import get_db
-
-        with get_db() as db:
-            existing = (
-                db.query(ApprovalRequestModel)
-                .filter(ApprovalRequestModel.request_no == request.request_id)
-                .first()
-            )
-            if existing is not None:
-                metadata = {
-                    "id": int(existing.id),
-                    "request_no": str(existing.request_no),
-                    "approval_path": (
-                        "/mod/xcagi-approval-bridge/approval-hub/workspace"
-                        f"?request_no={existing.request_no}"
-                    ),
-                }
-            else:
-                applicant = _resolve_applicant(db, runtime_context)
-                if applicant is None:
-                    raise RuntimeError("无法从当前登录会话解析审批申请人")
-                flow = db.query(ApprovalFlow).filter(ApprovalFlow.flow_key == flow_key).first()
-                if flow is None:
-                    flow = ApprovalFlow(
-                        flow_key=flow_key,
-                        flow_name="AI 工作流逐笔审批",
-                        description="桌面智能对话数据库写操作的逐笔人工审批",
-                        business_type="workflow_tool",
-                        node_type="serial",
-                        allow_transfer=False,
-                        allow_delegate=False,
-                        allow_withdraw=True,
-                        timeout_hours=48,
-                        is_active=True,
-                        is_deleted=False,
-                        created_by=int(applicant.id),
-                    )
-                    db.add(flow)
-                    db.flush()
-                audit_node = (
-                    db.query(ApprovalFlowNode)
-                    .filter(
-                        ApprovalFlowNode.flow_id == flow.id,
-                        ApprovalFlowNode.node_name == "AI 工作流审批留痕",
-                    )
-                    .first()
-                )
-                if audit_node is None:
-                    audit_node = ApprovalFlowNode(
-                        flow_id=int(flow.id),
-                        node_name="AI 工作流审批留痕",
-                        node_order=1,
-                        node_type="serial",
-                        approver_type="applicant",
-                        approver_ids=None,
-                        min_approvals=1,
-                        is_active=True,
-                    )
-                    db.add(audit_node)
-                    db.flush()
-
-                persisted_plan_id = (
-                    str(getattr(plan, "plan_id", "") or request.plan_id)
-                    if _is_valid_plan_for_snapshot(plan)
-                    else request.plan_id
-                )
-                business_data = {
-                    "plan_id": persisted_plan_id,
-                    "node_id": request.node_id,
-                    "tool_id": request.tool_id,
-                    "action": request.action,
-                    "params": request.params or {},
-                }
-                # 仅对合法计划写入绑定 request_no 的可靠工作流快照；坏/缺计划不落快照。
-                if _is_valid_plan_for_snapshot(plan):
-                    business_data[SNAPSHOT_KEY] = _build_workflow_snapshot(
-                        request, runtime_context, plan
-                    )
-                persisted = ApprovalRequestModel(
-                    request_no=request.request_id,
-                    flow_id=int(flow.id),
-                    business_type="workflow_tool",
-                    business_data=json.dumps(business_data, ensure_ascii=False, default=str),
-                    applicant_id=int(applicant.id),
-                    applicant_name=str(
-                        applicant.display_name or applicant.username or applicant.id
-                    ),
-                    title=f"智能对话写操作：{request.tool_id}.{request.action}",
-                    description=json.dumps(request.params or {}, ensure_ascii=False, default=str)[
-                        :500
-                    ],
-                    current_node_id=None,
-                    current_node_order=0,
-                    status="pending",
-                    priority="normal",
-                    submitted_at=request.created_at or datetime.now(),
-                    created_at=request.created_at or datetime.now(),
-                )
-                db.add(persisted)
-                db.flush()
-                try:
-                    db.execute(
-                        text(
-                            "INSERT INTO ai_action_audit (actor, action, payload) "
-                            "VALUES (:actor, :action, :payload)"
-                        ),
-                        {
-                            "actor": str(applicant.id),
-                            "action": "approval.submit_ai_workflow",
-                            "payload": json.dumps(
-                                {
-                                    "approval_request_id": persisted.id,
-                                    "request_no": persisted.request_no,
-                                    "plan_id": request.plan_id,
-                                    "node_id": request.node_id,
-                                },
-                                ensure_ascii=False,
-                            ),
-                        },
-                    )
-                except (*RECOVERABLE_ERRORS, SQLAlchemyError):
-                    logger.warning("AI 审批提交审计写入失败")
-                metadata = {
-                    "id": int(persisted.id),
-                    "request_no": str(persisted.request_no),
-                    "flow_id": int(flow.id),
-                    "audit_node_id": int(audit_node.id),
-                    "applicant_id": int(applicant.id),
-                    "approval_path": (
-                        "/mod/xcagi-approval-bridge/approval-hub/workspace"
-                        f"?request_no={persisted.request_no}"
-                    ),
-                }
-
-        try:
-            from app.neuro_bus.application_neuro_bridge import neuro_notify_approval_changed
-
-            neuro_notify_approval_changed(
-                "created",
-                approval_id=request.request_id,
-                flow_id=str(metadata.get("flow_id") or ""),
-            )
-        except RECOVERABLE_ERRORS:
-            logger.debug("neuro_notify_approval_changed skipped")
-        return metadata
-    except (*RECOVERABLE_ERRORS, SQLAlchemyError) as exc:
-        # 有界日志：仅记录异常类型，不向日志暴露原始 DB/异常正文（避免泄露内部细节）。
-        logger.warning(
-            "AI 审批持久化到 DB 失败 request_no=%s type=%s",
-            request.request_id,
-            type(exc).__name__,
-        )
-        return None
-
-
 def persist_agent_run_link(
     request_id: str,
     *,
@@ -349,7 +182,7 @@ def persist_agent_run_link(
             business_data[SNAPSHOT_KEY] = snapshot
             persisted.business_data = json.dumps(business_data, ensure_ascii=False, default=str)
             db.commit()
-    except (*RECOVERABLE_ERRORS, SQLAlchemyError) as exc:
+    except _APPROVAL_STORAGE_ERRORS as exc:
         logger.warning("AI 审批关联 Agent Run 持久化失败 type=%s", type(exc).__name__)
 
 
@@ -448,7 +281,7 @@ def _validated_snapshot(persisted) -> dict[str, Any] | None:
     # 租户绑定守卫：快照必须记录有效整数租户，且当前租户必须存在并与之相等；
     # 任一缺失/非法/不匹配一律 fail-closed（绝不放行 tenant_id=null 或无租户快照）。
     try:
-        snapshot_tenant_int = int(snapshot.get("tenant_id"))
+        snapshot_tenant_int = int(snapshot.get("tenant_id") or 0)
     except (TypeError, ValueError):
         return None
     current = current_tenant_id()
@@ -519,7 +352,7 @@ def load_durable_workflow_snapshot(
             if "workflow_execution" in business_data:
                 return None
             return _validated_snapshot(persisted)
-    except (*RECOVERABLE_ERRORS, SQLAlchemyError):
+    except _APPROVAL_STORAGE_ERRORS:
         logger.warning("load durable workflow snapshot failed request_no=%s", request_id)
         return None
 
@@ -561,7 +394,7 @@ def load_workflow_snapshot_for_execution(request_id: str) -> dict[str, Any] | No
             if "workflow_execution" in business_data:
                 return None
             return _validated_snapshot(persisted)
-    except (*RECOVERABLE_ERRORS, SQLAlchemyError):
+    except _APPROVAL_STORAGE_ERRORS:
         logger.warning("load workflow snapshot for execution failed request_no=%s", request_id)
         return None
 
@@ -602,7 +435,7 @@ def mark_durable_request_approved_and_load(request_id: str) -> dict[str, Any] | 
             persisted.approved_at = datetime.now()
             db.commit()
         return snapshot
-    except (*RECOVERABLE_ERRORS, SQLAlchemyError) as exc:
+    except _APPROVAL_STORAGE_ERRORS as exc:
         # 有界日志：不向日志暴露原始 DB/异常正文。
         logger.warning(
             "mark durable request approved failed request_no=%s type=%s",
@@ -610,84 +443,3 @@ def mark_durable_request_approved_and_load(request_id: str) -> dict[str, Any] | 
             type(exc).__name__,
         )
         return None
-
-
-def mark_durable_outcome(
-    request_id: str, *, success: bool, code: str = "", message: str = ""
-) -> None:
-    """原子真值：执行结束后把可靠请求置为终态，杜绝重放且失败如实。
-
-    - 成功 → ``approved``（正常获批终态，工作台过滤器可见）。
-    - 失败 → ``cancelled``（既有取消态）。
-    - 仅处理 ``workflow_tool`` 可靠请求；其它请求为 no-op。
-    - 终态与可执行态（预审批 pending、执行恢复 approved）严格区分，不被任何加载器
-      接受，故重复审批无法重新进入、无法重放业务。
-    - 绝不静默吞错：失败也落库为 ``cancelled``，且只落固定安全
-      代码/消息；``message`` 参数仅为兼容旧调用保留，永不持久化。
-    """
-    from app.db.models.approval import (
-        ApprovalRequest as ApprovalRequestModel,
-    )
-    from app.db.models.approval import (
-        ApprovalStatus,
-    )
-    from app.db.session import get_db
-
-    del message  # 兼容参数：原始文本不得参与任何持久化或公共输出。
-    status = ApprovalStatus.APPROVED.value if success else ApprovalStatus.CANCELLED.value
-    safe_code, safe_message = canonical_workflow_outcome(success=success, code=code)
-    try:
-        with get_db() as db:
-            persisted = (
-                db.query(ApprovalRequestModel)
-                .filter(ApprovalRequestModel.request_no == request_id)
-                .first()
-            )
-            if persisted is None:
-                return
-            if str(persisted.business_type or "").strip() != "workflow_tool":
-                return
-            business_data = json.loads(persisted.business_data) if persisted.business_data else {}
-            if not isinstance(business_data, dict):
-                business_data = {}
-            business_data["workflow_execution"] = {
-                "status": status,
-                "success": bool(success),
-                "code": safe_code,
-                "message": safe_message,
-            }
-            persisted.business_data = json.dumps(business_data, ensure_ascii=False, default=str)
-            persisted.status = status
-            # 执行失败 → 有界 rejection_reason（绝不落原始异常正文），并写入失败审计留痕。
-            if not success:
-                persisted.rejection_reason = WORKFLOW_EXECUTION_FAILED_CODE
-                try:
-                    db.execute(
-                        text(
-                            "INSERT INTO ai_action_audit (actor, action, payload) "
-                            "VALUES (:actor, :action, :payload)"
-                        ),
-                        {
-                            "actor": str(persisted.applicant_id or "").strip(),
-                            "action": "approval.execute_ai_workflow_failed",
-                            "payload": json.dumps(
-                                {
-                                    "request_no": request_id,
-                                    "code": safe_code,
-                                    "message": safe_message,
-                                },
-                                ensure_ascii=False,
-                            ),
-                        },
-                    )
-                except (*RECOVERABLE_ERRORS, SQLAlchemyError):
-                    logger.warning("AI 审批执行失败审计写入失败 request_no=%s", request_id)
-            persisted.updated_at = datetime.now()
-            db.commit()
-    except (*RECOVERABLE_ERRORS, SQLAlchemyError) as exc:
-        # 有界日志：不向日志暴露原始 DB/异常正文。
-        logger.warning(
-            "mark durable workflow outcome failed request_no=%s type=%s",
-            request_id,
-            type(exc).__name__,
-        )

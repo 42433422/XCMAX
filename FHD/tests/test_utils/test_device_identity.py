@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import app.utils.device_identity as device_identity
+import app.utils.device_system.device_identity as device_identity
 
 
 def _reset_cache() -> None:

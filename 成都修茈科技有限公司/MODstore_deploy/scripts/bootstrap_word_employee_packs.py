@@ -76,7 +76,7 @@ def _bootstrap_one(*, brief: str, extra_files: dict | None = None) -> Path:
     if "word-generate-employee" in brief:
         manifest["id"] = "word-generate-employee"
     manifest["version"] = "1.0.0"
-    manifest["description"] = brief.split("\n")[0][:200]
+    manifest["description"] = brief.split("\n", maxsplit=1)[0][:200]
     manifest["artifact"] = "employee_pack"
 
     pack_dir, raw_zip = materialize_asset_employee_pack(

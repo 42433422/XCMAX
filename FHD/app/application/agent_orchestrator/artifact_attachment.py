@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.application.agent_orchestrator.run_models import AgentRun, artifact_from_dict
 
 
 class ArtifactAttachmentMixin:
     """Attach tool artifacts to a run and maintain its artifact metadata."""
+
+    if TYPE_CHECKING:
+        _ingest_artifact_to_dataset: Any
 
     def _attach_artifacts_from_payload(
         self,

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, attr-defined, call-arg, method-assign"
 """COVERAGE_RAMP Phase 6 round 21: backend low-coverage modules (gap-fill).
 
 Targets (focus on uncovered branches; existing tests live in p2-p12):

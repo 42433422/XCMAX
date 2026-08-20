@@ -665,7 +665,7 @@ async function uploadEmployee() {
     // 重新加载商品列表
     try {
       const res = await api.catalog('', '', 4, 0)
-      items.value = res.items
+      items.value = res.items.map((item) => ({ ...item, price: Number(item.price ?? 0) }))
     } catch {
       // 加载失败不影响上传成功的提示
     }

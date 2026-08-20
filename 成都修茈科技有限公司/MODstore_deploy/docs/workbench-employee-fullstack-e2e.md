@@ -18,21 +18,21 @@
 
 ## 2. 13 步编排预期终态
 
-| 步骤 id | 典型终态 | 说明 |
-|---------|----------|------|
-| spec | done | 结构化需求写入 session |
-| employee_plan | done | 一站式规划 brief |
-| generate | done / error | Word 提取走 AI scaffold，非 Excel 资产模式 |
-| validate | done / error | 独立 manifest/Python 校验 |
-| script_workflow | done / skipped / error | 非资产模式且开启 embed 时尝试生成 |
-| embed_script | done / skipped | 无 script_wf 时 skipped 并说明原因 |
-| workflow | done / skipped | pack_only → skipped |
-| register_pack | done / error | 本地保存；失败即 error |
-| workflow_sandbox | done / skipped | pack_only → skipped |
-| mod_sandbox | done / error | vibe 门禁失败 → error |
-| standalone_smoke | done / skipped / error | validate 失败 → error |
-| host_check | done / skipped | 未配置 URL → skipped |
-| complete | done | 含 quality_report |
+| 步骤 id          | 典型终态               | 说明                                       |
+| ---------------- | ---------------------- | ------------------------------------------ |
+| spec             | done                   | 结构化需求写入 session                     |
+| employee_plan    | done                   | 一站式规划 brief                           |
+| generate         | done / error           | Word 提取走 AI scaffold，非 Excel 资产模式 |
+| validate         | done / error           | 独立 manifest/Python 校验                  |
+| script_workflow  | done / skipped / error | 非资产模式且开启 embed 时尝试生成          |
+| embed_script     | done / skipped         | 无 script_wf 时 skipped 并说明原因         |
+| workflow         | done / skipped         | pack_only → skipped                        |
+| register_pack    | done / error           | 本地保存；失败即 error                     |
+| workflow_sandbox | done / skipped         | pack_only → skipped                        |
+| mod_sandbox      | done / error           | vibe 门禁失败 → error                      |
+| standalone_smoke | done / skipped / error | validate 失败 → error                      |
+| host_check       | done / skipped         | 未配置 URL → skipped                       |
+| complete         | done                   | 含 quality_report                          |
 
 前端进度条将 **done + skipped + error** 均计为终态（如 13/13）。
 
@@ -56,7 +56,7 @@
 
 ---
 
-*与 [fhd-employee-composition.md](fhd-employee-composition.md)、[workbench-employee-impl-flow.md](workbench-employee-impl-flow.md) 交叉阅读。*
+_与 [fhd-employee-composition.md](fhd-employee-composition.md)、[workbench-employee-impl-flow.md](workbench-employee-impl-flow.md) 交叉阅读。_
 
 ## 值班编制 ↔ 桌面主控
 

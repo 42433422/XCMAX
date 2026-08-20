@@ -33,7 +33,7 @@ def test_model_payment_blueprints_delegate_routes():
     text = (MOD_DIR / "backend" / "blueprints.py").read_text(encoding="utf-8")
     assert "/model-payment/plans" in text
     assert "/model-payment/checkout" in text
-    assert "app.fastapi_routes.model_payment" in text
+    assert "app.mod_sdk.host_services" in text
 
 
 def test_list_model_payment_facade_registry_mod(monkeypatch):

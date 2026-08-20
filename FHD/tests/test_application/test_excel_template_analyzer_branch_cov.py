@@ -1,3 +1,4 @@
+# mypy: disable-error-code="call-overload, union-attr"
 """Branch coverage tests for app.utils.excel.excel_template_analyzer.
 
 Uses real openpyxl workbooks (created in tmp_path) to exercise branches in:

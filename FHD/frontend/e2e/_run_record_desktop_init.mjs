@@ -9,17 +9,11 @@ import { spawnSync, spawn } from 'child_process'
 import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const EVIDENCE = path.resolve(
-  __dirname,
-  '../../docs/evidence/e2e/desktop-init-cards-settings-20260724',
-)
+const EVIDENCE = path.resolve(__dirname, '../../docs/evidence/e2e/desktop-init-cards-settings-20260724')
 const SHOTS = path.join(EVIDENCE, 'shots')
 const REC = path.join(EVIDENCE, 'rec')
 const CLIPS = path.join(EVIDENCE, 'clips')
-const FFMPEG = path.join(
-  process.env.HOME || '',
-  'Library/Caches/ms-playwright/ffmpeg-1011/ffmpeg-mac',
-)
+const FFMPEG = path.join(process.env.HOME || '', 'Library/Caches/ms-playwright/ffmpeg-1011/ffmpeg-mac')
 const CDP = process.env.XCAGI_CDP || 'http://127.0.0.1:9222'
 const API = 'http://127.0.0.1:17500'
 const results = []
@@ -89,7 +83,10 @@ function stitchWebm(jpgPaths, outPath, fps = 0.45) {
 }
 
 async function bodySnippet(page, n = 300) {
-  const t = await page.locator('body').innerText().catch(() => '')
+  const t = await page
+    .locator('body')
+    .innerText()
+    .catch(() => '')
   return t.replace(/\s+/g, ' ').trim().slice(0, n)
 }
 
@@ -126,8 +123,7 @@ async function main() {
 
   const browser = await chromium.connectOverCDP(CDP)
   const context = browser.contexts()[0]
-  let page =
-    context.pages().find((p) => /17500/.test(p.url())) || context.pages()[0]
+  let page = context.pages().find((p) => /17500/.test(p.url())) || context.pages()[0]
   console.log('attached', page.url())
 
   // ========== A1 welcome ==========
@@ -170,11 +166,11 @@ async function main() {
   await page.goto(`${API}/onboarding?step=host-pack`, { waitUntil: 'domcontentloaded', timeout: 60_000 })
   await sleep(1800)
   frames = [await shot(page, '03-host-pack')]
-  const labels = await page.locator('.sidebar-preview-chip').allTextContents().catch(() => [])
-  fs.writeFileSync(
-    path.join(EVIDENCE, '03-sidebar-preview-labels.json'),
-    JSON.stringify({ labels, at: new Date().toISOString() }, null, 2),
-  )
+  const labels = await page
+    .locator('.sidebar-preview-chip')
+    .allTextContents()
+    .catch(() => [])
+  fs.writeFileSync(path.join(EVIDENCE, '03-sidebar-preview-labels.json'), JSON.stringify({ labels, at: new Date().toISOString() }, null, 2))
   const det = page.locator('details.host-pack-details summary, details summary').first()
   if (await det.isVisible().catch(() => false)) {
     await det.click().catch(() => undefined)
@@ -232,12 +228,7 @@ async function main() {
     frames.map((f) => f.jpg),
     path.join(REC, '05-first-ai-task.webm'),
   )
-  mark(
-    '05-first-ai-task',
-    ok,
-    methodFail ? `FAIL Method Not Allowed; action=${ran}; ${text}` : `action=${ran}; ${text}`,
-    frames,
-  )
+  mark('05-first-ai-task', ok, methodFail ? `FAIL Method Not Allowed; action=${ran}; ${text}` : `action=${ran}; ${text}`, frames)
 
   // ========== main shell ==========
   await page.goto(`${API}/`, { waitUntil: 'domcontentloaded', timeout: 60_000 })
@@ -389,18 +380,23 @@ async function main() {
     if (fs.existsSync(src)) fs.copyFileSync(src, path.join(REC, `${name}.mp4`))
   }
 
-  const buildInfo = JSON.parse(
-    fs.readFileSync('/Applications/XCAGI.app/Contents/Resources/build-info.json', 'utf8'),
-  )
-  const sku = JSON.parse(
-    fs.readFileSync('/Applications/XCAGI.app/Contents/Resources/product-sku.json', 'utf8'),
-  )
+  const buildInfo = JSON.parse(fs.readFileSync('/Applications/XCAGI.app/Contents/Resources/build-info.json', 'utf8'))
+  const sku = JSON.parse(fs.readFileSync('/Applications/XCAGI.app/Contents/Resources/product-sku.json', 'utf8'))
 
   fs.writeFileSync(path.join(EVIDENCE, '07-acceptance-results.json'), JSON.stringify(results, null, 2))
 
-  const shotList = fs.readdirSync(SHOTS).filter((f) => f.endsWith('.png')).sort()
-  const recList = fs.readdirSync(REC).filter((f) => /\.(webm|mp4)$/.test(f)).sort()
-  const clipList = fs.readdirSync(CLIPS).filter((f) => /\.(webm|mp4)$/.test(f)).sort()
+  const shotList = fs
+    .readdirSync(SHOTS)
+    .filter((f) => f.endsWith('.png'))
+    .sort()
+  const recList = fs
+    .readdirSync(REC)
+    .filter((f) => /\.(webm|mp4)$/.test(f))
+    .sort()
+  const clipList = fs
+    .readdirSync(CLIPS)
+    .filter((f) => /\.(webm|mp4)$/.test(f))
+    .sort()
 
   const flag = (step) => (results.find((r) => r.step === step)?.ok ? '☑ PASS' : '☐ FAIL')
   const checklist = `# 逐项验证清单（初始化 5 卡 + 系统设置）

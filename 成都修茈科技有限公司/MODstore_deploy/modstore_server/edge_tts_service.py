@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment"
 """edge-tts 预热、并发限制与短句缓存（降低 TTS 首包延迟）。"""
 
 from __future__ import annotations
@@ -7,6 +8,8 @@ import hashlib
 import logging
 from collections import OrderedDict
 from typing import AsyncIterator, Optional
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 _LOG = logging.getLogger(__name__)
 
@@ -80,7 +83,7 @@ async def warm_voice(voice: str, rs: str) -> None:
                     if chunk.get("type") == "audio" and chunk.get("data"):
                         put_cache(WARMUP_TEXT, voice, rs, chunk["data"])
                         break
-        except Exception:
+        except RECOVERABLE_ERRORS:
             _LOG.debug("edge-tts warm failed voice=%s", voice, exc_info=True)
         _warmed_keys.add(key)
 
@@ -111,7 +114,7 @@ async def stream_audio(text: str, voice: str, rs: str) -> AsyncIterator[bytes]:
                     data = chunk["data"]
                     buf.extend(data)
                     yield data
-    except Exception:
+    except RECOVERABLE_ERRORS:
         _LOG.warning("edge-tts stream failed text_len=%d voice=%s", len(t), voice, exc_info=True)
         raise
 

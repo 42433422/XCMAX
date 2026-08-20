@@ -32,7 +32,7 @@ class TestGetApiKeyExtended:
 
         with (
             patch(
-                "app.utils.path_utils.get_resource_path",
+                "app.utils.path_io.path_utils.get_resource_path",
                 return_value="/fake/config/deepseek_config.py",
             ),
             patch("os.path.exists", return_value=True),
@@ -46,7 +46,7 @@ class TestGetApiKeyExtended:
         monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
         r = DeepSeekIntentRecognizer(api_key=None)
         with patch(
-            "app.utils.path_utils.get_resource_path",
+            "app.utils.path_io.path_utils.get_resource_path",
             side_effect=RuntimeError("path fail"),
         ):
             assert r._get_api_key() == ""
@@ -185,7 +185,7 @@ class TestGetDeepseekApiKeyExtended:
 
         with (
             patch(
-                "app.utils.path_utils.get_resource_path",
+                "app.utils.path_io.path_utils.get_resource_path",
                 return_value="/fake/config.py",
             ),
             patch("os.path.exists", return_value=True),
@@ -198,7 +198,7 @@ class TestGetDeepseekApiKeyExtended:
     def test_get_deepseek_api_key_recoverable_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
         with patch(
-            "app.utils.path_utils.get_resource_path",
+            "app.utils.path_io.path_utils.get_resource_path",
             side_effect=RuntimeError("fail"),
         ):
             assert get_deepseek_api_key() == ""
@@ -213,7 +213,7 @@ class TestGetDeepseekApiKeyExtended:
 
         with (
             patch(
-                "app.utils.path_utils.get_resource_path",
+                "app.utils.path_io.path_utils.get_resource_path",
                 return_value="/fake/config.py",
             ),
             patch("os.path.exists", return_value=True),

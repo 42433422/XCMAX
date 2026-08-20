@@ -83,13 +83,9 @@ def compute_model(src: dict[str, Any]) -> dict[str, Any]:
         if svc.get("listen_port") is not None:
             port_consts.append((f"{cid}_LISTEN_PORT", int(svc["listen_port"])))
         if svc.get("nginx_upstream_port") is not None:
-            port_consts.append(
-                (f"{cid}_UPSTREAM_PORT", int(svc["nginx_upstream_port"]))
-            )
+            port_consts.append((f"{cid}_UPSTREAM_PORT", int(svc["nginx_upstream_port"])))
 
-    must_run = [
-        str(p["name"]) for p in (src.get("processes") or []) if p.get("must_run")
-    ]
+    must_run = [str(p["name"]) for p in (src.get("processes") or []) if p.get("must_run")]
 
     return {
         "host": host,
@@ -142,9 +138,7 @@ def render_ts(m: dict[str, Any]) -> str:
     for name, val in m["port_consts"]:
         lines.append(f"export const {name} = {val};")
     lines.append("")
-    lines.append(
-        f"export const MUST_RUN_PROCESSES: string[] = {_ts_array(m['must_run'])};"
-    )
+    lines.append(f"export const MUST_RUN_PROCESSES: string[] = {_ts_array(m['must_run'])};")
     lines.append("")
     return "\n".join(lines)
 

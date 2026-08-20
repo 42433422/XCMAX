@@ -1,6 +1,8 @@
-import sqlite3
 import os
+import sqlite3
 from datetime import datetime
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 def import_bandao_fengqing():
@@ -116,10 +118,10 @@ def import_bandao_fengqing():
         # 提交事务
         target_conn.commit()
 
-        print(f"\n=== 导入完成 ===")
+        print("\n=== 导入完成 ===")
         print(f"成功导入: {imported_count} 个产品")
         print(f"跳过已存在: {skipped_count} 个产品")
-        print(f"购买单位: 半岛风情")
+        print("购买单位: 半岛风情")
 
         # 验证导入结果
         target_cursor.execute("SELECT COUNT(*) FROM products WHERE description LIKE '%半岛风情%'")
@@ -132,7 +134,7 @@ def import_bandao_fengqing():
 
         return True
 
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"导入过程中出错: {e}")
         return False
 
@@ -148,7 +150,7 @@ def check_import_result():
         # 检查所有产品
         cursor.execute("SELECT COUNT(*) FROM products")
         total_count = cursor.fetchone()[0]
-        print(f"\n=== 系统产品统计 ===")
+        print("\n=== 系统产品统计 ===")
         print(f"总产品数量: {total_count}")
 
         # 检查半岛风情产品
@@ -177,7 +179,7 @@ def check_import_result():
 
         conn.close()
 
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"检查导入结果时出错: {e}")
 
 

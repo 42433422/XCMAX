@@ -35,9 +35,16 @@ from typing import Any
 _INVISIBLE_RE = re.compile(r"[\ufeff\u200b\u200c\u200d\u200e\u200f\u2028\u2029]")
 # Smart double / single quotes → ASCII equivalents.
 _SMART_QUOTES = {
-    "\u201c": '"', "\u201d": '"', "\u201e": '"', "\u201f": '"',
-    "\u2018": "'", "\u2019": "'", "\u201a": "'", "\u201b": "'",
-    "\u00ab": '"', "\u00bb": '"',
+    "\u201c": '"',
+    "\u201d": '"',
+    "\u201e": '"',
+    "\u201f": '"',
+    "\u2018": "'",
+    "\u2019": "'",
+    "\u201a": "'",
+    "\u201b": "'",
+    "\u00ab": '"',
+    "\u00bb": '"',
 }
 # ``//`` line comments and ``/* … */`` block comments — illegal in JSON
 # but extremely common in LLM output.
@@ -90,7 +97,7 @@ def safe_parse_json(raw: str | bytes) -> Any:
         if attempt.success:
             return attempt.payload
     raise JSONParseError(
-        f"Could not recover JSON from LLM response after exhausting all strategies",
+        "Could not recover JSON from LLM response after exhausting all strategies",
         snippet=text[:400],
     )
 
@@ -237,7 +244,7 @@ def _strip_comments(text: str) -> str:
                 in_str = False
             i += 1
             continue
-        if c in '"\'':
+        if c in "\"'":
             in_str = True
             quote = c
             out.append(c)
@@ -294,7 +301,7 @@ def _quote_bare_keys(text: str) -> str:
                 spans.append((span_start, i))
             i += 1
             continue
-        if c in '"\'':
+        if c in "\"'":
             in_str = True
             quote = c
             span_start = i
@@ -333,7 +340,7 @@ def _try_close_truncation(text: str) -> str | None:
                 in_str = False
             i += 1
             continue
-        if c in '"\'':
+        if c in "\"'":
             in_str = True
             quote = c
             i += 1
@@ -376,7 +383,7 @@ def _try_close_truncated_string(text: str) -> str | None:
                 in_str = False
             i += 1
             continue
-        if c in '"\'':
+        if c in "\"'":
             in_str = True
             quote = c
             i += 1
@@ -419,7 +426,7 @@ def _find_matching_brace(text: str, start: int) -> int:
                 in_str = False
             i += 1
             continue
-        if c in '"\'':
+        if c in "\"'":
             in_str = True
             quote = c
             i += 1

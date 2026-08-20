@@ -31,7 +31,7 @@ def _is_port_available(host: str, port: int) -> bool:
 
 
 def _resolve_host() -> str:
-    return os.environ.get("FASTAPI_HOST", "0.0.0.0")
+    return os.environ.get("FASTAPI_HOST", "127.0.0.1")
 
 
 def _resolve_port(host: str) -> int:

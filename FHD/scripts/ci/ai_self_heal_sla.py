@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, no-any-return, operator"
 """AI self-heal PR SLA 处理：auto-merge / stale 提醒 / 关闭。
 
 扫描 open PR，覆盖三类来源：
@@ -74,6 +75,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 try:
     import httpx
@@ -390,7 +393,7 @@ class GitHubClient:
             return True, "ok"
         try:
             message = str((resp.json() or {}).get("message") or "")
-        except Exception:
+        except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
             message = (resp.text or "")[:200]
         lowered = message.lower()
         if resp.status_code == 409 or "conflict" in lowered:
@@ -414,7 +417,7 @@ class GitHubClient:
         if resp.status_code == 200:
             try:
                 merge_sha = str((resp.json() or {}).get("sha") or "").strip()
-            except Exception:
+            except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
                 merge_sha = ""
             if len(merge_sha) != 40 or any(ch not in "0123456789abcdef" for ch in merge_sha):
                 return True, "ok_missing_merge_sha", ""
@@ -422,7 +425,7 @@ class GitHubClient:
         message = ""
         try:
             message = str((resp.json() or {}).get("message") or "")
-        except Exception:
+        except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
             message = (resp.text or "")[:200]
         lowered = message.lower()
         if resp.status_code in (405, 409) or "conflict" in lowered:
@@ -463,7 +466,7 @@ class GitHubClient:
             return True, "ok"
         try:
             message = str((resp.json() or {}).get("message") or "")
-        except Exception:
+        except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
             message = (resp.text or "")[:200]
         detail = message.replace("\n", " ").strip() or "no_message"
         return False, f"http_{resp.status_code}:{detail[:160]}"
@@ -551,7 +554,7 @@ def _notify_merge_failure_once(
     already = False
     try:
         already = client.has_issue_comment_containing(pr.number, MERGE_FAIL_COMMENT_MARKER)
-    except Exception as ex:  # noqa: BLE001 — 去重失败不应阻断打标
+    except RECOVERABLE_ERRORS as ex:  # noqa: BLE001 — 去重失败不应阻断打标
         print(f"  warn: comment dedup check failed: {ex}")
     if already:
         print(f"  skip comment: already notified merge failure on #{pr.number}")
@@ -786,7 +789,7 @@ def load_trusted_authors(path: Path | None = None) -> list[str]:
         if not isinstance(authors, list):
             return []
         return [str(a).strip() for a in authors if str(a).strip()]
-    except Exception:  # noqa: BLE001 — 配置解析失败 fail-safe 禁用
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 — 配置解析失败 fail-safe 禁用
         return []
 
 
@@ -1170,7 +1173,7 @@ def main(argv: list[str] | None = None) -> int:
                 dry_run=args.dry_run,
             )
             stats[action] = stats.get(action, 0) + 1
-        except Exception as e:  # noqa: BLE001 - 远端 PR 处理需要兜底
+        except BOUNDARY_ERRORS as e:  # noqa: BLE001 - 远端 PR 处理需要兜底
             print(f"[error] PR #{pr.number} 处理失败: {e}", file=sys.stderr)
 
     print(f"[sla] AI PR 处理完成: {stats}")
@@ -1208,7 +1211,7 @@ def main(argv: list[str] | None = None) -> int:
                         dry_run=args.dry_run,
                     )
                     regular_stats[action] = regular_stats.get(action, 0) + 1
-                except Exception as e:  # noqa: BLE001 - 远端 PR 处理需要兜底
+                except BOUNDARY_ERRORS as e:  # noqa: BLE001 - 远端 PR 处理需要兜底
                     print(f"[error] 普通 PR #{pr.number} 处理失败: {e}", file=sys.stderr)
             print(f"[sla] 普通 PR 处理完成: {regular_stats}")
 

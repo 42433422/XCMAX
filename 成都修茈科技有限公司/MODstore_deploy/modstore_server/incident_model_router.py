@@ -74,7 +74,12 @@ def route_for_incident(
     route = _route_from_env("MODSTORE_INCIDENT_MODEL_LOW")
     if route:
         return {**route, "reason": "low_cost_route", "role": role_key}
-    return {"model": "auto", "provider": "auto", "reason": "executor_auto", "role": role_key}
+    return {
+        "model": "auto",
+        "provider": "auto",
+        "reason": "executor_auto",
+        "role": role_key,
+    }
 
 
 def bench_override_for_route(route: Dict[str, Any]) -> Optional[Tuple[str, str]]:

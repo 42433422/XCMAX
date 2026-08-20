@@ -6,10 +6,12 @@ import json
 import os
 import re
 import time
-from collections import Counter, defaultdict
-from datetime import datetime, timedelta, timezone
+from collections import defaultdict
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 WINDOW_DAYS = 30
 
@@ -23,7 +25,7 @@ def _kb_fixes_dir() -> Path:
         from modstore_server.self_evolution_knowledge import kb_root
 
         return kb_root() / "fixes"
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return Path.home() / "Desktop" / "XCMAX" / "FHD" / "XCAGI" / "kb" / "fixes"
 
 
@@ -32,13 +34,13 @@ def _parse_time(value: Any, fallback_path: Path) -> datetime:
     try:
         dt = datetime.fromisoformat(text)
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(timezone.utc)
-    except Exception:
+            dt = dt.replace(tzinfo=UTC)
+        return dt.astimezone(UTC)
+    except RECOVERABLE_ERRORS:
         try:
-            return datetime.fromtimestamp(fallback_path.stat().st_mtime, tz=timezone.utc)
+            return datetime.fromtimestamp(fallback_path.stat().st_mtime, tz=UTC)
         except OSError:
-            return datetime.now(timezone.utc)
+            return datetime.now(UTC)
 
 
 def _incident_class(payload: Dict[str, Any]) -> str:
@@ -70,7 +72,7 @@ def _load_fix_events() -> List[Dict[str, Any]]:
     for path in sorted(directory.glob("*.json")):
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
+        except RECOVERABLE_ERRORS:
             continue
         if not isinstance(payload, dict):
             continue
@@ -87,7 +89,7 @@ def _load_fix_events() -> List[Dict[str, Any]]:
 
 
 def forecast_next_24h(*, window_days: int = WINDOW_DAYS) -> Dict[str, Any]:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     cutoff = now - timedelta(days=max(1, int(window_days or WINDOW_DAYS)))
     events = [row for row in _load_fix_events() if row["created_at"] >= cutoff]
     by_class: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
@@ -102,7 +104,10 @@ def forecast_next_24h(*, window_days: int = WINDOW_DAYS) -> Dict[str, Any]:
         gaps_hours: List[float] = []
         for prev, cur in zip(rows, rows[1:]):
             gaps_hours.append(
-                max(0.0, (cur["created_at"] - prev["created_at"]).total_seconds() / 3600.0)
+                max(
+                    0.0,
+                    (cur["created_at"] - prev["created_at"]).total_seconds() / 3600.0,
+                )
             )
         avg_gap = sum(gaps_hours) / len(gaps_hours) if gaps_hours else float(window_days * 24)
         last_age = max(0.0, (now - rows[-1]["created_at"]).total_seconds() / 3600.0)
@@ -121,7 +126,8 @@ def forecast_next_24h(*, window_days: int = WINDOW_DAYS) -> Dict[str, Any]:
             }
         )
     forecasts.sort(
-        key=lambda item: (float(item["confidence"]), -float(item["eta_hours"])), reverse=True
+        key=lambda item: (float(item["confidence"]), -float(item["eta_hours"])),
+        reverse=True,
     )
     return {
         "forecast_horizon_hours": 24,
@@ -138,7 +144,8 @@ def run_predictive_maintenance_once() -> Dict[str, Any]:
     path = _runtime_dir() / "predictive_maintenance_forecast.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        json.dumps(forecast, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        json.dumps(forecast, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
     )
     threshold = float(os.environ.get("MODSTORE_PREDICTIVE_MAINTENANCE_CONFIDENCE", "0.7"))
     emitted = False
@@ -159,7 +166,7 @@ def run_predictive_maintenance_once() -> Dict[str, Any]:
                     f"confidence={top.get('confidence')}"
                 ),
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             emitted = False
     return {**forecast, "emitted_incident": emitted, "forecast_path": str(path)}
 

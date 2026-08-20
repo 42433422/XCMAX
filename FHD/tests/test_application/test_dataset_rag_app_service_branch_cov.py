@@ -69,7 +69,7 @@ from app.application.dataset_rag_app_service import (
 )
 from app.infrastructure.rag.hybrid_retriever import RetrievedChunk
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.utils.safe_download_path import UnsafeDownloadPathError
+from app.utils.security.safe_download_path import UnsafeDownloadPathError
 
 # ─────────────────────────── helpers ────────────────────────────
 

@@ -12,12 +12,6 @@ import {
   YUANGON_PKG_DESCRIPTIONS as FALLBACK_DESCRIPTIONS,
 } from '@/domain/yuangonDutyRoster'
 
-interface DutyRosterState {
-  data: DutyRosterData | null
-  loading: boolean
-  error: Error | null
-}
-
 // 模块级单例 state (多个组件共享同一请求结果)
 const reactiveState = {
   data: ref<DutyRosterData | null>(null),

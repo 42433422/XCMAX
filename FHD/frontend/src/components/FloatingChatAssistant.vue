@@ -35,18 +35,11 @@
         <div class="floating-chat-title-wrap">
           <div id="floating-chat-title" class="floating-chat-title">小C助理</div>
         </div>
-        <button class="floating-chat-close" type="button" aria-label="关闭" @click="isOpen = false">
-          ×
-        </button>
+        <button class="floating-chat-close" type="button" aria-label="关闭" @click="isOpen = false">×</button>
       </div>
 
       <div ref="messageListRef" class="floating-chat-messages">
-        <div
-          v-for="(msg, idx) in visibleMessages"
-          :key="`${idx}-${msg.time}`"
-          class="floating-chat-message"
-          :class="msg.role"
-        >
+        <div v-for="(msg, idx) in visibleMessages" :key="`${idx}-${msg.time}`" class="floating-chat-message" :class="msg.role">
           <div class="floating-chat-bubble" v-html="sanitizeChatBubbleHtml(msg.content)"></div>
           <div class="floating-chat-time">{{ msg.time }}</div>
         </div>
@@ -64,9 +57,7 @@
           :disabled="isLoading"
           @keydown.enter.exact.prevent="submitMessage"
         ></textarea>
-        <button class="floating-chat-send" type="submit" :disabled="!draft || isLoading">
-          发送
-        </button>
+        <button class="floating-chat-send" type="submit" :disabled="!draft || isLoading">发送</button>
       </form>
     </div>
   </div>
@@ -81,18 +72,16 @@ import { readAiSessionIdFromStorage, writeAiSessionIdToStorage } from '@/utils/x
 const props = defineProps({
   visible: {
     type: Boolean,
-    default: true
+    default: true,
   },
   /** 管理端（含其登录入口）使用男版；桌面端和客户端使用女版。 */
   maleAvatar: {
     type: Boolean,
-    default: false
-  }
+    default: false,
+  },
 })
 
-const avatarUrl = computed(() =>
-  props.maleAvatar ? '/ai-butler-male-avatar-v1.jpg' : '/ai-butler-female-avatar-v1.png',
-)
+const avatarUrl = computed(() => (props.maleAvatar ? '/ai-butler-male-avatar-v1.jpg' : '/ai-butler-female-avatar-v1.png'))
 
 function generateSessionId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2)
@@ -123,20 +112,14 @@ const DRAG_THRESHOLD_PX = 4
 const EDGE_PADDING_PX = 8
 const ROOT_MARGIN_PX = 22
 
-const {
-  messages,
-  isLoading,
-  isStreamingReply,
-  loadingProgressText,
-  sendMessage,
-} = useChatView({
+const { messages, isLoading, isStreamingReply, loadingProgressText, sendMessage } = useChatView({
   sessionId: currentSessionId,
 })
 
 const visibleMessages = computed(() => messages.value.slice(-20))
 const rootStyle = computed(() => ({
   left: `${rootLeft.value}px`,
-  top: `${rootTop.value}px`
+  top: `${rootTop.value}px`,
 }))
 
 const closeFloatingChatPanel = () => {
@@ -268,14 +251,14 @@ watch(
   () => messages.value.length,
   () => {
     if (isOpen.value) void scrollToBottom()
-  }
+  },
 )
 
 watch(
   () => props.visible,
   (visibleNow) => {
     if (visibleNow) void placeRootToBottomRight()
-  }
+  },
 )
 
 watch(isOpen, () => {
@@ -479,8 +462,7 @@ onBeforeUnmount(() => {
   overflow-y: auto;
   padding: 12px;
   background:
-    radial-gradient(circle at 80% 0%, rgba(219, 234, 254, 0.7), transparent 36%),
-    linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+    radial-gradient(circle at 80% 0%, rgba(219, 234, 254, 0.7), transparent 36%), linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
 }
 
 .floating-chat-message {

@@ -6,13 +6,7 @@ defineProps<{
 
 <template>
   <div class="selp-flow" role="list" aria-label="自进化循环阶段">
-    <div
-      v-for="stage in stages"
-      :key="stage.key"
-      class="selp-stage"
-      :class="`selp-stage--${stage.tone}`"
-      role="listitem"
-    >
+    <div v-for="stage in stages" :key="stage.key" class="selp-stage" :class="`selp-stage--${stage.tone}`" role="listitem">
       <span class="selp-stage-dot" aria-hidden="true" />
       <span class="selp-stage-title">{{ stage.title }}</span>
       <strong class="selp-stage-value">{{ stage.value }}</strong>
@@ -42,7 +36,7 @@ defineProps<{
 }
 
 .selp-stage::after {
-  content: "";
+  content: '';
   position: absolute;
   inset: auto -18px -28px auto;
   width: 70px;
@@ -51,11 +45,21 @@ defineProps<{
   background: color-mix(in srgb, var(--stage-color, #64748b) 14%, transparent);
 }
 
-.selp-stage--ok { --stage-color: #16a34a; }
-.selp-stage--warn { --stage-color: #f59e0b; }
-.selp-stage--bad { --stage-color: #ef4444; }
-.selp-stage--running { --stage-color: #2563eb; }
-.selp-stage--idle { --stage-color: #64748b; }
+.selp-stage--ok {
+  --stage-color: #16a34a;
+}
+.selp-stage--warn {
+  --stage-color: #f59e0b;
+}
+.selp-stage--bad {
+  --stage-color: #ef4444;
+}
+.selp-stage--running {
+  --stage-color: #2563eb;
+}
+.selp-stage--idle {
+  --stage-color: #64748b;
+}
 
 .selp-stage-dot {
   width: 9px;

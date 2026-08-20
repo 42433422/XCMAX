@@ -5,9 +5,11 @@ from decimal import Decimal
 
 from docx import Document
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 
 class SalesContractGenerator:
-    def __init__(self, template_path: str, output_dir: str = None):
+    def __init__(self, template_path: str, output_dir: str | None = None):
         self.template_path = template_path
         if output_dir:
             self.output_dir = output_dir
@@ -63,8 +65,8 @@ class SalesContractGenerator:
         self,
         customer_name: str,
         customer_phone: str = "",
-        contract_date: str = None,
-        products: list[dict] = None,
+        contract_date: str | None = None,
+        products: list[dict] | None = None,
         return_buckets_expected: int = 0,
         return_buckets_actual: int = 0,
     ) -> dict:
@@ -101,7 +103,7 @@ class SalesContractGenerator:
         def _to_decimal(val):
             try:
                 return Decimal(str(val).replace(" KG", "").replace("kg", "").strip())
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 return Decimal("0")
 
         total_quantity = sum(

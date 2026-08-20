@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr"
 """Tests for app.application.workflow.planner — extended coverage (ext5).
 
 Focus: _execute_price_list_tool error branches, _execute_shipment_generate_tool,

@@ -32,7 +32,7 @@ from app.application.tutorial_v2.workspace import TutorialWorkspaceMixin
 from app.db.base import Base
 from app.db.models.tenant import Tenant
 from app.db.models.tutorial import TutorialRun, TutorialStepEvidence, TutorialWorkspace
-from app.utils.path_utils import get_app_data_dir
+from app.utils.path_io.path_utils import get_app_data_dir
 
 ValidationResult = tuple[
     bool,
@@ -117,10 +117,10 @@ class TutorialV2Service(
             prereqs = set(course["prerequisite_ids"])
             dto["locked"] = not prereqs.issubset(completed)
             dto["missing_prerequisite_ids"] = sorted(prereqs - completed)
-            run = latest.get(str(course["id"]))
-            dto["run"] = self._run_dto(run) if run else None
-            dto["status"] = run.status if run else "not_started"
-            dto["progress"] = self._run_dto(run)["progress"] if run else 0
+            latest_run = latest.get(str(course["id"]))
+            dto["run"] = self._run_dto(latest_run) if latest_run else None
+            dto["status"] = latest_run.status if latest_run else "not_started"
+            dto["progress"] = self._run_dto(latest_run)["progress"] if latest_run else 0
             result.append(dto)
         return result
 

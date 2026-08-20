@@ -44,10 +44,7 @@ export function useProductFlow() {
   function completeFlowAndGoChat(router: { replace: (x: { path: string }) => void }) {
     markProductFlowCompleted()
     markHostPackAcknowledged()
-    const path =
-      typeof window !== 'undefined' && window.location.pathname.startsWith('/mod/')
-        ? '/'
-        : '/'
+    const path = typeof window !== 'undefined' && window.location.pathname.startsWith('/mod/') ? '/' : '/'
     router.replace({ path })
   }
 
@@ -65,9 +62,7 @@ export function useProductFlow() {
   }
 }
 
-export function shouldRouteToProductOnboarding(
-  toName: string | symbol | null | undefined,
-): boolean {
+export function shouldRouteToProductOnboarding(toName: string | symbol | null | undefined): boolean {
   const name = String(toName || '')
   if (
     name === 'product-onboarding' ||

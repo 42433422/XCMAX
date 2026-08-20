@@ -8,11 +8,7 @@ vi.mock('@/api/agentRuns', () => ({
   default: agentRunsApiMock,
 }))
 
-import {
-  buildAgentRunTaskUpdate,
-  extractAgentRunId,
-  useAgentRunEventSync,
-} from './useAgentRunEvents'
+import { buildAgentRunTaskUpdate, extractAgentRunId, useAgentRunEventSync } from './useAgentRunEvents'
 
 describe('useAgentRunEvents', () => {
   beforeEach(() => {
@@ -27,13 +23,20 @@ describe('useAgentRunEvents', () => {
   })
 
   it('does not turn an ordinary chat lifecycle into a task', () => {
-    expect(buildAgentRunTaskUpdate({
-      runId: 'run_chat_only',
-      events: [
-        { event_id: 'evt_1', run_id: 'run_chat_only', event_type: 'planner.started' },
-        { event_id: 'evt_2', run_id: 'run_chat_only', event_type: 'run.completed', message: '完成' },
-      ],
-    })).toBeNull()
+    expect(
+      buildAgentRunTaskUpdate({
+        runId: 'run_chat_only',
+        events: [
+          { event_id: 'evt_1', run_id: 'run_chat_only', event_type: 'planner.started' },
+          {
+            event_id: 'evt_2',
+            run_id: 'run_chat_only',
+            event_type: 'run.completed',
+            message: '完成',
+          },
+        ],
+      }),
+    ).toBeNull()
   })
 
   it('maps a confirmed tool result to a successful task update', () => {
@@ -63,12 +66,14 @@ describe('useAgentRunEvents', () => {
   it('sanitizes legacy backend event messages before showing them to users', () => {
     const update = buildAgentRunTaskUpdate({
       runId: 'run_legacy',
-      events: [{
-        event_id: 'evt_legacy',
-        run_id: 'run_legacy',
-        event_type: 'run.completed',
-        message: 'Legacy planner run 执行完成',
-      }],
+      events: [
+        {
+          event_id: 'evt_legacy',
+          run_id: 'run_legacy',
+          event_type: 'run.completed',
+          message: 'Legacy planner run 执行完成',
+        },
+      ],
     })
     expect(update).toBeNull()
   })
@@ -103,11 +108,13 @@ describe('useAgentRunEvents', () => {
     await sync.syncAgentRunFromPayload({ data: { run_id: 'run_1' } }, '查产品')
 
     expect(agentRunsApiMock.listEvents).toHaveBeenCalledWith('run_1', {})
-    expect(upsertTask).toHaveBeenCalledWith(expect.objectContaining({
-      id: 'agent_run_1',
-      status: 'running',
-      messageRef: '5',
-    }))
+    expect(upsertTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'agent_run_1',
+        status: 'running',
+        messageRef: '5',
+      }),
+    )
   })
 
   it('keeps prior tool evidence when later polling returns only terminal events', async () => {
@@ -126,11 +133,15 @@ describe('useAgentRunEvents', () => {
     await sync.syncAgentRunEvents('run_1', '查产品')
     await sync.syncAgentRunEvents('run_1', '查产品')
 
-    expect(agentRunsApiMock.listEvents).toHaveBeenLastCalledWith('run_1', { after_event_id: 'evt_tool' })
-    expect(upsertTask).toHaveBeenLastCalledWith(expect.objectContaining({
-      status: 'success',
-      payload: expect.objectContaining({ lastAgentEventId: 'evt_done' }),
-    }))
+    expect(agentRunsApiMock.listEvents).toHaveBeenLastCalledWith('run_1', {
+      after_event_id: 'evt_tool',
+    })
+    expect(upsertTask).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        status: 'success',
+        payload: expect.objectContaining({ lastAgentEventId: 'evt_done' }),
+      }),
+    )
   })
 
   it('removes a stale task row when a run has no execution evidence', async () => {

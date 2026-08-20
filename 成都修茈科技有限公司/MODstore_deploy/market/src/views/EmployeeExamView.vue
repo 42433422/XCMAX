@@ -9,25 +9,13 @@
 
         <div class="exam-config">
           <label class="exam-label" for="exam-employee-select">员工包</label>
-          <select
-            id="exam-employee-select"
-            v-model="selectedEmployeeId"
-            class="exam-select"
-            :disabled="loadingEmployees || pipelineBusy"
-          >
+          <select id="exam-employee-select" v-model="selectedEmployeeId" class="exam-select" :disabled="loadingEmployees || pipelineBusy">
             <option v-if="!employeeOptions.length" value="">暂无可用员工包</option>
             <option v-for="opt in employeeOptions" :key="opt.id" :value="opt.id">
               {{ opt.name }}
             </option>
           </select>
-          <button
-            type="button"
-            class="btn btn-ghost btn-sm"
-            :disabled="loadingEmployees"
-            @click="loadEmployees"
-          >
-            刷新
-          </button>
+          <button type="button" class="btn btn-ghost btn-sm" :disabled="loadingEmployees" @click="loadEmployees">刷新</button>
         </div>
 
         <div
@@ -37,66 +25,42 @@
           @dragleave.prevent="dragOver = false"
           @drop.prevent="onDrop"
         >
-          <input
-            ref="fileInputRef"
-            type="file"
-            class="exam-file-input"
-            :accept="acceptAttr"
-            @change="onFileInput"
-          />
+          <input ref="fileInputRef" type="file" class="exam-file-input" :accept="acceptAttr" @change="onFileInput" />
           <template v-if="selectedFile">
             <div class="exam-file-chip">
               <span class="exam-file-chip-name" :title="selectedFile.name">{{ selectedFile.name }}</span>
               <span class="exam-file-chip-meta">{{ formatBytes(selectedFile.size) }}</span>
             </div>
-            <button type="button" class="btn btn-ghost btn-sm" :disabled="pipelineBusy" @click="clearFile">
-              更换
-            </button>
+            <button type="button" class="btn btn-ghost btn-sm" :disabled="pipelineBusy" @click="clearFile">更换</button>
           </template>
           <template v-else>
             <p class="exam-drop-title">拖入或选择文件</p>
             <p class="exam-drop-sub">{{ dropZoneSubtext }}</p>
-            <button type="button" class="btn btn-connect btn-sm" :disabled="pipelineBusy" @click="fileInputRef?.click()">
-              选择文件
-            </button>
+            <button type="button" class="btn btn-connect btn-sm" :disabled="pipelineBusy" @click="fileInputRef?.click()">选择文件</button>
           </template>
         </div>
 
         <p v-if="employeesError" class="exam-alert exam-alert--err">{{ employeesError }}</p>
         <p v-if="jsonReportUploadHint" class="exam-alert">{{ jsonReportUploadHint }}</p>
-        <p v-if="employeeAutoSwitchNote" class="exam-alert exam-alert--ok">{{ employeeAutoSwitchNote }}</p>
+        <p v-if="employeeAutoSwitchNote" class="exam-alert exam-alert--ok">
+          {{ employeeAutoSwitchNote }}
+        </p>
         <p v-if="legacyDocHint" class="exam-alert exam-alert--warn">{{ legacyDocHint }}</p>
         <p v-if="fileHint" class="exam-alert exam-alert--warn">{{ fileHint }}</p>
 
         <div v-if="pipelineComplete && !pipelineBusy" class="exam-done-chip">流程已完成</div>
         <p v-if="lastRunStatusLine" class="exam-run-status">{{ lastRunStatusLine }}</p>
 
-        <section
-          v-else-if="showPipelinePanel"
-          class="exam-pipeline"
-          aria-live="polite"
-          :aria-busy="pipelineBusy"
-        >
+        <section v-else-if="showPipelinePanel" class="exam-pipeline" aria-live="polite" :aria-busy="pipelineBusy">
           <div class="exam-pipeline-bar-wrap">
-            <div
-              class="exam-pipeline-bar"
-              role="progressbar"
-              :aria-valuenow="pipelinePercent"
-              aria-valuemin="0"
-              aria-valuemax="100"
-            >
+            <div class="exam-pipeline-bar" role="progressbar" :aria-valuenow="pipelinePercent" aria-valuemin="0" aria-valuemax="100">
               <div class="exam-pipeline-bar-fill" :style="{ width: `${pipelinePercent}%` }" />
             </div>
             <span class="exam-pipeline-pct">{{ pipelinePercent }}%</span>
           </div>
           <p v-if="pipelineMessage" class="exam-pipeline-message">{{ pipelineMessage }}</p>
           <ol class="exam-pipeline-steps">
-            <li
-              v-for="step in pipelineStepViews"
-              :key="step.id"
-              class="exam-pipeline-step"
-              :class="`exam-pipeline-step--${step.status}`"
-            >
+            <li v-for="step in pipelineStepViews" :key="step.id" class="exam-pipeline-step" :class="`exam-pipeline-step--${step.status}`">
               <span class="exam-pipeline-step-icon" aria-hidden="true">{{ step.icon }}</span>
               <span class="exam-pipeline-step-label">{{ step.label }}</span>
             </li>
@@ -108,7 +72,9 @@
         </button>
 
         <p v-if="runError" class="exam-alert exam-alert--err">{{ runError }}</p>
-        <p v-if="reportError && !pipelineBusy" class="exam-alert exam-alert--err">{{ reportError }}</p>
+        <p v-if="reportError && !pipelineBusy" class="exam-alert exam-alert--err">
+          {{ reportError }}
+        </p>
       </section>
 
       <section class="exam-panel exam-panel--output">
@@ -141,24 +107,14 @@
               </button>
             </div>
           </header>
-          <iframe
-            class="exam-report-card-frame"
-            :src="htmlReportPreviewUrl"
-            title="量化报告预览"
-            sandbox="allow-same-origin"
-          />
+          <iframe class="exam-report-card-frame" :src="htmlReportPreviewUrl" title="量化报告预览" sandbox="allow-same-origin" />
         </article>
 
         <details v-if="showMoreDrawer" class="exam-more">
           <summary>更多：摘要与下载</summary>
           <div v-if="resultSummary" class="exam-more-summary" v-html="resultSummaryHtml" />
           <div v-if="showManualReportButton" class="exam-more-actions">
-            <button
-              type="button"
-              class="btn btn-action btn-sm"
-              :disabled="pipelineBusy"
-              @click="generateReportFromRead"
-            >
+            <button type="button" class="btn btn-action btn-sm" :disabled="pipelineBusy" @click="generateReportFromRead">
               {{ manualReportButtonLabel }}
             </button>
           </div>
@@ -170,7 +126,7 @@
                 :disabled="downloadingKey === `${d.jobId}:${d.filename}`"
                 @click="downloadOutput(d)"
               >
-                {{ downloadingKey === `${d.jobId}:${d.filename}` ? '下载中…' : (d.label || d.filename) }}
+                {{ downloadingKey === `${d.jobId}:${d.filename}` ? '下载中…' : d.label || d.filename }}
               </button>
             </li>
           </ul>
@@ -180,10 +136,7 @@
           </details>
         </details>
 
-        <section
-          v-if="showFailurePanel"
-          class="exam-failure"
-        >
+        <section v-if="showFailurePanel" class="exam-failure">
           <h2 class="exam-failure-title">试跑失败</h2>
           <div v-if="resultSummary" class="exam-failure-body" v-html="resultSummaryHtml" />
         </section>
@@ -207,7 +160,6 @@ import {
   pickDocumentFullJsonDownload,
   pickQuantitativeReportDownload,
   readEmployeeDisplayName,
-  resolveReadEmployeeForExtension,
   suggestEmployeeForUploadedFile,
   type EmployeeOutputDownload,
 } from '../utils/tabularReadEmployees'
@@ -292,9 +244,7 @@ function setPipelineStep(id: PipelineStepId, status: PipelineStepStatus, message
   if (message !== undefined) pipelineMessage.value = message
 }
 
-const pipelineBusy = computed(
-  () => running.value || reportFromReadLoading.value || htmlPreviewLoading.value,
-)
+const pipelineBusy = computed(() => running.value || reportFromReadLoading.value || htmlPreviewLoading.value)
 
 const showPipelinePanel = computed(() => pipelineVisible.value)
 
@@ -399,9 +349,7 @@ const showManualReportButton = computed(() => {
   return wordReadSucceeded.value && !executeFailed.value
 })
 
-const manualReportButtonLabel = computed(() =>
-  htmlReportDownload.value || reportError.value ? '重新生成报告' : '生成量化报告',
-)
+const manualReportButtonLabel = computed(() => (htmlReportDownload.value || reportError.value ? '重新生成报告' : '生成量化报告'))
 
 const examPrimaryLabel = computed(() => {
   if (pipelineBusy.value) return '处理中，请稍候…'
@@ -410,15 +358,7 @@ const examPrimaryLabel = computed(() => {
   return '开始考试'
 })
 
-const canRun = computed(
-  () =>
-    Boolean(
-      selectedEmployeeId.value &&
-        selectedFile.value &&
-        !pipelineBusy.value &&
-        !loadingEmployees.value,
-    ),
-)
+const canRun = computed(() => Boolean(selectedEmployeeId.value && selectedFile.value && !pipelineBusy.value && !loadingEmployees.value))
 
 const legacyDocHint = computed(() => {
   const file = selectedFile.value
@@ -1063,7 +1003,9 @@ onMounted(() => {
   padding: 14px 12px;
   text-align: center;
   background: rgba(0, 0, 0, 0.12);
-  transition: border-color 0.15s, background 0.15s;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
 }
 
 .exam-dropzone--active {
@@ -1375,7 +1317,9 @@ onMounted(() => {
   border: 0.5px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.06);
   color: var(--color-text-primary, #fff);
-  transition: background 0.15s, border-color 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
   white-space: nowrap;
 }
 

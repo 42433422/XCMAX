@@ -163,10 +163,10 @@ async function loadList() {
   loading.value = true
   listError.value = ''
   try {
-    const res: any = await api.listStudioAssets()
+    const res = (await api.listStudioAssets()) as { items?: StudioItem[] }
     items.value = Array.isArray(res?.items) ? res.items : []
-  } catch (e: any) {
-    listError.value = e?.message || String(e)
+  } catch (e: unknown) {
+    listError.value = e instanceof Error ? e.message : String(e)
     items.value = []
   } finally {
     loading.value = false
@@ -184,8 +184,8 @@ async function onPickUpload(ev: Event) {
     await api.uploadStudioAsset(file)
     uploadMsg.value = `已上传：${file.name}`
     await loadList()
-  } catch (e: any) {
-    listError.value = e?.message || String(e)
+  } catch (e: unknown) {
+    listError.value = e instanceof Error ? e.message : String(e)
   } finally {
     uploading.value = false
   }
@@ -212,8 +212,8 @@ async function downloadBlob(it: StudioItem) {
     a.download = it.filename || 'download'
     a.click()
     URL.revokeObjectURL(url)
-  } catch (e: any) {
-    listError.value = e?.message || String(e)
+  } catch (e: unknown) {
+    listError.value = e instanceof Error ? e.message : String(e)
   }
 }
 
@@ -241,8 +241,8 @@ async function saveEdit() {
     await api.patchStudioAssetMetadata(editId.value, meta)
     editOpen.value = false
     await loadList()
-  } catch (e: any) {
-    listError.value = e?.message || String(e)
+  } catch (e: unknown) {
+    listError.value = e instanceof Error ? e.message : String(e)
   } finally {
     editSaving.value = false
   }
@@ -254,8 +254,8 @@ function confirmDelete(it: StudioItem) {
     try {
       await api.deleteStudioAsset(it.id)
       await loadList()
-    } catch (e: any) {
-      listError.value = e?.message || String(e)
+    } catch (e: unknown) {
+      listError.value = e instanceof Error ? e.message : String(e)
     }
   })()
 }
@@ -265,8 +265,8 @@ async function playTts() {
   ttsBusy.value = true
   try {
     await streamingTts.speak(text)
-  } catch (e: any) {
-    listError.value = e?.message || String(e)
+  } catch (e: unknown) {
+    listError.value = e instanceof Error ? e.message : String(e)
   } finally {
     ttsBusy.value = false
   }

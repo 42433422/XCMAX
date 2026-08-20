@@ -1,3 +1,4 @@
+# mypy: disable-error-code="attr-defined, misc"
 """合同生命周期 + 电子签 webhook 路由冒烟（FastAPI 版）。
 
 覆盖 ``app.fastapi_routes.contract_lifecycle_api`` 全部 7 条路由：

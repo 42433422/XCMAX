@@ -18,7 +18,8 @@ class DurableExecutionLeaseMixin:
         approved_step_id: str = "",
     ) -> None: ...
 
-    def _apply_requested_control(self, run: AgentRun) -> bool: ...
+    def _apply_requested_control(self, run: AgentRun) -> bool:
+        raise NotImplementedError
 
     def _execute_with_durable_lease(
         self,

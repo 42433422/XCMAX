@@ -15,7 +15,10 @@ def test_build_company_hall_has_six_departments_and_presence_model(monkeypatch):
     monkeypatch.setenv("MODSTORE_ACTION_ITEMS_KEEP_LOW_SIGNAL", "1")
     from sqlalchemy import text
 
-    from modstore_server.digest_action_items import ensure_table, parse_and_store_action_items
+    from modstore_server.digest_action_items import (
+        ensure_table,
+        parse_and_store_action_items,
+    )
     from modstore_server.models import get_engine
 
     ensure_table()
@@ -57,6 +60,7 @@ def test_build_company_hall_has_six_departments_and_presence_model(monkeypatch):
 def test_write_public_company_hall(tmp_path, monkeypatch):
     monkeypatch.setenv("XCMAX_MONOREPO_ROOT", str(tmp_path))
     corp = tmp_path / "成都修茈科技有限公司"
+    monkeypatch.setenv("MODSTORE_PUBLIC_OUTPUT_ROOT", str(corp))
     corp.mkdir(parents=True)
     out = write_public_company_hall(day=None)
     assert out["ok"] is True

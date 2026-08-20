@@ -14,8 +14,4 @@ export function isGenericBuild(): boolean {
 }
 
 /** minimal 发行仅打包这三类 Mod 的前端资源 */
-export const MINIMAL_BUILD_MOD_IDS = [
-  'xcagi-planner-bridge',
-  'xcagi-neuro-bus-bridge',
-  'xcagi-office-employee-pack-bridge',
-] as const
+export const MINIMAL_BUILD_MOD_IDS = ['xcagi-planner-bridge', 'xcagi-neuro-bus-bridge', 'xcagi-office-employee-pack-bridge'] as const

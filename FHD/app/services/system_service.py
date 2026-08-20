@@ -58,12 +58,12 @@ class SystemService(NeuroEventPublisherMixin):
                         "platform": "windows",
                     }
 
-                except RECOVERABLE_ERRORS as e:
-                    logger.error("获取开机自启配置失败：%s", e)
+                except RECOVERABLE_ERRORS:
+                    logger.exception("获取开机自启配置失败")
                     return {
                         "enabled": False,
                         "app_path": self.app_path,
-                        "message": str(e),
+                        "message": "开机自启配置暂时不可用",
                         "platform": "windows",
                     }
             else:
@@ -74,9 +74,13 @@ class SystemService(NeuroEventPublisherMixin):
                     "message": "当前平台不支持开机自启",
                 }
 
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("获取开机自启配置失败：%s", e)
-            return {"enabled": False, "app_path": self.app_path, "message": str(e)}
+        except RECOVERABLE_ERRORS:
+            logger.exception("获取开机自启配置失败")
+            return {
+                "enabled": False,
+                "app_path": self.app_path,
+                "message": "开机自启配置暂时不可用",
+            }
 
     def enable_startup(self) -> dict[str, Any]:
         """
@@ -109,15 +113,15 @@ class SystemService(NeuroEventPublisherMixin):
                         "command": startup_command,
                     }
 
-                except RECOVERABLE_ERRORS as e:
-                    logger.error("启用开机自启失败：%s", e)
-                    return {"success": False, "message": f"启用失败：{str(e)}"}
+                except RECOVERABLE_ERRORS:
+                    logger.exception("启用开机自启失败")
+                    return {"success": False, "message": "启用开机自启失败"}
             else:
                 return {"success": False, "message": f"当前平台不支持开机自启：{sys.platform}"}
 
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("启用开机自启失败：%s", e)
-            return {"success": False, "message": f"启用失败：{str(e)}"}
+        except RECOVERABLE_ERRORS:
+            logger.exception("启用开机自启失败")
+            return {"success": False, "message": "启用开机自启失败"}
 
     def disable_startup(self) -> dict[str, Any]:
         """
@@ -142,15 +146,15 @@ class SystemService(NeuroEventPublisherMixin):
 
                 except FileNotFoundError:
                     return {"success": True, "message": "开机自启原本就未启用"}
-                except RECOVERABLE_ERRORS as e:
-                    logger.error("禁用开机自启失败：%s", e)
-                    return {"success": False, "message": f"禁用失败：{str(e)}"}
+                except RECOVERABLE_ERRORS:
+                    logger.exception("禁用开机自启失败")
+                    return {"success": False, "message": "禁用开机自启失败"}
             else:
                 return {"success": False, "message": f"当前平台不支持开机自启：{sys.platform}"}
 
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("禁用开机自启失败：%s", e)
-            return {"success": False, "message": f"禁用失败：{str(e)}"}
+        except RECOVERABLE_ERRORS:
+            logger.exception("禁用开机自启失败")
+            return {"success": False, "message": "禁用开机自启失败"}
 
     def get_system_info(self) -> dict[str, Any]:
         """
@@ -175,9 +179,9 @@ class SystemService(NeuroEventPublisherMixin):
                 "executable": sys.executable,
             }
 
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("获取系统信息失败：%s", e)
-            return {"message": str(e)}
+        except RECOVERABLE_ERRORS:
+            logger.exception("获取系统信息失败")
+            return {"message": "系统信息暂时不可用"}
 
     def get_printer_config(self) -> dict[str, Any]:
         """
@@ -197,18 +201,18 @@ class SystemService(NeuroEventPublisherMixin):
 
                 return {"success": True, "printers": printers, "default_printer": default_printer}
 
-            except RECOVERABLE_ERRORS as e:
-                logger.error("获取打印机配置失败：%s", e)
+            except RECOVERABLE_ERRORS:
+                logger.exception("获取打印机配置失败")
                 return {
                     "success": False,
-                    "message": f"获取打印机配置失败：{str(e)}",
+                    "message": "获取打印机配置失败",
                     "printers": [],
                     "default_printer": None,
                 }
 
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("获取打印机配置失败：%s", e)
-            return {"success": False, "message": f"获取打印机配置失败：{str(e)}"}
+        except RECOVERABLE_ERRORS:
+            logger.exception("获取打印机配置失败")
+            return {"success": False, "message": "获取打印机配置失败"}
 
     def set_default_printer(self, printer_name: str) -> dict[str, Any]:
         """
@@ -233,13 +237,13 @@ class SystemService(NeuroEventPublisherMixin):
                 else:
                     return {"success": False, "message": f"设置默认打印机失败：{printer_name}"}
 
-            except RECOVERABLE_ERRORS as e:
-                logger.error("设置默认打印机失败：%s", e)
-                return {"success": False, "message": f"设置失败：{str(e)}"}
+            except RECOVERABLE_ERRORS:
+                logger.exception("设置默认打印机失败")
+                return {"success": False, "message": "设置默认打印机失败"}
 
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("设置默认打印机失败：%s", e)
-            return {"success": False, "message": f"设置失败：{str(e)}"}
+        except RECOVERABLE_ERRORS:
+            logger.exception("设置默认打印机失败")
+            return {"success": False, "message": "设置默认打印机失败"}
 
 
 def get_system_service() -> SystemService:

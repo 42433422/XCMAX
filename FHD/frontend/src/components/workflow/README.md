@@ -7,9 +7,11 @@
 ## 组件列表
 
 ### 1. WorkflowEmployeeRow.vue
+
 员工行开关组件，用于控制业务员的启用/禁用状态。
 
 **功能特性：**
+
 - ✅ 支持 v-model 双向绑定
 - ✅ 自定义标签文本
 - ✅ 切换动画效果
@@ -17,22 +19,19 @@
 - ✅ 无障碍支持（ARIA）
 
 **使用示例：**
+
 ```vue
 <template>
-  <WorkflowEmployeeRow
-    label="真实电话业务员"
-    employee-id="real_phone"
-    v-model="isActive"
-    @change="handleChange"
-    @toggle="handleToggle"
-  />
+  <WorkflowEmployeeRow label="真实电话业务员" employee-id="real_phone" v-model="isActive" @change="handleChange" @toggle="handleToggle" />
 </template>
 ```
 
 ### 2. WfVizBranchCard.vue
+
 工作流分支可视化卡片组件，展示业务流程和触发器。
 
 **功能特性：**
+
 - ✅ 固定/动态分支标识
 - ✅ 触发器链展示
 - ✅ 配置和详情操作按钮
@@ -40,6 +39,7 @@
 - ✅ 响应式设计
 
 **使用示例：**
+
 ```vue
 <template>
   <WfVizBranchCard
@@ -51,14 +51,13 @@
     @configure="handleConfigure"
     @view-details="handleViewDetails"
   >
-    <template #triggers>
-      固定行 id=real_phone；副窗启用 → ADB 设备连通检查 → 来电检测/接听
-    </template>
+    <template #triggers> 固定行 id=real_phone；副窗启用 → ADB 设备连通检查 → 来电检测/接听 </template>
   </WfVizBranchCard>
 </template>
 ```
 
 ### 3. WorkflowDemo.vue
+
 完整的演示组件，展示两个组件的组合使用。
 
 ## 类型定义
@@ -76,6 +75,7 @@
 所有组件都使用 scoped CSS，可以通过以下方式定制：
 
 ### 1. CSS 变量覆盖
+
 ```css
 :root {
   --wf-primary-color: #3b82f6;
@@ -85,6 +85,7 @@
 ```
 
 ### 2. 深度选择器
+
 ```vue
 <style>
 .workflow-employee-row {
@@ -108,6 +109,7 @@
 ## 集成指南
 
 ### 步骤 1：导入组件
+
 ```typescript
 // main.ts
 import WorkflowEmployeeRow from './components/workflow/WorkflowEmployeeRow.vue'
@@ -118,6 +120,7 @@ app.component('WfVizBranchCard', WfVizBranchCard)
 ```
 
 ### 步骤 2：在业务组件中使用
+
 ```vue
 <template>
   <div class="workflow-panel">
@@ -134,6 +137,7 @@ app.component('WfVizBranchCard', WfVizBranchCard)
 ```
 
 ### 步骤 3：处理业务逻辑
+
 ```typescript
 const handleEmployeeToggle = async ({ employeeId, active }) => {
   if (active) {
@@ -155,18 +159,18 @@ export const workflowApi = {
   async enableEmployee(id: string) {
     return axios.post(`/api/workflow/employees/${id}/enable`)
   },
-  
+
   async disableEmployee(id: string) {
     return axios.post(`/api/workflow/employees/${id}/disable`)
   },
-  
+
   async getBranchDetails(id: string) {
     return axios.get(`/api/workflow/branches/${id}`)
   },
-  
+
   async configureBranch(id: string, config: any) {
     return axios.put(`/api/workflow/branches/${id}/config`, config)
-  }
+  },
 }
 ```
 
@@ -183,10 +187,10 @@ describe('WorkflowEmployeeRow', () => {
     await wrapper.trigger('click')
     expect(wrapper.emitted('toggle')).toHaveLength(1)
   })
-  
+
   it('should update when modelValue changes', async () => {
     const wrapper = mount(WorkflowEmployeeRow, {
-      props: { modelValue: true }
+      props: { modelValue: true },
     })
     expect(wrapper.vm.isActive).toBe(true)
   })

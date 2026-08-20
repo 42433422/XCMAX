@@ -3,35 +3,109 @@ import type {
   PaymentCheckoutBody,
   PaymentCheckoutInput,
   PaymentCheckoutResponse,
+  PaymentOrder,
   PaymentSignResponse,
   RefundApplyResponse,
 } from '../types/api'
+import type { AccountLicensePlan } from '../domain/payment/types'
+
+export interface WalletBalanceResponse extends Record<string, unknown> {
+  balance?: number | string
+  membership_reference_yuan?: number | string
+}
+
+export interface WalletTransactionResponse extends Record<string, unknown> {
+  id: string | number
+  created_at?: string | null
+  type?: string | null
+  amount?: number | string
+  description?: string
+  order_no?: string
+  refund_no?: string
+}
+
+export interface WalletRefundResponse extends Record<string, unknown> {
+  id: string | number
+  refund_no?: string
+  order_no: string
+  amount: number | string
+  reason?: string
+  status?: string
+  created_at?: string
+}
+
+export interface WalletOverviewResponse extends Record<string, unknown> {
+  wallet?: WalletBalanceResponse
+  transactions?: WalletTransactionResponse[]
+  orders?: PaymentOrder[]
+  order_total?: number
+  refunds?: WalletRefundResponse[]
+}
+
+export interface PaymentMyPlanResponse extends Record<string, unknown> {
+  plan?: PaymentPlan | null
+  quotas?: Array<{ quota_type: string; remaining?: number; total?: number }>
+}
+
+export interface PaymentPlan extends Record<string, unknown> {
+  id: string
+  name?: string
+  price: number
+  description?: string
+  features?: string[]
+  requires_plan?: string | boolean | null
+  expires_at?: string | null
+}
+
+export interface PaymentPlansResponse extends Record<string, unknown> {
+  plans?: PaymentPlan[]
+}
+
+export interface AccountLicensePlansResponse extends Record<string, unknown> {
+  plans?: AccountLicensePlan[]
+}
+
+export interface PaymentQueryResponse extends Record<string, unknown> {
+  status?: string
+}
+
+export interface PaymentOrdersResponse extends Record<string, unknown> {
+  orders?: PaymentOrder[]
+}
+
+export interface RefundListResponse extends Record<string, unknown> {
+  refunds?: WalletRefundResponse[]
+}
 
 export const wallet = {
-  balance: () => req('/api/wallet/balance'),
-  walletOverview: (limit = 20, offset = 0) =>
-    req(`/api/wallet/overview?limit=${limit}&offset=${offset}`),
+  balance: () => req<WalletBalanceResponse>('/api/wallet/balance'),
+  walletOverview: (limit = 20, offset = 0) => req<WalletOverviewResponse>(`/api/wallet/overview?limit=${limit}&offset=${offset}`),
   walletAdminSelfCredit: (amount: number, description = '') =>
-    req('/api/wallet/admin-self-credit', { method: 'POST', body: JSON.stringify({ amount, description }) }),
-  recharge: (amount: number, description = '') => req('/api/wallet/recharge', { method: 'POST', body: JSON.stringify({ amount, description }) }),
-  transactions: (limit = 50, offset = 0) => req(`/api/wallet/transactions?limit=${limit}&offset=${offset}`),
+    req('/api/wallet/admin-self-credit', {
+      method: 'POST',
+      body: JSON.stringify({ amount, description }),
+    }),
+  recharge: (amount: number, description = '') =>
+    req('/api/wallet/recharge', { method: 'POST', body: JSON.stringify({ amount, description }) }),
+  transactions: (limit = 50, offset = 0) =>
+    req<{ transactions?: WalletTransactionResponse[] }>(`/api/wallet/transactions?limit=${limit}&offset=${offset}`),
 }
 
 export const payment = {
-  paymentPlans: () => req('/api/payment/plans'),
-  paymentAccountPlans: () => req('/api/payment/account-plans'),
-  paymentMyPlan: () => req('/api/payment/my-plan'),
+  paymentPlans: () => req<PaymentPlansResponse>('/api/payment/plans'),
+  paymentAccountPlans: () => req<AccountLicensePlansResponse>('/api/payment/account-plans'),
+  paymentMyPlan: () => req<PaymentMyPlanResponse>('/api/payment/my-plan'),
   paymentQuery: (orderId: string, options?: { reconcile?: boolean }) => {
     const r = options?.reconcile ? '?reconcile=true' : ''
-    return req(`/api/payment/query/${encodeURIComponent(orderId)}${r}`)
+    return req<PaymentQueryResponse>(`/api/payment/query/${encodeURIComponent(orderId)}${r}`)
   },
   paymentOrders: (status = '', limit = 50, offset = 0) => {
     const q = new URLSearchParams({ limit: String(limit), offset: String(offset) })
     if (status) q.set('status', status)
-    return req(`/api/payment/orders?${q}`)
+    return req<PaymentOrdersResponse>(`/api/payment/orders?${q}`)
   },
   paymentDismissNonActiveOrders: () =>
-    req('/api/payment/orders/dismiss-non-active', { method: 'POST', body: '{}' }),
+    req<{ ok?: boolean; message?: string; dismissed?: number }>('/api/payment/orders/dismiss-non-active', { method: 'POST', body: '{}' }),
   paymentCancelOrder: (orderNo: string) => req(`/api/payment/cancel/${encodeURIComponent(orderNo)}`, { method: 'POST', body: '{}' }),
   paymentDiagnostics: () => req('/api/payment/diagnostics'),
   paymentEntitlements: () => req('/api/payment/entitlements'),
@@ -90,12 +164,15 @@ export const payment = {
 
 export const refunds = {
   refundsApply: async (orderNo: string, reason: string): Promise<RefundApplyResponse> => {
-    const res = (await req('/api/refunds/apply', { method: 'POST', body: JSON.stringify({ order_no: orderNo, reason }) })) as RefundApplyResponse
+    const res = (await req('/api/refunds/apply', {
+      method: 'POST',
+      body: JSON.stringify({ order_no: orderNo, reason }),
+    })) as RefundApplyResponse
     if (res?.ok === false) throw new Error(res.message || '退款申请失败')
     return res
   },
-  refundsMy: () => req('/api/refunds/my'),
-  refundsAdminPending: () => req('/api/refunds/admin/pending'),
+  refundsMy: () => req<RefundListResponse>('/api/refunds/my'),
+  refundsAdminPending: () => req<RefundListResponse>('/api/refunds/admin/pending'),
   refundsAdminReview: (refundId: number, action: string, adminNote = '') =>
     req(`/api/refunds/admin/${encodeURIComponent(String(refundId))}/review`, {
       method: 'POST',

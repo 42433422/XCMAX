@@ -14,8 +14,14 @@ def test_parse_daily_digest_recipient_emails() -> None:
 
     assert parse_daily_digest_recipient_emails("") == []
     assert parse_daily_digest_recipient_emails("a@b.com") == ["a@b.com"]
-    assert parse_daily_digest_recipient_emails("a@b.com,c@d.com") == ["a@b.com", "c@d.com"]
-    assert parse_daily_digest_recipient_emails("a@b.com; c@d.com") == ["a@b.com", "c@d.com"]
+    assert parse_daily_digest_recipient_emails("a@b.com,c@d.com") == [
+        "a@b.com",
+        "c@d.com",
+    ]
+    assert parse_daily_digest_recipient_emails("a@b.com; c@d.com") == [
+        "a@b.com",
+        "c@d.com",
+    ]
 
 
 def test_count_on_duty_employees_uses_duty_roster() -> None:

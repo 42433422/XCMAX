@@ -1,34 +1,32 @@
 <script setup lang="ts">
-import { computed } from 'vue';
-import { useRoute } from 'vue-router';
-import { marketRegisterUrl, purchaseAuthorizationUrl } from '@/constants/loginBranding';
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
+import { marketRegisterUrl, purchaseAuthorizationUrl } from '@/constants/loginBranding'
 
-defineProps<{ enterprise: boolean }>();
+defineProps<{ enterprise: boolean }>()
 
-const route = useRoute();
+const route = useRoute()
 const registerRoute = computed(() => ({
   name: 'login-register' as const,
   query: route.query,
-}));
-const enterpriseRegisterUrl = marketRegisterUrl();
-const enterprisePurchaseUrl = purchaseAuthorizationUrl();
+}))
+const enterpriseRegisterUrl = marketRegisterUrl()
+const enterprisePurchaseUrl = purchaseAuthorizationUrl()
 </script>
 
 <template>
   <nav class="login-account-actions" :aria-label="$t('login.accountActions')">
     <template v-if="enterprise">
-      <a
-        class="login-account-action"
-        :href="enterpriseRegisterUrl"
-        target="_blank"
-        rel="noopener noreferrer"
-      >{{ $t('login.registerEnterprise') }}</a>
+      <a class="login-account-action" :href="enterpriseRegisterUrl" target="_blank" rel="noopener noreferrer">{{
+        $t('login.registerEnterprise')
+      }}</a>
       <a
         class="login-account-action login-account-action--primary"
         :href="enterprisePurchaseUrl"
         target="_blank"
         rel="noopener noreferrer"
-      >{{ $t('login.purchaseAuthorization') }}</a>
+        >{{ $t('login.purchaseAuthorization') }}</a
+      >
     </template>
     <router-link v-else class="login-account-action" :to="registerRoute">{{ $t('login.register') }}</router-link>
   </nav>

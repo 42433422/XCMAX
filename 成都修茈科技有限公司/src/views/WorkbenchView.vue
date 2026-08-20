@@ -4,11 +4,7 @@
       <div class="workbench-bar-inner">
         <h1 class="workbench-title">工作台</h1>
         <nav class="workbench-tabs" aria-label="工作台导航">
-          <router-link
-            :to="{ name: 'workbench-repository' }"
-            class="workbench-tab"
-            active-class="workbench-tab--active"
-          >
+          <router-link :to="{ name: 'workbench-repository' }" class="workbench-tab" active-class="workbench-tab--active">
             Mod 仓库
           </router-link>
         </nav>

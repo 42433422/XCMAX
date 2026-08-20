@@ -61,7 +61,12 @@ describe('useOrdersStore', () => {
 
   it('fetchOrders sets loading during request', async () => {
     let resolvePromise!: (v: any) => void
-    ;(ordersApi.getOrders as any).mockImplementation(() => new Promise(r => { resolvePromise = r }))
+    ;(ordersApi.getOrders as any).mockImplementation(
+      () =>
+        new Promise((r) => {
+          resolvePromise = r
+        }),
+    )
     const promise = store.fetchOrders()
     expect(store.loading).toBe(true)
     resolvePromise({ success: true, data: [] })
@@ -139,7 +144,6 @@ describe('useOrdersStore', () => {
     })
     await store.fetchOrders()
     expect(store.orders.length).toBe(2)
-
     ;(ordersApi.deleteOrder as any).mockResolvedValue({ success: true })
     const result = await store.deleteOrder('ORD-001')
     expect(result.success).toBe(true)
@@ -169,7 +173,6 @@ describe('useOrdersStore', () => {
     })
     await store.fetchOrders()
     expect(store.orders.length).toBe(1)
-
     ;(ordersApi.clearAllOrders as any).mockResolvedValue({ success: true })
     const result = await store.clearAllOrders()
     expect(result.success).toBe(true)

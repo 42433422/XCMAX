@@ -1,10 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  createTetrahedron,
-  createOctahedron,
-  createIcosahedron,
-  createDodecahedron,
-} from './geometry-real'
+import { createTetrahedron, createOctahedron, createIcosahedron, createDodecahedron } from './geometry-real'
 
 describe('geometry-real polyhedra', () => {
   it('createTetrahedron has 4 vertices and 4 faces', () => {

@@ -14,7 +14,6 @@ import json
 import os
 import subprocess
 import sys
-import tempfile
 import zipfile
 from pathlib import Path
 
@@ -62,7 +61,9 @@ def _build_xcemp(pack_id: str) -> bytes:
     if str(modstore_root) not in sys.path:
         sys.path.insert(0, str(modstore_root))
 
-    from modstore_server.employee_pack_export import _build_employee_pack_zip_with_source
+    from modstore_server.employee_pack_export import (
+        _build_employee_pack_zip_with_source,
+    )
 
     manifest = _minimal_manifest(pack_id)
     return _build_employee_pack_zip_with_source(pack_id, manifest, source_py=None)

@@ -66,8 +66,19 @@ def merged_cell_value(ws, row: int, col: int) -> Any:
         for rng in ranges or []:
             try:
                 if hasattr(rng, "min_row"):
-                    if rng.min_row <= row <= rng.max_row and rng.min_col <= col <= rng.max_col:
-                        return ws.cell(row=rng.min_row, column=rng.min_col).value
+                    min_row = rng.min_row
+                    max_row = rng.max_row
+                    min_col = rng.min_col
+                    max_col = rng.max_col
+                    if (
+                        min_row is not None
+                        and max_row is not None
+                        and min_col is not None
+                        and max_col is not None
+                        and min_row <= row <= max_row
+                        and min_col <= col <= max_col
+                    ):
+                        return ws.cell(row=min_row, column=min_col).value
                 elif isinstance(rng, str):
                     try:
                         from openpyxl.utils.cell import range_boundaries
@@ -75,7 +86,14 @@ def merged_cell_value(ws, row: int, col: int) -> Any:
                         from openpyxl.utils import range_boundaries
 
                     min_col, min_row, max_col, max_row = range_boundaries(rng)
-                    if min_row <= row <= max_row and min_col <= col <= max_col:
+                    if (
+                        min_col is not None
+                        and min_row is not None
+                        and max_col is not None
+                        and max_row is not None
+                        and min_row <= row <= max_row
+                        and min_col <= col <= max_col
+                    ):
                         return ws.cell(row=min_row, column=min_col).value
             except RECOVERABLE_ERRORS:
                 continue

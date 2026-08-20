@@ -354,7 +354,7 @@ class TestImportProductsRoute:
                 "app.application.facades.excel_facade.get_product_import_service",
                 return_value=mock_svc,
             ),
-            patch("app.application.get_extract_log_app_service", return_value=mock_log_svc),
+            patch("app.bootstrap.get_extract_log_service", return_value=mock_log_svc),
         ):
             resp = import_products({"data": [{"product_name": "Test"}]})
             assert resp.status_code == 200
@@ -381,7 +381,7 @@ class TestImportProductsRoute:
                 "app.application.facades.excel_facade.get_product_import_service",
                 return_value=mock_svc,
             ),
-            patch("app.application.get_extract_log_app_service", return_value=mock_log_svc),
+            patch("app.bootstrap.get_extract_log_service", return_value=mock_log_svc),
             patch(
                 "app.application.facades.excel_facade.get_ai_product_parser",
                 return_value=mock_parser,
@@ -405,7 +405,7 @@ class TestImportProductsRoute:
                 "app.application.facades.excel_facade.get_product_import_service",
                 return_value=mock_svc,
             ),
-            patch("app.application.get_extract_log_app_service", return_value=mock_log_svc),
+            patch("app.bootstrap.get_extract_log_service", return_value=mock_log_svc),
         ):
             resp = import_products({"data": [{"product_name": "Test"}]})
             assert resp.status_code == 500
@@ -428,7 +428,7 @@ class TestImportCustomersRoute:
         mock_log_svc.create_log.return_value = 1
         with (
             patch("app.application.get_customer_app_service", return_value=mock_svc),
-            patch("app.application.get_extract_log_app_service", return_value=mock_log_svc),
+            patch("app.bootstrap.get_extract_log_service", return_value=mock_log_svc),
         ):
             resp = import_customers({"data": [{"customer_name": "Test"}]})
             assert resp.status_code == 200
@@ -440,7 +440,7 @@ class TestImportCustomersRoute:
         mock_log_svc.create_log.return_value = 1
         with (
             patch("app.application.get_customer_app_service", return_value=mock_svc),
-            patch("app.application.get_extract_log_app_service", return_value=mock_log_svc),
+            patch("app.bootstrap.get_extract_log_service", return_value=mock_log_svc),
         ):
             resp = import_customers({"data": [{"customer_name": "Test"}]})
             assert resp.status_code == 500
@@ -450,12 +450,12 @@ class TestLogsRoute:
     def test_get_logs(self):
         mock_svc = MagicMock()
         mock_svc.get_logs.return_value = []
-        with patch("app.application.get_extract_log_app_service", return_value=mock_svc):
+        with patch("app.bootstrap.get_extract_log_service", return_value=mock_svc):
             resp = get_extract_logs()
             assert resp.status_code == 200
 
     def test_get_logs_error(self):
-        with patch("app.application.get_extract_log_app_service", side_effect=RuntimeError("fail")):
+        with patch("app.bootstrap.get_extract_log_service", side_effect=RuntimeError("fail")):
             resp = get_extract_logs()
             assert resp.status_code == 500
 
@@ -464,19 +464,19 @@ class TestLogDetailRoute:
     def test_not_found(self):
         mock_svc = MagicMock()
         mock_svc.get_log.return_value = None
-        with patch("app.application.get_extract_log_app_service", return_value=mock_svc):
+        with patch("app.bootstrap.get_extract_log_service", return_value=mock_svc):
             resp = get_extract_log(999)
             assert resp.status_code == 404
 
     def test_found(self):
         mock_svc = MagicMock()
         mock_svc.get_log.return_value = {"id": 1}
-        with patch("app.application.get_extract_log_app_service", return_value=mock_svc):
+        with patch("app.bootstrap.get_extract_log_service", return_value=mock_svc):
             resp = get_extract_log(1)
             assert resp.status_code == 200
 
     def test_error(self):
-        with patch("app.application.get_extract_log_app_service", side_effect=RuntimeError("fail")):
+        with patch("app.bootstrap.get_extract_log_service", side_effect=RuntimeError("fail")):
             resp = get_extract_log(1)
             assert resp.status_code == 500
 
@@ -485,18 +485,18 @@ class TestPreviewRoute:
     def test_not_found(self):
         mock_svc = MagicMock()
         mock_svc.get_log.return_value = None
-        with patch("app.application.get_extract_log_app_service", return_value=mock_svc):
+        with patch("app.bootstrap.get_extract_log_service", return_value=mock_svc):
             resp = get_preview(999)
             assert resp.status_code == 404
 
     def test_found(self):
         mock_svc = MagicMock()
         mock_svc.get_log.return_value = {"id": 1}
-        with patch("app.application.get_extract_log_app_service", return_value=mock_svc):
+        with patch("app.bootstrap.get_extract_log_service", return_value=mock_svc):
             resp = get_preview(1)
             assert resp.status_code == 200
 
     def test_error(self):
-        with patch("app.application.get_extract_log_app_service", side_effect=RuntimeError("fail")):
+        with patch("app.bootstrap.get_extract_log_service", side_effect=RuntimeError("fail")):
             resp = get_preview(1)
             assert resp.status_code == 500

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="var-annotated"
 """Coverage tests for app.application.autonomy.admin_overview helpers.
 
 Focuses on uncovered branches: env var resolution, JSONL edge cases,

@@ -1,9 +1,6 @@
 import { computed, onMounted, ref } from 'vue'
 import { buildFullApiUrl } from '@/api/core'
-import {
-  KITTEN_VIZ_EMPLOYEES,
-  type KittenVizEmployeeDef,
-} from '@/constants/kittenVisualizationEmployees'
+import { KITTEN_VIZ_EMPLOYEES, type KittenVizEmployeeDef } from '@/constants/kittenVisualizationEmployees'
 import { safeJsonRequest } from '@/utils/safeJsonRequest'
 import { buildTenantScopedStorageKey } from '@/utils/tenantStorageScope'
 
@@ -65,10 +62,9 @@ export function useKittenVizEmployees() {
   async function refreshInstalled() {
     loading.value = true
     try {
-      const json = await safeJsonRequest<{ success?: boolean; data?: Record<string, unknown> }>(
-        buildFullApiUrl(BRIDGE_INSTALLED_URL),
-        { credentials: 'include' },
-      )
+      const json = await safeJsonRequest<{ success?: boolean; data?: Record<string, unknown> }>(buildFullApiUrl(BRIDGE_INSTALLED_URL), {
+        credentials: 'include',
+      })
       installedIds.value = collectInstalledIds(json.data?.data)
     } catch {
       installedIds.value = new Set()

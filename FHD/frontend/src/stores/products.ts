@@ -3,10 +3,10 @@ import { ref, computed, type Ref } from 'vue'
 import productsApi from '../api/products'
 import type { Product, ProductCreateDTO, ProductUpdateDTO, ProductQueryParams } from '@/types/product'
 interface OperationResult {
-  success: boolean;
-  data?: unknown;
-  message?: string;
-  total?: number;
+  success: boolean
+  data?: unknown
+  message?: string
+  total?: number
 }
 
 export const useProductsStore = defineStore('products', () => {
@@ -84,7 +84,7 @@ export const useProductsStore = defineStore('products', () => {
     try {
       const data = await productsApi.deleteProduct(id)
       if (data.success) {
-        products.value = products.value.filter(p => p.id !== id)
+        products.value = products.value.filter((p) => p.id !== id)
         return { success: true }
       } else {
         error.value = data.message || '删除产品失败'
@@ -104,7 +104,7 @@ export const useProductsStore = defineStore('products', () => {
     try {
       const data = await productsApi.batchDeleteProducts(ids)
       if (data.success) {
-        products.value = products.value.filter(p => !ids.includes(p.id))
+        products.value = products.value.filter((p) => !ids.includes(p.id))
         return { success: true }
       } else {
         error.value = data.message || '批量删除失败'
@@ -128,6 +128,6 @@ export const useProductsStore = defineStore('products', () => {
     createProduct,
     updateProduct,
     deleteProduct,
-    batchDelete
+    batchDelete,
   }
 })

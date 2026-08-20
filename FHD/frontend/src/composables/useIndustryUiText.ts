@@ -64,9 +64,7 @@ export function useIndustryUiText() {
     return asRecord(industryConfig.value.units)
   })
 
-  const entityName = computed(() =>
-    str(uiLabels.value.entity, stripEntitySuffix(str(productFields.value.name, '业务对象')) || '业务对象'),
-  )
+  const entityName = computed(() => str(uiLabels.value.entity, stripEntitySuffix(str(productFields.value.name, '业务对象')) || '业务对象'))
   const entityPluralName = computed(() => str(uiLabels.value.entity_plural, entityName.value))
   const modelLabel = computed(() => str(uiLabels.value.model_label, str(productFields.value.model, '编号')))
   const nameLabel = computed(() => str(uiLabels.value.name_label, str(productFields.value.name, `${entityName.value}名称`)))
@@ -79,26 +77,15 @@ export function useIndustryUiText() {
   )
   const shipmentOrderName = computed(() => str(uiLabels.value.shipment_order, str(orderTypes.value.shipment, '业务单')))
   const recordsName = computed(() =>
-    str(
-      uiLabels.value.records,
-      resolveCoreNavLabel('shipment-records', industryId.value, []) || `${shipmentOrderName.value}记录`,
-    ),
+    str(uiLabels.value.records, resolveCoreNavLabel('shipment-records', industryId.value, []) || `${shipmentOrderName.value}记录`),
   )
   const queryTitle = computed(() => str(uiLabels.value.query_title, `${entityName.value}查询`))
-  const queryDescription = computed(() =>
-    str(uiLabels.value.query_description, `查询与快速修改${entityPluralName.value}资料`),
-  )
+  const queryDescription = computed(() => str(uiLabels.value.query_description, `查询与快速修改${entityPluralName.value}资料`))
   const queryPlaceholder = computed(() =>
-    str(
-      uiLabels.value.query_placeholder,
-      `输入${modelLabel.value}或${nameLabel.value}查询${entityName.value}`,
-    ),
+    str(uiLabels.value.query_placeholder, `输入${modelLabel.value}或${nameLabel.value}查询${entityName.value}`),
   )
   const entityListName = computed(() =>
-    str(
-      uiLabels.value.entity_list,
-      resolveCoreNavLabel('products', industryId.value, []) || `${entityName.value}管理`,
-    ),
+    str(uiLabels.value.entity_list, resolveCoreNavLabel('products', industryId.value, []) || `${entityName.value}管理`),
   )
   const assistantSubtitle = computed(() => {
     const indId = industryId.value
@@ -112,9 +99,7 @@ export function useIndustryUiText() {
   )
   const keywordChanged = computed(() => str(uiLabels.value.keyword_changed, '关键词已变更，请再点「查询」刷新结果。'))
   const queryFailedPrefix = computed(() => str(uiLabels.value.query_failed_prefix, `${entityName.value}接口请求失败`))
-  const searchFailedMessage = computed(
-    () => `${queryFailedPrefix.value}。请确认后端已启动、Vite 代理或 VITE_API_BASE_URL 指向正确。`,
-  )
+  const searchFailedMessage = computed(() => `${queryFailedPrefix.value}。请确认后端已启动、Vite 代理或 VITE_API_BASE_URL 指向正确。`)
 
   const starterPackPresets = computed<StarterPackItem[]>(() => {
     const fromConfig = normalizeStarterPack(industryConfig.value.ui_starter_pack)

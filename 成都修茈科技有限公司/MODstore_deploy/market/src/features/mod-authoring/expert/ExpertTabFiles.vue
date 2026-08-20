@@ -1,17 +1,8 @@
 <script setup lang="ts">
 import { useModAuthoringContext } from '../composables/useModAuthoringContext'
 
-const {
-  sortedFiles,
-  selectedPath,
-  fileContent,
-  loadingFile,
-  savingFile,
-  fileWarnings,
-  onPathSelect,
-  loadSelectedFile,
-  saveFile,
-} = useModAuthoringContext()
+const { sortedFiles, selectedPath, fileContent, loadingFile, savingFile, fileWarnings, onPathSelect, loadSelectedFile, saveFile } =
+  useModAuthoringContext()
 </script>
 
 <template>

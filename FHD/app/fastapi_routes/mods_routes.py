@@ -17,10 +17,20 @@ from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.security.secure_filename import secure_filename
 
 logger = logging.getLogger(__name__)
 
 router = None
+_MODS_UNAVAILABLE = "扩展服务暂时不可用，请稍后重试"
+
+
+def _public_mod_errors(errors: list[Any]) -> list[dict[str, str]]:
+    return [
+        {"mod_id": str(item.get("mod_id") or "unknown"), "error": "加载失败"}
+        for item in errors
+        if isinstance(item, dict)
+    ]
 
 
 def get_mods_router() -> Any:
@@ -89,20 +99,9 @@ def _register_mods_endpoints(router) -> None:
 
             load_mismatch = len(scanned) > 0 and mods_loaded == 0
 
-            manifest_errors = [
-                {"mod_id": e.get("mod_id", "unknown"), "error": e.get("error", str(e))}
-                for e in mm._scan_manifest_errors
-            ]
-
-            blueprint_errors = [
-                {"mod_id": e.get("mod_id", "unknown"), "error": e.get("error", str(e))}
-                for e in mm._blueprint_failures
-            ]
-
-            load_errors = [
-                {"mod_id": e.get("mod_id", "unknown"), "error": e.get("error", str(e))}
-                for e in mm._recent_load_failures
-            ]
+            manifest_errors = _public_mod_errors(mm._scan_manifest_errors)
+            blueprint_errors = _public_mod_errors(mm._blueprint_failures)
+            load_errors = _public_mod_errors(mm._recent_load_failures)
 
             partial_failure = len(load_errors) > 0 or len(blueprint_errors) > 0
 
@@ -124,8 +123,8 @@ def _register_mods_endpoints(router) -> None:
                     "mods_disabled": False,
                 },
             }
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("get_loading_status failed: %s", e)
+        except RECOVERABLE_ERRORS:
+            logger.exception("get_loading_status failed")
             return {
                 "success": True,
                 "data": {
@@ -134,12 +133,12 @@ def _register_mods_endpoints(router) -> None:
                     "primary_mod_count": 0,
                     "mods_loaded": 0,
                     "load_mismatch": False,
-                    "load_errors": [{"mod_id": "unknown", "error": str(e)}],
+                    "load_errors": [{"mod_id": "unknown", "error": "加载失败"}],
                     "manifest_errors": [],
                     "blueprint_errors": [],
                     "partial_failure": True,
                     "mods_disabled": False,
-                    "error": str(e),
+                    "error": _MODS_UNAVAILABLE,
                 },
             }
 
@@ -169,10 +168,14 @@ def _register_mods_endpoints(router) -> None:
                 content=body,
                 headers={"ETag": f'"{etag}"', "Cache-Control": "private, max-age=30"},
             )
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("list_mods failed: %s", e)
-            err = str(e)
-            return {"success": False, "message": err, "error": err, "data": []}
+        except RECOVERABLE_ERRORS:
+            logger.exception("list_mods failed")
+            return {
+                "success": False,
+                "message": _MODS_UNAVAILABLE,
+                "error": _MODS_UNAVAILABLE,
+                "data": [],
+            }
 
     @router.get("/routes")
     async def list_routes():
@@ -183,10 +186,14 @@ def _register_mods_endpoints(router) -> None:
             mm = get_mod_manager()
             routes = mm.get_routes()
             return {"success": True, "data": routes}
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("list_routes failed: %s", e)
-            err = str(e)
-            return {"success": False, "message": err, "error": err, "data": []}
+        except RECOVERABLE_ERRORS:
+            logger.exception("list_routes failed")
+            return {
+                "success": False,
+                "message": _MODS_UNAVAILABLE,
+                "error": _MODS_UNAVAILABLE,
+                "data": [],
+            }
 
     @router.get("/comms/endpoints")
     async def list_comms_endpoints():
@@ -195,9 +202,9 @@ def _register_mods_endpoints(router) -> None:
             from app.infrastructure.mods.comms import get_mod_comms
 
             return {"success": True, "data": get_mod_comms().list_endpoints()}
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("list_comms_endpoints failed: %s", e)
-            return {"success": False, "error": str(e)}
+        except RECOVERABLE_ERRORS:
+            logger.exception("list_comms_endpoints failed")
+            return {"success": False, "error": _MODS_UNAVAILABLE}
 
     @router.get("/employee-packs/{pack_id}/config-preview")
     async def employee_pack_config_preview(pack_id: str):
@@ -205,18 +212,21 @@ def _register_mods_endpoints(router) -> None:
 
         try:
             from app.infrastructure.mods.mod_manager import _default_mods_root
-        except RECOVERABLE_ERRORS as e:  # noqa: BLE001
-            return {"success": False, "error": str(e)}
-        root = os.path.join(
-            _default_mods_root(), "_employees", (pack_id or "").strip(), "manifest.json"
-        )
+        except RECOVERABLE_ERRORS:  # noqa: BLE001
+            logger.exception("employee pack root unavailable")
+            return {"success": False, "error": _MODS_UNAVAILABLE}
+        safe_pack_id = secure_filename((pack_id or "").strip())
+        if not safe_pack_id or safe_pack_id != (pack_id or "").strip():
+            return {"success": False, "error": "员工包编号无效"}
+        root = os.path.join(_default_mods_root(), "_employees", safe_pack_id, "manifest.json")
         if not os.path.isfile(root):
             return {"success": False, "error": "员工包未安装或 manifest 不存在"}
         try:
             with open(root, encoding="utf-8") as f:
                 data = json.load(f)
-        except (OSError, json.JSONDecodeError) as e:
-            return {"success": False, "error": str(e)}
+        except (OSError, json.JSONDecodeError):
+            logger.exception("employee pack manifest unreadable")
+            return {"success": False, "error": _MODS_UNAVAILABLE}
         v2 = data.get("employee_config_v2")
         hp = data.get("xcagi_host_profile")
         cog = (v2 or {}).get("cognition") if isinstance(v2, dict) else {}
@@ -263,9 +273,9 @@ def _register_mods_endpoints(router) -> None:
                     "comms_exports": mod.comms_exports,
                 },
             }
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("get_mod_detail failed: %s", e)
-            return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+        except RECOVERABLE_ERRORS:
+            logger.exception("get_mod_detail failed")
+            return JSONResponse({"success": False, "error": _MODS_UNAVAILABLE}, status_code=500)
 
     @router.delete("/{mod_id}")
     async def uninstall_mod_disk(mod_id: str):
@@ -286,6 +296,6 @@ def _register_mods_endpoints(router) -> None:
             if not ok:
                 return JSONResponse({"success": False, "message": msg}, status_code=400)
             return {"success": True, "message": msg, "data": {"id": mid}}
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("uninstall_mod_disk failed: %s", e)
-            return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+        except RECOVERABLE_ERRORS:
+            logger.exception("uninstall_mod_disk failed")
+            return JSONResponse({"success": False, "message": _MODS_UNAVAILABLE}, status_code=500)

@@ -1,10 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  advancedSidebarNavStep,
-  advancedPageFeaturesStep,
-  pageHighlightToStep,
-  fallbackPageObserveStep,
-} from './stepFactory'
+import { advancedSidebarNavStep, advancedPageFeaturesStep, pageHighlightToStep, fallbackPageObserveStep } from './stepFactory'
 
 describe('tutorial stepFactory', () => {
   it('advancedSidebarNavStep sanitizes id and sets click', () => {

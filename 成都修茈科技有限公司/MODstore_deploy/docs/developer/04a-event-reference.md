@@ -24,25 +24,25 @@ HMAC-SHA256(secret, timestamp + '.' + event_id + '.' + body)
 
 ## 事件清单
 
-| Event | Version | Aggregate | 必填字段 | 说明 |
-| --- | --- | --- | --- | --- |
-| `catalog.item_published` | 1 | catalog_item | `item_id`, `author_id`, `name`, `artifact` | A catalog item was published or made publicly available in the store. |
-| `catalog.package_published` | 1 | catalog_item | `pkg_id`, `author_id`, `version`, `artifact`, `name` | A catalog package (e.g. employee_pack) was published to the store. |
-| `employee.execution_completed` | 1 | employee_execution | `employee_id`, `user_id`, `task`, `status` | An AI employee task finished (status=success/failure). |
-| `employee.pack_registered` | 1 | employee_pack | `pack_id`, `author_id`, `mod_id`, `version` | An employee pack was registered from a workflow manifest. |
-| `invoice.created` | 1 | invoice | `invoice_id`, `user_id`, `order_no`, `amount` | An invoice was created for a completed payment order. |
-| `llm.quota_consumed` | 1 | user_llm_credential | `user_id`, `provider`, `model`, `tokens`, `cost` | LLM quota was consumed for a user request. |
-| `payment.paid` | 1 | payment_order | `out_trade_no`, `user_id`, `subject`, `total_amount`, `order_kind` | A payment order has been successfully paid and fulfilled. |
-| `refund.approved` | 1 | refund | `refund_id`, `order_no`, `user_id`, `amount`, `status` | A refund request was approved and successfully refunded. |
-| `refund.failed` | 1 | refund | `refund_id`, `order_no`, `user_id`, `amount`, `status` | A refund request was approved but downstream refund execution failed. |
-| `refund.rejected` | 1 | refund | `refund_id`, `order_no`, `user_id`, `amount`, `status` | A refund request was rejected by an administrator. |
-| `subscription.renewal_failed` | 1 | user_plan | `user_id`, `plan_id`, `reason` | A subscription auto-renewal failed (e.g. insufficient wallet balance). |
-| `subscription.renewed` | 1 | user_plan | `user_id`, `plan_id`, `out_trade_no`, `amount`, `expires_at` | A subscription plan was automatically renewed and payment deducted from wallet. |
-| `wallet.balance_changed` | 1 | wallet | `user_id`, `amount`, `source_order_id`, `transaction_type` | A user's wallet balance changed because of recharge, payment, or refund. |
-| `workflow.event_trigger` | 1 | workflow | `workflow_id`, `user_id` | Request asynchronous workflow execution driven by a domain event. |
-| `workflow.execution_completed` | 1 | workflow_execution | `workflow_id`, `execution_id`, `user_id`, `status` | A workflow execution finished successfully. |
-| `workflow.execution_failed` | 1 | workflow_execution | `workflow_id`, `execution_id`, `user_id`, `status` | A workflow execution ran but failed at runtime. |
-| `workflow.sandbox_completed` | 1 | workflow_execution | `workflow_id`, `user_id`, `status`, `duration_ms` | A workflow sandbox run finished (success or failure). |
+| Event                          | Version | Aggregate           | 必填字段                                                           | 说明                                                                            |
+| ------------------------------ | ------- | ------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| `catalog.item_published`       | 1       | catalog_item        | `item_id`, `author_id`, `name`, `artifact`                         | A catalog item was published or made publicly available in the store.           |
+| `catalog.package_published`    | 1       | catalog_item        | `pkg_id`, `author_id`, `version`, `artifact`, `name`               | A catalog package (e.g. employee_pack) was published to the store.              |
+| `employee.execution_completed` | 1       | employee_execution  | `employee_id`, `user_id`, `task`, `status`                         | An AI employee task finished (status=success/failure).                          |
+| `employee.pack_registered`     | 1       | employee_pack       | `pack_id`, `author_id`, `mod_id`, `version`                        | An employee pack was registered from a workflow manifest.                       |
+| `invoice.created`              | 1       | invoice             | `invoice_id`, `user_id`, `order_no`, `amount`                      | An invoice was created for a completed payment order.                           |
+| `llm.quota_consumed`           | 1       | user_llm_credential | `user_id`, `provider`, `model`, `tokens`, `cost`                   | LLM quota was consumed for a user request.                                      |
+| `payment.paid`                 | 1       | payment_order       | `out_trade_no`, `user_id`, `subject`, `total_amount`, `order_kind` | A payment order has been successfully paid and fulfilled.                       |
+| `refund.approved`              | 1       | refund              | `refund_id`, `order_no`, `user_id`, `amount`, `status`             | A refund request was approved and successfully refunded.                        |
+| `refund.failed`                | 1       | refund              | `refund_id`, `order_no`, `user_id`, `amount`, `status`             | A refund request was approved but downstream refund execution failed.           |
+| `refund.rejected`              | 1       | refund              | `refund_id`, `order_no`, `user_id`, `amount`, `status`             | A refund request was rejected by an administrator.                              |
+| `subscription.renewal_failed`  | 1       | user_plan           | `user_id`, `plan_id`, `reason`                                     | A subscription auto-renewal failed (e.g. insufficient wallet balance).          |
+| `subscription.renewed`         | 1       | user_plan           | `user_id`, `plan_id`, `out_trade_no`, `amount`, `expires_at`       | A subscription plan was automatically renewed and payment deducted from wallet. |
+| `wallet.balance_changed`       | 1       | wallet              | `user_id`, `amount`, `source_order_id`, `transaction_type`         | A user's wallet balance changed because of recharge, payment, or refund.        |
+| `workflow.event_trigger`       | 1       | workflow            | `workflow_id`, `user_id`                                           | Request asynchronous workflow execution driven by a domain event.               |
+| `workflow.execution_completed` | 1       | workflow_execution  | `workflow_id`, `execution_id`, `user_id`, `status`                 | A workflow execution finished successfully.                                     |
+| `workflow.execution_failed`    | 1       | workflow_execution  | `workflow_id`, `execution_id`, `user_id`, `status`                 | A workflow execution ran but failed at runtime.                                 |
+| `workflow.sandbox_completed`   | 1       | workflow_execution  | `workflow_id`, `user_id`, `status`, `duration_ms`                  | A workflow sandbox run finished (success or failure).                           |
 
 ## 详细说明
 
@@ -236,4 +236,3 @@ A workflow sandbox run finished (success or failure).
   - `user_id`
   - `status`
   - `duration_ms`
-

@@ -21,7 +21,9 @@ def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         if not service or not error_type or not message:
             issues.append({"code": "invalid_event", "path": f"events[{index}]"})
             continue
-        fingerprints.append(hashlib.sha256(f"{service}|{error_type}|{message}".encode()).hexdigest()[:16])
+        fingerprints.append(
+            hashlib.sha256(f"{service}|{error_type}|{message}".encode()).hexdigest()[:16]
+        )
     counts = Counter(fingerprints)
     incidents = [{"fingerprint": key, "count": count} for key, count in sorted(counts.items())]
     return {
@@ -37,4 +39,12 @@ def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
 
 
 def _failed(message: str, code: str) -> dict[str, Any]:
-    return {"ok": False, "status": "failed", "summary": message, "error_code": code, "evidence": [], "read_only": True, "side_effects": []}
+    return {
+        "ok": False,
+        "status": "failed",
+        "summary": message,
+        "error_code": code,
+        "evidence": [],
+        "read_only": True,
+        "side_effects": [],
+    }

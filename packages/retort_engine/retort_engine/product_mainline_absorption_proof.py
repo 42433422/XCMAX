@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 
 def build_product_mainline_absorption_proof(
@@ -39,8 +39,9 @@ def build_product_mainline_absorption_proof(
         if item.startswith("packages/retort_engine/docs/")
     ]
     quality = _read_json(root / "docs" / "retort_quality_gate_bundle.json")
-    quality_summary = (
-        quality.get("summary") if isinstance(quality.get("summary"), dict) else {}
+    quality_summary = cast(
+        dict[str, Any],
+        quality.get("summary") if isinstance(quality.get("summary"), dict) else {},
     )
     summary = {
         "commit": commit_sha,

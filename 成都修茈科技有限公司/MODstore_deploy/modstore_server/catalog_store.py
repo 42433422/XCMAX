@@ -11,6 +11,8 @@ import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 _lock = threading.Lock()
 
 
@@ -211,7 +213,7 @@ def package_manifest_alignment_errors(record: Dict[str, Any], archive_path: Path
                 _other_entries: list = []
                 with _zipfile.ZipFile(archive_path, "r") as _zr:
                     for _n in _zr.namelist():
-                        if _n.endswith("/manifest.json") and "/" not in _n.rstrip(
+                        if _n.endswith("/manifest.json") and "/" not in _n.removesuffix(
                             "/manifest.json"
                         ).replace(_n.split("/")[0] + "/", "", 1):
                             _top_dir = _n.split("/")[0]
@@ -230,7 +232,7 @@ def package_manifest_alignment_errors(record: Dict[str, Any], archive_path: Path
                                 _zw.writestr(_n, _zr.read(_n))
                     _shutil.move(str(_tmp_path), str(archive_path))
                     _LOG_ALIGN.info("AUTO-REPAIR: zip rewritten successfully %s", archive_path)
-            except Exception as _repair_exc:
+            except RECOVERABLE_ERRORS as _repair_exc:
                 _LOG_ALIGN.error("AUTO-REPAIR failed for %s: %s", archive_path, _repair_exc)
 
     return errors

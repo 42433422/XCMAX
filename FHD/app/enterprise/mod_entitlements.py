@@ -324,7 +324,7 @@ def persist_entitlements_to_session_row(session_id: str, client_ids: set[str]) -
                 row.market_user_id = _cached_market_user_id
             row.entitled_mod_ids_json = json.dumps(sorted(client_ids), ensure_ascii=False)
             db.commit()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("persist_entitlements_to_session_row failed")
 
 
@@ -353,7 +353,7 @@ def restore_entitlements_from_session_row(session_id: str) -> bool:
                 market_is_admin=market_is_admin,
             )
             return True
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("restore_entitlements_from_session_row failed")
         return False
 

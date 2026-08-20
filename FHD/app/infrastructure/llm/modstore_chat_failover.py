@@ -113,7 +113,7 @@ def build_chat_failover_candidates(
         catalog.get("providers") if isinstance(catalog.get("providers"), list) else []
     )
     by_provider: dict[str, dict[str, Any]] = {}
-    for block in providers_catalog:
+    for block in providers_catalog or []:
         if isinstance(block, dict):
             pid = str(block.get("provider") or "").strip().lower()
             if pid:
@@ -122,7 +122,7 @@ def build_chat_failover_candidates(
     status = status_payload or {}
     fernet_ok = bool(status.get("fernet_configured"))
     rows = status.get("providers") if isinstance(status.get("providers"), list) else []
-    for row in rows:
+    for row in rows or []:
         if not isinstance(row, dict):
             continue
         if not _provider_row_usable(row, fernet_ok=fernet_ok):

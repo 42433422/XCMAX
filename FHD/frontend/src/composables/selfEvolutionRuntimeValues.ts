@@ -2,9 +2,21 @@ import type { AutonomyGapStatus } from '@/constants/autonomyL4Readiness'
 import { asRecord, asString, firstText, type AnyRecord } from './useLoopRuntimePanel'
 
 export const DUTY_ROSTER_VIEW_TOKENS = new Set([
-  'department', 'dept', '六部门', 'hub', 'center', '中心', '中心图',
-  'legacy-area', 'area', '物理', '物理分区', 'client', 'workshop',
-  '车间', '客户端车间',
+  'department',
+  'dept',
+  '六部门',
+  'hub',
+  'center',
+  '中心',
+  '中心图',
+  'legacy-area',
+  'area',
+  '物理',
+  '物理分区',
+  'client',
+  'workshop',
+  '车间',
+  '客户端车间',
 ])
 
 export function normalizeDutyRosterView(raw: unknown): string {
@@ -23,11 +35,7 @@ export type EmployeeMention = {
   department?: string
 }
 
-export function collectEmployeeMentions(
-  value: unknown,
-  out: Map<string, EmployeeMention>,
-  source: string,
-) {
+export function collectEmployeeMentions(value: unknown, out: Map<string, EmployeeMention>, source: string) {
   if (value == null) return
   if (typeof value === 'string') {
     const match = value.match(/\b[a-z][a-z0-9]+(?:-[a-z0-9]+)+\b/g) || []
@@ -87,22 +95,17 @@ export function gapTone(status: AutonomyGapStatus): string {
 }
 
 export function proactiveCandidateTitle(item: Record<string, unknown>): string {
-  return firstText(
-    item.title,
-    item.summary,
-    item.reason,
-    item.module,
-    item.path,
-    item.file,
-    item.task_type,
-    '主动优化候选',
-  )
+  return firstText(item.title, item.summary, item.reason, item.module, item.path, item.file, item.task_type, '主动优化候选')
 }
 
 export function proactiveCandidateMeta(item: Record<string, unknown>): string {
-  return [
-    firstText(item.task_type, item.kind, item.category, item.signal_type),
-    firstText(item.source, item.script, item.metric),
-    item.score != null ? `评分 ${item.score}` : '',
-  ].filter(Boolean).join(' · ') || '主动信号'
+  return (
+    [
+      firstText(item.task_type, item.kind, item.category, item.signal_type),
+      firstText(item.source, item.script, item.metric),
+      item.score != null ? `评分 ${item.score}` : '',
+    ]
+      .filter(Boolean)
+      .join(' · ') || '主动信号'
+  )
 }

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
@@ -111,4 +111,4 @@ def install_openapi_enrichment(app: FastAPI) -> None:
         app.openapi_schema = schema
         return schema
 
-    app.openapi = enriched_openapi
+    cast("Any", app).openapi = enriched_openapi

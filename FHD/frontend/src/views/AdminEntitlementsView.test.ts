@@ -29,14 +29,12 @@ vi.mock('@/api/xcmaxAdmin', () => ({
     startImpersonate: (uid: number, name: string) => mockStartImpersonate(uid, name),
     getUserProfiles: () => mockGetUserProfiles(),
     setUserProfile: (uid: number, payload: unknown) => mockSetUserProfile(uid, payload),
-    forcePushUserEntitlements: (uid: number, payload: unknown) =>
-      mockForcePushUserEntitlements(uid, payload),
+    forcePushUserEntitlements: (uid: number, payload: unknown) => mockForcePushUserEntitlements(uid, payload),
   },
 }))
 
 vi.mock('@/utils/adminConsoleUrl', () => ({
-  buildEnterpriseImpersonateLaunchUrl: (token: string, path: string) =>
-    `http://enterprise.test/impersonate?token=${token}&path=${path}`,
+  buildEnterpriseImpersonateLaunchUrl: (token: string, path: string) => `http://enterprise.test/impersonate?token=${token}&path=${path}`,
 }))
 
 const mockAppAlert = vi.fn().mockResolvedValue(undefined)
@@ -94,7 +92,13 @@ describe('AdminEntitlementsView', () => {
     mockListUsers.mockResolvedValue({
       users: [
         { id: 1, username: 'admin', email: 'admin@test.com', is_admin: true, mod_ids: [] },
-        { id: 2, username: 'enterprise', email: 'ent@test.com', is_enterprise: true, mod_ids: ['mod1'] },
+        {
+          id: 2,
+          username: 'enterprise',
+          email: 'ent@test.com',
+          is_enterprise: true,
+          mod_ids: ['mod1'],
+        },
         { id: 3, username: 'normal', email: 'norm@test.com', mod_ids: [] },
       ],
     })
@@ -122,9 +126,7 @@ describe('AdminEntitlementsView', () => {
 
   it('shows mod count for each user', async () => {
     mockListUsers.mockResolvedValue({
-      users: [
-        { id: 1, username: 'user1', mod_ids: ['mod1', 'mod2'] },
-      ],
+      users: [{ id: 1, username: 'user1', mod_ids: ['mod1', 'mod2'] }],
     })
     const wrapper = mountComponent()
     await flushPromises()
@@ -275,7 +277,11 @@ describe('AdminEntitlementsView', () => {
                   status: 'rework',
                   status_label: '返工中',
                   timeline: [
-                    { status: 'rework', at: '2026-07-31T05:00:00Z', note: '[客服工单 CR-29-0001] 部门列错位' },
+                    {
+                      status: 'rework',
+                      at: '2026-07-31T05:00:00Z',
+                      note: '[客服工单 CR-29-0001] 部门列错位',
+                    },
                   ],
                 },
               ],
@@ -345,7 +351,13 @@ describe('AdminEntitlementsView', () => {
       if (url.includes('catalog')) {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({ data: { installed: [{ id: 'mod1', version: '1.0', is_installed: true }], available: [] } }),
+          json: () =>
+            Promise.resolve({
+              data: {
+                installed: [{ id: 'mod1', version: '1.0', is_installed: true }],
+                available: [],
+              },
+            }),
         })
       }
       return Promise.resolve({
@@ -370,20 +382,21 @@ describe('AdminEntitlementsView', () => {
       if (url.includes('catalog')) {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({
-            data: {
-              installed: [
-                {
-                  id: 'mod1',
-                  name: 'Test Mod',
-                  version: '1.0',
-                  is_installed: true,
-                  workflow_employees: [{ id: 'employee-a', label: '员工 A' }],
-                },
-              ],
-              available: [],
-            },
-          }),
+          json: () =>
+            Promise.resolve({
+              data: {
+                installed: [
+                  {
+                    id: 'mod1',
+                    name: 'Test Mod',
+                    version: '1.0',
+                    is_installed: true,
+                    workflow_employees: [{ id: 'employee-a', label: '员工 A' }],
+                  },
+                ],
+                available: [],
+              },
+            }),
         })
       }
       return Promise.resolve({
@@ -472,7 +485,9 @@ describe('AdminEntitlementsView', () => {
     let resolveCatalog: (value: unknown) => void
     mockApiFetch.mockImplementation((url: string) => {
       if (url.includes('catalog')) {
-        return new Promise(resolve => { resolveCatalog = resolve })
+        return new Promise((resolve) => {
+          resolveCatalog = resolve
+        })
       }
       return Promise.resolve({
         ok: true,
@@ -487,7 +502,11 @@ describe('AdminEntitlementsView', () => {
     // Should show loading state
     expect(wrapper.find('.admin-sync-strip button').text()).toContain('刷新中')
     // Resolve the pending request
-    resolveCatalog!({ ok: true, json: () => Promise.resolve({ data: { installed: [], available: [] } }) })
+    resolveCatalog!({
+      ok: true,
+      json: () => Promise.resolve({ data: { installed: [], available: [] } }),
+    })
+    await refreshPromise
     await flushPromises()
   })
 

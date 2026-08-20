@@ -6,10 +6,10 @@ export const KITTEN_PHASE = {
   schemaReady: 'schemaReady',
   analyzing: 'analyzing',
   delivered: 'delivered',
-  error: 'error'
+  error: 'error',
 } as const
 
-export type KittenPhase = typeof KITTEN_PHASE[keyof typeof KITTEN_PHASE]
+export type KittenPhase = (typeof KITTEN_PHASE)[keyof typeof KITTEN_PHASE]
 
 export const mapKittenPhaseToStepIndex = (phase: KittenPhase, hasDataset: boolean): number => {
   if (phase === KITTEN_PHASE.idle) return 0
@@ -29,14 +29,11 @@ export const mapKittenPhaseToLayer = (phase: KittenPhase, hasDataset: boolean): 
   return 'ingest'
 }
 
-export const useKittenWorkflowState = (
-  phase: Ref<KittenPhase>,
-  hasDataset: Ref<boolean>
-) => {
+export const useKittenWorkflowState = (phase: Ref<KittenPhase>, hasDataset: Ref<boolean>) => {
   const activeStepIndex = computed(() => mapKittenPhaseToStepIndex(phase.value, hasDataset.value))
   const activeLayerKey = computed(() => mapKittenPhaseToLayer(phase.value, hasDataset.value))
   return {
     activeStepIndex,
-    activeLayerKey
+    activeLayerKey,
   }
 }

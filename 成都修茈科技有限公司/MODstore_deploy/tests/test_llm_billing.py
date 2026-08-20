@@ -1,7 +1,5 @@
 from decimal import Decimal
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock
 
 from modstore_server.llm_billing import (
     UsageMeter,

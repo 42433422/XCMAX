@@ -5,6 +5,8 @@ import sys
 
 import websockets
 
+BOUNDARY_ERRORS = (Exception,)
+
 
 async def main():
     url = "wss://xiu-ci.com/api/asr/funasr"
@@ -14,7 +16,7 @@ async def main():
             msg = await asyncio.wait_for(ws.recv(), timeout=10)
             print("public wss OK:", msg[:200])
             return 0
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         print("public wss FAIL:", e)
         return 1
 

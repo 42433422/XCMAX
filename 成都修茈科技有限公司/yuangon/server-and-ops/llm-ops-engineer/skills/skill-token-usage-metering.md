@@ -27,10 +27,16 @@
   "status": "ok|warn",
   "summary": "24h 内共消耗 12.3M tokens，成本 ¥123.45，Top1: employee-xxx 占 35%",
   "items": [
-    {"employee_id": "xxx", "model": "deepseek-chat", "tokens": 4300000, "cost_cny": 43.00, "pct": 35.0}
+    {
+      "employee_id": "xxx",
+      "model": "deepseek-chat",
+      "tokens": 4300000,
+      "cost_cny": 43.0,
+      "pct": 35.0
+    }
   ],
   "warnings": ["employee-xxx 单日 token 占比 35% 超阈值 30%"],
-  "meta": {"period": "24h", "checked_at": "..."}
+  "meta": { "period": "24h", "checked_at": "..." }
 }
 ```
 

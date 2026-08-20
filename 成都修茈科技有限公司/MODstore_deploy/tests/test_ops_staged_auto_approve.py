@@ -99,7 +99,9 @@ def test_slo_halt_blocks_auto_approve(monkeypatch) -> None:
     assert should_auto_approve_staged(files_changed_count=3, diff_summary="FHD/foo.py") is False
 
 
-def test_marker_only_self_maintenance_status_rejected_after_review_risk(monkeypatch) -> None:
+def test_marker_only_self_maintenance_status_rejected_after_review_risk(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("MODSTORE_OPS_STAGED_AUTO_APPROVE", "1")
     monkeypatch.setenv(
         "MODSTORE_SELF_MAINTENANCE_LOOP_MEMORY_JSON",

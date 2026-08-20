@@ -10,7 +10,9 @@ import { req } from './shared'
 const m = vi.mocked(req)
 
 describe('developer API', () => {
-  beforeEach(() => { m.mockClear() })
+  beforeEach(() => {
+    m.mockClear()
+  })
 
   it('developerListTokens', async () => {
     await developer.developerListTokens()
@@ -84,7 +86,9 @@ describe('developer API', () => {
 })
 
 describe('templates API', () => {
-  beforeEach(() => { m.mockClear() })
+  beforeEach(() => {
+    m.mockClear()
+  })
 
   it('templatesList with no opts', async () => {
     await templates.templatesList()
@@ -118,7 +122,9 @@ describe('templates API', () => {
 })
 
 describe('notifications API', () => {
-  beforeEach(() => { m.mockClear() })
+  beforeEach(() => {
+    m.mockClear()
+  })
 
   it('notificationsList with defaults', async () => {
     await notifications.notificationsList()

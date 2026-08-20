@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """Supplementary branch-coverage tests for chat_trace.py missing branches.
 
 Targets branches not covered by test_chat_trace_cov.py:

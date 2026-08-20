@@ -92,9 +92,7 @@ function demoForStep(step: TutorialStep, waitFor: string): (timers: TimerGroup) 
   }
   return (timers) => {
     timers.set(() => {
-      const el =
-        document.querySelector<HTMLElement>(waitFor) ||
-        document.querySelector<HTMLElement>(step.targetSelector)
+      const el = document.querySelector<HTMLElement>(waitFor) || document.querySelector<HTMLElement>(step.targetSelector)
       if (!el) return
       getVirtualCursor()?.moveTo(el, { duration: 650 * SPEED, label: '看这里' })
       highlightElement(el)
@@ -125,11 +123,7 @@ export function buildDriverScheduleFromTutorialSteps(steps: TutorialStep[]): Dri
 }
 
 /** 轮询等待 selector 出现 */
-export async function waitForSelector(
-  selector: string,
-  maxMs = 10000,
-  intervalMs = 150,
-): Promise<HTMLElement | null> {
+export async function waitForSelector(selector: string, maxMs = 10000, intervalMs = 150): Promise<HTMLElement | null> {
   const sel = String(selector || '').trim()
   if (!sel) return null
   const start = Date.now()

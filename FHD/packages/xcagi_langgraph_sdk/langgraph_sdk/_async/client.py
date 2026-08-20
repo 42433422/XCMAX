@@ -15,6 +15,7 @@ from langgraph_sdk._async.http import HttpClient
 from langgraph_sdk._async.runs import RunsClient
 from langgraph_sdk._async.store import StoreClient
 from langgraph_sdk._async.threads import ThreadsClient
+from langgraph_sdk._exception_policy import BOUNDARY_ERRORS
 from langgraph_sdk._shared.types import TimeoutTypes
 from langgraph_sdk._shared.utilities import (
     NOT_PROVIDED,
@@ -110,19 +111,19 @@ def get_client(
     if url is None:
         url = "http://api"
         if os.environ.get("__LANGGRAPH_DEFER_LOOPBACK_TRANSPORT") == "true":
-            transport = get_asgi_transport()(app=None, root_path="/noauth")  # ty: ignore[invalid-argument-type]
+            transport = get_asgi_transport()(app=None, root_path="/noauth")
             _registered_transports.append(transport)
         else:
             try:
                 from langgraph_api.server import app  # type: ignore
 
                 transport = get_asgi_transport()(app, root_path="/noauth")
-            except Exception:
+            except BOUNDARY_ERRORS:
                 logger.debug(
                     "Failed to connect to in-process LangGraph server. Deferring configuration.",
                     exc_info=True,
                 )
-                transport = get_asgi_transport()(app=None, root_path="/noauth")  # ty: ignore[invalid-argument-type]
+                transport = get_asgi_transport()(app=None, root_path="/noauth")
                 _registered_transports.append(transport)
 
     if transport is None:
@@ -131,7 +132,7 @@ def get_client(
         base_url=url,
         transport=transport,
         timeout=(
-            httpx.Timeout(timeout)  # ty: ignore[invalid-argument-type]
+            httpx.Timeout(timeout)
             if timeout is not None
             else httpx.Timeout(connect=5, read=300, write=300, pool=5)
         ),

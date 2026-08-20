@@ -7,8 +7,7 @@ export default {
     database: '数据库',
     adminCustomerService: 'AI 客服后台',
     customerServiceAi: 'AI 客服',
-    customerServiceAiTitle:
-      '独立 AI 客服：投诉申诉、订单退款、上架审核与账号权益咨询',
+    customerServiceAiTitle: '独立 AI 客服：投诉申诉、订单退款、上架审核与账号权益咨询',
     notificationsCenter: '通知中心',
     levelBadgeTitle: '{title} · 累计经验 {exp}',
     defaultLevelTitle: '账号等级',

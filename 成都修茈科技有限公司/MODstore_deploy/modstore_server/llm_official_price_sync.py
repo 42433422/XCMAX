@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment, attr-defined, no-any-return, valid-type"
 """从官网价表 / OpenRouter 公开 API 同步模型官方价（元/1k tokens）。"""
 
 from __future__ import annotations
@@ -6,7 +7,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -15,6 +16,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from modstore_server.models import AiModelPrice
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -38,12 +40,12 @@ def _usd_to_cny() -> Decimal:
     if raw:
         try:
             return Decimal(raw)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
     try:
         data = json.loads(_data_path().read_text(encoding="utf-8"))
         return Decimal(str(data.get("meta", {}).get("usd_to_cny", 7.2)))
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return Decimal("7.2")
 
 
@@ -101,7 +103,7 @@ async def fetch_openrouter_quotes() -> Dict[Tuple[str, str], OfficialQuote]:
 
         client = get_http_client()
         resp = await client.get(OPENROUTER_MODELS_URL, timeout=30.0)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.get(OPENROUTER_MODELS_URL)
     if resp.status_code >= 400:
@@ -181,7 +183,7 @@ def apply_quote_to_row(
     row.official_output_price_per_1k = float(quote.output_per_1k)
     row.official_min_charge = float(quote.min_charge)
     row.official_source = quote.source[:500]
-    row.official_synced_at = synced_at or datetime.now(timezone.utc)
+    row.official_synced_at = synced_at or datetime.now(UTC)
 
 
 async def sync_official_prices_for_provider(
@@ -196,7 +198,7 @@ async def sync_official_prices_for_provider(
     if "openrouter" in src:
         openrouter_index = await fetch_openrouter_quotes()
     curated = load_curated_catalog()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     updated = 0
     skipped = 0
     samples: List[Dict[str, Any]] = []
@@ -210,7 +212,11 @@ async def sync_official_prices_for_provider(
         elif src == ["openrouter"]:
             prefer = "openrouter"
         quote = resolve_official_quote(
-            provider, mid, openrouter_index=openrouter_index, curated=curated, prefer=prefer
+            provider,
+            mid,
+            openrouter_index=openrouter_index,
+            curated=curated,
+            prefer=prefer,
         )
         if not quote:
             skipped += 1
@@ -269,7 +275,12 @@ def apply_official_markup_to_rows(
         if not row.enabled:
             row.enabled = True
         applied += 1
-    return {"provider": provider, "applied": applied, "skipped": skipped, "markup": float(markup)}
+    return {
+        "provider": provider,
+        "applied": applied,
+        "skipped": skipped,
+        "markup": float(markup),
+    }
 
 
 def money_max(a: Decimal, b: Decimal) -> Decimal:

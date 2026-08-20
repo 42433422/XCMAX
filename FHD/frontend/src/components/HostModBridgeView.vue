@@ -15,11 +15,7 @@ const props = defineProps<{
 }>()
 
 const attrs = useAttrs()
-const { View, modProps } = useAdminModHostView(
-  props.modId,
-  props.view,
-  props.title || props.view.replace(/View$/, ''),
-)
+const { View, modProps } = useAdminModHostView(props.modId, props.view, props.title || props.view.replace(/View$/, ''))
 
 const bindProps = computed(() => ({ ...modProps, ...attrs }))
 </script>

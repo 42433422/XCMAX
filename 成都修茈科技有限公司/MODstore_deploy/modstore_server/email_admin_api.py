@@ -24,6 +24,7 @@ from modstore_server.email_service import (
     send_test_email,
 )
 from modstore_server.models import User
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +94,7 @@ async def post_email_test(
     except RuntimeError as e:
         # 配置缺失：返回 400 + 具体提示，不要让管理员看 500 traceback
         raise HTTPException(400, str(e)) from e
-    except Exception as e:  # noqa: BLE001 — SMTP 登录失败、网络错误、超时等
+    except BOUNDARY_ERRORS as e:  # noqa: BLE001 — SMTP 登录失败、网络错误、超时等
         logger.warning("email test failed: %s", e)
         raise HTTPException(
             502,
@@ -116,7 +117,7 @@ async def post_digest_now(_: User = Depends(_require_admin)):
         from modstore_server.daily_digest import run_daily_digest_email
 
         result = await asyncio.to_thread(run_daily_digest_email)
-    except Exception as e:  # noqa: BLE001
+    except BOUNDARY_ERRORS as e:  # noqa: BLE001
         logger.exception("digest-now failed")
         raise HTTPException(500, str(e)) from e
     if not result.get("ok"):

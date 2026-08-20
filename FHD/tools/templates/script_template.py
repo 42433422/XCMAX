@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from app.utils.operational_errors import BOUNDARY_ERRORS
+
 
 @dataclass
 class ScriptResult:
@@ -103,7 +105,7 @@ def main() -> int:
         result = run(dry_run=args.dry_run)
         print_summary(result, started_at)
         return 0 if result.success else 1
-    except Exception as exc:
+    except BOUNDARY_ERRORS as exc:
         logging.error("Script failed with unhandled exception: %s", exc)
         logging.debug(traceback.format_exc())
         print("\n=== SCRIPT SUMMARY ===")

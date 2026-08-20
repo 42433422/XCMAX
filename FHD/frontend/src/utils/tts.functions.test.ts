@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // Mock offlineTts to avoid loading heavy dependencies
 vi.mock('./offlineTts', () => ({
@@ -36,7 +36,6 @@ import {
   hasAnyChineseLocalVoice,
   getTtsStatus,
   onTtsStatusChange,
-  type TtsEngineMode,
 } from './tts'
 
 describe('tts utility functions', () => {
@@ -216,9 +215,7 @@ describe('tts utility functions', () => {
     })
 
     it('returns a Chinese voice when available', () => {
-      const voices = [
-        { name: 'Yunxi', lang: 'zh-CN', localService: true, default: false },
-      ]
+      const voices = [{ name: 'Yunxi', lang: 'zh-CN', localService: true, default: false }]
       const result = pickBestChineseVoice(voices as SpeechSynthesisVoice[])
       expect(result).not.toBeNull()
       expect(result?.name).toBe('Yunxi')

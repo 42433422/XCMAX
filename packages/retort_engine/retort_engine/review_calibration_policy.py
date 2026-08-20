@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 BASE_CONTEXT_WEIGHTS = {
     "security": 35,
@@ -28,16 +28,19 @@ def build_review_calibration_policy(
     holdout = _read_json(docs / "retort_pr_holdout_blind_eval.json")
     adjudication = _read_json(docs / "retort_review_adjudication_calibration.json")
     rollback = _read_json(docs / "retort_pr_failure_rollback_replay.json")
-    holdout_summary = (
-        holdout.get("summary") if isinstance(holdout.get("summary"), dict) else {}
+    holdout_summary = cast(
+        dict[str, Any],
+        holdout.get("summary") if isinstance(holdout.get("summary"), dict) else {},
     )
-    adjudication_summary = (
+    adjudication_summary = cast(
+        dict[str, Any],
         adjudication.get("summary")
         if isinstance(adjudication.get("summary"), dict)
-        else {}
+        else {},
     )
-    rollback_summary = (
-        rollback.get("summary") if isinstance(rollback.get("summary"), dict) else {}
+    rollback_summary = cast(
+        dict[str, Any],
+        rollback.get("summary") if isinstance(rollback.get("summary"), dict) else {},
     )
     holdout_ready = holdout.get("status") == "ready" and bool(
         holdout_summary.get("blind_against_prior_reports")
@@ -94,13 +97,19 @@ def build_review_calibration_policy(
 
 def calibration_context_rank_weight(review_context: str) -> int:
     policy = build_review_calibration_policy()
-    weights = policy.get("weights") if isinstance(policy.get("weights"), dict) else {}
+    weights = cast(
+        dict[str, Any],
+        policy.get("weights") if isinstance(policy.get("weights"), dict) else {},
+    )
     return int(weights.get(str(review_context or "other"), 0) or 0)
 
 
 def calibration_context_rank_weights() -> dict[str, int]:
     policy = build_review_calibration_policy()
-    weights = policy.get("weights") if isinstance(policy.get("weights"), dict) else {}
+    weights = cast(
+        dict[str, Any],
+        policy.get("weights") if isinstance(policy.get("weights"), dict) else {},
+    )
     return {
         context: int(weights.get(context, 0) or 0) for context in BASE_CONTEXT_WEIGHTS
     }
@@ -108,7 +117,10 @@ def calibration_context_rank_weights() -> dict[str, int]:
 
 def calibration_summary() -> dict[str, Any]:
     policy = build_review_calibration_policy()
-    weights = policy.get("weights") if isinstance(policy.get("weights"), dict) else {}
+    weights = cast(
+        dict[str, Any],
+        policy.get("weights") if isinstance(policy.get("weights"), dict) else {},
+    )
     return {
         "enabled": bool(policy.get("enabled")),
         "weighted_context_count": sum(
@@ -117,7 +129,10 @@ def calibration_summary() -> dict[str, Any]:
         "max_context_weight": max(
             [int(value or 0) for value in weights.values()] or [0]
         ),
-        **(policy.get("summary") if isinstance(policy.get("summary"), dict) else {}),
+        **cast(
+            dict[str, Any],
+            policy.get("summary") if isinstance(policy.get("summary"), dict) else {},
+        ),
     }
 
 

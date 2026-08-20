@@ -4,9 +4,6 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Any
-
-import pytest
 
 from vibe_coding import MockLLM
 from vibe_coding.code_factory import NLCodeSkillFactory
@@ -16,13 +13,11 @@ from vibe_coding.workflow_engine import (
     RunOptions,
     VibeWorkflowEngine,
 )
-from vibe_coding.workflow_factory import NLWorkflowFactory
 from vibe_coding.workflow_models import (
     VibeWorkflowEdge,
     VibeWorkflowGraph,
     VibeWorkflowNode,
 )
-
 
 # ------------------------------------------------------------------ helpers
 
@@ -37,9 +32,7 @@ def _identity_skill_spec(skill_id: str, fn: str) -> str:
             "purpose": "demo",
             "signature": {"params": ["x"], "return_type": "dict", "required_params": ["x"]},
             "dependencies": [],
-            "test_cases": [
-                {"case_id": "h", "input_data": {"x": 1}, "expected_output": {"value": 1}}
-            ],
+            "test_cases": [{"case_id": "h", "input_data": {"x": 1}, "expected_output": {"value": 1}}],
             "quality_gate": {"required_keys": ["value"]},
             "domain_keywords": [],
         }
@@ -48,7 +41,11 @@ def _identity_skill_spec(skill_id: str, fn: str) -> str:
 
 def _identity_code(fn: str) -> str:
     return json.dumps(
-        {"source_code": f"def {fn}(x):\n    return {{'value': x}}\n"}
+        {
+            "source_code": (
+                f'def {fn}(x):\n    """Return the input in a workflow value payload."""\n    return {{\'value\': x}}\n'
+            )
+        }
     )
 
 

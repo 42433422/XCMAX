@@ -116,9 +116,16 @@ def test_run_probes_skips_diagnostics_without_token(monkeypatch):
     )
 
     results = preflight.run_probes(
-        base_url="http://java", admin_token="", payment_backend="java", java_url="http://java"
+        base_url="http://java",
+        admin_token="",
+        payment_backend="java",
+        java_url="http://java",
     )
-    assert {r.name for r in results} == {"contract_match", "actuator_health", "payment_plans"}
+    assert {r.name for r in results} == {
+        "contract_match",
+        "actuator_health",
+        "payment_plans",
+    }
 
 
 def test_run_probes_runs_diagnostics_with_token(monkeypatch):
@@ -141,7 +148,10 @@ def test_run_probes_runs_diagnostics_with_token(monkeypatch):
     monkeypatch.setattr(preflight, "probe_payment_diagnostics", fake_diag)
 
     results = preflight.run_probes(
-        base_url="http://java", admin_token="abc", payment_backend="java", java_url="http://java"
+        base_url="http://java",
+        admin_token="abc",
+        payment_backend="java",
+        java_url="http://java",
     )
     assert called["token"] == "abc"
     assert any(r.name == "payment_diagnostics" for r in results)

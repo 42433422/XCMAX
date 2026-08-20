@@ -2,16 +2,17 @@
 
 ## 元信息
 
-| 字段 | 值 |
-|------|----|
-| skill_id | `skill-playwright-e2e` |
-| 所属员工 | `test-qa-runner` |
-| 业务域 | 前端 E2E 端到端测试执行 |
-| 版本 | 1.0.0 |
+| 字段     | 值                      |
+| -------- | ----------------------- |
+| skill_id | `skill-playwright-e2e`  |
+| 所属员工 | `test-qa-runner`        |
+| 业务域   | 前端 E2E 端到端测试执行 |
+| 版本     | 1.0.0                   |
 
 ## 1. 静态阶段
 
 **执行逻辑**：
+
 ```
 npx playwright test --reporter=html
 → 解析结果（passed/failed/flaky）
@@ -20,6 +21,7 @@ npx playwright test --reporter=html
 ```
 
 **输出 schema**：
+
 ```json
 {
   "status": "ok | fail",
@@ -32,9 +34,9 @@ npx playwright test --reporter=html
 
 ## 2. 动态触发条件
 
-| 触发类型 | 规则 |
-|----------|------|
-| 结果不达标 | `tests_failed > 0`（排除 flaky 后）|
+| 触发类型   | 规则                                |
+| ---------- | ----------------------------------- |
+| 结果不达标 | `tests_failed > 0`（排除 flaky 后） |
 
 ## 3. 动态阶段
 

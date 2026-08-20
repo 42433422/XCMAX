@@ -18,9 +18,11 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +48,7 @@ def _repo_root() -> Path:
         from modstore_server.daily_digest import _repo_root as root_fn
 
         return Path(root_fn())
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         return Path(os.environ.get("MODSTORE_REPO_ROOT", ".")).resolve()
 
 
@@ -75,7 +77,7 @@ def _fit_image_box(
             return max_w_in, max_h_in
         ratio = min(max_w_in / w_px, max_h_in / h_px)
         return max(0.5, w_px * ratio), max(0.5, h_px * ratio)
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         return max_w_in, max_h_in
 
 
@@ -97,21 +99,37 @@ def build_surface_audit_pptx(
     - 无截图（results 为空或都没存盘）→ ``skipped=True``。
     """
     if not _enabled():
-        return {"ok": True, "skipped": True, "reason": "disabled", "path": "", "slides": 0}
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "disabled",
+            "path": "",
+            "slides": 0,
+        }
 
     results = report.get("results") if isinstance(report.get("results"), list) else []
     if not results:
-        return {"ok": True, "skipped": True, "reason": "no results", "path": "", "slides": 0}
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "no results",
+            "path": "",
+            "slides": 0,
+        }
 
     try:
         from pptx import Presentation
         from pptx.dml.color import RGBColor
-        from pptx.enum.text import PP_ALIGN
         from pptx.util import Inches, Pt
     except ImportError as exc:
-        return {"ok": False, "error": f"未安装 python-pptx：{exc}", "path": "", "slides": 0}
+        return {
+            "ok": False,
+            "error": f"未安装 python-pptx：{exc}",
+            "path": "",
+            "slides": 0,
+        }
 
-    day = str(report.get("day") or datetime.now(timezone.utc).strftime("%Y-%m-%d"))
+    day = str(report.get("day") or datetime.now(UTC).strftime("%Y-%m-%d"))
     if out_path is None:
         out_path = _save_dir(day) / f"surface-audit-{day}.pptx"
     out_path = Path(out_path)
@@ -201,7 +219,12 @@ def build_surface_audit_pptx(
         # 分线分析页
         sec = prs.slides.add_slide(blank)
         _add_text(
-            sec, 0.6, 0.4, _SLIDE_W_IN - 1.2, 0.9, [(_LANE_TITLES.get(lane, lane), 28, navy, True)]
+            sec,
+            0.6,
+            0.4,
+            _SLIDE_W_IN - 1.2,
+            0.9,
+            [(_LANE_TITLES.get(lane, lane), 28, navy, True)],
         )
         owner_line = (
             f"对应员工：{', '.join(str(o) for o in owners[:6])}" if owners else "对应员工：—"
@@ -214,7 +237,12 @@ def build_surface_audit_pptx(
             for ln in analysis_md.splitlines():
                 if ln.strip():
                     lines.append(
-                        (ln.strip(), 15, slate, ln.strip().startswith(("现状", "异常", "改进建议")))
+                        (
+                            ln.strip(),
+                            15,
+                            slate,
+                            ln.strip().startswith(("现状", "异常", "改进建议")),
+                        )
                     )
         else:
             lines.append(("（本产线暂无 AI 分析）", 14, grey, False))
@@ -242,7 +270,14 @@ def build_surface_audit_pptx(
                 1.05,
                 _SLIDE_W_IN - 1.0,
                 0.5,
-                [(f"HTTP {st or '—'} · {r.get('viewport') or ''}", 13, status_color, True)],
+                [
+                    (
+                        f"HTTP {st or '—'} · {r.get('viewport') or ''}",
+                        13,
+                        status_color,
+                        True,
+                    )
+                ],
             )
 
             img_left, img_top = 0.5, 1.6
@@ -257,7 +292,7 @@ def build_surface_audit_pptx(
                         width=Inches(w_in),
                         height=Inches(h_in),
                     )
-                except Exception:  # noqa: BLE001
+                except BOUNDARY_ERRORS:  # noqa: BLE001
                     logger.warning("surface ppt: add_picture failed path=%s", saved)
                     _add_text(
                         slide,
@@ -309,9 +344,14 @@ def build_surface_audit_pptx(
 
     try:
         prs.save(str(out_path))
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.exception("surface ppt: save failed")
-        return {"ok": False, "error": f"保存 pptx 失败：{exc}", "path": "", "slides": slide_count}
+        return {
+            "ok": False,
+            "error": f"保存 pptx 失败：{exc}",
+            "path": "",
+            "slides": slide_count,
+        }
 
     return {
         "ok": True,

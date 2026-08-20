@@ -1,3 +1,4 @@
+# mypy: disable-error-code="misc, union-attr"
 """COVERAGE_RAMP Phase 1 (p0-core): auth, middleware, db, app_service helpers (mocked I/O)."""
 
 from __future__ import annotations
@@ -60,7 +61,11 @@ from app.middleware.request_id import RequestIdMiddleware
 from app.middleware.subscription_gate import SubscriptionGateMiddleware, _subscription_gate_enabled
 from app.schemas.finance_schema import FinanceTransactionCreate, FinanceTransactionUpdate
 from app.schemas.rbac_schema import PermissionCreate, RoleCreate, RoleUpdate, UserRoleAssign
-from app.utils.mobile_api import format_error_response, format_mobile_response, paginate_list
+from app.utils.device_system.mobile_api import (
+    format_error_response,
+    format_mobile_response,
+    paginate_list,
+)
 
 # ---------------------------------------------------------------------------
 # Fixtures

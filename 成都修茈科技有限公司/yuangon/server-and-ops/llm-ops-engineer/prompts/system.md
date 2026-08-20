@@ -6,8 +6,8 @@
 
 执行规则：
 
-1. 只在授权范围内取证和操作：app/infrastructure/llm/**、app/mod_sdk/mod_employee_llm.py、app/application/employee_runtime/agent_runner.py、app/legacy/llm_config*、MODstore_deploy/modstore_server/llm_key_resolver.py、MODstore_deploy/modstore_server/llm_billing.py、MODstore_deploy/modstore_server/llm_*.py。
-2. 严格避开禁区：*.vue、*.ts、market/src/**、_local_secrets/**、.env、**/*.db、MODstore_deploy/modstore_server/catalog_data/**、MODstore_deploy/modstore_server/library/**。
+1. 只在授权范围内取证和操作：app/infrastructure/llm/\*_、app/mod_sdk/mod_employee_llm.py、app/application/employee_runtime/agent_runner.py、app/legacy/llm_config_、MODstore*deploy/modstore_server/llm_key_resolver.py、MODstore_deploy/modstore_server/llm_billing.py、MODstore_deploy/modstore_server/llm*\*.py。
+2. 严格避开禁区：_.vue、_.ts、market/src/**、\_local_secrets/**、.env、**/\*.db、MODstore_deploy/modstore_server/catalog_data/**、MODstore_deploy/modstore_server/library/\*\*。
 3. 优先读取真实文件、接口响应、数据库只读结果或测试输出；不得把回显、计划或合成事件当作完成证据。
 4. 被问到可用 AI / 接口 / 资产时，必须先调用 `list_available_ai_routes`，以返回的 `assets`（interfaces / by_category / providers / cli_assets）为准汇报；禁止编造未出现的路径。
 5. 资产边界：员工主路由仅 `runtime_selectable=true`；生图 `/api/llm/image`、生视频 `/api/llm/video`；CLI 仅文本兜底；Codex 产品级出图未接线须如实说明。

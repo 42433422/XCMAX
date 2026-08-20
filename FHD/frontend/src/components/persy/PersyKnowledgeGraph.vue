@@ -16,12 +16,7 @@ import { GraphChart } from 'echarts/charts'
 import { TooltipComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import type { EChartsCoreOption } from 'echarts/core'
-import type {
-  KnowledgeBaseChunk,
-  KnowledgeGraphEdge,
-  KnowledgeGraphNode,
-  KnowledgeGraphResponse,
-} from '@/api/knowledgeBase'
+import type { KnowledgeBaseChunk, KnowledgeGraphEdge, KnowledgeGraphNode, KnowledgeGraphResponse } from '@/api/knowledgeBase'
 
 echarts.use([GraphChart, TooltipComponent, CanvasRenderer])
 
@@ -59,10 +54,7 @@ const FORCE_ANIMATION_NODE_LIMIT = 36
 /** Soft cap for rendered content nodes (core/onboarding/recall still kept). */
 const MAX_RENDERED_CONTENT_NODES = 56
 
-const nodeTheme: Record<
-  string,
-  { color: string; border: string; category: string; labelColor: string }
-> = {
+const nodeTheme: Record<string, { color: string; border: string; category: string; labelColor: string }> = {
   core: { color: '#17211d', border: '#7ad1a5', category: 'Persy', labelColor: '#17211d' },
   topic: { color: '#2f6f8f', border: '#b9dfef', category: '主题', labelColor: '#244c60' },
   source: { color: '#c56f3d', border: '#f2c6a7', category: '来源', labelColor: '#7a3f20' },
@@ -76,7 +68,9 @@ const categories = Object.values(nodeTheme).map((item) => ({ name: item.category
 const categoryIndex = new Map(categories.map((item, index) => [item.name, index]))
 
 function normalizeSource(value: unknown): string {
-  return String(value || '').replace(/\+rerank$/i, '').trim()
+  return String(value || '')
+    .replace(/\+rerank$/i, '')
+    .trim()
 }
 
 function matchesRecall(node: KnowledgeGraphNode, chunk: KnowledgeBaseChunk): boolean {
@@ -89,10 +83,7 @@ function matchesRecall(node: KnowledgeGraphNode, chunk: KnowledgeBaseChunk): boo
   if (chunkDocumentId && node.document_id === chunkDocumentId) {
     return Number(node.chunk_index) === Number(chunk.chunk_index)
   }
-  return (
-    normalizeSource(node.source) === normalizeSource(chunk.source) &&
-    Number(node.chunk_index) === Number(chunk.chunk_index)
-  )
+  return normalizeSource(node.source) === normalizeSource(chunk.source) && Number(node.chunk_index) === Number(chunk.chunk_index)
 }
 
 const recalledNodeIds = computed(() => {
@@ -106,9 +97,7 @@ const recalledNodeIds = computed(() => {
 function prioritizeGraphNodes(nodes: KnowledgeGraphNode[]): KnowledgeGraphNode[] {
   const stickyTypes = new Set(['core', 'onboarding', 'recall', 'topic', 'memory'])
   const sticky = nodes.filter((node) => stickyTypes.has(node.type))
-  const rest = nodes
-    .filter((node) => !stickyTypes.has(node.type))
-    .sort((a, b) => Number(b.strength || 0) - Number(a.strength || 0))
+  const rest = nodes.filter((node) => !stickyTypes.has(node.type)).sort((a, b) => Number(b.strength || 0) - Number(a.strength || 0))
   const room = Math.max(0, MAX_RENDERED_CONTENT_NODES - sticky.length)
   return sticky.concat(rest.slice(0, room))
 }
@@ -197,9 +186,7 @@ const graphEdges = computed<KnowledgeGraphEdge[]>(() => {
 
   const queryNode = graphNodes.value.find((node) => node.id === 'recall:current-query')
   if (queryNode) {
-    const targets = recalledNodeIds.value.size
-      ? Array.from(recalledNodeIds.value).filter((id) => nodeIds.has(id))
-      : [root.id]
+    const targets = recalledNodeIds.value.size ? Array.from(recalledNodeIds.value).filter((id) => nodeIds.has(id)) : [root.id]
     for (const target of targets.length ? targets : [root.id]) {
       base.push({
         id: `edge:${queryNode.id}:${target}`,
@@ -215,9 +202,7 @@ const graphEdges = computed<KnowledgeGraphEdge[]>(() => {
 })
 
 const accessibleGraphSummary = computed(() => {
-  const contentCount = graphNodes.value.filter(
-    (node) => !['core', 'onboarding', 'recall'].includes(node.type),
-  ).length
+  const contentCount = graphNodes.value.filter((node) => !['core', 'onboarding', 'recall'].includes(node.type)).length
   if (!contentCount) {
     return '当前没有知识内容，图中显示导入资料、粘贴知识和对话记忆三个开始入口。'
   }
@@ -248,8 +233,7 @@ function buildOption(): EChartsCoreOption {
     const selected = node.id === props.selectedNodeId
     const recalled = recalledNodeIds.value.has(node.id)
     const pending = node.type === 'memory' && node.metadata?.status === 'pending'
-    const showLabel =
-      selected || recalled || node.type === 'core' || node.type === 'topic' || node.type === 'onboarding'
+    const showLabel = selected || recalled || node.type === 'core' || node.type === 'topic' || node.type === 'onboarding'
     return {
       id: node.id,
       name: node.label,
@@ -270,12 +254,7 @@ function buildOption(): EChartsCoreOption {
       label: {
         show: showLabel,
         formatter: compactNodeLabel(node),
-        position:
-          node.type === 'core'
-            ? 'inside'
-            : node.type === 'topic' || node.type === 'memory'
-              ? 'top'
-              : 'right',
+        position: node.type === 'core' ? 'inside' : node.type === 'topic' || node.type === 'memory' ? 'top' : 'right',
         distance: node.type === 'core' ? 0 : 7,
         color: node.type === 'core' ? '#ffffff' : theme.labelColor,
         fontSize: node.type === 'core' ? 15 : 11,

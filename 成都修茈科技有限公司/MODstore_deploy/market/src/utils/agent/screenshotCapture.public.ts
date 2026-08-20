@@ -29,8 +29,4 @@ export type {
 } from './screenshotCapture.types'
 
 // 公开函数：从实现模块 re-export，下游不必再 import 内部路径
-export {
-  captureViewport,
-  invalidateCaptureCache,
-  onCaptureMeta,
-} from './screenshotCapture'
+export { captureViewport, invalidateCaptureCache, onCaptureMeta } from './screenshotCapture'

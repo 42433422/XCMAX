@@ -243,7 +243,7 @@ def configure_loopback_transports(app: Any) -> None:
 @functools.lru_cache(maxsize=1)
 def get_asgi_transport() -> type[httpx.ASGITransport]:
     try:
-        from langgraph_api import asgi_transport  # ty: ignore[unresolved-import]
+        from langgraph_api import asgi_transport
 
         return asgi_transport.ASGITransport
     except ImportError:

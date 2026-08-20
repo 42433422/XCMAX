@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from urllib.parse import urlsplit
 
 from app.infrastructure.topology import LLM_V1_BASE_URL
 
@@ -44,6 +45,15 @@ def _base_url_from_chat_url(api_url: str) -> str:
     return url
 
 
+def _is_xcauto_url(value: str | None) -> bool:
+    raw = str(value or "").strip()
+    if not raw:
+        return False
+    parsed = urlsplit(raw if "://" in raw else f"https://{raw}")
+    host = (parsed.hostname or "").rstrip(".").lower()
+    return host in {"xiu-ci.com", "xiuci.com"} or host.endswith((".xiu-ci.com", ".xiuci.com"))
+
+
 def _env_wants_xcauto() -> bool:
     provider = (
         (os.environ.get("LLM_PROVIDER") or os.environ.get("XCAGI_LLM_PROVIDER") or "")
@@ -73,8 +83,7 @@ def _env_wants_xcauto() -> bool:
     return (
         provider in _XCAUTO_PROVIDER_ALIASES
         or model in _XCAUTO_PROVIDER_ALIASES
-        or "xiu-ci.com" in base
-        or "xiuci" in base
+        or _is_xcauto_url(base)
     )
 
 
@@ -176,7 +185,7 @@ def resolve_default_openai_provider() -> str:
     if provider:
         return provider.lower()
     _key, base = resolve_openai_env_credentials()
-    if base and ("xiu-ci.com" in base.lower() or "xiuci" in base.lower()):
+    if _is_xcauto_url(base):
         return "xcauto"
     if (os.environ.get("DEEPSEEK_API_KEY") or "").strip():
         return "deepseek"

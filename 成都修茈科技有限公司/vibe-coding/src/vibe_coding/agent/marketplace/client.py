@@ -31,6 +31,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from ..._internals.tls import ssl_context_for_endpoint
+
 DEFAULT_TIMEOUT_S: float = 30.0
 _RESERVED_TEST_SUFFIXES = (".example", ".example.com", ".example.test")
 
@@ -116,12 +118,8 @@ class MODstoreClient:
         base = os.environ.get(base_url_var, "").strip()
         token = os.environ.get(token_var, "").strip()
         if not base or not token:
-            raise MODstoreAuthError(
-                f"set {base_url_var} and {token_var} or pass them explicitly"
-            )
-        allow_private = (
-            os.environ.get("MODSTORE_ALLOW_PRIVATE_NETWORK", "").strip().lower()
-        )
+            raise MODstoreAuthError(f"set {base_url_var} and {token_var} or pass them explicitly")
+        allow_private = os.environ.get("MODSTORE_ALLOW_PRIVATE_NETWORK", "").strip().lower()
         return cls(
             base_url=base,
             access_token=token,
@@ -254,9 +252,7 @@ class MODstoreClient:
         req = urllib.request.Request(url=url, data=body, method=method, headers=h)
         try:
             ctx = self._ssl_context()
-            with urllib.request.urlopen(
-                req, timeout=self.timeout_s, context=ctx
-            ) as resp:
+            with urllib.request.urlopen(req, timeout=self.timeout_s, context=ctx) as resp:
                 raw = resp.read().decode("utf-8", errors="replace")
                 return _parse_json_response(raw)
         except urllib.error.HTTPError as exc:
@@ -268,14 +264,7 @@ class MODstoreClient:
             raise MODstoreError(f"network error: {exc.reason}") from exc
 
     def _ssl_context(self):
-        if self.verify_ssl:
-            return None
-        import ssl
-
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-        return ctx
+        return ssl_context_for_endpoint(self.base_url, verify_ssl=self.verify_ssl)
 
 
 # ---------------------------------------------------------------------- pure
@@ -320,9 +309,7 @@ def _assert_outbound_destination_safe(
         try:
             infos = socket.getaddrinfo(host, None)
         except socket.gaierror as exc:
-            raise MODstoreError(
-                f"base_url host cannot be safely resolved: {host}"
-            ) from exc
+            raise MODstoreError(f"base_url host cannot be safely resolved: {host}") from exc
         addresses = []
         for info in infos:
             sockaddr = info[4]
@@ -368,18 +355,15 @@ def _build_multipart(
     parts: list[bytes] = []
     for key, value in fields.items():
         parts.append(b"--" + boundary.encode("ascii") + crlf)
-        disp = f'Content-Disposition: form-data; name="{key}"'.encode("utf-8")
+        disp = f'Content-Disposition: form-data; name="{key}"'.encode()
         parts.append(disp + crlf + crlf)
         parts.append((value or "").encode("utf-8") + crlf)
     parts.append(b"--" + boundary.encode("ascii") + crlf)
     filename = file_path.name
     content_type = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
-    disp = (
-        f'Content-Disposition: form-data; name="{file_field}"; '
-        f'filename="{filename}"'
-    ).encode("utf-8")
+    disp = (f'Content-Disposition: form-data; name="{file_field}"; filename="{filename}"').encode()
     parts.append(disp + crlf)
-    parts.append(f"Content-Type: {content_type}".encode("utf-8") + crlf + crlf)
+    parts.append(f"Content-Type: {content_type}".encode() + crlf + crlf)
     parts.append(file_path.read_bytes())
     parts.append(crlf)
     parts.append(b"--" + boundary.encode("ascii") + b"--" + crlf)
@@ -388,9 +372,9 @@ def _build_multipart(
 
 
 __all__ = [
+    "DEFAULT_TIMEOUT_S",
     "MODstoreAuthError",
     "MODstoreClient",
     "MODstoreError",
     "UploadResult",
-    "DEFAULT_TIMEOUT_S",
 ]

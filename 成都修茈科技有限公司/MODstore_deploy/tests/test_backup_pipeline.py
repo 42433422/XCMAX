@@ -20,7 +20,9 @@ def test_daily_backup_emits_completed_event(
     monkeypatch.setenv("MODSTORE_RELEASE_TRAIN_JSON", str(ssot))
     monkeypatch.setenv("MODSTORE_BACKUP_DIR", str(tmp_path / "backups"))
     monkeypatch.setattr(
-        bj, "_backup_sqlite", lambda *a, **k: {"ok": True, "path": "x", "bytes": 1, "pruned": 0}
+        bj,
+        "_backup_sqlite",
+        lambda *a, **k: {"ok": True, "path": "x", "bytes": 1, "pruned": 0},
     )
     monkeypatch.setattr(bj, "_backup_release_train", lambda *a, **k: {"ok": True, "skipped": True})
 
@@ -53,7 +55,9 @@ def test_dr_probe_recovers_and_clears_guard(
     assert active_backup_guard(day="2026-06-10") is not None
 
     monkeypatch.setattr(
-        bj, "_backup_sqlite", lambda *a, **k: {"ok": True, "path": "x", "bytes": 1, "pruned": 0}
+        bj,
+        "_backup_sqlite",
+        lambda *a, **k: {"ok": True, "path": "x", "bytes": 1, "pruned": 0},
     )
     monkeypatch.setattr(bj, "_backup_release_train", lambda *a, **k: {"ok": True, "skipped": True})
 
@@ -112,7 +116,9 @@ def test_ondemand_backup_emits_event(tmp_path: Path, monkeypatch: pytest.MonkeyP
 
     monkeypatch.setenv("MODSTORE_BACKUP_DIR", str(tmp_path / "backups"))
     monkeypatch.setattr(
-        bj, "_backup_sqlite", lambda *a, **k: {"ok": True, "path": "x", "bytes": 1, "pruned": 0}
+        bj,
+        "_backup_sqlite",
+        lambda *a, **k: {"ok": True, "path": "x", "bytes": 1, "pruned": 0},
     )
     monkeypatch.setattr(bj, "_backup_release_train", lambda *a, **k: {"ok": True, "skipped": True})
 
@@ -128,7 +134,9 @@ def test_ondemand_backup_emits_event(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert "backup.completed" in events
 
 
-def test_backup_completed_kicks_retention_janitor(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_backup_completed_kicks_retention_janitor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from modstore_server.backup_event_subscriber import dispatch_backup_event
 
     kicked: list = []
@@ -146,7 +154,9 @@ def test_backup_completed_kicks_retention_janitor(monkeypatch: pytest.MonkeyPatc
     assert kicked
 
 
-def test_surface_audit_deps_auto_start_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_surface_audit_deps_auto_start_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("MODSTORE_SURFACE_AUDIT_AUTO_START", "0")
     monkeypatch.setenv("MODSTORE_SURFACE_AUDIT_PS_ENABLED", "1")
     monkeypatch.setenv("MODSTORE_SURFACE_AUDIT_PS_BASE_URL", "http://127.0.0.1:59999")
@@ -181,7 +191,9 @@ def test_resolve_internal_api_base_from_health_url(
     assert resolve_internal_api_base() == "http://127.0.0.1:8788"
 
 
-def test_surface_audit_stop_after_local_mac_default(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_surface_audit_stop_after_local_mac_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.delenv("MODSTORE_SURFACE_AUDIT_STOP_AFTER", raising=False)
     monkeypatch.setenv("MODSTORE_AUTOMATION_PRIMARY", "local_mac")
     from modstore_server.surface_audit_deps import surface_audit_stop_after_enabled

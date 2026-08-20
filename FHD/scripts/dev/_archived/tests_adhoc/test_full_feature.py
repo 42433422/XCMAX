@@ -1,8 +1,12 @@
+# mypy: disable-error-code="attr-defined"
 """测试恢复后的完整功能"""
 
 import os
 from pathlib import Path
+
 from openpyxl import load_workbook
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 # 设置 WORKSPACE_ROOT
 os.environ["WORKSPACE_ROOT"] = r"e:\FHD"
@@ -27,7 +31,7 @@ try:
         header_row=2,
         template_path=None,  # 不使用模板
     )
-    print(f"✓ 转换成功！")
+    print("✓ 转换成功！")
     print(f"  输入行数：{result['rows_in']}")
     print(f"  输出行数：{result['rows_stats']}")
     print(f"  输出路径：{result['output']}")
@@ -43,7 +47,7 @@ try:
         print(f"  最大行：{ws.max_row}, 最大列：{ws.max_column}")
 
         # 显示前 3 行
-        print(f"  前 3 行:")
+        print("  前 3 行:")
         for row_idx in range(1, min(4, ws.max_row + 1)):
             row_data = []
             for col_idx in range(1, min(10, ws.max_column + 1)):
@@ -53,9 +57,9 @@ try:
 
     wb_out.close()
 
-    print(f"\n✓ 测试完成！")
+    print("\n✓ 测试完成！")
 
-except Exception as e:
+except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"✗ 转换失败：{e}")
     import traceback
 

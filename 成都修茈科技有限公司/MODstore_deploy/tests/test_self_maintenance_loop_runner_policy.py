@@ -1214,7 +1214,10 @@ def test_accepted_para_wait_timeout_detects_flat_and_nested_shapes():
                     "accepted": "true",
                     "handler": "para_delegate",
                     "ok": False,
-                    "para_result": {"status": "para_task_timeout", "task_id": "task-nested"},
+                    "para_result": {
+                        "status": "para_task_timeout",
+                        "task_id": "task-nested",
+                    },
                 }
             ]
         }
@@ -1825,7 +1828,9 @@ def test_retort_non_scope_question_is_not_auto_remediated(monkeypatch):
     assert memory["open_items"] == []
 
 
-def test_reconcile_retort_scope_does_not_reopen_matching_closed_remediation(monkeypatch):
+def test_reconcile_retort_scope_does_not_reopen_matching_closed_remediation(
+    monkeypatch,
+):
     memory = {
         "closed_items": [
             {
@@ -4003,7 +4008,6 @@ def test_reconcile_absorbed_para_merge_passes_base_ref_to_git_runner():
     policy_path = "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy.py"
     captured_base_refs: list[str] = []
     branch_ref = "origin/devfleet/cursor/sub-1-custom"
-    scope = "成都修茈科技有限公司/MODstore_deploy/modstore_server/"
 
     def tracking_git(_root, *args: str):
         if args[:2] == ("diff", "--name-only"):
@@ -4133,7 +4137,6 @@ def _absorbed_git_runner(policy_path: str, branch_suffix: str, remaining_diff: s
     """Fake git runner for absorption tests; matches batched two-dot name-only diff."""
 
     branch_ref = f"origin/devfleet/cursor/sub-1-{branch_suffix}"
-    scope = "成都修茈科技有限公司/MODstore_deploy/modstore_server/"
 
     def fake_git(_root, *args: str):
         if args[:4] == ("diff", "--name-only", "origin/main", branch_ref) and args[4] == "--":
@@ -4684,7 +4687,10 @@ class TestFindDeliveryValidation:
         """非 preferred key 按字典序遍历，不依赖插入顺序。"""
         dv_a = {"commands": [{"exit_code": 1}], "marker": "a"}
         dv_b = {"commands": [{"exit_code": 1}], "marker": "b"}
-        left_first = {"alpha": {"delivery_validation": dv_a}, "beta": {"delivery_validation": dv_b}}
+        left_first = {
+            "alpha": {"delivery_validation": dv_a},
+            "beta": {"delivery_validation": dv_b},
+        }
         right_first = {
             "beta": {"delivery_validation": dv_b},
             "alpha": {"delivery_validation": dv_a},
@@ -5764,7 +5770,7 @@ def test_run_cmd_excerpt_accepts_truncated_success_despite_late_exit():
 
     from modstore_server.self_maintenance_subprocess import run_cmd_excerpt
 
-    script = "import sys\n" "sys.stdout.write('z' * 50000)\n" "sys.stdout.flush()\n" "sys.exit(0)\n"
+    script = "import sys\nsys.stdout.write('z' * 50000)\nsys.stdout.flush()\nsys.exit(0)\n"
     out = run_cmd_excerpt(
         [sys.executable, "-c", script],
         max_chars=128,
@@ -5777,7 +5783,7 @@ def test_run_cmd_excerpt_raises_on_nonzero_when_truncated():
 
     from modstore_server.self_maintenance_subprocess import run_cmd_excerpt
 
-    script = "import sys\n" "sys.stdout.write('x' * 50000)\n" "sys.stdout.flush()\n" "sys.exit(2)\n"
+    script = "import sys\nsys.stdout.write('x' * 50000)\nsys.stdout.flush()\nsys.exit(2)\n"
     with pytest.raises(RuntimeError, match="command failed"):
         run_cmd_excerpt(
             [sys.executable, "-c", script],

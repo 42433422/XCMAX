@@ -23,7 +23,12 @@ def test_tool_write_defers_for_regular_employee(monkeypatch, tmp_path):
     db = tmp_path / "tw.db"
     monkeypatch.setenv("MODSTORE_DB_PATH", str(db))
 
-    from modstore_server.models import EmployeeChangeRequest, User, get_session_factory, init_db
+    from modstore_server.models import (
+        EmployeeChangeRequest,
+        User,
+        get_session_factory,
+        init_db,
+    )
 
     init_db(db)
     sf = get_session_factory(db)
@@ -58,7 +63,7 @@ def test_tool_write_daily_orchestrator_writes_directly(monkeypatch, tmp_path):
     _reset_sqlalchemy_globals()
     db = tmp_path / "tw2.db"
     monkeypatch.setenv("MODSTORE_DB_PATH", str(db))
-    from modstore_server.models import get_session_factory, init_db
+    from modstore_server.models import init_db
 
     init_db(db)
 

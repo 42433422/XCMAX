@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import time
 
 import pytest
@@ -12,7 +11,6 @@ from modstore_server.payment_common import (
     SVIP_LOCKED_PLAN_IDS,
     SVIP_TIER_PLAN_IDS,
     CheckoutDTO,
-    SignCheckoutBody,
     _amount_sign_str,
     _amounts_match,
     _membership_meta,
@@ -27,7 +25,12 @@ from modstore_server.payment_common import (
 
 class TestGenerateAndVerifySignature:
     def test_sign_and_verify_roundtrip(self):
-        data = {"item_id": "0", "plan_id": "pro", "total_amount": "199", "wallet_recharge": "false"}
+        data = {
+            "item_id": "0",
+            "plan_id": "pro",
+            "total_amount": "199",
+            "wallet_recharge": "false",
+        }
         secret = "test-secret"
         sig = generate_signature(data, secret)
         assert verify_signature(data, secret, sig)

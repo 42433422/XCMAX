@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 OpenClaw Gateway WebSocket：challenge → connect → chat.send → 接收事件。
 
@@ -33,6 +32,8 @@ import os
 import sys
 import uuid
 
+BOUNDARY_ERRORS: tuple[type[Exception], ...] = (Exception,)
+
 
 def _extract_assistant_text(payload: dict) -> str:
     msg = payload.get("message") or {}
@@ -41,7 +42,11 @@ def _extract_assistant_text(payload: dict) -> str:
         return ""
     out = []
     for block in parts:
-        if isinstance(block, dict) and block.get("type") == "text" and isinstance(block.get("text"), str):
+        if (
+            isinstance(block, dict)
+            and block.get("type") == "text"
+            and isinstance(block.get("text"), str)
+        ):
             out.append(block["text"])
     return "".join(out)
 
@@ -71,9 +76,6 @@ async def chat_once(message: str) -> int:
         if challenge.get("event") != "connect.challenge":
             print("预期 connect.challenge，收到:", raw[:500], file=sys.stderr)
             return 1
-
-        nonce = challenge["payload"]["nonce"]
-        ts = challenge["payload"]["ts"]
 
         connect_id = str(uuid.uuid4())
         connect_req = {
@@ -176,7 +178,7 @@ def main() -> int:
     except KeyboardInterrupt:
         print("\n中断", file=sys.stderr)
         return 130
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         print(type(e).__name__, e, file=sys.stderr)
         return 1
 

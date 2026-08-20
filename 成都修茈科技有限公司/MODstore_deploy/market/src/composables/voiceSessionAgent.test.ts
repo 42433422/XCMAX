@@ -28,8 +28,9 @@ vi.mock('../api', () => ({
 }))
 
 import { api } from '../api'
+import type { VoiceRouteContext } from './voiceUtteranceRouter'
 
-const baseRouteCtx = {
+const baseRouteCtx: Omit<VoiceRouteContext, 'text'> = {
   orchPhase: 'idle',
   hasPlanSession: false,
   hasPendingHandoff: false,
@@ -119,22 +120,19 @@ describe('coerceClassificationForEmployee', () => {
 
   it('maps pushback to dismiss_plan', () => {
     const state = createDefaultVoiceSessionState('employee')
-    const result = coerceClassificationForEmployee(
-      { action: 'chat', replyHint: '', statePatch: {}, confidence: 0.5 },
-      state,
-      { text: '你怎么就开始做了呢' },
-    )
+    const result = coerceClassificationForEmployee({ action: 'chat', replyHint: '', statePatch: {}, confidence: 0.5 }, state, {
+      text: '你怎么就开始做了呢',
+    })
     expect(result.action).toBe('dismiss_plan')
     expect(result.statePatch.lastUserTone).toBe('complaint')
   })
 
   it('downgrades vague chat at checklist to clarify when low confidence', () => {
     const state = createDefaultVoiceSessionState('employee')
-    const result = coerceClassificationForEmployee(
-      { action: 'chat', replyHint: '', statePatch: {}, confidence: 0.4 },
-      state,
-      { text: '嗯', planSessionPhase: 'checklist' },
-    )
+    const result = coerceClassificationForEmployee({ action: 'chat', replyHint: '', statePatch: {}, confidence: 0.4 }, state, {
+      text: '嗯',
+      planSessionPhase: 'checklist',
+    })
     expect(result.action).toBe('clarify')
   })
 })
@@ -277,15 +275,15 @@ describe('fallbackClassifyVoiceTurn', () => {
     })
 
     expect(fallbackClassifyVoiceTurn(makeCtx('取消制作')).action).toBe('cancel_work')
-    expect(
-      fallbackClassifyVoiceTurn(makeCtx('现在进度怎么样了', { ...baseRouteCtx, hasPlanSession: true })).action,
-    ).toBe('status')
-    expect(
-      fallbackClassifyVoiceTurn(makeCtx('再加一个导出 CSV', { ...baseRouteCtx, orchestrating: true })).action,
-    ).toBe('chat')
+    expect(fallbackClassifyVoiceTurn(makeCtx('现在进度怎么样了', { ...baseRouteCtx, hasPlanSession: true })).action).toBe('status')
+    expect(fallbackClassifyVoiceTurn(makeCtx('再加一个导出 CSV', { ...baseRouteCtx, orchestrating: true })).action).toBe('chat')
     expect(
       fallbackClassifyVoiceTurn(
-        makeCtx('把字段改成客户名称', { ...baseRouteCtx, hasPlanSession: true, planSessionPhase: 'summary' }),
+        makeCtx('把字段改成客户名称', {
+          ...baseRouteCtx,
+          hasPlanSession: true,
+          planSessionPhase: 'summary',
+        }),
       ).action,
     ).toBe('update_plan')
     expect(fallbackClassifyVoiceTurn(makeCtx('确认任务')).action).toBe('clarify')
@@ -395,11 +393,7 @@ describe('buildPlanBriefFromVoiceMessages', () => {
     expect(buildPlanBriefFromVoiceMessages(state, [], '')).toBe('')
     expect(buildPlanBriefFromVoiceMessages(state, [], '开始规划')).toBe('【触发规划口令】\n开始规划')
 
-    const brief = buildPlanBriefFromVoiceMessages(
-      state,
-      [{ role: 'user', content: '开始规划' }],
-      '开始规划',
-    )
+    const brief = buildPlanBriefFromVoiceMessages(state, [{ role: 'user', content: '开始规划' }], '开始规划')
     expect(brief.match(/开始规划/g)).toHaveLength(1)
   })
 })
@@ -431,9 +425,7 @@ describe('pickBestEmployeeBriefFromVoice', () => {
   it('prefers a non-placeholder state goal and returns empty when all chunks are filtered', () => {
     const state = createDefaultVoiceSessionState('employee')
     state.userGoal = '负责客户投诉归因分析并输出日报'
-    expect(pickBestEmployeeBriefFromVoice(state, [{ role: 'user', content: '另一个需求' }])).toBe(
-      '负责客户投诉归因分析并输出日报',
-    )
+    expect(pickBestEmployeeBriefFromVoice(state, [{ role: 'user', content: '另一个需求' }])).toBe('负责客户投诉归因分析并输出日报')
 
     state.userGoal = ''
     expect(
@@ -591,7 +583,8 @@ describe('classifyVoiceTurn', () => {
       model: 'gpt-4o-mini',
     })
     expect(vi.mocked(api.llmChat)).toHaveBeenCalled()
-    expect(String(vi.mocked(api.llmChat).mock.calls[0][2][0].content)).toContain('工作台模式：employee')
+    const promptMessages = vi.mocked(api.llmChat).mock.calls[0][2] as Array<{ content: unknown }>
+    expect(String(promptMessages[0].content)).toContain('工作台模式：employee')
     expect(['open_plan', 'clarify', 'chat']).toContain(result.action)
   })
 })

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import Request
+from fastapi.responses import JSONResponse
 
 from app.application.planner_compat_service import (
     compat_chat_stream_async,
@@ -46,9 +47,7 @@ def resolve_ai_tier_for_request(request: Request) -> str:
     return resolve_ai_tier(request)
 
 
-def intent_test(body: dict[str, Any] | None) -> dict[str, Any]:
-    from fastapi.responses import JSONResponse
-
+def intent_test(body: dict[str, Any] | None) -> dict[str, Any] | JSONResponse:
     from app.application.ai_chat_helpers import recognize_intents
 
     message = str((body or {}).get("message") or "").strip()
@@ -56,9 +55,9 @@ def intent_test(body: dict[str, Any] | None) -> dict[str, Any]:
         return JSONResponse({"success": False, "message": "消息内容不能为空"}, status_code=400)
     try:
         return {"success": True, "data": recognize_intents(message)}
-    except RECOVERABLE_ERRORS as e:
+    except RECOVERABLE_ERRORS:
         return JSONResponse(
-            {"success": False, "message": f"意图识别失败：{str(e)}"},
+            {"success": False, "message": "意图识别失败，请稍后重试"},
             status_code=500,
         )
 

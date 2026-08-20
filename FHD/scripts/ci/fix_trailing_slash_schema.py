@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """一次性扫描：对运行时尾斜杠重复路由执行 schema 隐藏（调用共享 helper）。"""
+
 from __future__ import annotations
 
 import argparse
@@ -18,7 +19,7 @@ def main() -> int:
         sys.path.insert(0, str(root))
 
     from app.fastapi_app import get_fastapi_app
-    from app.fastapi_routes.openapi_route_compat import hide_trailing_slash_openapi_duplicates
+    from app.legacy.routes.openapi_route_compat import hide_trailing_slash_openapi_duplicates
 
     app = get_fastapi_app()
     hidden = hide_trailing_slash_openapi_duplicates(app)

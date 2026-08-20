@@ -44,7 +44,7 @@ from app.exceptions import (
     ValidationError,
 )
 from app.infrastructure.auth.dependencies import get_current_user
-from app.utils.audit_logger import audit_log as log_audit_event
+from app.utils.logging.audit_logger import audit_log as log_audit_event
 
 logger = logging.getLogger(__name__)
 
@@ -232,7 +232,7 @@ async def gdpr_export(
     _require_gdpr_enabled()
 
     if not current_user:
-        raise AuthenticationError("需要登录")
+        raise AuthenticationError(message="需要登录")
 
     import uuid
 
@@ -286,7 +286,7 @@ async def gdpr_erase(
     _require_gdpr_enabled()
 
     if not current_user:
-        raise AuthenticationError("需要登录")
+        raise AuthenticationError(message="需要登录")
 
     if body.confirmation != ERASE_CONFIRMATION_PHRASE:
         raise ValidationError(
@@ -361,7 +361,7 @@ async def gdpr_rectify(
     _require_gdpr_enabled()
 
     if not current_user:
-        raise AuthenticationError("需要登录")
+        raise AuthenticationError(message="需要登录")
 
     invalid_fields = set(body.fields.keys()) - ALLOWED_RECTIFY_FIELDS
     if invalid_fields:
@@ -369,16 +369,15 @@ async def gdpr_rectify(
             f"不允许更正的字段: {sorted(invalid_fields)}。允许: {sorted(ALLOWED_RECTIFY_FIELDS)}",
         )
 
-    # 实际更新逻辑交给 user_service（占位）
-    from app.infrastructure.persistence.sqlalchemy_uow import SqlAlchemyUnitOfWork
+    from app.db import SessionLocal
 
-    with SqlAlchemyUnitOfWork() as db:
+    with SessionLocal() as db:
         user = db.get(User, current_user.id)
         if not user:
             raise NotFoundError(f"用户 {current_user.id} 不存在")
         for field_name, new_value in body.fields.items():
             setattr(user, field_name, new_value)
-        db.flush()
+        db.commit()
 
     audit_id = log_audit_event(
         actor_id=current_user.id,
@@ -424,7 +423,7 @@ async def gdpr_status(
     _require_gdpr_enabled()
 
     if not current_user:
-        raise AuthenticationError("需要登录")
+        raise AuthenticationError(message="需要登录")
 
     # 占位：从 Redis / DB 查询任务状态（生产实现见后续 PR）
     return GdprTaskStatusResponse(

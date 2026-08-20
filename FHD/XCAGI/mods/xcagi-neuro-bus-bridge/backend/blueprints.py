@@ -47,11 +47,15 @@ def register_fastapi_routes(app, mod_id: str) -> None:
     def handlers_registry():
         from app.mod_sdk.neuro_bus_handler_registry import list_neuro_bus_handler_registry
 
-        return {"success": True, "data": list_neuro_bus_handler_registry(), "source": f"mod:{mod_id}"}
+        return {
+            "success": True,
+            "data": list_neuro_bus_handler_registry(),
+            "source": f"mod:{mod_id}",
+        }
 
     @router.get("/handlers/catalog")
     def handlers_catalog():
-        from app.infrastructure.mods.mod_manager import import_mod_backend_py
+        from app.mod_sdk.host_services import import_mod_backend_py
 
         mod = import_mod_backend_py(
             str(Path(__file__).resolve().parent.parent),
@@ -69,13 +73,13 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.get("/neurobus/health")
     async def mod_neurobus_health():
-        from app.neuro_bus.integrations.fastapi_integration import get_neurobus_health
+        from app.mod_sdk.host_services import get_neurobus_health
 
         return {"success": True, "data": get_neurobus_health(), "source": f"mod:{mod_id}"}
 
     @router.get("/neurobus/stats")
     async def mod_neurobus_stats():
-        from app.neuro_bus.bus import get_neuro_bus
+        from app.mod_sdk.host_services import get_neuro_bus
 
         bus = get_neuro_bus()
         stats = bus.get_stats() if hasattr(bus, "get_stats") else {}
@@ -92,7 +96,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
             event_payload = {}
         if not event_type:
             return {"success": False, "message": "event_type_required"}
-        from app.neuro_bus.application_neuro_bridge import publish_neuro_event
+        from app.mod_sdk.host_services import publish_neuro_event
 
         ok = publish_neuro_event(event_type, event_payload, domain=domain)
         return {

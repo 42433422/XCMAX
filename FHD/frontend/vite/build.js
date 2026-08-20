@@ -23,10 +23,7 @@ export function createBuildOptions() {
         },
       },
       onwarn(warning, warn) {
-        if (
-          warning.message &&
-          warning.message.includes('dynamic import will not move module into another chunk')
-        ) {
+        if (warning.message && warning.message.includes('dynamic import will not move module into another chunk')) {
           return
         }
         warn(warning)

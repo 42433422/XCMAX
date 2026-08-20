@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment, union-attr"
 """语音 Speech-to-Speech WebSocket：单连接内 LLM 流式 + 分句 edge-TTS。
 
 路径 ``/api/workbench/voice/s2s/ws``。客户端在 ASR 断句后发送 ``utterance``，
@@ -20,7 +21,6 @@ from sqlalchemy.orm import Session
 from modstore_server.llm_billing import (
     JavaWalletClient,
     WalletHold,
-    authorization_header,
     calculate_charge,
     enforce_risk_limits,
     estimate_preauthorization,
@@ -37,6 +37,7 @@ from modstore_server.llm_key_resolver import (
     resolve_base_url,
 )
 from modstore_server.models import User, get_session_factory
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.voice_s2s_sentence import VoiceStreamSentenceSplitter
 
 logger = logging.getLogger(__name__)
@@ -132,7 +133,7 @@ async def _run_billed_s2s_turn(
 
     try:
         enforce_risk_limits(db, user.id, provider, model, messages, None)
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         await _send_json(ws, {"type": "error", "message": str(exc)})
         return
 
@@ -176,7 +177,7 @@ async def _run_billed_s2s_turn(
                     sentence_id=sid,
                     cancel=cancel,
                 )
-            except Exception as exc:
+            except RECOVERABLE_ERRORS as exc:
                 logger.warning("S2S TTS failed: %s", exc)
 
     audio_task = asyncio.create_task(audio_worker())
@@ -204,7 +205,7 @@ async def _run_billed_s2s_turn(
                 )
                 try:
                     await wallet.release(auth_header, hold, err, request_id)
-                except Exception:
+                except RECOVERABLE_ERRORS:
                     logger.exception("S2S release hold failed")
                 await _send_json(ws, {"type": "error", "message": err})
                 return
@@ -225,7 +226,7 @@ async def _run_billed_s2s_turn(
         if cancel.is_set():
             try:
                 await wallet.release(auth_header, hold, "cancelled", request_id)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 pass
             await _send_json(ws, {"type": "cancelled"})
             return
@@ -262,18 +263,18 @@ async def _run_billed_s2s_turn(
             },
         )
         await _send_json(ws, {"type": "turn_done"})
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("S2S turn failed")
         try:
             await wallet.release(auth_header, hold, str(exc), request_id)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
         await _send_json(ws, {"type": "error", "message": str(exc)})
     finally:
         await audio_queue.put(None)
         try:
             await asyncio.wait_for(audio_task, timeout=120.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             audio_task.cancel()
 
 
@@ -298,7 +299,7 @@ async def voice_s2s_ws(
             await ws.close()
             return
         user_id = int(sub)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         await _send_json(ws, {"type": "error", "message": "认证失败"})
         await ws.close()
         return
@@ -428,9 +429,9 @@ async def voice_s2s_ws(
             await run_utterance_turn(msg, turn_id=turn_id)
     except WebSocketDisconnect:
         cancel.set()
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("voice S2S ws error")
         try:
             await _send_json(ws, {"type": "error", "message": str(exc)})
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass

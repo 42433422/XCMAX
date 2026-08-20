@@ -10,6 +10,7 @@ import os
 from typing import TYPE_CHECKING, Any
 
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
+from app.services.bert_intent_labels import ID_TO_LABEL, INTENT_LABELS, LABEL_TO_ID
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 if TYPE_CHECKING:
@@ -24,43 +25,6 @@ def _import_ml_stack():
     from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
     return torch, AutoModelForSequenceClassification, AutoTokenizer
-
-
-INTENT_LABELS = [
-    "shipment_generate",
-    "customers",
-    "products",
-    "shipments",
-    "wechat_send",
-    "print_label",
-    "upload_file",
-    "materials",
-    "shipment_template",
-    "template_extract",
-    "business_docking",
-    "template_preview",
-    "shipment_records",
-    "wechat",
-    "printer_list",
-    "settings",
-    "tools_table",
-    "other_tools",
-    "ai_ecosystem",
-    "excel_decompose",
-    "show_images",
-    "show_videos",
-    "greet",
-    "goodbye",
-    "help",
-    "negation",
-    "customer_export",
-    "customer_edit",
-    "customer_supplement",
-    "unk",
-]
-
-LABEL_TO_ID = {label: idx for idx, label in enumerate(INTENT_LABELS)}
-ID_TO_LABEL = {idx: label for idx, label in enumerate(INTENT_LABELS)}
 
 
 class BertIntentClassifier:
@@ -194,14 +158,15 @@ class BertIntentClassifier:
             model_path, local_files_only=local_files_only
         )
 
-        self.model = AutoModelForSequenceClassification.from_pretrained(
+        loaded_model = AutoModelForSequenceClassification.from_pretrained(
             model_path, local_files_only=local_files_only
         )
-        self.model.to(self.device)
-        self.model.eval()
+        loaded_model.to(self.device)
+        loaded_model.eval()
 
         if self.use_fp16:
-            self.model = self.model.half()
+            loaded_model = loaded_model.half()
+        self.model = loaded_model
 
         logger.info(
             "模型已加载：%s, 设备：%s, local_files_only=%s",
@@ -255,7 +220,7 @@ class BertIntentClassifier:
 
         predicted_label = self.id2label.get(predicted_idx, "unk")
 
-        result = {
+        result: dict[str, Any] = {
             "text": text,
             "intent": predicted_label,
             "confidence": round(confidence, 4),
@@ -338,7 +303,7 @@ class BertIntentClassifier:
         intent = random.choice(INTENT_LABELS[:-1])
         confidence = round(random.uniform(0.5, 0.9), 4)
 
-        result = {
+        result: dict[str, Any] = {
             "text": text,
             "intent": intent,
             "confidence": confidence,

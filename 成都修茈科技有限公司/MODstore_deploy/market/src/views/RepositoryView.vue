@@ -51,15 +51,12 @@
     <div v-if="message" :class="['flash', messageOk ? 'flash-ok' : 'flash-err']">{{ message }}</div>
 
     <section class="repo-shelf-filters" aria-label="能力货架筛选">
-      <input
-        v-model.trim="shelfQ"
-        class="input shelf-search"
-        type="search"
-        placeholder="搜索名称、ID、描述…"
-      />
+      <input v-model.trim="shelfQ" class="input shelf-search" type="search" placeholder="搜索名称、ID、描述…" />
       <select v-model="shelfIndustry" class="input shelf-select">
         <option value="">全部行业</option>
-        <option v-for="p in industryPresets" :key="'shelf-' + p.id" :value="p.id">{{ p.name }}</option>
+        <option v-for="p in industryPresets" :key="'shelf-' + p.id" :value="p.id">
+          {{ p.name }}
+        </option>
       </select>
       <select v-model="shelfStatus" class="input shelf-select">
         <option value="">全部状态</option>
@@ -81,14 +78,7 @@
         <option value="assigned">已分配企业</option>
         <option value="unassigned">未配置企业授权</option>
       </select>
-      <button
-        v-if="hasActiveShelfFilters"
-        type="button"
-        class="btn btn-sm shelf-clear-btn"
-        @click="clearShelfFilters"
-      >
-        清空筛选
-      </button>
+      <button v-if="hasActiveShelfFilters" type="button" class="btn btn-sm shelf-clear-btn" @click="clearShelfFilters">清空筛选</button>
     </section>
     <p class="repo-shelf-meta">
       展示 {{ filteredMods.length }} / {{ mods.length }} 个能力
@@ -148,11 +138,7 @@
         <div v-if="m.workflow_employees?.length" class="wf-emp-block">
           <div class="wf-emp-title">manifest 中的工作流声明（workflow_employees）</div>
           <div class="wf-emp-actions">
-            <div
-              v-for="(e, idx) in m.workflow_employees"
-              :key="(e.id || '') + '-' + idx"
-              class="wf-emp-line"
-            >
+            <div v-for="(e, idx) in m.workflow_employees" :key="(e.id || '') + '-' + idx" class="wf-emp-line">
               <button
                 type="button"
                 class="btn btn-sm btn-ghost"
@@ -193,7 +179,9 @@
         <button type="button" class="empty-link" @click="clearShelfFilters">清空筛选</button>
         或修改搜索关键词
       </p>
-      <p v-else class="empty-hint">{{ mods.length ? '调整搜索或筛选条件' : '新建或导入 Mod 开始' }}</p>
+      <p v-else class="empty-hint">
+        {{ mods.length ? '调整搜索或筛选条件' : '新建或导入 Mod 开始' }}
+      </p>
     </div>
 
     <!-- AI 脚手架 -->
@@ -208,12 +196,7 @@
         </div>
         <div class="form-group">
           <label class="label">描述</label>
-          <textarea
-            v-model="scaffoldBrief"
-            class="input textarea"
-            rows="4"
-            placeholder="简要描述 Mod 用途"
-          />
+          <textarea v-model="scaffoldBrief" class="input textarea" rows="4" placeholder="简要描述 Mod 用途" />
         </div>
         <div class="form-group">
           <label class="label">ID（可选）</label>
@@ -273,13 +256,13 @@ interface ModRow {
   primary?: boolean
   warnings?: string[]
   error?: string
-  workflow_employees?: Array<Record<string, any>>
+  workflow_employees?: Array<Record<string, unknown>>
   path?: string
   description?: string
   library_blurb?: string
   updated_at?: string
   usage_scene?: string
-  [key: string]: any
+  [key: string]: unknown
 }
 
 const mods = ref<ModRow[]>([])
@@ -287,9 +270,7 @@ const loading = ref(true)
 const message = ref('')
 const messageOk = ref(true)
 const industryPresets = listIndustryPresets()
-const authoringIndustryId = ref(
-  (typeof localStorage !== 'undefined' && localStorage.getItem(LS_AUTHORING_INDUSTRY)) || '通用',
-)
+const authoringIndustryId = ref((typeof localStorage !== 'undefined' && localStorage.getItem(LS_AUTHORING_INDUSTRY)) || '通用')
 const createIndustryId = ref(authoringIndustryId.value)
 const showCreate = ref(false)
 const createName = ref('')
@@ -344,24 +325,14 @@ const versionOptions = computed(() => {
 })
 
 const hasActiveShelfFilters = computed(
-  () =>
-    !!(
-      shelfQ.value.trim() ||
-      shelfIndustry.value ||
-      shelfStatus.value ||
-      shelfVersion.value ||
-      shelfTest.value ||
-      shelfScope.value
-    ),
+  () => !!(shelfQ.value.trim() || shelfIndustry.value || shelfStatus.value || shelfVersion.value || shelfTest.value || shelfScope.value),
 )
 
 const filteredMods = computed(() => {
   const q = shelfQ.value.trim().toLowerCase()
   return mods.value.filter((m) => {
     if (q) {
-      const hay = [m.id, m.name, m.description, m.library_blurb]
-        .map((x) => String(x || '').toLowerCase())
-        .join('\n')
+      const hay = [m.id, m.name, m.description, m.library_blurb].map((x) => String(x || '').toLowerCase()).join('\n')
       if (!hay.includes(q)) return false
     }
     if (shelfIndustry.value && modIndustryId(m) !== shelfIndustry.value) return false
@@ -378,9 +349,9 @@ const filteredMods = computed(() => {
 function modIndustryId(m: ModRow): string {
   const industry = m?.industry
   if (industry && typeof industry === 'object') {
-    const id = String((industry as Record<string, any>).id || '').trim()
+    const id = String((industry as Record<string, unknown>).id || '').trim()
     if (id) return id
-    const name = String((industry as Record<string, any>).name || '').trim()
+    const name = String((industry as Record<string, unknown>).name || '').trim()
     if (name) return name
   }
   if (typeof industry === 'string' && industry.trim()) return industry.trim()
@@ -482,7 +453,10 @@ function modIdFromDisplayName(name: string): string {
   const raw = String(name || '')
     .trim()
     .toLowerCase()
-  let x = raw.replace(/[^a-z0-9]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
+  let x = raw
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
   if (!x) {
     x = `mod-${Date.now().toString(36)}`
   }
@@ -503,7 +477,9 @@ function isCreateModConflictError(e: unknown): boolean {
 function flash(msg: string, ok = true) {
   message.value = msg
   messageOk.value = ok
-  setTimeout(() => { message.value = '' }, 5000)
+  setTimeout(() => {
+    message.value = ''
+  }, 5000)
 }
 
 /** 磁盘目录末段名（仅用于提示文案；删除 API 须用 manifest id） */
@@ -570,12 +546,15 @@ async function purgeRepoLibraryAndLocalState() {
   purgeLibraryBusy.value = true
   clearRepoPageLocalOnly()
   try {
-    const res: any = await api.adminPurgeAllMods()
+    const res = (await api.adminPurgeAllMods()) as {
+      removed_dir_count?: number
+      removed_user_mod_rows?: number
+    }
     const removed = Number(res?.removed_dir_count || 0)
     const removedRows = Number(res?.removed_user_mod_rows || 0)
     flash(`已清空能力货架：删除 ${removed} 个目录，截断 user_mods ${removedRows} 行`, true)
-  } catch (e: any) {
-    flash(`一键清空失败：${e?.message || String(e)}`, false)
+  } catch (e: unknown) {
+    flash(`一键清空失败：${e instanceof Error ? e.message : String(e)}`, false)
   } finally {
     purgeLibraryBusy.value = false
     await load({ cacheBust: true })
@@ -592,13 +571,8 @@ async function deleteModFromLibrary(m: ModRow) {
     return
   }
   const label = (m.name && String(m.name).trim()) || displayId || folder
-  const prim = m.primary
-    ? '\n\n注意：该包在 manifest 中标记为主扩展（primary），删除后请确认 XCAGI / 宿主侧不再依赖该 id。'
-    : ''
-  const idNote =
-    displayId && folderSeg && displayId !== folderSeg
-      ? `（manifest id：${displayId}；目录名：${folderSeg}）`
-      : `（${folder}）`
+  const prim = m.primary ? '\n\n注意：该包在 manifest 中标记为主扩展（primary），删除后请确认 XCAGI / 宿主侧不再依赖该 id。' : ''
+  const idNote = displayId && folderSeg && displayId !== folderSeg ? `（manifest id：${displayId}；目录名：${folderSeg}）` : `（${folder}）`
   if (
     !window.confirm(
       `确定从 Mod 能力货架删除「${label}」${idNote}？\n本地库目录将整包删除，且会从你的账号关联中移除。此操作不可恢复。${prim}`,
@@ -671,12 +645,7 @@ async function registerWorkflowToCatalog(modId: string, workflowIndex: number) {
     const pkg = res?.package
     const pid = pkg?.id || ''
     const ver = pkg?.version || ''
-    flash(
-      pid && ver
-        ? `已登记到本地仓库：${pid} @ ${ver}（员工制作页「已登记员工包」可见）`
-        : '已登记到本地仓库（/v1/packages）',
-      true,
-    )
+    flash(pid && ver ? `已登记到本地仓库：${pid} @ ${ver}（员工制作页「已登记员工包」可见）` : '已登记到本地仓库（/v1/packages）', true)
   } catch (err) {
     flash((err as Error)?.message || String(err), false)
   } finally {
@@ -684,7 +653,7 @@ async function registerWorkflowToCatalog(modId: string, workflowIndex: number) {
   }
 }
 
-function goEmployeePrefill(modId: string, emp: Record<string, any>, workflowIndex = 0) {
+function goEmployeePrefill(modId: string, emp: Record<string, unknown>, workflowIndex = 0) {
   const label = (emp && (emp.label || emp.id)) || '员工'
   const sum = typeof emp?.panel_summary === 'string' ? emp.panel_summary.trim() : ''
   const desc = sum
@@ -731,12 +700,7 @@ async function submitScaffold() {
   authoringIndustryId.value = industryId
   scaffoldBusy.value = true
   try {
-    const res = await api.modAiScaffold(
-      brief,
-      scaffoldIdHint.value.trim(),
-      scaffoldReplace.value,
-      industryId,
-    )
+    const res = await api.modAiScaffold(brief, scaffoldIdHint.value.trim(), scaffoldReplace.value, industryId)
     flash(`已生成并导入 ${res.id}`)
     showScaffold.value = false
     scaffoldBrief.value = ''
@@ -766,12 +730,11 @@ async function load(opts?: { cacheBust?: boolean }) {
 async function loadEnterpriseUsage() {
   usageLoadError.value = ''
   try {
-    const res: any = await api.adminListUsers(200, 0, true)
-    const rows: EnterpriseUserRow[] = Array.isArray(res?.users)
-      ? res.users
-      : Array.isArray(res?.data?.users)
-        ? res.data.users
-        : []
+    const res = (await api.adminListUsers(200, 0, true)) as {
+      users?: EnterpriseUserRow[]
+      data?: { users?: EnterpriseUserRow[] }
+    }
+    const rows: EnterpriseUserRow[] = Array.isArray(res?.users) ? res.users : Array.isArray(res?.data?.users) ? res.data.users : []
     const next: Record<string, string[]> = {}
     for (const user of rows) {
       const label = String(user.username || user.email || user.id || '').trim()
@@ -983,17 +946,17 @@ onUnmounted(() => {
 
 .page-desc {
   font-size: 0.9rem;
-  color: rgba(255,255,255,0.4);
+  color: rgba(255, 255, 255, 0.4);
   margin: 0 0 1.25rem;
   line-height: 1.55;
 }
 
 .page-desc .mono {
   font-size: 0.8125rem;
-  background: rgba(255,255,255,0.06);
+  background: rgba(255, 255, 255, 0.06);
   padding: 0.1em 0.35em;
   border-radius: 4px;
-  color: rgba(255,255,255,0.75);
+  color: rgba(255, 255, 255, 0.75);
 }
 
 .bundle-hint {
@@ -1039,19 +1002,19 @@ onUnmounted(() => {
 }
 
 .flash-ok {
-  background: rgba(74,222,128,0.1);
+  background: rgba(74, 222, 128, 0.1);
   color: #4ade80;
 }
 
 .flash-err {
-  background: rgba(255,80,80,0.1);
+  background: rgba(255, 80, 80, 0.1);
   color: #ff6b6b;
 }
 
 .loading {
   text-align: center;
   padding: 3rem;
-  color: rgba(255,255,255,0.3);
+  color: rgba(255, 255, 255, 0.3);
 }
 
 .mods-grid {
@@ -1062,7 +1025,7 @@ onUnmounted(() => {
 
 .mod-card {
   background: #111111;
-  border: 0.5px solid rgba(255,255,255,0.1);
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
   padding: 1.25rem;
   transition: all 0.2s;
@@ -1139,7 +1102,7 @@ onUnmounted(() => {
 }
 
 .mod-card:hover {
-  border-color: rgba(255,255,255,0.2);
+  border-color: rgba(255, 255, 255, 0.2);
   transform: translateY(-2px);
 }
 
@@ -1158,7 +1121,7 @@ onUnmounted(() => {
 
 .mod-card-blurb {
   font-size: 0.8125rem;
-  color: rgba(255,255,255,0.5);
+  color: rgba(255, 255, 255, 0.5);
   line-height: 1.5;
   margin: 0 0 0.625rem;
   display: -webkit-box;
@@ -1190,7 +1153,7 @@ onUnmounted(() => {
 
 .mod-card-id {
   font-size: 0.75rem;
-  color: rgba(255,255,255,0.3);
+  color: rgba(255, 255, 255, 0.3);
   font-family: monospace;
   margin-bottom: 0.5rem;
 }
@@ -1222,7 +1185,7 @@ onUnmounted(() => {
 .empty-state {
   text-align: center;
   padding: 4rem 1rem;
-  color: rgba(255,255,255,0.3);
+  color: rgba(255, 255, 255, 0.3);
 }
 
 .empty-state p {
@@ -1232,7 +1195,7 @@ onUnmounted(() => {
 
 .empty-hint {
   font-size: 0.85rem;
-  color: rgba(255,255,255,0.2);
+  color: rgba(255, 255, 255, 0.2);
 }
 
 .empty-link {
@@ -1252,10 +1215,10 @@ onUnmounted(() => {
 
 .btn {
   padding: 0.5rem 1rem;
-  border: 0.5px solid rgba(255,255,255,0.15);
+  border: 0.5px solid rgba(255, 255, 255, 0.15);
   border-radius: 6px;
   background: transparent;
-  color: rgba(255,255,255,0.7);
+  color: rgba(255, 255, 255, 0.7);
   font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
@@ -1263,7 +1226,7 @@ onUnmounted(() => {
 }
 
 .btn:hover {
-  background: rgba(255,255,255,0.06);
+  background: rgba(255, 255, 255, 0.06);
   color: #ffffff;
 }
 
@@ -1292,18 +1255,18 @@ onUnmounted(() => {
 }
 
 .badge-ok {
-  background: rgba(74,222,128,0.1);
+  background: rgba(74, 222, 128, 0.1);
   color: #4ade80;
 }
 
 .badge-warn {
-  background: rgba(251,191,36,0.1);
+  background: rgba(251, 191, 36, 0.1);
   color: #fbbf24;
 }
 
 .badge-primary {
-  background: rgba(255,255,255,0.06);
-  color: rgba(255,255,255,0.5);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .badge-scope {
@@ -1314,7 +1277,7 @@ onUnmounted(() => {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.6);
+  background: rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
@@ -1327,7 +1290,7 @@ onUnmounted(() => {
   width: 100%;
   max-width: 420px;
   background: #111111;
-  border: 0.5px solid rgba(255,255,255,0.1);
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
   border-radius: 16px;
   padding: 1.5rem;
 }
@@ -1346,23 +1309,23 @@ onUnmounted(() => {
 .label {
   display: block;
   font-size: 0.8rem;
-  color: rgba(255,255,255,0.5);
+  color: rgba(255, 255, 255, 0.5);
   margin-bottom: 0.4rem;
 }
 
 .input {
   width: 100%;
   padding: 0.6rem 0.75rem;
-  border: 0.5px solid rgba(255,255,255,0.15);
+  border: 0.5px solid rgba(255, 255, 255, 0.15);
   border-radius: 6px;
-  background: rgba(255,255,255,0.03);
+  background: rgba(255, 255, 255, 0.03);
   color: #ffffff;
   font-size: 0.9rem;
   outline: none;
 }
 
 .input:focus {
-  border-color: rgba(255,255,255,0.3);
+  border-color: rgba(255, 255, 255, 0.3);
 }
 
 .modal-actions {

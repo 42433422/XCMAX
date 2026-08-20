@@ -41,7 +41,12 @@ def test_fhd_shell_overlay(tmp_path: Path) -> None:
         tmp_path,
         "m1",
         "Base",
-        fhd_shell={"color": "blue", "type": "template", "description": "X", "name": "Shown"},
+        fhd_shell={
+            "color": "blue",
+            "type": "template",
+            "description": "X",
+            "name": "Shown",
+        },
     )
     rows = build_fhd_shell_mod_rows(tmp_path)
     m1 = next(r for r in rows if r["id"] == "m1")

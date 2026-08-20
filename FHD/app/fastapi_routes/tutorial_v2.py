@@ -17,6 +17,7 @@ from app.application.tutorial_v2.service import TutorialServiceError, TutorialV2
 from app.db.session import get_db_dependency
 from app.infrastructure.auth.dependencies import get_logged_in_user
 from app.schemas.tutorial_v2 import TutorialCourseDTO, TutorialRunDTO
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 router = APIRouter(prefix="/api/tutorial/v2", tags=["tutorial-v2"])
 service = TutorialV2Service()
@@ -80,7 +81,7 @@ def courses(
         return {"success": True, "data": data}
     except TutorialServiceError as exc:
         return _error(exc)
-    except Exception:  # noqa: BLE001 - public boundary must never expose raw backend text
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - public boundary must never expose raw backend text
         return _unexpected("courses")
 
 
@@ -98,7 +99,7 @@ def create_or_resume_run(
         }
     except TutorialServiceError as exc:
         return _error(exc)
-    except Exception:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:  # noqa: BLE001
         return _unexpected("start_run")
 
 
@@ -117,7 +118,7 @@ def current_run(
         return {"success": True, "data": service.run_dto(run) if run else None}
     except TutorialServiceError as exc:
         return _error(exc)
-    except Exception:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:  # noqa: BLE001
         return _unexpected("current_run")
 
 
@@ -135,7 +136,7 @@ def enter_run(
         return response
     except TutorialServiceError as exc:
         return _error(exc)
-    except Exception:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:  # noqa: BLE001
         return _unexpected("enter_run")
 
 
@@ -152,7 +153,7 @@ def leave_run(
         return response
     except TutorialServiceError as exc:
         return _error(exc)
-    except Exception:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:  # noqa: BLE001
         return _unexpected("leave_run")
 
 
@@ -198,7 +199,7 @@ def verify_step(
         return response
     except TutorialServiceError as exc:
         return _error(exc)
-    except Exception:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:  # noqa: BLE001
         return _unexpected("verify_step")
 
 
@@ -216,7 +217,7 @@ def reset_run(
         return response
     except TutorialServiceError as exc:
         return _error(exc)
-    except Exception:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:  # noqa: BLE001
         return _unexpected("reset_run")
 
 
@@ -229,7 +230,7 @@ def reports(
         return {"success": True, "data": service.reports(db, user)}
     except TutorialServiceError as exc:
         return _error(exc)
-    except Exception:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:  # noqa: BLE001
         return _unexpected("reports")
 
 
@@ -238,6 +239,7 @@ def tutorial_excel(request: Request, _user: Any = Depends(get_logged_in_user)):
     """Generate the built-in teaching workbook without writing repository files."""
     workbook = Workbook()
     sheet = workbook.active
+    assert sheet is not None
     sheet.title = "教学客户产品"
     sheet.append(["客户名称", "产品名称", "产品编码", "单价", "库存", "错误示例"])
     workspace_token = str(getattr(request.state, "tutorial_workspace_id", "practice") or "practice")

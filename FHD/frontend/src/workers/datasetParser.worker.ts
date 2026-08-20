@@ -69,7 +69,7 @@ const normalizeRows = (rows: Record<string, unknown>[], columns: string[]): Pars
     columns,
     preview: rows.slice(0, 3),
     sampleRows,
-    fieldProfiles: profileFields(sampleRows, columns)
+    fieldProfiles: profileFields(sampleRows, columns),
   }
 }
 
@@ -99,7 +99,10 @@ const normalizeJsonPayload = (payload: unknown): ParsedDatasetFile => {
       columns: ['value'],
       preview: payload.slice(0, 3).map((value) => ({ value })),
       sampleRows: payload.slice(0, KITTEN_DATASET_SAMPLE_LIMIT).map((value) => ({ value })),
-      fieldProfiles: profileFields(payload.slice(0, KITTEN_DATASET_SAMPLE_LIMIT).map((value) => ({ value })), ['value'])
+      fieldProfiles: profileFields(
+        payload.slice(0, KITTEN_DATASET_SAMPLE_LIMIT).map((value) => ({ value })),
+        ['value'],
+      ),
     }
   }
 
@@ -150,7 +153,11 @@ const parseByExt = async (file: File, ext: string): Promise<ParsedDatasetFile> =
 }
 
 self.onmessage = async (event: MessageEvent) => {
-  const { requestId, file, ext } = (event.data || {}) as { requestId: number; file: File; ext: string }
+  const { requestId, file, ext } = (event.data || {}) as {
+    requestId: number
+    file: File
+    ext: string
+  }
   if (!requestId || !file) return
   try {
     const payload = await parseByExt(file, String(ext || '').toLowerCase())

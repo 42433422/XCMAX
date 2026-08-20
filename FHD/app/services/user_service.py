@@ -9,7 +9,7 @@ from app.db.session import get_db
 from app.di.registry import get_service_registry
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.utils.password_hash import generate_password_hash
+from app.utils.security.password_hash import generate_password_hash
 from app.utils.time import utc_now_naive
 
 logger = logging.getLogger(__name__)

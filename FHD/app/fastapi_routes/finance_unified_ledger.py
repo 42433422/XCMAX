@@ -47,10 +47,10 @@ def finance_unified_ledger(
             "finance_self_hosted": True,
             "count": len(items),
         }
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("unified-ledger list failed")
         return JSONResponse(
-            {"success": False, "message": str(exc)[:500], "items": [], "count": 0},
+            {"success": False, "message": "财务台账服务暂时不可用", "items": [], "count": 0},
             status_code=500,
         )
 
@@ -69,10 +69,10 @@ def finance_unified_ledger_summary(
             "summary": summary,
             "finance_self_hosted": True,
         }
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("unified-ledger summary failed")
         return JSONResponse(
-            {"success": False, "message": str(exc)[:500], "summary": None},
+            {"success": False, "message": "财务台账服务暂时不可用", "summary": None},
             status_code=500,
         )
 
@@ -88,9 +88,9 @@ def finance_unified_ledger_rebuild(body: FinanceLedgerRebuildBody):
         market_user_id = body.market_user_id
         result = rebuild_ledger_archive(market_user_id=market_user_id)
         return {"success": True, **result}
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("unified-ledger rebuild failed")
         return JSONResponse(
-            {"success": False, "message": str(exc)[:500]},
+            {"success": False, "message": "财务台账服务暂时不可用"},
             status_code=500,
         )

@@ -118,7 +118,11 @@ def _load_registry_scripts() -> set[str]:
                 m = re.search(r"(?:\.\./)?(scripts/[A-Za-z0-9_./-]+\.py)", tok)
                 if m:
                     referenced.add(m.group(1))
-                elif tok.endswith(".py") and tok.startswith("scripts/") or tok.startswith("../scripts/"):
+                elif (
+                    tok.endswith(".py")
+                    and tok.startswith("scripts/")
+                    or tok.startswith("../scripts/")
+                ):
                     normalized = tok[3:] if tok.startswith("../") else tok
                     referenced.add(normalized)
     return referenced
@@ -173,7 +177,11 @@ def classify() -> tuple[list[dict], list[dict], list[dict]]:
 
 def _role_of(p: Path) -> str:
     name = p.name
-    if "_ssot" in name or name in ("ssot_cli.py", "ssot_registry_crosscheck.py", "ssot_inventory.py"):
+    if "_ssot" in name or name in (
+        "ssot_cli.py",
+        "ssot_registry_crosscheck.py",
+        "ssot_inventory.py",
+    ):
         return "ssot"
     if name.startswith("guard_") or name.startswith("check_") or name.startswith("validate_"):
         return "guard"
@@ -202,7 +210,9 @@ def _render_md(registered: list[dict], managed: list[dict], orphan: list[dict]) 
             f"{'yes' if e['in_ssot'] else 'no'} | {e['deps']} |"
         )
     lines.append("")
-    lines.append(f"合计：{len(registered)} 已纳入 ssot / {len(managed)} 已登记清单 / {len(orphan)} 新游离")
+    lines.append(
+        f"合计：{len(registered)} 已纳入 ssot / {len(managed)} 已登记清单 / {len(orphan)} 新游离"
+    )
     lines.append("")
     return "\n".join(lines)
 
@@ -212,7 +222,9 @@ def cmd_generate() -> int:
     INVENTORY_MD.parent.mkdir(parents=True, exist_ok=True)
     INVENTORY_MD.write_text(_render_md(registered, managed, orphan), encoding="utf-8")
     print(f"[ssot-inventory] 已生成 {INVENTORY_MD.relative_to(FHD_ROOT)}")
-    print(f"[ssot-inventory] registered={len(registered)} managed={len(managed)} orphan={len(orphan)}")
+    print(
+        f"[ssot-inventory] registered={len(registered)} managed={len(managed)} orphan={len(orphan)}"
+    )
     return EXIT_OK
 
 
@@ -222,11 +234,11 @@ def cmd_check() -> int:
         print("::error::ssot-inventory: 存在未登记的新游离规范性脚本：", file=sys.stderr)
         for e in orphan:
             print(f"  - {e['path']}（角色={e['role']}）", file=sys.stderr)
-        print("修复：确认应纳入 ssot 工程（登记 ssot.yaml 或加入清单），或调整命名。", file=sys.stderr)
+        print(
+            "修复：确认应纳入 ssot 工程（登记 ssot.yaml 或加入清单），或调整命名。", file=sys.stderr
+        )
         return EXIT_ORPHAN
-    print(
-        f"[ssot-inventory] OK — registered={len(registered)} managed={len(managed)} orphan=0"
-    )
+    print(f"[ssot-inventory] OK — registered={len(registered)} managed={len(managed)} orphan=0")
     return EXIT_OK
 
 

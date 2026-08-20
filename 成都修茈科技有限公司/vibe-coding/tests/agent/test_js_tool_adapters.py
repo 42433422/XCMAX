@@ -24,7 +24,6 @@ from vibe_coding.agent.tools import (
     default_polyglot_adapters,
 )
 
-
 # ----------------------------------------------------- stub sandbox
 
 
@@ -95,10 +94,7 @@ def test_eslint_skips_when_not_installed(tmp_path: Path, monkeypatch: pytest.Mon
 
 
 def test_tsc_parses_diagnostics(tmp_path: Path) -> None:
-    out = (
-        "src/foo.ts(12,5): error TS2304: Cannot find name 'bar'.\n"
-        "src/foo.ts(13,1): error TS1005: ';' expected.\n"
-    )
+    out = "src/foo.ts(12,5): error TS2304: Cannot find name 'bar'.\nsrc/foo.ts(13,1): error TS1005: ';' expected.\n"
     drv = _StubDriver(stdout=out, exit_code=1)
     adapter = TSCAdapter()
     report = _run_with_force_available(adapter, tmp_path, drv)
@@ -118,11 +114,7 @@ def test_tsc_passes_on_clean_run(tmp_path: Path) -> None:
 
 
 def test_vitest_parses_failures(tmp_path: Path) -> None:
-    out = (
-        "FAIL src/foo.test.ts > foo > rejects bad input\n"
-        "FAIL src/bar.test.ts > bar\n"
-        "PASS src/baz.test.ts\n"
-    )
+    out = "FAIL src/foo.test.ts > foo > rejects bad input\nFAIL src/bar.test.ts > bar\nPASS src/baz.test.ts\n"
     drv = _StubDriver(stdout=out, exit_code=1)
     adapter = VitestAdapter()
     report = _run_with_force_available(adapter, tmp_path, drv)

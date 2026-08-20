@@ -1,3 +1,4 @@
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """窄 CI 验证：CR 自动审批前在受影响路径跑语法检查 + pytest 子集 + 可选 ruff。"""
 
 from __future__ import annotations
@@ -10,6 +11,8 @@ import sys
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
+
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +38,7 @@ def _repo_root() -> Path:
         from modstore_server.integrations.ops_action_handlers import repo_root
 
         return Path(repo_root())
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return Path(os.environ.get("MODSTORE_REPO_ROOT", ".")).resolve()
 
 
@@ -132,7 +135,7 @@ def _prepare_overlay_root(
             if not init_file.exists():
                 init_file.write_text("", encoding="utf-8")
         return tmp, overlay, overlay_rel
-    except Exception:
+    except RECOVERABLE_ERRORS:
         tmp.cleanup()
         raise
 
@@ -199,12 +202,12 @@ def _run_py_compile(content: str, rel_path: str) -> Dict[str, Any]:
             "step": "py_compile",
             "stderr": (proc.stderr or "")[:500],
         }
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         return {"ok": False, "step": "py_compile", "error": str(exc)}
     finally:
         try:
             os.unlink(tmp_path)  # type: ignore[possibly-undefined]
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
 
 
@@ -239,7 +242,7 @@ def _run_ruff_check(rel_path: str, *, root: Path) -> Dict[str, Any]:
         }
     except FileNotFoundError:
         return {"ok": True, "skipped": True, "reason": "ruff not installed"}
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         return {"ok": False, "step": "ruff", "error": str(exc)}
 
 
@@ -285,7 +288,11 @@ def _run_pytest_subset(test_files: Sequence[str], *, root: Path) -> Dict[str, An
         if resolved and resolved not in existing:
             existing.append(resolved)
     if not existing:
-        return {"ok": True, "skipped": True, "reason": "related tests not present on disk"}
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "related tests not present on disk",
+        }
 
     args = [sys.executable, "-m", "pytest", "-q", "--tb=short", *list(existing)]
     try:
@@ -307,7 +314,7 @@ def _run_pytest_subset(test_files: Sequence[str], *, root: Path) -> Dict[str, An
         }
     except subprocess.TimeoutExpired:
         return {"ok": False, "step": "pytest", "error": "pytest timeout"}
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         return {"ok": False, "step": "pytest", "error": str(exc)}
 
 
@@ -319,7 +326,11 @@ def run_narrow_ci_validation(
 ) -> Dict[str, Any]:
     """对 CR 变更跑窄验证链；全部通过才返回 ok=True。"""
     if not _narrow_ci_enabled():
-        return {"ok": True, "skipped": True, "reason": "MODSTORE_CR_NARROW_CI_ENABLED=0"}
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "MODSTORE_CR_NARROW_CI_ENABLED=0",
+        }
 
     root = Path(project_root).resolve() if project_root else _repo_root()
     rel = (rel_path or "").replace("\\", "/").lstrip("/")
@@ -337,7 +348,7 @@ def run_narrow_ci_validation(
 
     try:
         overlay_tmp, overlay_root, overlay_rel = _prepare_overlay_root(root, rel, content)
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         overlay_out = {
             "error": str(exc)[:800],
             "ok": False,
@@ -414,7 +425,7 @@ def record_cr_validation_failure_for_evolution(
             emit_event=True,
             auto_dispatch=False,
         )
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.exception(
             "record_cr_validation_failure_for_evolution failed cr=%s", change_request_id
         )

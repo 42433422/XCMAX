@@ -1,3 +1,4 @@
+# mypy: disable-error-code="attr-defined"
 """Shared torch/transformers stubs for tests/test_services/.
 
 The source modules under test (app.services.intent_trainer,

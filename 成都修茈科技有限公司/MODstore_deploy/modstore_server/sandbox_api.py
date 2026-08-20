@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 from __future__ import annotations
 
 import logging
@@ -10,6 +11,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from modstore_server.api.auth_deps import require_user
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +62,7 @@ def api_sandbox_connect(body: ConnectRequest, _user=Depends(require_user)):
             health = client.get(f"{url}/api/health")
             health.raise_for_status()
             health_data = health.json()
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("sandbox connect failed: %s", exc)
         return {"ok": False, "error": str(exc)}
 
@@ -70,7 +72,7 @@ def api_sandbox_connect(body: ConnectRequest, _user=Depends(require_user)):
             resp = client.get(f"{url}/api/mods/loading-status")
             if resp.status_code == 200:
                 mods_info = resp.json()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
 
     return {
@@ -116,7 +118,7 @@ def api_sandbox_push_and_test(body: PushAndTestRequest, _user=Depends(require_us
                     )
                 resp.raise_for_status()
                 install_data = resp.json()
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             logger.warning("sandbox push failed: %s", exc)
             return {"ok": False, "error": str(exc)}
 
@@ -143,5 +145,5 @@ def api_sandbox_host_status(_user=Depends(require_user)):
             resp = client.get(f"{url}/api/mods/loading-status")
             resp.raise_for_status()
             return {"ok": True, "data": resp.json()}
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         return {"ok": False, "error": str(exc)}

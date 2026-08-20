@@ -9,7 +9,14 @@ const { apiMock, ApiError } = vi.hoisted(() => {
     }
   }
   return {
-    apiMock: { get: vi.fn(), post: vi.fn(), put: vi.fn(), patch: vi.fn(), delete: vi.fn(), download: vi.fn() },
+    apiMock: {
+      get: vi.fn(),
+      post: vi.fn(),
+      put: vi.fn(),
+      patch: vi.fn(),
+      delete: vi.fn(),
+      download: vi.fn(),
+    },
     ApiError,
   }
 })

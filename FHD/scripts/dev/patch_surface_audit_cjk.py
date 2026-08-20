@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Patch MODstore daily_digest_surface_audit _wait_page_ready for CJK fonts."""
+
 from __future__ import annotations
 
 import re
@@ -33,7 +34,7 @@ NEW = '''async def _wait_page_ready(page: Any, *, timeout_ms: int) -> None:
                 href,
             )
             break
-        except Exception:
+        except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
             continue
     try:
         await page.add_style_tag(
@@ -42,11 +43,11 @@ NEW = '''async def _wait_page_ready(page: Any, *, timeout_ms: int) -> None:
                 '"PingFang SC","Microsoft YaHei","SimHei",sans-serif!important}'
             )
         )
-    except Exception:
+    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
         pass
     try:
         await page.wait_for_load_state("networkidle", timeout=min(timeout_ms, 30_000))
-    except Exception:
+    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
         pass
     try:
         await page.evaluate(
@@ -59,7 +60,7 @@ NEW = '''async def _wait_page_ready(page: Any, *, timeout_ms: int) -> None:
               return false;
             }"""
         )
-    except Exception:
+    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
         pass
     await page.wait_for_timeout(2000)
 '''

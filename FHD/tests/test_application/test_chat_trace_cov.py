@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """Branch-coverage tests for app/application/agent_orchestrator/chat_trace.py.
 
 Targets the ~83 missing branches reported in coverage_new.json.

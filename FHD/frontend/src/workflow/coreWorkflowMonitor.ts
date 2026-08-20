@@ -1,12 +1,5 @@
-import {
-  isCoreWorkflowEmployeeId,
-  type CoreWorkflowEmployeeId,
-} from '@/constants/coreWorkflowMod'
-import {
-  formatWorkflowClock,
-  formatWorkflowHintTime,
-  isStarredChatAutoRefreshOn,
-} from '@/workflow/coreWorkflowPrefs'
+import { isCoreWorkflowEmployeeId, type CoreWorkflowEmployeeId } from '@/constants/coreWorkflowMod'
+import { formatWorkflowClock, formatWorkflowHintTime, isStarredChatAutoRefreshOn } from '@/workflow/coreWorkflowPrefs'
 import {
   CORE_WORKFLOW_PAYLOAD_KEYS,
   type CoreWorkflowEmployeeCtx,
@@ -18,7 +11,10 @@ import {
 
 export type { WorkflowMonitorPayload, WorkflowStepRow } from '@/workflow/coreWorkflowTypes'
 
-export function computeWorkflowProgressFromSteps(steps: WorkflowStepRow[]): { pct: number; label: string } {
+export function computeWorkflowProgressFromSteps(steps: WorkflowStepRow[]): {
+  pct: number
+  label: string
+} {
   if (!steps.length) return { pct: 0, label: '0 / 0 步' }
   const total = steps.length
   const done = steps.filter((s) => s.status === 'done').length
@@ -50,9 +46,7 @@ export function buildCoreWorkflowMonitorLine(
       const n = monitor.starredContactCount
       const cnt = typeof n === 'number' ? `星标联系人 ${n} 位` : '星标联系人'
       const ok = monitor.pollOk !== false ? '拉取通道正常' : '上次拉取失败，将重试'
-      const tail = lastWechat
-        ? ` · 最近预处理：${formatWorkflowHintTime(lastWechat.at)}`
-        : ' · 持续监听新消息'
+      const tail = lastWechat ? ` · 最近预处理：${formatWorkflowHintTime(lastWechat.at)}` : ' · 持续监听新消息'
       return `${ok} · 上次检查 ${t} · 每 ${sec}s 轮询 · ${cnt}${tail}`
     }
     return '监控就绪：等待首次轮询（通常 1 分钟内）…'
@@ -64,18 +58,14 @@ export function buildCoreWorkflowMonitorLine(
     }
     if (lastLabelPrint) {
       const line = lastLabelPrint.line.slice(0, 100)
-      return `已接收标签/打印类信号 · ${formatWorkflowHintTime(lastLabelPrint.at)} · ${line}${
-        lastLabelPrint.line.length > 100 ? '…' : ''
-      }`
+      return `已接收标签/打印类信号 · ${formatWorkflowHintTime(lastLabelPrint.at)} · ${line}${lastLabelPrint.line.length > 100 ? '…' : ''}`
     }
     return '星标轮询中：尚未命中标签/打印类意图；命中后本工作流才会推进。'
   }
   if (empId === 'shipment_mgmt') {
     if (lastShipmentAudit) {
       const line = lastShipmentAudit.line.slice(0, 100)
-      return `打印后审计 · ${formatWorkflowHintTime(lastShipmentAudit.at)} · ${line}${
-        lastShipmentAudit.line.length > 100 ? '…' : ''
-      }`
+      return `打印后审计 · ${formatWorkflowHintTime(lastShipmentAudit.at)} · ${line}${lastShipmentAudit.line.length > 100 ? '…' : ''}`
     }
     return '等待「开始打印」成功：结束后将自动统计出货记录并提示保存/推送建议。'
   }
@@ -86,19 +76,14 @@ export function buildCoreWorkflowMonitorLine(
     }
     if (lastReceiptFeedback) {
       const line = lastReceiptFeedback.line.slice(0, 100)
-      return `客户业务进程 · ${formatWorkflowHintTime(lastReceiptFeedback.at)} · ${line}${
-        lastReceiptFeedback.line.length > 100 ? '…' : ''
-      }`
+      return `客户业务进程 · ${formatWorkflowHintTime(lastReceiptFeedback.at)} · ${line}${lastReceiptFeedback.line.length > 100 ? '…' : ''}`
     }
     return '星标轮询中：尚未命中收货/对账类客户反馈；命中后将写入进程摘要。'
   }
   return ''
 }
 
-export function buildCoreWorkflowStepsForEmployee(
-  empId: CoreWorkflowEmployeeId,
-  ctx?: CoreWorkflowEmployeeCtx,
-): WorkflowStepRow[] {
+export function buildCoreWorkflowStepsForEmployee(empId: CoreWorkflowEmployeeId, ctx?: CoreWorkflowEmployeeCtx): WorkflowStepRow[] {
   if (empId === 'wechat_msg') {
     const refreshOn = isStarredChatAutoRefreshOn()
     const last = ctx?.lastWechat
@@ -130,16 +115,12 @@ export function buildCoreWorkflowStepsForEmployee(
       { id: 'lp1', label: '① 副窗启用「标签打印 AI 员工」', status: 'done' },
       {
         id: 'lp2',
-        label: refreshOn
-          ? '② 星标新消息 → 意图预处理（与微信消息员工同源）'
-          : '② 请开启「主动意识启用」以接收微信侧信号',
+        label: refreshOn ? '② 星标新消息 → 意图预处理（与微信消息员工同源）' : '② 请开启「主动意识启用」以接收微信侧信号',
         status: refreshOn ? (sig ? 'done' : 'active') : 'active',
       },
       {
         id: 'lp3',
-        label: sig
-          ? '③ 在智能对话补充型号/张数并触发打印链路'
-          : '③ 命中标签/打印意图后，在对话中执行打印',
+        label: sig ? '③ 在智能对话补充型号/张数并触发打印链路' : '③ 命中标签/打印意图后，在对话中执行打印',
         status: sig ? 'active' : 'pending',
       },
     ]
@@ -155,9 +136,7 @@ export function buildCoreWorkflowStepsForEmployee(
       },
       {
         id: 'sm3',
-        label: audit
-          ? '③ 已输出打印后审计：请到出货记录核对，按需导出/推送'
-          : '③ 打印后将自动统计本单位出货记录并给出保存/推送建议',
+        label: audit ? '③ 已输出打印后审计：请到出货记录核对，按需导出/推送' : '③ 打印后将自动统计本单位出货记录并给出保存/推送建议',
         status: audit ? 'active' : 'pending',
       },
     ]
@@ -176,9 +155,7 @@ export function buildCoreWorkflowStepsForEmployee(
       },
       {
         id: 'rc3',
-        label: sig
-          ? '③ 已展示客户业务进程摘要，请在智能对话中跟进确认'
-          : '③ 命中收货/对账类意图后写入进程信息',
+        label: sig ? '③ 已展示客户业务进程摘要，请在智能对话中跟进确认' : '③ 命中收货/对账类意图后写入进程信息',
         status: sig ? 'active' : 'pending',
       },
     ]
@@ -240,10 +217,7 @@ export function computeCoreWorkflowCurrentHint(
   return ''
 }
 
-export function computeCoreWorkflowStageLine(
-  empId: CoreWorkflowEmployeeId,
-  ctx?: CoreWorkflowEmployeeCtx,
-): string {
+export function computeCoreWorkflowStageLine(empId: CoreWorkflowEmployeeId, ctx?: CoreWorkflowEmployeeCtx): string {
   if (empId === 'wechat_msg') {
     if (!isStarredChatAutoRefreshOn()) return '等待开启主动意识'
     return ctx?.lastWechat ? '监控中 · 最近已处理' : '监控中 · 等待新消息'
@@ -286,18 +260,14 @@ export function computeCoreWorkflowProgressState(
     if (empId === 'wechat_msg') {
       return {
         progressPct: 0,
-        progressLabel: isStarredChatAutoRefreshOn()
-          ? '尚未进入处理：等待新消息'
-          : '尚未进入处理：请先开启主动意识',
+        progressLabel: isStarredChatAutoRefreshOn() ? '尚未进入处理：等待新消息' : '尚未进入处理：请先开启主动意识',
         workflowProgressStarted: false,
       }
     }
     if (empId === 'label_print') {
       return {
         progressPct: 0,
-        progressLabel: isStarredChatAutoRefreshOn()
-          ? '尚未进入执行：等待微信侧标签/打印类消息'
-          : '尚未进入执行：请先开启主动意识',
+        progressLabel: isStarredChatAutoRefreshOn() ? '尚未进入执行：等待微信侧标签/打印类消息' : '尚未进入执行：请先开启主动意识',
         workflowProgressStarted: false,
       }
     }
@@ -310,9 +280,7 @@ export function computeCoreWorkflowProgressState(
     }
     return {
       progressPct: 0,
-      progressLabel: isStarredChatAutoRefreshOn()
-        ? '尚未收到客户侧收货/对账类反馈'
-        : '尚未进入：请先开启主动意识',
+      progressLabel: isStarredChatAutoRefreshOn() ? '尚未收到客户侧收货/对账类反馈' : '尚未进入：请先开启主动意识',
       workflowProgressStarted: false,
     }
   }
@@ -331,7 +299,6 @@ export function mergeCorePayloadFromExisting(
 ): CoreWorkflowEmployeeCtx {
   const out: CoreWorkflowEmployeeCtx = {}
   if (!isCoreWorkflowEmployeeId(empId)) return out
-  const key = CORE_WORKFLOW_PAYLOAD_KEYS[empId]
   for (const k of Object.keys(CORE_WORKFLOW_PAYLOAD_KEYS) as CoreWorkflowEmployeeId[]) {
     const payloadKey = CORE_WORKFLOW_PAYLOAD_KEYS[k]
     if (opts && payloadKey in opts && opts[payloadKey] !== undefined) {
@@ -345,11 +312,7 @@ export function mergeCorePayloadFromExisting(
   return out
 }
 
-export function appendCoreWorkflowSummaryParts(
-  empId: string,
-  parts: string[],
-  ctx?: CoreWorkflowEmployeeCtx,
-): void {
+export function appendCoreWorkflowSummaryParts(empId: string, parts: string[], ctx?: CoreWorkflowEmployeeCtx): void {
   if (!isCoreWorkflowEmployeeId(empId)) return
   const t = formatWorkflowHintTime
   if (empId === 'wechat_msg' && ctx?.lastWechat) {

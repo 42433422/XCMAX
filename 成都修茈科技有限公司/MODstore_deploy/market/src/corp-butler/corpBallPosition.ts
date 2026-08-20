@@ -15,10 +15,7 @@ export function getCorpDefaultBallPosition(): { x: number; y: number } {
   const bottom = 24
   const y = Math.max(8, window.innerHeight - CORP_BALL_H - bottom)
   const mobile = isCorpMobileViewport()
-  const x =
-    isContactPagePath() || mobile
-      ? margin
-      : Math.max(8, window.innerWidth - CORP_BALL_W - margin)
+  const x = isContactPagePath() || mobile ? margin : Math.max(8, window.innerWidth - CORP_BALL_W - margin)
   return { x, y }
 }
 
@@ -27,7 +24,7 @@ function overlapsMobileBackToTop(x: number, y: number): boolean {
   if (!isCorpMobileViewport()) return false
   const zoneLeft = window.innerWidth - 72
   const zoneTop = window.innerHeight - 80
-  return x >= zoneLeft && y >= zoneTop
+  return x + CORP_BALL_W >= zoneLeft && y + CORP_BALL_H >= zoneTop
 }
 
 export function clampCorpBallPosition(x: number, y: number): { x: number; y: number } {

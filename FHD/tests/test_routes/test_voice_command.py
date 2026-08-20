@@ -1,3 +1,4 @@
+# mypy: disable-error-code="var-annotated"
 """Tests for app.fastapi_routes.voice_routes — POST /api/voice/command 端到端语音指令。
 
 覆盖 ASR → 意图识别 → 可选自动执行 的关键分支：
@@ -605,7 +606,8 @@ class TestVoiceCommandRoute:
         data = response.json()
         assert data["data"]["executed"] is False
         assert data["data"]["reason"] == "execution_failed"
-        assert "DB connection lost" in data["data"]["result"]["error"]
+        assert data["data"]["result"]["error"] == "语音指令执行服务暂时不可用"
+        assert "DB connection lost" not in data["data"]["result"]["error"]
 
     def test_response_includes_slots_and_intent_hints(self, client: TestClient):
         """响应里应携带 slots / intent_hints / is_negated / is_high_risk / elapsed_ms_asr 字段。"""

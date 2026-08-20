@@ -4,6 +4,7 @@ import asyncio
 import concurrent.futures
 import json
 import logging
+import re
 import threading
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Iterator, Sequence
@@ -44,6 +45,7 @@ from typing_extensions import TypedDict
 
 from langgraph.checkpoint.postgres import _ainternal as _ainternal
 from langgraph.checkpoint.postgres import _internal as _pg_internal
+from langgraph.store.postgres._exception_policy import BOUNDARY_ERRORS
 
 if TYPE_CHECKING:
     from langchain_core.embeddings import Embeddings
@@ -187,17 +189,18 @@ class ANNIndexConfig(TypedDict, total=False):
     """
 
 
-class HNSWConfig(ANNIndexConfig, total=False):
+class HNSWConfig(TypedDict, total=False):
     """Configuration for HNSW (Hierarchical Navigable Small World) index."""
 
-    kind: Literal["hnsw"]  # type: ignore[misc]
+    kind: Literal["hnsw"]
+    vector_type: Literal["vector", "halfvec"]
     m: int
     """Maximum number of connections per layer. Default is 16."""
     ef_construction: int
     """Size of dynamic candidate list for index construction. Default is 64."""
 
 
-class IVFFlatConfig(ANNIndexConfig, total=False):
+class IVFFlatConfig(TypedDict, total=False):
     """IVFFlat index divides vectors into lists, and then searches a subset of those lists that are closest to the query vector. It has faster build times and uses less memory than HNSW, but has lower query performance (in terms of speed-recall tradeoff).
 
     Three keys to achieving good recall are:
@@ -206,7 +209,8 @@ class IVFFlatConfig(ANNIndexConfig, total=False):
     3. When querying, specify an appropriate number of probes (higher is better for recall, lower is better for speed) - a good place to start is sqrt(lists)
     """
 
-    kind: Literal["ivfflat"]  # type: ignore[misc]
+    kind: Literal["ivfflat"]
+    vector_type: Literal["vector", "halfvec"]
     nlist: int
     """Number of inverted lists (clusters) for IVF index.
     
@@ -463,8 +467,9 @@ class BasePostgresStore(Generic[C]):
             ns_condition = "TRUE"
             ns_param: Sequence[str] | None = None
             if op.namespace_prefix:
-                ns_condition = "store.prefix LIKE %s"
-                ns_param = (f"{_namespace_to_text(op.namespace_prefix)}%",)
+                ns_condition, ns_param = _namespace_prefix_condition(
+                    op.namespace_prefix
+                )
             else:
                 ns_param = ()
 
@@ -617,15 +622,17 @@ class BasePostgresStore(Generic[C]):
                 conditions.append("(expires_at IS NULL OR expires_at > NOW())")
             if op.match_conditions:
                 for condition in op.match_conditions:
-                    if condition.match_type == "prefix":
-                        conditions.append("prefix LIKE %s")
+                    if condition.match_type in ("prefix", "suffix"):
+                        if not condition.path:
+                            # An empty path constrains nothing; skipping keeps it a
+                            # no-op rather than emitting a pattern that matches no
+                            # namespace at all.
+                            continue
+                        conditions.append("prefix ~ %s")
                         params.append(
-                            f"{_namespace_to_text(condition.path, handle_wildcards=True)}%"
-                        )
-                    elif condition.match_type == "suffix":
-                        conditions.append("prefix LIKE %s")
-                        params.append(
-                            f"%{_namespace_to_text(condition.path, handle_wildcards=True)}"
+                            _namespace_match_pattern(
+                                condition.path, condition.match_type
+                            )
                         )
                     else:
                         logger.warning(
@@ -884,12 +891,12 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
                         expired_items = self.sweep_ttl()
                         if expired_items > 0:
                             logger.info(f"Store swept {expired_items} expired items")
-                    except Exception as exc:
+                    except BOUNDARY_ERRORS as exc:
                         logger.exception(
                             "Store TTL sweep iteration failed", exc_info=exc
                         )
                 future.set_result(None)
-            except Exception as exc:
+            except BOUNDARY_ERRORS as exc:
                 future.set_exception(exc)
 
         thread = threading.Thread(target=_sweep_loop, daemon=True, name="ttl-sweeper")
@@ -1138,7 +1145,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
                 try:
                     cur.execute(sql)
                     cur.execute("INSERT INTO store_migrations (v) VALUES (%s)", (v,))
-                except Exception as e:
+                except BOUNDARY_ERRORS as e:
                     logger.error(
                         f"Failed to apply migration {v}.\nSql={sql}\nError={e}"
                     )
@@ -1160,7 +1167,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
                         if "dims" in params:
                             try:
                                 params["dims"] = int(params["dims"])
-                            except Exception as e:
+                            except BOUNDARY_ERRORS as e:
                                 raise ValueError(
                                     f"Invalid dims for vector index: {params['dims']}"
                                 ) from e
@@ -1262,7 +1269,7 @@ def _get_index_params(store: Any) -> tuple[str, dict[str, Any]]:
         key = "lists" if k == "nlist" else k
         try:
             ivalue = int(v)  # type: ignore[call-overload]
-        except Exception as e:
+        except BOUNDARY_ERRORS as e:
             raise ValueError(f"Invalid index parameter value for {k}: {v}") from e
         if ivalue <= 0:
             continue
@@ -1271,13 +1278,57 @@ def _get_index_params(store: Any) -> tuple[str, dict[str, Any]]:
     return kind, sanitized
 
 
-def _namespace_to_text(
-    namespace: tuple[str, ...], handle_wildcards: bool = False
-) -> str:
+def _namespace_to_text(namespace: tuple[str, ...]) -> str:
     """Convert namespace tuple to text string."""
-    if handle_wildcards:
-        namespace = tuple("%" if val == "*" else val for val in namespace)
     return ".".join(namespace)
+
+
+def _escape_like_literal(text: str) -> str:
+    """Escape LIKE metacharacters so `text` is matched literally.
+
+    Namespace labels may contain `_` and `%`, which would otherwise act as
+    wildcards: `("user_1",)` would match `("userX1",)`. Backslash is escaped
+    first so it cannot escape the following character. Requires an explicit
+    `ESCAPE '\\'` clause on the pattern.
+    """
+    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _namespace_prefix_condition(namespace_prefix: tuple[str, ...]) -> tuple[str, tuple]:
+    """Build the SQL scoping a search to a namespace and its descendants.
+
+    Matches the namespace exactly or requires the `.` separator before any
+    remainder, so a prefix of `("foo",)` does not also match `("foobar",)`.
+
+    Both arms stay index-friendly: equality on the `(prefix, key)` primary key,
+    the anchored LIKE on the `prefix text_pattern_ops` index.
+
+    Only the LIKE arm is escaped -- equality does not interpret metacharacters,
+    so escaping it would stop `("user_1",)` from matching itself.
+    """
+    path = _namespace_to_text(namespace_prefix)
+    condition = r"(store.prefix = %s OR store.prefix LIKE %s ESCAPE '\')"
+    return condition, (path, f"{_escape_like_literal(path)}.%")
+
+
+def _namespace_match_pattern(path: tuple[str, ...], match_type: str) -> str:
+    """Build a POSIX regex matching the dot-joined prefix on whole segments.
+
+    Needed because `LIKE` cannot express "any character except the separator".
+    Matches how `InMemoryStore` compares namespaces element-wise.
+
+    `*` matches exactly one segment. Prefix matches stay open-ended but must end
+    on a separator; suffix matches anchor at the end and begin on one.
+
+    Examples:
+        prefix ("uid", "*", "alice") -> ^uid\\.[^.]+\\.alice(\\.|\\Z)
+        suffix ("alice",)            -> (^|\\.)alice\\Z
+    """
+    segments = ("[^.]+" if part == "*" else re.escape(part) for part in path)
+    body = r"\.".join(segments)
+    if match_type == "suffix":
+        return rf"(^|\.){body}\Z"
+    return rf"^{body}(\.|\Z)"
 
 
 def _row_to_item(

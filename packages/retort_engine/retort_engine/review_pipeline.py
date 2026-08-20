@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 SOURCE_SUFFIXES = {
     ".py",
@@ -309,7 +309,9 @@ def chunk_unified_diff_by_review_context(
 
 def group_review_files(root: str | Path) -> dict[str, dict[str, Any]]:
     base = Path(root)
-    groups = {name: {"files": [], "marker_hits": 0} for name in COMPONENT_MARKERS}
+    groups: dict[str, dict[str, Any]] = {
+        name: {"files": [], "marker_hits": 0} for name in COMPONENT_MARKERS
+    }
     for path in _project_files(base):
         text = _read(path).lower()
         if not text:
@@ -430,8 +432,8 @@ def _diff_chunk(
 
 
 def _merge_review_summaries(reviews: list[dict[str, Any]]) -> dict[str, Any]:
-    summaries = [
-        review.get("summary")
+    summaries: list[dict[str, Any]] = [
+        cast(dict[str, Any], review.get("summary"))
         for review in reviews
         if isinstance(review.get("summary"), dict)
     ]

@@ -19,6 +19,16 @@ const employeesLoaded = ref(false)
 const eskills = ref<Array<{ id: string | number; name?: string; domain?: string }>>([])
 const eskillsLoaded = ref(false)
 
+function isEmployeeOption(value: unknown): value is { id: string; name?: string } {
+  return typeof value === 'object' && value !== null && 'id' in value && typeof (value as { id?: unknown }).id === 'string'
+}
+
+function isESkillOption(value: unknown): value is { id: string | number; name?: string; domain?: string } {
+  if (typeof value !== 'object' || value === null || !('id' in value)) return false
+  const id = (value as { id?: unknown }).id
+  return typeof id === 'string' || typeof id === 'number'
+}
+
 const meta = computed(() => (props.selected ? getNodeMeta(props.selected.data!.kind) : null))
 
 const labelDraft = ref('')
@@ -52,8 +62,8 @@ function setField(key: string, value: unknown) {
 async function ensureEmployees() {
   if (employeesLoaded.value) return
   try {
-    const list: any = await api.listEmployees()
-    const raw = Array.isArray(list) ? list : list?.employees || []
+    const list = await api.listEmployees()
+    const raw = list.filter(isEmployeeOption)
     employees.value = filterOutPlannedDutyEmployees(raw)
   } catch {
     employees.value = []
@@ -65,8 +75,9 @@ async function ensureEmployees() {
 async function ensureESkills() {
   if (eskillsLoaded.value) return
   try {
-    const list: any = await api.listESkills()
-    eskills.value = Array.isArray(list) ? list : list?.eskills || []
+    const list = await api.listESkills()
+    const record = typeof list === 'object' && list !== null ? (list as Record<string, unknown>) : {}
+    eskills.value = (Array.isArray(list) ? list : Array.isArray(record.eskills) ? record.eskills : []).filter(isESkillOption)
   } catch {
     eskills.value = []
   } finally {
@@ -125,18 +136,26 @@ function eskillLabel(s: { id: string | number; name?: string; domain?: string })
       <h3 class="wf2-properties__title">属性</h3>
       <button v-if="selected" class="wf2-properties__del" type="button" @click="emit('delete', selected.id)">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="3 6 5 6 21 6"/>
-          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+          <polyline points="3 6 5 6 21 6" />
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
         </svg>
         删除节点
       </button>
     </header>
 
     <div v-if="!selected" class="wf2-properties__empty">
-      <svg class="wf2-properties__empty-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-        <line x1="9" y1="9" x2="15" y2="15"/>
-        <line x1="15" y1="9" x2="9" y2="15"/>
+      <svg
+        class="wf2-properties__empty-icon"
+        width="40"
+        height="40"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+      >
+        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+        <line x1="9" y1="9" x2="15" y2="15" />
+        <line x1="15" y1="9" x2="9" y2="15" />
       </svg>
       <p>选中一个节点以编辑属性</p>
       <p class="wf2-properties__empty-sub">画布空白处单击可取消选中</p>
@@ -153,20 +172,12 @@ function eskillLabel(s: { id: string | number; name?: string; domain?: string })
 
       <label class="wf2-field">
         <span class="wf2-field__label">名称</span>
-        <input
-          v-model="labelDraft"
-          class="wf2-input"
-          type="text"
-          @blur="commitLabel"
-          @keydown.enter.prevent="commitLabel"
-        />
+        <input v-model="labelDraft" class="wf2-input" type="text" @blur="commitLabel" @keydown.enter.prevent="commitLabel" />
       </label>
 
       <template v-for="f in meta!.fields" :key="f.key">
         <label class="wf2-field">
-          <span class="wf2-field__label">
-            {{ f.label }}<span v-if="f.required" class="wf2-field__required">*</span>
-          </span>
+          <span class="wf2-field__label"> {{ f.label }}<span v-if="f.required" class="wf2-field__required">*</span> </span>
 
           <textarea
             v-if="f.type === 'textarea'"
@@ -187,11 +198,7 @@ function eskillLabel(s: { id: string | number; name?: string; domain?: string })
           />
 
           <label v-else-if="f.type === 'switch'" class="wf2-switch">
-            <input
-              type="checkbox"
-              :checked="Boolean(configDraft[f.key])"
-              @change="onSwitchInput(f.key, $event)"
-            />
+            <input type="checkbox" :checked="Boolean(configDraft[f.key])" @change="onSwitchInput(f.key, $event)" />
             <span>{{ Boolean(configDraft[f.key]) ? '启用' : '关闭' }}</span>
           </label>
 
@@ -419,7 +426,7 @@ function eskillLabel(s: { id: string | number; name?: string; domain?: string })
   color: #cbd5e1;
 }
 
-.wf2-switch input[type="checkbox"] {
+.wf2-switch input[type='checkbox'] {
   width: 36px;
   height: 20px;
   appearance: none;
@@ -430,7 +437,7 @@ function eskillLabel(s: { id: string | number; name?: string; domain?: string })
   transition: background 0.2s ease;
 }
 
-.wf2-switch input[type="checkbox"]::after {
+.wf2-switch input[type='checkbox']::after {
   content: '';
   position: absolute;
   top: 2px;
@@ -442,11 +449,11 @@ function eskillLabel(s: { id: string | number; name?: string; domain?: string })
   transition: transform 0.2s ease;
 }
 
-.wf2-switch input[type="checkbox"]:checked {
+.wf2-switch input[type='checkbox']:checked {
   background: rgba(99, 102, 241, 0.5);
 }
 
-.wf2-switch input[type="checkbox"]:checked::after {
+.wf2-switch input[type='checkbox']:checked::after {
   transform: translateX(16px);
   background: #fff;
 }

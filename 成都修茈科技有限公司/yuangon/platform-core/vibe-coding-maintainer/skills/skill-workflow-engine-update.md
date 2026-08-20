@@ -2,12 +2,12 @@
 
 ## 元信息
 
-| 字段 | 值 |
-|------|----|
-| skill_id | `skill-workflow-engine-update` |
-| 所属员工 | `vibe-coding-maintainer` |
-| 业务域 | vibe-coding 工作流引擎正确性与性能维护 |
-| 版本 | 1.0.0 |
+| 字段     | 值                                     |
+| -------- | -------------------------------------- |
+| skill_id | `skill-workflow-engine-update`         |
+| 所属员工 | `vibe-coding-maintainer`               |
+| 业务域   | vibe-coding 工作流引擎正确性与性能维护 |
+| 版本     | 1.0.0                                  |
 
 ---
 
@@ -32,6 +32,7 @@ py_compile src/vibe_coding/workflow_engine.py src/vibe_coding/workflow_condition
 ```
 
 **输出 schema**：
+
 ```json
 {
   "status": "ok | error",
@@ -46,6 +47,7 @@ py_compile src/vibe_coding/workflow_engine.py src/vibe_coding/workflow_condition
 ```
 
 **工具绑定**：
+
 - `python -m py_compile` — 语法检查
 - `python -m pytest tests/test_workflow_*.py tests/test_workflow_conditions.py` — 工作流测试（`tests/test_workflow_conditions.py` 含条件沙箱用例）
 - `python -m pytest tests/agent/test_advanced_workflow.py` — 高级工作流测试
@@ -55,21 +57,23 @@ py_compile src/vibe_coding/workflow_engine.py src/vibe_coding/workflow_condition
 
 ## 2. 动态触发条件
 
-| 触发类型 | 具体规则 | 阈值 |
-|----------|----------|------|
-| 执行报错 | SyntaxError / ImportError | 即触发 |
+| 触发类型   | 具体规则                                           | 阈值   |
+| ---------- | -------------------------------------------------- | ------ |
+| 执行报错   | SyntaxError / ImportError                          | 即触发 |
 | 结果不达标 | `tests_failed > 0` 或 `condition_safety == "fail"` | 即触发 |
-| 性能回归 | `perf_10node_ms > perf_baseline_ms * 1.5` | 即触发 |
+| 性能回归   | `perf_10node_ms > perf_baseline_ms * 1.5`          | 即触发 |
 
 ---
 
 ## 3. 动态自适应阶段
 
 **预算限制**：
+
 - 最大 token：5000
 - 最大步数：6
 
 **允许改动的模块白名单**：
+
 - `vibe-coding/src/vibe_coding/workflow_engine.py`
 - `vibe-coding/src/vibe_coding/workflow_conditions.py`
 - `vibe-coding/src/vibe_coding/workflow_models.py`
@@ -87,6 +91,7 @@ py_compile src/vibe_coding/workflow_engine.py src/vibe_coding/workflow_condition
 ## 4. 固化
 
 **验收标准**：
+
 - `tests_failed == 0`
 - `condition_safety == "pass"`
 - `perf_regression == false`
@@ -96,9 +101,9 @@ py_compile src/vibe_coding/workflow_engine.py src/vibe_coding/workflow_condition
 
 ## 5. 评估指标
 
-| 指标 | 目标值 |
-|------|--------|
-| 工作流测试通过率 | 100% |
-| 条件表达式安全性 | pass |
-| 性能回归率 | 0% |
-| 静态路径成功率 | ≥ 95% |
+| 指标             | 目标值 |
+| ---------------- | ------ |
+| 工作流测试通过率 | 100%   |
+| 条件表达式安全性 | pass   |
+| 性能回归率       | 0%     |
+| 静态路径成功率   | ≥ 95%  |

@@ -4,7 +4,7 @@
 由 ``start-lan.ps1``、``python run.py`` 或桌面壳 ``xcagi-backend`` 调用。
 环境变量（由启动脚本或 .env 注入）：
 
-- FASTAPI_HOST / XCAGI_API_HOST — 监听地址，默认 0.0.0.0
+- FASTAPI_HOST / XCAGI_API_HOST — 监听地址，默认 127.0.0.1
 - FASTAPI_PORT / XCAGI_API_PORT — 监听端口，默认 5000（**XCAGI_API_PORT 优先**，供 systemd/fhd-full.env 覆盖 .env 内 FASTAPI_PORT）
 - XCAGI_UVICORN_RELOAD — 是否启用热重载，默认 1（桌面/打包强制 0）
 """
@@ -16,6 +16,22 @@ import os
 import socket
 import sys
 from pathlib import Path
+
+BOUNDARY_ERRORS: tuple[type[Exception], ...] = (Exception,)
+RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    OSError,
+    ValueError,
+    TypeError,
+    KeyError,
+    AttributeError,
+    RuntimeError,
+    ImportError,
+    LookupError,
+    ConnectionError,
+    TimeoutError,
+    ArithmeticError,
+    UnicodeError,
+)
 
 _XCAGI_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = _XCAGI_DIR.parent
@@ -153,10 +169,10 @@ def _verify_frozen_critical_runtime() -> None:
     import av
     import faster_whisper
     from pypdf import PdfReader
-    from reportlab.lib.pagesizes import A4
-    from reportlab.pdfbase import pdfmetrics
-    from reportlab.pdfbase.cidfonts import UnicodeCIDFont
-    from reportlab.pdfgen import canvas
+    from reportlab.lib.pagesizes import A4  # type: ignore[import-untyped]
+    from reportlab.pdfbase import pdfmetrics  # type: ignore[import-untyped]
+    from reportlab.pdfbase.cidfonts import UnicodeCIDFont  # type: ignore[import-untyped]
+    from reportlab.pdfgen import canvas  # type: ignore[import-untyped]
 
     with tempfile.TemporaryDirectory(prefix="xcagi-office-probe-") as tmp:
         output = Path(tmp) / "probe.pdf"
@@ -234,7 +250,7 @@ def _apply_desktop_bootstrap(args: argparse.Namespace) -> None:
 
         if is_desktop_mode():
             configure_desktop_environment(os.environ.get("XCAGI_DATA_DIR"))
-    except Exception as exc:  # noqa: BLE001 - desktop bootstrap must stay best-effort
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - desktop bootstrap must stay best-effort
         print(f"[run_fastapi] desktop bootstrap warning: {exc}", file=sys.stderr)
 
 
@@ -262,10 +278,10 @@ def main(argv: list[str] | None = None) -> None:
     # Clash 常注入 ALL_PROXY=socks5://…；无 socksio 时 httpx 会直接失败。
     _ensure_sys_path()
     try:
-        from app.utils.proxy_env import sanitize_socks_all_proxy
+        from app.utils.security.proxy_env import sanitize_socks_all_proxy
 
         sanitize_socks_all_proxy()
-    except Exception:
+    except BOUNDARY_ERRORS:
         pass
 
     if args.desktop or args.data_dir or args.migrate_only:
@@ -309,7 +325,7 @@ def main(argv: list[str] | None = None) -> None:
 
     _ensure_sys_path()
 
-    host = os.environ.get("FASTAPI_HOST") or os.environ.get("XCAGI_API_HOST") or "0.0.0.0"
+    host = os.environ.get("FASTAPI_HOST") or os.environ.get("XCAGI_API_HOST") or "127.0.0.1"
     port = int(os.environ.get("XCAGI_API_PORT") or os.environ.get("FASTAPI_PORT") or "5000")
     # 桌面模式：端口由 Electron 主进程指定，不做避让——避让会导致 Electron 健康检查
     # 轮询原端口而后端实际监听其他端口，引发白屏超时。端口被占时直接报错退出，

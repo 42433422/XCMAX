@@ -63,7 +63,7 @@ RE_ADD_EVENT_LITERAL = re.compile(r'add_event\(\s*["\']([^"\']+)["\']')
 # 正则: 捕获 event_type/billing_event 赋值行(可能含三元 else 分支)
 # 用 finditer 拿整行,再从该行提取所有 dot.notation 字符串字面量
 RE_EVENT_TYPE_VAR_ASSIGN_LINE = re.compile(
-    r'(?m)^\s*(?:event_type|billing_event)\s*=\s*(.+?)(?:$|\n)',
+    r"(?m)^\s*(?:event_type|billing_event)\s*=\s*(.+?)(?:$|\n)",
     re.MULTILINE,
 )
 # 正则: 从单行字符串中提取所有 dot.notation 字面量(过滤纯文件名如 .py/.docx/.sql/.pdf/.xlsx)
@@ -71,7 +71,7 @@ RE_DOT_STRING_IN_LINE = re.compile(r'["\']([a-z][a-z0-9]*\.[a-z][a-z0-9_]*)["\']
 # 正则: 捕获 publish_neuro_event("xxx" / publish_neuro_event(\n  "xxx"
 RE_PUBLISH_NEURO = re.compile(r'publish_neuro_event\(\s*["\']([^"\']+)["\']')
 # 正则: 捕获前端 TS 字符串字面量 'xxx.yyy' / "xxx.yyy"
-RE_TS_STRING_LITERAL = re.compile(r'''['"]([a-z]+\.[a-z_]+)['"]''')
+RE_TS_STRING_LITERAL = re.compile(r"""['"]([a-z]+\.[a-z_]+)['"]""")
 
 
 # ──────────────────────────── 读源 + 计算中间表示 ────────────────────────────
@@ -133,7 +133,7 @@ def compute_model(src: dict[str, Any]) -> dict[str, Any]:
 
     # application_bridge 流:扁平 events
     ab = streams.get("application_bridge") or {}
-    for ev in (ab.get("events") or []):
+    for ev in ab.get("events") or []:
         entry = {
             "type": str(ev["type"]),
             "const": str(ev["const"]),
@@ -157,7 +157,7 @@ def render_python(m: dict[str, Any]) -> str:
         '"""NeuroBus event-type constants (derived from SSOT, zero business deps).',
         "",
         "Key invariant: every constant is a plain str (NOT Enum). Usage like",
-        '    bus.subscribe(RunEvents.CREATED, handler)',
+        "    bus.subscribe(RunEvents.CREATED, handler)",
         "is byte-identical to",
         '    bus.subscribe("run.created", handler)',
         "so existing string-equality call sites are unaffected.",
@@ -243,9 +243,7 @@ def render_python(m: dict[str, Any]) -> str:
     lines.append(f"EventType = Literal[{', '.join(json.dumps(t) for t in all_types)}]")
     lines.append("")
 
-    lines.append(
-        f"AgentRunEventType = Literal[{', '.join(json.dumps(t) for t in ar_types)}]"
-    )
+    lines.append(f"AgentRunEventType = Literal[{', '.join(json.dumps(t) for t in ar_types)}]")
     lines.append("")
 
     lines.append("def is_known_event_type(s: str) -> bool:")
@@ -271,7 +269,9 @@ def render_typescript(m: dict[str, Any]) -> str:
         suffix = ";" if t == ar_types[-1] else ""
         lines.append(f"  | '{t}'{suffix}")
     lines.append("")
-    lines.append("export const TERMINAL_AGENT_RUN_EVENT_TYPES: ReadonlySet<AgentRunEventType> = new Set([")
+    lines.append(
+        "export const TERMINAL_AGENT_RUN_EVENT_TYPES: ReadonlySet<AgentRunEventType> = new Set(["
+    )
     for t in terminal_types:
         lines.append(f"  '{t}',")
     lines.append("]);")
@@ -345,9 +345,30 @@ def scan_orchestrator_strings() -> set[str]:
     }
     # 文件扩展名 denylist(被 [a-z]+.[a-z_]+ 误匹配的文件名)
     FILE_EXTENSIONS = {
-        "py", "docx", "xlsx", "sql", "pdf", "png", "jpg", "jpeg",
-        "gif", "txt", "csv", "json", "html", "css", "js", "ts",
-        "yml", "yaml", "md", "log", "wav", "mp3", "mp4", "zip",
+        "py",
+        "docx",
+        "xlsx",
+        "sql",
+        "pdf",
+        "png",
+        "jpg",
+        "jpeg",
+        "gif",
+        "txt",
+        "csv",
+        "json",
+        "html",
+        "css",
+        "js",
+        "ts",
+        "yml",
+        "yaml",
+        "md",
+        "log",
+        "wav",
+        "mp3",
+        "mp4",
+        "zip",
     }
 
     found: set[str] = set()
@@ -393,8 +414,17 @@ def scan_frontend_composable_strings() -> set[str]:
         candidate = match.group(1)
         # 过滤明显不是事件类型的字符串(如 'success' / 'failed')
         if "." in candidate and candidate.split(".")[0] in {
-            "run", "planner", "step", "tool", "llm", "billing", "budget",
-            "observation", "artifact", "rag", "memory",
+            "run",
+            "planner",
+            "step",
+            "tool",
+            "llm",
+            "billing",
+            "budget",
+            "observation",
+            "artifact",
+            "rag",
+            "memory",
         }:
             found.add(candidate)
     return found
@@ -508,8 +538,11 @@ def cmd_check() -> int:
             events_path = "/api/agent/runs/{run_id}/events"
             ok_schema = (
                 ((data.get("paths") or {}).get(events_path, {}).get("get") or {})
-                .get("responses", {}).get("200", {})
-                .get("content", {}).get("application/json", {}).get("schema")
+                .get("responses", {})
+                .get("200", {})
+                .get("content", {})
+                .get("application/json", {})
+                .get("schema")
             )
             if ok_schema != {"$ref": "#/components/schemas/AgentRunEvent"}:
                 errors.append(
@@ -577,7 +610,9 @@ def cmd_generate(*, apply: bool, only: str | None) -> int:
         oa_changed, oa_msg = patch_openapi(m, apply=apply)
         if oa_changed:
             changed += 1
-            print(f"  {'写入' if apply else '[dry-run]'} {OPENAPI_FILE.relative_to(ROOT)}: {oa_msg}")
+            print(
+                f"  {'写入' if apply else '[dry-run]'} {OPENAPI_FILE.relative_to(ROOT)}: {oa_msg}"
+            )
         else:
             print(f"  {oa_msg}")
 

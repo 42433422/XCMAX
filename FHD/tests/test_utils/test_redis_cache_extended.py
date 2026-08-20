@@ -8,7 +8,17 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-import app.utils.redis_cache as rc
+import app.utils.performance.redis_cache as rc
+
+
+@pytest.fixture(autouse=True)
+def restore_global_cache_instance():
+    """Keep singleton mutations from leaking into unrelated tests."""
+    original = rc._redis_cache_instance
+    try:
+        yield
+    finally:
+        rc._redis_cache_instance = original
 
 
 @pytest.fixture
@@ -452,7 +462,7 @@ class TestAsyncCacheDecorator:
 
 class TestGlobalFunctions:
     def test_get_redis_cache_creates_instance(self, monkeypatch):
-        import app.utils.redis_cache as rc_mod
+        import app.utils.performance.redis_cache as rc_mod
 
         old = rc_mod._redis_cache_instance
         rc_mod._redis_cache_instance = None
@@ -463,7 +473,7 @@ class TestGlobalFunctions:
             rc_mod._redis_cache_instance = old
 
     def test_get_redis_cache_returns_existing(self):
-        import app.utils.redis_cache as rc_mod
+        import app.utils.performance.redis_cache as rc_mod
 
         existing = rc_mod._redis_cache_instance
         if existing is None:

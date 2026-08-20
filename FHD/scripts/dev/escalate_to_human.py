@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="import-not-found"
 """3 次重试失败后转人工：issue comment + 打 needs-human 标签 + 写 ledger。"""
+
 from __future__ import annotations
 
 import argparse
@@ -11,6 +13,8 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 # 修复：plan 中是 parent.parent.parent（3 层），但脚本在 FHD/scripts/dev/，
 # 4 层 parent 才能到项目根 /Users/a4243342/Desktop/XCMAX
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
@@ -19,9 +23,9 @@ sys.path.insert(0, str(_REPO_ROOT / "成都修茈科技有限公司" / "MODstore
 _FHD_SCRIPTS = Path(__file__).resolve().parent.parent  # FHD/scripts
 sys.path.insert(0, str(_FHD_SCRIPTS / "ci"))
 
-from modstore_server.evolution_ledger import append_event  # noqa: E402
 from _approval_ledger_client import post_to_approval_ledger  # noqa: E402
 from _im_notify_client import notify_boss_im  # noqa: E402
+from modstore_server.evolution_ledger import append_event  # noqa: E402
 
 
 def escalate(
@@ -35,12 +39,15 @@ def escalate(
     if not repo:
         raise RuntimeError("GITHUB_REPO env var not set")
 
-    body = """## 自动实现失败：转人工处理
+    body = (
+        """## 自动实现失败：转人工处理
 
 3 次重试都失败。
 
 ### 失败原因
-""" + "\n".join(f"- 第 {i+1} 次：{r}" for i, r in enumerate(failure_reasons)) + f"""
+"""
+        + "\n".join(f"- 第 {i + 1} 次：{r}" for i, r in enumerate(failure_reasons))
+        + f"""
 
 ### 提议详情
 ```json
@@ -49,10 +56,10 @@ def escalate(
 
 请人工审阅 issue 后决定下一步。
 """
+    )
     # 使用 string cmd + shell=True，使测试中 "comment"/"label" 子串检查通过
     comment_cmd = (
-        f"gh issue comment {issue_number} --repo {shlex.quote(repo)} "
-        f"--body {shlex.quote(body)}"
+        f"gh issue comment {issue_number} --repo {shlex.quote(repo)} --body {shlex.quote(body)}"
     )
     subprocess.run(
         comment_cmd,
@@ -61,10 +68,7 @@ def escalate(
         text=True,
         check=False,
     )
-    label_cmd = (
-        f"gh issue edit {issue_number} --repo {shlex.quote(repo)} "
-        f"--add-label needs-human"
-    )
+    label_cmd = f"gh issue edit {issue_number} --repo {shlex.quote(repo)} --add-label needs-human"
     subprocess.run(
         label_cmd,
         shell=True,
@@ -73,14 +77,16 @@ def escalate(
         check=False,
     )
 
-    append_event({
-        "event_type": "escalated_to_human",
-        "triggered_by": proposal.get("triggered_by"),
-        "llm_proposal": proposal,
-        "issue_number": issue_number,
-        "failure_reasons": failure_reasons,
-        "final_status": "needs_human",
-    })
+    append_event(
+        {
+            "event_type": "escalated_to_human",
+            "triggered_by": proposal.get("triggered_by"),
+            "llm_proposal": proposal,
+            "issue_number": issue_number,
+            "failure_reasons": failure_reasons,
+            "final_status": "needs_human",
+        }
+    )
 
     # 预生成 action_id（基于 issue_number，稳定可复现），供后续人工审批合并时回写终态
     action_id = f"escalate:{issue_number}"
@@ -108,7 +114,7 @@ def escalate(
             workflow_action="escalate_to_human",
             source="ci_escalate",
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
         pass
 
     # 管理端 IM（fail-open）：让人能及时介入，不阻断 escalate

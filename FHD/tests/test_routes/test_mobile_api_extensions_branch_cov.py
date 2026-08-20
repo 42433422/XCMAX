@@ -2987,7 +2987,7 @@ class TestMobileServiceBridgeRequestRespondHttpEx:
     async def test_generic_exception_returns_500(self, m):
         """branch: generic Exception → 500."""
         body = SimpleNamespace(status="resolved", response="ok", responded_by="admin")
-        with patch("app.db.session.get_db", side_effect=Exception("unexpected")):
+        with patch("app.db.session.get_db", side_effect=RuntimeError("unexpected")):
             result = await m.mobile_service_bridge_request_respond(
                 request_id=1, body=body, user=_user()
             )

@@ -103,18 +103,16 @@ describe('platformShellMode', () => {
       expect(isPlatformShellModeEnabled()).toBe(true)
     })
 
-  it('bootstrapMinimal sets shell mode', () => {
-    vi.stubEnv('VITE_XCAGI_EDITION', 'minimal')
-    vi.stubEnv('VITE_XCAGI_DEFAULT_PLATFORM_SHELL', '1')
-    bootstrapMinimalEditionDefaults()
-    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('1')
+    it('bootstrapMinimal sets shell mode', () => {
+      vi.stubEnv('VITE_XCAGI_EDITION', 'minimal')
+      vi.stubEnv('VITE_XCAGI_DEFAULT_PLATFORM_SHELL', '1')
+      bootstrapMinimalEditionDefaults()
+      expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('1')
     })
   })
 
   it('expands ERP menu keys when account custom mod is installed', async () => {
-    const { resolvePlatformShellMenuKeys, INDUSTRY_DELIVERY_ERP_MENU_KEYS } = await import(
-      './platformShellMode'
-    )
+    const { resolvePlatformShellMenuKeys, INDUSTRY_DELIVERY_ERP_MENU_KEYS } = await import('./platformShellMode')
     const bare = resolvePlatformShellMenuKeys([])
     expect(bare.has('products')).toBe(false)
     const withCustom = resolvePlatformShellMenuKeys(['taiyangniao-pro', 'attendance-industry'])
@@ -126,9 +124,7 @@ describe('platformShellMode', () => {
   })
 
   it('expands ERP menu keys once onboarding step 3 (host pack) is acknowledged', async () => {
-    const { resolvePlatformShellMenuKeys, shouldExposeIndustrySidebar } = await import(
-      './platformShellMode'
-    )
+    const { resolvePlatformShellMenuKeys, shouldExposeIndustrySidebar } = await import('./platformShellMode')
     // 未走引导、未装定制：保持壳 4 项
     expect(shouldExposeIndustrySidebar(['attendance-industry'], false)).toBe(false)
     expect(resolvePlatformShellMenuKeys(['attendance-industry'], false).has('products')).toBe(false)

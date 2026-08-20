@@ -72,7 +72,10 @@ async def test_list_candidates_prefers_primary_then_others(monkeypatch):
             "deepseek": ["deepseek-chat"],
             "xiaomi": ["mimo-v2"],
         }
-        return {"models": mapping.get(provider, []), "runtime_models": mapping.get(provider, [])}
+        return {
+            "models": mapping.get(provider, []),
+            "runtime_models": mapping.get(provider, []),
+        }
 
     monkeypatch.setattr(
         "modstore_server.llm_catalog.get_models_for_provider",

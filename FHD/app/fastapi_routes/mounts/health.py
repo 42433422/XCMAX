@@ -37,8 +37,9 @@ def register_health_routes(app: FastAPI) -> None:
                 payload["neuro"] = get_neurobus_health()
             else:
                 payload["neuro"] = {"enabled": False}
-        except RECOVERABLE_ERRORS as exc:
-            payload["neuro"] = {"enabled": True, "error": str(exc)}
+        except RECOVERABLE_ERRORS:
+            logger.exception("neuro health snapshot failed")
+            payload["neuro"] = {"enabled": True, "error": "unavailable"}
         neuro_reasons = neuro_degraded_reasons(payload.get("neuro"))
         if neuro_reasons:
             payload["degradedReasons"].extend(neuro_reasons)

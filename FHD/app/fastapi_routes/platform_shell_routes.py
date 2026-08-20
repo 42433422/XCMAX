@@ -144,7 +144,7 @@ async def _save_workspace_upload(file: UploadFile, *, subdir: str) -> dict[str, 
 
     from fastapi import HTTPException
 
-    from app.utils.secure_filename import secure_filename
+    from app.utils.security.secure_filename import secure_filename
 
     name = (file.filename or "").strip()
     suffix = Path(name).suffix.lower()
@@ -203,9 +203,10 @@ async def platform_shell_office_confirm(body: OfficeConfirmBody, request: Reques
 
         from app.application.attendance_import_app_service import import_attendance_workbook
         from app.mod_sdk.workspace import resolve_existing_workspace_file
+        from app.utils.path_io.path_utils import get_app_data_dir
 
         excel_path = resolve_existing_workspace_file(body.file_path)
-        db_path = Path(body.workspace_root or ".") / "data" / "mod_dbs" / "taiyangniao-pro.db"
+        db_path = Path(get_app_data_dir()) / "data" / "mod_dbs" / "taiyangniao-pro.db"
         result = import_attendance_workbook(
             excel_path,
             db_path,

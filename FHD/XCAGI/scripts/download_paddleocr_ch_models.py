@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 下载与当前 XCAGI（PaddleOCR 3.x + PaddleX）兼容的中文 OCR 推理模型到本地。
 
@@ -32,6 +31,8 @@ import tarfile
 import urllib.request
 from pathlib import Path
 
+BOUNDARY_ERRORS: tuple[type[Exception], ...] = (Exception,)
+
 # PaddleX 官方推理包（与 paddleocr 3.x 加载逻辑一致）
 BOS_BASE = (
     "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/"
@@ -59,7 +60,9 @@ def extract_tar(tar_path: Path, dest_dir: Path) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="下载 PaddleOCR 中文推理模型（PaddleX 格式，可离线）")
+    parser = argparse.ArgumentParser(
+        description="下载 PaddleOCR 中文推理模型（PaddleX 格式，可离线）"
+    )
     parser.add_argument(
         "--dir",
         type=Path,
@@ -82,7 +85,7 @@ def main() -> int:
             print(f"下载: {fname} ...")
             try:
                 download_file(url, tar_path)
-            except Exception as e:
+            except BOUNDARY_ERRORS as e:
                 print(f"失败: {fname} -> {e}", file=sys.stderr)
                 return 1
         else:
@@ -91,7 +94,7 @@ def main() -> int:
         print(f"解压: {fname} -> {target}")
         try:
             extract_tar(tar_path, target)
-        except Exception as e:
+        except BOUNDARY_ERRORS as e:
             print(f"解压失败: {e}", file=sys.stderr)
             return 1
 

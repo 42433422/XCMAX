@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """多员工 Mod 套件 FastAPI blueprints 模板（替代 Flask 占位）。"""
 
 from __future__ import annotations

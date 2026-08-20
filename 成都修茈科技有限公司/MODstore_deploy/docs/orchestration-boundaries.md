@@ -4,10 +4,10 @@ MODstore 同时存在两套「图」语义，**不可混用**。
 
 ## 1. 协作层（AI 员工）
 
-| 来源 | 含义 |
-|------|------|
-| `manifest.depends_on` | 员工包顶层协作声明 |
-| `employee_config_v2.collaboration.depends_on` | V2 协作配置 |
+| 来源                                          | 含义               |
+| --------------------------------------------- | ------------------ |
+| `manifest.depends_on`                         | 员工包顶层协作声明 |
+| `employee_config_v2.collaboration.depends_on` | V2 协作配置        |
 
 **用途**：描述多名虚拟员工在任务上的协作顺序、上下文承接；驱动管理员 **Duty Graph 运行**（[`admin_duty_graph_api.create_duty_graph_run`](../modstore_server/admin_duty_graph_api.py)），对员工执行器做拓扑排序与执行。
 
@@ -15,10 +15,10 @@ MODstore 同时存在两套「图」语义，**不可混用**。
 
 ## 2. 基建层（仓库内单独建模）
 
-| 来源 | 含义 |
-|------|------|
+| 来源                                                                          | 含义                                                            |
+| ----------------------------------------------------------------------------- | --------------------------------------------------------------- |
 | [`orchestration/deploy_topology.yaml`](../orchestration/deploy_topology.yaml) | 逻辑组件（如 backend / market / payment-java）与可选 rollout 边 |
-| [`orchestration/ci_pipeline.yaml`](../orchestration/ci_pipeline.yaml) | 与 `.github/workflows/` 对齐的 CI / deploy 工作流与触发链 |
+| [`orchestration/ci_pipeline.yaml`](../orchestration/ci_pipeline.yaml)         | 与 `.github/workflows/` 对齐的 CI / deploy 工作流与触发链       |
 
 **用途**：文档化并校验真实上线路径；契约见 [`contracts/orchestration/`](contracts/orchestration/README.md)。
 

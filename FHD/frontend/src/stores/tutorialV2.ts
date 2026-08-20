@@ -1,16 +1,9 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { ApiError } from '@/api'
-import {
-  tutorialV2Api,
-  type TutorialCourseDTO,
-  type TutorialRunDTO,
-} from '@/api/tutorialV2'
+import { tutorialV2Api, type TutorialCourseDTO, type TutorialRunDTO } from '@/api/tutorialV2'
 
-export function tutorialRunAllowsRoute(
-  run: TutorialRunDTO | null | undefined,
-  routeName: string,
-): boolean {
+export function tutorialRunAllowsRoute(run: TutorialRunDTO | null | undefined, routeName: string): boolean {
   if (!run || !['active', 'completed'].includes(run.status)) return false
   const target = String(routeName || '').trim()
   return Boolean(target && run.steps.some((step) => step.route_name === target))
@@ -26,12 +19,8 @@ export function activeTutorialRunAllowsRoute(routeName: string): boolean {
 
 function safeErrorHint(error: unknown): string {
   if (error instanceof ApiError) {
-    const payload = error.data && typeof error.data === 'object'
-      ? error.data as Record<string, unknown>
-      : {}
-    const nested = payload.error && typeof payload.error === 'object'
-      ? payload.error as Record<string, unknown>
-      : {}
+    const payload = error.data && typeof error.data === 'object' ? (error.data as Record<string, unknown>) : {}
+    const nested = payload.error && typeof payload.error === 'object' ? (payload.error as Record<string, unknown>) : {}
     if (typeof nested.hint === 'string' && nested.hint.trim()) return nested.hint
   }
   return '教程服务暂时不可用，请保存当前工作后重试。'
@@ -48,9 +37,7 @@ export const useTutorialV2Store = defineStore('tutorialV2', () => {
   const reports = ref<Array<Record<string, unknown>>>([])
 
   const isActive = computed(() => currentRun.value?.status === 'active')
-  const currentStep = computed(() => currentRun.value?.steps.find(
-    (step) => step.id === currentRun.value?.current_step_id,
-  ) || null)
+  const currentStep = computed(() => currentRun.value?.steps.find((step) => step.id === currentRun.value?.current_step_id) || null)
 
   async function loadCourses() {
     loading.value = true
@@ -117,20 +104,17 @@ export const useTutorialV2Store = defineStore('tutorialV2', () => {
     verificationHint.value = ''
     const verifiedTitle = currentStep.value.title
     try {
-      const result = await tutorialV2Api.verify(
-        currentRun.value.id,
-        currentStep.value.id,
-        {
-          visited_route: targetVisited.value ? visitedRoute : '',
-          target_visible: targetVisited.value && targetVisible,
-        },
-      )
+      const result = await tutorialV2Api.verify(currentRun.value.id, currentStep.value.id, {
+        visited_route: targetVisited.value ? visitedRoute : '',
+        target_visible: targetVisited.value && targetVisible,
+      })
       currentRun.value = result.run
       if (result.evidence.status === 'passed') {
         const next = result.run.steps.find((item) => item.id === result.run.current_step_id)
-        verificationHint.value = result.run.status === 'completed'
-          ? `“${verifiedTitle}”验证通过，本课程已完成。`
-          : `“${verifiedTitle}”验证通过；现在进入“${next?.title || '下一步'}”。`
+        verificationHint.value =
+          result.run.status === 'completed'
+            ? `“${verifiedTitle}”验证通过，本课程已完成。`
+            : `“${verifiedTitle}”验证通过；现在进入“${next?.title || '下一步'}”。`
         targetVisited.value = false
       } else {
         verificationHint.value = result.hint
@@ -151,9 +135,10 @@ export const useTutorialV2Store = defineStore('tutorialV2', () => {
       const previousCourseId = courses.value.find((course) => course.run?.id === runId)?.id
       currentRun.value = await tutorialV2Api.reset(runId)
       targetVisited.value = false
-      verificationHint.value = previousCourseId && previousCourseId !== currentRun.value.course_id
-        ? '新的练习已经开始。这里没有上一次的业务数据，请先重新完成前面的课程；旧练习数据会在 7 天后清理。'
-        : '新的练习已经开始，旧练习数据会在 7 天后清理。'
+      verificationHint.value =
+        previousCourseId && previousCourseId !== currentRun.value.course_id
+          ? '新的练习已经开始。这里没有上一次的业务数据，请先重新完成前面的课程；旧练习数据会在 7 天后清理。'
+          : '新的练习已经开始，旧练习数据会在 7 天后清理。'
       await loadCourses()
       return currentRun.value
     } catch (error) {

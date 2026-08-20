@@ -11,6 +11,7 @@ Core types:
 
 from __future__ import annotations
 
+import builtins
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from datetime import datetime
@@ -66,7 +67,7 @@ class Item:
     def __init__(
         self,
         *,
-        value: dict[str, Any],
+        value: builtins.dict[str, Any],
         key: str,
         namespace: tuple[str, ...],
         created_at: datetime,
@@ -102,7 +103,7 @@ class Item:
     def __hash__(self) -> int:
         return hash((self.namespace, self.key))
 
-    def dict(self) -> dict:
+    def dict(self) -> builtins.dict[str, Any]:
         return {
             "namespace": list(self.namespace),
             "key": self.key,
@@ -124,7 +125,7 @@ class SearchItem(Item):
         self,
         namespace: tuple[str, ...],
         key: str,
-        value: dict[str, Any],
+        value: builtins.dict[str, Any],
         created_at: datetime,
         updated_at: datetime,
         score: float | None = None,
@@ -148,7 +149,7 @@ class SearchItem(Item):
         )
         self.score = score
 
-    def dict(self) -> dict:
+    def dict(self) -> builtins.dict[str, Any]:
         result = super().dict()
         result["score"] = self.score
         return result
@@ -703,6 +704,11 @@ class IndexConfig(TypedDict, total=False):
         - Array notation creates separate embeddings for each element
         - Complex nested paths are supported (e.g., `"a.b[*].c.d"`)
     """
+
+    __tokenized_fields: list[tuple[str, Literal["$"] | list[str]]]
+    """Normalized internal field paths populated during store initialization."""
+    __estimated_num_vectors: int
+    """Internal estimate used by persistent vector-store backends."""
 
 
 class BaseStore(ABC):

@@ -57,7 +57,7 @@ def _fetch_product_meta_by_models(models, unit_name: str = "") -> dict[str, dict
         for model in model_list:
             model_raw = str(model or "").strip()
             model_norm = _normalize_model_token(model_raw)
-            records = []
+            records: list[dict[str, Any]] = []
 
             if unit_name:
                 result = (
@@ -310,29 +310,29 @@ def unified_chat_single_payload(
                     "data": {"parsed_data": parsed_retry},
                 },
             }
-        except RECOVERABLE_ERRORS as local_parse_err:
-            logger.error("普通版本地编号解析异常：%s", local_parse_err, exc_info=True)
+        except RECOVERABLE_ERRORS:
+            logger.exception("普通版本地编号解析异常")
             return {
                 "success": False,
-                "message": f"编号模式处理失败：{str(local_parse_err)}",
+                "message": "编号模式处理失败，请稍后重试",
                 "_http_status": 500,
             }
 
     if route_intent == "product_query":
-        body = build_product_query_response_dict(route_result)
-        if body:
-            return body
+        product_body = build_product_query_response_dict(route_result)
+        if product_body:
+            return product_body
 
     # ERP 业务意图（吸收 Odoo 18）：销售/报表/补货预警走确定性工具，不落入 workflow 计划器
     if route_intent in ("sales_query", "reports_query", "replenishment_suggest"):
         if route_intent == "sales_query":
-            body = build_sales_query_response_dict(route_result)
+            erp_body = build_sales_query_response_dict(route_result)
         elif route_intent == "reports_query":
-            body = build_reports_query_response_dict(route_result, message=text)
+            erp_body = build_reports_query_response_dict(route_result, message=text)
         else:
-            body = build_replenishment_suggest_response_dict(route_result)
-        if body:
-            return body
+            erp_body = build_replenishment_suggest_response_dict(route_result)
+        if erp_body:
+            return erp_body
 
     if route_intent == "delete_entity":
         slots = route_result.get("slots") or {}

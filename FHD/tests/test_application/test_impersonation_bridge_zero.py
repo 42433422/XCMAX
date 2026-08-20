@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """Tests for app.application.impersonation_bridge."""
 
 from __future__ import annotations

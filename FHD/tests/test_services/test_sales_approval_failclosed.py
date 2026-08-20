@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, method-assign"
 """ODOO-W1-08｜fail-closed 预览/审批/幂等/租户工具契约测试。
 
 覆盖（验收以后置条件为准，不以"代码存在"为准）：

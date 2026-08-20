@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from datetime import UTC, datetime
@@ -14,7 +15,9 @@ from sqlalchemy import text
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["health-k8s"])
+_UNAVAILABLE = "unavailable"
 
 
 def _check_database() -> dict[str, Any]:
@@ -24,8 +27,9 @@ def _check_database() -> dict[str, Any]:
         with get_db() as db:
             db.execute(text("SELECT 1"))
         return {"status": "healthy", "latency_ms": 0}
-    except RECOVERABLE_ERRORS as e:
-        return {"status": "unhealthy", "error": str(e)}
+    except RECOVERABLE_ERRORS:
+        logger.exception("database health check failed")
+        return {"status": "unhealthy", "error": _UNAVAILABLE}
 
 
 def _check_redis() -> dict[str, Any]:
@@ -36,8 +40,9 @@ def _check_redis() -> dict[str, Any]:
         client = redis.from_url(redis_url)
         client.ping()
         return {"status": "healthy", "latency_ms": 0}
-    except RECOVERABLE_ERRORS as e:
-        return {"status": "unhealthy", "error": str(e)}
+    except RECOVERABLE_ERRORS:
+        logger.exception("redis health check failed")
+        return {"status": "unhealthy", "error": _UNAVAILABLE}
 
 
 def _check_ai_service() -> dict[str, Any]:
@@ -64,16 +69,18 @@ def _check_ai_service() -> dict[str, Any]:
         if callable(getter):
             try:
                 engines = getter()
-            except RECOVERABLE_ERRORS as exc:
-                engines = {"error": str(exc)}
+            except RECOVERABLE_ERRORS:
+                logger.exception("intent engine status check failed")
+                engines = {"error": _UNAVAILABLE}
 
         return {
             "status": "healthy" if ready else "degraded",
             "model_loaded": ready,
             "engines": engines,
         }
-    except RECOVERABLE_ERRORS as e:
-        return {"status": "unhealthy", "error": str(e)}
+    except RECOVERABLE_ERRORS:
+        logger.exception("AI service health check failed")
+        return {"status": "unhealthy", "error": _UNAVAILABLE}
 
 
 def _check_pgvector() -> dict[str, Any]:
@@ -134,8 +141,9 @@ def _check_pgvector() -> dict[str, Any]:
             "ivfflat_index_count": int(index_count),
             "vector_tables": tables,
         }
-    except RECOVERABLE_ERRORS as e:
-        return {"status": "unhealthy", "error": str(e)}
+    except RECOVERABLE_ERRORS:
+        logger.exception("pgvector health check failed")
+        return {"status": "unhealthy", "error": _UNAVAILABLE}
 
 
 def _check_rasa_nlu() -> dict[str, Any]:
@@ -152,8 +160,9 @@ def _check_rasa_nlu() -> dict[str, Any]:
             "available": available,
             "detail": snapshot,
         }
-    except RECOVERABLE_ERRORS as e:
-        return {"status": "unhealthy", "error": str(e)}
+    except RECOVERABLE_ERRORS:
+        logger.exception("Rasa health check failed")
+        return {"status": "unhealthy", "error": _UNAVAILABLE}
 
 
 def _system_info() -> dict[str, Any]:
@@ -257,8 +266,9 @@ def capabilities_diagnostics():
         getter = getattr(recognizer, "get_engine_status", None)
         if callable(getter):
             intent_engines = getter()
-    except RECOVERABLE_ERRORS as exc:
-        intent_engines = {"error": str(exc)}
+    except RECOVERABLE_ERRORS:
+        logger.exception("diagnostic intent status check failed")
+        intent_engines = {"error": _UNAVAILABLE}
 
     return JSONResponse(
         {

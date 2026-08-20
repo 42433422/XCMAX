@@ -146,16 +146,16 @@ class RasaNLUService:
 
         try:
             from rasa.core.agent import Agent
-        except RECOVERABLE_ERRORS as e:  # ImportError or its downstream side effects
-            self._load_error = f"rasa_import_failed: {e}"
+        except RECOVERABLE_ERRORS:  # ImportError or its downstream side effects
+            self._load_error = "rasa_import_failed"
             return False
 
         try:
             self._agent = Agent.load(self.model_path)
             self._last_status["agent_loaded"] = True
             return True
-        except RECOVERABLE_ERRORS as e:
-            self._load_error = f"agent_load_failed: {e}"
+        except RECOVERABLE_ERRORS:
+            self._load_error = "agent_load_failed"
             self._agent = None
             return False
 

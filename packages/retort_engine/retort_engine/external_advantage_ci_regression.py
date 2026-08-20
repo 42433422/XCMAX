@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.external_advantage_matrix import build_external_advantage_matrix
 
@@ -19,7 +19,10 @@ def build_external_advantage_ci_regression(
     root = Path(project).expanduser().resolve()
     started = time.monotonic()
     matrix = build_external_advantage_matrix(root, min_cases=min_cases)
-    summary = matrix.get("summary") if isinstance(matrix.get("summary"), dict) else {}
+    summary = cast(
+        dict[str, Any],
+        matrix.get("summary") if isinstance(matrix.get("summary"), dict) else {},
+    )
     rows = [row for row in matrix.get("matrix") or [] if isinstance(row, dict)]
     regression_cases = [
         _case_regression(row, min_blind_delta=min_blind_delta) for row in rows
@@ -95,7 +98,9 @@ def build_external_advantage_ci_regression(
 
 
 def _case_regression(row: dict[str, Any], *, min_blind_delta: int) -> dict[str, Any]:
-    retort = row.get("retort") if isinstance(row.get("retort"), dict) else {}
+    retort = cast(
+        dict[str, Any], row.get("retort") if isinstance(row.get("retort"), dict) else {}
+    )
     checks = {
         "ready": row.get("ready") is True,
         "positive_behavior_delta": int(row.get("behavior_delta") or 0) > 0,

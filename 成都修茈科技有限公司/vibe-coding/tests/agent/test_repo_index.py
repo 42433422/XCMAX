@@ -5,12 +5,9 @@ from __future__ import annotations
 import textwrap
 from pathlib import Path
 
-import pytest
-
 from vibe_coding.agent.repo_index import (
     PythonLanguageAdapter,
     RepoIndex,
-    Symbol,
     build_index,
 )
 
@@ -48,9 +45,7 @@ def _make_project(root: Path) -> None:
     )
     (root / "pkg" / "broken.py").write_text("def oops(:\n", encoding="utf-8")
     (root / "scripts").mkdir()
-    (root / "scripts" / "run.py").write_text(
-        "from pkg.math import add\nprint(add(1, 2))\n", encoding="utf-8"
-    )
+    (root / "scripts" / "run.py").write_text("from pkg.math import add\nprint(add(1, 2))\n", encoding="utf-8")
     (root / ".gitignore").write_text("scripts/\n", encoding="utf-8")
     (root / "node_modules").mkdir()
     (root / "node_modules" / "stub.py").write_text("def banned(): ...\n", encoding="utf-8")
@@ -137,9 +132,7 @@ def test_incremental_rebuilds_changed(tmp_path: Path) -> None:
 
 def test_references_to(tmp_path: Path) -> None:
     _make_project(tmp_path)
-    (tmp_path / "extra.py").write_text(
-        "from pkg.math import add\nresult = add(1, 2)\n", encoding="utf-8"
-    )
+    (tmp_path / "extra.py").write_text("from pkg.math import add\nresult = add(1, 2)\n", encoding="utf-8")
     index = build_index(tmp_path)
     refs = index.references_to("add")
     assert refs, "should find at least one call to add(...)"

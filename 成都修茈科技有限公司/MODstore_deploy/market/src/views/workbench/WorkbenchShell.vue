@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, provide, ref, watch, computed } from 'vue'
+import { onMounted, provide, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import LeftRail from './panels/LeftRail.vue'
 import CanvasStage from './panels/CanvasStage.vue'
@@ -228,11 +228,12 @@ async function loadTarget(kind: TargetKind, id: string | null) {
       const prefillRaw = sessionStorage.getItem('modstore_employee_prefill')
       if (prefillRaw) {
         try {
-          const prefill = JSON.parse(prefillRaw) as Record<string, any>
-          const prefillId = String(prefill.id ?? prefill.identity?.id ?? '')
+          const prefill = asRecord(JSON.parse(prefillRaw))
+          const prefillIdentity = asRecord(prefill.identity)
+          const prefillId = String(prefill.id ?? prefillIdentity.id ?? '')
           if (prefillId === id || !prefillId) {
             sessionStorage.removeItem('modstore_employee_prefill')
-            const name = String(prefill.name ?? prefill.identity?.name ?? id)
+            const name = String(prefill.name ?? prefillIdentity.name ?? id)
             store.setTarget(kind, id, prefill, name)
             _snapshotBaseline(id, prefill)
             store.loadEligibleWorkflows()
@@ -287,8 +288,10 @@ onMounted(async () => {
   // If coming from wb-home generation and manifest has no workflow linked, apply the generated wfId
   const wfId = Number(route.query.wfId ?? 0)
   if (wfId > 0) {
-    const mf = store.target.manifest as Record<string, any>
-    const curWfId = Number(mf?.collaboration?.workflow?.workflow_id ?? 0)
+    const mf = asRecord(store.target.manifest)
+    const collaboration = asRecord(mf.collaboration)
+    const workflow = asRecord(collaboration.workflow)
+    const curWfId = Number(workflow.workflow_id ?? 0)
     if (curWfId === 0) {
       store.patchManifest('collaboration.workflow.workflow_id', wfId)
     }

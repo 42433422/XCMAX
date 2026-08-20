@@ -3,6 +3,8 @@
 import os
 from pathlib import Path
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 root = Path(r"E:\FHD")
 relpath = "424/考勤-2026-3月份考勤统计表.xlsx"
 
@@ -21,5 +23,5 @@ try:
         if "考勤" in f:
             print(f"  '{f}'")
             print(f"    normalized: '{f.replace(' ', '')}'")
-except Exception as e:
+except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"os.listdir error: {e}")

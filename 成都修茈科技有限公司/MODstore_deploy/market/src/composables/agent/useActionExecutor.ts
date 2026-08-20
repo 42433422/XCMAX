@@ -52,10 +52,21 @@ export function useActionExecutor() {
       const routeName = args.name || ROUTE_NAME_MAP[args.route || ''] || args.route || ''
       await router.push({ name: routeName, query: args.query })
       appendLog({ ts: Date.now(), action: 'navigate', label, risk: 'low', success: true })
-      return { success: true, message: `已跳转到 ${routeName}`, assistantReply: `好的，已为您跳转。` }
+      return {
+        success: true,
+        message: `已跳转到 ${routeName}`,
+        assistantReply: `好的，已为您跳转。`,
+      }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
-      appendLog({ ts: Date.now(), action: 'navigate', label, risk: 'low', success: false, detail: msg })
+      appendLog({
+        ts: Date.now(),
+        action: 'navigate',
+        label,
+        risk: 'low',
+        success: false,
+        detail: msg,
+      })
       return { success: false, message: msg }
     } finally {
       agentStore.setMode('idle')
@@ -77,7 +88,14 @@ export function useActionExecutor() {
       return { success: true, message: `已点击：${label}` }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
-      appendLog({ ts: Date.now(), action: 'click', label, risk: 'medium', success: false, detail: msg })
+      appendLog({
+        ts: Date.now(),
+        action: 'click',
+        label,
+        risk: 'medium',
+        success: false,
+        detail: msg,
+      })
       return { success: false, message: msg }
     } finally {
       agentStore.setMode('idle')
@@ -94,10 +112,7 @@ export function useActionExecutor() {
     try {
       const el = findElement(args) as HTMLInputElement | HTMLTextAreaElement | null
       if (!el) return { success: false, message: `未找到输入框：${args.label}` }
-      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-        Object.getPrototypeOf(el),
-        'value',
-      )?.set
+      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value')?.set
       if (nativeInputValueSetter) {
         nativeInputValueSetter.call(el, args.value)
         el.dispatchEvent(new Event('input', { bubbles: true }))
@@ -109,7 +124,14 @@ export function useActionExecutor() {
       return { success: true, message: `已填写：${label}` }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
-      appendLog({ ts: Date.now(), action: 'fill', label, risk: 'medium', success: false, detail: msg })
+      appendLog({
+        ts: Date.now(),
+        action: 'fill',
+        label,
+        risk: 'medium',
+        success: false,
+        detail: msg,
+      })
       return { success: false, message: msg }
     } finally {
       agentStore.setMode('idle')
@@ -132,7 +154,14 @@ export function useActionExecutor() {
       return { success: true, message: `已选择：${label}` }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
-      appendLog({ ts: Date.now(), action: 'select', label, risk: 'medium', success: false, detail: msg })
+      appendLog({
+        ts: Date.now(),
+        action: 'select',
+        label,
+        risk: 'medium',
+        success: false,
+        detail: msg,
+      })
       return { success: false, message: msg }
     } finally {
       agentStore.setMode('idle')
@@ -143,10 +172,18 @@ export function useActionExecutor() {
   async function scroll(args: { direction: 'up' | 'down' | 'top' | 'bottom'; px?: number }): Promise<SkillResult> {
     const px = args.px || 300
     switch (args.direction) {
-      case 'top': window.scrollTo({ top: 0, behavior: 'smooth' }); break
-      case 'bottom': window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); break
-      case 'up': window.scrollBy({ top: -px, behavior: 'smooth' }); break
-      case 'down': window.scrollBy({ top: px, behavior: 'smooth' }); break
+      case 'top':
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+        break
+      case 'bottom':
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })
+        break
+      case 'up':
+        window.scrollBy({ top: -px, behavior: 'smooth' })
+        break
+      case 'down':
+        window.scrollBy({ top: px, behavior: 'smooth' })
+        break
     }
     return { success: true, message: `已滚动：${args.direction}` }
   }
@@ -154,7 +191,11 @@ export function useActionExecutor() {
   /** 读取页面内容（低风险） */
   async function read(): Promise<SkillResult> {
     const content = serializeVisibleDom()
-    return { success: true, message: content, assistantReply: `当前页面内容摘要：\n${content.slice(0, 500)}` }
+    return {
+      success: true,
+      message: content,
+      assistantReply: `当前页面内容摘要：\n${content.slice(0, 500)}`,
+    }
   }
 
   /**
@@ -203,7 +244,11 @@ export function useActionExecutor() {
 /** 按 data-butler-id、aria-label、button文本查找元素 */
 function findElement(args: { selector?: string; butlerTarget?: string; label?: string }): Element | null {
   if (args.selector) {
-    try { return document.querySelector(args.selector) } catch { /* ignore */ }
+    try {
+      return document.querySelector(args.selector)
+    } catch {
+      /* ignore */
+    }
   }
   if (args.butlerTarget) {
     const el = document.querySelector(`[data-butler-id="${args.butlerTarget}"]`)

@@ -56,6 +56,7 @@ Copy-Item -Path "e:\FHD\ai-assistant-vue\dist\*" -Destination "e:\FHD\AI助手\t
 ```
 
 或者手动复制：
+
 1. 打开 `e:\FHD\ai-assistant-vue\dist` 文件夹
 2. 全选所有文件和文件夹
 3. 复制到 `e:\FHD\AI助手\templates\vue-dist\` 文件夹
@@ -65,6 +66,7 @@ Copy-Item -Path "e:\FHD\ai-assistant-vue\dist\*" -Destination "e:\FHD\AI助手\t
 编辑 `e:\FHD\AI助手\routes\pages.py` 文件，做以下修改：
 
 ### 修改 1: index() 函数
+
 找到以下代码：
 
 ```python
@@ -92,6 +94,7 @@ def index():
 ```
 
 ### 修改 2: ai_assistant() 函数
+
 找到以下代码：
 
 ```python
@@ -119,6 +122,7 @@ def ai_assistant():
 ```
 
 ### 修改 3: 添加 Vue 静态资源路由
+
 在 `index()` 函数之后添加以下代码：
 
 ```python
@@ -127,15 +131,15 @@ def serve_vue_assets(path):
     """提供 Vue 构建的 assets 静态资源"""
     vue_dist_dir = os.path.join(BASE_DIR, 'templates', 'vue-dist')
     requested_path = os.path.join(vue_dist_dir, path)
-    
+
     if os.path.exists(requested_path) and not os.path.isdir(requested_path):
         return send_from_directory(vue_dist_dir, path)
-    
+
     vue_assets_dir = os.path.join(vue_dist_dir, 'assets')
     assets_path = os.path.join(vue_assets_dir, path)
     if os.path.exists(assets_path) and not os.path.isdir(assets_path):
         return send_from_directory(vue_assets_dir, path)
-    
+
     return send_from_directory(vue_dist_dir, 'index.html')
 ```
 
@@ -185,10 +189,13 @@ e:\FHD\
 ## 常见问题
 
 ### Q: 构建失败怎么办？
+
 A: 请确保 Node.js 版本为 16.x 或更高，并删除 `node_modules` 文件夹和 `package-lock.json` 文件后重新运行 `npm install`。
 
 ### Q: 页面加载但显示空白？
+
 A: 检查浏览器控制台（F12）是否有 404 错误，确保静态资源路径正确。
 
 ### Q: 如何切换回原版本？
+
 A: 按照上面的"回滚方案"操作即可。

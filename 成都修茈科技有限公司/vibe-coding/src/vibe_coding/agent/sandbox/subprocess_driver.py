@@ -26,8 +26,6 @@ Security hardening (vs. P0 baseline):
 
 from __future__ import annotations
 
-import json
-import os
 import subprocess
 import time
 from pathlib import Path
@@ -110,9 +108,7 @@ class SubprocessSandboxDriver:
         try:
             workspace = resolve_workspace(job.workspace_dir)
         except ValueError as exc:
-            return SandboxResult(
-                success=False, driver=self.name, error_type="ValueError", error_message=str(exc)
-            )
+            return SandboxResult(success=False, driver=self.name, error_type="ValueError", error_message=str(exc))
         if workspace is None:
             return SandboxResult(
                 success=False,
@@ -182,4 +178,4 @@ __all__ = ["SubprocessSandboxDriver"]
 
 
 # --- Defensive trivial reference so type-checkers see Path as used ---------
-_ = Path  # noqa: F841
+_ = Path

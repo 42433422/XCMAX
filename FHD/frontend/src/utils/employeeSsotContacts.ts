@@ -60,27 +60,17 @@ export type EmployeeSsotPayload = {
   }
 }
 
-function labelForEmployee(
-  id: string,
-  payload: EmployeeSsotPayload | null | undefined,
-): string {
+function labelForEmployee(id: string, payload: EmployeeSsotPayload | null | undefined): string {
   const labels = payload?.employee_labels || {}
   return String(labels[id] || id).trim() || id
 }
 
-function descriptionForEmployee(
-  id: string,
-  payload: EmployeeSsotPayload | null | undefined,
-  fallback = '',
-): string {
+function descriptionForEmployee(id: string, payload: EmployeeSsotPayload | null | undefined, fallback = ''): string {
   const descriptions = payload?.employee_descriptions || {}
   return String(descriptions[id] || fallback).trim()
 }
 
-function mapContactRecord(
-  row: EmployeeSsotContactRecord,
-  payload: EmployeeSsotPayload | null | undefined,
-): EmployeeSsotContact | null {
+function mapContactRecord(row: EmployeeSsotContactRecord, payload: EmployeeSsotPayload | null | undefined): EmployeeSsotContact | null {
   const id = String(row.employee_id || '').trim()
   if (!id) return null
   const displayName = String(row.display_name || labelForEmployee(id, payload) || id).trim()
@@ -88,25 +78,15 @@ function mapContactRecord(
   const installed = Boolean(row.installed)
   const runnable = Boolean(row.runnable ?? installed)
   const source = String(row.source || (installed ? 'installed' : 'planned')).trim()
-  const contactRoute = String(
-    row.contact_route || row.mobile_contact_route || `/api/admin/employees/${id}`,
-  ).trim()
+  const contactRoute = String(row.contact_route || row.mobile_contact_route || `/api/admin/employees/${id}`).trim()
   return {
     id,
     display_name: displayName,
     username: id,
-    subtitle: runnable
-      ? `${department} · 可执行`
-      : source === 'planned'
-        ? `${department} · 未安装`
-        : `${department} · ${source}`,
+    subtitle: runnable ? `${department} · 可执行` : source === 'planned' ? `${department} · 未安装` : `${department} · ${source}`,
     description:
       String(row.description || '').trim() ||
-      descriptionForEmployee(
-        id,
-        payload,
-        runnable ? '已安装，可联系' : '编制内但未安装 employee_pack',
-      ),
+      descriptionForEmployee(id, payload, runnable ? '已安装，可联系' : '编制内但未安装 employee_pack'),
     area: department,
     status: runnable ? 'on_duty' : source === 'planned' ? 'planned' : source,
     api_base_path: contactRoute.replace(/\/chat\/?$/, '').replace(/\/messages\/?$/, '') || `/api/admin/employees/${id}`,
@@ -120,9 +100,7 @@ function mapContactRecord(
 }
 
 /** 将 platform-shell / mobile employee-ssot 派生包转为 IM 侧栏联系人。 */
-export function dutyEmployeesFromEmployeeSsot(
-  payload: EmployeeSsotPayload | null | undefined,
-): EmployeeSsotContact[] {
+export function dutyEmployeesFromEmployeeSsot(payload: EmployeeSsotPayload | null | undefined): EmployeeSsotContact[] {
   const contacts = payload?.contacts
   if (Array.isArray(contacts) && contacts.length) {
     const out: EmployeeSsotContact[] = []
@@ -158,12 +136,7 @@ export function dutyEmployeesFromEmployeeSsot(
         display_name: labelForEmployee(id, payload),
         username: id,
         subtitle: onDuty ? `${area} · 可执行` : `${area} · 未安装`,
-        description:
-          descriptionForEmployee(
-            id,
-            payload,
-            onDuty ? '已安装，可联系' : '编制内但未安装 employee_pack',
-          ),
+        description: descriptionForEmployee(id, payload, onDuty ? '已安装，可联系' : '编制内但未安装 employee_pack'),
         area,
         status: onDuty ? 'on_duty' : 'planned',
         api_base_path: `/api/admin/employees/${id}`,

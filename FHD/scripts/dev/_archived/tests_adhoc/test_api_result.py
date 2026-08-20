@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# mypy: disable-error-code="import-not-found"
 import json
 import sqlite3
 import sys

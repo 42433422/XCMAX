@@ -2,25 +2,47 @@
 
 from __future__ import annotations
 
-import dataclasses
+import dataclasses as dataclasses
 import logging
-import os
-import tempfile
-from pathlib import Path
+import os as os
+import tempfile as tempfile
+from pathlib import Path as Path
 from typing import Any, Literal
-from urllib.parse import quote
+from typing import cast as cast
+from urllib.parse import quote as quote
 
-from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
+from fastapi import (
+    APIRouter,
+    HTTPException,
+    Request,
+)
+from fastapi import (
+    File as File,
+)
+from fastapi import (
+    Query as Query,
+)
+from fastapi import (
+    UploadFile as UploadFile,
+)
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.application.mod_store_catalog_app import (
     catalog_base_url,
-    catalog_download_to,
-    catalog_get_json,
-    fetch_market_catalog_page,
     iter_catalog_packages,
     normalize_package_zip_path,
-    sync_modstore_library_to_local,
+)
+from app.application.mod_store_catalog_app import (
+    catalog_download_to as catalog_download_to,
+)
+from app.application.mod_store_catalog_app import (
+    catalog_get_json as catalog_get_json,
+)
+from app.application.mod_store_catalog_app import (
+    fetch_market_catalog_page as fetch_market_catalog_page,
+)
+from app.application.mod_store_catalog_app import (
+    sync_modstore_library_to_local as sync_modstore_library_to_local,
 )
 from app.shell.mods_catalog import list_mod_items
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -168,7 +190,8 @@ def _remote_to_mod_info(d: dict[str, Any], installed_ids: set[str]) -> dict[str,
     mid = str(d.get("id") or d.get("pkg_id") or "").strip()
     version = str(d.get("version") or "1.0.0").strip() or "1.0.0"
     name = str(d.get("name") or mid or "未命名").strip() or mid
-    commerce = d.get("commerce") if isinstance(d.get("commerce"), dict) else {}
+    raw_commerce = d.get("commerce")
+    commerce: dict[str, Any] = dict(raw_commerce) if isinstance(raw_commerce, dict) else {}
     download_url = str(d.get("download_url") or "").strip()
     from app.mod_sdk.host_foundation import catalog_store_collection
 
@@ -178,7 +201,7 @@ def _remote_to_mod_info(d: dict[str, Any], installed_ids: set[str]) -> dict[str,
         "name": name,
         "version": version,
         "author": str(
-            d.get("author") or d.get("publisher") or commerce.get("seller") or "—"
+            (d or {}).get("author") or d.get("publisher") or commerce.get("seller") or "—"
         ).strip()
         or "—",
         "description": str(d.get("description") or "").strip(),
@@ -198,7 +221,7 @@ def _remote_to_mod_info(d: dict[str, Any], installed_ids: set[str]) -> dict[str,
         "source": "remote",
         "catalog_base_url": catalog_base_url(),
         "store_collection": str(
-            d.get("store_collection") or commerce.get("collection") or ""
+            (d or {}).get("store_collection") or commerce.get("collection") or ""
         ).strip(),
         "public_listing": bool(d.get("public_listing")),
     }
@@ -208,7 +231,6 @@ def _remote_to_mod_info(d: dict[str, Any], installed_ids: set[str]) -> dict[str,
 
 
 async def _remote_rows() -> list[dict[str, Any]]:
-    from fastapi import HTTPException
 
     from app.mod_sdk.host_foundation import is_infrastructure_mod_hidden_from_store
 
@@ -241,11 +263,11 @@ async def _map_market_catalog_page(
     installed_ids = set(_installed_by_id())
     items_raw = data.get("items") if isinstance(data.get("items"), list) else []
     try:
-        total = int(data.get("total") or len(items_raw))
+        total = int(data.get("total") or len(items_raw or []))
     except (TypeError, ValueError):
-        total = len(items_raw)
+        total = len(items_raw or [])
     out: list[dict[str, Any]] = []
-    for raw in items_raw:
+    for raw in items_raw or []:
         if not isinstance(raw, dict):
             continue
         row = market_item_to_package_row(raw)
@@ -379,642 +401,45 @@ def _split_package_file(package_file: str) -> tuple[str, str]:
 _normalize_package_zip = normalize_package_zip_path
 
 
-async def _install_from_catalog(
-    pkg_id: str, version: str, activate: bool = True
-) -> ModStoreInstallResult:
-    from app.mod_sdk.host_foundation import (
-        install_aux_employee_pack_from_repo_seed,
-        is_aux_employee_pack_mod_id,
-        is_host_foundation_employee_pack,
-    )
-
-    if is_host_foundation_employee_pack(pkg_id):
-        return await _install_host_foundation_internal(edition=None)
-
-    if is_aux_employee_pack_mod_id(pkg_id):
-        ok, message = install_aux_employee_pack_from_repo_seed(pkg_id, activate=activate)
-        if ok:
-            return ModStoreInstallResult(success=True, message=message, data={"id": pkg_id})
-        logger.info("aux employee seed install failed for %s: %s; try catalog", pkg_id, message)
-
-    if not pkg_id:
-        raise HTTPException(status_code=400, detail="缺少 pkg_id")
-    if not version:
-        versions = await catalog_get_json(f"/packages/by-id/{quote(pkg_id, safe='')}/versions")
-        rows = versions.get("versions") or []
-        if isinstance(rows, list) and rows:
-            first = rows[0]
-            if isinstance(first, dict):
-                version = _safe_text(first.get("version"))
-            else:
-                version = _safe_text(first)
-    if not version:
-        raise HTTPException(status_code=400, detail="缺少 version")
-
-    tmp = tempfile.NamedTemporaryFile(prefix="xcagi-mod-", suffix=".zip", delete=False)
-    tmp_path = tmp.name
-    tmp.close()
-    normalized_path = tmp_path
-    try:
-        await catalog_download_to(
-            f"/packages/{quote(pkg_id, safe='')}/{quote(version, safe='')}/download",
-            Path(tmp_path),
-        )
-        normalized_path = _normalize_package_zip(tmp_path)
-        from app.infrastructure.mods.artifact_constants import ARTIFACT_EMPLOYEE_PACK
-        from app.infrastructure.mods.artifact_package import peek_artifact
-
-        if peek_artifact(normalized_path) == ARTIFACT_EMPLOYEE_PACK:
-            from app.infrastructure.mods.employee_registry import get_employee_registry
-
-            ok, message = get_employee_registry().install_from_package(
-                normalized_path, verify_signature=False
-            )
-            return ModStoreInstallResult(success=bool(ok), message=message, data=None)
-
-        from app.infrastructure.mods.mod_manager import get_mod_manager
-
-        ok, message, metadata = get_mod_manager().install_mod_package(
-            normalized_path,
-            verify_signature=False,
-            activate=activate,
-        )
-        data = (
-            dataclasses.asdict(metadata)
-            if metadata and dataclasses.is_dataclass(metadata)
-            else None
-        )
-        return ModStoreInstallResult(success=bool(ok), message=message, data=data)
-    finally:
-        for p in {tmp_path, normalized_path}:
-            try:
-                if p and os.path.exists(p):
-                    os.unlink(p)
-            except OSError:
-                logger.warning("无法删除临时 Mod 包: %s", p)
-
-
-@router.get("/catalog", response_model=ModStoreCatalogResponse)
-async def mod_store_catalog() -> ModStoreCatalogResponse:
-    rows, installed = await _combined_rows()
-    return ModStoreCatalogResponse(
-        data=ModStoreCatalogPayload(installed=installed, available=rows, indexed_count=len(rows))
-    )
-
-
-@router.get("/market-catalog", response_model=ModStoreMarketCatalogResponse)
-async def mod_store_market_catalog(
-    q: str | None = Query(None),
-    collection: str | None = Query(None),
-    artifact: str | None = Query(None),
-    material_category: str | None = Query(None),
-    license_scope: str | None = Query(None),
-    industry: str | None = Query(None),
-    security_level: str | None = Query(None),
-    limit: int = Query(80, ge=1, le=200),
-    offset: int = Query(0, ge=0),
-) -> ModStoreMarketCatalogResponse:
-    """代理修茈 AI 市场 /api/market/catalog，合并本机安装态。"""
-    data = await fetch_market_catalog_page(
-        q=q,
-        collection=collection,
-        artifact=artifact,
-        material_category=material_category,
-        license_scope=license_scope,
-        industry=industry,
-        security_level=security_level,
-        limit=limit,
-        offset=offset,
-    )
-    items, total = await _map_market_catalog_page(
-        data,
-        collection_hint=str(collection or "").strip(),
-    )
-    return ModStoreMarketCatalogResponse(
-        data=ModStoreMarketCatalogPayload(
-            items=items,
-            total=total,
-            collection=str(collection or "").strip(),
-        )
-    )
-
-
-@router.get("/search", response_model=ModStoreListResponse)
-async def mod_store_search(
-    q: str | None = Query(None),
-    author: str | None = Query(None),
-    installed: bool | None = Query(None),
-    limit: int = Query(50, ge=1, le=200),
-) -> ModStoreListResponse:
-    rows, _installed = await _combined_rows()
-    out = _filter_rows(rows, q=q, author=author, installed=installed)
-    return ModStoreListResponse(data=out[:limit])
-
-
-@router.get("/popular", response_model=ModStoreListResponse)
-async def mod_store_popular(limit: int = Query(10, ge=1, le=200)) -> ModStoreListResponse:
-    rows, _installed = await _combined_rows()
-    rows.sort(key=lambda r: r.get("total_downloads") or r.get("download_count") or 0, reverse=True)
-    return ModStoreListResponse(data=rows[:limit])
-
-
-@router.get("/recent", response_model=ModStoreListResponse)
-async def mod_store_recent(limit: int = Query(10, ge=1, le=200)) -> ModStoreListResponse:
-    rows, _installed = await _combined_rows()
-    rows.sort(key=lambda r: str(r.get("created_at") or ""), reverse=True)
-    return ModStoreListResponse(data=rows[:limit])
-
-
-@router.get("/mod/{mod_id}/details", response_model=ModStoreDetailResponse)
-async def mod_store_details(mod_id: str) -> ModStoreDetailResponse:
-    mid = (mod_id or "").strip()
-    try:
-        versions = await catalog_get_json(f"/packages/by-id/{quote(mid, safe='')}/versions")
-        rows = versions.get("versions") or []
-        if isinstance(rows, list) and rows:
-            latest = rows[0] if isinstance(rows[0], dict) else {"version": rows[0]}
-            version = _safe_text(latest.get("version")) or "1.0.0"
-            detail = await catalog_get_json(
-                f"/packages/{quote(mid, safe='')}/{quote(version, safe='')}"
-            )
-            return ModStoreDetailResponse(
-                data=ModStoreDetailData(
-                    id=str(detail.get("id") or mid),
-                    name=str(detail.get("name") or mid),
-                    version=str(detail.get("version") or version),
-                    author=str(detail.get("author") or detail.get("publisher") or "—"),
-                    description=str(detail.get("description") or ""),
-                    statistics=None,
-                    ratings=[],
-                    rating_count=0,
-                    source="remote",
-                    catalog_base_url=catalog_base_url(),
-                )
-            )
-    except HTTPException as exc:
-        logger.info("remote catalog detail fallback for %s: %s", mid, exc.detail)
-    rows, _installed = await _combined_rows()
-    for r in rows:
-        if str(r.get("id")) == mid:
-            return ModStoreDetailResponse(
-                data=ModStoreDetailData(
-                    id=str(r["id"]),
-                    name=str(r["name"]),
-                    version=str(r["version"]),
-                    author=str(r["author"]),
-                    description=str(r["description"]),
-                    statistics=None,
-                    ratings=[],
-                    rating_count=0,
-                    source=str(r.get("source") or "local"),
-                    catalog_base_url=str(r.get("catalog_base_url") or catalog_base_url()),
-                )
-            )
-    raise HTTPException(status_code=404, detail="未找到该 MOD")
-
-
-@router.post("/upload", response_model=ModStoreInstallResult)
-async def mod_store_upload(
-    file: UploadFile = File(..., description="Mod 包文件 (.xcemp 或 .zip)"),
-    activate: bool = Query(True, description="安装后是否立即激活"),
-) -> ModStoreInstallResult:
-    """上传 Mod 包到本机并自动安装。
-
-    进化状态闭环（2026-07-20）：
-      - 接受 multipart/form-data 文件上传（最大 100MB）
-      - 校验文件扩展名（.xcemp / .zip）
-      - 落地到临时文件后调用 ``mod_manager.install_mod_package``
-      - 返回安装结果（含 manifest 元数据）
-    """
-    MAX_UPLOAD_SIZE = 100 * 1024 * 1024
-    filename = (file.filename or "").lower()
-    if not (filename.endswith(".xcemp") or filename.endswith(".zip")):
-        raise HTTPException(
-            status_code=400,
-            detail="仅支持 .xcemp 或 .zip 格式的 Mod 包",
-        )
-
-    tmp = tempfile.NamedTemporaryFile(prefix="xcagi-upload-", suffix=".zip", delete=False)
-    tmp_path = tmp.name
-    tmp.close()
-    total_size = 0
-    try:
-        with open(tmp_path, "wb") as out:
-            while True:
-                chunk = await file.read(65536)
-                if not chunk:
-                    break
-                total_size += len(chunk)
-                if total_size > MAX_UPLOAD_SIZE:
-                    raise HTTPException(
-                        status_code=413,
-                        detail=f"文件过大（>{MAX_UPLOAD_SIZE // (1024 * 1024)}MB）",
-                    )
-                out.write(chunk)
-        if total_size == 0:
-            raise HTTPException(status_code=400, detail="上传文件为空")
-
-        # 复用 /install 的安装逻辑：读 manifest → 解压 → 注册
-        normalized_path = normalize_package_zip_path(tmp_path)
-        from app.infrastructure.mods.artifact_constants import ARTIFACT_EMPLOYEE_PACK
-        from app.infrastructure.mods.artifact_package import peek_artifact
-
-        if peek_artifact(normalized_path) == ARTIFACT_EMPLOYEE_PACK:
-            from app.infrastructure.mods.employee_registry import get_employee_registry
-
-            ok, message = get_employee_registry().install_from_package(
-                normalized_path, verify_signature=False
-            )
-            return ModStoreInstallResult(success=bool(ok), message=message, data=None)
-
-        from app.infrastructure.mods.mod_manager import get_mod_manager
-
-        ok, message, metadata = get_mod_manager().install_mod_package(
-            normalized_path,
-            verify_signature=False,
-            activate=activate,
-        )
-        data = (
-            dataclasses.asdict(metadata)
-            if metadata and dataclasses.is_dataclass(metadata)
-            else None
-        )
-        return ModStoreInstallResult(success=bool(ok), message=message, data=data)
-    finally:
-        for p in {tmp_path}:
-            try:
-                if p and os.path.exists(p):
-                    os.unlink(p)
-            except OSError:
-                logger.warning("无法删除上传临时文件: %s", p)
-
-
-@router.post("/install", response_model=ModStoreInstallResult)
-async def mod_store_install(request: Request) -> ModStoreInstallResult:
-    payload = await _request_payload(request)
-    pkg_id = _safe_text(payload.get("pkg_id") or payload.get("mod_id"))
-    version = _safe_text(payload.get("version"))
-    if not pkg_id:
-        pkg_id, parsed_version = _split_package_file(payload.get("package_file") or "")
-        version = version or parsed_version
-    activate = str(payload.get("activate") or "true").lower() not in {"0", "false", "no"}
-    return await _install_from_catalog(pkg_id, version, activate=activate)
-
-
-@router.post("/install-industry-seed", response_model=ModStoreInstallResult)
-async def mod_store_install_industry_seed(request: Request) -> ModStoreInstallResult:
-    """L2：从 industry-seeds 池安装所选行业中性 Mod；池缺失时 Catalog 兜底。"""
-    payload = await _request_payload(request)
-    raw = _safe_text(
-        payload.get("industry_id") or payload.get("mod_id") or payload.get("industryId")
-    )
-    if not raw:
-        raise HTTPException(status_code=400, detail="缺少 industry_id 或 mod_id")
-    from app.mod_sdk.industry_seed import install_industry_seed_with_fallback
-
-    data = await install_industry_seed_with_fallback(raw)
-    return ModStoreInstallResult(
-        success=bool(data.get("success")),
-        message=str(data.get("message") or ""),
-        data=data,
-    )
-
-
-@router.post("/install-customer-delivery-seed", response_model=ModStoreInstallResult)
-async def mod_store_install_customer_delivery_seed(request: Request) -> ModStoreInstallResult:
-    """账号定制交付：从服务器下载客户种子包并导入本地业务数据。"""
-    payload = await _request_payload(request)
-    mod_id = _safe_text(payload.get("mod_id") or payload.get("pkg_id"))
-    industry_id = _safe_text(payload.get("industry_id") or payload.get("industryId"))
-    if not mod_id:
-        raise HTTPException(status_code=400, detail="缺少 mod_id")
-
-    try:
-        from app.enterprise.mod_entitlements import (
-            enterprise_mod_filter_active,
-            get_cached_entitled_client_mod_ids,
-            sync_entitlements_from_request,
-        )
-
-        if enterprise_mod_filter_active():
-            await sync_entitlements_from_request(request)
-            entitled = get_cached_entitled_client_mod_ids() or set()
-            if mod_id not in entitled:
-                raise HTTPException(status_code=403, detail="当前账号未授权该客户交付包")
-    except HTTPException:
-        raise
-    except RECOVERABLE_ERRORS:
-        logger.warning("customer delivery seed entitlement check skipped", exc_info=True)
-
-    market_token = ""
-    try:
-        from app.fastapi_routes.market_account import resolve_valid_market_access_token
-        from app.infrastructure.auth.dependencies import session_id_from_request
-
-        sid = session_id_from_request(request)
-        if sid:
-            market_token = await resolve_valid_market_access_token(sid) or ""
-    except RECOVERABLE_ERRORS:
-        logger.warning("customer delivery seed token resolve skipped", exc_info=True)
-
-    from app.mod_sdk.customer_delivery_seed import install_customer_delivery_seed_package
-
-    data = await install_customer_delivery_seed_package(
-        mod_id=mod_id,
-        industry_id=industry_id,
-        market_token=market_token,
-    )
-    return ModStoreInstallResult(
-        success=bool(data.get("success")),
-        message=str(data.get("message") or ""),
-        data=data,
-    )
-
-
-@router.post("/reload-employees")
-async def mod_store_reload_employees(request: Request) -> ModStoreSimpleResponse:
-    """显式刷新 employee_pack HTTP 路由与 Planner 工具注册表（装包后双保险）。"""
-    payload = await _request_payload(request)
-    pack_id = _safe_text(payload.get("pack_id") or payload.get("pkg_id"))
-    from app.mod_sdk.employee_runtime import refresh_employee_pack_runtime
-
-    data = refresh_employee_pack_runtime(pack_id or None)
-    return ModStoreSimpleResponse(
-        success=True,
-        message="员工包 Planner 注册表已刷新",
-        data=data,
-    )
-
-
-@router.post("/uninstall", response_model=ModStoreSimpleResponse)
-async def mod_store_uninstall(request: Request) -> ModStoreSimpleResponse:
-    mod_id = await _body_value(request, "mod_id")
-    if not mod_id:
-        raise HTTPException(status_code=400, detail="缺少 mod_id")
-    from app.infrastructure.mods.mod_manager import get_mod_manager
-
-    ok, message = get_mod_manager().uninstall_mod(mod_id, remove_files=True)
-    return ModStoreSimpleResponse(success=bool(ok), message=message, data={"id": mod_id})
-
-
-@router.post("/update", response_model=ModStoreInstallResult)
-async def mod_store_update(request: Request) -> ModStoreInstallResult:
-    payload = await _request_payload(request)
-    pkg_id = _safe_text(payload.get("pkg_id") or payload.get("mod_id"))
-    version = _safe_text(payload.get("version"))
-    if not pkg_id:
-        pkg_id, parsed_version = _split_package_file(payload.get("package_file") or "")
-        version = version or parsed_version
-    return await _install_from_catalog(pkg_id, version, activate=True)
-
-
-@router.get("/validate", response_model=ModStoreSimpleResponse)
-async def mod_store_validate() -> ModStoreSimpleResponse:
-    return ModStoreSimpleResponse(success=False, message="未实现", data=None)
-
-
-@router.get("/updates", response_model=ModStoreUpdatesResponse)
-async def mod_store_updates() -> ModStoreUpdatesResponse:
-    return ModStoreUpdatesResponse(data={"updates_available": [], "count": 0})
-
-
-@router.get("/dependencies", response_model=ModStoreDependenciesResponse)
-async def mod_store_dependencies() -> ModStoreDependenciesResponse:
-    return ModStoreDependenciesResponse(
-        data={
-            "mod_id": "",
-            "dependencies": [],
-            "satisfied": [],
-            "missing": [],
-            "can_install": True,
-        }
-    )
-
-
-@router.post("/mod/{mod_id}/rate", response_model=ModStoreNotImplementedResponse)
-async def mod_store_rate(mod_id: str) -> ModStoreNotImplementedResponse:
-    return ModStoreNotImplementedResponse(
-        detail="评分 尚未在本后端实现；请将 Mod 包放入 XCAGI/mods 或通过 MODstore 工具链。"
-    )
-
-
-@router.get("/package/{package_file:path}/download")
-async def mod_store_download(package_file: str) -> None:
-    raise HTTPException(status_code=404, detail="包下载未实现")
-
-
-@router.delete("/package/{package_file:path}", response_model=ModStoreNotImplementedResponse)
-async def mod_store_delete_package(package_file: str) -> ModStoreNotImplementedResponse:
-    return ModStoreNotImplementedResponse(
-        detail="删除包 尚未在本后端实现；请将 Mod 包放入 XCAGI/mods 或通过 MODstore 工具链。"
-    )
-
-
-@router.post("/index/rebuild", response_model=ModStoreRebuildResponse)
-async def mod_store_rebuild_index() -> ModStoreRebuildResponse:
-    return ModStoreRebuildResponse(
-        data={"indexed": 0, "failed": 0}, message="索引由磁盘 manifest 实时生成，无需重建。"
-    )
-
-
-async def _ensure_host_foundation_employee_on_disk() -> tuple[bool, str]:
-    """将内置 _employees/xcagi-host-foundation-employee 复制到用户 mods 目录（若尚未存在）。"""
-    import shutil
-    import sys
-    from pathlib import Path
-
-    from app.infrastructure.mods.employee_registry import employees_root, get_employee_registry
-    from app.mod_sdk.host_foundation import HOST_FOUNDATION_EMPLOYEE_PACK_ID
-
-    mm_root = get_employee_registry().mods_root
-    dest = os.path.join(employees_root(mm_root), HOST_FOUNDATION_EMPLOYEE_PACK_ID)
-    if os.path.isdir(dest):
-        return True, "employee pack present"
-    candidates = [Path(mm_root) / "_employees" / HOST_FOUNDATION_EMPLOYEE_PACK_ID]
-    if (
-        getattr(sys, "frozen", False)
-        or os.environ.get("XCAGI_BUNDLED_MODS_DIR")
-        or os.environ.get("XCAGI_SEED_MODS_DIR")
-    ):
-        from app.mod_sdk.edition_policy import bundled_mods_dir
-
-        bundled = bundled_mods_dir()
-        if bundled is not None:
-            candidates.append(Path(bundled) / "_employees" / HOST_FOUNDATION_EMPLOYEE_PACK_ID)
-    src = next((p for p in candidates if os.path.isdir(str(p))), None)
-    if src is None:
-        checked = "；".join(str(p) for p in candidates)
-        return False, f"内置员工包目录缺失：{checked}"
-    os.makedirs(os.path.dirname(dest), exist_ok=True)
-    shutil.copytree(src, dest)
-    return True, "employee pack seeded"
-
-
-def _can_materialize_host_foundation_without_employee_marker() -> bool:
-    """Packaged builds can seed host bridges without the employee marker pack."""
-    import sys
-
-    return bool(
-        getattr(sys, "frozen", False)
-        or os.environ.get("XCAGI_BUNDLED_MODS_DIR")
-        or os.environ.get("XCAGI_SEED_MODS_DIR")
-    )
-
-
-async def _install_host_foundation_internal(edition: str | None) -> ModStoreInstallResult:
-    from app.mod_sdk.edition_policy import resolve_edition
-    from app.mod_sdk.host_foundation import materialize_host_foundation_bridges
-
-    ok, msg = await _ensure_host_foundation_employee_on_disk()
-    employee_seed_warning = ""
-    if not ok:
-        if not _can_materialize_host_foundation_without_employee_marker():
-            return ModStoreInstallResult(success=False, message=msg, data=None)
-        employee_seed_warning = msg
-    ed = (edition or resolve_edition() or "generic").strip().lower()
-    if ed not in ("minimal", "generic", "full"):
-        ed = "generic"
-    try:
-        data = materialize_host_foundation_bridges(ed)
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("materialize_host_foundation_bridges failed (edition=%s)", ed)
-        return ModStoreInstallResult(
-            success=False,
-            message=f"展开宿主 bridge 失败：{exc}",
-            data={"edition": ed, "missing_mod_ids": [], "ready": False},
-        )
-    if employee_seed_warning and isinstance(data, dict):
-        data = {**data, "employee_seed_warning": employee_seed_warning}
-    if data.get("ready"):
-        message = f"宿主基础能力员工包已就绪（bridge {data.get('installed_count')}/{data.get('expected_count')}）"
-        if employee_seed_warning:
-            message += f"；员工包标记未复制（{employee_seed_warning}）"
-        success = True
-    else:
-        missing = data.get("missing_mod_ids") or []
-        message = f"宿主 bridge 未齐（{data.get('installed_count')}/{data.get('expected_count')}）：{'、'.join(missing[:8])}"
-        success = False
-    return ModStoreInstallResult(success=success, message=message, data=data)
-
-
-@router.post("/install-host-foundation", response_model=ModStoreSimpleResponse)
-async def mod_store_install_host_foundation(
-    edition: str | None = Query(None, description="minimal | generic | full"),
-) -> ModStoreSimpleResponse:
-    """安装「宿主基础能力·预装员工」并 materialize 全部 bridge（非逐项 Mod 上架）。"""
-    try:
-        result = await _install_host_foundation_internal(edition)
-        return ModStoreSimpleResponse(
-            success=result.success, message=result.message, data=result.data
-        )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("install-host-foundation failed")
-        return ModStoreSimpleResponse(
-            success=False,
-            message=f"装包失败：{exc}",
-            data=None,
-        )
-
-
-@router.post("/bootstrap-edition-pack", response_model=ModStoreSimpleResponse)
-async def mod_store_bootstrap_edition_pack(
-    edition: str | None = Query(None, description="minimal | generic | full"),
-) -> ModStoreSimpleResponse:
-    """装齐当前 edition 所需 Mod：先复制安装包内置 mods/，再对缺失项尝试 Catalog。"""
-    from app.mod_sdk.edition_bootstrap import bootstrap_edition_pack
-    from app.mod_sdk.edition_policy import resolve_edition
-
-    ed = (edition or resolve_edition() or "generic").strip().lower()
-    if ed not in ("minimal", "generic", "full"):
-        raise HTTPException(status_code=400, detail="edition 须为 minimal、generic 或 full")
-    try:
-        from app.mod_sdk.product_skus import assert_bootstrap_edition_allowed
-
-        assert_bootstrap_edition_allowed(edition)
-    except PermissionError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    data = await bootstrap_edition_pack(ed)
-    if data.get("ready"):
-        msg = "通用宿主包已装齐"
-    else:
-        installed = int(data.get("installed_count") or 0)
-        expected = int(data.get("expected_count") or 0)
-        failed_ids: list[str] = []
-        for row in data.get("catalog") or []:
-            if not isinstance(row, dict):
-                continue
-            if row.get("status") in ("catalog_failed", "missing"):
-                mid = str(row.get("mod_id") or "").strip()
-                if mid:
-                    failed_ids.append(mid)
-        for row in data.get("seed") or []:
-            if not isinstance(row, dict):
-                continue
-            if row.get("status") in ("missing", "error"):
-                mid = str(row.get("mod_id") or "").strip()
-                if mid and mid not in failed_ids:
-                    failed_ids.append(mid)
-        hint = "、".join(failed_ids[:8])
-        msg = f"宿主包未装齐（{installed}/{expected}）"
-        if hint:
-            msg += f"：{hint}"
-    return ModStoreSimpleResponse(
-        success=bool(data.get("ready")),
-        message=msg,
-        data=data,
-    )
-
-
-@router.post("/sync-modstore-library", response_model=ModStoreSimpleResponse)
-async def mod_store_sync_modstore_library(request: Request) -> ModStoreSimpleResponse:
-    """使用修茈 PAT（须含 ``mod:sync``）从线上 ``/v1/mod-sync`` 拉 zip 并安装到本机 ``mods/``。"""
-    try:
-        body = await request.json()
-    except RECOVERABLE_ERRORS:
-        raise HTTPException(status_code=400, detail="需要 JSON 请求体") from None
-    if not isinstance(body, dict):
-        raise HTTPException(status_code=400, detail="JSON 须为对象")
-
-    base = (
-        str(body.get("base_url") or body.get("baseUrl") or "").strip().rstrip("/")
-        or "https://xiu-ci.com"
-    )
-    token = str(body.get("token") or "").strip()
-    if not token:
-        raise HTTPException(
-            status_code=400, detail="缺少 token（修茈 Developer PAT，需含 mod:sync）"
-        )
-
-    sync_all = bool(body.get("all"))
-    raw_ids = body.get("mod_ids")
-    mod_ids: list[str] | None = None
-    if isinstance(raw_ids, list):
-        mod_ids = [str(x).strip() for x in raw_ids if str(x).strip()]
-    elif isinstance(raw_ids, str) and raw_ids.strip():
-        mod_ids = [x.strip() for x in raw_ids.split(",") if x.strip()]
-
-    if not sync_all and (not mod_ids or len(mod_ids) == 0):
-        raise HTTPException(
-            status_code=400, detail="请指定 mod_ids（数组或逗号分隔字符串）或设置 all: true"
-        )
-
-    try:
-        raw = await sync_modstore_library_to_local(
-            base_url=base,
-            token=token,
-            mod_ids=mod_ids,
-            sync_all_ok=sync_all,
-        )
-        return ModStoreSimpleResponse(
-            success=bool(raw.get("success")),
-            message=str(raw.get("message") or ""),
-            data=raw.get("data") if isinstance(raw.get("data"), dict) else None,
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=str(e)) from e
-
-
 _delivery_routes = __import__("app.fastapi_routes.private_mod_delivery_routes", fromlist=["router"])
 router.include_router(_delivery_routes.router)
+
+from app.fastapi_routes import mod_store_route_handlers as _route_handlers
+
+_ROUTE_HANDLER_EXPORTS = frozenset(
+    [
+        "_can_materialize_host_foundation_without_employee_marker",
+        "_ensure_host_foundation_employee_on_disk",
+        "_install_from_catalog",
+        "_install_host_foundation_internal",
+        "mod_store_bootstrap_edition_pack",
+        "mod_store_catalog",
+        "mod_store_delete_package",
+        "mod_store_dependencies",
+        "mod_store_details",
+        "mod_store_download",
+        "mod_store_install",
+        "mod_store_install_customer_delivery_seed",
+        "mod_store_install_host_foundation",
+        "mod_store_install_industry_seed",
+        "mod_store_market_catalog",
+        "mod_store_popular",
+        "mod_store_rate",
+        "mod_store_rebuild_index",
+        "mod_store_recent",
+        "mod_store_reload_employees",
+        "mod_store_search",
+        "mod_store_sync_modstore_library",
+        "mod_store_uninstall",
+        "mod_store_update",
+        "mod_store_updates",
+        "mod_store_upload",
+        "mod_store_validate",
+    ]
+)
+
+
+def __getattr__(name: str):
+    if name in _ROUTE_HANDLER_EXPORTS:
+        return getattr(_route_handlers, name)
+    raise AttributeError(name)

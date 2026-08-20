@@ -357,7 +357,7 @@ async function previewTts() {
 // ── Module library ─────────────────────────────────────────────────────────
 
 const presentModuleKinds = computed(() => {
-  const m = manifest.value
+  const _m = manifest.value
   return new Set(
     DEFAULT_MODULE_ORDER.filter((kind) => {
       if (MODULE_META[kind].required) return true

@@ -16,7 +16,6 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
-
 ROOT_MARKERS = (".git", "FHD", "packages")
 
 
@@ -26,8 +25,7 @@ def run_git(args: list[str], cwd: Path) -> str:
         cwd=cwd,
         check=True,
         text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
     )
     return result.stdout
 
@@ -102,7 +100,9 @@ def worktree_dirty_details(root: Path) -> list[dict[str, object]]:
 
 
 def module_for_path(path: str) -> str:
-    if path.startswith("packages/retort_engine/.retort/") or path.startswith(".retort/"):
+    if path.startswith("packages/retort_engine/.retort/") or path.startswith(
+        ".retort/"
+    ):
         return "runtime-retort"
     if path.startswith("packages/retort_engine/"):
         return "retort-engine"
@@ -175,7 +175,9 @@ def looks_like_tracked_runtime(path: str) -> bool:
         )
         return not path.startswith(seed_allowlist)
     if path.endswith((".jsonl", ".log")):
-        return path.startswith(("packages/retort_engine/.retort/", ".retort/", ".hvigor/outputs/"))
+        return path.startswith(
+            ("packages/retort_engine/.retort/", ".retort/", ".hvigor/outputs/")
+        )
     return False
 
 
@@ -193,11 +195,17 @@ class BranchRow:
     strategy: str
 
 
-def classify_branch(name: str, ahead: int, changed: list[str], dirty: str) -> tuple[str, str]:
+def classify_branch(
+    name: str, ahead: int, changed: list[str], dirty: str
+) -> tuple[str, str]:
     modules = Counter(module_for_path(path) for path in changed)
-    runtime_only = bool(changed) and all(looks_like_tracked_runtime(path) for path in changed)
+    runtime_only = bool(changed) and all(
+        looks_like_tracked_runtime(path) for path in changed
+    )
     mostly_retort = bool(changed) and sum(
-        count for module, count in modules.items() if module in {"retort-engine", "runtime-retort"}
+        count
+        for module, count in modules.items()
+        if module in {"retort-engine", "runtime-retort"}
     ) >= max(1, int(len(changed) * 0.75))
 
     if ahead == 0:
@@ -207,12 +215,18 @@ def classify_branch(name: str, ahead: int, changed: list[str], dirty: str) -> tu
     if runtime_only:
         return "runtime-artifact-only", "do not merge; ignore or untrack artifacts"
     if name.startswith("retort/absorb") and mostly_retort:
-        return "retort-feature-candidate", "intake by cherry-pick/squash after Retort review"
+        return (
+            "retort-feature-candidate",
+            "intake by cherry-pick/squash after Retort review",
+        )
     if name.startswith("devfleet/codex/"):
         return "agent-feature-candidate", "inspect and cherry-pick useful commits"
     if ahead <= 5 and len(changed) <= 60:
         return "small-feature-candidate", "candidate for direct review/cherry-pick"
-    return "large-feature-candidate", "needs branch-level intake, likely squash/cherry-pick"
+    return (
+        "large-feature-candidate",
+        "needs branch-level intake, likely squash/cherry-pick",
+    )
 
 
 def branch_rows(root: Path, main_ref: str, limit: int | None) -> list[BranchRow]:
@@ -228,12 +242,18 @@ def branch_rows(root: Path, main_ref: str, limit: int | None) -> list[BranchRow]
     )
     for line in refs.splitlines():
         name, _date, commit, subject = line.split("|", 3)
-        counts = run_git(["rev-list", "--left-right", "--count", f"{main_ref}...{name}"], root).split()
+        counts = run_git(
+            ["rev-list", "--left-right", "--count", f"{main_ref}...{name}"], root
+        ).split()
         behind = int(counts[0])
         ahead = int(counts[1])
-        changed = run_git(["diff", "--name-only", f"{main_ref}...{name}"], root).splitlines()
+        changed = run_git(
+            ["diff", "--name-only", f"{main_ref}...{name}"], root
+        ).splitlines()
         modules_counter = Counter(module_for_path(path) for path in changed)
-        modules = ", ".join(f"{name}:{count}" for name, count in modules_counter.most_common(4))
+        modules = ", ".join(
+            f"{name}:{count}" for name, count in modules_counter.most_common(4)
+        )
         wt = worktrees.get(name, {})
         active = wt.get("path", "")
         dirty = wt.get("dirty", "no")
@@ -253,7 +273,9 @@ def branch_rows(root: Path, main_ref: str, limit: int | None) -> list[BranchRow]
             )
         )
 
-    rows.sort(key=lambda row: (row.ahead == 0, -row.ahead, -row.changed_files, row.name))
+    rows.sort(
+        key=lambda row: (row.ahead == 0, -row.ahead, -row.changed_files, row.name)
+    )
     return rows[:limit] if limit else rows
 
 
@@ -281,8 +303,10 @@ def tracked_runtime_candidates(root: Path) -> list[str]:
     return candidates
 
 
-def render_markdown(root: Path, main_ref: str, rows: list[BranchRow], dirty: list[dict[str, str]]) -> str:
-    generated = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+def render_markdown(
+    root: Path, main_ref: str, rows: list[BranchRow], dirty: list[dict[str, str]]
+) -> str:
+    generated = dt.datetime.now(dt.UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
     feature_rows = [row for row in rows if row.ahead > 0]
     tracked_runtime = tracked_runtime_candidates(root)
     dirty_worktrees = worktree_dirty_details(root)
@@ -299,15 +323,23 @@ def render_markdown(root: Path, main_ref: str, rows: list[BranchRow], dirty: lis
     out.append(f"- Feature-bearing branches in this report: {len(feature_rows)}")
     out.append(f"- Active dirty branch worktrees detected: {len(dirty_worktrees)}")
     out.append(f"- Dirty files in report-generation worktree: {len(dirty)}")
-    out.append(f"- Dirty files in report-generation worktree classified as runtime/test artifacts: {len(runtime_dirty)}")
+    out.append(
+        f"- Dirty files in report-generation worktree classified as runtime/test artifacts: {len(runtime_dirty)}"
+    )
     out.append(f"- High-confidence tracked runtime candidates: {len(tracked_runtime)}")
     out.append("")
     out.append("## Policy")
     out.append("")
     out.append("- Do not delete feature-bearing branches during cleanup.")
-    out.append("- Do not merge long branches directly into `main`; intake by small reviewed commits.")
-    out.append("- Runtime artifacts must be ignored or untracked before branch integration resumes.")
-    out.append("- Dirty active worktrees must be split by module before any merge attempt.")
+    out.append(
+        "- Do not merge long branches directly into `main`; intake by small reviewed commits."
+    )
+    out.append(
+        "- Runtime artifacts must be ignored or untracked before branch integration resumes."
+    )
+    out.append(
+        "- Dirty active worktrees must be split by module before any merge attempt."
+    )
     out.append("")
     out.append("## Dirty Worktree Modules")
     out.append("")
@@ -319,14 +351,18 @@ def render_markdown(root: Path, main_ref: str, rows: list[BranchRow], dirty: lis
     out.append("## Active Dirty Worktrees")
     out.append("")
     if dirty_worktrees:
-        out.append("| branch | dirty files | runtime-like | top modules | path | sample |")
+        out.append(
+            "| branch | dirty files | runtime-like | top modules | path | sample |"
+        )
         out.append("| --- | ---: | ---: | --- | --- | --- |")
         for item in dirty_worktrees:
             modules = item["modules"]
             assert isinstance(modules, Counter)
             sample_items = item["sample"]
             assert isinstance(sample_items, list)
-            top_modules = ", ".join(f"{module}:{count}" for module, count in modules.most_common(4))
+            top_modules = ", ".join(
+                f"{module}:{count}" for module, count in modules.most_common(4)
+            )
             sample = "<br>".join(f"`{file['path']}`" for file in sample_items[:6])
             out.append(
                 f"| `{item['branch']}` | {item['dirty_count']} | {item['runtime_count']} | "
@@ -372,10 +408,16 @@ def render_markdown(root: Path, main_ref: str, rows: list[BranchRow], dirty: lis
     out.append("")
     out.append("## Next Actions")
     out.append("")
-    out.append("1. Move tracked runtime candidates out of source control with a dedicated cleanup commit.")
+    out.append(
+        "1. Move tracked runtime candidates out of source control with a dedicated cleanup commit."
+    )
     out.append("2. Split dirty active worktrees by module before branch intake.")
-    out.append("3. Promote small feature candidates into an integration branch using cherry-pick or squash.")
-    out.append("4. Keep large Retort absorption branches as source material until reviewed.")
+    out.append(
+        "3. Promote small feature candidates into an integration branch using cherry-pick or squash."
+    )
+    out.append(
+        "4. Keep large Retort absorption branches as source material until reviewed."
+    )
     out.append("")
     return "\n".join(out)
 
@@ -400,7 +442,9 @@ def main() -> int:
             "dirty": dirty,
             "tracked_runtime_candidates": tracked_runtime_candidates(root),
         }
-        args.json_out.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+        args.json_out.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+        )
     if args.markdown_out:
         args.markdown_out.write_text(markdown.rstrip() + "\n")
     if not args.json_out and not args.markdown_out:

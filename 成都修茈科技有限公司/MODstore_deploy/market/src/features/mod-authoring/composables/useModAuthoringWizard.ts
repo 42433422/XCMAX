@@ -4,14 +4,11 @@ import type { ModAuthoringContext } from './useModAuthoringContext'
 
 export function useModAuthoringWizard(ctx: ModAuthoringContext) {
   const currentStep = ref(1)
-  const frontendSkipped = ref(
-    typeof localStorage !== 'undefined' && localStorage.getItem(WIZARD_FRONTEND_SKIP_KEY) === '1',
-  )
+  const frontendSkipped = ref(typeof localStorage !== 'undefined' && localStorage.getItem(WIZARD_FRONTEND_SKIP_KEY) === '1')
 
   const step1Done = computed(() => {
     const desc = ctx.modDescriptionLine.value
-    const industry = (ctx.modData.value as { manifest?: { industry?: { id?: string } } } | null)?.manifest
-      ?.industry
+    const industry = (ctx.modData.value as { manifest?: { industry?: { id?: string } } } | null)?.manifest?.industry
     const id = industry && typeof industry === 'object' ? String(industry.id || '').trim() : ''
     return Boolean(desc) && Boolean(id)
   })

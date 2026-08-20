@@ -31,7 +31,7 @@ def test_templates_create_route_executes_document_template_tool_through_agent(
             return_value=repo,
         ),
         patch(
-            "app.fastapi_routes.document_templates_compat.run_archive_template_create",
+            "app.legacy.routes.document_templates_compat.run_archive_template_create",
             return_value=(
                 {
                     "success": True,
@@ -86,7 +86,7 @@ def test_templates_update_route_executes_document_template_tool_through_agent(
             return_value=repo,
         ),
         patch(
-            "app.fastapi_routes.document_templates_compat.run_archive_template_update",
+            "app.legacy.routes.document_templates_compat.run_archive_template_update",
             return_value=(
                 {
                     "success": True,
@@ -137,7 +137,7 @@ def test_templates_delete_route_executes_document_template_tool_through_agent(
             return_value=repo,
         ),
         patch(
-            "app.fastapi_routes.document_templates_compat.run_archive_template_delete",
+            "app.legacy.routes.document_templates_compat.run_archive_template_delete",
             return_value=(
                 {
                     "success": True,

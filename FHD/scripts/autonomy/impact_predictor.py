@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import os
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 from .types import Action, ActionType, Prediction, RuntimeTruthSnapshot
 
 # 磁盘清理触发阈值默认值（可被 adaptive_thresholds 覆盖）
@@ -31,7 +33,7 @@ def _disk_clean_threshold() -> float:
         from app.domain.autonomy.adaptive_thresholds import get_threshold
 
         return float(get_threshold("disk_clean_threshold").value)
-    except Exception:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:  # noqa: BLE001
         return float(DISK_CLEAN_THRESHOLD)
 
 

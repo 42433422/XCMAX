@@ -154,7 +154,7 @@ class InstallResolver:
                     return False, "; ".join(ve), None
                 b = manifest.get("bundle") or {}
                 embeds = b.get("embeds") if isinstance(b.get("embeds"), list) else []
-                for rel in embeds:
+                for rel in embeds or []:
                     rel = str(rel).strip().lstrip("/").replace("/", os.sep)
                     inner = os.path.join(extract_root, rel)
                     if not os.path.isfile(inner):
@@ -172,7 +172,7 @@ class InstallResolver:
                         self._rollback(rollback_stack)
                         return False, f"安装嵌入失败 ({rel}): {msg}", meta
                 contains = b.get("contains") if isinstance(b.get("contains"), list) else []
-                for item in contains:
+                for item in contains or []:
                     if not isinstance(item, dict):
                         continue
                     ref = (item.get("ref") or "").strip()

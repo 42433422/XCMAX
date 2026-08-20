@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 
 from modstore_server.api.deps import _require_admin
 from modstore_server.models import User
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +79,6 @@ async def post_action_item_status(item_id: int, body: StatusDTO, _: User = Depen
         from modstore_server.public_action_board import write_public_action_board
 
         write_public_action_board()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("public action board after status update failed item_id=%s", item_id)
     return {"ok": True, "data": out}

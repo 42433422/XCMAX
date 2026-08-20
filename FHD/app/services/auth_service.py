@@ -9,9 +9,9 @@ from app.db.session import get_db
 from app.di.registry import get_service_registry
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.services.session_service import get_session_service
-from app.utils import audit_logger
+from app.utils.logging import audit_logger
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.utils.password_hash import check_password_hash, generate_password_hash
+from app.utils.security.password_hash import check_password_hash, generate_password_hash
 from app.utils.time import utc_now_naive
 
 logger = logging.getLogger(__name__)

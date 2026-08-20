@@ -174,7 +174,12 @@ class ProductApplicationService:
         Returns:
             导入结果
         """
-        result = self._products_service.import_products_from_excel(file_path, unit_name)
+        importer = getattr(self._products_service, "import_products_from_excel", None)
+        if not callable(importer):
+            from app.services import get_product_import_service
+
+            importer = get_product_import_service().import_products_from_excel
+        result = importer(file_path, unit_name)
 
         if result.get("success"):
             self._log_action("import_products", count=result.get("count", 0), unit_name=unit_name)
@@ -200,7 +205,10 @@ class ProductApplicationService:
         if not product_result.get("success"):
             return product_result
 
-        product = product_result.get("data")
+        raw_product = product_result.get("data")
+        if not isinstance(raw_product, dict):
+            return {"success": False, "message": "产品数据格式错误"}
+        product = raw_product
 
         label_data = {
             "product_id": product_id,
@@ -234,6 +242,8 @@ class ProductApplicationService:
             return label_result
 
         label_data = label_result.get("data")
+        if not isinstance(label_data, dict):
+            return {"success": False, "message": "标签数据格式错误"}
 
         return cast("dict[str, Any]", self._printer_service.print_labels([label_data]))
 
@@ -253,7 +263,7 @@ class ProductApplicationService:
         filters = filters or {}
 
         return self._products_service.get_products(
-            unit=filters.get("unit"),
+            unit_name=filters.get("unit"),
             keyword=keyword,
             page=filters.get("page", 1),
             per_page=filters.get("per_page", 20),

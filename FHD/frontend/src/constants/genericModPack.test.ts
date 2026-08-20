@@ -28,34 +28,16 @@ describe('genericModPack', () => {
   })
 
   it('respects client primary ERP without domain bridge', () => {
-    expect(
-      shouldAutoEnableMinimalPlatformShell(['attendance-industry', ...MINIMAL_HOST_MOD_IDS]),
-    ).toBe(false)
+    expect(shouldAutoEnableMinimalPlatformShell(['attendance-industry', ...MINIMAL_HOST_MOD_IDS])).toBe(false)
     const partialGeneric = GENERIC_HOST_MOD_IDS.filter((id) => id !== 'xcagi-erp-domain-bridge')
-    expect(
-      shouldAutoEnablePlatformShell(['attendance-industry', ...partialGeneric]),
-    ).toBe(false)
+    expect(shouldAutoEnablePlatformShell(['attendance-industry', ...partialGeneric])).toBe(false)
   })
 
   it('keeps host chat when planner mod facet is suppressed in client ERP', () => {
     const installed = ['attendance-industry', 'xcagi-planner-bridge', ...MINIMAL_HOST_MOD_IDS]
-    expect(
-      keepHostNavKeyVisibleWhenModSidebarFacetSuppressed(
-        'chat',
-        installed,
-        'attendance-industry',
-      ),
-    ).toBe(true)
-    expect(
-      keepHostNavKeyVisibleWhenModSidebarFacetSuppressed(
-        'ai-ecosystem',
-        installed,
-        'attendance-industry',
-      ),
-    ).toBe(true)
-    expect(
-      keepHostNavKeyVisibleWhenModSidebarFacetSuppressed('kitten-finance', installed, 'attendance-industry'),
-    ).toBe(true)
+    expect(keepHostNavKeyVisibleWhenModSidebarFacetSuppressed('chat', installed, 'attendance-industry')).toBe(true)
+    expect(keepHostNavKeyVisibleWhenModSidebarFacetSuppressed('ai-ecosystem', installed, 'attendance-industry')).toBe(true)
+    expect(keepHostNavKeyVisibleWhenModSidebarFacetSuppressed('kitten-finance', installed, 'attendance-industry')).toBe(true)
   })
 
   it('isHostMountedModMenuPath accepts pro_entry_path and host keys', () => {

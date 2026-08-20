@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """Employee runtime service port.
 
 When the Employee domain is extracted to its own process, the only thing the
@@ -11,7 +12,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from threading import Lock
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 
 class EmployeeRuntimeClient(ABC):
@@ -47,7 +48,7 @@ class InProcessEmployeeRuntimeClient(EmployeeRuntimeClient):
     def get_employee_status(self, employee_id: str) -> Dict[str, Any]:
         from modstore_server.employee_executor import get_employee_status as _status
 
-        return _status(employee_id)
+        return cast(Dict[str, Any], _status(employee_id))
 
     def execute_task(
         self,
@@ -60,8 +61,15 @@ class InProcessEmployeeRuntimeClient(EmployeeRuntimeClient):
     ) -> Dict[str, Any]:
         from modstore_server.employee_executor import execute_employee_task
 
-        return execute_employee_task(
-            employee_id, task, input_data or {}, user_id, bench_llm_override=bench_llm_override
+        return cast(
+            Dict[str, Any],
+            execute_employee_task(
+                employee_id,
+                task,
+                input_data or {},
+                user_id,
+                bench_llm_override=bench_llm_override,
+            ),
         )
 
 

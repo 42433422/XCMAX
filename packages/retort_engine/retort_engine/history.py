@@ -83,7 +83,7 @@ class RetortHistoryStore:
                 f"INSERT INTO {table} ({','.join(columns)}) VALUES ({placeholders})",
                 payload,
             )
-            return int(cursor.lastrowid)
+            return int(cursor.lastrowid or 0)
 
     def _init_schema(self) -> None:
         with sqlite3.connect(self.path) as conn:

@@ -32,9 +32,13 @@ describe('offlineTts ensureOfflineReady and synthesis', () => {
 
       const { ensureOfflineReady, isOfflineReady } = await importFresh()
       await ensureOfflineReady()
-      expect(mockPipeline).toHaveBeenCalledWith('text-to-speech', 'Xenova/mms-tts-cmn', expect.objectContaining({
-        dtype: 'q8',
-      }))
+      expect(mockPipeline).toHaveBeenCalledWith(
+        'text-to-speech',
+        'Xenova/mms-tts-cmn',
+        expect.objectContaining({
+          dtype: 'q8',
+        }),
+      )
       expect(isOfflineReady()).toBe(true)
     })
 
@@ -67,9 +71,7 @@ describe('offlineTts ensureOfflineReady and synthesis', () => {
     it('retries with hf-mirror on 401 error', async () => {
       const authError = new Error('Unauthorized access to file')
       const synth = vi.fn().mockResolvedValue({ audio: new Float32Array([0.1]), sampling_rate: 16000 })
-      mockPipeline
-        .mockRejectedValueOnce(authError)
-        .mockResolvedValueOnce(synth)
+      mockPipeline.mockRejectedValueOnce(authError).mockResolvedValueOnce(synth)
 
       const { ensureOfflineReady, isOfflineReady } = await importFresh()
       await ensureOfflineReady()
@@ -79,9 +81,7 @@ describe('offlineTts ensureOfflineReady and synthesis', () => {
 
     it('throws formatted error after mirror retry fails', async () => {
       const authError = new Error('Unauthorized access to file')
-      mockPipeline
-        .mockRejectedValueOnce(authError)
-        .mockRejectedValueOnce(new Error('Still unauthorized'))
+      mockPipeline.mockRejectedValueOnce(authError).mockRejectedValueOnce(new Error('Still unauthorized'))
 
       const { ensureOfflineReady, getOfflineError } = await importFresh()
       await expect(ensureOfflineReady()).rejects.toThrow()

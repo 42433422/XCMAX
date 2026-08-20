@@ -14,6 +14,8 @@ import subprocess
 from pathlib import Path
 from typing import Any, Dict
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 logger = logging.getLogger(__name__)
 
 _VALID_TIERS = frozenset({"local", "staging", "production"})
@@ -108,7 +110,7 @@ def health_payload() -> Dict[str, Any]:
         from modstore_server.research_tools import tavily_api_key
 
         tavily_ok = bool(tavily_api_key())
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     release = _release_identity()
     return {

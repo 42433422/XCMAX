@@ -8,10 +8,7 @@ vi.mock('@/api/xcmaxMarketProxy', () => ({
   },
 }))
 
-import {
-  useDutyRosterLoopStatus,
-  normalizeDutyRosterLoopStatus,
-} from './useDutyRosterLoopStatus'
+import { useDutyRosterLoopStatus, normalizeDutyRosterLoopStatus } from './useDutyRosterLoopStatus'
 
 describe('normalizeDutyRosterLoopStatus', () => {
   it('returns empty status for null payload', () => {

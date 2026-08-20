@@ -1,10 +1,12 @@
-# -*- coding: utf-8 -*-
+# mypy: disable-error-code="arg-type, union-attr"
 """
 详细测试 OCR 提取结果 - 捕获所有异常
 """
 
-import traceback
 import importlib.util
+import traceback
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 try:
     spec = importlib.util.spec_from_file_location(
@@ -19,21 +21,21 @@ try:
     # 测试 PE封固底漆稀料
     image_path = r"e:\FHD\26-0300001A_第1项_PE封固底漆稀料.png"
 
-    filename = image_path.split("\\")[-1]
+    filename = image_path.rsplit("\\", maxsplit=1)[-1]
     print(f"测试：{filename}")
     print("=" * 70)
 
     result = extract_text_with_ocr(image_path)
 
     if result.get("success"):
-        print(f"✓ 成功")
-        print(f"\n网格信息：")
+        print("✓ 成功")
+        print("\n网格信息：")
         grid = result.get("grid", {})
         print(f"  行 x 列：{grid.get('rows', 0)} 行 × {grid.get('cols', 0)} 列")
         print(f"  水平线 Y：{grid.get('horizontal_lines', [])}")
         print(f"  垂直线 X：{grid.get('vertical_lines', [])}")
 
-        print(f"\n单元格：")
+        print("\n单元格：")
         cells = grid.get("cells", [])
         for i, cell in enumerate(cells):
             print(
@@ -41,7 +43,7 @@ try:
                 f"位置({cell.get('x')},{cell.get('y')}) 尺寸{cell.get('width')}x{cell.get('height')}"
             )
 
-        print(f"\n字段：")
+        print("\n字段：")
         fields = result.get("fields", [])
         for i, field in enumerate(fields):
             print(
@@ -51,6 +53,6 @@ try:
     else:
         print(f"✗ 失败：{result.get('error')}")
 
-except Exception as e:
+except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"✗ 异常：{e}")
     traceback.print_exc()

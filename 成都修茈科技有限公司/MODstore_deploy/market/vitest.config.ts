@@ -28,15 +28,19 @@ export default defineConfig({
         'src/**/*.d.ts',
         'src/test/**',
         'src/e2e/**',
+        // 独立的“客来来”React/Electron 工作区自带 package.json 与测试配置，
+        // 不属于 Market 的 Vite 产物，不能混入 Market 覆盖率分母。
+        'src/domain/客来来/**',
         'src/**/*.test.ts',
         'src/**/*.spec.ts',
       ],
-      // 阶梯提升计划：30 → 50 → 80（实际覆盖率 59%，30% 是安全第一台阶）
+      // 全量行为测试拉到 2026-08-17 的可验证基线后，用整数下限锁住回归。
+      // 当前实测：74.82 / 59.44 / 69.18 / 77.50。
       thresholds: {
-        statements: 30,
-        branches: 25,
-        functions: 28,
-        lines: 30,
+        statements: 74,
+        branches: 59,
+        functions: 69,
+        lines: 77,
         'src/application/paymentApi.ts': {
           statements: 80,
           branches: 70,

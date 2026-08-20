@@ -126,17 +126,11 @@ describe('useVisibleNavItems · 平台壳第三步完成后长出行业菜单', 
     expect(customers?.name).toBe('部门管理')
 
     // erp-domain-bridge 的同名 mod 入口被合并去重，products / print 槽位只出现一次
-    const productSlots = visibleNavItems.value.filter(
-      (i) => i.key === 'products' || i.key === 'mod-erp-products',
-    )
+    const productSlots = visibleNavItems.value.filter((i) => i.key === 'products' || i.key === 'mod-erp-products')
     expect(productSlots.length).toBe(1)
-    const printSlots = visibleNavItems.value.filter(
-      (i) => i.key === 'print' || i.key === 'mod-erp-print',
-    )
+    const printSlots = visibleNavItems.value.filter((i) => i.key === 'print' || i.key === 'mod-erp-print')
     expect(printSlots.length).toBe(1)
-    const businessDockingSlots = visibleNavItems.value.filter(
-      (i) => i.key === 'business-docking' || i.key === 'mod-erp-business-docking',
-    )
+    const businessDockingSlots = visibleNavItems.value.filter((i) => i.key === 'business-docking' || i.key === 'mod-erp-business-docking')
     expect(businessDockingSlots.length).toBe(1)
   })
 })

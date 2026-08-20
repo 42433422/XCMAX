@@ -28,6 +28,7 @@ from .cors import (
 )
 from .lifespan import lifespan
 from .middleware_extra import register_extra_middleware, register_prometheus_metrics
+from .openapi_enrichment import install_openapi_enrichment
 
 
 def _desktop_fast_start_enabled() -> bool:
@@ -156,7 +157,10 @@ def create_fastapi_app(
         if _desktop_fast_start_enabled():
             app.state.mods_deferred_bootstrap = True
         else:
-            bootstrap_mod_extensions_sync(app)
+            # Register the staged routes now, but do not let the background
+            # worker mutate ``app.routes`` while the factory is still adding
+            # static mounts, aliases, and the SPA fallback below.
+            bootstrap_mod_extensions_sync(app, schedule_background=False)
     except RECOVERABLE_ERRORS as e:
         logger.warning("Mod extensions staged load failed (lifespan may retry): %s", e)
 
@@ -173,6 +177,20 @@ def create_fastapi_app(
     except RECOVERABLE_ERRORS as e:
         logger.exception("Failed to register SPA history fallback: %s", e)
         raise
+
+    # Apply documentation normalization only after every route has been
+    # registered. Runtime slash aliases stay available, while duplicate schema
+    # entries are hidden and every documented operation receives complete
+    # tags, description and a 2xx response schema.
+    from app.legacy.routes.openapi_route_compat import hide_trailing_slash_openapi_duplicates
+
+    hide_trailing_slash_openapi_duplicates(app)
+    install_openapi_enrichment(app)
+
+    if not _desktop_fast_start_enabled() and not getattr(app.state, "mods_full_load_done", False):
+        from app.fastapi_app.mod_startup import schedule_background_mod_load
+
+        schedule_background_mod_load(app)
 
     # ``create_fastapi_app`` is also called directly by the desktop runner.  Keep
     # that serving instance as the process singleton so later login/entitlement

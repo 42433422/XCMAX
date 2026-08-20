@@ -22,9 +22,12 @@ export async function resetHostOnboardingForTest(): Promise<void> {
 }
 
 export async function bootstrapDesktopDatabase(): Promise<{ steps?: string[]; message?: string }> {
-  const res = await api.post<{ success?: boolean; steps?: string[]; message?: string; detail?: string }>(
-    '/api/desktop/bootstrap-db',
-  )
+  const res = await api.post<{
+    success?: boolean
+    steps?: string[]
+    message?: string
+    detail?: string
+  }>('/api/desktop/bootstrap-db')
   if (!res?.success) {
     throw new Error(String(res?.message || res?.detail || '初始化失败'))
   }
@@ -33,7 +36,5 @@ export async function bootstrapDesktopDatabase(): Promise<{ steps?: string[]; me
 
 export function openAssistantTutorialTab(): void {
   if (typeof window === 'undefined') return
-  window.dispatchEvent(
-    new CustomEvent('xcagi:tutorial:set-assistant-tab', { detail: { open: true, tab: 'tutorial' } }),
-  )
+  window.dispatchEvent(new CustomEvent('xcagi:tutorial:set-assistant-tab', { detail: { open: true, tab: 'tutorial' } }))
 }

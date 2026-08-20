@@ -14,9 +14,7 @@ export interface ChatAttachmentMeta {
 }
 
 /** OpenAI-compatible multimodal user message parts（与 /api/llm/chat 对齐）。 */
-export type ChatMultimodalPart =
-  | { type: 'text'; text: string }
-  | { type: 'image_url'; image_url: { url: string } }
+export type ChatMultimodalPart = { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }
 
 export interface ChatMessage {
   id: string
@@ -152,7 +150,9 @@ export function makeMessage(role: ChatMessage['role'], content: string, extra: P
 
 /** 侧栏/列表展示的短标题（带省略号） */
 export function summarizeForTitle(text: string, maxLen = 28): string {
-  const s = String(text || '').replace(/\s+/g, ' ').trim()
+  const s = String(text || '')
+    .replace(/\s+/g, ' ')
+    .trim()
   if (!s) return '新对话'
   if (s.length <= maxLen) return s
   const cut = s.slice(0, maxLen)
@@ -163,7 +163,9 @@ export function summarizeForTitle(text: string, maxLen = 28): string {
 
 /** 会话持久化标题（首轮用户问题，保留更完整文案供 tooltip） */
 export function buildConversationTitle(text: string, maxLen = 48): string {
-  const s = String(text || '').replace(/\s+/g, ' ').trim()
+  const s = String(text || '')
+    .replace(/\s+/g, ' ')
+    .trim()
   if (!s) return '新对话'
   if (s.length <= maxLen) return s
   const cut = s.slice(0, maxLen)
@@ -184,10 +186,7 @@ export function exportConversationAsMarkdown(c: Conversation): string {
 }
 
 /** 主区消息为空但 storage 中该会话有记录时，应从 storage 重新加载列表。 */
-export function shouldReloadConversationFromStorage(
-  uiMessageCount: number,
-  storageMessages: ChatMessage[] | undefined,
-): boolean {
+export function shouldReloadConversationFromStorage(uiMessageCount: number, storageMessages: ChatMessage[] | undefined): boolean {
   return uiMessageCount === 0 && (storageMessages?.length ?? 0) > 0
 }
 
@@ -209,7 +208,9 @@ export function mergeConversationsForPick(
 }
 
 export function searchConversations(list: Conversation[], q: string): Conversation[] {
-  const kw = String(q || '').trim().toLowerCase()
+  const kw = String(q || '')
+    .trim()
+    .toLowerCase()
   if (!kw) return list
   return list.filter((c) => {
     if (c.title.toLowerCase().includes(kw)) return true

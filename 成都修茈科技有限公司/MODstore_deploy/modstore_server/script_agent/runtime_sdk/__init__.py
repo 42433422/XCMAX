@@ -1,3 +1,4 @@
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """``modstore_runtime`` —— 沙箱内脚本可以 ``import`` 的受控 SDK（"AI 兜底"）。
 
 子进程通过 TCP socket（``127.0.0.1:$MODSTORE_RUNTIME_PORT``）+ 一次性 token

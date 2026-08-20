@@ -28,11 +28,7 @@ describe('officeEmployeePagePaths', () => {
     const store: Record<string, string> = { [LS_OFFICE_EMPLOYEE_PACK_MOD_PAGES_ENABLED]: '1' }
     vi.stubGlobal('localStorage', { getItem: (k: string) => store[k] ?? null })
     expect(useOfficeEmployeePackModPages()).toBe(true)
-    expect(resolveOfficeEmployeePagePath('/tools')).toBe(
-      '/mod/xcagi-office-employee-pack-bridge/tools',
-    )
-    expect(resolveOfficeEmployeePageRedirectForRouteName('other-tools')).toBe(
-      '/mod/xcagi-office-employee-pack-bridge/other-tools',
-    )
+    expect(resolveOfficeEmployeePagePath('/tools')).toBe('/mod/xcagi-office-employee-pack-bridge/tools')
+    expect(resolveOfficeEmployeePageRedirectForRouteName('other-tools')).toBe('/mod/xcagi-office-employee-pack-bridge/other-tools')
   })
 })

@@ -1,15 +1,14 @@
-# -*- coding: utf-8 -*-
+# mypy: disable-error-code="arg-type, assignment"
 """
 生成实际标签图片的 HTML 预览 - 使用实际检测数据
 """
 
-import cv2
-import numpy as np
-import os
-import json
-
 # 使用 glob 找到实际文件
 import glob
+import json
+
+import cv2
+import numpy as np
 
 files = glob.glob(r"e:\FHD\26-0300001A*.png")
 image_path = files[0]
@@ -90,8 +89,8 @@ def merge_close_lines(lines, threshold=50):
     return merged
 
 
-horizontal_lines = sorted(list(set(horizontal_lines)))
-vertical_lines = sorted(list(set(vertical_lines)))
+horizontal_lines = sorted(set(horizontal_lines))
+vertical_lines = sorted(set(vertical_lines))
 
 horizontal_lines = merge_very_close_lines(horizontal_lines, threshold=5)
 vertical_lines = merge_very_close_lines(vertical_lines, threshold=5)
@@ -99,7 +98,7 @@ vertical_lines = merge_very_close_lines(vertical_lines, threshold=5)
 horizontal_lines = merge_close_lines(horizontal_lines, threshold=50)
 vertical_lines = merge_close_lines(vertical_lines, threshold=50)
 
-print(f"\n网格线检测结果:")
+print("\n网格线检测结果:")
 print(f"  水平线：{horizontal_lines}")
 print(f"  垂直线：{vertical_lines}")
 
@@ -205,7 +204,7 @@ html_content = f"""<!DOCTYPE html>
     <div class="container">
         <h1>📋 实际标签图片预览</h1>
         <div class="info">
-            <strong>图片尺寸：{width} × {height}</strong> | 比例 {width/height:.2f}:1
+            <strong>图片尺寸：{width} × {height}</strong> | 比例 {width / height:.2f}:1
         </div>
 
         <div class="preview-container">
@@ -225,7 +224,7 @@ html_content = f"""<!DOCTYPE html>
                 </div>
                 <div class="info-item">
                     <div class="info-label">网格结构</div>
-                    <div class="info-value">{len(horizontal_lines)-1}行 × {len(vertical_lines)-1}列</div>
+                    <div class="info-value">{len(horizontal_lines) - 1}行 × {len(vertical_lines) - 1}列</div>
                 </div>
 
                 <h3 style="margin-top: 20px;">📏 水平线 Y 坐标</h3>
@@ -300,4 +299,4 @@ with open(output_path, "w", encoding="utf-8") as f:
     f.write(html_content)
 
 print(f"\n✓ HTML 预览已生成：{output_path}")
-print(f"请在浏览器中打开查看实际网格布局")
+print("请在浏览器中打开查看实际网格布局")

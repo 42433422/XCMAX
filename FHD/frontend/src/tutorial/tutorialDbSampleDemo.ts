@@ -125,9 +125,7 @@ function selectRowsWithPrefix(containerSelector: string, prefix: string): number
 
 async function confirmBatchDeleteDialog(): Promise<void> {
   await sleep(350)
-  const btn = document.querySelector<HTMLElement>(
-    '.confirm-dialog-footer .btn-danger, .confirm-dialog .btn-danger',
-  )
+  const btn = document.querySelector<HTMLElement>('.confirm-dialog-footer .btn-danger, .confirm-dialog .btn-danger')
   btn?.click()
 }
 
@@ -135,9 +133,7 @@ export async function runQuickStartDeleteCustomersDemo(): Promise<void> {
   await sleep(500)
   selectRowsWithPrefix('#view-customers', PREFIX)
   await sleep(300)
-  const batchBtn = document.querySelector<HTMLElement>(
-    '#view-customers .customers-header-actions .btn-danger, #view-customers .btn-danger',
-  )
+  const batchBtn = document.querySelector<HTMLElement>('#view-customers .customers-header-actions .btn-danger, #view-customers .btn-danger')
   if (batchBtn) {
     batchBtn.click()
     await confirmBatchDeleteDialog()

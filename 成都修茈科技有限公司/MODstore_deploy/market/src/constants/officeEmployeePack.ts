@@ -18,16 +18,7 @@ export const OFFICE_AUX_PACK_1_PKG_IDS = ['json-report-employee'] as const
 export const OFFICE_EMPLOYEE_COLLECTION = 'office_employee_pack'
 export const OFFICE_AUX_PACK_1_COLLECTION = 'office_employee_aux_pack_1'
 
-export type EmployeePackIconKind =
-  | 'ppt'
-  | 'excel'
-  | 'csv'
-  | 'pdf'
-  | 'word'
-  | 'report'
-  | 'chart'
-  | 'office'
-  | 'generic'
+export type EmployeePackIconKind = 'ppt' | 'excel' | 'csv' | 'pdf' | 'word' | 'report' | 'chart' | 'office' | 'generic'
 
 export function employeePackIconKind(pkgId?: string | null): EmployeePackIconKind {
   const id = (pkgId || '').toLowerCase()

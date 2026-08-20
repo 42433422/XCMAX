@@ -17,7 +17,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-import app.utils.redis_cache as rc
+import app.utils.performance.redis_cache as rc
 
 
 @pytest.fixture

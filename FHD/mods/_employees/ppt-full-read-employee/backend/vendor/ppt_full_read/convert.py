@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from app.mod_sdk.errors import RECOVERABLE_ERRORS
+
 _CATEGORY_DIRS = ("figures", "photos", "diagrams", "icons", "uncategorized")
 _SPEAKER_NOTES_PROMPT = "为这份PPT生成每页的演讲备注"
 
@@ -33,7 +35,7 @@ def _shape_text(shape: Any) -> str:
             if t:
                 lines.append(t)
         return "\n".join(lines)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return ""
 
 
@@ -61,14 +63,16 @@ def _extract_pptx(src_path: Path) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]
                     area = max(1, w * h // 914400)
                     category = _classify_image(max(1, w // 914400), max(1, h // 914400), area)
                     img_seq += 1
-                    images_raw.append({
-                        "id": f"s{slide_idx}_img{img_seq}",
-                        "slide": slide_idx,
-                        "category": category,
-                        "bytes": blob,
-                        "ext": ext,
-                    })
-                except Exception:
+                    images_raw.append(
+                        {
+                            "id": f"s{slide_idx}_img{img_seq}",
+                            "slide": slide_idx,
+                            "category": category,
+                            "bytes": blob,
+                            "ext": ext,
+                        }
+                    )
+                except RECOVERABLE_ERRORS:
                     continue
                 continue
             t = _shape_text(shape).strip()
@@ -86,19 +90,25 @@ def _extract_pptx(src_path: Path) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]
         try:
             if slide.has_notes_slide and slide.notes_slide.notes_text_frame:
                 notes_existing = (slide.notes_slide.notes_text_frame.text or "").strip()
-        except Exception:
+        except RECOVERABLE_ERRORS:
             notes_existing = ""
-        slides_out.append({
-            "index": slide_idx,
-            "title": slide_title,
-            "bullets": bullets[:12],
-            "body_text": "\n".join(texts),
-            "notes_existing": notes_existing,
-            "notes_generated": "",
-            "images": [],
-        })
+        slides_out.append(
+            {
+                "index": slide_idx,
+                "title": slide_title,
+                "bullets": bullets[:12],
+                "body_text": "\n".join(texts),
+                "notes_existing": notes_existing,
+                "notes_generated": "",
+                "images": [],
+            }
+        )
 
-    outline = [{"level": 1, "text": s["title"], "slide_index": s["index"]} for s in slides_out if s.get("title")]
+    outline = [
+        {"level": 1, "text": s["title"], "slide_index": s["index"]}
+        for s in slides_out
+        if s.get("title")
+    ]
     payload = {
         "title": title_guess or src_path.stem,
         "slide_count": len(slides_out),
@@ -121,12 +131,14 @@ def _write_image_files(images: List[Dict[str, Any]], images_root: Path) -> List[
         fname = f"{img.get('id') or 'img'}.{ext}"
         out_path = sub / fname
         out_path.write_bytes(img.get("bytes") or b"")
-        catalog.append({
-            "id": img.get("id"),
-            "slide": img.get("slide"),
-            "category": category,
-            "relpath": str(out_path.relative_to(images_root.parent)).replace("\\", "/"),
-        })
+        catalog.append(
+            {
+                "id": img.get("id"),
+                "slide": img.get("slide"),
+                "category": category,
+                "relpath": str(out_path.relative_to(images_root.parent)).replace("\\", "/"),
+            }
+        )
     return catalog
 
 
@@ -165,8 +177,10 @@ async def _vlm_describe_image(
         }
     ]
     try:
-        res = await asyncio.wait_for(call_llm(messages, max_tokens=600, temperature=0.1), timeout=90.0)
-    except Exception:
+        res = await asyncio.wait_for(
+            call_llm(messages, max_tokens=600, temperature=0.1), timeout=90.0
+        )
+    except RECOVERABLE_ERRORS:
         return None
     if not isinstance(res, dict) or not res.get("ok"):
         return None
@@ -208,14 +222,18 @@ async def _generate_speaker_note(
         user_msg += f"\n已有备注（可参考，勿照抄）：\n{notes_existing[:1500]}\n"
     if vlm_txt:
         user_msg += f"\n图片识别摘要：\n{vlm_txt}\n"
-    user_msg += "\n请只输出本页演讲备注正文（中文，200-400字），不要 JSON，不要编造幻灯片上没有的信息。"
+    user_msg += (
+        "\n请只输出本页演讲备注正文（中文，200-400字），不要 JSON，不要编造幻灯片上没有的信息。"
+    )
     messages = [
         {"role": "system", "content": "你是专业的演示文稿演讲稿撰写助手。"},
         {"role": "user", "content": user_msg},
     ]
     try:
-        res = await asyncio.wait_for(call_llm(messages, max_tokens=800, temperature=0.3), timeout=120.0)
-    except Exception:
+        res = await asyncio.wait_for(
+            call_llm(messages, max_tokens=800, temperature=0.3), timeout=120.0
+        )
+    except RECOVERABLE_ERRORS:
         return ""
     if not isinstance(res, dict) or not res.get("ok"):
         return ""
@@ -247,7 +265,7 @@ async def convert_file(
     warnings: List[str] = []
     try:
         presentation, images_raw = _extract_pptx(src_path)
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         raise ValueError(f"PPT 解析失败：{exc}") from exc
 
     catalog = _write_image_files(images_raw, images_root)
@@ -265,7 +283,9 @@ async def convert_file(
         )
         if sidecar:
             sidecar_path = img_abs.with_suffix(img_abs.suffix + ".vlm.json")
-            sidecar_path.write_text(json.dumps(sidecar, ensure_ascii=False, indent=2), encoding="utf-8")
+            sidecar_path.write_text(
+                json.dumps(sidecar, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
             entry["vlm_sidecar"] = str(sidecar_path.relative_to(output_dir)).replace("\\", "/")
             desc = str(sidecar.get("description") or sidecar.get("detected_text") or "")[:500]
             slide_no = int(entry.get("slide") or 0)
@@ -274,8 +294,14 @@ async def convert_file(
             warnings.append(f"图片 {entry.get('id')} 未获得 VLM 描述")
 
     images_index_path = output_dir / "images_index.json"
-    images_index = {"images": catalog, "categories": list(_CATEGORY_DIRS), "vlm_count": sum(1 for i in catalog if i.get("vlm_sidecar"))}
-    images_index_path.write_text(json.dumps(images_index, ensure_ascii=False, indent=2), encoding="utf-8")
+    images_index = {
+        "images": catalog,
+        "categories": list(_CATEGORY_DIRS),
+        "vlm_count": sum(1 for i in catalog if i.get("vlm_sidecar")),
+    }
+    images_index_path.write_text(
+        json.dumps(images_index, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     deck_title = str(presentation.get("title") or src_path.stem)
     notes_lines: List[str] = [f"# {deck_title}", ""]
@@ -284,7 +310,9 @@ async def convert_file(
             continue
         idx = int(slide.get("index") or 0)
         vlm_hints = slide_vlm.get(idx, [])
-        generated = await _generate_speaker_note(slide, ctx, deck_title=deck_title, vlm_summaries=vlm_hints)
+        generated = await _generate_speaker_note(
+            slide, ctx, deck_title=deck_title, vlm_summaries=vlm_hints
+        )
         if generated:
             slide["notes_generated"] = generated
         elif not ctx.get("call_llm"):
@@ -294,7 +322,9 @@ async def convert_file(
         notes_lines.append(f"## 第 {idx} 页 · {slide.get('title') or ''}")
         if slide.get("notes_existing"):
             notes_lines.append(f"**已有备注：** {slide['notes_existing'][:500]}")
-        notes_lines.append(str(slide.get("notes_generated") or slide.get("notes_existing") or "（未生成）"))
+        notes_lines.append(
+            str(slide.get("notes_generated") or slide.get("notes_existing") or "（未生成）")
+        )
         notes_lines.append("")
 
     try:

@@ -27,33 +27,33 @@ class TestAuthenticateFailureMessage:
     """Verify the 4 known DB-error patterns and the fallback."""
 
     def test_market_access_token_missing(self) -> None:
-        exc = Exception("OperationalError: market_access_token column not found")
+        exc = RuntimeError("OperationalError: market_access_token column not found")
         msg = _authenticate_failure_message(exc)
         assert "market_access_token" in msg
         assert "alembic upgrade head" in msg
 
     def test_no_such_table_users_sqlite(self) -> None:
-        exc = Exception("OperationalError: no such table: users")
+        exc = RuntimeError("OperationalError: no such table: users")
         msg = _authenticate_failure_message(exc)
         assert "no such table: users" in msg or "users 表" in msg
 
     def test_relation_users_does_not_exist(self) -> None:
-        exc = Exception('psycopg2.errors.UndefinedTable: relation "users" does not exist')
+        exc = RuntimeError('psycopg2.errors.UndefinedTable: relation "users" does not exist')
         msg = _authenticate_failure_message(exc)
         assert "users 表" in msg
 
     def test_relation_sessions_does_not_exist(self) -> None:
-        exc = Exception('psycopg2.errors.UndefinedTable: relation "sessions" does not exist')
+        exc = RuntimeError('psycopg2.errors.UndefinedTable: relation "sessions" does not exist')
         msg = _authenticate_failure_message(exc)
         assert "sessions 表" in msg
 
     def test_unrelated_error_returns_generic(self) -> None:
-        exc = Exception("connection refused")
+        exc = RuntimeError("connection refused")
         msg = _authenticate_failure_message(exc)
         assert msg == "登录失败，请稍后重试"
 
     def test_chained_cause_is_inspected(self) -> None:
-        inner = Exception("no such table: users")
+        inner = RuntimeError("no such table: users")
         outer = RuntimeError("bootstrap failed")
         outer.__cause__ = inner
         msg = _authenticate_failure_message(outer)
@@ -61,8 +61,8 @@ class TestAuthenticateFailureMessage:
 
     def test_loop_protection(self) -> None:
         # circular cause chain (id(cur) in seen) should not infinite-loop
-        a = Exception("loop")
-        b = Exception("a")
+        a = RuntimeError("loop")
+        b = RuntimeError("a")
         a.__cause__ = b
         b.__cause__ = a
         msg = _authenticate_failure_message(a)

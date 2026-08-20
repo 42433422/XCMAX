@@ -33,7 +33,11 @@ function mountView(query: Record<string, string> = {}) {
     routes: [
       { path: '/forgot-account', name: 'forgot-account', component: ForgotAccountView },
       { path: '/login', name: 'login', component: { template: '<div />' } },
-      { path: '/forgot-password', name: 'login-forgot-password', component: { template: '<div />' } },
+      {
+        path: '/forgot-password',
+        name: 'login-forgot-password',
+        component: { template: '<div />' },
+      },
     ],
   })
   return router.push({ path: '/forgot-account', query }).then(() =>
@@ -168,9 +172,7 @@ describe('ForgotAccountView', () => {
 
   it('shows error message on ApiError', async () => {
     const { ApiError } = await import('@/api')
-    forgotAccountMock.mockRejectedValue(
-      new ApiError('请求失败', { message: '邮箱不存在' }),
-    )
+    forgotAccountMock.mockRejectedValue(new ApiError('请求失败', { message: '邮箱不存在' }))
     const wrapper = await mountView()
     await wrapper.find('input[type="email"]').setValue('user@example.com')
     await wrapper.find('form').trigger('submit.prevent')
@@ -180,9 +182,7 @@ describe('ForgotAccountView', () => {
 
   it('shows error message on ApiError with error object', async () => {
     const { ApiError } = await import('@/api')
-    forgotAccountMock.mockRejectedValue(
-      new ApiError('请求失败', { error: { message: '服务异常' } }),
-    )
+    forgotAccountMock.mockRejectedValue(new ApiError('请求失败', { error: { message: '服务异常' } }))
     const wrapper = await mountView()
     await wrapper.find('input[type="email"]').setValue('user@example.com')
     await wrapper.find('form').trigger('submit.prevent')

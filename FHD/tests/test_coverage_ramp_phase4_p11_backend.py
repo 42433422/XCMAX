@@ -43,13 +43,13 @@ def test_get_api_key_from_config_file(
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     cfg = tmp_path / "deepseek_config.py"
     cfg.write_text('DEEPSEEK_API_KEY = "from-config"\n', encoding="utf-8")
-    with patch("app.utils.path_utils.get_resource_path", return_value=str(cfg)):
+    with patch("app.utils.path_io.path_utils.get_resource_path", return_value=str(cfg)):
         assert rec._get_api_key() == "from-config"
 
 
 def test_get_api_key_none(rec: DeepSeekIntentRecognizer, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
-    with patch("app.utils.path_utils.get_resource_path", return_value=None):
+    with patch("app.utils.path_io.path_utils.get_resource_path", return_value=None):
         assert rec._get_api_key() == ""
 
 

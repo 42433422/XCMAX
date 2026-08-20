@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Build xcmax-tree-data.json for XCAGI-Full-Pipeline.html directory viewer."""
+
 from __future__ import annotations
 
 import json
@@ -20,9 +21,7 @@ DUTY_GAPS_OUT = CACHE_DIR / "xcmax-yuangon-duty-gaps.json"
 SIX_LINE_MAP = ROOT / "FHD" / "config" / "six_line_employee_map.json"
 STEP_EMPLOYEE_OUT = CACHE_DIR / "xcmax-step-employee-coverage.json"
 
-EXCLUDE_DIR_NAMES = frozenset(
-    {"__pycache__", "node_modules", "build", "dist", ".git"}
-)
+EXCLUDE_DIR_NAMES = frozenset({"__pycache__", "node_modules", "build", "dist", ".git"})
 EXCLUDE_DIR_PREFIXES = (".venv", "_tmp_pdx")
 EXCLUDE_PATH_PARTS = frozenset({".archive", ".tools"})
 EXCLUDE_TOP_LEVEL = frozenset({"vosk-model-small-cn-0.22"})
@@ -160,7 +159,11 @@ def match_path_rule(rel: str, path_map: dict[str, Any]) -> dict[str, Any] | None
         prefix = str(rule.get("prefix") or "")
         if not prefix:
             continue
-        if rel == prefix.rstrip("/") or probe.startswith(prefix) or rel.startswith(prefix):
+        if (
+            rel == prefix.rstrip("/")
+            or probe.startswith(prefix)
+            or rel.startswith(prefix)
+        ):
             if len(prefix) > best_len:
                 best = rule
                 best_len = len(prefix)
@@ -178,7 +181,9 @@ def get_tree_node(tree: dict, rel_path: str) -> dict | None:
     return node
 
 
-def collect_zone_paths(tree: dict, zone_roots: list[str], path_map: dict[str, Any] | None = None) -> list[str]:
+def collect_zone_paths(
+    tree: dict, zone_roots: list[str], path_map: dict[str, Any] | None = None
+) -> list[str]:
     """顶层目录 + FHD/成都公司 二级目录 + 配置的 depth3 根（如 FHD domains）。"""
     zones: list[str] = []
     children = tree.get("children") or {}
@@ -225,7 +230,9 @@ def audit_yuangon_duty_gaps() -> dict[str, Any]:
     extra_yaml = sorted(on_disk - planned)
     path_map = load_path_employee_map()
     workflow_mods = path_map.get("workflow_mods") or []
-    employee_binding = audit_employee_system_binding(path_map, roster=roster, planned=planned)
+    employee_binding = audit_employee_system_binding(
+        path_map, roster=roster, planned=planned
+    )
     return {
         "version": date.today().isoformat(),
         "planned_yuangon_count": len(planned),
@@ -286,9 +293,16 @@ def audit_employee_system_binding(
         planned = _roster_planned_ids(roster)
 
     path_primary = _path_primary_ids(path_map)
-    craft_exempt = set((roster.get("areas") or {}).get("craft-workshop", {}).get("ids") or [])
+    craft_exempt = set(
+        (roster.get("areas") or {}).get("craft-workshop", {}).get("ids") or []
+    )
     partner_exempt: set[str] = set()
-    for sub in (roster.get("departments") or {}).get("ops_partner", {}).get("subzones", {}).values():
+    for sub in (
+        (roster.get("departments") or {})
+        .get("ops_partner", {})
+        .get("subzones", {})
+        .values()
+    ):
         for eid in sub.get("ids") or []:
             partner_exempt.add(str(eid))
 
@@ -317,7 +331,9 @@ def audit_employee_system_binding(
 
     path_primary_not_in_roster = sorted(path_primary - planned)
     path_primary_missing_workspace = sorted(
-        eid for eid in path_primary if eid in planned and not _employee_has_workspace(eid)
+        eid
+        for eid in path_primary
+        if eid in planned and not _employee_has_workspace(eid)
     )
 
     roster_count = len(planned)
@@ -326,7 +342,9 @@ def audit_employee_system_binding(
     path_expected = planned - craft_exempt - partner_exempt
     path_expected_with_rule = len(path_expected & path_primary)
     path_expected_pct = (
-        round(path_expected_with_rule / len(path_expected) * 100, 2) if path_expected else 100.0
+        round(path_expected_with_rule / len(path_expected) * 100, 2)
+        if path_expected
+        else 100.0
     )
 
     return {
@@ -373,10 +391,20 @@ def audit_six_line_step_employees(
         planned = _roster_planned_ids(roster)
 
     workflow_mods = six_line_map.get("workflow_mods") or {}
-    wf_rows = workflow_mods.get("employees") if isinstance(workflow_mods, dict) else workflow_mods
+    wf_rows = (
+        workflow_mods.get("employees")
+        if isinstance(workflow_mods, dict)
+        else workflow_mods
+    )
     if not isinstance(wf_rows, list):
-        wf_rows = six_line_map.get("workflow_mods") if isinstance(six_line_map.get("workflow_mods"), list) else []
-    workflow_ids = {str(row.get("id") or "") for row in wf_rows if isinstance(row, dict)}
+        wf_rows = (
+            six_line_map.get("workflow_mods")
+            if isinstance(six_line_map.get("workflow_mods"), list)
+            else []
+        )
+    workflow_ids = {
+        str(row.get("id") or "") for row in wf_rows if isinstance(row, dict)
+    }
     workflow_ids.discard("")
 
     steps: list[dict[str, Any]] = []
@@ -416,9 +444,13 @@ def audit_six_line_step_employees(
     all_step_refs = primary_ids | support_ids
     unknown_refs = sorted((all_step_refs - planned) - workflow_ids)
     roster_not_in_steps = sorted(planned - all_step_refs - workflow_ids)
-    step_coverage_pct = round(steps_with_primary / steps_total * 100, 2) if steps_total else 0.0
+    step_coverage_pct = (
+        round(steps_with_primary / steps_total * 100, 2) if steps_total else 0.0
+    )
     roster_step_pct = (
-        round(len(planned & all_step_refs) / len(planned) * 100, 2) if planned else 100.0
+        round(len(planned & all_step_refs) / len(planned) * 100, 2)
+        if planned
+        else 100.0
     )
 
     return {
@@ -482,7 +514,9 @@ def compute_path_employee_coverage(
             gaps.append({**entry, "reason": "无主责员工规则"})
 
     zone_count = len(zones)
-    zone_coverage_pct = round(staffed_zones / zone_count * 100, 2) if zone_count else 0.0
+    zone_coverage_pct = (
+        round(staffed_zones / zone_count * 100, 2) if zone_count else 0.0
+    )
     file_coverage_pct = (
         round(staffed_files / total_zone_files * 100, 2) if total_zone_files else 0.0
     )
@@ -557,7 +591,9 @@ def compute_line_coverage(tree: dict) -> dict[str, Any]:
             by_primary[primary]["bytes"] += sz
 
     unmapped_files = scanned_files - mapped_files
-    coverage_pct = round(mapped_files / scanned_files * 100, 2) if scanned_files else 0.0
+    coverage_pct = (
+        round(mapped_files / scanned_files * 100, 2) if scanned_files else 0.0
+    )
 
     def pct(n: int, base: int) -> float:
         return round(n / base * 100, 2) if base else 0.0
@@ -576,7 +612,9 @@ def compute_line_coverage(tree: dict) -> dict[str, Any]:
         "unmapped_files": unmapped_files,
         "coverage_pct": coverage_pct,
         "extended_note": "extended_coverage_pct 含扫描排除目录的逻辑归属（S-R），非物理扫描计数",
-        "extended_coverage_pct": 100.0 if scanned_files and unmapped_files == 0 else coverage_pct,
+        "extended_coverage_pct": 100.0
+        if scanned_files and unmapped_files == 0
+        else coverage_pct,
         "by_line": by_line,
         "by_primary": by_primary,
         "top_level": top_level,
@@ -610,9 +648,7 @@ def build() -> dict:
         rel_dir = Path(dirpath).relative_to(ROOT)
         parts = rel_dir.parts
         dirnames[:] = sorted(
-            d
-            for d in dirnames
-            if not should_skip_dir(d, parts + (d,))
+            d for d in dirnames if not should_skip_dir(d, parts + (d,))
         )
         if parts and should_skip_dir(parts[-1], parts):
             continue
@@ -670,7 +706,9 @@ def main() -> int:
         f"roster in steps {step_employee['roster_in_steps_count']}/{step_employee['roster_count']}",
         file=sys.stderr,
     )
-    print(f"Writing {OUT} ({fc} files, {sz / 1024 / 1024:.1f} MB data)", file=sys.stderr)
+    print(
+        f"Writing {OUT} ({fc} files, {sz / 1024 / 1024:.1f} MB data)", file=sys.stderr
+    )
     with OUT.open("w", encoding="utf-8") as f:
         json.dump(tree, f, ensure_ascii=False, separators=(",", ":"))
     with COVERAGE_OUT.open("w", encoding="utf-8") as f:

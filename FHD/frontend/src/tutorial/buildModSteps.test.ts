@@ -43,8 +43,20 @@ describe('buildModSteps', () => {
 
   it('injects mod step after nav key', () => {
     const base = [
-      { id: 'nav-chat', title: 'A', description: 'd', targetSelector: '.sidebar .menu-item[data-view="chat"]', actionType: 'click' as const },
-      { id: 'nav-products', title: 'B', description: 'd', targetSelector: '.sidebar .menu-item[data-view="products"]', actionType: 'click' as const },
+      {
+        id: 'nav-chat',
+        title: 'A',
+        description: 'd',
+        targetSelector: '.sidebar .menu-item[data-view="chat"]',
+        actionType: 'click' as const,
+      },
+      {
+        id: 'nav-products',
+        title: 'B',
+        description: 'd',
+        targetSelector: '.sidebar .menu-item[data-view="products"]',
+        actionType: 'click' as const,
+      },
     ]
     const modSteps = [
       {

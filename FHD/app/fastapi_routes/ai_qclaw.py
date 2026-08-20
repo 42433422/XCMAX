@@ -76,7 +76,7 @@ def _trace_qclaw_control_result(
         traced["run_id"] = run.run_id
         traced["agent_run_id"] = run.run_id
         return traced
-    except Exception:  # noqa: BLE001 - tracing must not break legacy control endpoints
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - tracing must not break legacy control endpoints
         logger.exception("failed to attach AgentRun trace to Qclaw control action")
         return payload
 
@@ -191,9 +191,9 @@ def ai_qclaw_test_route(request: Request, body: dict = Body(default_factory=dict
             channel="qclaw_route_smoke",
             intent="qclaw_route_smoke",
         )
-    except RECOVERABLE_ERRORS as err:
+    except RECOVERABLE_ERRORS:
         return JSONResponse(
-            {"success": False, "path": path, "method": method, "message": str(err)},
+            {"success": False, "path": path, "method": method, "message": "请求执行失败"},
             status_code=500,
         )
 

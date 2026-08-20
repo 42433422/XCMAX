@@ -1,101 +1,104 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
-import { authApi } from '@/api/auth';
-import modelPaymentApi, { type ModelPaymentPlan } from '@/api/modelPayment';
+import { computed, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { authApi } from '@/api/auth'
+import modelPaymentApi, { type ModelPaymentPlan } from '@/api/modelPayment'
 
-const BUDGET_STORAGE_KEY = 'xcagi_contact_budget';
+const BUDGET_STORAGE_KEY = 'xcagi_contact_budget'
 
-const route = useRoute();
-const router = useRouter();
+const route = useRoute()
+const router = useRouter()
 
-const plans = ref<ModelPaymentPlan[]>([]);
-const loading = ref(true);
-const checkoutPlanId = ref<string | null>(null);
-const errorMessage = ref('');
-const subscription = ref<Record<string, unknown> | null>(null);
-const budgetRange = ref('');
+const plans = ref<ModelPaymentPlan[]>([])
+const loading = ref(true)
+const checkoutPlanId = ref<string | null>(null)
+const errorMessage = ref('')
+const subscription = ref<Record<string, unknown> | null>(null)
+const budgetRange = ref('')
 
 const redirectPath = computed(() => {
-  const raw = route.query.redirect;
-  const value = Array.isArray(raw) ? raw[0] : raw;
-  return typeof value === 'string' && value.startsWith('/') ? value : '/';
-});
+  const raw = route.query.redirect
+  const value = Array.isArray(raw) ? raw[0] : raw
+  return typeof value === 'string' && value.startsWith('/') ? value : '/'
+})
 
 function resolveBudgetRange(): string {
-  const fromQuery = route.query.budget_range ?? route.query.budget;
-  const queryValue = Array.isArray(fromQuery) ? fromQuery[0] : fromQuery;
+  const fromQuery = route.query.budget_range ?? route.query.budget
+  const queryValue = Array.isArray(fromQuery) ? fromQuery[0] : fromQuery
   if (typeof queryValue === 'string' && queryValue.trim()) {
-    return queryValue.trim();
+    return queryValue.trim()
   }
   try {
-    return (localStorage.getItem(BUDGET_STORAGE_KEY) || '').trim();
+    return (localStorage.getItem(BUDGET_STORAGE_KEY) || '').trim()
   } catch {
-    return '';
+    return ''
   }
 }
 
 function isPermanentPlan(planId: string): boolean {
-  return planId.startsWith('saas-permanent-');
+  return planId.startsWith('saas-permanent-')
 }
 
 function priceUnit(plan: ModelPaymentPlan): string {
-  if (plan.id === 'saas-trial-30') return '/30天';
-  if (isPermanentPlan(plan.id)) return '/永久';
-  return '/月';
+  if (plan.id === 'saas-trial-30') return '/30天'
+  if (isPermanentPlan(plan.id)) return '/永久'
+  return '/月'
 }
 
 function formatYuan(cents: number): string {
-  return (cents / 100).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  return (cents / 100).toLocaleString('zh-CN', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })
 }
 
 onMounted(async () => {
-  document.title = '套餐与定价';
-  budgetRange.value = resolveBudgetRange();
+  document.title = '套餐与定价'
+  budgetRange.value = resolveBudgetRange()
   try {
     const [planRes, subRes] = await Promise.all([
       modelPaymentApi.getPlans(budgetRange.value || undefined),
       authApi.getSubscriptionStatus().catch(() => null),
-    ]);
-    plans.value = (planRes?.data?.plans || []).filter((p: ModelPaymentPlan) => p.id.startsWith('saas-'));
+    ])
+    plans.value = (planRes?.data?.plans || []).filter((p: ModelPaymentPlan) => p.id.startsWith('saas-'))
     if (subRes && (subRes as { data?: Record<string, unknown> }).data) {
-      subscription.value = (subRes as { data: Record<string, unknown> }).data;
+      subscription.value = (subRes as { data: Record<string, unknown> }).data
     }
   } catch (e: unknown) {
-    errorMessage.value = e instanceof Error ? e.message : '加载套餐失败';
+    errorMessage.value = e instanceof Error ? e.message : '加载套餐失败'
   } finally {
-    loading.value = false;
+    loading.value = false
   }
-});
+})
 
 async function purchase(planId: string) {
-  checkoutPlanId.value = planId;
-  errorMessage.value = '';
+  checkoutPlanId.value = planId
+  errorMessage.value = ''
   try {
-    const res = await modelPaymentApi.checkout(planId);
-    const data = res?.data;
+    const res = await modelPaymentApi.checkout(planId)
+    const data = res?.data
     if (!res?.success || !data) {
-      errorMessage.value = res?.message || '下单失败';
-      return;
+      errorMessage.value = res?.message || '下单失败'
+      return
     }
     if (data.redirect_url) {
-      window.location.assign(data.redirect_url);
-      return;
+      window.location.assign(data.redirect_url)
+      return
     }
     if (data.setup_hint) {
-      errorMessage.value = data.setup_hint;
-      return;
+      errorMessage.value = data.setup_hint
+      return
     }
-    errorMessage.value = '支付渠道未就绪，请联系管理员配置支付宝';
+    errorMessage.value = '支付渠道未就绪，请联系管理员配置支付宝'
   } catch (e: unknown) {
-    errorMessage.value = e instanceof Error ? e.message : '支付请求失败';
+    errorMessage.value = e instanceof Error ? e.message : '支付请求失败'
   } finally {
-    checkoutPlanId.value = null;
+    checkoutPlanId.value = null
   }
 }
 
 async function goBack() {
-  await router.replace(redirectPath.value);
+  await router.replace(redirectPath.value)
 }
 </script>
 
@@ -107,20 +110,13 @@ async function goBack() {
         试用剩余 {{ subscription.trial_days_remaining ?? '—' }} 天
         <span v-if="subscription.trial_expires_at">（至 {{ subscription.trial_expires_at }}）</span>
       </p>
-      <p v-else-if="subscription?.active === false" class="saas-trial-expired" role="alert">
-        试用已结束，请购买套餐以继续使用。
-      </p>
+      <p v-else-if="subscription?.active === false" class="saas-trial-expired" role="alert">试用已结束，请购买套餐以继续使用。</p>
 
       <p v-if="errorMessage" class="saas-error" role="alert">{{ errorMessage }}</p>
       <p v-if="loading" class="muted">加载中…</p>
 
       <div v-else class="saas-plan-grid">
-        <article
-          v-for="plan in plans"
-          :key="plan.id"
-          class="saas-plan-card"
-          :class="{ 'saas-plan-card--recommended': plan.recommended }"
-        >
+        <article v-for="plan in plans" :key="plan.id" class="saas-plan-card" :class="{ 'saas-plan-card--recommended': plan.recommended }">
           <div class="saas-plan-head">
             <h2>{{ plan.title }}</h2>
             <span v-if="plan.recommended" class="saas-badge saas-badge--recommended">按预算推荐</span>
@@ -131,12 +127,7 @@ async function goBack() {
             <span class="saas-price-unit">{{ priceUnit(plan) }}</span>
           </p>
           <p class="saas-desc">{{ plan.description }}</p>
-          <button
-            type="button"
-            class="saas-buy-btn"
-            :disabled="checkoutPlanId !== null"
-            @click="purchase(plan.id)"
-          >
+          <button type="button" class="saas-buy-btn" :disabled="checkoutPlanId !== null" @click="purchase(plan.id)">
             {{ checkoutPlanId === plan.id ? '跳转支付…' : '支付宝购买' }}
           </button>
         </article>

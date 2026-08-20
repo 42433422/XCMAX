@@ -108,7 +108,7 @@ class AIConversationService(
         self.api_key = os.environ.get("DEEPSEEK_API_KEY", "")
         if not self.api_key:
             try:
-                from app.utils.path_utils import get_resource_path
+                from app.utils.path_io.path_utils import get_resource_path
 
                 config_path = get_resource_path("config", "deepseek_config.py")
                 if os.path.exists(config_path):
@@ -415,7 +415,7 @@ def _build_persona_repository():
         from app.infrastructure.persona.persona_repository_impl import PersonaRepositoryImpl
 
         return PersonaRepositoryImpl()
-    except Exception as exc:  # noqa: BLE001
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
         logger.warning("Persona 持久化仓储不可用，降级内存仓储: %s", exc)
         return _InMemoryPersonaRepository()
 
@@ -468,6 +468,19 @@ def init_ai_conversation_service() -> AIConversationService:
     _ai_conversation_service.persona_service = _create_persona_service()
     logger.info("AI 对话服务已初始化（已注入 PersonaService）")
     return _ai_conversation_service
+
+
+async def close_ai_conversation_service() -> None:
+    """Close all cached HTTP clients owned by the conversation singleton."""
+    global _ai_conversation_service
+    service = _ai_conversation_service
+    _ai_conversation_service = None
+    if service is not None:
+        from app.services.conversation.resource_cleanup import (
+            close_conversation_service_clients,
+        )
+
+        await close_conversation_service_clients(service)
 
 
 from app.neuro_bus.neuro_service_instrumentation import instrument_service_layer_class

@@ -3,10 +3,7 @@ import type { ASRResult } from './asr/types'
 import type { useSpeechRecognition } from './useSpeechRecognition'
 import { mergeAsrLiveText } from './mergeAsrLiveText'
 import { normalizeVoiceAsrText } from './normalizeVoiceAsrText'
-import {
-  shouldFlushVoiceUtterance,
-  type VoiceCaptureSnapshot,
-} from './voiceEndpointLogic'
+import { shouldFlushVoiceUtterance, type VoiceCaptureSnapshot } from './voiceEndpointLogic'
 import { speculativeTextsMatch } from './voiceSpeculativeMatch'
 import { takeMicPreflight } from './asr/micPreflight'
 import { wakeSharedMicCapture } from './asr/sharedMicCapture'
@@ -97,10 +94,7 @@ export function useVoiceContinuousChat(deps: VoiceContinuousChatDeps) {
       return {
         ...base,
         silenceMs: Math.min(base.silenceMs, VOICE_PHONE_ENDPOINT.silenceMs),
-        partialStableS2sMs: Math.min(
-          base.partialStableS2sMs ?? VOICE_ENDPOINT.partialStableS2sMs,
-          VOICE_PHONE_ENDPOINT.partialStableS2sMs,
-        ),
+        partialStableS2sMs: Math.min(base.partialStableS2sMs ?? VOICE_ENDPOINT.partialStableS2sMs, VOICE_PHONE_ENDPOINT.partialStableS2sMs),
         partialMinChars: Math.min(base.partialMinChars, VOICE_PHONE_ENDPOINT.partialMinChars),
         serverFinalDebounceMs: Math.min(
           base.serverFinalDebounceMs ?? VOICE_ENDPOINT.serverFinalDebounceMs,
@@ -267,10 +261,7 @@ export function useVoiceContinuousChat(deps: VoiceContinuousChatDeps) {
       serverFinalTimer = null
       if (!deps.autoSend.value || submitLock || micPausedByUser.value) return
       if (audioSpeaking) return
-      const pending =
-        listenPartial.trim() ||
-        voiceTranscript.value.trim() ||
-        voiceDraft.value.trim()
+      const pending = listenPartial.trim() || voiceTranscript.value.trim() || voiceDraft.value.trim()
       if (!pending) return
       // FunASR offline 段已结束：信任服务端断句，不受 partialMinChars 限制
       void finishUtterance()
@@ -349,10 +340,7 @@ export function useVoiceContinuousChat(deps: VoiceContinuousChatDeps) {
         void finishUtterance()
         return
       }
-      const pending =
-        listenPartial.trim() ||
-        voiceTranscript.value.trim() ||
-        voiceDraft.value.trim()
+      const pending = listenPartial.trim() || voiceTranscript.value.trim() || voiceDraft.value.trim()
       if (voiceListening.value && pending && deps.autoSend.value) {
         scheduleContinuousSilenceSubmit()
       }
@@ -406,9 +394,7 @@ export function useVoiceContinuousChat(deps: VoiceContinuousChatDeps) {
       if (contentChanged && isSpeculating.value) {
         cancelSpeculativeState()
       }
-      const merged = normalizeVoiceAsrText(
-        mergeAsrLiveText(prevListen, trimmed, !!r.isFinal),
-      )
+      const merged = normalizeVoiceAsrText(mergeAsrLiveText(prevListen, trimmed, !!r.isFinal))
       listenPartial = merged
       markAsrActivity(merged !== prevListen)
       voiceTranscript.value = merged
@@ -448,12 +434,7 @@ export function useVoiceContinuousChat(deps: VoiceContinuousChatDeps) {
   function handleAudioLevel(level: number) {
     voiceAudioLevel.value = level
     if (level > micPeakLevel) micPeakLevel = level
-    if (
-      deps.autoSend.value &&
-      deps.isChatBusy?.() &&
-      deps.isTtsPlaying?.() &&
-      deps.onAsrDuringTts?.(level)
-    ) {
+    if (deps.autoSend.value && deps.isChatBusy?.() && deps.isTtsPlaying?.() && deps.onAsrDuringTts?.(level)) {
       return
     }
     if (!deps.autoSend.value || submitLock || !voiceListening.value || micPausedByUser.value) return
@@ -492,18 +473,13 @@ export function useVoiceContinuousChat(deps: VoiceContinuousChatDeps) {
     clearContinuousSilenceTimer()
     submitLock = true
     try {
-      let text = normalizeVoiceAsrText(
-        voiceTranscript.value.trim() || voiceDraft.value.trim(),
-      )
+      let text = normalizeVoiceAsrText(voiceTranscript.value.trim() || voiceDraft.value.trim())
       if (voiceListening.value && deps.isVoiceTargetActive()) {
         try {
           const flushed = normalizeVoiceAsrText((await flushAsr()).trim())
           if (flushed) {
             if (deps.getAsrBackendId?.() === 'funasr') {
-              text =
-                flushed.length >= text.length
-                  ? flushed
-                  : normalizeVoiceAsrText(mergeAsrLiveText(text, flushed, true))
+              text = flushed.length >= text.length ? flushed : normalizeVoiceAsrText(mergeAsrLiveText(text, flushed, true))
             } else {
               text = flushed
             }
@@ -572,9 +548,7 @@ export function useVoiceContinuousChat(deps: VoiceContinuousChatDeps) {
     micWatchdog = setTimeout(() => {
       micWatchdog = null
       if (!voiceListening.value || micPausedByUser.value || submitLock) return
-      const hasText = Boolean(
-        listenPartial.trim() || voiceTranscript.value.trim() || voiceDraft.value.trim(),
-      )
+      const hasText = Boolean(listenPartial.trim() || voiceTranscript.value.trim() || voiceDraft.value.trim())
       if (hasText) return
       if (micPeakLevel >= 0.008) return
       if (deps.isAsrReady && !deps.isAsrReady()) {
@@ -603,12 +577,7 @@ export function useVoiceContinuousChat(deps: VoiceContinuousChatDeps) {
   async function startListening(opts?: { fresh?: boolean; reconnect?: boolean }) {
     if (submitLock || _starting) return
     if (micPausedByUser.value && opts?.fresh !== false) return
-    if (
-      voiceListening.value &&
-      deps.isVoiceTargetActive() &&
-      opts?.fresh === false &&
-      !opts?.reconnect
-    ) {
+    if (voiceListening.value && deps.isVoiceTargetActive() && opts?.fresh === false && !opts?.reconnect) {
       startSilenceWatchdog()
       return
     }
@@ -619,42 +588,42 @@ export function useVoiceContinuousChat(deps: VoiceContinuousChatDeps) {
 
     _starting = true
     try {
-    deps.beforeStartListening?.()
-    refreshVoiceEndpoint()
-    clearContinuousSilenceTimer()
-    const fresh = opts?.fresh !== false
-    if (fresh) {
-      micPausedByUser.value = false
-      resetListenSession()
-      voiceDraft.value = ''
-      voiceTranscript.value = ''
-    }
-    deps.voiceChatPhase.value = 'listening'
-    deps.setVoiceTarget()
-    const micPreflight = takeMicPreflight()
+      deps.beforeStartListening?.()
+      refreshVoiceEndpoint()
+      clearContinuousSilenceTimer()
+      const fresh = opts?.fresh !== false
+      if (fresh) {
+        micPausedByUser.value = false
+        resetListenSession()
+        voiceDraft.value = ''
+        voiceTranscript.value = ''
+      }
+      deps.voiceChatPhase.value = 'listening'
+      deps.setVoiceTarget()
+      const micPreflight = takeMicPreflight()
 
-    await deps.asr.startListening(
-      (r) => handleAsrResult(r),
-      (msg) => onAsrError(msg),
-      (level) => handleAudioLevel(level),
-      {
-        continuous: true,
-        mediaStream: micPreflight ?? undefined,
-      },
-    )
+      await deps.asr.startListening(
+        (r) => handleAsrResult(r),
+        (msg) => onAsrError(msg),
+        (level) => handleAudioLevel(level),
+        {
+          continuous: true,
+          mediaStream: micPreflight ?? undefined,
+        },
+      )
 
-    if (deps.asr.sessionReady.value) {
-      voiceListening.value = true
-      deps.voiceState.value = 'listening'
-      startSilenceWatchdog()
-      startMicWatchdog()
-      scheduleWebSpeechStallCheck()
-      return { error: null as string | null }
-    }
+      if (deps.asr.sessionReady.value) {
+        voiceListening.value = true
+        deps.voiceState.value = 'listening'
+        startSilenceWatchdog()
+        startMicWatchdog()
+        scheduleWebSpeechStallCheck()
+        return { error: null as string | null }
+      }
 
-    const err = deps.asr.error.value || '语音识别启动失败，请点麦克风重试。'
-    resetCaptureUi()
-    return { error: err as string }
+      const err = deps.asr.error.value || '语音识别启动失败，请点麦克风重试。'
+      resetCaptureUi()
+      return { error: err as string }
     } finally {
       _starting = false
     }
@@ -695,11 +664,7 @@ export function useVoiceContinuousChat(deps: VoiceContinuousChatDeps) {
       return { msg, retry: false }
     }
     const whisperOnly = msg.includes('Whisper') || msg.includes('模型')
-    const noRetry =
-      msg.includes('不支持') ||
-      msg.includes('权限') ||
-      msg.includes('未找到') ||
-      msg.includes('请先登录')
+    const noRetry = msg.includes('不支持') || msg.includes('权限') || msg.includes('未找到') || msg.includes('请先登录')
     const retry = deps.autoSend.value && !noRetry && !whisperOnly
 
     if (deps.autoSend.value && whisperOnly) {

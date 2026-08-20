@@ -162,7 +162,13 @@ def test_replay_publishes_payment_paid(admin_client, monkeypatch, tmp_path):
     assert seen[-1][0] == "payment.paid"
     assert seen[-1][1] == order_no
     payload = seen[-1][2]
-    for required in ("out_trade_no", "user_id", "subject", "total_amount", "order_kind"):
+    for required in (
+        "out_trade_no",
+        "user_id",
+        "subject",
+        "total_amount",
+        "order_kind",
+    ):
         assert required in payload
 
 

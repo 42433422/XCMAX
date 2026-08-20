@@ -6,10 +6,11 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import struct
 import sys
 import time
 from pathlib import Path
+
+BOUNDARY_ERRORS = (Exception,)
 
 CHUNK_SAMPLES = 960
 SAMPLE_RATE = 16000
@@ -95,7 +96,7 @@ async def recognize_pcm(pcm: bytes, label: str) -> dict:
                     texts.append(text)
                     if msg.get("is_final"):
                         finals.append(text)
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         return {
             "label": label,
             "ok": False,

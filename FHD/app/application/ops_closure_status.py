@@ -97,6 +97,8 @@ def _build_roster_rows(
 def build_ops_closure_status(remote_health: dict[str, Any] | None) -> dict[str, Any]:
     health = remote_health if isinstance(remote_health, dict) else {}
     staffing = health.get("staffing") if isinstance(health.get("staffing"), dict) else {}
+    if not isinstance(staffing, dict):
+        staffing = {}
     missing_remote = list(staffing.get("missing_employees") or [])
     missing_remote_set = set(missing_remote)
     planned = sorted(all_planned_duty_employee_ids())
@@ -128,6 +130,8 @@ def build_ops_closure_status(remote_health: dict[str, Any] | None) -> dict[str, 
                 "employee_ids": missing_local[:50],
             }
         )
+    if not isinstance(cr, dict):
+        cr = {}
     pending_cr = int(cr.get("pending") or 0)
     if pending_cr > 0:
         blockers.append({"code": "PENDING_CHANGE_REQUESTS", "count": pending_cr})

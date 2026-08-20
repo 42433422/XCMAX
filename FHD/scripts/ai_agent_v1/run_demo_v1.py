@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="assignment"
 """AI Agent V1 — 7 场景统一入口。
 
 场景清单（与 [`../../docs/ai-agent-v1-plan.md`](../../docs/ai-agent-v1-plan.md) Phase 2 对齐）：
@@ -21,6 +22,7 @@
     python3 scripts/ai_agent_v1/run_demo_v1.py --scenario 2 --strategy auto
     python3 scripts/ai_agent_v1/run_demo_v1.py --scenario 6 --strategy interactive
 """
+
 from __future__ import annotations
 
 import argparse
@@ -29,9 +31,11 @@ import os
 import sys
 import traceback
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable
+
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 ROOT = Path(__file__).resolve().parents[2]
 EVIDENCE_DIR = ROOT / "docs" / "evidence" / "ai-agent-v1"
@@ -67,9 +71,7 @@ def _stub_planner_rag() -> None:
     app_pkg.get_user_memory_rag_app_service = _factory  # type: ignore[attr-defined]
 
 
-def _dispatch_workflow_tool(
-    tool_id: str, action: str, params: dict[str, Any]
-) -> dict[str, Any]:
+def _dispatch_workflow_tool(tool_id: str, action: str, params: dict[str, Any]) -> dict[str, Any]:
     from app.application.facades.tools_facade import execute_registered_workflow_tool
 
     return execute_registered_workflow_tool(tool_id=tool_id, action=action, params=params)
@@ -86,13 +88,11 @@ def _database_reachable() -> bool:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         return True
-    except Exception:
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
         return False
 
 
-def _mock_dispatcher(
-    tool_id: str, action: str, params: dict[str, Any]
-) -> dict[str, Any]:
+def _mock_dispatcher(tool_id: str, action: str, params: dict[str, Any]) -> dict[str, Any]:
     """
     无 DB 时的工具桩：仍经 WorkflowEngine 调度。
     注意：仅 mock 已实现工具的关键调用；未知工具返回 NOT_IMPLEMENTED。
@@ -120,7 +120,7 @@ def _mock_dispatcher(
         return {
             "success": True,
             "id": 5001,
-            "order_number": f"MOCK-{datetime.now(timezone.utc).strftime('%Y%m%d')}-001",
+            "order_number": f"MOCK-{datetime.now(UTC).strftime('%Y%m%d')}-001",
             "message": "mock: 发货单已生成",
         }
     if key == ("inventory", "query"):
@@ -405,7 +405,7 @@ SCENARIOS: list[Scenario] = [
 
 
 def _default_output_path(scenario_id: int) -> Path:
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     return EVIDENCE_DIR / f"scenario-{scenario_id}-{stamp}.json"
 
 
@@ -423,10 +423,14 @@ def run_scenario(
     _stub_planner_rag()
 
     force_live = str(os.environ.get("AI_AGENT_V1_LIVE_TOOLS", "")).strip().lower() in {
-        "1", "true", "yes",
+        "1",
+        "true",
+        "yes",
     }
     force_mock = str(os.environ.get("AI_AGENT_V1_MOCK_TOOLS", "")).strip().lower() in {
-        "1", "true", "yes",
+        "1",
+        "true",
+        "yes",
     }
     if force_mock:
         dispatcher = _mock_dispatcher
@@ -441,7 +445,7 @@ def run_scenario(
     engine = WorkflowEngine(tool_dispatcher=dispatcher)
     gated = ApprovalGatedEngine(engine=engine)
 
-    plan_id = f"v1-s{scenario.scenario_id}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
+    plan_id = f"v1-s{scenario.scenario_id}-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}"
     plan = scenario.plan_builder(plan_id)
     runtime_ctx: dict[str, Any] = {
         "user_id": f"v1_scenario_{scenario.scenario_id}",
@@ -514,7 +518,7 @@ def main(argv: list[str] | None = None) -> int:
                 f"rejected={decision.get('any_rejected')}"
             )
             print(f"  evidence: {ev.get('_evidence_path')}")
-        except Exception as e:
+        except BOUNDARY_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             failures += 1
             print(f"  ERROR: {e}")
             traceback.print_exc()

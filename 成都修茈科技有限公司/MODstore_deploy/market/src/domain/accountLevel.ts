@@ -82,12 +82,7 @@ export function normalizeMeResponse(me: unknown): NormalizedMe | null | undefine
   if (typeof me !== 'object') return null
   const m = me as Record<string, unknown>
   const inner = m.user
-  if (
-    inner &&
-    typeof inner === 'object' &&
-    m.id === undefined &&
-    (inner as { id?: unknown }).id !== undefined
-  ) {
+  if (inner && typeof inner === 'object' && m.id === undefined && (inner as { id?: unknown }).id !== undefined) {
     const u = inner as Record<string, unknown>
     return {
       id: u.id as number | string | undefined,

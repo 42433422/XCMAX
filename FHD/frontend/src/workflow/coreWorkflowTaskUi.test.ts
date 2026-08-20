@@ -1,9 +1,5 @@
 import { describe, expect, it, beforeEach } from 'vitest'
-import {
-  workflowProgressIsIdle,
-  coreWorkflowTaskDotStatusClass,
-  coreWorkflowTaskDotTitle,
-} from './coreWorkflowTaskUi'
+import { workflowProgressIsIdle, coreWorkflowTaskDotStatusClass, coreWorkflowTaskDotTitle } from './coreWorkflowTaskUi'
 import { STAR_REFRESH_STORAGE_KEY } from './coreWorkflowPrefs'
 
 describe('coreWorkflowTaskUi', () => {
@@ -39,7 +35,10 @@ describe('coreWorkflowTaskUi', () => {
 
   it('success when progress complete', () => {
     expect(
-      coreWorkflowTaskDotStatusClass('label_print', { workflowProgressStarted: true, workflowProgressPct: 100 }),
+      coreWorkflowTaskDotStatusClass('label_print', {
+        workflowProgressStarted: true,
+        workflowProgressPct: 100,
+      }),
     ).toBe('success')
   })
 })

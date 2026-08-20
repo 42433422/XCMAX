@@ -1,3 +1,4 @@
+# mypy: disable-error-code="misc"
 """Shared fixtures for tests/test_db/ — coverage ramp C3.2-a.
 
 Provides:

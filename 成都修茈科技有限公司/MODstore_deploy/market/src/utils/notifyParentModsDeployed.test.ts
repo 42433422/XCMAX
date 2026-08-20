@@ -5,7 +5,10 @@ describe('notifyParentModsDeployed', () => {
   it('posts message to parent window with deployed list', () => {
     const postMessageSpy = vi.fn()
     const originalParent = window.parent
-    Object.defineProperty(window, 'parent', { value: { postMessage: postMessageSpy }, configurable: true })
+    Object.defineProperty(window, 'parent', {
+      value: { postMessage: postMessageSpy },
+      configurable: true,
+    })
 
     notifyParentModsDeployed(['mod1', 'mod2'])
 
@@ -24,14 +27,14 @@ describe('notifyParentModsDeployed', () => {
   it('converts non-array deployed to empty array', () => {
     const postMessageSpy = vi.fn()
     const originalParent = window.parent
-    Object.defineProperty(window, 'parent', { value: { postMessage: postMessageSpy }, configurable: true })
+    Object.defineProperty(window, 'parent', {
+      value: { postMessage: postMessageSpy },
+      configurable: true,
+    })
 
     notifyParentModsDeployed(null)
 
-    expect(postMessageSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ deployed: [] }),
-      '*',
-    )
+    expect(postMessageSpy).toHaveBeenCalledWith(expect.objectContaining({ deployed: [] }), '*')
 
     Object.defineProperty(window, 'parent', { value: originalParent, configurable: true })
   })
@@ -52,14 +55,14 @@ describe('notifyParentModsDeployed', () => {
   it('handles undefined deployed', () => {
     const postMessageSpy = vi.fn()
     const originalParent = window.parent
-    Object.defineProperty(window, 'parent', { value: { postMessage: postMessageSpy }, configurable: true })
+    Object.defineProperty(window, 'parent', {
+      value: { postMessage: postMessageSpy },
+      configurable: true,
+    })
 
     notifyParentModsDeployed(undefined)
 
-    expect(postMessageSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ deployed: [] }),
-      '*',
-    )
+    expect(postMessageSpy).toHaveBeenCalledWith(expect.objectContaining({ deployed: [] }), '*')
 
     Object.defineProperty(window, 'parent', { value: originalParent, configurable: true })
   })

@@ -6,119 +6,34 @@ Excel 模板分析工具模块
 
 import json
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
 import openpyxl
+from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.worksheet import Worksheet
 
-
-@dataclass
-class CellStyle:
-    font_name: str | None = None
-    font_size: float | None = None
-    font_bold: bool | None = None
-    font_color: str | None = None
-    fill_pattern: str | None = None
-    fill_fg_color: str | None = None
-    fill_bg_color: str | None = None
-    alignment_horizontal: str | None = None
-    alignment_vertical: str | None = None
-    border_style: str | None = None
-    border_color: str | None = None
-    number_format: str | None = None
-
-
-@dataclass
-class CellInfo:
-    address: str
-    row: int
-    col: int
-    value: Any
-    type: str
-    formula: str | None = None
-    style: CellStyle | None = None
-    is_merged: bool = False
-    merged_range: str | None = None
-
-
-@dataclass
-class MergedCellInfo:
-    range: str
-    min_row: int
-    max_row: int
-    min_col: int
-    max_col: int
-    purpose: str = ""
-
-
-@dataclass
-class ContentZone:
-    name: str
-    rows: list[int]
-    type: str
-    description: str = ""
-
-
-@dataclass
-class EditableRange:
-    range: str
-    min_row: int
-    max_row: int
-    min_col: int
-    max_col: int
-    description: str
+from app.utils.excel.template_analysis_constants import HEADER_INDICATORS, TEMPLATE_KEYWORDS
+from app.utils.excel.template_analysis_models import (
+    CellInfo,
+    CellStyle,
+    ContentZone,
+    EditableRange,
+    MergedCellInfo,
+)
 
 
 class ExcelTemplateAnalyzer:
-    TEMPLATE_KEYWORDS = [
-        "送货单",
-        "收据",
-        "发票",
-        "订单",
-        "清单",
-        "表",
-        "单",
-        "合计",
-        "汇总",
-        "签名",
-        "日期",
-        "编号",
-        "单位",
-        "联系人",
-        "电话",
-        "地址",
-        "备注",
-        "产 品",
-        "型 号",
-        "名 称",
-        "数 量",
-        "规 格",
-        "单 价",
-        "金 额",
-    ]
-
-    HEADER_INDICATORS = [
-        "产品型号",
-        "产品名称",
-        "数量",
-        "规格",
-        "单价",
-        "金额",
-        "备注",
-        "型号",
-        "名称",
-        "件数",
-        "千克",
-        "公斤",
-    ]
+    TEMPLATE_KEYWORDS = TEMPLATE_KEYWORDS
+    HEADER_INDICATORS = HEADER_INDICATORS
 
     def __init__(self, file_path: str):
         self.file_path = file_path
         self.file_name = Path(file_path).name
-        self.workbook: openpyxl.Workbook | None = None
-        self.worksheet: openpyxl.Workbook | None = None
+        self._workbook: Workbook | None = None
+        self._worksheet: Worksheet | None = None
         self.workbook_name: str = ""
         self.max_row: int = 0
         self.max_col: int = 0
@@ -127,6 +42,18 @@ class ExcelTemplateAnalyzer:
         self.cells: dict[str, CellInfo] = {}
         self.zones: list[ContentZone] = []
         self.editable_ranges: list[EditableRange] = []
+
+    @property
+    def workbook(self) -> Workbook:
+        if self._workbook is None:
+            raise RuntimeError("workbook has not been loaded")
+        return self._workbook
+
+    @property
+    def worksheet(self) -> Worksheet:
+        if self._worksheet is None:
+            raise RuntimeError("worksheet has not been loaded")
+        return self._worksheet
 
     def analyze(self, sheet_name: str | None = None) -> dict[str, Any]:
         self._load_workbook(sheet_name)
@@ -139,12 +66,12 @@ class ExcelTemplateAnalyzer:
         return self._build_output()
 
     def _load_workbook(self, sheet_name: str | None = None):
-        self.workbook = openpyxl.load_workbook(self.file_path)
+        self._workbook = openpyxl.load_workbook(self.file_path)
 
         if sheet_name:
-            self.worksheet = self.workbook[sheet_name]
+            self._worksheet = self.workbook[sheet_name]
         else:
-            self.worksheet = self.workbook.active
+            self._worksheet = self.workbook.active
 
         self.workbook_name = self.worksheet.title
 
@@ -239,6 +166,7 @@ class ExcelTemplateAnalyzer:
                 )
 
     def _get_merged_range(self, address: str) -> str | None:
+        assert self is not None
         for merged_range in self.worksheet.merged_cells.ranges:
             if address in merged_range:
                 return str(merged_range)
@@ -436,6 +364,7 @@ class ExcelTemplateAnalyzer:
         min_col_letter = get_column_letter(min_col)
         max_col_letter = get_column_letter(max_col)
 
+        assert self is not None
         first_cell = self.worksheet.cell(min_row, min_col).value
         self.worksheet.cell(min_row, max_col).value  # noqa: B018
 

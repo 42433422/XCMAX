@@ -4,6 +4,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from langgraph.cache.base import BaseCache, FullKey, Namespace, ValueT
+from langgraph.checkpoint._exception_policy import BOUNDARY_ERRORS
 from langgraph.checkpoint.serde.base import SerializerProtocol
 
 
@@ -60,7 +61,7 @@ class RedisCache(BaseCache[ValueT]):
         # Get values from Redis using MGET
         try:
             raw_values = self.redis.mget(redis_keys)
-        except Exception:
+        except BOUNDARY_ERRORS:
             # If Redis is unavailable, return empty dict
             return {}
 
@@ -71,7 +72,7 @@ class RedisCache(BaseCache[ValueT]):
                     # Deserialize the value
                     encoding, data = raw_value.split(b":", 1)
                     values[keys[i]] = self.serde.loads_typed((encoding.decode(), data))
-                except Exception:
+                except BOUNDARY_ERRORS:
                     # Skip corrupted entries
                     continue
 
@@ -81,15 +82,15 @@ class RedisCache(BaseCache[ValueT]):
         """Asynchronously get the cached values for the given keys."""
         return self.get(keys)
 
-    def set(self, mapping: Mapping[FullKey, tuple[ValueT, int | None]]) -> None:
+    def set(self, pairs: Mapping[FullKey, tuple[ValueT, int | None]]) -> None:
         """Set the cached values for the given keys and TTLs."""
-        if not mapping:
+        if not pairs:
             return
 
         # Use pipeline for efficient batch operations
         pipe = self.redis.pipeline()
 
-        for (ns, key), (value, ttl) in mapping.items():
+        for (ns, key), (value, ttl) in pairs.items():
             redis_key = self._make_key(ns, key)
             encoding, data = self.serde.dumps_typed(value)
 
@@ -103,13 +104,13 @@ class RedisCache(BaseCache[ValueT]):
 
         try:
             pipe.execute()
-        except Exception:
+        except BOUNDARY_ERRORS:
             # Silently fail if Redis is unavailable
             pass
 
-    async def aset(self, mapping: Mapping[FullKey, tuple[ValueT, int | None]]) -> None:
+    async def aset(self, pairs: Mapping[FullKey, tuple[ValueT, int | None]]) -> None:
         """Asynchronously set the cached values for the given keys and TTLs."""
-        self.set(mapping)
+        self.set(pairs)
 
     def clear(self, namespaces: Sequence[Namespace] | None = None) -> None:
         """Delete the cached values for the given namespaces.
@@ -134,7 +135,7 @@ class RedisCache(BaseCache[ValueT]):
 
                 if keys_to_delete:
                     self.redis.delete(*keys_to_delete)
-        except Exception:
+        except BOUNDARY_ERRORS:
             # Silently fail if Redis is unavailable
             pass
 

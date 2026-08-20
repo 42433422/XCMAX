@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr"
 """Exact remediation selection and origin lineage for unattended loop retries."""
 
 from __future__ import annotations

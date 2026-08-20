@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="assignment"
 """AI Agent V1 端到端 — Mod 商店：识别异常 → 自动发通知 → 出月报。
 
 完整链路：
@@ -10,13 +11,13 @@
 
 证据：docs/evidence/ai-agent-v1/e2e-modstore-<stamp>.json
 """
+
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -120,9 +121,7 @@ def _build_modstore_plan(plan_id: str) -> Any:
     )
 
 
-def _mock_e2e_dispatcher(
-    tool_id: str, action: str, params: dict[str, Any]
-) -> dict[str, Any]:
+def _mock_e2e_dispatcher(tool_id: str, action: str, params: dict[str, Any]) -> dict[str, Any]:
     """端到端 demo 工具桩。"""
     if (tool_id, action) == ("modstore_orders", "query"):
         return {
@@ -167,10 +166,9 @@ def _mock_e2e_dispatcher(
     return {"success": False, "message": f"mock 未实现: {tool_id}.{action}"}
 
 
-def _dispatch_workflow_tool(
-    tool_id: str, action: str, params: dict[str, Any]
-) -> dict[str, Any]:
+def _dispatch_workflow_tool(tool_id: str, action: str, params: dict[str, Any]) -> dict[str, Any]:
     from app.application.facades.tools_facade import execute_registered_workflow_tool
+
     return execute_registered_workflow_tool(tool_id=tool_id, action=action, params=params)
 
 
@@ -186,7 +184,7 @@ def run_modstore_e2e(strategy: str = "auto") -> dict[str, Any]:
     engine = WorkflowEngine(tool_dispatcher=dispatcher)
     gated = ApprovalGatedEngine(engine=engine)
 
-    plan_id = f"e2e-modstore-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
+    plan_id = f"e2e-modstore-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}"
     plan = _build_modstore_plan(plan_id)
     runtime_ctx: dict[str, Any] = {
         "user_id": "e2e_modstore_demo",
@@ -204,7 +202,7 @@ def run_modstore_e2e(strategy: str = "auto") -> dict[str, Any]:
     )
     evidence["e2e_scenario"] = "modstore_anomaly_notify_and_report"
 
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     out = EVIDENCE_DIR / f"e2e-modstore-{stamp}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(evidence, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -228,7 +226,7 @@ def main(argv: list[str] | None = None) -> int:
         f"  approved={decision.get('all_approved')} pending={decision.get('pending_approval')} "
         f"rejected={decision.get('any_rejected')}"
     )
-    for nr in (evidence.get("node_results_summary") or []):
+    for nr in evidence.get("node_results_summary") or []:
         print(f"  {nr.get('node_id')}: success={nr.get('success')} action={nr.get('action')}")
     print(f"  evidence: {evidence.get('_evidence_path')}")
     return 0

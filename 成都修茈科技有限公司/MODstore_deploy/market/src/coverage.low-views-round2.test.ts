@@ -309,7 +309,7 @@ describe('low coverage admin and developer views, round 2', () => {
   it('covers AI account CRUD, validation, rotation and delete flows', async () => {
     const wrapper = mount(AdminAiAccountsView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
     expect(apiMock.adminListAiAccounts).toHaveBeenCalledWith({ limit: 200 })
     expect(vm.fullWebhookList[0].paths[0].url).toContain('/api/qq/hook')
 
@@ -338,10 +338,7 @@ describe('low coverage admin and developer views, round 2', () => {
     vm.openEdit(row)
     vm.editForm.display_name = 'Updated'
     await vm.submitEdit()
-    expect(apiMock.adminUpdateAiAccount).toHaveBeenCalledWith(
-      7,
-      expect.objectContaining({ display_name: 'Updated' }),
-    )
+    expect(apiMock.adminUpdateAiAccount).toHaveBeenCalledWith(7, expect.objectContaining({ display_name: 'Updated' }))
 
     vm.openRotate(row)
     await vm.submitRotate()
@@ -355,7 +352,7 @@ describe('low coverage admin and developer views, round 2', () => {
       app_secret: 'secret2',
       bot_token: 'token2',
     })
-    ;(window.confirm as any).mockReturnValueOnce(false).mockReturnValueOnce(true)
+    ;(window.confirm as UnsafeTestValue).mockReturnValueOnce(false).mockReturnValueOnce(true)
     await vm.removeAccount(row)
     expect(apiMock.adminDeleteAiAccount).not.toHaveBeenCalled()
     await vm.removeAccount(row)
@@ -421,7 +418,7 @@ describe('low coverage admin and developer views, round 2', () => {
     await inputs[3].setValue('modal-app')
     await inputs[4].setValue('modal-secret')
     await inputs[5].setValue('modal-token')
-    ;(wrapper.vm as any).closeCreate()
+    ;(wrapper.vm as UnsafeTestValue).closeCreate()
     await flushPromises()
 
     await wrapper.findAll('.aa-row-actions .btn')[0].trigger('click')
@@ -432,7 +429,7 @@ describe('low coverage admin and developer views, round 2', () => {
     await wrapper.get('.aa-modal select').setValue('disabled')
     await wrapper.get('.aa-modal input[type="checkbox"]').setValue(true)
     await wrapper.get('.aa-modal textarea').setValue('edited notes')
-    ;(wrapper.vm as any).closeEdit()
+    ;(wrapper.vm as UnsafeTestValue).closeEdit()
     await flushPromises()
 
     await wrapper.findAll('.aa-row-actions .btn')[1].trigger('click')
@@ -441,7 +438,7 @@ describe('low coverage admin and developer views, round 2', () => {
     await inputs[0].setValue('rotate-app')
     await inputs[1].setValue('rotate-secret')
     await inputs[2].setValue('rotate-token')
-    ;(wrapper.vm as any).closeRotate()
+    ;(wrapper.vm as UnsafeTestValue).closeRotate()
     await flushPromises()
 
     await wrapper.findAll('.aa-row-actions .btn')[2].trigger('click')
@@ -461,18 +458,18 @@ describe('low coverage admin and developer views, round 2', () => {
     apiMock.butlerQqStatus.mockRejectedValueOnce(new Error('qq status down'))
     const qqStatusFailure = mount(AdminAiAccountsView, globalMount)
     await flushPromises()
-    expect((qqStatusFailure.vm as any).qqStatus).toBe(null)
+    expect((qqStatusFailure.vm as UnsafeTestValue).qqStatus).toBe(null)
     qqStatusFailure.unmount()
 
     apiMock.adminListAiAccounts.mockRejectedValueOnce(new Error('list down'))
     const listFailure = mount(AdminAiAccountsView, globalMount)
     await flushPromises()
-    expect((listFailure.vm as any).error).toBe('list down')
+    expect((listFailure.vm as UnsafeTestValue).error).toBe('list down')
     listFailure.unmount()
 
     const wrapper = mount(AdminAiAccountsView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
     apiMock.adminCreateAiAccount.mockRejectedValueOnce(new Error('create down'))
     vm.openCreate()
@@ -506,7 +503,7 @@ describe('low coverage admin and developer views, round 2', () => {
   it('covers customer service standards and integration save branches', async () => {
     const wrapper = mount(AdminCustomerServiceView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
     expect(vm.standards).toHaveLength(1)
     expect(vm.integrations).toHaveLength(1)
 
@@ -533,10 +530,7 @@ describe('low coverage admin and developer views, round 2', () => {
     vm.editIntegration(vm.integrations[0])
     vm.integrationConfigText = '{"operation_id":"sync"}'
     await vm.saveIntegration()
-    expect(apiMock.customerServiceUpdateIntegration).toHaveBeenCalledWith(
-      2,
-      expect.objectContaining({ config: { operation_id: 'sync' } }),
-    )
+    expect(apiMock.customerServiceUpdateIntegration).toHaveBeenCalledWith(2, expect.objectContaining({ config: { operation_id: 'sync' } }))
 
     vm.integrationConfigText = '{bad json'
     await vm.saveIntegration()
@@ -552,7 +546,7 @@ describe('low coverage admin and developer views, round 2', () => {
   it('covers material library list, upload, clipboard, download, edit, delete and TTS paths', async () => {
     const wrapper = mount(MyMaterialsView, { ...globalMount, attachTo: document.body })
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
     const item = vm.items[0]
 
     expect(vm.kindLabel('audio')).toBe('音频')
@@ -565,9 +559,7 @@ describe('low coverage admin and developer views, round 2', () => {
 
     vm.copyDownloadPath(5)
     await flushPromises()
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
-      '/api/workbench/studio-assets/5/file',
-    )
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('/api/workbench/studio-assets/5/file')
 
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
@@ -608,7 +600,7 @@ describe('low coverage admin and developer views, round 2', () => {
     apiMock.listStudioAssets.mockRejectedValueOnce(new Error('list failed'))
     const wrapper = mount(MyMaterialsView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
     expect(vm.listError).toContain('list failed')
 
     apiMock.downloadStudioAssetBlob.mockRejectedValueOnce(new Error('download failed'))
@@ -639,29 +631,29 @@ describe('low coverage admin and developer views, round 2', () => {
     localStorage.setItem('modstore_emp_chat_hidden_pkg_ids', JSON.stringify(['emp_hidden', 42]))
     const wrapper = mount(MyEmployeesView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
-    expect(vm.visibleEmployees.map((e: any) => e.id)).toContain('emp_alpha')
+    expect(vm.visibleEmployees.map((e: UnsafeTestValue) => e.id)).toContain('emp_alpha')
     vm.openEmployee('emp_alpha')
     expect(routerMock.push).toHaveBeenCalledWith({
       name: 'workbench-shell',
       params: { target: 'employee', id: 'emp_alpha' },
     })
-    ;(window.confirm as any).mockReturnValueOnce(false)
+    ;(window.confirm as UnsafeTestValue).mockReturnValueOnce(false)
     vm.hideLocally('emp_alpha')
     expect([...vm.hiddenPkgIds]).not.toContain('emp_alpha')
-    ;(window.confirm as any).mockReturnValueOnce(true)
+    ;(window.confirm as UnsafeTestValue).mockReturnValueOnce(true)
     vm.hideLocally('emp_alpha')
     expect([...vm.hiddenPkgIds]).toContain('emp_alpha')
     vm.clearHiddenPkgIds()
     expect([...vm.hiddenPkgIds]).toHaveLength(0)
-    ;(window.confirm as any).mockReturnValueOnce(false)
+    ;(window.confirm as UnsafeTestValue).mockReturnValueOnce(false)
     await vm.confirmDeleteEmployee({ id: 'emp_alpha', name: 'Alpha' })
     expect(apiMock.adminDeleteEmployeePack).not.toHaveBeenCalled()
-    ;(window.confirm as any).mockReturnValueOnce(true)
+    ;(window.confirm as UnsafeTestValue).mockReturnValueOnce(true)
     await vm.confirmDeleteEmployee({ id: 'emp_alpha', name: 'Alpha' })
     expect(apiMock.adminDeleteEmployeePack).toHaveBeenCalledWith('emp_alpha')
-    ;(window.confirm as any).mockReturnValueOnce(true)
+    ;(window.confirm as UnsafeTestValue).mockReturnValueOnce(true)
     await vm.purgeAllEmployees()
     expect(apiMock.adminPurgeAllEmployeePacks).toHaveBeenCalled()
     expect(vm.listError).toContain('packages.json')
@@ -672,7 +664,7 @@ describe('low coverage admin and developer views, round 2', () => {
     apiMock.listEmployees.mockRejectedValueOnce(new Error('employees failed'))
     const wrapper = mount(MyEmployeesView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
     expect(vm.listError).toContain('employees failed')
 
     await vm.confirmDeleteEmployee({ id: 'emp_alpha', name: 'Alpha' })
@@ -684,7 +676,7 @@ describe('low coverage admin and developer views, round 2', () => {
   it('covers developer webhook create, edit, toggle, deliveries, retry and delete paths', async () => {
     const wrapper = mount(DeveloperWebhooksPanel, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
     expect(vm.subs).toHaveLength(1)
     expect(vm.statusChipClass('failed')).toBe('dw__chip dw__chip--failed')
@@ -718,10 +710,7 @@ describe('low coverage admin and developer views, round 2', () => {
     vm.dialog.secret = 'new-secret'
     vm.toggleEvent('payment.succeeded')
     await vm.submitDialog()
-    expect(apiMock.developerUpdateWebhook).toHaveBeenCalledWith(
-      11,
-      expect.objectContaining({ secret: 'new-secret' }),
-    )
+    expect(apiMock.developerUpdateWebhook).toHaveBeenCalledWith(11, expect.objectContaining({ secret: 'new-secret' }))
 
     await vm.toggleActive(sub)
     expect(apiMock.developerUpdateWebhook).toHaveBeenCalledWith(11, { is_active: false })
@@ -736,10 +725,10 @@ describe('low coverage admin and developer views, round 2', () => {
 
     await vm.sendTest(sub)
     expect(apiMock.developerTestWebhook).toHaveBeenCalledWith(11)
-    ;(window.confirm as any).mockReturnValueOnce(false)
+    ;(window.confirm as UnsafeTestValue).mockReturnValueOnce(false)
     await vm.deleteSub(sub)
     expect(apiMock.developerDeleteWebhook).not.toHaveBeenCalled()
-    ;(window.confirm as any).mockReturnValueOnce(true)
+    ;(window.confirm as UnsafeTestValue).mockReturnValueOnce(true)
     await vm.deleteSub(sub)
     expect(apiMock.developerDeleteWebhook).toHaveBeenCalledWith(11)
   })
@@ -748,7 +737,7 @@ describe('low coverage admin and developer views, round 2', () => {
     apiMock.developerListWebhooks.mockRejectedValueOnce(new Error('refresh failed'))
     const wrapper = mount(DeveloperWebhooksPanel, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
     expect(vm.errMsg).toContain('refresh failed')
 
     apiMock.developerCreateWebhook.mockRejectedValueOnce(new Error('create failed'))
@@ -785,7 +774,7 @@ describe('low coverage public auth views, round 2', () => {
   it('covers register verification and submit branches', async () => {
     vi.useFakeTimers()
     const wrapper = mount(RegisterView, globalMount)
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
     await vm.sendCode()
     expect(vm.err).toContain('邮箱')
@@ -813,12 +802,7 @@ describe('low coverage public auth views, round 2', () => {
     vm.password = 'secret123'
     vm.verificationCode = '123456'
     await vm.doRegister()
-    expect(apiMock.register).toHaveBeenCalledWith(
-      'tester',
-      'secret123',
-      'new@example.test',
-      '123456',
-    )
+    expect(apiMock.register).toHaveBeenCalledWith('tester', 'secret123', 'new@example.test', '123456')
     expect(routerMock.replace).toHaveBeenCalledWith({
       name: 'plans',
       query: { plan: 'plan_enterprise' },
@@ -835,7 +819,7 @@ describe('low coverage public auth views, round 2', () => {
     vi.useFakeTimers()
     sessionStorage.setItem('login_email', 'stored@example.test')
     const wrapper = mount(LoginByEmailView, globalMount)
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
     expect(vm.email).toBe('stored@example.test')
 
     await vm.sendCode()
@@ -866,7 +850,7 @@ describe('low coverage public auth views, round 2', () => {
   it('covers forgot password validation, cooldown, reset and API error branches', async () => {
     vi.useFakeTimers()
     const wrapper = mount(ForgotPasswordView, globalMount)
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
     await vm.sendCode()
     expect(vm.err).toContain('有效邮箱')

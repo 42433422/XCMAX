@@ -97,8 +97,8 @@ async def _chat_completion(
             primary_model = adapter.model_name
         else:
             return await adapter.chat_completion(messages, max_tokens=max_tokens)
-    except RECOVERABLE_ERRORS as exc:
-        primary_error = str(exc)[:800]
+    except RECOVERABLE_ERRORS:
+        primary_error = "主模型服务暂不可用"
         logger.warning("employee primary LLM failed; trying configured fallback")
 
     fallback_cfg = _resolve_employee_llm_fallback_config(provider)
@@ -120,9 +120,9 @@ async def _chat_completion(
                 result["_fallback_provider"] = fallback_provider
                 result["_fallback_model"] = fallback.model_name
                 return result
-        except RECOVERABLE_ERRORS as exc:
+        except RECOVERABLE_ERRORS:
             logger.exception("employee fallback LLM failed")
-            return {"error": f"{primary_error}; fallback failed: {str(exc)[:400]}"[:800]}
+            return {"error": f"{primary_error}；备用模型服务也暂不可用"}
 
     if primary_error:
         logger.warning("employee agent LLM unavailable")

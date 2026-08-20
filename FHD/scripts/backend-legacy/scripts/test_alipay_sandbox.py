@@ -32,6 +32,8 @@ import uuid
 from pathlib import Path
 from urllib.parse import parse_qsl
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
@@ -140,7 +142,7 @@ def _do_verify_notify(path: Path) -> int:
     print(f"fields  = {sorted(data.keys())}")
     try:
         ok = mp_ali.verify_notify(data, signature)
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"[verify-notify] 验签异常：{e}", file=sys.stderr)
         return 1
     print(f"verified = {ok}")

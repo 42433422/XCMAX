@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """P-W 管理端：MODstore 工作台 /market/admin/* 十页 + digest 解锁。"""
+
 from __future__ import annotations
 
 import sys
@@ -13,7 +14,7 @@ TARGET = Path(
 
 MARKER = "_PW_MARKET_ADMIN_PAGES"
 
-ADMIN_PAGES_CONST = '''
+ADMIN_PAGES_CONST = """
 _PW_MARKET_ADMIN_PAGES: Tuple[Tuple[str, str], ...] = (
     ("管理端·数据库管理", "/market/admin/database"),
     ("管理端·值班员工", "/market/admin/duty-employees"),
@@ -26,9 +27,9 @@ _PW_MARKET_ADMIN_PAGES: Tuple[Tuple[str, str], ...] = (
     ("管理端·管家技能", "/market/admin/butler-skills"),
     ("管理端·AI 账号池", "/market/admin/ai-accounts"),
 )
-'''
+"""
 
-BUILD_LOOP = '''
+BUILD_LOOP = """
     for name, path in _PW_MARKET_ADMIN_PAGES:
         out.append(
             SurfaceTarget(
@@ -41,7 +42,7 @@ BUILD_LOOP = '''
             )
         )
 
-'''
+"""
 
 HELPERS = '''
 
@@ -67,7 +68,7 @@ def _fetch_admin_digest_code_sync(auth: Dict[str, str]) -> str:
         code = str(data.get("code") or "").strip().upper()
         if len(code) == 6:
             return code
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures
         logger.warning("surface audit: digest-identity fetch failed: %s", exc)
     return ""
 
@@ -107,42 +108,36 @@ async def _prepare_admin_digest(context: Any, auth: Dict[str, str]) -> None:
             )
             with urllib.request.urlopen(req, timeout=30):
                 pass
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures
             logger.warning("surface audit: verify-admin-digest-code failed: %s", exc)
     await _inject_admin_digest(context, code)
 
 '''
 
-APPLY_PREPARE_BRANCH = '''    if prepare == "admin_digest":
+APPLY_PREPARE_BRANCH = """    if prepare == "admin_digest":
         try:
             unlock_btn = page.get_by_role("button", name=re.compile("解锁管理端"))
             if await unlock_btn.is_visible(timeout=2500):
                 await unlock_btn.click(timeout=5000)
                 await page.wait_for_timeout(1000)
-        except Exception:
+        except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
             pass
         try:
             await page.wait_for_selector(".wb-sidebar-admin-nav, #app .app-shell", timeout=12_000)
-        except Exception:
+        except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
             pass
         return
-'''
+"""
 
-CAPTURE_CTX_PATCH = '''                if market_auth and _path_needs_market_auth(target.path):
+CAPTURE_CTX_PATCH = """                if market_auth and _path_needs_market_auth(target.path):
                     await _inject_market_auth(context, market_auth)
                 if target.prepare == "admin_digest" and market_auth:
                     await _prepare_admin_digest(context, market_auth)
-'''
+"""
 
 
 def _replace_old_admin_block(text: str) -> str:
     """移除旧 FHD admin-console 五页（若存在）。"""
-    old_snippets = (
-        '("/xcmax-admin")',
-        '("/automation-policy")',
-        'prepare="admin_digest"',
-        'f"admin:',
-    )
     if '("/xcmax-admin")' not in text:
         return text
     import re
@@ -187,7 +182,10 @@ if __name__ == "__main__":
         text = text.replace(anchor, HELPERS.strip() + "\n\n\n" + anchor, 1)
         changed = True
 
-    if "_PW_MARKET_ADMIN_PAGES:" in text and "for name, path in _PW_MARKET_ADMIN_PAGES:" not in text:
+    if (
+        "_PW_MARKET_ADMIN_PAGES:" in text
+        and "for name, path in _PW_MARKET_ADMIN_PAGES:" not in text
+    ):
         needle = "    for name, path in _PAPP_PUBLIC_PAGES:"
         if needle not in text:
             needle = "\n    return out\n"
@@ -202,7 +200,7 @@ if __name__ == "__main__":
         anchor = "async def _apply_page_prepare(page: Any, prepare: str, timeout_ms: int) -> None:"
         if anchor not in text:
             raise SystemExit("_apply_page_prepare not found")
-        insert_at = text.find("    if prepare.startswith(\"ai_store_tab:\"):")
+        insert_at = text.find('    if prepare.startswith("ai_store_tab:"):')
         if insert_at < 0:
             raise SystemExit("ai_store_tab branch not found")
         text = text[:insert_at] + APPLY_PREPARE_BRANCH + text[insert_at:]
@@ -212,8 +210,7 @@ if __name__ == "__main__":
     if old_ctx in text and "_prepare_admin_digest" not in text:
         text = text.replace(
             old_ctx,
-            CAPTURE_CTX_PATCH.strip()
-            + "\n                page = await context.new_page()",
+            CAPTURE_CTX_PATCH.strip() + "\n                page = await context.new_page()",
             1,
         )
         changed = True

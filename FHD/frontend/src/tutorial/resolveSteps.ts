@@ -14,9 +14,7 @@ export function resolveTrackSteps(trackId: TutorialTrackId, ctx: TutorialBuildCo
   } else {
     steps = injectModSteps([], collectModStepsForTrack(id, ctx.mods as never[]))
   }
-  const modInjected = id === 'basic'
-    ? injectModSteps(steps, collectModStepsForTrack(id, ctx.mods as never[]))
-    : steps
+  const modInjected = id === 'basic' ? injectModSteps(steps, collectModStepsForTrack(id, ctx.mods as never[])) : steps
   return modInjected
 }
 

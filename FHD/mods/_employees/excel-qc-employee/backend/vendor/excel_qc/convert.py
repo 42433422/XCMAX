@@ -74,14 +74,20 @@ async def convert_file(
 
     plan = _optional_json("plan", "plan_path", "plan.json", payload, ctx)
     if plan is None:
-        raise ValueError("缺少写入计划：请在 payload.plan 内联或 payload.plan_path 指定 plan.json。")
+        raise ValueError(
+            "缺少写入计划：请在 payload.plan 内联或 payload.plan_path 指定 plan.json。"
+        )
 
     rules = _optional_json("rules", "rules_path", "rules.json", payload, ctx)
     write_report = _optional_json(
         "write_report", "write_report_path", "write_report.json", payload, ctx
     )
-    tpl = template_path if template_path and Path(template_path).is_file() else _resolve_path(
-        payload.get("template_path") or payload.get("template_relpath"), payload, ctx
+    tpl = (
+        template_path
+        if template_path and Path(template_path).is_file()
+        else _resolve_path(
+            payload.get("template_path") or payload.get("template_relpath"), payload, ctx
+        )
     )
 
     report = run_qc(
@@ -115,9 +121,7 @@ async def convert_file(
     output_dir = output_path.parent
     output_dir.mkdir(parents=True, exist_ok=True)
     out = output_dir / "qc_report.json"
-    out.write_text(
-        json.dumps(report, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
-    )
+    out.write_text(json.dumps(report, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
 
     return {
         "output_path": str(out),

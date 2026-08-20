@@ -37,9 +37,12 @@ from __future__ import annotations
 
 import ast
 import operator
-from typing import Any, Mapping
+from collections.abc import Callable, Mapping
+from typing import Any
 
-_CMP_OPS = {
+from vibe_coding.operational_errors import BOUNDARY_ERRORS
+
+_CMP_OPS: dict[type[ast.cmpop], Callable[[Any, Any], bool]] = {
     ast.Eq: operator.eq,
     ast.NotEq: operator.ne,
     ast.Lt: operator.lt,
@@ -52,7 +55,7 @@ _CMP_OPS = {
     ast.IsNot: operator.is_not,
 }
 
-_UNARY_OPS = {
+_UNARY_OPS: dict[type[ast.unaryop], Callable[[Any], Any]] = {
     ast.UAdd: operator.pos,
     ast.USub: operator.neg,
     ast.Not: operator.not_,
@@ -82,7 +85,7 @@ def evaluate_condition(expression: str, context: Mapping[str, Any]) -> bool:
         value = _eval(tree.body, context)
     except ConditionError:
         raise
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:
         raise ConditionError(f"condition raised {type(exc).__name__}: {exc}") from exc
     return bool(value)
 
@@ -117,12 +120,12 @@ def _eval(node: ast.AST, ctx: Mapping[str, Any]) -> Any:
 
     if isinstance(node, ast.Compare):
         left = _eval(node.left, ctx)
-        for op, right_node in zip(node.ops, node.comparators):
+        for op, right_node in zip(node.ops, node.comparators, strict=False):
             right = _eval(right_node, ctx)
-            op_type = type(op)
-            if op_type not in _CMP_OPS:
-                raise ConditionError(f"unsupported comparator: {op_type.__name__}")
-            if not _CMP_OPS[op_type](left, right):
+            comparator_type = type(op)
+            if comparator_type not in _CMP_OPS:
+                raise ConditionError(f"unsupported comparator: {comparator_type.__name__}")
+            if not _CMP_OPS[comparator_type](left, right):
                 return False
             left = right
         return True
@@ -143,21 +146,17 @@ def _eval(node: ast.AST, ctx: Mapping[str, Any]) -> Any:
         raise ConditionError(f"unsupported BoolOp: {type(node.op).__name__}")
 
     if isinstance(node, ast.UnaryOp):
-        op_type = type(node.op)
-        if op_type not in _UNARY_OPS:
-            raise ConditionError(f"unsupported unary op: {op_type.__name__}")
-        return _UNARY_OPS[op_type](_eval(node.operand, ctx))
+        unary_type = type(node.op)
+        if unary_type not in _UNARY_OPS:
+            raise ConditionError(f"unsupported unary op: {unary_type.__name__}")
+        return _UNARY_OPS[unary_type](_eval(node.operand, ctx))
 
     if isinstance(node, ast.List):
         return [_eval(elt, ctx) for elt in node.elts]
     if isinstance(node, ast.Tuple):
         return tuple(_eval(elt, ctx) for elt in node.elts)
     if isinstance(node, ast.Dict):
-        return {
-            _eval(k, ctx): _eval(v, ctx)
-            for k, v in zip(node.keys, node.values)
-            if k is not None
-        }
+        return {_eval(k, ctx): _eval(v, ctx) for k, v in zip(node.keys, node.values, strict=False) if k is not None}
 
     raise ConditionError(f"unsupported expression: {type(node).__name__}")
 
@@ -181,8 +180,7 @@ def _lookup(target: Any, key: Any, node: ast.AST) -> Any:
     # Anything else: be conservative and refuse — we don't want LLM-supplied
     # conditions to read user-defined Python attributes.
     raise ConditionError(
-        f"cannot resolve {key!r} on {type(target).__name__} value at "
-        f"line {getattr(node, 'lineno', '?')}"
+        f"cannot resolve {key!r} on {type(target).__name__} value at line {getattr(node, 'lineno', '?')}"
     )
 
 

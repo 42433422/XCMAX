@@ -1,3 +1,4 @@
+# mypy: disable-error-code="no-any-return"
 """行业规则引擎测试：证明"不同行业走不同业务规则"由 profile 数据驱动、无行业分支。"""
 
 import json

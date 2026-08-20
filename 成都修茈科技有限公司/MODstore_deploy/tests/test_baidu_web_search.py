@@ -12,7 +12,11 @@ def test_bing_full_query_relevance_filter() -> None:
     from modstore_server.bing_web_search import filter_results_by_full_query
 
     astronomy = [
-        {"title": "太阳_百度百科", "url": "https://baike.baidu.com/item/太阳", "content": "恒星"},
+        {
+            "title": "太阳_百度百科",
+            "url": "https://baike.baidu.com/item/太阳",
+            "content": "恒星",
+        },
     ]
     assert filter_results_by_full_query("太阳鸟包装有限公司", astronomy) == []
     good = [
@@ -60,19 +64,29 @@ def test_rank_contact_serp_rows_prefers_query_hit() -> None:
 
     rows = [
         {"title": "成都市_百度百科", "url": "https://baike.baidu.com", "content": ""},
-        {"title": "成都修茈科技有限公司 | 官网", "url": "https://xiu-ci.com", "content": ""},
+        {
+            "title": "成都修茈科技有限公司 | 官网",
+            "url": "https://xiu-ci.com",
+            "content": "",
+        },
     ]
     ranked = rank_contact_serp_rows("成都修茈科技", rows)
     assert "修茈" in ranked[0]["title"]
 
 
 def test_web_search_result_titles() -> None:
-    from modstore_server.research_tools import clean_web_company_candidate, web_search_result_titles
+    from modstore_server.research_tools import (
+        clean_web_company_candidate,
+        web_search_result_titles,
+    )
 
     titles = web_search_result_titles(
         [
             {"title": "深圳市太阳鸟展示包装有限公司 - 爱企查", "url": "https://a.test"},
-            {"title": "深圳市太阳鸟展示包装有限公司 - 水滴信用", "url": "https://b.test"},
+            {
+                "title": "深圳市太阳鸟展示包装有限公司 - 水滴信用",
+                "url": "https://b.test",
+            },
             {"title": "其他公司有限责任公司", "url": "https://c.test"},
         ],
         limit=5,
@@ -158,7 +172,12 @@ def test_format_web_results_combined_groups_by_engine() -> None:
 
     text = format_web_results_combined(
         [
-            {"title": "B", "url": "https://b.test", "content": "y", "crawl_engine": "bing"},
+            {
+                "title": "B",
+                "url": "https://b.test",
+                "content": "y",
+                "crawl_engine": "bing",
+            },
         ]
     )
     assert "Bing" in text
@@ -166,7 +185,9 @@ def test_format_web_results_combined_groups_by_engine() -> None:
 
 
 @pytest.mark.asyncio
-async def test_web_search_fallback_crawler_first(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_web_search_fallback_crawler_first(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from modstore_server import research_tools as rt
 
     async def _bing(q: str, max_results: int = 10, **kwargs):  # type: ignore[no-untyped-def]

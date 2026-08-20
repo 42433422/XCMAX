@@ -6,6 +6,7 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { renderMarkdown } from '../../utils/lightMarkdown'
 import { sanitizeMermaidSource } from '../../utils/mermaidSanitize'
+import type { Mermaid } from 'mermaid'
 
 const props = defineProps<{
   content: string
@@ -24,7 +25,7 @@ const rendered = computed(() => {
   return html
 })
 
-let mermaidApi: any = null
+let mermaidApi: Mermaid | null = null
 let mermaidInit = false
 
 async function getMermaid() {
@@ -99,8 +100,8 @@ async function flushMermaid() {
 
     if (!rendered) {
       const errMsg = (lastErr as Error)?.message || String(lastErr || '')
-      const escapeText = (raw: string) =>
-        raw.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' } as any)[c])
+      const escapeMap: Record<string, string> = { '<': '&lt;', '>': '&gt;', '&': '&amp;' }
+      const escapeText = (raw: string) => raw.replace(/[<>&]/g, (c) => escapeMap[c] || c)
       el.innerHTML =
         `<div class="md-mermaid-fail">` +
         `<div class="md-mermaid-fail__head">` +

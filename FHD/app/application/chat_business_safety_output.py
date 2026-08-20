@@ -19,6 +19,7 @@ from app.application.chat_business_safety_core import (
     _not_executed,
     _payload,
 )
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _EXPORT_COLUMNS = (
     ("work_date", "日期"),
@@ -50,6 +51,7 @@ def _create_attendance_export(rows: list[dict[str, Any]], meta: dict[str, Any]) 
 
     wb = openpyxl.Workbook()
     ws = wb.active
+    assert ws is not None
     ws.title = "考勤明细"
     ws.append([label for _, label in _EXPORT_COLUMNS])
     for row in rows:
@@ -62,9 +64,11 @@ def _create_attendance_export(rows: list[dict[str, Any]], meta: dict[str, Any]) 
         ws.append(values)
     ws.freeze_panes = "A2"
     ws.auto_filter.ref = ws.dimensions
-    for col in ws.columns:
+    from openpyxl.utils import get_column_letter
+
+    for column_index, col in enumerate(ws.columns, start=1):
         width = min(36, max(10, max(len(str(cell.value or "")) for cell in col) + 2))
-        ws.column_dimensions[col[0].column_letter].width = width
+        ws.column_dimensions[get_column_letter(column_index)].width = width
     wb.save(output)
     wb.close()
     return output, relpath
@@ -87,7 +91,7 @@ def _handle_attendance_export(
         )
     try:
         output, relpath = _create_attendance_export(rows, meta)
-    except Exception as exc:  # noqa: BLE001 - converted to a truthful receipt
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - converted to a truthful receipt
         return _not_executed(
             intent,
             "考勤表未生成：文件写出失败。",
@@ -147,7 +151,7 @@ def _handle_attendance_print(
 
         service = facade._get_printer_service()
         printers = service.get_printers()
-    except Exception as exc:  # noqa: BLE001
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
         return _not_executed(
             intent,
             "打印未执行：无法读取系统打印机状态。",
@@ -171,7 +175,7 @@ def _handle_attendance_print(
     try:
         output, relpath = _create_attendance_export(rows, meta)
         result = service.print_document(str(output))
-    except Exception as exc:  # noqa: BLE001
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
         return _not_executed(
             intent,
             "打印未执行：考勤文件生成或提交打印失败。",

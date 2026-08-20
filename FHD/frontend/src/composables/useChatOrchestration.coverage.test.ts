@@ -402,7 +402,10 @@ function resetMockState() {
   mockHandleShipmentModify.mockResolvedValue(false)
   mockSearchProducts.mockResolvedValue({ success: true, data: [], total: 0 })
   mockFetchShipmentRecordsForUnit.mockResolvedValue([])
-  mockSummarizeShipmentRecordsForAudit.mockReturnValue({ headline: '审计摘要', detailLines: ['行1'] })
+  mockSummarizeShipmentRecordsForAudit.mockReturnValue({
+    headline: '审计摘要',
+    detailLines: ['行1'],
+  })
   mockSaveMessage.mockResolvedValue(undefined)
   mockPushStreamingAiShell.mockReturnValue(0)
   mockHydrateTaskOrderNumber.mockResolvedValue(undefined)
@@ -542,7 +545,13 @@ describe('useChatOrchestration coverage – ExcelAnalysis 回调', () => {
   it('onAnalyzed 有 running excel_analyze 任务时标记成功', () => {
     createApi()
     state.taskList!.value = [
-      { id: 'excel-1', type: 'excel_analyze', status: 'running', title: '分析Excel', source: 'excel' },
+      {
+        id: 'excel-1',
+        type: 'excel_analyze',
+        status: 'running',
+        title: '分析Excel',
+        source: 'excel',
+      },
     ]
     capturedExcelCallbacks.onAnalyzed!({
       fileName: 'test.xlsx',
@@ -554,7 +563,14 @@ describe('useChatOrchestration coverage – ExcelAnalysis 回调', () => {
   it('onAnalyzeProgress 有 running 任务时更新进度', () => {
     createApi()
     state.taskList!.value = [
-      { id: 'excel-1', type: 'excel_analyze', status: 'running', title: '分析Excel', source: 'excel', progress: 5 },
+      {
+        id: 'excel-1',
+        type: 'excel_analyze',
+        status: 'running',
+        title: '分析Excel',
+        source: 'excel',
+        progress: 5,
+      },
     ]
     capturedExcelCallbacks.onAnalyzeProgress!({ step: '解析中', progress: 50 })
   })
@@ -570,7 +586,14 @@ describe('useChatOrchestration coverage – ExcelAnalysis 回调', () => {
   it('onAnalyzeDone 成功时 finishTask', () => {
     createApi()
     state.taskList!.value = [
-      { id: 'excel-1', type: 'excel_analyze', status: 'running', title: '分析Excel', source: 'excel', summary: '摘要' },
+      {
+        id: 'excel-1',
+        type: 'excel_analyze',
+        status: 'running',
+        title: '分析Excel',
+        source: 'excel',
+        summary: '摘要',
+      },
     ]
     capturedExcelCallbacks.onAnalyzeDone!({ success: true, message: '完成' })
   })
@@ -578,7 +601,13 @@ describe('useChatOrchestration coverage – ExcelAnalysis 回调', () => {
   it('onAnalyzeDone 失败时 failTask', () => {
     createApi()
     state.taskList!.value = [
-      { id: 'excel-1', type: 'excel_analyze', status: 'running', title: '分析Excel', source: 'excel' },
+      {
+        id: 'excel-1',
+        type: 'excel_analyze',
+        status: 'running',
+        title: '分析Excel',
+        source: 'excel',
+      },
     ]
     capturedExcelCallbacks.onAnalyzeDone!({ success: false, message: '失败原因' })
   })
@@ -641,12 +670,7 @@ describe('useChatOrchestration coverage – runShipmentMgmtAfterPrintSuccess', (
     expect(mockFetchShipmentRecordsForUnit).toHaveBeenCalledWith('甲公司')
     expect(mockSummarizeShipmentRecordsForAudit).toHaveBeenCalled()
     expect(mockDispatchCoreWorkflowModRun).toHaveBeenCalled()
-    expect(mockAddAndSaveMessage).toHaveBeenCalledWith(
-      expect.stringContaining('出货管理'),
-      'ai',
-      undefined,
-      expect.any(Object),
-    )
+    expect(mockAddAndSaveMessage).toHaveBeenCalledWith(expect.stringContaining('出货管理'), 'ai', undefined, expect.any(Object))
   })
 
   it('taskList 有 workflow_emp_shipment_mgmt 时 upsertWorkflowEmployeeTask', async () => {
@@ -679,12 +703,7 @@ describe('useChatOrchestration coverage – handleStartPrintCommand', () => {
     }
     const api = createApi()
     await api.sendMessage('开始打印')
-    expect(mockAddAndSaveMessage).toHaveBeenCalledWith(
-      expect.stringContaining('未包含可打印文件'),
-      'ai',
-      undefined,
-      expect.any(Object),
-    )
+    expect(mockAddAndSaveMessage).toHaveBeenCalledWith(expect.stringContaining('未包含可打印文件'), 'ai', undefined, expect.any(Object))
     expect(mockExecutePrintTask).not.toHaveBeenCalled()
   })
 
@@ -699,12 +718,7 @@ describe('useChatOrchestration coverage – handleStartPrintCommand', () => {
     mockExecutePrintTask.mockResolvedValue({ success: false, message: '打印机离线' })
     const api = createApi()
     await api.sendMessage('开始打印')
-    expect(mockAddAndSaveMessage).toHaveBeenCalledWith(
-      expect.stringContaining('打印完成'),
-      'ai',
-      undefined,
-      expect.any(Object),
-    )
+    expect(mockAddAndSaveMessage).toHaveBeenCalledWith(expect.stringContaining('打印完成'), 'ai', undefined, expect.any(Object))
   })
 
   it('打印成功且有 taskListId 时标记 shipment 任务为 success', async () => {
@@ -873,7 +887,12 @@ describe('useChatOrchestration coverage – maybeCloseAssistantFloatForShipmentT
     mockRequestChatByModeWithTimeout.mockResolvedValue({
       success: true,
       response: '已生成发货单',
-      task: { type: 'shipment_generate', title: '发货任务', api_url: '/api/ship', completed: false },
+      task: {
+        type: 'shipment_generate',
+        title: '发货任务',
+        api_url: '/api/ship',
+        completed: false,
+      },
     })
     const api = createApi()
     const handler = vi.fn()
@@ -933,12 +952,7 @@ describe('useChatOrchestration coverage – confirmTask 各分支', () => {
       payload: {},
     })
     await api.confirmTask()
-    expect(mockAddAndSaveMessage).toHaveBeenCalledWith(
-      expect.stringContaining('服务器错误'),
-      'ai',
-      undefined,
-      expect.any(Object),
-    )
+    expect(mockAddAndSaveMessage).toHaveBeenCalledWith(expect.stringContaining('服务器错误'), 'ai', undefined, expect.any(Object))
     expect(api.currentTask.value).toBeNull()
     vi.unstubAllGlobals()
   })
@@ -954,12 +968,7 @@ describe('useChatOrchestration coverage – confirmTask 各分支', () => {
       payload: {},
     })
     await api.confirmTask()
-    expect(mockAddAndSaveMessage).toHaveBeenCalledWith(
-      expect.stringContaining('网络断开'),
-      'ai',
-      undefined,
-      expect.any(Object),
-    )
+    expect(mockAddAndSaveMessage).toHaveBeenCalledWith(expect.stringContaining('网络断开'), 'ai', undefined, expect.any(Object))
     vi.unstubAllGlobals()
   })
 
@@ -974,12 +983,7 @@ describe('useChatOrchestration coverage – confirmTask 各分支', () => {
       payload: {},
     })
     await api.confirmTask()
-    expect(mockAddAndSaveMessage).toHaveBeenCalledWith(
-      expect.stringContaining('网络错误'),
-      'ai',
-      undefined,
-      expect.any(Object),
-    )
+    expect(mockAddAndSaveMessage).toHaveBeenCalledWith(expect.stringContaining('网络错误'), 'ai', undefined, expect.any(Object))
     vi.unstubAllGlobals()
   })
 
@@ -1179,11 +1183,9 @@ describe('useChatOrchestration coverage – sendMessage 各分支', () => {
 
   it('debounce > 0 时走 enqueueChatBatchMessage', async () => {
     mockGetChatBatchDebounceMs.mockReturnValue(300)
-    mockEnqueueChatBatchMessage.mockImplementation(
-      (_msg: string, _ms: number, cb: (m: string[]) => void) => {
-        cb(['batch-msg'])
-      },
-    )
+    mockEnqueueChatBatchMessage.mockImplementation((_msg: string, _ms: number, cb: (m: string[]) => void) => {
+      cb(['batch-msg'])
+    })
     mockRequestChatByModeWithTimeout.mockResolvedValue({ success: true, response: '批量回复' })
     const api = createApi()
     await api.sendMessage('普通消息')
@@ -1258,11 +1260,9 @@ describe('useChatOrchestration coverage – executeRemoteChatRound 批量', () =
     localStorage.clear()
     resetMockState()
     mockGetChatBatchDebounceMs.mockReturnValue(300)
-    mockEnqueueChatBatchMessage.mockImplementation(
-      (_msg: string, _ms: number, cb: (m: string[]) => void) => {
-        cb(['first', 'second'])
-      },
-    )
+    mockEnqueueChatBatchMessage.mockImplementation((_msg: string, _ms: number, cb: (m: string[]) => void) => {
+      cb(['first', 'second'])
+    })
   })
 
   it('批量成功且有 requires_token 部分', async () => {
@@ -1271,7 +1271,13 @@ describe('useChatOrchestration coverage – executeRemoteChatRound 批量', () =
       batch: true,
       results: [
         { success: true, response: 'part-1' },
-        { success: true, response: 'part-2', requires_token: true, token_name: 'DB_READ_TOKEN', token_description: '读取令牌' },
+        {
+          success: true,
+          response: 'part-2',
+          requires_token: true,
+          token_name: 'DB_READ_TOKEN',
+          token_description: '读取令牌',
+        },
       ],
     })
     const api = createApi()
@@ -1293,12 +1299,7 @@ describe('useChatOrchestration coverage – executeRemoteChatRound 批量', () =
     const api = createApi()
     await api.sendMessage('批量')
     await vi.waitFor(() => {
-      expect(mockAddAndSaveMessage).toHaveBeenCalledWith(
-        expect.stringContaining('part-2 失败'),
-        'ai',
-        undefined,
-        expect.any(Object),
-      )
+      expect(mockAddAndSaveMessage).toHaveBeenCalledWith(expect.stringContaining('part-2 失败'), 'ai', undefined, expect.any(Object))
     })
   })
 
@@ -1312,12 +1313,7 @@ describe('useChatOrchestration coverage – executeRemoteChatRound 批量', () =
     const api = createApi()
     await api.sendMessage('批量')
     await vi.waitFor(() => {
-      expect(mockAddAndSaveMessage).toHaveBeenCalledWith(
-        expect.stringContaining('批量请求失败'),
-        'ai',
-        undefined,
-        expect.any(Object),
-      )
+      expect(mockAddAndSaveMessage).toHaveBeenCalledWith(expect.stringContaining('批量请求失败'), 'ai', undefined, expect.any(Object))
     })
   })
 
@@ -1326,7 +1322,11 @@ describe('useChatOrchestration coverage – executeRemoteChatRound 批量', () =
       success: true,
       batch: true,
       results: [
-        { success: true, response: 'part-1', task: { type: 'custom', title: '新任务', api_url: '/x' } },
+        {
+          success: true,
+          response: 'part-1',
+          task: { type: 'custom', title: '新任务', api_url: '/x' },
+        },
       ],
     })
     const api = createApi()
@@ -1338,7 +1338,11 @@ describe('useChatOrchestration coverage – executeRemoteChatRound 批量', () =
       success: true,
       batch: true,
       results: [
-        { success: true, response: 'part-1', autoAction: { type: 'show_products_float', query: '5003' } },
+        {
+          success: true,
+          response: 'part-1',
+          autoAction: { type: 'show_products_float', query: '5003' },
+        },
       ],
     })
     const api = createApi()
@@ -1403,24 +1407,14 @@ describe('useChatOrchestration coverage – executeRemoteChatRound 单条 JSON',
     })
     const api = createApi()
     await api.sendMessage('普通')
-    expect(mockAddAndSaveMessage).toHaveBeenCalledWith(
-      expect.stringContaining('处理出错'),
-      'ai',
-      undefined,
-      expect.any(Object),
-    )
+    expect(mockAddAndSaveMessage).toHaveBeenCalledWith(expect.stringContaining('处理出错'), 'ai', undefined, expect.any(Object))
   })
 
   it('单条请求抛出异常', async () => {
     mockRequestChatByModeWithTimeout.mockRejectedValue(new Error('请求超时'))
     const api = createApi()
     await api.sendMessage('普通')
-    expect(mockAddAndSaveMessage).toHaveBeenCalledWith(
-      expect.stringContaining('请求超时'),
-      'ai',
-      undefined,
-      expect.any(Object),
-    )
+    expect(mockAddAndSaveMessage).toHaveBeenCalledWith(expect.stringContaining('请求超时'), 'ai', undefined, expect.any(Object))
   })
 
   it('单条请求抛出非 Error 类型', async () => {
@@ -1428,12 +1422,7 @@ describe('useChatOrchestration coverage – executeRemoteChatRound 单条 JSON',
     const api = createApi()
     await api.sendMessage('普通')
     await vi.waitFor(() => {
-      expect(mockAddAndSaveMessage).toHaveBeenCalledWith(
-        expect.stringContaining('字符串错误'),
-        'ai',
-        undefined,
-        expect.any(Object),
-      )
+      expect(mockAddAndSaveMessage).toHaveBeenCalledWith(expect.stringContaining('字符串错误'), 'ai', undefined, expect.any(Object))
     })
   })
 
@@ -1476,7 +1465,14 @@ describe('useChatOrchestration coverage – executeRemoteChatRound 流式', () =
 
   it('流式成功并触发 task', async () => {
     mockReadPlannerSseResponse.mockImplementation(async (_res, onEvent) => {
-      onEvent({ type: 'done', result: { success: true, response: '回复', task: { type: 'custom', title: '任务', api_url: '/x' } } })
+      onEvent({
+        type: 'done',
+        result: {
+          success: true,
+          response: '回复',
+          task: { type: 'custom', title: '任务', api_url: '/x' },
+        },
+      })
     })
     const api = createApi()
     await api.sendMessage('hello')
@@ -1484,7 +1480,10 @@ describe('useChatOrchestration coverage – executeRemoteChatRound 流式', () =
 
   it('流式成功并触发 autoAction', async () => {
     mockReadPlannerSseResponse.mockImplementation(async (_res, onEvent) => {
-      onEvent({ type: 'done', result: { success: true, response: '回复', autoAction: { type: 'show_orders' } } })
+      onEvent({
+        type: 'done',
+        result: { success: true, response: '回复', autoAction: { type: 'show_orders' } },
+      })
     })
     const api = createApi()
     const handler = vi.fn()
@@ -1496,7 +1495,11 @@ describe('useChatOrchestration coverage – executeRemoteChatRound 流式', () =
 
   it('流式 requires_token 事件且为 WRITE 令牌时保存 resumeDraft', async () => {
     mockReadPlannerSseResponse.mockImplementation(async (_res, onEvent) => {
-      onEvent({ type: 'requires_token', token_name: 'DB_WRITE_TOKEN', token_description: '写入令牌' })
+      onEvent({
+        type: 'requires_token',
+        token_name: 'DB_WRITE_TOKEN',
+        token_description: '写入令牌',
+      })
       onEvent({ type: 'done', result: { success: true, response: '' } })
     })
     const api = createApi()
@@ -1510,20 +1513,14 @@ describe('useChatOrchestration coverage – executeRemoteChatRound 流式', () =
     mockSendChatStream.mockRejectedValue(abortErr)
     const api = createApi()
     await api.sendMessage('hello')
-    expect(mockApplyPlainTextToMessageIndex).toHaveBeenCalledWith(
-      0,
-      expect.stringContaining('超时'),
-    )
+    expect(mockApplyPlainTextToMessageIndex).toHaveBeenCalledWith(0, expect.stringContaining('超时'))
   })
 
   it('流式非 Abort 错误时报告失败', async () => {
     mockSendChatStream.mockRejectedValue(new Error('连接断开'))
     const api = createApi()
     await api.sendMessage('hello')
-    expect(mockApplyPlainTextToMessageIndex).toHaveBeenCalledWith(
-      0,
-      expect.stringContaining('连接断开'),
-    )
+    expect(mockApplyPlainTextToMessageIndex).toHaveBeenCalledWith(0, expect.stringContaining('连接断开'))
   })
 
   it('流式 done 无 result 时用 streamPlain 兜底', async () => {
@@ -1552,10 +1549,7 @@ describe('useChatOrchestration coverage – executeRemoteChatRound 流式', () =
     })
     const api = createApi()
     await api.sendMessage('hello')
-    expect(mockApplyPlainTextToMessageIndex).toHaveBeenCalledWith(
-      0,
-      expect.stringContaining('模型不可用'),
-    )
+    expect(mockApplyPlainTextToMessageIndex).toHaveBeenCalledWith(0, expect.stringContaining('模型不可用'))
   })
 
   it('流式 HTTP 非 ok 时报告错误', async () => {
@@ -1563,10 +1557,7 @@ describe('useChatOrchestration coverage – executeRemoteChatRound 流式', () =
     mockParseChatStreamErrorResponse.mockResolvedValue('服务不可用')
     const api = createApi()
     await api.sendMessage('hello')
-    expect(mockApplyPlainTextToMessageIndex).toHaveBeenCalledWith(
-      0,
-      expect.stringContaining('处理失败'),
-    )
+    expect(mockApplyPlainTextToMessageIndex).toHaveBeenCalledWith(0, expect.stringContaining('处理失败'))
   })
 })
 
@@ -1739,12 +1730,7 @@ describe('useChatOrchestration coverage – errorMessage 间接覆盖', () => {
       payload: {},
     })
     await api.confirmTask()
-    expect(mockAddAndSaveMessage).toHaveBeenCalledWith(
-      expect.stringContaining('连接超时'),
-      'ai',
-      undefined,
-      expect.any(Object),
-    )
+    expect(mockAddAndSaveMessage).toHaveBeenCalledWith(expect.stringContaining('连接超时'), 'ai', undefined, expect.any(Object))
     vi.unstubAllGlobals()
   })
 
@@ -1759,12 +1745,7 @@ describe('useChatOrchestration coverage – errorMessage 间接覆盖', () => {
       payload: {},
     })
     await api.confirmTask()
-    expect(mockAddAndSaveMessage).toHaveBeenCalledWith(
-      expect.stringContaining('网络错误'),
-      'ai',
-      undefined,
-      expect.any(Object),
-    )
+    expect(mockAddAndSaveMessage).toHaveBeenCalledWith(expect.stringContaining('网络错误'), 'ai', undefined, expect.any(Object))
     vi.unstubAllGlobals()
   })
 })

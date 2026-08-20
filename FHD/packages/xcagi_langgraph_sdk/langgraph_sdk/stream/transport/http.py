@@ -20,6 +20,7 @@ import httpx
 import orjson
 from langchain_protocol import Event
 
+from langgraph_sdk._exception_policy import TERMINATION_ERRORS
 from langgraph_sdk._shared.utilities import _quote_path_param
 from langgraph_sdk.sse import BytesLineDecoder, SSEDecoder
 from langgraph_sdk.stream.transport.base import (
@@ -155,7 +156,7 @@ class ProtocolSseTransport:
                 if not done.done():
                     done.set_result(err)
                 raise
-            except BaseException as err:
+            except TERMINATION_ERRORS as err:
                 if not ready.done():
                     ready.set_exception(err)
                 if not done.done():

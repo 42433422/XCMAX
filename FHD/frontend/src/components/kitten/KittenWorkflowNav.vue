@@ -1,10 +1,6 @@
 <template>
   <nav class="kitten-workflow" aria-label="分析工作流">
-    <div
-      v-for="(step, idx) in steps"
-      :key="step.key"
-      :class="['kitten-workflow-step', stepClass(idx)]"
-    >
+    <div v-for="(step, idx) in steps" :key="step.key" :class="['kitten-workflow-step', stepClass(idx)]">
       <span class="kitten-workflow-index">{{ idx + 1 }}</span>
       <span class="kitten-workflow-label">{{ step.label }}</span>
       <span class="kitten-workflow-desc">{{ step.desc }}</span>
@@ -16,18 +12,18 @@
 const props = defineProps({
   steps: {
     type: Array,
-    default: () => []
+    default: () => [],
   },
   activeIndex: {
     type: Number,
-    default: 0
-  }
+    default: 0,
+  },
 })
 
 const stepClass = (idx) => ({
   done: idx < props.activeIndex,
   current: idx === props.activeIndex,
-  upcoming: idx > props.activeIndex
+  upcoming: idx > props.activeIndex,
 })
 </script>
 
@@ -48,7 +44,9 @@ const stepClass = (idx) => ({
   border-radius: 10px;
   background: #ffffff;
   border: 1px solid #e2e8f0;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
 }
 .kitten-workflow-step.done {
   border-color: #86efac;

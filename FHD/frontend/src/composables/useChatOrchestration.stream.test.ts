@@ -66,7 +66,10 @@ vi.mock('./useChatPersistence', () => ({
   resolveExcelSheetOptionsFromContext: vi.fn(() => []),
   extractLikelyProductQueryKeyword: vi.fn(() => null),
   clearPersistedTaskPanelState: vi.fn(),
-  useChatHistoryPersistence: () => ({ toPlainText: (s: string) => s, isWelcomeMessage: () => false }),
+  useChatHistoryPersistence: () => ({
+    toPlainText: (s: string) => s,
+    isWelcomeMessage: () => false,
+  }),
   useChatTaskPanelPersistence: () => ({
     persistTaskPanelStateForSession: vi.fn(),
     applyPersistedTaskPanelStateForSession: vi.fn(),
@@ -243,7 +246,11 @@ describe('useChatOrchestration stream', () => {
 
   it('sendMessage stream handles requires_token event', async () => {
     readPlannerSseResponse.mockImplementation(async (_res, onEvent) => {
-      onEvent({ type: 'requires_token', token_name: 'PAYMENT_TOKEN', token_description: '支付授权' })
+      onEvent({
+        type: 'requires_token',
+        token_name: 'PAYMENT_TOKEN',
+        token_description: '支付授权',
+      })
       onEvent({ type: 'done', result: { success: true, response: '' } })
     })
     const api = useChatOrchestration({ sessionId: ref('s') })

@@ -38,7 +38,7 @@ def test_filesystem_template_store_legacy_list():
 
 
 def test_password_hash_roundtrip():
-    from app.utils.password_hash import check_password_hash, generate_password_hash
+    from app.utils.security.password_hash import check_password_hash, generate_password_hash
 
     hashed = generate_password_hash("secret-pass")
     assert check_password_hash(hashed, "secret-pass")

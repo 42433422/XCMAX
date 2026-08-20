@@ -16,10 +16,10 @@ T = TypeVar("T")
 CacheStatus = Literal["miss", "fresh", "stale", "expired"]
 
 try:
-    from langgraph_api.cache import (  # ty: ignore[unresolved-import]
+    from langgraph_api.cache import (
         cache_get as _cache_get,
     )
-    from langgraph_api.cache import (  # ty: ignore[unresolved-import]
+    from langgraph_api.cache import (
         cache_set as _cache_set,
     )
 except ImportError:
@@ -28,8 +28,8 @@ except ImportError:
 
 
 try:
-    from langgraph_api.cache import SWRResult  # ty: ignore[unresolved-import]
-    from langgraph_api.cache import swr as _api_swr  # ty: ignore[unresolved-import]
+    from langgraph_api.cache import SWRResult
+    from langgraph_api.cache import swr as _api_swr
 
 except ImportError:
     _api_swr = None

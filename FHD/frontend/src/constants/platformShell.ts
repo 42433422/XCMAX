@@ -9,8 +9,7 @@ export const BRIDGE_MOD_IDS = [
 
 export type BridgeModId = (typeof BRIDGE_MOD_IDS)[number]
 
-export const PLATFORM_SHELL_POLICY =
-  '新业务应做成 Mod（房子）或 employee_pack（家具），勿再写入宿主 workflow-employees.json'
+export const PLATFORM_SHELL_POLICY = '新业务应做成 Mod（房子）或 employee_pack（家具），勿再写入宿主 workflow-employees.json'
 
 export interface PlatformShellCapabilities {
   schema_version?: number

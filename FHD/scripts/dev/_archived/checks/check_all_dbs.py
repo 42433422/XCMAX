@@ -1,6 +1,5 @@
-# -*- coding: utf-8 -*-
-import sqlite3
 import os
+import sqlite3
 
 files = ["app.db", "customers.db", "products.db", "users.db"]
 for f in files:

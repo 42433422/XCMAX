@@ -5,27 +5,12 @@ import { useRouter } from 'vue-router'
 import type { AgentTaskSummary } from '@/api/agentRuns'
 import { useAgentTaskCenterStore } from '@/stores/agentTaskCenter'
 import { useTutorialV2Store } from '@/stores/tutorialV2'
-import {
-  taskNeedsApproval,
-  taskProgressPercent,
-  taskStatusLabel,
-  taskUnreadCount,
-} from '@/utils/taskWorkspacePresentation'
+import { taskNeedsApproval, taskProgressPercent, taskStatusLabel, taskUnreadCount } from '@/utils/taskWorkspacePresentation'
 
 const store = useAgentTaskCenterStore()
 const tutorialStore = useTutorialV2Store()
 const router = useRouter()
-const {
-  tasks,
-  drawerOpen,
-  loading,
-  connected,
-  error,
-  runtime,
-  unreadCount,
-  approvalCount,
-  activeCount,
-} = storeToRefs(store)
+const { tasks, drawerOpen, loading, connected, error, runtime, unreadCount, approvalCount, activeCount } = storeToRefs(store)
 const filter = ref<'all' | 'active' | 'unread' | 'approval'>('all')
 const filters = [
   { value: 'all', label: '全部' },
@@ -34,43 +19,44 @@ const filters = [
   { value: 'approval', label: '待审批' },
 ] as const
 
-const filteredTasks = computed(() => tasks.value.filter((task) => {
-  if (filter.value === 'active') {
-    return ['queued', 'planning', 'running', 'retrying', 'paused'].includes(task.status)
-  }
-  if (filter.value === 'unread') return taskUnreadCount(task) > 0
-  if (filter.value === 'approval') return taskNeedsApproval(task)
-  return true
-}))
+const filteredTasks = computed(() =>
+  tasks.value.filter((task) => {
+    if (filter.value === 'active') {
+      return ['queued', 'planning', 'running', 'retrying', 'paused'].includes(task.status)
+    }
+    if (filter.value === 'unread') return taskUnreadCount(task) > 0
+    if (filter.value === 'approval') return taskNeedsApproval(task)
+    return true
+  }),
+)
 
 const tutorialScopeKey = computed(() => {
   const run = tutorialStore.currentRun
   return `${run?.id || ''}:${run?.status || ''}:${run?.generation || ''}`
 })
 
-const overview = computed(() => runtime.value.progress || {
-  task_count: tasks.value.length,
-  active_count: activeCount.value,
-  attention_count: approvalCount.value,
-  completed_count: tasks.value.filter((task) => task.status === 'completed').length,
-  overall_percent: tasks.value.length
-    ? Math.round(tasks.value.reduce((total, task) => total + taskProgressPercent(task), 0) / tasks.value.length)
-    : 0,
-})
+const overview = computed(
+  () =>
+    runtime.value.progress || {
+      task_count: tasks.value.length,
+      active_count: activeCount.value,
+      attention_count: approvalCount.value,
+      completed_count: tasks.value.filter((task) => task.status === 'completed').length,
+      overall_percent: tasks.value.length
+        ? Math.round(tasks.value.reduce((total, task) => total + taskProgressPercent(task), 0) / tasks.value.length)
+        : 0,
+    },
+)
 
 function formatTime(value: string | undefined): string {
   if (!value) return ''
   const date = new Date(value)
-  return Number.isNaN(date.getTime())
-    ? value
-    : date.toLocaleString('zh-CN', { hour12: false })
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('zh-CN', { hour12: false })
 }
 
 async function openWorkspace(task: AgentTaskSummary): Promise<void> {
   if (taskUnreadCount(task) > 0) await store.markTaskRead(task.task_id)
-  const conversationId = String(
-    task.conversation_id || task.workspace_id || task.task_id,
-  ).trim()
+  const conversationId = String(task.conversation_id || task.workspace_id || task.task_id).trim()
   await router.push({
     name: 'task-workspace',
     params: { taskId: task.task_id },
@@ -96,13 +82,7 @@ watch(tutorialScopeKey, (next, previous) => {
 </script>
 
 <template>
-  <button
-    class="task-center-trigger"
-    type="button"
-    aria-label="打开独立工作区列表"
-    :aria-expanded="drawerOpen"
-    @click="toggleDrawer"
-  >
+  <button class="task-center-trigger" type="button" aria-label="打开独立工作区列表" :aria-expanded="drawerOpen" @click="toggleDrawer">
     <span class="task-center-trigger__icon">◈</span>
     <span>工作区</span>
     <strong v-if="approvalCount">{{ approvalCount }}</strong>
@@ -128,7 +108,8 @@ watch(tutorialScopeKey, (next, previous) => {
           </header>
 
           <div v-if="error" class="task-center-error">
-            <span>{{ error }}</span><button type="button" @click="store.refresh()">重试</button>
+            <span>{{ error }}</span
+            ><button type="button" @click="store.refresh()">重试</button>
           </div>
 
           <section class="task-center-overview" aria-label="全部工作区进度概览">
@@ -143,7 +124,9 @@ watch(tutorialScopeKey, (next, previous) => {
               :aria-valuenow="overview.overall_percent"
               aria-valuemin="0"
               aria-valuemax="100"
-            ><span :style="{ width: `${overview.overall_percent}%` }" /></div>
+            >
+              <span :style="{ width: `${overview.overall_percent}%` }" />
+            </div>
             <div class="task-center-overview__facts">
               <span>{{ overview.active_count }} 个未结束</span>
               <span>{{ overview.attention_count }} 个需处理</span>
@@ -189,7 +172,10 @@ watch(tutorialScopeKey, (next, previous) => {
 
               <span class="task-center-progress">
                 <span class="task-center-progress__head">
-                  <span>{{ task.progress?.stage || taskStatusLabel(task.status) }}<template v-if="task.progress?.detail"> · {{ task.progress.detail }}</template></span>
+                  <span
+                    >{{ task.progress?.stage || taskStatusLabel(task.status)
+                    }}<template v-if="task.progress?.detail"> · {{ task.progress.detail }}</template></span
+                  >
                   <strong>{{ taskProgressPercent(task) }}%</strong>
                 </span>
                 <span
@@ -199,7 +185,8 @@ watch(tutorialScopeKey, (next, previous) => {
                   :aria-valuenow="taskProgressPercent(task)"
                   aria-valuemin="0"
                   aria-valuemax="100"
-                ><span :style="{ width: `${taskProgressPercent(task)}%` }" /></span>
+                  ><span :style="{ width: `${taskProgressPercent(task)}%` }"
+                /></span>
               </span>
 
               <span class="task-center-item__meta">

@@ -48,7 +48,7 @@ const purgeBusy = ref(false)
 const visibleEmployees = computed(() =>
   employees.value.filter((e) => !hiddenPkgIds.value.has(e.id) && !isDutyRosterEmployee(e.id)),
 )
-const hasV1OnlyEmployees = computed(() => employees.value.some((e) => e.source === 'v1_catalog'))
+const _hasV1OnlyEmployees = computed(() => employees.value.some((e) => e.source === 'v1_catalog'))
 
 function persistHiddenPkgIds() {
   localStorage.setItem(HIDDEN_PKG_IDS_KEY, JSON.stringify([...hiddenPkgIds.value]))
@@ -119,7 +119,11 @@ async function purgeAllEmployees() {
   purgeBusy.value = true
   listError.value = ''
   try {
-    const res: any = await api.adminPurgeAllEmployeePacks()
+    const res = (await api.adminPurgeAllEmployeePacks()) as {
+      removed_packages_json?: number
+      removed_db_rows?: number
+      removed_files?: number
+    }
     const a = Number(res?.removed_packages_json || 0)
     const b = Number(res?.removed_db_rows || 0)
     const c = Number(res?.removed_files || 0)

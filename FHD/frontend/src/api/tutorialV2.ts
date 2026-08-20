@@ -95,11 +95,13 @@ export const tutorialV2Api = {
     return response.data
   },
   async verify(runId: string, stepId: string, context: Record<string, unknown>) {
-    const response = await api.post<ApiEnvelope<{
-      run: TutorialRunDTO
-      evidence: TutorialEvidenceDTO
-      hint: string
-    }>>(`/api/tutorial/v2/runs/${runId}/steps/${stepId}/verify`, { context })
+    const response = await api.post<
+      ApiEnvelope<{
+        run: TutorialRunDTO
+        evidence: TutorialEvidenceDTO
+        hint: string
+      }>
+    >(`/api/tutorial/v2/runs/${runId}/steps/${stepId}/verify`, { context })
     return response.data
   },
   async reset(runId: string): Promise<TutorialRunDTO> {

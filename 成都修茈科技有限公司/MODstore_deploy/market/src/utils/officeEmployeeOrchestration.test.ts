@@ -69,9 +69,7 @@ describe('officeEmployeeOrchestration', () => {
 
   it('treats 完成 + homework pptx as generate', () => {
     expect(detectOfficeGenerateIntent('@附件1 课堂作业_已完成.pptx 完成')).toBeNull()
-    expect(
-      classifyOfficeTask('@附件1 课堂作业_已完成.pptx 完成', ['课堂作业_已完成.pptx']),
-    ).toBe('generate')
+    expect(classifyOfficeTask('@附件1 课堂作业_已完成.pptx 完成', ['课堂作业_已完成.pptx'])).toBe('generate')
   })
 
   it('does not treat bare 完成 with generic pptx as generate', () => {
@@ -79,16 +77,10 @@ describe('officeEmployeeOrchestration', () => {
   })
 
   it('classifies pptx + animation homework as generate', () => {
-    expect(
-      detectOfficeEnhanceAttachedIntent('给每道课堂练习加跑马灯动画', ['PPT课堂练习作业 (2).pptx']),
-    ).toBe(true)
-    expect(
-      classifyOfficeTask('请给每页作业加跑马灯动画', ['PPT课堂练习作业 (2).pptx']),
-    ).toBe('generate')
+    expect(detectOfficeEnhanceAttachedIntent('给每道课堂练习加跑马灯动画', ['PPT课堂练习作业 (2).pptx'])).toBe(true)
+    expect(classifyOfficeTask('请给每页作业加跑马灯动画', ['PPT课堂练习作业 (2).pptx'])).toBe('generate')
     expect(classifyOfficeTask('制作幻灯片动画效果', ['a.pptx'])).toBe('generate')
-    expect(
-      classifyOfficeTask('将图片制作成跑马灯动画', ['PPT课堂练习作业 (2).pptx']),
-    ).toBe('generate')
+    expect(classifyOfficeTask('将图片制作成跑马灯动画', ['PPT课堂练习作业 (2).pptx'])).toBe('generate')
     expect(pickGenerateFormat('将图片制作成跑马灯动画', ['PPT课堂练习作业 (2).pptx'])).toBe('ppt')
   })
 
@@ -102,36 +94,21 @@ describe('officeEmployeeOrchestration', () => {
       { role: 'assistant', content: '已读懂作业要求…' },
     ]
     expect(collectOfficeAttachmentNamesFromMessages(msgs)).toEqual(['PPT课堂练习作业 (2).pptx'])
-    expect(
-      classifyOfficeTask('帮我做跑马灯动画', collectOfficeAttachmentNamesFromMessages(msgs)),
-    ).toBe('generate')
-    expect(
-      shouldRecoverOfficeGenerate(
-        '好的',
-        [],
-        collectOfficeAttachmentNamesFromMessages(msgs),
-        true,
-      ),
-    ).toBe(true)
+    expect(classifyOfficeTask('帮我做跑马灯动画', collectOfficeAttachmentNamesFromMessages(msgs))).toBe('generate')
+    expect(shouldRecoverOfficeGenerate('好的', [], collectOfficeAttachmentNamesFromMessages(msgs), true)).toBe(true)
   })
 
   it('guide-only follow-up stays analyze', () => {
-    expect(
-      classifyOfficeTask('给我操作指南就好', ['PPT课堂练习作业 (2).pptx']),
-    ).toBe('analyze')
+    expect(classifyOfficeTask('给我操作指南就好', ['PPT课堂练习作业 (2).pptx'])).toBe('analyze')
   })
 
   it('classifies @附件 homework pptx 完成 as generate', () => {
-    expect(
-      classifyOfficeTask('@附件1 PPT课堂练习作业 (2).pptx 完成', ['PPT课堂练习作业 (2).pptx']),
-    ).toBe('generate')
+    expect(classifyOfficeTask('@附件1 PPT课堂练习作业 (2).pptx 完成', ['PPT课堂练习作业 (2).pptx'])).toBe('generate')
   })
 
   it('uses conversation text for animation intent when current message is 完成', () => {
     const conv = '将 5 张花卉图片和播放按钮做成跑马灯动画'
-    expect(
-      classifyOfficeTask('完成', ['PPT课堂练习作业 (2).pptx'], { conversationUserText: conv }),
-    ).toBe('generate')
+    expect(classifyOfficeTask('完成', ['PPT课堂练习作业 (2).pptx'], { conversationUserText: conv })).toBe('generate')
   })
 
   it('detectUserMissingDeliverableComplaint', () => {
@@ -140,9 +117,7 @@ describe('officeEmployeeOrchestration', () => {
   })
 
   it('assistantGaveManualOfficeStepsOnly', () => {
-    expect(
-      assistantGaveManualOfficeStepsOnly('请告知您的偏好。选项 1：手动操作 PowerPoint'),
-    ).toBe(true)
+    expect(assistantGaveManualOfficeStepsOnly('请告知您的偏好。选项 1：手动操作 PowerPoint')).toBe(true)
   })
 
   it('still detects explicit generate pptx intent', () => {
@@ -163,9 +138,9 @@ describe('officeEmployeeOrchestration', () => {
   })
 
   it('shouldHandleAsOfficeTask with ready employee file', () => {
-    const file = new File(['x'], 't.docx', { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })
-    expect(
-      shouldHandleAsOfficeTask('总结', [{ name: 't.docx', purpose: 'employee', status: 'ready', file }], null),
-    ).toBe(true)
+    const file = new File(['x'], 't.docx', {
+      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    })
+    expect(shouldHandleAsOfficeTask('总结', [{ name: 't.docx', purpose: 'employee', status: 'ready', file }], null)).toBe(true)
   })
 })

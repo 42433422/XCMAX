@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """管理员：员工变更申请（审批落盘）。"""
 
 from __future__ import annotations

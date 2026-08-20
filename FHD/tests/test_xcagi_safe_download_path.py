@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from app.utils.safe_download_path import (
+from app.utils.security.safe_download_path import (
     UnsafeDownloadPathError,
     resolve_under_allowed_dirs,
 )

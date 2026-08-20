@@ -1,3 +1,4 @@
+# mypy: disable-error-code="import-not-found"
 """autonomy_callback / report_callback / deploy_callback 契约测试。"""
 
 from __future__ import annotations

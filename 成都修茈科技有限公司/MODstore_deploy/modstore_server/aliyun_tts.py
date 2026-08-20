@@ -5,6 +5,8 @@ from __future__ import annotations
 import base64
 from typing import Any, Dict, Optional, Tuple
 
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
+
 
 def synthesize_aliyun_tts(
     text: str,
@@ -43,14 +45,14 @@ def synthesize_aliyun_tts(
             sample_rate=int(sample_rate) if sample_rate else 24000,
             api_key=api_key,
         )
-    except Exception as e:  # noqa: BLE001
+    except BOUNDARY_ERRORS as e:  # noqa: BLE001
         return None, str(e), {}
 
     raw: Optional[bytes] = None
     try:
         if hasattr(result, "get_audio_data"):
             raw = result.get_audio_data()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         raw = None
     if not raw and isinstance(result, dict):
         b64 = (
@@ -61,14 +63,14 @@ def synthesize_aliyun_tts(
         if isinstance(b64, str):
             try:
                 raw = base64.b64decode(b64)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 raw = None
     if not raw:
         err = ""
         if hasattr(result, "get_response"):
             try:
                 err = str(result.get_response())
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 err = repr(result)
         else:
             err = getattr(result, "message", None) or repr(result)

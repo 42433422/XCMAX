@@ -16,8 +16,9 @@ human_report 在「发现什么」段反映。
 from __future__ import annotations
 
 import logging
-import re
 from typing import Any, Dict, List, Tuple
+
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -297,7 +298,7 @@ def enrich_perception_with_classification(
             ni = {}
             perceived["normalized_input"] = ni
         ni["_task_classification"] = classification
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.debug("task_classifier enrich failed employee_id=%s err=%s", employee_id, exc)
 
 

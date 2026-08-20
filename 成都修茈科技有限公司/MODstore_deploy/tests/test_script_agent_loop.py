@@ -10,7 +10,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any, Awaitable, Callable, Dict, List
 
 import pytest
@@ -61,7 +60,13 @@ def _ok_result(outputs: List[Dict[str, Any]] | None = None) -> SandboxResult:
         stdout="done\n",
         stderr="",
         outputs=outputs
-        or [{"filename": "result.json", "path": "/tmp/x/outputs/result.json", "size": 16}],
+        or [
+            {
+                "filename": "result.json",
+                "path": "/tmp/x/outputs/result.json",
+                "size": 16,
+            }
+        ],
         errors=[],
         timed_out=False,
     )
@@ -80,7 +85,9 @@ def _failed_result() -> SandboxResult:
     )
 
 
-def _make_runner(results: List[SandboxResult]) -> Callable[..., Awaitable[SandboxResult]]:
+def _make_runner(
+    results: List[SandboxResult],
+) -> Callable[..., Awaitable[SandboxResult]]:
     """按顺序返回一组 SandboxResult 的 mock runner。"""
     queue = list(results)
 

@@ -5,14 +5,14 @@
 
 ## 元数据
 
-| 项 | 值 |
-| --- | --- |
-| 日期 | 2026-05-04 |
-| 时区 | UTC+08:00 |
-| 环境 | 本机 Windows 10 + Docker Desktop（仅 `xcagi-postgres` 容器在跑，没有完整 MODstore 栈） |
-| MODstore_deploy Git（短） | `70fd951` |
-| 参与人 | 单人独立操作（演练记录不要求人数，只要求可复现） |
-| 范围 | 1 次 SEV2 桌面推演 + 4 个 chaos 场景 dry-run + PostgreSQL restore dry-run |
+| 项                        | 值                                                                                     |
+| ------------------------- | -------------------------------------------------------------------------------------- |
+| 日期                      | 2026-05-04                                                                             |
+| 时区                      | UTC+08:00                                                                              |
+| 环境                      | 本机 Windows 10 + Docker Desktop（仅 `xcagi-postgres` 容器在跑，没有完整 MODstore 栈） |
+| MODstore_deploy Git（短） | `70fd951`                                                                              |
+| 参与人                    | 单人独立操作（演练记录不要求人数，只要求可复现）                                       |
+| 范围                      | 1 次 SEV2 桌面推演 + 4 个 chaos 场景 dry-run + PostgreSQL restore dry-run              |
 
 ## 1. SEV2 桌面推演：支付代理 502 飙升
 
@@ -20,25 +20,25 @@
 
 按 [`docs/sre-operating-model.md`](../../../sre-operating-model.md) 第 40–55 行 SEV 分级与事故流程模板填写：
 
-| 字段 | 内容 |
-| --- | --- |
-| 事故等级 | SEV2（核心链路部分失败：支付代理大面积 502，登录与市场仍可用） |
-| 开始时间 | T0（演练用） |
-| 影响范围 | 支付下单、续费、退款；钱包余额查询不受影响 |
-| 当前状态 | 502 持续，未恢复 |
-| Incident Commander | 演练人 A |
-| 修复执行人 | 演练人 B（与 A 可同人） |
-| 沟通节奏 | 每 10 分钟在群里同步状态，直到归零 |
+| 字段               | 内容                                                           |
+| ------------------ | -------------------------------------------------------------- |
+| 事故等级           | SEV2（核心链路部分失败：支付代理大面积 502，登录与市场仍可用） |
+| 开始时间           | T0（演练用）                                                   |
+| 影响范围           | 支付下单、续费、退款；钱包余额查询不受影响                     |
+| 当前状态           | 502 持续，未恢复                                               |
+| Incident Commander | 演练人 A                                                       |
+| 修复执行人         | 演练人 B（与 A 可同人）                                        |
+| 沟通节奏           | 每 10 分钟在群里同步状态，直到归零                             |
 
 **5 步流程模拟**：
 
-| 步骤 | 模板动作 | 本次推演填写 |
-| --- | --- | --- |
-| 1. 确认影响 | Grafana / Prometheus / 冒烟脚本 / 用户反馈 | `python scripts/sre_smoke_check.py --base-url http://127.0.0.1:8765 --payment-url http://127.0.0.1:8080 ...`；查 Grafana 5xx panel；尝试 `/api/payment/plans` |
-| 2. 指派负责人 | 1 IC + 1 修复人 | A = IC，B = 修复（演练人本人兼任） |
-| 3. 止血优先 | 回滚 / 限流 / 关闭高风险入口 / 切回 Java 后端 | 优先按 [`PAYMENT_GRAY_RELEASE.md`](../../../PAYMENT_GRAY_RELEASE.md) 的「回滚到 Python 支付」段执行；如未启用灰度则 `docker compose --profile app restart payment-service` |
-| 4. 恢复验证 | 冒烟 + 手工验证 + 告警归零 | `sre_smoke_check`、手工 `POST /api/payment/orders` 用 sandbox 账号、Grafana firing alerts 归 0 |
-| 5. 复盘 | 24h 内出时间线 / 根因 / 改进项 | 按 [`incident-response.md`](../../incident-response.md) 「复盘模板」生成单独文件 |
+| 步骤          | 模板动作                                      | 本次推演填写                                                                                                                                                               |
+| ------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. 确认影响   | Grafana / Prometheus / 冒烟脚本 / 用户反馈    | `python scripts/sre_smoke_check.py --base-url http://127.0.0.1:8765 --payment-url http://127.0.0.1:8080 ...`；查 Grafana 5xx panel；尝试 `/api/payment/plans`              |
+| 2. 指派负责人 | 1 IC + 1 修复人                               | A = IC，B = 修复（演练人本人兼任）                                                                                                                                         |
+| 3. 止血优先   | 回滚 / 限流 / 关闭高风险入口 / 切回 Java 后端 | 优先按 [`PAYMENT_GRAY_RELEASE.md`](../../../PAYMENT_GRAY_RELEASE.md) 的「回滚到 Python 支付」段执行；如未启用灰度则 `docker compose --profile app restart payment-service` |
+| 4. 恢复验证   | 冒烟 + 手工验证 + 告警归零                    | `sre_smoke_check`、手工 `POST /api/payment/orders` 用 sandbox 账号、Grafana firing alerts 归 0                                                                             |
+| 5. 复盘       | 24h 内出时间线 / 根因 / 改进项                | 按 [`incident-response.md`](../../incident-response.md) 「复盘模板」生成单独文件                                                                                           |
 
 **推演中发现的流程缺口**（即「写过没跑过」会暴露的点）：
 
@@ -50,12 +50,12 @@
 
 按 [`chaos/README.md`](../../../../chaos/README.md) 与 [`chaos-game-day.md`](../../chaos-game-day.md) 标准步骤执行 dry-run（**未** `--confirm`）。命令、stdout 与开始/结束时间戳保存在同目录 `*.log`：
 
-| 场景 | 期望影响 | 期望恢复 | 本次 dry-run 日志 |
-| --- | --- | --- | --- |
-| `payment-restart` | 支付代理短暂 502，Java target 短暂 down | `/actuator/health` UP，502 归零 | [`chaos-payment-restart-dryrun.log`](chaos-payment-restart-dryrun.log) |
-| `redis-stop` | Redis target down，部分缓存 / 防重放报错或降级 | Redis healthy，FastAPI/Java 5xx 回基线 | [`chaos-redis-stop-dryrun.log`](chaos-redis-stop-dryrun.log) |
-| `api-restart` | FastAPI target 短暂 down，前端 API 调用失败 | `/api/health` 与 `/health/ready` 恢复 | [`chaos-api-restart-dryrun.log`](chaos-api-restart-dryrun.log) |
-| `postgres-stop` | API health database degraded，Java Hikari 连接失败 | PostgreSQL healthy，Hikari 恢复 | 未跑（生产 / 预发都属于高风险，dry-run 也按规则只记录命令；如需记录见 [`chaos/README.md`](../../../../chaos/README.md) 「生产约束」） |
+| 场景              | 期望影响                                           | 期望恢复                               | 本次 dry-run 日志                                                                                                                     |
+| ----------------- | -------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `payment-restart` | 支付代理短暂 502，Java target 短暂 down            | `/actuator/health` UP，502 归零        | [`chaos-payment-restart-dryrun.log`](chaos-payment-restart-dryrun.log)                                                                |
+| `redis-stop`      | Redis target down，部分缓存 / 防重放报错或降级     | Redis healthy，FastAPI/Java 5xx 回基线 | [`chaos-redis-stop-dryrun.log`](chaos-redis-stop-dryrun.log)                                                                          |
+| `api-restart`     | FastAPI target 短暂 down，前端 API 调用失败        | `/api/health` 与 `/health/ready` 恢复  | [`chaos-api-restart-dryrun.log`](chaos-api-restart-dryrun.log)                                                                        |
+| `postgres-stop`   | API health database degraded，Java Hikari 连接失败 | PostgreSQL healthy，Hikari 恢复        | 未跑（生产 / 预发都属于高风险，dry-run 也按规则只记录命令；如需记录见 [`chaos/README.md`](../../../../chaos/README.md) 「生产约束」） |
 
 每个 dry-run 都打印了 `inject` / `recover` 命令但没有真正执行；与 `chaos_drill.py` 的 `--confirm` 守卫一致。在预发执行真实 confirm 时，把对应日志改名为 `chaos-<scenario>-confirm.log` 并补充：
 
@@ -92,12 +92,12 @@ python scripts/restore_postgres.py "$env:TEMP\fake-modstore-postgres.dump" --cle
 
 ## 5. 改进项
 
-| 编号 | 内容 | 负责人 | 截止 |
-| --- | --- | --- | --- |
-| EX-2026-05-04-1 | `incident-response.md` 「沟通模板」加 **升级条件** 字段 | TBD | 下一次 PR |
-| EX-2026-05-04-2 | `sre-operating-model.md` 第 49 行附近补「IC 不直接改代码」一行 | TBD | 下一次 PR |
-| EX-2026-05-04-3 | 在预发跑一次 `chaos_drill.py --scenario payment-restart --confirm`，记录到 `exercises/<date>/` 并把恢复时长贴回本表 | TBD | 1 个发布周期内 |
-| EX-2026-05-04-4 | 在备机跑一次 `restore_postgres.py --confirm`（small-dataset），实测 RPO / RTO 写入 `dr-rpo-rto-*.csv` | TBD | 1 个发布周期内 |
+| 编号            | 内容                                                                                                                | 负责人 | 截止           |
+| --------------- | ------------------------------------------------------------------------------------------------------------------- | ------ | -------------- |
+| EX-2026-05-04-1 | `incident-response.md` 「沟通模板」加 **升级条件** 字段                                                             | TBD    | 下一次 PR      |
+| EX-2026-05-04-2 | `sre-operating-model.md` 第 49 行附近补「IC 不直接改代码」一行                                                      | TBD    | 下一次 PR      |
+| EX-2026-05-04-3 | 在预发跑一次 `chaos_drill.py --scenario payment-restart --confirm`，记录到 `exercises/<date>/` 并把恢复时长贴回本表 | TBD    | 1 个发布周期内 |
+| EX-2026-05-04-4 | 在备机跑一次 `restore_postgres.py --confirm`（small-dataset），实测 RPO / RTO 写入 `dr-rpo-rto-*.csv`               | TBD    | 1 个发布周期内 |
 
 ## 引用
 

@@ -6,7 +6,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class CustomerCreate(BaseModel):
@@ -52,6 +52,8 @@ class CustomerUpdate(BaseModel):
 
 
 class CustomerResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     customer_code: str
     name: str
@@ -66,9 +68,6 @@ class CustomerResponse(BaseModel):
     is_active: int
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class CustomerListResponse(BaseModel):

@@ -9,6 +9,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from vibe_coding.operational_errors import BOUNDARY_ERRORS
+
 from .facade import VibeCoder
 from .nl.llm import MockLLM, OpenAILLM
 
@@ -23,7 +25,11 @@ def _build_llm(args: argparse.Namespace) -> Any:
                         "name": "demo",
                         "domain": "demo",
                         "function_name": "demo",
-                        "source_code": "def demo(value=''):\n    return {'echo': str(value)}",
+                        "source_code": (
+                            "def demo(value=''):\n"
+                            '    """Return the supplied value as an echo payload."""\n'
+                            "    return {'echo': str(value)}"
+                        ),
                         "signature": {
                             "params": ["value"],
                             "return_type": "dict",
@@ -135,7 +141,7 @@ def _cmd_list(args: argparse.Namespace) -> int:
 # ----------------------------------------------------------------- agent (P0)
 
 
-def _make_context(args: argparse.Namespace) -> "Any | None":
+def _make_context(args: argparse.Namespace) -> Any | None:
     """Best-effort :class:`AgentContext` from CLI flags + git status."""
     from .agent.context import AgentContext
 
@@ -254,7 +260,7 @@ def _cmd_publish(args: argparse.Namespace) -> int:
             verify_ssl=not args.no_verify_ssl,
             dry_run=args.dry_run,
         )
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:
         print(f"error: publish failed: {exc}", file=sys.stderr)
         return 1
     print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
@@ -366,9 +372,7 @@ def build_parser() -> argparse.ArgumentParser:
     heal_cmd.set_defaults(func=_cmd_heal)
 
     # ------------------------------------------------------------- marketplace
-    pub = sub.add_parser(
-        "publish", help="package a skill and upload it to a MODstore deployment"
-    )
+    pub = sub.add_parser("publish", help="package a skill and upload it to a MODstore deployment")
     pub.add_argument("skill_id")
     pub.add_argument("--base-url", default="", help="MODstore origin (env: MODSTORE_BASE_URL)")
     pub.add_argument("--admin-token", default="", help="admin access token (env: MODSTORE_ADMIN_TOKEN)")
@@ -383,17 +387,13 @@ def build_parser() -> argparse.ArgumentParser:
     pub.set_defaults(func=_cmd_publish)
 
     # --------------------------------------------------------------- web / lsp
-    web_cmd = sub.add_parser(
-        "web", help="run the vibe-coding Web UI / API on host:port"
-    )
+    web_cmd = sub.add_parser("web", help="run the vibe-coding Web UI / API on host:port")
     web_cmd.add_argument("--host", default="127.0.0.1")
     web_cmd.add_argument("--port", type=int, default=8765)
     web_cmd.add_argument("--log-level", default="info")
     web_cmd.set_defaults(func=_cmd_web)
 
-    lsp_cmd = sub.add_parser(
-        "lsp", help="speak JSON-RPC over stdio for editor plugin integration"
-    )
+    lsp_cmd = sub.add_parser("lsp", help="speak JSON-RPC over stdio for editor plugin integration")
     lsp_cmd.set_defaults(func=_cmd_lsp)
 
     return parser

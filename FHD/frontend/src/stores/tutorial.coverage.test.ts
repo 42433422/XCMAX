@@ -53,11 +53,7 @@ vi.mock('@/tutorial/runtime', () => ({
   shouldNeverAutoSkipStep: (...a: unknown[]) => mockShouldNeverAutoSkipStep(...a),
 }))
 
-import {
-  useTutorialStore,
-  getTutorialTtsWarmupTexts,
-  setTutorialBuildContextFactory,
-} from './tutorial'
+import { useTutorialStore, getTutorialTtsWarmupTexts, setTutorialBuildContextFactory } from './tutorial'
 
 // ── 基础步骤数据 ──────────────────────────────────────────
 const baseSteps = [
@@ -109,9 +105,7 @@ describe('tutorial store – 覆盖率补齐', () => {
         visibleNav: [],
       }
       setTutorialBuildContextFactory(() => factoryCtx)
-      mockResolveAllWarmupSteps.mockReturnValue([
-        { id: 'w1', description: '涂装热身' },
-      ])
+      mockResolveAllWarmupSteps.mockReturnValue([{ id: 'w1', description: '涂装热身' }])
       const out = getTutorialTtsWarmupTexts(true)
       expect(out).toEqual(['涂装热身'])
       // factory 被调用，createTutorialBuildContext 不被调用
@@ -143,10 +137,7 @@ describe('tutorial store – 覆盖率补齐', () => {
     })
 
     it('description 字段缺失时按空字符串处理', () => {
-      mockResolveAllWarmupSteps.mockReturnValue([
-        { id: 'w1' },
-        { id: 'w2', description: '有效' },
-      ])
+      mockResolveAllWarmupSteps.mockReturnValue([{ id: 'w1' }, { id: 'w2', description: '有效' }])
       const out = getTutorialTtsWarmupTexts(false)
       expect(out).toEqual(['有效'])
     })
@@ -208,9 +199,7 @@ describe('tutorial store – 覆盖率补齐', () => {
     it('shouldNeverAutoSkipStep 返回 true 时设置 fallback 高亮和提示', () => {
       mockShouldNeverAutoSkipStep.mockReturnValue(true)
       mockResolveStepHighlightRect.mockReturnValue(null)
-      const stepsNeverSkip = [
-        { id: 's1', actionType: 'click' },
-      ]
+      const stepsNeverSkip = [{ id: 's1', actionType: 'click' }]
       mockResolveTrackSteps.mockReturnValue(stepsNeverSkip)
       const s = useTutorialStore()
       s.startTutorial({ track: 'basic' })
@@ -221,9 +210,7 @@ describe('tutorial store – 覆盖率补齐', () => {
     it('noAutoSkipWhenMissing 为 true 时触发轮询', () => {
       vi.useFakeTimers()
       mockResolveStepHighlightRect.mockReturnValue(null)
-      const stepsNoAutoSkip = [
-        { id: 's1', actionType: 'click', noAutoSkipWhenMissing: true },
-      ]
+      const stepsNoAutoSkip = [{ id: 's1', actionType: 'click', noAutoSkipWhenMissing: true }]
       mockResolveTrackSteps.mockReturnValue(stepsNoAutoSkip)
       const s = useTutorialStore()
       s.startTutorial({ track: 'basic' })
@@ -234,9 +221,8 @@ describe('tutorial store – 覆盖率补齐', () => {
 
     it('无高亮且非特殊步骤时自动跳过', () => {
       // s1 无高亮被跳过，s2 有高亮不被跳过
-      mockResolveStepHighlightRect.mockImplementation(
-        (step: { id: string }) =>
-          step.id === 's1' ? null : { top: 1, left: 2, width: 3, height: 4 },
+      mockResolveStepHighlightRect.mockImplementation((step: { id: string }) =>
+        step.id === 's1' ? null : { top: 1, left: 2, width: 3, height: 4 },
       )
       const stepsAutoSkip = [
         { id: 's1', actionType: 'click' },
@@ -251,9 +237,7 @@ describe('tutorial store – 覆盖率补齐', () => {
     })
 
     it('步骤含 routeName 时通过 ensureRouteForStepThen 解析', () => {
-      const stepsWithRoute = [
-        { id: 's1', actionType: 'observe', routeName: 'home' },
-      ]
+      const stepsWithRoute = [{ id: 's1', actionType: 'observe', routeName: 'home' }]
       mockResolveTrackSteps.mockReturnValue(stepsWithRoute)
       const s = useTutorialStore()
       s.startTutorial({ track: 'basic' })
@@ -262,9 +246,7 @@ describe('tutorial store – 覆盖率补齐', () => {
     })
 
     it('步骤含 assistantTab 时通过 dispatchAssistantTab 分发', () => {
-      const stepsWithTab = [
-        { id: 's1', actionType: 'observe', assistantTab: 'chat' },
-      ]
+      const stepsWithTab = [{ id: 's1', actionType: 'observe', assistantTab: 'chat' }]
       mockResolveTrackSteps.mockReturnValue(stepsWithTab)
       const s = useTutorialStore()
       s.startTutorial({ track: 'basic' })
@@ -273,9 +255,7 @@ describe('tutorial store – 覆盖率补齐', () => {
     })
 
     it('步骤同时含 routeName 和 assistantTab 时走 routeName 分支', () => {
-      const stepsWithBoth = [
-        { id: 's1', actionType: 'observe', routeName: 'home', assistantTab: 'chat' },
-      ]
+      const stepsWithBoth = [{ id: 's1', actionType: 'observe', routeName: 'home', assistantTab: 'chat' }]
       mockResolveTrackSteps.mockReturnValue(stepsWithBoth)
       const s = useTutorialStore()
       s.startTutorial({ track: 'basic' })
@@ -294,9 +274,7 @@ describe('tutorial store – 覆盖率补齐', () => {
 
     it('轮询找到高亮后清除提示并标记 observe 步骤为 passed', () => {
       mockResolveStepHighlightRect.mockReturnValue(null)
-      const stepsNoAutoSkip = [
-        { id: 's1', actionType: 'observe', noAutoSkipWhenMissing: true },
-      ]
+      const stepsNoAutoSkip = [{ id: 's1', actionType: 'observe', noAutoSkipWhenMissing: true }]
       mockResolveTrackSteps.mockReturnValue(stepsNoAutoSkip)
       const s = useTutorialStore()
       s.startTutorial({ track: 'basic' })
@@ -315,9 +293,7 @@ describe('tutorial store – 覆盖率补齐', () => {
 
     it('轮询 50 次后超时，设置提示并允许下一步', () => {
       mockResolveStepHighlightRect.mockReturnValue(null)
-      const stepsNoAutoSkip = [
-        { id: 's1', actionType: 'observe', noAutoSkipWhenMissing: true },
-      ]
+      const stepsNoAutoSkip = [{ id: 's1', actionType: 'observe', noAutoSkipWhenMissing: true }]
       mockResolveTrackSteps.mockReturnValue(stepsNoAutoSkip)
       const s = useTutorialStore()
       s.startTutorial({ track: 'basic' })
@@ -333,9 +309,7 @@ describe('tutorial store – 覆盖率补齐', () => {
 
     it('教程未激活时轮询直接返回', () => {
       mockResolveStepHighlightRect.mockReturnValue(null)
-      const stepsNoAutoSkip = [
-        { id: 's1', actionType: 'observe', noAutoSkipWhenMissing: true },
-      ]
+      const stepsNoAutoSkip = [{ id: 's1', actionType: 'observe', noAutoSkipWhenMissing: true }]
       mockResolveTrackSteps.mockReturnValue(stepsNoAutoSkip)
       const s = useTutorialStore()
       s.startTutorial({ track: 'basic' })
@@ -352,9 +326,7 @@ describe('tutorial store – 覆盖率补齐', () => {
 
     it('click 步骤轮询找到高亮后不自动标记 passed', () => {
       mockResolveStepHighlightRect.mockReturnValue(null)
-      const stepsNoAutoSkip = [
-        { id: 's1', actionType: 'click', noAutoSkipWhenMissing: true },
-      ]
+      const stepsNoAutoSkip = [{ id: 's1', actionType: 'click', noAutoSkipWhenMissing: true }]
       mockResolveTrackSteps.mockReturnValue(stepsNoAutoSkip)
       const s = useTutorialStore()
       s.startTutorial({ track: 'basic' })
@@ -417,9 +389,7 @@ describe('tutorial store – 覆盖率补齐', () => {
     it('noAutoSkipWhenMissing 为 true 时触发轮询', () => {
       vi.useFakeTimers()
       mockResolveStepHighlightRect.mockReturnValue(null)
-      const stepsNoAutoSkip = [
-        { id: 's1', actionType: 'click', noAutoSkipWhenMissing: true },
-      ]
+      const stepsNoAutoSkip = [{ id: 's1', actionType: 'click', noAutoSkipWhenMissing: true }]
       mockResolveTrackSteps.mockReturnValue(stepsNoAutoSkip)
       const s = useTutorialStore()
       s.startTutorial({ track: 'basic' })
@@ -432,9 +402,8 @@ describe('tutorial store – 覆盖率补齐', () => {
     it('skipMissingOnFail=false 时使用 fallback 高亮不跳过', () => {
       const fallbackRect = { top: 0, left: 0, width: 10, height: 10 }
       // startTutorial 时 s1 被跳过，s2 有高亮
-      mockResolveStepHighlightRect.mockImplementation(
-        (step: { id: string }) =>
-          step.id === 's1' ? null : { top: 1, left: 2, width: 3, height: 4 },
+      mockResolveStepHighlightRect.mockImplementation((step: { id: string }) =>
+        step.id === 's1' ? null : { top: 1, left: 2, width: 3, height: 4 },
       )
       const stepsAutoSkip = [
         { id: 's1', actionType: 'click' },
@@ -453,9 +422,8 @@ describe('tutorial store – 覆盖率补齐', () => {
 
     it('skipMissingOnFail=true（默认）且无特殊标记时跳过缺失步骤', () => {
       // s1 无高亮被跳过，s2 有高亮
-      mockResolveStepHighlightRect.mockImplementation(
-        (step: { id: string }) =>
-          step.id === 's1' ? null : { top: 1, left: 2, width: 3, height: 4 },
+      mockResolveStepHighlightRect.mockImplementation((step: { id: string }) =>
+        step.id === 's1' ? null : { top: 1, left: 2, width: 3, height: 4 },
       )
       const stepsAutoSkip = [
         { id: 's1', actionType: 'click' },
@@ -469,9 +437,7 @@ describe('tutorial store – 覆盖率补齐', () => {
     })
 
     it('步骤含 routeName 时通过 ensureRouteForStepThen 解析', () => {
-      const stepsWithRoute = [
-        { id: 's1', actionType: 'observe', routeName: 'home' },
-      ]
+      const stepsWithRoute = [{ id: 's1', actionType: 'observe', routeName: 'home' }]
       mockResolveTrackSteps.mockReturnValue(stepsWithRoute)
       const s = useTutorialStore()
       s.startTutorial({ track: 'basic' })
@@ -481,9 +447,7 @@ describe('tutorial store – 覆盖率补齐', () => {
     })
 
     it('步骤含 assistantTab 时通过 dispatchAssistantTab 分发', () => {
-      const stepsWithTab = [
-        { id: 's1', actionType: 'observe', assistantTab: 'chat' },
-      ]
+      const stepsWithTab = [{ id: 's1', actionType: 'observe', assistantTab: 'chat' }]
       mockResolveTrackSteps.mockReturnValue(stepsWithTab)
       const s = useTutorialStore()
       s.startTutorial({ track: 'basic' })

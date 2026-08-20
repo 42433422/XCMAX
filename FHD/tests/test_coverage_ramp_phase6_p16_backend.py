@@ -1116,7 +1116,7 @@ class TestCustomerRepositorySave:
         with (
             patch("app.infrastructure.repositories.customer_repository_impl.get_db") as gdb,
             patch(
-                "app.infrastructure.repositories.customer_repository_impl.purchase_unit_to_domain"
+                "app.infrastructure.repositories.customer_repository_impl.customer_to_domain"
             ) as mock_to_domain,
         ):
             gdb.return_value.__enter__ = lambda self: mock_db
@@ -1162,7 +1162,7 @@ class TestCustomerRepositorySave:
         with (
             patch("app.infrastructure.repositories.customer_repository_impl.get_db") as gdb,
             patch(
-                "app.infrastructure.repositories.customer_repository_impl.purchase_unit_to_domain"
+                "app.infrastructure.repositories.customer_repository_impl.customer_to_domain"
             ) as mock_to_domain,
         ):
             gdb.return_value.__enter__ = lambda self: mock_db
@@ -2059,13 +2059,10 @@ class TestConsciousProcessorProcess:
     @pytest.mark.asyncio
     async def test_process_with_reliability_handler_fails_records_failure(self):
         proc = ConsciousProcessor(enable_reliability=True)
-        # Replace the real NeuroBusDeduplicator with a Mock that has a `remove`
-        # method (the source code calls self._deduplicator.remove(event) on
-        # failure, but NeuroBusDeduplicator does not implement it — a
-        # pre-existing bug we work around here).
+        # The canonical deduplicator releases an acquired event on failure.
         proc._deduplicator = MagicMock()
         proc._deduplicator.check_and_acquire = Mock(return_value=True)
-        proc._deduplicator.remove = Mock()
+        proc._deduplicator.release = Mock()
         proc._circuit_breaker = MagicMock()
         proc._circuit_breaker.check = Mock(return_value=True)
         proc._circuit_breaker.record_failure = Mock()
@@ -2085,7 +2082,7 @@ class TestConsciousProcessorProcess:
         assert result.success is False
         assert proc._error_count == 1
         proc._circuit_breaker.record_failure.assert_called_once()
-        proc._deduplicator.remove.assert_called_once()
+        proc._deduplicator.release.assert_called_once()
 
 
 class TestConsciousProcessorStats:

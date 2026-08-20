@@ -31,9 +31,7 @@ function offlineIndustryBaseline(industryId: string): IndustryBaselinePlan {
   }
 }
 
-export async function fetchPlatformShellCapabilities(
-  force = false,
-): Promise<PlatformShellCapabilities> {
+export async function fetchPlatformShellCapabilities(force = false): Promise<PlatformShellCapabilities> {
   if (cached && !force) return cached
   const r = await apiFetch('/api/platform-shell/capabilities', {
     timeoutMs: DEFAULT_MOD_API_TIMEOUT_MS,
@@ -45,10 +43,7 @@ export async function fetchPlatformShellCapabilities(
   return data
 }
 
-export function isBridgeModInstalled(
-  caps: PlatformShellCapabilities,
-  modId: string,
-): boolean {
+export function isBridgeModInstalled(caps: PlatformShellCapabilities, modId: string): boolean {
   const row = (caps.bridge_mods || []).find((b) => b.mod_id === modId)
   return Boolean(row?.installed)
 }
@@ -75,9 +70,7 @@ export function clearDeliverableStatusCache(): void {
     .catch(() => {})
 }
 
-export async function fetchOnboardingIndustryCatalog(
-  force = false,
-): Promise<OnboardingIndustryCatalog> {
+export async function fetchOnboardingIndustryCatalog(force = false): Promise<OnboardingIndustryCatalog> {
   if (!force && onboardingCatalogCached) return onboardingCatalogCached
   const r = await apiFetch('/api/platform-shell/onboarding-industries', {
     timeoutMs: DEFAULT_MOD_API_TIMEOUT_MS,
@@ -89,20 +82,16 @@ export async function fetchOnboardingIndustryCatalog(
   return data
 }
 
-export async function fetchIndustryBaseline(
-  industryId: string,
-  force = false,
-): Promise<IndustryBaselinePlan> {
+export async function fetchIndustryBaseline(industryId: string, force = false): Promise<IndustryBaselinePlan> {
   const key = String(industryId || '').trim() || '通用'
   if (!force && baselineCache.has(key)) {
     return baselineCache.get(key) as IndustryBaselinePlan
   }
   let data: IndustryBaselinePlan
   try {
-    const r = await apiFetch(
-      `/api/platform-shell/industry-baseline?industry_id=${encodeURIComponent(key)}`,
-      { timeoutMs: DEFAULT_MOD_API_TIMEOUT_MS },
-    )
+    const r = await apiFetch(`/api/platform-shell/industry-baseline?industry_id=${encodeURIComponent(key)}`, {
+      timeoutMs: DEFAULT_MOD_API_TIMEOUT_MS,
+    })
     if (!r.ok) throw new Error(`industry-baseline HTTP ${r.status}`)
     const body = await r.json()
     data = (body?.data || body) as IndustryBaselinePlan
@@ -113,9 +102,7 @@ export async function fetchIndustryBaseline(
   return data
 }
 
-export async function fetchEmployeePlannerStatus(
-  _force = false,
-): Promise<EmployeePlannerStatus> {
+export async function fetchEmployeePlannerStatus(_force = false): Promise<EmployeePlannerStatus> {
   const r = await apiFetch('/api/platform-shell/employee-planner-status', {
     timeoutMs: DEFAULT_MOD_API_TIMEOUT_MS,
   })

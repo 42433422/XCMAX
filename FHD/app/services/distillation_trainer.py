@@ -17,6 +17,7 @@ import json
 import logging
 import os
 from datetime import datetime
+from typing import Any
 
 import torch
 from sklearn.metrics import accuracy_score, classification_report
@@ -163,10 +164,13 @@ class DistillationTrainer:
         os.makedirs(CHECKPOINT_DIR, exist_ok=True)
         os.makedirs(LOG_DIR, exist_ok=True)
 
-        self.tokenizer = None
-        self.model = None
-        self.train_loader = None
-        self.val_loader = None
+        # Hugging Face and PyTorch expose runtime-parametric objects whose concrete
+        # generic types vary by installed version. They are initialized together in
+        # ``prepare_data`` before any training method is entered.
+        self.tokenizer: Any = None
+        self.model: Any = None
+        self.train_loader: Any = None
+        self.val_loader: Any = None
 
     def load_data(self, data_path: str) -> tuple[list[str], list[int]]:
         """加载训练数据"""
@@ -226,7 +230,7 @@ class DistillationTrainer:
         )
         self.model.to(self.device)
 
-    def train_epoch(self, optimizer, scheduler) -> float:
+    def train_epoch(self, optimizer: Any, scheduler: Any) -> tuple[float, float]:
         """训练一个 epoch"""
         self.model.train()
         total_loss = 0
@@ -254,12 +258,12 @@ class DistillationTrainer:
             correct += (preds == labels).sum().item()
             total += labels.size(0)
 
-        avg_loss = total_loss / len(self.train_loader)
+        avg_loss = total_loss / len(self.train_loader or [])
         accuracy = correct / total
         return avg_loss, accuracy
 
     @torch.no_grad()
-    def evaluate(self) -> dict[str, float]:
+    def evaluate(self) -> dict[str, Any]:
         """评估模型"""
         self.model.eval()
         total_loss = 0
@@ -281,7 +285,7 @@ class DistillationTrainer:
             all_preds.extend(preds.cpu().numpy())
             all_labels.extend(labels.cpu().numpy())
 
-        avg_loss = total_loss / len(self.val_loader)
+        avg_loss = total_loss / len(self.val_loader or [])
         accuracy = accuracy_score(all_labels, all_preds)
 
         return {
@@ -328,7 +332,7 @@ class DistillationTrainer:
 
         optimizer = AdamW(self.model.parameters(), lr=self.learning_rate, weight_decay=0.01)
 
-        total_steps = len(self.train_loader) * self.epochs
+        total_steps = len(self.train_loader or []) * self.epochs
         warmup_steps = int(total_steps * self.warmup_ratio)
 
         scheduler = get_linear_schedule_with_warmup(

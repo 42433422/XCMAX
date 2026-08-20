@@ -29,13 +29,13 @@ cd ..
 
 由 `triggers.schedule.cron` 在每个 employee.yaml 中声明，由 MODstore 内置的 APScheduler 在启动时自动注册：
 
-| 时间 | 员工 | 动作 |
-|------|------|------|
-| 02:00 / 5min | `intake-dispatcher` | 扫 `mianshi/` 候补包 + 检查队列 |
-| 02:30 | `push-update-context-officer` | yuangon → onboard 兜底回流 |
-| 03:00 | `task-router-officer` | 重建路由表 |
-| 03:15 | `retention-officer` | 清扫过期临时文件 |
-| 03:30 | `daily-orchestrator` | 跑测试 + 自动修复 + 提交评审 |
+| 时间         | 员工                          | 动作                            |
+| ------------ | ----------------------------- | ------------------------------- |
+| 02:00 / 5min | `intake-dispatcher`           | 扫 `mianshi/` 候补包 + 检查队列 |
+| 02:30        | `push-update-context-officer` | yuangon → onboard 兜底回流      |
+| 03:00        | `task-router-officer`         | 重建路由表                      |
+| 03:15        | `retention-officer`           | 清扫过期临时文件                |
+| 03:30        | `daily-orchestrator`          | 跑测试 + 自动修复 + 提交评审    |
 
 启动方式：MODstore 主进程启动时由 `modstore_server/scheduling/aps.py` 读取所有 manifest 的 `triggers.schedule` 字段并注册。
 
@@ -44,6 +44,7 @@ cd ..
 ```bash
 tail -n 5 MODstore_deploy/modstore_server/data/event_outbox.jsonl
 ```
+
 正常应该看到形如 `{"event_name":"yuangon.def.changed",...}`、`{"event_name":"ops.intake.candidate_pack",...}` 的记录。  
 对应的订阅由 `triggers.subscribes` 在 onboard 时写入 `employee_trigger_bindings` 表（见已知未决项 DB-001）。
 
@@ -74,6 +75,6 @@ MODstore_deploy/.venv/Scripts/python.exe MODstore_deploy/scripts/coverage_audit.
 
 ## 七、变更记录
 
-| 日期 | 变更 | 操作人 |
-|------|------|--------|
-| 2026-05-08 | 初版：上线 5 个 cron + git hook + 3 个脚手架 | admin |
+| 日期       | 变更                                         | 操作人 |
+| ---------- | -------------------------------------------- | ------ |
+| 2026-05-08 | 初版：上线 5 个 cron + git hook + 3 个脚手架 | admin  |

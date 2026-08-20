@@ -14,27 +14,17 @@
       <div class="tutorial-title">{{ currentStep.title }}</div>
       <p class="tutorial-desc">{{ currentStep.description }}</p>
       <p class="tutorial-test">
-        功能测试：通过 {{ tutorialStore.testSummary.passed }} / {{ tutorialStore.testSummary.total }}
+        功能测试：通过 {{ tutorialStore.testSummary.passed }} /
+        {{ tutorialStore.testSummary.total }}
         <span v-if="tutorialStore.testSummary.skipped > 0">，跳过 {{ tutorialStore.testSummary.skipped }}</span>
       </p>
       <p v-if="tutorialStore.blockedTip" class="tutorial-tip">{{ tutorialStore.blockedTip }}</p>
 
       <div class="tutorial-actions" data-tutorial-overlay="true">
-        <button
-          type="button"
-          class="btn btn-secondary btn-sm"
-          :disabled="!tutorialStore.hasPrev"
-          @click.stop="tutorialStore.prevStep"
-        >
+        <button type="button" class="btn btn-secondary btn-sm" :disabled="!tutorialStore.hasPrev" @click.stop="tutorialStore.prevStep">
           上一步
         </button>
-        <button
-          type="button"
-          class="btn btn-secondary btn-sm"
-          @click.stop="tutorialStore.exitTutorial"
-        >
-          跳过
-        </button>
+        <button type="button" class="btn btn-secondary btn-sm" @click.stop="tutorialStore.exitTutorial">跳过</button>
         <button
           type="button"
           class="btn btn-primary btn-sm tutorial-primary-next"
@@ -149,7 +139,7 @@ const spotlightStyle = computed(() => {
     top: `${rect.value.top - o}px`,
     left: `${rect.value.left - o}px`,
     width: `${rect.value.width + o * 2}px`,
-    height: `${rect.value.height + o * 2}px`
+    height: `${rect.value.height + o * 2}px`,
   }
 })
 
@@ -166,10 +156,7 @@ const cardStyle = computed(() => {
   // 高亮在屏幕右侧（如副窗）时，勿把教程卡片与洞口左缘对齐，否则会盖住整块副窗
   const highlightOnRight = cx > viewportWidth * 0.52
   /** 主工作区大块高亮（非侧栏窄条）：卡片居中于洞口，避免贴左 16px 被误认为还在讲侧栏列表 */
-  const wideMainContentHighlight =
-    r.width >= Math.min(520, viewportWidth * 0.38) &&
-    r.left >= viewportWidth * 0.14 &&
-    r.height >= 120
+  const wideMainContentHighlight = r.width >= Math.min(520, viewportWidth * 0.38) && r.left >= viewportWidth * 0.14 && r.height >= 120
 
   const preferBottomTop = r.top + r.height + gap
   const preferTopTop = Math.max(gap, r.top - cardAboveHighlightPx)
@@ -192,7 +179,7 @@ const cardStyle = computed(() => {
   return {
     top: `${top}px`,
     left: `${left}px`,
-    width: `${cardWidth}px`
+    width: `${cardWidth}px`,
   }
 })
 
@@ -247,8 +234,8 @@ const fetchTtsAudioBase64 = async (text) => {
     body: JSON.stringify({
       text: content,
       lang: 'zh',
-      voice: 'zh-CN-XiaoxiaoNeural'
-    })
+      voice: 'zh-CN-XiaoxiaoNeural',
+    }),
   })
     .then(async (resp) => {
       const data = await resp.json().catch(() => ({}))
@@ -323,9 +310,11 @@ const ensureStepRoute = async () => {
 const ensureAssistantTab = async () => {
   const tab = String(currentStep.value?.assistantTab || '').trim()
   if (!tab) return
-  window.dispatchEvent(new CustomEvent('xcagi:tutorial:set-assistant-tab', {
-    detail: { tab, open: true }
-  }))
+  window.dispatchEvent(
+    new CustomEvent('xcagi:tutorial:set-assistant-tab', {
+      detail: { tab, open: true },
+    }),
+  )
   await nextTick()
 }
 
@@ -410,7 +399,7 @@ watch(
     tick()
     startPrintPollTimer = window.setInterval(tick, 600)
   },
-  { immediate: true }
+  { immediate: true },
 )
 
 watch(
@@ -421,7 +410,7 @@ watch(
     prefetchTutorialSpeech()
     refreshOnFrame()
   },
-  { immediate: true }
+  { immediate: true },
 )
 
 onMounted(() => {
@@ -444,16 +433,18 @@ watch(
           await router.push({ name: restore.routeName })
         }
       }
-      window.dispatchEvent(new CustomEvent('xcagi:tutorial:restore-float', {
-        detail: {
-          isOpen: !!restore?.assistantOpen,
-          activeTab: restore?.assistantTab || 'push',
-          assistantState: restore?.assistantState || null
-        }
-      }))
+      window.dispatchEvent(
+        new CustomEvent('xcagi:tutorial:restore-float', {
+          detail: {
+            isOpen: !!restore?.assistantOpen,
+            activeTab: restore?.assistantTab || 'push',
+            assistantState: restore?.assistantState || null,
+          },
+        }),
+      )
     }
     wasActive = active
-  }
+  },
 )
 
 onBeforeUnmount(() => {

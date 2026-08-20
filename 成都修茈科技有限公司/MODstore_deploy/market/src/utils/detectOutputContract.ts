@@ -1,22 +1,8 @@
 export type OutputContract = 'json' | 'code' | null
 
-const JSON_PATTERNS = [
-  /\bjson\s*only\b/i,
-  /\bonly\s*json\b/i,
-  /仅\s*json/i,
-  /只\s*输出\s*json/i,
-  /只\s*要\s*json/i,
-  /纯\s*json/i,
-]
+const JSON_PATTERNS = [/\bjson\s*only\b/i, /\bonly\s*json\b/i, /仅\s*json/i, /只\s*输出\s*json/i, /只\s*要\s*json/i, /纯\s*json/i]
 
-const CODE_PATTERNS = [
-  /\bcode\s*only\b/i,
-  /\bonly\s*code\b/i,
-  /仅\s*代码/i,
-  /只\s*输出\s*代码/i,
-  /只\s*要\s*代码/i,
-  /纯\s*代码/i,
-]
+const CODE_PATTERNS = [/\bcode\s*only\b/i, /\bonly\s*code\b/i, /仅\s*代码/i, /只\s*输出\s*代码/i, /只\s*要\s*代码/i, /纯\s*代码/i]
 
 /** 从用户消息推断「仅 JSON / 仅代码」输出契约（用于 system prompt）。 */
 export function detectOutputContract(userText: string): OutputContract {

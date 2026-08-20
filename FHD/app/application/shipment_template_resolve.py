@@ -18,12 +18,22 @@ from __future__ import annotations
 import logging
 import os
 import re
+import tempfile
 import threading
 import time
 from pathlib import Path
 from typing import Any
 
+from app.application.shipment_products_for_unit import (
+    resolve_products_for_unit as resolve_products_for_unit,
+)
+from app.application.shipment_template_usage import log_template_usage as _log_template_usage
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.path_io.path_utils import get_app_data_dir, get_base_dir
+from app.utils.security.safe_download_path import (
+    UnsafeDownloadPathError,
+    resolve_under_allowed_dirs,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +81,7 @@ def _get_template_store():
     except RECOVERABLE_ERRORS:
         pass
     from app.infrastructure.templates.template_store_impl import FileSystemTemplateStore
-    from app.utils.path_utils import get_base_dir
+    from app.utils.path_io.path_utils import get_base_dir
 
     return FileSystemTemplateStore(base_dir=get_base_dir())
 
@@ -87,6 +97,21 @@ def _normalize_unit_token(value: str) -> str:
 
 def _is_layout_file(path: str) -> bool:
     return Path(path).suffix.lower() in _LAYOUT_EXTS
+
+
+def _trusted_template_path(path: Any) -> str | None:
+    try:
+        safe = resolve_under_allowed_dirs(
+            str(path or ""),
+            [
+                Path(get_base_dir()).resolve(),
+                Path(get_app_data_dir()).resolve(),
+                Path(tempfile.gettempdir()).resolve(),
+            ],
+        )
+    except UnsafeDownloadPathError:
+        return None
+    return str(safe) if safe.is_file() and _is_layout_file(str(safe)) else None
 
 
 def _row_active(row: dict[str, Any]) -> bool:
@@ -117,8 +142,8 @@ def _score_template(
 ) -> int:
     if not _row_active(row):
         return -1
-    path = str(row.get("path") or "")
-    if not path or not os.path.isfile(path) or not _is_layout_file(path):
+    path = _trusted_template_path(row.get("path"))
+    if not path:
         return -1
 
     score = 0
@@ -189,51 +214,10 @@ def _match_row_by_name(rows: list[dict[str, Any]], needle: str) -> dict[str, Any
         filename = str(row.get("filename") or "").lower()
         rid = str(row.get("id") or "").lower()
         if key in {name, filename, rid}:
-            path = str(row.get("path") or "")
-            if path and os.path.isfile(path) and _is_layout_file(path) and _row_active(row):
+            path = _trusted_template_path(row.get("path"))
+            if path and _row_active(row):
                 return row
     return None
-
-
-def _log_template_usage(
-    template_id: str | None,
-    *,
-    action: str,
-    result_text: str,
-) -> None:
-    tid = str(template_id or "").strip()
-    db_id: int | None = None
-    if tid.startswith("db:"):
-        try:
-            db_id = int(tid.split(":", 1)[1])
-        except ValueError:
-            db_id = None
-    elif tid.isdigit():
-        db_id = int(tid)
-    if db_id is None:
-        return
-    try:
-        from sqlalchemy import text
-
-        from app.db.session import get_db
-
-        with get_db() as db:
-            db.execute(
-                text(
-                    """
-                    INSERT INTO template_usage_log (template_id, action, result)
-                    VALUES (:template_id, :action, :result)
-                    """
-                ),
-                {
-                    "template_id": db_id,
-                    "action": action[:64],
-                    "result": str(result_text or "")[:500],
-                },
-            )
-            db.commit()
-    except RECOVERABLE_ERRORS as exc:
-        logger.debug("template_usage_log skip: %s", exc)
 
 
 def log_template_usage(
@@ -266,6 +250,7 @@ def resolve_shipment_template(
         intent_key, _INTENT_TEMPLATE_TYPES["shipment_generate"]
     )
     strict_mode = shipment_template_strict_enabled(strict)
+    path: str | None = None
 
     try:
         store = _get_template_store()
@@ -283,8 +268,8 @@ def resolve_shipment_template(
 
     # 1) template_id
     if tid:
-        path = store.resolve_template_file(tid)
-        if path and os.path.isfile(path) and _is_layout_file(path):
+        path = _trusted_template_path(store.resolve_template_file(tid))
+        if path:
             out = _result(
                 ok=True,
                 path=path,
@@ -309,10 +294,12 @@ def resolve_shipment_template(
     # 1.5) 用户偏好 / 槽位 preferred（可是 id 或名称）
     if pref and not tid:
         if pref.startswith(("db:", "fs:", "shipment")) or pref.isdigit():
-            path = store.resolve_template_file(
-                pref if pref.startswith(("db:", "fs:")) else f"db:{pref}"
+            path = _trusted_template_path(
+                store.resolve_template_file(
+                    pref if pref.startswith(("db:", "fs:")) else f"db:{pref}"
+                )
             )
-            if path and os.path.isfile(path) and _is_layout_file(path):
+            if path:
                 out = _result(
                     ok=True,
                     path=path,
@@ -330,7 +317,10 @@ def resolve_shipment_template(
         rows = _list_templates_cached(store)
         row = _match_row_by_name(rows, pref)
         if row:
-            path = str(row["path"])
+            path = _trusted_template_path(row.get("path"))
+            if not path:
+                row = None
+        if row and path:
             out = _result(
                 ok=True,
                 path=path,
@@ -345,24 +335,26 @@ def resolve_shipment_template(
                 _log_template_usage(out["template_id"], action="resolve", result_text=out["reason"])
             return out
 
-    # 2) 显式路径 / 文件名
+    # 2) 显式文件名（仅从模板库匹配，不接受任意本地路径）
     if tname:
-        as_path = Path(tname).expanduser()
-        if as_path.is_file() and _is_layout_file(str(as_path)):
-            out = _result(
+        explicit_path = _trusted_template_path(tname)
+        if explicit_path:
+            return _result(
                 ok=True,
-                path=str(as_path.resolve()),
+                path=explicit_path,
                 template_id=tid or None,
-                template_name=as_path.name,
+                template_name=Path(explicit_path).name,
                 source="explicit_path",
                 reason="resolved_by_path",
                 unit_name=unit or None,
             )
-            return out
         rows = _list_templates_cached(store)
         row = _match_row_by_name(rows, tname)
         if row:
-            path = str(row["path"])
+            path = _trusted_template_path(row.get("path"))
+            if not path:
+                row = None
+        if row and path:
             out = _result(
                 ok=True,
                 path=path,
@@ -378,11 +370,12 @@ def resolve_shipment_template(
             return out
         # 交给 legacy 按文件名搜索（非 strict）
         if not strict_mode:
+            legacy_name = Path(tname).name
             return _result(
                 ok=True,
-                path=tname,
+                path=legacy_name,
                 template_id=tid or None,
-                template_name=tname,
+                template_name=legacy_name,
                 source="legacy_name",
                 reason="passthrough_filename",
                 unit_name=unit or None,
@@ -417,7 +410,10 @@ def resolve_shipment_template(
                 best_unit_score = score
                 best_unit = row
         if best_unit and best_unit_score >= 0:
-            path = str(best_unit.get("path") or "")
+            path = _trusted_template_path(best_unit.get("path"))
+            if not path:
+                best_unit = None
+        if best_unit and best_unit_score >= 0 and path:
             out = _result(
                 ok=True,
                 path=path,
@@ -442,7 +438,10 @@ def resolve_shipment_template(
             best_score = score
             best = row
     if best and best_score >= 0:
-        path = str(best.get("path") or "")
+        path = _trusted_template_path(best.get("path"))
+        if not path:
+            best = None
+    if best and best_score >= 0 and path:
         out = _result(
             ok=True,
             path=path,
@@ -464,17 +463,13 @@ def resolve_shipment_template(
             row = store.get_default_for_type(ttype)
         except RECOVERABLE_ERRORS:
             row = None
-        if (
-            row
-            and row.get("path")
-            and os.path.isfile(str(row["path"]))
-            and _is_layout_file(str(row["path"]))
-        ):
+        path = _trusted_template_path(row.get("path") if row else None)
+        if row and path:
             out = _result(
                 ok=True,
-                path=str(row["path"]),
+                path=path,
                 template_id=str(row.get("id") or ""),
-                template_name=row.get("name") or Path(str(row["path"])).name,
+                template_name=row.get("name") or Path(path).name,
                 template_type=row.get("template_type") or ttype,
                 source=row.get("source") or "store_default",
                 reason=f"store_default:{ttype}",
@@ -493,43 +488,3 @@ def resolve_shipment_template(
         error_code="TEMPLATE_NOT_FOUND",
         unit_name=unit or None,
     )
-
-
-def resolve_products_for_unit(unit_name: str, *, limit: int = 1) -> list[dict[str, Any]]:
-    """打单缺产品明细时，用该客户最近出货记录明细兜底。"""
-    name = str(unit_name or "").strip()
-    if not name:
-        return []
-    try:
-        from app.bootstrap import get_shipment_app_service
-
-        svc = get_shipment_app_service()
-        getter = getattr(svc, "get_latest_products_for_unit", None)
-        if callable(getter):
-            rows = getter(name, limit=limit)
-            if isinstance(rows, list) and rows:
-                return list(rows)
-        orders = svc.get_orders(20) or []
-        unit_token = _normalize_unit_token(name)
-        for order in orders:
-            if not isinstance(order, dict):
-                continue
-            customer = str(
-                order.get("customer_name")
-                or order.get("unit_name")
-                or order.get("purchase_unit")
-                or ""
-            ).strip()
-            cust_token = _normalize_unit_token(customer)
-            if customer and (
-                customer == name
-                or name in customer
-                or customer in name
-                or (unit_token and cust_token and unit_token in cust_token)
-            ):
-                items = order.get("products") or order.get("items") or []
-                if isinstance(items, list) and items:
-                    return list(items)
-    except RECOVERABLE_ERRORS as exc:
-        logger.debug("resolve_products_for_unit failed: %s", exc, exc_info=True)
-    return []

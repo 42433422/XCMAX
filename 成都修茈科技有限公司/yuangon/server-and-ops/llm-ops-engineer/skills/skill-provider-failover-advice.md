@@ -13,11 +13,11 @@
 1. 调 `test_llm_key_health` 确认主 provider 当前状态。
 2. 调 `list_platform_llm_models` 查平台统一模型目录，再参考预设 failover 链：
 
-   | 主 provider | 备 1 | 备 2 | 兜底 |
-   |---|---|---|---|
-   | deepseek | tongyi | zhipu | ollama-local |
-   | openai | openrouter | deepseek | ollama-local |
-   | claude | deepseek-reasoner | tongyi | ollama-local |
+   | 主 provider | 备 1              | 备 2     | 兜底         |
+   | ----------- | ----------------- | -------- | ------------ |
+   | deepseek    | tongyi            | zhipu    | ollama-local |
+   | openai      | openrouter        | deepseek | ollama-local |
+   | claude      | deepseek-reasoner | tongyi   | ollama-local |
 
 3. 对备选链逐一调 `test_llm_key_health` 确认可用性。
 4. 评估切换影响：
@@ -32,10 +32,10 @@
 {
   "status": "failover_switched",
   "summary": "deepseek 失效，已切换至 dashscope/qwen-plus，对下一次平台 AI 员工调用生效",
-  "from": {"provider": "deepseek", "reason": "key_invalid"},
-  "to": {"provider": "tongyi", "model": "qwen-plus", "fallback_chain": ["zhipu", "ollama-local"]},
-  "impact": {"quality_delta": -0.5, "latency_delta_ms": -400, "cost_delta_pct": -50},
-  "audit": {"revision": "...", "actor": "employee:llm-ops-engineer"},
+  "from": { "provider": "deepseek", "reason": "key_invalid" },
+  "to": { "provider": "tongyi", "model": "qwen-plus", "fallback_chain": ["zhipu", "ollama-local"] },
+  "impact": { "quality_delta": -0.5, "latency_delta_ms": -400, "cost_delta_pct": -50 },
+  "audit": { "revision": "...", "actor": "employee:llm-ops-engineer" },
   "rollback_available": true,
   "requires_human": false
 }

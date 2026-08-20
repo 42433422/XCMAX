@@ -1611,7 +1611,7 @@ class TestProcessChatEdge:
                 mock_loop.run_until_complete.side_effect = RuntimeError("API_KEY invalid")
                 mock_new_loop.return_value = mock_loop
                 result = svc.process_chat("u1", "测试消息", None, None, None)
-        assert "API Key" in result["message"]
+        assert "AI 服务暂时不可用" in result["message"]
 
     def test_recoverable_error_with_connection_returns_fallback(self):
         svc = _make_svc()
@@ -1638,7 +1638,7 @@ class TestProcessChatEdge:
                 mock_loop.run_until_complete.side_effect = RuntimeError("connection refused")
                 mock_new_loop.return_value = mock_loop
                 result = svc.process_chat("u1", "测试消息", None, None, None)
-        assert "无法连接到 AI 服务" in result["message"]
+        assert "AI 服务暂时不可用" in result["message"]
 
     def test_recoverable_error_other_returns_fallback(self):
         svc = _make_svc()

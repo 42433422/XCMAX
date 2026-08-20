@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 import subprocess
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, Mapping, Optional
 
@@ -105,7 +105,7 @@ def reconcile_para_merge_failure_state(
     if not stale_same_task:
         return reason, item_kind, open_items, changed
 
-    closed_at = datetime.now(timezone.utc).isoformat()
+    closed_at = datetime.now(UTC).isoformat()
     kept_items: list[Dict[str, Any]] = []
     newly_closed: list[Dict[str, Any]] = []
     for item in open_items:

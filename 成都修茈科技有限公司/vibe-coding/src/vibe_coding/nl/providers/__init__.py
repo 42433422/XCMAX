@@ -48,11 +48,11 @@ from .qwen import QwenLLM
 from .zhipu import ZhipuLLM
 
 __all__ = [
+    "PROVIDER_PRESETS",
     "AnthropicLLM",
     "DeepSeekLLM",
     "MoonshotLLM",
     "OpenAICompatibleLLM",
-    "PROVIDER_PRESETS",
     "ProviderInfo",
     "QwenLLM",
     "ZhipuLLM",

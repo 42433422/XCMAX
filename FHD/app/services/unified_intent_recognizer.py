@@ -48,7 +48,7 @@ class RecognizerResult:
     """统一识别结果"""
 
     primary_intent: str
-    tool_key: str
+    tool_key: str | None
     intent_hints: list[str]
     is_negated: bool
     is_greeting: bool
@@ -210,14 +210,11 @@ class UnifiedIntentRecognizer:
                         quick_result.get("primary_intent"),
                         context_used,
                     )
+                    quick_intent = str(quick_result.get("primary_intent") or "unk")
                     return RecognizerResult(
-                        primary_intent=quick_result.get("primary_intent"),
+                        primary_intent=quick_intent,
                         tool_key=quick_result.get("tool_key"),
-                        intent_hints=(
-                            [quick_result.get("primary_intent")]
-                            if quick_result.get("primary_intent")
-                            else []
-                        ),
+                        intent_hints=([quick_intent] if quick_intent != "unk" else []),
                         is_negated=False,
                         is_greeting=False,
                         is_goodbye=False,
@@ -278,7 +275,7 @@ class UnifiedIntentRecognizer:
         final_result = self._merge_results(results, message, context_data)
 
         return RecognizerResult(
-            primary_intent=final_result.get("primary_intent"),
+            primary_intent=str(final_result.get("primary_intent") or "unk"),
             tool_key=final_result.get("tool_key"),
             intent_hints=final_result.get("intent_hints", []),
             is_negated=final_result.get("is_negated", False),

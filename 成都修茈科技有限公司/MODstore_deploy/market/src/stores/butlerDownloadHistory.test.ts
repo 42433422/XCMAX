@@ -19,7 +19,7 @@ describe('useButlerDownloadHistoryStore', () => {
   it('initializes with empty records after hydration', () => {
     const auth = useAuthStore()
     auth.$patch({
-      user: { id: 'u1' } as any,
+      user: { id: 'u1' } as UnsafeTestValue,
       membership: { tier: 'free', label: '普通用户', is_member: false },
     })
     const store = useButlerDownloadHistoryStore()
@@ -38,7 +38,7 @@ describe('useButlerDownloadHistoryStore', () => {
   it('loadFromStorage reads from localStorage and applies retention', () => {
     const auth = useAuthStore()
     auth.$patch({
-      user: { id: 'u1' } as any,
+      user: { id: 'u1' } as UnsafeTestValue,
       membership: { tier: 'vip', label: 'VIP', is_member: true },
     })
     const records = Array.from({ length: 3 }, (_, i) => ({
@@ -58,7 +58,7 @@ describe('useButlerDownloadHistoryStore', () => {
   it('loadFromStorage handles localStorage errors gracefully', () => {
     const auth = useAuthStore()
     auth.$patch({
-      user: { id: 'u1' } as any,
+      user: { id: 'u1' } as UnsafeTestValue,
       membership: { tier: 'free', label: '', is_member: false },
     })
     const store = useButlerDownloadHistoryStore()
@@ -73,7 +73,7 @@ describe('useButlerDownloadHistoryStore', () => {
   it('loadFromStorage handles null/invalid JSON gracefully', () => {
     const auth = useAuthStore()
     auth.$patch({
-      user: { id: 'u1' } as any,
+      user: { id: 'u1' } as UnsafeTestValue,
       membership: { tier: 'free', label: '', is_member: false },
     })
     const store = useButlerDownloadHistoryStore()
@@ -84,7 +84,7 @@ describe('useButlerDownloadHistoryStore', () => {
   it('recordDownloads is a no-op for empty downloads', () => {
     const auth = useAuthStore()
     auth.$patch({
-      user: { id: 'u1' } as any,
+      user: { id: 'u1' } as UnsafeTestValue,
       membership: { tier: 'vip', label: 'VIP', is_member: true },
     })
     const store = useButlerDownloadHistoryStore()
@@ -95,7 +95,7 @@ describe('useButlerDownloadHistoryStore', () => {
   it('recordDownloads adds new records and persists', () => {
     const auth = useAuthStore()
     auth.$patch({
-      user: { id: 'u1' } as any,
+      user: { id: 'u1' } as UnsafeTestValue,
       membership: { tier: 'vip', label: 'VIP', is_member: true },
     })
     const store = useButlerDownloadHistoryStore()
@@ -107,7 +107,7 @@ describe('useButlerDownloadHistoryStore', () => {
   it('recordSingle records a single download', () => {
     const auth = useAuthStore()
     auth.$patch({
-      user: { id: 'u1' } as any,
+      user: { id: 'u1' } as UnsafeTestValue,
       membership: { tier: 'vip', label: 'VIP', is_member: true },
     })
     const store = useButlerDownloadHistoryStore()
@@ -122,7 +122,7 @@ describe('useButlerDownloadHistoryStore', () => {
   it('activeRecords and expiredRecords partition by expired flag', () => {
     const auth = useAuthStore()
     auth.$patch({
-      user: { id: 'u1' } as any,
+      user: { id: 'u1' } as UnsafeTestValue,
       membership: { tier: 'vip', label: 'VIP', is_member: true },
     })
     const store = useButlerDownloadHistoryStore()
@@ -135,15 +135,12 @@ describe('useButlerDownloadHistoryStore', () => {
   it('non-member retention expires records beyond limit', () => {
     const auth = useAuthStore()
     auth.$patch({
-      user: { id: 'u1' } as any,
+      user: { id: 'u1' } as UnsafeTestValue,
       membership: { tier: 'free', label: '', is_member: false },
     })
     const store = useButlerDownloadHistoryStore()
     store.loadFromStorage()
-    const downloads = Array.from(
-      { length: BUTLER_DOWNLOAD_NON_MEMBER_ACTIVE_LIMIT + 3 },
-      (_, i) => makeDownload(i + 1),
-    )
+    const downloads = Array.from({ length: BUTLER_DOWNLOAD_NON_MEMBER_ACTIVE_LIMIT + 3 }, (_, i) => makeDownload(i + 1))
     store.recordDownloads(downloads)
     expect(store.activeRecords).toHaveLength(BUTLER_DOWNLOAD_NON_MEMBER_ACTIVE_LIMIT)
     expect(store.expiredRecords.length).toBeGreaterThan(0)
@@ -152,7 +149,7 @@ describe('useButlerDownloadHistoryStore', () => {
   it('reapplyRetention re-applies retention and persists', () => {
     const auth = useAuthStore()
     auth.$patch({
-      user: { id: 'u1' } as any,
+      user: { id: 'u1' } as UnsafeTestValue,
       membership: { tier: 'vip', label: 'VIP', is_member: true },
     })
     const store = useButlerDownloadHistoryStore()
@@ -167,7 +164,7 @@ describe('useButlerDownloadHistoryStore', () => {
   it('persist swallows localStorage write errors', () => {
     const auth = useAuthStore()
     auth.$patch({
-      user: { id: 'u1' } as any,
+      user: { id: 'u1' } as UnsafeTestValue,
       membership: { tier: 'vip', label: 'VIP', is_member: true },
     })
     const store = useButlerDownloadHistoryStore()

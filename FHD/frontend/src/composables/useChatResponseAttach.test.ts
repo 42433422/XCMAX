@@ -89,9 +89,7 @@ describe('useChatResponseAttach', () => {
       },
       '执行任务',
     )
-    expect(upsertTask).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'wf-9', type: 'workflow', status: 'queued' }),
-    )
+    expect(upsertTask).toHaveBeenCalledWith(expect.objectContaining({ id: 'wf-9', type: 'workflow', status: 'queued' }))
   })
 
   it('syncTaskFromChatResponse marks workflow done', () => {
@@ -120,13 +118,8 @@ describe('useChatResponseAttach', () => {
 
   it('syncTaskFromChatResponse marks workflow failed', () => {
     const { upsertTask, syncTaskFromChatResponse } = makeDeps()
-    syncTaskFromChatResponse(
-      { success: false, message: 'boom', data: { action: 'workflow_failed', data: {} } },
-      'bad',
-    )
-    expect(upsertTask).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'wf-running', status: 'failed', error: 'boom' }),
-    )
+    syncTaskFromChatResponse({ success: false, message: 'boom', data: { action: 'workflow_failed', data: {} } }, 'bad')
+    expect(upsertTask).toHaveBeenCalledWith(expect.objectContaining({ id: 'wf-running', status: 'failed', error: 'boom' }))
   })
 
   it('syncTaskFromChatResponse updates running workflow progress from node_results', () => {
@@ -145,9 +138,7 @@ describe('useChatResponseAttach', () => {
       },
       'progress',
     )
-    expect(upsertTask).toHaveBeenCalledWith(
-      expect.objectContaining({ status: 'running', stage: expect.stringContaining('1/2') }),
-    )
+    expect(upsertTask).toHaveBeenCalledWith(expect.objectContaining({ status: 'running', stage: expect.stringContaining('1/2') }))
   })
 
   it('attachContextSummaryToLastAiMessage writes summary on last ai', () => {

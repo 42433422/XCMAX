@@ -349,7 +349,7 @@ class TestExportToExcel:
                 "app.infrastructure.repositories.material_repository_impl.get_db",
                 return_value=GuardedContext(),
             ),
-            patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)),
+            patch("app.utils.path_io.path_utils.get_data_dir", return_value=str(tmp_path)),
         ):
             result = repo.export_to_excel()
 

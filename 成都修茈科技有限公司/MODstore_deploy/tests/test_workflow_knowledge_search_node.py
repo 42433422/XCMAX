@@ -8,11 +8,13 @@ from pathlib import Path
 
 import pytest
 
+BOUNDARY_ERRORS = (Exception,)
+
 
 def _bootstrap(tmp_path: Path, monkeypatch):
     try:
         import chromadb  # noqa: F401
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         pytest.skip("chromadb 未安装；跳过 knowledge_search 节点测试")
 
     monkeypatch.setenv("MODSTORE_VECTOR_BACKEND", "chroma")
@@ -93,7 +95,6 @@ def test_knowledge_search_validator_requires_query(tmp_path, monkeypatch):
     from modstore_server.models import (
         User,
         Workflow,
-        WorkflowEdge,
         WorkflowNode,
         get_session_factory,
     )

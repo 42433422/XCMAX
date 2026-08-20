@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 为每个扩展（Mod）在 PostgreSQL 上创建独立业务库，并启用 pgvector。
 
@@ -21,12 +20,15 @@ Mod 列表来源（按优先级）：
 或单库示例:
   DATABASE_URL=postgresql+psycopg://.../xcagi__my_mod python -m alembic upgrade head
 """
+
 from __future__ import annotations
 
 import json
 import os
 import sys
 from pathlib import Path
+
+BOUNDARY_ERRORS: tuple[type[Exception], ...] = (Exception,)
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT not in sys.path:
@@ -41,7 +43,9 @@ except ImportError:
 
 
 def _normalize_mod_file_suffix(mod_id: str) -> str:
-    return "".join(ch if ch.isalnum() else "_" for ch in str(mod_id or "").strip()).strip("_").lower()
+    return (
+        "".join(ch if ch.isalnum() else "_" for ch in str(mod_id or "").strip()).strip("_").lower()
+    )
 
 
 def _discover_mod_ids() -> list[str]:
@@ -154,7 +158,7 @@ def main() -> int:
                 c.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
             eng.dispose()
             print(f"OK vector extension: {dbn}")
-        except Exception as e:
+        except BOUNDARY_ERRORS as e:
             print(
                 f"WARN: could not enable vector on {dbn} ({e}). "
                 f"Fix DATABASE_URL credentials then run: "

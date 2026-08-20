@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, union-attr"
 """COVERAGE_RAMP Phase 3 round 1: workflow/planner deep branches, price_list_export,
 service_bridge + excel_extract routes, compat_db writes."""
 

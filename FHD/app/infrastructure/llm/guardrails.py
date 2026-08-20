@@ -231,7 +231,7 @@ def _words_path() -> Path:
     explicit = (os.environ.get("XCAGI_GUARDRAILS_WORDS_FILE") or "").strip()
     if explicit:
         return Path(explicit)
-    from app.utils.path_utils import get_base_dir
+    from app.utils.path_io.path_utils import get_base_dir
 
     return Path(get_base_dir()) / "config" / "guardrails" / "sensitive_words.txt"
 
@@ -271,7 +271,7 @@ def check_input(messages: list[dict[str, Any]]) -> GuardrailResult:
             result.score = 1.0
             result.action = "block"
         return result
-    except Exception:  # noqa: BLE001 — fail-open
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 — fail-open
         logger.error("guardrail check_input failed, fail-open", exc_info=True)
         return GuardrailResult()
 
@@ -299,6 +299,6 @@ def check_output(text: str) -> tuple[str, GuardrailResult]:
         if result.action == "block":
             return text, result
         return get_sensitive_words().mask(text), result
-    except Exception:  # noqa: BLE001 — fail-open
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 — fail-open
         logger.error("guardrail check_output failed, fail-open", exc_info=True)
         return text, GuardrailResult()

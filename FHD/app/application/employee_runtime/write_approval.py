@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Any
+from typing import Any, cast
 
 from app.application.employee_runtime.tool_scope import CODE_WRITE_TOOLS, WRITE_TOOLS
+from app.application.workflow.types import normalize_workflow_risk
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -66,21 +67,23 @@ def build_write_approval_gate(
                         tool_id=name,
                         action=write_action,
                         params=dict(args or {}),
-                        risk=risk,
+                        risk=normalize_workflow_risk(risk),
                     )
                 ],
-                risk_level=risk,
+                risk_level=normalize_workflow_risk(risk),
             )
             gated = ApprovalGatedEngine(WorkflowEngine(lambda **kw: {"success": True}))
-            decision = gated.evaluate_plan(plan, runtime_context=payload, strategy="interactive")
-            if decision.all_approved and not decision.any_rejected:
+            gated_decision = gated.evaluate_plan(
+                plan, runtime_context=payload, strategy="interactive"
+            )
+            if gated_decision.all_approved and not gated_decision.any_rejected:
                 return {"ok": True}
-            if decision.pending_approval:
+            if gated_decision.pending_approval:
                 return {
                     "ok": False,
                     "reason": "写操作待审批（请在审批工作台通过后重试）",
                     "pending_approval": True,
-                    "approval_request_ids": list(decision.approval_request_ids or []),
+                    "approval_request_ids": list(gated_decision.approval_request_ids or []),
                 }
         except RECOVERABLE_ERRORS:
             logger.debug(
@@ -114,7 +117,7 @@ def compose_gates(*gates: Any) -> Any:
             except RECOVERABLE_ERRORS:
                 continue
             if not verdict.get("ok", True):
-                return verdict
+                return cast("dict[str, Any]", verdict)
         return {"ok": True}
 
     return combined

@@ -12,11 +12,7 @@ import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
  * @param {string} [opts.xcmaxPublicApiPrefix]
  * @param {string} opts.i18nInclude
  */
-export function createVitePlugins({
-  staticCopyPlugin,
-  xcmaxPublicApiPrefix = '',
-  i18nInclude,
-}) {
+export function createVitePlugins({ staticCopyPlugin, xcmaxPublicApiPrefix = '', i18nInclude }) {
   return [
     vue(),
     VueI18n({
@@ -49,10 +45,7 @@ export function createVitePlugins({
       name: 'disable-legacy-chat-js',
       transformIndexHtml(html, ctx) {
         if (ctx.server) return html
-        return html.replace(
-          'window.__ENABLE_LEGACY__ !== false',
-          'window.__ENABLE_LEGACY__ === true'
-        )
+        return html.replace('window.__ENABLE_LEGACY__ !== false', 'window.__ENABLE_LEGACY__ === true')
       },
     },
   ]

@@ -21,6 +21,8 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from pydantic import BaseModel
 from typing_extensions import NotRequired, Required, is_typeddict
 
+from langgraph._internal._exception_policy import BOUNDARY_ERRORS
+
 try:
     from langgraph.checkpoint.serde._msgpack import (  # noqa: F401
         STRICT_MSGPACK_ENABLED,
@@ -221,7 +223,7 @@ def _safe_get_type_hints(typ: Any) -> dict[str, Any]:
         return get_type_hints(
             typ, globalns=globalns, localns=localns, include_extras=True
         )
-    except Exception:
+    except BOUNDARY_ERRORS:
         return {}
 
 
@@ -232,7 +234,7 @@ def _is_pydantic_model(typ: Any) -> bool:
         return True
     try:
         from pydantic.v1 import BaseModel as BaseModelV1
-    except Exception:
+    except BOUNDARY_ERRORS:
         return False
     return issubclass(typ, BaseModelV1)
 

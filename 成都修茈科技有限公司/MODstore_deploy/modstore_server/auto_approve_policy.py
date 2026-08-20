@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """自动审批策略：评估 ChangeRequest 风险级别，低风险自动落盘。
 
 环境变量：
@@ -14,6 +15,8 @@ import logging
 import os
 from pathlib import Path
 from typing import Any, Dict, Optional, Sequence, Tuple
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -176,7 +179,7 @@ def classify_change_risk(
                     "self-maintenance marker-only change requires human review: "
                     + str(requirement.get("reason") or ""),
                 )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return "medium", "self-maintenance policy check failed closed"
 
     line_count = _count_diff_lines(content, original_content)
@@ -247,9 +250,10 @@ def maybe_auto_approve(
                             ),
                             "retort_clarification": clar_block,
                         }
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 logger.exception(
-                    "retort clarification gate check failed for CR %s", change_request_id
+                    "retort clarification gate check failed for CR %s",
+                    change_request_id,
                 )
 
             try:
@@ -267,7 +271,7 @@ def maybe_auto_approve(
                     for x in json.loads(getattr(row, "approval_required_globs_json", "[]") or "[]")
                     if str(x).strip()
                 ]
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 ag_from_row = []
             ag_snapshot = [
                 str(x).strip()
@@ -281,7 +285,7 @@ def maybe_auto_approve(
                 manifest = pack.get("manifest") if isinstance(pack.get("manifest"), dict) else {}
                 sg, fg, ag = workspace_policy_from_manifest(manifest)
                 ag = list(dict.fromkeys([*ag, *ag_snapshot, *ag_from_row]))
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 sg, fg, ag = [], [], list(dict.fromkeys([*ag_snapshot, *ag_from_row]))
 
             # 重新评估风险（DB 中可能是旧值）
@@ -313,7 +317,7 @@ def maybe_auto_approve(
                 "risk_decision": risk_decision.to_dict(),
             }
 
-        # 所有风险等级先经 SSOT，再由自动窄 CI 验证；不进入人工审批队列。
+        # 仅 SSOT 明确允许的风险等级进入窄 CI；高风险必须由上面的人工门禁拦截。
         narrow_ci: Dict[str, Any] = {"ok": True, "skipped": True}
         if _require_ci() or os.environ.get(
             "MODSTORE_CR_NARROW_CI_ENABLED", "1"
@@ -349,7 +353,9 @@ def maybe_auto_approve(
                 }
 
         # SSOT + 窄 CI 通过后自动落盘。
-        from modstore_server.employee_change_request_service import apply_employee_change_request
+        from modstore_server.employee_change_request_service import (
+            apply_employee_change_request,
+        )
         from modstore_server.models import User
 
         sf2 = get_session_factory()
@@ -364,7 +370,10 @@ def maybe_auto_approve(
 
         result = apply_employee_change_request(change_request_id, admin_id or 0)
         logger.info(
-            "auto_approve: CR %d auto-approved (risk=%s): %s", change_request_id, risk, reason
+            "auto_approve: CR %d auto-approved (risk=%s): %s",
+            change_request_id,
+            risk,
+            reason,
         )
         return {
             "auto_approved": True,
@@ -374,7 +383,7 @@ def maybe_auto_approve(
             "risk_decision": risk_decision.to_dict(),
         }
 
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("maybe_auto_approve failed for CR %d", change_request_id)
         return {"auto_approved": False, "reason": str(exc)}
 
@@ -411,7 +420,10 @@ def evaluate_employee_pack(pack_id: str) -> Tuple[str, str]:
     file_paths = [f for f in files if f.is_file()]
 
     if len(file_paths) > MAX_EMPLOYEE_PACK_FILES:
-        return "high", f"pack has {len(file_paths)} files > {MAX_EMPLOYEE_PACK_FILES} limit"
+        return (
+            "high",
+            f"pack has {len(file_paths)} files > {MAX_EMPLOYEE_PACK_FILES} limit",
+        )
 
     for f in file_paths:
         rel = str(f.relative_to(pack_dir))

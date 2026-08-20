@@ -16,6 +16,7 @@ XCMAX _archive 敏感文件清理脚本（v9.0.0 整改配套工具）
   - 不动 dist/_internal/aliyunsdkcore/.../cacert.pem 这类公开 CA 证书包。
   - 失败立即抛错，不静默吞异常。
 """
+
 from __future__ import annotations
 
 import argparse
@@ -44,20 +45,62 @@ HIGH_RISK_RULES = [
     # 真实 .env（不是 .env.example / .env.generic / .env.minimal）
     {"name": "real_env", "pattern": lambda p: p.name == ".env"},
     # 私有项目配置（IDE / 平台私有 token）
-    {"name": "private_config", "pattern": lambda p: p.name == "project.private.config.json"},
+    {
+        "name": "private_config",
+        "pattern": lambda p: p.name == "project.private.config.json",
+    },
     # 登录态 / 鉴权缓存
     {"name": "login_out", "pattern": lambda p: p.name == "login_out.json"},
     # 客户/产品/支付业务库（真实数据风险）
-    {"name": "products_db", "pattern": lambda p: p.name.startswith("products") and p.suffix in {".db", ".db-shm", ".db-wal"}},
-    {"name": "pytest_products_db", "pattern": lambda p: p.name == ".pytest_products.db"},
+    {
+        "name": "products_db",
+        "pattern": lambda p: (
+            p.name.startswith("products") and p.suffix in {".db", ".db-shm", ".db-wal"}
+        ),
+    },
+    {
+        "name": "pytest_products_db",
+        "pattern": lambda p: p.name == ".pytest_products.db",
+    },
     # 应用核心数据库（xcagi / modstore / test_upload / *.db-wal/-shm）— 任何 SQLite 都可能含客户/订单/支付数据
-    {"name": "app_db", "pattern": lambda p: p.suffix in {".db", ".db-shm", ".db-wal"} and not p.name.startswith("contact") and not p.name.startswith("message") and not p.name.startswith("media") and not p.name.startswith("biz_message") and not p.name.startswith("test_") and p.parent.name not in {"tests", "test"}},
+    {
+        "name": "app_db",
+        "pattern": lambda p: (
+            p.suffix in {".db", ".db-shm", ".db-wal"}
+            and not p.name.startswith("contact")
+            and not p.name.startswith("message")
+            and not p.name.startswith("media")
+            and not p.name.startswith("biz_message")
+            and not p.name.startswith("test_")
+            and p.parent.name not in {"tests", "test"}
+        ),
+    },
     # 微信解密的本地数据库（可能含真实聊天记录）
-    {"name": "wechat_decrypt_db", "pattern": lambda p: "wechat-decrypt/raw_db" in str(p) and p.suffix in {".db", ".db-shm", ".db-wal"}},
+    {
+        "name": "wechat_decrypt_db",
+        "pattern": lambda p: (
+            "wechat-decrypt/raw_db" in str(p)
+            and p.suffix in {".db", ".db-shm", ".db-wal"}
+        ),
+    },
     # 二进制 mod 包（私有版权代码/资源）
     {"name": "xcmod_binary", "pattern": lambda p: p.suffix == ".xcmod"},
     # .env 的不同语种副本（个人版 / 交付版 / docker 版）
-    {"name": "env_variant", "pattern": lambda p: p.name.startswith(".env.") and not p.name.endswith((".example", ".generic", ".minimal", ".fhd-docker.example", ".fhd-docker"))},
+    {
+        "name": "env_variant",
+        "pattern": lambda p: (
+            p.name.startswith(".env.")
+            and not p.name.endswith(
+                (
+                    ".example",
+                    ".generic",
+                    ".minimal",
+                    ".fhd-docker.example",
+                    ".fhd-docker",
+                )
+            )
+        ),
+    },
 ]
 
 # 明确豁免（公开 CA bundle、示例配置）
@@ -82,7 +125,7 @@ def classify(rel_path: Path) -> str | None:
         try:
             if rule["pattern"](p):
                 return rule["name"]
-        except Exception:
+        except (AttributeError, OSError, TypeError, ValueError):
             continue
     return None
 
@@ -101,7 +144,7 @@ def already_redacted(path: Path) -> bool:
         return False
     try:
         head = path.read_text(encoding="utf-8", errors="ignore")
-    except Exception:
+    except (OSError, UnicodeError):
         return False
     return "XCAGI_REDACTED_SNAPSHOT_POINTER" in head
 
@@ -110,7 +153,7 @@ def parse_redacted_placeholder(path: Path) -> dict:
     """从占位文件解析出原 SHA-256 / 大小 / 快照相对路径。"""
     try:
         text = path.read_text(encoding="utf-8", errors="ignore")
-    except Exception:
+    except (OSError, UnicodeError):
         return {}
     info: dict = {}
     for line in text.splitlines():
@@ -127,7 +170,9 @@ def parse_redacted_placeholder(path: Path) -> dict:
     return info
 
 
-def make_placeholder(orig: Path, rel: str, rule: str, snapshot_rel: str, sha256: str, size: int) -> str:
+def make_placeholder(
+    orig: Path, rel: str, rule: str, snapshot_rel: str, sha256: str, size: int
+) -> str:
     return (
         f"# XCAGI_REDACTED_SNAPSHOT_POINTER\n"
         f"# 本文件已被脱敏（规则: {rule}）。\n"
@@ -144,7 +189,9 @@ def make_placeholder(orig: Path, rel: str, rule: str, snapshot_rel: str, sha256:
 
 
 def main(argv: list[str]) -> int:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     ap.add_argument("--dry-run", action="store_true", help="只扫描、不迁移、不替换")
     ap.add_argument("--report-only", action="store_true", help="只生成报告、不动文件")
     ap.add_argument(
@@ -196,7 +243,9 @@ def main(argv: list[str]) -> int:
                 "sha256": meta.get("sha256", "-"),
                 "snapshot_rel": meta.get("snapshot_rel", "-"),
             }
-            if args.strict and (record["sha256"] == "-" or record["snapshot_rel"] == "-"):
+            if args.strict and (
+                record["sha256"] == "-" or record["snapshot_rel"] == "-"
+            ):
                 record["status"] = "redacted_but_missing_meta"
             results.append(record)
             continue
@@ -206,23 +255,29 @@ def main(argv: list[str]) -> int:
             try:
                 size = abs_p.stat().st_size
                 sha = sha256_file(abs_p)
-            except Exception as e:
-                results.append({"rel": str(rel_p), "rule": rule, "status": f"hash_error: {e}"})
+            except OSError as e:
+                results.append(
+                    {"rel": str(rel_p), "rule": rule, "status": f"hash_error: {e}"}
+                )
                 continue
-            results.append({
-                "rel": str(rel_p),
-                "rule": rule,
-                "status": "needs_redaction",
-                "size": size,
-                "sha256": sha,
-            })
+            results.append(
+                {
+                    "rel": str(rel_p),
+                    "rule": rule,
+                    "status": "needs_redaction",
+                    "size": size,
+                    "sha256": sha,
+                }
+            )
             continue
 
         try:
             sha = sha256_file(abs_p)
             size = abs_p.stat().st_size
-        except Exception as e:
-            results.append({"rel": str(rel_p), "rule": rule, "status": f"hash_error: {e}"})
+        except OSError as e:
+            results.append(
+                {"rel": str(rel_p), "rule": rule, "status": f"hash_error: {e}"}
+            )
             continue
 
         snapshot_abs = SNAPSHOT_DIR / rel_p
@@ -246,10 +301,12 @@ def main(argv: list[str]) -> int:
             snapshot_abs.parent.mkdir(parents=True, exist_ok=True)
             if not args.report_only:
                 shutil.copy2(abs_p, snapshot_abs)
-                placeholder = make_placeholder(abs_p, str(rel_p), rule, snapshot_rel, sha, size)
+                placeholder = make_placeholder(
+                    abs_p, str(rel_p), rule, snapshot_rel, sha, size
+                )
                 abs_p.write_text(placeholder, encoding="utf-8")
             record["status"] = "redacted" if not args.report_only else "report_only"
-        except Exception as e:
+        except OSError as e:
             record["status"] = f"error: {e}"
 
         results.append(record)
@@ -268,8 +325,12 @@ def main(argv: list[str]) -> int:
         "needs_redaction": sum(1 for r in results if r["status"] == "needs_redaction"),
         "dry_run": sum(1 for r in results if r["status"] == "dry_run"),
         "report_only": sum(1 for r in results if r["status"] == "report_only"),
-        "already_redacted": sum(1 for r in results if r["status"] == "already_redacted"),
-        "redacted_but_missing_meta": sum(1 for r in results if r["status"] == "redacted_but_missing_meta"),
+        "already_redacted": sum(
+            1 for r in results if r["status"] == "already_redacted"
+        ),
+        "redacted_but_missing_meta": sum(
+            1 for r in results if r["status"] == "redacted_but_missing_meta"
+        ),
         "errors": sum(1 for r in results if r["status"].startswith("error")),
     }
     print("\nSummary:", json.dumps(summary, ensure_ascii=False, indent=2))
@@ -279,7 +340,11 @@ def main(argv: list[str]) -> int:
     #   1 = 存在未脱敏文件（FAIL）
     #   2 = 内部错误
     if args.check:
-        if summary["needs_redaction"] > 0 or summary["errors"] > 0 or summary["redacted_but_missing_meta"] > 0:
+        if (
+            summary["needs_redaction"] > 0
+            or summary["errors"] > 0
+            or summary["redacted_but_missing_meta"] > 0
+        ):
             return 1
         return 0
     return 0 if summary["errors"] == 0 else 2
@@ -294,8 +359,8 @@ def write_report(results: list[dict], *, dry_run: bool) -> None:
     lines.append("# XCMAX _archive 敏感文件清理报告")
     lines.append("")
     lines.append(f"- 生成时间：{datetime.now().isoformat(timespec='seconds')}")
-    lines.append(f"- 扫描根目录：`_archive/`")
-    lines.append(f"- 快照目录：`_archive/.redacted-snapshots/`（已在 .gitignore）")
+    lines.append("- 扫描根目录：`_archive/`")
+    lines.append("- 快照目录：`_archive/.redacted-snapshots/`（已在 .gitignore）")
     lines.append(f"- 模式：{'dry-run（不修改文件）' if dry_run else '实执行'}")
     lines.append("")
     lines.append("## 规则命中统计")
@@ -329,8 +394,11 @@ def write_report(results: list[dict], *, dry_run: bool) -> None:
         # 统一渲染为仓库内相对路径（去掉可能的前缀 _archive/）
         snap_disp = snap
         if snap_disp.startswith("_archive/"):
-            snap_disp = snap_disp[len("_archive/"):]
-        elif snap_disp.startswith(".redacted-snapshots/") or snap_disp == ".redacted-snapshots":
+            snap_disp = snap_disp[len("_archive/") :]
+        elif (
+            snap_disp.startswith(".redacted-snapshots/")
+            or snap_disp == ".redacted-snapshots"
+        ):
             pass
         lines.append(
             f"| {r['status']} | `{r['rule']}` | {size} | `{sha_short}` | "
@@ -351,12 +419,16 @@ def write_report(results: list[dict], *, dry_run: bool) -> None:
     lines.append("")
     lines.append("## 二次执行幂等")
     lines.append("")
-    lines.append("脚本对已脱敏占位文件（含 `XCAGI_REDACTED_SNAPSHOT_POINTER` 标记）直接跳过；")
+    lines.append(
+        "脚本对已脱敏占位文件（含 `XCAGI_REDACTED_SNAPSHOT_POINTER` 标记）直接跳过；"
+    )
     lines.append("可重复执行，不会重复迁移。")
     lines.append("")
     lines.append("## 豁免清单（明确保留）")
     lines.append("")
-    lines.append("- `**/.env.example`、`.env.generic`、`.env.minimal`、`.env.fhd-docker.example`")
+    lines.append(
+        "- `**/.env.example`、`.env.generic`、`.env.minimal`、`.env.fhd-docker.example`"
+    )
     lines.append("- `dist/_internal/aliyunsdkcore/.../cacert.pem` 等公开 CA 证书包")
     lines.append("")
 
@@ -372,7 +444,9 @@ def update_archived_md(results: list[dict]) -> None:
         if section_title in content:
             return  # 已存在则不重复追加
     else:
-        content = "# _archive 归档目录说明\n\n本目录存放只读历史快照，**禁止日常改动**。\n\n"
+        content = (
+            "# _archive 归档目录说明\n\n本目录存放只读历史快照，**禁止日常改动**。\n\n"
+        )
 
     n = sum(1 for r in results if r["status"] == "redacted")
     addendum = (

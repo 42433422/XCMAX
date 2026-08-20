@@ -12,11 +12,15 @@ from typing import Any
 from fastapi import APIRouter, Body, Request
 from fastapi.responses import JSONResponse
 
+from app.application.workflow.types import normalize_workflow_risk
+
 router = APIRouter(tags=["tools-execute"])
 
 
 def user_id_from_tool_request(request: Request, body: dict[str, Any]) -> str:
     params = body.get("params") if isinstance(body.get("params"), dict) else {}
+    if not isinstance(params, dict):
+        params = {}
     return str(
         request.headers.get("X-User-Id")
         or request.headers.get("X-User-ID")
@@ -44,8 +48,24 @@ def tool_route_agent_payload(run: Any, node_id: str) -> dict[str, Any]:
                 break
     if not output:
         output = {"success": getattr(run, "status", "") in {"completed", "waiting_user"}}
-    if not output.get("success") and getattr(run, "error", "") and not output.get("message"):
-        output["message"] = getattr(run, "error", "")
+    if not output.get("success"):
+        # Tool implementations historically returned ``str(exc)`` and persisted
+        # tracebacks in their failure payload.  Rebuild the public failure shape
+        # from stable fields so neither can cross the HTTP boundary.  Preserve
+        # only a validated HTTP status because route adapters need to distinguish
+        # validation/not-found/unavailable failures without exposing raw details.
+        raw_error_code = str(output.get("error_code") or "tool_failed")[:64]
+        try:
+            raw_http_status = int(output.get("http_status_code") or 0)
+        except (TypeError, ValueError):
+            raw_http_status = 0
+        output = {
+            "success": False,
+            "message": "工具执行失败，请稍后重试",
+            "error_code": raw_error_code,
+        }
+        if 400 <= raw_http_status <= 599:
+            output["http_status_code"] = raw_http_status
     run_id = str(getattr(run, "run_id", "") or "")
     if run_id:
         output["run_id"] = run_id
@@ -91,12 +111,16 @@ def run_tools_execute_agent(
                 tool_id=tool_id,
                 action=action,
                 params=dict(params),
-                risk=str(registry[tool_id]["actions"][action].get("risk") or "low"),
+                risk=normalize_workflow_risk(
+                    str(registry[tool_id]["actions"][action].get("risk") or "low")
+                ),
                 idempotent=bool(registry[tool_id]["actions"][action].get("idempotent", False)),
                 description=f"Execute {tool_id}.{action} through the unified Agent runtime.",
             )
         ],
-        risk_level=str(registry[tool_id]["actions"][action].get("risk") or "low"),
+        risk_level=normalize_workflow_risk(
+            str(registry[tool_id]["actions"][action].get("risk") or "low")
+        ),
         metadata={"source": "tools_execute_route", "route": route_path},
     )
     user_id = user_id_from_tool_request(request, body)

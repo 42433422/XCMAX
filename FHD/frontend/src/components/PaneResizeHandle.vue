@@ -24,7 +24,7 @@ withDefaults(
     orientation: 'vertical',
     label: '调整面板尺寸',
     disabled: false,
-  }
+  },
 )
 
 defineEmits(['resize-start', 'reset'])
@@ -64,7 +64,9 @@ defineEmits(['resize-start', 'reset'])
   border-radius: 999px;
   background: rgba(148, 163, 184, 0.42);
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.44);
-  transition: background 160ms ease, box-shadow 160ms ease;
+  transition:
+    background 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .pane-resize-handle--vertical .pane-resize-handle__grip {

@@ -9,8 +9,6 @@ describe('lanPaths', () => {
 
   it('maps to mod facade when enabled', () => {
     vi.stubGlobal('localStorage', { getItem: () => '1' })
-    expect(resolveLanApiPath('/api/lan/admin/keys')).toBe(
-      '/api/mod/xcagi-lan-license-bridge/lan/admin/keys',
-    )
+    expect(resolveLanApiPath('/api/lan/admin/keys')).toBe('/api/mod/xcagi-lan-license-bridge/lan/admin/keys')
   })
 })

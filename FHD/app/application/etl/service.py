@@ -28,6 +28,7 @@ from app.application.etl.service_uploads import UploadServiceMixin
 from app.application.etl.targets import target_capabilities
 from app.application.etl.transforms import ALLOWED_TRANSFORMS
 from app.db import SessionLocal as SessionLocal
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +51,7 @@ class EtlService(
             from app.application.shipment_etl_profile import list_profiles
 
             compatibility_presets = list_profiles()
-        except Exception:  # noqa: BLE001
+        except RECOVERABLE_ERRORS:  # noqa: BLE001
             compatibility_presets = []
         return {
             "enabled": True,
@@ -92,7 +93,7 @@ def mark_interrupted_runs_on_startup(bind: Any) -> int:
                 )
             )
             return max(0, int(result.rowcount or 0))
-    except Exception:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:  # noqa: BLE001
         logger.exception("Unable to mark interrupted ETL runs during startup")
         return 0
 

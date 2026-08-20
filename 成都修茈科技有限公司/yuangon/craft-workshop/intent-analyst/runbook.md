@@ -13,11 +13,13 @@
         | Handler | 说明 |
         |---------|------|
         | `llm_md` | 接收 Markdown 任务描述，调用 LLM 输出结构化结果 |
+
 | `echo` | 调试用：原样返回输入，用于 smoke 测试 |
 
         ## 核心 Scope
 
         - `workbench/sessions/*`
+
 - `workbench/intent/*`
 - `yuangon/craft-workshop/intent-analyst/**`
 

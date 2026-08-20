@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.pr_review import review_diff
 
@@ -41,10 +41,11 @@ def build_review_quality_benchmark(
         matches = [_finding_matched(comments, item) for item in expected]
         expected_findings += len(expected)
         matched_findings += sum(1 for item in matches if item)
-        incremental = (
+        incremental = cast(
+            dict[str, Any],
             review.get("incremental")
             if isinstance(review.get("incremental"), dict)
-            else {}
+            else {},
         )
         if (
             sample.get("requires_incremental_skip")
@@ -410,10 +411,11 @@ def _category_summary(
         row["expected_finding_count"] += int(sample.get("expected_finding_count") or 0)
         row["matched_finding_count"] += int(sample.get("matched_finding_count") or 0)
         row["false_positive_count"] += int(sample.get("false_positive_count") or 0)
-        incremental = (
+        incremental = cast(
+            dict[str, Any],
             sample.get("incremental")
             if isinstance(sample.get("incremental"), dict)
-            else {}
+            else {},
         )
         if (
             incremental.get("enabled")

@@ -7,6 +7,7 @@
   python scripts/cleanup_unit_name.py
   python scripts/cleanup_unit_name.py 七彩乐园
 """
+
 from __future__ import annotations
 
 import argparse

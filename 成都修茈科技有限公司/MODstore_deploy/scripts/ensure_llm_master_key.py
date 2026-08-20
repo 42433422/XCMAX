@@ -13,6 +13,8 @@ import stat
 import sys
 from pathlib import Path
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 KEY_NAME = "MODSTORE_LLM_MASTER_KEY"
 ASSIGN_RE = re.compile(rf"^\s*(?:export\s+)?{re.escape(KEY_NAME)}\s*=", re.ASCII)
 
@@ -25,7 +27,7 @@ def _generate_fernet_key() -> str:
 def _is_valid_fernet_key(value: str) -> bool:
     try:
         return len(base64.urlsafe_b64decode(value.encode("ascii"))) == 32
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return False
 
 

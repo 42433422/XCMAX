@@ -92,7 +92,12 @@ def test_register_workflow_employee_catalog_ok(monkeypatch, tmp_path, admin_clie
 
     r2 = admin_client.post(
         "/api/mods/wf-reg-ok/register-workflow-employee-catalog",
-        json={"workflow_index": 0, "industry": "通用", "price": 0, "release_channel": "stable"},
+        json={
+            "workflow_index": 0,
+            "industry": "通用",
+            "price": 0,
+            "release_channel": "stable",
+        },
     )
     assert r2.status_code == 200, r2.text
     data = r2.json()

@@ -408,7 +408,7 @@ def test_materials_create_exception_500(
     mock_material_svc.create_material.side_effect = RuntimeError("db locked")
     r = materials_client.post("/api/materials", json={"name": "异常项"})
     assert r.status_code == 500
-    assert "db locked" in r.json()["message"]
+    assert r.json()["message"] == "工具执行失败"
 
 
 def test_materials_list_injects_count(
@@ -858,13 +858,14 @@ def test_ai_print_file_failure(
     out_dir = tmp_path / "shipment_outputs"
     out_dir.mkdir()
     (out_dir / "fail.docx").write_bytes(b"doc")
-    monkeypatch.setattr("app.utils.path_utils.get_app_data_dir", lambda: str(tmp_path))
+    monkeypatch.setattr("app.utils.path_io.path_utils.get_app_data_dir", lambda: str(tmp_path))
     printer = MagicMock()
     printer.print_document.return_value = {"success": False, "message": "offline"}
     monkeypatch.setattr(ai_routes_mod, "_printer_svc", lambda: printer)
     r = ai_client.post("/api/print/fail.docx", json={"printer_name": "HP"})
     assert r.status_code == 400
-    assert r.json()["message"] == "offline"
+    assert r.json()["message"] == "打印服务暂时不可用，请稍后重试"
+    assert "offline" not in r.text
 
 
 def test_ai_print_pdf_labels_501(ai_client: TestClient) -> None:

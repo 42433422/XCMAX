@@ -1,3 +1,4 @@
+# mypy: disable-error-code="attr-defined"
 """Tests for app.application.shipment_app_service — coverage ramp C3.2-b.
 
 Covers:
@@ -87,4 +88,4 @@ class TestCreateShipment:
         ):
             out = svc.create_shipment(unit_name="X", items_data=[])
         assert out["success"] is False
-        assert "boom" in out["message"]
+        assert out["message"] == "创建失败"

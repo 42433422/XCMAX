@@ -13,11 +13,7 @@
   "employee": {
     "id": "word-content-extractor",
     "label": "Word文档全量读取员工",
-    "capabilities": [
-      "docs.readme",
-      "project.analyze",
-      "docs.summary"
-    ]
+    "capabilities": ["docs.readme", "project.analyze", "docs.summary"]
   },
   "employee_config_v2": {
     "perception": {
@@ -39,10 +35,7 @@
           "name": "Word文档全量读取员工",
           "persona": "解析.docx文件，提取段落文本、标题层级、表格数据、图片、样式信息、页眉页脚、元数据和批注，输出结构化JSON和纯文本文件",
           "tone": "professional",
-          "expertise": [
-            "Word文档内容全量读取与解析",
-            "办公自动化"
-          ]
+          "expertise": ["Word文档内容全量读取与解析", "办公自动化"]
         },
         "behavior_rules": [
           "始终围绕Word文档全量读取员工的职责范围处理请求。",
@@ -68,9 +61,7 @@
       ]
     },
     "actions": {
-      "handlers": [
-        "agent"
-      ],
+      "handlers": ["agent"],
       "agent": {
         "workspace": {
           "mode": "user_project",

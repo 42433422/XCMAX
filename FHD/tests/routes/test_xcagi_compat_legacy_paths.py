@@ -1,4 +1,5 @@
-"""Tests for app.fastapi_routes.xcagi_compat — coverage ramp C3.3-a.
+# mypy: disable-error-code="arg-type, misc"
+"""Tests for app.legacy.routes.xcagi_compat — coverage ramp C3.3-a.
 
 Covers the aggregated compat router and ``_register_router_events`` log path.
 """
@@ -11,8 +12,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.fastapi_routes.openapi_route_compat import iter_effective_routes
-from app.fastapi_routes.xcagi_compat import router
+from app.legacy.routes.openapi_route_compat import iter_effective_routes
+from app.legacy.routes.xcagi_compat import router
 
 
 def _collect_paths(app: FastAPI) -> list[str]:
@@ -38,26 +39,27 @@ def _collect_paths(app: FastAPI) -> list[str]:
 def client() -> TestClient:
     app = FastAPI()
     app.include_router(router)
-    return TestClient(app)
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 class TestRouterEvents:
     def test_register_logs_subscribers(self) -> None:
-        with patch("app.fastapi_routes.xcagi_compat.get_neuro_bus") as g:
+        with patch("app.legacy.routes.xcagi_compat.get_neuro_bus") as g:
             bus = MagicMock()
             bus.subscribers = {"a": 1, "b": 2}
             g.return_value = bus
             # Re-invoke the function under test
-            from app.fastapi_routes.xcagi_compat import _register_router_events
+            from app.legacy.routes.xcagi_compat import _register_router_events
 
             _register_router_events()
         g.assert_called_once()
 
     def test_register_handles_exception(self) -> None:
         with patch(
-            "app.fastapi_routes.xcagi_compat.get_neuro_bus", side_effect=Exception("no bus")
+            "app.legacy.routes.xcagi_compat.get_neuro_bus", side_effect=RuntimeError("no bus")
         ):
-            from app.fastapi_routes.xcagi_compat import _register_router_events
+            from app.legacy.routes.xcagi_compat import _register_router_events
 
             # Should not raise
             _register_router_events()

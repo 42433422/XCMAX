@@ -5,9 +5,10 @@ from __future__ import annotations
 
 import json
 import sys
-import tempfile
 import uuid
 from pathlib import Path
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 MODSTORE_ROOT = Path(__file__).resolve().parents[1]
 if str(MODSTORE_ROOT) not in sys.path:
@@ -27,7 +28,7 @@ def _fixture_bytes(kind: str) -> bytes:
 
         return minimal_xlsx_fixture_bytes()
     if kind == "csv":
-        return "name,score\nalice,90\nbob,85\n".encode("utf-8")
+        return b"name,score\nalice,90\nbob,85\n"
     if kind == "pdf":
         from modstore_server.pdf_extract_runtime import minimal_pdf_fixture_bytes
 
@@ -94,7 +95,7 @@ def _simulate_execute_file(
             )
             out["error"] = err or "direct_python 未成功或未写出 outputs 文件"
         return out
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         return {"ok": False, "error": str(exc)[:800]}
     finally:
         import shutil
@@ -108,7 +109,7 @@ def main() -> int:
     for pack_id, fname, kind in READ_PACKS:
         try:
             payload = _fixture_bytes(kind)
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             rows.append({"pack_id": pack_id, "ok": False, "stage": "fixture", "error": str(exc)})
             all_ok = False
             continue

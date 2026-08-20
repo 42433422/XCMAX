@@ -9,6 +9,8 @@ from urllib.parse import urlparse
 import httpx
 from sqlalchemy.orm import Session
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 
 class EmbeddingConfigError(RuntimeError):
     pass
@@ -22,7 +24,14 @@ _PROVIDER_EMBEDDING_DEFAULTS: Dict[str, tuple[str, int]] = {
     "together": ("BAAI/bge-large-en-v1.5", 1024),
     "ollama": ("nomic-embed-text", 768),
 }
-_EMBEDDING_PROVIDER_ORDER = ("openai", "siliconflow", "dashscope", "zhipu", "together", "ollama")
+_EMBEDDING_PROVIDER_ORDER = (
+    "openai",
+    "siliconflow",
+    "dashscope",
+    "zhipu",
+    "together",
+    "ollama",
+)
 
 
 def _env(name: str) -> str:
@@ -102,7 +111,7 @@ def _resolve_embedding_config(
                     source = f"{candidate}:{provider_source}"
                     selected_provider = candidate
                     break
-        except Exception:
+        except RECOVERABLE_ERRORS:
             # 回退到 MODSTORE_EMBEDDING_* 环境变量，避免状态接口因 BYOK 解密问题中断。
             pass
     out: Dict[str, Any] = {

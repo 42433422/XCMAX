@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.utils.path_utils import resolve_fhd_repo_root
+from app.utils.path_io.path_utils import resolve_fhd_repo_root
 
 logger = logging.getLogger(__name__)
 
@@ -138,7 +138,9 @@ class PriceListGenerator:
                 title.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 title_run = title.runs[0]
                 title_run.font.name = "SimSun"
-                title_run._element.rPr.rFonts.set(qn("w:eastAsia"), "SimSun")
+                title_run._element.get_or_add_rPr().get_or_add_rFonts().set(
+                    qn("w:eastAsia"), "SimSun"
+                )
                 title_run.font.size = Pt(16)
                 title_run.bold = True
 
@@ -147,7 +149,9 @@ class PriceListGenerator:
                 date_para = doc.add_paragraph(f"生成日期：{date_str}")
                 date_run = date_para.runs[0]
                 date_run.font.name = "SimSun"
-                date_run._element.rPr.rFonts.set(qn("w:eastAsia"), "SimSun")
+                date_run._element.get_or_add_rPr().get_or_add_rFonts().set(
+                    qn("w:eastAsia"), "SimSun"
+                )
                 date_run.font.size = Pt(10)
 
                 doc.add_paragraph()  # 空行

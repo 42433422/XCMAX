@@ -11,8 +11,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-import pytest
-
 from vibe_coding import MockLLM, VibeCoder
 from vibe_coding.agent.tools.runner import ToolReport
 
@@ -58,9 +56,7 @@ def test_heal_project_with_tool_runner(tmp_path: Path) -> None:
     project = tmp_path / "proj"
     project.mkdir()
     (project / "pkg").mkdir()
-    (project / "pkg" / "math.py").write_text(
-        "def add(a, b):\n    return a + b  # broken\n", encoding="utf-8"
-    )
+    (project / "pkg" / "math.py").write_text("def add(a, b):\n    return a + b  # broken\n", encoding="utf-8")
 
     # Round 1: patch changes "broken" → "fixed"; tool runner fails → triggers round 2.
     # Round 2: patch changes "fixed" to itself (no-op is fine) and tool runner passes.

@@ -3,7 +3,10 @@ import { api } from '../api'
 import { useAuthStore } from '../stores/auth'
 
 export function normalizeAdminDigestCode(raw: string): string {
-  return (raw || '').replace(/[^0-9A-Fa-f]/gi, '').toUpperCase().slice(0, 6)
+  return (raw || '')
+    .replace(/[^0-9A-Fa-f]/gi, '')
+    .toUpperCase()
+    .slice(0, 6)
 }
 
 const VERIFY_MS = 45_000
@@ -51,12 +54,9 @@ export function useAdminDigestUnlock() {
     busy.value = true
     err.value = ''
     code.value = raw
-    let verifyTimer: ReturnType<typeof setTimeout> | undefined
+    let verifyTimer: number | undefined
     const timeoutReject = new Promise<never>((_, rej) => {
-      verifyTimer = window.setTimeout(
-        () => rej(new Error(`校验请求超时（${VERIFY_MS / 1000}s），请检查网络或稍后重试`)),
-        VERIFY_MS,
-      )
+      verifyTimer = window.setTimeout(() => rej(new Error(`校验请求超时（${VERIFY_MS / 1000}s），请检查网络或稍后重试`)), VERIFY_MS)
     })
     try {
       const res = (await Promise.race([
@@ -79,8 +79,7 @@ export function useAdminDigestUnlock() {
     } catch (e) {
       const baseMsg = e instanceof Error ? e.message : String(e)
       const hint =
-        /身份码无效|已过期|校验失败|400/i.test(baseMsg) &&
-        !/MODSTORE_DIGEST|UPSTREAM|digest_api/i.test(baseMsg)
+        /身份码无效|已过期|校验失败|400/i.test(baseMsg) && !/MODSTORE_DIGEST|UPSTREAM|digest_api/i.test(baseMsg)
           ? ' 请确认浏览器所连市场 API 与身份码来源一致。'
           : ''
       err.value = baseMsg + hint

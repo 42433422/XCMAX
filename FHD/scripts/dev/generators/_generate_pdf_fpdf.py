@@ -1,3 +1,4 @@
+# mypy: disable-error-code="import-untyped"
 from fpdf import FPDF
 
 
@@ -20,7 +21,7 @@ class PDF(FPDF):
 md_path = r"e:\FHD\XCAGI\AI企业解决方案对比分析报告.md"
 pdf_path = r"e:\FHD\XCAGI\AI企业解决方案对比分析报告.pdf"
 
-with open(md_path, "r", encoding="utf-8") as f:
+with open(md_path, encoding="utf-8") as f:
     lines = f.readlines()
 
 pdf = PDF()

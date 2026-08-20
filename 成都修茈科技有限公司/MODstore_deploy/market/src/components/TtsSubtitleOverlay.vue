@@ -1,13 +1,7 @@
 <template>
   <Teleport to="body">
     <Transition name="tts-sub">
-      <div
-        v-if="visible && current"
-        class="tts-sub"
-        role="status"
-        aria-live="polite"
-        aria-label="朗读字幕"
-      >
+      <div v-if="visible && current" class="tts-sub" role="status" aria-live="polite" aria-label="朗读字幕">
         <button type="button" class="tts-sub__close" aria-label="关闭字幕" title="关闭" @click="dismiss">
           <svg viewBox="0 0 16 16" width="14" height="14" fill="none" aria-hidden="true">
             <path d="M4 4l8 8M12 4L4 12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
@@ -86,7 +80,9 @@ const { visible, current, dismiss } = useTtsSubtitleStore()
 
 .tts-sub-enter-active,
 .tts-sub-leave-active {
-  transition: opacity 0.28s ease, transform 0.28s ease;
+  transition:
+    opacity 0.28s ease,
+    transform 0.28s ease;
 }
 
 .tts-sub-enter-from,

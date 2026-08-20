@@ -30,8 +30,5 @@ export function reportVoiceLatencyIfComplete(): Record<string, number> | null {
     speech_to_llm_ms: llm ? Math.round(llm - end) : -1,
     speech_to_tts_ms: Math.round(tts - end),
   }
-  if (import.meta.env?.DEV) {
-    console.info('[voice_latency]', report)
-  }
   return report
 }

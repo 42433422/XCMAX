@@ -69,9 +69,7 @@ describe('workflowEmployeeRegistry', () => {
     it('returns existing employees when no mods provided', () => {
       const registry: WorkflowEmployeeRegistryV1 = {
         schemaVersion: 1,
-        employees: [
-          { id: 'emp1', label: 'Employee 1', kind: 'mod_extension', order: 1, source: 'json' },
-        ],
+        employees: [{ id: 'emp1', label: 'Employee 1', kind: 'mod_extension', order: 1, source: 'json' }],
       }
       const result = mergeModManifestEntries(registry, [])
       expect(result).toHaveLength(1)
@@ -83,9 +81,7 @@ describe('workflowEmployeeRegistry', () => {
       const mods = [
         {
           id: 'mod1',
-          workflow_employees: [
-            { id: 'emp1', label: 'Employee 1' },
-          ],
+          workflow_employees: [{ id: 'emp1', label: 'Employee 1' }],
         },
       ]
       const result = mergeModManifestEntries(registry, mods as any)

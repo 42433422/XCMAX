@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from contextvars import ContextVar, Token
-from typing import Any
+from typing import Any, cast
 
 _OWNER_USER_ID: ContextVar[int | None] = ContextVar("etl_llm_owner_user_id", default=None)
 
@@ -66,11 +66,14 @@ class SessionMarketProvider:
             timeout=timeout,
         )
         try:
-            return await adapter.chat_completion(
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                **kwargs,
+            return cast(
+                "dict[str, Any] | None",
+                await adapter.chat_completion(
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    **kwargs,
+                ),
             )
         finally:
             await adapter.close()

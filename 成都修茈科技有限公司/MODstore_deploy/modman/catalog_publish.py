@@ -10,6 +10,8 @@ from typing import Any, Dict, cast
 
 from modman.artifact_constants import normalize_artifact
 
+BOUNDARY_ERRORS = (Exception,)
+
 
 def _read_manifest_from_zip(zip_path: Path) -> Dict[str, Any]:
     with zipfile.ZipFile(zip_path, "r") as zf:
@@ -77,7 +79,7 @@ def main_publish(zip_path: str, catalog_url: str, token: str) -> int:
         return 1
     try:
         code, msg = publish_zip(p, catalog_url, token)
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         print(str(e), file=sys.stderr)
         return 1
     if code != 0:

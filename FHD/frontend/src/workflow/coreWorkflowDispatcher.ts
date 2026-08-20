@@ -9,12 +9,7 @@ export const CORE_WORKFLOW_HOST_EVENTS = {
   wechatStarPolled: 'xcagi:wechat-star-feed-polled',
 } as const
 
-export type CoreWorkflowModRunAction =
-  | 'status'
-  | 'signal_ack'
-  | 'audit_summary'
-  | 'feedback_ack'
-  | 'enqueue_ack'
+export type CoreWorkflowModRunAction = 'status' | 'signal_ack' | 'audit_summary' | 'feedback_ack' | 'enqueue_ack'
 
 /** Mod 已安装时向员工 run 端点投递；失败不阻断宿主事件链 */
 export function dispatchCoreWorkflowModRun(
@@ -51,9 +46,9 @@ export type WechatStarPolledDetail = {
   ok?: boolean
 }
 
-export function buildLabelPrintHostUpdate(
-  detail: LabelPrintSignalDetail,
-): { lastLabelPrint: CoreWorkflowTimestampLine } {
+export function buildLabelPrintHostUpdate(detail: LabelPrintSignalDetail): {
+  lastLabelPrint: CoreWorkflowTimestampLine
+} {
   const line = String(detail.line || '').trim() || '标签/打印类消息'
   return { lastLabelPrint: { at: Number(detail.at) || Date.now(), line } }
 }
@@ -64,9 +59,13 @@ export function buildReceiptFeedbackHostUpdate(detail: ReceiptFeedbackSignalDeta
   pushDescription: string
 } {
   const contact = String(detail.contactName || '星标联系人').trim()
-  const msg = String(detail.messageText || '').trim().slice(0, 400)
+  const msg = String(detail.messageText || '')
+    .trim()
+    .slice(0, 400)
   const il = String(detail.intentLabel || '').trim()
-  const idetail = String(detail.intentDetail || '').trim().slice(0, 240)
+  const idetail = String(detail.intentDetail || '')
+    .trim()
+    .slice(0, 240)
   const line = String(detail.line || '').trim() || `${contact}：${msg.slice(0, 80)}`
   const detailParts = [
     `【客户反馈 · 业务进程】联系人：${contact}`,

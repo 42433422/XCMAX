@@ -6,20 +6,20 @@
 
 ## 负责文件
 
-| 路径 | 说明 |
-|------|------|
-| `MODstore_deploy/tests/**` | MODstore 后端测试 |
-| `vibe-coding/tests/**` | vibe-coding 单元测试 |
-| `MODstore_deploy/market/src/**/*.test.ts` | Market 前端单测 |
-| `MODstore_deploy/market/src/**/*.spec.ts` | Market 前端 E2E spec |
-| `MODstore_deploy/market/src/test/**` | Market 前端测试基础设施 |
-| `MODstore_deploy/market/vite.config.ts` | 前端测试配置（vitest） |
-| `playwright.config.ts` | E2E 测试配置 |
-| `.pre-commit-config.yaml` | 提交前钩子配置 |
-| `.github/workflows/ci-*.yml` | CI 工作流测试步骤 |
-| `MODstore_deploy/tests/test_coverage_gates.py` | 覆盖率门禁配置 |
-| `MODstore_deploy/tests/conftest.py` | MODstore 测试共享 fixture |
-| `vibe-coding/tests/conftest.py` | vibe-coding 测试共享 fixture |
+| 路径                                           | 说明                         |
+| ---------------------------------------------- | ---------------------------- |
+| `MODstore_deploy/tests/**`                     | MODstore 后端测试            |
+| `vibe-coding/tests/**`                         | vibe-coding 单元测试         |
+| `MODstore_deploy/market/src/**/*.test.ts`      | Market 前端单测              |
+| `MODstore_deploy/market/src/**/*.spec.ts`      | Market 前端 E2E spec         |
+| `MODstore_deploy/market/src/test/**`           | Market 前端测试基础设施      |
+| `MODstore_deploy/market/vite.config.ts`        | 前端测试配置（vitest）       |
+| `playwright.config.ts`                         | E2E 测试配置                 |
+| `.pre-commit-config.yaml`                      | 提交前钩子配置               |
+| `.github/workflows/ci-*.yml`                   | CI 工作流测试步骤            |
+| `MODstore_deploy/tests/test_coverage_gates.py` | 覆盖率门禁配置               |
+| `MODstore_deploy/tests/conftest.py`            | MODstore 测试共享 fixture    |
+| `vibe-coding/tests/conftest.py`                | vibe-coding 测试共享 fixture |
 
 ## vibe-coding Agent 层测试（多 Agent 协同回归）
 
@@ -36,11 +36,11 @@ python -m pytest tests/agent/ --cov=src/vibe_coding/agent --cov-report=term-miss
 
 **失败归属简要判断**
 
-| 现象 | 倾向 |
-|------|------|
-| `ImportError` / `ModuleNotFoundError` 指向 `vibe_coding.agent` 以外 | 环境或仓库切根目录错误（确认 `cwd` 为 `vibe-coding/` 且已 `pip install -e ".[test]"`） |
-| 单测断言失败、`MockLLM` 与 orchestration 相关 | 多为 Agent 逻辑或测试数据预期变化 → 通知 `vibe-coding-maintainer` |
-| `tree-sitter` / Docker 相关 optional 依赖缺失 | 阅读用例文件顶部 `pytest.importorskip` / skip 说明；缺依赖时在 CI 或本地安装对应 extra，勿改被测源码 |
+| 现象                                                                | 倾向                                                                                                 |
+| ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `ImportError` / `ModuleNotFoundError` 指向 `vibe_coding.agent` 以外 | 环境或仓库切根目录错误（确认 `cwd` 为 `vibe-coding/` 且已 `pip install -e ".[test]"`）               |
+| 单测断言失败、`MockLLM` 与 orchestration 相关                       | 多为 Agent 逻辑或测试数据预期变化 → 通知 `vibe-coding-maintainer`                                    |
+| `tree-sitter` / Docker 相关 optional 依赖缺失                       | 阅读用例文件顶部 `pytest.importorskip` / skip 说明；缺依赖时在 CI 或本地安装对应 extra，勿改被测源码 |
 
 编排与同序回归可参考：`tests/agent/test_orchestration.py`（Planner / Coder / Reviewer / Researcher / Tester / Best-of-N）。
 
@@ -58,18 +58,18 @@ python -m pytest tests/agent/ --cov=src/vibe_coding/agent --cov-report=term-miss
 
 ## KPI
 
-| 指标 | 目标 |
-|------|------|
-| MODstore 测试通过率 | 100%（CI 门禁）|
-| vibe-coding 测试通过率 | 100% |
-| Market 前端测试通过率 | 100% |
-| 测试覆盖率（MODstore） | ≥ 80% |
-| 测试覆盖率（vibe-coding） | ≥ 85% |
-| 测试覆盖率（Market 前端） | ≥ 80% |
-| Playwright E2E 通过率 | ≥ 95% |
-| TypeScript 类型检查 | 零错误 |
-| CI 测试步骤覆盖完整率 | 100% |
-| pre-commit hook 覆盖率 | 100%（所有 linter/formatter 均有 hook）|
+| 指标                      | 目标                                    |
+| ------------------------- | --------------------------------------- |
+| MODstore 测试通过率       | 100%（CI 门禁）                         |
+| vibe-coding 测试通过率    | 100%                                    |
+| Market 前端测试通过率     | 100%                                    |
+| 测试覆盖率（MODstore）    | ≥ 80%                                   |
+| 测试覆盖率（vibe-coding） | ≥ 85%                                   |
+| 测试覆盖率（Market 前端） | ≥ 80%                                   |
+| Playwright E2E 通过率     | ≥ 95%                                   |
+| TypeScript 类型检查       | 零错误                                  |
+| CI 测试步骤覆盖完整率     | 100%                                    |
+| pre-commit hook 覆盖率    | 100%（所有 linter/formatter 均有 hook） |
 
 ## 禁区
 

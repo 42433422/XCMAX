@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  buildGenerateJsonFile,
-  detectUserProvidedJsonFile,
-  resolveGenerateInputs,
-} from './officeGenerateFromText'
+import { buildGenerateJsonFile, detectUserProvidedJsonFile, resolveGenerateInputs } from './officeGenerateFromText'
 
 describe('officeGenerateFromText', () => {
   it('builds minimal json file with user_query', async () => {

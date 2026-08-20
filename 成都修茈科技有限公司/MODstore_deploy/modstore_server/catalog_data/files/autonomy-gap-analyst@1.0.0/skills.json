@@ -3,32 +3,20 @@
     {
       "name": "scorecard-gap-analysis",
       "description": "Capability declared by autonomous proposal: scorecard-gap-analysis",
-      "inputs": [
-        "founder_autonomy_scorecard_json"
-      ],
-      "outputs": [
-        "evidence_gap_analysis"
-      ]
+      "inputs": ["founder_autonomy_scorecard_json"],
+      "outputs": ["evidence_gap_analysis"]
     },
     {
       "name": "evidence-receipt-validation",
       "description": "Capability declared by autonomous proposal: evidence-receipt-validation",
-      "inputs": [
-        "founder_autonomy_scorecard_json"
-      ],
-      "outputs": [
-        "evidence_gap_analysis"
-      ]
+      "inputs": ["founder_autonomy_scorecard_json"],
+      "outputs": ["evidence_gap_analysis"]
     },
     {
       "name": "bounded-capability-planning",
       "description": "Capability declared by autonomous proposal: bounded-capability-planning",
-      "inputs": [
-        "founder_autonomy_scorecard_json"
-      ],
-      "outputs": [
-        "evidence_gap_analysis"
-      ]
+      "inputs": ["founder_autonomy_scorecard_json"],
+      "outputs": ["evidence_gap_analysis"]
     }
   ]
 }

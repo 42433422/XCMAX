@@ -46,7 +46,7 @@ function summarizeReply(question: string, report: AllHandsReport): string {
   if (synth && synth.markdown && !synth.error) {
     const cited = (synth.cited_employees || []).join('、') || '—'
     return [
-      `# 数字管家综合答复（员工大会 #${(report.summary?.total ?? report.employees?.length ?? 0)} 人）`,
+      `# 数字管家综合答复（员工大会 #${report.summary?.total ?? report.employees?.length ?? 0} 人）`,
       `> 问题：${question}`,
       '',
       synth.markdown.trim(),
@@ -55,11 +55,7 @@ function summarizeReply(question: string, report: AllHandsReport): string {
     ].join('\n')
   }
   // 综合阶段失败/不可用时退回到「逐员工答复」摘要
-  const lines: string[] = [
-    `# 员工大会答复（综合阶段不可用）`,
-    `> 问题：${question}`,
-    '',
-  ]
+  const lines: string[] = [`# 员工大会答复（综合阶段不可用）`, `> 问题：${question}`, '']
   if (synth?.error) lines.push(`> 综合答复异常：${synth.error}`, '')
   for (const row of report.employees || []) {
     lines.push(`- **[${row.employee_id}]** ${row.name || ''} · 状态：${row.status || '—'}`)
@@ -94,15 +90,7 @@ export const askAllHandsSkill: AgentSkill = {
   description: '把一个问题转给所有在岗员工讨论，由数字管家做综合答复',
   version: '1.0.0',
   trigger: {
-    keywords: [
-      '/全员大会',
-      '/ask-all-hands',
-      '/allhands',
-      '员工大会',
-      '问全员',
-      '召集全员',
-      '让所有员工',
-    ],
+    keywords: ['/全员大会', '/ask-all-hands', '/allhands', '员工大会', '问全员', '召集全员', '让所有员工'],
     intent: ['ask_all_hands', 'all_hands', '员工大会'],
   },
   permission: 'execute',

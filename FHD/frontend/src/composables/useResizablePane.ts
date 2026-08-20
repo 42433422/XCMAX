@@ -31,7 +31,7 @@ export function useResizablePane(options: UseResizablePaneOptions) {
       defaultSize: options.defaultSize,
       minSize: options.minSize,
       maxSize: options.maxSize,
-    })
+    }),
   )
 
   const paneStyle = computed(() => ({
@@ -50,8 +50,7 @@ export function useResizablePane(options: UseResizablePaneOptions) {
 
   const onResizeMove = (event: MouseEvent) => {
     if (!isResizing.value) return
-    const pointer =
-      options.orientation === 'horizontal' ? event.clientY : event.clientX
+    const pointer = options.orientation === 'horizontal' ? event.clientY : event.clientX
     const rawDelta = pointer - startPointer
     const delta = options.invertDelta ? -rawDelta : rawDelta
     paneLayoutStore.setPaneSize(options.paneKey, startPaneSize + delta, {
@@ -64,12 +63,10 @@ export function useResizablePane(options: UseResizablePaneOptions) {
   const startResize = (event: MouseEvent) => {
     if (!isEnabled()) return
     isResizing.value = true
-    startPointer =
-      options.orientation === 'horizontal' ? event.clientY : event.clientX
+    startPointer = options.orientation === 'horizontal' ? event.clientY : event.clientX
     startPaneSize = paneSize.value
     document.body.style.userSelect = 'none'
-    document.body.style.cursor =
-      options.orientation === 'horizontal' ? 'row-resize' : 'col-resize'
+    document.body.style.cursor = options.orientation === 'horizontal' ? 'row-resize' : 'col-resize'
     options.onResizeStart?.()
     window.addEventListener('mousemove', onResizeMove)
     window.addEventListener('mouseup', stopResize)

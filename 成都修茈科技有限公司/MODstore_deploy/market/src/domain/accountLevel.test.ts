@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  buildLevelProfileDict,
-  isMeAdminPayload,
-  normalizeMeResponse,
-  LEVEL_THRESHOLDS,
-} from './accountLevel'
+import { buildLevelProfileDict, isMeAdminPayload, normalizeMeResponse, LEVEL_THRESHOLDS } from './accountLevel'
 
 describe('accountLevel', () => {
   it('buildLevelProfileDict matches low tiers', () => {
@@ -47,7 +42,7 @@ describe('accountLevel', () => {
   })
 
   it('buildLevelProfileDict handles string experience', () => {
-    expect(buildLevelProfileDict('5000' as any).level).toBe(3)
+    expect(buildLevelProfileDict('5000' as UnsafeTestValue).level).toBe(3)
   })
 
   it('buildLevelProfileDict at exact threshold boundary', () => {
@@ -110,13 +105,13 @@ describe('accountLevel', () => {
 
   it('buildLevelProfileDict handles very large number string', () => {
     // 类型边界：字符串数字应被正确转换
-    expect(buildLevelProfileDict('999999' as any).level).toBe(7)
+    expect(buildLevelProfileDict('999999' as UnsafeTestValue).level).toBe(7)
   })
 
   it('buildLevelProfileDict handles boolean experience (truthy/falsy edge)', () => {
     // 类型边界：布尔值 Number(true)=1, Number(false)=0
-    expect(buildLevelProfileDict(true as any).experience).toBe(1)
-    expect(buildLevelProfileDict(false as any).experience).toBe(0)
+    expect(buildLevelProfileDict(true as UnsafeTestValue).experience).toBe(1)
+    expect(buildLevelProfileDict(false as UnsafeTestValue).experience).toBe(0)
   })
 
   it('LEVEL_THRESHOLDS has 7 levels', () => {

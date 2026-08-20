@@ -6,12 +6,13 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import struct
 import subprocess
 import sys
 import tempfile
 import time
 from pathlib import Path
+
+BOUNDARY_ERRORS = (Exception,)
 
 CHUNK_SAMPLES = 960  # 60ms @ 16kHz, matches frontend FunASRBackend
 SAMPLE_RATE = 16000
@@ -104,7 +105,7 @@ def ensure_token() -> None:
         from modstore_server.auth_service import create_access_token
 
         os.environ["ASR_TOKEN"] = create_access_token(1, "asr-speech-smoke")
-    except Exception:
+    except BOUNDARY_ERRORS:
         pass
 
 
@@ -120,7 +121,12 @@ async def recognize_pcm(pcm: bytes, label: str) -> dict:
         hello = await asyncio.wait_for(ws.recv(), timeout=10)
         hello_j = json.loads(hello)
         if hello_j.get("type") == "error":
-            return {"label": label, "ok": False, "error": hello_j.get("message"), "latency_ms": 0}
+            return {
+                "label": label,
+                "ok": False,
+                "error": hello_j.get("message"),
+                "latency_ms": 0,
+            }
 
         await ws.send(json.dumps(CFG))
         chunks = 0
@@ -183,7 +189,7 @@ async def main() -> int:
         for i, phrase in enumerate(PHRASES):
             print(f"\n=== TTS + ASR: {phrase!r} ===")
             pcm = await synthesize_pcm(phrase, work / f"utt_{i}")
-            print(f"pcm={len(pcm)} bytes (~{len(pcm)/2/SAMPLE_RATE:.1f}s)")
+            print(f"pcm={len(pcm)} bytes (~{len(pcm) / 2 / SAMPLE_RATE:.1f}s)")
             result = await recognize_pcm(pcm, phrase)
             results.append(result)
             status = "PASS" if result["ok"] else "FAIL"

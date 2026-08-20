@@ -1,3 +1,4 @@
+# mypy: disable-error-code="import-not-found"
 """
 应用服务层测试
 

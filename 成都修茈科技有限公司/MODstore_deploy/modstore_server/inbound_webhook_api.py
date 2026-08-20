@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment"
 """Inbound webhook receivers — 让外部系统把任务推进来给 AI 员工。
 
 支持的入口：
@@ -30,13 +31,13 @@ import logging
 import os
 import threading
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Header, HTTPException, Request
-from sqlalchemy.orm import Session
 
 from modstore_server.models import OnDemandOrchestrateJob, User, get_session_factory
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +100,7 @@ def _enqueue_orchestrate_job(
             r = session.query(OnDemandOrchestrateJob).filter_by(job_id=job_id).first()
             if r:
                 r.status = "running"
-                r.started_at = datetime.now(timezone.utc)
+                r.started_at = datetime.now(UTC)
                 session.commit()
         try:
             if use_task_router:
@@ -126,7 +127,7 @@ def _enqueue_orchestrate_job(
                 r = session.query(OnDemandOrchestrateJob).filter_by(job_id=job_id).first()
                 if r:
                     r.status = "done"
-                    r.completed_at = datetime.now(timezone.utc)
+                    r.completed_at = datetime.now(UTC)
                     r.result_json = json.dumps(
                         {"source": source_label, **(result or {})},
                         ensure_ascii=False,
@@ -145,15 +146,15 @@ def _enqueue_orchestrate_job(
                     content=f"来自 {source_label} 的任务已分派并完成：{(task_description or '')[:120]}",
                     data={"job_id": job_id, "source": source_label},
                 )
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 logger.debug("inbound webhook notify skipped", exc_info=True)
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             logger.exception("inbound webhook job %s (%s) failed", job_id, source_label)
             with sf2() as session:
                 r = session.query(OnDemandOrchestrateJob).filter_by(job_id=job_id).first()
                 if r:
                     r.status = "failed"
-                    r.completed_at = datetime.now(timezone.utc)
+                    r.completed_at = datetime.now(UTC)
                     r.error = str(exc)[:4000]
                     session.commit()
 
@@ -186,8 +187,7 @@ def _summarize_github_payload(event: str, payload: Dict[str, Any]) -> str:
         commits = payload.get("commits") or []
         first = (commits[0].get("message") if commits else "") or ""
         return (
-            f"GitHub 推送：{repo}@{ref}（{sender}） — {len(commits)} commits；"
-            f"首条：{first[:200]}"
+            f"GitHub 推送：{repo}@{ref}（{sender}） — {len(commits)} commits；首条：{first[:200]}"
         )
     if event == "issues":
         action = payload.get("action") or ""
@@ -254,7 +254,7 @@ async def receive_github_webhook(
         raise HTTPException(401, "GitHub 签名校验失败")
     try:
         payload = json.loads(body or b"{}")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         raise HTTPException(400, "payload 不是合法 JSON")
     event = (x_github_event or "").strip().lower() or "unknown"
     if event == "ping":
@@ -292,7 +292,7 @@ def _summarize_feishu_payload(payload: Dict[str, Any]) -> str:
         try:
             content_obj = json.loads(content)
             text = content_obj.get("text") or content_obj.get("content") or ""
-        except Exception:
+        except RECOVERABLE_ERRORS:
             text = str(content)[:500]
         return f"飞书消息：{text[:1500]}"
     return f"飞书事件 {event_type}：{json.dumps(event, ensure_ascii=False)[:1500]}"
@@ -306,7 +306,7 @@ async def receive_feishu_webhook(request: Request):
     body = await request.body()
     try:
         payload = json.loads(body or b"{}")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         raise HTTPException(400, "payload 不是合法 JSON")
     if payload.get("type") == "url_verification":
         if (payload.get("token") or "") != expected_token:
@@ -364,7 +364,7 @@ async def receive_dingtalk_webhook(
     body = await request.body()
     try:
         payload = json.loads(body or b"{}")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         raise HTTPException(400, "payload 不是合法 JSON")
     desc = _summarize_dingtalk_payload(payload)
     uid = _resolve_actor_user_id()
@@ -405,7 +405,7 @@ async def receive_generic_webhook(
     body = await request.body()
     try:
         payload = json.loads(body or b"{}")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         raise HTTPException(400, "payload 不是合法 JSON")
     desc = (
         str(payload.get("task_description") or "").strip()

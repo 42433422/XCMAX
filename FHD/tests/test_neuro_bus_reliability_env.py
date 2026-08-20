@@ -8,6 +8,7 @@ import app.neuro_bus.dead_letter_queue as dead_letter_queue_mod
 from app.neuro_bus.bus import NeuroBus, _neuro_env_flag
 from app.neuro_bus.dead_letter_queue import get_dead_letter_queue
 from app.neuro_bus.events.base import EventMetadata, EventPriority, NeuroEvent
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 
 @pytest.mark.parametrize(
@@ -30,7 +31,7 @@ def test_neuro_env_flag_parsing(monkeypatch, raw: str, expected: bool) -> None:
 def _shutdown_executor(bus: NeuroBus) -> None:
     try:
         bus._executor.shutdown(wait=False)
-    except Exception:
+    except BOUNDARY_ERRORS:
         pass
 
 

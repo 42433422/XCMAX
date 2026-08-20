@@ -45,6 +45,8 @@ def normalize_market_chat_response(
             message = (
                 choice_dict.get("message") if isinstance(choice_dict.get("message"), dict) else {}
             )
+            if not isinstance(message, dict):
+                message = {}
             normalized_message: Dict[str, Any] = {
                 "role": message.get("role") or "assistant",
                 "content": message.get("content") or "",

@@ -247,9 +247,9 @@ class TestResolveAuthBootstrapEngine:
         from app.db.init_db import _resolve_auth_bootstrap_engine
 
         with patch(
-            "app.db.init_db._create_engine_for_url", side_effect=Exception("no"), create=True
+            "app.db.init_db._create_engine_for_url", side_effect=RuntimeError("no"), create=True
         ):
-            with patch("app.db._get_engine", side_effect=Exception("no"), create=True):
+            with patch("app.db._get_engine", side_effect=RuntimeError("no"), create=True):
                 result = _resolve_auth_bootstrap_engine(None, database_url="sqlite:///test.db")
         # When _create_engine_for_url fails and no engine provided,
         # it tries _get_engine which also fails, returns None

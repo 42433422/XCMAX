@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment"
 """incident-bus：事件入队并按 EmployeeTriggerBinding 派发员工任务。"""
 
 from __future__ import annotations
@@ -7,11 +8,15 @@ import json
 import logging
 import os
 import threading
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List
 
-from modstore_server.employee_executor import execute_employee_task
+from modstore_server.employee_executor import execute_employee_task as execute_employee_task
+from modstore_server.incident_dispatch import _dispatch_incident_body as _dispatch_incident_body
+from modstore_server.incident_dispatch import (
+    _dispatch_intake_routing_plan as _dispatch_intake_routing_plan,
+)
 from modstore_server.integrations.ops_action_handlers import EVENT_TYPES
 from modstore_server.models import (
     CatalogItem,
@@ -20,6 +25,7 @@ from modstore_server.models import (
     User,
     get_session_factory,
 )
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 from modstore_server.platform_llm_scope import platform_llm_scoped
 
 logger = logging.getLogger(__name__)
@@ -101,7 +107,7 @@ def _publish_stream_shadow(
                     incident_id,
                     reason[:200],
                 )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception(
             "incident_bus: redis stream shadow publish crashed event=%s incident_id=%s",
             event_type,
@@ -133,7 +139,7 @@ def publish(
     fp = fingerprint or _fingerprint(payload, source)
     sf = get_session_factory()
     with sf() as session:
-        cutoff = datetime.now(timezone.utc) - timedelta(minutes=10)
+        cutoff = datetime.now(UTC) - timedelta(minutes=10)
         old = (
             session.query(IncidentEvent)
             .filter(
@@ -173,7 +179,7 @@ def publish(
                 payload=payload if isinstance(payload, dict) else {},
                 auto_dispatch=True,
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.exception("employee suggestion ingest failed")
     if event_type == "consistency_check.completed":
         try:
@@ -190,7 +196,7 @@ def publish(
                     source=source or "consistency_checker",
                     source_ref=str((payload or {}).get("source_ref") or "")[:128],
                 )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.exception("consistency_check.completed autofix trigger failed")
     # 默认异步派发：同步跑员工编排/LLM 会拖死 HTTP（如 AI 客服 /chat → 处理中卡住）。
     # 测试或显式需要可设 MODSTORE_INCIDENT_SYNC_DISPATCH=1。
@@ -204,7 +210,7 @@ def publish(
     def _run_dispatch() -> None:
         try:
             _dispatch_incident(eid)
-        except Exception:  # noqa: BLE001
+        except BOUNDARY_ERRORS:  # noqa: BLE001
             logger.exception("dispatch incident id=%s failed", eid)
 
     if sync_dispatch:
@@ -322,7 +328,7 @@ def _dispatch_incident(event_id: int) -> None:
             )
             return
         claimed_here = True
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.debug("incident cluster claim skipped event_id=%s", event_id, exc_info=True)
 
     try:
@@ -333,7 +339,7 @@ def _dispatch_incident(event_id: int) -> None:
                 from modstore_server.node_coordinator import release_incident_claim
 
                 release_incident_claim(event_id)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 logger.debug(
                     "incident cluster claim release failed event_id=%s",
                     event_id,
@@ -371,272 +377,6 @@ def _routing_plan_owners(exec_result: Any) -> set[str]:
     }
 
 
-def _dispatch_intake_routing_plan(
-    exec_result: Any,
-    *,
-    incident_payload: Dict[str, Any],
-    event_type: str,
-    source: str,
-    admin_id: int,
-    catalog_ids: set[str],
-    skip_ids: set[str],
-    brief: str,
-) -> int:
-    """Execute ``proposed_owner`` employees from intake routing_plan (real side effects)."""
-
-    from modstore_server.duty_workforce_contracts import duty_event_execution_input
-
-    extra = 0
-    for row in _extract_routing_plan(exec_result):
-        owner = str(row.get("proposed_owner") or "").strip()
-        if not owner or owner in skip_ids or owner not in catalog_ids:
-            continue
-        try:
-            duty_input = duty_event_execution_input(
-                owner,
-                event_type=event_type,
-                source=source,
-                incident=incident_payload,
-            )
-            owner_brief = (f"{brief} | route={owner} request_id={row.get('request_id') or ''}")[
-                :500
-            ]
-            execute_employee_task(
-                owner,
-                owner_brief,
-                duty_input
-                or _incident_employee_input(
-                    incident_payload=incident_payload,
-                    event_type=event_type,
-                    source=source,
-                ),
-                user_id=0 if duty_input else admin_id,
-            )
-            extra += 1
-            skip_ids.add(owner)
-            logger.info(
-                "incident_bus: intake routing_plan dispatched owner=%s request_id=%s",
-                owner,
-                row.get("request_id"),
-            )
-        except Exception:  # noqa: BLE001
-            logger.exception("incident_bus: intake routing_plan dispatch failed owner=%s", owner)
-    return extra
-
-
-def _dispatch_incident_body(event_id: int) -> None:
-    event_type_pre = _incident_event_type(event_id)
-    if event_type_pre in _NON_DISPATCH_EVENT_TYPES:
-        logger.info(
-            "incident_bus: lifecycle event_id=%s event_type=%s recorded without employee dispatch",
-            event_id,
-            event_type_pre,
-        )
-        return
-
-    binding_only = event_type_pre in _BINDING_ONLY_EVENT_TYPES
-
-    if not binding_only and (
-        os.environ.get("MODSTORE_UNIFIED_ORCHESTRATOR_ENABLED", "1") or ""
-    ).strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }:
-        try:
-            from modstore_server.unified_autonomy_orchestrator import (
-                orchestrate_incident,
-            )
-
-            orchestration = orchestrate_incident(event_id)
-            if not orchestration.get("should_dispatch", True):
-                logger.info(
-                    "incident_bus: unified orchestrator parked event_id=%s reason=%s",
-                    event_id,
-                    orchestration.get("reason"),
-                )
-                return
-        except Exception:
-            logger.exception(
-                "unified incident orchestrator failed event_id=%s; fallback dispatch",
-                event_id,
-            )
-
-    if not binding_only and (
-        os.environ.get("MODSTORE_INCIDENT_TEAM_ENABLED", "1") or ""
-    ).strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }:
-        try:
-            from modstore_server.incident_team_orchestrator import (
-                dispatch_incident_team,
-            )
-
-            team = dispatch_incident_team(event_id)
-            if team.get("claimed"):
-                logger.info(
-                    "incident_bus: team claimed event_id=%s ok=%s team=%s",
-                    event_id,
-                    team.get("ok"),
-                    (
-                        (team.get("team") or {}).get("team")
-                        if isinstance(team.get("team"), dict)
-                        else None
-                    ),
-                )
-                # 客服工单：团队抢单后仍走 binding，让 intake-dispatcher /
-                # user-customer-service-officer 按既有订阅接单（跳过 market 防双派）。
-                if event_type_pre == "ops.intake.customer_ticket":
-                    binding_only = True
-                else:
-                    return
-            else:
-                logger.info(
-                    "incident_bus: team did not claim event_id=%s reason=%s; fallback market",
-                    event_id,
-                    team.get("reason"),
-                )
-        except Exception:
-            logger.exception("incident team failed event_id=%s; fallback market", event_id)
-
-    if not binding_only and (
-        os.environ.get("MODSTORE_EMPLOYEE_TASK_MARKET_ENABLED", "1") or ""
-    ).strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }:
-        try:
-            from modstore_server.employee_task_market import (
-                dispatch_incident_via_market,
-            )
-
-            market = dispatch_incident_via_market(event_id)
-            if market.get("ok") and market.get("claimed"):
-                logger.info(
-                    "incident_bus: market claimed event_id=%s employee=%s score=%s",
-                    event_id,
-                    market.get("employee_id"),
-                    (
-                        (market.get("winner") or {}).get("score")
-                        if isinstance(market.get("winner"), dict)
-                        else None
-                    ),
-                )
-                return
-            logger.info(
-                "incident_bus: market did not claim event_id=%s reason=%s; fallback binding dispatch",
-                event_id,
-                market.get("reason"),
-            )
-        except Exception:
-            logger.exception(
-                "incident task market failed event_id=%s; fallback binding dispatch",
-                event_id,
-            )
-
-    sf = get_session_factory()
-    admin_id = _admin_user_id()
-    if admin_id <= 0:
-        logger.warning("incident_bus: no user in DB, skip dispatch event_id=%s", event_id)
-        return
-
-    binding_ids: List[str] = []
-    catalog_ids: set[str] = set()
-    payload: Dict[str, Any] = {}
-    event_type = ""
-    source = ""
-    brief = ""
-
-    # List of (priority, employee_id) tuples for ordered dispatch
-    binding_list: List[tuple] = []
-    with sf() as session:
-        ev = session.query(IncidentEvent).filter(IncidentEvent.id == event_id).first()
-        if not ev:
-            return
-        for b in (
-            session.query(EmployeeTriggerBinding)
-            .filter(EmployeeTriggerBinding.is_active.is_(True))
-            .order_by(EmployeeTriggerBinding.priority.asc(), EmployeeTriggerBinding.id.asc())
-            .all()
-        ):
-            eid_sub = str(b.employee_id or "").strip()
-            if not eid_sub:
-                continue
-            base, filt = _parse_binding_event_key(str(b.event_type or ""))
-            if base != ev.event_type:
-                continue
-            if filt and filt != str(ev.source or ""):
-                continue
-            binding_list.append((int(b.priority or 5), eid_sub))
-        binding_ids = [eid for _, eid in sorted(binding_list)]
-        catalog_ids = _catalog_employee_ids(session)
-        try:
-            payload = json.loads(ev.payload_json or "{}")
-        except json.JSONDecodeError:
-            payload = {}
-        event_type = str(ev.event_type or "")
-        source = str(ev.source or "")
-        summary = str(payload.get("summary") or source or "incident")
-        brief = f"[{event_type}] {summary}"[:500]
-
-    dispatched = 0
-    already_ran: set[str] = set()
-    for eid_emp in binding_ids:
-        if not eid_emp or eid_emp not in catalog_ids:
-            continue
-        try:
-            from modstore_server.duty_workforce_contracts import duty_event_execution_input
-
-            duty_input = duty_event_execution_input(
-                eid_emp,
-                event_type=event_type,
-                source=source,
-                incident=payload,
-            )
-            exec_result = execute_employee_task(
-                eid_emp,
-                brief,
-                duty_input
-                or _incident_employee_input(
-                    incident_payload=payload,
-                    event_type=event_type,
-                    source=source,
-                ),
-                user_id=0 if duty_input else admin_id,
-            )
-            dispatched += 1
-            already_ran.add(eid_emp)
-            # intake-dispatcher: consume routing_plan → real downstream dispatch
-            if eid_emp == "intake-dispatcher":
-                extra = _dispatch_intake_routing_plan(
-                    exec_result,
-                    incident_payload=payload,
-                    event_type=event_type,
-                    source=source,
-                    admin_id=admin_id,
-                    catalog_ids=catalog_ids,
-                    skip_ids=already_ran,
-                    brief=brief,
-                )
-                dispatched += int(extra)
-                already_ran.update(_routing_plan_owners(exec_result))
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("incident dispatch employee=%s: %s", eid_emp, exc)
-
-    with sf() as session:
-        ev2 = session.query(IncidentEvent).filter(IncidentEvent.id == event_id).first()
-        if ev2:
-            # team/market 可能已写过 dispatched_count；binding 追加而非覆盖
-            ev2.dispatched_count = int(ev2.dispatched_count or 0) + int(dispatched)
-            session.commit()
-
-
 def sync_employee_trigger_bindings_from_yuangon(yuangon_dir: Path) -> int:
     """扫描 ``yuangon/**/employee.yaml``，按 ``triggers`` upsert :class:`EmployeeTriggerBinding`。"""
     try:
@@ -654,7 +394,7 @@ def sync_employee_trigger_bindings_from_yuangon(yuangon_dir: Path) -> int:
         for f in sorted(ydir.glob("**/employee.yaml")):
             try:
                 data = yaml.safe_load(f.read_text(encoding="utf-8"))
-            except Exception:  # noqa: BLE001
+            except BOUNDARY_ERRORS:  # noqa: BLE001
                 continue
             if not isinstance(data, dict):
                 continue

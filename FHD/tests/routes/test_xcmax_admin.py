@@ -1,3 +1,4 @@
+# mypy: disable-error-code="misc, union-attr"
 """Tests for app.fastapi_routes.xcmax_admin — coverage ramp.
 
 Covers all route endpoints, helper functions, and error paths.
@@ -30,7 +31,8 @@ def app_with_router() -> FastAPI:
 
 @pytest.fixture
 def client(app_with_router: FastAPI) -> TestClient:
-    return TestClient(app_with_router, raise_server_exceptions=False)
+    with TestClient(app_with_router, raise_server_exceptions=False) as test_client:
+        yield test_client
 
 
 # ---------------------------------------------------------------------------

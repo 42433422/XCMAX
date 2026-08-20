@@ -46,13 +46,7 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     testTimeout: 30_000,
-    include: [
-      'src/**/*.test.js',
-      'src/**/*.test.ts',
-      'tests/**/*.test.js',
-      'tests/**/*.test.ts',
-      'tests/smoke/**/*.test.js',
-    ],
+    include: ['src/**/*.test.js', 'src/**/*.test.ts', 'tests/**/*.test.js', 'tests/**/*.test.ts', 'tests/smoke/**/*.test.js'],
     exclude: [
       '**/node_modules/**',
       '**/dist/**',

@@ -227,7 +227,9 @@ class TestSystemMaintenanceRouter:
         assert result["http_status_code"] == 400
 
     def test_clear_performance_cache_no_redis(self):
-        with patch("app.utils.performance_initializer.get_performance_optimizer") as mock_get:
+        with patch(
+            "app.utils.performance.performance_initializer.get_performance_optimizer"
+        ) as mock_get:
             mock_get.return_value.redis_cache = None
             result = _registered_router_system_maintenance(
                 "clear_performance_cache", {}, {}, "admin", ""
@@ -236,7 +238,9 @@ class TestSystemMaintenanceRouter:
         assert result["http_status_code"] == 503
 
     def test_clear_performance_cache_with_pattern(self):
-        with patch("app.utils.performance_initializer.get_performance_optimizer") as mock_get:
+        with patch(
+            "app.utils.performance.performance_initializer.get_performance_optimizer"
+        ) as mock_get:
             mock_get.return_value.redis_cache.clear_pattern.return_value = 5
             result = _registered_router_system_maintenance(
                 "clear_performance_cache", {"pattern": "user:*"}, {}, "admin", ""
@@ -245,7 +249,9 @@ class TestSystemMaintenanceRouter:
         assert "user:*" in result["message"]
 
     def test_clear_performance_cache_without_pattern(self):
-        with patch("app.utils.performance_initializer.get_performance_optimizer") as mock_get:
+        with patch(
+            "app.utils.performance.performance_initializer.get_performance_optimizer"
+        ) as mock_get:
             mock_get.return_value.redis_cache.clear_local_cache = MagicMock()
             result = _registered_router_system_maintenance(
                 "clear_performance_cache", {}, {}, "admin", ""
@@ -254,7 +260,9 @@ class TestSystemMaintenanceRouter:
         assert "本地缓存" in result["message"]
 
     def test_invalidate_performance_cache_no_redis(self):
-        with patch("app.utils.performance_initializer.get_performance_optimizer") as mock_get:
+        with patch(
+            "app.utils.performance.performance_initializer.get_performance_optimizer"
+        ) as mock_get:
             mock_get.return_value.redis_cache = None
             result = _registered_router_system_maintenance(
                 "invalidate_performance_cache", {}, {}, "admin", ""
@@ -262,7 +270,9 @@ class TestSystemMaintenanceRouter:
         assert result["http_status_code"] == 503
 
     def test_invalidate_performance_cache_success(self):
-        with patch("app.utils.performance_initializer.get_performance_optimizer") as mock_get:
+        with patch(
+            "app.utils.performance.performance_initializer.get_performance_optimizer"
+        ) as mock_get:
             mock_get.return_value.redis_cache.delete.return_value = 3
             result = _registered_router_system_maintenance(
                 "invalidate_performance_cache", {"keys": ["k1", "k2", "k3"]}, {}, "admin", ""
@@ -271,7 +281,9 @@ class TestSystemMaintenanceRouter:
         assert result["data"]["deleted_count"] == 3
 
     def test_reinitialize_performance(self):
-        with patch("app.utils.performance_initializer.init_performance_optimization") as mock_init:
+        with patch(
+            "app.utils.performance.performance_initializer.init_performance_optimization"
+        ) as mock_init:
             mock_init.return_value.get_status.return_value = {"ok": True}
             result = _registered_router_system_maintenance(
                 "reinitialize_performance", {}, {}, "admin", ""
@@ -474,7 +486,7 @@ class TestLabelTemplateGeneratorRouter:
 class TestDocumentTemplateRouter:
     def test_create(self):
         with patch(
-            "app.fastapi_routes.document_templates_compat.run_archive_template_create",
+            "app.legacy.routes.document_templates_compat.run_archive_template_create",
             return_value=({"success": True}, 201),
         ):
             result = _registered_router_document_template("create", {"name": "T1"}, {}, "admin", "")
@@ -483,7 +495,7 @@ class TestDocumentTemplateRouter:
 
     def test_update(self):
         with patch(
-            "app.fastapi_routes.document_templates_compat.run_archive_template_update",
+            "app.legacy.routes.document_templates_compat.run_archive_template_update",
             return_value=({"success": True}, 200),
         ):
             result = _registered_router_document_template("update", {"id": 1}, {}, "admin", "")
@@ -491,7 +503,7 @@ class TestDocumentTemplateRouter:
 
     def test_delete(self):
         with patch(
-            "app.fastapi_routes.document_templates_compat.run_archive_template_delete",
+            "app.legacy.routes.document_templates_compat.run_archive_template_delete",
             return_value=({"success": True}, 200),
         ):
             result = _registered_router_document_template(
@@ -501,7 +513,7 @@ class TestDocumentTemplateRouter:
 
     def test_delete_with_base_dir(self):
         with patch(
-            "app.fastapi_routes.document_templates_compat.run_archive_template_delete",
+            "app.legacy.routes.document_templates_compat.run_archive_template_delete",
             return_value=({"success": False, "message": "err"}, 400),
         ) as mock:
             result = _registered_router_document_template(
@@ -516,7 +528,7 @@ class TestDocumentTemplateRouter:
 
     def test_none_status_code_defaults(self):
         with patch(
-            "app.fastapi_routes.document_templates_compat.run_archive_template_create",
+            "app.legacy.routes.document_templates_compat.run_archive_template_create",
             return_value=({"success": True}, None),
         ):
             result = _registered_router_document_template("create", {}, {}, "admin", "")
@@ -524,7 +536,7 @@ class TestDocumentTemplateRouter:
 
     def test_none_status_code_failure_defaults(self):
         with patch(
-            "app.fastapi_routes.document_templates_compat.run_archive_template_create",
+            "app.legacy.routes.document_templates_compat.run_archive_template_create",
             return_value=({"success": False}, None),
         ):
             result = _registered_router_document_template("create", {}, {}, "admin", "")

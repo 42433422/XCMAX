@@ -10,7 +10,6 @@ from vibe_coding.agent.patch import (
     FileEdit,
     Hunk,
     PatchApplier,
-    PatchConflict,
     ProjectPatch,
 )
 
@@ -62,9 +61,7 @@ def test_create_delete_rename_applied(tmp_path: Path) -> None:
 
 def test_create_rejects_existing(tmp_path: Path) -> None:
     _make_project(tmp_path)
-    patch = ProjectPatch(
-        edits=[FileEdit(path="pkg/__init__.py", operation="create", contents="x")]
-    )
+    patch = ProjectPatch(edits=[FileEdit(path="pkg/__init__.py", operation="create", contents="x")])
     applier = PatchApplier(tmp_path)
     result = applier.apply(patch)
     assert not result.applied
@@ -124,9 +121,7 @@ def test_rollback_after_apply(tmp_path: Path) -> None:
         new_text="    return 99\n",
         anchor_after="\n\ndef sub(a, b):\n",
     )
-    patch = ProjectPatch(
-        edits=[FileEdit(path="pkg/math.py", operation="modify", hunks=[hunk])]
-    )
+    patch = ProjectPatch(edits=[FileEdit(path="pkg/math.py", operation="modify", hunks=[hunk])])
     applier = PatchApplier(tmp_path)
     res = applier.apply(patch)
     assert res.applied

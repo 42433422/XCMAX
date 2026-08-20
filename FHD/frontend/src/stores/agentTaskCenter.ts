@@ -1,11 +1,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import agentRunsApi from '@/api/agentRuns'
-import type {
-  AgentRun,
-  AgentTaskRuntime,
-  AgentTaskSummary,
-} from '@/api/agentRuns'
+import type { AgentRun, AgentTaskRuntime, AgentTaskSummary } from '@/api/agentRuns'
 import { buildFullApiUrl } from '@/api/core'
 
 const TERMINAL_STATES = new Set(['completed', 'failed', 'cancelled'])
@@ -32,20 +28,20 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
   let started = false
   let scopeVersion = 0
 
-  const attentionCount = computed(() =>
-    tasks.value.filter((task) => ['waiting_user', 'blocked', 'failed'].includes(task.status)).length,
-  )
+  const attentionCount = computed(() => tasks.value.filter((task) => ['waiting_user', 'blocked', 'failed'].includes(task.status)).length)
   const unreadCount = computed(() =>
-    tasks.value.reduce((total, task) => total + Math.max(
+    tasks.value.reduce(
+      (total, task) => total + Math.max(0, Number(task.unread_count ?? (task.attention_state === 'result_unread' ? 1 : 0)) || 0),
       0,
-      Number(task.unread_count ?? (task.attention_state === 'result_unread' ? 1 : 0)) || 0,
-    ), 0),
+    ),
   )
-  const approvalCount = computed(() =>
-    tasks.value.filter((task) => task.approval_required || task.attention_state === 'approval_required' || task.status === 'waiting_user').length,
+  const approvalCount = computed(
+    () =>
+      tasks.value.filter((task) => task.approval_required || task.attention_state === 'approval_required' || task.status === 'waiting_user')
+        .length,
   )
-  const activeCount = computed(() =>
-    tasks.value.filter((task) => ['queued', 'planning', 'running', 'retrying', 'paused'].includes(task.status)).length,
+  const activeCount = computed(
+    () => tasks.value.filter((task) => ['queued', 'planning', 'running', 'retrying', 'paused'].includes(task.status)).length,
   )
 
   function replaceTasks(snapshot: AgentTaskSummary[]): void {
@@ -61,10 +57,7 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
     const requestedScopeVersion = scopeVersion
     loading.value = true
     try {
-      const [taskResponse, runtimeResponse] = await Promise.all([
-        agentRunsApi.listTasks({ limit: 200 }),
-        agentRunsApi.getTaskRuntime(),
-      ])
+      const [taskResponse, runtimeResponse] = await Promise.all([agentRunsApi.listTasks({ limit: 200 }), agentRunsApi.getTaskRuntime()])
       if (requestedScopeVersion !== scopeVersion) return
       replaceTasks(Array.isArray(taskResponse.data) ? taskResponse.data : [])
       if (runtimeResponse.data) runtime.value = runtimeResponse.data
@@ -102,7 +95,7 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
       const response = await agentRunsApi.markTaskRead(id)
       const updated = response.data
       if (updated) {
-        tasks.value = tasks.value.map((task) => task.task_id === id ? { ...task, ...updated } : task)
+        tasks.value = tasks.value.map((task) => (task.task_id === id ? { ...task, ...updated } : task))
         if (selectedTaskId.value === id) selectedTask.value = updated
       }
       error.value = ''

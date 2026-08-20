@@ -93,14 +93,9 @@ export function buildAiopenCursorInstallLinks(baseUrl: string, apiKey = '') {
   }
 }
 
-export function buildAiopenClientInstalls(
-  baseUrl: string,
-  apiKey = '',
-  options: { stdioScriptPath?: string } = {}
-): AiMcpClientInstall[] {
+export function buildAiopenClientInstalls(baseUrl: string, apiKey = '', _options: { stdioScriptPath?: string } = {}): AiMcpClientInstall[] {
   const urlCfg = buildMcpUrlConfig(baseUrl, apiKey)
   const remoteCfg = buildMcpRemoteConfig(baseUrl, apiKey)
-  const stdioCfg = buildMcpStdioConfig(baseUrl, apiKey, options.stdioScriptPath)
 
   return [
     {
@@ -209,11 +204,10 @@ export function unmarkAiopenClientInstalled(clientId: AiMcpClientId): void {
 }
 
 /** 解析 MCP 配置应使用的后端根地址（非 Vite :5001） */
-export function resolveAiopenBackendBase(
-  pageOrigin: string,
-  options: { envApiBase?: string; mcpUrl?: string } = {}
-): string {
-  const envBase = String(options.envApiBase || '').trim().replace(/\/$/, '')
+export function resolveAiopenBackendBase(pageOrigin: string, options: { envApiBase?: string; mcpUrl?: string } = {}): string {
+  const envBase = String(options.envApiBase || '')
+    .trim()
+    .replace(/\/$/, '')
   if (envBase && /^https?:\/\//i.test(envBase)) return envBase
   const mcpUrl = String(options.mcpUrl || '').trim()
   if (mcpUrl) {
@@ -230,9 +224,7 @@ export function resolveAiopenBackendBase(
 export function buildAiopenOneLiner(backendBase: string, apiKey = ''): string {
   const base = resolveAiopenBackendBase('', { envApiBase: backendBase })
   const guide = `${base}/api/aiopen/guide?format=markdown`
-  const keyHint = apiKey.trim()
-    ? `连接口令是 ${apiKey.trim()}，`
-    : ''
+  const keyHint = apiKey.trim() ? `连接口令是 ${apiKey.trim()}，` : ''
   return `请打开 ${guide} 阅读 XCAGI AIOPEN 接入说明，${keyHint}帮我写好 MCP 配置并验证连通，完成后告诉我能否操控本软件。`
 }
 
@@ -246,11 +238,8 @@ export function buildAiAssistantSetupPrompt(options: {
   const base = resolveAiopenBackendBase('', { envApiBase: options.backendBase })
   const guide = options.guideUrl || `${base}/api/aiopen/guide?format=markdown`
   const clients = buildAiopenClientInstalls(base, options.apiKey || '')
-  const client =
-    clients.find((c) => c.id === (options.clientId || 'generic')) || clients[clients.length - 1]
-  const keyLine = options.apiKey?.trim()
-    ? `- 连接口令（请求头 X-AIOPEN-Key）：${options.apiKey.trim()}`
-    : '- 连接口令：开发模式可留空'
+  const client = clients.find((c) => c.id === (options.clientId || 'generic')) || clients[clients.length - 1]
+  const keyLine = options.apiKey?.trim() ? `- 连接口令（请求头 X-AIOPEN-Key）：${options.apiKey.trim()}` : '- 连接口令：开发模式可留空'
 
   return `请帮我接入 XCAGI AIOPEN（MCP 开放平台），完成后告诉我是否配置成功。
 

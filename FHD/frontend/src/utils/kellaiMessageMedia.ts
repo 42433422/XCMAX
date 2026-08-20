@@ -8,16 +8,7 @@ export type KellaiMediaMessageLike = {
   metadata?: Record<string, unknown> | null
 }
 
-const META_URL_KEYS = [
-  'media_url',
-  'image_url',
-  'pic_url',
-  'PicUrl',
-  'url',
-  'src',
-  'imageUrl',
-  'mediaUrl',
-] as const
+const META_URL_KEYS = ['media_url', 'image_url', 'pic_url', 'PicUrl', 'url', 'src', 'imageUrl', 'mediaUrl'] as const
 
 function isRenderableImageUrl(value: string): boolean {
   const s = String(value || '').trim()
@@ -31,8 +22,7 @@ function isRenderableImageUrl(value: string): boolean {
 
 export function resolveKellaiMessageImageSrc(message: KellaiMediaMessageLike | null | undefined): string {
   if (!message) return ''
-  const meta =
-    message.metadata && typeof message.metadata === 'object' ? message.metadata : {}
+  const meta = message.metadata && typeof message.metadata === 'object' ? message.metadata : {}
   for (const key of META_URL_KEYS) {
     const candidate = String(meta[key] ?? '').trim()
     if (isRenderableImageUrl(candidate)) return candidate
@@ -49,6 +39,5 @@ export function resolveKellaiMessageImageSrc(message: KellaiMediaMessageLike | n
 }
 
 export function isKellaiImagePlaceholder(content: string): boolean {
-  return /^\[?\s*图片\s*\]?$/i.test(String(content || '').trim()) ||
-    /^\[image\]$/i.test(String(content || '').trim())
+  return /^\[?\s*图片\s*\]?$/i.test(String(content || '').trim()) || /^\[image\]$/i.test(String(content || '').trim())
 }

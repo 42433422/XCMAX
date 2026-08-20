@@ -1,10 +1,5 @@
 import { describe, expect, it, beforeEach } from 'vitest'
-import {
-  isStarredChatAutoRefreshOn,
-  formatWorkflowHintTime,
-  formatWorkflowClock,
-  STAR_REFRESH_STORAGE_KEY,
-} from './coreWorkflowPrefs'
+import { isStarredChatAutoRefreshOn, formatWorkflowHintTime, formatWorkflowClock, STAR_REFRESH_STORAGE_KEY } from './coreWorkflowPrefs'
 
 describe('coreWorkflowPrefs', () => {
   beforeEach(() => {

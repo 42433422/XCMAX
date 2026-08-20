@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -50,7 +48,9 @@ def test_plan_release_candidate_from_market(monkeypatch):
         _fake_create,
     )
 
-    from modstore_server.telemetry_backlog_loop import plan_release_candidate_from_market
+    from modstore_server.telemetry_backlog_loop import (
+        plan_release_candidate_from_market,
+    )
 
     out = plan_release_candidate_from_market(
         [

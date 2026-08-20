@@ -7,28 +7,28 @@
 
 ## 1. 结论（给训练/优化用）
 
-| 维度 | 结果 |
-|------|------|
-| 编排是否跑通 | 是（14 步中 pack_only 跳过工作流） |
-| 是否做出「可读 Word」员工 | **否** — 实际产物是 **Word 生成**（JSON→docx），不是全量读取 |
-| 真实 .docx 冒烟（实验包） | **失败** — `仅支持 .json` |
-| 真实 .docx 冒烟（黄金包） | **通过** — 写出 `document_full.json` + txt，2 个下载项 |
-| 主要根因 | brief 未含「全量提取」→ `is_word_generate` 与 `is_word_full_extract` 同时为真；`build_rule_spec` **先匹配 generate**；generate 步走内置 `render_word_generate_convert_module()`，**非 MiMo 现场写 OOXML 解析代码** |
+| 维度                      | 结果                                                                                                                                                                                                               |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 编排是否跑通              | 是（14 步中 pack_only 跳过工作流）                                                                                                                                                                                 |
+| 是否做出「可读 Word」员工 | **否** — 实际产物是 **Word 生成**（JSON→docx），不是全量读取                                                                                                                                                       |
+| 真实 .docx 冒烟（实验包） | **失败** — `仅支持 .json`                                                                                                                                                                                          |
+| 真实 .docx 冒烟（黄金包） | **通过** — 写出 `document_full.json` + txt，2 个下载项                                                                                                                                                             |
+| 主要根因                  | brief 未含「全量提取」→ `is_word_generate` 与 `is_word_full_extract` 同时为真；`build_rule_spec` **先匹配 generate**；generate 步走内置 `render_word_generate_convert_module()`，**非 MiMo 现场写 OOXML 解析代码** |
 
 ---
 
 ## 2. 实验包 vs 黄金包（结构）
 
-| 项 | `word-full-read-employee`（黄金） | `word-full-read-employee-llm-lab`（实验） |
-|----|-----------------------------------|-------------------------------------------|
-| `rule_spec.runtime_kind` | `word_full_extract` | **`word_generate`** |
-| `accepted_extensions` | `.docx`, `.doc` | **`.json`**（+ 模板 `.docx`） |
-| 默认输出 | `outputs/document_full.json` | **`outputs/generated_document.docx`** |
-| vendor 路径 | `backend/vendor/word_full_read/` | `backend/vendor/word_full_read_employee_llm_lab/` |
-| `convert.py` 行数 | ~441（OOXML 解压 + 可选 python-docx） | ~197（**读 JSON，写 docx**） |
-| manifest 能力 | `doc.full_extract` 等 | **`doc.generate` / template_merge** |
-| panel 文案 | 上传 Word → JSON | **上传 JSON → 生成 Word**（与读取需求相反） |
-| `created_by` | `asset_pipeline` | manifest 内混有 `employee_ai_scaffold` |
+| 项                       | `word-full-read-employee`（黄金）     | `word-full-read-employee-llm-lab`（实验）         |
+| ------------------------ | ------------------------------------- | ------------------------------------------------- |
+| `rule_spec.runtime_kind` | `word_full_extract`                   | **`word_generate`**                               |
+| `accepted_extensions`    | `.docx`, `.doc`                       | **`.json`**（+ 模板 `.docx`）                     |
+| 默认输出                 | `outputs/document_full.json`          | **`outputs/generated_document.docx`**             |
+| vendor 路径              | `backend/vendor/word_full_read/`      | `backend/vendor/word_full_read_employee_llm_lab/` |
+| `convert.py` 行数        | ~441（OOXML 解压 + 可选 python-docx） | ~197（**读 JSON，写 docx**）                      |
+| manifest 能力            | `doc.full_extract` 等                 | **`doc.generate` / template_merge**               |
+| panel 文案               | 上传 Word → JSON                      | **上传 JSON → 生成 Word**（与读取需求相反）       |
+| `created_by`             | `asset_pipeline`                      | manifest 内混有 `employee_ai_scaffold`            |
 
 实验包 **有** `vendor/.../convert.py`（故 `has_convert_py` 在按 `word_full_read/` 路径扫描时会误报 false）；质检仍标 `word_full_extract` 管线，但 convert 扫描提示缺 `images` / `core_properties`（因实际是 generate schema）。
 
@@ -72,10 +72,10 @@ flowchart TD
 
 使用与 `minimal_docx_bytes()` 等价的 ZIP（`ZIP_DEFLATED`）调用 `POST /api/employees/{id}/execute-file`。
 
-| 员工包 | 结果 | 说明 |
-|--------|------|------|
-| `word-full-read-employee` | **PASS** | `direct_python` ok；`output_downloads` 2 |
-| `word-full-read-employee-llm-lab` | **FAIL** | `不支持的文件类型：.docx，仅支持 .json` |
+| 员工包                            | 结果     | 说明                                     |
+| --------------------------------- | -------- | ---------------------------------------- |
+| `word-full-read-employee`         | **PASS** | `direct_python` ok；`output_downloads` 2 |
+| `word-full-read-employee-llm-lab` | **FAIL** | `不支持的文件类型：.docx，仅支持 .json`  |
 
 原始手工 docx（未 DEFLATE）对黄金包会报 `Bad magic number`（python-docx 先失败）；应用 runtime 自带 fixture 格式。
 

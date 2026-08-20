@@ -9,8 +9,6 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import func
-
 from app.db.models import (
     Product,
     PurchaseInbound,
@@ -22,117 +20,14 @@ from app.db.models import (
 from app.db.session import get_db
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.services.inventory_service import InventoryService
+from app.services.purchase_service_supplier_mixin import PurchaseSupplierMixin
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
 
-class PurchaseService(NeuroEventPublisherMixin):
+class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
     """采购管理服务类"""
-
-    @staticmethod
-    def _decimal_to_float(value: Any) -> Any:
-        if isinstance(value, Decimal):
-            return float(value)
-        return value
-
-    @staticmethod
-    def _model_to_dict(model: Any) -> dict[str, Any]:
-        if model is None:
-            return {}
-        result = {}
-        for col in model.__table__.columns:
-            value = getattr(model, col.name)
-            result[col.name] = PurchaseService._decimal_to_float(value)
-        return result
-
-    def get_suppliers(
-        self, status: str | None = None, keyword: str | None = None
-    ) -> dict[str, Any]:
-        with get_db() as db:
-            query = db.query(Supplier)
-            if status:
-                query = query.filter(Supplier.status == status)
-            if keyword:
-                query = query.filter(
-                    Supplier.name.like(f"%{keyword}%")
-                    | Supplier.code.like(f"%{keyword}%")
-                    | Supplier.contact_person.like(f"%{keyword}%")
-                )
-            suppliers = query.order_by(Supplier.code).all()
-            return {
-                "success": True,
-                "data": [self._model_to_dict(s) for s in suppliers],
-                "count": len(suppliers),
-            }
-
-    def get_supplier(self, supplier_id: int) -> dict[str, Any]:
-        with get_db() as db:
-            supplier = db.query(Supplier).filter(Supplier.id == supplier_id).first()
-            if not supplier:
-                return {"success": False, "message": "供应商不存在"}
-            return {"success": True, "data": self._model_to_dict(supplier)}
-
-    def create_supplier(self, data: dict[str, Any]) -> dict[str, Any]:
-        with get_db() as db:
-            try:
-                supplier = Supplier(
-                    code=data.get("code"),
-                    name=data.get("name"),
-                    contact_person=data.get("contact_person"),
-                    contact_phone=data.get("contact_phone"),
-                    contact_email=data.get("contact_email"),
-                    address=data.get("address"),
-                    payment_terms=data.get("payment_terms", "月结"),
-                    credit_limit=self._decimal_to_float(data.get("credit_limit", 0)),
-                    status=data.get("status", "active"),
-                    rating=data.get("rating", 3),
-                    remark=data.get("remark"),
-                    created_at=datetime.now(),
-                    updated_at=datetime.now(),
-                )
-                db.add(supplier)
-                db.commit()
-                db.refresh(supplier)
-                return {"success": True, "data": self._model_to_dict(supplier)}
-            except RECOVERABLE_ERRORS as e:
-                db.rollback()
-                logger.error("创建供应商失败: %s", e)
-                return {"success": False, "message": str(e)}
-
-    def update_supplier(self, supplier_id: int, data: dict[str, Any]) -> dict[str, Any]:
-        with get_db() as db:
-            try:
-                supplier = db.query(Supplier).filter(Supplier.id == supplier_id).first()
-                if not supplier:
-                    return {"success": False, "message": "供应商不存在"}
-
-                for key, value in data.items():
-                    if hasattr(supplier, key):
-                        setattr(supplier, key, value)
-                supplier.updated_at = datetime.now()
-
-                db.commit()
-                db.refresh(supplier)
-                return {"success": True, "data": self._model_to_dict(supplier)}
-            except RECOVERABLE_ERRORS as e:
-                db.rollback()
-                logger.error("更新供应商失败: %s", e)
-                return {"success": False, "message": str(e)}
-
-    def delete_supplier(self, supplier_id: int) -> dict[str, Any]:
-        with get_db() as db:
-            try:
-                supplier = db.query(Supplier).filter(Supplier.id == supplier_id).first()
-                if not supplier:
-                    return {"success": False, "message": "供应商不存在"}
-                supplier.status = "deleted"
-                db.commit()
-                return {"success": True, "message": "供应商已删除"}
-            except RECOVERABLE_ERRORS as e:
-                db.rollback()
-                logger.error("删除供应商失败: %s", e)
-                return {"success": False, "message": str(e)}
 
     def get_purchase_orders(
         self,
@@ -201,7 +96,7 @@ class PurchaseService(NeuroEventPublisherMixin):
         with get_db() as db:
             try:
                 order_no = data.get("order_no") or self._generate_order_no()
-                total_amount = 0
+                total_amount = 0.0
 
                 order = PurchaseOrder(
                     order_no=order_no,
@@ -245,14 +140,12 @@ class PurchaseService(NeuroEventPublisherMixin):
                     )
                     db.add(item)
 
-                order.total_amount = total_amount
+                order.total_amount = Decimal(str(total_amount))
                 db.commit()
                 db.refresh(order)
 
                 # Sample Neuro-DDD closed loop: emit order.created after durable commit.
                 try:
-                    from decimal import Decimal
-
                     from app.neuro_bus.domains.order_domain import get_order_domain
 
                     get_order_domain().emit_order_created(
@@ -261,7 +154,7 @@ class PurchaseService(NeuroEventPublisherMixin):
                         items=list(items_data or []),
                         total_amount=Decimal(str(total_amount or 0)),
                     )
-                except Exception:  # noqa: BLE001 - never block purchase on bus emit
+                except RECOVERABLE_ERRORS:  # noqa: BLE001 - never block purchase on bus emit
                     logger.debug("emit_order_created skipped", exc_info=True)
 
                 return {
@@ -295,7 +188,7 @@ class PurchaseService(NeuroEventPublisherMixin):
                     db.query(PurchaseOrderItem).filter(
                         PurchaseOrderItem.order_id == order_id
                     ).delete()
-                    total_amount = 0
+                    total_amount = 0.0
 
                     for item_data in data["items"]:
                         product = (
@@ -327,7 +220,7 @@ class PurchaseService(NeuroEventPublisherMixin):
                         )
                         db.add(item)
 
-                    order.total_amount = total_amount
+                    order.total_amount = Decimal(str(total_amount))
 
                 db.commit()
                 db.refresh(order)
@@ -389,7 +282,7 @@ class PurchaseService(NeuroEventPublisherMixin):
         with get_db() as db:
             try:
                 inbound_no = data.get("inbound_no") or self._generate_inbound_no()
-                total_amount = 0
+                total_amount = 0.0
                 inventory_service = InventoryService()
 
                 inbound = PurchaseInbound(
@@ -434,9 +327,12 @@ class PurchaseService(NeuroEventPublisherMixin):
                     )
                     db.add(item)
 
+                    warehouse_id = data.get("warehouse_id")
+                    if warehouse_id is None:
+                        raise ValueError("采购入库缺少 warehouse_id")
                     result = inventory_service.inventory_in(
                         product_id=item_data.get("product_id"),
-                        warehouse_id=data.get("warehouse_id"),
+                        warehouse_id=int(warehouse_id),
                         quantity=quantity,
                         batch_no=item_data.get("batch_no"),
                         location_id=item_data.get("location_id"),
@@ -449,7 +345,7 @@ class PurchaseService(NeuroEventPublisherMixin):
                     if not result.get("success"):
                         logger.warning("库存入库失败: %s", result.get("message"))
 
-                inbound.total_amount = total_amount
+                inbound.total_amount = Decimal(str(total_amount))
                 inbound.status = "completed"
                 db.commit()
                 db.refresh(inbound)
@@ -483,11 +379,12 @@ class PurchaseService(NeuroEventPublisherMixin):
                         )
                         if not journal_result.get("success"):
                             logger.warning("应付账款记账失败: %s", journal_result.get("message"))
-                    except Exception:  # noqa: BLE001 - 记账失败不阻断入库主流程
+                    except RECOVERABLE_ERRORS:  # noqa: BLE001 - 记账失败不阻断入库主流程
                         logger.warning("应付账款记账失败", exc_info=True)
 
-                if data.get("order_id"):
-                    self._update_order_received_quantity(db, data.get("order_id"))
+                order_id = data.get("order_id")
+                if order_id is not None:
+                    self._update_order_received_quantity(db, int(order_id))
 
                 self._publish_event(
                     "inventory.inbound_created",
@@ -587,53 +484,6 @@ class PurchaseService(NeuroEventPublisherMixin):
                 "page": page,
                 "per_page": per_page,
             }
-
-    def _generate_order_no(self) -> str:
-        return f"PO{datetime.now().strftime('%Y%m%d%H%M%S')}"
-
-    def _generate_inbound_no(self) -> str:
-        return f"PI{datetime.now().strftime('%Y%m%d%H%M%S')}"
-
-    def get_supplier_summary(self) -> dict[str, Any]:
-        with get_db() as db:
-            stats = (
-                db.query(Supplier.status, func.count(Supplier.id).label("count"))
-                .group_by(Supplier.status)
-                .all()
-            )
-
-            result = {}
-            for status, count in stats:
-                result[status or "unknown"] = count
-
-            return {"success": True, "data": result}
-
-    def get_purchase_summary(
-        self, start_date: datetime | None = None, end_date: datetime | None = None
-    ) -> dict[str, Any]:
-        with get_db() as db:
-            query = db.query(
-                PurchaseOrder.status,
-                func.count(PurchaseOrder.id).label("count"),
-                func.sum(PurchaseOrder.total_amount).label("amount"),
-            )
-
-            if start_date:
-                query = query.filter(PurchaseOrder.order_date >= start_date)
-            if end_date:
-                query = query.filter(PurchaseOrder.order_date <= end_date)
-
-            query = query.group_by(PurchaseOrder.status)
-            stats = query.all()
-
-            result = {}
-            for status, count, amount in stats:
-                result[status or "unknown"] = {
-                    "count": count,
-                    "amount": self._decimal_to_float(amount),
-                }
-
-            return {"success": True, "data": result}
 
 
 # NEURO-DDD: 为 Services 层类添加 instrumentation

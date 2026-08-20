@@ -1,3 +1,4 @@
+# mypy: disable-error-code="misc"
 """Kitten 分析/图表/报告路由冒烟（FastAPI 版）。
 
 覆盖 ``app.fastapi_routes.ai_kitten`` 全部 14 条路由：
@@ -71,7 +72,8 @@ def test_business_snapshot_recoverable_error(
     assert r.status_code == 500
     body = r.json()
     assert body["success"] is False
-    assert "DB 不可用" in body["message"]
+    assert body["message"] == "小猫分析服务暂时不可用，请稍后重试"
+    assert "DB 不可用" not in body["message"]
 
 
 # ---------------------------------------------------------------------------
@@ -570,7 +572,8 @@ def test_financial_report_recoverable_error(
     assert r.status_code == 500
     body = r.json()
     assert body["success"] is False
-    assert "财务报表生成失败" in body["message"]
+    assert body["message"] == "小猫分析服务暂时不可用，请稍后重试"
+    assert "数据解析失败" not in body["message"]
 
 
 # ---------------------------------------------------------------------------
@@ -630,7 +633,8 @@ def test_report_export_recoverable_error(
     assert r.status_code == 500
     body = r.json()
     assert body["success"] is False
-    assert "导出失败" in body["message"]
+    assert body["message"] == "小猫分析服务暂时不可用，请稍后重试"
+    assert "构建失败" not in body["message"]
 
 
 # ---------------------------------------------------------------------------
@@ -683,7 +687,8 @@ def test_report_export_docx_recoverable_error(
     assert r.status_code == 500
     body = r.json()
     assert body["success"] is False
-    assert "Word 导出失败" in body["message"]
+    assert body["message"] == "小猫分析服务暂时不可用，请稍后重试"
+    assert "磁盘满" not in body["message"]
 
 
 # ---------------------------------------------------------------------------
@@ -797,6 +802,8 @@ def test_document_generate_runtime_error_returns_503(
     assert r.status_code == 503
     body = r.json()
     assert body["success"] is False
+    assert body["message"] == "文档生成服务暂时不可用，请稍后重试"
+    assert "LLM 服务不可用" not in body["message"]
 
 
 def test_document_generate_recoverable_error_returns_500(
@@ -810,7 +817,8 @@ def test_document_generate_recoverable_error_returns_500(
     assert r.status_code == 500
     body = r.json()
     assert body["success"] is False
-    assert "文档生成失败" in body["message"]
+    assert body["message"] == "文档生成服务暂时不可用，请稍后重试"
+    assert "数据格式错误" not in body["message"]
 
 
 def test_document_generate_ascii_filename_fallback(

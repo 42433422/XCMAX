@@ -16,6 +16,8 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 # 每千 token 美元费率（输入, 输出）；仅埋点估算，精细归因属批次 B
 _MODEL_RATES_USD_PER_1K: dict[str, tuple[float, float]] = {
     "deepseek-chat": (0.00014, 0.00028),
@@ -103,7 +105,7 @@ def _current_business_trace() -> tuple[str | None, str | None]:
         from app.neuro_bus.tracer import current_span, current_trace
 
         return current_trace.get(), current_span.get()
-    except Exception:  # noqa: BLE001 — 桥接失败不阻断
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 — 桥接失败不阻断
         return None, None
 
 

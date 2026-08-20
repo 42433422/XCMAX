@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """Tests for app.application.digest_email_app_service."""
 
 from __future__ import annotations

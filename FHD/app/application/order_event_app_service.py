@@ -13,6 +13,8 @@ def ingest_paid_event(
     *,
     hmac_signature: str | None = None,
     raw: bytes | None = None,
+    timestamp: str | None = None,
+    event_id: str | None = None,
 ) -> dict[str, Any]:
     from app.services.order_event_bridge import ingest_paid_event as _ingest
 
@@ -20,6 +22,8 @@ def ingest_paid_event(
         envelope,
         hmac_signature=hmac_signature,
         raw=raw,
+        timestamp=timestamp,
+        event_id=event_id,
     )
 
 

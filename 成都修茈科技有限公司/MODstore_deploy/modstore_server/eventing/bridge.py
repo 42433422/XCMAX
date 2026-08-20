@@ -7,7 +7,7 @@ so MODstore remains independently runnable.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
@@ -51,9 +51,9 @@ def neuro_event_dict_to_domain_event(data: dict[str, Any]) -> DomainEvent:
     occurred_at: str
     ts = metadata.get("timestamp")
     if isinstance(ts, (int, float)):
-        occurred_at = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+        occurred_at = datetime.fromtimestamp(ts, tz=UTC).isoformat()
     else:
-        occurred_at = datetime.now(timezone.utc).isoformat()
+        occurred_at = datetime.now(UTC).isoformat()
 
     subject_id = payload.pop("_aggregate_id", "")
     version = payload.pop("_version", 1)

@@ -73,10 +73,10 @@ def _bootstrap_one(meta: dict) -> dict:
 
     pkg_id = meta["pkg_id"]
     brief = f"""员工包 ID：{pkg_id}
-员工名称：{meta['name']}
+员工名称：{meta["name"]}
 版本：1.0.0
 
-{meta['brief_extra']}
+{meta["brief_extra"]}
 读取 kitten 数据集（columns/rows JSON），在 direct_python 内生成 ECharts chart_spec.json 与 chart.html。
 handlers 必须为 direct_python；禁止编造数据中不存在的行列。"""
 

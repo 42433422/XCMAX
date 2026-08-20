@@ -8,7 +8,8 @@ from app.services.mobile_relay_service import MobileRelayService
 def register_desktop_relay(*, host: str, port: int) -> dict[str, Any]:
     from app.services.mobile_relay_desktop_client import register_desktop_relay as _register
 
-    return _register(host=host, port=port)
+    result = _register(host=host, port=port)
+    return result or {"success": False, "message": "桌面中继注册未返回结果"}
 
 
 def cached_desktop_relay_payload() -> dict[str, Any] | None:

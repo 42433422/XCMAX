@@ -3,7 +3,7 @@
 The single-skill flow and the multi-agent orchestrator are both
 **fixed pipelines** — each role has a hard-coded responsibility and
 order. `ReActAgent` plugs in for open-ended tasks where the agent
-needs to *decide* what to do next based on intermediate observations:
+needs to _decide_ what to do next based on intermediate observations:
 
 > 审查这个仓库，找出最容易出 bug 的模块并修复
 > 为 `pytest -k user_service` 第 3 次后偶发失败的问题排查根因
@@ -43,21 +43,21 @@ for step in result.steps:
 `allow_network=True` to expose `http_fetch`; supply
 `shell_allowlist=(...)` to scope what the agent can shell out to.
 
-| Category | Tool | Purpose |
-| --- | --- | --- |
-| Filesystem | `read_file` | Read a project-relative text file (≤ 256 KiB) |
-|  | `write_file` | Overwrite or create a file with new contents |
-|  | `list_dir` | List entries in a directory (capped) |
-|  | `stat_path` | File metadata (kind / size / exists) |
-|  | `apply_edit` | Replace a unique `old_text` with `new_text` |
-| Shell | `run_command` | Run a shell command via the sandbox driver |
-| Search | `grep` | Recursive regex search; returns `{file, line, snippet}` |
-|  | `find_files` | Glob across the project (`**/*.py` etc.) |
-| Git | `git_status` / `git_diff` / `git_log` | Read-only inspection |
-| Project | `index_project` | Build / refresh the RepoIndex |
-|  | `find_symbol` | Look up symbols across the index |
-|  | `apply_project_patch` | Generate + apply a multi-file patch |
-| Web | `http_fetch` | Fetch an URL body (opt-in via `allow_network=True`) |
+| Category   | Tool                                  | Purpose                                                 |
+| ---------- | ------------------------------------- | ------------------------------------------------------- |
+| Filesystem | `read_file`                           | Read a project-relative text file (≤ 256 KiB)           |
+|            | `write_file`                          | Overwrite or create a file with new contents            |
+|            | `list_dir`                            | List entries in a directory (capped)                    |
+|            | `stat_path`                           | File metadata (kind / size / exists)                    |
+|            | `apply_edit`                          | Replace a unique `old_text` with `new_text`             |
+| Shell      | `run_command`                         | Run a shell command via the sandbox driver              |
+| Search     | `grep`                                | Recursive regex search; returns `{file, line, snippet}` |
+|            | `find_files`                          | Glob across the project (`**/*.py` etc.)                |
+| Git        | `git_status` / `git_diff` / `git_log` | Read-only inspection                                    |
+| Project    | `index_project`                       | Build / refresh the RepoIndex                           |
+|            | `find_symbol`                         | Look up symbols across the index                        |
+|            | `apply_project_patch`                 | Generate + apply a multi-file patch                     |
+| Web        | `http_fetch`                          | Fetch an URL body (opt-in via `allow_network=True`)     |
 
 Every tool runs through the project's path guard
 (`vibe_coding.agent.security.paths`) so the agent can't `..` its way

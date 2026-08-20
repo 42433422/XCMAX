@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 
-from app.utils.path_utils import get_base_dir
+from app.utils.path_io.path_utils import get_base_dir
 
 
 def get_distillation_root_dir() -> str:

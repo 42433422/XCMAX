@@ -22,6 +22,7 @@ from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
 from modstore_server.auth_service import decode_access_token, get_user_by_id
 from modstore_server.metrics import observe_realtime_ws_event
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +60,7 @@ class _ConnectionManager:
             try:
                 await ws.send_text(data)
                 n += 1
-            except Exception as e:
+            except RECOVERABLE_ERRORS as e:
                 logger.debug("WebSocket 发送失败 user_id=%s: %s", user_id, e)
         return n
 
@@ -79,7 +80,7 @@ def schedule_push_to_user(user_id: int, payload: dict[str, Any]) -> None:
     async def _go() -> None:
         try:
             await _manager.send_json_to_user(int(user_id), payload)
-        except Exception as e:
+        except RECOVERABLE_ERRORS as e:
             logger.debug("realtime 推送任务失败: %s", e)
 
     loop.create_task(_go())
@@ -123,7 +124,7 @@ async def websocket_channel(
         await websocket.send_text(
             json.dumps({"type": "ready", "user_id": user_id}, ensure_ascii=False)
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         await _manager.unregister(user_id, websocket)
         observe_realtime_ws_event("ready_send_fail")
         return
@@ -136,11 +137,11 @@ async def websocket_channel(
                     websocket.receive_text(),
                     timeout=_IDLE_RECV_TIMEOUT_SEC,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 observe_realtime_ws_event("idle_timeout")
                 try:
                     await websocket.close(code=1000)
-                except Exception:
+                except RECOVERABLE_ERRORS:
                     pass
                 break
             except WebSocketDisconnect:

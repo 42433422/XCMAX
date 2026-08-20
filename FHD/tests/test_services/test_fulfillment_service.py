@@ -1,3 +1,4 @@
+# mypy: disable-error-code="no-any-return"
 """Tests for app.services.fulfillment_service — 履行/预留/backorder/return 模块（ODOO-W1-03）。
 
 用真实 sqlite :memory:（StaticPool 复用同一引擎），patch inventory_service 与

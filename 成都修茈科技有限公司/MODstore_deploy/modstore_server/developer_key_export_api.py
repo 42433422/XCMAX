@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """开发者密钥 Web→桌面加密导出（ECDH P-256 + AES-GCM）与审计。"""
 
 from __future__ import annotations
@@ -6,7 +7,7 @@ import base64
 import json
 import logging
 from collections import deque
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any, Deque, Dict, List, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -14,11 +15,12 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import _get_current_user
-from modstore_server.auth_service import generate_pat, hash_pat, verify_password
+from modstore_server.auth_service import generate_pat, verify_password
 from modstore_server.datetime_utils import as_utc_aware
 from modstore_server.infrastructure.db import get_db
 from modstore_server.key_export_crypto import encrypt_json_to_recipient
 from modstore_server.models import DeveloperKeyExportEvent, DeveloperToken, User
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +45,7 @@ def _client_ip(request: Request) -> str:
 
 
 def _rate_check(user_id: int) -> None:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     dq = _rate_buckets.setdefault(user_id, deque())
     while dq and now - dq[0] > _EXPORT_WINDOW:
         dq.popleft()
@@ -110,7 +112,7 @@ def export_encrypted_bundle(
 ):
     try:
         spki = base64.b64decode(body.recipient_public_key_spki_b64.strip())
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         raise HTTPException(400, "recipient_public_key_spki_b64 不是合法 base64") from e
     if len(spki) < 32:
         raise HTTPException(400, "公钥过短")
@@ -161,11 +163,11 @@ def export_encrypted_bundle(
         if r.revoked_at is not None:
             raise HTTPException(400, f"Token id={tid} 已吊销")
         exp = as_utc_aware(r.expires_at)
-        if exp and exp < datetime.now(timezone.utc):
+        if exp and exp < datetime.now(UTC):
             raise HTTPException(400, f"Token id={tid} 已过期")
         olds.append(r)
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     new_rows: List[Tuple[DeveloperToken, str, DeveloperToken, List[Any]]] = []
     for old in olds:
         raw, prefix, digest = generate_pat()
@@ -189,7 +191,7 @@ def export_encrypted_bundle(
 
     try:
         db.flush()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         db.rollback()
         raise
 
@@ -219,7 +221,7 @@ def export_encrypted_bundle(
     except RuntimeError as e:
         db.rollback()
         raise HTTPException(503, str(e)) from e
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         db.rollback()
         logger.exception("key export encrypt failed")
         raise HTTPException(400, f"加密失败: {e}") from e

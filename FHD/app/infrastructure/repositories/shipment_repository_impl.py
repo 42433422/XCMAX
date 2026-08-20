@@ -1,3 +1,5 @@
+from typing import cast
+
 from app.db.models import ShipmentRecord
 from app.db.session import get_db
 from app.domain.shipment.aggregates import Shipment
@@ -86,4 +88,4 @@ class SQLAlchemyShipmentRepository(ShipmentRepository):
     def count(self) -> int:
         """统计发货单总数"""
         with get_db() as db:
-            return db.query(ShipmentRecord).count()
+            return cast("int", db.query(ShipmentRecord).count())

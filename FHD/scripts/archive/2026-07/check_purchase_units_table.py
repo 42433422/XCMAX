@@ -1,5 +1,7 @@
 import sqlite3
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 
 def check_purchase_units_table():
     """检查purchase_units表的内容"""
@@ -65,7 +67,7 @@ def check_purchase_units_table():
             "units_list": units,
         }
 
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 检查purchase_units表时出错: {e}")
         return {"error": str(e)}
 
@@ -109,7 +111,7 @@ def add_bandao_fengqing_to_purchase_units():
         conn.close()
         return True
 
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 添加半岛风情到purchase_units表时出错: {e}")
         return False
 
@@ -125,7 +127,7 @@ if __name__ == "__main__":
 
     if "error" not in result:
         if result["table_exists"]:
-            print(f"✅ purchase_units表存在")
+            print("✅ purchase_units表存在")
             print(f"   活跃购买单位: {result['active_units']} 个")
             print(f"   总购买单位: {result['total_units']} 个")
 

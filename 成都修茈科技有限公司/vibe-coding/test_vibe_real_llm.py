@@ -1,9 +1,12 @@
 """Test vibe-coding with REAL MIMO API - generate a real Python function from NL brief."""
-import json
+
 import sys
+
+from vibe_coding.operational_errors import BOUNDARY_ERRORS
+
 sys.path.insert(0, r"e:\成都修茈科技有限公司\vibe-coding\src")
 
-from vibe_coding import VibeCoder, OpenAILLM
+from vibe_coding import OpenAILLM, VibeCoder
 
 if __name__ == "__main__":
     # Use MIMO API (OpenAI-compatible)
@@ -34,26 +37,27 @@ if __name__ == "__main__":
     try:
         skill = coder.code(brief, mode="brief_first")
         print(f"\nSuccess! Skill: {skill.skill_id}")
-        
+
         version = skill.get_active_version()
         print(f"\nFunction: {version.function_name}")
         print(f"\nSource code:\n{version.source_code}")
-        
-        print(f"\nTest cases:")
+
+        print("\nTest cases:")
         for tc in version.test_cases:
             print(f"  - {tc.case_id}: input={tc.input_data}, expected={tc.expected_output}")
-        
-        print(f"\nExecuting skill with input: {{'items': ['hello', 'hi', 'world', 'ok', 'python']}}")
+
+        print("\nExecuting skill with input: {'items': ['hello', 'hi', 'world', 'ok', 'python']}")
         result = coder.run(skill.skill_id, {"items": ["hello", "hi", "world", "ok", "python"]})
         print(f"Result: {result.output_data}")
-        
+
         print("\n" + "=" * 60)
         print("Test 1 PASSED!")
         print("=" * 60)
-        
-    except Exception as e:
+
+    except BOUNDARY_ERRORS as e:
         print(f"\nTest 1 FAILED: {e}")
         import traceback
+
         traceback.print_exc()
 
     # Test 2: More complex function
@@ -64,20 +68,21 @@ if __name__ == "__main__":
     try:
         skill2 = coder.code(brief2, mode="brief_first")
         print(f"\nSuccess! Skill: {skill2.skill_id}")
-        
+
         version2 = skill2.get_active_version()
         print(f"\nFunction: {version2.function_name}")
         print(f"\nSource code:\n{version2.source_code}")
-        
-        print(f"\nTest cases:")
+
+        print("\nTest cases:")
         for tc in version2.test_cases:
             print(f"  - {tc.case_id}: input={tc.input_data}, expected={tc.expected_output}")
-        
+
         print("\n" + "=" * 60)
         print("Test 2 PASSED!")
         print("=" * 60)
-        
-    except Exception as e:
+
+    except BOUNDARY_ERRORS as e:
         print(f"\nTest 2 FAILED: {e}")
         import traceback
+
         traceback.print_exc()

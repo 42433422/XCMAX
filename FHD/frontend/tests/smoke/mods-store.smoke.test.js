@@ -73,11 +73,7 @@ describe('mods store smoke', () => {
     expect(store.isLoaded).toBe(true)
     expect(store.mods.length).toBe(1)
     expect(store.mods[0].id).toBe('taiyangniao-pro')
-    expect(global.fetch).toHaveBeenNthCalledWith(
-      1,
-      '/api/mods/',
-      expect.objectContaining({ credentials: 'include' })
-    )
+    expect(global.fetch).toHaveBeenNthCalledWith(1, '/api/mods/', expect.objectContaining({ credentials: 'include' }))
   })
 
   it('登录权益覆盖 localStorage 中的旧 activeModId', async () => {

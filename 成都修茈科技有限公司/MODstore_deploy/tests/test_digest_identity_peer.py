@@ -5,8 +5,6 @@ from __future__ import annotations
 import hashlib
 from datetime import datetime, timedelta
 
-import pytest
-
 
 def test_internal_verify_404_when_inbound_disabled(client, monkeypatch):
     monkeypatch.delenv("MODSTORE_DIGEST_PEER_ENABLE_INBOUND", raising=False)

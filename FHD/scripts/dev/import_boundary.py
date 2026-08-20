@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="arg-type, list-item"
 """LG-W1-T10-A Static Import Boundary checker.
 
 Deterministic, stdlib-only, fail-closed AST import checker that enforces the

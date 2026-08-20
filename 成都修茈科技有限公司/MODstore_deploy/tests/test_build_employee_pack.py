@@ -193,7 +193,8 @@ def test_build_pack_from_commit_end_to_end(tmp_path, monkeypatch):
 
     with (
         patch(
-            "modstore_server.build_employee_pack._get_commit_diff_files", return_value=diff_files
+            "modstore_server.build_employee_pack._get_commit_diff_files",
+            return_value=diff_files,
         ),
         patch("modstore_server.build_employee_pack._read_pack_file") as mock_read,
     ):

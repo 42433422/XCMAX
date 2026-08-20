@@ -10,12 +10,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from dotenv import load_dotenv
+from dotenv import load_dotenv  # noqa: E402
 
 load_dotenv(ROOT / ".env", override=False)
 load_dotenv(ROOT / ".env.local", override=True)
 
-from modstore_server.models import User, get_session_factory
+from modstore_server.models import User, get_session_factory  # noqa: E402
 
 PROVIDER = "xiaomi"
 MODEL = "mimo-v2.5-pro"

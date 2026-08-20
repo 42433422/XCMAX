@@ -880,7 +880,8 @@ def test_execute_planner_tool_from_body_recoverable_error() -> None:
     ):
         out = execute_planner_tool_from_body({"tool_name": "fail_tool"})
     assert out["success"] is False
-    assert "exec boom" in out["error"]
+    assert out["error"] == "工具执行失败，请稍后重试"
+    assert out["error_code"] == "planner_tool_execution_failed"
     assert out["tool_name"] == "fail_tool"
 
 
@@ -918,7 +919,8 @@ def test_execute_planner_tool_from_body_propagates_structured_failure() -> None:
     ):
         out = execute_planner_tool_from_body({"tool_name": "word-full-read-employee"})
     assert out["success"] is False
-    assert out["error"] == "employee output is missing"
+    assert out["error"] == "工具执行失败，请检查输入后重试"
+    assert "employee output is missing" not in out["result"]
     assert out["execution_path"] == "mod_facade"
 
 
@@ -1449,13 +1451,10 @@ async def test_handle_cancelled_invalid_shipment_id_raises(
             "app.neuro_bus.domains.shipment_domain_handlers.try_complete_command_reply"
         ) as mock_reply,
     ):
-        # int(None) 抛 TypeError（不属于 RECOVERABLE_ERRORS？TypeError 不在列表中）
-        # 实际：RECOVERABLE_ERRORS = INFRA_TRANSIENT + DATA_SHAPE
-        # DATA_SHAPE = (ValueError, json.JSONDecodeError, UnicodeError, LookupError)
-        # TypeError 不在其中 → 应该向上抛出
-        with pytest.raises(TypeError):
+        with pytest.raises(ValueError, match="positive integer"):
             await handlers.handle_cancelled(event)
     mock_core.cancel_shipment.assert_not_called()
+    mock_reply.assert_called_once()
 
 
 @pytest.mark.asyncio

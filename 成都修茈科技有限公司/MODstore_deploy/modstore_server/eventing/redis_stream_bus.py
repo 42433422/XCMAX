@@ -15,8 +15,10 @@ import logging
 import os
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Dict, List
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +79,7 @@ def _client():
                 retry_on_timeout=True,
                 health_check_interval=30,
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.exception("redis stream init failed")
             return None
     return _redis_client
@@ -98,7 +100,7 @@ def publish_event(
     if r is None:
         return {"ok": False, "reason": "redis client unavailable"}
 
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now_iso = datetime.now(UTC).isoformat()
     resolved_event_id = (event_id or "").strip()
     if not resolved_event_id:
         sid = int(incident_id or 0)
@@ -122,7 +124,7 @@ def publish_event(
         else:
             mid = r.xadd(key, data)
         return {"ok": True, "stream": key, "message_id": str(mid)}
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("redis stream publish failed event=%s", event_type)
         return {"ok": False, "error": str(exc)[:300], "stream": key}
 
@@ -140,7 +142,7 @@ def ensure_group(group_name: str, *, key: str | None = None) -> Dict[str, Any]:
     try:
         r.xgroup_create(stream, group, id="0-0", mkstream=True)
         return {"ok": True, "created": True, "stream": stream, "group": group}
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         msg = str(exc)
         if "BUSYGROUP" in msg:
             return {"ok": True, "created": False, "stream": stream, "group": group}
@@ -167,7 +169,11 @@ def read_group(
     group = (group_name or "").strip()
     consumer = (consumer_name or "").strip()
     if not group or not consumer:
-        return {"ok": False, "reason": "group_name/consumer_name required", "events": []}
+        return {
+            "ok": False,
+            "reason": "group_name/consumer_name required",
+            "events": [],
+        }
 
     ensure_res = ensure_group(group, key=stream)
     if not ensure_res.get("ok"):
@@ -185,7 +191,7 @@ def read_group(
             count=max(1, int(count or 20)),
             block=max(0, int(block_ms or 0)),
         )
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("redis stream read_group failed stream=%s group=%s", stream, group)
         return {"ok": False, "error": str(exc)[:300], "events": []}
 
@@ -196,7 +202,7 @@ def read_group(
             payload_raw = raw.get("payload_json") or "{}"
             try:
                 payload = json.loads(payload_raw)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 payload = {}
             events.append(
                 {
@@ -212,7 +218,13 @@ def read_group(
                     "raw_fields": raw,
                 }
             )
-    return {"ok": True, "events": events, "stream": stream, "group": group, "consumer": consumer}
+    return {
+        "ok": True,
+        "events": events,
+        "stream": stream,
+        "group": group,
+        "consumer": consumer,
+    }
 
 
 def ack(group_name: str, message_ids: List[str], *, key: str | None = None) -> Dict[str, Any]:
@@ -229,7 +241,7 @@ def ack(group_name: str, message_ids: List[str], *, key: str | None = None) -> D
     try:
         n = r.xack(stream, group, *mids)
         return {"ok": True, "acked": int(n or 0), "stream": stream, "group": group}
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("redis stream ack failed stream=%s group=%s", stream, group)
         return {"ok": False, "error": str(exc)[:300], "stream": stream, "group": group}
 

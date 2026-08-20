@@ -18,16 +18,24 @@ from app.application.desktop_admin_gate import (
 from app.application.desktop_admin_gate import (
     is_desktop_runtime as _gate_is_desktop_runtime,
 )
+from app.application.enterprise_login_finalize import finalize_enterprise_login
 from app.application.session_account_meta import (
     AccountKind,
-    company_brand_from_user_blob,
     extract_market_user_blob,
     persist_session_account_meta,
     validate_account_kind_for_market,
 )
+from app.application.session_account_meta import (
+    company_brand_from_user_blob as _company_brand_from_user_blob,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+
+def company_brand_from_user_blob(user_blob: dict[str, Any]) -> str:
+    """Compatibility seam retained for integrations patching the login facade."""
+    return _company_brand_from_user_blob(user_blob)
 
 
 def _is_desktop_runtime() -> bool:
@@ -123,14 +131,14 @@ async def ensure_local_user_after_market(
         ensure_runtime_auth_bootstrap(swallow_errors=True)
         with get_db() as db:
             exists = db.query(User).filter(User.username == username).first()
-    except RECOVERABLE_ERRORS as db_exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("enterprise login user lookup failed")
         return None, JSONResponse(
             {
                 "success": False,
                 "error": {
                     "code": "DATABASE_ERROR",
-                    "message": f"本地用户库不可用：{db_exc}",
+                    "message": "本地用户库暂不可用",
                 },
             },
             status_code=503,
@@ -250,224 +258,6 @@ def _derive_and_heal_account_kind(
         )
 
 
-async def finalize_enterprise_login(
-    *,
-    result: dict[str, Any],
-    session_id: str | None,
-    market_result: dict[str, Any] | None,
-    account_kind: AccountKind,
-    username: str,
-    sku: str,
-    skip_market_sync: bool = False,
-) -> dict[str, Any]:
-    """绑定市场 token、会话元数据、Mod 权益与租户信息。"""
-    from app.fastapi_routes.market_account import (
-        fetch_market_membership_tier,
-        save_session_market_token,
-    )
-
-    if not session_id:
-        return result
-
-    password_for_market = None
-    try:
-        if skip_market_sync:
-            market_result = market_result or {"success": False}
-        elif market_result is None and sku != "enterprise":
-            password_for_market = True
-        elif market_result is None:
-            market_result = {"success": False}
-
-        if password_for_market and isinstance(result, dict):
-            pass
-
-        mtok = str((market_result or {}).get("token") or "").strip()
-        mrefresh = str((market_result or {}).get("refresh_token") or "").strip()
-        from app.application.surface_audit_demo_account import is_local_demo_market_token
-
-        local_demo_market = bool(mtok and is_local_demo_market_token(mtok))
-        if market_result and market_result.get("success") and mtok:
-            save_session_market_token(str(session_id), mtok, mrefresh or None)
-            result["market_access_token"] = mtok
-            if mrefresh:
-                result["market_refresh_token"] = mrefresh
-
-        if market_result and market_result.get("success"):
-            user_blob = extract_market_user_blob(market_result)
-            market_uid: int | None = None
-            if user_blob.get("id") is not None:
-                market_uid = int(user_blob["id"])
-            company_brand = company_brand_from_user_blob(user_blob)
-            tenant_id_val: int | None = None
-            tenant_name = company_brand
-            user_id = (result.get("user") or {}).get("id")
-            if user_id is not None:
-                tenant_info = bind_tenant_for_login(
-                    user_id=int(user_id),
-                    company_brand=company_brand,
-                    username=username,
-                )
-                if tenant_info.get("tenant_id") is not None:
-                    tenant_id_val = int(tenant_info["tenant_id"])
-                    result["tenant_id"] = tenant_id_val
-                if tenant_info.get("tenant_name"):
-                    tenant_name = str(tenant_info["tenant_name"])
-                    result["tenant_name"] = tenant_name
-                active_license_plan_id = str(
-                    (market_result or {}).get("active_plan_id") or ""
-                ).strip()
-                if active_license_plan_id:
-                    from app.application.tenant_subscription_app_service import (
-                        apply_paid_plan_for_user,
-                    )
-
-                    if apply_paid_plan_for_user(
-                        user_id=int(user_id),
-                        plan_id=active_license_plan_id,
-                    ):
-                        result["account_license_plan_id"] = active_license_plan_id
-                        result["account_tier"] = str(
-                            (market_result or {}).get("account_tier") or "normal"
-                        )
-            market_is_admin = bool(market_result.get("is_market_admin"))
-            market_is_enterprise = bool(market_result.get("is_enterprise"))
-            # 单一真相源 + 自动派生：account_kind 由本地 User.tier 派生（市场身份可向上提升），
-            # 不再采用登录入口传入的 account_kind。
-            account_kind = _derive_and_heal_account_kind(
-                user_id=user_id,
-                market_is_admin=market_is_admin,
-                market_is_enterprise=market_is_enterprise,
-                fallback=account_kind,
-            )
-            persist_session_account_meta(
-                str(session_id),
-                account_kind=account_kind,
-                company_brand=company_brand,
-                market_user_id=market_uid,
-                market_is_admin=market_is_admin,
-                market_is_enterprise=market_is_enterprise,
-                tenant_id=tenant_id_val,
-            )
-            result["account_kind"] = account_kind
-            result["company_brand"] = company_brand
-            result["market_is_admin"] = market_is_admin
-            result["market_is_enterprise"] = market_is_enterprise
-            # 维度3 会员体系：登录后从市场同步会员等级到 Session.market_membership_tier
-            if mtok and not local_demo_market:
-                from app.application.session_account_meta import (
-                    persist_session_membership_tier,
-                )
-
-                membership_tier = await fetch_market_membership_tier(mtok)
-                if membership_tier:
-                    persist_session_membership_tier(str(session_id), membership_tier)
-                    result["market_membership_tier"] = membership_tier
-        elif skip_market_sync:
-            user_id = (result.get("user") or {}).get("id")
-            if user_id is not None:
-                tenant_info = bind_tenant_for_login(
-                    user_id=int(user_id),
-                    company_brand=str(result.get("company_brand") or username),
-                    username=username,
-                )
-                if tenant_info.get("tenant_id") is not None:
-                    result["tenant_id"] = tenant_info["tenant_id"]
-                if tenant_info.get("tenant_name"):
-                    result["tenant_name"] = tenant_info["tenant_name"]
-                persist_session_account_meta(
-                    str(session_id),
-                    account_kind=account_kind,
-                    company_brand=str(result.get("company_brand") or ""),
-                    tenant_id=(
-                        int(tenant_info["tenant_id"]) if tenant_info.get("tenant_id") else None
-                    ),
-                )
-            result["account_kind"] = account_kind
-
-        if (
-            sku == "enterprise"
-            and market_result
-            and market_result.get("success")
-            and mtok
-            and not local_demo_market
-        ):
-            from app.enterprise.mod_entitlements import (
-                get_cached_entitled_client_mod_ids,
-                persist_entitlements_to_session_row,
-                refresh_session_entitlements_from_market,
-                reload_enterprise_mods_after_login,
-            )
-
-            market_uid = None
-            raw_login = market_result.get("raw")
-            if isinstance(raw_login, dict):
-                ub = raw_login.get("user")
-                if isinstance(ub, dict) and ub.get("id") is not None:
-                    market_uid = int(ub["id"])
-            client_ids = await refresh_session_entitlements_from_market(
-                market_token=mtok,
-                market_user_id=market_uid,
-                market_username=username,
-                session_id=str(session_id),
-            )
-            persist_entitlements_to_session_row(str(session_id), client_ids)
-            await reload_enterprise_mods_after_login()
-            cached = get_cached_entitled_client_mod_ids()
-            if cached is not None:
-                result["entitled_mod_ids"] = sorted(cached)
-
-        if market_result:
-            result["market_account"] = {
-                "success": bool(market_result.get("success")),
-                "market_base_url": market_result.get("market_base_url"),
-                "message": market_result.get("message", ""),
-                "is_enterprise": bool(market_result.get("is_enterprise")),
-                "is_market_admin": bool(market_result.get("is_market_admin")),
-            }
-    except RECOVERABLE_ERRORS as exc:
-        result["market_account"] = {
-            "success": False,
-            "message": f"市场账号自动同步失败：{exc}",
-        }
-
-    if session_id and "entitled_mod_ids" not in result:
-        try:
-            from app.enterprise.account_mod_binding import (
-                augment_entitled_client_mod_ids_for_username,
-            )
-            from app.enterprise.mod_entitlements import (
-                enterprise_mod_filter_active,
-                get_cached_entitled_client_mod_ids,
-                persist_entitlements_to_session_row,
-                reload_enterprise_mods_after_login,
-                set_session_entitlements,
-            )
-
-            fallback = augment_entitled_client_mod_ids_for_username(username, set())
-            if fallback:
-                set_session_entitlements(
-                    market_user_id=None,
-                    market_username=username,
-                    entitled_client_mod_ids=fallback,
-                )
-                persist_entitlements_to_session_row(str(session_id), fallback)
-                if enterprise_mod_filter_active():
-                    await reload_enterprise_mods_after_login()
-                cached = get_cached_entitled_client_mod_ids()
-                if cached:
-                    result["entitled_mod_ids"] = sorted(cached)
-        except RECOVERABLE_ERRORS:
-            logger.exception("account_mod_binding fallback on login failed")
-
-    denied = _reject_admin_on_desktop(
-        session_id=str(session_id) if session_id else None,
-        account_kind=str(result.get("account_kind") or account_kind or ""),
-    )
-    if denied is not None:
-        return denied
-    return result
-
-
 async def run_market_first_login(
     *,
     username: str,
@@ -482,8 +272,6 @@ async def run_market_first_login(
     totp_code: str | None = None,
 ) -> tuple[dict[str, Any] | None, JSONResponse | None]:
     """企业 SKU：市场先行，再本地 session + finalize。"""
-    from app.application.session_account_meta import persist_session_account_meta
-
     # 桌面端：显式 admin 入口直接拒绝（即使市场可达也不开管理员会话）
     if str(account_kind).strip().lower() == "admin" and _is_desktop_runtime():
         return {
@@ -498,21 +286,9 @@ async def run_market_first_login(
     login_username = username
     if sku == "enterprise":
         if market_result is None and login_market_fn and password:
-            logger.info(
-                "enterprise market-first login start username=%s account_kind=%s sku=%s",
-                username,
-                account_kind,
-                sku,
-            )
+            logger.info("enterprise market-first login started")
             market_result = await login_market_fn(username, password)
-            logger.info(
-                "enterprise market-first login result username=%s success=%s is_enterprise=%s is_market_admin=%s base=%s",
-                username,
-                bool((market_result or {}).get("success")),
-                bool((market_result or {}).get("is_enterprise")),
-                bool((market_result or {}).get("is_market_admin")),
-                (market_result or {}).get("market_base_url"),
-            )
+            logger.info("enterprise market-first login completed")
         if not (market_result or {}).get("success"):
             if account_kind == "admin" and password:
                 # 市场不可达的本地管理员应急登录：不阻断于本地 MFA

@@ -23,7 +23,10 @@ def test_build_public_board_has_no_internal_fields(monkeypatch):
     monkeypatch.setenv("MODSTORE_ACTION_ITEMS_KEEP_LOW_SIGNAL", "1")
     from sqlalchemy import text
 
-    from modstore_server.digest_action_items import ensure_table, parse_and_store_action_items
+    from modstore_server.digest_action_items import (
+        ensure_table,
+        parse_and_store_action_items,
+    )
     from modstore_server.models import get_engine
 
     ensure_table()
@@ -113,6 +116,7 @@ def test_verified_strategic_goal_is_visible_with_loop_linkage(monkeypatch):
 def test_write_public_action_board_corp_root(tmp_path, monkeypatch):
     monkeypatch.setenv("XCMAX_MONOREPO_ROOT", str(tmp_path))
     corp = tmp_path / "成都修茈科技有限公司"
+    monkeypatch.setenv("MODSTORE_PUBLIC_OUTPUT_ROOT", str(corp))
     corp.mkdir(parents=True)
     out = write_public_action_board(day=None)
     assert out["ok"] is True

@@ -65,7 +65,7 @@ def run_bounded_agent_loop(
         if verdict.get("complete") is True:
             status = "complete"
             break
-    payload = {
+    payload: dict[str, Any] = {
         "status": status,
         "objective": objective,
         "summary": {

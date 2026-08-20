@@ -48,7 +48,9 @@ def _minimal_employee_pack(
 
 
 def test_missing_pack_dir_fails_fast():
-    from modstore_server.mod_scaffold_runner import run_employee_pack_code_validation_report
+    from modstore_server.mod_scaffold_runner import (
+        run_employee_pack_code_validation_report,
+    )
 
     report = asyncio.run(
         run_employee_pack_code_validation_report(Path("/nonexistent/pack-dir-xyz")),
@@ -60,7 +62,9 @@ def test_missing_pack_dir_fails_fast():
 
 
 def test_missing_depends_on_fails_consistency(tmp_path):
-    from modstore_server.mod_scaffold_runner import run_employee_pack_code_validation_report
+    from modstore_server.mod_scaffold_runner import (
+        run_employee_pack_code_validation_report,
+    )
 
     pack = _minimal_employee_pack(tmp_path, depends_on=["not-a-real-employee-id-xyz"])
     report = asyncio.run(run_employee_pack_code_validation_report(pack))

@@ -9,7 +9,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.history import RetortHistoryStore
 from retort_engine.models import EmployeeTaskRecord, ImprovementTask
@@ -43,7 +43,7 @@ def run_employee_scheduler_stress(
     request_dir.mkdir(parents=True, exist_ok=True)
     result_dir.mkdir(parents=True, exist_ok=True)
     store = RetortHistoryStore(history_path)
-    rounds = []
+    rounds: list[dict[str, Any]] = []
     failed_process_count = 0
     process_invocation_count = 0
     expected_task_ids: list[str] = []
@@ -58,7 +58,7 @@ def run_employee_scheduler_stress(
             expected_task_ids.append(str(task["task_id"]))
             _append_queue_record(queue_path, run_id, task)
             store.record_employee_task(_employee_task_record(run_id, task))
-        payloads = []
+        payloads: list[dict[str, Any]] = []
         for worker_index, task_batch in enumerate(
             _split_tasks(tasks, worker_count), start=1
         ):
@@ -101,12 +101,12 @@ def run_employee_scheduler_stress(
                 }
             )
         processes = _run_workers(
-            root, [Path(item["payload_path"]) for item in payloads]
+            root, [Path(str(item["payload_path"])) for item in payloads]
         )
         process_invocation_count += len(processes)
-        payload_results = []
+        payload_results: list[dict[str, Any]] = []
         for payload_info, process in zip(payloads, processes, strict=True):
-            result_path = Path(payload_info["result_path"])
+            result_path = Path(str(payload_info["result_path"]))
             worker_run = {
                 "round_index": round_index,
                 "worker_index": payload_info["worker_index"],
@@ -153,7 +153,7 @@ def run_employee_scheduler_stress(
         and isinstance(item["process"].get("pid"), int)
         and int(item["process"]["pid"]) > 0
     ]
-    summary = {
+    summary: dict[str, Any] = {
         "run_id": run_id,
         "round_count": len(rounds),
         "tasks_per_round": max(1, tasks_per_round),
@@ -263,7 +263,9 @@ def _append_queue_record(queue_path: Path, run_id: str, task: dict[str, Any]) ->
 def _split_tasks(
     tasks: list[dict[str, Any]], worker_count: int
 ) -> list[list[dict[str, Any]]]:
-    batches = [[] for _ in range(max(1, min(worker_count, len(tasks) or 1)))]
+    batches: list[list[dict[str, Any]]] = [
+        [] for _ in range(max(1, min(worker_count, len(tasks) or 1)))
+    ]
     for index, task in enumerate(tasks):
         batches[index % len(batches)].append(task)
     return [batch for batch in batches if batch]
@@ -273,7 +275,7 @@ def _run_workers(root: Path, payload_paths: list[Path]) -> list[dict[str, Any]]:
     if len(payload_paths) <= 1:
         return [_run_worker(root, payload_paths[0])] if payload_paths else []
     package_root, env = _worker_runtime_env()
-    processes = []
+    processes: list[dict[str, Any]] = []
     for payload_path in payload_paths:
         command = _worker_command(package_root, payload_path)
         started_at = datetime.now(timezone.utc).isoformat()
@@ -296,12 +298,14 @@ def _run_workers(root: Path, payload_paths: list[Path]) -> list[dict[str, Any]]:
                 "started_monotonic": started_monotonic,
             }
         )
-    results = []
+    results: list[dict[str, Any]] = []
     for item in processes:
-        process = item["process"]
+        process = cast(subprocess.Popen[str], item["process"])
         try:
             stdout, stderr = process.communicate(timeout=120)
-            returncode = int(process.returncode)
+            returncode = int(
+                process.returncode if process.returncode is not None else -1
+            )
         except subprocess.TimeoutExpired:
             process.kill()
             stdout, stderr = process.communicate()
@@ -314,7 +318,9 @@ def _run_workers(root: Path, payload_paths: list[Path]) -> list[dict[str, Any]]:
                 "ended_at": datetime.now(timezone.utc).isoformat(),
                 "duration_sec": round(
                     time.monotonic()
-                    - float(item.get("started_monotonic") or time.monotonic()),
+                    - float(
+                        cast(Any, item.get("started_monotonic") or time.monotonic())
+                    ),
                     3,
                 ),
                 "returncode": returncode,

@@ -13,7 +13,7 @@ import json
 import os
 import random
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
@@ -240,7 +240,9 @@ def _sample_item(row: Dict[str, Any], phase: str, run_id: str) -> Dict[str, Any]
 
 
 def _metrics_for_phase(
-    phase: str, items: Sequence[Dict[str, Any]], review_results: Dict[str, Dict[str, Any]]
+    phase: str,
+    items: Sequence[Dict[str, Any]],
+    review_results: Dict[str, Dict[str, Any]],
 ) -> Dict[str, Any]:
     labeled = []
     false_positive = 0
@@ -288,7 +290,8 @@ def run_auto_merge_audit_sampling_once(
     if not requested_phases:
         requested_phases = list(PHASES)
     size = max(
-        1, sample_size or _env_int("MODSTORE_AUTO_MERGE_AUDIT_SAMPLE_SIZE", DEFAULT_SAMPLE_SIZE)
+        1,
+        sample_size or _env_int("MODSTORE_AUTO_MERGE_AUDIT_SAMPLE_SIZE", DEFAULT_SAMPLE_SIZE),
     )
     size = min(size, 100)
     rows = [row for row in _read_jsonl(_ledger_path()) if _is_auto_merge(row)]
@@ -298,12 +301,12 @@ def run_auto_merge_audit_sampling_once(
         if phase in by_phase:
             by_phase[phase].append(row)
 
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     run_id = f"audit-{stamp}-{_stable_id(stamp, len(rows))[:8]}"
     existing_ids = _existing_queue_ids()
     review_results = _load_review_results()
     summary: Dict[str, Any] = {
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
         "ledger_path": str(_ledger_path()),
         "ok": True,
         "phase_metrics": {},

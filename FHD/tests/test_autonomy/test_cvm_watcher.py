@@ -1,3 +1,4 @@
+# mypy: disable-error-code="index"
 """tests/test_autonomy/test_cvm_watcher.py — cvm-autonomy-watcher 主程序测试。
 
 覆盖：

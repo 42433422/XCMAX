@@ -1,10 +1,6 @@
 import { computed, type Ref } from 'vue'
 import { useWorkflowAiEmployeesStore } from '@/stores/workflowAiEmployees'
-import {
-  formatWorkDurationShort,
-  totalWorkMs,
-  type WorkflowEmployeeDeskRow,
-} from '@/composables/useWorkflowEmployeeDesks'
+import { formatWorkDurationShort, totalWorkMs, type WorkflowEmployeeDeskRow } from '@/composables/useWorkflowEmployeeDesks'
 
 export type WorkspaceDeskDisplayDeps = {
   nowMs: Ref<number>
@@ -86,9 +82,7 @@ export function useWorkspaceDeskDisplay(deps: WorkspaceDeskDisplayDeps) {
     }
   }
 
-  const selectedDeskLoopState = computed(() =>
-    selectedDesk.value ? deskLoopState(selectedDesk.value) : null,
-  )
+  const selectedDeskLoopState = computed(() => (selectedDesk.value ? deskLoopState(selectedDesk.value) : null))
 
   return {
     progressPct,

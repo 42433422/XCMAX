@@ -12,12 +12,24 @@ import bisect
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Iterable
+from typing import Any
 
 # Default histogram buckets in milliseconds. Roughly geometric: covers
 # fast LLM calls (50ms) up to long heal loops (60s).
 DEFAULT_BUCKETS_MS: tuple[float, ...] = (
-    5, 10, 25, 50, 100, 250, 500, 1_000, 2_500, 5_000, 10_000, 30_000, 60_000,
+    5,
+    10,
+    25,
+    50,
+    100,
+    250,
+    500,
+    1_000,
+    2_500,
+    5_000,
+    10_000,
+    30_000,
+    60_000,
 )
 
 
@@ -129,7 +141,7 @@ class Histogram:
             if entry is None or not entry["samples"]:
                 return 0.0
             samples = list(entry["samples"])
-        idx = max(0, min(len(samples) - 1, int(round(p * (len(samples) - 1)))))
+        idx = max(0, min(len(samples) - 1, round(p * (len(samples) - 1))))
         return float(samples[idx])
 
     def count(self, *, labels: dict[str, str] | None = None) -> int:
@@ -210,18 +222,14 @@ class MetricsRegistry:
                 "counters": {
                     name: {
                         "description": c.description,
-                        "values": [
-                            {"labels": dict(k), "value": v} for k, v in c.snapshot().items()
-                        ],
+                        "values": [{"labels": dict(k), "value": v} for k, v in c.snapshot().items()],
                     }
                     for name, c in self.counters.items()
                 },
                 "gauges": {
                     name: {
                         "description": g.description,
-                        "values": [
-                            {"labels": dict(k), "value": v} for k, v in g.snapshot().items()
-                        ],
+                        "values": [{"labels": dict(k), "value": v} for k, v in g.snapshot().items()],
                     }
                     for name, g in self.gauges.items()
                 },
@@ -229,10 +237,7 @@ class MetricsRegistry:
                     name: {
                         "description": h.description,
                         "buckets": list(h.buckets),
-                        "values": [
-                            {"labels": dict(k), **v}
-                            for k, v in h.snapshot().items()
-                        ],
+                        "values": [{"labels": dict(k), **v} for k, v in h.snapshot().items()],
                     }
                     for name, h in self.histograms.items()
                 },
@@ -262,13 +267,9 @@ class MetricsRegistry:
                     cumulative = 0
                     for i, threshold in enumerate(hist.buckets):
                         cumulative += entry["buckets"][i]
-                        bucket_label = _format_labels(
-                            tuple(sorted({**base_labels, "le": str(threshold)}.items()))
-                        )
+                        bucket_label = _format_labels(tuple(sorted({**base_labels, "le": str(threshold)}.items())))
                         lines.append(f"{name}_bucket{bucket_label} {cumulative}")
-                    inf_label = _format_labels(
-                        tuple(sorted({**base_labels, "le": "+Inf"}.items()))
-                    )
+                    inf_label = _format_labels(tuple(sorted({**base_labels, "le": "+Inf"}.items())))
                     lines.append(f"{name}_bucket{inf_label} {entry['count']}")
                     lines.append(f"{name}_sum{_format_labels(key)} {entry['sum']}")
                     lines.append(f"{name}_count{_format_labels(key)} {entry['count']}")
@@ -283,7 +284,7 @@ def _format_labels(key: tuple[tuple[str, str], ...]) -> str:
 
 
 def _escape(value: str) -> str:
-    return value.replace("\\", "\\\\").replace("\n", "\\n").replace("\"", "\\\"")
+    return value.replace("\\", "\\\\").replace("\n", "\\n").replace('"', '\\"')
 
 
 # ----------------------------------------------------- timing helper
@@ -297,7 +298,7 @@ class TimerContext:
         self.labels = labels
         self._t0 = 0.0
 
-    def __enter__(self) -> "TimerContext":
+    def __enter__(self) -> TimerContext:
         self._t0 = time.perf_counter()
         return self
 
@@ -322,8 +323,8 @@ def get_default_registry() -> MetricsRegistry:
 
 
 __all__ = [
-    "Counter",
     "DEFAULT_BUCKETS_MS",
+    "Counter",
     "Gauge",
     "Histogram",
     "MetricsRegistry",

@@ -140,8 +140,8 @@ vi.mock('@/i18n', () => ({
 }))
 
 vi.mock('@/utils/typeGuards', () => ({
-  asRecord: (v: unknown) => (v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {}),
-  asArray: <T>(v: unknown) => (Array.isArray(v) ? v as T[] : [] as T[]),
+  asRecord: (v: unknown) => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {}),
+  asArray: <T>(v: unknown) => (Array.isArray(v) ? (v as T[]) : ([] as T[])),
   asString: (v: unknown, fallback = '') => (typeof v === 'string' ? v : fallback),
   asBoolean: (v: unknown, fallback = false) => (typeof v === 'boolean' ? v : fallback),
   asDisposable: (v: unknown) => (typeof v === 'function' ? v : () => {}),
@@ -149,7 +149,12 @@ vi.mock('@/utils/typeGuards', () => ({
 
 /* ── store mocks ── */
 const mockIndustryStore = {
-  industries: [] as Array<{ id: string | number; name: string; code: string; [k: string]: unknown }>,
+  industries: [] as Array<{
+    id: string | number
+    name: string
+    code: string
+    [k: string]: unknown
+  }>,
   currentIndustry: null as unknown,
   currentConfig: null as unknown,
   currentIndustryId: 'default',
@@ -244,9 +249,9 @@ vi.mock('@/constants/accountModBinding', () => ({
 vi.mock('@/constants/genericModPack', () => ({
   ACCOUNT_CUSTOM_MOD_IDS: ['taiyangniao-pro', 'sz-qsm-pro'],
   expectedHostBridgeModIds: () => ['host-bridge-1', 'host-bridge-2'],
-  isHostBridgeModId: (...args: unknown[]) => mockIsHostBridgeModId(...args as [string]),
-  isSelectableExtensionModId: (...args: unknown[]) => mockIsSelectableExtensionModId(...args as [string]),
-  isWorkflowEmployeeModId: (...args: unknown[]) => mockIsWorkflowEmployeeModId(...args as [string]),
+  isHostBridgeModId: (...args: unknown[]) => mockIsHostBridgeModId(...(args as [string])),
+  isSelectableExtensionModId: (...args: unknown[]) => mockIsSelectableExtensionModId(...(args as [string])),
+  isWorkflowEmployeeModId: (...args: unknown[]) => mockIsWorkflowEmployeeModId(...(args as [string])),
 }))
 
 vi.mock('@/api', () => ({
@@ -343,11 +348,17 @@ function resetApiMocks() {
   mockIntentPackagesApiGetPackages.mockReset()
   mockAdminAuditApiList.mockReset()
   // 设置默认返回值
-  mockAuthApiGetCurrentUser.mockResolvedValue({ success: false, data: { user: null, permissions: [] } })
+  mockAuthApiGetCurrentUser.mockResolvedValue({
+    success: false,
+    data: { user: null, permissions: [] },
+  })
   mockAuthApiValidateSession.mockResolvedValue({ success: false })
   mockAuthApiLogout.mockResolvedValue({})
   mockAuthApiUpdateCompanyBrand.mockResolvedValue({ success: true })
-  mockAuthApiUploadAvatar.mockResolvedValue({ success: true, data: { avatar_url: '/api/auth/avatar' } })
+  mockAuthApiUploadAvatar.mockResolvedValue({
+    success: true,
+    data: { avatar_url: '/api/auth/avatar' },
+  })
   mockAuthApiUpdateProfile.mockResolvedValue({ success: true, data: { user: null } })
   mockSystemApiGetIndustries.mockResolvedValue({ success: true, data: [] })
   mockSystemApiGetCurrentIndustry.mockResolvedValue({ success: false })
@@ -386,7 +397,14 @@ describe('SettingsView – loadLocalUser 各种路径', () => {
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({
       success: true,
       data: {
-        user: { id: 1, username: 'admin', display_name: 'Admin', email: 'a@a.com', role: 'admin', is_active: true },
+        user: {
+          id: 1,
+          username: 'admin',
+          display_name: 'Admin',
+          email: 'a@a.com',
+          role: 'admin',
+          is_active: true,
+        },
         permissions: [],
       },
     })
@@ -421,12 +439,15 @@ describe('SettingsView – loadLocalUser 各种路径', () => {
   it('session validate 无 username 时回退到 market storage', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({ success: false })
     mockAuthApiValidateSession.mockResolvedValueOnce({ success: true, valid: true, data: {} })
-    localStorage.setItem('xcagi_market_user_json', JSON.stringify({
-      id: 9,
-      username: 'marketuser',
-      display_name: 'Market User',
-      email: 'm@m.com',
-    }))
+    localStorage.setItem(
+      'xcagi_market_user_json',
+      JSON.stringify({
+        id: 9,
+        username: 'marketuser',
+        display_name: 'Market User',
+        email: 'm@m.com',
+      }),
+    )
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
@@ -519,7 +540,17 @@ describe('SettingsView – profileBrandTitle 计算属性', () => {
     mockAccountProfileStore.displayBrand = ''
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({
       success: true,
-      data: { user: { id: 1, username: 'alice', display_name: 'Alice', email: '', role: 'user', is_active: true }, permissions: [] },
+      data: {
+        user: {
+          id: 1,
+          username: 'alice',
+          display_name: 'Alice',
+          email: '',
+          role: 'user',
+          is_active: true,
+        },
+        permissions: [],
+      },
     })
     const wrapper = await mountSettings()
     await nextTick()
@@ -551,7 +582,17 @@ describe('SettingsView – profileSubline 计算属性', () => {
     mockAccountProfileStore.displayBrand = '公司A'
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({
       success: true,
-      data: { user: { id: 1, username: 'bob', display_name: 'Bob', email: '', role: 'user', is_active: true }, permissions: [] },
+      data: {
+        user: {
+          id: 1,
+          username: 'bob',
+          display_name: 'Bob',
+          email: '',
+          role: 'user',
+          is_active: true,
+        },
+        permissions: [],
+      },
     })
     const wrapper = await mountSettings()
     await nextTick()
@@ -565,7 +606,17 @@ describe('SettingsView – profileSubline 计算属性', () => {
     mockAccountProfileStore.displayBrand = '公司B'
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({
       success: true,
-      data: { user: { id: 1, username: 'carol', display_name: '公司B', email: '', role: 'user', is_active: true }, permissions: [] },
+      data: {
+        user: {
+          id: 1,
+          username: 'carol',
+          display_name: '公司B',
+          email: '',
+          role: 'user',
+          is_active: true,
+        },
+        permissions: [],
+      },
     })
     const wrapper = await mountSettings()
     await nextTick()
@@ -579,7 +630,17 @@ describe('SettingsView – profileSubline 计算属性', () => {
     mockAccountProfileStore.displayBrand = ''
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({
       success: true,
-      data: { user: { id: 1, username: 'dave', display_name: 'Dave', email: '', role: 'user', is_active: true }, permissions: [] },
+      data: {
+        user: {
+          id: 1,
+          username: 'dave',
+          display_name: 'Dave',
+          email: '',
+          role: 'user',
+          is_active: true,
+        },
+        permissions: [],
+      },
     })
     const wrapper = await mountSettings()
     await nextTick()
@@ -593,7 +654,17 @@ describe('SettingsView – profileSubline 计算属性', () => {
     mockAccountProfileStore.displayBrand = ''
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({
       success: true,
-      data: { user: { id: 42, username: 'eve', display_name: 'eve', email: '', role: 'user', is_active: true }, permissions: [] },
+      data: {
+        user: {
+          id: 42,
+          username: 'eve',
+          display_name: 'eve',
+          email: '',
+          role: 'user',
+          is_active: true,
+        },
+        permissions: [],
+      },
     })
     const wrapper = await mountSettings()
     await nextTick()
@@ -624,7 +695,17 @@ describe('SettingsView – avatarInitial 与 profileAvatarUrl', () => {
   it('有 user 时 avatarInitial 返回首字母大写', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({
       success: true,
-      data: { user: { id: 1, username: 'alice', display_name: 'alice', email: '', role: 'user', is_active: true }, permissions: [] },
+      data: {
+        user: {
+          id: 1,
+          username: 'alice',
+          display_name: 'alice',
+          email: '',
+          role: 'user',
+          is_active: true,
+        },
+        permissions: [],
+      },
     })
     const wrapper = await mountSettings()
     await nextTick()
@@ -637,7 +718,18 @@ describe('SettingsView – avatarInitial 与 profileAvatarUrl', () => {
   it('profileAvatarUrl 从 user.avatar_url 构建完整 URL', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({
       success: true,
-      data: { user: { id: 1, username: 'a', display_name: 'A', email: '', role: 'user', is_active: true, avatar_url: '/avatar.png' }, permissions: [] },
+      data: {
+        user: {
+          id: 1,
+          username: 'a',
+          display_name: 'A',
+          email: '',
+          role: 'user',
+          is_active: true,
+          avatar_url: '/avatar.png',
+        },
+        permissions: [],
+      },
     })
     const wrapper = await mountSettings()
     await nextTick()
@@ -651,7 +743,18 @@ describe('SettingsView – avatarInitial 与 profileAvatarUrl', () => {
   it('profileAvatarUrl 处理 http 开头的 avatar_url', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({
       success: true,
-      data: { user: { id: 1, username: 'a', display_name: 'A', email: '', role: 'user', is_active: true, avatar_url: 'https://cdn.test/a.png?x=1' }, permissions: [] },
+      data: {
+        user: {
+          id: 1,
+          username: 'a',
+          display_name: 'A',
+          email: '',
+          role: 'user',
+          is_active: true,
+          avatar_url: 'https://cdn.test/a.png?x=1',
+        },
+        permissions: [],
+      },
     })
     const wrapper = await mountSettings()
     await nextTick()
@@ -707,7 +810,17 @@ describe('SettingsView – profileFormDirty 与 profileHomeSummary', () => {
   it('有 user 但草稿与当前一致时 profileFormDirty 为 false', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({
       success: true,
-      data: { user: { id: 1, username: 'alice', display_name: 'Alice', email: 'a@a.com', role: 'user', is_active: true }, permissions: [] },
+      data: {
+        user: {
+          id: 1,
+          username: 'alice',
+          display_name: 'Alice',
+          email: 'a@a.com',
+          role: 'user',
+          is_active: true,
+        },
+        permissions: [],
+      },
     })
     const wrapper = await mountSettings()
     await nextTick()
@@ -720,7 +833,17 @@ describe('SettingsView – profileFormDirty 与 profileHomeSummary', () => {
   it('修改草稿后 profileFormDirty 为 true', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({
       success: true,
-      data: { user: { id: 1, username: 'alice', display_name: 'Alice', email: 'a@a.com', role: 'user', is_active: true }, permissions: [] },
+      data: {
+        user: {
+          id: 1,
+          username: 'alice',
+          display_name: 'Alice',
+          email: 'a@a.com',
+          role: 'user',
+          is_active: true,
+        },
+        permissions: [],
+      },
     })
     const wrapper = await mountSettings()
     await nextTick()
@@ -744,7 +867,17 @@ describe('SettingsView – profileFormDirty 与 profileHomeSummary', () => {
   it('profileHomeSummary 有名字时返回组合', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({
       success: true,
-      data: { user: { id: 1, username: 'alice', display_name: 'Alice', email: '', role: 'user', is_active: true }, permissions: [] },
+      data: {
+        user: {
+          id: 1,
+          username: 'alice',
+          display_name: 'Alice',
+          email: '',
+          role: 'user',
+          is_active: true,
+        },
+        permissions: [],
+      },
     })
     const wrapper = await mountSettings()
     await nextTick()
@@ -764,7 +897,10 @@ describe('SettingsView – companyBrandDirty', () => {
     mockAccountProfileStore.accountKind = 'enterprise'
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({
       success: true,
-      data: { user: { id: 1, username: 'a', display_name: 'A', email: '', role: 'user', is_active: true }, permissions: [] },
+      data: {
+        user: { id: 1, username: 'a', display_name: 'A', email: '', role: 'user', is_active: true },
+        permissions: [],
+      },
     })
   })
 
@@ -806,7 +942,10 @@ describe('SettingsView – saveCompanyBrand', () => {
     mockAccountProfileStore.accountKind = 'enterprise'
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({
       success: true,
-      data: { user: { id: 1, username: 'a', display_name: 'A', email: '', role: 'user', is_active: true }, permissions: [] },
+      data: {
+        user: { id: 1, username: 'a', display_name: 'A', email: '', role: 'user', is_active: true },
+        permissions: [],
+      },
     })
   })
 
@@ -834,7 +973,8 @@ describe('SettingsView – saveCompanyBrand', () => {
     vm.companyBrandDraft = '重复名'
     await nextTick()
     await vm.saveCompanyBrand()
-    const { appAlert: _a } = await import('@/utils/appDialog'); void _a
+    const { appAlert: _a } = await import('@/utils/appDialog')
+    void _a
     expect(mockAppAlert).toHaveBeenCalledWith(expect.stringContaining('保存失败'))
     wrapper.unmount()
   })
@@ -848,7 +988,8 @@ describe('SettingsView – saveCompanyBrand', () => {
     vm.companyBrandDraft = '新品牌'
     await nextTick()
     await vm.saveCompanyBrand()
-    const { appAlert: _a } = await import('@/utils/appDialog'); void _a
+    const { appAlert: _a } = await import('@/utils/appDialog')
+    void _a
     expect(mockAppAlert).toHaveBeenCalledWith(expect.stringContaining('网络错误'))
     wrapper.unmount()
   })
@@ -866,7 +1007,17 @@ describe('SettingsView – saveProfile', () => {
     resetStores()
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({
       success: true,
-      data: { user: { id: 1, username: 'alice', display_name: 'Alice', email: 'a@a.com', role: 'user', is_active: true }, permissions: [] },
+      data: {
+        user: {
+          id: 1,
+          username: 'alice',
+          display_name: 'Alice',
+          email: 'a@a.com',
+          role: 'user',
+          is_active: true,
+        },
+        permissions: [],
+      },
     })
   })
 
@@ -883,7 +1034,16 @@ describe('SettingsView – saveProfile', () => {
   it('表单修改后保存成功时更新 user', async () => {
     mockAuthApiUpdateProfile.mockResolvedValueOnce({
       success: true,
-      data: { user: { id: 1, username: 'alice', display_name: 'Alice New', email: 'new@a.com', role: 'user', is_active: true } },
+      data: {
+        user: {
+          id: 1,
+          username: 'alice',
+          display_name: 'Alice New',
+          email: 'new@a.com',
+          role: 'user',
+          is_active: true,
+        },
+      },
     })
     const wrapper = await mountSettings()
     await nextTick()
@@ -907,7 +1067,8 @@ describe('SettingsView – saveProfile', () => {
     vm.profileDisplayNameDraft = 'Alice New'
     await nextTick()
     await vm.saveProfile()
-    const { appAlert: _a } = await import('@/utils/appDialog'); void _a
+    const { appAlert: _a } = await import('@/utils/appDialog')
+    void _a
     expect(mockAppAlert).toHaveBeenCalledWith(expect.stringContaining('保存失败'))
     wrapper.unmount()
   })
@@ -940,7 +1101,10 @@ describe('SettingsView – 头像交互', () => {
   it('已登录时点击头像触发 input click', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({
       success: true,
-      data: { user: { id: 1, username: 'a', display_name: 'A', email: '', role: 'user', is_active: true }, permissions: [] },
+      data: {
+        user: { id: 1, username: 'a', display_name: 'A', email: '', role: 'user', is_active: true },
+        permissions: [],
+      },
     })
     const wrapper = await mountSettings()
     await nextTick()
@@ -956,7 +1120,10 @@ describe('SettingsView – 头像交互', () => {
   it('上传中时点击头像不触发 input click', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({
       success: true,
-      data: { user: { id: 1, username: 'a', display_name: 'A', email: '', role: 'user', is_active: true }, permissions: [] },
+      data: {
+        user: { id: 1, username: 'a', display_name: 'A', email: '', role: 'user', is_active: true },
+        permissions: [],
+      },
     })
     const wrapper = await mountSettings()
     await nextTick()
@@ -973,7 +1140,10 @@ describe('SettingsView – 头像交互', () => {
   it('文件超过 4MB 时提示', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({
       success: true,
-      data: { user: { id: 1, username: 'a', display_name: 'A', email: '', role: 'user', is_active: true }, permissions: [] },
+      data: {
+        user: { id: 1, username: 'a', display_name: 'A', email: '', role: 'user', is_active: true },
+        permissions: [],
+      },
     })
     const wrapper = await mountSettings()
     await nextTick()
@@ -981,7 +1151,8 @@ describe('SettingsView – 头像交互', () => {
     const vm = wrapper.vm as any
     const bigFile = new File(['x'.repeat(5 * 1024 * 1024)], 'big.png', { type: 'image/png' })
     await vm.onAvatarFileChange({ target: { value: 'x', files: [bigFile] } })
-    const { appAlert: _a } = await import('@/utils/appDialog'); void _a
+    const { appAlert: _a } = await import('@/utils/appDialog')
+    void _a
     expect(mockAppAlert).toHaveBeenCalledWith('头像图片不能超过 4MB')
     wrapper.unmount()
   })
@@ -989,7 +1160,10 @@ describe('SettingsView – 头像交互', () => {
   it('无文件时不执行上传', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({
       success: true,
-      data: { user: { id: 1, username: 'a', display_name: 'A', email: '', role: 'user', is_active: true }, permissions: [] },
+      data: {
+        user: { id: 1, username: 'a', display_name: 'A', email: '', role: 'user', is_active: true },
+        permissions: [],
+      },
     })
     const wrapper = await mountSettings()
     await nextTick()
@@ -1003,9 +1177,15 @@ describe('SettingsView – 头像交互', () => {
   it('上传成功时更新 avatar_url', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({
       success: true,
-      data: { user: { id: 1, username: 'a', display_name: 'A', email: '', role: 'user', is_active: true }, permissions: [] },
+      data: {
+        user: { id: 1, username: 'a', display_name: 'A', email: '', role: 'user', is_active: true },
+        permissions: [],
+      },
     })
-    mockAuthApiUploadAvatar.mockResolvedValueOnce({ success: true, data: { avatar_url: '/new-avatar.png' } })
+    mockAuthApiUploadAvatar.mockResolvedValueOnce({
+      success: true,
+      data: { avatar_url: '/new-avatar.png' },
+    })
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
@@ -1019,7 +1199,10 @@ describe('SettingsView – 头像交互', () => {
   it('上传失败时提示错误', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({
       success: true,
-      data: { user: { id: 1, username: 'a', display_name: 'A', email: '', role: 'user', is_active: true }, permissions: [] },
+      data: {
+        user: { id: 1, username: 'a', display_name: 'A', email: '', role: 'user', is_active: true },
+        permissions: [],
+      },
     })
     mockAuthApiUploadAvatar.mockRejectedValueOnce(new Error('上传失败'))
     const wrapper = await mountSettings()
@@ -1028,7 +1211,8 @@ describe('SettingsView – 头像交互', () => {
     const vm = wrapper.vm as any
     const file = new File(['x'], 'a.png', { type: 'image/png' })
     await vm.onAvatarFileChange({ target: { value: 'x', files: [file] } })
-    const { appAlert: _a } = await import('@/utils/appDialog'); void _a
+    const { appAlert: _a } = await import('@/utils/appDialog')
+    void _a
     expect(mockAppAlert).toHaveBeenCalledWith(expect.stringContaining('头像上传失败'))
     wrapper.unmount()
   })
@@ -1046,12 +1230,16 @@ describe('SettingsView – onLogout', () => {
     resetStores()
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({
       success: true,
-      data: { user: { id: 1, username: 'a', display_name: 'A', email: '', role: 'user', is_active: true }, permissions: [] },
+      data: {
+        user: { id: 1, username: 'a', display_name: 'A', email: '', role: 'user', is_active: true },
+        permissions: [],
+      },
     })
   })
 
   it('用户取消确认时不执行登出', async () => {
-    const { appConfirm: _c } = await import('@/utils/appDialog'); void _c
+    const { appConfirm: _c } = await import('@/utils/appDialog')
+    void _c
     ;(mockAppConfirm as any).mockResolvedValueOnce(false)
     const wrapper = await mountSettings()
     await nextTick()
@@ -1082,7 +1270,8 @@ describe('SettingsView – onLogout', () => {
     await nextTick()
     const vm = wrapper.vm as any
     await vm.onLogout()
-    const { appAlert: _a } = await import('@/utils/appDialog'); void _a
+    const { appAlert: _a } = await import('@/utils/appDialog')
+    void _a
     expect(mockAppAlert).toHaveBeenCalledWith(expect.stringContaining('退出失败'))
     wrapper.unmount()
   })
@@ -1100,10 +1289,22 @@ describe('SettingsView – 审计日志', () => {
     resetStores()
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({
       success: true,
-      data: { user: { id: 1, username: 'admin', display_name: 'Admin', email: '', role: 'admin', is_active: true }, permissions: [] },
+      data: {
+        user: {
+          id: 1,
+          username: 'admin',
+          display_name: 'Admin',
+          email: '',
+          role: 'admin',
+          is_active: true,
+        },
+        permissions: [],
+      },
     })
   })
-  afterEach(() => { vi.unstubAllGlobals() })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
 
   it('loadAuditLogs 成功时填充审计列表', async () => {
     mockAdminAuditApiList.mockResolvedValue({
@@ -1153,7 +1354,17 @@ describe('SettingsView – 审计日志', () => {
     mockAuthApiGetCurrentUser.mockReset()
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({
       success: true,
-      data: { user: { id: 1, username: 'user', display_name: 'User', email: '', role: 'user', is_active: true }, permissions: [] },
+      data: {
+        user: {
+          id: 1,
+          username: 'user',
+          display_name: 'User',
+          email: '',
+          role: 'user',
+          is_active: true,
+        },
+        permissions: [],
+      },
     })
     const wrapper = await mountSettings()
     await nextTick()
@@ -1185,7 +1396,7 @@ describe('SettingsView – loadDesktopDatabaseStatus', () => {
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    await new Promise(r => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 50))
     const vm = wrapper.vm as any
     expect(vm.desktopDatabaseVisible).toBe(false)
     wrapper.unmount()
@@ -1193,13 +1404,16 @@ describe('SettingsView – loadDesktopDatabaseStatus', () => {
 
   it('storageMode 为 local_sqlite 时显示本地 SQLite', async () => {
     mockApiGet.mockImplementation(async (url: string) => {
-      if (url === '/api/desktop/status') return { data: { desktopMode: true, storageMode: 'local_sqlite', database: '/tmp/db.sqlite' } }
+      if (url === '/api/desktop/status')
+        return {
+          data: { desktopMode: true, storageMode: 'local_sqlite', database: '/tmp/db.sqlite' },
+        }
       return { data: {}, success: false }
     })
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    await new Promise(r => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 50))
     const vm = wrapper.vm as any
     expect(vm.desktopDatabaseVisible).toBe(true)
     expect(vm.databaseStorageLabel).toBe('本地数据库（SQLite）')
@@ -1215,7 +1429,7 @@ describe('SettingsView – loadDesktopDatabaseStatus', () => {
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    await new Promise(r => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 50))
     const vm = wrapper.vm as any
     expect(vm.databaseStorageLabel).toBe('远程 PostgreSQL')
     wrapper.unmount()
@@ -1229,7 +1443,7 @@ describe('SettingsView – loadDesktopDatabaseStatus', () => {
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    await new Promise(r => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 50))
     const vm = wrapper.vm as any
     expect(vm.databaseStorageLabel).toBe('本地数据库')
     wrapper.unmount()
@@ -1240,7 +1454,7 @@ describe('SettingsView – loadDesktopDatabaseStatus', () => {
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    await new Promise(r => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 50))
     const vm = wrapper.vm as any
     expect(vm.desktopDatabaseVisible).toBe(false)
     wrapper.unmount()
@@ -1267,7 +1481,7 @@ describe('SettingsView – loadIndustries', () => {
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    await new Promise(r => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 50))
     const vm = wrapper.vm as any
     expect(vm.industries.length).toBe(1)
     wrapper.unmount()
@@ -1282,7 +1496,7 @@ describe('SettingsView – loadIndustries', () => {
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    await new Promise(r => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 50))
     const vm = wrapper.vm as any
     expect(vm.industries.length).toBe(1)
     wrapper.unmount()
@@ -1318,7 +1532,7 @@ describe('SettingsView – loadCurrentIndustryDetail', () => {
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    await new Promise(r => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 50))
     const vm = wrapper.vm as any
     expect(vm.currentIndustryUnit).toBe('件')
     wrapper.unmount()
@@ -1332,20 +1546,26 @@ describe('SettingsView – loadCurrentIndustryDetail', () => {
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    await new Promise(r => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 50))
     const vm = wrapper.vm as any
     expect(vm.currentIndustryUnit).toBe('天')
     wrapper.unmount()
   })
 
   it('失败时用 mod manifest 兜底', async () => {
-    mockModsStore.mods = [{ id: 'ext-1', name: 'Ext', industry: { id: 'ind1', name: '行业1', units: { primary: '小时' } } }]
+    mockModsStore.mods = [
+      {
+        id: 'ext-1',
+        name: 'Ext',
+        industry: { id: 'ind1', name: '行业1', units: { primary: '小时' } },
+      },
+    ]
     mockModsStore.activeModId = 'ext-1'
     mockSystemApiGetCurrentIndustry.mockRejectedValueOnce(new Error('net'))
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    await new Promise(r => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 50))
     const vm = wrapper.vm as any
     expect(vm.currentIndustryUnit).toBe('小时')
     wrapper.unmount()
@@ -1356,7 +1576,7 @@ describe('SettingsView – loadCurrentIndustryDetail', () => {
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    await new Promise(r => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 50))
     const vm = wrapper.vm as any
     expect(vm.currentIndustryUnit).toBe('天')
     wrapper.unmount()
@@ -1388,7 +1608,7 @@ describe('SettingsView – loadIntentPackages', () => {
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    await new Promise(r => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 50))
     const vm = wrapper.vm as any
     expect(vm.intentPackages.base.enabled).toBe(false)
     expect(vm.intentPackages.base.keywords).toEqual(['新词'])
@@ -1404,7 +1624,7 @@ describe('SettingsView – loadIntentPackages', () => {
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    await new Promise(r => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 50))
     const vm = wrapper.vm as any
     expect(vm.intentPackages.base.enabled).toBe(true)
     wrapper.unmount()
@@ -1442,7 +1662,7 @@ describe('SettingsView – loadPreferences', () => {
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    await new Promise(r => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 50))
     const vm = wrapper.vm as any
     expect(vm.assistantName).toBe('小智')
     expect(vm.aiMode).toBe('offline')
@@ -1458,7 +1678,7 @@ describe('SettingsView – loadPreferences', () => {
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    await new Promise(r => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 50))
     const vm = wrapper.vm as any
     expect(vm.assistantName).toBe('本地助手')
     wrapper.unmount()
@@ -1472,7 +1692,7 @@ describe('SettingsView – loadPreferences', () => {
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    await new Promise(r => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 50))
     const vm = wrapper.vm as any
     expect(vm.aiMode).toBe('offline')
     expect(mockApiPost).toHaveBeenCalledWith('/api/preferences', expect.objectContaining({ key: 'aiMode', value: 'offline' }))
@@ -1487,7 +1707,7 @@ describe('SettingsView – loadPreferences', () => {
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    await new Promise(r => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 50))
     const vm = wrapper.vm as any
     expect(vm.aiMode).toBe('online')
     wrapper.unmount()
@@ -1499,7 +1719,7 @@ describe('SettingsView – loadPreferences', () => {
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    await new Promise(r => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 50))
     const vm = wrapper.vm as any
     expect(vm.assistantName).toBe('兜底助手')
     wrapper.unmount()
@@ -1510,7 +1730,7 @@ describe('SettingsView – loadPreferences', () => {
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    await new Promise(r => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 50))
     const vm = wrapper.vm as any
     expect(vm.assistantName).toBe('修茈')
     wrapper.unmount()
@@ -1521,7 +1741,7 @@ describe('SettingsView – loadPreferences', () => {
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    await new Promise(r => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 50))
     const vm = wrapper.vm as any
     expect(vm.assistantName).toBe('修茈')
     wrapper.unmount()
@@ -1565,7 +1785,8 @@ describe('SettingsView – saveSettings', () => {
     await nextTick()
     const vm = wrapper.vm as any
     await vm.saveSettings()
-    const { appAlert: _a } = await import('@/utils/appDialog'); void _a
+    const { appAlert: _a } = await import('@/utils/appDialog')
+    void _a
     expect(mockAppAlert).toHaveBeenCalledWith(expect.stringContaining('保存失败'))
     wrapper.unmount()
   })
@@ -1577,7 +1798,8 @@ describe('SettingsView – saveSettings', () => {
     await nextTick()
     const vm = wrapper.vm as any
     await vm.saveSettings()
-    const { appAlert: _a } = await import('@/utils/appDialog'); void _a
+    const { appAlert: _a } = await import('@/utils/appDialog')
+    void _a
     expect(mockAppAlert).toHaveBeenCalledWith(expect.stringContaining('保存失败'))
     wrapper.unmount()
   })
@@ -1609,7 +1831,7 @@ describe('SettingsView – loadDistillationVersions', () => {
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    await new Promise(r => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 50))
     const vm = wrapper.vm as any
     expect(vm.versions.length).toBe(1)
     expect(vm.sampleCount).toBe(500)
@@ -1631,7 +1853,7 @@ describe('SettingsView – loadDistillationVersions', () => {
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    await new Promise(r => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 50))
     const vm = wrapper.vm as any
     expect(vm.sampleCountWarning).toContain('读取失败')
     wrapper.unmount()
@@ -1645,7 +1867,7 @@ describe('SettingsView – loadDistillationVersions', () => {
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    await new Promise(r => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 50))
     const vm = wrapper.vm as any
     expect(vm.versionsError).toContain('权限不足')
     wrapper.unmount()
@@ -1659,7 +1881,7 @@ describe('SettingsView – loadDistillationVersions', () => {
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    await new Promise(r => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 50))
     const vm = wrapper.vm as any
     expect(vm.versionsError).toContain('网络错误')
     expect(vm.versions.length).toBe(0)
@@ -1768,7 +1990,9 @@ describe('SettingsView – openSettingsExtensions', () => {
     resetApiMocks()
     resetStores()
   })
-  afterEach(() => { vi.restoreAllMocks() })
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
 
   it('找到 details 元素时打开并滚动', async () => {
     const wrapper = await mountSettings()
@@ -1849,7 +2073,8 @@ describe('SettingsView – retryModRoutesLoad', () => {
     const wrapper = await mountSettings()
     const vm = wrapper.vm as any
     await vm.retryModRoutesLoad()
-    const { appAlert: _a } = await import('@/utils/appDialog'); void _a
+    const { appAlert: _a } = await import('@/utils/appDialog')
+    void _a
     expect(mockAppAlert).toHaveBeenCalledWith('加载失败')
     wrapper.unmount()
   })
@@ -1862,7 +2087,8 @@ describe('SettingsView – retryModRoutesLoad', () => {
     const wrapper = await mountSettings()
     const vm = wrapper.vm as any
     await vm.retryModRoutesLoad()
-    const { appAlert: _a } = await import('@/utils/appDialog'); void _a
+    const { appAlert: _a } = await import('@/utils/appDialog')
+    void _a
     expect(mockAppAlert).toHaveBeenCalledWith(expect.stringContaining('仍未获取到路由表'))
     wrapper.unmount()
   })
@@ -1875,7 +2101,8 @@ describe('SettingsView – retryModRoutesLoad', () => {
     const wrapper = await mountSettings()
     const vm = wrapper.vm as any
     await vm.retryModRoutesLoad()
-    const { appAlert: _a } = await import('@/utils/appDialog'); void _a
+    const { appAlert: _a } = await import('@/utils/appDialog')
+    void _a
     expect(mockAppAlert).toHaveBeenCalledWith('Mod 与路由已重新加载。')
     wrapper.unmount()
   })
@@ -1892,7 +2119,9 @@ describe('SettingsView – onActiveModChange', () => {
     resetApiMocks()
     resetStores()
   })
-  afterEach(() => { vi.restoreAllMocks() })
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
 
   it('空 modId 时不执行', async () => {
     const wrapper = await mountSettings()
@@ -1963,7 +2192,8 @@ describe('SettingsView – onUninstallMod', () => {
   })
 
   it('受保护 mod 时提示不能卸载', async () => {
-    const { appAlert: _a } = await import('@/utils/appDialog'); void _a
+    const { appAlert: _a } = await import('@/utils/appDialog')
+    void _a
     const wrapper = await mountSettings()
     const vm = wrapper.vm as any
     await vm.onUninstallMod('protected-mod')
@@ -1973,7 +2203,8 @@ describe('SettingsView – onUninstallMod', () => {
   })
 
   it('用户取消确认时不卸载', async () => {
-    const { appConfirm: _c } = await import('@/utils/appDialog'); void _c
+    const { appConfirm: _c } = await import('@/utils/appDialog')
+    void _c
     ;(mockAppConfirm as any).mockResolvedValueOnce(false)
     mockModsStore.mods = [{ id: 'ext-1', name: 'Ext1' }]
     const wrapper = await mountSettings()
@@ -1989,7 +2220,8 @@ describe('SettingsView – onUninstallMod', () => {
     const wrapper = await mountSettings()
     const vm = wrapper.vm as any
     await vm.onUninstallMod('ext-1')
-    const { appAlert: _a } = await import('@/utils/appDialog'); void _a
+    const { appAlert: _a } = await import('@/utils/appDialog')
+    void _a
     expect(mockAppAlert).toHaveBeenCalledWith('已卸载')
     wrapper.unmount()
   })
@@ -2000,7 +2232,8 @@ describe('SettingsView – onUninstallMod', () => {
     const wrapper = await mountSettings()
     const vm = wrapper.vm as any
     await vm.onUninstallMod('ext-1')
-    const { appAlert: _a } = await import('@/utils/appDialog'); void _a
+    const { appAlert: _a } = await import('@/utils/appDialog')
+    void _a
     expect(mockAppAlert).toHaveBeenCalledWith(expect.stringContaining('卸载失败'))
     wrapper.unmount()
   })
@@ -2012,7 +2245,8 @@ describe('SettingsView – onUninstallMod', () => {
     const wrapper = await mountSettings()
     const vm = wrapper.vm as any
     await vm.onUninstallMod('ext-1')
-    const { appAlert: _a } = await import('@/utils/appDialog'); void _a
+    const { appAlert: _a } = await import('@/utils/appDialog')
+    void _a
     expect(mockAppAlert).toHaveBeenCalledWith(expect.stringContaining('API 错误'))
     wrapper.unmount()
   })
@@ -2023,7 +2257,8 @@ describe('SettingsView – onUninstallMod', () => {
     const wrapper = await mountSettings()
     const vm = wrapper.vm as any
     await vm.onUninstallMod('ext-1')
-    const { appAlert: _a } = await import('@/utils/appDialog'); void _a
+    const { appAlert: _a } = await import('@/utils/appDialog')
+    void _a
     expect(mockAppAlert).toHaveBeenCalledWith(expect.stringContaining('网络错误'))
     wrapper.unmount()
   })
@@ -2031,7 +2266,8 @@ describe('SettingsView – onUninstallMod', () => {
   it('卸载 primary mod 时提示包含主扩展警告', async () => {
     mockModsStore.mods = [{ id: 'ext-1', name: 'Ext1', primary: true }]
     mockApiDelete.mockResolvedValueOnce({ success: true, message: '已卸载' })
-    const { appConfirm: _c } = await import('@/utils/appDialog'); void _c
+    const { appConfirm: _c } = await import('@/utils/appDialog')
+    void _c
     const wrapper = await mountSettings()
     const vm = wrapper.vm as any
     await vm.onUninstallMod('ext-1')
@@ -2043,7 +2279,8 @@ describe('SettingsView – onUninstallMod', () => {
     mockModsStore.mods = [{ id: 'ext-1', name: 'Ext1' }]
     mockModsStore.activeModId = 'ext-1'
     mockApiDelete.mockResolvedValueOnce({ success: true, message: '已卸载' })
-    const { appConfirm: _c } = await import('@/utils/appDialog'); void _c
+    const { appConfirm: _c } = await import('@/utils/appDialog')
+    void _c
     const wrapper = await mountSettings()
     const vm = wrapper.vm as any
     await vm.onUninstallMod('ext-1')
@@ -2063,7 +2300,9 @@ describe('SettingsView – scrollToSettingsSection', () => {
     resetApiMocks()
     resetStores()
   })
-  afterEach(() => { vi.restoreAllMocks() })
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
 
   it('route.query.section 存在时滚动到对应元素', async () => {
     // 使用真实的 <details> 元素以通过 instanceof HTMLDetailsElement 检查
@@ -2074,7 +2313,7 @@ describe('SettingsView – scrollToSettingsSection', () => {
     const getByIdSpy = vi.spyOn(document, 'getElementById').mockReturnValue(fakeEl)
     const wrapper = await mountSettings({ section: 'profile-home' })
     await nextTick()
-    await new Promise(r => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 50))
     expect(fakeEl.open).toBe(true)
     expect((fakeEl as any).scrollIntoView).toHaveBeenCalled()
     getByIdSpy.mockRestore()
@@ -2102,7 +2341,7 @@ describe('SettingsView – scrollToSettingsSection', () => {
     const getByIdSpy = vi.spyOn(document, 'getElementById').mockReturnValue(fakeEl)
     const wrapper = await mountSettings({ section: 'unknown' })
     await nextTick()
-    await new Promise(r => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 50))
     expect(parentDetails.open).toBe(true)
     getByIdSpy.mockRestore()
     wrapper.unmount()
@@ -2143,10 +2382,7 @@ describe('SettingsView – mod 相关计算属性', () => {
   })
 
   it('hostBridgeInstalledCount 计算已安装数', async () => {
-    mockModsStore.mods = [
-      { id: 'host-bridge-1' },
-      { id: 'host-bridge-2' },
-    ]
+    mockModsStore.mods = [{ id: 'host-bridge-1' }, { id: 'host-bridge-2' }]
     const wrapper = await mountSettings()
     const vm = wrapper.vm as any
     expect(vm.hostBridgeInstalledCount).toBe(2)
@@ -2227,11 +2463,7 @@ describe('SettingsView – mod 相关计算属性', () => {
   })
 
   it('modSettingsFoldMeta 各种组合', async () => {
-    mockModsStore.mods = [
-      { id: 'host-bridge-1' },
-      { id: 'ext-1', name: 'Ext1' },
-      { id: 'wf-1', name: 'Wf1' },
-    ]
+    mockModsStore.mods = [{ id: 'host-bridge-1' }, { id: 'ext-1', name: 'Ext1' }, { id: 'wf-1', name: 'Wf1' }]
     const wrapper = await mountSettings()
     const vm = wrapper.vm as any
     const meta = vm.modSettingsFoldMeta
@@ -2449,7 +2681,13 @@ describe('SettingsView – intentPackageEntries', () => {
     const vm = wrapper.vm as any
     vm.intentPackages = {
       ...vm.intentPackages,
-      base: { name: '基础', iconClass: 'fa', description: '', enabled: true, keywords: ['有效', '', '  ', '词'] },
+      base: {
+        name: '基础',
+        iconClass: 'fa',
+        description: '',
+        enabled: true,
+        keywords: ['有效', '', '  ', '词'],
+      },
     }
     await nextTick()
     const baseEntry = vm.intentPackageEntries.find((e: any) => e.key === 'base')
@@ -2471,19 +2709,21 @@ describe('SettingsView – updateIndustryKeywords', () => {
   })
 
   it('从 mod manifest.intent_keywords 更新', async () => {
-    mockModsStore.mods = [{
-      id: 'ext-1',
-      name: 'Ext1',
-      industry: {
-        id: 'ind1',
-        name: '行业1',
-        intent_keywords: {
-          create_order: ['创建订单', '下单'],
-          quantity_unit: '件',
-          print_label: '打印',
+    mockModsStore.mods = [
+      {
+        id: 'ext-1',
+        name: 'Ext1',
+        industry: {
+          id: 'ind1',
+          name: '行业1',
+          intent_keywords: {
+            create_order: ['创建订单', '下单'],
+            quantity_unit: '件',
+            print_label: '打印',
+          },
         },
       },
-    }]
+    ]
     mockModsStore.activeModId = 'ext-1'
     const wrapper = await mountSettings()
     await nextTick()
@@ -2557,11 +2797,13 @@ describe('SettingsView – applyAccountMetaFromAuthPayload', () => {
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()
-    expect(mockAccountProfileStore.applyFromMeData).toHaveBeenCalledWith(expect.objectContaining({
-      account_kind: 'enterprise',
-      company_brand: '公司Z',
-      market_is_admin: true,
-    }))
+    expect(mockAccountProfileStore.applyFromMeData).toHaveBeenCalledWith(
+      expect.objectContaining({
+        account_kind: 'enterprise',
+        company_brand: '公司Z',
+        market_is_admin: true,
+      }),
+    )
     wrapper.unmount()
   })
 
@@ -2592,7 +2834,9 @@ describe('SettingsView – UI 事件交互', () => {
     resetApiMocks()
     resetStores()
   })
-  afterEach(() => { vi.restoreAllMocks() })
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
 
   it('点击保存设置按钮可触发 saveSettings', async () => {
     mockApiPost.mockResolvedValue({ success: true })
@@ -2677,7 +2921,13 @@ describe('SettingsView – watch activeModIndustry', () => {
   })
 
   it('activeModIndustry 变化时触发 updateIndustryKeywords', async () => {
-    mockModsStore.mods = [{ id: 'ext-1', name: 'Ext1', industry: { id: 'ind1', name: '行业1', intent_keywords: { create_order: '创建' } } }]
+    mockModsStore.mods = [
+      {
+        id: 'ext-1',
+        name: 'Ext1',
+        industry: { id: 'ind1', name: '行业1', intent_keywords: { create_order: '创建' } },
+      },
+    ]
     mockModsStore.activeModId = 'ext-1'
     const wrapper = await mountSettings()
     await nextTick()

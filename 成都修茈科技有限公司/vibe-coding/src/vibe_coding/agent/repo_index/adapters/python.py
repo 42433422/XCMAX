@@ -18,8 +18,10 @@ from __future__ import annotations
 import ast
 from typing import Any
 
-from . import LanguageAdapter, ParsedFile
+from vibe_coding.operational_errors import BOUNDARY_ERRORS
+
 from ..index import Reference, Symbol
+from . import ParsedFile
 
 
 class PythonLanguageAdapter:
@@ -54,7 +56,7 @@ class PythonLanguageAdapter:
             symbols = list(_extract_symbols(path, tree))
             imports = list(_extract_imports(tree))
             references = list(_extract_references(path, source, tree))
-        except Exception as exc:  # noqa: BLE001 — adapter must stay tolerant
+        except BOUNDARY_ERRORS as exc:
             parse_error = f"extract_error:{type(exc).__name__}:{exc}"
 
         return ParsedFile(
@@ -110,9 +112,7 @@ def _extract_symbols(path: str, tree: ast.AST) -> list[Symbol]:
     return out
 
 
-def _function_symbol(
-    path: str, node: ast.FunctionDef | ast.AsyncFunctionDef, *, parent: str
-) -> Symbol:
+def _function_symbol(path: str, node: ast.FunctionDef | ast.AsyncFunctionDef, *, parent: str) -> Symbol:
     sig = _format_signature(node)
     doc = (ast.get_docstring(node) or "").strip()
     first_line = doc.splitlines()[0] if doc else ""
@@ -136,7 +136,7 @@ def _class_symbol(path: str, node: ast.ClassDef) -> Symbol:
     for base in node.bases:
         try:
             bases.append(ast.unparse(base))
-        except Exception:  # noqa: BLE001
+        except BOUNDARY_ERRORS:
             bases.append("?")
     sig = f"class {node.name}" + (f"({', '.join(bases)})" if bases else "")
     doc = (ast.get_docstring(node) or "").strip()
@@ -163,6 +163,8 @@ def _assignment_symbols(path: str, node: ast.AST) -> list[Symbol]:
     elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
         targets.append(node.target.id)
     out: list[Symbol] = []
+    start_line = getattr(node, "lineno", 0)
+    end_line = getattr(node, "end_lineno", start_line) or start_line
     for name in targets:
         if name.isupper() or not name.startswith("_"):
             out.append(
@@ -170,8 +172,8 @@ def _assignment_symbols(path: str, node: ast.AST) -> list[Symbol]:
                     name=name,
                     kind="constant" if name.isupper() else "variable",
                     file=path,
-                    start_line=node.lineno,
-                    end_line=getattr(node, "end_lineno", node.lineno) or node.lineno,
+                    start_line=start_line,
+                    end_line=end_line,
                     signature="",
                     docstring="",
                     parent="",
@@ -201,7 +203,7 @@ def _format_signature(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
         parts.append(f"*{args.vararg.arg}{ann}")
     elif args.kwonlyargs:
         parts.append("*")
-    for kwarg, kdef in zip(args.kwonlyargs, args.kw_defaults):
+    for kwarg, kdef in zip(args.kwonlyargs, args.kw_defaults, strict=False):
         ann = f": {_unparse(kwarg.annotation)}" if kwarg.annotation else ""
         default = f" = {_unparse(kdef)}" if kdef is not None else ""
         parts.append(f"{kwarg.arg}{ann}{default}")
@@ -218,7 +220,7 @@ def _unparse(node: ast.AST | None) -> str:
         return ""
     try:
         return ast.unparse(node)
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:
         return "?"
 
 

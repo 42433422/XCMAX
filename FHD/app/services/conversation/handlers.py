@@ -1,5 +1,5 @@
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.services.conversation.context import ConversationContext
 
@@ -7,6 +7,13 @@ logger = logging.getLogger(__name__)
 
 
 class HandlersMixin:
+    if TYPE_CHECKING:
+        add_intent_feedback: Any
+        add_to_history: Any
+        confirmation_service: Any
+        intent_service: Any
+        record_user_action: Any
+
     async def _handle_special_intents(
         self,
         message: str,

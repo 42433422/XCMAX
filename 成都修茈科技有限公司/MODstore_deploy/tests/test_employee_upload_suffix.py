@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 
 def test_pptx_allowed_for_ppt_read_employee():
     from modstore_server.employee_api import _suffix_allowed_for_employee

@@ -3,9 +3,7 @@ import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 vi.mock('@/utils/pretext', () => ({
-  batchEstimateMessageHeights: vi.fn().mockImplementation((msgs: any[]) =>
-    msgs.length === 0 ? [] : msgs.map(() => 80)
-  ),
+  batchEstimateMessageHeights: vi.fn().mockImplementation((msgs: any[]) => (msgs.length === 0 ? [] : msgs.map(() => 80))),
   measureText: vi.fn().mockReturnValue({ height: 60, width: 400 }),
 }))
 

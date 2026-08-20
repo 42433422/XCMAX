@@ -1,13 +1,6 @@
 export type CaptureBackend = 'html2canvas' | 'dom-snapshot'
 
-export type CaptureFailureReason =
-  | 'aborted'
-  | 'cors'
-  | 'memory'
-  | 'no_backend'
-  | 'render'
-  | 'timeout'
-  | 'unsupported'
+export type CaptureFailureReason = 'aborted' | 'cors' | 'memory' | 'no_backend' | 'render' | 'timeout' | 'unsupported'
 
 export type CaptureSeverity = 'critical' | 'degraded' | 'user'
 
@@ -186,9 +179,7 @@ function bytesFromDataUrl(dataUrl: string): number {
 }
 
 function encodeUtf8Base64(value: string): string {
-  const encoded = encodeURIComponent(value).replace(/%([0-9A-F]{2})/g, (_, hex) =>
-    String.fromCharCode(Number.parseInt(hex, 16)),
-  )
+  const encoded = encodeURIComponent(value).replace(/%([0-9A-F]{2})/g, (_, hex) => String.fromCharCode(Number.parseInt(hex, 16)))
   return globalThis.btoa ? globalThis.btoa(encoded) : encoded
 }
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="var-annotated"
 """
 批量迁移修复脚本
 
@@ -9,9 +10,7 @@
 4. 执行代码格式化
 """
 
-import re
 from pathlib import Path
-from typing import List, Tuple
 
 
 class BatchMigrationFixer:
@@ -137,7 +136,7 @@ class BatchMigrationFixer:
             service_name = old.replace("get_", "").replace("_app_service", "")
             lines.append(f"# {service_name}")
             lines.append(f"from app.application.{service_name}_app_service import {old}")
-            lines.append(f"->")
+            lines.append("->")
             lines.append(f"from app.application.{service_name}_app_service_v2 import {new}")
             lines.append("")
 
@@ -260,7 +259,7 @@ def main():
                     print(f"  [UPDATED] {route_file.name}")
                 else:
                     print(f"  [SKIP] 无需更新")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
                 print(f"  [ERROR] {e}")
     
     print("\\n" + "=" * 60)

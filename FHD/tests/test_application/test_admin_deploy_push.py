@@ -26,6 +26,13 @@ from app.application.admin_deploy_push import (
     start_deploy_push,
 )
 
+
+def _consume_scheduled_coroutine(coro):
+    """Model create_task ownership without leaving an un-awaited test coroutine."""
+    coro.close()
+    return Mock()
+
+
 # ========================= _hub_remote_dir ====================================
 
 
@@ -292,6 +299,7 @@ class TestStartDeployPush:
     @patch("app.application.admin_deploy_push.asyncio.create_task")
     @patch("app.application.admin_deploy_push._JOB_LOCK")
     async def test_start_push_creates_job(self, mock_lock, mock_create_task):
+        mock_create_task.side_effect = _consume_scheduled_coroutine
         mock_lock.__aenter__ = AsyncMock(return_value=None)
         mock_lock.__aexit__ = AsyncMock(return_value=False)
 
@@ -304,6 +312,7 @@ class TestStartDeployPush:
     @patch("app.application.admin_deploy_push._JOB_LOCK")
     @patch("app.application.admin_deploy_push._ACTIVE_JOB", None)
     async def test_start_push_default_options(self, mock_lock, mock_create_task):
+        mock_create_task.side_effect = _consume_scheduled_coroutine
         mock_lock.__aenter__ = AsyncMock(return_value=None)
         mock_lock.__aexit__ = AsyncMock(return_value=False)
 

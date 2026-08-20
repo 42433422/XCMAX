@@ -6,6 +6,7 @@ Barcode Generator - 条形码生成器
 
 import io
 import logging
+from typing import Any, cast
 
 from PIL import Image
 
@@ -168,7 +169,7 @@ class BarcodeGenerator:
         bar_width = 2
         for _ in range(80):
             bar_height = random.randint(height // 2, height)
-            draw.rectangle([x, 0, x + bar_width, bar_height], fill="black")
+            draw.rectangle((x, 0, x + bar_width, bar_height), fill="black")
             x += bar_width + random.randint(1, 3)
 
         # 绘制下方文本
@@ -223,7 +224,7 @@ class BarcodeGenerator:
 try:
     from PIL import ImageDraw
 except ImportError:
-    ImageDraw = None
+    ImageDraw = cast("Any", None)
 
 
 def generate_barcode(

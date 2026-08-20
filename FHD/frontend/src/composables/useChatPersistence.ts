@@ -10,6 +10,7 @@ import {
 } from '@/utils/chatStorageKeys'
 import { isIndustryWelcomePlainText } from '@/constants/industryPresets'
 import { hasAgentRunExecutionEvidence } from '@/utils/agentRunExecution'
+import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
 
 /** 刷新后仍能把「分析 Excel」结果随 /api/ai/chat 的 context 带上，避免「加入数据库」落 LLM 空转 */
 export const EXCEL_ANALYSIS_STORAGE_PREFIX = 'xcagi_excel_analysis_ctx_'
@@ -113,10 +114,7 @@ export function resolveExcelSheetOptionsFromContext(ctx: unknown): LinkedExcelSh
   return result
 }
 
-export function resolveLinkedSheetGridPreview(
-  ctx: unknown,
-  linkedSheet: LinkedExcelSheet | null
-): Record<string, unknown> | null {
+export function resolveLinkedSheetGridPreview(ctx: unknown, linkedSheet: LinkedExcelSheet | null): Record<string, unknown> | null {
   if (!ctx || typeof ctx !== 'object' || !linkedSheet?.sheet_name) return null
   const c = ctx as Record<string, unknown>
   const previewData = c.preview_data as Record<string, unknown> | undefined
@@ -125,8 +123,7 @@ export function resolveLinkedSheetGridPreview(
     const sheet = s as Record<string, unknown>
     const n = String(sheet?.sheet_name || '').trim()
     const i = Number(sheet?.sheet_index || 0)
-    return (linkedSheet.sheet_name && n === linkedSheet.sheet_name)
-      || (linkedSheet.sheet_index > 0 && i === linkedSheet.sheet_index)
+    return (linkedSheet.sheet_name && n === linkedSheet.sheet_name) || (linkedSheet.sheet_index > 0 && i === linkedSheet.sheet_index)
   }) as Record<string, unknown> | undefined
   if (!target) return null
   const sampleRows = Array.isArray(target?.sample_rows) ? target.sample_rows.slice(0, 8) : []
@@ -142,7 +139,9 @@ export function resolveLinkedSheetGridPreview(
     fieldNames.length ? `字段：${fieldNames.join('、')}` : '',
     sampleRows.length ? `样例：${JSON.stringify(sampleRows)}` : '',
     gridRows.length ? `网格前 ${gridRows.length} 行：${JSON.stringify(gridRows)}` : '',
-  ].filter(Boolean).join('\n')
+  ]
+    .filter(Boolean)
+    .join('\n')
   return {
     sheet_name: linkedSheet.sheet_name,
     sheet_index: linkedSheet.sheet_index,
@@ -174,7 +173,10 @@ export function extractLikelyProductQueryKeyword(raw: string): string | null {
   for (const re of patterns) {
     const m = t.match(re)
     if (m?.[1]) {
-      let k = String(m[1]).trim().replace(/[。！？…]+$/g, '').trim()
+      let k = String(m[1])
+        .trim()
+        .replace(/[。！？…]+$/g, '')
+        .trim()
       if ((k.startsWith('「') && k.endsWith('」')) || (k.startsWith('"') && k.endsWith('"')) || (k.startsWith('『') && k.endsWith('』'))) {
         k = k.slice(1, -1).trim()
       }
@@ -193,21 +195,19 @@ export function readPersistedTaskPanelState(sessionKey: string): PersistedTaskPa
     if (!raw) return null
     const parsed = JSON.parse(raw)
     if (!parsed || typeof parsed !== 'object') return null
-    const taskList = Array.isArray((parsed as PersistedTaskPanelState).taskList)
-      ? (parsed as PersistedTaskPanelState).taskList
-      : []
+    const taskList = Array.isArray((parsed as PersistedTaskPanelState).taskList) ? (parsed as PersistedTaskPanelState).taskList : []
     const activeTaskId = String((parsed as PersistedTaskPanelState).activeTaskId || '').trim()
     const expandedTaskIds = Array.isArray((parsed as PersistedTaskPanelState).expandedTaskIds)
       ? (parsed as PersistedTaskPanelState).expandedTaskIds.map((x) => String(x || '').trim()).filter(Boolean)
       : []
     const filterRaw = String((parsed as PersistedTaskPanelState).taskFilter || '').trim()
-    const taskFilter = (['all', 'running', 'blocked', 'success', 'failed'].includes(filterRaw)
-      ? filterRaw
-      : 'all') as PersistedTaskPanelState['taskFilter']
-    const currentTask = ((parsed as PersistedTaskPanelState).currentTask
-      && typeof (parsed as PersistedTaskPanelState).currentTask === 'object')
-      ? (parsed as PersistedTaskPanelState).currentTask as ShipmentTask
-      : null
+    const taskFilter = (
+      ['all', 'running', 'blocked', 'success', 'failed'].includes(filterRaw) ? filterRaw : 'all'
+    ) as PersistedTaskPanelState['taskFilter']
+    const currentTask =
+      (parsed as PersistedTaskPanelState).currentTask && typeof (parsed as PersistedTaskPanelState).currentTask === 'object'
+        ? ((parsed as PersistedTaskPanelState).currentTask as ShipmentTask)
+        : null
     return {
       taskList,
       activeTaskId,
@@ -249,11 +249,7 @@ export function isVerifiedAgentTask(task: TaskItem): boolean {
 }
 
 export function toPlainText(raw: unknown): string {
-  return String(raw || '')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<[^>]*>/g, '')
-    .replace(/&nbsp;/gi, ' ')
-    .trim()
+  return plainTextFromChatHtml(String(raw || '')).trim()
 }
 
 export function isWelcomeMessage(msg: { role?: unknown; content?: unknown }): boolean {
@@ -280,10 +276,7 @@ export function useChatHistoryPersistence(deps: ChatHistoryPersistenceDeps) {
         const sid = String(s?.session_id || s?.id || '').trim()
         if (!sid) return null
         const title = String(s?.title || s?.summary || '').trim() || `会话 ${idx + 1}`
-        const count = Number(
-          s?.message_count
-          ?? (Array.isArray(s?.messages) ? s.messages.length : 0),
-        )
+        const count = Number(s?.message_count ?? (Array.isArray(s?.messages) ? s.messages.length : 0))
         return {
           ...s,
           session_id: sid,
@@ -332,10 +325,7 @@ export function useChatHistoryPersistence(deps: ChatHistoryPersistenceDeps) {
     }
   }
 
-  function deriveLocalSessionTitle(
-    messagesList: Array<{ role?: unknown; content?: unknown }>,
-    fallbackTitle = '',
-  ): string {
+  function deriveLocalSessionTitle(messagesList: Array<{ role?: unknown; content?: unknown }>, fallbackTitle = ''): string {
     const fallback = String(fallbackTitle || '').trim()
     if (fallback) return fallback
     const meaningful = messagesList.filter((msg) => {
@@ -344,7 +334,9 @@ export function useChatHistoryPersistence(deps: ChatHistoryPersistenceDeps) {
       return !isWelcomeMessage(msg)
     })
     const preferred = meaningful.find((msg) => String(msg?.role || '') === 'user') || meaningful[0]
-    const plain = toPlainText(preferred?.content || '').replace(/\s+/g, ' ').trim()
+    const plain = toPlainText(preferred?.content || '')
+      .replace(/\s+/g, ' ')
+      .trim()
     if (!plain) return '新会话'
     return plain.length > 32 ? `${plain.slice(0, 32)}...` : plain
   }
@@ -434,8 +426,8 @@ export function useChatHistoryPersistence(deps: ChatHistoryPersistenceDeps) {
     for (let i = 0; i < localStorage.length; i += 1) {
       const key = String(localStorage.key(i) || '')
       if (
-        extractSessionIdForActiveMod(CHAT_MESSAGES_STORAGE_PREFIX, key, currentMod)
-        || extractSessionIdForActiveMod(CHAT_SESSION_META_PREFIX, key, currentMod)
+        extractSessionIdForActiveMod(CHAT_MESSAGES_STORAGE_PREFIX, key, currentMod) ||
+        extractSessionIdForActiveMod(CHAT_SESSION_META_PREFIX, key, currentMod)
       ) {
         removeKeys.push(key)
       }
@@ -471,15 +463,7 @@ export interface ChatTaskPanelPersistenceDeps {
 }
 
 export function useChatTaskPanelPersistence(deps: ChatTaskPanelPersistenceDeps) {
-  const {
-    sessionId,
-    taskList,
-    activeTaskId,
-    expandedTaskIds,
-    taskFilter,
-    currentTask,
-    sortTaskList,
-  } = deps
+  const { sessionId, taskList, activeTaskId, expandedTaskIds, taskFilter, currentTask, sortTaskList } = deps
 
   function persistTaskPanelStateForSession(targetSessionId?: string): void {
     const sid = String(targetSessionId || sessionId.value || '').trim() || 'default'
@@ -488,7 +472,7 @@ export function useChatTaskPanelPersistence(deps: ChatTaskPanelPersistenceDeps) 
       activeTaskId: String(activeTaskId.value || '').trim(),
       expandedTaskIds: expandedTaskIds.value.slice(0, 80),
       taskFilter: taskFilter.value,
-      currentTask: (currentTask.value ? { ...(currentTask.value as ShipmentTask) } : null),
+      currentTask: currentTask.value ? { ...(currentTask.value as ShipmentTask) } : null,
       savedAt: Date.now(),
     })
   }
@@ -504,16 +488,12 @@ export function useChatTaskPanelPersistence(deps: ChatTaskPanelPersistenceDeps) 
       currentTask.value = null
       return
     }
-    taskList.value = (Array.isArray(persisted.taskList) ? persisted.taskList : [])
-      .filter(isVerifiedAgentTask)
-      .slice(0, TASK_HISTORY_LIMIT)
+    taskList.value = (Array.isArray(persisted.taskList) ? persisted.taskList : []).filter(isVerifiedAgentTask).slice(0, TASK_HISTORY_LIMIT)
     taskFilter.value = persisted.taskFilter
     currentTask.value = (persisted.currentTask || null) as ShipmentTask | null
     const idSet = new Set(taskList.value.map((t) => t.id))
     expandedTaskIds.value = (persisted.expandedTaskIds || []).filter((id) => idSet.has(id)).slice(0, 80)
-    activeTaskId.value = persisted.activeTaskId && idSet.has(persisted.activeTaskId)
-      ? persisted.activeTaskId
-      : (taskList.value[0]?.id || '')
+    activeTaskId.value = persisted.activeTaskId && idSet.has(persisted.activeTaskId) ? persisted.activeTaskId : taskList.value[0]?.id || ''
     sortTaskList()
   }
 

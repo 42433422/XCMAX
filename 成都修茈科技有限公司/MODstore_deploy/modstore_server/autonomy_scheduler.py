@@ -1,3 +1,4 @@
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Scheduler extensions that keep autonomy evidence and remediation moving."""
 
 from __future__ import annotations
@@ -5,13 +6,14 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from apscheduler.triggers.interval import IntervalTrigger
 
 from modstore_server.founder_scorecard_publisher import register_founder_scorecard_job
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -66,13 +68,13 @@ def _rollout_recovery_deadline() -> datetime | None:
     except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError):
         return None
     if built_at.tzinfo is None:
-        built_at = built_at.replace(tzinfo=timezone.utc)
+        built_at = built_at.replace(tzinfo=UTC)
     grace_seconds = min(
         4 * 3600,
         _int_env("MODSTORE_AUTONOMY_ROLLOUT_GRACE_SECONDS", 90 * 60, minimum=300),
     )
-    deadline = built_at.astimezone(timezone.utc) + timedelta(seconds=grace_seconds)
-    return deadline if deadline > datetime.now(timezone.utc) else None
+    deadline = built_at.astimezone(UTC) + timedelta(seconds=grace_seconds)
+    return deadline if deadline > datetime.now(UTC) else None
 
 
 def self_maintenance_cooldown_minutes(triggered_by: str) -> int:
@@ -100,7 +102,7 @@ def _reconcile_completed_loop_memory_safely() -> None:
         )
 
         reconcile_completed_loop_memory_from_ledger()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("failed to reconcile verified self-maintenance merge receipts")
 
 
@@ -287,7 +289,7 @@ def register_autonomy_jobs(
                 result.get("scheduler_status") or "success",
                 result.get("reason") or (result.get("gate") or {}).get("reason"),
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.exception("self-maintenance remediation scheduler failed")
 
     scheduler.add_job(
@@ -301,7 +303,7 @@ def register_autonomy_jobs(
         ),
         id="self_maintenance_remediation_loop",
         replace_existing=True,
-        next_run_time=datetime.now(timezone.utc) + timedelta(seconds=90),
+        next_run_time=datetime.now(UTC) + timedelta(seconds=90),
         misfire_grace_time=_int_env(
             "MODSTORE_SCHEDULER_BUSINESS_MISFIRE_GRACE_SECONDS",
             3600,

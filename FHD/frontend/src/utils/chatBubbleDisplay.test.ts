@@ -33,10 +33,7 @@ describe('chatBubbleDisplay', () => {
   })
 
   it('keeps normal prose while removing tool json lines', () => {
-    const raw = [
-      '{"file_path": "uploads/a.xlsx", "action": "read"}',
-      '已读取完成，请确认是否入库。',
-    ].join('\n')
+    const raw = ['{"file_path": "uploads/a.xlsx", "action": "read"}', '已读取完成，请确认是否入库。'].join('\n')
     expect(stripToolInvocationLeaks(raw)).toBe('已读取完成，请确认是否入库。')
     expect(extractToolInvocationChips(raw)).toEqual([{ label: '读取', detail: 'a.xlsx' }])
   })

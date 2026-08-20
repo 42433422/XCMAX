@@ -1,12 +1,13 @@
-# -*- coding: utf-8 -*-
+# mypy: disable-error-code="arg-type, assignment"
 """
 验证合并后的单元格并生成可视化报告
 """
 
+import glob
+import json
+
 import cv2
 import numpy as np
-import json
-import glob
 
 # 读取图片
 files = glob.glob(r"e:\FHD\26-0300001A*.png")
@@ -80,8 +81,8 @@ def merge_lines(lines, threshold=50):
     return merged
 
 
-horizontal_lines = sorted(list(set(horizontal_lines)))
-vertical_lines = sorted(list(set(vertical_lines)))
+horizontal_lines = sorted(set(horizontal_lines))
+vertical_lines = sorted(set(vertical_lines))
 horizontal_lines = merge_very_close(horizontal_lines, threshold=5)
 vertical_lines = merge_very_close(vertical_lines, threshold=5)
 horizontal_lines = merge_lines(horizontal_lines, threshold=50)
@@ -212,7 +213,7 @@ html_content = f"""<!DOCTYPE html>
             </div>
             <div class="summary-item">
                 <div>合并的组数</div>
-                <div class="summary-value">{sum(1 for c in merged_cells if c['is_merged'])}</div>
+                <div class="summary-value">{sum(1 for c in merged_cells if c["is_merged"])}</div>
             </div>
         </div>
 
@@ -235,10 +236,10 @@ for mc in merged_cells:
     )
 
     html_content += f"""                    <div class="{css_class}">
-                        <div class="cell-header">#[{mc['row']},{mc['start_col']}] {merge_info}</div>
+                        <div class="cell-header">#[{mc["row"]},{mc["start_col"]}] {merge_info}</div>
                         <div class="cell-detail">
-                            位置: ({mc['x']}, {mc['y']}) |
-                            尺寸: {mc['width']} × {mc['height']}
+                            位置: ({mc["x"]}, {mc["y"]}) |
+                            尺寸: {mc["width"]} × {mc["height"]}
                         </div>
                     </div>
 """
@@ -349,7 +350,7 @@ with open(output_path, "w", encoding="utf-8") as f:
     f.write(html_content)
 
 print(f"✓ 最终合并结果报告已生成：{output_path}")
-print(f"\n合并统计：")
+print("\n合并统计：")
 print(f"  原始单元格：{rows * cols} 个")
 print(f"  合并后单元格：{len(merged_cells)} 个")
 print(f"  合并的组数：{sum(1 for c in merged_cells if c['is_merged'])} 组")

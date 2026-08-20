@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """测试 app.application.workflow.planner 的分支覆盖。
 
 覆盖目标：

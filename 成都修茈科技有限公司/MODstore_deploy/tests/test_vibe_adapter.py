@@ -99,7 +99,9 @@ def test_get_vibe_coder_caches_per_user_provider(monkeypatch, tmp_path):
 
     monkeypatch.setattr(vibe_adapter, "_import_facade", fake_import_facade)
     monkeypatch.setattr(
-        vibe_adapter.ChatDispatchLLMClient, "from_user", classmethod(lambda cls, *a, **k: object())
+        vibe_adapter.ChatDispatchLLMClient,
+        "from_user",
+        classmethod(lambda cls, *a, **k: object()),
     )
 
     c1 = vibe_adapter.get_vibe_coder(user_id=1, provider="openai", model="gpt-4o-mini")

@@ -51,70 +51,70 @@ def _optimizer_mock(*, initialized=True, healthy=True):
     return opt
 
 
-@patch("app.utils.performance_initializer.get_performance_optimizer")
+@patch("app.utils.performance.performance_initializer.get_performance_optimizer")
 def test_performance_health_healthy(mock_get: MagicMock, system_client: TestClient) -> None:
     mock_get.return_value = _optimizer_mock()
     r = system_client.get("/api/performance/health")
     assert r.status_code == 200
 
 
-@patch("app.utils.performance_initializer.get_performance_optimizer")
+@patch("app.utils.performance.performance_initializer.get_performance_optimizer")
 def test_performance_metrics_summary(mock_get: MagicMock, system_client: TestClient) -> None:
     mock_get.return_value = _optimizer_mock()
     r = system_client.get("/api/performance/metrics/summary")
     assert r.status_code == 200
 
 
-@patch("app.utils.performance_initializer.get_performance_optimizer")
+@patch("app.utils.performance.performance_initializer.get_performance_optimizer")
 def test_performance_prometheus(mock_get: MagicMock, system_client: TestClient) -> None:
     mock_get.return_value = _optimizer_mock()
     r = system_client.get("/api/performance/metrics/prometheus")
     assert r.status_code == 200
 
 
-@patch("app.utils.performance_initializer.get_performance_optimizer")
+@patch("app.utils.performance.performance_initializer.get_performance_optimizer")
 def test_performance_cache_stats(mock_get: MagicMock, system_client: TestClient) -> None:
     mock_get.return_value = _optimizer_mock()
     r = system_client.get("/api/performance/cache/stats")
     assert r.status_code == 200
 
 
-@patch("app.utils.performance_initializer.get_performance_optimizer")
+@patch("app.utils.performance.performance_initializer.get_performance_optimizer")
 def test_performance_cache_clear(mock_get: MagicMock, system_client: TestClient) -> None:
     mock_get.return_value = _optimizer_mock()
     r = system_client.post("/api/performance/cache/clear")
     assert r.status_code == 200
 
 
-@patch("app.utils.performance_initializer.get_performance_optimizer")
+@patch("app.utils.performance.performance_initializer.get_performance_optimizer")
 def test_performance_cache_invalidate(mock_get: MagicMock, system_client: TestClient) -> None:
     mock_get.return_value = _optimizer_mock()
     r = system_client.post("/api/performance/cache/invalidate", json={"key": "k"})
     assert r.status_code in (200, 400)
 
 
-@patch("app.utils.performance_initializer.get_performance_optimizer")
+@patch("app.utils.performance.performance_initializer.get_performance_optimizer")
 def test_performance_tasks_status(mock_get: MagicMock, system_client: TestClient) -> None:
     mock_get.return_value = _optimizer_mock()
     r = system_client.get("/api/performance/tasks/status")
     assert r.status_code == 200
 
 
-@patch("app.utils.performance_initializer.get_performance_optimizer")
+@patch("app.utils.performance.performance_initializer.get_performance_optimizer")
 def test_performance_alerts(mock_get: MagicMock, system_client: TestClient) -> None:
     mock_get.return_value = _optimizer_mock()
     r = system_client.get("/api/performance/alerts")
     assert r.status_code == 200
 
 
-@patch("app.utils.performance_initializer.get_performance_optimizer")
+@patch("app.utils.performance.performance_initializer.get_performance_optimizer")
 def test_performance_slow_queries(mock_get: MagicMock, system_client: TestClient) -> None:
     mock_get.return_value = _optimizer_mock()
     r = system_client.get("/api/performance/slow-queries")
     assert r.status_code == 200
 
 
-@patch("app.utils.performance_initializer.get_performance_optimizer")
+@patch("app.utils.performance.performance_initializer.get_performance_optimizer")
 def test_performance_reinitialize(mock_get: MagicMock, system_client: TestClient) -> None:
     mock_get.return_value = _optimizer_mock()
     r = system_client.post("/api/performance/optimize/reinitialize")

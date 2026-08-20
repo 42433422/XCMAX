@@ -36,7 +36,14 @@ describe('useChatSession', () => {
       localUserId,
     })
     conversations.value = [
-      { id: 5, title: '张三', is_direct: true, last_message_at: null, last_message_preview: '', unread_count: 0 },
+      {
+        id: 5,
+        title: '张三',
+        is_direct: true,
+        last_message_at: null,
+        last_message_preview: '',
+        unread_count: 0,
+      },
     ]
     activeConversationId.value = 5
     expect(isMyMessage({ id: 1, conversation_id: 5, sender_user_id: 1, body: 'hi', created_at: null })).toBe(true)
@@ -89,7 +96,14 @@ describe('useChatSession', () => {
     const { activeTitle } = useChatSession({ conversations, activeConversationId, localUserId })
     expect(activeTitle.value).toBe('会话')
     conversations.value = [
-      { id: 3, title: '李四', is_direct: true, last_message_at: null, last_message_preview: '', unread_count: 0 },
+      {
+        id: 3,
+        title: '李四',
+        is_direct: true,
+        last_message_at: null,
+        last_message_preview: '',
+        unread_count: 0,
+      },
     ]
     activeConversationId.value = 3
     expect(activeTitle.value).toBe('李四')
@@ -107,7 +121,12 @@ describe('useContactPicker', () => {
   it('过滤掉企业专属客服联系人', async () => {
     contactsMock.fetchImContacts.mockResolvedValue([
       { id: 1, display_name: '张三', username: 'zhangsan' },
-      { id: 99, display_name: '企业专属客服', username: 'enterprise-cs', is_enterprise_dedicated_cs: true },
+      {
+        id: 99,
+        display_name: '企业专属客服',
+        username: 'enterprise-cs',
+        is_enterprise_dedicated_cs: true,
+      },
     ])
     const picker = useContactPicker({ imApiReachable })
     await picker.openContactPicker()
@@ -139,8 +158,25 @@ describe('useContactPicker', () => {
 
 describe('useMessengerEntries 纯函数', () => {
   it('isSuperEmployeeEntry / isCodexSuperEmployeeEntry 识别超级员工', () => {
-    const codex = { id: 'codex-super-employee', display_name: 'x', username: 'x', subtitle: 'x', is_codex_super_employee: true }
-    const duty = { id: 'e1', display_name: 'x', username: 'x', subtitle: 'x', description: '', area: '', status: '', api_base_path: '', phone_channel: '', is_duty_employee_entry: true }
+    const codex = {
+      id: 'codex-super-employee',
+      display_name: 'x',
+      username: 'x',
+      subtitle: 'x',
+      is_codex_super_employee: true,
+    }
+    const duty = {
+      id: 'e1',
+      display_name: 'x',
+      username: 'x',
+      subtitle: 'x',
+      description: '',
+      area: '',
+      status: '',
+      api_base_path: '',
+      phone_channel: '',
+      is_duty_employee_entry: true,
+    }
     expect(isSuperEmployeeEntry(codex)).toBe(true)
     expect(isCodexSuperEmployeeEntry(codex)).toBe(true)
     expect(isDutyEmployeeEntry(duty)).toBe(true)

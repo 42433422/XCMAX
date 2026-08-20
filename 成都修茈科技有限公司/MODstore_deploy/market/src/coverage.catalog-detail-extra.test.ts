@@ -89,7 +89,11 @@ beforeEach(() => {
   localStorage.setItem('modstore_token', 'token')
 
   apiMock.catalogDetail.mockResolvedValue(catalogItem())
-  apiMock.catalogReviews.mockResolvedValue({ reviews: [{ id: 1, rating: 5, content: 'good' }], average_rating: 5, total: 1 })
+  apiMock.catalogReviews.mockResolvedValue({
+    reviews: [{ id: 1, rating: 5, content: 'good' }],
+    average_rating: 5,
+    total: 1,
+  })
   apiMock.catalogQuality.mockResolvedValue({
     six_dimension: {
       overall_score: 91.25,
@@ -105,13 +109,19 @@ beforeEach(() => {
   apiMock.catalogToggleFavorite.mockResolvedValue({ favorited: true })
   apiMock.catalogSubmitReview.mockResolvedValue({})
   apiMock.catalogSubmitComplaint.mockResolvedValue({})
-  apiMock.getEmployeeStatus.mockResolvedValue({ status: 'online', execution_stats: { total_executions: 7, success_rate: 0.9 } })
+  apiMock.getEmployeeStatus.mockResolvedValue({
+    status: 'online',
+    execution_stats: { total_executions: 7, success_rate: 0.9 },
+  })
   apiMock.buyItem.mockResolvedValue({ message: 'owned' })
   apiMock.paymentCheckout.mockResolvedValue({ ok: true, type: 'precreate', order_id: 'ord_1' })
   apiMock.downloadItem.mockResolvedValue({})
   apiMock.adminDeleteCatalog.mockResolvedValue({})
 
-  vi.stubGlobal('confirm', vi.fn(() => true))
+  vi.stubGlobal(
+    'confirm',
+    vi.fn(() => true),
+  )
   vi.stubGlobal('alert', vi.fn())
 })
 
@@ -124,7 +134,7 @@ describe('catalog detail coverage', () => {
   it('covers mount, labels, author follow, quality and employee status paths', async () => {
     const wrapper = mount(CatalogDetailView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
     expect(apiMock.catalogDetail).toHaveBeenCalledWith('10')
     expect(vm.itemCapabilities).toHaveLength(1)
@@ -154,7 +164,10 @@ describe('catalog detail coverage', () => {
 
     localStorage.removeItem('modstore_token')
     await vm.toggleAuthorFollow()
-    expect(routerMock.push).toHaveBeenCalledWith({ name: 'login', query: { redirect: '/catalog/10' } })
+    expect(routerMock.push).toHaveBeenCalledWith({
+      name: 'login',
+      query: { redirect: '/catalog/10' },
+    })
     localStorage.setItem('modstore_token', 'token')
 
     await vm.loadQuality(true)
@@ -183,11 +196,14 @@ describe('catalog detail coverage', () => {
   it('covers favorite, reviews and complaint branches', async () => {
     const wrapper = mount(CatalogDetailView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
     localStorage.removeItem('modstore_token')
     await vm.toggleFavorite()
-    expect(routerMock.push).toHaveBeenCalledWith({ name: 'login', query: { redirect: '/catalog/10' } })
+    expect(routerMock.push).toHaveBeenCalledWith({
+      name: 'login',
+      query: { redirect: '/catalog/10' },
+    })
 
     localStorage.setItem('modstore_token', 'token')
     await vm.toggleFavorite()
@@ -218,12 +234,19 @@ describe('catalog detail coverage', () => {
     expect(vm.complaintPanelOpen).toBe(true)
     expect(vm.customerServiceLink('refund')).toEqual({
       name: 'customer-service',
-      query: expect.objectContaining({ scene: 'refund', catalog_id: '10', pkg_id: 'emp_customer_service' }),
+      query: expect.objectContaining({
+        scene: 'refund',
+        catalog_id: '10',
+        pkg_id: 'emp_customer_service',
+      }),
     })
 
     localStorage.removeItem('modstore_token')
     await vm.submitComplaint()
-    expect(routerMock.push).toHaveBeenCalledWith({ name: 'login', query: { redirect: '/catalog/10' } })
+    expect(routerMock.push).toHaveBeenCalledWith({
+      name: 'login',
+      query: { redirect: '/catalog/10' },
+    })
 
     localStorage.setItem('modstore_token', 'token')
     vm.complaintReason = 'abc'
@@ -248,11 +271,14 @@ describe('catalog detail coverage', () => {
   it('covers buy, download, delist, navigate and mount error branches', async () => {
     const wrapper = mount(CatalogDetailView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
     localStorage.removeItem('modstore_token')
     await vm.doBuy()
-    expect(routerMock.push).toHaveBeenCalledWith({ name: 'login', query: { redirect: '/catalog/10' } })
+    expect(routerMock.push).toHaveBeenCalledWith({
+      name: 'login',
+      query: { redirect: '/catalog/10' },
+    })
 
     localStorage.setItem('modstore_token', 'token')
     vm.item.price = 0
@@ -270,7 +296,11 @@ describe('catalog detail coverage', () => {
     await vm.doBuy()
     expect(window.alert).toHaveBeenCalledWith('pay failed')
 
-    apiMock.paymentCheckout.mockResolvedValueOnce({ ok: true, type: 'precreate', order_id: 'ord_2' })
+    apiMock.paymentCheckout.mockResolvedValueOnce({
+      ok: true,
+      type: 'precreate',
+      order_id: 'ord_2',
+    })
     await vm.doBuy()
     expect(routerMock.push).toHaveBeenCalledWith({ name: 'checkout', params: { orderId: 'ord_2' } })
 
@@ -287,11 +317,10 @@ describe('catalog detail coverage', () => {
     apiMock.downloadItem.mockRejectedValueOnce(new Error('download failed'))
     await vm.doDownload()
     expect(window.alert).toHaveBeenCalledWith('download failed')
-
-    ;(window.confirm as any).mockReturnValueOnce(false)
+    ;(window.confirm as UnsafeTestValue).mockReturnValueOnce(false)
     await vm.delistItem()
     expect(apiMock.adminDeleteCatalog).not.toHaveBeenCalled()
-    ;(window.confirm as any).mockReturnValueOnce(true)
+    ;(window.confirm as UnsafeTestValue).mockReturnValueOnce(true)
     await vm.delistItem()
     expect(apiMock.adminDeleteCatalog).toHaveBeenCalledWith(10)
     expect(routerMock.push).toHaveBeenCalledWith({ name: 'ai-store' })
@@ -306,7 +335,7 @@ describe('catalog detail coverage', () => {
     apiMock.catalogDetail.mockRejectedValueOnce(new Error('detail failed'))
     const bad = mount(CatalogDetailView, globalMount)
     await flushPromises()
-    expect((bad.vm as any).err).toContain('detail failed')
+    expect((bad.vm as UnsafeTestValue).err).toContain('detail failed')
   })
 
   it('covers array route param and author self computed branch', async () => {
@@ -315,7 +344,7 @@ describe('catalog detail coverage', () => {
     apiMock.catalogDetail.mockResolvedValueOnce(catalogItem({ id: 88, author_id: 2, author: { id: 2, name: 'Self' } }))
     const wrapper = mount(CatalogDetailView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
     expect(vm.catalogParamId).toBe('88')
     expect(vm.isAuthorSelf).toBe(true)
   })

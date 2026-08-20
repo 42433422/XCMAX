@@ -1,11 +1,6 @@
 import { requestJson } from '../infrastructure/http/client'
 
-export type OpenApiAuthType =
-  | 'none'
-  | 'api_key'
-  | 'bearer'
-  | 'basic'
-  | 'oauth2_client_credentials'
+export type OpenApiAuthType = 'none' | 'api_key' | 'bearer' | 'basic' | 'oauth2_client_credentials'
 
 export interface OpenApiConnectorSummary {
   id: number
@@ -87,9 +82,7 @@ export interface ConnectorDetailResponse {
   credential: OpenApiCredentialView
 }
 
-export function importConnector(
-  payload: ImportConnectorPayload,
-): Promise<ImportConnectorResponse> {
+export function importConnector(payload: ImportConnectorPayload): Promise<ImportConnectorResponse> {
   return requestJson('/api/openapi-connectors/import', {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -115,20 +108,16 @@ export function saveCredentials(
   authType: OpenApiAuthType,
   config: Record<string, unknown>,
 ): Promise<{ ok: boolean; credential: OpenApiCredentialView }> {
-  return requestJson(
-    `/api/openapi-connectors/${encodeURIComponent(String(id))}/credentials`,
-    {
-      method: 'PUT',
-      body: JSON.stringify({ auth_type: authType, config }),
-    },
-  )
+  return requestJson(`/api/openapi-connectors/${encodeURIComponent(String(id))}/credentials`, {
+    method: 'PUT',
+    body: JSON.stringify({ auth_type: authType, config }),
+  })
 }
 
 export function deleteCredentials(id: number | string): Promise<{ ok: boolean }> {
-  return requestJson(
-    `/api/openapi-connectors/${encodeURIComponent(String(id))}/credentials`,
-    { method: 'DELETE' },
-  )
+  return requestJson(`/api/openapi-connectors/${encodeURIComponent(String(id))}/credentials`, {
+    method: 'DELETE',
+  })
 }
 
 export function toggleOperation(
@@ -136,13 +125,10 @@ export function toggleOperation(
   operationId: string,
   enabled: boolean,
 ): Promise<{ ok: boolean; operation: OpenApiOperationSummary }> {
-  return requestJson(
-    `/api/openapi-connectors/${encodeURIComponent(String(id))}/operations/${encodeURIComponent(operationId)}`,
-    {
-      method: 'PATCH',
-      body: JSON.stringify({ enabled }),
-    },
-  )
+  return requestJson(`/api/openapi-connectors/${encodeURIComponent(String(id))}/operations/${encodeURIComponent(operationId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ enabled }),
+  })
 }
 
 export interface TestCallPayload {
@@ -152,23 +138,16 @@ export interface TestCallPayload {
   timeout?: number
 }
 
-export function testOperation(
-  id: number | string,
-  operationId: string,
-  payload: TestCallPayload = {},
-): Promise<OpenApiTestResult> {
-  return requestJson(
-    `/api/openapi-connectors/${encodeURIComponent(String(id))}/operations/${encodeURIComponent(operationId)}/test`,
-    {
-      method: 'POST',
-      body: JSON.stringify({
-        params: payload.params || {},
-        body: payload.body ?? null,
-        headers: payload.headers || {},
-        timeout: payload.timeout ?? 30,
-      }),
-    },
-  )
+export function testOperation(id: number | string, operationId: string, payload: TestCallPayload = {}): Promise<OpenApiTestResult> {
+  return requestJson(`/api/openapi-connectors/${encodeURIComponent(String(id))}/operations/${encodeURIComponent(operationId)}/test`, {
+    method: 'POST',
+    body: JSON.stringify({
+      params: payload.params || {},
+      body: payload.body ?? null,
+      headers: payload.headers || {},
+      timeout: payload.timeout ?? 30,
+    }),
+  })
 }
 
 export interface PublishWorkflowNodePayload {
@@ -187,21 +166,12 @@ export function publishWorkflowNode(
   id: number | string,
   payload: PublishWorkflowNodePayload,
 ): Promise<{ ok: boolean; node: Record<string, unknown> }> {
-  return requestJson(
-    `/api/openapi-connectors/${encodeURIComponent(String(id))}/publish-workflow-node`,
-    {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    },
-  )
+  return requestJson(`/api/openapi-connectors/${encodeURIComponent(String(id))}/publish-workflow-node`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
 }
 
-export function listLogs(
-  id: number | string,
-  limit = 50,
-  offset = 0,
-): Promise<{ items: OpenApiCallLogEntry[] }> {
-  return requestJson(
-    `/api/openapi-connectors/${encodeURIComponent(String(id))}/logs?limit=${limit}&offset=${offset}`,
-  )
+export function listLogs(id: number | string, limit = 50, offset = 0): Promise<{ items: OpenApiCallLogEntry[] }> {
+  return requestJson(`/api/openapi-connectors/${encodeURIComponent(String(id))}/logs?limit=${limit}&offset=${offset}`)
 }

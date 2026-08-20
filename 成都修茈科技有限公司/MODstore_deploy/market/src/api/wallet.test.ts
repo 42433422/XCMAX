@@ -77,7 +77,7 @@ describe('payment api', () => {
   it('paymentOrders builds query string with status', async () => {
     vi.mocked(req).mockResolvedValue({})
     await payment.paymentOrders('paid', 10, 0)
-    const call = vi.mocked(req).mock.calls[0] as any[]
+    const call = vi.mocked(req).mock.calls[0] as UnsafeTestValue[]
     const url = call[0] as string
     expect(url).toContain('status=paid')
     expect(url).toContain('limit=10')
@@ -137,18 +137,14 @@ describe('payment api', () => {
 
   it('paymentCheckout returns checkout on success with page type', async () => {
     const checkout = { ok: true, type: 'page', redirect_url: 'https://pay.example.com' }
-    vi.mocked(req)
-      .mockResolvedValueOnce({ plan_id: 'p', request_id: 'r', timestamp: 1, signature: 's' })
-      .mockResolvedValueOnce(checkout)
+    vi.mocked(req).mockResolvedValueOnce({ plan_id: 'p', request_id: 'r', timestamp: 1, signature: 's' }).mockResolvedValueOnce(checkout)
     const res = await payment.paymentCheckout({ plan_id: 'p' })
     expect(res).toEqual(checkout)
   })
 
   it('paymentCheckout returns checkout on success with precreate type', async () => {
     const checkout = { ok: true, type: 'precreate', order_id: 'ORD123' }
-    vi.mocked(req)
-      .mockResolvedValueOnce({ plan_id: 'p', request_id: 'r', timestamp: 1, signature: 's' })
-      .mockResolvedValueOnce(checkout)
+    vi.mocked(req).mockResolvedValueOnce({ plan_id: 'p', request_id: 'r', timestamp: 1, signature: 's' }).mockResolvedValueOnce(checkout)
     const res = await payment.paymentCheckout({ plan_id: 'p' })
     expect(res).toEqual(checkout)
   })
@@ -163,11 +159,9 @@ describe('payment api', () => {
 
   it('paymentCheckout passes pay_channel and pay_type', async () => {
     const checkout = { ok: true, type: 'page', redirect_url: 'https://pay.example.com' }
-    vi.mocked(req)
-      .mockResolvedValueOnce({ plan_id: 'p', request_id: 'r', timestamp: 1, signature: 's' })
-      .mockResolvedValueOnce(checkout)
+    vi.mocked(req).mockResolvedValueOnce({ plan_id: 'p', request_id: 'r', timestamp: 1, signature: 's' }).mockResolvedValueOnce(checkout)
     await payment.paymentCheckout({ plan_id: 'p', pay_channel: 'alipay', pay_type: 'wap' })
-    const secondCall = vi.mocked(req).mock.calls[1] as any[]
+    const secondCall = vi.mocked(req).mock.calls[1] as UnsafeTestValue[]
     const body = JSON.parse(secondCall[1].body as string)
     expect(body.pay_channel).toBe('alipay')
     expect(body.pay_type).toBe('wap')

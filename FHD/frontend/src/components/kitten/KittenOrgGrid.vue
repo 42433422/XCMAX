@@ -2,12 +2,7 @@
   <section class="kitten-org" aria-label="职能模块">
     <div class="kitten-org-title">工作台职能</div>
     <div class="kitten-org-grid">
-      <div
-        v-for="card in cards"
-        :key="card.key"
-        class="kitten-org-card"
-        :class="{ active: card.key === activeLayerKey }"
-      >
+      <div v-for="card in cards" :key="card.key" class="kitten-org-card" :class="{ active: card.key === activeLayerKey }">
         <span class="kitten-org-card-title">{{ card.title }}</span>
         <span class="kitten-org-card-desc">{{ card.desc }}</span>
       </div>
@@ -19,12 +14,12 @@
 defineProps({
   cards: {
     type: Array,
-    default: () => []
+    default: () => [],
   },
   activeLayerKey: {
     type: String,
-    default: 'ingest'
-  }
+    default: 'ingest',
+  },
 })
 </script>
 
@@ -54,7 +49,10 @@ defineProps({
   flex-direction: column;
   gap: 4px;
   min-height: 0;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background-color 0.15s ease;
 }
 .kitten-org-card.active {
   border-color: #60a5fa;

@@ -87,11 +87,35 @@ onMounted(load)
 </template>
 
 <style scoped>
-.change-requests { padding: 24px; max-width: 720px; }
-.cr-form { display: flex; flex-direction: column; gap: 12px; margin: 16px 0; }
-.cr-form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
-.cr-list { list-style: none; padding: 0; }
-.cr-list li { padding: 8px 0; border-bottom: 1px solid var(--border, #333); }
-.error { color: #f85149; }
-.muted { color: var(--muted, #888); font-size: 13px; }
+.change-requests {
+  padding: 24px;
+  max-width: 720px;
+}
+.cr-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 16px 0;
+}
+.cr-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+.cr-list {
+  list-style: none;
+  padding: 0;
+}
+.cr-list li {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border, #333);
+}
+.error {
+  color: #f85149;
+}
+.muted {
+  color: var(--muted, #888);
+  font-size: 13px;
+}
 </style>

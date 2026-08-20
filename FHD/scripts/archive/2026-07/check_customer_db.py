@@ -1,5 +1,7 @@
 import sqlite3
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 
 def check_customer_database():
     """检查customer数据库中的购买单位"""
@@ -118,7 +120,7 @@ def check_customer_database():
             "active_units": active_units_count if purchase_units_exists else 1,
         }
 
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 检查customer数据库时出错: {e}")
         return {"error": str(e)}
 
@@ -131,7 +133,7 @@ if __name__ == "__main__":
 
     print("\n" + "=" * 50)
     if "error" not in result:
-        print(f"✅ 检查完成！")
+        print("✅ 检查完成！")
         print(f"   数据库表数量: {len(result['tables'])}")
         print(f"   purchase_units表存在: {result['purchase_units_exists']}")
         print(f"   活跃购买单位数量: {result['active_units']}")

@@ -103,6 +103,7 @@ def grid_to_workbook_path(
     path.parent.mkdir(parents=True, exist_ok=True)
     wb = Workbook()
     ws = wb.active
+    assert ws is not None
     ws.title = (sheet_name or "OCR")[:31]
     row_idx = 1
     for line in meta_lines or []:
@@ -154,7 +155,7 @@ def _load_image_arrays(path: Path) -> list[Any]:
             images = convert_from_path(str(path), first_page=1, last_page=max_pages)
             return [np.array(img.convert("RGB")) for img in images]
         except RECOVERABLE_ERRORS as exc:
-            raise RuntimeError(f"PDF OCR 依赖不可用（需 pypdfium2 或 pdf2image）: {exc}") from exc
+            raise RuntimeError("PDF OCR 依赖不可用（需 pypdfium2 或 pdf2image）") from exc
 
     raise RuntimeError(f"不支持的 OCR 源类型: {suffix}")
 
@@ -237,9 +238,9 @@ def ocr_source_to_workbook(
             "meta_lines": meta_lines,
             "message": f"OCR 已生成表格 {xlsx.name}",
         }
-    except RECOVERABLE_ERRORS as exc:
-        logger.info("ocr_source_to_workbook failed: %s", exc, exc_info=True)
-        return {"success": False, "message": f"OCR 失败: {exc}", "error_code": "ocr_failed"}
+    except RECOVERABLE_ERRORS:
+        logger.exception("ocr_source_to_workbook failed")
+        return {"success": False, "message": "OCR 失败", "error_code": "ocr_failed"}
 
 
 def parse_ocr_document(
@@ -260,10 +261,10 @@ def parse_ocr_document(
 
     try:
         src = resolve_etl_path(file_path, workspace_root=workspace_root, must_exist=True)
-    except ShipmentEtlPathError as exc:
+    except ShipmentEtlPathError:
         return {
             "success": False,
-            "message": f"非法文件路径: {exc}",
+            "message": "非法文件路径",
             "error_code": "unsafe_path",
             "notes": [],
         }

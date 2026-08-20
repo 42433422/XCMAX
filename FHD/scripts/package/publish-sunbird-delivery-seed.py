@@ -12,7 +12,7 @@ import hashlib
 import json
 import shutil
 import zipfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -94,7 +94,7 @@ def _build_zip(seed_root: Path, out_dir: Path, version: str) -> Path:
         "version": version,
         "apply": "sunbird_roster",
         "contents": package_files,
-        "built_at": datetime.now(timezone.utc).isoformat(),
+        "built_at": datetime.now(UTC).isoformat(),
     }
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr(
@@ -145,7 +145,7 @@ def _upsert_package(modstore_root: Path, zip_path: Path, version: str) -> dict[s
         "download_path": f"/v1/packages/{PACKAGE_ID}/{version}/download",
         "commerce": {"mode": "free", "product_id": None, "sku": None},
         "license": {"type": "account_entitlement", "verify_url": None},
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
     }
     rows.append(record)
     data["packages"] = rows

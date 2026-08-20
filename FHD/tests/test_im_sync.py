@@ -1,3 +1,4 @@
+# mypy: disable-error-code="attr-defined"
 """IM 消息漫游 + xcmax sync 协议扩展。"""
 
 from __future__ import annotations

@@ -199,7 +199,7 @@ def test_pg_expr_norm_unit() -> None:
 
 
 def test_exc_chain_has_undefined_table() -> None:
-    exc = Exception("relation does not exist")
+    exc = RuntimeError("relation does not exist")
     assert _exc_chain_has_undefined_table(exc) in (True, False)
 
 

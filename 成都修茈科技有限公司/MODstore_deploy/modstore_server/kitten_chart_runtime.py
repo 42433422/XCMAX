@@ -111,7 +111,7 @@ def _load_dataset(src_path: Path) -> Tuple[List[str], List[Dict[str, Any]]]:
 def _pick_fields(columns: List[str], rows: List[Dict[str, Any]]) -> Tuple[str, str]:
     if not columns or not rows:
         return "", ""
-    numeric_scores: Dict[str, int] = {c: 0 for c in columns}
+    numeric_scores: Dict[str, int] = dict.fromkeys(columns, 0)
     for row in rows[:200]:
         for col in columns:
             val = row.get(col)
@@ -191,7 +191,12 @@ def build_chart_spec(
             "xAxis": {"type": "category", "data": labels},
             "yAxis": {"type": "value"},
             "series": [
-                {"type": "line", "smooth": True, "data": values, "areaStyle": {"opacity": 0.08}}
+                {
+                    "type": "line",
+                    "smooth": True,
+                    "data": values,
+                    "areaStyle": {"opacity": 0.08},
+                }
             ],
         }
     if chart_type == "dashboard":

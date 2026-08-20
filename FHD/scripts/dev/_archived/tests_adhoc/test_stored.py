@@ -1,10 +1,13 @@
-# -*- coding: utf-8 -*-
-import sys
+# mypy: disable-error-code="import-not-found"
 import os
+import sys
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 sys.path.insert(0, r"E:\FHD\XCAGI")
-from app.utils.path_utils import get_resource_path
 import sqlite3
+
+from app.utils.path_io.path_utils import get_resource_path
 
 msg_db_path = os.path.join(
     get_resource_path("wechat-decrypt"), "decrypted", "message", "message_0.db"
@@ -50,7 +53,7 @@ for table in tables:
             for msg_row in cur.fetchall():
                 content = decompress(msg_row[0], msg_row[1]).strip()
                 print(f"  [{msg_row[2]}] ct={msg_row[1]}: {repr(content[:60])}")
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"Error in {table}: {e}")
 
 conn.close()

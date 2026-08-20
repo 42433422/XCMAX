@@ -11,6 +11,7 @@ from fastapi import APIRouter
 
 from modstore_server.api.dto import HealthResponse
 from modstore_server.deploy_context import health_payload
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 router = APIRouter(tags=["health"])
 
@@ -68,7 +69,7 @@ def _scheduler_process_status() -> bool:
             and data.get("scheduler_running") is True
             and data.get("scheduler_healthy") is True
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         status = False
 
     _scheduler_status_cache = (now, status)
@@ -83,7 +84,7 @@ def _scheduler_status() -> bool | None:
         from modstore_server.workflow_scheduler import scheduler_integrity_status
 
         return bool(scheduler_integrity_status()["ok"])
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return None
 
 

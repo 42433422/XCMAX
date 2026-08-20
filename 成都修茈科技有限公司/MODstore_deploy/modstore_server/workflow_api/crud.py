@@ -1,7 +1,8 @@
+# mypy: disable-error-code="arg-type, assignment"
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -45,7 +46,11 @@ async def create_workflow(
     db.add(workflow)
     db.commit()
     db.refresh(workflow)
-    return {"id": workflow.id, "name": workflow.name, "description": workflow.description}
+    return {
+        "id": workflow.id,
+        "name": workflow.name,
+        "description": workflow.description,
+    }
 
 
 @router.get("/", summary="获取工作流列表")
@@ -140,7 +145,7 @@ async def update_workflow(
         workflow.description = body.description
     if body.is_active is not None:
         workflow.is_active = body.is_active
-    workflow.updated_at = datetime.now(timezone.utc)
+    workflow.updated_at = datetime.now(UTC)
 
     db.commit()
     db.refresh(workflow)

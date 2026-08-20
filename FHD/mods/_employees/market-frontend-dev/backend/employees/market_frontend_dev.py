@@ -12,7 +12,9 @@ def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     issues: list[dict[str, str]] = []
     files = proposal.get("files") if isinstance(proposal.get("files"), list) else []
     tests = proposal.get("tests") if isinstance(proposal.get("tests"), list) else []
-    api_contracts = proposal.get("api_contracts") if isinstance(proposal.get("api_contracts"), list) else []
+    api_contracts = (
+        proposal.get("api_contracts") if isinstance(proposal.get("api_contracts"), list) else []
+    )
     framework = str(proposal.get("framework") or "").strip().lower()
     if framework != "vue3":
         issues.append({"code": "framework_not_vue3", "path": "frontend_change.framework"})
@@ -20,7 +22,9 @@ def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     for index, value in enumerate(files[:200]):
         path = str(value or "").strip()[:500]
         if not path.startswith("market/src/") or not path.endswith((".vue", ".ts", ".css")):
-            issues.append({"code": "file_outside_frontend_scope", "path": f"frontend_change.files[{index}]"})
+            issues.append(
+                {"code": "file_outside_frontend_scope", "path": f"frontend_change.files[{index}]"}
+            )
         else:
             clean_files.append(path)
     if not clean_files:
@@ -36,11 +40,23 @@ def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         "files": clean_files,
         "issues": issues,
         "ready_for_implementation": not issues,
-        "evidence": ["input.frontend_change.files", "input.frontend_change.api_contracts", "input.frontend_change.tests"],
+        "evidence": [
+            "input.frontend_change.files",
+            "input.frontend_change.api_contracts",
+            "input.frontend_change.tests",
+        ],
         "read_only": True,
         "side_effects": [],
     }
 
 
 def _failed(message: str, code: str) -> dict[str, Any]:
-    return {"ok": False, "status": "failed", "summary": message, "error_code": code, "evidence": [], "read_only": True, "side_effects": []}
+    return {
+        "ok": False,
+        "status": "failed",
+        "summary": message,
+        "error_code": code,
+        "evidence": [],
+        "read_only": True,
+        "side_effects": [],
+    }

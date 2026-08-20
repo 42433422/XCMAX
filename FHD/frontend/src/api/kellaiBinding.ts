@@ -130,11 +130,7 @@ const PAIRING_HEADERS: HeadersInit = {
   ...clientShellRequestHeaders(),
 }
 
-async function request<T>(
-  path: string,
-  init?: RequestInit,
-  allowEmptyData = false,
-): Promise<T> {
+async function request<T>(path: string, init?: RequestInit, allowEmptyData = false): Promise<T> {
   const response = await apiFetch(path, {
     ...init,
     headers: {
@@ -143,11 +139,7 @@ async function request<T>(
     },
   })
   const payload = (await response.json().catch(() => ({}))) as Envelope<T>
-  if (
-    !response.ok
-    || payload.success !== true
-    || (!allowEmptyData && payload.data === undefined)
-  ) {
+  if (!response.ok || payload.success !== true || (!allowEmptyData && payload.data === undefined)) {
     throw new Error(payload.detail || payload.error || payload.message || `请求失败（HTTP ${response.status}）`)
   }
   return payload.data as T
@@ -171,9 +163,7 @@ export const kellaiBindingApi = {
 
   async customers(limit = 50): Promise<KellaiCustomer[]> {
     const safeLimit = Math.max(1, Math.min(Number(limit) || 50, 50))
-    const data = await request<{ customers?: KellaiCustomer[] }>(
-      `/api/kellai/binding/customers?limit=${safeLimit}`,
-    )
+    const data = await request<{ customers?: KellaiCustomer[] }>(`/api/kellai/binding/customers?limit=${safeLimit}`)
     return data.customers || []
   },
 
@@ -194,9 +184,7 @@ export const kellaiBindingApi = {
     if (!Number.isInteger(safeCustomerId) || safeCustomerId <= 0) {
       return Promise.reject(new Error('客户编号无效'))
     }
-    return request<KellaiCopilotDraft | null>(
-      `/api/kellai/binding/customers/${safeCustomerId}/copilot-drafts/latest`,
-    )
+    return request<KellaiCopilotDraft | null>(`/api/kellai/binding/customers/${safeCustomerId}/copilot-drafts/latest`)
   },
 
   followUpOverview(customerId: number): Promise<KellaiFollowUpOverview> {
@@ -204,9 +192,7 @@ export const kellaiBindingApi = {
     if (!Number.isInteger(safeCustomerId) || safeCustomerId <= 0) {
       return Promise.reject(new Error('客户编号无效'))
     }
-    return request<KellaiFollowUpOverview>(
-      `/api/kellai/binding/customers/${safeCustomerId}/follow-up-tasks`,
-    )
+    return request<KellaiFollowUpOverview>(`/api/kellai/binding/customers/${safeCustomerId}/follow-up-tasks`)
   },
 
   async followUpTasks(customerId: number): Promise<KellaiFollowUpTask[]> {
@@ -219,35 +205,25 @@ export const kellaiBindingApi = {
     if (!Number.isInteger(safeCustomerId) || safeCustomerId <= 0) {
       return Promise.reject(new Error('客户编号无效'))
     }
-    return request<KellaiCopilotDraft>(
-      `/api/kellai/binding/customers/${safeCustomerId}/copilot-drafts`,
-      { method: 'POST', body: '{}' },
-    )
+    return request<KellaiCopilotDraft>(`/api/kellai/binding/customers/${safeCustomerId}/copilot-drafts`, { method: 'POST', body: '{}' })
   },
 
-  decideDraft(
-    draftId: string,
-    decision: 'approve' | 'reject',
-    note = '',
-  ): Promise<KellaiCopilotDraft> {
+  decideDraft(draftId: string, decision: 'approve' | 'reject', note = ''): Promise<KellaiCopilotDraft> {
     const safeDraftId = String(draftId || '').trim()
     if (!safeDraftId) return Promise.reject(new Error('草稿编号无效'))
-    return request<KellaiCopilotDraft>(
-      `/api/kellai/binding/copilot-drafts/${encodeURIComponent(safeDraftId)}/${decision}`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ note: String(note || '').slice(0, 500) }),
-      },
-    )
+    return request<KellaiCopilotDraft>(`/api/kellai/binding/copilot-drafts/${encodeURIComponent(safeDraftId)}/${decision}`, {
+      method: 'POST',
+      body: JSON.stringify({ note: String(note || '').slice(0, 500) }),
+    })
   },
 
   createFollowUpTask(draftId: string): Promise<KellaiFollowUpTask> {
     const safeDraftId = String(draftId || '').trim()
     if (!safeDraftId) return Promise.reject(new Error('草稿编号无效'))
-    return request<KellaiFollowUpTask>(
-      `/api/kellai/binding/copilot-drafts/${encodeURIComponent(safeDraftId)}/follow-up-task`,
-      { method: 'POST', body: '{}' },
-    )
+    return request<KellaiFollowUpTask>(`/api/kellai/binding/copilot-drafts/${encodeURIComponent(safeDraftId)}/follow-up-task`, {
+      method: 'POST',
+      body: '{}',
+    })
   },
 
   decideFollowUpTask(
@@ -260,17 +236,21 @@ export const kellaiBindingApi = {
     if (decision === 'complete' && !['success', 'no_result', 'failed'].includes(outcomeResult)) {
       return Promise.reject(new Error('完成任务时必须记录执行结果'))
     }
-    return request<KellaiFollowUpTask>(
-      `/api/kellai/binding/follow-up-tasks/${encodeURIComponent(safeTaskId)}/${decision}`,
-      { method: 'POST', body: JSON.stringify({ outcome_result: outcomeResult }) },
-    )
+    return request<KellaiFollowUpTask>(`/api/kellai/binding/follow-up-tasks/${encodeURIComponent(safeTaskId)}/${decision}`, {
+      method: 'POST',
+      body: JSON.stringify({ outcome_result: outcomeResult }),
+    })
   },
 
   async disconnect(): Promise<void> {
-    await request<void>('/api/kellai/binding/disconnect', {
-      method: 'POST',
-      body: '{}',
-    }, true)
+    await request<void>(
+      '/api/kellai/binding/disconnect',
+      {
+        method: 'POST',
+        body: '{}',
+      },
+      true,
+    )
   },
 }
 

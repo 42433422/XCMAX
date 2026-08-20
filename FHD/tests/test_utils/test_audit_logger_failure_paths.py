@@ -33,8 +33,8 @@ def _clean_env(monkeypatch: pytest.MonkeyPatch):
 def test_audit_log_emits_json(monkeypatch: pytest.MonkeyPatch, caplog):
     import logging
 
-    from app.utils import audit_logger
-    from app.utils.audit_logger import audit_log
+    from app.utils.logging import audit_logger
+    from app.utils.logging.audit_logger import audit_log
 
     # 阻断对 append_audit_event 的真实调用（避免 os env 副作用）
     with patch.object(audit_logger, "append_audit_event") as m:
@@ -58,8 +58,8 @@ def test_audit_log_failure_path(monkeypatch: pytest.MonkeyPatch, caplog):
     """append_audit_event 抛错时，audit_log 必须静默（不能向上抛）。"""
     import logging
 
-    from app.utils import audit_logger
-    from app.utils.audit_logger import audit_log
+    from app.utils.logging import audit_logger
+    from app.utils.logging.audit_logger import audit_log
 
     def boom(_):
         raise RuntimeError("disk full")
@@ -74,8 +74,8 @@ def test_audit_log_failure_path(monkeypatch: pytest.MonkeyPatch, caplog):
 
 def test_audit_log_user_id_none_serialized():
     """当 user_id 为 None 时，actor 应为 None 而非 'None'。"""
-    from app.utils import audit_logger
-    from app.utils.audit_logger import audit_log
+    from app.utils.logging import audit_logger
+    from app.utils.logging.audit_logger import audit_log
 
     with patch.object(audit_logger, "append_audit_event") as m:
         audit_log("x", None, "ip", {})
@@ -84,8 +84,8 @@ def test_audit_log_user_id_none_serialized():
 
 
 def test_audit_log_ip_none_serialized():
-    from app.utils import audit_logger
-    from app.utils.audit_logger import audit_log
+    from app.utils.logging import audit_logger
+    from app.utils.logging.audit_logger import audit_log
 
     with patch.object(audit_logger, "append_audit_event") as m:
         audit_log("x", "u", None, {})
@@ -94,7 +94,7 @@ def test_audit_log_ip_none_serialized():
 
 
 def test_append_audit_event_skips_when_no_path():
-    from app.utils.audit_events import append_audit_event
+    from app.utils.logging.audit_events import append_audit_event
 
     with patch.dict(os.environ, {}, clear=True):
         os.environ.pop("AUDIT_LOG_PATH", None)
@@ -103,8 +103,8 @@ def test_append_audit_event_skips_when_no_path():
 
 
 def test_append_audit_event_writes_line(tmp_path, monkeypatch: pytest.MonkeyPatch):
-    from app.utils import audit_events
-    from app.utils.audit_events import append_audit_event
+    from app.utils.logging import audit_events
+    from app.utils.logging.audit_events import append_audit_event
 
     p = tmp_path / "audit.jsonl"
     monkeypatch.setattr(audit_events, "audit_log_path", lambda: str(p))
@@ -117,8 +117,8 @@ def test_append_audit_event_writes_line(tmp_path, monkeypatch: pytest.MonkeyPatc
 
 
 def test_append_audit_event_keeps_existing_ts(tmp_path, monkeypatch: pytest.MonkeyPatch):
-    from app.utils import audit_events
-    from app.utils.audit_events import append_audit_event
+    from app.utils.logging import audit_events
+    from app.utils.logging.audit_events import append_audit_event
 
     p = tmp_path / "audit.jsonl"
     monkeypatch.setattr(audit_events, "audit_log_path", lambda: str(p))
@@ -128,8 +128,8 @@ def test_append_audit_event_keeps_existing_ts(tmp_path, monkeypatch: pytest.Monk
 
 
 def test_append_audit_event_creates_parent_dir(tmp_path, monkeypatch: pytest.MonkeyPatch):
-    from app.utils import audit_events
-    from app.utils.audit_events import append_audit_event
+    from app.utils.logging import audit_events
+    from app.utils.logging.audit_events import append_audit_event
 
     p = tmp_path / "nested" / "dir" / "a.jsonl"
     monkeypatch.setattr(audit_events, "audit_log_path", lambda: str(p))
@@ -138,8 +138,8 @@ def test_append_audit_event_creates_parent_dir(tmp_path, monkeypatch: pytest.Mon
 
 
 def test_append_audit_event_open_failure_silent(tmp_path, monkeypatch: pytest.MonkeyPatch):
-    from app.utils import audit_events
-    from app.utils.audit_events import append_audit_event
+    from app.utils.logging import audit_events
+    from app.utils.logging.audit_events import append_audit_event
 
     monkeypatch.setattr(audit_events, "audit_log_path", lambda: "/dev/null/forbidden/path")
     # open 必定失败；append_audit_event 必须吞掉

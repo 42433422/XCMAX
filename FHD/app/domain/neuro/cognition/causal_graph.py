@@ -86,7 +86,8 @@ def load_causal_graph(path: Path | None = None) -> CausalGraph:
         except (TypeError, ValueError):
             strength = 0.0
         try:
-            sign = int(item.get("sign") if item.get("sign") is not None else 1)
+            raw_sign = item.get("sign")
+            sign = int(1 if raw_sign is None else raw_sign)
         except (TypeError, ValueError):
             sign = 1
         intervention = item.get("intervention")

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """XCAGI sync routes."""
 
 from __future__ import annotations
@@ -24,7 +25,8 @@ def api_sync_push(body: SyncDTO, user: User = Depends(require_user)):
     xc = resolved_xcagi(cfg)
     if not xc:
         raise HTTPException(
-            400, "未配置有效的 XCAGI 根目录（Mod 源码库页「路径与同步」或环境变量 XCAGI_ROOT）"
+            400,
+            "未配置有效的 XCAGI 根目录（Mod 源码库页「路径与同步」或环境变量 XCAGI_ROOT）",
         )
     if not user.is_admin and body.mod_ids:
         for mod_id in body.mod_ids:

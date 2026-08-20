@@ -36,6 +36,21 @@ class PrinterAdapter(PrinterPort):
         """获取打印机状态"""
         return {"status": "ready", "message": "打印机就绪"}
 
+    def list_printers(self) -> list[dict[str, Any]]:
+        from app.utils.path_io.print_utils import PrinterUtils
+
+        return PrinterUtils().get_available_printers()
+
+    def get_default_printer(self) -> str | None:
+        from app.utils.path_io.print_utils import PrinterUtils
+
+        return PrinterUtils().get_default_printer()
+
+    def set_default_printer(self, printer_name: str) -> bool:
+        from app.utils.path_io.printer_automation import PrinterAutomation
+
+        return PrinterAutomation().set_default_printer(printer_name)
+
 
 def get_printer_adapter() -> PrinterPort:
     """获取打印机适配器"""

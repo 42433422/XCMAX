@@ -2,10 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { mergeSidebarMenuItems } from '@/utils/mergeSidebarMenuItems'
 import { MOD_MENU_ID_TO_HOST_NAV_KEY } from '@/constants/genericModPack'
 
-function hostNavKeyHasContributingModFacet(
-  hostNavKey: string,
-  modMenuItems: Array<{ key: string; path?: string }>,
-): boolean {
+function hostNavKeyHasContributingModFacet(hostNavKey: string, modMenuItems: Array<{ key: string; path?: string }>): boolean {
   const key = String(hostNavKey || '').trim()
   if (!key) return false
   for (const item of modMenuItems) {
@@ -45,11 +42,6 @@ describe('员工工作流侧栏可见性', () => {
       ['xcagi-office-employee-pack-bridge'],
       '',
     )
-    expect(merged.map((m) => m.key)).toEqual([
-      'xcmax-admin',
-      'workflow-employee-space',
-      'chat',
-      'admin-entitlements',
-    ])
+    expect(merged.map((m) => m.key)).toEqual(['xcmax-admin', 'workflow-employee-space', 'chat', 'admin-entitlements'])
   })
 })

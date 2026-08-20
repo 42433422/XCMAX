@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 
 @dataclass
@@ -69,7 +69,7 @@ class Brief:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Brief":
+    def from_dict(cls, data: Dict[str, Any]) -> Brief:
         inputs_raw = data.get("inputs") or []
         inputs = [
             (

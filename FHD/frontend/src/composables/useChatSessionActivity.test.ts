@@ -31,23 +31,18 @@ describe('useChatSessionActivity', () => {
   })
 
   it('records product fast paths under the original task identity', async () => {
-    await recordProductFastPathTask(
-      'task-a',
-      '查询 5003',
-      '5003',
-      [{ model_number: '5003' }],
-      1,
-      '命中 1 条',
-    )
-    expect(agentRunsApi.observeTool).toHaveBeenCalledWith(expect.objectContaining({
-      message: '查询 5003',
-      tool_id: 'products',
-      action: 'query',
-      output: { success: true, returned: 1, total: 1 },
-      runtime_context: expect.objectContaining({
-        task_id: 'task-a',
-        conversation_id: 'task-a',
+    await recordProductFastPathTask('task-a', '查询 5003', '5003', [{ model_number: '5003' }], 1, '命中 1 条')
+    expect(agentRunsApi.observeTool).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: '查询 5003',
+        tool_id: 'products',
+        action: 'query',
+        output: { success: true, returned: 1, total: 1 },
+        runtime_context: expect.objectContaining({
+          task_id: 'task-a',
+          conversation_id: 'task-a',
+        }),
       }),
-    }))
+    )
   })
 })

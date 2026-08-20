@@ -22,24 +22,20 @@ function httpRequest(urlStr, { method = 'GET', headers = {}, body = null } = {})
   return new Promise((resolve, reject) => {
     const u = new URL(urlStr)
     const lib = u.protocol === 'https:' ? https : http
-    const req = lib.request(
-      urlStr,
-      { method, headers },
-      (res) => {
-        const chunks = []
-        res.on('data', (c) => chunks.push(c))
-        res.on('end', () => {
-          const buf = Buffer.concat(chunks)
-          const text = buf.toString('utf8')
-          resolve({
-            ok: res.statusCode >= 200 && res.statusCode < 300,
-            status: res.statusCode,
-            text: () => Promise.resolve(text),
-            json: () => Promise.resolve(JSON.parse(text)),
-          })
+    const req = lib.request(urlStr, { method, headers }, (res) => {
+      const chunks = []
+      res.on('data', (c) => chunks.push(c))
+      res.on('end', () => {
+        const buf = Buffer.concat(chunks)
+        const text = buf.toString('utf8')
+        resolve({
+          ok: res.statusCode >= 200 && res.statusCode < 300,
+          status: res.statusCode,
+          text: () => Promise.resolve(text),
+          json: () => Promise.resolve(JSON.parse(text)),
         })
-      }
-    )
+      })
+    })
     req.on('error', reject)
     if (body != null) req.write(body)
     req.end()
@@ -47,12 +43,7 @@ function httpRequest(urlStr, { method = 'GET', headers = {}, body = null } = {})
 }
 
 function smokeBase() {
-  return String(
-    process.env.SMOKE_API_BASE_URL ||
-      process.env.VITE_API_BASE_URL ||
-      process.env.VITE_API_BASE ||
-      ''
-  ).replace(/\/+$/, '')
+  return String(process.env.SMOKE_API_BASE_URL || process.env.VITE_API_BASE_URL || process.env.VITE_API_BASE || '').replace(/\/+$/, '')
 }
 
 function smokeDbToken() {
@@ -77,16 +68,11 @@ const verifyRoute = String(process.env.SMOKE_CHECK_BULK_ROUTE || '').trim() === 
     const o = await res.json()
     const paths = Object.keys(o.paths || {})
     const hit = paths.some(
-      (p) =>
-        p.replace(/\/$/, '') === '/api/admin/products/bulk-import' ||
-        p.replace(/\/$/, '') === '/api/admin/products/bulk-import/'
+      (p) => p.replace(/\/$/, '') === '/api/admin/products/bulk-import' || p.replace(/\/$/, '') === '/api/admin/products/bulk-import/',
     )
-    expect(hit, `paths 中应有 bulk-import，实际含 admin 的项: ${paths.filter((x) => x.includes('admin')).join(', ') || '(无)'}`).toBe(
-      true
-    )
+    expect(hit, `paths 中应有 bulk-import，实际含 admin 的项: ${paths.filter((x) => x.includes('admin')).join(', ') || '(无)'}`).toBe(true)
   })
 })
-
 ;(canRun ? describe : describe.skip)('db bulk-import API (可选集成)', () => {
   it('dry_run 返回 success（不写库）', async () => {
     const hdr = {

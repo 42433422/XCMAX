@@ -6,20 +6,20 @@
 
 ## 负责文件
 
-| 类型 | 路径 | 默认 TTL |
-|------|------|----------|
-| 沙箱 run 工作目录 | `MODstore_deploy/modstore_server/workbench_script_runs/*` | 7 天 |
-| catalog 上传分片残留 | `MODstore_deploy/modstore_server/market_files/.tmp_chunks/*` | 1 天 |
-| webhook 投递事件存档 | `MODstore_deploy/modstore_server/webhook_events/*.json` | 30 天 |
-| Cursor / smoke 日志 | `.cursor_*_log.txt` | 14 天 |
-| 历史测试产物 | `coverage/`、`playwright-report/`、`test-results/` | 30 天 |
-| Cursor 临时 xcemp 缓存 | `__tmp_xcemp/`、`__tmp_emp_*.json` | 7 天 |
-| Nginx 解压副本 | `_nginx_extract/` | 90 天（仅作归档参考） |
-| 历史落地稿 | `new/`、`site/`、`dist/` | 90 天（提交前先归档到 `legacy-archive.md`） |
-| 支付 SDK 解压副本 | `alipay_package/` | 90 天 |
-| 冻结子项目 | `taiyangniao-pro/` | 不清理，仅生成归档说明（如需复活由 admin 指派维护员） |
-| 自身 runbook | `MODstore_deploy/docs/runbooks/file-retention.md` | — |
-| 历史归档说明 | `MODstore_deploy/docs/runbooks/legacy-archive.md` | — |
+| 类型                   | 路径                                                         | 默认 TTL                                              |
+| ---------------------- | ------------------------------------------------------------ | ----------------------------------------------------- |
+| 沙箱 run 工作目录      | `MODstore_deploy/modstore_server/workbench_script_runs/*`    | 7 天                                                  |
+| catalog 上传分片残留   | `MODstore_deploy/modstore_server/market_files/.tmp_chunks/*` | 1 天                                                  |
+| webhook 投递事件存档   | `MODstore_deploy/modstore_server/webhook_events/*.json`      | 30 天                                                 |
+| Cursor / smoke 日志    | `.cursor_*_log.txt`                                          | 14 天                                                 |
+| 历史测试产物           | `coverage/`、`playwright-report/`、`test-results/`           | 30 天                                                 |
+| Cursor 临时 xcemp 缓存 | `__tmp_xcemp/`、`__tmp_emp_*.json`                           | 7 天                                                  |
+| Nginx 解压副本         | `_nginx_extract/`                                            | 90 天（仅作归档参考）                                 |
+| 历史落地稿             | `new/`、`site/`、`dist/`                                     | 90 天（提交前先归档到 `legacy-archive.md`）           |
+| 支付 SDK 解压副本      | `alipay_package/`                                            | 90 天                                                 |
+| 冻结子项目             | `taiyangniao-pro/`                                           | 不清理，仅生成归档说明（如需复活由 admin 指派维护员） |
+| 自身 runbook           | `MODstore_deploy/docs/runbooks/file-retention.md`            | —                                                     |
+| 历史归档说明           | `MODstore_deploy/docs/runbooks/legacy-archive.md`            | —                                                     |
 
 ## 典型任务
 
@@ -30,11 +30,11 @@
 
 ## KPI
 
-| 指标 | 目标 |
-|------|------|
-| 周累计释放空间 | ≥ 1 GB（基线，看仓库实际增长率） |
-| 误删（命中禁区或活跃文件） | 0 |
-| 每日 cron 按时执行率 | ≥ 95% |
+| 指标                       | 目标                             |
+| -------------------------- | -------------------------------- |
+| 周累计释放空间             | ≥ 1 GB（基线，看仓库实际增长率） |
+| 误删（命中禁区或活跃文件） | 0                                |
+| 每日 cron 按时执行率       | ≥ 95%                            |
 
 ## 禁区
 

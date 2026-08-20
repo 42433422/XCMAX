@@ -28,6 +28,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from app.mod_sdk.errors import RECOVERABLE_ERRORS
+
 PLAN_VERSION = 1
 
 # xlsx 规格上限；无界范围（如 ``BR:CC``）在保护区语义下必须覆盖全部行/列。
@@ -85,9 +87,7 @@ def _normalize_phases(plan: Dict[str, Any]) -> List[Dict[str, Any]]:
             raise PlanError(f"phases[{i}] 必须是对象。")
         kind = str(ph.get("phase") or "").strip()
         if kind not in KNOWN_PHASES:
-            raise PlanError(
-                f"phases[{i}] 未知阶段：{kind or '(空)'}；支持 {sorted(KNOWN_PHASES)}"
-            )
+            raise PlanError(f"phases[{i}] 未知阶段：{kind or '(空)'}；支持 {sorted(KNOWN_PHASES)}")
         out.append(ph)
     return out
 
@@ -111,7 +111,7 @@ def _range_bounds(
 
     try:
         min_col, min_row, max_col, max_row = range_boundaries(rng)
-    except Exception as exc:  # noqa: BLE001
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
         raise PlanError(f"非法范围：{rng!r}（{exc}）") from exc
     return (
         int(min_row or 1),
@@ -146,7 +146,9 @@ class _ProtectedZones:
         return None
 
 
-def _resolve_target(ws_names: List[str], item: Dict[str, Any], idx: int, phase: str) -> Tuple[str, int, int]:
+def _resolve_target(
+    ws_names: List[str], item: Dict[str, Any], idx: int, phase: str
+) -> Tuple[str, int, int]:
     from openpyxl.utils.cell import coordinate_to_tuple
 
     sheet = str(item.get("sheet") or "").strip().strip("'")
@@ -158,7 +160,7 @@ def _resolve_target(ws_names: List[str], item: Dict[str, Any], idx: int, phase: 
     if ref:
         try:
             row, col = coordinate_to_tuple(ref.upper())
-        except Exception as exc:  # noqa: BLE001
+        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
             raise PlanError(f"{phase}[{idx}] 非法单元格引用：{ref!r}") from exc
         return sheet, int(row), int(col)
     try:
@@ -230,7 +232,13 @@ def _run_clear_ranges(
                 zone = protected.hit(sheet, r, c)
                 if zone is not None:
                     stats["violations"].append(
-                        {"phase": "clear_ranges", "sheet": sheet, "row": r, "col": c, "zone": list(zone)}
+                        {
+                            "phase": "clear_ranges",
+                            "sheet": sheet,
+                            "row": r,
+                            "col": c,
+                            "zone": list(zone),
+                        }
                     )
                     continue
                 cell = ws.cell(r, c)
@@ -284,7 +292,13 @@ def _run_formula_writes(
         zone = protected.hit(sheet, row, col)
         if zone is not None:
             stats["violations"].append(
-                {"phase": "formula_writes", "sheet": sheet, "row": row, "col": col, "zone": list(zone)}
+                {
+                    "phase": "formula_writes",
+                    "sheet": sheet,
+                    "row": row,
+                    "col": col,
+                    "zone": list(zone),
+                }
             )
             continue
         ws = wb[sheet]
@@ -366,7 +380,9 @@ def convert_file(
     except (TypeError, ValueError):
         version = -1
     if version != PLAN_VERSION:
-        raise PlanError(f"不支持的 plan_version：{plan.get('plan_version')!r}（当前支持 {PLAN_VERSION}）")
+        raise PlanError(
+            f"不支持的 plan_version：{plan.get('plan_version')!r}（当前支持 {PLAN_VERSION}）"
+        )
     phases = _normalize_phases(plan)
 
     template = _resolve_template_path(template_path, plan, ctx or {})
@@ -378,7 +394,9 @@ def convert_file(
     output_dir.mkdir(parents=True, exist_ok=True)
     xlsx_path = output_path
     if xlsx_path.suffix.lower() not in {".xlsx", ".xlsm"}:
-        default_name = Path(str(rule_spec.get("default_output_relpath") or "outputs/filled.xlsx")).name
+        default_name = Path(
+            str(rule_spec.get("default_output_relpath") or "outputs/filled.xlsx")
+        ).name
         xlsx_path = output_dir / default_name
     warnings: List[str] = []
     if keep_vba and xlsx_path.suffix.lower() != ".xlsm":
@@ -412,7 +430,9 @@ def convert_file(
         if stats["violations"]:
             msg = f"{len(stats['violations'])} 条写入落在保护区"
             if payload.get("strict_protected"):
-                raise PlanError(f"{msg}，strict_protected 模式下拒绝写出。示例：{stats['violations'][:3]}")
+                raise PlanError(
+                    f"{msg}，strict_protected 模式下拒绝写出。示例：{stats['violations'][:3]}"
+                )
             warnings.append(f"{msg}，已跳过（详见 write_report.json violations）。")
 
         wb.save(xlsx_path)

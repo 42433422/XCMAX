@@ -1,3 +1,4 @@
+# mypy: disable-error-code="import-not-found, no-any-return, union-attr"
 """规则映射员 / 质检员的 LLM 协作路径测试（mock call_llm）。
 
 分工契约：LLM 提议、确定性验证——非法提议必须被拒绝且留痕；

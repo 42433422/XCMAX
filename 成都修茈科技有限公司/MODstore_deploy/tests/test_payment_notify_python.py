@@ -14,6 +14,8 @@ from fastapi.testclient import TestClient
 
 from modstore_server.api.app_factory import create_app, load_default_config
 
+BOUNDARY_ERRORS = (Exception,)
+
 
 def _make_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.delenv("PAYMENT_BACKEND", raising=False)
@@ -48,7 +50,7 @@ def _notify_plain_text(r):
     """兼容 JSON 字符串体与纯文本体（支付宝约定 success / fail）。"""
     try:
         return r.json()
-    except Exception:
+    except BOUNDARY_ERRORS:
         return r.text
 
 
@@ -70,7 +72,7 @@ def alipay_verify_ok(monkeypatch: pytest.MonkeyPatch):
     def _verify(_data: dict, _sig: str) -> bool:
         return True
 
-    monkeypatch.setattr("modstore_server.payment_api.alipay_service.verify_notify", _verify)
+    monkeypatch.setattr("modstore_server.api.payment_routes.alipay_service.verify_notify", _verify)
 
 
 def test_notify_success_marks_order_paid(
@@ -186,7 +188,7 @@ def test_notify_verify_signature_false_fails(
 ):
     client = _make_client(tmp_path, monkeypatch)
     monkeypatch.setattr(
-        "modstore_server.payment_api.alipay_service.verify_notify",
+        "modstore_server.api.payment_routes.alipay_service.verify_notify",
         lambda _d, _s: False,
     )
     od = Path(os.environ["MODSTORE_PAYMENT_ORDERS_DIR"])

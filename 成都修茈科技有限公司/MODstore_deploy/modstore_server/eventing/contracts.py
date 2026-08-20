@@ -44,7 +44,13 @@ EVENT_CONTRACTS: dict[str, EventContract] = {
         name=PAYMENT_PAID,
         version=1,
         aggregate="payment_order",
-        required_payload=("out_trade_no", "user_id", "subject", "total_amount", "order_kind"),
+        required_payload=(
+            "out_trade_no",
+            "user_id",
+            "subject",
+            "total_amount",
+            "order_kind",
+        ),
         description="A payment order has been successfully paid and fulfilled.",
     ),
     WALLET_BALANCE_CHANGED: EventContract(

@@ -386,7 +386,7 @@ test = [
 
 [[package]]
 name = "langgraph-checkpoint-postgres"
-version = "3.1.0"
+version = "3.1.1"
 source = { editable = "../xcagi_langgraph_checkpoint_backends/checkpoint-postgres" }
 dependencies = [
     { name = "langgraph-checkpoint" },
@@ -433,7 +433,7 @@ test = [
 
 [[package]]
 name = "langgraph-checkpoint-sqlite"
-version = "3.1.0"
+version = "3.1.1"
 source = { editable = "../xcagi_langgraph_checkpoint_backends/checkpoint-sqlite" }
 dependencies = [
     { name = "aiosqlite" },
@@ -591,6 +591,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
+    { name = "ty" },
 ]
 test = [
     { name = "pytest" },

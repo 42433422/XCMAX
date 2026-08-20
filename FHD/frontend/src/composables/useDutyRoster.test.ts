@@ -9,7 +9,7 @@ vi.mock('@/api/system', () => ({
 }))
 
 // useDutyRoster 使用模块级单例 state，需在每个测试前重置模块
-let useDutyRoster: typeof import('./useDutyRoster')['useDutyRoster']
+let useDutyRoster: (typeof import('./useDutyRoster'))['useDutyRoster']
 
 describe('useDutyRoster', () => {
   beforeEach(async () => {

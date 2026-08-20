@@ -45,15 +45,18 @@ def esign_channel(request: Request):
 
 @router.get("/status")
 def contract_lifecycle_status(market_user_id: int, username: str = ""):
-    from app.services.contract_lifecycle import get_contract_block
-    from app.services.user_cs_pipeline import load_pipeline
+    from app.application.business_route_facade import contract_block, load_customer_pipeline
 
     uid = int(market_user_id)
-    doc = load_pipeline(uid, username=username)
-    block = get_contract_block(doc)
+    doc = load_customer_pipeline(uid, username=username)
+    block = contract_block(doc)
     task = block.get("esign_task") if isinstance(block.get("esign_task"), dict) else {}
     fields = doc.get("contract_fields") if isinstance(doc.get("contract_fields"), dict) else {}
+    if not isinstance(task, dict):
+        task = {}
     sign_url = str(task.get("sign_url") or "").strip()
+    if not isinstance(fields, dict):
+        fields = {}
     return JSONResponse(
         {
             "success": True,
@@ -74,35 +77,45 @@ def contract_lifecycle_status(market_user_id: int, username: str = ""):
 
 @router.post("/transition")
 def contract_transition(body: ContractTransitionBody):
-    from app.services.contract_lifecycle import apply_contract_to_crm_meta, transition_contract
-    from app.services.user_cs_pipeline import load_pipeline, save_pipeline
+    from app.application.business_route_facade import (
+        load_customer_pipeline,
+        save_customer_pipeline,
+        sync_contract_crm_metadata,
+        transition_customer_contract,
+    )
 
     uid = body.market_user_id
     status = body.status.strip()
-    doc = load_pipeline(uid, username=body.username)
-    doc = transition_contract(doc, status, source="api", note=body.note)
-    doc = apply_contract_to_crm_meta(doc)
-    doc = save_pipeline(doc)
+    doc = load_customer_pipeline(uid, username=body.username)
+    doc = transition_customer_contract(doc, status, source="api", note=body.note)
+    doc = sync_contract_crm_metadata(doc)
+    doc = save_customer_pipeline(doc)
     return JSONResponse({"success": True, "data": {"pipeline": doc}})
 
 
 @router.post("/esign/start")
 def esign_start(body: EsignStartBody):
-    from app.services.contract_lifecycle import apply_contract_to_crm_meta, start_esign_flow
-    from app.services.user_cs_pipeline import load_pipeline, save_pipeline
+    from app.application.business_route_facade import (
+        load_customer_pipeline,
+        save_customer_pipeline,
+        start_customer_esign,
+        sync_contract_crm_metadata,
+    )
 
     uid = body.market_user_id
-    doc = load_pipeline(uid, username=body.username)
+    doc = load_customer_pipeline(uid, username=body.username)
     payment = doc.get("payment") if isinstance(doc.get("payment"), dict) else {}
+    if not isinstance(payment, dict):
+        payment = {}
     amount = payment.get("contract_amount_cents")
-    doc = start_esign_flow(
+    doc = start_customer_esign(
         doc,
         party_a=body.party_a,
         party_b=body.party_b or str(doc.get("erp_customer_name") or ""),
         amount_cents=int(amount) if amount is not None else None,
     )
-    doc = apply_contract_to_crm_meta(doc)
-    doc = save_pipeline(doc)
+    doc = sync_contract_crm_metadata(doc)
+    doc = save_customer_pipeline(doc)
     return JSONResponse({"success": True, "data": {"pipeline": doc}})
 
 

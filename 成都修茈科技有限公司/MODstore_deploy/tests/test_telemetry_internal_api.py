@@ -1,7 +1,5 @@
 """telemetry_internal_api 鉴权与 ingest。"""
 
-import os
-
 import pytest
 from fastapi.testclient import TestClient
 

@@ -18,6 +18,8 @@ from langgraph.checkpoint.base import (
 from langgraph.checkpoint.serde.types import TASKS
 from psycopg.types.json import Jsonb
 
+from langgraph.store.postgres._exception_policy import BOUNDARY_ERRORS
+
 # Page size for stage-1 paged scan in `get_delta_channel_history`. Internal
 # constant — exposing this as a kwarg is left as a follow-up.
 _DELTA_PAGE_SIZE = 1024
@@ -32,7 +34,7 @@ try:
             DeprecationWarning,
             stacklevel=2,
         )
-except Exception:
+except BOUNDARY_ERRORS:
     # skip version check if running from source
     pass
 

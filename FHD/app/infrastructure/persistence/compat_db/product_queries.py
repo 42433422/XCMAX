@@ -40,8 +40,9 @@ def _load_products_list_impl_pg(
         logger.debug("suppressed exception", exc_info=True)
     try:
         eng = get_sync_engine()
-    except RECOVERABLE_ERRORS as e:
-        return [], 0, f"无法连接 PostgreSQL：{e}。请检查 DATABASE_URL 与数据库是否已启动。"
+    except RECOVERABLE_ERRORS:
+        logger.exception("product query database connection failed")
+        return [], 0, "无法连接 PostgreSQL。请检查 DATABASE_URL 与数据库是否已启动。"
 
     try:
         with eng.connect() as conn:
@@ -63,11 +64,12 @@ def _load_products_list_impl_pg(
                         "当前库中不存在 public.products 表，产品列表为空。请在目标库执行仓库 scripts/pg_init_xcagi_core.sql 后重启后端。",
                     )
                 col_names = {c["name"] for c in insp.get_columns("products")}
-            except RECOVERABLE_ERRORS as e:
+            except RECOVERABLE_ERRORS:
+                logger.exception("products metadata query failed")
                 return (
                     [],
                     0,
-                    f"products 元数据查询超时或失败：{e}。可调环境变量 FHD_PRODUCTS_META_TIMEOUT_MS。",
+                    "products 元数据查询超时或失败。可调环境变量 FHD_PRODUCTS_META_TIMEOUT_MS。",
                 )
             finally:
                 if meta_timeout_ms > 0:
@@ -160,7 +162,7 @@ def _load_products_list_impl_pg(
             + " LIMIT :lim OFFSET :off"
         )
         qparams = {**params, "lim": per_page, "off": offset}
-        rows: list[Any] = []
+        rows: Any = []
         data_query_err: Exception | None = None
         with eng.connect() as conn:
             try:
@@ -205,11 +207,12 @@ def _load_products_list_impl_pg(
         if total is None:
             total = offset + len(rows_out)
         return rows_out, total, None
-    except OperationalError as e:
+    except OperationalError:
+        logger.exception("product query database operation failed")
         return (
             [],
             0,
-            f"无法连接 PostgreSQL：{e}。请确认数据库已启动、DATABASE_URL 正确，"
+            "无法连接 PostgreSQL。请确认数据库已启动、DATABASE_URL 正确，"
             "并检查网络/VPN；若连接偏慢可增大环境变量 FHD_DB_CONNECT_TIMEOUT。",
         )
 

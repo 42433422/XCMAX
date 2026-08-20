@@ -141,8 +141,8 @@ def apply_validation_rules(
             failed = not isinstance(expected, list) or value not in expected
         elif op in {"min", "max"}:
             try:
-                actual_number = float(value)
-                expected_number = float(expected)
+                actual_number = float(value or 0.0)
+                expected_number = float(expected or 0.0)
                 failed = (
                     actual_number < expected_number
                     if op == "min"
@@ -153,7 +153,7 @@ def apply_validation_rules(
         elif op in {"min_length", "max_length"}:
             try:
                 actual_length = len(str(value or ""))
-                expected_length = int(expected)
+                expected_length = int(expected or 0)
                 failed = (
                     actual_length < expected_length
                     if op == "min_length"

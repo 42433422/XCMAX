@@ -1,4 +1,4 @@
-﻿"""数字管家 QQ 官方机器人 — botpy WebSocket Gateway 集成
+"""数字管家 QQ 官方机器人 — botpy WebSocket Gateway 集成
 
 在 QQ 开放平台后台不提供 Webhook 入口时（通常是"频道机器人"模式），
 本模块通过 qq-botpy SDK 建立 WebSocket 长连接，接收以下事件并转交
@@ -24,9 +24,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from fastapi import APIRouter
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +143,8 @@ def _make_client():
 
         async def on_ready(self):
             logger.info(
-                "butler-qqbot: WebSocket ready, robot=%s", self.robot.name if self.robot else "?"
+                "butler-qqbot: WebSocket ready, robot=%s",
+                self.robot.name if self.robot else "?",
             )
 
         async def on_error(self, event_name: str, *args, **kwargs):
@@ -181,7 +184,7 @@ async def _run_botpy_forever() -> None:
         except asyncio.CancelledError:
             logger.info("butler-qqbot: cancelled, stopping.")
             break
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             logger.error("butler-qqbot: connection error: %s, retry in %ss", exc, backoff)
             await asyncio.sleep(backoff)
             backoff = min(backoff * 2, 120)

@@ -12,11 +12,7 @@ const videoDurationSec = defineModel<number>('videoDurationSec', { default: 10 }
 </script>
 
 <template>
-  <aside
-    class="wb-direct-media-rail"
-    :class="[`wb-direct-media-rail--${mode}`]"
-    :aria-label="mode === 'image' ? '生图参数' : '生视频参数'"
-  >
+  <aside class="wb-direct-media-rail" :class="[`wb-direct-media-rail--${mode}`]" :aria-label="mode === 'image' ? '生图参数' : '生视频参数'">
     <header class="wb-direct-media-rail__head">
       <span class="wb-direct-media-rail__badge" aria-hidden="true">
         {{ mode === 'image' ? '生图' : '生视频' }}

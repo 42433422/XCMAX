@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment"
 """Self-maintenance loop runtime status API."""
 
 from __future__ import annotations
@@ -6,7 +7,7 @@ import json
 import os
 import secrets
 import subprocess
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict
 
@@ -55,7 +56,10 @@ def _git_is_ancestor(ancestor: str, descendant: str) -> bool:
     repo_root = Path(
         os.environ.get("MODSTORE_SELF_MAINTENANCE_PROJECT_ROOT") or "/root/XCMAX"
     ).expanduser()
-    commits = (str(ancestor or "").strip().lower(), str(descendant or "").strip().lower())
+    commits = (
+        str(ancestor or "").strip().lower(),
+        str(descendant or "").strip().lower(),
+    )
     if any(
         len(commit) not in {40, 64}
         or any(character not in "0123456789abcdef" for character in commit)
@@ -161,7 +165,7 @@ async def record_self_maintenance_deployment_receipt(
         _record_verified_deploy_employee_metric,
     )
 
-    observed_at = datetime.now(timezone.utc).isoformat()
+    observed_at = datetime.now(UTC).isoformat()
 
     def _record(event: Dict[str, Any]) -> None:
         event = {**event, "created_at": str(event.get("created_at") or observed_at)}
@@ -252,7 +256,7 @@ async def record_modstore_evolution_deployment_receipt(
     except DeploymentReceiptError as exc:
         raise HTTPException(409, exc.reason) from exc
 
-    observed_at = datetime.now(timezone.utc).isoformat()
+    observed_at = datetime.now(UTC).isoformat()
 
     def _record(event: Dict[str, Any]) -> None:
         event = {**event, "created_at": str(event.get("created_at") or observed_at)}

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import SaasPricingView from './SaasPricingView.vue'
@@ -10,7 +10,13 @@ const mockGetPlans = vi.fn().mockResolvedValue({
   data: {
     plans: [
       { id: 'saas-basic', title: '基础版', amount_cents: 9900, description: '基础功能', badge: '' },
-      { id: 'saas-pro', title: '专业版', amount_cents: 29900, description: '全部功能', badge: '推荐' },
+      {
+        id: 'saas-pro',
+        title: '专业版',
+        amount_cents: 29900,
+        description: '全部功能',
+        badge: '推荐',
+      },
     ],
   },
 })
@@ -62,8 +68,20 @@ describe('SaasPricingView', () => {
       success: true,
       data: {
         plans: [
-          { id: 'saas-basic', title: '基础版', amount_cents: 9900, description: '基础功能', badge: '' },
-          { id: 'saas-pro', title: '专业版', amount_cents: 29900, description: '全部功能', badge: '推荐' },
+          {
+            id: 'saas-basic',
+            title: '基础版',
+            amount_cents: 9900,
+            description: '基础功能',
+            badge: '',
+          },
+          {
+            id: 'saas-pro',
+            title: '专业版',
+            amount_cents: 29900,
+            description: '全部功能',
+            badge: '推荐',
+          },
         ],
       },
     })
@@ -240,15 +258,20 @@ describe('SaasPricingView', () => {
   })
 
   it('disables buy buttons during checkout', async () => {
-      let resolveCheckout: (value: unknown) => void
-    mockCheckout.mockImplementation(() => new Promise(resolve => { resolveCheckout = resolve }))
+    let resolveCheckout: (value: unknown) => void
+    mockCheckout.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveCheckout = resolve
+        }),
+    )
     const wrapper = await mountComponent()
     await flushPromises()
     await wrapper.findAll('.saas-buy-btn')[0].trigger('click')
     await flushPromises()
     // All buttons should be disabled during checkout
     const btns = wrapper.findAll('.saas-buy-btn')
-    expect(btns.every(b => b.attributes('disabled') !== undefined)).toBe(true)
+    expect(btns.every((b) => b.attributes('disabled') !== undefined)).toBe(true)
     // Resolve the checkout
     resolveCheckout!({ success: true, data: { redirect_url: 'https://pay.test' } })
     await flushPromises()

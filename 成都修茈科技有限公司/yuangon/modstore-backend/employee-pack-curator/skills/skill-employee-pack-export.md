@@ -2,16 +2,17 @@
 
 ## 元信息
 
-| 字段 | 值 |
-|------|----|
+| 字段     | 值                           |
+| -------- | ---------------------------- |
 | skill_id | `skill-employee-pack-export` |
-| 所属员工 | `employee-pack-curator` |
-| 业务域 | 员工包 .xcemp 导出与入库 |
-| 版本 | 1.0.0 |
+| 所属员工 | `employee-pack-curator`      |
+| 业务域   | 员工包 .xcemp 导出与入库     |
+| 版本     | 1.0.0                        |
 
 ## 1. 静态阶段
 
 **执行逻辑**：
+
 ```
 读取 yuangon/<员工>/employee.yaml → 校验必填字段
 → 调用 employee_pack_export.py → 生成 .xcemp → 写入 market_files/
@@ -19,16 +20,23 @@
 ```
 
 **输出 schema**：
+
 ```json
-{ "status": "ok | error", "package_id": "", "version": "", "xcemp_path": "", "registry_updated": true }
+{
+  "status": "ok | error",
+  "package_id": "",
+  "version": "",
+  "xcemp_path": "",
+  "registry_updated": true
+}
 ```
 
 ## 2. 动态触发条件
 
-| 触发类型 | 规则 |
-|----------|------|
-| 执行报错 | `employee.yaml` 缺少必填字段；export 脚本报错 |
-| 结果不达标 | `registry_updated == false` |
+| 触发类型   | 规则                                          |
+| ---------- | --------------------------------------------- |
+| 执行报错   | `employee.yaml` 缺少必填字段；export 脚本报错 |
+| 结果不达标 | `registry_updated == false`                   |
 
 ## 3. 动态阶段
 

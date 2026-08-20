@@ -13,6 +13,7 @@
 
 运行：python FHD/scripts/dev/verify_employee_contract.py [--strict]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -21,8 +22,11 @@ import re
 import sys
 from pathlib import Path
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 try:
     import yaml as _yaml
+
     _HAS_YAML = True
 except ImportError:
     _HAS_YAML = False
@@ -44,12 +48,18 @@ def _load_yaml_depends(yaml_path: Path) -> list[str]:
             data = _yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
             if isinstance(data, dict):
                 deps = data.get("depends_on", [])
-                return [str(x).strip() for x in deps if str(x).strip()] if isinstance(deps, list) else []
-        except Exception:
+                return (
+                    [str(x).strip() for x in deps if str(x).strip()]
+                    if isinstance(deps, list)
+                    else []
+                )
+        except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
             pass
     # Fallback: regex parse
     content = yaml_path.read_text(encoding="utf-8")
-    deps = re.findall(r"^\s*-\s+(.+)$", content[content.find("depends_on:"):].split("\n\n")[0], re.MULTILINE)
+    deps = re.findall(
+        r"^\s*-\s+(.+)$", content[content.find("depends_on:") :].split("\n\n")[0], re.MULTILINE
+    )
     return [d.strip() for d in deps if d.strip() and not d.startswith("#")]
 
 
@@ -63,8 +73,10 @@ def _load_yaml_handlers(yaml_path: Path) -> list[str]:
                 actions = data.get("actions", {})
                 if isinstance(actions, dict):
                     h = actions.get("handlers", [])
-                    return [str(x).strip() for x in h if str(x).strip()] if isinstance(h, list) else []
-        except Exception:
+                    return (
+                        [str(x).strip() for x in h if str(x).strip()] if isinstance(h, list) else []
+                    )
+        except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
             pass
     return []
 
@@ -95,7 +107,7 @@ def check_employee(emp_dir: Path) -> tuple[str, list[tuple[str, str]]]:
 
     try:
         mf = json.loads(mf_path.read_text())
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         return emp_dir.name, [(ERROR, f"manifest.json parse error: {e}")]
 
     pkg_id = mf.get("id", emp_dir.name)
@@ -115,7 +127,9 @@ def check_employee(emp_dir: Path) -> tuple[str, list[tuple[str, str]]]:
 
     # Check 1: depends_on consistency
     if sorted(root_depends) != sorted(collab_depends):
-        issues.append((ERROR, f"depends_on mismatch: root={root_depends} vs collaboration={collab_depends}"))
+        issues.append(
+            (ERROR, f"depends_on mismatch: root={root_depends} vs collaboration={collab_depends}")
+        )
 
     # Check 2: handlers in _DISPATCH
     if handlers:
@@ -123,9 +137,13 @@ def check_employee(emp_dir: Path) -> tuple[str, list[tuple[str, str]]]:
         if dispatch_keys:
             for h in handlers:
                 if h not in dispatch_keys:
-                    issues.append((WARN, f"handler '{h}' declared in manifest but not found in _DISPATCH"))
+                    issues.append(
+                        (WARN, f"handler '{h}' declared in manifest but not found in _DISPATCH")
+                    )
         else:
-            issues.append((WARN, "no _DISPATCH found in backend/employees/*.py – cannot verify handlers"))
+            issues.append(
+                (WARN, "no _DISPATCH found in backend/employees/*.py – cannot verify handlers")
+            )
 
     # Check 3: yuangon yaml exists
     if area:
@@ -156,8 +174,9 @@ def check_employee(emp_dir: Path) -> tuple[str, list[tuple[str, str]]]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--strict", action="store_true",
-                        help="Treat WARN as ERROR (exit 2 on any issue)")
+    parser.add_argument(
+        "--strict", action="store_true", help="Treat WARN as ERROR (exit 2 on any issue)"
+    )
     args = parser.parse_args()
 
     all_issues: dict[str, list[tuple[str, str]]] = {}
@@ -181,7 +200,9 @@ def main() -> int:
                 warn_count += 1
             print(f"[{level}] {pkg_id}: {msg}")
 
-    print(f"\nSummary: {error_count} ERROR(s), {warn_count} WARN(s) across {len(all_issues)} employee(s)")
+    print(
+        f"\nSummary: {error_count} ERROR(s), {warn_count} WARN(s) across {len(all_issues)} employee(s)"
+    )
 
     if error_count > 0:
         return 2

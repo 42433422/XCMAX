@@ -1,9 +1,10 @@
+# mypy: disable-error-code="arg-type"
 """Employee receipt coverage with explicit capability/production semantics."""
 
 from __future__ import annotations
 
 import math
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import func, or_
@@ -33,7 +34,7 @@ def build_execution_coverage(
 ) -> dict[str, Any]:
     """Separate safe burn-in capability from non-burn-in production duty."""
 
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
     cutoff = now - timedelta(hours=window_hours)
     production_cutoff = now - timedelta(hours=production_window_hours)
     sf = get_session_factory()

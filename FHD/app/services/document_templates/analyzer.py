@@ -6,6 +6,7 @@ import re
 import threading
 import uuid
 import zipfile
+from typing import Any
 from xml.etree import ElementTree as ET
 
 from app.http.json_response import json_response
@@ -25,7 +26,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
-analysis_progress = {}
+analysis_progress: dict[str, dict[str, Any]] = {}
 progress_lock = threading.Lock()
 
 

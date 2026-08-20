@@ -57,16 +57,19 @@ def model() -> dict[str, Any]:
 
 
 def render_json(m: dict[str, Any]) -> str:
-    return json.dumps(
-        {
-            "_generated_from": SOURCE_REL,
-            "_note": "DO NOT EDIT BY HAND — run scripts/dev/database_storage_ssot.py generate --apply",
-            **m,
-        },
-        ensure_ascii=False,
-        indent=2,
-        sort_keys=True,
-    ) + "\n"
+    return (
+        json.dumps(
+            {
+                "_generated_from": SOURCE_REL,
+                "_note": "DO NOT EDIT BY HAND — run scripts/dev/database_storage_ssot.py generate --apply",
+                **m,
+            },
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    )
 
 
 def render_ts(m: dict[str, Any]) -> str:

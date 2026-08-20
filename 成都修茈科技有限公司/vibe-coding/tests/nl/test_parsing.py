@@ -56,7 +56,7 @@ class TestChatterPrefix:
         assert safe_parse_json_object(raw) == {"a": 1}
 
     def test_chinese_chatter(self) -> None:
-        raw = "好的，下面是 JSON：\n{\"name\": \"测试\"}"
+        raw = '好的，下面是 JSON：\n{"name": "测试"}'
         assert safe_parse_json_object(raw) == {"name": "测试"}
 
 
@@ -96,11 +96,11 @@ class TestSmartQuotes:
 
 class TestInvisibleChars:
     def test_bom_stripped(self) -> None:
-        raw = "\ufeff{\"a\": 1}"
+        raw = '\ufeff{"a": 1}'
         assert safe_parse_json_object(raw) == {"a": 1}
 
     def test_zero_width_space_stripped(self) -> None:
-        raw = "{\u200b\"a\": 1}"
+        raw = '{\u200b"a": 1}'
         assert safe_parse_json_object(raw) == {"a": 1}
 
 
@@ -127,7 +127,7 @@ class TestTruncation:
 
 class TestExtractFirstObject:
     def test_simple_extract(self) -> None:
-        raw = "before {\"a\": 1} after"
+        raw = 'before {"a": 1} after'
         out = extract_first_object(raw)
         assert out == '{"a": 1}'
 

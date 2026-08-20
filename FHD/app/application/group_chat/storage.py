@@ -10,7 +10,7 @@ import os
 import secrets
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -30,6 +30,17 @@ from app.application.group_chat.employee_registry import (
 
 
 class AiGroupChatStorageMixin:
+    if TYPE_CHECKING:
+        _canonical_group_name: Any
+        _groups_path: Any
+        _messages_path: Path
+
+        @staticmethod
+        def _chat_friendly_summary(
+            value: str, limit: int, *, include_detail_note: bool = True
+        ) -> str:
+            raise NotImplementedError
+
     _ENCRYPTED_MESSAGE_PREFIX = "enc:v1:"
 
     # ── 持久化 ──

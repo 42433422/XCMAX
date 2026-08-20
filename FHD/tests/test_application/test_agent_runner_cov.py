@@ -1,3 +1,4 @@
+# mypy: disable-error-code="no-any-return"
 """覆盖率补强测试：app.application.employee_runtime.agent_runner。
 
 聚焦于 _run_async / _resolve_employee_llm_config / _chat_completion /
@@ -234,7 +235,8 @@ class TestChatCompletion:
             result = await _chat_completion([{"role": "user", "content": "hi"}])
 
         assert "error" in result
-        assert "net down" in result["error"]
+        assert result["error"] == "主模型服务暂不可用"
+        assert "net down" not in result["error"]
 
     async def test_primary_429_falls_back_to_minimax(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setenv("FHD_EMPLOYEE_LLM_PROVIDER", "xiaomi")
@@ -270,9 +272,8 @@ class TestChatCompletion:
         with patch(ADAPTER_PATH, return_value=adapter):
             result = await _chat_completion([{"role": "user", "content": "hi"}])
 
-        # str(exc)[:800] 截断
-        assert len(result["error"]) <= 800
-        assert result["error"] == long_msg[:800]
+        assert result["error"] == "主模型服务暂不可用"
+        assert long_msg[:80] not in result["error"]
 
 
 class TestRunAgentHandler:

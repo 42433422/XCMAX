@@ -4,8 +4,6 @@
 from __future__ import annotations
 
 import json
-import os
-from pathlib import Path
 
 import pytest
 
@@ -30,7 +28,7 @@ def test_append_event_writes_jsonl_line(tmp_ledger):
         "triggered_by": "intent_benchmark",
         "signal_score": 0.85,
     }
-    result = append_event(event)
+    append_event(event)
     assert tmp_ledger.exists()
     lines = tmp_ledger.read_text(encoding="utf-8").strip().splitlines()
     assert len(lines) == 1

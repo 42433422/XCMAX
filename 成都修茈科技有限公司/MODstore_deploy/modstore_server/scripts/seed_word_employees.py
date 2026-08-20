@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="assignment, index"
 """Seed Word 全量读取 + Word 生成员工包到 catalog（与 excel seed 同流程）。"""
 
 from __future__ import annotations

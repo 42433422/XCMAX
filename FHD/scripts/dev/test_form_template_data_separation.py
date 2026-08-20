@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="index"
 """多类型表单：测试能否分离「版式/模版」与「业务数据」。
 
 用法::
@@ -11,6 +12,8 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -70,7 +73,7 @@ def _score(decomp: dict, etl: dict, analyzed: dict) -> dict:
 def main() -> int:
     from app.application.excel_template_http_app_service import _decompose_template
     from app.application.shipment_excel_etl_app_service import preview_shipment_excel_etl
-    from app.fastapi_routes.document_templates_compat import run_archive_template_analyze
+    from app.legacy.routes.document_templates_compat import run_archive_template_analyze
 
     files = sorted(FIXTURE_DIR.glob("*.xlsx"))
     if not files:
@@ -82,7 +85,7 @@ def main() -> int:
         decomp, _ = _decompose_template(str(path), sample_rows=3)
         try:
             etl = preview_shipment_excel_etl(str(path))
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
             etl = {"success": False, "message": str(exc), "notes": []}
         try:
             analyzed, _code = run_archive_template_analyze(
@@ -90,7 +93,7 @@ def main() -> int:
                 filename=path.name,
                 template_name=path.stem,
             )
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
             analyzed = {"success": False, "message": str(exc)}
         scored = _score(decomp, etl, analyzed)
         cases.append({"file": path.name, **scored})
@@ -109,10 +112,7 @@ def main() -> int:
     out = FIXTURE_DIR / "separation_report.json"
     out.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(report, ensure_ascii=False, indent=2))
-    print(
-        f"VERDICT separated={report['summary']['separated']}/{len(cases)} "
-        f"quality={by_q}"
-    )
+    print(f"VERDICT separated={report['summary']['separated']}/{len(cases)} quality={by_q}")
     return 0 if report["summary"]["separated"] > 0 else 1
 
 

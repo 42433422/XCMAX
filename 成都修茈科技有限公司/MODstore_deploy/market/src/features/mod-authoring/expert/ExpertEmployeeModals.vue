@@ -37,12 +37,7 @@ const {
       </div>
       <ul v-else class="emp-pick-list">
         <li v-for="row in empPickRows" :key="row.pickKey">
-          <button
-            type="button"
-            class="emp-pick-row"
-            :disabled="empPickSaving"
-            @click="() => void confirmPickEmployee(row)"
-          >
+          <button type="button" class="emp-pick-row" :disabled="empPickSaving" @click="() => void confirmPickEmployee(row)">
             <span class="emp-pick-name">{{ row.name }}</span>
             <span class="emp-pick-meta muted">{{ row.id }} · {{ row.sourceLabel }}</span>
             <span v-if="row.version" class="emp-pick-meta muted">v{{ row.version }}</span>
@@ -90,12 +85,7 @@ const {
       </div>
       <div class="modal-actions">
         <button type="button" class="btn" :disabled="empModalSaving" @click="closeEmployeeModal">取消</button>
-        <button
-          type="button"
-          class="btn btn-primary"
-          :disabled="empModalSaving"
-          @click="() => void submitEmployeeModal()"
-        >
+        <button type="button" class="btn btn-primary" :disabled="empModalSaving" @click="() => void submitEmployeeModal()">
           {{ empModalSaving ? '保存中…' : empScaffoldDone ? '关闭' : '保存' }}
         </button>
       </div>

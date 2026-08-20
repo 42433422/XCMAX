@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from functools import lru_cache
 from typing import Any, cast
 
@@ -10,6 +11,7 @@ from app.mod_sdk.neuro_bus_compat import NEURO_BUS_BRIDGE_MOD_ID, is_neuro_bus_v
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+_PROVIDER_IMPORT_LOCK = threading.RLock()
 
 
 def is_neuro_bus_runtime_via_mod_enabled() -> bool:
@@ -20,7 +22,10 @@ def is_neuro_bus_runtime_via_mod_enabled() -> bool:
 def _load_runtime_providers(mod_path: str, mod_id: str):
     from app.infrastructure.mods.mod_manager import import_mod_backend_py
 
-    return import_mod_backend_py(mod_path, mod_id, "bus_runtime_providers")
+    # The dynamic importer registers the module before executing it. Serialise
+    # first-load cache misses so another thread cannot observe that partial module.
+    with _PROVIDER_IMPORT_LOCK:
+        return import_mod_backend_py(mod_path, mod_id, "bus_runtime_providers")
 
 
 def _resolve_mod_path() -> tuple[str, str] | tuple[None, None]:
@@ -39,8 +44,9 @@ def _get_bundle() -> dict[str, Any]:
     mod_id, mod_path = _resolve_mod_path()
     if not mod_path:
         raise RuntimeError("neuro bus runtime mod not installed")
-    mod = _load_runtime_providers(mod_path, mod_id or NEURO_BUS_BRIDGE_MOD_ID)
-    return cast("dict[str, Any]", mod.create_bus_runtime_bundle())
+    with _PROVIDER_IMPORT_LOCK:
+        mod = _load_runtime_providers(mod_path, mod_id or NEURO_BUS_BRIDGE_MOD_ID)
+        return cast("dict[str, Any]", mod.create_bus_runtime_bundle())
 
 
 async def run_lifespan_setup() -> None:

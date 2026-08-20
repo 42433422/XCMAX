@@ -20,9 +20,7 @@ function initListeners() {
   if (typeof window === 'undefined') return
 
   const mobileQuery = window.matchMedia(`(max-width: ${BREAKPOINTS.mobileMax}px)`)
-  const tabletQuery = window.matchMedia(
-    `(min-width: ${BREAKPOINTS.mobileMax + 1}px) and (max-width: ${BREAKPOINTS.tabletMax}px)`,
-  )
+  const tabletQuery = window.matchMedia(`(min-width: ${BREAKPOINTS.mobileMax + 1}px) and (max-width: ${BREAKPOINTS.tabletMax}px)`)
 
   function forceAndroidClient(): boolean {
     if (typeof window === 'undefined') return false

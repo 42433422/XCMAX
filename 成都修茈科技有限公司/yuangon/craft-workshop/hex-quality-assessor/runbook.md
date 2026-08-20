@@ -7,21 +7,23 @@
         ## 上游 Handoff 契约
 
         ### handoff: quality-validator → 本岗
+
 - **触发条件**：`employee.task.done:quality-validator`
 - **输入**：待补充（参见 `yuangon/**/quality-validator/runbook.md`）
 - **门禁**：依赖完成前本岗不得继续
 
+          ## Handlers
 
-        ## Handlers
+          | Handler | 说明 |
+          |---------|------|
+          | `llm_md` | 接收 Markdown 任务描述，调用 LLM 输出结构化结果 |
 
-        | Handler | 说明 |
-        |---------|------|
-        | `llm_md` | 接收 Markdown 任务描述，调用 LLM 输出结构化结果 |
-| `echo` | 调试用：原样返回输入，用于 smoke 测试 |
+  | `echo` | 调试用：原样返回输入，用于 smoke 测试 |
 
-        ## 核心 Scope
+          ## 核心 Scope
 
-        - `FHD/mods/_employees/hex-quality-assessor/**`
+          - `FHD/mods/_employees/hex-quality-assessor/**`
+
 - `yuangon/craft-workshop/hex-quality-assessor/**`
 - `workbench/sessions/*`
 - `workbench/validation/*`

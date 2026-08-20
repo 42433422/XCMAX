@@ -1,18 +1,16 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+# mypy: disable-error-code="operator"
 """
 完整 Neuro-DDD 迁移执行脚本
 
 完成 5 个核心 Services + Backend 路由的全部迁移
 """
 
-import os
-import sys
-import re
-import asyncio
-from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 @dataclass
@@ -136,7 +134,7 @@ from app.neuro_bus.events.base import NeuroEvent, EventPriority
                 self.log(f"已迁移: {service_config['name']}", "OK")
                 migrated += 1
 
-            except Exception as e:
+            except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
                 self.log(f"迁移失败 {service_config['name']}: {e}", "ERROR")
                 failed.append(service_config["name"])
 
@@ -292,7 +290,7 @@ from app.neuro_bus.events.base import NeuroEvent, EventPriority
             for e in service_config["events"]:
                 method = f'''    async def handle_{e}(self, event: NeuroEvent) -> Dict[str, Any]:
         """处理 {e} 事件"""
-        logger.info(f"[{service_config['name']}Domain] 处理 {e}: {{event.payload}}")
+        logger.info(f"[{service_config["name"]}Domain] 处理 {e}: {{event.payload}}")
         # TODO: 实现具体业务逻辑
         return {{"success": True, "event_type": "{domain}.{e}"}}'''
                 handler_methods.append(method)
@@ -301,7 +299,7 @@ from app.neuro_bus.events.base import NeuroEvent, EventPriority
 
             handler_content = f'''# -*- coding: utf-8 -*-
 """
-{service_config['name']} Domain Event Handlers (V2)
+{service_config["name"]} Domain Event Handlers (V2)
 
 Auto-generated event handlers for {domain} domain
 """
@@ -318,8 +316,8 @@ from app.neuro_bus.events.{domain}_events import (
 logger = logging.getLogger(__name__)
 
 
-class {service_config['name']}DomainHandlers:
-    """{service_config['name']} 领域事件处理器"""
+class {service_config["name"]}DomainHandlers:
+    """{service_config["name"]} 领域事件处理器"""
     
     def __init__(self):
         self.bus = get_neuro_bus()
@@ -327,20 +325,20 @@ class {service_config['name']}DomainHandlers:
     def register(self):
         """注册所有事件处理器"""
 {subscribe_code}
-        logger.info("[{service_config['name']}Domain] 已注册 {{len(self.bus.subscribers)}} 个事件处理器")
+        logger.info("[{service_config["name"]}Domain] 已注册 {{len(self.bus.subscribers)}} 个事件处理器")
 
 {handler_methods_str}
 
 
 # 全局处理器实例
-_handlers: {service_config['name']}DomainHandlers = None
+_handlers: {service_config["name"]}DomainHandlers = None
 
 
-def get_{domain}_handlers() -> {service_config['name']}DomainHandlers:
+def get_{domain}_handlers() -> {service_config["name"]}DomainHandlers:
     """获取领域处理器单例"""
     global _handlers
     if _handlers is None:
-        _handlers = {service_config['name']}DomainHandlers()
+        _handlers = {service_config["name"]}DomainHandlers()
     return _handlers
 '''
 

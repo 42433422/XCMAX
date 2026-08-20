@@ -8,6 +8,8 @@ import types
 from collections import deque
 from time import monotonic
 
+from langgraph._internal._exception_policy import TERMINATION_ERRORS
+
 
 class AsyncQueue(asyncio.Queue):
     """Async unbounded FIFO queue with a wait() method.
@@ -25,7 +27,7 @@ class AsyncQueue(asyncio.Queue):
             self._getters.append(getter)
             try:
                 await getter
-            except BaseException:
+            except TERMINATION_ERRORS:
                 getter.cancel()  # Just in case getter is not done yet.
                 try:
                     # Clean self._getters from canceled getters.

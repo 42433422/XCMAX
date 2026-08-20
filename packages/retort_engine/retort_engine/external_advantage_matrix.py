@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.external_advantage_adjudicator import (
     adjudicate_external_advantage_rows,
@@ -98,20 +98,25 @@ def build_external_advantage_matrix(
     )
     delta = round(retort_average - baseline_average, 2)
     regression = verify_external_advantage_rows(rows)
-    regression_summary = (
-        regression.get("summary") if isinstance(regression.get("summary"), dict) else {}
+    regression_summary = cast(
+        dict[str, Any],
+        regression.get("summary")
+        if isinstance(regression.get("summary"), dict)
+        else {},
     )
     adjudication = adjudicate_external_advantage_rows(rows)
-    adjudication_summary = (
+    adjudication_summary = cast(
+        dict[str, Any],
         adjudication.get("summary")
         if isinstance(adjudication.get("summary"), dict)
-        else {}
+        else {},
     )
     blind_adjudication = blind_third_party_adjudicate_external_advantages(rows)
-    blind_summary = (
+    blind_summary = cast(
+        dict[str, Any],
         blind_adjudication.get("summary")
         if isinstance(blind_adjudication.get("summary"), dict)
-        else {}
+        else {},
     )
     summary = {
         "case_count": len(rows),
@@ -241,11 +246,15 @@ def _evaluate_case(case: dict[str, Any]) -> dict[str, Any]:
         issue_context=str(case.get("external_advantage") or ""),
     )
     comments = [item for item in review.get("comments") or [] if isinstance(item, dict)]
-    summary = review.get("summary") if isinstance(review.get("summary"), dict) else {}
-    extension_policy = (
+    summary = cast(
+        dict[str, Any],
+        review.get("summary") if isinstance(review.get("summary"), dict) else {},
+    )
+    extension_policy = cast(
+        dict[str, Any],
         summary.get("extension_policy")
         if isinstance(summary.get("extension_policy"), dict)
-        else {}
+        else {},
     )
     baseline = _baseline_review(case)
     retort = _retort_review_score(case, comments, summary, extension_policy)

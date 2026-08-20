@@ -54,7 +54,7 @@ class PrinterServiceDomainHandlers:
 
 
 # 全局处理器实例
-_handlers: PrinterServiceDomainHandlers = None
+_handlers: PrinterServiceDomainHandlers | None = None
 
 
 def get_print_handlers() -> PrinterServiceDomainHandlers:

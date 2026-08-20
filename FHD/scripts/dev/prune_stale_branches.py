@@ -58,8 +58,8 @@ class BranchInfo:
 
     name: str
     last_commit_iso: str  # YYYY-MM-DD
-    ahead: int = 0        # 分支领先 main 的提交数
-    behind: int = 0       # main 领先分支的提交数
+    ahead: int = 0  # 分支领先 main 的提交数
+    behind: int = 0  # main 领先分支的提交数
     merged: bool = False  # 是否已合并进 main
     open_pr: bool = False
     protected: bool = False
@@ -70,6 +70,7 @@ class BranchInfo:
 # --------------------------------------------------------------------------- #
 # 纯函数：决策逻辑（与 git 解耦，便于单测）
 # --------------------------------------------------------------------------- #
+
 
 def _parse_date(s: str) -> dt.date:
     try:
@@ -87,7 +88,9 @@ def is_protected_branch(name: str, current_branch: str) -> bool:
     return name == current_branch
 
 
-def resolve_protection(name: str, current_branch: str, open_pr: bool, include_open_pr: bool) -> bool:
+def resolve_protection(
+    name: str, current_branch: str, open_pr: bool, include_open_pr: bool
+) -> bool:
     """综合是否受保护。
 
     开放 PR 分支默认受保护（跳过）；``--also-open-pr`` 时不再因 open PR 受保护
@@ -145,7 +148,8 @@ def classify(
 # git 执行层
 # --------------------------------------------------------------------------- #
 
-def run_git(args: list[str], *, cwd: Path = REPO_ROOT) -> subprocess.CompletedProcess:
+
+def run_git(args: list[str], *, cwd: Path = REPO_ROOT) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["git", "-C", str(cwd), *args],
         capture_output=True,
@@ -161,8 +165,17 @@ def list_open_pr_branches(cwd: Path = REPO_ROOT) -> set[str]:
     """依赖 gh CLI 获取开放 PR 的 head 分支；不可用时返回空集（不阻断）。"""
     try:
         r = subprocess.run(
-            ["gh", "pr", "list", "--state", "open", "--json", "headRefName",
-             "--jq", ".[].headRefName"],
+            [
+                "gh",
+                "pr",
+                "list",
+                "--state",
+                "open",
+                "--json",
+                "headRefName",
+                "--jq",
+                ".[].headRefName",
+            ],
             capture_output=True,
             text=True,
             cwd=str(cwd),
@@ -228,6 +241,7 @@ def delete_local(name: str, cwd: Path = REPO_ROOT) -> subprocess.CompletedProces
 # 组装与报告
 # --------------------------------------------------------------------------- #
 
+
 def build_report(
     *,
     before: dt.date | None,
@@ -265,7 +279,9 @@ def _action_label(info: BranchInfo, apply: bool) -> str:
     return "[deleted]" if apply and info.category == DELETABLE else "[keep]"
 
 
-def print_report(infos: list[BranchInfo], *, apply: bool, prune_local: bool, list_all: bool) -> None:
+def print_report(
+    infos: list[BranchInfo], *, apply: bool, prune_local: bool, list_all: bool
+) -> None:
     order = {DELETABLE: 0, STALE: 1, ACTIVE: 2, PROTECTED: 3}
     rows = sorted(infos, key=lambda i: (order[i.category], i.name))
 
@@ -304,7 +320,9 @@ def print_report(infos: list[BranchInfo], *, apply: bool, prune_local: bool, lis
     )
 
 
-def apply_deletions(infos: list[BranchInfo], *, prune_local: bool, cwd: Path = REPO_ROOT) -> tuple[int, int]:
+def apply_deletions(
+    infos: list[BranchInfo], *, prune_local: bool, cwd: Path = REPO_ROOT
+) -> tuple[int, int]:
     """只删除 deletable（排除 open PR / protected / stale）。"""
     deleted = 0
     failed = 0
@@ -332,22 +350,43 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p.add_argument("--apply", action="store_true",
-                   help="真正删除可删（deletable）的远端分支（默认 dry-run 仅报告）")
-    p.add_argument("--prune-local", action="store_true",
-                   help="在 --apply 时追加清理本地对应分支（git branch -D）")
-    p.add_argument("--list-all", action="store_true",
-                   help="输出全量清单（含 active/protected），默认只突出 stale/deletable")
-    p.add_argument("--also-open-pr", action="store_true",
-                   help="把有开放 PR 的分支纳入候选提示（但绝不删除）")
-    p.add_argument("--before", type=_parse_date, default=None,
-                   help="只处理该日期（YYYY-MM-DD）之前无提交的分支；更近的视为 active")
-    p.add_argument("--behind", type=int, default=DEFAULT_BEHIND,
-                   help=f"deletable 的 behind main 阈值（默认 {DEFAULT_BEHIND}）")
-    p.add_argument("--stale-days", type=int, default=DEFAULT_STALE_DAYS,
-                   help=f"陈旧天数阈值，超过该天数无提交视为 stale/deletable（默认 {DEFAULT_STALE_DAYS}）")
-    p.add_argument("--repo", type=Path, default=None,
-                   help="git 仓库根目录（默认自动探测为 FHD）")
+    p.add_argument(
+        "--apply",
+        action="store_true",
+        help="真正删除可删（deletable）的远端分支（默认 dry-run 仅报告）",
+    )
+    p.add_argument(
+        "--prune-local",
+        action="store_true",
+        help="在 --apply 时追加清理本地对应分支（git branch -D）",
+    )
+    p.add_argument(
+        "--list-all",
+        action="store_true",
+        help="输出全量清单（含 active/protected），默认只突出 stale/deletable",
+    )
+    p.add_argument(
+        "--also-open-pr", action="store_true", help="把有开放 PR 的分支纳入候选提示（但绝不删除）"
+    )
+    p.add_argument(
+        "--before",
+        type=_parse_date,
+        default=None,
+        help="只处理该日期（YYYY-MM-DD）之前无提交的分支；更近的视为 active",
+    )
+    p.add_argument(
+        "--behind",
+        type=int,
+        default=DEFAULT_BEHIND,
+        help=f"deletable 的 behind main 阈值（默认 {DEFAULT_BEHIND}）",
+    )
+    p.add_argument(
+        "--stale-days",
+        type=int,
+        default=DEFAULT_STALE_DAYS,
+        help=f"陈旧天数阈值，超过该天数无提交视为 stale/deletable（默认 {DEFAULT_STALE_DAYS}）",
+    )
+    p.add_argument("--repo", type=Path, default=None, help="git 仓库根目录（默认自动探测为 FHD）")
     return p.parse_args(argv)
 
 

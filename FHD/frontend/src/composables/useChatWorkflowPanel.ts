@@ -120,7 +120,10 @@ export interface UseChatWorkflowPanelDeps {
   persistTaskPanelStateForSession: (targetSessionId?: string) => void
   showTaskConfirm: (task: ShipmentTask | null | undefined) => void
   emitAssistantPush: (payload?: Record<string, unknown>) => void
-  maybeCloseAssistantFloatForShipmentTask: (task: ShipmentTask | null | undefined, autoAction: Record<string, unknown> | null | undefined) => void
+  maybeCloseAssistantFloatForShipmentTask: (
+    task: ShipmentTask | null | undefined,
+    autoAction: Record<string, unknown> | null | undefined,
+  ) => void
 }
 
 export function useChatWorkflowPanel(deps: UseChatWorkflowPanelDeps) {
@@ -131,11 +134,9 @@ export function useChatWorkflowPanel(deps: UseChatWorkflowPanelDeps) {
     activeTaskId,
     expandedTaskIds,
     taskFilter,
-    currentTask,
     upsertTask,
     sortTaskList,
     createTaskId,
-    persistTaskPanelStateForSession,
     showTaskConfirm,
     emitAssistantPush,
     maybeCloseAssistantFloatForShipmentTask,
@@ -168,7 +169,7 @@ export function useChatWorkflowPanel(deps: UseChatWorkflowPanelDeps) {
       progress: 100,
       stage: d.sourceApi === 'intent_test' ? '专业模式·意图 API' : '本地规则预处理',
       summary: lines.join('\n'),
-      payload: { ...d }
+      payload: { ...d },
     })
 
     const wf = taskList.value.find((t) => t.id === 'workflow_emp_wechat_msg')
@@ -194,8 +195,7 @@ export function useChatWorkflowPanel(deps: UseChatWorkflowPanelDeps) {
     const task = d.task
     if (!task || task.type !== 'shipment_generate') return
     const contact = String(d.contactName || '').trim()
-    const hint =
-      '\n\n可在左侧对话发送「再加 / 删除第几行 / 改成…」调整明细后再点确认执行。（与智能对话内改预览一致）'
+    const hint = '\n\n可在左侧对话发送「再加 / 删除第几行 / 改成…」调整明细后再点确认执行。（与智能对话内改预览一致）'
     const baseDesc = String(task.description || '').trim()
     const next = {
       ...task,
@@ -214,9 +214,7 @@ export function useChatWorkflowPanel(deps: UseChatWorkflowPanelDeps) {
     maybeCloseAssistantFloatForShipmentTask(next, null)
     emitAssistantPush({
       title: '微信发货单预览',
-      description: contact
-        ? `来自 ${contact}，请在右侧任务面板确认或先对话改明细`
-        : '请在右侧任务面板确认或先对话改明细',
+      description: contact ? `来自 ${contact}，请在右侧任务面板确认或先对话改明细` : '请在右侧任务面板确认或先对话改明细',
     })
   }
 
@@ -244,7 +242,9 @@ export function useChatWorkflowPanel(deps: UseChatWorkflowPanelDeps) {
       line: host.lastReceiptFeedback.line,
       detail: host.lastReceiptFeedback.detail,
     })
-    upsertWorkflowEmployeeTask('receipt_confirm', { lastReceiptFeedback: host.lastReceiptFeedback })
+    upsertWorkflowEmployeeTask('receipt_confirm', {
+      lastReceiptFeedback: host.lastReceiptFeedback,
+    })
     emitAssistantPush({
       title: host.pushTitle,
       description: host.pushDescription,
@@ -500,7 +500,11 @@ export function useChatWorkflowPanel(deps: UseChatWorkflowPanelDeps) {
     const base = getPhoneAgentApiBase(empId).replace(/\/+$/, '')
     const lastPolledAt = Date.now()
     if (!base) {
-      return { lastPolledAt, running: false, fetchError: '当前为原版模式或未加载 Mod，无电话扩展接口' }
+      return {
+        lastPolledAt,
+        running: false,
+        fetchError: '当前为原版模式或未加载 Mod，无电话扩展接口',
+      }
     }
     const ch = resolvePhoneChannelByEmployee(empId)
     try {
@@ -566,7 +570,7 @@ export function useChatWorkflowPanel(deps: UseChatWorkflowPanelDeps) {
     lastLabelPrint?: { at: number; line: string },
     lastShipmentAudit?: { at: number; line: string; detail?: string },
     lastReceiptFeedback?: { at: number; line: string; detail?: string },
-    phoneStatus?: PhoneAgentStatusPayload
+    phoneStatus?: PhoneAgentStatusPayload,
   ): string {
     if (isCoreWorkflowEmployeeId(empId)) {
       return buildCoreWorkflowMonitorLine(empId, monitor, {
@@ -629,9 +633,7 @@ export function useChatWorkflowPanel(deps: UseChatWorkflowPanelDeps) {
       const tail = t ? ` · 上次同步 ${t}` : ''
       const wmModel =
         ps.phone_whisper_model && String(ps.phone_whisper_model).trim()
-          ? ` · Whisper=${String(ps.phone_whisper_model).trim()}${
-              ps.phone_whisper_backend ? `(${ps.phone_whisper_backend})` : ''
-            }`
+          ? ` · Whisper=${String(ps.phone_whisper_model).trim()}${ps.phone_whisper_backend ? `(${ps.phone_whisper_backend})` : ''}`
           : ''
       const head = `${run} · ${wm}${cap ? ` · ${cap}` : ''}${wmModel}${tail}`
       const speechHi =
@@ -649,11 +651,11 @@ export function useChatWorkflowPanel(deps: UseChatWorkflowPanelDeps) {
               silenceLo,
             )}（峰值是轮询窗内最大块；分段用双阈值：对端小声需块 RMS 常≥语音阈值才会送 ASR；环境吵可调高两阈值）`
           : ''
-      const titleShort = String(ps.last_popup_title || '').replace(/\s+/g, ' ').slice(0, 36)
+      const titleShort = String(ps.last_popup_title || '')
+        .replace(/\s+/g, ' ')
+        .slice(0, 36)
       const inCallSig =
-        ps.phone_in_call_ui_visible === true ||
-        ps.phone_wechat_call_session_active === true ||
-        ps.phone_agent_voice_session_active === true
+        ps.phone_in_call_ui_visible === true || ps.phone_wechat_call_session_active === true || ps.phone_agent_voice_session_active === true
       const step1 = ps.last_popup_detected_at_ms
         ? `① 识别弹窗：已识别 · ${formatWorkflowClock(ps.last_popup_detected_at_ms)} · ${ps.last_popup_source || '—'}${titleShort ? ` · ${titleShort}` : ''}`
         : inCallSig
@@ -663,8 +665,7 @@ export function useChatWorkflowPanel(deps: UseChatWorkflowPanelDeps) {
       if (ps.last_click_at_ms != null && ps.last_click_at_ms !== undefined) {
         const ok = ps.last_click_ok === true
         const m = formatPhoneClickMethod(ps.last_click_method)
-        const xy =
-          ps.last_click_x != null && ps.last_click_y != null ? ` · 坐标(${ps.last_click_x},${ps.last_click_y})` : ''
+        const xy = ps.last_click_x != null && ps.last_click_y != null ? ` · 坐标(${ps.last_click_x},${ps.last_click_y})` : ''
         const errRaw = formatPhoneClickError(ps.last_click_error)
         const err = errRaw ? ` · ${errRaw.slice(0, 120)}` : ''
         step2 = `② 点击接听：${ok ? '已执行' : '失败'} · ${formatWorkflowClock(ps.last_click_at_ms)} · ${m}${xy}${err}`
@@ -673,17 +674,12 @@ export function useChatWorkflowPanel(deps: UseChatWorkflowPanelDeps) {
       }
       const playDev = (ps.vb_cable_playback_device_name || '').trim() || 'CABLE Input'
       const hz =
-        typeof ps.vb_cable_stream_sample_hz === 'number' && ps.vb_cable_stream_sample_hz > 0
-          ? `${ps.vb_cable_stream_sample_hz} Hz`
-          : '—'
-      const noMp3 =
-        ps.mp3_decode_available === false ||
-        (ps.mp3_decode_available === undefined && ps.ffmpeg_on_path === false)
+        typeof ps.vb_cable_stream_sample_hz === 'number' && ps.vb_cable_stream_sample_hz > 0 ? `${ps.vb_cable_stream_sample_hz} Hz` : '—'
+      const noMp3 = ps.mp3_decode_available === false || (ps.mp3_decode_available === undefined && ps.ffmpeg_on_path === false)
       const ff = noMp3 ? ' · MP3 解码依赖未就绪（pip install miniaudio）' : ''
       let step3 = `③ 对方听合成音：微信麦克风须选「CABLE Output」。TTS 写入「${playDev}」@ ${hz}${ff}`
       if (ps.last_opening_at_ms != null && ps.last_opening_at_ms !== undefined) {
         const oOk = ps.last_opening_ok === true
-        const oErr = (ps.last_opening_error || '').trim()
         step3 = `③ 开场白：${oOk ? '已播到 VB' : '失败'} · ${formatWorkflowClock(ps.last_opening_at_ms)}${
           !oOk ? ` · ${formatOpeningError(ps.last_opening_error).slice(0, 120)}` : ''
         } · 若仍无声请检查微信麦克风是否为 CABLE Output`
@@ -700,26 +696,22 @@ export function useChatWorkflowPanel(deps: UseChatWorkflowPanelDeps) {
           : ''
       let step5 = `⑤ 对方语音→ASR：尚无识别结果（${cap5}；对端说话且 Whisper 出字后此处显示时间与文字。无字请对照：采音诊断、XCAGI_PHONE_RMS_SPEECH/SILENCE_LO、后端「句末静音送 ASR」与 Whisper 日志）${pyaudioRemoteHint}`
       if (ps.last_asr_at_ms != null && ps.last_asr_at_ms !== undefined) {
-        const raw = String(ps.last_asr_text || '').replace(/\s+/g, ' ').trim()
+        const raw = String(ps.last_asr_text || '')
+          .replace(/\s+/g, ' ')
+          .trim()
         const slice = raw.slice(0, 80)
-        step5 = `⑤ 对方语音(ASR)：${formatWorkflowClock(ps.last_asr_at_ms)} · 「${slice}${
-          raw.length > 80 ? '…' : ''
-        }」`
+        step5 = `⑤ 对方语音(ASR)：${formatWorkflowClock(ps.last_asr_at_ms)} · 「${slice}${raw.length > 80 ? '…' : ''}」`
       }
       let step6 = '⑥ 回复→VB：尚无（需先有 ASR 并完成意图与 TTS）'
       if (ps.last_reply_at_ms != null && ps.last_reply_at_ms !== undefined) {
-        const raw = String(ps.last_reply_text || '').replace(/\s+/g, ' ').trim()
+        const raw = String(ps.last_reply_text || '')
+          .replace(/\s+/g, ' ')
+          .trim()
         const slice = raw.length ? raw.slice(0, 80) : '（空）'
         const pe = (ps.last_pipeline_error || '').trim()
         const peShow = pe ? ` · ${formatPhonePipelineError(pe).slice(0, 72)}` : ''
-        step6 = `⑥ 回复→VB：${formatWorkflowClock(ps.last_reply_at_ms)} · 「${slice}${
-          raw.length > 80 ? '…' : ''
-        }」${peShow}`
-      } else if (
-        (ps.last_pipeline_error || '').trim() &&
-        ps.last_asr_at_ms != null &&
-        ps.last_asr_at_ms !== undefined
-      ) {
+        step6 = `⑥ 回复→VB：${formatWorkflowClock(ps.last_reply_at_ms)} · 「${slice}${raw.length > 80 ? '…' : ''}」${peShow}`
+      } else if ((ps.last_pipeline_error || '').trim() && ps.last_asr_at_ms != null && ps.last_asr_at_ms !== undefined) {
         const pe = formatPhonePipelineError(ps.last_pipeline_error).slice(0, 120)
         step6 = `⑥ 回复→VB：失败 · ${pe}`
       }
@@ -730,14 +722,10 @@ export function useChatWorkflowPanel(deps: UseChatWorkflowPanelDeps) {
             )} · ①②③⑤⑥ 已初始化`
           : ''
       const problemZh = String(ps.phone_capture_problem_zh || '').trim()
-      const problemLine =
-        problemZh.length > 0 ? problemZh.slice(0, 240) + (problemZh.length > 240 ? '…' : '') : ''
+      const problemLine = problemZh.length > 0 ? problemZh.slice(0, 240) + (problemZh.length > 240 ? '…' : '') : ''
       const wmHint = String(ps.phone_window_monitor_hint_zh || '').trim()
-      const wmHintLine =
-        wmHint.length > 0 ? wmHint.slice(0, 360) + (wmHint.length > 360 ? '…' : '') : ''
-      const detailLines = [wmHintLine, diagLine, problemLine, step1, step2, step3, step5, step6, step4].filter(
-        Boolean,
-      )
+      const wmHintLine = wmHint.length > 0 ? wmHint.slice(0, 360) + (wmHint.length > 360 ? '…' : '') : ''
+      const detailLines = [wmHintLine, diagLine, problemLine, step1, step2, step3, step5, step6, step4].filter(Boolean)
       if (import.meta.env.DEV) {
         return [head, ...detailLines].join('\n')
       }
@@ -769,7 +757,7 @@ export function useChatWorkflowPanel(deps: UseChatWorkflowPanelDeps) {
       lastShipmentAudit?: { at: number; line: string; detail?: string }
       lastReceiptFeedback?: { at: number; line: string; detail?: string }
       phoneStatus?: PhoneAgentStatusPayload
-    }
+    },
   ): WorkflowStepRow[] {
     if (isCoreWorkflowEmployeeId(empId)) {
       return buildCoreWorkflowStepsForEmployee(empId, ctx)
@@ -784,13 +772,12 @@ export function useChatWorkflowPanel(deps: UseChatWorkflowPanelDeps) {
         (ps as PhoneAgentStatusPayload | undefined)?.phone_wechat_call_session_active === true ||
         (ps as PhoneAgentStatusPayload | undefined)?.phone_agent_voice_session_active === true
       const clickTried =
-        ps != null && (ps as PhoneAgentStatusPayload).last_click_at_ms != null &&
+        ps != null &&
+        (ps as PhoneAgentStatusPayload).last_click_at_ms != null &&
         (ps as PhoneAgentStatusPayload).last_click_at_ms !== undefined
       const clickOk = (ps as PhoneAgentStatusPayload | undefined)?.last_click_ok === true
-      const hasAsr =
-        ps != null && ps.last_asr_at_ms != null && ps.last_asr_at_ms !== undefined
-      const hasOpening =
-        ps != null && ps.last_opening_at_ms != null && ps.last_opening_at_ms !== undefined
+      const hasAsr = ps != null && ps.last_asr_at_ms != null && ps.last_asr_at_ms !== undefined
+      const hasOpening = ps != null && ps.last_opening_at_ms != null && ps.last_opening_at_ms !== undefined
       const answered = clickOk || inCallUi || hasAsr || sessionActive || hasOpening
       const popupOrCallUi = popupDone || inCallUi
       const pipelineReady = !!(
@@ -828,31 +815,18 @@ export function useChatWorkflowPanel(deps: UseChatWorkflowPanelDeps) {
             : answered
               ? '⑤ 通话已接通（自动未点接听或手动接听）'
               : '⑤ 等待执行接听点击…',
-          status: !ps
-            ? 'pending'
-            : clickOk || answered
-              ? 'done'
-              : clickTried && !clickOk
-                ? 'active'
-                : popupOrCallUi
-                  ? 'active'
-                  : 'pending',
+          status: !ps ? 'pending' : clickOk || answered ? 'done' : clickTried && !clickOk ? 'active' : popupOrCallUi ? 'active' : 'pending',
         },
         {
           id: 'wp6',
           label:
             ps?.last_asr_at_ms != null && ps.last_asr_at_ms !== undefined
-              ? `⑥ 音频→ASR→回复：已识别「${String(ps.last_asr_text || '').replace(/\s+/g, ' ').trim().slice(0, 36)}${
-                  String(ps.last_asr_text || '').length > 36 ? '…' : ''
-                }」`
+              ? `⑥ 音频→ASR→回复：已识别「${String(ps.last_asr_text || '')
+                  .replace(/\s+/g, ' ')
+                  .trim()
+                  .slice(0, 36)}${String(ps.last_asr_text || '').length > 36 ? '…' : ''}」`
               : '⑥ 音频采集 → ASR → 意图 → TTS → VB-Cable',
-          status: !ps || !run || !wm
-            ? 'pending'
-            : hasAsr
-              ? 'done'
-              : pipelineReady
-                ? 'active'
-                : 'active',
+          status: !ps || !run || !wm ? 'pending' : hasAsr ? 'done' : pipelineReady ? 'active' : 'active',
         },
       ]
     }
@@ -887,9 +861,7 @@ export function useChatWorkflowPanel(deps: UseChatWorkflowPanelDeps) {
         },
         {
           id: 'rp4',
-          label: answerTried
-            ? `④ 自动接听：${answerOk ? '已执行成功' : '执行失败'}`
-            : '④ 自动接听指令（振铃时触发）',
+          label: answerTried ? `④ 自动接听：${answerOk ? '已执行成功' : '执行失败'}` : '④ 自动接听指令（振铃时触发）',
           status: !ps || !run ? 'pending' : answerOk ? 'done' : callState === 'RINGING' ? 'active' : 'pending',
         },
         {
@@ -918,7 +890,7 @@ export function useChatWorkflowPanel(deps: UseChatWorkflowPanelDeps) {
     lastLabelPrint?: { at: number; line: string },
     lastShipmentAudit?: { at: number; line: string; detail?: string },
     lastReceiptFeedback?: { at: number; line: string; detail?: string },
-    phoneStatus?: PhoneAgentStatusPayload
+    phoneStatus?: PhoneAgentStatusPayload,
   ): string {
     if (isCoreWorkflowEmployeeId(empId)) {
       return computeCoreWorkflowCurrentHint(
@@ -955,9 +927,7 @@ export function useChatWorkflowPanel(deps: UseChatWorkflowPanelDeps) {
       }
       if (!ps.running) {
         const err = String(ps.phone_agent_last_start_error || '').trim()
-        const tail = err
-          ? ` 启动失败原因：${err.length > 200 ? `${err.slice(0, 200)}…` : err}`
-          : ''
+        const tail = err ? ` 启动失败原因：${err.length > 200 ? `${err.slice(0, 200)}…` : err}` : ''
         return `phone-agent 未处于运行状态：请在一键托管中打开「微信电话对接业务员」，并检查运行后端的 Python 是否已安装 soundcard / 音频设备（详见后端日志）。${tail}`
       }
       if (!ps.window_monitor_available) {
@@ -971,9 +941,7 @@ export function useChatWorkflowPanel(deps: UseChatWorkflowPanelDeps) {
       if (ps.vb_cable_available) bits.push('VB-Cable')
       const chain = bits.length ? `链路组件：${bits.join('、')}` : '语音链路组件状态未知'
       const inCall =
-        ps.phone_in_call_ui_visible === true ||
-        ps.phone_wechat_call_session_active === true ||
-        ps.phone_agent_voice_session_active === true
+        ps.phone_in_call_ui_visible === true || ps.phone_wechat_call_session_active === true || ps.phone_agent_voice_session_active === true
       if (inCall) {
         return `当前处于通话阶段；${chain}。对方说话后将更新 ASR；若长期无文本请检查扬声器回环与 RMS 阈值（见状态里的采音说明）。`
       }
@@ -1005,7 +973,7 @@ export function useChatWorkflowPanel(deps: UseChatWorkflowPanelDeps) {
     lastLabelPrint?: { at: number; line: string },
     lastShipmentAudit?: { at: number; line: string; detail?: string },
     lastReceiptFeedback?: { at: number; line: string; detail?: string },
-    phoneStatus?: PhoneAgentStatusPayload
+    phoneStatus?: PhoneAgentStatusPayload,
   ): string {
     if (isCoreWorkflowEmployeeId(empId)) {
       return computeCoreWorkflowStageLine(empId, {
@@ -1065,15 +1033,11 @@ export function useChatWorkflowPanel(deps: UseChatWorkflowPanelDeps) {
       lastReceiptFeedback?: { at: number; line: string; detail?: string }
       monitor?: WorkflowMonitorPayload | null
       phoneStatus?: PhoneAgentStatusPayload | null
-    }
+    },
   ) {
     const taskId = `workflow_emp_${empId}`
     const existing = taskList.value.find((t) => t.id === taskId)
-    const coreCtx = mergeCorePayloadFromExisting(
-      empId,
-      opts,
-      existing?.payload as Record<string, unknown> | undefined,
-    )
+    const coreCtx = mergeCorePayloadFromExisting(empId, opts, existing?.payload as Record<string, unknown> | undefined)
     const lastWechat = coreCtx.lastWechat
     const lastLabelPrint = coreCtx.lastLabelPrint
     const lastShipmentAudit = coreCtx.lastShipmentAudit
@@ -1175,7 +1139,7 @@ export function useChatWorkflowPanel(deps: UseChatWorkflowPanelDeps) {
       lastLabelPrint,
       lastShipmentAudit,
       lastReceiptFeedback,
-      phoneStatus
+      phoneStatus,
     )
     const hint = computeWorkflowCurrentHint(
       empId,
@@ -1185,7 +1149,7 @@ export function useChatWorkflowPanel(deps: UseChatWorkflowPanelDeps) {
       lastLabelPrint,
       lastShipmentAudit,
       lastReceiptFeedback,
-      phoneStatus
+      phoneStatus,
     )
     const meta = resolveWorkflowEmployeePanelMeta(empId)
     if (!meta) return
@@ -1203,26 +1167,26 @@ export function useChatWorkflowPanel(deps: UseChatWorkflowPanelDeps) {
       summaryParts.push(`电话业务员状态：${bits}`)
       if (ps.last_popup_detected_at_ms) {
         summaryParts.push(
-          `识别弹窗：${formatWorkflowClock(ps.last_popup_detected_at_ms)} · ${ps.last_popup_source || '—'} · ${String(ps.last_popup_title || '').slice(0, 60)}`
+          `识别弹窗：${formatWorkflowClock(ps.last_popup_detected_at_ms)} · ${ps.last_popup_source || '—'} · ${String(ps.last_popup_title || '').slice(0, 60)}`,
         )
       }
       if (ps.last_click_at_ms != null && ps.last_click_at_ms !== undefined) {
         summaryParts.push(
-          `接听点击：${ps.last_click_ok ? '成功' : '失败'} · ${formatWorkflowClock(ps.last_click_at_ms)} · ${ps.last_click_method || '—'}`
+          `接听点击：${ps.last_click_ok ? '成功' : '失败'} · ${formatWorkflowClock(ps.last_click_at_ms)} · ${ps.last_click_method || '—'}`,
         )
       }
       if (ps.last_asr_at_ms != null && ps.last_asr_at_ms !== undefined && (ps.last_asr_text || '').trim()) {
         summaryParts.push(
           `对方语音(ASR) ${formatWorkflowClock(ps.last_asr_at_ms)}：${String(ps.last_asr_text).slice(0, 160)}${
             String(ps.last_asr_text).length > 160 ? '…' : ''
-          }`
+          }`,
         )
       }
       if (ps.last_reply_at_ms != null && ps.last_reply_at_ms !== undefined && (ps.last_reply_text || '').trim()) {
         summaryParts.push(
           `回复送 VB ${formatWorkflowClock(ps.last_reply_at_ms)}：${String(ps.last_reply_text).slice(0, 160)}${
             String(ps.last_reply_text).length > 160 ? '…' : ''
-          }`
+          }`,
         )
       }
     }
@@ -1249,14 +1213,7 @@ export function useChatWorkflowPanel(deps: UseChatWorkflowPanelDeps) {
       title: meta.title,
       status: 'running',
       progress: progressPct,
-      stage: computeWorkflowStageLine(
-        empId,
-        lastWechat,
-        lastLabelPrint,
-        lastShipmentAudit,
-        lastReceiptFeedback,
-        phoneStatus
-      ),
+      stage: computeWorkflowStageLine(empId, lastWechat, lastLabelPrint, lastShipmentAudit, lastReceiptFeedback, phoneStatus),
       summary: summaryParts.join('\n\n'),
       payload: {
         employeeId: empId,
@@ -1371,31 +1328,31 @@ export function useChatWorkflowPanel(deps: UseChatWorkflowPanelDeps) {
     persistTaskPanelStateForSession: (targetSessionId?: string) => void,
     currentTask: { value: ShipmentTask | null },
   ) {
-watch(
-  [taskList, activeTaskId, expandedTaskIds, taskFilter, currentTask],
-  () => {
-    persistTaskPanelStateForSession()
-  },
-  { deep: true }
-)
+    watch(
+      [taskList, activeTaskId, expandedTaskIds, taskFilter, currentTask],
+      () => {
+        persistTaskPanelStateForSession()
+      },
+      { deep: true },
+    )
 
-watch(
-  () => modsStore.modsForWorkflowUi,
-  (mods) => {
-    workflowAiEmployeesStore.hydrateFromMods(mods)
-    workflowAiEmployeesStore.pruneOrphanWorkflowEmployeeToggles(mods)
-    syncWorkflowEmployeePanelTasks(readWorkflowEmployeeEnabledMap())
-  },
-  { deep: true }
-)
+    watch(
+      () => modsStore.modsForWorkflowUi,
+      (mods) => {
+        workflowAiEmployeesStore.hydrateFromMods(mods)
+        workflowAiEmployeesStore.pruneOrphanWorkflowEmployeeToggles(mods)
+        syncWorkflowEmployeePanelTasks(readWorkflowEmployeeEnabledMap())
+      },
+      { deep: true },
+    )
 
-watch(
-  () => workflowAiEmployeesStore.enabled,
-  () => {
-    syncWorkflowEmployeePanelTasks(readWorkflowEmployeeEnabledMap())
-  },
-  { deep: true }
-)
+    watch(
+      () => workflowAiEmployeesStore.enabled,
+      () => {
+        syncWorkflowEmployeePanelTasks(readWorkflowEmployeeEnabledMap())
+      },
+      { deep: true },
+    )
   }
 
   function mountWorkflowPanel() {

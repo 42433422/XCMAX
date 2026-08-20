@@ -1,5 +1,6 @@
 import sqlite3
-import sys
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 def analyze_database(db_path):
@@ -33,7 +34,7 @@ def analyze_database(db_path):
 
         conn.close()
         return True
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"分析数据库时出错: {e}")
         return False
 

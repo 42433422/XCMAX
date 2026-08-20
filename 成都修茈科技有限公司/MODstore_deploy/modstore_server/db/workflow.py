@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     Boolean,
@@ -29,11 +29,11 @@ class Workflow(Base):
     name = Column(String(256), nullable=False)
     description = Column(Text, default="")
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
     updated_at = Column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
     migration_status = Column(String(16), default="", index=True)
     migrated_to_id = Column(Integer, nullable=True, index=True)
@@ -50,7 +50,7 @@ class WorkflowNode(Base):
     config = Column(Text, default="{}")
     position_x = Column(Float, default=0.0)
     position_y = Column(Float, default=0.0)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
 
 class WorkflowEdge(Base):
@@ -61,7 +61,7 @@ class WorkflowEdge(Base):
     source_node_id = Column(Integer, ForeignKey("workflow_nodes.id"), nullable=False)
     target_node_id = Column(Integer, ForeignKey("workflow_nodes.id"), nullable=False)
     condition = Column(Text, default="")
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
 
 class WorkflowSandboxRun(Base):
@@ -75,7 +75,7 @@ class WorkflowSandboxRun(Base):
     mock_employees = Column(Boolean, default=True)
     graph_fingerprint = Column(String(64), default="", index=True)
     report_json = Column(Text, default="{}")
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
 
 
 class WorkflowExecution(Base):
@@ -88,7 +88,7 @@ class WorkflowExecution(Base):
     input_data = Column(Text, default="{}")
     output_data = Column(Text, default="{}")
     error_message = Column(Text, default="")
-    started_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    started_at = Column(DateTime, default=lambda: datetime.now(UTC))
     completed_at = Column(DateTime, nullable=True)
 
 
@@ -102,11 +102,11 @@ class WorkflowTrigger(Base):
     trigger_key = Column(String(128), default="", index=True)
     config_json = Column(Text, default="{}")
     is_active = Column(Boolean, default=True, index=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
     updated_at = Column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
 
@@ -121,7 +121,7 @@ class WorkflowVersion(Base):
     note = Column(Text, default="")
     graph_snapshot = Column(Text, nullable=False, default="{}")
     is_current = Column(Boolean, default=True, index=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
 
 class ScriptWorkflow(Base):
@@ -137,11 +137,11 @@ class ScriptWorkflow(Base):
     agent_session_id = Column(String(64), default="", index=True)
     migrated_from_workflow_id = Column(Integer, nullable=True, index=True)
     last_manual_sandbox_run_id = Column(Integer, nullable=True, index=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
     updated_at = Column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
 
@@ -158,7 +158,7 @@ class ScriptWorkflowVersion(Base):
     plan_md = Column(Text, default="")
     agent_log_json = Column(Text, default="{}")
     is_current = Column(Boolean, default=True, index=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
 
 class ScriptWorkflowRun(Base):
@@ -177,5 +177,5 @@ class ScriptWorkflowRun(Base):
     outputs_meta_json = Column(Text, default="[]")
     runtime_sdk_calls_json = Column(Text, default="[]")
     error_message = Column(Text, default="")
-    started_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    started_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
     completed_at = Column(DateTime, nullable=True)

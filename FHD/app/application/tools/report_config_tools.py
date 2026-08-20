@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 def _configs_path() -> str:
     """返回报表配置 JSON 文件路径，确保父目录存在。"""
-    from app.utils.path_utils import get_data_dir
+    from app.utils.path_io.path_utils import get_data_dir
 
     cfg_dir = os.path.join(get_data_dir(), "reports")
     os.makedirs(cfg_dir, exist_ok=True)

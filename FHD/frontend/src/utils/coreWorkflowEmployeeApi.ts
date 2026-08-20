@@ -1,8 +1,5 @@
 import { apiFetch, DEFAULT_MOD_API_TIMEOUT_MS } from '@/utils/apiBase'
-import {
-  isWorkflowEmployeeId,
-  type WorkflowEmployeeId,
-} from '@/constants/workflowEmployeeMods'
+import { isWorkflowEmployeeId, type WorkflowEmployeeId } from '@/constants/workflowEmployeeMods'
 import type { ModWithWorkflowEmployees } from '@/utils/modWorkflowEmployees'
 import { findWorkflowEmployeeEntry } from '@/utils/modWorkflowEmployees'
 
@@ -11,10 +8,7 @@ export type CoreWorkflowRunPayload = {
   [key: string]: unknown
 }
 
-function modIdForWorkflowEmployee(
-  mods: ModWithWorkflowEmployees[] | undefined,
-  employeeId: string,
-): string | null {
+function modIdForWorkflowEmployee(mods: ModWithWorkflowEmployees[] | undefined, employeeId: string): string | null {
   const entry = findWorkflowEmployeeEntry(mods, employeeId)
   return entry?.modId?.trim() || null
 }

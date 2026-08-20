@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, cast
 
 from modman.repo_config import (
     RepoConfig,
@@ -20,6 +21,7 @@ from modman.repo_config import save_config as _default_save_config
 from modman.store import project_root as _default_project_root
 
 STATE_FILENAME = "_modstore_state.json"
+_MOD_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
 
 
 def repo_root() -> Path:
@@ -39,7 +41,7 @@ def cfg() -> RepoConfig:
     if app_mod is not None:
         fn = getattr(app_mod, "load_config", None)
         if callable(fn):
-            return fn()
+            return cast(RepoConfig, fn())
     return _default_load_config()
 
 
@@ -62,7 +64,7 @@ def project_root() -> Path:
     if app_mod is not None:
         fn = getattr(app_mod, "project_root", None)
         if callable(fn):
-            return fn()
+            return cast(Path, fn())
     return _default_project_root()
 
 
@@ -102,11 +104,15 @@ def assert_path_inside_fhd_repo(fhd: Path, target: Path) -> None:
 
 
 def mod_dir(mod_id: str) -> Path:
-    if not mod_id or "/" in mod_id or "\\" in mod_id:
+    normalized = (mod_id or "").strip()
+    if normalized in {".", ".."} or _MOD_ID_RE.fullmatch(normalized) is None:
         raise ValueError("非法 mod id")
-    d = lib() / mod_id
+    root = lib().resolve()
+    d = (root / normalized).resolve()
+    if not d.is_relative_to(root):
+        raise ValueError("非法 mod id")
     if not d.is_dir():
-        raise FileNotFoundError(f"Mod 不存在: {mod_id}")
+        raise FileNotFoundError(f"Mod 不存在: {normalized}")
     return d
 
 

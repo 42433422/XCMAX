@@ -12,15 +12,7 @@ export type ActionRisk = 'low' | 'medium' | 'high'
 export type ConfirmStrategy = 'auto' | 'preview' | 'explicit'
 
 /** 管家状态机 */
-export type ButlerMode =
-  | 'idle'
-  | 'listening'
-  | 'thinking'
-  | 'operating'
-  | 'awaiting_confirm'
-  | 'speaking'
-  | 'orchestrating'
-  | 'error'
+export type ButlerMode = 'idle' | 'listening' | 'thinking' | 'operating' | 'awaiting_confirm' | 'speaking' | 'orchestrating' | 'error'
 
 // ─── Orchestration ────────────────────────────────────────────────────
 export interface StructuredStepMessage {
@@ -93,6 +85,9 @@ export interface SkillResult {
   /** 可选的后续消息注入管家对话 */
   assistantReply?: string
 }
+
+/** 官网管家技能的同步/异步执行结果。 */
+export type SkillExecuteResult = SkillResult
 
 export interface AgentSkill {
   id: string
@@ -172,7 +167,6 @@ export interface EvolutionNeed {
   detectedAt: number
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export interface EvolutionEngine {
   detectMissingCapability(): Promise<EvolutionNeed>
   generateSkillCode(need: EvolutionNeed): Promise<string>

@@ -7,11 +7,13 @@ from pathlib import Path
 from typing import Any
 
 from sqlalchemy import JSON, Boolean, Column, DateTime, ForeignKey, Integer, String, Text
-from sqlalchemy.orm import declarative_base, relationship
+from sqlalchemy.orm import DeclarativeBase, relationship
 
 from app.utils.time import utc_now_naive
 
-Base = declarative_base()
+
+class Base(DeclarativeBase):
+    """Declarative base for the isolated legacy templates database."""
 
 
 class Template(Base):

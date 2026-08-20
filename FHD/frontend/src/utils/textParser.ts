@@ -15,8 +15,18 @@ export interface ShipmentCommand {
 }
 
 const CN_NUMBERS: Record<string, number> = {
-  '零': 0, '〇': 0, '一': 1, '二': 2, '两': 2, '三': 3,
-  '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9
+  零: 0,
+  〇: 0,
+  一: 1,
+  二: 2,
+  两: 2,
+  三: 3,
+  四: 4,
+  五: 5,
+  六: 6,
+  七: 7,
+  八: 8,
+  九: 9,
 }
 
 export function parseCnInt(token: string): number | null {
@@ -36,11 +46,17 @@ export function parseCnInt(token: string): number | null {
 }
 
 export function normalizeModel(model: string): string {
-  return String(model || '').trim().toUpperCase()
+  return String(model || '')
+    .trim()
+    .toUpperCase()
 }
 
 export function normalizeProductToken(value: string): string {
-  return String(value || '').trim().toUpperCase().replace(/\s+/g, '').replace(/-/g, '')
+  return String(value || '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '')
+    .replace(/-/g, '')
 }
 
 export function toNumber(val: unknown): number | null {
@@ -50,41 +66,38 @@ export function toNumber(val: unknown): number | null {
 
 export function extractModelQtySpec(text: string): ProductSpec | null {
   const t = String(text || '').trim()
-  const normalizedText = t.replace(/[，,；;。]/g, ' ').replace(/\s+/g, ' ').trim()
+  const normalizedText = t
+    .replace(/[，,；;。]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
   const q = '(\\d+|[一二两三四五六七八九十零〇]+)'
   const modelToken = '([0-9A-Za-z-]+)'
   const specToken = '(\\d+(?:\\.\\d+)?)'
 
-  const p00 = normalizedText.match(
-    new RegExp(`^(?:一?个|1个)?\\s*${q}\\s*桶\\s*${modelToken}\\s*规格\\s*${specToken}$`)
-  )
+  const p00 = normalizedText.match(new RegExp(`^(?:一?个|1个)?\\s*${q}\\s*桶\\s*${modelToken}\\s*规格\\s*${specToken}$`))
   if (p00) {
     return {
       model: normalizeModel(p00[2]),
       quantity_tins: parseCnInt(p00[1]) || 1,
-      tin_spec: Number(p00[3])
+      tin_spec: Number(p00[3]),
     }
   }
 
-  const p00b = normalizedText.match(
-    new RegExp(`^(?:一?个|1个)?\\s*${q}\\s*桶\\s*${modelToken}$`)
-  )
+  const p00b = normalizedText.match(new RegExp(`^(?:一?个|1个)?\\s*${q}\\s*桶\\s*${modelToken}$`))
   if (p00b) {
     return {
       model: normalizeModel(p00b[2]),
       quantity_tins: parseCnInt(p00b[1]) || 1,
-      tin_spec: null
+      tin_spec: null,
     }
   }
 
-  const p00c = normalizedText.match(
-    new RegExp(`^${q}\\s*桶\\s*规格\\s*${specToken}$`)
-  )
+  const p00c = normalizedText.match(new RegExp(`^${q}\\s*桶\\s*规格\\s*${specToken}$`))
   if (p00c) {
     return {
       model: null,
       quantity_tins: parseCnInt(p00c[1]) || 1,
-      tin_spec: Number(p00c[2])
+      tin_spec: Number(p00c[2]),
     }
   }
 
@@ -93,7 +106,7 @@ export function extractModelQtySpec(text: string): ProductSpec | null {
     return {
       model: null,
       quantity_tins: null,
-      tin_spec: Number(p00d[1])
+      tin_spec: Number(p00d[1]),
     }
   }
 
@@ -102,16 +115,18 @@ export function extractModelQtySpec(text: string): ProductSpec | null {
     return {
       model: normalizeModel(p0[1]),
       quantity_tins: parseCnInt(p0[2]) || 1,
-      tin_spec: p0[3] ? Number(p0[3]) : null
+      tin_spec: p0[3] ? Number(p0[3]) : null,
     }
   }
 
-  const p0b = t.match(/(?:把)?\s*([0-9A-Za-z-]+)\s*规格\s*(?:改成|改为|改)\s*(\d+(?:\.\d+)?)(?:\s*(\d+|[一二两三四五六七八九十零〇]+)\s*桶)?/)
+  const p0b = t.match(
+    /(?:把)?\s*([0-9A-Za-z-]+)\s*规格\s*(?:改成|改为|改)\s*(\d+(?:\.\d+)?)(?:\s*(\d+|[一二两三四五六七八九十零〇]+)\s*桶)?/,
+  )
   if (p0b) {
     return {
       model: normalizeModel(p0b[1]),
-      quantity_tins: p0b[3] ? (parseCnInt(p0b[3]) || 1) : null,
-      tin_spec: Number(p0b[2])
+      quantity_tins: p0b[3] ? parseCnInt(p0b[3]) || 1 : null,
+      tin_spec: Number(p0b[2]),
     }
   }
 
@@ -120,7 +135,7 @@ export function extractModelQtySpec(text: string): ProductSpec | null {
     return {
       model: normalizeModel(p1[2]),
       quantity_tins: parseCnInt(p1[1]) || 1,
-      tin_spec: Number(p1[3])
+      tin_spec: Number(p1[3]),
     }
   }
 
@@ -129,7 +144,7 @@ export function extractModelQtySpec(text: string): ProductSpec | null {
     return {
       model: normalizeModel(p1b[2]),
       quantity_tins: parseCnInt(p1b[1]) || 1,
-      tin_spec: null
+      tin_spec: null,
     }
   }
 
@@ -138,7 +153,7 @@ export function extractModelQtySpec(text: string): ProductSpec | null {
     return {
       model: normalizeModel(p2[1]),
       quantity_tins: parseCnInt(p2[2]) || 1,
-      tin_spec: p2[3] ? Number(p2[3]) : null
+      tin_spec: p2[3] ? Number(p2[3]) : null,
     }
   }
 
@@ -147,7 +162,7 @@ export function extractModelQtySpec(text: string): ProductSpec | null {
     return {
       model: normalizeModel(p3[1]),
       quantity_tins: null,
-      tin_spec: Number(p3[2])
+      tin_spec: Number(p3[2]),
     }
   }
 
@@ -164,7 +179,7 @@ export function parseShipmentCommand(text: string): ShipmentCommand | null {
 
   const addPatterns = [
     /^(?:再加|还要|继续加|再补|加上|增加|再来|再来个|来一桶)\s*(.+)$/,
-    /^(?:.*?)(?:再加|还要|继续加|再补|加上|增加|再来|再来个|来一桶)\s*(.+)$/
+    /^(?:.*?)(?:再加|还要|继续加|再补|加上|增加|再来|再来个|来一桶)\s*(.+)$/,
   ]
 
   for (const pattern of addPatterns) {
@@ -177,8 +192,8 @@ export function parseShipmentCommand(text: string): ShipmentCommand | null {
           product: {
             model_number: parsed.model,
             quantity_tins: parsed.quantity_tins || 1,
-            tin_spec: parsed.tin_spec || 10
-          }
+            tin_spec: parsed.tin_spec || 10,
+          },
         }
       }
     }
@@ -186,7 +201,7 @@ export function parseShipmentCommand(text: string): ShipmentCommand | null {
 
   const removePatterns = [
     /^(?:删除|删掉|删|去掉|移除|减去|减)\s*(.+)$/,
-    /^(?:把)?\s*([0-9A-Za-z-]+)\s*(?:删掉|删除|删|去掉|移除|减去|减)\s*$/
+    /^(?:把)?\s*([0-9A-Za-z-]+)\s*(?:删掉|删除|删|去掉|移除|减去|减)\s*$/,
   ]
 
   for (const pattern of removePatterns) {
@@ -203,7 +218,7 @@ export function parseShipmentCommand(text: string): ShipmentCommand | null {
     /^(?:改成|改为|修改|改)\s*(.+)$/,
     /^(?:把)?\s*([0-9A-Za-z-]+)\s*规格\s*(?:改成|改为|改)\s*(\d+(?:\.\d+)?)(?:\s*(\d+|[一二两三四五六七八九十零〇]+)\s*桶)?\s*$/,
     /^([0-9A-Za-z-]+)\s*(?:改成|改为|改)\s*(.+)$/,
-    /^(?:把)?\s*([0-9A-Za-z-]+)\s*(?:改成|改为|修改|改)\s*(.+)$/
+    /^(?:把)?\s*([0-9A-Za-z-]+)\s*(?:改成|改为|修改|改)\s*(.+)$/,
   ]
 
   for (const pattern of editPatterns) {
@@ -223,8 +238,8 @@ export function parseShipmentCommand(text: string): ShipmentCommand | null {
           product: {
             model_number: model,
             quantity_tins: parsedFromBody?.quantity_tins ?? parsedFromFull?.quantity_tins ?? 1,
-            tin_spec: parsedFromBody?.tin_spec ?? parsedFromFull?.tin_spec ?? 10
-          }
+            tin_spec: parsedFromBody?.tin_spec ?? parsedFromFull?.tin_spec ?? 10,
+          },
         }
       }
     }
@@ -239,22 +254,26 @@ export function isStartPrintMessage(message: string): boolean {
 }
 
 export function detectRuntimeModeCommand(message: string): 'set_work_mode' | 'show_monitor' | null {
-  const text = String(message || '').trim().toLowerCase()
+  const text = String(message || '')
+    .trim()
+    .toLowerCase()
   if (!text) return null
 
   const compact = text.replace(/\s+/g, '')
-  const wantsWorkMode = compact === '工作模式'
-    || compact === '切换工作模式'
-    || compact === '进入工作模式'
-    || compact === 'workmode'
-    || compact === 'switchtoworkmode'
-    || compact === 'enterworkmode'
-  const wantsMonitorMode = compact === '监控模式'
-    || compact === '切换监控模式'
-    || compact === '进入监控模式'
-    || compact === 'monitormode'
-    || compact === 'switchtomonitormode'
-    || compact === 'entermonitormode'
+  const wantsWorkMode =
+    compact === '工作模式' ||
+    compact === '切换工作模式' ||
+    compact === '进入工作模式' ||
+    compact === 'workmode' ||
+    compact === 'switchtoworkmode' ||
+    compact === 'enterworkmode'
+  const wantsMonitorMode =
+    compact === '监控模式' ||
+    compact === '切换监控模式' ||
+    compact === '进入监控模式' ||
+    compact === 'monitormode' ||
+    compact === 'switchtomonitormode' ||
+    compact === 'entermonitormode'
 
   if (wantsWorkMode) return 'set_work_mode'
   if (wantsMonitorMode) return 'show_monitor'

@@ -22,6 +22,8 @@ import os
 import sys
 from pathlib import Path
 
+from app.utils.operational_errors import BOUNDARY_ERRORS
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = PROJECT_ROOT / "scripts"
 
@@ -46,7 +48,7 @@ def _load_checker_module():
     sys.modules[mod_name] = mod
     try:
         spec.loader.exec_module(mod)
-    except Exception:
+    except BOUNDARY_ERRORS:
         sys.modules.pop(mod_name, None)
         raise
     return mod
@@ -64,6 +66,13 @@ def test_openapi_and_routes_are_consistent(monkeypatch):
 
     routes = checker.collect_runtime_routes(app)
     ops, _schema = checker.collect_openapi_operations(app)
+
+    capability_routes = [
+        route
+        for route in routes
+        if route.method == "GET" and route.path == "/api/platform-shell/capabilities"
+    ]
+    assert len(capability_routes) == 1, "platform-shell bootstrap must be registered once"
 
     ignores = checker._compile_ignores(list(checker._DEFAULT_IGNORE_PATTERNS))
 

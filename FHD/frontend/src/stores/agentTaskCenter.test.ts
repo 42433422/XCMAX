@@ -22,9 +22,23 @@ vi.mock('@/api/core', () => ({ buildFullApiUrl: (path: string) => path }))
 import { useAgentTaskCenterStore } from './agentTaskCenter'
 
 const task = {
-  task_id: 'task-1', user_id: 'owner', title: '并发库存核对', source: 'agent', task_type: 'agent',
-  status: 'waiting_user', attempt: 1, run_count: 1, active_run_id: 'run-1',
-  capabilities: { approve: true, pause: true, cancel: true, retry: false, resume: false, evidence: true },
+  task_id: 'task-1',
+  user_id: 'owner',
+  title: '并发库存核对',
+  source: 'agent',
+  task_type: 'agent',
+  status: 'waiting_user',
+  attempt: 1,
+  run_count: 1,
+  active_run_id: 'run-1',
+  capabilities: {
+    approve: true,
+    pause: true,
+    cancel: true,
+    retry: false,
+    resume: false,
+    evidence: true,
+  },
   active_run: { run_id: 'run-1', user_id: 'owner', message: '核对库存', status: 'waiting_user' },
 }
 
@@ -38,14 +52,24 @@ describe('agent task center store', () => {
       data: { running: true, max_workers: 4, active_count: 2 },
     })
     apiMock.getTask.mockResolvedValue({ success: true, data: task })
-    apiMock.getRun.mockResolvedValue({ success: true, data: task.active_run, approval: { grant: 'grant-1' } })
-    apiMock.continueRun.mockResolvedValue({ success: true, data: { ...task.active_run, status: 'queued' } })
+    apiMock.getRun.mockResolvedValue({
+      success: true,
+      data: task.active_run,
+      approval: { grant: 'grant-1' },
+    })
+    apiMock.continueRun.mockResolvedValue({
+      success: true,
+      data: { ...task.active_run, status: 'queued' },
+    })
     apiMock.pauseRun.mockResolvedValue({ success: true, data: task.active_run })
     apiMock.cancelRun.mockResolvedValue({ success: true, data: task.active_run })
     apiMock.resumeRun.mockResolvedValue({ success: true, data: task.active_run })
     apiMock.retryRun.mockResolvedValue({ success: true, data: task.active_run })
     apiMock.archiveTask.mockResolvedValue({ success: true, data: task })
-    apiMock.markTaskRead.mockResolvedValue({ success: true, data: { ...task, attention_state: '', unread_count: 0 } })
+    apiMock.markTaskRead.mockResolvedValue({
+      success: true,
+      data: { ...task, attention_state: '', unread_count: 0 },
+    })
   })
 
   afterEach(() => {
@@ -104,9 +128,7 @@ describe('agent task center store', () => {
 
     store.start()
     await vi.waitFor(() => expect(FakeEventSource.instances).toHaveLength(1))
-    FakeEventSource.instances[0].emit('task.snapshot', [
-      { ...task, status: 'completed', attention_state: 'result_unread' },
-    ])
+    FakeEventSource.instances[0].emit('task.snapshot', [{ ...task, status: 'completed', attention_state: 'result_unread' }])
 
     expect(FakeEventSource.instances[0].url).toBe('/api/agent/tasks/events/stream')
     expect(store.connected).toBe(true)
@@ -215,7 +237,12 @@ describe('agent task center store', () => {
 
     store.selectedTask = null
     await store.control('pause')
-    store.selectedTask = { ...task, active_run_id: undefined, active_run: undefined, runs: undefined }
+    store.selectedTask = {
+      ...task,
+      active_run_id: undefined,
+      active_run: undefined,
+      runs: undefined,
+    }
     await store.control('pause')
     expect(apiMock.pauseRun).not.toHaveBeenCalled()
     expect(store.error).toBe('工作区当前没有可控制的运行')

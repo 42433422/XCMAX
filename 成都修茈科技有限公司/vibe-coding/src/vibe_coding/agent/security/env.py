@@ -21,7 +21,7 @@ or :class:`SandboxJob.env`.
 from __future__ import annotations
 
 import os
-from typing import Iterable, Mapping
+from collections.abc import Iterable, Mapping
 
 # Curated allow-list. Resist the temptation to add ``*_KEY`` / ``*_SECRET``
 # / ``*_TOKEN`` style variables — if a tool needs one, the caller can pass

@@ -25,22 +25,69 @@ vi.mock('@/stores/tutorialV2', () => ({
 }))
 
 const approvalWorkspace = {
-  task_id: 'task-approval', user_id: 'owner', title: '客户B销售开票', source: 'agent', task_type: 'agent',
-  status: 'waiting_user', attention_state: 'approval_required', approval_required: true, unread_count: 0,
-  attempt: 1, run_count: 1, active_run_id: 'run-approval', conversation_id: 'chat-approval',
-  progress: { percent: 45, completed_units: 1, settled_units: 1, total_units: 2, current_unit: 2, stage: '等待审批', detail: '确认开票', status: 'waiting_user', attempt: 1, indeterminate: false, basis: 'steps' },
+  task_id: 'task-approval',
+  user_id: 'owner',
+  title: '客户B销售开票',
+  source: 'agent',
+  task_type: 'agent',
+  status: 'waiting_user',
+  attention_state: 'approval_required',
+  approval_required: true,
+  unread_count: 0,
+  attempt: 1,
+  run_count: 1,
+  active_run_id: 'run-approval',
+  conversation_id: 'chat-approval',
+  progress: {
+    percent: 45,
+    completed_units: 1,
+    settled_units: 1,
+    total_units: 2,
+    current_unit: 2,
+    stage: '等待审批',
+    detail: '确认开票',
+    status: 'waiting_user',
+    attempt: 1,
+    indeterminate: false,
+    basis: 'steps',
+  },
 }
 const unreadWorkspace = {
-  task_id: 'task-result', user_id: 'owner', title: '月度经营报告', source: 'agent', task_type: 'agent',
-  status: 'completed', attention_state: 'result_unread', approval_required: false, unread_count: 1,
-  attempt: 1, run_count: 1, active_run_id: 'run-result', conversation_id: 'chat-result',
-  progress: { percent: 100, completed_units: 2, settled_units: 2, total_units: 2, current_unit: 2, stage: '任务完成', detail: '', status: 'completed', attempt: 1, indeterminate: false, basis: 'steps' },
+  task_id: 'task-result',
+  user_id: 'owner',
+  title: '月度经营报告',
+  source: 'agent',
+  task_type: 'agent',
+  status: 'completed',
+  attention_state: 'result_unread',
+  approval_required: false,
+  unread_count: 1,
+  attempt: 1,
+  run_count: 1,
+  active_run_id: 'run-result',
+  conversation_id: 'chat-result',
+  progress: {
+    percent: 100,
+    completed_units: 2,
+    settled_units: 2,
+    total_units: 2,
+    current_unit: 2,
+    stage: '任务完成',
+    detail: '',
+    status: 'completed',
+    attempt: 1,
+    indeterminate: false,
+    basis: 'steps',
+  },
 }
 
 describe('GlobalTaskCenter', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    apiMock.listTasks.mockResolvedValue({ success: true, data: [approvalWorkspace, unreadWorkspace] })
+    apiMock.listTasks.mockResolvedValue({
+      success: true,
+      data: [approvalWorkspace, unreadWorkspace],
+    })
     apiMock.getTaskRuntime.mockResolvedValue({
       success: true,
       data: {

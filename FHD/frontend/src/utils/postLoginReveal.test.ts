@@ -1,9 +1,5 @@
 import { describe, expect, it, beforeEach } from 'vitest'
-import {
-  armPostLoginReveal,
-  consumePostLoginReveal,
-  POST_LOGIN_REVEAL_KEY,
-} from './postLoginReveal'
+import { armPostLoginReveal, consumePostLoginReveal, POST_LOGIN_REVEAL_KEY } from './postLoginReveal'
 
 describe('postLoginReveal', () => {
   beforeEach(() => {

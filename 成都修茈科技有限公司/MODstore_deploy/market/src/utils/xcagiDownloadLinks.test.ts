@@ -42,20 +42,14 @@ describe('xcagiDownloadLinks', () => {
 
   it('uses the stable Android 1.0.0.0 artifact names', () => {
     expect(xcagiDownloadFileName('personal', 'android')).toBe('XCAGI-Personal-Android-1.0.0.0.apk')
-    expect(xcagiDownloadFileName('enterprise', 'android')).toBe(
-      'XCAGI-Enterprise-Android-1.0.0.0.apk',
-    )
+    expect(xcagiDownloadFileName('enterprise', 'android')).toBe('XCAGI-Enterprise-Android-1.0.0.0.apk')
   })
 
   it('builds personal and enterprise macOS dmg URLs for x64 and arm64', () => {
     const base = normalizeXcagiDownloadBase('https://xiu-ci.com/xcagi-v8.1.0')
 
-    expect(xcagiDownloadFileName('personal', 'mac', '8.1.0', '1.5.0', 'x64')).toBe(
-      'XCAGI-Personal-8.1.0-mac-x64.dmg',
-    )
-    expect(xcagiDownloadFileName('enterprise', 'mac', '8.1.0', '1.5.0', 'arm64')).toBe(
-      'XCAGI-Enterprise-8.1.0-mac-arm64.dmg',
-    )
+    expect(xcagiDownloadFileName('personal', 'mac', '8.1.0', '1.5.0', 'x64')).toBe('XCAGI-Personal-8.1.0-mac-x64.dmg')
+    expect(xcagiDownloadFileName('enterprise', 'mac', '8.1.0', '1.5.0', 'arm64')).toBe('XCAGI-Enterprise-8.1.0-mac-arm64.dmg')
     expect(xcagiDownloadUrl('personal', 'mac', base, '8.1.0', '1.5.0', 'arm64')).toBe(
       'https://xiu-ci.com/xcagi-v8.1.0/personal/XCAGI-Personal-8.1.0-mac-arm64.dmg',
     )
@@ -157,11 +151,14 @@ describe('fetchDownloadManifest', () => {
   })
 
   it('returns parsed manifest on HTTP 200', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => ({
-      ok: true,
-      status: 200,
-      json: async () => mockManifest,
-    })))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => mockManifest,
+      })),
+    )
     const m = await fetchDownloadManifest('https://example.com/manifest.json', { force: true })
     expect(m).not.toBeNull()
     expect(m?.version).toBe('1.0.0.0')
@@ -169,25 +166,34 @@ describe('fetchDownloadManifest', () => {
   })
 
   it('returns null on HTTP 404 (caller falls back to static URL)', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 404, json: async () => null })))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: false, status: 404, json: async () => null })),
+    )
     const m = await fetchDownloadManifest('https://example.com/missing.json', { force: true })
     expect(m).toBeNull()
   })
 
   it('returns null on schema mismatch', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => ({
-      ok: true,
-      status: 200,
-      json: async () => ({ schema: 'wrong', version: '1.0.0.0' }),
-    })))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ schema: 'wrong', version: '1.0.0.0' }),
+      })),
+    )
     const m = await fetchDownloadManifest('https://example.com/manifest.json', { force: true })
     expect(m).toBeNull()
   })
 
   it('returns null on network error', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => {
-      throw new Error('network')
-    }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new Error('network')
+      }),
+    )
     const m = await fetchDownloadManifest('https://example.com/manifest.json', { force: true })
     expect(m).toBeNull()
   })
@@ -219,15 +225,16 @@ describe('findManifestEntry', () => {
 
 describe('resolveDownloadEntry', () => {
   it('uses manifest entry when available', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => ({
-      ok: true,
-      status: 200,
-      json: async () => mockManifest,
-    })))
-    const entry = await resolveDownloadEntry('enterprise', 'win')
-    expect(entry.url).toBe(
-      'https://xiu-ci.com/xcagi-v1.0.0.0/enterprise/XCAGI-Enterprise-Setup-1.0.0.0-x64.exe',
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => mockManifest,
+      })),
     )
+    const entry = await resolveDownloadEntry('enterprise', 'win')
+    expect(entry.url).toBe('https://xiu-ci.com/xcagi-v1.0.0.0/enterprise/XCAGI-Enterprise-Setup-1.0.0.0-x64.exe')
     expect(entry.sha256).toBe('bbbb')
     expect(entry.size).toBe(1100)
   })
@@ -235,12 +242,13 @@ describe('resolveDownloadEntry', () => {
   it('falls back to static URL when manifest fetch fails', async () => {
     // 用动态 import 拿到干净的模块(避免上一个测试的 cachedManifest 污染)
     vi.resetModules()
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 404, json: async () => null })))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: false, status: 404, json: async () => null })),
+    )
     const mod = await import('./xcagiDownloadLinks')
     const entry = await mod.resolveDownloadEntry('personal', 'win')
-    expect(entry.url).toBe(
-      'https://xiu-ci.com/xcagi-v1.0.0.0/personal/XCAGI-Personal-Setup-1.0.0.0-x64.exe',
-    )
+    expect(entry.url).toBe('https://xiu-ci.com/xcagi-v1.0.0.0/personal/XCAGI-Personal-Setup-1.0.0.0-x64.exe')
     expect(entry.sha256).toBe('')
     expect(entry.size).toBe(0)
   })

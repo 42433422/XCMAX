@@ -23,6 +23,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from app.utils.operational_errors import BOUNDARY_ERRORS
+
 logger = logging.getLogger(__name__)
 
 FHD_ROOT = Path(__file__).resolve().parents[2]
@@ -258,7 +260,7 @@ def run(args: argparse.Namespace) -> int:
         issue = _gh_get(f"{api}/issues/{issue_number}", args.token)
         comment = _gh_get(f"{api}/issues/comments/{approval_comment_id}", args.token)
         comments = _gh_get(f"{api}/issues/{issue_number}/comments?per_page=100", args.token)
-    except Exception as exc:  # noqa: BLE001 - audit report must survive API errors
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001 - audit report must survive API errors
         return _finish(result, ok=False, status="failed", reason=f"GitHub read failed: {exc}")
 
     valid, reason = _validate_promotion(
@@ -315,11 +317,11 @@ def run(args: argparse.Namespace) -> int:
         result.receipt_comment_id = int(receipt.get("id") or 0)
         if not result.receipt_comment_id:
             raise RuntimeError("GitHub did not return a receipt comment id")
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         if added_implement_label:
             try:
                 _gh_delete_label(args.repo, issue_number, IMPLEMENT_LABEL, args.token)
-            except Exception as rollback_exc:  # noqa: BLE001
+            except BOUNDARY_ERRORS as rollback_exc:  # noqa: BLE001
                 logger.error("label rollback failed: %s", rollback_exc)
         return _finish(result, ok=False, status="failed", reason=f"promotion prepare failed: {exc}")
 
@@ -336,7 +338,7 @@ def run(args: argparse.Namespace) -> int:
             },
         )
         result.dispatch_requested = True
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         failure_body = _receipt_body(
             marker,
             status="failed",
@@ -352,12 +354,12 @@ def run(args: argparse.Namespace) -> int:
                 args.token,
                 {"body": failure_body},
             )
-        except Exception as receipt_exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as receipt_exc:  # noqa: BLE001
             logger.error("failed to update dispatch failure receipt: %s", receipt_exc)
         if added_implement_label:
             try:
                 _gh_delete_label(args.repo, issue_number, IMPLEMENT_LABEL, args.token)
-            except Exception as rollback_exc:  # noqa: BLE001
+            except BOUNDARY_ERRORS as rollback_exc:  # noqa: BLE001
                 logger.error("label rollback failed: %s", rollback_exc)
         return _finish(result, ok=False, status="dispatch_failed", reason=str(exc))
 
@@ -375,7 +377,7 @@ def run(args: argparse.Namespace) -> int:
             args.token,
             {"body": completed_body},
         )
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         return _finish(
             result,
             ok=False,

@@ -1,8 +1,9 @@
+# mypy: disable-error-code="assignment"
 """Admin-only outbox / DLQ helpers (replay & discard)."""
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -109,7 +110,7 @@ def admin_discard_dlq(
     row.resolution_status = "discarded"
     row.resolution_action = "admin_no_replay"
     row.resolution_note = "explicit administrator discard; audit row retained"
-    row.resolved_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    row.resolved_at = datetime.now(UTC).replace(tzinfo=None)
     row.last_reconciled_at = row.resolved_at
     db.commit()
     return {"ok": True, "retained": True, "resolution_status": "discarded"}

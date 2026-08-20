@@ -18,6 +18,7 @@
 签名格式：在 yml 末尾加一行 `signature: ed25519:<base64>`。
 校验端（updater.ts）会移除该行后对剩余内容验签。
 """
+
 from __future__ import annotations
 
 import argparse

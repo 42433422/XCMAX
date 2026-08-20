@@ -1,13 +1,12 @@
-# -*- coding: utf-8 -*-
 """
 使用 PaddleOCR predict 方法 - 处理中文路径
 """
 
-from paddleocr import PaddleOCR
-import numpy as np
-import cv2
-import json
 import glob
+
+import cv2
+import numpy as np
+from paddleocr import PaddleOCR
 
 # 读取图片
 files = glob.glob(r"e:\FHD\26-0300001A*.png")
@@ -34,7 +33,7 @@ if result is None:
     print("❌ 未检测到任何内容")
     exit(1)
 
-print(f"\n" + "=" * 70)
+print("\n" + "=" * 70)
 print("OCR 结果")
 print("=" * 70)
 
@@ -49,5 +48,5 @@ if hasattr(result, "rec_res"):
 
 # 尝试获取表格结构
 if hasattr(result, "table"):
-    print(f"\n表格结构：")
+    print("\n表格结构：")
     print(result.table)

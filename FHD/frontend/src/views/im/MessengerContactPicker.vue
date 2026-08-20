@@ -7,20 +7,9 @@
           <i class="fa fa-times" aria-hidden="true"></i>
         </button>
       </header>
-      <input
-        :value="keyword"
-        type="text"
-        class="im-compose-input"
-        placeholder="搜索姓名或账号"
-        @input="onInput"
-      />
+      <input :value="keyword" type="text" class="im-compose-input" placeholder="搜索姓名或账号" @input="onInput" />
       <ul v-if="filteredContacts.length" class="im-contact-list">
-        <li
-          v-for="ct in filteredContacts"
-          :key="ct.id"
-          class="im-contact-item"
-          @click="$emit('select', ct)"
-        >
+        <li v-for="ct in filteredContacts" :key="ct.id" class="im-contact-item" @click="$emit('select', ct)">
           <span class="im-avatar im-avatar--sm" aria-hidden="true">{{ avatarText(ct.display_name) }}</span>
           <div class="im-contact-main">
             <div class="im-contact-name">{{ ct.display_name }}</div>
@@ -36,25 +25,25 @@
 </template>
 
 <script setup lang="ts">
-import type { ImContact } from '@/api/im';
-import { avatarText } from '@/composables/messenger/useMessengerEntries';
+import type { ImContact } from '@/api/im'
+import { avatarText } from '@/composables/messenger/useMessengerEntries'
 
 defineProps<{
-  open: boolean;
-  keyword: string;
-  filteredContacts: ImContact[];
-  contactsLoading: boolean;
-}>();
+  open: boolean
+  keyword: string
+  filteredContacts: ImContact[]
+  contactsLoading: boolean
+}>()
 
 const emit = defineEmits<{
-  (e: 'close'): void;
-  (e: 'update:keyword', value: string): void;
-  (e: 'select', contact: ImContact): void;
-}>();
+  (e: 'close'): void
+  (e: 'update:keyword', value: string): void
+  (e: 'select', contact: ImContact): void
+}>()
 
 function onInput(ev: Event): void {
-  const target = ev.target as HTMLInputElement;
-  emit('update:keyword', target.value);
+  const target = ev.target as HTMLInputElement
+  emit('update:keyword', target.value)
 }
 </script>
 
@@ -71,7 +60,9 @@ function onInput(ev: Event): void {
   align-items: center;
   justify-content: center;
   font-size: 15px;
-  transition: background 150ms ease, color 150ms ease;
+  transition:
+    background 150ms ease,
+    color 150ms ease;
 }
 .im-icon-btn:hover {
   background: rgba(0, 82, 217, 0.08);

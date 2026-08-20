@@ -2,10 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { ModWithWorkflowEmployees } from '@/utils/modWorkflowEmployees'
 import type { WorkflowEmployeeRegistryEntry } from '@/types/workflow-employee'
-import {
-  filterWorkflowRegistrySourceMods,
-  isNonWorkflowDeskEmployeeId,
-} from '@/utils/modWorkflowEmployees'
+import { filterWorkflowRegistrySourceMods, isNonWorkflowDeskEmployeeId } from '@/utils/modWorkflowEmployees'
 import {
   loadWorkflowEmployeeRegistry,
   mergeModManifestEntries,
@@ -24,10 +21,7 @@ function collectManifestWorkflowEmployeeIds(mods: ModWithWorkflowEmployees[] | u
   return ids
 }
 
-import {
-  buildTenantScopedStorageKey,
-  resolveTenantStorageScopeFromRuntime,
-} from '@/utils/tenantStorageScope'
+import { buildTenantScopedStorageKey, resolveTenantStorageScopeFromRuntime } from '@/utils/tenantStorageScope'
 
 export const WORKFLOW_AI_EMPLOYEES_STORAGE_KEY = 'xcagi_workflow_ai_employees'
 
@@ -41,10 +35,7 @@ function ensureActiveTenantScope(): string {
 }
 
 export function workflowAiEmployeesStorageKey(scope?: string): string {
-  return buildTenantScopedStorageKey(
-    WORKFLOW_AI_EMPLOYEES_STORAGE_KEY,
-    scope ?? ensureActiveTenantScope(),
-  )
+  return buildTenantScopedStorageKey(WORKFLOW_AI_EMPLOYEES_STORAGE_KEY, scope ?? ensureActiveTenantScope())
 }
 
 export function defaultWorkflowBuiltinEnabled(): Record<string, boolean> {
@@ -74,10 +65,7 @@ function readWorkflowEnabledFromLocalStorage(scope?: string): Record<string, boo
   }
 }
 
-function mergeModWorkflowIds(
-  cur: Record<string, boolean>,
-  mods: ModWithWorkflowEmployees[] | undefined,
-): Record<string, boolean> {
+function mergeModWorkflowIds(cur: Record<string, boolean>, mods: ModWithWorkflowEmployees[] | undefined): Record<string, boolean> {
   const next = { ...cur }
   for (const m of filterWorkflowRegistrySourceMods(mods)) {
     for (const e of m.workflow_employees || []) {
@@ -98,16 +86,15 @@ export const useWorkflowAiEmployeesStore = defineStore('workflowAiEmployees', ()
 
   function persistAndNotify() {
     try {
-      localStorage.setItem(
-        workflowAiEmployeesStorageKey(),
-        JSON.stringify(enabled.value),
-      )
+      localStorage.setItem(workflowAiEmployeesStorageKey(), JSON.stringify(enabled.value))
     } catch {
       /* quota / private mode */
     }
-    void import('@/utils/workspacePrefsApi').then(({ queueWorkspacePrefsSync }) => {
-      queueWorkspacePrefsSync({ workflow_ai_employees: { ...enabled.value } })
-    }).catch(() => {})
+    void import('@/utils/workspacePrefsApi')
+      .then(({ queueWorkspacePrefsSync }) => {
+        queueWorkspacePrefsSync({ workflow_ai_employees: { ...enabled.value } })
+      })
+      .catch(() => {})
     window.dispatchEvent(
       new CustomEvent('xcagi:workflow-ai-employees-changed', {
         detail: { enabled: { ...enabled.value } },

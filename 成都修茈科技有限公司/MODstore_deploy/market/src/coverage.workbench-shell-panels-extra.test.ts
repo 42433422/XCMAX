@@ -51,16 +51,16 @@ const workbenchStore = vi.hoisted(() => ({
     kind: 'employee',
     id: 'emp_1',
     name: 'Employee One',
-    manifest: {} as Record<string, any>,
-  },
-  canvasNodes: [] as any[],
-  canvasEdges: [] as any[],
-  selectedNode: null as any,
+    manifest: {} as Record<string, UnsafeTestValue>,
+  } as { kind: string; id: string | null; name: string; manifest: Record<string, UnsafeTestValue> },
+  canvasNodes: [] as UnsafeTestValue[],
+  canvasEdges: [] as UnsafeTestValue[],
+  selectedNode: null as UnsafeTestValue,
   inspectorMode: 'node',
   dirty: false,
   lastSavedAt: 0,
-  agentRuns: [] as any[],
-  currentRun: null as any,
+  agentRuns: [] as UnsafeTestValue[],
+  currentRun: null as UnsafeTestValue,
   setTarget: vi.fn((kind: string, id: string | null, manifest: Record<string, unknown>, name: string) => {
     workbenchStore.target.kind = kind
     workbenchStore.target.id = id
@@ -69,7 +69,7 @@ const workbenchStore = vi.hoisted(() => ({
   }),
   patchManifest: vi.fn((path: string, value: unknown) => {
     const parts = path.split('.')
-    let cur = workbenchStore.target.manifest as Record<string, any>
+    let cur = workbenchStore.target.manifest as Record<string, UnsafeTestValue>
     for (const key of parts.slice(0, -1)) {
       if (!cur[key] || typeof cur[key] !== 'object') cur[key] = {}
       cur = cur[key]
@@ -77,12 +77,12 @@ const workbenchStore = vi.hoisted(() => ({
     cur[parts[parts.length - 1]] = value
     workbenchStore.dirty = true
   }),
-  setCanvasGraph: vi.fn((nodes: any[], edges: any[]) => {
+  setCanvasGraph: vi.fn((nodes: UnsafeTestValue[], edges: UnsafeTestValue[]) => {
     workbenchStore.canvasNodes = nodes
     workbenchStore.canvasEdges = edges
   }),
   selectNode: vi.fn((id: string | null) => {
-    workbenchStore.selectedNode = id ? workbenchStore.canvasNodes.find((n) => n.id === id) ?? { id, data: {} } : null
+    workbenchStore.selectedNode = id ? (workbenchStore.canvasNodes.find((n) => n.id === id) ?? { id, data: {} }) : null
   }),
   loadEligibleWorkflows: vi.fn(),
   setResearch: vi.fn(),
@@ -169,9 +169,27 @@ vi.mock('./views/workflow/v2/composables/useAutoLayout', () => ({
 vi.mock('./composables/useWorkbenchManifest', () => ({
   MODULE_META: {
     identity: { label: 'Identity', icon: 'I', accent: '#111', required: true, paths: ['identity'] },
-    prompt: { label: 'Prompt', icon: 'P', accent: '#222', required: true, paths: ['cognition.agent'] },
-    skills: { label: 'Skills', icon: 'S', accent: '#333', required: false, paths: ['cognition.skills'] },
-    workflow_heart: { label: 'Workflow', icon: 'W', accent: '#444', required: false, paths: ['collaboration.workflow'] },
+    prompt: {
+      label: 'Prompt',
+      icon: 'P',
+      accent: '#222',
+      required: true,
+      paths: ['cognition.agent'],
+    },
+    skills: {
+      label: 'Skills',
+      icon: 'S',
+      accent: '#333',
+      required: false,
+      paths: ['cognition.skills'],
+    },
+    workflow_heart: {
+      label: 'Workflow',
+      icon: 'W',
+      accent: '#444',
+      required: false,
+      paths: ['collaboration.workflow'],
+    },
     memory: { label: 'Memory', icon: 'M', accent: '#555', required: false, paths: ['memory'] },
   },
   DEFAULT_MODULE_ORDER: ['identity', 'prompt', 'skills', 'workflow_heart', 'memory'],
@@ -183,7 +201,11 @@ vi.mock('./composables/useWorkbenchManifest', () => ({
 vi.mock('./employeeConfigV2', () => ({
   createEmptyEmployeeConfigV2: vi.fn((opts?: Record<string, unknown>) => ({
     identity: { id: '', name: '', version: '1.0.0' },
-    cognition: { agent: { model: (opts as any)?.model || { provider: 'auto', model_name: 'auto' } } },
+    cognition: {
+      agent: {
+        model: (opts as UnsafeTestValue)?.model || { provider: 'auto', model_name: 'auto' },
+      },
+    },
     collaboration: { workflow: { workflow_id: 0 } },
   })),
   upgradeLegacyToV2: vi.fn((raw: Record<string, unknown>) => ({
@@ -195,13 +217,24 @@ vi.mock('./employeeConfigV2', () => ({
 vi.mock('./domain/llm/defaultEmployeeLlm', () => ({
   AUTO_EMPLOYEE_LLM_SENTINEL: 'auto',
   STATIC_DEFAULT_EMPLOYEE_LLM: { provider: 'auto', model_name: 'auto' },
-  resolveDefaultEmployeeLlmFromStatusAndCatalog: vi.fn(() => ({ provider: 'deepseek', model_name: 'deepseek-chat' })),
+  resolveDefaultEmployeeLlmFromStatusAndCatalog: vi.fn(() => ({
+    provider: 'deepseek',
+    model_name: 'deepseek-chat',
+  })),
 }))
-vi.mock('./composables/useBreakpoint', () => ({ useBreakpoint: () => ({ isMobile: breakpointState.isMobile }) }))
-vi.mock('./composables/useAgentLoop', () => ({ useAgentLoop: () => ({ runEmployeeDraft: runEmployeeDraftMock }) }))
+vi.mock('./composables/useBreakpoint', () => ({
+  useBreakpoint: () => ({ isMobile: breakpointState.isMobile }),
+}))
+vi.mock('./composables/useAgentLoop', () => ({
+  useAgentLoop: () => ({ runEmployeeDraft: runEmployeeDraftMock }),
+}))
 vi.mock('./composables/useFieldAi', () => ({ useFieldAi: () => ({ assist: fieldAssistMock }) }))
 vi.mock('./composables/useManifestDiff', () => ({
-  useManifestDiff: () => ({ hasBaseline: { value: true }, diffCount: { value: 2 }, diffs: { value: [] } }),
+  useManifestDiff: () => ({
+    hasBaseline: { value: true },
+    diffCount: { value: 2 },
+    diffs: { value: [] },
+  }),
 }))
 vi.mock('./composables/useStreamingTts', () => ({
   useStreamingTts: vi.fn(() => ({ speak: ttsSpeakMock })),
@@ -209,10 +242,10 @@ vi.mock('./composables/useStreamingTts', () => ({
 vi.mock('./composables/llmCatalogModelHelpers', () => ({
   LLM_CATEGORY_ORDER: ['chat', 'reasoning'],
   categoryLabel: vi.fn((_catalog: unknown, cat: string) => `cat:${cat}`),
-  modelsForCategory: vi.fn((block: any, cat: string) =>
-    (block?.models_detailed || []).filter((m: any) => (m.capability?.category || 'chat') === cat),
+  modelsForCategory: vi.fn((block: UnsafeTestValue, cat: string) =>
+    (block?.models_detailed || []).filter((m: UnsafeTestValue) => (m.capability?.category || 'chat') === cat),
   ),
-  modelOptionLabel: vi.fn((row: any) => `model:${row.id}`),
+  modelOptionLabel: vi.fn((row: UnsafeTestValue) => `model:${row.id}`),
 }))
 
 import WorkbenchShell from './views/workbench/WorkbenchShell.vue'
@@ -228,7 +261,10 @@ const globalMount = {
       Teleport: true,
       Transition: false,
       TransitionGroup: false,
-      CanvasStage: { template: '<div class="canvas-stage-stub" />', methods: { fitView: fitViewMock } },
+      CanvasStage: {
+        template: '<div class="canvas-stage-stub" />',
+        methods: { fitView: fitViewMock },
+      },
       EmployeeAiDraftReview: { template: '<div class="draft-review-stub" />' },
     },
   },
@@ -247,8 +283,8 @@ beforeEach(() => {
   authMock.isAdmin = true
   authMock.username = 'admin'
 
-  computeAutoLayoutMock.mockImplementation((nodes: any[]) => new Map(nodes.map((n, i) => [n.id, { x: i * 10, y: i * 20 }])))
-  manifestHelpers.manifestToNodes.mockImplementation((manifest: Record<string, any>) => [
+  computeAutoLayoutMock.mockImplementation((nodes: UnsafeTestValue[]) => new Map(nodes.map((n, i) => [n.id, { x: i * 10, y: i * 20 }])))
+  manifestHelpers.manifestToNodes.mockImplementation((manifest: Record<string, UnsafeTestValue>) => [
     {
       id: 'identity',
       position: { x: 0, y: 0 },
@@ -256,7 +292,13 @@ beforeEach(() => {
         moduleKind: 'identity',
         label: 'Identity',
         enabled: true,
-        meta: { label: 'Identity', icon: 'I', accent: '#111', required: true, paths: ['identity'] },
+        meta: {
+          label: 'Identity',
+          icon: 'I',
+          accent: '#111',
+          required: true,
+          paths: ['identity'],
+        },
         slice: manifest.identity,
       },
     },
@@ -267,20 +309,44 @@ beforeEach(() => {
         moduleKind: 'prompt',
         label: 'Prompt',
         enabled: true,
-        meta: { label: 'Prompt', icon: 'P', accent: '#222', required: true, paths: ['cognition.agent'] },
+        meta: {
+          label: 'Prompt',
+          icon: 'P',
+          accent: '#222',
+          required: true,
+          paths: ['cognition.agent'],
+        },
         slice: manifest.cognition?.agent,
       },
     },
   ])
-  manifestHelpers.manifestToEdges.mockImplementation((nodes: any[]) => nodes.length > 1 ? [{ id: 'e-identity-prompt', source: 'identity', target: 'prompt' }] : [])
-  manifestHelpers.addModuleToManifest.mockImplementation((manifest: Record<string, unknown>, kind: string) => ({ ...manifest, [`added_${kind}`]: true }))
-  manifestHelpers.removeModuleFromManifest.mockImplementation((manifest: Record<string, unknown>, kind: string) => ({ ...manifest, [`removed_${kind}`]: true }))
+  manifestHelpers.manifestToEdges.mockImplementation((nodes: UnsafeTestValue[]) =>
+    nodes.length > 1 ? [{ id: 'e-identity-prompt', source: 'identity', target: 'prompt' }] : [],
+  )
+  manifestHelpers.addModuleToManifest.mockImplementation((manifest: Record<string, unknown>, kind: string) => ({
+    ...manifest,
+    [`added_${kind}`]: true,
+  }))
+  manifestHelpers.removeModuleFromManifest.mockImplementation((manifest: Record<string, unknown>, kind: string) => ({
+    ...manifest,
+    [`removed_${kind}`]: true,
+  }))
 
   apiMock.llmStatus.mockResolvedValue({ providers: [] })
   apiMock.llmCatalog.mockResolvedValue({
     providers: [
-      { provider: 'deepseek', label: 'DeepSeek', models: ['deepseek-chat'], models_detailed: [{ id: 'deepseek-chat', capability: { category: 'chat' } }] },
-      { provider: 'openai', label: 'OpenAI', models: ['gpt-test'], models_detailed: [{ id: 'gpt-test', capability: { category: 'reasoning' } }] },
+      {
+        provider: 'deepseek',
+        label: 'DeepSeek',
+        models: ['deepseek-chat'],
+        models_detailed: [{ id: 'deepseek-chat', capability: { category: 'chat' } }],
+      },
+      {
+        provider: 'openai',
+        label: 'OpenAI',
+        models: ['gpt-test'],
+        models_detailed: [{ id: 'gpt-test', capability: { category: 'reasoning' } }],
+      },
     ],
   })
   apiMock.getEmployeeManifest.mockResolvedValue({
@@ -288,13 +354,22 @@ beforeEach(() => {
     name: 'Loaded Employee',
     manifest: baseManifest(),
   })
-  apiMock.employeeSaveManifest.mockResolvedValue({ ok: true, pack_id: 'emp_saved', eskill_registered: 1, manifest: baseManifest() })
+  apiMock.employeeSaveManifest.mockResolvedValue({
+    ok: true,
+    pack_id: 'emp_saved',
+    eskill_registered: 1,
+    manifest: baseManifest(),
+  })
   apiMock.listEmployees.mockResolvedValue([
     { id: 'emp_1', name: 'Employee One', source: 'catalog' },
     { id: 'emp_old', name: 'Old Employee', source: 'v1_catalog' },
   ])
   apiMock.adminDeleteEmployeePack.mockResolvedValue({})
-  apiMock.adminPurgeAllEmployeePacks.mockResolvedValue({ removed_packages_json: 1, removed_db_rows: 2, removed_files: 3 })
+  apiMock.adminPurgeAllEmployeePacks.mockResolvedValue({
+    removed_packages_json: 1,
+    removed_db_rows: 2,
+    removed_files: 3,
+  })
   apiMock.workbenchResearchContext.mockResolvedValue({ context: 'research', sources: ['s1'] })
   apiMock.executeEmployeeTask.mockResolvedValue({ ok: true, text: 'done' })
   apiMock.employeeBenchTest.mockResolvedValue({
@@ -302,7 +377,11 @@ beforeEach(() => {
     tasks_result: [],
     level_scores: { 1: 90 },
     overall_score: 90,
-    audit: { ok: true, dimensions: { manifest_compliance: { score: 90, reasons: [] } }, summary: { average: 90, pass: true } },
+    audit: {
+      ok: true,
+      dimensions: { manifest_compliance: { score: 90, reasons: [] } },
+      summary: { average: 90, pass: true },
+    },
     passed: true,
   })
   apiMock.employeePublish.mockResolvedValue({ ok: true, pkg_id: 'emp_1' })
@@ -312,10 +391,16 @@ beforeEach(() => {
   ttsSpeakMock.mockResolvedValue(undefined)
   runEmployeeDraftMock.mockResolvedValue({ abort: vi.fn() })
 
-  Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:pack') })
+  Object.defineProperty(URL, 'createObjectURL', {
+    configurable: true,
+    value: vi.fn(() => 'blob:pack'),
+  })
   Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
   vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
-  vi.stubGlobal('confirm', vi.fn(() => true))
+  vi.stubGlobal(
+    'confirm',
+    vi.fn(() => true),
+  )
   vi.stubGlobal('alert', vi.fn())
 })
 
@@ -330,22 +415,61 @@ describe('employee module node coverage', () => {
   it('renders all summary branches', () => {
     const meta = { label: 'Fallback', icon: 'F', accent: '#000', required: false }
     const cases = [
-      [{ moduleKind: 'identity', label: 'Identity', meta, slice: { name: 'Alice' }, enabled: true }, 'Alice'],
+      [
+        {
+          moduleKind: 'identity',
+          label: 'Identity',
+          meta,
+          slice: { name: 'Alice' },
+          enabled: true,
+        },
+        'Alice',
+      ],
       [{ moduleKind: 'identity', label: 'Identity', meta, slice: { id: 'emp_x' }, enabled: false }, 'emp_x'],
-      [{ moduleKind: 'prompt', label: 'Prompt', meta, slice: { system_prompt: 'x'.repeat(70) }, enabled: true }, '…'],
+      [
+        {
+          moduleKind: 'prompt',
+          label: 'Prompt',
+          meta,
+          slice: { system_prompt: 'x'.repeat(70) },
+          enabled: true,
+        },
+        '…',
+      ],
       [{ moduleKind: 'prompt', label: 'Prompt', meta, slice: {}, enabled: true }, '未填写提示词'],
-      [{ moduleKind: 'skills', label: 'Skills', meta, slice: [{ id: 'a' }, { id: 'b' }], enabled: true }, '2 个技能'],
+      [
+        {
+          moduleKind: 'skills',
+          label: 'Skills',
+          meta,
+          slice: [{ id: 'a' }, { id: 'b' }],
+          enabled: true,
+        },
+        '2 个技能',
+      ],
       [{ moduleKind: 'skills', label: 'Skills', meta, slice: [], enabled: true }, '暂无技能'],
-      [{ moduleKind: 'workflow_heart', label: 'Workflow', meta, slice: { workflow_id: 8 }, enabled: true }, '工作流 #8'],
+      [
+        {
+          moduleKind: 'workflow_heart',
+          label: 'Workflow',
+          meta,
+          slice: { workflow_id: 8 },
+          enabled: true,
+        },
+        '工作流 #8',
+      ],
       [{ moduleKind: 'workflow_heart', label: 'Workflow', meta, slice: {}, enabled: true }, '未绑定工作流'],
       [{ moduleKind: 'memory', label: 'Memory', meta, slice: { long_term: true }, enabled: true }, '短期 + 长期记忆'],
       [{ moduleKind: 'memory', label: 'Memory', meta, slice: {}, enabled: true }, '仅短期记忆'],
       [{ moduleKind: 'other', label: 'Other', meta, slice: { x: 1 }, enabled: true }, 'Fallback'],
       [{ moduleKind: 'other', label: 'Other', meta, slice: null, enabled: true }, '未配置'],
-    ] as any[]
+    ] as UnsafeTestValue[]
 
     for (const [data, expected] of cases) {
-      const wrapper = mount(EmployeeModuleNode, { props: { id: 'n1', selected: true, data }, global: { stubs: { Handle: true } } })
+      const wrapper = mount(EmployeeModuleNode, {
+        props: { id: 'n1', selected: true, data },
+        global: { stubs: { Handle: true } },
+      })
       expect(wrapper.text()).toContain(expected)
       wrapper.unmount()
     }
@@ -356,7 +480,7 @@ describe('workbench canvas and rails coverage', () => {
   it('covers canvas sync, graph events, drop and exposed layout helpers', async () => {
     const wrapper = mount(CanvasStage, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
     expect(workbenchStore.setCanvasGraph).toHaveBeenCalled()
     expect(workbenchStore.canvasNodes[0].position).toEqual({ x: 0, y: 0 })
@@ -373,7 +497,10 @@ describe('workbench canvas and rails coverage', () => {
     vm.onPaneClick()
     expect(workbenchStore.selectNode).toHaveBeenCalledWith(null)
 
-    const dragEvent = { preventDefault: vi.fn(), dataTransfer: { dropEffect: '', getData: vi.fn(() => 'memory') } }
+    const dragEvent = {
+      preventDefault: vi.fn(),
+      dataTransfer: { dropEffect: '', getData: vi.fn(() => 'memory') },
+    }
     vm.onDragOver(dragEvent)
     expect(dragEvent.preventDefault).toHaveBeenCalled()
     expect(dragEvent.dataTransfer.dropEffect).toBe('copy')
@@ -394,26 +521,34 @@ describe('workbench canvas and rails coverage', () => {
     workbenchStore.target.id = '44'
     const workflow = mount(CanvasStage, globalMount)
     await flushPromises()
-    expect((workflow.vm as any).isWorkflowTarget).toBe(true)
-    expect((workflow.vm as any).activeWorkflowId).toBe(44)
+    expect((workflow.vm as UnsafeTestValue).isWorkflowTarget).toBe(true)
+    expect((workflow.vm as UnsafeTestValue).activeWorkflowId).toBe(44)
     workflow.unmount()
 
     workbenchStore.target.kind = 'mod'
     workbenchStore.target.id = null
     const mod = mount(CanvasStage, globalMount)
     await flushPromises()
-    expect((mod.vm as any).isEmployeeTarget).toBe(false)
+    expect((mod.vm as UnsafeTestValue).isEmployeeTarget).toBe(false)
   })
 
   it('covers left rail list, agent, delete, purge and route selection flows', async () => {
     routeMock.query = { packId: 'emp_1' }
     workbenchStore.currentRun = { brief: 'retry brief' }
-    workbenchStore.agentRuns = [{ id: 'run1', brief: 'brief', startedAt: 1, status: 'done', manifest: { identity: { id: 'generated' } } }]
+    workbenchStore.agentRuns = [
+      {
+        id: 'run1',
+        brief: 'brief',
+        startedAt: 1,
+        status: 'done',
+        manifest: { identity: { id: 'generated' } },
+      },
+    ]
     const wrapper = mount(LeftRail, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
-    expect(vm.visibleEmployees.map((e: any) => e.id)).toContain('emp_1')
+    expect(vm.visibleEmployees.map((e: UnsafeTestValue) => e.id)).toContain('emp_1')
     expect(wrapper.emitted('select-employee')?.[0]).toEqual(['emp_1'])
     vm.hideLocally('emp_1')
     expect([...vm.hiddenPkgIds]).toContain('emp_1')
@@ -438,15 +573,13 @@ describe('workbench canvas and rails coverage', () => {
     vm.applyRunManifest(workbenchStore.agentRuns[0])
     expect(workbenchStore.setTarget).toHaveBeenCalledWith('employee', 'emp_1', { identity: { id: 'generated' } }, 'Employee One')
     expect(vm.formatTs(Date.now())).toBeTruthy()
-
-    ;(window.confirm as any).mockReturnValueOnce(false)
+    ;(window.confirm as UnsafeTestValue).mockReturnValueOnce(false)
     await vm.confirmDeleteEmployee({ id: 'emp_1', name: 'Employee One' })
     expect(apiMock.adminDeleteEmployeePack).not.toHaveBeenCalled()
-    ;(window.confirm as any).mockReturnValueOnce(true)
+    ;(window.confirm as UnsafeTestValue).mockReturnValueOnce(true)
     await vm.confirmDeleteEmployee({ id: 'emp_1', name: 'Employee One' })
     expect(apiMock.adminDeleteEmployeePack).toHaveBeenCalledWith('emp_1')
-
-    ;(window.confirm as any).mockReturnValueOnce(true)
+    ;(window.confirm as UnsafeTestValue).mockReturnValueOnce(true)
     await vm.purgeAllEmployees()
     expect(apiMock.adminPurgeAllEmployeePacks).toHaveBeenCalled()
     expect(vm.listError).toContain('packages.json')
@@ -456,7 +589,7 @@ describe('workbench canvas and rails coverage', () => {
     apiMock.listEmployees.mockRejectedValueOnce(new Error('list failed'))
     const wrapper = mount(LeftRail, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
     expect(vm.listError).toContain('list failed')
 
     apiMock.adminDeleteEmployeePack.mockRejectedValueOnce(new Error('delete failed'))
@@ -480,12 +613,18 @@ describe('workbench right rail coverage', () => {
       data: {
         moduleKind: 'prompt',
         label: 'Prompt',
-        meta: { label: 'Prompt', icon: 'P', accent: '#222', required: true, paths: ['cognition.agent'] },
+        meta: {
+          label: 'Prompt',
+          icon: 'P',
+          accent: '#222',
+          required: true,
+          paths: ['cognition.agent'],
+        },
       },
     }
     const wrapper = mount(RightRail, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
     expect(vm.mode).toBe('node')
     expect(vm.identityName).toBe('Employee One')
@@ -496,7 +635,7 @@ describe('workbench right rail coverage', () => {
 
     await vm.refreshWorkbenchLlmCatalog()
     expect(apiMock.llmCatalog).toHaveBeenCalledWith(true)
-    expect(vm.catalogProviderPickerRows.map((r: any) => r.provider)).toContain('deepseek')
+    expect(vm.catalogProviderPickerRows.map((r: UnsafeTestValue) => r.provider)).toContain('deepseek')
     expect(vm.employeeHasStructuredModels).toBe(true)
     expect(vm.employeeCategoryLabel('chat')).toBe('cat:chat')
     expect(vm.employeeModelsForCategory('chat')).toHaveLength(1)
@@ -542,7 +681,7 @@ describe('workbench right rail coverage', () => {
     vi.useFakeTimers()
     const wrapper = mount(RightRail, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
     expect(vm.presentModuleKinds.has('identity')).toBe(true)
     vm.addModule('memory')
@@ -599,7 +738,7 @@ describe('workbench right rail coverage', () => {
   it('covers right rail empty-id and error branches', async () => {
     const wrapper = mount(RightRail, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
     workbenchStore.target.id = ''
     await vm.runEmployee()
@@ -630,7 +769,11 @@ describe('workbench right rail coverage', () => {
     await vm.downloadPack(true)
     expect(vm.publishError).toContain('download failed')
 
-    apiMock.employeeSyncTest.mockResolvedValueOnce({ ok: false, reason: 'sync failed', stage: 'bench' })
+    apiMock.employeeSyncTest.mockResolvedValueOnce({
+      ok: false,
+      reason: 'sync failed',
+      stage: 'bench',
+    })
     await vm.startSyncTest()
     expect(vm.syncError).toContain('sync failed')
     apiMock.employeeSyncTest.mockRejectedValueOnce(new Error('x'.repeat(400)))
@@ -647,7 +790,7 @@ describe('workbench shell coverage', () => {
     sessionStorage.setItem('modstore_employee_prefill', JSON.stringify({ identity: { id: 'emp_route', name: 'Prefill' } }))
     const wrapper = shallowMount(WorkbenchShell, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
     expect(vm.resolveKind()).toBe('employee')
     expect(vm.resolveId()).toBe('emp_route')
@@ -672,7 +815,10 @@ describe('workbench shell coverage', () => {
     expect(apiMock.llmStatus).toHaveBeenCalled()
 
     vm.switchTarget('workflow')
-    expect(routerMock.push).toHaveBeenCalledWith({ name: 'workbench-shell', params: { target: 'workflow' } })
+    expect(routerMock.push).toHaveBeenCalledWith({
+      name: 'workbench-shell',
+      params: { target: 'workflow' },
+    })
 
     const leftEvent = new MouseEvent('mousedown', { clientX: 100 })
     vm.onLeftResizeMouseDown(leftEvent)
@@ -711,15 +857,21 @@ describe('workbench shell coverage', () => {
     expect(vm.saveMsg).toContain('network save failed')
 
     await vm.onSelectEmployee('emp_2')
-    expect(routerMock.replace).toHaveBeenCalledWith({ name: 'workbench-shell', params: { target: 'employee', id: 'emp_2' } })
+    expect(routerMock.replace).toHaveBeenCalledWith({
+      name: 'workbench-shell',
+      params: { target: 'employee', id: 'emp_2' },
+    })
   }, 15_000)
 
   it('covers shell API load failure, blank employee target, placeholders and embedded switching', async () => {
     apiMock.getEmployeeManifest.mockRejectedValueOnce(new Error('manifest failed'))
     routeMock.params = { target: 'employee', id: 'emp_missing' }
-    const wrapper = shallowMount(WorkbenchShell, { ...globalMount, props: { embedded: true, initialTarget: 'mod' } })
+    const wrapper = shallowMount(WorkbenchShell, {
+      ...globalMount,
+      props: { embedded: true, initialTarget: 'mod' },
+    })
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
     expect(vm.loadError).toContain('manifest failed')
 
     await vm.loadTarget('employee', null)

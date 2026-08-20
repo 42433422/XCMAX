@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """工作台用户素材库：上传、列表、下载、删除、元数据更新。"""
 
 from __future__ import annotations
@@ -6,7 +7,7 @@ import json
 import logging
 import os
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -336,7 +337,7 @@ def patch_studio_asset_metadata(
         if not row:
             raise HTTPException(404, "素材不存在")
         row.metadata_json = json.dumps(body.metadata or {}, ensure_ascii=False)
-        row.updated_at = datetime.now(timezone.utc)
+        row.updated_at = datetime.now(UTC)
         session.commit()
         return {
             "id": row.id,

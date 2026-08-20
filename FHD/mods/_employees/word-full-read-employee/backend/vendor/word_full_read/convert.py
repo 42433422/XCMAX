@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-import io
 import json
 import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from xml.etree import ElementTree as ET
+
+from app.mod_sdk.errors import RECOVERABLE_ERRORS
 
 _W_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 _R_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
@@ -185,22 +186,33 @@ def _parse_sections(body: ET.Element, paragraph_count: int) -> List[Dict[str, An
         if tag == "p":
             ppr = child.find(f"{_W_NS}pPr")
             if ppr is not None and ppr.find(f"{_W_NS}sectPr") is not None:
-                sections.append({
-                    "section_index": sec_idx,
-                    "kind": "paragraph_sectPr",
-                    "paragraph_index": para_cursor,
-                })
+                sections.append(
+                    {
+                        "section_index": sec_idx,
+                        "kind": "paragraph_sectPr",
+                        "paragraph_index": para_cursor,
+                    }
+                )
                 sec_idx += 1
             para_cursor += 1
         elif tag == "sectPr":
-            sections.append({
-                "section_index": sec_idx,
-                "kind": "body_sectPr",
-                "paragraph_index": para_cursor,
-            })
+            sections.append(
+                {
+                    "section_index": sec_idx,
+                    "kind": "body_sectPr",
+                    "paragraph_index": para_cursor,
+                }
+            )
             sec_idx += 1
     if not sections and paragraph_count:
-        sections.append({"section_index": 0, "kind": "default", "paragraph_index": 0, "paragraph_end": paragraph_count - 1})
+        sections.append(
+            {
+                "section_index": 0,
+                "kind": "default",
+                "paragraph_index": 0,
+                "paragraph_end": paragraph_count - 1,
+            }
+        )
     return sections
 
 
@@ -227,7 +239,9 @@ def _build_outline(paragraphs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return outline
 
 
-def _build_blocks(body: ET.Element, paragraphs: List[Dict[str, Any]], tables: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _build_blocks(
+    body: ET.Element, paragraphs: List[Dict[str, Any]], tables: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
     blocks: List[Dict[str, Any]] = []
     p_idx = 0
     t_idx = 0
@@ -236,15 +250,17 @@ def _build_blocks(body: ET.Element, paragraphs: List[Dict[str, Any]], tables: Li
         if tag == "p":
             if p_idx < len(paragraphs):
                 p = paragraphs[p_idx]
-                blocks.append({
-                    "type": "paragraph",
-                    "index": p.get("index"),
-                    "text": p.get("text"),
-                    "is_heading": p.get("is_heading"),
-                    "heading_level": p.get("heading_level"),
-                    "list_type": p.get("list_type"),
-                    "list_level": p.get("list_level"),
-                })
+                blocks.append(
+                    {
+                        "type": "paragraph",
+                        "index": p.get("index"),
+                        "text": p.get("text"),
+                        "is_heading": p.get("is_heading"),
+                        "heading_level": p.get("heading_level"),
+                        "list_type": p.get("list_type"),
+                        "list_level": p.get("list_level"),
+                    }
+                )
                 ppr = child.find(f"{_W_NS}pPr")
                 if ppr is not None and ppr.find(f"{_W_NS}sectPr") is not None:
                     blocks.append({"type": "section_break", "paragraph_index": p.get("index")})
@@ -252,12 +268,14 @@ def _build_blocks(body: ET.Element, paragraphs: List[Dict[str, Any]], tables: Li
         elif tag == "tbl":
             if t_idx < len(tables):
                 tbl = tables[t_idx]
-                blocks.append({
-                    "type": "table",
-                    "index": tbl.get("index"),
-                    "row_count": tbl.get("row_count"),
-                    "col_count": tbl.get("col_count"),
-                })
+                blocks.append(
+                    {
+                        "type": "table",
+                        "index": tbl.get("index"),
+                        "row_count": tbl.get("row_count"),
+                        "col_count": tbl.get("col_count"),
+                    }
+                )
             t_idx += 1
         elif tag == "sectPr":
             blocks.append({"type": "section_break", "kind": "body_sectPr"})
@@ -274,7 +292,14 @@ def _parse_tables(body: ET.Element) -> List[Dict[str, Any]]:
                 row.append(_text_of(tc))
             if row:
                 rows.append(row)
-        tables.append({"index": t_idx, "rows": rows, "row_count": len(rows), "col_count": max((len(r) for r in rows), default=0)})
+        tables.append(
+            {
+                "index": t_idx,
+                "rows": rows,
+                "row_count": len(rows),
+                "col_count": max((len(r) for r in rows), default=0),
+            }
+        )
     return tables
 
 
@@ -322,19 +347,40 @@ def _extract_with_docx(src_path: Path) -> Optional[Dict[str, Any]]:
     except ImportError:
         return None
     doc = docx.Document(str(src_path))
-    paras = [{"index": i, "style": (p.style.name if p.style else ""), "text": p.text, "runs": []} for i, p in enumerate(doc.paragraphs) if p.text]
+    paras = [
+        {"index": i, "style": (p.style.name if p.style else ""), "text": p.text, "runs": []}
+        for i, p in enumerate(doc.paragraphs)
+        if p.text
+    ]
     tables = []
     for ti, tbl in enumerate(doc.tables):
         rows = [[cell.text for cell in row.cells] for row in tbl.rows]
-        tables.append({"index": ti, "rows": rows, "row_count": len(rows), "col_count": max((len(r) for r in rows), default=0)})
+        tables.append(
+            {
+                "index": ti,
+                "rows": rows,
+                "row_count": len(rows),
+                "col_count": max((len(r) for r in rows), default=0),
+            }
+        )
     core = {}
     try:
         cp = doc.core_properties
-        for attr in ("author", "title", "subject", "keywords", "category", "comments", "created", "modified", "last_modified_by"):
+        for attr in (
+            "author",
+            "title",
+            "subject",
+            "keywords",
+            "category",
+            "comments",
+            "created",
+            "modified",
+            "last_modified_by",
+        ):
             val = getattr(cp, attr, None)
             if val is not None:
                 core[attr] = str(val)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     return {"paragraphs": paras, "tables": tables, "core_properties": core}
 
@@ -408,7 +454,9 @@ def convert_file(
     src_path = extract_src
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    json_path = output_path if output_path.suffix.lower() == ".json" else output_dir / "document_full.json"
+    json_path = (
+        output_path if output_path.suffix.lower() == ".json" else output_dir / "document_full.json"
+    )
     txt_path = output_dir / "document_full.txt"
     if str(rule_spec.get("default_text_output_relpath") or "").endswith(".txt"):
         txt_path = output_dir / Path(str(rule_spec.get("default_text_output_relpath"))).name
@@ -421,7 +469,10 @@ def convert_file(
             payload_data["metadata"]["legacy_doc"] = legacy_meta
     if docx_enhanced:
         if docx_enhanced.get("core_properties"):
-            payload_data["core_properties"] = {**payload_data.get("core_properties", {}), **docx_enhanced["core_properties"]}
+            payload_data["core_properties"] = {
+                **payload_data.get("core_properties", {}),
+                **docx_enhanced["core_properties"],
+            }
         if len(docx_enhanced.get("paragraphs") or []) > len(payload_data.get("paragraphs") or []):
             payload_data["paragraphs"] = docx_enhanced["paragraphs"]
         if len(docx_enhanced.get("tables") or []) > len(payload_data.get("tables") or []):

@@ -1,13 +1,8 @@
 <script setup lang="ts">
 import { useModAuthoringContext } from '../composables/useModAuthoringContext'
 
-const {
-  industryPresetList,
-  selectedIndustryPreset,
-  savingManifest,
-  applyIndustryPresetToManifest,
-  manifestSidebarStatus,
-} = useModAuthoringContext()
+const { industryPresetList, selectedIndustryPreset, savingManifest, applyIndustryPresetToManifest, manifestSidebarStatus } =
+  useModAuthoringContext()
 </script>
 
 <template>
@@ -17,12 +12,7 @@ const {
       <select v-model="selectedIndustryPreset" class="input industry-adapt-select industry-select">
         <option v-for="p in industryPresetList" :key="p.id" :value="p.id">{{ p.name }}</option>
       </select>
-      <button
-        type="button"
-        class="btn btn-primary btn-sm"
-        :disabled="savingManifest"
-        @click="applyIndustryPresetToManifest"
-      >
+      <button type="button" class="btn btn-primary btn-sm" :disabled="savingManifest" @click="applyIndustryPresetToManifest">
         {{ savingManifest ? '保存中…' : '保存' }}
       </button>
     </div>

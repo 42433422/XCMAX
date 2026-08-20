@@ -1,9 +1,11 @@
-# -*- coding: utf-8 -*-
-import sys
+# mypy: disable-error-code="import-not-found"
 import os
+import sys
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 sys.path.insert(0, r"E:\FHD\XCAGI")
-from app.utils.path_utils import get_resource_path
+from app.utils.path_io.path_utils import get_resource_path
 
 print(f"get_resource_path('wechat-decrypt'): {get_resource_path('wechat-decrypt')}")
 print(f"exists: {os.path.exists(get_resource_path('wechat-decrypt'))}")
@@ -16,7 +18,7 @@ try:
     from mcp_server import _decompress_content
 
     print(f"Import succeeded: {_decompress_content}")
-except Exception as e:
+except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"Import failed: {e}")
     import traceback
 

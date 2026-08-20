@@ -65,7 +65,8 @@ def save_field_overrides(
 def build_merged_fields(market_user_id: int, *, username: str = "") -> dict[str, str]:
     doc = load_pipeline(int(market_user_id), username=username)
     overrides = load_field_overrides(int(market_user_id))
-    stored = doc.get("contract_fields") if isinstance(doc.get("contract_fields"), dict) else {}
+    raw_stored = doc.get("contract_fields")
+    stored: dict[str, Any] = raw_stored if isinstance(raw_stored, dict) else {}
     merged: dict[str, str] = {}
     for field in FIELD_SCHEMA:
         key = field["key"]

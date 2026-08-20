@@ -9,10 +9,10 @@ class RbacAppService:
     def list_tenants(self) -> list[dict[str, Any]]:
         return []
 
-    def list_data_scopes(self, tenant_id: str | None) -> list[dict[str, Any]]:
+    def list_data_scopes(self, tenant_id: int | None) -> list[dict[str, Any]]:
         return []
 
-    def list_roles(self, tenant_id: str | None = None) -> list[dict[str, Any]]:
+    def list_roles(self, tenant_id: int | None = None) -> list[dict[str, Any]]:
         return []
 
     def get_role(self, role_id: int) -> dict[str, Any]:
@@ -24,7 +24,7 @@ class RbacAppService:
         description: str | None,
         permissions: list[str],
         *,
-        tenant_id: str | None = None,
+        tenant_id: int | None = None,
     ) -> dict[str, Any]:
         return {"name": name, "description": description, "permissions": permissions}
 

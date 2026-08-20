@@ -192,7 +192,13 @@ def needs_executor_translation(v2: Dict[str, Any]) -> bool:
         return False
     if any(
         k in v2
-        for k in ("identity", "collaboration", "management", "commerce", "workflow_employees")
+        for k in (
+            "identity",
+            "collaboration",
+            "management",
+            "commerce",
+            "workflow_employees",
+        )
     ):
         return True
     perc = v2.get("perception")

@@ -13,43 +13,43 @@ interface TemplateScopeRule {
 const SCOPE_CONFIG = templateScopeRules as Record<string, TemplateScopeRule>
 
 const TERM_EQUIVALENTS: Record<string, string[]> = {
-  '产品型号': ['产品型号', '产 品 型 号', '型号', '产品编码', '品名'],
-  '型号': ['型号', '产品型号', '产 品 型 号', '产品编码', '品名'],
-  '规格': ['规格', '规格型号', '规格/kg', '规格型号', '规格/KG'],
-  '价格': ['价格', '单价', '单价/元', '售价', '现金价'],
-  '单价': ['单价', '价格', '单价/元', '售价', '现金价'],
-  '金额': ['金额', '金额/元', '金额合计', '金额总计', '总金额', '合计', '家具厂金额'],
-  '数量': ['数量', '数量(kg)', '数量/kg', '数量/件', '数量/桶', '库存数量', '库存'],
+  产品型号: ['产品型号', '产 品 型 号', '型号', '产品编码', '品名'],
+  型号: ['型号', '产品型号', '产 品 型 号', '产品编码', '品名'],
+  规格: ['规格', '规格型号', '规格/kg', '规格型号', '规格/KG'],
+  价格: ['价格', '单价', '单价/元', '售价', '现金价'],
+  单价: ['单价', '价格', '单价/元', '售价', '现金价'],
+  金额: ['金额', '金额/元', '金额合计', '金额总计', '总金额', '合计', '家具厂金额'],
+  数量: ['数量', '数量(kg)', '数量/kg', '数量/件', '数量/桶', '库存数量', '库存'],
   '数量/KG': ['数量/KG', '数量/kg'],
   '数量/件': ['数量/件'],
-  '电话': ['电话', '联系电话', '手机号', '手机', '电话号码'],
-  '购买单位': ['购买单位', '单位', '单位名称', '客户名称', '厂名', '客户', '客户名'],
-  '客户名称': ['客户名称', '购买单位', '单位名称', '厂名', '客户', '客户名'],
-  '产品名称': ['产品名称', '产 品 名 称', '名称', '品名', '产品名', '商品名称'],
-  '联系人': ['联系人', '收货人', '经手人', '负责人'],
-  '地址': ['地址', '收货地址', '送货地址', '单位地址'],
-  '日期': ['日期', '订单日期', '出货日期', '送货日期', '开单日期'],
-  '单号': ['单号', '订单号', '订单编号', '单据编号', '编号'],
-  '备注': ['备注', '备  注', '备 注', '说明', '附注', '备注说明'],
-  '规格型号': ['规格型号', '规格', '型号', '规格/KG'],
-  '单位': ['单位', '单位名称', '计量单位'],
-  '仓库': ['仓库', '仓库名称', '库房'],
-  '经手人': ['经手人', '经办人', '操作员'],
-  '税前单价': ['税前单价', '不含税单价', '净单价'],
-  '税后单价': ['税后单价', '含税单价', '单价'],
-  '税率': ['税率', '税点', '税率%'],
-  '税额': ['税额', '税额/元'],
-  '折扣': ['折扣', '折后价', '折扣率'],
-  '包装': ['包装', '包装形式', '件装'],
-  '颜色': ['颜色', '色号', '色彩'],
-  '等级': ['等级', '品质', '档次'],
-  '品牌': ['品牌', '商标', '牌子'],
-  '月份': ['月份', '月份'],
-  '内': ['内', '内部'],
-  '外': ['外', '外部'],
-  '销售金额': ['销售金额', '销售额'],
-  '实收款': ['实收款', '已收款', '已付款'],
-  '下欠款金额': ['下欠款金额', '下欠款', '欠款'],
+  电话: ['电话', '联系电话', '手机号', '手机', '电话号码'],
+  购买单位: ['购买单位', '单位', '单位名称', '客户名称', '厂名', '客户', '客户名'],
+  客户名称: ['客户名称', '购买单位', '单位名称', '厂名', '客户', '客户名'],
+  产品名称: ['产品名称', '产 品 名 称', '名称', '品名', '产品名', '商品名称'],
+  联系人: ['联系人', '收货人', '经手人', '负责人'],
+  地址: ['地址', '收货地址', '送货地址', '单位地址'],
+  日期: ['日期', '订单日期', '出货日期', '送货日期', '开单日期'],
+  单号: ['单号', '订单号', '订单编号', '单据编号', '编号'],
+  备注: ['备注', '备  注', '备 注', '说明', '附注', '备注说明'],
+  规格型号: ['规格型号', '规格', '型号', '规格/KG'],
+  单位: ['单位', '单位名称', '计量单位'],
+  仓库: ['仓库', '仓库名称', '库房'],
+  经手人: ['经手人', '经办人', '操作员'],
+  税前单价: ['税前单价', '不含税单价', '净单价'],
+  税后单价: ['税后单价', '含税单价', '单价'],
+  税率: ['税率', '税点', '税率%'],
+  税额: ['税额', '税额/元'],
+  折扣: ['折扣', '折后价', '折扣率'],
+  包装: ['包装', '包装形式', '件装'],
+  颜色: ['颜色', '色号', '色彩'],
+  等级: ['等级', '品质', '档次'],
+  品牌: ['品牌', '商标', '牌子'],
+  月份: ['月份', '月份'],
+  内: ['内', '内部'],
+  外: ['外', '外部'],
+  销售金额: ['销售金额', '销售额'],
+  实收款: ['实收款', '已收款', '已付款'],
+  下欠款金额: ['下欠款金额', '下欠款', '欠款'],
 }
 
 function normalizeTerm(value: string): string {
@@ -76,11 +76,11 @@ function getEquivalentTerms(term: string): string[] {
   for (const [canonical, aliases] of Object.entries(TERM_EQUIVALENTS)) {
     const normalizedCanonical = normalizeTerm(canonical)
     if (normalizedCanonical === normalizedKey) {
-      return [normalizedKey, ...aliases.map(a => normalizeTerm(a))]
+      return [normalizedKey, ...aliases.map((a) => normalizeTerm(a))]
     }
     for (const alias of aliases) {
       if (normalizeTerm(alias) === normalizedKey) {
-        return [normalizedKey, normalizedCanonical, ...aliases.map(a => normalizeTerm(a))]
+        return [normalizedKey, normalizedCanonical, ...aliases.map((a) => normalizeTerm(a))]
       }
     }
   }
@@ -92,25 +92,20 @@ function getAllNormalizedTerms(termSet: Set<string>): Set<string> {
   const result = new Set<string>()
   for (const term of termSet) {
     const equivalents = getEquivalentTerms(term)
-    equivalents.forEach(eq => result.add(eq))
+    equivalents.forEach((eq) => result.add(eq))
 
     const baseField = extractBaseField(term)
     if (baseField !== term) {
       result.add(baseField)
       const baseEquivalents = getEquivalentTerms(baseField)
-      baseEquivalents.forEach(bq => result.add(bq))
+      baseEquivalents.forEach((bq) => result.add(bq))
     }
   }
   return result
 }
 
 function extractBaseField(term: string): string {
-  const unitPatterns = [
-    /\/(kg|件|元|桶|米|厘米|mm|cm|m|个|箱|包|箱|张|份|批|t|吨|g|克|mg)/i,
-    /_kg$/i,
-    /_piece$/i,
-    /_unit$/i
-  ]
+  const unitPatterns = [/\/(kg|件|元|桶|米|厘米|mm|cm|m|个|箱|包|箱|张|份|批|t|吨|g|克|mg)/i, /_kg$/i, /_piece$/i, /_unit$/i]
 
   for (const pattern of unitPatterns) {
     if (pattern.test(term)) {
@@ -141,7 +136,11 @@ function calculateFieldSimilarity(fields1: string[], fields2: string[]): number 
   return union > 0 ? intersection / union : 0
 }
 
-function inferTemplateTypeByFields(fields: string[]): { templateType: string; scopeKey: string; matchScore: number } {
+function inferTemplateTypeByFields(fields: string[]): {
+  templateType: string
+  scopeKey: string
+  matchScore: number
+} {
   const fieldSet = new Set(fields.map(normalizeTerm))
   const allFieldTerms = getAllNormalizedTerms(fieldSet)
 
@@ -154,7 +153,7 @@ function inferTemplateTypeByFields(fields: string[]): { templateType: string; sc
     let matchedRequired = 0
     for (const term of requiredTerms) {
       const equivalents = getEquivalentTerms(term)
-      if (equivalents.some(eq => allFieldTerms.has(eq))) {
+      if (equivalents.some((eq) => allFieldTerms.has(eq))) {
         matchedRequired++
       }
     }
@@ -213,18 +212,16 @@ function groupSheetsBySimilarity(sheets: SheetInfo[]): SheetGroup[] {
 
     const allFields = new Set<string>()
     for (const sheet of groupSheets) {
-      sheet.fields.forEach(f => allFields.add(normalizeTerm(f)))
+      sheet.fields.forEach((f) => allFields.add(normalizeTerm(f)))
     }
 
     const commonFields: string[] = []
     const differenceFields: string[] = []
 
     for (const field of allFields) {
-      const appearsInAll = groupSheets.every(sheet =>
-        sheet.fields.map(normalizeTerm).includes(field)
-      )
+      const appearsInAll = groupSheets.every((sheet) => sheet.fields.map(normalizeTerm).includes(field))
       if (appearsInAll) {
-        const originalField = groupSheets[0].fields.find(f => normalizeTerm(f) === field) || field
+        const originalField = groupSheets[0].fields.find((f) => normalizeTerm(f) === field) || field
         commonFields.push(originalField)
       } else {
         differenceFields.push(field)
@@ -246,7 +243,7 @@ function groupSheetsBySimilarity(sheets: SheetInfo[]): SheetGroup[] {
       recommendedTemplateId: '',
       recommendedTemplateName: SCOPE_CONFIG[scopeKey]?.label || templateType,
       matchScore: Math.round(matchScore * 100),
-      templateType
+      templateType,
     })
   }
 
@@ -255,9 +252,16 @@ function groupSheetsBySimilarity(sheets: SheetInfo[]): SheetGroup[] {
 
 async function loadTemplates(): Promise<Array<{ id: string; name: string; templateType: string; businessScope: string }>> {
   try {
-    const res = await templatePreviewApi.listTemplates() as {
+    const res = (await templatePreviewApi.listTemplates()) as {
       success?: boolean
-      templates?: Array<{ id: string; name?: string; template_name?: string; template_type?: string; business_scope?: string; category?: string }>
+      templates?: Array<{
+        id: string
+        name?: string
+        template_name?: string
+        template_type?: string
+        business_scope?: string
+        category?: string
+      }>
     }
     if (res?.success && Array.isArray(res.templates)) {
       return res.templates
@@ -307,9 +311,7 @@ export function useBatchAnalyze() {
       if (!jsonData || jsonData.length === 0) continue
 
       const headerRow = jsonData[0] || []
-      const fields: string[] = headerRow
-        .map((cell: unknown) => String(cell ?? '').trim())
-        .filter((cell: string) => cell.length > 0)
+      const fields: string[] = headerRow.map((cell: unknown) => String(cell ?? '').trim()).filter((cell: string) => cell.length > 0)
 
       const rowCount = Math.max(0, jsonData.length - 1)
 
@@ -329,7 +331,7 @@ export function useBatchAnalyze() {
         sheetIndex: i + 1,
         fields,
         rowCount,
-        sampleRows
+        sampleRows,
       })
     }
 
@@ -347,7 +349,7 @@ export function useBatchAnalyze() {
       store.updateProgress({
         processedFiles: i + 1,
         currentFileName: file.name,
-        progress: Math.round(((i + 1) / files.length) * 50)
+        progress: Math.round(((i + 1) / files.length) * 50),
       })
 
       try {
@@ -379,9 +381,7 @@ export function useBatchAnalyze() {
     const templates = await loadTemplates()
 
     for (const group of groups) {
-      const matchingTemplates = templates.filter(t =>
-        t.businessScope === group.category || t.templateType === group.templateType
-      )
+      const matchingTemplates = templates.filter((t) => t.businessScope === group.category || t.templateType === group.templateType)
 
       if (matchingTemplates.length > 0) {
         group.recommendedTemplateId = matchingTemplates[0].id
@@ -398,7 +398,7 @@ export function useBatchAnalyze() {
   async function startBatchAnalyze(fileList: File[]): Promise<SheetGroup[]> {
     store.startNewSession()
 
-    const excelFiles = fileList.filter(f => /\.(xlsx?)$/i.test(f.name))
+    const excelFiles = fileList.filter((f) => /\.(xlsx?)$/i.test(f.name))
     if (excelFiles.length === 0) {
       store.setError('没有找到 Excel 文件')
       return []
@@ -433,6 +433,6 @@ export function useBatchAnalyze() {
     calculateFieldSimilarity,
     groupSheetsBySimilarity,
     inferTemplateTypeByFields,
-    readWorkbookSheets
+    readWorkbookSheets,
   }
 }

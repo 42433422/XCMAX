@@ -10,12 +10,7 @@ vi.mock('@/api', () => ({
   put: (...a: unknown[]) => put(...a),
 }))
 
-import {
-  useServiceBridge,
-  formatServiceBridgeTime,
-  serviceBridgePriorityLabel,
-  serviceBridgeStatusLabel,
-} from './useServiceBridge'
+import { useServiceBridge, formatServiceBridgeTime, serviceBridgePriorityLabel, serviceBridgeStatusLabel } from './useServiceBridge'
 
 describe('useServiceBridge helpers', () => {
   it('formatServiceBridgeTime handles empty, seconds and ms and invalid', () => {
@@ -79,7 +74,11 @@ describe('useServiceBridge actions', () => {
   it('createRequest posts and returns data', async () => {
     post.mockResolvedValue({ data: { id: 9 } })
     const b = useServiceBridge()
-    const r = await b.createRequest({ source_instance_id: 'i', source_instance_name: 'n', title: 't' })
+    const r = await b.createRequest({
+      source_instance_id: 'i',
+      source_instance_name: 'n',
+      title: 't',
+    })
     expect(r?.id).toBe(9)
     expect(b.submitting.value).toBe(false)
   })
@@ -88,7 +87,11 @@ describe('useServiceBridge actions', () => {
     get.mockResolvedValue({ data: { instance_id: 'remote' } })
     post.mockResolvedValue({ data: { id: 11 } })
     const b = useServiceBridge()
-    const r = await b.createEnterpriseContact({ source_instance_id: 'i', source_instance_name: 'n', title: 't' })
+    const r = await b.createEnterpriseContact({
+      source_instance_id: 'i',
+      source_instance_name: 'n',
+      title: 't',
+    })
     expect(r?.id).toBe(11)
     expect(post).toHaveBeenCalledWith('/api/service-bridge/outbox', expect.any(Object))
   })
@@ -97,7 +100,11 @@ describe('useServiceBridge actions', () => {
     get.mockRejectedValue(new Error('no config'))
     post.mockResolvedValue({ data: { id: 12 } })
     const b = useServiceBridge()
-    const r = await b.createEnterpriseContact({ source_instance_id: 'i', source_instance_name: 'n', title: 't' })
+    const r = await b.createEnterpriseContact({
+      source_instance_id: 'i',
+      source_instance_name: 'n',
+      title: 't',
+    })
     expect(r?.id).toBe(12)
     expect(post).toHaveBeenCalledWith('/api/service-bridge/requests', expect.any(Object))
   })

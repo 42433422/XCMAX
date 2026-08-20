@@ -1,5 +1,8 @@
 """Runtime initialization for Tutorial V2 control-plane tables."""
 
+from typing import cast
+
+from sqlalchemy import Table
 from sqlalchemy.engine import Engine
 
 from app.db.base import Base
@@ -11,9 +14,9 @@ def init_tutorial_v2_tables(engine: Engine) -> None:
     Base.metadata.create_all(
         engine,
         tables=[
-            TutorialWorkspace.__table__,
-            TutorialRun.__table__,
-            TutorialStepEvidence.__table__,
+            cast("Table", TutorialWorkspace.__table__),
+            cast("Table", TutorialRun.__table__),
+            cast("Table", TutorialStepEvidence.__table__),
         ],
         checkfirst=True,
     )

@@ -101,11 +101,7 @@ def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
         "risk_level": _clean_text(role_context.get("risk_level"), limit=32).lower(),
         "handlers": _clean_string_list(role_context.get("handlers")),
     }
-    missing_fields = [
-        field
-        for field in _REQUIRED_ROLE_FIELDS
-        if not normalized[field]
-    ]
+    missing_fields = [field for field in _REQUIRED_ROLE_FIELDS if not normalized[field]]
     questions: list[dict[str, str]] = []
     question_text = {
         "mission": "这个岗位交付的可验证结果是什么？",
@@ -151,9 +147,7 @@ def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
             "input.target_employee_id",
             *[f"input.role_context.{field}" for field in _REQUIRED_ROLE_FIELDS],
         ],
-        "warnings": (
-            ["存在待补字段；本回执不代表岗位已完成入职"] if missing_fields else []
-        ),
+        "warnings": (["存在待补字段；本回执不代表岗位已完成入职"] if missing_fields else []),
         "read_only": True,
         "side_effects": [],
         "meta": {

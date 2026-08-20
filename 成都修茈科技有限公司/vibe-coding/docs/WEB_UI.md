@@ -33,17 +33,17 @@ Edit Project / Heal Project** without ever leaving the browser.
 
 The same server exposes a JSON API under `/api/`:
 
-| Endpoint | Method | Purpose |
-| --- | --- | --- |
-| `/api/health` | GET | Liveness + version |
-| `/api/code` | POST | Generate a single CodeSkill |
-| `/api/workflow` | POST | Generate a multi-skill workflow |
-| `/api/run/{skill_id}` | POST | Execute a known skill |
-| `/api/index` | POST | Build / refresh the RepoIndex |
-| `/api/edit` | POST | Generate a ProjectPatch |
-| `/api/apply` | POST | Apply a ProjectPatch (with dry-run) |
-| `/api/heal` | POST | Iterative heal loop |
-| `/api/publish` | POST | Push a skill to MODstore |
+| Endpoint              | Method | Purpose                             |
+| --------------------- | ------ | ----------------------------------- |
+| `/api/health`         | GET    | Liveness + version                  |
+| `/api/code`           | POST   | Generate a single CodeSkill         |
+| `/api/workflow`       | POST   | Generate a multi-skill workflow     |
+| `/api/run/{skill_id}` | POST   | Execute a known skill               |
+| `/api/index`          | POST   | Build / refresh the RepoIndex       |
+| `/api/edit`           | POST   | Generate a ProjectPatch             |
+| `/api/apply`          | POST   | Apply a ProjectPatch (with dry-run) |
+| `/api/heal`           | POST   | Iterative heal loop                 |
+| `/api/publish`        | POST   | Push a skill to MODstore            |
 
 All endpoints accept and return JSON. Example:
 
@@ -75,14 +75,14 @@ The LSP-lite adapter speaks **JSON-RPC 2.0** with framed messages
 (`Content-Length: …\r\n\r\n<body>`) for stdio transports, identical to
 real LSP — but the method set is intentionally tiny:
 
-| Method | Purpose |
-| --- | --- |
-| `vibe.code` | Generate a CodeSkill |
-| `vibe.edit` | Generate a ProjectPatch |
-| `vibe.apply` | Apply a patch (with dry-run) |
-| `vibe.heal` | Iterative heal loop |
-| `vibe.index` | Build / refresh index |
-| `vibe.publish` | Publish to MODstore |
+| Method         | Purpose                      |
+| -------------- | ---------------------------- |
+| `vibe.code`    | Generate a CodeSkill         |
+| `vibe.edit`    | Generate a ProjectPatch      |
+| `vibe.apply`   | Apply a patch (with dry-run) |
+| `vibe.heal`    | Iterative heal loop          |
+| `vibe.index`   | Build / refresh index        |
+| `vibe.publish` | Publish to MODstore          |
 
 Each request takes the same params as the corresponding HTTP endpoint
 and returns the same response. Errors use standard JSON-RPC codes

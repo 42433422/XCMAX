@@ -10,6 +10,8 @@ import pytest
 
 from modstore_server.script_agent import sandbox_runner
 
+BOUNDARY_ERRORS = (Exception,)
+
 
 def test_run_simple_print(tmp_path: Path) -> None:
     code = (
@@ -176,7 +178,7 @@ def test_runtime_sdk_rejects_invalid_token(tmp_path: Path) -> None:
             writer.close()
             try:
                 await writer.wait_closed()
-            except Exception:
+            except BOUNDARY_ERRORS:
                 pass
             return line
         finally:
@@ -189,7 +191,10 @@ def test_runtime_sdk_rejects_invalid_token(tmp_path: Path) -> None:
 
 
 def test_sandbox_employee_run_allowlist_blocks_rpc() -> None:
-    from modstore_server.script_agent.sandbox_host import SandboxHostContext, SandboxRpcServer
+    from modstore_server.script_agent.sandbox_host import (
+        SandboxHostContext,
+        SandboxRpcServer,
+    )
 
     async def go():
         ctx = SandboxHostContext(user_id=1, employee_run_allowlist=("only-a",))
@@ -201,7 +206,10 @@ def test_sandbox_employee_run_allowlist_blocks_rpc() -> None:
 
 
 def test_sandbox_employee_run_allowlist_allows_and_runs(monkeypatch, tmp_path: Path) -> None:
-    from modstore_server.script_agent.sandbox_host import SandboxHostContext, SandboxRpcServer
+    from modstore_server.script_agent.sandbox_host import (
+        SandboxHostContext,
+        SandboxRpcServer,
+    )
     from modstore_server.services import employee as employee_svc
 
     async def go():

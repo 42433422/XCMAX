@@ -31,8 +31,20 @@ function createStoreState() {
     currentStepIndex: 0,
     steps: [
       { id: 's1', title: '第一步', description: '描述一', actionType: 'observe' },
-      { id: 's2', title: '第二步', description: '描述二', actionType: 'click', targetSelector: '.target-btn' },
-      { id: 's3', title: '第三步', description: '描述三', actionType: 'observe', routeName: 'home' },
+      {
+        id: 's2',
+        title: '第二步',
+        description: '描述二',
+        actionType: 'click',
+        targetSelector: '.target-btn',
+      },
+      {
+        id: 's3',
+        title: '第三步',
+        description: '描述三',
+        actionType: 'observe',
+        routeName: 'home',
+      },
     ] as StepShape[],
     highlightRect: null as { top: number; left: number; width: number; height: number } | null,
     blockedTip: '',
@@ -97,10 +109,7 @@ async function mountComponent(options: Record<string, unknown> = {}) {
 }
 
 // 激活教程并设置 currentStep 与 rect，触发组件渲染
-async function activateTutorial(
-  wrapper: ReturnType<typeof mount>,
-  overrides: Record<string, unknown> = {},
-) {
+async function activateTutorial(wrapper: ReturnType<typeof mount>, overrides: Record<string, unknown> = {}) {
   const state = storeContainer.state
   // 默认激活教程，除非 overrides 显式指定 isActive
   if (overrides.isActive === undefined) {
@@ -128,7 +137,11 @@ async function activateTutorial(
 
 function setViewport(width: number, height: number) {
   Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: width })
-  Object.defineProperty(window, 'innerHeight', { configurable: true, writable: true, value: height })
+  Object.defineProperty(window, 'innerHeight', {
+    configurable: true,
+    writable: true,
+    value: height,
+  })
 }
 
 describe('TutorialOverlay.vue 覆盖率补齐测试', () => {
@@ -146,13 +159,16 @@ describe('TutorialOverlay.vue 覆盖率补齐测试', () => {
     vi.stubEnv('VITE_ENABLE_TUTORIAL_ONLINE_TTS', '')
 
     // Mock fetch
-    vi.stubGlobal('fetch', vi.fn(async () => ({
-      ok: true,
-      status: 200,
-      headers: { get: () => 'application/json' },
-      json: async () => ({ success: true, data: { audioBase64: 'data:audio/mp3;base64,AAAA' } }),
-      text: async () => '',
-    })))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ success: true, data: { audioBase64: 'data:audio/mp3;base64,AAAA' } }),
+        text: async () => '',
+      })),
+    )
 
     // Mock speechSynthesis
     Object.defineProperty(window, 'speechSynthesis', {
@@ -162,25 +178,34 @@ describe('TutorialOverlay.vue 覆盖率补齐测试', () => {
     })
 
     // Mock requestAnimationFrame 为同步执行
-    vi.stubGlobal('requestAnimationFrame', vi.fn((cb: FrameRequestCallback) => {
-      cb(0)
-      return 0
-    }))
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn((cb: FrameRequestCallback) => {
+        cb(0)
+        return 0
+      }),
+    )
     vi.stubGlobal('cancelAnimationFrame', vi.fn())
 
     // Mock requestIdleCallback 为同步执行
-    vi.stubGlobal('requestIdleCallback', vi.fn((cb: any) => {
-      cb({ didTimeout: false, timeRemaining: () => 0 })
-      return 0
-    }))
+    vi.stubGlobal(
+      'requestIdleCallback',
+      vi.fn((cb: any) => {
+        cb({ didTimeout: false, timeRemaining: () => 0 })
+        return 0
+      }),
+    )
     vi.stubGlobal('cancelIdleCallback', vi.fn())
 
     // Mock Audio
-    vi.stubGlobal('Audio', vi.fn().mockImplementation(() => ({
-      play: vi.fn().mockResolvedValue(undefined),
-      pause: vi.fn(),
-      src: '',
-    })))
+    vi.stubGlobal(
+      'Audio',
+      vi.fn().mockImplementation(() => ({
+        play: vi.fn().mockResolvedValue(undefined),
+        pause: vi.fn(),
+        src: '',
+      })),
+    )
   })
 
   afterEach(() => {
@@ -336,7 +361,13 @@ describe('TutorialOverlay.vue 覆盖率补齐测试', () => {
   it('actionType=click 且 allowCardNext!=true 时主按钮 title 提示', async () => {
     const { wrapper } = await mountComponent()
     await activateTutorial(wrapper, {
-      currentStep: { id: 's2', title: '点击步', description: '描述', actionType: 'click', targetSelector: '.x' },
+      currentStep: {
+        id: 's2',
+        title: '点击步',
+        description: '描述',
+        actionType: 'click',
+        targetSelector: '.x',
+      },
     })
     expect(wrapper.find('.tutorial-primary-next').attributes('title')).toContain('建议先按高亮')
   })
@@ -345,7 +376,12 @@ describe('TutorialOverlay.vue 覆盖率补齐测试', () => {
     const { wrapper } = await mountComponent()
     await activateTutorial(wrapper, {
       currentStep: {
-        id: 's2', title: '点击步', description: '描述', actionType: 'click', targetSelector: '.x', allowCardNext: true,
+        id: 's2',
+        title: '点击步',
+        description: '描述',
+        actionType: 'click',
+        targetSelector: '.x',
+        allowCardNext: true,
       },
     })
     expect(wrapper.find('.tutorial-primary-next').attributes('title') || '').toBe('')
@@ -478,7 +514,11 @@ describe('TutorialOverlay.vue 覆盖率补齐测试', () => {
     const { wrapper } = await mountComponent()
     await activateTutorial(wrapper, {
       currentStep: {
-        id: 's2', title: '点击', description: '描述', actionType: 'click', targetSelector: '.target-btn',
+        id: 's2',
+        title: '点击',
+        description: '描述',
+        actionType: 'click',
+        targetSelector: '.target-btn',
       },
     })
     const btn = document.createElement('button')
@@ -495,7 +535,11 @@ describe('TutorialOverlay.vue 覆盖率补齐测试', () => {
     const { wrapper } = await mountComponent()
     await activateTutorial(wrapper, {
       currentStep: {
-        id: 's2', title: '点击', description: '描述', actionType: 'click', targetSelector: '.starter-pack-item',
+        id: 's2',
+        title: '点击',
+        description: '描述',
+        actionType: 'click',
+        targetSelector: '.starter-pack-item',
       },
     })
     const item = document.createElement('div')
@@ -515,7 +559,11 @@ describe('TutorialOverlay.vue 覆盖率补齐测试', () => {
     const { wrapper } = await mountComponent()
     await activateTutorial(wrapper, {
       currentStep: {
-        id: 's2', title: '点击', description: '描述', actionType: 'click', targetSelector: '.target-btn',
+        id: 's2',
+        title: '点击',
+        description: '描述',
+        actionType: 'click',
+        targetSelector: '.target-btn',
       },
     })
     const btn = document.createElement('button')
@@ -531,7 +579,11 @@ describe('TutorialOverlay.vue 覆盖率补齐测试', () => {
     const { wrapper } = await mountComponent()
     await activateTutorial(wrapper, {
       currentStep: {
-        id: 's2', title: '点击', description: '描述', actionType: 'click', targetSelector: '',
+        id: 's2',
+        title: '点击',
+        description: '描述',
+        actionType: 'click',
+        targetSelector: '',
       },
     })
     const btn = document.createElement('button')
@@ -572,7 +624,9 @@ describe('TutorialOverlay.vue 覆盖率补齐测试', () => {
     storeContainer.state.refreshHighlight.mockClear()
     window.dispatchEvent(new Event('resize'))
     await flushPromises()
-    expect(storeContainer.state.refreshHighlight).toHaveBeenCalledWith({ skipMissingOnFail: false })
+    expect(storeContainer.state.refreshHighlight).toHaveBeenCalledWith({
+      skipMissingOnFail: false,
+    })
   })
 
   it('scroll 事件触发 refreshHighlight', async () => {
@@ -581,7 +635,9 @@ describe('TutorialOverlay.vue 覆盖率补齐测试', () => {
     storeContainer.state.refreshHighlight.mockClear()
     window.dispatchEvent(new Event('scroll'))
     await flushPromises()
-    expect(storeContainer.state.refreshHighlight).toHaveBeenCalledWith({ skipMissingOnFail: false })
+    expect(storeContainer.state.refreshHighlight).toHaveBeenCalledWith({
+      skipMissingOnFail: false,
+    })
   })
 
   // ===== 7. xcagi:warmup-tutorial-tts 事件 =====
@@ -620,7 +676,11 @@ describe('TutorialOverlay.vue 覆盖率补齐测试', () => {
   it('isActive 失活且有 returnContext.routeName 时跳转回原路由', async () => {
     const { wrapper, router } = await mountComponent()
     await activateTutorial(wrapper)
-    storeContainer.state.returnContext = { routeName: 'home', assistantOpen: true, assistantTab: 'push' }
+    storeContainer.state.returnContext = {
+      routeName: 'home',
+      assistantOpen: true,
+      assistantTab: 'push',
+    }
     storeContainer.state.isActive = false
     await nextTick()
     await flushPromises()
@@ -645,7 +705,11 @@ describe('TutorialOverlay.vue 覆盖率补齐测试', () => {
     window.addEventListener('xcagi:tutorial:restore-float', (e: Event) => {
       restoreDetail = (e as CustomEvent).detail
     })
-    storeContainer.state.returnContext = { assistantOpen: true, assistantTab: 'assistant', assistantState: { foo: 'bar' } }
+    storeContainer.state.returnContext = {
+      assistantOpen: true,
+      assistantTab: 'assistant',
+      assistantState: { foo: 'bar' },
+    }
     storeContainer.state.isActive = false
     await nextTick()
     await flushPromises()
@@ -692,7 +756,11 @@ describe('TutorialOverlay.vue 覆盖率补齐测试', () => {
     const { wrapper, router } = await mountComponent()
     await activateTutorial(wrapper)
     storeContainer.state.currentStep = {
-      id: 's3', title: '路由步', description: '描述三', actionType: 'observe', routeName: 'home',
+      id: 's3',
+      title: '路由步',
+      description: '描述三',
+      actionType: 'observe',
+      routeName: 'home',
     }
     await nextTick()
     await flushPromises()
@@ -706,7 +774,10 @@ describe('TutorialOverlay.vue 覆盖率补齐测试', () => {
     await activateTutorial(wrapper)
     const pushSpy = vi.spyOn(router, 'push')
     storeContainer.state.currentStep = {
-      id: 's4', title: '无路由步', description: '描述', actionType: 'observe',
+      id: 's4',
+      title: '无路由步',
+      description: '描述',
+      actionType: 'observe',
     }
     await nextTick()
     await flushPromises()
@@ -720,7 +791,11 @@ describe('TutorialOverlay.vue 覆盖率补齐测试', () => {
     await activateTutorial(wrapper)
     const pushSpy = vi.spyOn(router, 'push')
     storeContainer.state.currentStep = {
-      id: 's5', title: '同路由步', description: '描述', actionType: 'observe', routeName: 'chat',
+      id: 's5',
+      title: '同路由步',
+      description: '描述',
+      actionType: 'observe',
+      routeName: 'chat',
     }
     await nextTick()
     await flushPromises()
@@ -735,7 +810,11 @@ describe('TutorialOverlay.vue 覆盖率补齐测试', () => {
       tabDetail = (e as CustomEvent).detail
     })
     storeContainer.state.currentStep = {
-      id: 's6', title: '副窗步', description: '描述', actionType: 'observe', assistantTab: 'assistant',
+      id: 's6',
+      title: '副窗步',
+      description: '描述',
+      actionType: 'observe',
+      assistantTab: 'assistant',
     }
     await nextTick()
     await flushPromises()
@@ -750,7 +829,10 @@ describe('TutorialOverlay.vue 覆盖率补齐测试', () => {
       dispatched = true
     })
     storeContainer.state.currentStep = {
-      id: 's7', title: '无副窗步', description: '描述', actionType: 'observe',
+      id: 's7',
+      title: '无副窗步',
+      description: '描述',
+      actionType: 'observe',
     }
     await nextTick()
     await flushPromises()
@@ -761,7 +843,11 @@ describe('TutorialOverlay.vue 覆盖率补齐测试', () => {
     const { router } = await mountComponent()
     const pushSpy = vi.spyOn(router, 'push')
     storeContainer.state.currentStep = {
-      id: 's8', title: '步', description: '描述', actionType: 'observe', routeName: 'home',
+      id: 's8',
+      title: '步',
+      description: '描述',
+      actionType: 'observe',
+      routeName: 'home',
     }
     await nextTick()
     await flushPromises()
@@ -785,7 +871,10 @@ describe('TutorialOverlay.vue 覆盖率补齐测试', () => {
     await activateTutorial(wrapper)
     storeContainer.state.refreshHighlight.mockClear()
     storeContainer.state.currentStep = {
-      id: 'starter-pack-demo-3-start-print', title: '开始打印', description: '描述', actionType: 'observe',
+      id: 'starter-pack-demo-3-start-print',
+      title: '开始打印',
+      description: '描述',
+      actionType: 'observe',
     }
     await nextTick()
     await flushPromises()
@@ -801,7 +890,10 @@ describe('TutorialOverlay.vue 覆盖率补齐测试', () => {
     const { wrapper } = await mountComponent()
     await activateTutorial(wrapper)
     storeContainer.state.currentStep = {
-      id: 'starter-pack-demo-3-start-print', title: '开始打印', description: '描述', actionType: 'observe',
+      id: 'starter-pack-demo-3-start-print',
+      title: '开始打印',
+      description: '描述',
+      actionType: 'observe',
     }
     await nextTick()
     await flushPromises()
@@ -823,7 +915,10 @@ describe('TutorialOverlay.vue 覆盖率补齐测试', () => {
     const { wrapper } = await mountComponent()
     await activateTutorial(wrapper)
     storeContainer.state.currentStep = {
-      id: 'starter-pack-demo-3-start-print', title: '开始打印', description: '描述', actionType: 'observe',
+      id: 'starter-pack-demo-3-start-print',
+      title: '开始打印',
+      description: '描述',
+      actionType: 'observe',
     }
     await nextTick()
     await flushPromises()
@@ -950,13 +1045,16 @@ describe('TutorialOverlay.vue TTS 路径测试', () => {
     vi.stubEnv('VITE_ENABLE_TUTORIAL_ONLINE_TTS', 'true')
 
     // Mock fetch
-    vi.stubGlobal('fetch', vi.fn(async () => ({
-      ok: true,
-      status: 200,
-      headers: { get: () => 'application/json' },
-      json: async () => ({ success: true, data: { audioBase64: 'data:audio/mp3;base64,AAAA' } }),
-      text: async () => '',
-    })))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ success: true, data: { audioBase64: 'data:audio/mp3;base64,AAAA' } }),
+        text: async () => '',
+      })),
+    )
 
     // Mock speechSynthesis
     Object.defineProperty(window, 'speechSynthesis', {
@@ -966,25 +1064,34 @@ describe('TutorialOverlay.vue TTS 路径测试', () => {
     })
 
     // Mock requestAnimationFrame 为同步
-    vi.stubGlobal('requestAnimationFrame', vi.fn((cb: FrameRequestCallback) => {
-      cb(0)
-      return 0
-    }))
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn((cb: FrameRequestCallback) => {
+        cb(0)
+        return 0
+      }),
+    )
     vi.stubGlobal('cancelAnimationFrame', vi.fn())
 
     // Mock requestIdleCallback 为同步
-    vi.stubGlobal('requestIdleCallback', vi.fn((cb: any) => {
-      cb({ didTimeout: false, timeRemaining: () => 0 })
-      return 0
-    }))
+    vi.stubGlobal(
+      'requestIdleCallback',
+      vi.fn((cb: any) => {
+        cb({ didTimeout: false, timeRemaining: () => 0 })
+        return 0
+      }),
+    )
     vi.stubGlobal('cancelIdleCallback', vi.fn())
 
     // Mock Audio
-    vi.stubGlobal('Audio', vi.fn().mockImplementation(() => ({
-      play: vi.fn().mockResolvedValue(undefined),
-      pause: vi.fn(),
-      src: '',
-    })))
+    vi.stubGlobal(
+      'Audio',
+      vi.fn().mockImplementation(() => ({
+        play: vi.fn().mockResolvedValue(undefined),
+        pause: vi.fn(),
+        src: '',
+      })),
+    )
   })
 
   afterEach(() => {
@@ -992,8 +1099,16 @@ describe('TutorialOverlay.vue TTS 路径测试', () => {
     vi.unstubAllGlobals()
     vi.unstubAllEnvs()
     vi.restoreAllMocks()
-    Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: originalInnerWidth })
-    Object.defineProperty(window, 'innerHeight', { configurable: true, writable: true, value: originalInnerHeight })
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: originalInnerWidth,
+    })
+    Object.defineProperty(window, 'innerHeight', {
+      configurable: true,
+      writable: true,
+      value: originalInnerHeight,
+    })
   })
 
   it('启用 TTS 时 isActive 触发 prefetchTutorialSpeech', async () => {
@@ -1008,7 +1123,10 @@ describe('TutorialOverlay.vue TTS 路径测试', () => {
     await activateTutorial(wrapper)
     ;(globalThis.fetch as any).mockClear()
     storeContainer.state.currentStep = {
-      id: 's-tts', title: 'TTS 步', description: '需要朗读的描述', actionType: 'observe',
+      id: 's-tts',
+      title: 'TTS 步',
+      description: '需要朗读的描述',
+      actionType: 'observe',
     }
     await nextTick()
     await flushPromises()
@@ -1027,8 +1145,11 @@ describe('TutorialOverlay.vue TTS 路径测试', () => {
 
   it('TTS fetch 返回非 ok 时返回空字符串', async () => {
     ;(globalThis.fetch as any).mockResolvedValueOnce({
-      ok: false, status: 500, headers: { get: () => 'application/json' },
-      json: async () => ({}), text: async () => '',
+      ok: false,
+      status: 500,
+      headers: { get: () => 'application/json' },
+      json: async () => ({}),
+      text: async () => '',
     })
     const { wrapper } = await mountComponent()
     await activateTutorial(wrapper)
@@ -1038,8 +1159,11 @@ describe('TutorialOverlay.vue TTS 路径测试', () => {
 
   it('TTS fetch 返回 success=false 时返回空', async () => {
     ;(globalThis.fetch as any).mockResolvedValueOnce({
-      ok: true, status: 200, headers: { get: () => 'application/json' },
-      json: async () => ({ success: false, data: {} }), text: async () => '',
+      ok: true,
+      status: 200,
+      headers: { get: () => 'application/json' },
+      json: async () => ({ success: false, data: {} }),
+      text: async () => '',
     })
     const { wrapper } = await mountComponent()
     await activateTutorial(wrapper)
@@ -1049,8 +1173,11 @@ describe('TutorialOverlay.vue TTS 路径测试', () => {
 
   it('TTS fetch 返回的 audioBase64 非 data:audio/ 前缀时返回空', async () => {
     ;(globalThis.fetch as any).mockResolvedValueOnce({
-      ok: true, status: 200, headers: { get: () => 'application/json' },
-      json: async () => ({ success: true, data: { audioBase64: 'not-audio-data' } }), text: async () => '',
+      ok: true,
+      status: 200,
+      headers: { get: () => 'application/json' },
+      json: async () => ({ success: true, data: { audioBase64: 'not-audio-data' } }),
+      text: async () => '',
     })
     const { wrapper } = await mountComponent()
     await activateTutorial(wrapper)
@@ -1060,8 +1187,13 @@ describe('TutorialOverlay.vue TTS 路径测试', () => {
 
   it('TTS fetch 返回 json 解析失败时返回空', async () => {
     ;(globalThis.fetch as any).mockResolvedValueOnce({
-      ok: true, status: 200, headers: { get: () => 'application/json' },
-      json: async () => { throw new Error('parse error') }, text: async () => '',
+      ok: true,
+      status: 200,
+      headers: { get: () => 'application/json' },
+      json: async () => {
+        throw new Error('parse error')
+      },
+      text: async () => '',
     })
     const { wrapper } = await mountComponent()
     await activateTutorial(wrapper)
@@ -1121,9 +1253,12 @@ describe('TutorialOverlay.vue TTS 路径测试', () => {
 
   it('speakTutorialStep 中 Audio 构造抛异常时进入 catch 分支', async () => {
     // 让 Audio 构造函数抛出异常，触发 speakTutorialStep 的 catch 分支
-    vi.stubGlobal('Audio', vi.fn(() => {
-      throw new Error('Audio constructor error')
-    }))
+    vi.stubGlobal(
+      'Audio',
+      vi.fn(() => {
+        throw new Error('Audio constructor error')
+      }),
+    )
     const { wrapper } = await mountComponent()
     await activateTutorial(wrapper)
     // 多次 flushPromises 确保异步 speakTutorialStep 完成
@@ -1159,12 +1294,17 @@ describe('TutorialOverlay.vue TTS 路径测试', () => {
 
   it('stopTutorialSpeech 中 audio.pause 抛异常时静默处理', async () => {
     // Audio.pause 抛异常，测试 try-catch 分支
-    const pauseError = vi.fn(() => { throw new Error('pause error') })
-    vi.stubGlobal('Audio', vi.fn().mockImplementation(() => ({
-      play: vi.fn().mockResolvedValue(undefined),
-      pause: pauseError,
-      src: '',
-    })))
+    const pauseError = vi.fn(() => {
+      throw new Error('pause error')
+    })
+    vi.stubGlobal(
+      'Audio',
+      vi.fn().mockImplementation(() => ({
+        play: vi.fn().mockResolvedValue(undefined),
+        pause: pauseError,
+        src: '',
+      })),
+    )
     const { wrapper } = await mountComponent()
     await activateTutorial(wrapper)
     // 触发 stopTutorialSpeech（isActive 失活）

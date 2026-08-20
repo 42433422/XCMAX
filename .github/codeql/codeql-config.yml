@@ -2,6 +2,8 @@ name: "XCAGI production CodeQL scope"
 
 paths-ignore:
   - "**/tests/**"
+  - "**/*.test.ts"
+  - "**/*.spec.ts"
   - "**/examples/**"
   - "scripts/**"
   - "**/scripts/**"

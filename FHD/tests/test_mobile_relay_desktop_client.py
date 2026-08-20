@@ -43,7 +43,7 @@ def test_relay_poll_backoff_is_bounded_and_resets():
 
 def test_register_desktop_relay_uses_stable_device_id(monkeypatch, tmp_path):
     from app.services import mobile_relay_desktop_client as relay
-    from app.utils import device_identity
+    from app.utils.device_system import device_identity
 
     posted: list[dict] = []
 

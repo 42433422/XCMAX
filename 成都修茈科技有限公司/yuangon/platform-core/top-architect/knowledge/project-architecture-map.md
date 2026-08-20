@@ -4,24 +4,24 @@
 
 ## 1. 顶层结构
 
-| 区域 | 作用 | 关键路径 |
-|------|------|----------|
-| XCMAX 根仓 | 总仓、CI、桌面/移动/网站/员工体系汇合点 | `.github/**`、`docs/**`、`scripts/dev/**` |
-| FHD | XCAGI 主应用：FastAPI 后端、Vue 前端、Electron 桌面、移动端主线、员工 SSOT | `FHD/app/**`、`FHD/frontend/src/**`、`FHD/desktop/**`、`FHD/mobile-flutter-poc/**` |
-| MODstore_deploy | Mod/员工包/工作流/支付/市场平台 | `成都修茈科技有限公司/MODstore_deploy/**` |
-| yuangon | 管理端员工岗位包说明、runbook、skill、prompt | `成都修茈科技有限公司/yuangon/**` |
+| 区域            | 作用                                                                       | 关键路径                                                                           |
+| --------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| XCMAX 根仓      | 总仓、CI、桌面/移动/网站/员工体系汇合点                                    | `.github/**`、`docs/**`、`scripts/dev/**`                                          |
+| FHD             | XCAGI 主应用：FastAPI 后端、Vue 前端、Electron 桌面、移动端主线、员工 SSOT | `FHD/app/**`、`FHD/frontend/src/**`、`FHD/desktop/**`、`FHD/mobile-flutter-poc/**` |
+| MODstore_deploy | Mod/员工包/工作流/支付/市场平台                                            | `成都修茈科技有限公司/MODstore_deploy/**`                                          |
+| yuangon         | 管理端员工岗位包说明、runbook、skill、prompt                               | `成都修茈科技有限公司/yuangon/**`                                                  |
 
 ## 2. FHD 主应用架构
 
 FHD 采用 Neuro-DDD 思路：表现层、应用层、领域层、基础设施层分离，并用 NeuroBus/事件契约承接 AI 员工和自动化流程。
 
-| 层 | 典型路径 | 职责 |
-|----|----------|------|
-| 表现层 | `FHD/app/fastapi_routes/**`、`FHD/frontend/src/**` | API 路由、Vue 页面、移动 API |
-| 应用层 | `FHD/app/application/**` | 用例编排、跨领域协调、服务层 |
-| 领域层 | `FHD/app/domain/**` | 领域实体、规则、值对象 |
-| 基础设施层 | `FHD/app/infrastructure/**`、`FHD/app/db/**` | DB、外部服务、Mod 加载、持久化 |
-| 事件/AI | `FHD/app/neuro_bus/**`、`FHD/config/neuro_bus_events.yaml` | 事件契约、追踪、AI 编排 |
+| 层         | 典型路径                                                   | 职责                           |
+| ---------- | ---------------------------------------------------------- | ------------------------------ |
+| 表现层     | `FHD/app/fastapi_routes/**`、`FHD/frontend/src/**`         | API 路由、Vue 页面、移动 API   |
+| 应用层     | `FHD/app/application/**`                                   | 用例编排、跨领域协调、服务层   |
+| 领域层     | `FHD/app/domain/**`                                        | 领域实体、规则、值对象         |
+| 基础设施层 | `FHD/app/infrastructure/**`、`FHD/app/db/**`               | DB、外部服务、Mod 加载、持久化 |
+| 事件/AI    | `FHD/app/neuro_bus/**`、`FHD/config/neuro_bus_events.yaml` | 事件契约、追踪、AI 编排        |
 
 桌面形态是 Electron 壳加本地 FastAPI 子进程；Web 形态是 Nginx/服务端 FastAPI；移动端主线是 Flutter UI 调 FastAPI `/api/mobile/v1/*`。
 
@@ -29,13 +29,13 @@ FHD 采用 Neuro-DDD 思路：表现层、应用层、领域层、基础设施�
 
 移动统一主线以 Flutter 为前端、OpenAPI 为契约、FastAPI 为可信业务后端。
 
-| 主题 | SSOT/入口 |
-|------|-----------|
-| 移动统一策略 | `FHD/docs/mobile_tri_platform_ssot.md` |
-| Flutter 主实现 | `FHD/mobile-flutter-poc/**` |
-| 契约 | `FHD/contracts/openapi.json` |
+| 主题             | SSOT/入口                                                                                 |
+| ---------------- | ----------------------------------------------------------------------------------------- |
+| 移动统一策略     | `FHD/docs/mobile_tri_platform_ssot.md`                                                    |
+| Flutter 主实现   | `FHD/mobile-flutter-poc/**`                                                               |
+| 契约             | `FHD/contracts/openapi.json`                                                              |
 | FastAPI 移动接口 | `FHD/app/fastapi_routes/mobile_api.py`、`FHD/app/fastapi_routes/mobile_api_extensions.py` |
-| Flutter 收敛边界 | `FHD/mobile-flutter-poc/FLUTTER_UNIFICATION.md` |
+| Flutter 收敛边界 | `FHD/mobile-flutter-poc/FLUTTER_UNIFICATION.md`                                           |
 
 原则：Flutter 只做交互、展示、缓存和端侧适配；账号、权限、员工、聊天、支付、审批、同步、数据写入都归 FastAPI。
 
@@ -62,12 +62,12 @@ FHD 采用 Neuro-DDD 思路：表现层、应用层、领域层、基础设施�
 
 MODstore 是 Mod、AI 员工包、工作流、支付/钱包/权益的平台。当前是同进程模块化为主，支付域已有 Java 服务边界。
 
-| 域 | 典型路径 | 职责 |
-|----|----------|------|
-| 市场前端 | `成都修茈科技有限公司/MODstore_deploy/market/**` | Vue 3 + Vite 页面、市场、工作台 |
-| Python 网关 | `成都修茈科技有限公司/MODstore_deploy/modstore_server/**` | FastAPI 网关、Catalog、员工、工作流、LLM、通知 |
-| Java 支付 | `成都修茈科技有限公司/MODstore_deploy/java_payment_service/**` | 订单、支付、钱包、权益 |
-| 文档/ADR | `成都修茈科技有限公司/MODstore_deploy/docs/**` | 架构、服务边界、支付契约、运行手册 |
+| 域          | 典型路径                                                       | 职责                                           |
+| ----------- | -------------------------------------------------------------- | ---------------------------------------------- |
+| 市场前端    | `成都修茈科技有限公司/MODstore_deploy/market/**`               | Vue 3 + Vite 页面、市场、工作台                |
+| Python 网关 | `成都修茈科技有限公司/MODstore_deploy/modstore_server/**`      | FastAPI 网关、Catalog、员工、工作流、LLM、通知 |
+| Java 支付   | `成都修茈科技有限公司/MODstore_deploy/java_payment_service/**` | 订单、支付、钱包、权益                         |
+| 文档/ADR    | `成都修茈科技有限公司/MODstore_deploy/docs/**`                 | 架构、服务边界、支付契约、运行手册             |
 
 关键边界见 `成都修茈科技有限公司/MODstore_deploy/docs/ARCHITECTURE.md`、`SERVICE_BOUNDARIES.md`、`PAYMENT_CONTRACT.md`。
 
@@ -75,16 +75,16 @@ MODstore 是 Mod、AI 员工包、工作流、支付/钱包/权益的平台。�
 
 回答问题时优先核对这些真相源：
 
-| 领域 | 文件 |
-|------|------|
-| SSOT 索引 | `FHD/docs/SSOT_INDEX.md` |
-| 项目状态 | `FHD/docs/PROJECT_STATE.md` |
-| 员工编制 | `FHD/config/duty_roster.json` |
-| 移动统一 | `FHD/docs/mobile_tri_platform_ssot.md` |
-| OpenAPI | `FHD/contracts/openapi.json` |
-| 事件契约 | `FHD/config/neuro_bus_events.yaml` |
-| 账号体系 | `FHD/docs/account_system_ssot.md` |
-| 版本 | `FHD/VERSION.md` |
+| 领域      | 文件                                   |
+| --------- | -------------------------------------- |
+| SSOT 索引 | `FHD/docs/SSOT_INDEX.md`               |
+| 项目状态  | `FHD/docs/PROJECT_STATE.md`            |
+| 员工编制  | `FHD/config/duty_roster.json`          |
+| 移动统一  | `FHD/docs/mobile_tri_platform_ssot.md` |
+| OpenAPI   | `FHD/contracts/openapi.json`           |
+| 事件契约  | `FHD/config/neuro_bus_events.yaml`     |
+| 账号体系  | `FHD/docs/account_system_ssot.md`      |
+| 版本      | `FHD/VERSION.md`                       |
 
 `PROJECT_STATE.md` 是诚实仪表盘。它可能比旧架构文档更接近当前风险和落地状态。架构建议必须同时看“目标架构”和“真实进度”。
 

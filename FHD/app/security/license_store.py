@@ -309,7 +309,7 @@ def issue_key(
             " VALUES (?, ?, ?, ?, ?, ?)",
             (digest, label.strip(), now, created_by.strip(), expires_at, 1 if is_admin else 0),
         )
-        new_id = int(cur.lastrowid)
+        new_id = int(cur.lastrowid or 0)
         row = conn.execute("SELECT * FROM lan_license_keys WHERE id=?", (new_id,)).fetchone()
     return secret_text, _row_to_key(row)
 
@@ -403,7 +403,7 @@ def record_session(
             " VALUES (?, ?, ?, ?, ?, ?, ?)",
             (jti, key_id, kid or "", ip or "", user_agent or "", int(issued_at), int(expires_at)),
         )
-        new_id = int(cur.lastrowid)
+        new_id = int(cur.lastrowid or 0)
         row = conn.execute("SELECT * FROM lan_license_sessions WHERE id=?", (new_id,)).fetchone()
     return _row_to_session(row)
 
@@ -457,283 +457,19 @@ def touch_session(jti: str) -> None:
         )
 
 
-# ---------------------------------------------------------------------------
-# 审计
-# ---------------------------------------------------------------------------
-
-
-def write_audit(
-    *,
-    action: str,
-    target: str = "",
-    actor: str = "",
-    ip: str = "",
-    detail: str = "",
-) -> None:
-    ensure_schema()
-    with _connect() as conn:
-        conn.execute(
-            "INSERT INTO lan_audit_log (ts, actor, action, target, ip, detail)"
-            " VALUES (?, ?, ?, ?, ?, ?)",
-            (_now(), actor or "", action, target or "", ip or "", detail or ""),
-        )
-
-
-def list_audit(limit: int = 200) -> list[AuditEntry]:
-    ensure_schema()
-    with _connect() as conn:
-        rows = conn.execute(
-            "SELECT * FROM lan_audit_log ORDER BY id DESC LIMIT ?", (int(limit),)
-        ).fetchall()
-    return [_row_to_audit(r) for r in rows]
-
-
-# ---------------------------------------------------------------------------
-# 动态白名单 / 访问申请
-# ---------------------------------------------------------------------------
-
-
-def is_ip_explicitly_allowed(ip: str) -> bool:
-    ensure_schema()
-    norm = str(ip or "").strip()
-    if not norm:
-        return False
-    with _connect() as conn:
-        row = conn.execute(
-            "SELECT COUNT(1) AS n FROM lan_allowed_clients WHERE ip=? AND revoked_at IS NULL",
-            (norm,),
-        ).fetchone()
-    return int(row["n"] or 0) > 0
-
-
-def touch_allowed_client(ip: str) -> None:
-    ensure_schema()
-    norm = str(ip or "").strip()
-    if not norm:
-        return
-    with _connect() as conn:
-        conn.execute(
-            "UPDATE lan_allowed_clients SET last_seen_at=? WHERE ip=? AND revoked_at IS NULL",
-            (_now(), norm),
-        )
-
-
-def list_allowed_clients(active_only: bool = True, limit: int = 200) -> list[AllowedClient]:
-    ensure_schema()
-    sql = "SELECT * FROM lan_allowed_clients"
-    params: tuple = ()
-    if active_only:
-        sql += " WHERE revoked_at IS NULL"
-    sql += " ORDER BY approved_at DESC, id DESC LIMIT ?"
-    params = params + (int(limit),)
-    with _connect() as conn:
-        rows = conn.execute(sql, params).fetchall()
-    return [_row_to_allowed_client(r) for r in rows]
-
-
-def revoke_allowed_client(client_id: int, *, actor: str = "", ip: str = "") -> bool:
-    ensure_schema()
-    now = _now()
-    with _connect() as conn:
-        cur = conn.execute(
-            "UPDATE lan_allowed_clients SET revoked_at=? WHERE id=? AND revoked_at IS NULL",
-            (now, int(client_id)),
-        )
-        ok = cur.rowcount > 0
-    if ok:
-        write_audit(
-            action="allowlist.revoke",
-            target=f"allow:{client_id}",
-            actor=actor,
-            ip=ip,
-        )
-    return ok
-
-
-def get_latest_access_request_by_ip(ip: str) -> AccessRequest | None:
-    ensure_schema()
-    norm = str(ip or "").strip()
-    if not norm:
-        return None
-    with _connect() as conn:
-        row = conn.execute(
-            "SELECT * FROM lan_access_requests WHERE ip=? ORDER BY id DESC LIMIT 1",
-            (norm,),
-        ).fetchone()
-    return _row_to_access_request(row) if row else None
-
-
-def create_access_request(
-    *,
-    ip: str,
-    device_label: str = "",
-    note: str = "",
-    user_agent: str = "",
-) -> AccessRequest:
-    ensure_schema()
-    norm_ip = str(ip or "").strip()
-    if not norm_ip:
-        raise ValueError("ip must not be empty")
-    label = str(device_label or "").strip()[:200]
-    detail = str(note or "").strip()[:500]
-    ua = str(user_agent or "").strip()[:512]
-    now = _now()
-    with _connect() as conn:
-        existing = conn.execute(
-            "SELECT * FROM lan_access_requests WHERE ip=? AND status='pending' ORDER BY id DESC LIMIT 1",
-            (norm_ip,),
-        ).fetchone()
-        if existing:
-            conn.execute(
-                "UPDATE lan_access_requests"
-                " SET device_label=?, note=?, user_agent=?, requested_at=?"
-                " WHERE id=?",
-                (label, detail, ua, now, int(existing["id"])),
-            )
-            row = conn.execute(
-                "SELECT * FROM lan_access_requests WHERE id=?",
-                (int(existing["id"]),),
-            ).fetchone()
-            return _row_to_access_request(row)
-
-        cur = conn.execute(
-            "INSERT INTO lan_access_requests"
-            " (ip, device_label, note, user_agent, requested_at, status)"
-            " VALUES (?, ?, ?, ?, ?, 'pending')",
-            (norm_ip, label, detail, ua, now),
-        )
-        row = conn.execute(
-            "SELECT * FROM lan_access_requests WHERE id=?",
-            (int(cur.lastrowid),),
-        ).fetchone()
-    return _row_to_access_request(row)
-
-
-def list_access_requests(
-    *,
-    status: str | None = None,
-    limit: int = 200,
-) -> list[AccessRequest]:
-    ensure_schema()
-    sql = "SELECT * FROM lan_access_requests"
-    params: tuple = ()
-    norm_status = str(status or "").strip().lower()
-    if norm_status and norm_status != "all":
-        sql += " WHERE status=?"
-        params = (norm_status,)
-    sql += " ORDER BY id DESC LIMIT ?"
-    params = params + (int(limit),)
-    with _connect() as conn:
-        rows = conn.execute(sql, params).fetchall()
-    return [_row_to_access_request(r) for r in rows]
-
-
-def approve_access_request(
-    request_id: int,
-    *,
-    actor: str = "",
-    review_note: str = "",
-) -> AccessRequest | None:
-    ensure_schema()
-    now = _now()
-    note = str(review_note or "").strip()[:500]
-    with _connect() as conn:
-        row = conn.execute(
-            "SELECT * FROM lan_access_requests WHERE id=?",
-            (int(request_id),),
-        ).fetchone()
-        if not row:
-            return None
-
-        record = _row_to_access_request(row)
-        conn.execute(
-            "UPDATE lan_access_requests"
-            " SET status='approved', reviewed_at=?, reviewed_by=?, review_note=?"
-            " WHERE id=?",
-            (now, actor or "", note, int(request_id)),
-        )
-        existing_allow = conn.execute(
-            "SELECT id FROM lan_allowed_clients WHERE ip=? LIMIT 1",
-            (record.ip,),
-        ).fetchone()
-        if existing_allow:
-            conn.execute(
-                "UPDATE lan_allowed_clients"
-                " SET label=?, note=?, approved_at=?, approved_by=?, request_id=?, revoked_at=NULL"
-                " WHERE id=?",
-                (
-                    record.device_label,
-                    note or record.note,
-                    now,
-                    actor or "",
-                    int(request_id),
-                    int(existing_allow["id"]),
-                ),
-            )
-        else:
-            conn.execute(
-                "INSERT INTO lan_allowed_clients"
-                " (ip, label, note, approved_at, approved_by, request_id)"
-                " VALUES (?, ?, ?, ?, ?, ?)",
-                (
-                    record.ip,
-                    record.device_label,
-                    note or record.note,
-                    now,
-                    actor or "",
-                    int(request_id),
-                ),
-            )
-        updated = conn.execute(
-            "SELECT * FROM lan_access_requests WHERE id=?",
-            (int(request_id),),
-        ).fetchone()
-    write_audit(
-        action="allowlist.approve",
-        target=f"request:{request_id}",
-        actor=actor,
-        ip=record.ip,
-        detail=note or record.device_label,
-    )
-    return _row_to_access_request(updated) if updated else None
-
-
-def reject_access_request(
-    request_id: int,
-    *,
-    actor: str = "",
-    review_note: str = "",
-) -> AccessRequest | None:
-    ensure_schema()
-    now = _now()
-    note = str(review_note or "").strip()[:500]
-    with _connect() as conn:
-        row = conn.execute(
-            "SELECT * FROM lan_access_requests WHERE id=?",
-            (int(request_id),),
-        ).fetchone()
-        if not row:
-            return None
-        conn.execute(
-            "UPDATE lan_access_requests"
-            " SET status='rejected', reviewed_at=?, reviewed_by=?, review_note=?"
-            " WHERE id=?",
-            (now, actor or "", note, int(request_id)),
-        )
-        updated = conn.execute(
-            "SELECT * FROM lan_access_requests WHERE id=?",
-            (int(request_id),),
-        ).fetchone()
-    record = _row_to_access_request(updated) if updated else None
-    if record:
-        write_audit(
-            action="allowlist.reject",
-            target=f"request:{request_id}",
-            actor=actor,
-            ip=record.ip,
-            detail=note or record.device_label,
-        )
-    return record
+from app.security.license_access_store import approve_access_request as approve_access_request
+from app.security.license_access_store import create_access_request as create_access_request
+from app.security.license_access_store import (
+    get_latest_access_request_by_ip as get_latest_access_request_by_ip,
+)
+from app.security.license_access_store import is_ip_explicitly_allowed as is_ip_explicitly_allowed
+from app.security.license_access_store import list_access_requests as list_access_requests
+from app.security.license_access_store import list_allowed_clients as list_allowed_clients
+from app.security.license_access_store import reject_access_request as reject_access_request
+from app.security.license_access_store import revoke_allowed_client as revoke_allowed_client
+from app.security.license_access_store import touch_allowed_client as touch_allowed_client
+from app.security.license_audit_store import list_audit as list_audit
+from app.security.license_audit_store import write_audit as write_audit
 
 
 def to_dict_key(k: LicenseKey) -> dict:

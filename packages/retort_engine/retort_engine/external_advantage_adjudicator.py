@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 
 def adjudicate_external_advantage_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -68,8 +68,13 @@ def blind_third_party_adjudicate_external_advantages(
 
 
 def _adjudicate_row(row: dict[str, Any]) -> dict[str, Any]:
-    baseline = row.get("baseline") if isinstance(row.get("baseline"), dict) else {}
-    retort = row.get("retort") if isinstance(row.get("retort"), dict) else {}
+    baseline = cast(
+        dict[str, Any],
+        row.get("baseline") if isinstance(row.get("baseline"), dict) else {},
+    )
+    retort = cast(
+        dict[str, Any], row.get("retort") if isinstance(row.get("retort"), dict) else {}
+    )
     baseline_score = _baseline_score(baseline)
     retort_score = _retort_score(row, retort)
     checks = {
@@ -95,8 +100,13 @@ def _adjudicate_row(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def _blind_row(row: dict[str, Any]) -> dict[str, Any]:
-    baseline = row.get("baseline") if isinstance(row.get("baseline"), dict) else {}
-    retort = row.get("retort") if isinstance(row.get("retort"), dict) else {}
+    baseline = cast(
+        dict[str, Any],
+        row.get("baseline") if isinstance(row.get("baseline"), dict) else {},
+    )
+    retort = cast(
+        dict[str, Any], row.get("retort") if isinstance(row.get("retort"), dict) else {}
+    )
     expected_context = str(row.get("expected_context") or "")
     expected_severity = str(row.get("expected_severity") or "")
     observed_contexts = {

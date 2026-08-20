@@ -1,6 +1,4 @@
-# -*- coding: utf-8 -*-
 import sqlite3
-import os
 
 msg_db = r"E:\FHD\XCAGI\resources\wechat-decrypt\decrypted\message\message_0.db"
 contact_db = r"E:\FHD\XCAGI\resources\wechat-decrypt\decrypted\contact\contact.db"

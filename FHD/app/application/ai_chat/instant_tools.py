@@ -10,8 +10,6 @@ logger = logging.getLogger(__name__)
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-OPERATIONAL_ERRORS = RECOVERABLE_ERRORS
-
 
 class AIChatInstantToolsMixin:
     def _execute_pro_mode_tools(
@@ -43,7 +41,7 @@ class AIChatInstantToolsMixin:
             )
             tin_spec = slots.get("tin_spec") or parsed_params.get("tin_spec", "")
             products_list = slots.get("products") or []
-            parsed_products = []
+            parsed_products: list[dict[str, Any]] = []
             parsed_unit_name = ""
 
             # pro 模式优先从原消息解析整单，保留完整 products[]。
@@ -201,9 +199,9 @@ class AIChatInstantToolsMixin:
                 "unit_name": unit_name,
                 "query": model_number or keyword or "",
             }
-        except RECOVERABLE_ERRORS as prod_err:
-            logger.error("即时执行 products 查询失败: %s", prod_err, exc_info=True)
-            response_data["response"] = f"查询产品失败：{str(prod_err)}"
+        except RECOVERABLE_ERRORS:
+            logger.exception("即时执行 products 查询失败")
+            response_data["response"] = "查询产品失败，请稍后重试"
 
         return response_data
 
@@ -220,9 +218,9 @@ class AIChatInstantToolsMixin:
             response_data["response"] = (
                 f"查询到 {len(customers)} 个客户" if customers else "未找到客户"
             )
-        except RECOVERABLE_ERRORS as cust_err:
-            logger.error("即时执行 customers 查询失败: %s", cust_err, exc_info=True)
-            response_data["response"] = f"查询客户失败：{str(cust_err)}"
+        except RECOVERABLE_ERRORS:
+            logger.exception("即时执行 customers 查询失败")
+            response_data["response"] = "查询客户失败，请稍后重试"
 
         return response_data
 
@@ -278,9 +276,9 @@ class AIChatInstantToolsMixin:
                     return response_data
                 response_data["response"] = created.get("message", "处理单位失败")
                 return response_data
-            except RECOVERABLE_ERRORS as err:
-                logger.error("customers 添加意图执行失败: %s", err, exc_info=True)
-                response_data["response"] = f"处理单位失败：{str(err)}"
+            except RECOVERABLE_ERRORS:
+                logger.exception("customers 添加意图执行失败")
+                response_data["response"] = "处理单位失败"
                 return response_data
 
         if is_query_intent:
@@ -298,8 +296,8 @@ class AIChatInstantToolsMixin:
         unit_name: str,
         products: list,
         original_message: str = "",
-        default_qty: int = None,
-        default_spec: int = None,
+        default_qty: int | None = None,
+        default_spec: int | None = None,
     ) -> str:
         """根据产品列表构建订单文本"""
         import re
@@ -419,9 +417,9 @@ class AIChatInstantToolsMixin:
                     response_data["response"] = doc_result.get("message", "生成发货单失败")
             else:
                 response_data["response"] = parsed.get("message", "订单解析失败")
-        except RECOVERABLE_ERRORS as tool_err:
-            logger.error("自动执行 shipment_generate 失败: %s", tool_err, exc_info=True)
-            response_data["response"] = f"生成发货单失败：{str(tool_err)}"
+        except RECOVERABLE_ERRORS:
+            logger.exception("自动执行 shipment_generate 失败")
+            response_data["response"] = "生成发货单失败，请稍后重试"
 
         return response_data
 

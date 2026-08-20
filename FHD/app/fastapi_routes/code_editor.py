@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import difflib
 import hashlib
+import logging
 import os
 import uuid
 from pathlib import Path
@@ -15,6 +16,7 @@ from pydantic import BaseModel
 from app.domain.ai.tier import assert_p2_elevated_claim_or_raise, resolve_ai_tier
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/code-editor", tags=["code-editor"])
 
 _EDIT_STORE: dict[str, dict[str, Any]] = {}
@@ -228,8 +230,9 @@ def code_editor_draft(request: Request, body: DraftBody) -> dict:
     ]
     try:
         out = chat_completion_no_tools(messages)
-    except RECOVERABLE_ERRORS as e:
-        return {"success": False, "message": str(e), "is_new_file": False}
+    except RECOVERABLE_ERRORS:
+        logger.exception("code editor draft failed")
+        return {"success": False, "message": "代码草稿服务暂时不可用", "is_new_file": False}
 
     if isinstance(out, str) and out.strip().upper().startswith("ERROR:"):
         return {"success": False, "message": out.strip(), "is_new_file": False}

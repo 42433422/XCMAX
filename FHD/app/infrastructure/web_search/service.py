@@ -77,7 +77,12 @@ async def _tavily_search(query: str, api_key: str, max_results: int) -> list[Web
 async def _serpapi_search(query: str, api_key: str, max_results: int) -> list[WebSearchHit]:
     import httpx
 
-    params = {"engine": "google", "q": query, "api_key": api_key, "num": max_results}
+    params: dict[str, str | int] = {
+        "engine": "google",
+        "q": query,
+        "api_key": api_key,
+        "num": max_results,
+    }
     async with httpx.AsyncClient(timeout=_DEFAULT_TIMEOUT_SEC) as client:
         r = await client.get("https://serpapi.com/search.json", params=params)
         r.raise_for_status()

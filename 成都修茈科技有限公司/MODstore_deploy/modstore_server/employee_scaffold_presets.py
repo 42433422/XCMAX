@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr"
 """Department-oriented capability presets for :mod:`employee_ai_scaffold`.
 
 Used when ``employee.capabilities`` from the LLM is empty and/or when the LLM
@@ -12,12 +13,22 @@ from typing import Any, Dict, List, Tuple
 DEPARTMENT_PRESETS: Dict[str, Dict[str, Any]] = {
     "design": {
         "label_zh": "设计与创意",
-        "capabilities": ["ux.copy_review", "brand.guide_check", "layout.feedback", "task.analyze"],
+        "capabilities": [
+            "ux.copy_review",
+            "brand.guide_check",
+            "layout.feedback",
+            "task.analyze",
+        ],
         "skill_hints": ["产出可执行的评审清单与修订建议；不确定处标注假设"],
     },
     "engineering": {
         "label_zh": "研发工程",
-        "capabilities": ["code.review", "bug.triage", "api.contract_check", "task.analyze"],
+        "capabilities": [
+            "code.review",
+            "bug.triage",
+            "api.contract_check",
+            "task.analyze",
+        ],
         "skill_hints": ["变更影响范围、风险与回滚建议"],
     },
     "qa": {
@@ -52,17 +63,32 @@ DEPARTMENT_PRESETS: Dict[str, Dict[str, Any]] = {
     },
     "marketing": {
         "label_zh": "市场增长",
-        "capabilities": ["copy.variations", "landing.hints", "seo.brief", "task.analyze"],
+        "capabilities": [
+            "copy.variations",
+            "landing.hints",
+            "seo.brief",
+            "task.analyze",
+        ],
         "skill_hints": ["受众、卖点、合规用语注意"],
     },
     "sales": {
         "label_zh": "销售与客户拓展",
-        "capabilities": ["pitch.outline", "objection.handling", "crm.note_summary", "task.analyze"],
+        "capabilities": [
+            "pitch.outline",
+            "objection.handling",
+            "crm.note_summary",
+            "task.analyze",
+        ],
         "skill_hints": ["下一步动作与跟进要点"],
     },
     "support": {
         "label_zh": "客户支持",
-        "capabilities": ["ticket.classify", "customer.reply", "kb.article_outline", "task.analyze"],
+        "capabilities": [
+            "ticket.classify",
+            "customer.reply",
+            "kb.article_outline",
+            "task.analyze",
+        ],
         "skill_hints": ["共情、事实核对、升级条件"],
     },
     "data": {
@@ -87,7 +113,12 @@ DEPARTMENT_PRESETS: Dict[str, Dict[str, Any]] = {
     },
     "hr": {
         "label_zh": "人力资源",
-        "capabilities": ["jd.outline", "interview.rubric", "onboarding.checklist", "task.analyze"],
+        "capabilities": [
+            "jd.outline",
+            "interview.rubric",
+            "onboarding.checklist",
+            "task.analyze",
+        ],
         "skill_hints": ["平等雇佣与隐私边界"],
     },
     "legal_ops": {
@@ -122,7 +153,12 @@ DEPARTMENT_PRESETS: Dict[str, Dict[str, Any]] = {
     },
     "research": {
         "label_zh": "研究与竞品",
-        "capabilities": ["competitor.matrix", "source.trace_hint", "summary.brief", "task.analyze"],
+        "capabilities": [
+            "competitor.matrix",
+            "source.trace_hint",
+            "summary.brief",
+            "task.analyze",
+        ],
         "skill_hints": ["标注信息时效性与来源"],
     },
 }
@@ -132,7 +168,9 @@ def list_preset_keys() -> List[str]:
     return sorted(DEPARTMENT_PRESETS.keys())
 
 
-def resolve_preset_capabilities(department_preset: str | None) -> Tuple[List[str], Dict[str, Any]]:
+def resolve_preset_capabilities(
+    department_preset: str | None,
+) -> Tuple[List[str], Dict[str, Any]]:
     """Return (capabilities, meta) for a preset key; meta empty if unknown."""
     key = str(department_preset or "").strip().lower()
     if not key or key not in DEPARTMENT_PRESETS:

@@ -3,17 +3,10 @@
     <div class="order-list-page__head">
       <h2 class="page-title">我的订单</h2>
       <div class="order-list-toolbar" v-if="!loading && orders.length">
-        <button
-          type="button"
-          class="btn btn-ghost order-dismiss-btn"
-          :disabled="dismissing"
-          @click="dismissNonActive"
-        >
+        <button type="button" class="btn btn-ghost order-dismiss-btn" :disabled="dismissing" @click="dismissNonActive">
           {{ dismissing ? '处理中…' : '清理展示' }}
         </button>
-        <span class="order-list-toolbar__hint" title="隐藏已关闭/失败/已退款等，保留待付、已付、退款中"
-          >从列表隐藏终态</span
-        >
+        <span class="order-list-toolbar__hint" title="隐藏已关闭/失败/已退款等，保留待付、已付、退款中">从列表隐藏终态</span>
       </div>
     </div>
     <div v-if="err" class="err">{{ err }}</div>
@@ -34,12 +27,7 @@
 
       <div v-if="!orders.length" class="empty">暂无订单</div>
       <div v-else class="order-list">
-        <div
-          v-for="order in orders"
-          :key="order.out_trade_no"
-          class="order-card"
-          @click="goDetail(order)"
-        >
+        <div v-for="order in orders" :key="order.out_trade_no" class="order-card" @click="goDetail(order)">
           <div class="order-header">
             <span class="order-no">{{ order.out_trade_no }}</span>
             <span :class="['order-status', order.status]">{{ statusText(order.status) }}</span>
@@ -50,22 +38,8 @@
           </div>
           <div class="order-footer">
             <span class="order-time">{{ formatTime(order.created_at) }}</span>
-            <button
-              v-if="order.status === 'pending'"
-              type="button"
-              class="btn-cancel"
-              @click.stop="cancelOrder(order)"
-            >
-              取消
-            </button>
-            <button
-              v-if="order.status === 'paid'"
-              type="button"
-              class="btn-refund"
-              @click.stop="goRefund(order)"
-            >
-              申请退款
-            </button>
+            <button v-if="order.status === 'pending'" type="button" class="btn-cancel" @click.stop="cancelOrder(order)">取消</button>
+            <button v-if="order.status === 'paid'" type="button" class="btn-refund" @click.stop="goRefund(order)">申请退款</button>
           </div>
         </div>
       </div>

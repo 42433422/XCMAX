@@ -23,10 +23,12 @@ describe('kellaiBindingApi', () => {
   })
 
   it('loads binding status through the local pairing API', async () => {
-    apiBaseMocks.apiFetch.mockResolvedValueOnce(jsonResponse({
-      success: true,
-      data: { state: 'connected', connection: { authorized_scopes: ['customer_profiles.read'] } },
-    }))
+    apiBaseMocks.apiFetch.mockResolvedValueOnce(
+      jsonResponse({
+        success: true,
+        data: { state: 'connected', connection: { authorized_scopes: ['customer_profiles.read'] } },
+      }),
+    )
 
     await expect(kellaiBindingApi.status()).resolves.toMatchObject({ state: 'connected' })
     expect(apiBaseMocks.apiFetch).toHaveBeenCalledWith(
@@ -42,28 +44,24 @@ describe('kellaiBindingApi', () => {
 
   it('normalizes customer and conversation limits', async () => {
     apiBaseMocks.apiFetch
-      .mockResolvedValueOnce(jsonResponse({
-        success: true,
-        data: { customers: [{ customer_id: 7, display_name: '测试客户' }] },
-      }))
-      .mockResolvedValueOnce(jsonResponse({
-        success: true,
-        data: { messages: [{ id: 'm1', customer_id: 7, direction: 'inbound', content: '你好' }] },
-      }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          data: { customers: [{ customer_id: 7, display_name: '测试客户' }] },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          data: { messages: [{ id: 'm1', customer_id: 7, direction: 'inbound', content: '你好' }] },
+        }),
+      )
 
     await expect(kellaiBindingApi.customers(999)).resolves.toHaveLength(1)
     await expect(kellaiBindingApi.conversations(7, 999)).resolves.toHaveLength(1)
 
-    expect(apiBaseMocks.apiFetch).toHaveBeenNthCalledWith(
-      1,
-      '/api/kellai/binding/customers?limit=50',
-      expect.any(Object),
-    )
-    expect(apiBaseMocks.apiFetch).toHaveBeenNthCalledWith(
-      2,
-      '/api/kellai/binding/customers/7/conversations?limit=100',
-      expect.any(Object),
-    )
+    expect(apiBaseMocks.apiFetch).toHaveBeenNthCalledWith(1, '/api/kellai/binding/customers?limit=50', expect.any(Object))
+    expect(apiBaseMocks.apiFetch).toHaveBeenNthCalledWith(2, '/api/kellai/binding/customers/7/conversations?limit=100', expect.any(Object))
   })
 
   it('rejects invalid customer ids before making a request', async () => {
@@ -87,10 +85,12 @@ describe('kellaiBindingApi', () => {
     apiBaseMocks.apiFetch
       .mockResolvedValueOnce(jsonResponse({ success: true, data: null }))
       .mockResolvedValueOnce(jsonResponse({ success: true, data: draft }))
-      .mockResolvedValueOnce(jsonResponse({
-        success: true,
-        data: { ...draft, status: 'approved_for_manual_send' },
-      }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          data: { ...draft, status: 'approved_for_manual_send' },
+        }),
+      )
 
     await expect(kellaiBindingApi.latestDraft(7)).resolves.toBeNull()
     await expect(kellaiBindingApi.generateDraft(7)).resolves.toMatchObject({ draft_id: 'draft-1' })
@@ -125,10 +125,12 @@ describe('kellaiBindingApi', () => {
     apiBaseMocks.apiFetch
       .mockResolvedValueOnce(jsonResponse({ success: true, data: { tasks: [task] } }))
       .mockResolvedValueOnce(jsonResponse({ success: true, data: task }))
-      .mockResolvedValueOnce(jsonResponse({
-        success: true,
-        data: { ...task, status: 'completed' },
-      }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          data: { ...task, status: 'completed' },
+        }),
+      )
 
     await expect(kellaiBindingApi.followUpTasks(7)).resolves.toHaveLength(1)
     await expect(kellaiBindingApi.createFollowUpTask('draft-1')).resolves.toMatchObject({
@@ -153,17 +155,19 @@ describe('kellaiBindingApi', () => {
   it('accepts the success-only disconnect response', async () => {
     apiBaseMocks.apiFetch.mockResolvedValueOnce(jsonResponse({ success: true }))
     await expect(kellaiBindingApi.disconnect()).resolves.toBeUndefined()
-    expect(apiBaseMocks.apiFetch).toHaveBeenCalledWith(
-      '/api/kellai/binding/disconnect',
-      expect.objectContaining({ method: 'POST' }),
-    )
+    expect(apiBaseMocks.apiFetch).toHaveBeenCalledWith('/api/kellai/binding/disconnect', expect.objectContaining({ method: 'POST' }))
   })
 
   it('surfaces backend errors without treating HTML or empty payloads as success', async () => {
-    apiBaseMocks.apiFetch.mockResolvedValueOnce(jsonResponse({
-      success: false,
-      detail: '客来来尚未连接',
-    }, 409))
+    apiBaseMocks.apiFetch.mockResolvedValueOnce(
+      jsonResponse(
+        {
+          success: false,
+          detail: '客来来尚未连接',
+        },
+        409,
+      ),
+    )
 
     await expect(kellaiBindingApi.customers()).rejects.toThrow('客来来尚未连接')
   })

@@ -339,19 +339,22 @@ class TestNeuroBusDeduplicator:
 
 class TestSlidingWindowCounter:
     def test_add_and_count(self):
-        counter = SlidingWindowCounter(window_size=1.0)
+        with pytest.warns(DeprecationWarning, match="use TokenBucket"):
+            counter = SlidingWindowCounter(window_size=1.0)
         counter.add()
         counter.add()
         assert counter.count() == 2
 
     def test_reset(self):
-        counter = SlidingWindowCounter()
+        with pytest.warns(DeprecationWarning, match="use TokenBucket"):
+            counter = SlidingWindowCounter()
         counter.add()
         counter.reset()
         assert counter.count() == 0
 
     def test_expiry(self):
-        counter = SlidingWindowCounter(window_size=0.01)
+        with pytest.warns(DeprecationWarning, match="use TokenBucket"):
+            counter = SlidingWindowCounter(window_size=0.01)
         counter.add()
         time.sleep(0.02)
         assert counter.count() == 0
@@ -536,7 +539,7 @@ class TestNeuroBusDLQIntegration:
         dlq = DeadLetterQueue()
         integration = NeuroBusDLQIntegration(dlq)
         event = _make_event()
-        eid = integration.handle_failure(event, Exception("fail"), retry_count=3)
+        eid = integration.handle_failure(event, RuntimeError("fail"), retry_count=3)
         assert eid.startswith("dlq-")
 
     def test_handle_failure_timeout(self):

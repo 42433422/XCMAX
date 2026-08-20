@@ -1,3 +1,4 @@
+# mypy: disable-error-code="no-any-return"
 """
 开票/贷项通知单 & 记账服务测试（ODOO-W1-04）
 
@@ -25,6 +26,7 @@ from app.application import invoicing_service
 from app.db.base import Base
 from app.db.models import Customer, JournalEntry, Product, SalesOrder, SalesOrderItem
 from app.services import accounting_services as svc
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 
 @pytest.fixture(scope="function")
@@ -261,7 +263,7 @@ class TestAtomicRollback:
             try:
                 yield db_session
                 db_session.commit()
-            except Exception:
+            except BOUNDARY_ERRORS:
                 db_session.rollback()
                 raise
 

@@ -22,13 +22,16 @@ from langgraph.store.base import (
 )
 from langgraph.store.base.batch import AsyncBatchedBaseStore
 
+from langgraph.store.sqlite._exception_policy import BOUNDARY_ERRORS
 from langgraph.store.sqlite.base import (
     _PLACEHOLDER,
+    NS_MATCH_FUNCTION,
     BaseSqliteStore,
     SqliteIndexConfig,
     _decode_ns_text,
     _ensure_index_config,
     _group_ops,
+    _namespace_match,
     _row_to_item,
     _row_to_search_item,
 )
@@ -149,6 +152,13 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
         async with self.lock:
             if self.is_setup:
                 return
+
+            # list_namespaces needs segment-aware matching, which SQLite cannot
+            # express in LIKE or GLOB. Registered here rather than in __init__
+            # because aiosqlite's create_function is a coroutine.
+            await self.conn.create_function(
+                NS_MATCH_FUNCTION, 2, _namespace_match, deterministic=True
+            )
 
             # Create migrations table if it doesn't exist
             await self.conn.execute(
@@ -290,7 +300,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
                         logger.info(f"Store swept {expired_items} expired items")
                 except asyncio.CancelledError:
                     break
-                except Exception as exc:
+                except BOUNDARY_ERRORS as exc:
                     logger.exception("Store TTL sweep iteration failed", exc_info=exc)
 
         task = asyncio.create_task(_sweep_loop())
@@ -416,7 +426,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
                 if query.kind == "refresh":
                     try:
                         await cur.execute(query.query, query.params)
-                    except Exception as e:
+                    except BOUNDARY_ERRORS as e:
                         raise ValueError(
                             f"Error executing TTL refresh: \n{query.query}\n{query.params}\n{e}"
                         ) from e
@@ -426,7 +436,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
                 if query.kind == "get":
                     try:
                         await cur.execute(query.query, query.params)
-                    except Exception as e:
+                    except BOUNDARY_ERRORS as e:
                         raise ValueError(
                             f"Error executing GET query: \n{query.query}\n{query.params}\n{e}"
                         ) from e
@@ -560,7 +570,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
                         update_params = (prefix_text, *key_list)
                         try:
                             await cur.execute(update_query, update_params)
-                        except Exception as e:
+                        except BOUNDARY_ERRORS as e:
                             logger.error(
                                 f"Error during TTL refresh update for search: {e}"
                             )

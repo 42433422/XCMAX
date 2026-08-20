@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 
 from app.application.private_mod_delivery_state import (
     _STATE_LOCK,
@@ -83,7 +83,7 @@ def set_track_status(
                     node["updated_at"] = row["updated_at"]
         project["updated_at"] = _now_iso()
         _write_state(state)
-        return json.loads(json.dumps(project, ensure_ascii=False))
+        return cast("dict[str, Any]", json.loads(json.dumps(project, ensure_ascii=False)))
 
 
 def set_node_status(
@@ -133,7 +133,7 @@ def set_node_status(
         track_row["updated_at"] = _now_iso()
         project["updated_at"] = _now_iso()
         _write_state(state)
-        return json.loads(json.dumps(project, ensure_ascii=False))
+        return cast("dict[str, Any]", json.loads(json.dumps(project, ensure_ascii=False)))
 
 
 def attach_track_nodes(
@@ -142,12 +142,15 @@ def attach_track_nodes(
 ) -> dict[str, list[dict[str, Any]]]:
     """把 SSOT/manifest 声明的节点与本地进度合并，供生产员工面板渲染。"""
     tracks = project.get("tracks") if isinstance(project.get("tracks"), dict) else {}
-    tracks = _migrate_tracks(dict(tracks))
+    tracks = _migrate_tracks(dict(tracks or {}))
     out: dict[str, list[dict[str, Any]]] = {"modules": [], "employees": []}
-    for track in TRACKS:
+    for track in TRACKS or []:
         track_row = tracks.get(track) if isinstance(tracks.get(track), dict) else {}
+        if not isinstance(track_row, dict):
+            track_row = {}
         node_state = track_row.get("nodes") if isinstance(track_row.get("nodes"), dict) else {}
-        declared_nodes = declared.get(track) if isinstance(declared.get(track), list) else []
+        raw_declared_nodes = declared.get(track)
+        declared_nodes = list(raw_declared_nodes) if isinstance(raw_declared_nodes, list) else []
         merged: list[dict[str, Any]] = []
         seen: set[str] = set()
         for item in declared_nodes:
@@ -158,7 +161,11 @@ def attach_track_nodes(
             if not nid or nid in seen:
                 continue
             seen.add(nid)
+            if not isinstance(node_state, dict):
+                node_state = {}
             state = node_state.get(nid) if isinstance(node_state.get(nid), dict) else {}
+            if not isinstance(state, dict):
+                state = {}
             status = str(state.get("status") or "production")
             next_stages = allowed_next_stages(status)
             timeline = list(state.get("timeline") or [])[-30:]
@@ -183,7 +190,7 @@ def attach_track_nodes(
 
 def overall_status(project: dict[str, Any]) -> str:
     tracks = project.get("tracks") if isinstance(project.get("tracks"), dict) else {}
-    tracks = _migrate_tracks(dict(tracks))
+    tracks = _migrate_tracks(dict(tracks or {}))
     statuses = [str((tracks.get(k) or {}).get("status") or "production") for k in TRACKS]
     if all(status == "delivered" for status in statuses):
         return "delivered"
@@ -203,7 +210,7 @@ def stage_label(track: str, status: str) -> str:
     if status == "partial":
         return "部分完成"
     if track == "employees" and status == "delivered":
-        return TRACKS[track]["delivered_label"]
+        return str(TRACKS[track]["delivered_label"])
     return STAGE_LABELS.get(status, status)
 
 

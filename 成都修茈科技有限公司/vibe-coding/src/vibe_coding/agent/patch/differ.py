@@ -14,7 +14,7 @@ ledger / metrics).
 from __future__ import annotations
 
 import difflib
-from typing import Iterable
+from collections.abc import Iterable
 
 from .hunk import Hunk
 
@@ -78,9 +78,7 @@ def unified_diff(original: str, rewritten: str, *, path: str = "file") -> str:
     """Produce a classic ``unified_diff`` string for human display."""
     a = original.splitlines(keepends=True)
     b = rewritten.splitlines(keepends=True)
-    return "".join(
-        difflib.unified_diff(a, b, fromfile=f"a/{path}", tofile=f"b/{path}", n=3)
-    )
+    return "".join(difflib.unified_diff(a, b, fromfile=f"a/{path}", tofile=f"b/{path}", n=3))
 
 
 def _coalesce_overlapping(hunks: Iterable[Hunk]) -> list[Hunk]:

@@ -9,14 +9,11 @@ export interface WorkflowOption {
 }
 
 export interface EmployeeWorkbenchStateInputs {
-  parseWorkflowIdFromEntry: (entry: any) => number
-  inferWorkflowIdFromManifest: (manifest: any, index: number) => number
+  parseWorkflowIdFromEntry: (entry: unknown) => number
+  inferWorkflowIdFromManifest: (manifest: Record<string, unknown>, index: number) => number
 }
 
-export function useEmployeeWorkbenchState({
-  parseWorkflowIdFromEntry,
-  inferWorkflowIdFromManifest,
-}: EmployeeWorkbenchStateInputs) {
+export function useEmployeeWorkbenchState({ parseWorkflowIdFromEntry, inferWorkflowIdFromManifest }: EmployeeWorkbenchStateInputs) {
   const employeeTemplateId = ref('workflow')
   const employeeConfigV2 = ref(applyTemplateV2('workflow'))
   const employeeConfigErrors = ref<string[]>([])

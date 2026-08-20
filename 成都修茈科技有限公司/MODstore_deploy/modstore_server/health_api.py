@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter
 from sqlalchemy import text
 
 from modstore_server.models import get_session_factory
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 router = APIRouter(prefix="/health", tags=["health"])
 
@@ -17,7 +18,7 @@ router = APIRouter(prefix="/health", tags=["health"])
 async def health_check():
     checks: dict = {
         "status": "ok",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "version": os.environ.get("MODSTORE_VERSION", "unknown"),
     }
     try:
@@ -25,7 +26,7 @@ async def health_check():
         with sf() as session:
             session.execute(text("SELECT 1"))
         checks["database"] = "ok"
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:
         checks["database"] = f"error: {e}"
         checks["status"] = "degraded"
     return checks

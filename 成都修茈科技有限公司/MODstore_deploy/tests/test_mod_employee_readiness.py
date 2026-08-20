@@ -155,7 +155,12 @@ def test_register_workflow_employee_catalog_writes_runtime_catalog(
     save_store({"packages": []})
 
     async def fake_audit(*args, **kwargs):
-        return {"ok": True, "summary": {"pass": True}, "dimensions": {}, "functional_tests": []}
+        return {
+            "ok": True,
+            "summary": {"pass": True},
+            "dimensions": {},
+            "functional_tests": [],
+        }
 
     monkeypatch.setattr("modstore_server.routes_registry.run_package_audit_async", fake_audit)
 

@@ -45,9 +45,7 @@ class VitestAdapter:
             return shutil.which(self._binary) is not None
         if shutil.which("vitest") is not None:
             return True
-        if self._npx_fallback and shutil.which("npx") is not None:
-            return True
-        return False
+        return bool(self._npx_fallback and shutil.which("npx") is not None)
 
     def run(
         self,

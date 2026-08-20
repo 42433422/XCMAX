@@ -125,14 +125,14 @@ class JournalEntry(IntegerPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, Ba
 
     def is_balanced(self) -> bool:
         """借贷平衡校验：借方总额 == 贷方总额（Decimal 求和，无浮点转换）。"""
-        debit = sum((l.debit or Decimal(0)) for l in self.lines)
-        credit = sum((l.credit or Decimal(0)) for l in self.lines)
+        debit: Decimal = sum((line.debit or Decimal(0) for line in self.lines), Decimal(0))
+        credit: Decimal = sum((line.credit or Decimal(0) for line in self.lines), Decimal(0))
         return abs(debit - credit) < Decimal("0.01")
 
     def refresh_totals(self) -> None:
         """从明细行重算借贷总额（Decimal 精度保留，赋值 Decimal 总计）。"""
-        self.debit_total = sum((l.debit or Decimal(0)) for l in self.lines)
-        self.credit_total = sum((l.credit or Decimal(0)) for l in self.lines)
+        self.debit_total = sum((line.debit or Decimal(0) for line in self.lines), Decimal(0))
+        self.credit_total = sum((line.credit or Decimal(0) for line in self.lines), Decimal(0))
 
     def to_dict(self) -> dict:
         return {

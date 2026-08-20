@@ -1,53 +1,48 @@
-import { createRouter, createWebHistory, START_LOCATION, type NavigationGuardNext, type RouteLocationNormalized, type RouteRecordRaw } from 'vue-router';
-import { useLanGate } from '@/composables/useLanGate';
 import {
-  isPlatformShellModeEnabled,
-  isIndustryDeliveryRouteName,
-  SHELL_CORE_ROUTE_NAMES,
-} from '@/constants/platformShellMode';
-import { shouldRouteToProductOnboarding } from '@/composables/useProductFlow';
-import { readHostPackAcknowledged } from '@/constants/productFlow';
-import {
-  resolveHostPackOnboardingStep,
-  shouldRouteToHostPackOnboarding,
-} from '@/utils/hostPackOnboardingGate';
-import { resolveHostBusinessPageRedirect } from '@/utils/hostBusinessPageRedirect';
-import { customerServiceHostPathFromModPath } from '@/utils/customerServicePagePaths';
-import { resolvePlannerChatHomePath, resolvePlannerPagePath } from '@/utils/plannerPagePaths';
-import { readActiveExtensionModId } from '@/utils/erpDomainPaths';
-import { isProtectedClientModId } from '@/constants/protectedMods';
-import { fetchProductSku, isEnterpriseEdition } from '@/utils/productSku';
+  createRouter,
+  createWebHistory,
+  START_LOCATION,
+  type NavigationGuardNext,
+  type RouteLocationNormalized,
+  type RouteRecordRaw,
+} from 'vue-router'
+import { useLanGate } from '@/composables/useLanGate'
+import { isPlatformShellModeEnabled, isIndustryDeliveryRouteName, SHELL_CORE_ROUTE_NAMES } from '@/constants/platformShellMode'
+import { shouldRouteToProductOnboarding } from '@/composables/useProductFlow'
+import { readHostPackAcknowledged } from '@/constants/productFlow'
+import { resolveHostPackOnboardingStep, shouldRouteToHostPackOnboarding } from '@/utils/hostPackOnboardingGate'
+import { resolveHostBusinessPageRedirect } from '@/utils/hostBusinessPageRedirect'
+import { customerServiceHostPathFromModPath } from '@/utils/customerServicePagePaths'
+import { resolvePlannerChatHomePath, resolvePlannerPagePath } from '@/utils/plannerPagePaths'
+import { readActiveExtensionModId } from '@/utils/erpDomainPaths'
+import { isProtectedClientModId } from '@/constants/protectedMods'
+import { fetchProductSku, isEnterpriseEdition } from '@/utils/productSku'
 import {
   consumeDesktopSessionBootstrapHint,
   hasRecentEnterpriseSessionHint,
   validateEnterpriseSessionCached,
-} from '@/utils/authSessionCache';
-import { useModsStore } from '@/stores/mods';
-import {
-  DESKTOP_ADMIN_FORBIDDEN_MESSAGE,
-  isAdminConsoleSpa,
-  resolveAdminConsoleHomeUrl,
-} from '@/utils/adminConsoleUrl';
-import { isDesktopShell } from '@/utils/desktopShell';
-import { ADMIN_HOST_ROUTE_RECORDS } from '@admin-console-inject/adminHostRoutes';
-import {
-  ADMIN_OPERATOR_BLOCKED_ROUTE_NAMES,
-  ADMIN_OPERATOR_HOME_ROUTE,
-} from '@/constants/adminOperatorNav';
-import { buildRoleMenuProfile, canShowCoreMenuKey } from '@/utils/roleMenuProfile';
-import { isClientErpSidebarContext } from '@/constants/genericModPack';
-import { AI_DELIVERY_ROUTES } from './privateModDeliveryRoutes';
-import { resolveInitialRoutes } from './initialRouteSelection';
-import { refreshDesktopSessionInBackground } from '@/utils/desktopSessionRestore';
-import { activeTutorialRunAllowsRoute } from '@/stores/tutorialV2';
-const DEFAULT_DUTY_ROSTER_GRAPH_VIEW = 'department';
+} from '@/utils/authSessionCache'
+import { useModsStore } from '@/stores/mods'
+import { DESKTOP_ADMIN_FORBIDDEN_MESSAGE, isAdminConsoleSpa, resolveAdminConsoleHomeUrl } from '@/utils/adminConsoleUrl'
+import { isDesktopShell } from '@/utils/desktopShell'
+import { ADMIN_HOST_ROUTE_RECORDS } from '@admin-console-inject/adminHostRoutes'
+import { ADMIN_OPERATOR_BLOCKED_ROUTE_NAMES, ADMIN_OPERATOR_HOME_ROUTE } from '@/constants/adminOperatorNav'
+import { buildRoleMenuProfile, canShowCoreMenuKey } from '@/utils/roleMenuProfile'
+import { isClientErpSidebarContext } from '@/constants/genericModPack'
+import { AI_DELIVERY_ROUTES } from './privateModDeliveryRoutes'
+import { resolveInitialRoutes } from './initialRouteSelection'
+import { refreshDesktopSessionInBackground } from '@/utils/desktopSessionRestore'
+import { activeTutorialRunAllowsRoute } from '@/stores/tutorialV2'
+const DEFAULT_DUTY_ROSTER_GRAPH_VIEW = 'department'
 function normalizeDutyRosterGraphView(raw: unknown): string {
-  const token = String(Array.isArray(raw) ? raw[0] : raw || '').trim().toLowerCase();
-  if (token === 'department' || token === 'dept' || token === '六部门') return 'department';
-  if (token === 'hub' || token === 'center' || token === '中心' || token === '中心图') return 'hub';
-  if (token === 'legacy-area' || token === 'area' || token === '物理' || token === '物理分区') return 'legacy-area';
-  if (token === 'client' || token === 'workshop' || token === '车间' || token === '客户端车间') return 'client';
-  return DEFAULT_DUTY_ROSTER_GRAPH_VIEW;
+  const token = String(Array.isArray(raw) ? raw[0] : raw || '')
+    .trim()
+    .toLowerCase()
+  if (token === 'department' || token === 'dept' || token === '六部门') return 'department'
+  if (token === 'hub' || token === 'center' || token === '中心' || token === '中心图') return 'hub'
+  if (token === 'legacy-area' || token === 'area' || token === '物理' || token === '物理分区') return 'legacy-area'
+  if (token === 'client' || token === 'workshop' || token === '车间' || token === '客户端车间') return 'client'
+  return DEFAULT_DUTY_ROSTER_GRAPH_VIEW
 }
 
 const allRoutes: RouteRecordRaw[] = [
@@ -59,39 +54,48 @@ const allRoutes: RouteRecordRaw[] = [
     path: '/login',
     name: 'login',
     component: () => import('../views/LoginView.vue'),
-    meta: { title: '登录', publicAccess: true, hideChrome: true }
+    meta: { title: '登录', publicAccess: true, hideChrome: true },
   },
   {
     path: '/login/help',
     name: 'login-help',
     component: () => import('../views/LoginHelpView.vue'),
-    meta: { title: '登录帮助', publicAccess: true, hideChrome: true }
+    meta: { title: '登录帮助', publicAccess: true, hideChrome: true },
   },
   {
     path: '/login/register',
     name: 'login-register',
     component: () => import('../views/RegisterView.vue'),
-    meta: { title: '注册', publicAccess: true, hideChrome: true }
+    meta: { title: '注册', publicAccess: true, hideChrome: true },
   },
   {
     path: '/login/forgot-account',
     name: 'login-forgot-account',
     component: () => import('../views/ForgotAccountView.vue'),
-    meta: { title: '忘记账号', publicAccess: true, hideChrome: true }
+    meta: { title: '忘记账号', publicAccess: true, hideChrome: true },
   },
   {
     path: '/login/forgot-password',
     name: 'login-forgot-password',
     component: () => import('../views/ForgotPasswordView.vue'),
-    meta: { title: '忘记密码', publicAccess: true, hideChrome: true }
+    meta: { title: '忘记密码', publicAccess: true, hideChrome: true },
   },
   {
     path: '/',
     name: 'chat',
     component: () => import('../views/ChatView.vue'),
-    meta: { title: '智能对话' }
+    meta: { title: '智能对话' },
   },
-  { path: '/workspaces/:taskId', name: 'task-workspace', component: () => import('../views/ChatView.vue'), props: (route) => ({ workspaceTaskId: String(route.params.taskId || ''), workspaceConversationId: String(route.query.conversation || route.params.taskId || '') }), meta: { title: '独立工作区' } },
+  {
+    path: '/workspaces/:taskId',
+    name: 'task-workspace',
+    component: () => import('../views/ChatView.vue'),
+    props: (route) => ({
+      workspaceTaskId: String(route.params.taskId || ''),
+      workspaceConversationId: String(route.query.conversation || route.params.taskId || ''),
+    }),
+    meta: { title: '独立工作区' },
+  },
   {
     path: '/persy/knowledge',
     name: 'persy-knowledge',
@@ -102,9 +106,9 @@ const allRoutes: RouteRecordRaw[] = [
     path: '/lan-gate',
     name: 'lan-gate',
     component: () => import('../views/LanGateView.vue'),
-    meta: { title: '局域网授权', publicAccess: true, hideChrome: true }
+    meta: { title: '局域网授权', publicAccess: true, hideChrome: true },
   },
-];
+]
 
 /** minimal 构建：Vite 静态剔除下列宿主 ERP/审批等业务路由（勿改为动态 import 独立 chunk） */
 if (import.meta.env.VITE_XCAGI_EDITION !== 'minimal') {
@@ -222,13 +226,13 @@ if (import.meta.env.VITE_XCAGI_EDITION !== 'minimal') {
       component: () => import('../views/TemplatePreviewView.vue'),
       meta: { title: '模板预览' },
       beforeEnter: (to: RouteLocationNormalized, _from: RouteLocationNormalized, next: NavigationGuardNext) => {
-        const view = to.query.view;
+        const view = to.query.view
         if (view === 'excel' || view === 'template-preview') {
-          next();
+          next()
         } else if (view) {
-          next();
+          next()
         } else {
-          next();
+          next()
         }
       },
     },
@@ -289,7 +293,7 @@ if (import.meta.env.VITE_XCAGI_EDITION !== 'minimal') {
       component: () => import('../views/InventoryView.vue'),
       meta: { title: '库存管理' },
     },
-  );
+  )
 }
 
 allRoutes.push(
@@ -309,19 +313,19 @@ allRoutes.push(
     path: '/mod-store',
     name: 'mod-store',
     component: () => import('../views/ModStore.vue'),
-    meta: { title: '能力库' }
+    meta: { title: '能力库' },
   },
   {
     path: '/settings',
     name: 'settings',
     component: () => import('../views/SettingsView.vue'),
-    meta: { title: '设置' }
+    meta: { title: '设置' },
   },
   {
     path: '/im',
     name: 'im',
     component: () => import('../views/ImMessengerView.vue'),
-    meta: { title: '信息' }
+    meta: { title: '信息' },
   },
   {
     path: isAdminConsoleSpa() ? '/entitlements' : '/admin/entitlements',
@@ -333,19 +337,19 @@ allRoutes.push(
     path: '/desktop-runtime',
     name: 'desktop-runtime',
     component: () => import('../views/DesktopRuntimeView.vue'),
-    meta: { title: '桌面运行时' }
+    meta: { title: '桌面运行时' },
   },
   {
     path: '/chat-debug',
     name: 'chat-debug',
     component: () => import('../views/ChatDebugView.vue'),
-    meta: { title: '对话调试' }
+    meta: { title: '对话调试' },
   },
   {
     path: '/tools',
     name: 'tools',
     component: () => import('../views/ToolsView.vue'),
-    meta: { title: '工具' }
+    meta: { title: '工具' },
   },
   {
     path: '/other-tools',
@@ -366,7 +370,7 @@ allRoutes.push(
     path: '/workflow-employee-space',
     name: 'workflow-employee-space',
     component: () => import('../views/EmployeeWorkspaceView.vue'),
-    meta: { title: '员工空间' }
+    meta: { title: '员工空间' },
   },
   ...(isAdminConsoleSpa()
     ? [
@@ -387,74 +391,66 @@ allRoutes.push(
       ]),
   {
     path: '/employee-workspace',
-    redirect: { name: 'workflow-employee-space' }
+    redirect: { name: 'workflow-employee-space' },
   },
   {
     path: '/yuangong-stitch',
-    redirect: { name: 'workflow-employee-stitch-full' }
+    redirect: { name: 'workflow-employee-stitch-full' },
   },
   {
     path: '/mod/:modId',
     name: 'mod-landing',
     component: () => import('../views/ModLandingView.vue'),
-    meta: { title: 'Mod 详情', mod: true }
+    meta: { title: 'Mod 详情', mod: true },
   },
-);
+)
 
 if (import.meta.env.VITE_XCMAX_ADMIN_CONSOLE === '1') {
-  allRoutes.push(...ADMIN_HOST_ROUTE_RECORDS);
+  allRoutes.push(...ADMIN_HOST_ROUTE_RECORDS)
 }
 
-const routes = resolveInitialRoutes(allRoutes);
+const routes = resolveInitialRoutes(allRoutes)
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
-  routes
-});
+  routes,
+})
 router.beforeEach(async (to, _from, next) => {
   let provisionalDesktopEntry = false
   if (to.name === 'duty-roster-graph') {
-    const nextView = normalizeDutyRosterGraphView(to.query.view);
-    const currentView = String(Array.isArray(to.query.view) ? to.query.view[0] : to.query.view || '').trim().toLowerCase();
-    const normalizedView = String(nextView);
+    const nextView = normalizeDutyRosterGraphView(to.query.view)
+    const currentView = String(Array.isArray(to.query.view) ? to.query.view[0] : to.query.view || '')
+      .trim()
+      .toLowerCase()
+    const normalizedView = String(nextView)
     if (currentView !== normalizedView) {
       next({
         name: 'duty-roster-graph',
         query: { ...to.query, view: normalizedView },
         hash: to.hash,
         replace: true,
-      });
-      return;
+      })
+      return
     }
   }
 
-  if (
-    isAdminConsoleSpa() &&
-    to.path.startsWith('/mod/xcagi-planner-bridge/')
-  ) {
+  if (isAdminConsoleSpa() && to.path.startsWith('/mod/xcagi-planner-bridge/')) {
     const hostPath = to.path.slice('/mod/xcagi-planner-bridge'.length) || '/'
     next({ path: hostPath, query: to.query, hash: to.hash, replace: true })
     return
   }
 
-  if (
-    isAdminConsoleSpa() &&
-    to.name &&
-    ADMIN_OPERATOR_BLOCKED_ROUTE_NAMES.has(String(to.name))
-  ) {
-    next({ name: ADMIN_OPERATOR_HOME_ROUTE, replace: true });
-    return;
+  if (isAdminConsoleSpa() && to.name && ADMIN_OPERATOR_BLOCKED_ROUTE_NAMES.has(String(to.name))) {
+    next({ name: ADMIN_OPERATOR_HOME_ROUTE, replace: true })
+    return
   }
 
-  if (
-    !isAdminConsoleSpa() &&
-    (to.name === 'workflow-visualization' || to.name === 'mod-workflow-visualization')
-  ) {
+  if (!isAdminConsoleSpa() && (to.name === 'workflow-visualization' || to.name === 'mod-workflow-visualization')) {
     try {
-      const { useAccountProfileStore } = await import('@/stores/accountProfile');
-      const profileStore = useAccountProfileStore();
-      if (!profileStore.loaded) await profileStore.refreshFromServer();
-      const modsStore = useModsStore();
+      const { useAccountProfileStore } = await import('@/stores/accountProfile')
+      const profileStore = useAccountProfileStore()
+      if (!profileStore.loaded) await profileStore.refreshFromServer()
+      const modsStore = useModsStore()
       const menuProfile = buildRoleMenuProfile(
         {
           accountKind: profileStore.accountKind,
@@ -466,31 +462,26 @@ router.beforeEach(async (to, _from, next) => {
           (modsStore.mods || []).map((m) => String(m.id || '').trim()),
           modsStore.activeModId,
         ),
-      );
+      )
       if (!canShowCoreMenuKey(menuProfile, 'workflow-visualization')) {
-        next({ name: 'workflow-employee-space', replace: true });
-        return;
+        next({ name: 'workflow-employee-space', replace: true })
+        return
       }
     } catch {
-      next({ name: 'workflow-employee-space', replace: true });
-      return;
+      next({ name: 'workflow-employee-space', replace: true })
+      return
     }
   }
 
   // 管理端冷启动落在 `/` 时默认进运维总览；侧栏点「智能对话」时 _from 非 START_LOCATION，须放行
-  if (
-    isAdminConsoleSpa() &&
-    to.name === 'chat' &&
-    to.path === '/' &&
-    _from === START_LOCATION
-  ) {
+  if (isAdminConsoleSpa() && to.name === 'chat' && to.path === '/' && _from === START_LOCATION) {
     try {
-      const { useAccountProfileStore } = await import('@/stores/accountProfile');
-      const profile = useAccountProfileStore();
-      if (!profile.loaded) await profile.refreshFromServer();
+      const { useAccountProfileStore } = await import('@/stores/accountProfile')
+      const profile = useAccountProfileStore()
+      if (!profile.loaded) await profile.refreshFromServer()
       if (profile.isAdminAccount) {
-        next({ name: ADMIN_OPERATOR_HOME_ROUTE, replace: true });
-        return;
+        next({ name: ADMIN_OPERATOR_HOME_ROUTE, replace: true })
+        return
       }
     } catch {
       /* ignore */
@@ -498,42 +489,35 @@ router.beforeEach(async (to, _from, next) => {
   }
 
   if (to.matched.length === 0 && to.path.startsWith('/mod/')) {
-    const csHost = customerServiceHostPathFromModPath(to.path);
+    const csHost = customerServiceHostPathFromModPath(to.path)
     if (csHost) {
-      next({ path: csHost, query: to.query, hash: to.hash, replace: true });
-      return;
+      next({ path: csHost, query: to.query, hash: to.hash, replace: true })
+      return
     }
-    if (
-      to.path.startsWith('/mod/xcagi-planner-bridge/') &&
-      isProtectedClientModId(readActiveExtensionModId())
-    ) {
-      next({ path: '/', query: to.query, hash: to.hash, replace: true });
-      return;
+    if (to.path.startsWith('/mod/xcagi-planner-bridge/') && isProtectedClientModId(readActiveExtensionModId())) {
+      next({ path: '/', query: to.query, hash: to.hash, replace: true })
+      return
     }
-    next({ path: '/', replace: true });
-    return;
+    next({ path: '/', replace: true })
+    return
   }
 
-  if (
-    to.path.startsWith('/mod/xcagi-planner-bridge/') &&
-    isProtectedClientModId(readActiveExtensionModId())
-  ) {
-    next({ path: '/', query: to.query, hash: to.hash, replace: true });
-    return;
+  if (to.path.startsWith('/mod/xcagi-planner-bridge/') && isProtectedClientModId(readActiveExtensionModId())) {
+    next({ path: '/', query: to.query, hash: to.hash, replace: true })
+    return
   }
 
   // 局域网授权守卫仅作用于主机管理员控制台（避免影响其他业务页面）
   // 独立 admin-console SPA 已由账号会话鉴权，不再弹出局域网密钥框
-  const requiresLanGate =
-    !isAdminConsoleSpa() && to.matched.some((r) => Boolean(r.meta?.hostAdmin));
+  const requiresLanGate = !isAdminConsoleSpa() && to.matched.some((r) => Boolean(r.meta?.hostAdmin))
   if (requiresLanGate && !to.meta.publicAccess) {
     try {
-      const lan = useLanGate();
-      const status = await lan.refresh();
+      const lan = useLanGate()
+      const status = await lan.refresh()
       if (status?.enabled && !status.authorized) {
-        lan.openLanGateModal(to.fullPath);
-        next(false);
-        return;
+        lan.openLanGateModal(to.fullPath)
+        next(false)
+        return
       }
     } catch {
       /* 状态接口异常时不阻断；后端 401 会兜底拦截 */
@@ -541,29 +525,29 @@ router.beforeEach(async (to, _from, next) => {
   }
 
   try {
-    const modsStore = useModsStore();
+    const modsStore = useModsStore()
     if (modsStore.clientModsUiOff && to.matched.some((r) => Boolean(r.meta?.mod))) {
-      next(resolvePlannerChatHomePath());
-      return;
+      next(resolvePlannerChatHomePath())
+      return
     }
   } catch {
     /* Pinia 未就绪时忽略 */
   }
 
   if (to.path === '/' || to.name === 'chat') {
-    const modChat = resolvePlannerPagePath('/');
-    const modChatPath = modChat.split('?')[0] || modChat;
+    const modChat = resolvePlannerPagePath('/')
+    const modChatPath = modChat.split('?')[0] || modChat
     if (modChat !== '/' && to.path !== modChatPath) {
       if (router.resolve(modChatPath).matched.length === 0) {
-        next();
-        return;
+        next()
+        return
       }
-      next({ path: modChat, query: to.query, hash: to.hash });
-      return;
+      next({ path: modChat, query: to.query, hash: to.hash })
+      return
     }
   }
 
-  const activeTutorialRoute = activeTutorialRunAllowsRoute(String(to.name || ''));
+  const activeTutorialRoute = activeTutorialRunAllowsRoute(String(to.name || ''))
   if (
     isPlatformShellModeEnabled() &&
     !activeTutorialRoute &&
@@ -571,18 +555,20 @@ router.beforeEach(async (to, _from, next) => {
     !SHELL_CORE_ROUTE_NAMES.has(String(to.name)) &&
     !isIndustryDeliveryRouteName(
       String(to.name),
-      useModsStore().mods.map((m) => String(m.id || '').trim()).filter(Boolean),
+      useModsStore()
+        .mods.map((m) => String(m.id || '').trim())
+        .filter(Boolean),
       readHostPackAcknowledged(),
     ) &&
     !to.meta?.mod
   ) {
-    const modPage = resolveHostBusinessPageRedirect(String(to.name));
+    const modPage = resolveHostBusinessPageRedirect(String(to.name))
     if (modPage) {
-      next(modPage);
-      return;
+      next(modPage)
+      return
     }
-    next(resolvePlannerChatHomePath());
-    return;
+    next(resolvePlannerChatHomePath())
+    return
   }
 
   // 干净通用版：禁用 Mod 页 redirect，宿主 /products 等走 frontend/src/views/*
@@ -615,21 +601,19 @@ router.beforeEach(async (to, _from, next) => {
   // SSOT：桌面壳禁止 admin（须早于 requiresAdminAccount / 管理端客服侧，避免企业构建内 /admin/entitlements 可达）
   if (!to.meta?.publicAccess && isDesktopShell() && !isAdminConsoleSpa()) {
     try {
-      const { useAccountProfileStore } = await import('@/stores/accountProfile');
-      const profile = useAccountProfileStore();
-      const useSessionHint = !profile.loaded && (
-        hasRecentEnterpriseSessionHint() || await consumeDesktopSessionBootstrapHint()
-      )
+      const { useAccountProfileStore } = await import('@/stores/accountProfile')
+      const profile = useAccountProfileStore()
+      const useSessionHint = !profile.loaded && (hasRecentEnterpriseSessionHint() || (await consumeDesktopSessionBootstrapHint()))
       if (useSessionHint) {
         provisionalDesktopEntry = true
         refreshDesktopSessionInBackground(router, profile, to.fullPath !== '/login' ? to.fullPath : '/')
       } else if (!profile.loaded) {
-        await profile.refreshFromServer();
+        await profile.refreshFromServer()
       }
       if (!provisionalDesktopEntry && profile.isAdminAccount && to.name !== 'login') {
         try {
-          const { authApi } = await import('@/api/auth');
-          await authApi.logout().catch(() => undefined);
+          const { authApi } = await import('@/api/auth')
+          await authApi.logout().catch(() => undefined)
         } catch {
           /* ignore */
         }
@@ -639,8 +623,8 @@ router.beforeEach(async (to, _from, next) => {
             redirect: '/',
             error: DESKTOP_ADMIN_FORBIDDEN_MESSAGE,
           },
-        });
-        return;
+        })
+        return
       }
     } catch {
       /* ignore — 后续企业会话校验会兜底 */
@@ -649,56 +633,51 @@ router.beforeEach(async (to, _from, next) => {
 
   if (to.meta?.requiresAdminAccount && !isAdminConsoleSpa()) {
     try {
-      const { useAccountProfileStore } = await import('@/stores/accountProfile');
-      const profile = useAccountProfileStore();
+      const { useAccountProfileStore } = await import('@/stores/accountProfile')
+      const profile = useAccountProfileStore()
       if (!profile.loaded) {
-        await profile.refreshFromServer();
+        await profile.refreshFromServer()
       }
       if (!profile.isAdminAccount) {
-        next({ name: 'chat' });
-        return;
+        next({ name: 'chat' })
+        return
       }
     } catch {
-      next({ name: 'chat' });
-      return;
+      next({ name: 'chat' })
+      return
     }
   }
 
   if (!to.meta?.publicAccess) {
     try {
-      const sku = await fetchProductSku();
+      const sku = await fetchProductSku()
       if (isEnterpriseEdition(sku)) {
         const useSessionHint = isDesktopShell() && provisionalDesktopEntry
         if (useSessionHint) {
           provisionalDesktopEntry = true
         }
-        const valid = useSessionHint ? true : await validateEnterpriseSessionCached();
+        const valid = useSessionHint ? true : await validateEnterpriseSessionCached()
         if (!valid) {
           next({
             name: 'login',
             query: { redirect: to.fullPath !== '/login' ? to.fullPath : '/' },
-          });
-          return;
+          })
+          return
         }
         try {
-          const { useAccountProfileStore } = await import('@/stores/accountProfile');
-          const profile = useAccountProfileStore();
+          const { useAccountProfileStore } = await import('@/stores/accountProfile')
+          const profile = useAccountProfileStore()
           if (provisionalDesktopEntry && !profile.loaded) {
             refreshDesktopSessionInBackground(router, profile, to.fullPath !== '/login' ? to.fullPath : '/')
           } else if (!profile.loaded) {
-            await profile.refreshFromServer();
+            await profile.refreshFromServer()
           }
-          if (
-            !provisionalDesktopEntry &&
-            !isAdminConsoleSpa() &&
-            profile.isAdminAccount &&
-            to.name !== 'login'
-          ) {
+          if (!provisionalDesktopEntry && !isAdminConsoleSpa() && profile.isAdminAccount && to.name !== 'login') {
             // 非桌面：网页企业壳把 admin 会话导向独立管理端；桌面已在上方拒入
             if (isDesktopShell()) {
               try {
-                const { authApi } = await import('@/api/auth');
-                await authApi.logout().catch(() => undefined);
+                const { authApi } = await import('@/api/auth')
+                await authApi.logout().catch(() => undefined)
               } catch {
                 /* ignore */
               }
@@ -708,10 +687,10 @@ router.beforeEach(async (to, _from, next) => {
                   redirect: '/',
                   error: DESKTOP_ADMIN_FORBIDDEN_MESSAGE,
                 },
-              });
-              return;
+              })
+              return
             }
-            const adminHome = resolveAdminConsoleHomeUrl();
+            const adminHome = resolveAdminConsoleHomeUrl()
             if (!adminHome) {
               next({
                 name: 'login',
@@ -719,28 +698,28 @@ router.beforeEach(async (to, _from, next) => {
                   redirect: '/',
                   error: DESKTOP_ADMIN_FORBIDDEN_MESSAGE,
                 },
-              });
-              return;
+              })
+              return
             }
-            window.location.href = adminHome;
-            next(false);
-            return;
+            window.location.href = adminHome
+            next(false)
+            return
           }
         } catch {
           /* ignore */
         }
       }
     } catch {
-      const sku = await fetchProductSku().catch(() => 'generic');
+      const sku = await fetchProductSku().catch(() => 'generic')
       if (!isEnterpriseEdition(sku)) {
-        next();
-        return;
+        next()
+        return
       }
       next({
         name: 'login',
         query: { redirect: to.fullPath !== '/login' ? to.fullPath : '/' },
-      });
-      return;
+      })
+      return
     }
   }
 
@@ -751,30 +730,22 @@ router.beforeEach(async (to, _from, next) => {
     return
   }
 
-  if (
-    shouldRouteToProductOnboarding(to.name) &&
-    !to.meta?.publicAccess &&
-    !isAdminConsoleSpa()
-  ) {
-    const sku = await fetchProductSku().catch(() => 'generic');
+  if (shouldRouteToProductOnboarding(to.name) && !to.meta?.publicAccess && !isAdminConsoleSpa()) {
+    const sku = await fetchProductSku().catch(() => 'generic')
     if (!isEnterpriseEdition(sku)) {
-      const { resolveProductFlowEntryStep } = await import('@/constants/productFlow');
-      const step = resolveProductFlowEntryStep(to.query?.step);
-      next({ name: 'product-onboarding', query: { step, redirect: to.fullPath } });
-      return;
+      const { resolveProductFlowEntryStep } = await import('@/constants/productFlow')
+      const step = resolveProductFlowEntryStep(to.query?.step)
+      next({ name: 'product-onboarding', query: { step, redirect: to.fullPath } })
+      return
     }
   }
 
-  if (
-    shouldRouteToHostPackOnboarding(to.name) &&
-    !to.meta?.publicAccess &&
-    !isAdminConsoleSpa()
-  ) {
+  if (shouldRouteToHostPackOnboarding(to.name) && !to.meta?.publicAccess && !isAdminConsoleSpa()) {
     try {
       // The login success navigation refreshes this gate once.  Reusing its
       // short session cache keeps a subsequent desktop deep-link/reload from
       // blocking the usable screen on the same three bootstrap requests.
-      const onboardingStep = await resolveHostPackOnboardingStep(false);
+      const onboardingStep = await resolveHostPackOnboardingStep(false)
       if (onboardingStep) {
         next({
           name: 'product-onboarding',
@@ -782,20 +753,20 @@ router.beforeEach(async (to, _from, next) => {
             step: onboardingStep,
             redirect: to.fullPath !== '/onboarding' ? to.fullPath : '/',
           },
-        });
-        return;
+        })
+        return
       }
     } catch {
       /* API 异常时不阻断主流程 */
     }
   }
 
-  next();
-});
+  next()
+})
 
 router.afterEach((to) => {
   const title = to.meta?.title
   document.title = title ? `${title} - XCAGI` : 'XCAGI'
-});
+})
 
-export default router;
+export default router

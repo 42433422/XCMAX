@@ -2,13 +2,9 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
 from typing import Any
 
 from .._internals import TriggerPolicy
-# removed: ESkillRuntime not part of standalone vibe_coding
-# from ..runtime import ESkillRuntime
-from .._internals.code_models import CodeSkillRun
 from .runtime import CodeSkillRuntime
 
 
@@ -17,7 +13,7 @@ class HybridSkillRuntime:
 
     def __init__(
         self,
-        config_runtime: ESkillRuntime,
+        config_runtime: Any,
         code_runtime: CodeSkillRuntime,
         *,
         config_store: Any | None = None,
@@ -35,7 +31,7 @@ class HybridSkillRuntime:
         quality_gate: dict[str, Any] | None = None,
         force_dynamic: bool = False,
         solidify: bool = True,
-    ) -> SkillRun:
+    ) -> Any:
         skill = self.config_store.get_skill(skill_id)
         st = getattr(skill, "skill_type", None) or "config"
 
@@ -50,7 +46,7 @@ class HybridSkillRuntime:
             )
 
         if st == "code":
-            cr = self.code_runtime.run(
+            return self.code_runtime.run(
                 skill_id,
                 input_data,
                 force_dynamic=force_dynamic,
@@ -58,8 +54,6 @@ class HybridSkillRuntime:
                 trigger_policy=trigger_policy,
                 quality_gate=quality_gate,
             )
-            return self._code_to_skill_run(cr)
-
         # hybrid
         r1 = self.config_runtime.run(
             skill_id,
@@ -72,34 +66,10 @@ class HybridSkillRuntime:
         if r1.stage in ("static", "solidified"):
             return r1
 
-        cr = self.code_runtime.run(
+        return self.code_runtime.run(
             skill_id,
             input_data,
             solidify=solidify,
             trigger_policy=trigger_policy,
             quality_gate=quality_gate,
-        )
-        return self._code_to_skill_run(cr)
-
-    def _code_to_skill_run(self, cr: CodeSkillRun) -> SkillRun:
-        patch = None
-        if cr.patch:
-            patch = DynamicPatch(
-                reason=cr.patch.reason,
-                changes={
-                    "patched_code": cr.patch.patched_code,
-                    "original_code": cr.patch.original_code,
-                    "diff_summary": cr.patch.diff_summary,
-                    "llm_reasoning": cr.patch.llm_reasoning,
-                },
-            )
-        return SkillRun(
-            run_id=cr.run_id,
-            skill_id=cr.skill_id,
-            stage=cr.stage,
-            input_data=deepcopy(cr.input_data),
-            output_data=dict(cr.output_data),
-            patch=patch,
-            error=cr.error,
-            diagnosis=dict(cr.diagnosis),
         )

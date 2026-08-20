@@ -12,11 +12,47 @@ const actionLoading = ref(false)
 const error = ref('')
 const info = ref('')
 
-const dashboard = ref<Record<string, any>>({})
-const suggestions = ref<Array<Record<string, any>>>([])
-const briefTasks = ref<Array<Record<string, any>>>([])
-const threads = ref<Array<Record<string, any>>>([])
-const messages = ref<Array<Record<string, any>>>([])
+interface AutonomyDashboard {
+  counts?: {
+    change_requests_pending?: number
+    suggestions_pending?: number
+    brief_tasks_pending?: number
+    collab_threads_open?: number
+  }
+}
+
+interface EmployeeSuggestion {
+  id: number | string
+  source_employee_id?: string
+  target_employee_ids?: string[]
+  kind?: string
+  risk_level?: string
+  status?: string
+  summary?: string
+}
+
+interface EmployeeBriefTask {
+  id: number | string
+  owner_employee_id?: string
+  task_brief?: string
+}
+
+interface CollabThread {
+  id: number | string
+  title?: string
+}
+
+interface CollabMessage {
+  id: number | string
+  sender_employee_id?: string
+  content?: string
+}
+
+const dashboard = ref<AutonomyDashboard>({})
+const suggestions = ref<EmployeeSuggestion[]>([])
+const briefTasks = ref<EmployeeBriefTask[]>([])
+const threads = ref<CollabThread[]>([])
+const messages = ref<CollabMessage[]>([])
 
 const suggestionStatus = ref('pending')
 const selectedSuggestionIds = ref<number[]>([])
@@ -35,7 +71,7 @@ function toggleSuggestion(id: number) {
 }
 
 async function loadDashboard() {
-  dashboard.value = (await api.adminEmployeeAutonomyDashboard(40)) as Record<string, any>
+  dashboard.value = (await api.adminEmployeeAutonomyDashboard(40)) as AutonomyDashboard
 }
 
 async function loadSuggestions() {
@@ -43,7 +79,7 @@ async function loadSuggestions() {
     status: suggestionStatus.value || undefined,
     limit: 120,
     offset: 0,
-  })) as { items?: Array<Record<string, any>> }
+  })) as { items?: EmployeeSuggestion[] }
   suggestions.value = Array.isArray(r?.items) ? r.items : []
   selectedSuggestionIds.value = selectedSuggestionIds.value.filter((id) =>
     suggestions.value.some((s) => Number(s.id) === id),
@@ -54,13 +90,13 @@ async function loadBriefTasks() {
   const r = (await api.adminEmployeeBriefTasks({
     status: 'pending',
     limit: 120,
-  })) as { items?: Array<Record<string, any>> }
+  })) as { items?: EmployeeBriefTask[] }
   briefTasks.value = Array.isArray(r?.items) ? r.items : []
 }
 
 async function loadThreads() {
   const r = (await api.adminEmployeeCollabThreads({ status: 'open', limit: 80 })) as {
-    items?: Array<Record<string, any>>
+    items?: CollabThread[]
   }
   threads.value = Array.isArray(r?.items) ? r.items : []
   if (!selectedThreadId.value && threads.value.length) {
@@ -74,7 +110,7 @@ async function loadMessages() {
     return
   }
   const r = (await api.adminEmployeeCollabMessages(selectedThreadId.value, 200)) as {
-    items?: Array<Record<string, any>>
+    items?: CollabMessage[]
   }
   messages.value = Array.isArray(r?.items) ? r.items : []
 }
@@ -179,7 +215,7 @@ async function triggerEvolutionScan() {
       lookback_hours: 24,
       min_failures: 3,
       limit: 30,
-    })) as Record<string, any>
+    })) as { processed?: number; created?: number }
     info.value = `进化扫描完成：processed=${out?.processed ?? 0} created=${out?.created ?? 0}`
     await loadDashboard()
   } catch (e: unknown) {
@@ -207,7 +243,7 @@ async function createThread() {
       title,
       participants,
       created_by_employee_id: 'admin',
-    })) as Record<string, any>
+    })) as { thread_id?: number | string }
     selectedThreadId.value = Number(out?.thread_id || 0)
     newThreadTitle.value = ''
     newThreadParticipants.value = ''
@@ -591,4 +627,3 @@ html[data-workbench-theme='light'] .muted{color:#94a3b8}
 html[data-workbench-theme='light'] .btn{border-color:#d1d5db}
 html[data-workbench-theme='light'] .btn.link{color:#2563eb}
 </style>
-

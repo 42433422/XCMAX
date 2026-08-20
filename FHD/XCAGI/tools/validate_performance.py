@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 XCAGI 性能优化系统 - 快速启动和验证脚本
 
@@ -9,10 +8,12 @@ XCAGI 性能优化系统 - 快速启动和验证脚本
 4. 生成性能报告
 """
 
-import sys
-import os
-import time
 import json
+import os
+import sys
+import time
+
+BOUNDARY_ERRORS: tuple[type[Exception], ...] = (Exception,)
 
 # 将项目根目录添加到 Python 路径
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -36,7 +37,7 @@ def check_redis_connection():
     """检查 Redis 连接"""
     print("\n📡 [1/6] 检查 Redis 连接...")
     try:
-        from app.utils.redis_cache import get_redis_cache
+        from app.utils.performance.redis_cache import get_redis_cache
 
         cache = get_redis_cache()
 
@@ -49,7 +50,7 @@ def check_redis_connection():
 
             if value == "ok":
                 stats = cache.stats
-                print(f"   ✅ Redis 连接成功")
+                print("   ✅ Redis 连接成功")
                 print(f"      - 本地缓存大小: {stats.get('local_cache_size', 0)}")
                 print(f"      - 命中率: {stats.get('hit_rate', 0):.1%}")
                 return True
@@ -57,7 +58,7 @@ def check_redis_connection():
         print("   ⚠️  Redis 未连接（将使用本地缓存）")
         return False
 
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         print(f"   ❌ Redis 检查失败: {e}")
         return False
 
@@ -66,18 +67,18 @@ def check_query_optimizer():
     """检查查询优化器"""
     print("\n🔍 [2/6] 检查查询优化器...")
     try:
-        from app.utils.query_optimizer import get_query_optimizer
+        from app.utils.performance.query_optimizer import get_query_optimizer
 
         optimizer = get_query_optimizer()
         stats = optimizer.stats
 
-        print(f"   ✅ 查询优化器已启用")
+        print("   ✅ 查询优化器已启用")
         print(f"      - 总查询数: {stats.get('total_queries', 0)}")
         print(f"      - 慢查询数: {stats.get('slow_queries', 0)}")
         print(f"      - 平均耗时: {stats.get('avg_duration_ms', 0):.3f}ms")
         return True
 
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         print(f"   ❌ 查询优化器检查失败: {e}")
         return False
 
@@ -86,22 +87,24 @@ def check_async_tasks():
     """检查异步任务管理"""
     print("\n⚡ [3/6] 检查异步任务管理...")
     try:
-        from app.utils.async_tasks import get_async_task_manager
+        from app.utils.async_task.async_tasks import get_async_task_manager
 
         manager = get_async_task_manager()
         stats = manager.stats
 
-        print(f"   ✅ 异步任务管理已启用")
+        print("   ✅ 异步任务管理已启用")
         print(f"      - 已注册任务: {len(stats.get('registered_tasks', []))}")
         print(f"      - 活跃任务: {stats.get('active_tasks', 0)}")
 
-        registered = stats.get('registered_tasks', [])
+        registered = stats.get("registered_tasks", [])
         if registered:
-            print(f"      - 任务列表: {', '.join(registered[:5])}{'...' if len(registered) > 5 else ''}")
+            print(
+                f"      - 任务列表: {', '.join(registered[:5])}{'...' if len(registered) > 5 else ''}"
+            )
 
         return True
 
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         print(f"   ❌ 异步任务管理检查失败: {e}")
         return False
 
@@ -115,13 +118,13 @@ def check_request_dedup():
         deduplicator = get_request_deduplicator()
         stats = deduplicator.stats
 
-        print(f"   ✅ 请求去重已启用")
+        print("   ✅ 请求去重已启用")
         print(f"      - 总请求数: {stats.get('total_requests', 0)}")
         print(f"      - 去重命中: {stats.get('deduplicated', 0)}")
         print(f"      - 去重率: {stats.get('dedup_rate', 0):.1f}%")
         return True
 
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         print(f"   ❌ 请求去重检查失败: {e}")
         return False
 
@@ -130,17 +133,17 @@ def check_performance_monitor():
     """检查性能监控"""
     print("\n📊 [5/6] 检查性能监控...")
     try:
-        from app.utils.performance_monitor import get_performance_monitor
+        from app.utils.performance.performance_monitor import get_performance_monitor
 
         monitor = get_performance_monitor()
         summary = monitor.get_metrics_summary(minutes=5)
 
         if summary.get("message") == "暂无数据":
-            print(f"   ✅ 性能监控已启用（暂无数据，等待请求后生成）")
+            print("   ✅ 性能监控已启用（暂无数据，等待请求后生成）")
             return True
 
         api_stats = summary.get("api_stats", {})
-        print(f"   ✅ 性能监控已启用")
+        print("   ✅ 性能监控已启用")
         print(f"      - 总API调用: {api_stats.get('total', 0)}")
         print(f"      - 平均延迟: {api_stats.get('avg_ms', 0):.2f}ms")
         print(f"      - 错误率: {api_stats.get('error_4xx', 0) + api_stats.get('error_5xx', 0)}")
@@ -148,11 +151,13 @@ def check_performance_monitor():
 
         memory = summary.get("memory")
         if memory:
-            print(f"      - 内存占用: {memory.get('rss_mb', 0):.1f}MB ({memory.get('percent', 0):.1f}%)")
+            print(
+                f"      - 内存占用: {memory.get('rss_mb', 0):.1f}MB ({memory.get('percent', 0):.1f}%)"
+            )
 
         return True
 
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         print(f"   ❌ 性能监控检查失败: {e}")
         return False
 
@@ -173,6 +178,7 @@ def check_api_endpoints():
     for endpoint, desc in endpoints:
         try:
             import httpx
+
             response = httpx.get(f"http://localhost:5000{endpoint}", timeout=2)
             status = "✅" if response.status_code == 200 else "⚠️"
             print(f"   {status} {desc}: {response.status_code}")
@@ -180,7 +186,7 @@ def check_api_endpoints():
             if response.status_code != 200:
                 all_ok = False
 
-        except Exception:
+        except BOUNDARY_ERRORS:
             print(f"   ⏳  {desc}: 无法连接（服务可能未启动）")
             all_ok = False
 
@@ -196,7 +202,8 @@ def run_performance_test():
     # 测试1: 缓存读写
     start = time.perf_counter()
     try:
-        from app.utils.redis_cache import get_redis_cache
+        from app.utils.performance.redis_cache import get_redis_cache
+
         cache = get_redis_cache()
 
         for i in range(100):
@@ -208,13 +215,14 @@ def run_performance_test():
         duration = (time.perf_counter() - start) * 1000
         results["cache_100ops"] = round(duration, 2)
         print(f"   📦 缓存100次读写: {duration:.2f}ms")
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         print(f"   ❌ 缓存测试失败: {e}")
 
     # 测试2: 监控记录
     start = time.perf_counter()
     try:
-        from app.utils.performance_monitor import get_performance_monitor
+        from app.utils.performance.performance_monitor import get_performance_monitor
+
         monitor = get_performance_monitor()
 
         for i in range(50):
@@ -223,13 +231,14 @@ def run_performance_test():
         duration = (time.perf_counter() - start) * 1000
         results["monitor_50records"] = round(duration, 2)
         print(f"   📊 监控50次记录: {duration:.2f}ms")
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         print(f"   ❌ 监控测试失败: {e}")
 
     # 测试3: 去重操作
     start = time.perf_counter()
     try:
         from app.utils.resilience.request_deduplicator import get_request_deduplicator
+
         dedup = get_request_deduplicator()
 
         def dummy_func(x):
@@ -241,7 +250,7 @@ def run_performance_test():
         duration = (time.perf_counter() - start) * 1000
         results["dedup_50ops"] = round(duration, 2)
         print(f"   🔄 去重50次调用: {duration:.2f}ms")
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         print(f"   ❌ 去重测试失败: {e}")
 
     return results
@@ -257,8 +266,8 @@ def generate_report(check_results, perf_results):
         "summary": {
             "total_components": len(check_results),
             "passed_components": sum(1 for v in check_results.values() if v),
-            "overall_status": "✅ 全部通过" if all(check_results.values()) else "⚠️ 部分未通过"
-        }
+            "overall_status": "✅ 全部通过" if all(check_results.values()) else "⚠️ 部分未通过",
+        },
     }
 
     print("\n" + "=" * 60)
@@ -267,7 +276,9 @@ def generate_report(check_results, perf_results):
     print(f"时间: {report['timestamp']}")
     print(f"版本: {report['version']}")
     print("-" * 60)
-    print(f"组件状态: {report['summary']['passed_components']}/{report['summary']['total_components']} 通过")
+    print(
+        f"组件状态: {report['summary']['passed_components']}/{report['summary']['total_components']} 通过"
+    )
     print(f"总体状态: {report['summary']['overall_status']}")
     print("=" * 60)
 
@@ -302,7 +313,7 @@ def main():
         with open(output_file, "w", encoding="utf-8") as f:
             json.dump(report, f, indent=2, ensure_ascii=False)
         print(f"\n💾 报告已保存: {output_file}")
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:
         print(f"\n⚠️  报告保存失败: {e}")
 
     # 返回退出码

@@ -10,6 +10,7 @@ import httpx
 import orjson
 from langchain_protocol import Event
 
+from langgraph_sdk._exception_policy import TERMINATION_ERRORS
 from langgraph_sdk._shared.utilities import _quote_path_param
 from langgraph_sdk.sse import BytesLineDecoder, SSEDecoder
 from langgraph_sdk.stream.transport.base import (
@@ -106,7 +107,7 @@ class SyncProtocolSseTransport:
                 part = sse_decoder.decode(b"")
                 if part is not None and isinstance(part.data, dict):
                     yield cast("Event", part.data)
-            except BaseException as exc:
+            except TERMINATION_ERRORS as exc:
                 if not closed:
                     stream_error = exc
                 raise

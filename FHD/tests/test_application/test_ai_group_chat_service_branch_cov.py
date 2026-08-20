@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment, var-annotated"
 """测试 ai_group_chat_service 的分支覆盖（聚焦未覆盖方法与边界分支）。
 
 覆盖目标：
@@ -583,7 +584,7 @@ class TestDefaultDutyEmployeeLoader:
         )
         monkeypatch.setattr(
             "app.infrastructure.mods.mod_manager.get_mod_manager",
-            MagicMock(side_effect=Exception("no mod manager")),
+            MagicMock(side_effect=RuntimeError("no mod manager")),
         )
         result = _default_duty_employee_loader()
         assert len(result) >= 1

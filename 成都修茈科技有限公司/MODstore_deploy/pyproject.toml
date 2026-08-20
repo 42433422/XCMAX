@@ -2,7 +2,7 @@
 name = "modstore"
 version = "0.2.0"
 description = "MODstore：XCAGI Mod 库、制作、调试沙箱与同步"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = []
 
 [project.optional-dependencies]
@@ -30,7 +30,6 @@ web = [
     # 仅在配置了 BUTLER_QQ_* env 后真正启用；未安装则 butler_qq_bridge 路由跳过注册。
     "pynacl>=1.5",
     "qq-botpy>=1.2.1",
-    "xcagi-common @ file:../../packages/xcagi_common",
 ]
 knowledge = [
     "chromadb>=0.5",
@@ -94,7 +93,7 @@ modman = ["data/*.json"]
 
 [tool.black]
 line-length = 100
-target-version = ["py310"]
+target-version = ["py311"]
 
 [tool.isort]
 profile = "black"
@@ -108,6 +107,10 @@ pythonpath = ["."]
 addopts = "-q"
 asyncio_mode = "auto"
 xfail_strict = true
+filterwarnings = [
+    "error",
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated:starlette.exceptions.StarletteDeprecationWarning",
+]
 markers = [
     "integration: HTTP/webhook integration tests",
     "release_gate: release train / digest / deploy smoke subset (PR hard gate)",
@@ -120,14 +123,14 @@ omit = ["*/tests/*", "*/modstore_server/workbench_script_runs/*"]
 
 [tool.coverage.report]
 # 适用于裸 ``coverage report``。enforced floor = 当前真实覆盖率(全量 tree 自承约 40%+,
-# 本地未实测:xcagi_common 要求 Python>=3.10)。设为诚实的 40 作棘轮——能挡回归、只可上调。
+# 本地未实测:xcagi_common 要求 Python>=3.11)。设为诚实的 40 作棘轮——能挡回归、只可上调。
 # 路线图目标(尚未达成)为 80;CI 实际门禁见
 # .github/workflows/ci-backend-python.yml 的 MODSTORE_PY_COVERAGE_FLOOR(=40,与此一致),
 # 它发布到仓库根 .github/workflows/modstore-ci-backend-python.yml 后由 GitHub 实际执行。
 fail_under = 40
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.11"
 explicit_package_bases = true
 mypy_path = ["."]
 follow_imports = "normal"
@@ -146,16 +149,6 @@ ignore_missing_imports = false
 
 [[tool.mypy.overrides]]
 module = [
-    "modstore_server.infrastructure.library_paths",
-    "modstore_server.infrastructure.notification_repository",
-    "modstore_server.quota_middleware",
-    "modstore_server.catalog_store",
-    "modstore_server.services._circuit_breaker",
-]
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = [
     "modstore_server.infrastructure.db",
     "modstore_server.api.deps",
     "modstore_server.application.*",
@@ -163,48 +156,6 @@ module = [
 ]
 ignore_errors = false
 disallow_untyped_defs = true
-
-# application.catalog has runtime dict access patterns that mypy can't infer — silence for now
-[[tool.mypy.overrides]]
-module = ["modstore_server.application.catalog"]
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = [
-    "modstore_server.api.app_factory",
-    "modstore_server.api.market_routes",
-    "modstore_server.api.payment_routes",
-    "modstore_server.employee_api",
-    "modstore_server.llm_api",
-    "modstore_server.workflow_engine",
-    "modstore_server.workbench_api",
-    "modstore_server.knowledge_ingest",
-    "modstore_server.knowledge_v2_api",
-    "modstore_server.customer_service_api",
-    "modstore_server.customer_service_orchestrator",
-    "modstore_server.agent_butler_api",
-    "modstore_server.agent_butler_orchestrate",
-    "modstore_server.butler_qq_bridge",
-    "modstore_server.script_agent.agent_loop",
-    "modstore_server.script_agent.sandbox_runner",
-    "modstore_server.script_workflow_api",
-    "modstore_server.employee_ai_pipeline",
-    "modstore_server.employee_change_request_service",
-    "modstore_server.mod_employee_agent_runner",
-    "modstore_server.workflow_fhd_bridge",
-    "modstore_server.workflow_nl_graph",
-    "modstore_server.integrations.vibe_adapter",
-    "modstore_server.integrations.vibe_action_handlers",
-    "modstore_server.services.employee",
-    "modstore_server.services.llm",
-    "modstore_server.services.knowledge",
-    "modstore_server.vector_store",
-    "modstore_server.llm_chat_proxy",
-    "modstore_server.employee_executor",
-    "modstore_server.routes_registry",
-    "modstore_server.butler_qq_botpy",
-]
-ignore_errors = true
 
 [[tool.mypy.overrides]]
 module = [
@@ -237,10 +188,11 @@ module = [
     "uvicorn.*",
     "websockets.*",
     "xcagi_common.*",
+    "paramiko.*",
+    "pysqlite3.*",
+    "cursor_sdk.*",
+    "redisvl.*",
+    "vibe_coding.*",
+    "retort_engine.*",
 ]
 ignore_missing_imports = true
-
-# 剩余遗留模块（大量推断债）— 全量静默
-[[tool.mypy.overrides]]
-module = ["modstore_server.*"]
-ignore_errors = true

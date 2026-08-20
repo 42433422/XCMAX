@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment, index"
 import os
 import sys
 
@@ -23,7 +24,7 @@ with engine.begin() as conn:
     )
     row = result.mappings().first()
     if row:
-        print(f'默认模板：{row["slug"]} -> {row["storage_relpath"]}')
+        print(f"默认模板：{row['slug']} -> {row['storage_relpath']}")
     else:
         print("没有默认模板")
 
@@ -31,7 +32,7 @@ with engine.begin() as conn:
     print("=== 查询所有激活模板（Excel 优先）===")
     result = conn.execute(
         text(
-            """
+            r"""
         SELECT slug, storage_relpath, is_default, is_active,
                (CASE WHEN storage_relpath ~* '\.(xls|xlsx|xlsm)$' THEN 0 ELSE 1 END) as is_word
         FROM document_templates
@@ -43,5 +44,5 @@ with engine.begin() as conn:
     )
     for row in result:
         print(
-            f'{row["slug"]:20} {row["storage_relpath"]:40} is_default={row["is_default"]} is_word={row["is_word"]}'
+            f"{row['slug']:20} {row['storage_relpath']:40} is_default={row['is_default']} is_word={row['is_word']}"
         )

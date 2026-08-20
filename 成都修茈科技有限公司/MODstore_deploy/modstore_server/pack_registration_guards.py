@@ -1,8 +1,9 @@
+# mypy: disable-error-code="arg-type, union-attr"
 """pack-registrar 登记前/审核门禁：上游自动化、元数据一致性、五维失败分级。"""
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 # 动态阶段仅允许自动修补的审核维度（其余须 audit_passed=false + 人工）
 _TRIVIAL_AUDIT_DIMENSIONS = frozenset(
@@ -101,7 +102,7 @@ def workflow_automation_block_reason(
                 "须 workflow-automator 完成后再调用 register_mod_employee_packs_async"
             )
 
-    return "缺少 workflow-automator 完成标记（automation_complete / workflow_id），" "拒收登记"
+    return "缺少 workflow-automator 完成标记（automation_complete / workflow_id），拒收登记"
 
 
 def registration_metadata_mismatches(

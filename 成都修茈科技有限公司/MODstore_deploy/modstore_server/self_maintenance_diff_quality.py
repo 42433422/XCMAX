@@ -101,8 +101,7 @@ def _git_blob(
     if proc.returncode != 0:
         detail = (proc.stderr or b"").decode("utf-8", errors="replace")[:1000]
         raise RuntimeError(
-            f"git show failed for {repo_path!r} at {target!r} "
-            f"with exit {proc.returncode}: {detail}"
+            f"git show failed for {repo_path!r} at {target!r} with exit {proc.returncode}: {detail}"
         )
     return proc.stdout or b""
 

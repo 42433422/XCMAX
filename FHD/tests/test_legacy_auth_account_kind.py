@@ -1,3 +1,4 @@
+# mypy: disable-error-code="attr-defined, no-any-return"
 from __future__ import annotations
 
 from collections.abc import Callable

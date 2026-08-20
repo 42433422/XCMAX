@@ -31,6 +31,10 @@ from app.desktop_runtime.support_bundle import build_support_bundle_zip
 from app.infrastructure.auth.dependencies import get_logged_in_user
 from app.runtime_integrity import runtime_integrity_snapshot
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.security.safe_download_path import (
+    UnsafeDownloadPathError,
+    resolve_under_allowed_dirs,
+)
 
 router = APIRouter(prefix="/api/desktop", tags=["desktop-runtime"])
 
@@ -167,6 +171,8 @@ def update_desktop_deployment_settings(request: DeploymentSettingsUpdate):
     _db_profile_path, db_profile = load_or_create_profile(dirs["root"])
     remote = db_profile.get("remote") if isinstance(db_profile.get("remote"), dict) else {}
     requested_pg_url = str(request.postgresUrl or request.postgres_url or "").strip()
+    if not isinstance(remote, dict):
+        remote = {}
     existing_pg_url = str(remote.get("database_url") or "").strip()
     postgres_url = requested_pg_url or existing_pg_url
 
@@ -294,7 +300,16 @@ def download_model_asset(request: DownloadModelRequest, _user=Depends(get_logged
 def install_manifest(path: str, _user=Depends(get_logged_in_user)):
     if not is_desktop_mode():
         raise HTTPException(status_code=409, detail="模型下载仅在桌面模式下可写入 userData")
-    manifest_path = Path(path)
+    dirs = ensure_desktop_dirs(os.environ.get("XCAGI_DATA_DIR"))
+    try:
+        manifest_path = resolve_under_allowed_dirs(
+            path,
+            [dirs["uploads"], dirs["cache"], dirs["models"]],
+        )
+    except UnsafeDownloadPathError as exc:
+        raise HTTPException(
+            status_code=400, detail="manifest path is outside desktop storage"
+        ) from exc
     if not manifest_path.is_file():
         raise HTTPException(status_code=404, detail="manifest not found")
     targets = [
@@ -333,23 +348,27 @@ async def receive_crash_report(request: Request):
     report_id = uuid.uuid4().hex[:12]
 
     if "multipart/form-data" in content_type:
-        form = await request.form()
         saved: list[str] = []
-        for field_name in form:
-            field = form[field_name]
-            filename = str(getattr(field, "filename", "") or "").strip()
-            reader = getattr(field, "read", None)
-            if not filename or not callable(reader):
-                continue
-            content = await reader()
-            if len(content) > _MAX_CRASH_DUMP_BYTES:
-                raise HTTPException(status_code=413, detail="崩溃转储超过 20 MB")
-            ext = Path(filename).suffix.lower()
-            if ext not in _ALLOWED_CRASH_SUFFIXES:
-                ext = ".bin"
-            target = crash_dir / f"crash-{ts}-{report_id}-{len(saved)}{ext}"
-            target.write_bytes(content)
-            saved.append(target.name)
+        # The request form owns SpooledTemporaryFile instances for uploaded
+        # dumps. Its async context manager closes every upload on success and
+        # on validation errors, preventing descriptor leaks in the long-lived
+        # desktop backend.
+        async with request.form() as form:
+            for field_name in form:
+                field = form[field_name]
+                filename = str(getattr(field, "filename", "") or "").strip()
+                reader = getattr(field, "read", None)
+                if not filename or not callable(reader):
+                    continue
+                content = await reader()
+                if len(content) > _MAX_CRASH_DUMP_BYTES:
+                    raise HTTPException(status_code=413, detail="崩溃转储超过 20 MB")
+                ext = Path(filename).suffix.lower()
+                if ext not in _ALLOWED_CRASH_SUFFIXES:
+                    ext = ".bin"
+                target = crash_dir / f"crash-{ts}-{report_id}-{len(saved)}{ext}"
+                target.write_bytes(content)
+                saved.append(target.name)
         if not saved:
             raise HTTPException(status_code=400, detail="未收到崩溃转储文件")
         return JSONResponse({"saved": True, "files": saved})

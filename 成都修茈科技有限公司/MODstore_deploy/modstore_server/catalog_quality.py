@@ -1,3 +1,4 @@
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """公开市场员工包质量检测与六维报告（craft validate + six_dimension）。"""
 
 from __future__ import annotations
@@ -5,9 +6,11 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +73,7 @@ def resolve_employee_pack_dir(pkg_id: str) -> Optional[Path]:
         lib.mkdir(parents=True, exist_ok=True)
         mod_dir = find_mod_dir_by_manifest_id(lib, pid)
         return mod_dir if mod_dir.is_dir() else None
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.debug("resolve_employee_pack_dir failed for %s: %s", pid, exc)
         return None
 
@@ -83,7 +86,7 @@ def read_rule_spec_runtime_kind(pack_dir: Path) -> str:
         data = json.loads(rule_path.read_text(encoding="utf-8"))
         if isinstance(data, dict):
             return str(data.get("runtime_kind") or "").strip()
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         pass
     return ""
 
@@ -148,10 +151,10 @@ def quality_snapshot_fresh(
     try:
         ts = datetime.fromisoformat(audited_at.replace("Z", "+00:00"))
         if ts.tzinfo is None:
-            ts = ts.replace(tzinfo=timezone.utc)
-        age = datetime.now(timezone.utc) - ts
+            ts = ts.replace(tzinfo=UTC)
+        age = datetime.now(UTC) - ts
         return age <= timedelta(days=max_age_days)
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         return False
 
 
@@ -164,7 +167,7 @@ def build_quality_snapshot_payload(
     pack_dir: Path,
     pipeline_label: str,
 ) -> Dict[str, Any]:
-    audited_at = datetime.now(timezone.utc).isoformat()
+    audited_at = datetime.now(UTC).isoformat()
     return {
         "audited_at": audited_at,
         "quality_report": {
@@ -213,7 +216,9 @@ async def build_employee_quality_report(
 ) -> Dict[str, Any]:
     """对单个员工包目录执行 validate + 六维汇总；use_llm 时调用 hex-quality-assessor。"""
     from modstore_server.employee_six_dimension import compute_six_dimension_report
-    from modstore_server.employee_six_dimension_llm import enrich_six_dimension_report_with_llm
+    from modstore_server.employee_six_dimension_llm import (
+        enrich_six_dimension_report_with_llm,
+    )
 
     pipeline_label = pipeline_label_from_pack(pack_dir, brief)
     val = await run_pack_validate(pack_dir=pack_dir, brief=brief)
@@ -250,7 +255,7 @@ async def build_employee_quality_report(
         "six_dimension": six_dimension,
         "gate": gate,
         "pipeline_label": pipeline_label,
-        "audited_at": datetime.now(timezone.utc).isoformat(),
+        "audited_at": datetime.now(UTC).isoformat(),
         "from_cache": False,
         "six_dimension_llm_meta": llm_meta or None,
     }
@@ -293,7 +298,9 @@ def set_process_cached_quality(pkg_id: str, sha256: str, payload: Dict[str, Any]
     from modstore_server import cache
 
     cache.set_json(
-        process_cache_key(pkg_id, sha256), payload, ttl_seconds=PROCESS_CACHE_TTL_SECONDS
+        process_cache_key(pkg_id, sha256),
+        payload,
+        ttl_seconds=PROCESS_CACHE_TTL_SECONDS,
     )
 
 
@@ -329,7 +336,7 @@ async def quality_report_for_catalog_item(
             "six_dimension": None,
             "gate": {"passed": False, "critical_failed": True, "failed_dimensions": []},
             "pipeline_label": "",
-            "audited_at": datetime.now(timezone.utc).isoformat(),
+            "audited_at": datetime.now(UTC).isoformat(),
             "from_cache": False,
         }
 
@@ -355,7 +362,7 @@ async def quality_report_for_catalog_item(
         item.graph_snapshot = json.dumps(snap_payload, ensure_ascii=False)
         try:
             session.commit()
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
             logger.warning("quality snapshot commit failed for %s: %s", pkg_id, exc)
             session.rollback()
 

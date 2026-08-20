@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="union-attr"
 """生成快速上手教程用 Excel / Word 样本（frontend/public/tutorial/）。"""
+
 from __future__ import annotations
 
 import sys
@@ -7,12 +9,16 @@ import zipfile
 from pathlib import Path
 from xml.sax.saxutils import escape
 
+from app.utils.operational_errors import BOUNDARY_ERRORS
+
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "frontend" / "public" / "tutorial"
 PREFIX = "教程示例-"
 
 
-def _write_minimal_xlsx(path: Path, sheet_name: str, headers: list[str], rows: list[list[str]]) -> None:
+def _write_minimal_xlsx(
+    path: Path, sheet_name: str, headers: list[str], rows: list[list[str]]
+) -> None:
     try:
         from openpyxl import Workbook
     except ImportError as exc:
@@ -100,7 +106,7 @@ def main() -> int:
         ws.append([f"{PREFIX}市场部", f"{PREFIX}样品B", "大号"])
         ws.append([f"{PREFIX}研发部", f"{PREFIX}样品C", "定制"])
         wb.save(wb_path)
-    except Exception as exc:
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print("warn: dept-employee second sheet skipped:", exc, file=sys.stderr)
 
     print("wrote samples to", OUT)

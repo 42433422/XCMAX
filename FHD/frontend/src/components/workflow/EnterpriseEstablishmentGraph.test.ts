@@ -31,7 +31,7 @@ vi.mock('@/composables/useAutoLayout', () => ({
     for (const id of ids) {
       positions.set(id, { x, y })
       x += opts.cellWidth + (opts.gapX || 0)
-      if ((positions.size) % cols === 0) {
+      if (positions.size % cols === 0) {
         x = 0
         y += opts.cellHeight + (opts.gapY || 0)
       }
@@ -56,17 +56,41 @@ vi.mock('@/constants/enterpriseWorkflowEstablishment', () => ({
   },
 }))
 vi.mock('@/utils/typeGuards', () => ({
-  asRecord: (v: unknown) => (v && typeof v === 'object' ? v as Record<string, unknown> : {}),
+  asRecord: (v: unknown) => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {}),
   asString: (v: unknown) => (typeof v === 'string' ? v : ''),
 }))
 
 import EnterpriseEstablishmentGraph from '@/components/workflow/EnterpriseEstablishmentGraph.vue'
 
 const sampleDesks = [
-  { empId: 'mgmt-001', shortName: '张三', panelTitle: '管理', enabled: true, snapshot: { visuallyBusy: false } },
-  { empId: 'tool-001', shortName: '李四', panelTitle: '工具', enabled: true, snapshot: { visuallyBusy: true } },
-  { empId: 'exec-001', shortName: '王五', panelTitle: '执行', enabled: false, snapshot: { visuallyBusy: false } },
-  { empId: 'svc-001', shortName: '赵六', panelTitle: '服务', enabled: true, snapshot: { visuallyBusy: false } },
+  {
+    empId: 'mgmt-001',
+    shortName: '张三',
+    panelTitle: '管理',
+    enabled: true,
+    snapshot: { visuallyBusy: false },
+  },
+  {
+    empId: 'tool-001',
+    shortName: '李四',
+    panelTitle: '工具',
+    enabled: true,
+    snapshot: { visuallyBusy: true },
+  },
+  {
+    empId: 'exec-001',
+    shortName: '王五',
+    panelTitle: '执行',
+    enabled: false,
+    snapshot: { visuallyBusy: false },
+  },
+  {
+    empId: 'svc-001',
+    shortName: '赵六',
+    panelTitle: '服务',
+    enabled: true,
+    snapshot: { visuallyBusy: false },
+  },
 ]
 
 function mountComponent(propsOverrides = {}) {
@@ -74,7 +98,7 @@ function mountComponent(propsOverrides = {}) {
     props: {
       desks: sampleDesks,
       selectedEmpId: null,
-      isBusy: (row: typeof sampleDesks[number]) => Boolean(row.snapshot?.visuallyBusy),
+      isBusy: (row: (typeof sampleDesks)[number]) => Boolean(row.snapshot?.visuallyBusy),
       ...propsOverrides,
     },
     global: {
@@ -115,7 +139,9 @@ describe('EnterpriseEstablishmentGraph', () => {
     const wrapper = mountComponent()
     // Access component internals to test onNodeClick
     const vm = wrapper.vm as any
-    vm.onNodeClick({ node: { id: 'management::mgmt-001', type: 'default', data: { empId: 'mgmt-001' } } })
+    vm.onNodeClick({
+      node: { id: 'management::mgmt-001', type: 'default', data: { empId: 'mgmt-001' } },
+    })
     expect(wrapper.emitted('select')).toBeTruthy()
     expect(wrapper.emitted('select')![0]).toEqual(['mgmt-001'])
   })
@@ -130,7 +156,9 @@ describe('EnterpriseEstablishmentGraph', () => {
   it('does not emit select for placeholder node click', async () => {
     const wrapper = mountComponent()
     const vm = wrapper.vm as any
-    vm.onNodeClick({ node: { id: 'management::__empty__', type: 'default', data: { placeholder: true } } })
+    vm.onNodeClick({
+      node: { id: 'management::__empty__', type: 'default', data: { placeholder: true } },
+    })
     expect(wrapper.emitted('select')).toBeFalsy()
   })
 

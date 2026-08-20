@@ -19,34 +19,43 @@ def register_infrastructure_routes(app: FastAPI) -> None:
 
         app.include_router(kellai_binding_router)
         logger.info("Registered kellai_binding_router (/api/kellai/binding/*)")
-    except RECOVERABLE_ERRORS as e:
-        logger.warning("客来来绑定路由 skipped: %s", e)
+    except RECOVERABLE_ERRORS:
+        logger.exception("客来来绑定路由 skipped")
     try:
         from app.fastapi_routes.desktop_runtime import router as desktop_runtime_router
 
         app.include_router(desktop_runtime_router)
         record_runtime_component(app, "desktop_runtime_routes", ok=True, required=True)
         logger.info("Registered desktop_runtime_router (/api/desktop/*)")
-    except RECOVERABLE_ERRORS as e:
+    except RECOVERABLE_ERRORS:
         record_runtime_component(
-            app, "desktop_runtime_routes", ok=False, required=True, detail=str(e)
+            app,
+            "desktop_runtime_routes",
+            ok=False,
+            required=True,
+            detail="desktop runtime routes unavailable",
         )
-        logger.warning("Desktop runtime routes skipped: %s", e)
+        logger.exception("Desktop runtime routes skipped")
     try:
         from app.fastapi_routes.desktop_automation import router as desktop_automation_router
 
         app.include_router(desktop_automation_router)
         record_runtime_component(app, "desktop_automation_routes", ok=True)
         logger.info("Registered desktop_automation_router (/api/desktop/automation/*)")
-    except RECOVERABLE_ERRORS as e:
-        record_runtime_component(app, "desktop_automation_routes", ok=False, detail=str(e))
-        logger.warning("Desktop automation routes skipped: %s", e)
+    except RECOVERABLE_ERRORS:
+        record_runtime_component(
+            app,
+            "desktop_automation_routes",
+            ok=False,
+            detail="desktop automation routes unavailable",
+        )
+        logger.exception("Desktop automation routes skipped")
     try:
         from app.fastapi_routes.gdpr import router as gdpr_router
 
         app.include_router(gdpr_router)
         record_runtime_component(app, "gdpr_routes", ok=True)
         logger.info("Registered gdpr_router (/api/gdpr/*)")
-    except RECOVERABLE_ERRORS as e:
-        record_runtime_component(app, "gdpr_routes", ok=False, detail=str(e))
-        logger.warning("GDPR routes skipped: %s", e)
+    except RECOVERABLE_ERRORS:
+        record_runtime_component(app, "gdpr_routes", ok=False, detail="GDPR routes unavailable")
+        logger.exception("GDPR routes skipped")

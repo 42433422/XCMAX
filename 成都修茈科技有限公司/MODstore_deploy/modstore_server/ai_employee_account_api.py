@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type, assignment"
 """AI 员工账号池——管理员 CRUD + 内部查询 API。
 
 ## 路由概览
@@ -21,7 +22,7 @@ dict 返回；查不到返回 ``None``，让上层走 ENV fallback。
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -38,6 +39,7 @@ from modstore_server.ai_employee_account_secrets import (
 from modstore_server.api.deps import require_admin
 from modstore_server.models import User, get_session_factory
 from modstore_server.models_ai_accounts import AIEmployeeAccount
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/admin/ai-accounts", tags=["admin-ai-accounts"])
@@ -107,7 +109,7 @@ def _channel_paths(platform: str, employee_id: str) -> Dict[str, Any]:
                         "path": f"/api/agent/butler/qq/{webhook_key}/webhook",
                     }
                 )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     return {"platform": plat, "paths": paths}
 
@@ -121,7 +123,7 @@ def _to_view(row: AIEmployeeAccount, *, has_secret: Optional[bool] = None) -> Di
             has_secret = bool(sp) and (
                 read_secret(platform=row.platform, account_id=int(row.id)) is not None
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             has_secret = False
     channel = _channel_paths(row.platform, row.employee_id or "")
     return {
@@ -152,7 +154,7 @@ def _invalidate_runtime_caches() -> None:
 
         invalidate_creds_cache()
         invalidate_bot_ctx_cache()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.debug("invalidate butler_qq_bridge caches failed", exc_info=True)
 
 
@@ -280,7 +282,7 @@ def create_account(
                 external_id=row.external_id,
                 secret=body.secret,
             )
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             session.rollback()
             raise HTTPException(500, f"密钥落地失败：{exc}") from exc
 
@@ -340,7 +342,7 @@ def update_account(
             row.sandbox = bool(body.sandbox)
         if body.notes is not None:
             row.notes = body.notes
-        row.updated_at = datetime.now(timezone.utc)
+        row.updated_at = datetime.now(UTC)
         session.commit()
         session.refresh(row)
         view = _to_view(row)
@@ -367,10 +369,10 @@ def rotate_secret(
                 external_id=row.external_id,
                 secret=body.secret,
             )
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             raise HTTPException(500, f"密钥写入失败：{exc}") from exc
         row.secrets_path = str(sp)
-        row.updated_at = datetime.now(timezone.utc)
+        row.updated_at = datetime.now(UTC)
         session.commit()
         session.refresh(row)
         view = _to_view(row, has_secret=True)

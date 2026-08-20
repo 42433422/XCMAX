@@ -1,22 +1,10 @@
 import { resolveApprovalPagePath, resolveApprovalPageRedirectForRouteName } from '@/utils/approvalPagePaths'
 import { resolveErpPagePath, resolveErpPageRedirectForRouteName } from '@/utils/erpPagePaths'
 import { resolveLanPagePath, resolveLanPageRedirectForRouteName } from '@/utils/lanPagePaths'
-import {
-  resolvePlannerPagePath,
-  resolvePlannerPageRedirectForRouteName,
-} from '@/utils/plannerPagePaths'
-import {
-  resolveCustomerServicePagePath,
-  resolveCustomerServicePageRedirectForRouteName,
-} from '@/utils/customerServicePagePaths'
-import {
-  resolveModelPaymentPagePath,
-  resolveModelPaymentPageRedirectForRouteName,
-} from '@/utils/modelPaymentPagePaths'
-import {
-  resolveOfficeEmployeePagePath,
-  resolveOfficeEmployeePageRedirectForRouteName,
-} from '@/utils/officeEmployeePagePaths'
+import { resolvePlannerPagePath, resolvePlannerPageRedirectForRouteName } from '@/utils/plannerPagePaths'
+import { resolveCustomerServicePagePath, resolveCustomerServicePageRedirectForRouteName } from '@/utils/customerServicePagePaths'
+import { resolveModelPaymentPagePath, resolveModelPaymentPageRedirectForRouteName } from '@/utils/modelPaymentPagePaths'
+import { resolveOfficeEmployeePagePath, resolveOfficeEmployeePageRedirectForRouteName } from '@/utils/officeEmployeePagePaths'
 import { resolveWorkflowPageRedirectForRouteName } from '@/utils/workflowPagePaths'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 

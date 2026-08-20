@@ -1,5 +1,5 @@
-# -*- coding: utf-8 -*-
-import sys, os
+# mypy: disable-error-code="import-not-found"
+import sys
 
 sys.path.insert(0, r"E:\FHD\XCAGI\resources\wechat-decrypt")
 from mcp_server import _decompress_content
@@ -27,7 +27,7 @@ for row in rows:
     if isinstance(content, bytes):
         content = content.decode("utf-8", errors="replace")
     content = (content or "").strip()
-    print(f'content[:100]: {content[:100] if content else "None"}')
+    print(f"content[:100]: {content[:100] if content else 'None'}")
     print(f"wechat_id in content: {wechat_id in content}")
     if wechat_id in content:
         found += 1

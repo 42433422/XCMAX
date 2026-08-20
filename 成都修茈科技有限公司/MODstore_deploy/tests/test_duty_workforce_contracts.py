@@ -120,14 +120,23 @@ def test_trusted_event_requires_declared_event_and_rejects_forged_contract() -> 
     assert contract["mode"] == "event"
     assert manifest["employee_config_v2"]["actions"]["handlers"] == ["agent"]
 
-    forged = {**payload, "work_contract": {**payload["work_contract"], "risk_level": "low"}}
-    assert _trusted_system_duty_contract_execution(employee_id, forged, user_id=0) == ({}, {})
+    forged = {
+        **payload,
+        "work_contract": {**payload["work_contract"], "risk_level": "low"},
+    }
+    assert _trusted_system_duty_contract_execution(employee_id, forged, user_id=0) == (
+        {},
+        {},
+    )
     assert _trusted_system_duty_contract_execution(
         employee_id,
         _contract_payload(employee_id, trigger="event", event_type="undeclared"),
         user_id=0,
     ) == ({}, {})
-    assert _trusted_system_duty_contract_execution(employee_id, payload, user_id=1) == ({}, {})
+    assert _trusted_system_duty_contract_execution(employee_id, payload, user_id=1) == (
+        {},
+        {},
+    )
 
 
 def test_source_filtered_event_contract_builds_safe_system_input(monkeypatch) -> None:

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Print size and base64 sha512 for a local file (used on update server)."""
+
 from __future__ import annotations
 
 import base64

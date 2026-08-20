@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# mypy: disable-error-code="arg-type"
 """
 创建真正有垂直合并的测试图片
 """
@@ -54,7 +54,7 @@ image.save(test_image_path)
 
 print(f"✓ 测试图片已创建：{test_image_path}")
 print(f"  尺寸：{width} x {height}")
-print(f"\n这个测试图片有以下垂直合并：")
-print(f"  - 第2列，合并了第1行和第2行")
-print(f"  - 合并范围：X=[150,400], Y=[50,190]")
-print(f"  - 在 y=120 处，从 x=150 到 x=400 的水平线被擦除了")
+print("\n这个测试图片有以下垂直合并：")
+print("  - 第2列，合并了第1行和第2行")
+print("  - 合并范围：X=[150,400], Y=[50,190]")
+print("  - 在 y=120 处，从 x=150 到 x=400 的水平线被擦除了")

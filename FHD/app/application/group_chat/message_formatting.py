@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 from app.application.group_chat.constants import (
     _BROKEN_MARKDOWN_LINK_RE,
@@ -19,9 +19,19 @@ from app.application.group_chat.constants import (
     _UNFINISHED_REPORT_MARKERS,
     CONTEXT_TURNS,
 )
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 class AiGroupChatFormattingMixin:
+    if TYPE_CHECKING:
+
+        @staticmethod
+        def _chat_friendly_summary(
+            value: str, limit: int, *, include_detail_note: bool = True
+        ) -> str:
+            raise NotImplementedError
+
+    @staticmethod
     def _clean_chat_summary_line(line: str) -> str:
         text = _TEMP_PATH_RE.sub("临时执行工作区", str(line or ""))
         text = _MARKDOWN_LINK_RE.sub(r"\1", text)
@@ -46,7 +56,9 @@ class AiGroupChatFormattingMixin:
         if not success:
             text = cls._stringify_summary(result.get("reply"))
             if text:
-                return cls._chat_friendly_summary(text, limit=500, include_detail_note=False)
+                return cast(
+                    "str", cls._chat_friendly_summary(text, limit=500, include_detail_note=False)
+                )
         parts: list[str] = []
         if success:
             parts.append("未发现阻塞")
@@ -60,8 +72,9 @@ class AiGroupChatFormattingMixin:
 
     @classmethod
     def _effective_report_status(cls, row: dict[str, Any]) -> str:
-        report = row.get("payload") if isinstance(row.get("payload"), dict) else {}
-        status = str(row.get("status") or report.get("status") or "").strip().lower()
+        raw_report = row.get("payload")
+        report: dict[str, Any] = dict(raw_report) if isinstance(raw_report, dict) else {}
+        status = str((row or {}).get("status") or report.get("status") or "").strip().lower()
         summary = cls._stringify_summary(report.get("summary") or row.get("body") or "")
         success = report.get("success")
         task = cls._stringify_summary(report.get("original_task") or report.get("task") or "")
@@ -245,7 +258,7 @@ class AiGroupChatFormattingMixin:
             return value.strip()
         try:
             return json.dumps(value, ensure_ascii=False, separators=(",", ":"))[:1200]
-        except TypeError:
+        except TypeError:  # noqa: BLE001 - untrusted summary serialization fallback
             return str(value)[:1200]
 
     @staticmethod
@@ -306,6 +319,7 @@ class AiGroupChatFormattingMixin:
             f"请以「{me}」身份回应最新这条消息，用一两句话简洁回应。"
         )
         try:
+            service: Any
             if employee_id == "codex-super-employee":
                 service = CodexSuperEmployeeService()
             elif employee_id == "cursor-super-employee":
@@ -330,5 +344,5 @@ class AiGroupChatFormattingMixin:
             if body:
                 return body
             return f"（{me} 暂时无法回应）"
-        except Exception as exc:  # noqa: BLE001
+        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
             return f"（{me} 暂时无法回应：{str(exc)[:120]}）"

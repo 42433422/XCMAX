@@ -32,9 +32,7 @@ def run(payload: dict[str, Any], _ctx: dict[str, Any]) -> dict[str, Any]:
             row.get("share_bps"),
             row.get("recorded_share_cents"),
         )
-        if not partner_id or not all(
-            isinstance(value, int) and value >= 0 for value in values
-        ):
+        if not partner_id or not all(isinstance(value, int) and value >= 0 for value in values):
             invalid.append({"index": index, "reason": "invalid_reconciliation_input"})
             continue
         gross_cents, share_bps, recorded_cents = values

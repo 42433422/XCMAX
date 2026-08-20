@@ -40,6 +40,83 @@ class EntitlementServiceTest {
         user.setPasswordHash("hash");
     }
 
+    @Test
+    void activeMembershipSelectionSkipsNullAndAccountLicensePlans() {
+        UserPlan missingPlan = new UserPlan();
+        UserPlan accountLicense = new UserPlan();
+        PlanTemplate accountPlan = new PlanTemplate();
+        accountPlan.setId("saas-trial-30");
+        accountLicense.setPlan(accountPlan);
+        UserPlan membership = new UserPlan();
+        PlanTemplate membershipPlan = new PlanTemplate();
+        membershipPlan.setId("plan_pro");
+        membership.setPlan(membershipPlan);
+        membership.setStartedAt(LocalDateTime.now());
+        when(userPlanRepository.findByUserAndActiveTrue(user))
+                .thenReturn(List.of(missingPlan, accountLicense, membership));
+
+        assertThat(entitlementService.getActivePlan(user)).contains(membership);
+    }
+
+    @Test
+    void catalogAndPermanentPlanNullMetadataRemainSafe() {
+        when(entitlementRepository.findBySourceOrderId(anyString())).thenReturn(Optional.empty());
+        when(catalogItemRepository.findById(1L)).thenReturn(Optional.empty());
+        CatalogItem noArtifact = new CatalogItem();
+        noArtifact.setArtifact(null);
+        when(catalogItemRepository.findById(2L)).thenReturn(Optional.of(noArtifact));
+        CatalogItem regular = new CatalogItem();
+        regular.setArtifact("mod");
+        when(catalogItemRepository.findById(3L)).thenReturn(Optional.of(regular));
+
+        entitlementService.grantCatalogEntitlement(user, 1L, "OT-NULL-ITEM");
+        entitlementService.grantCatalogEntitlement(user, 2L, "OT-NULL-ARTIFACT");
+        entitlementService.grantCatalogEntitlement(user, 3L, "OT-MOD");
+
+        PlanTemplate permanent = new PlanTemplate();
+        permanent.setId("saas-permanent-starter");
+        permanent.setQuotasJson("{\"ai_calls\":null}");
+        UserPlan nullPlan = new UserPlan();
+        UserPlan previousLicense = new UserPlan();
+        previousLicense.setPlan(permanent);
+        when(userPlanRepository.findByUserAndActiveTrue(user))
+                .thenReturn(List.of(nullPlan, previousLicense));
+        when(quotaRepository.findByUserAndQuotaType(user, "ai_calls"))
+                .thenReturn(Optional.empty());
+
+        entitlementService.activatePlan(user, permanent, "OT-PERMANENT");
+
+        verify(userRepository).save(user);
+        verify(quotaRepository).save(argThat(quota -> quota.getTotal() == 0));
+    }
+
+    @Test
+    void trialLicenseReceivesPublishedThirtyDayExpiry() {
+        PlanTemplate trial = new PlanTemplate();
+        trial.setId("saas-trial-30");
+        trial.setQuotasJson("{}");
+        when(userPlanRepository.findByUserAndActiveTrue(user)).thenReturn(List.of());
+        when(userPlanRepository.save(any(UserPlan.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        entitlementService.activatePlan(user, trial, "OT-TRIAL");
+
+        verify(userPlanRepository).save(argThat(plan ->
+                plan.getExpiresAt() != null
+                        && plan.getExpiresAt().isAfter(plan.getStartedAt().plusDays(29))));
+    }
+
+    @Test
+    void catalogEvidenceRejectsEveryInvalidReferenceShape() {
+        assertThat(entitlementService.catalogFulfillmentEvidence(null, 1L).get("reason"))
+                .isEqualTo("invalid_order_reference");
+        assertThat(entitlementService.catalogFulfillmentEvidence(" ", 1L).get("reason"))
+                .isEqualTo("invalid_order_reference");
+        assertThat(entitlementService.catalogFulfillmentEvidence("OT", null).get("reason"))
+                .isEqualTo("invalid_order_reference");
+        assertThat(entitlementService.catalogFulfillmentEvidence("OT", 0L).get("reason"))
+                .isEqualTo("invalid_order_reference");
+    }
+
     @Nested
     class CreatePurchase {
         @Test

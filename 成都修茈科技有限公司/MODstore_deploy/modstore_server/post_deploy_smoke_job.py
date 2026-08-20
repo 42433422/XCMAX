@@ -7,7 +7,7 @@ import os
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
 if TYPE_CHECKING:
-    from apscheduler.schedulers.base import BaseScheduler
+    pass
 
 logger = logging.getLogger(__name__)
 

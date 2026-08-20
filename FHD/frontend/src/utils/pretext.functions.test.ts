@@ -165,10 +165,7 @@ describe('pretext', () => {
   describe('batchEstimateMessageHeights', () => {
     it('returns heights for multiple messages', () => {
       mockLayout.mockReturnValue({ width: 200, height: 30, lineCount: 1 })
-      const heights = batchEstimateMessageHeights(
-        [{ content: 'a' }, { content: 'b', fontSize: 18 }],
-        200
-      )
+      const heights = batchEstimateMessageHeights([{ content: 'a' }, { content: 'b', fontSize: 18 }], 200)
       expect(heights).toEqual([30, 30])
     })
 
@@ -214,7 +211,11 @@ describe('pretext', () => {
     })
 
     it('uses smallest font and truncates when nothing fits', () => {
-      mockLayoutWithLines.mockReturnValue({ width: 100, height: 100, lines: [{ text: 'l1' }, { text: 'l2' }, { text: 'l3' }] })
+      mockLayoutWithLines.mockReturnValue({
+        width: 100,
+        height: 100,
+        lines: [{ text: 'l1' }, { text: 'l2' }, { text: 'l3' }],
+      })
       const layout = calculateLabelLayout('long label', 50, 20)
       expect(layout.fontSize).toBe(8)
       expect(layout.lineHeight).toBe(8 * 1.2)

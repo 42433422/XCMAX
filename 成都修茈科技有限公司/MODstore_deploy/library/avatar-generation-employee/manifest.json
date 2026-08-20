@@ -12,13 +12,7 @@
   "employee": {
     "id": "avatar-generation-employee",
     "label": "头像生成员",
-    "capabilities": [
-      "avatar.research_taxonomy",
-      "avatar.prompt_design",
-      "avatar.prompt_presets",
-      "image.generation",
-      "brand.identity"
-    ]
+    "capabilities": ["avatar.research_taxonomy", "avatar.prompt_design", "avatar.prompt_presets", "image.generation", "brand.identity"]
   },
   "workflow_employees": [
     {
@@ -26,13 +20,7 @@
       "label": "头像生成员",
       "panel_title": "头像生成员",
       "panel_summary": "输入员工姓名、部门、职能和偏好，生成头像方案、提示词，并在可用时调用生图模型。",
-      "capabilities": [
-        "avatar.research_taxonomy",
-        "avatar.prompt_design",
-        "avatar.prompt_presets",
-        "image.generation",
-        "brand.identity"
-      ],
+      "capabilities": ["avatar.research_taxonomy", "avatar.prompt_design", "avatar.prompt_presets", "image.generation", "brand.identity"],
       "api_base_path": "employees/avatar-generation-employee",
       "entry_action": "run"
     }
@@ -51,10 +39,7 @@
     },
     "perception": {
       "type": "text",
-      "accepted_extensions": [
-        ".json",
-        ".txt"
-      ]
+      "accepted_extensions": [".json", ".txt"]
     },
     "memory": {
       "type": "session"
@@ -66,13 +51,7 @@
           "name": "头像生成员",
           "persona": "懂社交头像、人设设计和 AI 员工视觉识别的创意员工",
           "tone": "professional",
-          "expertise": [
-            "头像类型归纳",
-            "动漫与插画提示词",
-            "AI 员工视觉识别",
-            "品牌色与小尺寸可读性",
-            "批量头像表与移动端头像预设"
-          ]
+          "expertise": ["头像类型归纳", "动漫与插画提示词", "AI 员工视觉识别", "品牌色与小尺寸可读性", "批量头像表与移动端头像预设"]
         },
         "behavior_rules": [
           "覆盖真人、关系、动漫游戏、插画化本人、职业品牌、宠物吉祥物、兴趣符号、抽象氛围、默认极简九类头像。",
@@ -118,9 +97,7 @@
       }
     },
     "actions": {
-      "handlers": [
-        "direct_python"
-      ],
+      "handlers": ["direct_python"],
       "direct_python": {
         "module": "avatar_generation_employee",
         "action": "generate",
@@ -133,11 +110,7 @@
   "metadata": {
     "framework_version": "2.0.0",
     "created_by": "avatar_taxonomy_pipeline",
-    "prompt_presets": [
-      "employee_avatar_sheet",
-      "xiaoc_human_aquatic",
-      "mobile_contact_avatar"
-    ],
+    "prompt_presets": ["employee_avatar_sheet", "xiaoc_human_aquatic", "mobile_contact_avatar"],
     "avatar_types": [
       "真人头像",
       "关系型头像",
@@ -151,9 +124,7 @@
     ]
   },
   "actions": {
-    "handlers": [
-      "direct_python"
-    ],
+    "handlers": ["direct_python"],
     "direct_python": {
       "module": "avatar_generation_employee",
       "action": "generate",

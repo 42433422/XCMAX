@@ -26,12 +26,20 @@ def _seed_ledger() -> None:
     with sf() as session:
         session.add(
             EmployeeExecutionMetric(
-                user_id=1, employee_id="emp-busy", task="t", status="success", duration_ms=10
+                user_id=1,
+                employee_id="emp-busy",
+                task="t",
+                status="success",
+                duration_ms=10,
             )
         )
         session.add(
             EmployeeExecutionMetric(
-                user_id=1, employee_id="emp-busy", task="t2", status="failed", duration_ms=10
+                user_id=1,
+                employee_id="emp-busy",
+                task="t2",
+                status="failed",
+                duration_ms=10,
             )
         )
         session.add(
@@ -57,7 +65,10 @@ def _seed_ledger() -> None:
 
 def test_build_report_reflects_ledger():
     """种账本后：统计里数字到位，文案里关键段落到齐（DB 可能有其它用例的残留行，只断言下限）。"""
-    from modstore_server.boss_daily_im_report import _collect_stats, build_boss_daily_im_report
+    from modstore_server.boss_daily_im_report import (
+        _collect_stats,
+        build_boss_daily_im_report,
+    )
 
     _seed_ledger()
     stats = _collect_stats()

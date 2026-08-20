@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { defineComponent, h, nextTick, ref } from 'vue'
+import type { NodeKind } from './domain/workflow/nodeKinds'
+import type { WorkflowFlowEdge, WorkflowFlowNode } from './domain/workflow/types'
 
 const wf2 = vi.hoisted(() => ({
-  currentGraph: null as any,
+  currentGraph: null as UnsafeTestValue,
   flowInstance: {
     applyNodeChanges: vi.fn(),
     applyEdgeChanges: vi.fn(),
@@ -19,7 +21,9 @@ const wf2 = vi.hoisted(() => ({
     publishWorkflowVersion: vi.fn(async () => ({ version_no: 3 })),
     saveWorkflowAsTemplate: vi.fn(async () => ({ id: 77 })),
     listEmployees: vi.fn(async () => ({ employees: [{ id: 'emp-a', name: '员工A' }] })),
-    listESkills: vi.fn(async () => ({ eskills: [{ id: 'skill-a', name: '技能A', domain: '销售' }] })),
+    listESkills: vi.fn(async () => ({
+      eskills: [{ id: 'skill-a', name: '技能A', domain: '销售' }],
+    })),
   },
 }))
 
@@ -33,7 +37,11 @@ vi.mock('@vue-flow/core', async () => {
         return () => vue.h('div', { class: 'vue-flow-stub' }, slots.default?.())
       },
     }),
-    Handle: vue.defineComponent({ name: 'Handle', props: ['type', 'position', 'id'], setup: () => () => vue.h('span', { class: 'handle-stub' }) }),
+    Handle: vue.defineComponent({
+      name: 'Handle',
+      props: ['type', 'position', 'id'],
+      setup: () => () => vue.h('span', { class: 'handle-stub' }),
+    }),
     Position: { Left: 'left', Right: 'right' },
     useVueFlow: () => wf2.flowInstance,
   }
@@ -41,17 +49,32 @@ vi.mock('@vue-flow/core', async () => {
 
 vi.mock('@vue-flow/background', async () => {
   const vue = await import('vue')
-  return { Background: vue.defineComponent({ name: 'Background', setup: () => () => vue.h('div', { class: 'background-stub' }) }) }
+  return {
+    Background: vue.defineComponent({
+      name: 'Background',
+      setup: () => () => vue.h('div', { class: 'background-stub' }),
+    }),
+  }
 })
 
 vi.mock('@vue-flow/controls', async () => {
   const vue = await import('vue')
-  return { Controls: vue.defineComponent({ name: 'Controls', setup: () => () => vue.h('div', { class: 'controls-stub' }) }) }
+  return {
+    Controls: vue.defineComponent({
+      name: 'Controls',
+      setup: () => () => vue.h('div', { class: 'controls-stub' }),
+    }),
+  }
 })
 
 vi.mock('@vue-flow/minimap', async () => {
   const vue = await import('vue')
-  return { MiniMap: vue.defineComponent({ name: 'MiniMap', setup: () => () => vue.h('div', { class: 'minimap-stub' }) }) }
+  return {
+    MiniMap: vue.defineComponent({
+      name: 'MiniMap',
+      setup: () => () => vue.h('div', { class: 'minimap-stub' }),
+    }),
+  }
 })
 
 vi.mock('./views/workflow/v2/composables/useWorkflowGraph', () => ({
@@ -68,15 +91,15 @@ const VersionsPanelStub = defineComponent({
   },
 })
 
-function makeNode(id: string, kind: string, config: Record<string, unknown> = {}) {
+function makeNode(id: string, kind: string, config: Record<string, unknown> = {}): WorkflowFlowNode {
   return {
     id,
     type: 'mod',
     position: { x: 10, y: 20 },
     data: {
-      kind,
+      kind: kind as NodeKind,
       label: `${kind}-${id}`,
-      backendId: id,
+      backendId: Number.parseInt(id, 10) || 0,
       config,
     },
   }
@@ -87,7 +110,15 @@ function makeGraph() {
     makeNode('start', 'start', { output_var: 'start_result' }),
     makeNode('employee', 'employee', { employee_id: 'emp-a', output_var: 'employee_result' }),
   ])
-  const edges = ref([{ id: 'edge-1', source: 'start', target: 'employee', sourceHandle: null }])
+  const edges = ref<WorkflowFlowEdge[]>([
+    {
+      id: 'edge-1',
+      source: 'start',
+      target: 'employee',
+      sourceHandle: null,
+      data: { condition: '', backendId: 1 },
+    },
+  ])
   const meta = ref({ name: '覆盖工作流', description: 'desc', is_active: false })
   return {
     nodes,
@@ -102,7 +133,13 @@ function makeGraph() {
       return id
     }),
     addEdge: vi.fn(async (source: string, target: string, sourceHandle?: string | null) => {
-      edges.value.push({ id: `edge-${edges.value.length + 1}`, source, target, sourceHandle: sourceHandle ?? null })
+      edges.value.push({
+        id: `edge-${edges.value.length + 1}`,
+        source,
+        target,
+        sourceHandle: sourceHandle ?? null,
+        data: { condition: '', backendId: 0 },
+      })
     }),
     deleteEdge: vi.fn(async (id: string) => {
       edges.value = edges.value.filter((e) => e.id !== id)
@@ -194,7 +231,10 @@ describe('coverage workflow v2 editor', () => {
     await flush()
     expect(wrapper.findComponent(PropertiesPanel).props('selected')?.id).toBe('employee')
     await vueFlow.vm.$emit('node-drag-stop', { node: wf2.currentGraph.nodes.value[1] })
-    expect(wf2.currentGraph.updateNodePositionLocally).toHaveBeenCalledWith('employee', { x: 320, y: 180 })
+    expect(wf2.currentGraph.updateNodePositionLocally).toHaveBeenCalledWith('employee', {
+      x: 320,
+      y: 180,
+    })
     expect(wf2.currentGraph.flushNodePosition).toHaveBeenCalledWith('employee')
     await vueFlow.vm.$emit('connect', { source: 'start', target: 'employee', sourceHandle: 'ok' })
     expect(wf2.currentGraph.addEdge).toHaveBeenCalledWith('start', 'employee', 'ok')
@@ -206,9 +246,16 @@ describe('coverage workflow v2 editor', () => {
 
     const library = wrapper.findComponent({ name: 'NodeLibraryPanel' })
     await library.vm.$emit('add', 'condition')
-    expect(wf2.currentGraph.addNode).toHaveBeenCalledWith('condition', expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }))
+    expect(wf2.currentGraph.addNode).toHaveBeenCalledWith(
+      'condition',
+      expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }),
+    )
     const canvas = wrapper.find('.wf2-canvas-wrap')
-    const dragEvent = { types: ['application/wf2-node-kind'], dropEffect: '', getData: vi.fn(() => 'variable_set') }
+    const dragEvent = {
+      types: ['application/wf2-node-kind'],
+      dropEffect: '',
+      getData: vi.fn(() => 'variable_set'),
+    }
     await canvas.trigger('dragover', { dataTransfer: dragEvent })
     await canvas.trigger('drop', { dataTransfer: dragEvent, clientX: 50, clientY: 60 })
     expect(wf2.flowInstance.screenToFlowCoordinate).toHaveBeenCalledWith({ x: 50, y: 60 })
@@ -220,8 +267,15 @@ describe('coverage workflow v2 editor', () => {
 
     const properties = wrapper.findComponent(PropertiesPanel)
     await vueFlow.vm.$emit('node-click', { node: wf2.currentGraph.nodes.value[0] })
-    await properties.vm.$emit('patch', { id: 'start', label: '新名称', config: { output_var: 'x' } })
-    expect(wf2.currentGraph.patchNodeData).toHaveBeenCalledWith('start', { label: '新名称', config: { output_var: 'x' } })
+    await properties.vm.$emit('patch', {
+      id: 'start',
+      label: '新名称',
+      config: { output_var: 'x' },
+    })
+    expect(wf2.currentGraph.patchNodeData).toHaveBeenCalledWith('start', {
+      label: '新名称',
+      config: { output_var: 'x' },
+    })
     await properties.vm.$emit('delete', 'start')
     expect(wf2.currentGraph.deleteNode).toHaveBeenCalledWith('start')
 
@@ -258,18 +312,30 @@ describe('coverage workflow v2 editor', () => {
 describe('coverage workflow v2 panels and nodes', () => {
   it('covers toolbar event surface', async () => {
     const { default: ToolbarPanel } = await import('./views/workflow/v2/panels/ToolbarPanel.vue')
-    const wrapper = mount(ToolbarPanel, { props: { workflowName: '', saving: true, isActive: true } })
+    const wrapper = mount(ToolbarPanel, {
+      props: { workflowName: '', saving: true, isActive: true },
+    })
     expect(wrapper.text()).toContain('未命名工作流')
     for (const button of wrapper.findAll('button')) await button.trigger('click')
     await wrapper.find('h2').trigger('click')
-    expect(Object.keys(wrapper.emitted())).toEqual(expect.arrayContaining([
-      'back', 'toggle-active', 'auto-layout', 'versions', 'publish', 'save-as-template', 'sandbox', 'execute', 'rename',
-    ]))
+    expect(Object.keys(wrapper.emitted())).toEqual(
+      expect.arrayContaining([
+        'back',
+        'toggle-active',
+        'auto-layout',
+        'versions',
+        'publish',
+        'save-as-template',
+        'sandbox',
+        'execute',
+        'rename',
+      ]),
+    )
   })
 
   it('covers generic node summaries for every node kind branch', async () => {
     const { default: GenericNode } = await import('./views/workflow/v2/nodes/GenericNode.vue')
-    const cases = [
+    const cases: Array<[string, Record<string, unknown>, string]> = [
       ['employee', { employee_id: 'emp-a' }, '员工 emp-a'],
       ['employee', {}, '未选择员工'],
       ['eskill', { skill_id: 'skill-a' }, 'ESkill skill-a'],
@@ -284,7 +350,11 @@ describe('coverage workflow v2 panels and nodes', () => {
     ]
     for (const [kind, config, expected] of cases) {
       const wrapper = mount(GenericNode, {
-        props: { id: `n-${kind}`, selected: true, data: { kind, label: `${kind} 节点`, config } },
+        props: {
+          id: `n-${kind}`,
+          selected: true,
+          data: { kind: kind as NodeKind, label: `${kind} 节点`, config, backendId: 0 },
+        },
         global: { stubs: { Handle: defineComponent({ template: '<span />' }) } },
       })
       expect(wrapper.text()).toContain(String(expected))
@@ -294,7 +364,10 @@ describe('coverage workflow v2 panels and nodes', () => {
 
   it('covers properties panel field editors and API loading fallbacks', async () => {
     const { default: PropertiesPanel } = await import('./views/workflow/v2/panels/PropertiesPanel.vue')
-    const selected = makeNode('selected-employee', 'employee', { employee_id: 'emp-a', output_var: 'out' })
+    const selected = makeNode('selected-employee', 'employee', {
+      employee_id: 'emp-a',
+      output_var: 'out',
+    })
     const wrapper = mount(PropertiesPanel, { props: { selected } })
     await flush()
     await wrapper.find('input[type="text"]').setValue('更新节点')
@@ -308,7 +381,9 @@ describe('coverage workflow v2 panels and nodes', () => {
     for (const textarea of wrapper.findAll('textarea')) await textarea.setValue('{"ok":true}').catch(() => undefined)
     await wrapper.find('.wf2-properties__del').trigger('click')
     expect(wrapper.emitted('delete')?.[0]).toEqual(['selected-employee'])
-    await wrapper.setProps({ selected: makeNode('selected-skill', 'eskill', { skill_id: 'skill-a', params: { a: 1 } }) })
+    await wrapper.setProps({
+      selected: makeNode('selected-skill', 'eskill', { skill_id: 'skill-a', params: { a: 1 } }),
+    })
     await flush()
     for (const select of wrapper.findAll('select')) await select.setValue('skill-a').catch(() => undefined)
     await wrapper.setProps({ selected: null })
@@ -318,7 +393,9 @@ describe('coverage workflow v2 panels and nodes', () => {
 
     wf2.api.listEmployees.mockRejectedValueOnce(new Error('employees failed'))
     wf2.api.listESkills.mockRejectedValueOnce(new Error('skills failed'))
-    const failed = mount(PropertiesPanel, { props: { selected: makeNode('selected-failed', 'employee', {}) } })
+    const failed = mount(PropertiesPanel, {
+      props: { selected: makeNode('selected-failed', 'employee', {}) },
+    })
     await flush()
     expect(failed.exists()).toBe(true)
     failed.unmount()

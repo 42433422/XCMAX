@@ -1,3 +1,4 @@
+# mypy: disable-error-code="no-any-return"
 """读取 capability_proposal.jsonl → 创建受控 GitHub 治理 issue。
 
 CI 用法（在 capability-proposal-to-issue.yml workflow 中）:

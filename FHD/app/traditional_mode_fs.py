@@ -18,7 +18,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.utils.path_utils import get_base_dir
+from app.utils.path_io.path_utils import get_base_dir
 
 logger = logging.getLogger(__name__)
 
@@ -50,16 +50,23 @@ _watchdog_thread: threading.Thread | None = None
 _watchdog_prev: dict[str, float] = {}
 
 
-def resolve_safe_path(relative_path: str = "") -> str | None:
-    root_abs = os.path.abspath(ROOT_DIR)
-    safe = os.path.abspath(os.path.normpath(os.path.join(root_abs, relative_path or "")))
+def resolve_path_under_root(root: str, relative_path: str = "") -> str | None:
+    """Resolve a relative path below ``root``, following and containing symlinks."""
+
+    fragment = str(relative_path or "")
+    if os.path.isabs(fragment):
+        return None
+    root_path = os.path.realpath(os.path.abspath(os.path.expanduser(root)))
+    candidate = os.path.realpath(os.path.abspath(os.path.join(root_path, fragment)))
     try:
-        common = os.path.commonpath([root_abs, safe])
+        common = os.path.commonpath((root_path, candidate))
     except ValueError:
         return None
-    if common != root_abs:
-        return None
-    return safe
+    return candidate if common == root_path else None
+
+
+def resolve_safe_path(relative_path: str = "") -> str | None:
+    return resolve_path_under_root(ROOT_DIR, relative_path)
 
 
 def root_info_response() -> dict[str, Any]:
@@ -233,15 +240,15 @@ def list_files_response(rel_path: str = "") -> tuple[dict[str, Any], int]:
                     dirs.append(entry)
                 else:
                     files.append(entry)
-            except OSError as e:
-                logger.warning("无法获取文件信息: %s 错误: %s", entry_path, e)
+            except OSError:
+                logger.warning("无法获取文件信息", exc_info=True)
                 continue
 
         entries = dirs + files
         return {"success": True, "data": {"path": rel_path, "files": entries}}, 200
-    except RECOVERABLE_ERRORS as e:
-        logger.error("列出目录失败: %s", e, exc_info=True)
-        return {"success": False, "error": str(e)}, 500
+    except RECOVERABLE_ERRORS:
+        logger.exception("列出目录失败")
+        return {"success": False, "error": "文件服务暂时不可用，请稍后重试"}, 500
 
 
 def read_file_response(rel_file: str) -> tuple[dict[str, Any], int]:
@@ -265,9 +272,9 @@ def read_file_response(rel_file: str) -> tuple[dict[str, Any], int]:
                 sheets_data: dict[str, Any] = {}
                 for sheet_name in sheet_names:
                     sheet = wb[sheet_name]
-                    rows_data = []
+                    rows_data: list[list[Any]] = []
                     for row in sheet.iter_rows(values_only=True):
-                        row_list = []
+                        row_list: list[Any] = []
                         for cell in row:
                             if cell is None:
                                 row_list.append(None)
@@ -288,9 +295,9 @@ def read_file_response(rel_file: str) -> tuple[dict[str, Any], int]:
                 }, 200
             except ImportError:
                 return {"success": False, "error": "openpyxl 未安装，无法读取 Excel 文件"}, 500
-            except RECOVERABLE_ERRORS as e:
-                logger.error("读取 Excel 文件失败: %s", e, exc_info=True)
-                return {"success": False, "error": f"读取 Excel 失败: {str(e)}"}, 500
+            except RECOVERABLE_ERRORS:
+                logger.exception("读取 Excel 文件失败")
+                return {"success": False, "error": "Excel 读取服务暂时不可用，请稍后重试"}, 500
 
         if ext in IMAGE_EXTENSIONS:
             with open(full_path, "rb") as f:
@@ -324,9 +331,9 @@ def read_file_response(rel_file: str) -> tuple[dict[str, Any], int]:
                 content = base64.b64encode(f.read()).decode("utf-8")
             return {"success": True, "data": {"type": "binary", "content": content}}, 200
 
-    except RECOVERABLE_ERRORS as e:
-        logger.error("读取文件失败: %s", e, exc_info=True)
-        return {"success": False, "error": str(e)}, 500
+    except RECOVERABLE_ERRORS:
+        logger.exception("读取文件失败")
+        return {"success": False, "error": "文件服务暂时不可用，请稍后重试"}, 500
 
 
 def _build_snapshot() -> dict[str, float]:
@@ -387,8 +394,8 @@ def _watchdog_loop() -> None:
                     for q in dead:
                         if q in _watch_clients:
                             _watch_clients.remove(q)
-    except RECOVERABLE_ERRORS as e:
-        logger.error("Watchdog 线程异常: %s", e, exc_info=True)
+    except RECOVERABLE_ERRORS:
+        logger.exception("Watchdog 线程异常")
     finally:
         _watchdog_running = False
 

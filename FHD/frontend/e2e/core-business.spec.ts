@@ -9,7 +9,7 @@ test.describe('Core business flows (basic)', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({ success: true, data: { reply: 'ok' } }),
-      })
+      }),
     )
 
     await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 30_000 })
@@ -43,7 +43,7 @@ test.describe('Core business flows (basic)', () => {
           success: true,
           data: [{ id: 'm1', name: 'TestMod', version: '1.0', author: '', description: '' }],
         }),
-      })
+      }),
     )
 
     await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 30_000 })
@@ -101,7 +101,7 @@ test.describe('Core business flows (basic)', () => {
             { warehouse: 'B', sku: 'SKU-001', quantity: 0 },
           ],
         }),
-      })
+      }),
     )
 
     await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 30_000 })
@@ -122,4 +122,3 @@ test.describe('Core business flows (basic)', () => {
     expect(lastTransferPayload).toMatchObject({ from_warehouse: 'A', to_warehouse: 'B', quantity: 20 })
   })
 })
-

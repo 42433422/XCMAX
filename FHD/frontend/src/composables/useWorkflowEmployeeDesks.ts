@@ -45,9 +45,12 @@ export function useNowMsTicker(intervalMs = 30000) {
   onMounted(() => {
     if (typeof window === 'undefined') return
     nowMs.value = Date.now()
-    timer = window.setInterval(() => {
-      nowMs.value = Date.now()
-    }, Math.max(1000, intervalMs))
+    timer = window.setInterval(
+      () => {
+        nowMs.value = Date.now()
+      },
+      Math.max(1000, intervalMs),
+    )
   })
   onBeforeUnmount(() => {
     if (timer != null) {
@@ -92,9 +95,7 @@ export function useWorkflowEmployeeDesks() {
     })
   })
 
-  const onDutyDesks = computed<WorkflowEmployeeDeskRow[]>(() =>
-    desks.value.filter((d) => d.enabled)
-  )
+  const onDutyDesks = computed<WorkflowEmployeeDeskRow[]>(() => desks.value.filter((d) => d.enabled))
 
   function statusLine(row: WorkflowEmployeeDeskRow): string {
     if (!row.enabled) return '副窗未启用'

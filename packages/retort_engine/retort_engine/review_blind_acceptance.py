@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from retort_engine.pr_review import review_diff
 
@@ -80,7 +80,7 @@ def _evaluate_case(case: dict[str, Any]) -> dict[str, Any]:
     )
     comments = [item for item in review.get("comments") or [] if isinstance(item, dict)]
     publishable = [item for item in comments if item.get("publishable")]
-    top = comments[0] if comments else {}
+    top = cast(dict[str, Any], comments[0] if comments else {})
     checks = {
         "min_publishable_comments": len(publishable)
         >= int(expectation.get("min_publishable_comments") or 0),

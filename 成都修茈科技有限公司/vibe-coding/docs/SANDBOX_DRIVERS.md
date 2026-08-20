@@ -3,13 +3,13 @@
 The agent uses a driver abstraction so the same interface works across
 many execution environments:
 
-| Driver | Dependencies | Network isolation | FS isolation | Memory cap | Best for |
-| --- | :---: | :---: | :---: | :---: | --- |
-| `SubprocessSandboxDriver` | none | ✗ | AST whitelist only | POSIX only | Default; fast local runs |
-| `DockerSandboxDriver` | `docker` CLI | ✓ (`--network=none`) | ✓ (`--read-only`) | ✓ | Hostile-input testing |
-| `WebContainerSandboxDriver` | bridge URL | (browser-side) | iframe / WC | n/a | Front-end (Node) workflows |
-| `CloudSandboxDriver` | API key | provider-managed | provider-managed | provider-managed | Hosted execution (E2B / Daytona / Modal) |
-| `MockSandboxDriver` | none | n/a | n/a | n/a | Unit tests |
+| Driver                      | Dependencies |  Network isolation   |    FS isolation    |    Memory cap    | Best for                                 |
+| --------------------------- | :----------: | :------------------: | :----------------: | :--------------: | ---------------------------------------- |
+| `SubprocessSandboxDriver`   |     none     |          ✗           | AST whitelist only |    POSIX only    | Default; fast local runs                 |
+| `DockerSandboxDriver`       | `docker` CLI | ✓ (`--network=none`) | ✓ (`--read-only`)  |        ✓         | Hostile-input testing                    |
+| `WebContainerSandboxDriver` |  bridge URL  |    (browser-side)    |    iframe / WC     |       n/a        | Front-end (Node) workflows               |
+| `CloudSandboxDriver`        |   API key    |   provider-managed   |  provider-managed  | provider-managed | Hosted execution (E2B / Daytona / Modal) |
+| `MockSandboxDriver`         |     none     |         n/a          |        n/a         |       n/a        | Unit tests                               |
 
 ## SubprocessSandboxDriver (default)
 

@@ -1,4 +1,6 @@
-import json, base64, urllib.request
+import base64
+import json
+import urllib.request
 
 data = json.dumps({"text": "您好", "voice": "zh-CN-XiaoxiaoNeural", "lang": "zh"}).encode()
 req = urllib.request.Request(

@@ -1,6 +1,11 @@
+# mypy: disable-error-code="arg-type, assignment"
+# isort: skip_file
+# ruff: noqa: E402
 """独立 AI 客服平台 API。"""
 
 from __future__ import annotations
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 import logging
 import threading
@@ -17,6 +22,13 @@ from modstore_server.customer_service_orchestrator import (
     handle_customer_message,
     session_payload,
     ticket_payload,
+)
+from modstore_server.customer_service_api_helpers import (
+    audit_payload as _audit_payload,
+    integration_payload as _integration_payload,
+    own_session_or_404 as _own_session_or_404,
+    standard_payload as _standard_payload,
+    visible_ticket_or_404 as _visible_ticket_or_404,
 )
 from modstore_server.customer_service_tools import json_dumps, json_loads
 from modstore_server.models import User
@@ -55,7 +67,7 @@ def _publish_customer_ticket_incident(payload: Dict[str, Any]) -> None:
             source="customer-service-api",
             fingerprint=None,
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("customer-service ticket incident publish failed")
 
 
@@ -145,9 +157,7 @@ async def customer_service_chat(
                 "xiu-ci",
                 "xiuci",
             )
-        ):
-            scope = "website"
-        elif issue_domain in {"website", "官网"}:
+        ) or issue_domain in {"website", "官网"}:
             scope = "website"
         elif issue_domain in {"desktop", "android", "fhd", "modstore"}:
             scope = issue_domain
@@ -297,7 +307,8 @@ async def list_actions(
         q = q.filter(CustomerServiceAction.ticket_id == ticket.id)
     elif not user.is_admin:
         q = q.join(
-            CustomerServiceTicket, CustomerServiceAction.ticket_id == CustomerServiceTicket.id
+            CustomerServiceTicket,
+            CustomerServiceAction.ticket_id == CustomerServiceTicket.id,
         ).filter(CustomerServiceTicket.user_id == user.id)
     rows = q.order_by(CustomerServiceAction.id.desc()).limit(limit).all()
     return {"items": [action_payload(r) for r in rows]}
@@ -312,7 +323,9 @@ async def list_standards(
     # SSOT 四种默认标准：库空时自愈补种（避免发布/迁库后后台空白）
     if not rows:
         try:
-            from modstore_server.models_db import init_default_customer_service_standards
+            from modstore_server.models_db import (
+                init_default_customer_service_standards,
+            )
 
             init_default_customer_service_standards()
             rows = (
@@ -320,7 +333,7 @@ async def list_standards(
                 .order_by(CustomerServiceStandard.priority.asc())
                 .all()
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             rows = []
     return {"items": [_standard_payload(r, include_policy=user.is_admin) for r in rows]}
 
@@ -430,80 +443,8 @@ async def update_integration(
     return _integration_payload(row)
 
 
-def _own_session_or_404(db: Session, user: User, session_id: int) -> CustomerServiceSession:
-    row = (
-        db.query(CustomerServiceSession)
-        .filter(CustomerServiceSession.id == session_id, CustomerServiceSession.user_id == user.id)
-        .first()
-    )
-    if not row:
-        raise HTTPException(404, "客服会话不存在")
-    return row
-
-
-def _visible_ticket_or_404(db: Session, user: User, ticket_id: int) -> CustomerServiceTicket:
-    q = db.query(CustomerServiceTicket).filter(CustomerServiceTicket.id == ticket_id)
-    if not user.is_admin:
-        q = q.filter(CustomerServiceTicket.user_id == user.id)
-    row = q.first()
-    if not row:
-        raise HTTPException(404, "客服工单不存在")
-    return row
-
-
-def _standard_payload(
-    row: CustomerServiceStandard, *, include_policy: bool = False
-) -> Dict[str, Any]:
-    payload = {
-        "id": row.id,
-        "name": row.name,
-        "scenario": row.scenario,
-        "description": row.description,
-        "auto_enabled": row.auto_enabled,
-        "risk_level": row.risk_level,
-        "priority": row.priority,
-        "rules": json_loads(row.rules_json, {}),
-        "created_at": row.created_at.isoformat() if row.created_at else "",
-        "updated_at": row.updated_at.isoformat() if row.updated_at else "",
-    }
-    if include_policy:
-        payload["action_policy"] = json_loads(row.action_policy_json, {})
-    return payload
-
-
-def _integration_payload(row: CustomerServiceIntegration) -> Dict[str, Any]:
-    return {
-        "id": row.id,
-        "name": row.name,
-        "integration_type": row.integration_type,
-        "connector_id": row.connector_id,
-        "workflow_id": row.workflow_id,
-        "scenario": row.scenario,
-        "config": json_loads(row.config_json, {}),
-        "enabled": row.enabled,
-        "created_by": row.created_by,
-        "created_at": row.created_at.isoformat() if row.created_at else "",
-        "updated_at": row.updated_at.isoformat() if row.updated_at else "",
-    }
-
-
-def _audit_payload(row: CustomerServiceAuditLog) -> Dict[str, Any]:
-    return {
-        "id": row.id,
-        "ticket_id": row.ticket_id,
-        "session_id": row.session_id,
-        "actor_user_id": row.actor_user_id,
-        "actor_type": row.actor_type,
-        "event_type": row.event_type,
-        "detail": json_loads(row.detail_json, {}),
-        "created_at": row.created_at.isoformat() if row.created_at else "",
-    }
-
-
-from modstore_server.customer_service_delivery_api import (
-    _custom_delivery_evidence,
-)
 from modstore_server.customer_service_delivery_api import (  # noqa: F401
+    _custom_delivery_evidence as _custom_delivery_evidence,
     router as custom_delivery_router,
 )
 

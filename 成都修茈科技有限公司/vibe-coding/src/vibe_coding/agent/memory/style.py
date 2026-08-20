@@ -37,7 +37,7 @@ class StyleProfile:
     has_async: bool = False
 
     @classmethod
-    def from_index(cls, index: RepoIndex) -> "StyleProfile":
+    def from_index(cls, index: RepoIndex) -> StyleProfile:
         functions = [
             s for e in index.files.values() for s in e.symbols if s.kind in ("function", "method", "async_function")
         ]
@@ -59,19 +59,13 @@ class StyleProfile:
         common_imports = [name for name, _ in Counter(all_imports).most_common(10)]
         common_excs = _infer_exceptions(all_symbols_names)
 
-        func_lengths = [
-            s.end_line - s.start_line + 1 for s in functions if s.end_line > s.start_line
-        ]
+        func_lengths = [s.end_line - s.start_line + 1 for s in functions if s.end_line > s.start_line]
         avg_len = sum(func_lengths) / max(len(func_lengths), 1)
 
         uses_dc = any("dataclasses" in (e.imports or []) for e in index.files.values())
-        uses_proto = any(
-            "Protocol" in (s.signature or "") for e in index.files.values() for s in e.symbols
-        )
+        uses_proto = any("Protocol" in (s.signature or "") for e in index.files.values() for s in e.symbols)
         uses_aliases = any(
-            s.kind == "variable" and s.name.endswith("Type")
-            for e in index.files.values()
-            for s in e.symbols
+            s.kind == "variable" and s.name.endswith("Type") for e in index.files.values() for s in e.symbols
         )
         has_async = any(s.kind == "async_function" for e in index.files.values() for s in e.symbols)
 
@@ -110,7 +104,7 @@ class StyleProfile:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, raw: dict[str, Any]) -> "StyleProfile":
+    def from_dict(cls, raw: dict[str, Any]) -> StyleProfile:
         return cls(
             naming_convention=str(raw.get("naming_convention") or "snake_case"),
             type_hint_rate=float(raw.get("type_hint_rate") or 0.0),
@@ -128,9 +122,21 @@ class StyleProfile:
 _CAMEL_RE = re.compile(r"[A-Z][a-z]+[A-Z]")
 _SNAKE_RE = re.compile(r"[a-z]_[a-z]")
 _EXCEPTION_NAMES = frozenset(
-    {"ValueError", "TypeError", "KeyError", "RuntimeError", "IndexError",
-     "AttributeError", "NotImplementedError", "Exception", "OSError",
-     "FileNotFoundError", "PermissionError", "ImportError", "StopIteration"}
+    {
+        "ValueError",
+        "TypeError",
+        "KeyError",
+        "RuntimeError",
+        "IndexError",
+        "AttributeError",
+        "NotImplementedError",
+        "Exception",
+        "OSError",
+        "FileNotFoundError",
+        "PermissionError",
+        "ImportError",
+        "StopIteration",
+    }
 )
 
 

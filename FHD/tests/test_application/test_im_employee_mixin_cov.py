@@ -887,6 +887,7 @@ class TestEmployeeImSummary:
         with (
             patch.object(svc, "_direct_peer_id", return_value=21),
             patch.object(svc, "_count_unread", return_value=2),
+            patch.object(svc, "get_or_create_direct", return_value={"id": 102}),
         ):
             result = svc.employee_im_summary(
                 10,
@@ -960,7 +961,7 @@ class TestEmployeeImSummary:
         with (
             patch.object(svc, "_direct_peer_id", return_value=999),
             patch.object(svc, "_count_unread", return_value=0),
-            patch.object(svc, "get_or_create_direct", side_effect=Exception("fail")),
+            patch.object(svc, "get_or_create_direct", side_effect=RuntimeError("fail")),
         ):
             result = svc.employee_im_summary(10, [{"id": "e1", "name": "A"}])
         assert "e1" not in result

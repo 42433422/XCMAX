@@ -9,10 +9,7 @@ import {
 describe('voiceUserTurnCoalesce', () => {
   it('merges short continuation fragments', () => {
     expect(shouldCoalesceVoiceUserTurn('个流市对', '现在这个流式对话有很多问题')).toBe(true)
-    const out = appendCoalescedVoiceUserTurn(
-      [{ role: 'user', content: '个流市对' }],
-      '现在这个流式对话有很多问题',
-    )
+    const out = appendCoalescedVoiceUserTurn([{ role: 'user', content: '个流市对' }], '现在这个流式对话有很多问题')
     expect(out).toHaveLength(1)
     expect(out[0].content).toContain('流')
   })

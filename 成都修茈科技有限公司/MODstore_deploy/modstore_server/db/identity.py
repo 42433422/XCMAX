@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     Boolean,
@@ -27,7 +27,7 @@ class VerificationCode(Base):
     code = Column(String(8), nullable=False)
     expires_at = Column(DateTime, nullable=False)
     used = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
 
 class User(Base):
@@ -41,7 +41,7 @@ class User(Base):
     is_admin = Column(Boolean, default=False)
     is_enterprise = Column(Boolean, default=False, nullable=False, index=True)
     account_state = Column(String(32), default="pending_plan", nullable=False, index=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
     default_llm_json = Column(Text, default="")
     experience = Column(Integer, default=0, nullable=False)
 
@@ -52,7 +52,7 @@ class Wallet(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
     balance = Column(Numeric(12, 2), default=0.0)
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
 
 class Transaction(Base):
@@ -65,7 +65,7 @@ class Transaction(Base):
     status = Column(String(16), default="completed")
     description = Column(Text, default="")
     idempotency_key = Column(String(128), default="", index=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
 
 class LandingContactSubmission(Base):
@@ -81,7 +81,7 @@ class LandingContactSubmission(Base):
     message = Column(Text, default="")
     source = Column(String(64), default="home", index=True)
     meta_json = Column(Text, default="{}")
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
 
 
 class AccountExperienceLedger(Base):
@@ -99,4 +99,4 @@ class AccountExperienceLedger(Base):
     amount = Column(Numeric(12, 2), nullable=False)
     xp_delta = Column(Integer, nullable=False)
     description = Column(Text, default="")
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))

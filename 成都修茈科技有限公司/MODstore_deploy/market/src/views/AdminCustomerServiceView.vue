@@ -14,7 +14,9 @@
       <h2>新增/编辑审核标准</h2>
       <div class="form-grid">
         <label>名称<input v-model="standardForm.name" /></label>
-        <label>场景<input v-model="standardForm.scenario" placeholder="refund / catalog_complaint / catalog_review / account_support" /></label>
+        <label
+          >场景<input v-model="standardForm.scenario" placeholder="refund / catalog_complaint / catalog_review / account_support"
+        /></label>
         <label>风险等级<input v-model="standardForm.risk_level" /></label>
         <label>优先级<input v-model.number="standardForm.priority" type="number" /></label>
       </div>
@@ -23,7 +25,9 @@
       <label>动作策略 JSON<textarea v-model="standardPolicyText" /></label>
       <div class="row">
         <label class="check"><input v-model="standardForm.auto_enabled" type="checkbox" /> 启用自动化</label>
-        <button class="btn" @click="saveStandard">{{ editingStandardId ? '保存标准' : '创建标准' }}</button>
+        <button class="btn" @click="saveStandard">
+          {{ editingStandardId ? '保存标准' : '创建标准' }}
+        </button>
         <button class="btn ghost" @click="resetStandard">清空</button>
       </div>
     </section>
@@ -43,7 +47,8 @@
       <h2>新增/编辑对接能力</h2>
       <div class="form-grid">
         <label>名称<input v-model="integrationForm.name" /></label>
-        <label>类型
+        <label
+          >类型
           <select v-model="integrationForm.integration_type">
             <option value="openapi">OpenAPI 网页 API</option>
             <option value="workflow">平台工作流</option>
@@ -56,7 +61,9 @@
       <label>配置 JSON<textarea v-model="integrationConfigText" placeholder='{"operation_id":"createTicket","auto_invoke":true}' /></label>
       <div class="row">
         <label class="check"><input v-model="integrationForm.enabled" type="checkbox" /> 启用</label>
-        <button class="btn" @click="saveIntegration">{{ editingIntegrationId ? '保存对接' : '创建对接' }}</button>
+        <button class="btn" @click="saveIntegration">
+          {{ editingIntegrationId ? '保存对接' : '创建对接' }}
+        </button>
         <button class="btn ghost" @click="resetIntegration">清空</button>
       </div>
     </section>
@@ -78,9 +85,33 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { api } from '../api'
+import { asUnknownRecord } from '../utils/typeNarrowing'
 
-const standards = ref<any[]>([])
-const integrations = ref<any[]>([])
+interface ReviewStandard {
+  id: number
+  name: string
+  scenario: string
+  description?: string
+  risk_level?: string
+  priority?: number
+  auto_enabled?: boolean
+  rules?: Record<string, unknown>
+  action_policy?: Record<string, unknown>
+}
+
+interface ServiceIntegration {
+  id: number
+  name: string
+  integration_type: string
+  connector_id?: number | null
+  workflow_id?: number | null
+  scenario: string
+  enabled?: boolean
+  config?: Record<string, unknown>
+}
+
+const standards = ref<ReviewStandard[]>([])
+const integrations = ref<ServiceIntegration[]>([])
 const message = ref('')
 const editingStandardId = ref<number | null>(null)
 const editingIntegrationId = ref<number | null>(null)
@@ -113,8 +144,10 @@ async function loadAll() {
     api.customerServiceStandards().catch(() => ({ items: [] })),
     api.customerServiceIntegrations().catch(() => ({ items: [] })),
   ])
-  standards.value = Array.isArray((s as any)?.items) ? (s as any).items : []
-  integrations.value = Array.isArray((i as any)?.items) ? (i as any).items : []
+  const standardResponse = asUnknownRecord(s)
+  const integrationResponse = asUnknownRecord(i)
+  standards.value = Array.isArray(standardResponse.items) ? (standardResponse.items as ReviewStandard[]) : []
+  integrations.value = Array.isArray(integrationResponse.items) ? (integrationResponse.items as ServiceIntegration[]) : []
 }
 
 async function saveStandard() {
@@ -129,12 +162,12 @@ async function saveStandard() {
     message.value = '审核标准已保存'
     resetStandard()
     await loadAll()
-  } catch (e: any) {
-    message.value = e?.message || '保存审核标准失败'
+  } catch (e: unknown) {
+    message.value = e instanceof Error ? e.message : '保存审核标准失败'
   }
 }
 
-function editStandard(item: any) {
+function editStandard(item: ReviewStandard) {
   editingStandardId.value = item.id
   standardForm.name = item.name || ''
   standardForm.scenario = item.scenario || 'general'
@@ -171,12 +204,12 @@ async function saveIntegration() {
     message.value = '对接配置已保存'
     resetIntegration()
     await loadAll()
-  } catch (e: any) {
-    message.value = e?.message || '保存对接配置失败'
+  } catch (e: unknown) {
+    message.value = e instanceof Error ? e.message : '保存对接配置失败'
   }
 }
 
-function editIntegration(item: any) {
+function editIntegration(item: ServiceIntegration) {
   editingIntegrationId.value = item.id
   integrationForm.name = item.name || ''
   integrationForm.integration_type = item.integration_type || 'openapi'
@@ -307,14 +340,44 @@ textarea {
   color: #d7fbe8;
 }
 
-html[data-workbench-theme='light'] .admin-cs{background:#f8f9fa;color:#1a1a1a}
-html[data-workbench-theme='light'] .admin-cs__header p{color:#d97706}
-html[data-workbench-theme='light'] .panel{background:#fff;border-color:#e2e8f0}
-html[data-workbench-theme='light'] label{color:rgba(0,0,0,0.65)}
-html[data-workbench-theme='light'] input,html[data-workbench-theme='light'] select,html[data-workbench-theme='light'] textarea{background:#fff;color:#1a1a1a;border-color:#d1d5db}
-html[data-workbench-theme='light'] .btn{background:#d97706;color:#fff}
-html[data-workbench-theme='light'] .btn.ghost{background:rgba(0,0,0,0.04);color:#1a1a1a;border-color:#d1d5db}
-html[data-workbench-theme='light'] .list-row{border-top-color:rgba(0,0,0,0.06)}
-html[data-workbench-theme='light'] .list-row span,html[data-workbench-theme='light'] .muted{color:#64748b}
-html[data-workbench-theme='light'] .notice{color:#059669}
+html[data-workbench-theme='light'] .admin-cs {
+  background: #f8f9fa;
+  color: #1a1a1a;
+}
+html[data-workbench-theme='light'] .admin-cs__header p {
+  color: #d97706;
+}
+html[data-workbench-theme='light'] .panel {
+  background: #fff;
+  border-color: #e2e8f0;
+}
+html[data-workbench-theme='light'] label {
+  color: rgba(0, 0, 0, 0.65);
+}
+html[data-workbench-theme='light'] input,
+html[data-workbench-theme='light'] select,
+html[data-workbench-theme='light'] textarea {
+  background: #fff;
+  color: #1a1a1a;
+  border-color: #d1d5db;
+}
+html[data-workbench-theme='light'] .btn {
+  background: #d97706;
+  color: #fff;
+}
+html[data-workbench-theme='light'] .btn.ghost {
+  background: rgba(0, 0, 0, 0.04);
+  color: #1a1a1a;
+  border-color: #d1d5db;
+}
+html[data-workbench-theme='light'] .list-row {
+  border-top-color: rgba(0, 0, 0, 0.06);
+}
+html[data-workbench-theme='light'] .list-row span,
+html[data-workbench-theme='light'] .muted {
+  color: #64748b;
+}
+html[data-workbench-theme='light'] .notice {
+  color: #059669;
+}
 </style>

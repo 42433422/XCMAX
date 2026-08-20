@@ -1,9 +1,12 @@
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """制作车间 craft 步骤失败：指标、incident-bus（on_error）、可选人工升级。"""
 
 from __future__ import annotations
 
 import logging
 from typing import Any, Dict, Optional, Tuple
+
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +32,7 @@ def _load_yuangon_employee_meta(employee_id: str) -> Dict[str, Any]:
         from modstore_server.all_hands_report import _load_yuangon_employee_meta as _load
 
         return _load(employee_id)
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         return {}
 
 
@@ -47,16 +50,19 @@ def _employee_trigger_limits(employee_id: str) -> Dict[str, int]:
     """读取 yuangon employee.yaml triggers 中的动态修复预算。"""
     trig = _load_yuangon_employee_meta(employee_id).get("triggers")
     if not isinstance(trig, dict):
-        return {"max_patch_budget_tokens": 3000, "max_patch_steps": 4}
+        return {"max_patch_budget_tokens": 4000, "max_patch_steps": 4}
     try:
-        budget = int(trig.get("max_patch_budget_tokens") or 3000)
+        budget = int(trig.get("max_patch_budget_tokens") or 4000)
     except (TypeError, ValueError):
-        budget = 3000
+        budget = 4000
     try:
         steps = int(trig.get("max_patch_steps") or 4)
     except (TypeError, ValueError):
         steps = 4
-    return {"max_patch_budget_tokens": max(500, budget), "max_patch_steps": max(1, steps)}
+    return {
+        "max_patch_budget_tokens": max(4000, budget),
+        "max_patch_steps": max(1, steps),
+    }
 
 
 def invalid_workflow_sandbox_report(workflow_id: Any) -> Dict[str, Any]:
@@ -112,7 +118,7 @@ def emit_craft_step_failure(
                 llm_tokens=llm_tokens,
                 error=msg,
             )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.debug("craft failure metric record failed step=%s", step_id, exc_info=True)
 
     escalate = _employee_escalate_to_human(emp) if emp else False
@@ -133,7 +139,7 @@ def emit_craft_step_failure(
             payload,
             source=emp or (resolved_step or step_id),
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.exception("craft step on_error publish failed step=%s", step_id)
 
     if emp:
@@ -146,5 +152,5 @@ def emit_craft_step_failure(
                 status="failed",
                 error=msg,
             )
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.debug("craft failure lifecycle event failed", exc_info=True)

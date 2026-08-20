@@ -7,17 +7,12 @@
         :class="['message', msg.role]"
         :style="{ minHeight: messageHeights.get(idx) ? messageHeights.get(idx) + 'px' : 'auto' }"
       >
-        <ChatTypingIndicator
-          v-if="msg.role === 'ai' && msg.streamingShell"
-          label="正在思考…"
-        />
+        <ChatTypingIndicator v-if="msg.role === 'ai' && msg.streamingShell" label="正在思考…" />
         <div
           v-else
           class="message-html"
           v-html="
-            msg.role === 'ai'
-              ? sanitizeChatBubbleMarkdown(aiMarkdownSourceFromContent(msg.content))
-              : sanitizeChatBubbleHtml(msg.content)
+            msg.role === 'ai' ? sanitizeChatBubbleMarkdown(aiMarkdownSourceFromContent(msg.content)) : sanitizeChatBubbleHtml(msg.content)
           "
         ></div>
         <details
@@ -26,52 +21,28 @@
           :open="!!msg.streamingShell"
         >
           <summary>
-            <i
-              v-if="msg.streamingShell"
-              class="fa fa-spinner fa-spin execution-timeline__spinner"
-              aria-hidden="true"
-            ></i>
+            <i v-if="msg.streamingShell" class="fa fa-spinner fa-spin execution-timeline__spinner" aria-hidden="true"></i>
             <span class="execution-timeline__current">
               {{ msg.toolProgressLabel || latestExecutionLabel(msg) }}
             </span>
-            <span v-if="msg.executionProgress?.length" class="execution-timeline__count">
-              {{ msg.executionProgress.length }} 步
-            </span>
+            <span v-if="msg.executionProgress?.length" class="execution-timeline__count"> {{ msg.executionProgress.length }} 步 </span>
           </summary>
           <ol v-if="msg.executionProgress?.length" class="execution-timeline__list">
-            <li
-              v-for="(item, progressIndex) in msg.executionProgress"
-              :key="`${item.at}-${progressIndex}`"
-              :class="`is-${item.status}`"
-            >
+            <li v-for="(item, progressIndex) in msg.executionProgress" :key="`${item.at}-${progressIndex}`" :class="`is-${item.status}`">
               <span class="execution-timeline__marker">{{ executionMarker(item.status) }}</span>
               <span>{{ item.label }}</span>
             </li>
           </ol>
         </details>
-        <div
-          v-if="msg.role === 'ai' && msg.shipmentDownloadUrl"
-          class="message-shipment-actions"
-        >
-          <a
-            class="btn btn-primary btn-sm"
-            :href="msg.shipmentDownloadUrl"
-            download
-            @click="$emit('shipment-download-click')"
-          >
+        <div v-if="msg.role === 'ai' && msg.shipmentDownloadUrl" class="message-shipment-actions">
+          <a class="btn btn-primary btn-sm" :href="msg.shipmentDownloadUrl" download @click="$emit('shipment-download-click')">
             {{ $t('chat.downloadShipment') }}
           </a>
         </div>
-        <div
-          v-if="showDiagnosticMetadata && msg.role === 'ai' && msg.contextSummary"
-          class="context-summary"
-        >
+        <div v-if="showDiagnosticMetadata && msg.role === 'ai' && msg.contextSummary" class="context-summary">
           {{ msg.contextSummary }}
         </div>
-        <details
-          v-if="showDiagnosticMetadata && msg.role === 'ai' && msg.thinkingSteps"
-          class="thinking-panel"
-        >
+        <details v-if="showDiagnosticMetadata && msg.role === 'ai' && msg.thinkingSteps" class="thinking-panel">
           <summary>{{ $t('chat.viewThinkingSteps') }}</summary>
           <pre>{{ msg.thinkingSteps }}</pre>
         </details>
@@ -97,7 +68,9 @@
             <span class="trace-chip">{{ $t('chat.tracePlan') }}</span>
             <span class="trace-chip">{{ $t('chat.traceExecute') }}</span>
           </div>
-          <div class="trace-action" v-if="msg.workflowAction">{{ $t('chat.statusLabel', { status: msg.workflowAction }) }}</div>
+          <div class="trace-action" v-if="msg.workflowAction">
+            {{ $t('chat.statusLabel', { status: msg.workflowAction }) }}
+          </div>
           <ul v-if="msg.nodeResults && msg.nodeResults.length" class="trace-list">
             <li v-for="(nr, nIdx) in msg.nodeResults" :key="nIdx">
               <span :class="['trace-status', nr.success ? 'ok' : 'fail']">{{ nr.success ? $t('chat.success') : $t('chat.failed') }}</span>
@@ -110,9 +83,7 @@
               <span v-if="nr.error || nr.message" class="trace-node-error">
                 {{ nr.error || nr.message }}
               </span>
-              <span v-if="nr.recovery_hint" class="trace-node-hint">
-                恢复建议：{{ nr.recovery_hint }}
-              </span>
+              <span v-if="nr.recovery_hint" class="trace-node-hint"> 恢复建议：{{ nr.recovery_hint }} </span>
             </li>
           </ul>
         </div>
@@ -126,11 +97,7 @@
             :aria-label="playingMsgIdx === idx ? $t('chat.stopTts') : $t('chat.speakReply')"
             @click.stop="$emit('toggle-message-tts', idx, msg.content)"
           >
-            <i
-              class="fa"
-              :class="playingMsgIdx === idx ? 'fa-stop' : 'fa-volume-up'"
-              aria-hidden="true"
-            ></i>
+            <i class="fa" :class="playingMsgIdx === idx ? 'fa-stop' : 'fa-volume-up'" aria-hidden="true"></i>
           </button>
         </div>
       </div>
@@ -197,11 +164,15 @@ function executionMarker(status: string): string {
   return '●'
 }
 
-watch(messagesHostRef, (el) => {
-  const bag = props.chatMessagesRef
-  if (!bag) return
-  bag.value = el
-}, { immediate: true })
+watch(
+  messagesHostRef,
+  (el) => {
+    const bag = props.chatMessagesRef
+    if (!bag) return
+    bag.value = el
+  },
+  { immediate: true },
+)
 </script>
 
 <style scoped>

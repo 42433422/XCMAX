@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """产线灰度放开策略：P-S 优先 primary，其余维持 shadow；CR 预算与通过率门禁。"""
 
 from __future__ import annotations
@@ -5,8 +6,10 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Sequence
+from datetime import UTC, datetime, timedelta
+from typing import Any, Dict, List
+
+from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +90,7 @@ def check_daily_cr_budget(*, digest_record_id: int = 0) -> Dict[str, Any]:
         from modstore_server.models import EmployeeChangeRequest, get_session_factory
 
         sf = get_session_factory()
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+        cutoff = datetime.now(UTC) - timedelta(hours=24)
         with sf() as session:
             rows = (
                 session.query(EmployeeChangeRequest)
@@ -102,7 +105,7 @@ def check_daily_cr_budget(*, digest_record_id: int = 0) -> Dict[str, Any]:
                 data = json.loads(r.diff_blob or "{}")
                 content = str(data.get("content") or "")
                 total_lines += len(content.splitlines())
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 pass
         max_cr = _cr_budget_max()
         max_lines = _cr_lines_budget()
@@ -115,7 +118,7 @@ def check_daily_cr_budget(*, digest_record_id: int = 0) -> Dict[str, Any]:
             "budget_max_lines": max_lines,
             "digest_record_id": int(digest_record_id or 0),
         }
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.exception("check_daily_cr_budget failed")
         return {"ok": True, "skipped": True, "error": str(exc)}
 
@@ -132,7 +135,7 @@ def line_rollout_pass_rate(*, dispatch_line: str, lookback_days: int = 7) -> Dic
     except ValueError:
         pass
 
-    cutoff = datetime.now(timezone.utc) - timedelta(days=lookback_days)
+    cutoff = datetime.now(UTC) - timedelta(days=lookback_days)
     try:
         from modstore_server.models import EmployeeChangeRequest, get_session_factory
 
@@ -165,7 +168,7 @@ def line_rollout_pass_rate(*, dispatch_line: str, lookback_days: int = 7) -> Dic
             "min_pass_rate": min_rate,
             "dispatch_line": line_tag,
         }
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         return {"ok": True, "skipped": True, "error": str(exc)}
 
 

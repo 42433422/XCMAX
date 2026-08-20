@@ -177,13 +177,15 @@ describe('contact intake bridge coverage', () => {
       configurable: true,
     })
 
-    expect(describeDraftFields({
-      userRole: '老板',
-      directions: ['自动派单'],
-      email: 'x@example.com',
-      budget: ' ',
-      extraNote: '',
-    })).toEqual(['岗位角色', '期望方向', '邮箱'])
+    expect(
+      describeDraftFields({
+        userRole: '老板',
+        directions: ['自动派单'],
+        email: 'x@example.com',
+        budget: ' ',
+        extraNote: '',
+      }),
+    ).toEqual(['岗位角色', '期望方向', '邮箱'])
 
     scrollToIntake()
     expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' })

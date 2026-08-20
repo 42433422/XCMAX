@@ -45,23 +45,25 @@ _MEASURE_UNIT_TOKENS = frozenset(
 _CUSTOMER_LABEL_RE = re.compile(
     r"(?:^|[\s\n])"
     r"(?:客户名称|购货单位|购买单位|订货单位|需方|甲方|买受人|采购单位)"
-    r"(?:[（(][^）)]*[）)])?"
-    r"\s*[：:]\s*"
-    r"(?P<name>.+?)"
-    r"(?=\s*(?:联系人|电话|传真|手机|报价日期|日期|订单|地址|开户|税号|邮编|乙方|供方|卖方)"
-    r"\s*[：:]|\s*$)",
+    r"(?:[（(][^）)]{0,100}[）)])?"
+    r"[\s]{0,20}[：:][\s]{0,20}"
+    r"(?P<name>.{1,200}?)"
+    r"(?=[\s]{0,20}(?:联系人|电话|传真|手机|报价日期|日期|订单|地址|开户|税号|邮编|乙方|供方|卖方)"
+    r"[\s]{0,20}[：:]|[\s]{0,20}$)",
     re.UNICODE,
 )
 
 # 购货单位（简称）：全称
 _PURCHASE_UNIT_PAREN_RE = re.compile(
-    r"[购货购买]单位\s*[（(][^）)]*[）)]\s*[：:]\s*(?P<name>.+?)(?=\s+(?:联系人|电话|日期|购货|购买)|$)",
+    r"[购货购买]单位[\s]{0,20}[（(][^）)]{0,100}[）)][\s]{0,20}[：:][\s]{0,20}"
+    r"(?P<name>.{1,200}?)(?=[\s]{1,20}(?:联系人|电话|日期|购货|购买)|$)",
     re.UNICODE,
 )
 
 # 购货单位：…（无括号）
 _PURCHASE_UNIT_PLAIN_RE = re.compile(
-    r"[购货购买]单位\s*[：:]\s*(?P<name>.+?)(?=\s+(?:联系人|电话|日期|订单)|$)",
+    r"[购货购买]单位[\s]{0,20}[：:][\s]{0,20}"
+    r"(?P<name>.{1,200}?)(?=[\s]{1,20}(?:联系人|电话|日期|订单)|$)",
     re.UNICODE,
 )
 
@@ -110,13 +112,13 @@ def _extract_inline_customer_hits_from_cell(text: str) -> list[str]:
     for m in _CUSTOMER_LABEL_RE.finditer(raw):
         _push(m.group("name"))
     if not hits:
-        m = _PURCHASE_UNIT_PAREN_RE.search(raw)
-        if m:
-            _push(m.group("name"))
+        paren_match = _PURCHASE_UNIT_PAREN_RE.search(raw)
+        if paren_match:
+            _push(paren_match.group("name"))
     if not hits:
-        m = _PURCHASE_UNIT_PLAIN_RE.search(raw)
-        if m:
-            _push(m.group("name"))
+        plain_match = _PURCHASE_UNIT_PLAIN_RE.search(raw)
+        if plain_match:
+            _push(plain_match.group("name"))
 
     return hits
 

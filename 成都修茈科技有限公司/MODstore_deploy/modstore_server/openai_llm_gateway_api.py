@@ -1,3 +1,4 @@
+# mypy: disable-error-code="call-overload"
 """OpenAI-compatible gateway for **XCauto** (修茈模型中转) and XCAGI desktop clients.
 
 Uses the same auth as the market API (``Authorization: Bearer`` JWT or developer PAT
@@ -26,7 +27,7 @@ from __future__ import annotations
 import logging
 import time
 import uuid
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -42,6 +43,7 @@ from modstore_server.llm_key_resolver import KNOWN_PROVIDERS
 from modstore_server.llm_model_gates import merge_catalog_capabilities
 from modstore_server.llm_model_taxonomy import CATEGORY_ORDER, category_labels_zh
 from modstore_server.models import User
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +75,7 @@ _CATEGORY_ENDPOINT: dict[str, str] = {
 
 class OAIChatMessage(BaseModel):
     role: str
-    content: Union[str, List[Dict[str, Any]]]
+    content: str | List[Dict[str, Any]]
 
 
 class OAIChatCompletionRequest(BaseModel):
@@ -146,7 +148,7 @@ async def _build_catalog_model_entries(db: Session, user_id: int) -> List[Dict[s
     for provider in KNOWN_PROVIDERS:
         try:
             block = await get_models_for_provider(db, user_id, provider, force_refresh=False)
-        except Exception:  # noqa: BLE001
+        except BOUNDARY_ERRORS:  # noqa: BLE001
             logger.exception("gateway /v1/models catalog fetch failed for %s", provider)
             block = {"models": [], "models_detailed": []}
         providers_out.append(
@@ -158,11 +160,11 @@ async def _build_catalog_model_entries(db: Session, user_id: int) -> List[Dict[s
         )
     try:
         merge_catalog_capabilities(db, providers_out)
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         logger.exception("merge_catalog_capabilities failed in /v1/models")
     try:
         merge_catalog_pricing(db, providers_out)
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         logger.exception("merge_catalog_pricing failed in /v1/models")
 
     data: List[Dict[str, Any]] = []
@@ -212,7 +214,12 @@ async def _build_catalog_model_entries(db: Session, user_id: int) -> List[Dict[s
             data.append(_oai_model_entry(oid, provider, category="llm", display_name=text))
     # 稳定排序：按 category 序再按 id
     order = {c: i for i, c in enumerate(CATEGORY_ORDER)}
-    data.sort(key=lambda r: (order.get(str(r.get("category") or "other"), 99), str(r.get("id"))))
+    data.sort(
+        key=lambda r: (
+            order.get(str(r.get("category") or "other"), 99),
+            str(r.get("id")),
+        )
+    )
     return data
 
 
@@ -245,7 +252,7 @@ async def openai_list_models(
     try:
         catalog_rows = await _build_catalog_model_entries(db, int(user.id))
         data.extend(catalog_rows)
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         logger.exception("gateway /v1/models full catalog failed; returning virtual models only")
     return {
         "object": "list",

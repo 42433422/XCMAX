@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.utils.operational_errors import BOUNDARY_ERRORS
+
 """Branch-coverage tests for app.fastapi_routes.ai_open.
 
 Target missing branches (line_from → line_to):
@@ -644,7 +646,7 @@ def test_ws_recoverable_error_during_receive():
             with c.websocket_connect("/api/aiopen/ws?session_id=err-sess") as ws:
                 ws.receive_json()  # hello frame
                 ws.send_text("trigger")
-        except Exception:
+        except BOUNDARY_ERRORS:
             pass  # connection may close after the error – acceptable
 
 

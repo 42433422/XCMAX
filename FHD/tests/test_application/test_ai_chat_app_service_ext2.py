@@ -12,6 +12,8 @@ from app.application.ai_chat_app_service import (
     AIChatApplicationService,
     _skip_pro_excel_deterministic_import,
 )
+from app.application.workflow.types import PlanGraph
+from app.domain.autonomy.risk_types import RiskDecision
 
 
 def _make_service():
@@ -22,7 +24,17 @@ def _make_service():
         patch("app.application.ai_chat_app_service.WorkflowEngine"),
         patch("app.application.ai_chat_app_service.get_approval_service"),
     ):
-        return AIChatApplicationService()
+        service = AIChatApplicationService()
+        service.workflow_planner.plan.return_value = PlanGraph(
+            plan_id="test-plan",
+            intent="test",
+        )
+        service.risk_gate.evaluate.return_value = RiskDecision(
+            requires_confirmation=False,
+            reason="",
+        )
+        service.approval_service.get_approval_required_nodes.return_value = []
+        return service
 
 
 # ========================= _default_purchase_unit_for_import ==============

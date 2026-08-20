@@ -14,7 +14,6 @@ const { checklist, artifactNote } = useModAuthoringContext()
       <li v-for="row in checklist" :key="row.key" :class="{ ok: row.ok, warn: !row.ok }">
         <span class="mark">{{ row.ok ? '✓' : '○' }}</span>
         {{ row.label }}
-        <span v-if="row.hint" class="hint">{{ row.hint }}</span>
       </li>
     </ul>
     <div v-if="artifactNote" class="artifact-note">{{ artifactNote }}</div>

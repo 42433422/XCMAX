@@ -1,3 +1,4 @@
+# mypy: disable-error-code="attr-defined"
 """Tests for app.infrastructure.rag.hybrid_retriever — coverage ramp C3.3-b.
 
 Covers:
@@ -17,6 +18,7 @@ from app.infrastructure.rag.hybrid_retriever import (
     BM25,
     RetrievedChunk,
 )
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 
 class TestBM25:
@@ -77,5 +79,5 @@ class TestRagServiceFallback:
             try:
                 out = svc.query("hello")
                 assert out is not None
-            except Exception:
+            except BOUNDARY_ERRORS:
                 pass  # acceptable: missing backend

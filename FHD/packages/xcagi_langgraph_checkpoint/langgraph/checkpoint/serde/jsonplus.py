@@ -23,13 +23,14 @@ from ipaddress import (
     IPv6Interface,
     IPv6Network,
 )
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
 import ormsgpack
 from langchain_core.load.load import Reviver
 
+from langgraph.checkpoint._exception_policy import BOUNDARY_ERRORS
 from langgraph.checkpoint.serde import _msgpack as _lg_msgpack
 from langgraph.checkpoint.serde.base import SerializerProtocol
 from langgraph.checkpoint.serde.event_hooks import emit_serde_event
@@ -204,7 +205,7 @@ class JsonPlusSerializer(SerializerProtocol):
                 return cls(**kwargs)
             else:
                 return cls()
-        except Exception as exc:
+        except BOUNDARY_ERRORS as exc:
             # Method-field dispatch has been removed (GHSA-fjqc-hq36-qh5p), so
             # legacy pydantic payloads emitting `method=[None, "construct"]`
             # no longer fall back to `cls.construct(**kwargs)` when the
@@ -649,7 +650,7 @@ def _create_msgpack_ext_hook(
                     return tup[2]
                 # module, name, arg
                 return getattr(importlib.import_module(tup[0]), tup[1])(tup[2])
-            except Exception:
+            except BOUNDARY_ERRORS:
                 return None
         elif code == EXT_CONSTRUCTOR_POS_ARGS:
             try:
@@ -662,7 +663,7 @@ def _create_msgpack_ext_hook(
                     return _send_from_args(tup[2])
                 # module, name, args
                 return getattr(importlib.import_module(tup[0]), tup[1])(*tup[2])
-            except Exception:
+            except BOUNDARY_ERRORS:
                 return None
         elif code == EXT_CONSTRUCTOR_KW_ARGS:
             try:
@@ -673,7 +674,7 @@ def _create_msgpack_ext_hook(
                     return tup[2]
                 # module, name, kwargs
                 return getattr(importlib.import_module(tup[0]), tup[1])(**tup[2])
-            except Exception:
+            except BOUNDARY_ERRORS:
                 return None
         elif code == EXT_METHOD_SINGLE_ARG:
             try:
@@ -686,7 +687,7 @@ def _create_msgpack_ext_hook(
                 return getattr(
                     getattr(importlib.import_module(tup[0]), tup[1]), tup[3]
                 )(tup[2])
-            except Exception:
+            except BOUNDARY_ERRORS:
                 return None
         elif code == EXT_PYDANTIC_V1:
             try:
@@ -699,9 +700,9 @@ def _create_msgpack_ext_hook(
                 cls = getattr(importlib.import_module(tup[0]), tup[1])
                 try:
                     return cls(**tup[2])
-                except Exception:
+                except BOUNDARY_ERRORS:
                     return cls.construct(**tup[2])
-            except Exception:
+            except BOUNDARY_ERRORS:
                 # for pydantic objects we can't find/reconstruct
                 # let's return the kwargs dict instead
                 try:
@@ -719,9 +720,9 @@ def _create_msgpack_ext_hook(
                 cls = getattr(importlib.import_module(tup[0]), tup[1])
                 try:
                     return cls(**tup[2])
-                except Exception:
+                except BOUNDARY_ERRORS:
                     return cls.model_construct(**tup[2])
-            except Exception:
+            except BOUNDARY_ERRORS:
                 # for pydantic objects we can't find/reconstruct
                 # let's return the kwargs dict instead
                 try:
@@ -737,7 +738,7 @@ def _create_msgpack_ext_hook(
                 )
                 arr = _np.frombuffer(buf, dtype=_np.dtype(dtype_str))
                 return arr.reshape(shape, order=order)
-            except Exception:
+            except BOUNDARY_ERRORS:
                 return None
         return None
 
@@ -763,7 +764,7 @@ def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
                 )
             # module, name, arg
             return tup[2]
-        except Exception:
+        except BOUNDARY_ERRORS:
             return
     elif code == EXT_CONSTRUCTOR_POS_ARGS:
         try:
@@ -776,7 +777,7 @@ def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
                 return _send_from_args(tup[2])
             # module, name, args
             return tup[2]
-        except Exception:
+        except BOUNDARY_ERRORS:
             return
     elif code == EXT_CONSTRUCTOR_KW_ARGS:
         try:
@@ -787,7 +788,7 @@ def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
             )
             # module, name, args
             return tup[2]
-        except Exception:
+        except BOUNDARY_ERRORS:
             return
     elif code == EXT_METHOD_SINGLE_ARG:
         try:
@@ -798,7 +799,7 @@ def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
             )
             # module, name, arg, method
             return tup[2]
-        except Exception:
+        except BOUNDARY_ERRORS:
             return
     elif code == EXT_PYDANTIC_V1:
         try:
@@ -809,7 +810,7 @@ def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
             )
             # module, name, kwargs
             return tup[2]
-        except Exception:
+        except BOUNDARY_ERRORS:
             # for pydantic objects we can't find/reconstruct
             # let's return the kwargs dict instead
             return
@@ -822,7 +823,7 @@ def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
             )
             # module, name, kwargs, method
             return tup[2]
-        except Exception:
+        except BOUNDARY_ERRORS:
             return
     elif code == EXT_NUMPY_ARRAY:
         try:
@@ -835,7 +836,7 @@ def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
             )
             arr = _np.frombuffer(buf, dtype=_np.dtype(dtype_str))
             return arr.reshape(shape, order=order).tolist()
-        except Exception:
+        except BOUNDARY_ERRORS:
             return
 
 
@@ -879,5 +880,5 @@ def _normalize_module_keys(
         if isclass(module):
             normalized.add((module.__module__, module.__name__))
         else:
-            normalized.add(cast(tuple[str, ...], module))
+            normalized.add(module)
     return normalized

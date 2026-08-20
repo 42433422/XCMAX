@@ -9,13 +9,11 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import threading
-import time
-from dataclasses import dataclass, field
 from typing import Any
 
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.application.etl import llm_assist_runtime as _runtime
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -37,142 +35,17 @@ _SAFE_MAPPING_TRANSFORMS = frozenset({"trim", "number", "date"})
 # delivery workbook creates the linked customer/product preview at the same
 # time).  Keep this process-local on purpose: account credentials and quota
 # state are not ETL business data and are never persisted with a run.
-_CIRCUIT_LOCK = threading.Lock()
-_CIRCUIT_OPEN_UNTIL: dict[str, tuple[float, str]] = {}
-_OWNER_CALL_LOCKS: dict[str, threading.Lock] = {}
-
-
-@dataclass(slots=True)
-class LlmAssistResult:
-    used_llm: bool = False
-    degraded: bool = False
-    degradation_code: str = ""
-    model: str = ""
-    billing: dict[str, Any] = field(default_factory=dict)
-    data: dict[str, Any] = field(default_factory=dict)
-
-    def public_metadata(self) -> dict[str, Any]:
-        result: dict[str, Any] = {
-            "used_llm": self.used_llm,
-            "advisory_only": True,
-            "degraded": self.degraded,
-        }
-        if self.degradation_code:
-            result["degradation_code"] = self.degradation_code
-        if self.model:
-            result["model"] = self.model
-        if self.billing:
-            result["billing"] = dict(self.billing)
-        return result
-
-
-def etl_llm_mode() -> str:
-    raw = str(os.environ.get("FHD_ETL_LLM") or "auto").strip().lower()
-    if raw in {"0", "false", "no", "off", "disabled"}:
-        return "off"
-    if raw in {"1", "true", "yes", "on", "enabled"}:
-        return "on"
-    return "auto"
-
-
-def etl_llm_timeout_seconds() -> float:
-    """Return the hard latency budget for optional ETL advice.
-
-    The ETL parser and adapters have deterministic fallbacks, so a long model
-    wait provides no correctness benefit.  The outer bounded call below also
-    enforces this value for preview-worker threads, where the structured-output
-    bridge otherwise runs an ``asyncio.run`` call without applying its timeout.
-    """
-
-    raw = str(os.environ.get("FHD_ETL_LLM_TIMEOUT") or "6").strip()
-    try:
-        return min(12.0, max(1.0, float(raw)))
-    except ValueError:
-        return 6.0
-
-
-def etl_row_advice_limit() -> int:
-    raw = str(os.environ.get("FHD_ETL_LLM_ROW_ADVICE_LIMIT") or "20").strip()
-    try:
-        return min(100, max(0, int(raw)))
-    except ValueError:
-        return 20
-
-
-def _degradation_code(exc: BaseException) -> str:
-    message = str(exc).lower()
-    if "quota exhausted" in message or "额度" in message or "429" in message:
-        return "ETL_LLM_QUOTA_EXHAUSTED"
-    return "ETL_LLM_UNAVAILABLE"
-
-
-def _circuit_key() -> str:
-    """Scope degradation to the current software-account owner when present."""
-
-    try:
-        from app.application.etl.llm_session_provider import current_etl_llm_owner
-
-        owner_user_id = current_etl_llm_owner()
-    except Exception:  # noqa: BLE001 - assist scoping must not block preview
-        owner_user_id = None
-    return f"owner:{owner_user_id}" if owner_user_id is not None else "process"
-
-
-def _circuit_cooldown_seconds(degradation_code: str) -> float:
-    """Use a longer owner cooldown for a confirmed quota exhaustion."""
-
-    env_name = (
-        "FHD_ETL_LLM_QUOTA_COOLDOWN_SECONDS"
-        if degradation_code == "ETL_LLM_QUOTA_EXHAUSTED"
-        else "FHD_ETL_LLM_FAILURE_COOLDOWN_SECONDS"
-    )
-    default = 300.0 if degradation_code == "ETL_LLM_QUOTA_EXHAUSTED" else 30.0
-    raw = str(os.environ.get(env_name) or default).strip()
-    try:
-        return min(3600.0, max(1.0, float(raw)))
-    except ValueError:
-        return default
-
-
-def _circuit_degradation(key: str) -> str:
-    now = time.monotonic()
-    with _CIRCUIT_LOCK:
-        state = _CIRCUIT_OPEN_UNTIL.get(key)
-        if state is None:
-            return ""
-        expires_at, degradation_code = state
-        if expires_at <= now:
-            _CIRCUIT_OPEN_UNTIL.pop(key, None)
-            return ""
-        return degradation_code
-
-
-def _open_circuit(key: str, degradation_code: str) -> None:
-    with _CIRCUIT_LOCK:
-        _CIRCUIT_OPEN_UNTIL[key] = (
-            time.monotonic() + _circuit_cooldown_seconds(degradation_code),
-            degradation_code,
-        )
-
-
-def _owner_call_lock(key: str) -> threading.Lock:
-    with _CIRCUIT_LOCK:
-        lock = _OWNER_CALL_LOCKS.get(key)
-        if lock is None:
-            lock = threading.Lock()
-            _OWNER_CALL_LOCKS[key] = lock
-        return lock
-
-
-def clear_etl_llm_circuit() -> None:
-    """Clear transient assist degradation state (primarily for lifecycle/tests).
-
-    This contains only process-local timing/error codes.  It never clears an
-    ETL run, a template, an upload, or any account credential.
-    """
-
-    with _CIRCUIT_LOCK:
-        _CIRCUIT_OPEN_UNTIL.clear()
+LlmAssistResult = _runtime.LlmAssistResult
+clear_etl_llm_circuit = _runtime.clear_etl_llm_circuit
+etl_llm_mode = _runtime.etl_llm_mode
+etl_llm_timeout_seconds = _runtime.etl_llm_timeout_seconds
+etl_row_advice_limit = _runtime.etl_row_advice_limit
+_circuit_cooldown_seconds = _runtime.circuit_cooldown_seconds
+_circuit_degradation = _runtime.circuit_degradation
+_circuit_key = _runtime.circuit_key
+_degradation_code = _runtime.degradation_code
+_open_circuit = _runtime.open_circuit
+_owner_call_lock = _runtime.owner_call_lock
 
 
 def _bounded_structured_completion(
@@ -212,7 +85,7 @@ def _bounded_structured_completion(
                 conversation_service=conversation_service,
                 provider=provider,
             )
-        except BaseException as exc:  # noqa: BLE001 - transported to preview fallback
+        except BOUNDARY_ERRORS as exc:
             box["error"] = exc
 
     worker = threading.Thread(
@@ -313,7 +186,7 @@ def _complete(
                 billing=dict(result.billing or {}),
                 data=dict(result.data),
             )
-        except Exception as exc:  # noqa: BLE001 - LLM failure must never own ETL execution
+        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - LLM failure must never own ETL execution
             degradation_code = _degradation_code(exc)
             _open_circuit(circuit_key, degradation_code)
             logger.info(
@@ -589,7 +462,7 @@ def advise_row_decisions(payloads: list[dict[str, Any]]) -> LlmAssistResult:
         if not isinstance(item, dict):
             continue
         try:
-            index = int(item.get("index"))
+            index = int(item.get("index") or 0)
         except (TypeError, ValueError):
             continue
         action = str(item.get("action") or "")

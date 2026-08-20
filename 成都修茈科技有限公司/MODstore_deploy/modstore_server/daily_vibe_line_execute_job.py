@@ -7,6 +7,8 @@ import os
 from datetime import datetime
 from typing import Any, Dict, Optional
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -17,7 +19,7 @@ def _today_digest_day() -> str:
         tz_name = os.environ.get("MODSTORE_DAILY_DIGEST_TZ", "Asia/Shanghai").strip()
         tz = ZoneInfo(tz_name)
         return datetime.now(tz).strftime("%Y-%m-%d")
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return datetime.utcnow().strftime("%Y-%m-%d")
 
 
@@ -52,7 +54,11 @@ def run_daily_vibe_line_execute_job(
 ) -> Dict[str, Any]:
     raw = (os.environ.get("MODSTORE_DAILY_VIBE_EXECUTE_ENABLED", "1") or "").strip().lower()
     if raw in ("0", "false", "no", "off"):
-        return {"ok": True, "skipped": True, "reason": "MODSTORE_DAILY_VIBE_EXECUTE_ENABLED=0"}
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "MODSTORE_DAILY_VIBE_EXECUTE_ENABLED=0",
+        }
 
     from modstore_server.autonomy_guard_delegate import request_action
 
@@ -98,7 +104,7 @@ def run_daily_vibe_line_execute_job(
             row = session.get(DailyDigestRecord, int(rid))
             if row is not None:
                 release_kind = (row.release_kind or "").strip()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
     if release_kind:
         logger.info("daily vibe line execute record_id=%s release_kind=%s", rid, release_kind)
@@ -119,7 +125,9 @@ def run_daily_vibe_line_execute_job(
         )
     elif out.get("skipped"):
         logger.info(
-            "daily vibe line execute skipped record_id=%s reason=%s", rid, out.get("reason")
+            "daily vibe line execute skipped record_id=%s reason=%s",
+            rid,
+            out.get("reason"),
         )
     else:
         logger.warning("daily vibe line execute failed record_id=%s err=%s", rid, out.get("error"))
@@ -137,7 +145,7 @@ def cron_trigger_for_vibe_line_execute():
         hour = int(os.environ.get("MODSTORE_DAILY_VIBE_EXECUTE_HOUR", "8"))
         minute = int(os.environ.get("MODSTORE_DAILY_VIBE_EXECUTE_MINUTE", "15"))
         return CronTrigger(hour=hour, minute=minute, timezone=tz)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         from apscheduler.triggers.cron import CronTrigger
 
         return CronTrigger(hour=8, minute=15)

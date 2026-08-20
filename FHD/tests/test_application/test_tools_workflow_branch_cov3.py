@@ -71,7 +71,8 @@ class TestRunNaturalLanguagePandas:
         with patch_ctx:
             result = run_natural_language_pandas(df, "bad")
         assert "error" in result
-        assert "bad query" in result["error"]
+        assert result["error"] == "invalid_pandas_query"
+        assert "bad query" not in result["error"]
         assert result["generated_code"] == ""
 
     def test_recoverable_error_sets_error_msg(self) -> None:
@@ -80,7 +81,8 @@ class TestRunNaturalLanguagePandas:
         with patch_ctx:
             result = run_natural_language_pandas(df, "x")
         assert "error" in result
-        assert "io fail" in result["error"]
+        assert result["error"] == "excel_query_failed"
+        assert "io fail" not in result["error"]
 
     def test_empty_code_does_not_execute(self) -> None:
         df = pd.DataFrame({"a": [1, 2]})
@@ -132,7 +134,8 @@ class TestRunNaturalLanguagePandas:
         with patch_ctx:
             result = run_natural_language_pandas(df, "x")
         assert "error" in result
-        assert "rt fail" in result["error"]
+        assert result["error"] == "excel_query_failed"
+        assert "rt fail" not in result["error"]
 
 
 # ---------------------------------------------------------------------------
@@ -155,7 +158,8 @@ class TestHandleExcelAnalysis:
         ):
             result = handle_excel_analysis({"file_path": "x.xlsx"})
         assert result["success"] is False
-        assert "denied" in result["error"]
+        assert result["error"] == "invalid_excel_path"
+        assert "denied" not in result["error"]
 
     def test_file_not_found_returns_error(self, tmp_path: Path) -> None:
         result = handle_excel_analysis({"file_path": "missing.xlsx"}, workspace_root=str(tmp_path))
@@ -173,7 +177,7 @@ class TestHandleExcelAnalysis:
                 {"file_path": "data.xlsx", "action": "read"}, workspace_root=str(tmp_path)
             )
         assert result["success"] is False
-        assert "read failed" in result["error"]
+        assert result["error"] == "read_excel_failed"
 
     def test_action_excel_query(self, tmp_path: Path) -> None:
         f = tmp_path / "data.xlsx"
@@ -675,7 +679,8 @@ class TestExecuteWorkflowToolSchemaUnderstand:
             result = self._call({"file_path": "data.xlsx"}, workspace_root=str(tmp_path))
         data = json.loads(result)
         assert data["success"] is False
-        assert "read fail" in data["error"]
+        assert data["error"] == "read_excel_failed"
+        assert "read fail" not in data["error"]
 
 
 # ---------------------------------------------------------------------------
@@ -850,7 +855,8 @@ class TestExecuteWorkflowToolGenerateOffice:
             result = self._call({"user_request": "make a doc"})
         data = json.loads(result)
         assert data["success"] is False
-        assert "disk full" in data["error"]
+        assert data["error"] == "office_document_generation_failed"
+        assert "disk full" not in data["error"]
 
     def test_prompt_alias_for_user_request(self) -> None:
         with (

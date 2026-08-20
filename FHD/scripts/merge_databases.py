@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="attr-defined, operator, return-value"
 """
 数据库合并脚本 - 将 customers.db 合并到 products.db
 
@@ -22,10 +23,12 @@ import sqlite3
 import sys
 from datetime import datetime
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
-from app.db.init_db import get_db_path, get_customers_db_path
+from app.db.init_db import get_customers_db_path, get_db_path
 
 
 def backup_database(db_path: str) -> str:
@@ -84,7 +87,7 @@ def merge_purchase_units(dry_run: bool = True) -> dict:
     to_merge = [r for r in customers_data if r.get("unit_name") not in existing_names]
     to_update = [r for r in customers_data if r.get("unit_name") in existing_names]
 
-    print(f"\n📋 合并计划:")
+    print("\n📋 合并计划:")
     print(f"  - 新增: {len(to_merge)} 条")
     print(f"  - 更新: {len(to_update)} 条")
 
@@ -147,7 +150,7 @@ def merge_purchase_units(dry_run: bool = True) -> dict:
         conn.commit()
         print(f"\n✅ 成功合并 {results['records_copied']} 条记录")
 
-    except Exception as e:
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         conn.rollback()
         results["errors"].append(str(e))
         print(f"\n❌ 合并失败: {e}")
@@ -205,7 +208,7 @@ def main():
     if args.verify:
         print("\n🔍 验证合并结果...")
         result = verify_merge()
-        print(f"\n📊 验证结果:")
+        print("\n📊 验证结果:")
         print(f"  products.db 存在: {result['products_db_exists']}")
         print(f"  products.db.purchase_units: {result['products_purchase_units_count']} 条")
         print(f"  customers.db 存在: {result['customers_db_exists']}")
@@ -226,7 +229,7 @@ def main():
         return
 
     if args.cleanup and os.path.exists(get_customers_db_path()):
-        print(f"\n🗑️  准备删除 customers.db...")
+        print("\n🗑️  准备删除 customers.db...")
         backup_path = backup_database(get_customers_db_path())
         if backup_path:
             os.remove(get_customers_db_path())

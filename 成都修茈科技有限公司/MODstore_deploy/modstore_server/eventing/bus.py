@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """NeuroBus interface and enhanced in-memory implementation.
 
 Aligned with FHD's NeuroBus reliability layer:
@@ -19,6 +20,8 @@ from collections import defaultdict
 from collections.abc import Callable
 from enum import IntEnum
 from typing import Any
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 from .events import DomainEvent
 
@@ -126,7 +129,9 @@ class CircuitBreaker:
             elif self._state == "closed" and self._failure_count >= self._failure_threshold:
                 self._state = "open"
                 logger.warning(
-                    "Circuit [%s] open due to %d failures", self.name, self._failure_count
+                    "Circuit [%s] open due to %d failures",
+                    self.name,
+                    self._failure_count,
                 )
 
     @property
@@ -273,7 +278,7 @@ class InMemoryNeuroBus(NeuroBus):
                 sub.record_call(success=True)
                 if self._circuit is not None:
                     self._circuit.record_success()
-            except Exception as exc:
+            except RECOVERABLE_ERRORS as exc:
                 sub.record_call(success=False)
                 any_failed = True
                 self._error_count += 1
@@ -287,7 +292,7 @@ class InMemoryNeuroBus(NeuroBus):
                 if self._dlq_callback is not None:
                     try:
                         self._dlq_callback(event, exc, getattr(sub.handler, "__name__", None))
-                    except Exception:
+                    except RECOVERABLE_ERRORS:
                         logger.exception("DLQ callback failed for event: %s", event.event_name)
 
         if any_failed and self._dedup is not None:

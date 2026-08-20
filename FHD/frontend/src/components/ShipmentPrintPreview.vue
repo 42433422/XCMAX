@@ -58,7 +58,13 @@
                     </select>
                   </td>
                   <td class="col-price">
-                    <input type="number" v-model.number="product.unit_price" class="editable-input table-input" step="0.01" @input="recalculate" />
+                    <input
+                      type="number"
+                      v-model.number="product.unit_price"
+                      class="editable-input table-input"
+                      step="0.01"
+                      @input="recalculate"
+                    />
                   </td>
                   <td class="col-amount">{{ calculateAmount(product) }}元</td>
                   <td class="col-actions">
@@ -72,16 +78,15 @@
           </div>
 
           <div class="grid-row grid-add">
-            <button type="button" class="btn btn-secondary btn-sm" @click="addProduct">
-              <i class="fa fa-plus"></i> 添加产品
-            </button>
+            <button type="button" class="btn btn-secondary btn-sm" @click="addProduct"><i class="fa fa-plus"></i> 添加产品</button>
           </div>
 
           <div class="grid-row grid-summary">
             <div class="summary-info">
               <div class="summary-item">
                 <span class="label">总数量：</span>
-                <input type="number" v-model.number="localData.total_quantity" class="editable-input summary-input" readonly /> {{ localData.unit || 'KG' }}
+                <input type="number" v-model.number="localData.total_quantity" class="editable-input summary-input" readonly />
+                {{ localData.unit || 'KG' }}
               </div>
               <div class="summary-item total-amount">
                 <span class="label">合计金额：</span>
@@ -136,12 +141,12 @@ export default {
   props: {
     show: {
       type: Boolean,
-      default: false
+      default: false,
     },
     shipmentData: {
       type: Object,
-      default: null
-    }
+      default: null,
+    },
   },
   emits: ['close', 'print', 'download', 'update'],
   data() {
@@ -160,9 +165,9 @@ export default {
           approver: '黄种霜',
           accountant: '胡小玲',
           manager: '姚胜华',
-          warehouse: '廖振卷'
-        }
-      }
+          warehouse: '廖振卷',
+        },
+      },
     }
   },
   watch: {
@@ -174,21 +179,21 @@ export default {
             ...newData,
             signatures: {
               ...this.localData.signatures,
-              ...(newData.signatures || {})
-            }
+              ...(newData.signatures || {}),
+            },
           }
           this.recalculate()
         }
       },
       immediate: true,
-      deep: true
+      deep: true,
     },
     localData: {
       handler() {
         this.$emit('update', this.localData)
       },
-      deep: true
-    }
+      deep: true,
+    },
   },
   methods: {
     close() {
@@ -204,7 +209,7 @@ export default {
     recalculate() {
       let totalQty = 0
       let totalAmt = 0
-      this.localData.products.forEach(p => {
+      this.localData.products.forEach((p) => {
         const qty = Number(p.quantity) || 0
         const price = Number(p.unit_price) || 0
         totalQty += qty
@@ -220,7 +225,7 @@ export default {
         spec: '',
         quantity: 1,
         unit: 'KG',
-        unit_price: 0
+        unit_price: 0,
       })
     },
 
@@ -240,8 +245,8 @@ export default {
 
     handleDownload() {
       this.$emit('download', this.localData)
-    }
-  }
+    },
+  },
 }
 </script>
 

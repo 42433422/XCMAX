@@ -68,8 +68,12 @@ def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
                 "id": item_id,
                 "priority": priority,
                 "risk_level": str(item.get("risk_level") or "medium").strip().lower()[:32],
-                "blocked_by": [str(value).strip()[:160] for value in blockers if str(value).strip()],
-                "acceptance": [str(value).strip()[:300] for value in acceptance if str(value).strip()],
+                "blocked_by": [
+                    str(value).strip()[:160] for value in blockers if str(value).strip()
+                ],
+                "acceptance": [
+                    str(value).strip()[:300] for value in acceptance if str(value).strip()
+                ],
             }
         )
 
@@ -81,10 +85,7 @@ def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
             item["id"],
         ),
     )
-    queue = [
-        {**item, "queue_position": position}
-        for position, item in enumerate(ordered, start=1)
-    ]
+    queue = [{**item, "queue_position": position} for position, item in enumerate(ordered, start=1)]
     status = "approved" if not issues else "rejected"
     summary = (
         f"已只读核对 {len(raw_items[:200])} 项每日工作："

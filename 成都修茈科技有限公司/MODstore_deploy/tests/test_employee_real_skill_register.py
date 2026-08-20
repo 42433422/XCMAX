@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import tempfile
-import types
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -78,7 +77,9 @@ def _make_pack_dir_with_skills(tmp: Path) -> Path:
 @pytest.mark.asyncio
 async def test_register_with_script_returns_eskill_spec():
     """有脚本 + mock coder，应返回至少 1 个 eskill_spec。"""
-    from modstore_server.employee_skill_register import register_employee_pack_as_eskills
+    from modstore_server.employee_skill_register import (
+        register_employee_pack_as_eskills,
+    )
 
     with tempfile.TemporaryDirectory() as tmpdir:
         pack_dir = _make_pack_dir(Path(tmpdir))
@@ -163,7 +164,9 @@ async def test_register_with_script_returns_eskill_spec():
 @pytest.mark.asyncio
 async def test_register_multi_step_split():
     """LLM 成功返回 3 步时，应注册 3 个 ESkill。"""
-    from modstore_server.employee_skill_register import register_employee_pack_as_eskills
+    from modstore_server.employee_skill_register import (
+        register_employee_pack_as_eskills,
+    )
 
     split_steps = [
         {
@@ -234,7 +237,9 @@ async def test_register_multi_step_split():
 @pytest.mark.asyncio
 async def test_register_manifest_skills_when_llm_split_fails():
     """LLM 拆分失败时，仍应从 manifest 的 skills/suggested_skills 拆出多个 ESkill。"""
-    from modstore_server.employee_skill_register import register_employee_pack_as_eskills
+    from modstore_server.employee_skill_register import (
+        register_employee_pack_as_eskills,
+    )
 
     with tempfile.TemporaryDirectory() as tmpdir:
         pack_dir = _make_pack_dir_with_skills(Path(tmpdir))
@@ -286,7 +291,9 @@ async def test_register_manifest_skills_when_llm_split_fails():
 @pytest.mark.asyncio
 async def test_register_no_script_returns_empty():
     """无 backend/employees/*.py 时，应返回空列表（不报错）。"""
-    from modstore_server.employee_skill_register import register_employee_pack_as_eskills
+    from modstore_server.employee_skill_register import (
+        register_employee_pack_as_eskills,
+    )
 
     with tempfile.TemporaryDirectory() as tmpdir:
         pack_dir = Path(tmpdir)
@@ -312,7 +319,9 @@ async def test_register_no_script_returns_empty():
 @pytest.mark.asyncio
 async def test_register_vibe_unavailable_returns_empty():
     """get_vibe_coder 抛 VibeIntegrationError → 返回空列表。"""
-    from modstore_server.employee_skill_register import register_employee_pack_as_eskills
+    from modstore_server.employee_skill_register import (
+        register_employee_pack_as_eskills,
+    )
 
     with tempfile.TemporaryDirectory() as tmpdir:
         pack_dir = _make_pack_dir(Path(tmpdir))

@@ -6,7 +6,7 @@ import os
 import time
 from unittest.mock import MagicMock, patch
 
-import pytest
+from redis.exceptions import RedisError
 
 from modstore_server.cache import delete, get_json, set_json
 
@@ -65,7 +65,7 @@ class TestRedisFallback:
 
     def test_redis_get_error_returns_none(self):
         mock_client = MagicMock()
-        mock_client.get.side_effect = Exception("redis error")
+        mock_client.get.side_effect = RedisError("redis error")
         with patch("modstore_server.cache._redis_client", return_value=mock_client):
             result = get_json("any_key_redis_err")
             assert result is None

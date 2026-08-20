@@ -9,8 +9,6 @@ describe('modelPaymentPaths', () => {
 
   it('maps to mod facade when enabled', () => {
     vi.stubGlobal('localStorage', { getItem: () => '1' })
-    expect(resolveModelPaymentApiPath('/api/model-payment/checkout')).toBe(
-      '/api/mod/xcagi-model-payment-bridge/model-payment/checkout',
-    )
+    expect(resolveModelPaymentApiPath('/api/model-payment/checkout')).toBe('/api/mod/xcagi-model-payment-bridge/model-payment/checkout')
   })
 })

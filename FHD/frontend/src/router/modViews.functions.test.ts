@@ -13,13 +13,7 @@ vi.mock('@/constants/hostViewGlob', () => ({
   hostViewGlob: mockHostViewGlob,
 }))
 
-import {
-  modView,
-  hostView,
-  resolveModPageView,
-  listPhysicalViewGlobKeys,
-  physicalViewExists,
-} from './modViews'
+import { modView, hostView, resolveModPageView, listPhysicalViewGlobKeys, physicalViewExists } from './modViews'
 
 describe('modViews', () => {
   beforeEach(() => {
@@ -236,7 +230,9 @@ describe('modViews', () => {
 
     it('returns keys in original form (with backslashes if present)', () => {
       mockModPhysicalViewGlob['./mods/m1/frontend/views/A.vue'] = async () => ({ default: {} })
-      mockModPhysicalViewGlob['.\\mods\\m2\\frontend\\views\\B.vue'] = async () => ({ default: {} })
+      mockModPhysicalViewGlob['.\\mods\\m2\\frontend\\views\\B.vue'] = async () => ({
+        default: {},
+      })
 
       const keys = listPhysicalViewGlobKeys()
       expect(keys).toContain('.\\mods\\m2\\frontend\\views\\B.vue')
@@ -245,7 +241,9 @@ describe('modViews', () => {
 
   describe('physicalViewExists', () => {
     it('returns true when mod view exists in mods/<id>/frontend/views/<file>', () => {
-      mockModPhysicalViewGlob['./mods/m1/frontend/views/Products.vue'] = async () => ({ default: {} })
+      mockModPhysicalViewGlob['./mods/m1/frontend/views/Products.vue'] = async () => ({
+        default: {},
+      })
 
       expect(physicalViewExists('m1', 'Products.vue')).toBe(true)
     })
@@ -267,7 +265,9 @@ describe('modViews', () => {
     })
 
     it('normalizes backslashes when checking existence', () => {
-      mockModPhysicalViewGlob['.\\mods\\m3\\frontend\\views\\Backslash.vue'] = async () => ({ default: {} })
+      mockModPhysicalViewGlob['.\\mods\\m3\\frontend\\views\\Backslash.vue'] = async () => ({
+        default: {},
+      })
 
       expect(physicalViewExists('m3', 'Backslash.vue')).toBe(true)
     })
@@ -283,13 +283,17 @@ describe('modViews', () => {
     })
 
     it('does not match partial mod id', () => {
-      mockModPhysicalViewGlob['./mods/m1extra/frontend/views/X.vue'] = async () => ({ default: {} })
+      mockModPhysicalViewGlob['./mods/m1extra/frontend/views/X.vue'] = async () => ({
+        default: {},
+      })
 
       expect(physicalViewExists('m1', 'X.vue')).toBe(false)
     })
 
     it('does not match partial viewFile', () => {
-      mockModPhysicalViewGlob['./mods/m1/frontend/views/ProductsViewExtra.vue'] = async () => ({ default: {} })
+      mockModPhysicalViewGlob['./mods/m1/frontend/views/ProductsViewExtra.vue'] = async () => ({
+        default: {},
+      })
 
       expect(physicalViewExists('m1', 'ProductsView.vue')).toBe(false)
     })

@@ -7,6 +7,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -105,7 +107,7 @@ def main() -> int:
                 )
 
                 mirror_catalog_file_to_market_files(row.stored_filename)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 pass
             published.append(
                 {
@@ -120,7 +122,7 @@ def main() -> int:
         from modstore_server.market_catalog_api import _invalidate_market_catalog_caches
 
         _invalidate_market_catalog_caches()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         pass
 
     print(json.dumps({"ok": True, "published": published}, ensure_ascii=False, indent=2))

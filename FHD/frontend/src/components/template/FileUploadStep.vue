@@ -1,7 +1,7 @@
 <template>
   <div class="file-upload-step">
     <div class="form-group">
-      <label>模板名称 <span style="color:red">*</span></label>
+      <label>模板名称 <span style="color: red">*</span></label>
       <input
         type="text"
         v-model="localTemplateName"
@@ -9,66 +9,50 @@
         placeholder="例如：出货单模板、产品目录导出"
         @input="onTemplateNameChange"
       />
-      <div class="muted" style="font-size:12px;margin-top:5px;">
-        用于区分不同模板，必填
-      </div>
+      <div class="muted" style="font-size: 12px; margin-top: 5px">用于区分不同模板，必填</div>
     </div>
 
     <div class="form-group">
       <label>上传文件</label>
       <div
         class="upload-area"
-        :class="{ 'has-file': localSelectedFile, 'dragover': isDragover }"
+        :class="{ 'has-file': localSelectedFile, dragover: isDragover }"
         @dragover.prevent="isDragover = true"
         @dragleave.prevent="isDragover = false"
         @drop.prevent="handleDrop"
         @click="triggerFileInput"
       >
-        <input
-          ref="fileInput"
-          type="file"
-          :accept="uploadAccept"
-          style="display:none"
-          @change="handleFileSelect"
-        />
+        <input ref="fileInput" type="file" :accept="uploadAccept" style="display: none" @change="handleFileSelect" />
 
         <div v-if="!localSelectedFile" class="upload-placeholder">
-          <div style="font-size:48px;margin-bottom:10px;"><i class="fa fa-folder-open-o" aria-hidden="true"></i></div>
+          <div style="font-size: 48px; margin-bottom: 10px">
+            <i class="fa fa-folder-open-o" aria-hidden="true"></i>
+          </div>
           <div>点击或拖拽上传文件</div>
-          <div class="muted" style="font-size:12px;margin-top:5px;">
+          <div class="muted" style="font-size: 12px; margin-top: 5px">
             {{ uploadHint }}
           </div>
         </div>
 
         <div v-else class="file-info">
-          <div style="font-size:36px;margin-bottom:10px;"><i class="fa" :class="getFileIconClass()" aria-hidden="true"></i></div>
-          <div style="font-weight:500;">{{ localSelectedFile.name }}</div>
-          <div class="muted" style="font-size:12px;margin-top:5px;">
+          <div style="font-size: 36px; margin-bottom: 10px">
+            <i class="fa" :class="getFileIconClass()" aria-hidden="true"></i>
+          </div>
+          <div style="font-weight: 500">{{ localSelectedFile.name }}</div>
+          <div class="muted" style="font-size: 12px; margin-top: 5px">
             {{ formatFileSize(localSelectedFile.size) }}
           </div>
-          <button
-            type="button"
-            class="btn btn-sm btn-danger"
-            style="margin-top:10px;"
-            @click.stop="clearFile"
-          >
-            ✕ 删除
-          </button>
+          <button type="button" class="btn btn-sm btn-danger" style="margin-top: 10px" @click.stop="clearFile">✕ 删除</button>
         </div>
       </div>
     </div>
 
     <div v-if="recognizedType" class="recognized-type">
-      <span
-        class="badge"
-        :class="recognizedType === 'word' ? 'badge-info' : 'badge-success'"
-      >
-        已识别类型：{{ recognizedTypeLabel }}
-      </span>
-      <span v-if="analyzing" class="muted" style="margin-left:10px;">分析中...</span>
+      <span class="badge" :class="recognizedType === 'word' ? 'badge-info' : 'badge-success'"> 已识别类型：{{ recognizedTypeLabel }} </span>
+      <span v-if="analyzing" class="muted" style="margin-left: 10px">分析中...</span>
     </div>
 
-    <div v-if="analyzeError" class="alert alert-danger" style="margin-top:10px;">
+    <div v-if="analyzeError" class="alert alert-danger" style="margin-top: 10px">
       {{ analyzeError }}
     </div>
   </div>
@@ -88,12 +72,12 @@ export default {
   props: {
     templateName: {
       type: String,
-      default: ''
+      default: '',
     },
     selectedFile: {
       type: [File, null],
-      default: null
-    }
+      default: null,
+    },
   },
   data() {
     return {
@@ -102,7 +86,7 @@ export default {
       recognizedType: null,
       isDragover: false,
       analyzing: false,
-      analyzeError: null
+      analyzeError: null,
     }
   },
   computed: {
@@ -123,7 +107,7 @@ export default {
     },
     selectedFile(val) {
       this.localSelectedFile = val
-    }
+    },
   },
   methods: {
     triggerFileInput() {
@@ -160,7 +144,7 @@ export default {
       this.$emit('file-selected', {
         selectedFile: this.localSelectedFile,
         templateName: this.localTemplateName,
-        recognizedType: this.recognizedType
+        recognizedType: this.recognizedType,
       })
     },
 
@@ -177,7 +161,7 @@ export default {
       this.$emit('file-selected', {
         selectedFile: this.localSelectedFile,
         templateName: this.localTemplateName,
-        recognizedType: this.recognizedType
+        recognizedType: this.recognizedType,
       })
     },
 
@@ -202,7 +186,7 @@ export default {
       return {
         templateName: this.localTemplateName,
         selectedFile: this.localSelectedFile,
-        recognizedType: this.recognizedType
+        recognizedType: this.recognizedType,
       }
     },
 
@@ -216,8 +200,8 @@ export default {
         return false
       }
       return true
-    }
-  }
+    },
+  },
 }
 </script>
 

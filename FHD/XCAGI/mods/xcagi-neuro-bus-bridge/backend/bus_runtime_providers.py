@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """里程碑 S：NeuroBus 运行时提供方入口。"""
 
 from __future__ import annotations
@@ -13,7 +12,7 @@ def list_runtime_resolvers() -> list[str]:
 
 
 def create_bus_runtime_bundle() -> dict[str, Any]:
-    from app.infrastructure.mods.mod_manager import import_mod_backend_py
+    from app.mod_sdk.host_services import import_mod_backend_py
     from app.mod_sdk.neuro_bus_compat import NEURO_BUS_BRIDGE_MOD_ID, _resolve_mod_dir
 
     mod_dir = _resolve_mod_dir()

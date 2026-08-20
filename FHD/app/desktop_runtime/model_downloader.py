@@ -10,6 +10,7 @@ import urllib.request
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from .paths import ensure_desktop_dirs
 
@@ -27,6 +28,15 @@ class ModelAsset:
 
 def models_dir(data_dir: str | os.PathLike[str] | None = None) -> Path:
     return ensure_desktop_dirs(data_dir)["models"]
+
+
+def _safe_path_component(value: str, *, label: str) -> str:
+    raw = str(value or "").strip()
+    if not raw or len(raw) > 128 or raw in {".", ".."}:
+        raise ValueError(f"invalid model {label}")
+    if any(not (char.isalnum() or char in {"-", "_", "."}) for char in raw):
+        raise ValueError(f"invalid model {label}")
+    return raw
 
 
 def _sha256(path: Path) -> str:
@@ -99,9 +109,12 @@ def download_model(
     connect_timeout: float = 10.0,
     read_timeout: float = 60.0,
 ) -> Path:
-    target_dir = models_dir(data_dir) / asset.name / asset.version
+    safe_name = _safe_path_component(asset.name, label="name")
+    safe_version = _safe_path_component(asset.version, label="version")
+    asset_filename = _safe_path_component(Path(urlsplit(asset.url).path).name, label="filename")
+    target_dir = models_dir(data_dir) / safe_name / safe_version
     target_dir.mkdir(parents=True, exist_ok=True)
-    target = target_dir / Path(asset.url).name
+    target = target_dir / asset_filename
     partial = target.with_suffix(target.suffix + ".part")
 
     if target.exists() and _sha256(target).lower() == asset.sha256.lower():

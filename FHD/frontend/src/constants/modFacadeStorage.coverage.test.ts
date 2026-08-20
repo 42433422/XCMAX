@@ -1,34 +1,14 @@
 import { describe, expect, it, afterEach } from 'vitest'
-import {
-  readApprovalModFacadeEnabled,
-  setApprovalModFacadeEnabled,
-  LS_APPROVAL_MOD_FACADE_ENABLED,
-} from './approvalMod'
-import {
-  readErpDomainModFacadeEnabled,
-  setErpDomainModFacadeEnabled,
-  LS_ERP_DOMAIN_MOD_FACADE_ENABLED,
-} from './erpDomainMod'
-import {
-  readLanModFacadeEnabled,
-  setLanModFacadeEnabled,
-  LS_LAN_MOD_FACADE_ENABLED,
-} from './lanMod'
-import {
-  readModelPaymentModFacadeEnabled,
-  setModelPaymentModFacadeEnabled,
-  LS_MODEL_PAYMENT_MOD_FACADE_ENABLED,
-} from './modelPaymentMod'
+import { readApprovalModFacadeEnabled, setApprovalModFacadeEnabled, LS_APPROVAL_MOD_FACADE_ENABLED } from './approvalMod'
+import { readErpDomainModFacadeEnabled, setErpDomainModFacadeEnabled, LS_ERP_DOMAIN_MOD_FACADE_ENABLED } from './erpDomainMod'
+import { readLanModFacadeEnabled, setLanModFacadeEnabled, LS_LAN_MOD_FACADE_ENABLED } from './lanMod'
+import { readModelPaymentModFacadeEnabled, setModelPaymentModFacadeEnabled, LS_MODEL_PAYMENT_MOD_FACADE_ENABLED } from './modelPaymentMod'
 import {
   readOfficeEmployeePackModPagesEnabled,
   setOfficeEmployeePackModPagesEnabled,
   LS_OFFICE_EMPLOYEE_PACK_MOD_PAGES_ENABLED,
 } from './officeEmployeePackMod'
-import {
-  readPlannerModFacadeEnabled,
-  setPlannerModFacadeEnabled,
-  LS_PLANNER_MOD_FACADE_ENABLED,
-} from './plannerMod'
+import { readPlannerModFacadeEnabled, setPlannerModFacadeEnabled, LS_PLANNER_MOD_FACADE_ENABLED } from './plannerMod'
 
 /**
  * 临时把 globalThis.localStorage 隐藏（模拟无 Storage 环境），
@@ -49,7 +29,7 @@ function withoutLocalStorage(fn: () => void) {
       Object.defineProperty(globalThis, 'localStorage', descriptor)
     } else {
       // 自有属性被删除后，恢复对原型 getter 的访问
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       delete (globalThis as any).localStorage
     }
   }
@@ -63,12 +43,42 @@ interface ModFacadeCase {
 }
 
 const cases: ModFacadeCase[] = [
-  { name: 'approval', read: readApprovalModFacadeEnabled, set: setApprovalModFacadeEnabled, key: LS_APPROVAL_MOD_FACADE_ENABLED },
-  { name: 'erpDomain', read: readErpDomainModFacadeEnabled, set: setErpDomainModFacadeEnabled, key: LS_ERP_DOMAIN_MOD_FACADE_ENABLED },
-  { name: 'lan', read: readLanModFacadeEnabled, set: setLanModFacadeEnabled, key: LS_LAN_MOD_FACADE_ENABLED },
-  { name: 'modelPayment', read: readModelPaymentModFacadeEnabled, set: setModelPaymentModFacadeEnabled, key: LS_MODEL_PAYMENT_MOD_FACADE_ENABLED },
-  { name: 'officeEmployeePack', read: readOfficeEmployeePackModPagesEnabled, set: setOfficeEmployeePackModPagesEnabled, key: LS_OFFICE_EMPLOYEE_PACK_MOD_PAGES_ENABLED },
-  { name: 'planner', read: readPlannerModFacadeEnabled, set: setPlannerModFacadeEnabled, key: LS_PLANNER_MOD_FACADE_ENABLED },
+  {
+    name: 'approval',
+    read: readApprovalModFacadeEnabled,
+    set: setApprovalModFacadeEnabled,
+    key: LS_APPROVAL_MOD_FACADE_ENABLED,
+  },
+  {
+    name: 'erpDomain',
+    read: readErpDomainModFacadeEnabled,
+    set: setErpDomainModFacadeEnabled,
+    key: LS_ERP_DOMAIN_MOD_FACADE_ENABLED,
+  },
+  {
+    name: 'lan',
+    read: readLanModFacadeEnabled,
+    set: setLanModFacadeEnabled,
+    key: LS_LAN_MOD_FACADE_ENABLED,
+  },
+  {
+    name: 'modelPayment',
+    read: readModelPaymentModFacadeEnabled,
+    set: setModelPaymentModFacadeEnabled,
+    key: LS_MODEL_PAYMENT_MOD_FACADE_ENABLED,
+  },
+  {
+    name: 'officeEmployeePack',
+    read: readOfficeEmployeePackModPagesEnabled,
+    set: setOfficeEmployeePackModPagesEnabled,
+    key: LS_OFFICE_EMPLOYEE_PACK_MOD_PAGES_ENABLED,
+  },
+  {
+    name: 'planner',
+    read: readPlannerModFacadeEnabled,
+    set: setPlannerModFacadeEnabled,
+    key: LS_PLANNER_MOD_FACADE_ENABLED,
+  },
 ]
 
 describe.each(cases)('$name mod facade storage edge branches', ({ read, set, key }) => {

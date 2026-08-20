@@ -10,6 +10,7 @@ import logging
 import os
 import uuid
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
@@ -276,7 +277,7 @@ def _extract_single_sheet_bundle(
         "max_col": 0,
         "header_row_index": 1,
     }
-    empty_cache: object = {"styles": {}, "cell_style_refs": {}}
+    empty_cache: dict[str, Any] = {"styles": {}, "cell_style_refs": {}}
 
     if not matrix:
         return {

@@ -121,12 +121,7 @@ jobs:
         run: ruff format --check app/ tests/
 
       - name: Run mypy type checking
-        run: |
-          set +e
-          mypy app/ --no-error-summary
-          if [ "$?" -ne 0 ]; then
-            echo "::warning::mypy reported errors (advisory; see docs/MYPY_BATCH_STATUS.md)"
-          fi
+        run: mypy app/ --no-error-summary
 
       - name: Type/SQL debt ratchet
         run: |

@@ -108,11 +108,7 @@ function main() {
   const newsItems = readNewsData()
   buildNews(newsItems)
   wrapPages()
-  console.log(
-    'marketing-site build: wrote news.html + news.json, re-wrapped',
-    WRAP_PAGES.length,
-    'pages',
-  )
+  console.log('marketing-site build: wrote news.html + news.json, re-wrapped', WRAP_PAGES.length, 'pages')
 }
 
 main()

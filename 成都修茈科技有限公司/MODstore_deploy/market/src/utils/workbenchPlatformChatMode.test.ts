@@ -1,9 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import {
-  WB_PLATFORM_CHAT_MODE_KEY,
-  readPlatformChatModePreference,
-  writePlatformChatModePreference,
-} from './workbenchPlatformChatMode'
+import { WB_PLATFORM_CHAT_MODE_KEY, readPlatformChatModePreference, writePlatformChatModePreference } from './workbenchPlatformChatMode'
 
 const LEGACY_KEY = 'wb_platform_chat_mode'
 

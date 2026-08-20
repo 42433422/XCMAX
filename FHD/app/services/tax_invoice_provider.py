@@ -16,6 +16,8 @@ def issue_crm_invoice_for_pipeline(doc: dict[str, Any]) -> dict[str, Any]:
     doc = dict(doc)
     uid = int(doc.get("market_user_id") or 0)
     payment = doc.get("payment") if isinstance(doc.get("payment"), dict) else {}
+    if not isinstance(payment, dict):
+        payment = {}
     amount_cents = int(payment.get("contract_amount_cents") or 0)
     inv = create_crm_invoice_for_pipeline(
         uid,

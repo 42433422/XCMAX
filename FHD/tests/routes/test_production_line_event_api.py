@@ -1,3 +1,4 @@
+# mypy: disable-error-code="misc"
 """production_line_event_api — 时间轨/事件轨 HTTP 路由烟测。"""
 
 from __future__ import annotations
@@ -16,7 +17,8 @@ def client() -> TestClient:
     app = FastAPI()
     app.include_router(admin_router)
     app.include_router(xcmax_router)
-    return TestClient(app)
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 def test_event_rail_status(client: TestClient) -> None:

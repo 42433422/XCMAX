@@ -120,18 +120,15 @@ describe('KellaiCustomerInbox', () => {
       created_at: '2026-07-15T10:03:00Z',
     }
     kellaiMocks.createFollowUpTask.mockResolvedValue(followUpTask)
-    kellaiMocks.decideFollowUpTask.mockImplementation(async (
-      _taskId: string,
-      decision: string,
-      outcomeResult: string,
-    ) => ({
+    kellaiMocks.decideFollowUpTask.mockImplementation(async (_taskId: string, decision: string, outcomeResult: string) => ({
       ...followUpTask,
-      status: decision === 'complete'
-        ? outcomeResult === 'failed' ? 'failed' : 'completed'
-        : 'cancelled',
+      status: decision === 'complete' ? (outcomeResult === 'failed' ? 'failed' : 'completed') : 'cancelled',
       outcome_result: decision === 'complete' ? outcomeResult : '',
     }))
-    kellaiMocks.start.mockResolvedValue({ request_id: 'req-1', expires_at: '2026-07-15T10:15:00Z' })
+    kellaiMocks.start.mockResolvedValue({
+      request_id: 'req-1',
+      expires_at: '2026-07-15T10:15:00Z',
+    })
     kellaiMocks.disconnect.mockResolvedValue(undefined)
     ;(window as Window & { xcagiDesktop?: unknown }).xcagiDesktop = undefined
   })
@@ -155,23 +152,21 @@ describe('KellaiCustomerInbox', () => {
     expect(kellaiMocks.conversations).toHaveBeenCalledWith(7, 100)
 
     const messageText = wrapper.find('.kellai-inbox__messages').text()
-    expect(messageText.indexOf('请问什么时候可以交付？')).toBeLessThan(
-      messageText.indexOf('我来确认交付时间。'),
-    )
+    expect(messageText.indexOf('请问什么时候可以交付？')).toBeLessThan(messageText.indexOf('我来确认交付时间。'))
     wrapper.unmount()
   })
 
   it('starts local pairing from the client inbox and opens the Kellai desktop app', async () => {
     kellaiMocks.status.mockResolvedValue({
       state: 'not_connected',
-      available_scopes: [
-        { id: 'customer_profiles.read', label: '读取客户档案', description: '只读客户资料' },
-      ],
+      available_scopes: [{ id: 'customer_profiles.read', label: '读取客户档案', description: '只读客户资料' }],
     })
     const openKellaiDesktop = vi.fn().mockResolvedValue({ ok: true })
-    ;(window as Window & {
-      xcagiDesktop?: { openKellaiDesktop?: () => Promise<{ ok?: boolean }> }
-    }).xcagiDesktop = { openKellaiDesktop }
+    ;(
+      window as Window & {
+        xcagiDesktop?: { openKellaiDesktop?: () => Promise<{ ok?: boolean }> }
+      }
+    ).xcagiDesktop = { openKellaiDesktop }
 
     const wrapper = mount(KellaiCustomerInbox)
     await flushPromises()
@@ -189,9 +184,7 @@ describe('KellaiCustomerInbox', () => {
     const wrapper = mount(KellaiCustomerInbox)
     await flushPromises()
 
-    const generateButton = wrapper
-      .findAll('button')
-      .find((button) => button.text().includes('生成摘要与草稿'))
+    const generateButton = wrapper.findAll('button').find((button) => button.text().includes('生成摘要与草稿'))
     expect(generateButton).toBeTruthy()
     await generateButton!.trigger('click')
     await flushPromises()
@@ -201,9 +194,7 @@ describe('KellaiCustomerInbox', () => {
     expect(wrapper.text()).toContain('您好，我正在核实交付计划')
     expect(wrapper.text()).toContain('等待人工批准')
 
-    const approveButton = wrapper
-      .findAll('button')
-      .find((button) => button.text().includes('批准为手动发送草稿'))
+    const approveButton = wrapper.findAll('button').find((button) => button.text().includes('批准为手动发送草稿'))
     expect(approveButton).toBeTruthy()
     await approveButton!.trigger('click')
     await flushPromises()
@@ -218,15 +209,11 @@ describe('KellaiCustomerInbox', () => {
     const wrapper = mount(KellaiCustomerInbox)
     await flushPromises()
 
-    const generateButton = wrapper
-      .findAll('button')
-      .find((button) => button.text().includes('生成摘要与草稿'))
+    const generateButton = wrapper.findAll('button').find((button) => button.text().includes('生成摘要与草稿'))
     await generateButton!.trigger('click')
     await flushPromises()
 
-    const createTaskButton = wrapper
-      .findAll('button')
-      .find((button) => button.text().includes('批准并创建跟进任务'))
+    const createTaskButton = wrapper.findAll('button').find((button) => button.text().includes('批准并创建跟进任务'))
     expect(createTaskButton).toBeTruthy()
     await createTaskButton!.trigger('click')
     await flushPromises()
@@ -235,9 +222,7 @@ describe('KellaiCustomerInbox', () => {
     expect(wrapper.text()).toContain('客户跟进 · 询问交期')
     expect(wrapper.text()).toContain('不会写回客来来，也不会联系客户')
 
-    const completeButton = wrapper
-      .findAll('button')
-      .find((button) => button.text().includes('完成 · 有效'))
+    const completeButton = wrapper.findAll('button').find((button) => button.text().includes('完成 · 有效'))
     expect(completeButton).toBeTruthy()
     await completeButton!.trigger('click')
     await flushPromises()
@@ -251,9 +236,7 @@ describe('KellaiCustomerInbox', () => {
 
   it('revokes the local read token after explicit customer confirmation', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
-    kellaiMocks.status
-      .mockResolvedValueOnce(connectedStatus)
-      .mockResolvedValueOnce({ state: 'not_connected', available_scopes: [] })
+    kellaiMocks.status.mockResolvedValueOnce(connectedStatus).mockResolvedValueOnce({ state: 'not_connected', available_scopes: [] })
 
     const wrapper = mount(KellaiCustomerInbox)
     await flushPromises()

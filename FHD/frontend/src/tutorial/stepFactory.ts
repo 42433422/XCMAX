@@ -4,11 +4,7 @@ export const createStep = (step: TutorialStep): TutorialStep => ({
   ...step,
 })
 
-export const advancedSidebarNavStep = (
-  viewKey: string,
-  title: string,
-  description: string,
-): TutorialStep =>
+export const advancedSidebarNavStep = (viewKey: string, title: string, description: string): TutorialStep =>
   createStep({
     id: `nav-${viewKey.replace(/[^a-z0-9-]/gi, '-')}`,
     title,
@@ -38,10 +34,7 @@ export const advancedPageFeaturesStep = (
     noAutoSkipWhenMissing: true,
   })
 
-export function pageHighlightToStep(
-  routeName: string,
-  highlight: TutorialPageHighlight,
-): TutorialStep {
+export function pageHighlightToStep(routeName: string, highlight: TutorialPageHighlight): TutorialStep {
   return advancedPageFeaturesStep(
     highlight.idSuffix,
     routeName,
@@ -52,10 +45,7 @@ export function pageHighlightToStep(
   )
 }
 
-export const fallbackPageObserveStep = (
-  routeName: string,
-  menuLabel: string,
-): TutorialStep =>
+export const fallbackPageObserveStep = (routeName: string, menuLabel: string): TutorialStep =>
   createStep({
     id: `page-${routeName}-overview`,
     title: `${menuLabel} · 页面概览`,

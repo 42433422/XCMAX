@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     Boolean,
@@ -30,11 +30,11 @@ class PlanTemplate(Base):
     features_json = Column(Text, default="[]")
     quotas_json = Column(Text, default="{}")
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
     updated_at = Column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
 
@@ -44,10 +44,10 @@ class UserPlan(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     plan_id = Column(String(64), ForeignKey("plan_templates.id"), nullable=False, index=True)
-    started_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    started_at = Column(DateTime, default=lambda: datetime.now(UTC))
     expires_at = Column(DateTime, nullable=True)
     is_active = Column(Boolean, default=True, index=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
     auto_renew = Column(Boolean, default=True, nullable=False)
     renewal_fail_reason = Column(Text, default="")
 
@@ -64,8 +64,8 @@ class Quota(Base):
     reset_at = Column(DateTime, nullable=True)
     updated_at = Column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
 
@@ -78,7 +78,7 @@ class Entitlement(Base):
     entitlement_type = Column(String(32), nullable=False, index=True)
     source_order_id = Column(String(64), default="", index=True)
     metadata_json = Column(Text, default="{}")
-    granted_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    granted_at = Column(DateTime, default=lambda: datetime.now(UTC))
     expires_at = Column(DateTime, nullable=True)
     is_active = Column(Boolean, default=True, index=True)
 
@@ -93,11 +93,11 @@ class RefundRequest(Base):
     reason = Column(Text, nullable=False)
     status = Column(String(16), default="pending", index=True)
     admin_note = Column(Text, default="")
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
     updated_at = Column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
 
@@ -114,8 +114,8 @@ class LlmBillingSettings(Base):
     official_markup_multiplier = Column(Numeric(8, 4), nullable=True)
     updated_at = Column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
 
@@ -138,8 +138,8 @@ class AiModelPrice(Base):
     enabled = Column(Boolean, default=True, index=True)
     updated_at = Column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
 
@@ -162,11 +162,11 @@ class LlmModelCapability(Base):
     l3_reviewer_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     l3_at = Column(DateTime, nullable=True)
     cs_ticket_id = Column(Integer, nullable=True, index=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
     updated_at = Column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
 
@@ -182,7 +182,7 @@ class AuthorEarning(Base):
     platform_fee_rate = Column(Numeric(5, 4), nullable=False, default=0.30)
     net = Column(Numeric(12, 2), nullable=False)
     status = Column(String(16), default="pending", index=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
     settled_at = Column(DateTime, nullable=True)
 
 
@@ -194,7 +194,7 @@ class AuthorWithdrawal(Base):
     amount = Column(Numeric(12, 2), nullable=False)
     status = Column(String(16), default="pending", index=True)
     admin_note = Column(Text, default="")
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
     processed_at = Column(DateTime, nullable=True)
 
 
@@ -218,11 +218,11 @@ class GrayRelease(Base):
     )  # active / paused / promoted / rolled_back
     note = Column(Text, default="")
     author_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
     updated_at = Column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
 
@@ -239,11 +239,11 @@ class ModReview(Base):
     content = Column(Text, default="")
     author_reply = Column(Text, default="")
     is_hidden = Column(Boolean, default=False, index=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
     updated_at = Column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
 
@@ -262,11 +262,11 @@ class Invoice(Base):
     reject_reason = Column(Text, default="")
     pdf_url = Column(String(1024), default="")
     issued_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
     updated_at = Column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
 
@@ -285,5 +285,5 @@ class ReconciliationReport(Base):
     wallet_top_ups = Column(Numeric(12, 2), default=0.0)
     alipay_income = Column(Numeric(12, 2), default=0.0)
     status = Column(String(16), default="draft", index=True)
-    generated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    generated_at = Column(DateTime, default=lambda: datetime.now(UTC))
     confirmed_at = Column(DateTime, nullable=True)

@@ -1,7 +1,9 @@
+# mypy: disable-error-code="attr-defined"
 import os
 import sqlite3
-from app.db.init_db import get_db_path, get_customers_db_path
-from app.utils.path_utils import get_app_data_dir
+
+from app.db.init_db import get_customers_db_path, get_db_path
+from app.utils.path_io.path_utils import get_app_data_dir
 
 
 def test_sqlalchemy_config():
@@ -22,13 +24,13 @@ def test_sqlalchemy_config():
     print(f"📊 customers.db路径: {customers_db_path}")
 
     # 检查文件是否存在
-    print(f"\n📋 数据库文件状态:")
+    print("\n📋 数据库文件状态:")
     print(f"  products.db: {'✅ 存在' if os.path.exists(products_db_path) else '❌ 不存在'}")
     print(f"  customers.db: {'✅ 存在' if os.path.exists(customers_db_path) else '❌ 不存在'}")
 
     # 检查数据库内容
     if os.path.exists(customers_db_path):
-        print(f"\n🔍 检查customers.db内容:")
+        print("\n🔍 检查customers.db内容:")
         conn = sqlite3.connect(customers_db_path)
         cursor = conn.cursor()
 
@@ -52,14 +54,14 @@ def test_sqlalchemy_config():
             if count > 0:
                 cursor.execute(f"SELECT * FROM {table_name} LIMIT 3")
                 rows = cursor.fetchall()
-                print(f"    样本数据:")
+                print("    样本数据:")
                 for i, row in enumerate(rows):
-                    print(f"      {i+1}. {row}")
+                    print(f"      {i + 1}. {row}")
 
         conn.close()
 
     # 检查后端实际使用的数据库
-    print(f"\n🔍 检查后端API使用的数据库:")
+    print("\n🔍 检查后端API使用的数据库:")
 
     # 检查后端API返回的数据是否来自这个数据库
     import requests
@@ -78,7 +80,7 @@ def test_sqlalchemy_config():
                 print(f"    - ID: {customer['id']}, 名称: {customer['customer_name']}")
 
     # 检查是否需要修改数据库路径
-    print(f"\n💡 问题分析:")
+    print("\n💡 问题分析:")
 
     # 检查我们统一的customer数据库路径
     unified_db_path = "e:/FHD/424/customers.db"
@@ -93,17 +95,17 @@ def test_sqlalchemy_config():
         print(f"  活跃购买单位数量: {count}")
         conn.close()
 
-    print(f"\n🎯 解决方案:")
+    print("\n🎯 解决方案:")
     print("  需要修改SQLAlchemy配置，让它使用统一的customer数据库路径")
 
 
 def check_path_utils():
     """检查路径工具函数"""
 
-    print(f"\n🔍 检查路径工具函数")
+    print("\n🔍 检查路径工具函数")
     print("=" * 60)
 
-    from app.utils.path_utils import get_base_dir, get_resource_path
+    from app.utils.path_io.path_utils import get_base_dir, get_resource_path
 
     base_dir = get_base_dir()
     resource_path = get_resource_path("db_seed")
@@ -113,7 +115,7 @@ def check_path_utils():
 
     # 检查db_seed目录
     if os.path.exists(resource_path):
-        print(f"📋 db_seed目录内容:")
+        print("📋 db_seed目录内容:")
         for item in os.listdir(resource_path):
             print(f"  - {item}")
 
@@ -127,7 +129,7 @@ if __name__ == "__main__":
     test_sqlalchemy_config()
     check_path_utils()
 
-    print(f"\n📋 总结:")
+    print("\n📋 总结:")
     print("1. 检查SQLAlchemy使用的数据库路径")
     print("2. 确认后端API数据来源")
     print("3. 修改配置使用统一的customer数据库")

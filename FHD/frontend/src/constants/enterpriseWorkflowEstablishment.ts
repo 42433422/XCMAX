@@ -3,29 +3,29 @@
  * 与管理端内部六部门（O-A 获客 / P-S 软件等）不同；员工从 AI 市场安装后可自动上岗至对应栏位。
  */
 
-export type EnterpriseOrgLayerId = 'tools' | 'execution' | 'service' | 'management'
+export type EnterpriseOrgLayerId = 'tools' | 'execution' | 'service' | 'management';
 
 /** @deprecated 沿用旧名，与 EnterpriseOrgLayerId 相同 */
-export type EnterpriseEstablishmentZoneId = EnterpriseOrgLayerId
+export type EnterpriseEstablishmentZoneId = EnterpriseOrgLayerId;
 
 export type EnterpriseOrgLayer = {
-  id: EnterpriseOrgLayerId
+  id: EnterpriseOrgLayerId;
   /** 企业端编制代号 L1–L4 */
-  code: string
-  label: string
-  desc: string
-  color: string
-}
+  code: string;
+  label: string;
+  desc: string;
+  color: string;
+};
 
-export type EmployeeListing = 'listed' | 'unlisted'
+export type EmployeeListing = 'listed' | 'unlisted';
 export type EnterpriseEmployeeMeta = {
-  id: string
-  label: string
-  enterprise_layer: EnterpriseOrgLayerId
-  listing: EmployeeListing
-  source: string
-  mod_id: string
-}
+  id: string;
+  label: string;
+  enterprise_layer: EnterpriseOrgLayerId;
+  listing: EmployeeListing;
+  source: string;
+  mod_id: string;
+};
 
 // CI SSOT BEGIN
 /** 企业端四层 + 员工层归属/上架状态（来自 config/duty_roster.json，勿手改）。 */
@@ -51,11 +51,11 @@ export const ENTERPRISE_EMPLOYEES: Record<string, EnterpriseEmployeeMeta> = {
 // CI SSOT END
 
 /** @deprecated 与 ENTERPRISE_ORG_LAYERS 相同 */
-export const ENTERPRISE_ESTABLISHMENT_ZONES = ENTERPRISE_ORG_LAYERS
+export const ENTERPRISE_ESTABLISHMENT_ZONES = ENTERPRISE_ORG_LAYERS;
 
-export type EnterpriseEstablishmentZone = EnterpriseOrgLayer
+export type EnterpriseEstablishmentZone = EnterpriseOrgLayer;
 
-const LAYER_ID_SET = new Set<string>(ENTERPRISE_ORG_LAYERS.map((z) => z.id))
+const LAYER_ID_SET = new Set<string>(ENTERPRISE_ORG_LAYERS.map((z) => z.id));
 
 const MANIFEST_LAYER_ALIASES: Record<string, EnterpriseOrgLayerId> = {
   tools: 'tools',
@@ -78,7 +78,7 @@ const MANIFEST_LAYER_ALIASES: Record<string, EnterpriseOrgLayerId> = {
   management_layer: 'management',
   管理层: 'management',
   管理: 'management',
-}
+};
 
 /**
  * 客户行业包 / 别名变体员工的层兜底（不在 SSOT ENTERPRISE_EMPLOYEES 内）。
@@ -92,17 +92,21 @@ const EMP_ID_LAYER: Record<string, EnterpriseOrgLayerId> = {
   attendance_ai: 'service', // taiyangniao-pro 客户包
   coating_ai: 'service', // sz-qsm-pro 客户包
   taiyangniao_attendance: 'service', // 历史别名
-}
+};
 
 function normalizeBlob(empId: string, shortName?: string, panelTitle?: string): string {
-  return `${empId} ${shortName || ''} ${panelTitle || ''}`.toLowerCase().replace(/[_-]+/g, ' ')
+  return `${empId} ${shortName || ''} ${panelTitle || ''}`.toLowerCase().replace(/[_-]+/g, ' ');
 }
 
-export function normalizeEnterpriseOrgLayerId(raw: string | undefined | null): EnterpriseOrgLayerId | null {
-  const key = String(raw || '').trim().toLowerCase()
-  if (!key) return null
-  if (LAYER_ID_SET.has(key)) return key as EnterpriseOrgLayerId
-  return MANIFEST_LAYER_ALIASES[key] ?? MANIFEST_LAYER_ALIASES[String(raw || '').trim()] ?? null
+export function normalizeEnterpriseOrgLayerId(
+  raw: string | undefined | null
+): EnterpriseOrgLayerId | null {
+  const key = String(raw || '')
+    .trim()
+    .toLowerCase();
+  if (!key) return null;
+  if (LAYER_ID_SET.has(key)) return key as EnterpriseOrgLayerId;
+  return MANIFEST_LAYER_ALIASES[key] ?? MANIFEST_LAYER_ALIASES[String(raw || '').trim()] ?? null;
 }
 
 /**
@@ -112,112 +116,120 @@ export function resolveEnterpriseOrgLayer(
   empId: string,
   shortName?: string,
   panelTitle?: string,
-  manifestLayer?: string,
+  manifestLayer?: string
 ): EnterpriseOrgLayerId {
-  const fromManifest = normalizeEnterpriseOrgLayerId(manifestLayer)
-  if (fromManifest) return fromManifest
+  const fromManifest = normalizeEnterpriseOrgLayerId(manifestLayer);
+  if (fromManifest) return fromManifest;
 
   // SSOT 优先：config/duty_roster.json enterprise_employees（查表，非猜测）
-  const rawId = String(empId || '').trim()
-  const ssot = ENTERPRISE_EMPLOYEES[rawId] || ENTERPRISE_EMPLOYEES[rawId.toLowerCase()]
-  if (ssot) return ssot.enterprise_layer
+  const rawId = String(empId || '').trim();
+  const ssot = ENTERPRISE_EMPLOYEES[rawId] || ENTERPRISE_EMPLOYEES[rawId.toLowerCase()];
+  if (ssot) return ssot.enterprise_layer;
 
-  const id = rawId.toLowerCase()
-  if (id && EMP_ID_LAYER[id]) return EMP_ID_LAYER[id]
+  const id = rawId.toLowerCase();
+  if (id && EMP_ID_LAYER[id]) return EMP_ID_LAYER[id];
 
-  const blob = normalizeBlob(empId, shortName, panelTitle)
-  if (/局域网|lan|授权|接入|gate|token|连接|工具|tool|skill|ocr|adapter/.test(blob)) return 'tools'
-  if (/出货|收货|发货|shipment|receipt|delivery|履约|订单|对账|标签|打印|label|print|单据|票据|条码|excel|word|pdf|ppt|csv/.test(blob)) {
-    return 'execution'
+  const blob = normalizeBlob(empId, shortName, panelTitle);
+  if (/局域网|lan|授权|接入|gate|token|连接|工具|tool|skill|ocr|adapter/.test(blob)) return 'tools';
+  if (
+    /出货|收货|发货|shipment|receipt|delivery|履约|订单|对账|标签|打印|label|print|单据|票据|条码|excel|word|pdf|ppt|csv/.test(
+      blob
+    )
+  ) {
+    return 'execution';
   }
-  if (/微信|wechat|消息|触点|客服|沟通|contacts|考勤|attendance|人事|排班|出勤|taiyangniao|太阳鸟/.test(blob)) {
-    return 'service'
+  if (
+    /微信|wechat|消息|触点|客服|沟通|contacts|考勤|attendance|人事|排班|出勤|taiyangniao|太阳鸟/.test(
+      blob
+    )
+  ) {
+    return 'service';
   }
   if (/编排|路由|orchestr|router|监控|自治|管理|workflow_auto|automator|dispatcher/.test(blob)) {
-    return 'management'
+    return 'management';
   }
-  return 'management'
+  return 'management';
 }
 
 /** @deprecated 使用 resolveEnterpriseOrgLayer */
 export function resolveEnterpriseEstablishmentZone(
   empId: string,
   shortName?: string,
-  panelTitle?: string,
+  panelTitle?: string
 ): EnterpriseOrgLayerId {
-  return resolveEnterpriseOrgLayer(empId, shortName, panelTitle)
+  return resolveEnterpriseOrgLayer(empId, shortName, panelTitle);
 }
 
 export function countEnterpriseEstablishmentMaxSlots(
-  desks: { empId: string; shortName?: string; panelTitle?: string }[],
+  desks: { empId: string; shortName?: string; panelTitle?: string }[]
 ): number {
-  const counts = new Map<EnterpriseOrgLayerId, number>()
-  for (const z of ENTERPRISE_ORG_LAYERS) counts.set(z.id, 0)
+  const counts = new Map<EnterpriseOrgLayerId, number>();
+  for (const z of ENTERPRISE_ORG_LAYERS) counts.set(z.id, 0);
   for (const row of desks) {
-    const zid = resolveEnterpriseOrgLayer(row.empId, row.shortName, row.panelTitle)
-    counts.set(zid, (counts.get(zid) ?? 0) + 1)
+    const zid = resolveEnterpriseOrgLayer(row.empId, row.shortName, row.panelTitle);
+    counts.set(zid, (counts.get(zid) ?? 0) + 1);
   }
-  const max = Math.max(0, ...counts.values())
-  return Math.max(1, max)
+  const max = Math.max(0, ...counts.values());
+  return Math.max(1, max);
 }
 
 export function enterpriseOrgLayerById(id: string): EnterpriseOrgLayer | undefined {
-  if (!LAYER_ID_SET.has(id)) return undefined
-  return ENTERPRISE_ORG_LAYERS.find((z) => z.id === id)
+  if (!LAYER_ID_SET.has(id)) return undefined;
+  return ENTERPRISE_ORG_LAYERS.find((z) => z.id === id);
 }
 
 /** @deprecated 使用 enterpriseOrgLayerById */
 export function enterpriseEstablishmentZoneById(id: string): EnterpriseOrgLayer | undefined {
-  return enterpriseOrgLayerById(id)
+  return enterpriseOrgLayerById(id);
 }
 
 export type EnterpriseOrgLayerCatalogInput = {
-  id?: string
-  pkg_id?: string
-  name?: string
-  description?: string
-  artifact?: string
-  store_collection?: string
-  employee?: { id?: string; label?: string }
-  workflow_employees?: Array<{ id?: string; label?: string; enterprise_layer?: string }>
-  enterprise_layer?: string
-}
+  id?: string;
+  pkg_id?: string;
+  name?: string;
+  description?: string;
+  artifact?: string;
+  store_collection?: string;
+  employee?: { id?: string; label?: string };
+  workflow_employees?: Array<{ id?: string; label?: string; enterprise_layer?: string }>;
+  enterprise_layer?: string;
+};
 
 /** AI 市场商品卡：推断所属四部门（用于色标/标签） */
 export function resolveEnterpriseOrgLayerForCatalogItem(
-  row: EnterpriseOrgLayerCatalogInput,
+  row: EnterpriseOrgLayerCatalogInput
 ): EnterpriseOrgLayer | undefined {
-  const top = normalizeEnterpriseOrgLayerId(row.enterprise_layer)
-  if (top) return enterpriseOrgLayerById(top)
+  const top = normalizeEnterpriseOrgLayerId(row.enterprise_layer);
+  if (top) return enterpriseOrgLayerById(top);
 
-  const wf = row.workflow_employees
+  const wf = row.workflow_employees;
   if (Array.isArray(wf) && wf.length) {
     for (const e of wf) {
-      const layer = normalizeEnterpriseOrgLayerId(e.enterprise_layer)
-      if (layer) return enterpriseOrgLayerById(layer)
+      const layer = normalizeEnterpriseOrgLayerId(e.enterprise_layer);
+      if (layer) return enterpriseOrgLayerById(layer);
       const inferred = resolveEnterpriseOrgLayer(
         String(e.id || ''),
         String(e.label || ''),
         '',
-        e.enterprise_layer,
-      )
-      return enterpriseOrgLayerById(inferred)
+        e.enterprise_layer
+      );
+      return enterpriseOrgLayerById(inferred);
     }
   }
 
-  const emp = row.employee
+  const emp = row.employee;
   if (emp && typeof emp === 'object') {
     const inferred = resolveEnterpriseOrgLayer(
       String(emp.id || row.id || row.pkg_id || ''),
       String(emp.label || row.name || ''),
-      row.description,
-    )
-    return enterpriseOrgLayerById(inferred)
+      row.description
+    );
+    return enterpriseOrgLayerById(inferred);
   }
 
   const blob = `${row.id || ''} ${row.pkg_id || ''} ${row.name || ''} ${row.description || ''}`
     .toLowerCase()
-    .replace(/[_-]+/g, ' ')
-  const inferred = resolveEnterpriseOrgLayer(blob, row.name, row.description)
-  return enterpriseOrgLayerById(inferred)
+    .replace(/[_-]+/g, ' ');
+  const inferred = resolveEnterpriseOrgLayer(blob, row.name, row.description);
+  return enterpriseOrgLayerById(inferred);
 }

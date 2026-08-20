@@ -153,7 +153,11 @@ describe('TemplateMediaPreview.coverage', () => {
   })
 
   it('isVirtualPlaceholder is false when resolvedMediaKind is label', () => {
-    const wrapper = mountComponent({ virtual: true, mediaKind: '', template: { category: 'label' } })
+    const wrapper = mountComponent({
+      virtual: true,
+      mediaKind: '',
+      template: { category: 'label' },
+    })
     expect((wrapper.vm as any).isVirtualPlaceholder).toBe(false)
   })
 
@@ -169,7 +173,11 @@ describe('TemplateMediaPreview.coverage', () => {
   })
 
   it('virtual placeholder shows required terms when provided', () => {
-    const wrapper = mountComponent({ virtual: true, mediaKind: 'excel', requiredTerms: ['品名', '规格'] })
+    const wrapper = mountComponent({
+      virtual: true,
+      mediaKind: 'excel',
+      requiredTerms: ['品名', '规格'],
+    })
     expect(wrapper.find('.tp-placeholder-terms').text()).toContain('品名')
     expect(wrapper.find('.tp-placeholder-terms').text()).toContain('规格')
   })
@@ -221,7 +229,12 @@ describe('TemplateMediaPreview.coverage', () => {
   })
 
   it('passes labelWidth and labelHeight to LabelPreview', () => {
-    const wrapper = mountComponent({ mediaKind: '', template: { category: 'label' }, labelWidth: 400, labelHeight: 300 })
+    const wrapper = mountComponent({
+      mediaKind: '',
+      template: { category: 'label' },
+      labelWidth: 400,
+      labelHeight: 300,
+    })
     const label = wrapper.findComponent({ name: 'LabelPreview' })
     expect(label.props('width')).toBe(400)
     expect(label.props('height')).toBe(300)

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import {
   LS_DB_READ_TOKEN,
   LS_DB_WRITE_TOKEN,
@@ -363,45 +363,31 @@ describe('dbTokenHeaders', () => {
 
   describe('combinedRequestUrl', () => {
     it('returns url when it is absolute http URL', () => {
-      expect(combinedRequestUrl({ url: 'http://example.com/api/test' })).toBe(
-        'http://example.com/api/test',
-      )
+      expect(combinedRequestUrl({ url: 'http://example.com/api/test' })).toBe('http://example.com/api/test')
     })
 
     it('returns url when it is absolute https URL', () => {
-      expect(combinedRequestUrl({ url: 'https://example.com/api/test' })).toBe(
-        'https://example.com/api/test',
-      )
+      expect(combinedRequestUrl({ url: 'https://example.com/api/test' })).toBe('https://example.com/api/test')
     })
 
     it('returns url when it is absolute HTTP URL (uppercase)', () => {
-      expect(combinedRequestUrl({ url: 'HTTP://example.com/api/test' })).toBe(
-        'HTTP://example.com/api/test',
-      )
+      expect(combinedRequestUrl({ url: 'HTTP://example.com/api/test' })).toBe('HTTP://example.com/api/test')
     })
 
     it('returns url when it is absolute HTTPS URL (uppercase)', () => {
-      expect(combinedRequestUrl({ url: 'HTTPS://example.com/api/test' })).toBe(
-        'HTTPS://example.com/api/test',
-      )
+      expect(combinedRequestUrl({ url: 'HTTPS://example.com/api/test' })).toBe('HTTPS://example.com/api/test')
     })
 
     it('combines baseURL and url with leading slash in url', () => {
-      expect(combinedRequestUrl({ baseURL: 'https://api.example.com', url: '/api/test' })).toBe(
-        'https://api.example.com/api/test',
-      )
+      expect(combinedRequestUrl({ baseURL: 'https://api.example.com', url: '/api/test' })).toBe('https://api.example.com/api/test')
     })
 
     it('combines baseURL and url without leading slash in url', () => {
-      expect(combinedRequestUrl({ baseURL: 'https://api.example.com', url: 'api/test' })).toBe(
-        'https://api.example.com/api/test',
-      )
+      expect(combinedRequestUrl({ baseURL: 'https://api.example.com', url: 'api/test' })).toBe('https://api.example.com/api/test')
     })
 
     it('strips trailing slash from baseURL', () => {
-      expect(combinedRequestUrl({ baseURL: 'https://api.example.com/', url: '/api/test' })).toBe(
-        'https://api.example.com/api/test',
-      )
+      expect(combinedRequestUrl({ baseURL: 'https://api.example.com/', url: '/api/test' })).toBe('https://api.example.com/api/test')
     })
 
     it('returns just path when baseURL is empty', () => {
@@ -427,9 +413,7 @@ describe('dbTokenHeaders', () => {
     })
 
     it('returns url when url is empty but baseURL is set (empty path with slash)', () => {
-      expect(combinedRequestUrl({ baseURL: 'https://api.example.com', url: '' })).toBe(
-        'https://api.example.com/',
-      )
+      expect(combinedRequestUrl({ baseURL: 'https://api.example.com', url: '' })).toBe('https://api.example.com/')
     })
 
     it('handles relative URL with no slash and no baseURL', () => {
@@ -437,15 +421,11 @@ describe('dbTokenHeaders', () => {
     })
 
     it('handles complex baseURL with path', () => {
-      expect(
-        combinedRequestUrl({ baseURL: 'https://api.example.com/v1', url: '/users' }),
-      ).toBe('https://api.example.com/v1/users')
+      expect(combinedRequestUrl({ baseURL: 'https://api.example.com/v1', url: '/users' })).toBe('https://api.example.com/v1/users')
     })
 
     it('handles complex baseURL with path and trailing slash', () => {
-      expect(
-        combinedRequestUrl({ baseURL: 'https://api.example.com/v1/', url: '/users' }),
-      ).toBe('https://api.example.com/v1/users')
+      expect(combinedRequestUrl({ baseURL: 'https://api.example.com/v1/', url: '/users' })).toBe('https://api.example.com/v1/users')
     })
   })
 

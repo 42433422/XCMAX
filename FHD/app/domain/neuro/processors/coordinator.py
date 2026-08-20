@@ -148,7 +148,7 @@ class ProcessorCoordinator:
         self,
         text: str,
         user_id: str = "",
-        context: dict[str, Any] = None,
+        context: dict[str, Any] | None = None,
     ) -> ProcessingReport:
         """
         处理用户输入
@@ -372,7 +372,7 @@ class ProcessorCoordinator:
 async def process_intent(
     text: str,
     user_id: str = "",
-    context: dict[str, Any] = None,
+    context: dict[str, Any] | None = None,
 ) -> ProcessingReport:
     """
     便捷函数：处理意图

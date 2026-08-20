@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 from app.infrastructure.llm import invoke
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -184,7 +184,7 @@ def _current_trace_id() -> str | None:
         from app.neuro_bus.tracer import current_trace
 
         return current_trace.get()
-    except Exception:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:  # noqa: BLE001
         return None
 
 
@@ -205,7 +205,7 @@ def complete_structured_sync(
     def _runner() -> None:
         try:
             box["result"] = asyncio.run(complete_structured(messages, **kwargs))
-        except BaseException as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:
             box["error"] = exc
 
     thread = threading.Thread(target=_runner, daemon=True)

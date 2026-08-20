@@ -109,17 +109,14 @@ def main() -> int:
         print("Workflow:", graph.workflow_id)
         for n in graph.nodes:
             print(
-                f"  {n.node_id:8s} {n.node_type:8s} layer={n.layer or '-':6s} "
-                f"code_skill_ref={n.code_skill_ref or '-'}"
+                f"  {n.node_id:8s} {n.node_type:8s} layer={n.layer or '-':6s} code_skill_ref={n.code_skill_ref or '-'}"
             )
         print("Code skills created:", report.code_skills_created)
 
         result = coder.execute(graph, {"text": "hello"})
         print("\nWorkflow run success:", result.success, "duration_ms:", result.duration_ms)
         for outcome in result.outcomes:
-            print(
-                f"  {outcome.node_id} -> stage={outcome.stage} output={outcome.output}"
-            )
+            print(f"  {outcome.node_id} -> stage={outcome.stage} output={outcome.output}")
         print("Final context:", json.dumps(result.context, ensure_ascii=False))
     return 0
 

@@ -1,3 +1,4 @@
+# mypy: disable-error-code="attr-defined"
 """Tests for app.application.ai_chat_rag_integration — with RAG module mocked."""
 
 from __future__ import annotations

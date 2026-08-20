@@ -93,6 +93,8 @@ from langgraph.types import Command, Send, StreamWriter
 from pydantic import BaseModel, ValidationError
 from typing_extensions import TypeVar, Unpack
 
+from langgraph.prebuilt._exception_policy import BOUNDARY_ERRORS
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -332,7 +334,7 @@ def msg_content_output(output: Any) -> str | list[dict]:
     # any existing ToolNode usage.
     try:
         return json.dumps(output, ensure_ascii=False)
-    except Exception:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         return str(output)
 
 
@@ -981,7 +983,7 @@ class ToolNode(RunnableCallable):
         # (2 and 3 can happen in a "supervisor w/ tools" multi-agent architecture)
         except GraphBubbleUp:
             raise
-        except Exception as e:
+        except BOUNDARY_ERRORS as e:
             # Determine which exception types are handled
             handled_types: tuple[type[Exception], ...]
             if isinstance(self._handle_tool_errors, type) and issubclass(
@@ -1053,7 +1055,7 @@ class ToolNode(RunnableCallable):
         # Call wrapper with request and execute callable
         try:
             return self._wrap_tool_call(tool_request, execute)
-        except Exception as e:
+        except BOUNDARY_ERRORS as e:
             # Wrapper threw an exception
             if not self._handle_tool_errors:
                 raise
@@ -1128,7 +1130,7 @@ class ToolNode(RunnableCallable):
         # (2 and 3 can happen in a "supervisor w/ tools" multi-agent architecture)
         except GraphBubbleUp:
             raise
-        except Exception as e:
+        except BOUNDARY_ERRORS as e:
             # Determine which exception types are handled
             handled_types: tuple[type[Exception], ...]
             if isinstance(self._handle_tool_errors, type) and issubclass(
@@ -1208,7 +1210,7 @@ class ToolNode(RunnableCallable):
             # None check was performed above already
             self._wrap_tool_call = cast("ToolCallWrapper", self._wrap_tool_call)
             return self._wrap_tool_call(tool_request, _sync_execute)
-        except Exception as e:
+        except BOUNDARY_ERRORS as e:
             # Wrapper threw an exception
             if not self._handle_tool_errors:
                 raise

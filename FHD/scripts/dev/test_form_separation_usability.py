@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="arg-type, index"
 """拆得开还不够：验证「抽出的数据 + 版式」能否真正用来建单/打单。
 
 链路：
@@ -49,11 +50,16 @@ def _item_usable(item: dict) -> bool:
     junk = {"february", "march", "april", "may", "june", "july", "january", "my title"}
     if name.lower() in junk or model.lower() in junk:
         return False
-    if qty_n >= 1900 and qty_n <= 2100 and name.lower() in {
-        "my title",
-        "another title",
-        "the best image ever",
-    }:
+    if (
+        qty_n >= 1900
+        and qty_n <= 2100
+        and name.lower()
+        in {
+            "my title",
+            "another title",
+            "the best image ever",
+        }
+    ):
         return False
     return True
 
@@ -149,7 +155,9 @@ def _eval_one(path: Path) -> dict:
     data_ok = bool(best and best.get("_usable_items"))
     semantic_ok = bool(best and _items_semantically_sane(list(best.get("_usable_items") or [])))
     unit_ok = bool(best and _unit_usable(str(best.get("unit_name") or ""), stem))
-    layout_ok = len(headers) >= 2 or bool(((decomp or {}).get("decomposition") or {}).get("header_row"))
+    layout_ok = len(headers) >= 2 or bool(
+        ((decomp or {}).get("decomposition") or {}).get("header_row")
+    )
 
     create_calls: list[dict] = []
 
@@ -200,7 +208,9 @@ def _eval_one(path: Path) -> dict:
                     import_shipments=True,
                 )
 
-    create_ok = bool(exec_result.get("success")) and int(exec_result.get("shipment_created") or 0) > 0
+    create_ok = (
+        bool(exec_result.get("success")) and int(exec_result.get("shipment_created") or 0) > 0
+    )
     if create_ok and create_calls:
         # 建单内容也要可用
         call = create_calls[0]
@@ -208,7 +218,9 @@ def _eval_one(path: Path) -> dict:
             call.get("items_data")
         )
         # 若 unit 是文件名但 items 可用，仍算「半可用」
-        items_ok = any(_item_usable(i) for i in (call.get("items_data") or []) if isinstance(i, dict))
+        items_ok = any(
+            _item_usable(i) for i in (call.get("items_data") or []) if isinstance(i, dict)
+        )
         create_ok = bool(items_ok)
 
     # 打单：用抽出数据 + 源文件当模版

@@ -69,7 +69,9 @@ describe('whisper worker coverage', () => {
     expect(messages).toContainEqual({ type: 'progress', data: { status: 'loading' } })
     expect(messages).toContainEqual({ type: 'ready' })
 
-    await handler({ data: { type: 'transcribe', jobId: 7, data: { audio: new Float32Array([0.1]) } } } as MessageEvent)
+    await handler({
+      data: { type: 'transcribe', jobId: 7, data: { audio: new Float32Array([0.1]) } },
+    } as MessageEvent)
     expect(transcriber).toHaveBeenCalledWith(new Float32Array([0.1]), {
       language: 'chinese',
       task: 'transcribe',

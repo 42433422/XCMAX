@@ -290,7 +290,7 @@ def mock_etl_metrics(monkeypatch):
 @pytest.fixture
 def app_data(tmp_path, monkeypatch):
     for attr in (
-        "app.utils.path_utils.get_app_data_dir",
+        "app.utils.path_io.path_utils.get_app_data_dir",
         "app.application.etl.service_targets.get_app_data_dir",
         "app.application.etl.service_uploads.get_app_data_dir",
         "app.application.etl.service_history.get_app_data_dir",
@@ -1797,6 +1797,7 @@ class TestShipmentTemplateService:
         run = _make_run(
             etl_db, upload_id="upx", target_type="shipment_records", status="preview_ready"
         )
+        run.file_sha256 = "a" * 64
         run.source_features_json = dump_json(
             {
                 "regions": [

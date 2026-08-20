@@ -90,7 +90,7 @@ def main() -> int:
 
         for row in (
             session.query(UserPlan)
-            .filter(UserPlan.user_id == user.id, UserPlan.is_active == True)
+            .filter(UserPlan.user_id == user.id, UserPlan.is_active.is_(True))
             .all()
         ):
             row.is_active = False

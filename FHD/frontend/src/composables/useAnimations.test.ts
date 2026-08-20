@@ -1,12 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { defineComponent, ref, h } from 'vue'
 import { mount } from '@vue/test-utils'
-import {
-  useAnimation,
-  useCSSAnimation,
-  useTransition,
-  easingFunctions,
-} from './useAnimations'
+import { useAnimation, useCSSAnimation, useTransition, easingFunctions } from './useAnimations'
 
 let frames: Array<(t: number) => void> = []
 
@@ -57,7 +52,7 @@ describe('easingFunctions', () => {
 function withComponent(setup: () => Record<string, unknown>) {
   const Comp = defineComponent({
     setup() {
-      const api = setup()
+      setup()
       return () => h('div')
     },
   })
@@ -71,7 +66,12 @@ describe('useAnimation', () => {
     const onComplete = vi.fn()
     let api: ReturnType<typeof useAnimation>
     withComponent(() => {
-      api = useAnimation(el, { duration: 100, onFrame, onComplete, easing: easingFunctions.linear })
+      api = useAnimation(el, {
+        duration: 100,
+        onFrame,
+        onComplete,
+        easing: easingFunctions.linear,
+      })
       return {}
     })
     api!.startAnimation()
@@ -168,7 +168,12 @@ describe('useTransition', () => {
     const onComplete = vi.fn()
     let api: ReturnType<typeof useTransition>
     withComponent(() => {
-      api = useTransition(el, { property: 'opacity', unit: '', easing: easingFunctions.linear, onComplete })
+      api = useTransition(el, {
+        property: 'opacity',
+        unit: '',
+        easing: easingFunctions.linear,
+        onComplete,
+      })
       return {}
     })
     api!.transition(1, 100)

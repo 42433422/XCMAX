@@ -24,7 +24,7 @@
 
 const REDACTION_PATTERNS: Array<{ kind: string; re: RegExp }> = [
   // 邮箱
-  { kind: 'EMAIL', re: /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g },
+  { kind: 'EMAIL', re: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g },
   // 中国大陆手机号
   { kind: 'PHONE_CN', re: /\b1[3-9]\d{9}\b/g },
   // 18 位身份证
@@ -34,11 +34,11 @@ const REDACTION_PATTERNS: Array<{ kind: string; re: RegExp }> = [
   // 银行卡号启发式：13-19 位连续数字（含空格分隔）
   { kind: 'BANK_CARD', re: /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{3,4}\b/g },
   // JWT：header.payload.signature
-  { kind: 'JWT', re: /\beyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+/g },
+  { kind: 'JWT', re: /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g },
   // API Key / Bearer：长度 ≥ 32 的连续 base64url/hex 段
   {
     kind: 'API_KEY',
-    re: /\b(?:sk-|pk-|Bearer\s+)[A-Za-z0-9_\-]{16,}/g,
+    re: /\b(?:sk-|pk-|Bearer\s+)[A-Za-z0-9_-]{16,}/g,
   },
 ]
 

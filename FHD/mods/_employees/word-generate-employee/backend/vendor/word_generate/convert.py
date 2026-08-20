@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
-from app.application.office_plaintext_generate import resolve_word_document_spec
+from app.mod_sdk.errors import RECOVERABLE_ERRORS
+from app.mod_sdk.host_services import resolve_word_document_spec
 
 
 def _style_for_paragraph(doc: Any, p: Dict[str, Any]) -> Optional[str]:
@@ -43,14 +43,15 @@ def _apply_run_format(run: Any, run_data: Dict[str, Any]) -> None:
                 try:
                     run.font.name = fn[key]
                     break
-                except Exception:
+                except RECOVERABLE_ERRORS:
                     pass
     half = style.get("font_size_half_pt")
     if half is not None:
         try:
             from docx.shared import Pt
+
             run.font.size = Pt(int(half) / 2)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
 
 
@@ -141,7 +142,9 @@ async def convert_file(
     except ImportError as exc:
         raise RuntimeError("python-docx 未安装，无法生成 Word") from exc
 
-    spec, _warnings = await resolve_word_document_spec(src_path, payload or {}, ctx or {}, rule_spec or {})
+    spec, _warnings = await resolve_word_document_spec(
+        src_path, payload or {}, ctx or {}, rule_spec or {}
+    )
     if not (spec.get("paragraphs") or spec.get("blocks") or spec.get("plain_text")):
         raise ValueError("缺少 paragraphs/blocks/plain_text，无法生成 docx")
 

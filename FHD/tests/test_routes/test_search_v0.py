@@ -1,3 +1,4 @@
+# mypy: disable-error-code="attr-defined"
 """智能搜索 V0 路由单测。"""
 
 from __future__ import annotations

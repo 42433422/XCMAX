@@ -4,11 +4,7 @@ import { useModsStore } from '@/stores/mods'
 import { useWorkflowAiEmployeesStore } from '@/stores/workflowAiEmployees'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import { useStartupAuth, type StartupAuthResult } from '@/composables/useStartupAuth'
-import {
-  STARTUP_MOD_FETCH_CAP_MS,
-  useStartupSplash,
-  extractModNames,
-} from '@/composables/useStartupSplash'
+import { STARTUP_MOD_FETCH_CAP_MS, useStartupSplash, extractModNames } from '@/composables/useStartupSplash'
 import { useAppShellBridge } from '@/composables/useAppShellBridge'
 import { useXcmaxSync } from '@/composables/useXcmaxSync'
 
@@ -22,19 +18,12 @@ export function useAppBoot() {
   const router = useRouter()
   const modsStore = useModsStore()
 
-  const isSandboxMode =
-    typeof window !== 'undefined' &&
-    new URLSearchParams(window.location.search).has('sandbox')
+  const isSandboxMode = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('sandbox')
   const hideChrome = computed(() => route.meta?.hideChrome === true)
 
   function isPublicEntryRoute(r = route) {
     const name = String(r?.name || '')
-    return (
-      name === 'login' ||
-      name === 'lan-gate' ||
-      name === 'product-onboarding' ||
-      r?.meta?.hideChrome === true
-    )
+    return name === 'login' || name === 'lan-gate' || name === 'product-onboarding' || r?.meta?.hideChrome === true
   }
 
   /** 产品决策：取消开屏加载动画，启动后直接进主界面（仍保留 Mod/鉴权初始化） */
@@ -94,7 +83,7 @@ export function useAppBoot() {
         xcmaxSync.start()
       }
     },
-    { immediate: true }
+    { immediate: true },
   )
 
   onMounted(async () => {
@@ -144,9 +133,7 @@ export function useAppBoot() {
     ])
 
     void loadStartupMods.finally(() => {
-      modsStore.applyLoadingStatusPreview(
-        startupModPreview.value as Array<{ id: string; name?: string; version?: string }>
-      )
+      modsStore.applyLoadingStatusPreview(startupModPreview.value as Array<{ id: string; name?: string; version?: string }>)
     })
 
     const finishSplash = () => completeStartupSplash(ensureStartupAuthenticated)
@@ -164,9 +151,7 @@ export function useAppBoot() {
 
         await modWaitOrCap
         try {
-          modsStore.applyLoadingStatusPreview(
-            startupModPreview.value as Array<{ id: string; name?: string; version?: string }>
-          )
+          modsStore.applyLoadingStatusPreview(startupModPreview.value as Array<{ id: string; name?: string; version?: string }>)
         } catch (e) {
           console.warn('[useAppBoot] applyLoadingStatusPreview:', e)
         }
@@ -174,8 +159,7 @@ export function useAppBoot() {
         try {
           await modsStore.initialize(true, {
             entitledModIds: authResult.entitledModIds,
-            forceFromEntitlements:
-              authResult.ok && authResult.entitledModIds.length > 0,
+            forceFromEntitlements: authResult.ok && authResult.entitledModIds.length > 0,
             accountUsername: authResult.accountUsername,
           })
           if (modsStore.clientModsUiOff) {

@@ -51,3 +51,19 @@ def test_ai_self_heal_workflow_run_names_are_not_path_prefixed() -> None:
     assert 'workflows: ["CI/CD Pipeline", "CI - Backend Python", "Source Governance"' in body
     assert '"cvm-autonomy-watcher"' in body
     assert '"FHD/CI/CD Pipeline"' not in body
+
+
+def test_corporate_component_workflows_are_published_with_root_paths() -> None:
+    root_frontend = publisher._render_corp(
+        REPO_ROOT / "成都修茈科技有限公司" / ".github" / "workflows" / "ci-root-frontend.yml"
+    )
+    vibe = publisher._render_corp(
+        REPO_ROOT / "成都修茈科技有限公司" / ".github" / "workflows" / "ci-vibe-coding.yml"
+    )
+
+    assert root_frontend is not None
+    assert vibe is not None
+    assert "working-directory: 成都修茈科技有限公司" in root_frontend[1]
+    assert "cache-dependency-path: 成都修茈科技有限公司/package-lock.json" in root_frontend[1]
+    assert "working-directory: 成都修茈科技有限公司/vibe-coding" in vibe[1]
+    assert "- '成都修茈科技有限公司/vibe-coding/**'" in vibe[1]

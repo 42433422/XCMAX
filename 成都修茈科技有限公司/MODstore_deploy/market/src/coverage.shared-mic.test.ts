@@ -10,7 +10,10 @@ class TestMediaStream {
   }
 }
 
-const mockStarts: Array<{ handlers: { onAudioData: (pcm: Float32Array) => void; onAudioLevel?: (level: number) => void }; stream?: MediaStream }> = []
+const mockStarts: Array<{
+  handlers: { onAudioData: (pcm: Float32Array) => void; onAudioLevel?: (level: number) => void }
+  stream?: MediaStream
+}> = []
 const mockStops: unknown[] = []
 const mockWakes: unknown[] = []
 
@@ -27,10 +30,16 @@ vi.mock('./composables/asr/audioCapture', () => {
       this.active = false
       mockStops.push(this)
     })
-    handlers: { onAudioData: (pcm: Float32Array) => void; onAudioLevel?: (level: number) => void } | null = null
+    handlers: {
+      onAudioData: (pcm: Float32Array) => void
+      onAudioLevel?: (level: number) => void
+    } | null = null
 
     async start(
-      handlers: { onAudioData: (pcm: Float32Array) => void; onAudioLevel?: (level: number) => void },
+      handlers: {
+        onAudioData: (pcm: Float32Array) => void
+        onAudioLevel?: (level: number) => void
+      },
       stream?: MediaStream,
     ) {
       this.handlers = handlers
@@ -99,20 +108,14 @@ describe('shared mic and preflight coverage', () => {
   it('requests mic preflight, falls back to loose constraints, and clears pending state', async () => {
     vi.stubGlobal('MediaStream', TestMediaStream)
     const stream = new TestMediaStream() as unknown as MediaStream
-    const getUserMedia = vi.fn()
-      .mockRejectedValueOnce(new Error('strict rejected'))
-      .mockResolvedValueOnce(stream)
+    const getUserMedia = vi.fn().mockRejectedValueOnce(new Error('strict rejected')).mockResolvedValueOnce(stream)
     Object.defineProperty(navigator, 'mediaDevices', {
       value: { getUserMedia },
       configurable: true,
     })
 
     const { releaseHeldMicStream } = await import('./composables/asr/sharedMicCapture')
-    const {
-      requestMicInUserGesture,
-      takeMicPreflight,
-      clearMicPreflight,
-    } = await import('./composables/asr/micPreflight')
+    const { requestMicInUserGesture, takeMicPreflight, clearMicPreflight } = await import('./composables/asr/micPreflight')
 
     const pending = requestMicInUserGesture()
     await expect(pending).resolves.toBe(stream)

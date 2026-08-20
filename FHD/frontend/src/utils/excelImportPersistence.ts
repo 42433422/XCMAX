@@ -1,6 +1,6 @@
 /**
  * Excel 导入持久化工具
- * 
+ *
  * 解决聊天记录中断导致 pending_import_id 丢失的问题
  * 将待导入的 Excel 数据存储在 sessionStorage 中
  */
@@ -31,10 +31,10 @@ export function savePendingImport(data: PendingExcelImport): void {
   try {
     const key = STORAGE_PREFIX + data.pending_id
     sessionStorage.setItem(key, JSON.stringify(data))
-    
+
     // 同时保存到 localStorage 作为备份（防止页面刷新丢失）
     localStorage.setItem(key, JSON.stringify(data))
-    
+
     console.log('[ExcelImport] 保存待导入数据:', data.pending_id)
   } catch (error) {
     console.error('[ExcelImport] 保存失败:', error)
@@ -52,7 +52,7 @@ export function getPendingImport(pending_id: string): PendingExcelImport | null 
     if (sessionData) {
       return JSON.parse(sessionData)
     }
-    
+
     // 如果 sessionStorage 没有，尝试从 localStorage 读取
     const localData = localStorage.getItem(key)
     if (localData) {
@@ -61,7 +61,7 @@ export function getPendingImport(pending_id: string): PendingExcelImport | null 
       sessionStorage.setItem(key, localData)
       return parsed
     }
-    
+
     return null
   } catch (error) {
     console.error('[ExcelImport] 读取失败:', error)
@@ -90,7 +90,7 @@ export function cleanupExpiredImports(): void {
   try {
     const now = Date.now()
     const EXPIRY_MS = 24 * 60 * 60 * 1000 // 24 小时
-    
+
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i)
       if (key && key.startsWith(STORAGE_PREFIX)) {
@@ -104,7 +104,7 @@ export function cleanupExpiredImports(): void {
               console.log('[ExcelImport] 清理过期数据:', key)
             }
           }
-        } catch (e) {
+        } catch {
           // 忽略解析错误的数据
         }
       }
@@ -120,7 +120,7 @@ export function cleanupExpiredImports(): void {
 export function getAllPendingImports(): PendingExcelImport[] {
   try {
     const imports: PendingExcelImport[] = []
-    
+
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i)
       if (key && key.startsWith(STORAGE_PREFIX)) {
@@ -129,12 +129,12 @@ export function getAllPendingImports(): PendingExcelImport[] {
           if (data && data.pending_id) {
             imports.push(data)
           }
-        } catch (e) {
+        } catch {
           // 忽略解析错误的数据
         }
       }
     }
-    
+
     return imports.sort((a, b) => b.created_at - a.created_at)
   } catch (error) {
     console.error('[ExcelImport] 获取列表失败:', error)

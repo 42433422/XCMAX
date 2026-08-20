@@ -1,15 +1,17 @@
-# -*- coding: utf-8 -*-
-import sys
-import os
+# mypy: disable-error-code="attr-defined, import-not-found"
 import logging
+import os
+import sys
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logging.basicConfig(level=logging.DEBUG)
 
 sys.path.insert(0, r"E:\FHD\XCAGI")
 
-from app.db.session import get_db
 from app.db.models import WechatContact
-from app.utils.path_utils import get_resource_path
+from app.db.session import get_db
+from app.utils.path_io.path_utils import get_resource_path
 
 with get_db() as db:
     contact = db.query(WechatContact).filter(WechatContact.id == 1).first()
@@ -45,7 +47,7 @@ with get_db() as db:
                     f"decompress result type={type(result)}, result={repr(result[:50]) if result else None}"
                 )
             conn.close()
-        except Exception as e:
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             print(f"Error: {e}")
             import traceback
 

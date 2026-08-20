@@ -59,7 +59,7 @@ class AgentContext:
     notes: str = ""
 
     @classmethod
-    def empty(cls) -> "AgentContext":
+    def empty(cls) -> AgentContext:
         return cls()
 
     def to_dict(self) -> dict[str, Any]:
@@ -76,7 +76,7 @@ class AgentContext:
         return compact
 
     @classmethod
-    def from_dict(cls, raw: dict[str, Any] | None) -> "AgentContext":
+    def from_dict(cls, raw: dict[str, Any] | None) -> AgentContext:
         if not isinstance(raw, dict):
             return cls()
         sel_raw = raw.get("selection")
@@ -106,7 +106,7 @@ class AgentContext:
         *,
         max_lines: int = MAX_DIFF_LINES,
         include_recent_commits: bool = True,
-    ) -> "AgentContext":
+    ) -> AgentContext:
         """Best-effort context inferred from ``git status`` / ``git diff``.
 
         P1 enhancement: also populate :attr:`recent_edits` from the last
@@ -168,7 +168,7 @@ class AgentContext:
             ctx.recent_edits = _git_recent_edits(root_path, limit=MAX_RECENT_EDITS)
         return ctx
 
-    def merge(self, other: "AgentContext") -> "AgentContext":
+    def merge(self, other: AgentContext) -> AgentContext:
         """Combine ``self`` (high-priority) with ``other`` (fallback).
 
         Scalar fields take ``self``'s value if non-empty; list fields are
@@ -197,16 +197,11 @@ class AgentContext:
             cursor_line=first(self.cursor_line, other.cursor_line),
             cursor_column=first(self.cursor_column, other.cursor_column),
             selection=first(self.selection, other.selection),
-            recent_files=dedupe(self.recent_files, other.recent_files)[
-                :MAX_RECENT_FILES
-            ],
+            recent_files=dedupe(self.recent_files, other.recent_files)[:MAX_RECENT_FILES],
             open_files=dedupe(self.open_files, other.open_files)[:MAX_OPEN_FILES],
             recent_edits=(self.recent_edits or other.recent_edits)[:MAX_RECENT_EDITS],
-            shell_output=_truncate_tail(
-                first(self.shell_output, other.shell_output), MAX_SHELL_BUDGET
-            ),
-            git_status={**(other.git_status or {}), **(self.git_status or {})}
-            or None,
+            shell_output=_truncate_tail(first(self.shell_output, other.shell_output), MAX_SHELL_BUDGET),
+            git_status={**(other.git_status or {}), **(self.git_status or {})} or None,
             notes=first(self.notes, other.notes),
         )
 
@@ -272,12 +267,8 @@ class AgentContext:
         if "recent_edits" in compact:
             compact["recent_edits"] = compact["recent_edits"][:MAX_RECENT_EDITS]
         if "shell_output" in compact:
-            compact["shell_output"] = _truncate_tail(
-                compact["shell_output"], MAX_SHELL_BUDGET
-            )
-        return "## 当前编辑器上下文\n```json\n" + json.dumps(
-            compact, ensure_ascii=False, indent=2
-        ) + "\n```"
+            compact["shell_output"] = _truncate_tail(compact["shell_output"], MAX_SHELL_BUDGET)
+        return "## 当前编辑器上下文\n```json\n" + json.dumps(compact, ensure_ascii=False, indent=2) + "\n```"
 
 
 def _git_recent_edits(root: Path, *, limit: int) -> list[dict[str, Any]]:

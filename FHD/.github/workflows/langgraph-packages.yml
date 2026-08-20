@@ -1,0 +1,59 @@
+name: LangGraph Embedded Packages
+
+on:
+  pull_request:
+    paths:
+      - "packages/xcagi_langgraph_*/**"
+      - ".github/workflows/langgraph-packages.yml"
+  push:
+    branches: [main]
+    paths:
+      - "packages/xcagi_langgraph_*/**"
+      - ".github/workflows/langgraph-packages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: langgraph-embedded-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: core
+            path: "packages/xcagi_langgraph_core"
+          - name: checkpoint
+            path: "packages/xcagi_langgraph_checkpoint"
+          - name: prebuilt
+            path: "packages/xcagi_langgraph_prebuilt"
+          - name: checkpoint-sqlite
+            path: "packages/xcagi_langgraph_checkpoint_backends/checkpoint-sqlite"
+          - name: checkpoint-postgres
+            path: "packages/xcagi_langgraph_checkpoint_backends/checkpoint-postgres"
+          - name: sdk
+            path: "packages/xcagi_langgraph_sdk"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install locked dependencies
+        working-directory: ${{ matrix.path }}
+        run: uv sync --frozen --group dev
+      - name: Run native type checking
+        working-directory: ${{ matrix.path }}
+        run: uv run ty check
+      - name: Run tests with warnings as errors
+        working-directory: ${{ matrix.path }}
+        run: uv run pytest -q -W error

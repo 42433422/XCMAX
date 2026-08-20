@@ -166,9 +166,11 @@ def build_docx_bytes(spec: dict[str, Any]) -> tuple[bytes, str]:
         tt = str(tbl.get("title") or "").strip()
         if tt:
             doc.add_paragraph(tt)
-        headers = tbl.get("headers") if isinstance(tbl.get("headers"), list) else []
-        rows = tbl.get("rows") if isinstance(tbl.get("rows"), list) else []
-        col_counts = [len(headers)]
+        raw_headers = tbl.get("headers")
+        headers = list(raw_headers) if isinstance(raw_headers, list) else []
+        raw_rows = tbl.get("rows")
+        rows: list[Any] = list(raw_rows) if isinstance(raw_rows, list) else []
+        col_counts = [len(headers or [])]
         for r in rows:
             if isinstance(r, list):
                 col_counts.append(len(r))
@@ -177,9 +179,9 @@ def build_docx_bytes(spec: dict[str, Any]) -> tuple[bytes, str]:
         table = doc.add_table(rows=n_row, cols=n_col)
         table.style = "Table Grid"
         for j in range(n_col):
-            h = headers[j] if j < len(headers) else ""
+            h = headers[j] if j < len(headers or []) else ""
             table.rows[0].cells[j].text = str(h)
-        for i, r in enumerate(rows, start=1):
+        for i, r in enumerate((rows or []), start=1):
             if not isinstance(r, list):
                 continue
             for j in range(n_col):
@@ -202,22 +204,26 @@ def build_xlsx_bytes(spec: dict[str, Any]) -> tuple[bytes, str]:
 
     title = str(spec.get("title") or "生成表格").strip() or "生成表格"
     wb = Workbook()
-    sheets = spec.get("sheets") if isinstance(spec.get("sheets"), list) else []
+    raw_sheets = spec.get("sheets")
+    sheets: list[Any] = list(raw_sheets) if isinstance(raw_sheets, list) else []
     if not sheets:
         sheets = [{"name": "Sheet1", "headers": ["说明"], "rows": [["（无内容）"]]}]
     first = True
-    for sh in sheets:
+    for sh in sheets or []:
         if not isinstance(sh, dict):
             continue
         name = str(sh.get("name") or "Sheet1").strip()[:31] or "Sheet1"
         if first:
             ws = wb.active
+            assert ws is not None
             ws.title = name
             first = False
         else:
             ws = wb.create_sheet(title=name)
-        headers = sh.get("headers") if isinstance(sh.get("headers"), list) else []
-        rows = sh.get("rows") if isinstance(sh.get("rows"), list) else []
+        raw_headers = sh.get("headers")
+        headers = list(raw_headers) if isinstance(raw_headers, list) else []
+        raw_rows = sh.get("rows")
+        rows = list(raw_rows) if isinstance(raw_rows, list) else []
         r_i = 1
         if headers:
             for j, h in enumerate(headers, start=1):

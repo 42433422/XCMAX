@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="import-not-found"
 """按购买单位（products.unit）删除产品；需已配置 DATABASE_URL（PostgreSQL）。"""
+
 from __future__ import annotations
 
 import argparse
@@ -26,13 +28,13 @@ def main() -> int:
         print("unit_name 不能为空", file=sys.stderr)
         return 2
 
-    from sqlalchemy import inspect, text
-
-    from app.fastapi_routes.xcagi_compat_db_base import (
+    from app.legacy.routes.xcagi_compat_db_base import (
         _customer_pg_products_has_unit,
         _pg_expr_norm_unit,
     )
-    from app.fastapi_routes.xcagi_compat_db_writes import _products_delete_by_unit_pg
+    from app.legacy.routes.xcagi_compat_db_writes import _products_delete_by_unit_pg
+    from sqlalchemy import inspect, text
+
     from app.infrastructure.db.sync_engine import (
         dispose_sync_engine,
         get_database_url,

@@ -40,6 +40,23 @@ _INTENT_PACKAGES_STATE: dict[str, bool] = {
 }
 
 
+def _public_unified_chat_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Keep provider/tool exception details behind the public chat boundary."""
+    if bool(payload.get("success")):
+        return payload
+    raw_status = payload.get("_http_status", 500)
+    try:
+        status = max(400, min(int(raw_status), 599))
+    except (TypeError, ValueError):
+        status = 500
+    return {
+        "success": False,
+        "message": "AI 服务暂时不可用，请稍后重试",
+        "error_code": str(payload.get("error_code") or "ai_service_unavailable")[:64],
+        "_http_status": status,
+    }
+
+
 def _attach_unified_chat_run(
     payload: dict[str, Any],
     *,
@@ -50,7 +67,8 @@ def _attach_unified_chat_run(
 ) -> dict[str, Any]:
     from app.application.agent_orchestrator.chat_trace import attach_chat_trace_run
 
-    runtime_context = body.get("context") if isinstance(body.get("context"), dict) else {}
+    raw_context = body.get("context")
+    runtime_context: dict[str, Any] = raw_context if isinstance(raw_context, dict) else {}
     runtime_context = {
         **runtime_context,
         "route": "/api/ai/chat-unified",
@@ -81,6 +99,8 @@ def _trace_intent_test_run(
         from app.application.agent_orchestrator.chat_trace import create_chat_trace_run
 
         data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+        if not isinstance(data, dict):
+            data = {}
         run = create_chat_trace_run(
             {
                 **payload,
@@ -100,7 +120,7 @@ def _trace_intent_test_run(
             channel="intent_test_route",
             intent="intent_recognition",
         )
-    except Exception:  # noqa: BLE001 - tracing must not break intent recognition
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - tracing must not break intent recognition
         logger.exception("failed to attach AgentRun trace to intent test route")
         return payload
     traced = dict(payload)
@@ -121,13 +141,15 @@ def ai_chat_unified_alias(request: Request, body: dict = Body(default_factory=di
     message = (body.get("message", "") or "").strip()
     if not message:
         return JSONResponse({"success": False, "message": "消息内容不能为空"}, status_code=400)
-    payload = unified_chat_single_payload(
-        message,
-        body.get("user_id"),
-        request.client.host if request.client else "",
-        (body.get("source") or "").strip().lower(),
-        body.get("mode"),
-        body.get("context") or {},
+    payload = _public_unified_chat_payload(
+        unified_chat_single_payload(
+            message,
+            str(body.get("user_id") or ""),
+            request.client.host if request.client else "",
+            (body.get("source") or "").strip().lower(),
+            body.get("mode"),
+            body.get("context") or {},
+        )
     )
     status = int(payload.pop("_http_status", 200))
     payload = _attach_unified_chat_run(
@@ -154,13 +176,15 @@ def ai_chat_unified_batch_alias(request: Request, body: dict = Body(default_fact
         return JSONResponse({"success": False, "message": "单次批量最多 20 条"}, status_code=400)
     results: list = []
     for msg in messages:
-        payload = unified_chat_single_payload(
-            msg,
-            body.get("user_id"),
-            request.client.host if request.client else "",
-            (body.get("source") or "").strip().lower(),
-            body.get("mode"),
-            body.get("context") or {},
+        payload = _public_unified_chat_payload(
+            unified_chat_single_payload(
+                msg,
+                str(body.get("user_id") or ""),
+                request.client.host if request.client else "",
+                (body.get("source") or "").strip().lower(),
+                body.get("mode"),
+                body.get("context") or {},
+            )
         )
         status = int(payload.pop("_http_status", 200))
         if status >= 400:

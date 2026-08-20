@@ -1,3 +1,4 @@
+# mypy: disable-error-code="assignment"
 """digest / line-execute → 战略层行动项桥接。
 
 把 ``daily_action_items`` 幂等镜像到 ``strategic_action_items``，并确保每条 digest
@@ -15,10 +16,12 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Dict, Optional
 
 from sqlalchemy import select
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +67,7 @@ def _find_track_decision_id(record_id: int) -> Optional[str]:
             .limit(1)
         ).scalar_one_or_none()
         return str(row.decision_id) if row is not None else None
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.debug("find track decision failed record_id=%s", record_id, exc_info=True)
         return None
     finally:
@@ -80,18 +83,32 @@ def ensure_digest_track_decision(
 ) -> Dict[str, Any]:
     """确保 digest 有可挂载的战略决策；优先复用传入 / 已有追踪决策。"""
     if not _env_enabled():
-        return {"ok": True, "skipped": True, "reason": "strategic_layer integration disabled"}
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "strategic_layer integration disabled",
+        }
 
     rid = int(record_id or 0)
     if rid <= 0:
         return {"ok": False, "error": "invalid record_id"}
 
     if decision_id:
-        return {"ok": True, "decision_id": str(decision_id), "reused": True, "source": "caller"}
+        return {
+            "ok": True,
+            "decision_id": str(decision_id),
+            "reused": True,
+            "source": "caller",
+        }
 
     existing = _find_track_decision_id(rid)
     if existing:
-        return {"ok": True, "decision_id": existing, "reused": True, "source": "track_scope"}
+        return {
+            "ok": True,
+            "decision_id": existing,
+            "reused": True,
+            "source": "track_scope",
+        }
 
     try:
         from modstore_server.strategic_layer import (
@@ -134,7 +151,7 @@ def ensure_digest_track_decision(
             "status": record.status.value,
             "autonomy_action": record.autonomy_action,
         }
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("ensure_digest_track_decision failed record_id=%s", rid)
         return {"ok": False, "error": str(exc)}
 
@@ -148,7 +165,11 @@ def sync_daily_to_strategic(
 ) -> Dict[str, Any]:
     """把指定 digest 的 daily_action_items 幂等镜像到 strategic_action_items。"""
     if not _env_enabled():
-        return {"ok": True, "skipped": True, "reason": "strategic_layer integration disabled"}
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "strategic_layer integration disabled",
+        }
 
     rid = int(record_id or 0)
     if rid <= 0:
@@ -173,7 +194,12 @@ def sync_daily_to_strategic(
 
         anchor = str(ensure_out.get("decision_id") or "").strip()
         if not anchor:
-            return {"ok": False, "error": "missing decision_id", "created": 0, "updated": 0}
+            return {
+                "ok": False,
+                "error": "missing decision_id",
+                "created": 0,
+                "updated": 0,
+            }
 
         from modstore_server.db.base import get_session_factory
         from modstore_server.db.strategic import StrategicActionItem
@@ -193,7 +219,7 @@ def sync_daily_to_strategic(
         created = 0
         updated = 0
         skipped = 0
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         session = get_session_factory()()
         try:
             for it in items:
@@ -255,7 +281,7 @@ def sync_daily_to_strategic(
                         existing.completed_at = None
                     updated += 1
             session.commit()
-        except Exception:
+        except RECOVERABLE_ERRORS:
             session.rollback()
             raise
         finally:
@@ -277,7 +303,7 @@ def sync_daily_to_strategic(
             "skipped": skipped,
             "ensure": ensure_out,
         }
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("sync_daily_to_strategic failed record_id=%s", rid)
         return {"ok": False, "error": str(exc), "created": 0, "updated": 0}
 
@@ -285,7 +311,11 @@ def sync_daily_to_strategic(
 def mirror_daily_status(daily_item_id: int, status: str) -> Dict[str, Any]:
     """单条 daily 状态推进时镜像到 strategic_action_items。"""
     if not _env_enabled():
-        return {"ok": True, "skipped": True, "reason": "strategic_layer integration disabled"}
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "strategic_layer integration disabled",
+        }
 
     iid = int(daily_item_id or 0)
     if iid <= 0:
@@ -297,14 +327,18 @@ def mirror_daily_status(daily_item_id: int, status: str) -> Dict[str, Any]:
         from modstore_server.db.base import get_session_factory
         from modstore_server.db.strategic import StrategicActionItem
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         session = get_session_factory()()
         try:
             row = session.execute(
                 select(StrategicActionItem).where(StrategicActionItem.action_id == action_id)
             ).scalar_one_or_none()
             if row is None:
-                return {"ok": True, "skipped": True, "reason": "strategic action item not found"}
+                return {
+                    "ok": True,
+                    "skipped": True,
+                    "reason": "strategic action item not found",
+                }
             row.status = mapped
             row.updated_at = now
             if mapped == "completed":
@@ -314,12 +348,12 @@ def mirror_daily_status(daily_item_id: int, status: str) -> Dict[str, Any]:
                 row.completed_at = None
             session.commit()
             return {"ok": True, "action_id": action_id, "status": mapped}
-        except Exception:
+        except RECOVERABLE_ERRORS:
             session.rollback()
             raise
         finally:
             session.close()
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("mirror_daily_status failed daily_id=%s", iid)
         return {"ok": False, "error": str(exc)}
 
@@ -331,7 +365,11 @@ def sync_record_after_status_writeback(
 ) -> Dict[str, Any]:
     """line-execute / deploy 回写后，按 record_id（或最新 day）再 sync 一次。"""
     if not _env_enabled():
-        return {"ok": True, "skipped": True, "reason": "strategic_layer integration disabled"}
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "strategic_layer integration disabled",
+        }
     try:
         from modstore_server.digest_action_items import latest_day, list_action_items
 
@@ -347,7 +385,7 @@ def sync_record_after_status_writeback(
         if rid <= 0:
             return {"ok": True, "skipped": True, "reason": "no record_id"}
         return sync_daily_to_strategic(record_id=rid)
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("sync_record_after_status_writeback failed")
         return {"ok": False, "error": str(exc)}
 

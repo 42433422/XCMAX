@@ -13,7 +13,9 @@ FHD_REPO_ROOT = SANDBOX_ROOT.parent
 
 # 桌面模式数据根：xcagi.db 在 <RUNTIME_ROOT>/data/xcagi.db
 DEFAULT_RUNTIME_ROOT = SANDBOX_ROOT / "data" / "runtime"
-RUNTIME_ROOT = Path(os.environ.get("SANDBOX_RUNTIME_ROOT", DEFAULT_RUNTIME_ROOT)).expanduser().resolve()
+RUNTIME_ROOT = (
+    Path(os.environ.get("SANDBOX_RUNTIME_ROOT", DEFAULT_RUNTIME_ROOT)).expanduser().resolve()
+)
 
 # 可选：把 FHD 前端 dist 链到 web_static；不存在则回退 templates/vue-dist
 WEB_STATIC = SANDBOX_ROOT / "web_static"

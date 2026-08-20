@@ -13,7 +13,10 @@
                 v-for="cell in row"
                 :key="'real-cell-' + rowIndex + '-' + cell.col"
                 class="real-grid-cell"
-                :class="{ 'has-content': cell.text, 'is-merged': cell.rowspan > 1 || cell.colspan > 1 }"
+                :class="{
+                  'has-content': cell.text,
+                  'is-merged': cell.rowspan > 1 || cell.colspan > 1,
+                }"
                 :rowspan="cell.rowspan"
                 :colspan="cell.colspan"
               >
@@ -24,20 +27,12 @@
         </table>
         <div class="excel-headers" v-show="!hasGridData">
           <div class="row-num-header"></div>
-          <div
-            v-for="(col, index) in displayColumns"
-            :key="'header-' + index"
-            class="col-header"
-          >
+          <div v-for="(col, index) in displayColumns" :key="'header-' + index" class="col-header">
             {{ getColumnHeader(index) }}
           </div>
         </div>
         <div class="excel-body" v-show="!hasGridData">
-          <div
-            v-for="(row, rowIndex) in displayRows"
-            :key="'row-' + rowIndex"
-            class="excel-row"
-          >
+          <div v-for="(row, rowIndex) in displayRows" :key="'row-' + rowIndex" class="excel-row">
             <div class="row-num">{{ rowIndex + 1 }}</div>
             <div
               v-for="(col, colIndex) in displayColumns"
@@ -62,28 +57,28 @@ export default {
   props: {
     fields: {
       type: Array,
-      default: () => []
+      default: () => [],
     },
     sampleRows: {
       type: Array,
-      default: () => []
+      default: () => [],
     },
     rows: {
       type: Number,
-      default: 6
+      default: 6,
     },
     columns: {
       type: Number,
-      default: 5
+      default: 5,
     },
     title: {
       type: String,
-      default: 'Excel 模板预览'
+      default: 'Excel 模板预览',
     },
     gridData: {
       type: Object,
-      default: null
-    }
+      default: null,
+    },
   },
   computed: {
     hasGridData() {
@@ -107,10 +102,10 @@ export default {
     },
     columnHeaders() {
       if (this.fields && this.fields.length > 0) {
-        return this.fields.map(f => f.label || f.name || '')
+        return this.fields.map((f) => f.label || f.name || '')
       }
       return []
-    }
+    },
   },
   methods: {
     getColumnHeader(index) {
@@ -143,8 +138,8 @@ export default {
       }
 
       return ''
-    }
-  }
+    },
+  },
 }
 </script>
 

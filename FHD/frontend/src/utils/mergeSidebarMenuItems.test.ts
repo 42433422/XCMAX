@@ -43,7 +43,7 @@ describe('mergeSidebarMenuItems', () => {
     expect(merged.map((item) => item.key)).toEqual(['materials'])
   })
 
-it('keeps model service in settings; suppresses Mod business-docking; host ETL stays', () => {
+  it('keeps model service in settings; suppresses Mod business-docking; host ETL stays', () => {
     const merged = mergeSidebarMenuItems(
       [
         { key: 'chat', name: '智能对话', iconClass: 'fa-comments-o' },
@@ -74,9 +74,7 @@ it('keeps model service in settings; suppresses Mod business-docking; host ETL s
   })
 
   it('drops mod item when key uses erroneous mod-mod- prefix', () => {
-    const trailing = [
-      { key: 'internal-customer-service', name: '内部客服', iconClass: 'fa-headphones' },
-    ]
+    const trailing = [{ key: 'internal-customer-service', name: '内部客服', iconClass: 'fa-headphones' }]
     const mod = [
       {
         key: 'mod-mod-internal-customer-service',
@@ -199,8 +197,18 @@ it('keeps model service in settings; suppresses Mod business-docking; host ETL s
 
   it('dedupes duplicate keys', () => {
     const mod = [
-      { key: 'mod-approval-hub', name: '审批', iconClass: 'fa-check', modId: 'xcagi-approval-bridge' },
-      { key: 'mod-approval-hub', name: '审批', iconClass: 'fa-check', modId: 'xcagi-approval-bridge' },
+      {
+        key: 'mod-approval-hub',
+        name: '审批',
+        iconClass: 'fa-check',
+        modId: 'xcagi-approval-bridge',
+      },
+      {
+        key: 'mod-approval-hub',
+        name: '审批',
+        iconClass: 'fa-check',
+        modId: 'xcagi-approval-bridge',
+      },
     ]
     const core = [{ key: 'approval-hub', name: '审批中心', iconClass: 'fa-check-square-o' }]
     const merged = mergeSidebarMenuItems(core, mod, [], [], [])

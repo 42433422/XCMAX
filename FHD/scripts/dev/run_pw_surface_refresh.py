@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """生产 MODstore P-W 全量 surface-audit 重拍。"""
+
 from __future__ import annotations
 
 import asyncio
 import os
-import sys
 
 
 async def main() -> int:

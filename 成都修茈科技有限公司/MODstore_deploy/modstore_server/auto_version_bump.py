@@ -12,8 +12,10 @@ from __future__ import annotations
 import logging
 import os
 import re
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import UTC, datetime
+from typing import Any, Dict, List
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +77,7 @@ def _auto_version_enabled() -> bool:
 def get_current_version(project_root: str) -> str:
     pyproject = os.path.join(project_root, "pyproject.toml")
     if os.path.isfile(pyproject):
-        with open(pyproject, "r", encoding="utf-8") as f:
+        with open(pyproject, encoding="utf-8") as f:
             for line in f:
                 m = re.match(r'version\s*=\s*"([\d.]+)"', line)
                 if m:
@@ -122,7 +124,7 @@ def determine_bump_type(project_root: str) -> str:
                 return "minor"
 
         return "patch"
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return "patch"
 
 
@@ -143,7 +145,7 @@ def sync_version_anchors(project_root: str, new_version: str) -> List[Dict[str, 
             continue
 
         try:
-            with open(full_path, "r", encoding="utf-8") as f:
+            with open(full_path, encoding="utf-8") as f:
                 content = f.read()
 
             old_version_match = re.search(anchor["pattern"], content)
@@ -185,9 +187,14 @@ def sync_version_anchors(project_root: str, new_version: str) -> List[Dict[str, 
                     "new": new_version,
                 }
             )
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             results.append(
-                {"key": anchor["key"], "path": anchor["path"], "status": "error", "error": str(exc)}
+                {
+                    "key": anchor["key"],
+                    "path": anchor["path"],
+                    "status": "error",
+                    "error": str(exc),
+                }
             )
 
     return results
@@ -209,7 +216,7 @@ def generate_changelog_entry(project_root: str, new_version: str) -> str:
             return ""
 
         messages = proc.stdout.strip().splitlines()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return ""
 
     features = []
@@ -229,7 +236,7 @@ def generate_changelog_entry(project_root: str, new_version: str) -> str:
         else:
             others.append(clean)
 
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
     lines = [f"## v{new_version} ({today})", ""]
 
     if features:
@@ -259,12 +266,12 @@ def prepend_changelog(project_root: str, entry: str) -> bool:
     if not os.path.isfile(changelog_path):
         return False
 
-    with open(changelog_path, "r", encoding="utf-8") as f:
+    with open(changelog_path, encoding="utf-8") as f:
         content = f.read()
 
     unreleased_marker = "## Unreleased"
     if unreleased_marker in content:
-        parts = content.split(unrecovered_marker, 1)
+        parts = content.split(unreleased_marker, 1)
         new_content = parts[0] + unreleased_marker + "\n\n" + entry + parts[1]
     else:
         first_h2 = content.find("\n## ")
@@ -301,12 +308,12 @@ def auto_version_bump(project_root: str) -> Dict[str, Any]:
     version_md_path = os.path.join(project_root, "VERSION.md")
     if os.path.isfile(version_md_path):
         try:
-            with open(version_md_path, "r", encoding="utf-8") as f:
+            with open(version_md_path, encoding="utf-8") as f:
                 vm_content = f.read()
             vm_content = vm_content.replace(current, new_version)
             with open(version_md_path, "w", encoding="utf-8") as f:
                 f.write(vm_content)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             logger.warning("failed to update VERSION.md")
 
     release_version_path = os.path.join(project_root, "release", "VERSION")
@@ -314,11 +321,13 @@ def auto_version_bump(project_root: str) -> Dict[str, Any]:
         os.makedirs(os.path.dirname(release_version_path), exist_ok=True)
         with open(release_version_path, "w", encoding="utf-8") as f:
             f.write(new_version)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.warning("failed to write release/VERSION")
 
     try:
-        from modstore_server.employee_change_request_service import defer_write_as_change_request
+        from modstore_server.employee_change_request_service import (
+            defer_write_as_change_request,
+        )
         from modstore_server.integrations.ops_action_handlers import repo_root
 
         root = str(repo_root())
@@ -331,7 +340,7 @@ def auto_version_bump(project_root: str) -> Dict[str, Any]:
         for rel_path in changed_files:
             full_path = os.path.join(project_root, rel_path)
             if os.path.isfile(full_path):
-                with open(full_path, "r", encoding="utf-8") as f:
+                with open(full_path, encoding="utf-8") as f:
                     content = f.read()
                 try:
                     defer_write_as_change_request(
@@ -340,9 +349,9 @@ def auto_version_bump(project_root: str) -> Dict[str, Any]:
                         path=rel_path,
                         content=content,
                     )
-                except Exception:
+                except RECOVERABLE_ERRORS:
                     logger.warning("CR for %s failed", rel_path)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         logger.warning("CR pipeline not available, version files written directly")
 
     return {

@@ -4,20 +4,22 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from dotenv import load_dotenv
+from dotenv import load_dotenv  # noqa: E402
 
 load_dotenv(ROOT / ".env", override=False)
 load_dotenv(ROOT / ".env.local", override=True)
 
-from modstore_server.llm_chat_proxy import chat_dispatch
-from modstore_server.llm_key_resolver import platform_api_key, platform_base_url
+from modstore_server.llm_chat_proxy import chat_dispatch  # noqa: E402
+from modstore_server.llm_key_resolver import (  # noqa: E402
+    platform_api_key,
+    platform_base_url,
+)
 
 
 async def main() -> int:

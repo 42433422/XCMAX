@@ -1,11 +1,13 @@
 import json
 import logging
 import os
+from datetime import datetime
+from typing import Any, cast
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.utils.path_utils import get_app_data_dir
-from app.utils.print_utils import PrinterUtils
-from app.utils.printer_automation import EnhancedPrinterUtils
+from app.utils.path_io.path_utils import get_app_data_dir
+from app.utils.path_io.print_utils import PrinterUtils
+from app.utils.path_io.printer_automation import EnhancedPrinterUtils
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +46,7 @@ class PrinterService:
             return None
         exact = next((p.get("name") for p in printers if p.get("name") == name), None)
         if exact:
-            return exact
+            return cast("str | None", exact)
         name_lower = name.lower()
         for p in printers:
             p_name = (p.get("name") or "").strip()
@@ -153,9 +155,12 @@ class PrinterService:
                 "count": len(printers),
                 **classified_info,
             }
-        except RECOVERABLE_ERRORS as e:
-            logger.error("获取打印机列表失败: %s", e)
-            return {"success": False, "message": str(e), "printers": []}
+        except RECOVERABLE_ERRORS:
+            logger.exception("获取打印机列表失败")
+            return {"success": False, "message": "获取打印机列表失败", "printers": []}
+
+    def list_printers(self) -> list[dict[str, Any]]:
+        return cast("list[dict[str, Any]]", self.printer_utils.get_available_printers())
 
     def get_default_printer(self) -> dict:
         try:
@@ -164,9 +169,12 @@ class PrinterService:
                 return {"success": True, "printer": printer}
             else:
                 return {"success": False, "message": "未找到默认打印机"}
-        except RECOVERABLE_ERRORS as e:
-            logger.error("获取默认打印机失败: %s", e)
-            return {"success": False, "message": str(e)}
+        except RECOVERABLE_ERRORS:
+            logger.exception("获取默认打印机失败")
+            return {"success": False, "message": "获取默认打印机失败"}
+
+    def set_default_printer(self, printer_name: str) -> bool:
+        return bool(self.enhanced_utils.set_default_printer(printer_name))
 
     def get_document_printer(self) -> str | None:
         printers = self.printer_utils.get_available_printers()
@@ -197,16 +205,22 @@ class PrinterService:
                 return {"success": False, "message": "未指定打印机且无法获取默认打印机"}
 
             if use_automation:
-                return self.enhanced_utils.print_file_enhanced(
-                    file_path, printer_name, use_automation=True
+                return cast(
+                    "dict[Any, Any]",
+                    self.enhanced_utils.print_file_enhanced(
+                        file_path, printer_name, use_automation=True
+                    ),
                 )
             else:
-                return self.printer_utils.print_file(
-                    file_path, printer_name, use_default_printer=False
+                return cast(
+                    "dict[Any, Any]",
+                    self.printer_utils.print_file(
+                        file_path, printer_name, use_default_printer=False
+                    ),
                 )
-        except RECOVERABLE_ERRORS as e:
-            logger.error("打印文档失败: %s", e)
-            return {"success": False, "message": str(e)}
+        except RECOVERABLE_ERRORS:
+            logger.exception("打印文档失败")
+            return {"success": False, "message": "打印文档失败"}
 
     def print_label(self, file_path: str, printer_name: str | None = None, copies: int = 1) -> dict:
         try:
@@ -231,20 +245,79 @@ class PrinterService:
                 "successful": success_count,
                 "details": results,
             }
-        except RECOVERABLE_ERRORS as e:
-            logger.error("打印标签失败: %s", e)
-            return {"success": False, "message": str(e)}
+        except RECOVERABLE_ERRORS:
+            logger.exception("打印标签失败")
+            return {"success": False, "message": "打印标签失败"}
+
+    def print_labels(self, label_data: list[dict[str, Any]]) -> dict[str, Any]:
+        """Fail closed when callers provide label data without a rendered label file.
+
+        Physical printing requires a concrete file produced by the selected label
+        template. Keeping this compatibility API prevents an AttributeError while
+        making the missing render step explicit to the caller.
+        """
+        if not label_data:
+            return {"success": False, "message": "没有要打印的标签", "count": 0}
+        return {
+            "success": False,
+            "message": "标签数据尚未渲染为打印文件，请先选择标签模板并生成标签",
+            "count": len(label_data),
+        }
+
+    def generate_label(
+        self,
+        *,
+        product_name: str | None,
+        model_number: str | None = None,
+        specification: str | None = None,
+        quantity: int | float = 1,
+    ) -> dict[str, Any]:
+        """Render one printable label image using the built-in label renderer."""
+        from app.infrastructure.documents.shipment_document_generator_impl import (
+            SimpleLabelGenerator,
+        )
+
+        output_dir = os.path.join(get_app_data_dir(), "label_outputs")
+        generator = SimpleLabelGenerator(output_dir)
+        filename = generator.generate_label(
+            {
+                "product_name": product_name or "未命名产品",
+                "model_number": model_number or "",
+                "specification": specification or "",
+                "quantity": quantity,
+            },
+            order_number=f"LABEL-{datetime.now().strftime('%Y%m%d%H%M%S%f')}",
+        )
+        if not filename:
+            return {"success": False, "message": "标签生成失败", "file_path": None}
+        file_path = os.path.join(output_dir, filename)
+        return {
+            "success": True,
+            "message": "标签生成成功",
+            "filename": filename,
+            "file_path": file_path,
+        }
+
+    def get_printer_status(self) -> dict[str, Any]:
+        """Compatibility status API used by the printing application service."""
+        result = self.get_printers()
+        return {
+            "success": bool(result.get("success")),
+            "status": "ready" if result.get("count", 0) else "unavailable",
+            "printers": result.get("printers", []),
+            "message": result.get("message", ""),
+        }
 
     def test_printer(self, printer_name: str) -> dict:
         try:
-            return self.printer_utils.test_printer(printer_name)
+            return cast("dict[Any, Any]", self.printer_utils.test_printer(printer_name))
         except RECOVERABLE_ERRORS as e:
             logger.error("测试打印机失败: %s", e)
             return {
                 "success": False,
                 "available": False,
                 "printer": printer_name,
-                "message": str(e),
+                "message": "打印机可用性检查失败",
             }
 
     def validate_printer_separation(self) -> dict:
@@ -269,9 +342,9 @@ class PrinterService:
                 }
 
             return {"valid": True, "doc_printer": doc_printer, "label_printer": label_printer}
-        except RECOVERABLE_ERRORS as e:
-            logger.error("验证打印机分离失败: %s", e)
-            return {"valid": False, "message": str(e)}
+        except RECOVERABLE_ERRORS:
+            logger.exception("验证打印机分离失败")
+            return {"valid": False, "message": "验证打印机分离失败"}
 
 
 printer_service = PrinterService()
@@ -279,7 +352,7 @@ printer_service = PrinterService()
 
 def get_printers() -> list[dict]:
     result = printer_service.get_printers()
-    return result.get("printers", [])
+    return cast("list[dict[Any, Any]]", result.get("printers", []))
 
 
 def get_document_printer() -> str | None:

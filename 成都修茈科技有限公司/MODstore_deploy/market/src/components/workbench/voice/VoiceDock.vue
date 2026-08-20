@@ -68,25 +68,21 @@ function syncDraftFromDom() {
           rows="1"
           :placeholder="listening && !micPaused ? '说或打字都行…' : '想说什么，直接打字…'"
           @input="emit('update:draft', ($event.target as HTMLTextAreaElement).value)"
-          @focus="(e) => { syncDraftFromDom(); scrollInputIntoViewOnMobile(e.target as HTMLTextAreaElement) }"
+          @focus="
+            (e) => {
+              syncDraftFromDom()
+              scrollInputIntoViewOnMobile(e.target as HTMLTextAreaElement)
+            }
+          "
           @keydown.enter.prevent="handleSend"
         />
-        <button
-          type="button"
-          class="wb-voice-dock__send"
-          :disabled="!canSend"
-          title="发送文字"
-          aria-label="发送"
-          @click.stop="handleSend"
-        >
-          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+        <button type="button" class="wb-voice-dock__send" :disabled="!canSend" title="发送文字" aria-label="发送" @click.stop="handleSend">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+          </svg>
         </button>
       </div>
-      <div
-        v-if="(listening || connecting || recognizing) && !micPaused"
-        class="wb-voice-dock__listen-badge"
-        role="status"
-      >
+      <div v-if="(listening || connecting || recognizing) && !micPaused" class="wb-voice-dock__listen-badge" role="status">
         <span
           class="wb-voice-dock__listen-dot"
           :class="{
@@ -113,11 +109,11 @@ function syncDraftFromDom() {
       >
         <span v-if="connecting || recognizing" class="wb-voice-dock__mic-spinner" aria-hidden="true" />
         <svg v-else-if="micPaused" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <path d="M8 5v14l11-7z"/>
+          <path d="M8 5v14l11-7z" />
         </svg>
         <svg v-else viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <rect x="6" y="5" width="4" height="14" rx="1"/>
-          <rect x="14" y="5" width="4" height="14" rx="1"/>
+          <rect x="6" y="5" width="4" height="14" rx="1" />
+          <rect x="14" y="5" width="4" height="14" rx="1" />
         </svg>
       </button>
     </div>
@@ -246,7 +242,10 @@ function syncDraftFromDom() {
   padding: 0;
   background: rgba(255, 255, 255, 0.1);
   color: rgba(255, 255, 255, 0.88);
-  transition: background 0.15s, transform 0.15s, box-shadow 0.15s;
+  transition:
+    background 0.15s,
+    transform 0.15s,
+    box-shadow 0.15s;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }

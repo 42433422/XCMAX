@@ -75,7 +75,6 @@ async def test_convert_file_writes_html(tmp_path: Path):
 def test_convert_file_sync_wrapper(tmp_path: Path):
     from modstore_server.json_report_runtime import (
         build_json_quant_report_rule_spec,
-        convert_file,
         render_json_report_convert_module,
     )
     from modstore_server.word_generate_runtime import minimal_document_full_json

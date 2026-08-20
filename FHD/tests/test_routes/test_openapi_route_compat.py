@@ -1,4 +1,4 @@
-"""Tests for app.fastapi_routes.openapi_route_compat."""
+"""Tests for app.legacy.routes.openapi_route_compat."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.fastapi_routes.openapi_route_compat import (
+from app.legacy.routes.openapi_route_compat import (
     hide_trailing_slash_openapi_duplicates,
     include_router_with_slash_compat,
 )
@@ -42,7 +42,7 @@ class TestIncludeRouterWithSlashCompat:
         app = MagicMock()
         router = MagicMock()
         with patch(
-            "app.fastapi_routes.openapi_route_compat.hide_trailing_slash_openapi_duplicates",
+            "app.legacy.routes.openapi_route_compat.hide_trailing_slash_openapi_duplicates",
             return_value=0,
         ) as mock_hide:
             include_router_with_slash_compat(app, router)

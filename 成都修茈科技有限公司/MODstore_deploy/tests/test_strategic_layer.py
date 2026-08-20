@@ -22,7 +22,6 @@ from modstore_server.strategic_layer import (
     AutonomyEvaluator,
     CouncilMeetingService,
     DecidedBy,
-    DecisionAlreadyDecidedError,
     DecisionLifecycleError,
     DecisionProposer,
     DecisionStatus,
@@ -434,9 +433,21 @@ class TestCouncilMeetingService:
             minutes_md="Meeting with malformed action item",
             decisions=[],
             action_items=[
-                {"description": "", "assigned_to": "x", "decision_id": "y"},  # 缺 description
-                {"description": "valid", "assigned_to": "", "decision_id": "y"},  # 缺 assigned_to
-                {"description": "valid", "assigned_to": "x", "decision_id": ""},  # 缺 decision_id
+                {
+                    "description": "",
+                    "assigned_to": "x",
+                    "decision_id": "y",
+                },  # 缺 description
+                {
+                    "description": "valid",
+                    "assigned_to": "",
+                    "decision_id": "y",
+                },  # 缺 assigned_to
+                {
+                    "description": "valid",
+                    "assigned_to": "x",
+                    "decision_id": "",
+                },  # 缺 decision_id
             ],
             actor="founder",
         )

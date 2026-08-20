@@ -12,7 +12,14 @@ defineProps<{
     <div class="selp-active-gates-head">
       <span>检查项</span>
       <strong>{{ activeGates.ok === false ? '异常' : '正常' }}</strong>
-      <small>{{ activeGates.blocking_count ?? 0 }} 阻断 · {{ asArray(activeGates.blocking_keys).map((k) => asString(k)).join(' / ') || '无' }}</small>
+      <small
+        >{{ activeGates.blocking_count ?? 0 }} 阻断 ·
+        {{
+          asArray(activeGates.blocking_keys)
+            .map((k) => asString(k))
+            .join(' / ') || '无'
+        }}</small
+      >
     </div>
     <div class="selp-active-gates-grid" role="list">
       <div

@@ -60,9 +60,7 @@ export async function runQuickStartWordDemo(): Promise<void> {
     new CustomEvent('xcagi:tutorial-chat-line', {
       detail: {
         role: ok ? 'ai' : 'task',
-        content: ok
-          ? `Word 读取完成（教程样本）\n${summary.slice(0, 800)}`
-          : `Word 读取未完成：${summary.slice(0, 400)}`,
+        content: ok ? `Word 读取完成（教程样本）\n${summary.slice(0, 800)}` : `Word 读取未完成：${summary.slice(0, 400)}`,
       },
     }),
   )

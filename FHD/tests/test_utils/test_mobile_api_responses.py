@@ -8,7 +8,11 @@
 
 from __future__ import annotations
 
-from app.utils.mobile_api import format_error_response, format_mobile_response, paginate_list
+from app.utils.device_system.mobile_api import (
+    format_error_response,
+    format_mobile_response,
+    paginate_list,
+)
 
 
 def test_format_mobile_response_defaults():

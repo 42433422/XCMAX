@@ -24,11 +24,11 @@ CI / 容器镜像可以用 `pip install .[vibe]` 来约束版本(`pyproject.toml
 
 ## 2. 环境变量
 
-| 变量 | 默认 | 含义 |
-|---|---|---|
-| `MODSTORE_ENABLE_VIBE_WEB` | 关 | `1` 时把 `vibe_coding.agent.web.create_app()` 挂载到 `/api/vibe`(给 LSP / 调试 / 第三方消费用) |
-| `VIBE_CODING_STORE_DIR` | `${MODSTORE_DATA_DIR}/vibe_coding` | 每个用户的 `VibeCoder` store_dir 在它下面再开 `users/<uid>/` 子目录 |
-| `MODSTORE_TENANT_WORKSPACE_ROOT` | `${MODSTORE_DATA_DIR}/workspaces/{user_id}` | `vibe_edit` / `vibe_heal` 强制 root 必须落在这条 path 下,越界拒绝 |
+| 变量                             | 默认                                        | 含义                                                                                           |
+| -------------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `MODSTORE_ENABLE_VIBE_WEB`       | 关                                          | `1` 时把 `vibe_coding.agent.web.create_app()` 挂载到 `/api/vibe`(给 LSP / 调试 / 第三方消费用) |
+| `VIBE_CODING_STORE_DIR`          | `${MODSTORE_DATA_DIR}/vibe_coding`          | 每个用户的 `VibeCoder` store_dir 在它下面再开 `users/<uid>/` 子目录                            |
+| `MODSTORE_TENANT_WORKSPACE_ROOT` | `${MODSTORE_DATA_DIR}/workspaces/{user_id}` | `vibe_edit` / `vibe_heal` 强制 root 必须落在这条 path 下,越界拒绝                              |
 
 `{user_id}` 占位符会被替换。所有 vibe action 入口都走
 [`vibe_adapter.ensure_within_workspace`](../modstore_server/integrations/vibe_adapter.py),从根上挡住 `../` 路径穿越。

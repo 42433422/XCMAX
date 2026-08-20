@@ -28,6 +28,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from vibe_coding.operational_errors import BOUNDARY_ERRORS
+
 from ..nl.llm import LLMClient
 from ..nl.parsing import JSONParseError, safe_parse_json_object
 from .context import AgentContext
@@ -173,7 +175,7 @@ class DebugReasoner:
         )
         try:
             raw = self.llm.chat(_DEBUG_SYSTEM_PROMPT, prompt_user, json_mode=True)
-        except Exception as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:
             return DebugReport(
                 error_type=error_type,
                 error_message=error_message,
@@ -204,9 +206,9 @@ class DebugReasoner:
         produce a minimal hunk repair given the ``CodeDiagnosis``.
         """
         try:
-            from ..runtime.patch_generator import CodePatch
-            from ..nl.prompts import CODE_HUNK_REPAIR_PROMPT
             from ..code_factory import _apply_hunks_inline
+            from ..nl.prompts import CODE_HUNK_REPAIR_PROMPT
+            from ..runtime.patch_generator import CodePatch
         except ImportError:
             return None
         user_msg = (
@@ -218,13 +220,13 @@ class DebugReasoner:
         try:
             raw = self.llm.chat(CODE_HUNK_REPAIR_PROMPT, user_msg, json_mode=True)
             payload = safe_parse_json_object(raw)
-        except (JSONParseError, Exception):  # noqa: BLE001
+        except BOUNDARY_ERRORS:
             return None
         raw_hunks = payload.get("hunks")
         if isinstance(raw_hunks, list) and raw_hunks:
             try:
                 patched = _apply_hunks_inline(source_code, raw_hunks)
-            except Exception:  # noqa: BLE001
+            except BOUNDARY_ERRORS:
                 return None
         elif isinstance(payload.get("source_code"), str) and payload["source_code"].strip():
             patched = payload["source_code"].strip()
@@ -270,11 +272,7 @@ class DebugReasoner:
                 continue
             abs_file = self.root / Path(rel)
             source_window = _read_lines(abs_file, frame.line, _FRAME_CONTEXT_LINES)
-            syms = [
-                s.qualified_name
-                for s in entry.symbols
-                if s.start_line <= frame.line <= s.end_line
-            ]
+            syms = [s.qualified_name for s in entry.symbols if s.start_line <= frame.line <= s.end_line]
             enriched.append(
                 FrameInfo(
                     file=rel,
@@ -300,9 +298,7 @@ class DebugReasoner:
             f"## Traceback\n```\n{traceback_str[:4_000]}\n```",
         ]
         if frames:
-            frame_text = "\n".join(
-                json.dumps(f.to_dict(), ensure_ascii=False) for f in frames
-            )
+            frame_text = "\n".join(json.dumps(f.to_dict(), ensure_ascii=False) for f in frames)
             if len(frame_text) > _MAX_PROMPT_CHARS:
                 frame_text = frame_text[:_MAX_PROMPT_CHARS] + "\n... (truncated)"
             parts.append(f"## 栈帧详情\n{frame_text}")

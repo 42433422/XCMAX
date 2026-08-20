@@ -21,13 +21,21 @@ describe('useManifestDiff', () => {
 
   it('detects changes when baseline differs from current', () => {
     const store = useWorkbenchStore()
-    store.setTarget('employee', 'emp1', {
-      identity: { name: 'Original', id: 'emp1', version: '1.0.0' },
-    }, 'Original')
+    store.setTarget(
+      'employee',
+      'emp1',
+      {
+        identity: { name: 'Original', id: 'emp1', version: '1.0.0' },
+      },
+      'Original',
+    )
 
-    sessionStorage.setItem('workbench_baseline_manifest_emp1', JSON.stringify({
-      identity: { name: 'Original', id: 'emp1', version: '1.0.0' },
-    }))
+    sessionStorage.setItem(
+      'workbench_baseline_manifest_emp1',
+      JSON.stringify({
+        identity: { name: 'Original', id: 'emp1', version: '1.0.0' },
+      }),
+    )
 
     store.patchManifest('identity.name', 'Changed')
 
@@ -74,15 +82,23 @@ describe('useManifestDiff', () => {
 
   it('detects changes in cognition.agent.system_prompt', () => {
     const store = useWorkbenchStore()
-    store.setTarget('employee', 'emp1', {
-      identity: { name: 'Test' },
-      cognition: { agent: { system_prompt: 'Original prompt' } },
-    }, 'Test')
+    store.setTarget(
+      'employee',
+      'emp1',
+      {
+        identity: { name: 'Test' },
+        cognition: { agent: { system_prompt: 'Original prompt' } },
+      },
+      'Test',
+    )
 
-    sessionStorage.setItem('workbench_baseline_manifest_emp1', JSON.stringify({
-      identity: { name: 'Test' },
-      cognition: { agent: { system_prompt: 'Original prompt' } },
-    }))
+    sessionStorage.setItem(
+      'workbench_baseline_manifest_emp1',
+      JSON.stringify({
+        identity: { name: 'Test' },
+        cognition: { agent: { system_prompt: 'Original prompt' } },
+      }),
+    )
 
     store.patchManifest('cognition.agent.system_prompt', 'New prompt')
 

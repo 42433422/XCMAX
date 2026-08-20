@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict
+
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +31,7 @@ def _backup_dir() -> Path:
         from modstore_server.daily_backup_job import _backup_dir as daily_dir
 
         return daily_dir() / "ondemand"
-    except Exception:
+    except RECOVERABLE_ERRORS:
         raw = (os.environ.get("MODSTORE_BACKUP_DIR") or "").strip()
         if raw:
             return Path(raw).expanduser().resolve() / "ondemand"
@@ -43,13 +45,21 @@ def run_ondemand_backup(
 ) -> Dict[str, Any]:
     """执行一次按需快照。``trigger`` 如 ``auto_rollback`` / ``FASTGATE`` / ``manual``。"""
     if not _enabled():
-        return {"ok": True, "skipped": True, "reason": "MODSTORE_ONDEMAND_BACKUP_ENABLED=0"}
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "MODSTORE_ONDEMAND_BACKUP_ENABLED=0",
+        }
 
-    from modstore_server.daily_backup_job import _backup_release_train, _backup_sqlite, _keep
+    from modstore_server.daily_backup_job import (
+        _backup_release_train,
+        _backup_sqlite,
+        _keep,
+    )
 
     dst_dir = _backup_dir()
     dst_dir.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     keep = _keep()
     tag = str(trigger or "manual").replace("/", "_")[:32]
     prefix = f"ondemand_{tag}_{stamp}"

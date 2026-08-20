@@ -34,8 +34,7 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 from modstore_server.runtime_async import run_coro_sync
 
 if TYPE_CHECKING:  # pragma: no cover - 仅给类型检查;运行时 lazy import
-    from vibe_coding import LLMClient, VibeCoder
-    from vibe_coding.agent.coder import ProjectVibeCoder
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -129,7 +128,7 @@ class ChatDispatchLLMClient:
         model: str,
         *,
         default_max_tokens: int = 8192,
-    ) -> "ChatDispatchLLMClient":
+    ) -> ChatDispatchLLMClient:
         """走 ``llm_key_resolver`` 解析 BYOK / 平台 Key,使用 session 路径调用。"""
         from modstore_server.llm_key_resolver import (
             OAI_COMPAT_OPENAI_STYLE_PROVIDERS,

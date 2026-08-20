@@ -14,6 +14,8 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 NODES_KEY = "xcmax:cluster:nodes"
 CLAIM_PREFIX = "xcmax:cluster:incident_claim:"
 DEFAULT_STALE_SECONDS = 300
@@ -71,7 +73,7 @@ def _parse_claim_owner(raw: Any) -> Dict[str, Any]:
         try:
             data = json.loads(text)
             return data if isinstance(data, dict) else {"node_id": text}
-        except Exception:
+        except RECOVERABLE_ERRORS:
             return {"node_id": text}
     return {"node_id": text}
 
@@ -147,7 +149,7 @@ def _redis_client():
             socket_timeout=5.0,
             retry_on_timeout=True,
         )
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return None
 
 
@@ -172,14 +174,19 @@ def write_node_heartbeat(*, job_count: Optional[int] = None) -> Dict[str, Any]:
         try:
             r.hset(NODES_KEY, payload["node_id"], json.dumps(payload, ensure_ascii=False))
             r.expire(NODES_KEY, max(DEFAULT_STALE_SECONDS * 3, 900))
-            return {**payload, "backend": "redis", "leader": elect_leader().get("node_id")}
-        except Exception:
+            return {
+                **payload,
+                "backend": "redis",
+                "leader": elect_leader().get("node_id"),
+            }
+        except RECOVERABLE_ERRORS:
             pass
     directory = _runtime_dir() / "cluster_nodes"
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"{payload['node_id']}.json"
     path.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
     )
     return {**payload, "backend": "file", "leader": elect_leader().get("node_id")}
 
@@ -190,7 +197,7 @@ def _read_nodes_from_redis() -> List[Dict[str, Any]]:
         return []
     try:
         rows = r.hgetall(NODES_KEY)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return []
     out: List[Dict[str, Any]] = []
     for raw in rows.values():
@@ -198,7 +205,7 @@ def _read_nodes_from_redis() -> List[Dict[str, Any]]:
             data = json.loads(raw)
             if isinstance(data, dict):
                 out.append(data)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             continue
     return out
 
@@ -213,7 +220,7 @@ def _read_nodes_from_file() -> List[Dict[str, Any]]:
             data = json.loads(path.read_text(encoding="utf-8"))
             if isinstance(data, dict):
                 out.append(data)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             continue
     return out
 
@@ -230,7 +237,12 @@ def cluster_status(*, stale_seconds: int = DEFAULT_STALE_SECONDS) -> Dict[str, A
             active.append(row)
         else:
             stale.append(row)
-    active.sort(key=lambda item: (int(item.get("priority") or 50), str(item.get("node_id") or "")))
+    active.sort(
+        key=lambda item: (
+            int(item.get("priority") or 50),
+            str(item.get("node_id") or ""),
+        )
+    )
     leader = active[0] if active else None
     return {
         "active_nodes": active,
@@ -313,7 +325,7 @@ def claim_incident_for_node(event_id: int, *, ttl_seconds: int = 900) -> Dict[st
                 "node_id": node_id,
                 "owner": owner,
             }
-        except Exception:
+        except RECOVERABLE_ERRORS:
             pass
     claim_dir = _runtime_dir() / "cluster_claims"
     claim_dir.mkdir(parents=True, exist_ok=True)
@@ -321,7 +333,7 @@ def claim_incident_for_node(event_id: int, *, ttl_seconds: int = 900) -> Dict[st
     if claim_path.exists():
         try:
             owner = _parse_claim_owner(claim_path.read_text(encoding="utf-8"))
-        except Exception:
+        except RECOVERABLE_ERRORS:
             owner = {}
         same_owner = (
             str(owner.get("node_id") or "") == node_id and int(owner.get("pid") or 0) == os.getpid()
@@ -376,7 +388,7 @@ def release_incident_claim(event_id: int) -> Dict[str, Any]:
                 "event_id": int(event_id),
                 "owner": owner,
             }
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             return {
                 "backend": "redis",
                 "released": False,
@@ -387,7 +399,7 @@ def release_incident_claim(event_id: int) -> Dict[str, Any]:
     if claim_path.exists():
         try:
             owner = _parse_claim_owner(claim_path.read_text(encoding="utf-8"))
-        except Exception:
+        except RECOVERABLE_ERRORS:
             owner = {}
         if (
             str(owner.get("node_id") or "") == node_id and int(owner.get("pid") or 0) in {0, pid}
@@ -403,7 +415,12 @@ def release_incident_claim(event_id: int) -> Dict[str, Any]:
             "event_id": int(event_id),
             "owner": owner,
         }
-    return {"backend": "file", "released": True, "event_id": int(event_id), "missing": True}
+    return {
+        "backend": "file",
+        "released": True,
+        "event_id": int(event_id),
+        "missing": True,
+    }
 
 
 __all__ = [

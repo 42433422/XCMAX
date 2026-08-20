@@ -2,19 +2,20 @@
 
 ## 元信息
 
-| 字段 | 值 |
-|------|----|
-| skill_id | `skill-flask-route-health` |
-| 所属员工 | `flask-entry-keeper` |
-| 业务域 | Flask app.py 路由与表单逻辑维护 |
-| 版本 | 1.0.0 |
-| 父版本 | — |
+| 字段     | 值                              |
+| -------- | ------------------------------- |
+| skill_id | `skill-flask-route-health`      |
+| 所属员工 | `flask-entry-keeper`            |
+| 业务域   | Flask app.py 路由与表单逻辑维护 |
+| 版本     | 1.0.0                           |
+| 父版本   | —                               |
 
 ---
 
 ## 1. 静态阶段
 
 **执行逻辑**：
+
 ```
 python -m py_compile app.py → 启动 Flask（测试模式）
 → 对每个路由发起 HTTP 冒烟请求 → 校验响应状态码
@@ -22,6 +23,7 @@ python -m py_compile app.py → 启动 Flask（测试模式）
 ```
 
 **输出 schema**：
+
 ```json
 {
   "status": "ok | error",
@@ -35,10 +37,10 @@ python -m py_compile app.py → 启动 Flask（测试模式）
 
 ## 2. 动态触发条件
 
-| 触发类型 | 规则 |
-|----------|------|
-| 执行报错 | `py_compile` 抛出 SyntaxError；路由返回 5xx |
-| 结果不达标 | `failed_routes` 非空 |
+| 触发类型   | 规则                                        |
+| ---------- | ------------------------------------------- |
+| 执行报错   | `py_compile` 抛出 SyntaxError；路由返回 5xx |
+| 结果不达标 | `failed_routes` 非空                        |
 
 ---
 
@@ -53,6 +55,7 @@ python -m py_compile app.py → 启动 Flask（测试模式）
 ## 4. 固化
 
 **验收标准**：
+
 - [x] `syntax_errors == []`
 - [x] `failed_routes == []`
 - [x] `pip-audit` 无新增高危漏洞

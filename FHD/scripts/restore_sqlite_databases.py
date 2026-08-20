@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 从备份目录或单个 .db 文件恢复 XCAGI 本地 SQLite 数据。
 
-开发环境数据目录 = 项目根目录（与 app.utils.path_utils.get_app_data_dir 一致）。
+开发环境数据目录 = 项目根目录（与 app.utils.path_io.path_utils.get_app_data_dir 一致）。
 打包环境数据目录 = %APPDATA%\\XCAGI。
 
 用法示例：
@@ -24,12 +23,14 @@ import sys
 import time
 from pathlib import Path
 
+from app.utils.operational_errors import BOUNDARY_ERRORS
+
 _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from app.db.init_db import DEFAULT_DB_FILES, get_db_path  # type: ignore
-from app.utils.path_utils import get_app_data_dir, get_base_dir  # type: ignore
+from app.utils.path_io.path_utils import get_app_data_dir, get_base_dir  # type: ignore
 
 # 与业务相关的常见库（DEFAULT_DB_FILES + users）
 _EXTRA_DB = ("users.db",)
@@ -160,7 +161,7 @@ def main() -> int:
                 + ", users.db）。",
                 file=sys.stderr,
             )
-            print(f"若曾备份到其他路径，请将整目录作为 --from 参数。", file=sys.stderr)
+            print("若曾备份到其他路径，请将整目录作为 --from 参数。", file=sys.stderr)
             return 2
 
         print(f"预备份目录（本次被覆盖前的文件）: {backup_root}")
@@ -168,7 +169,7 @@ def main() -> int:
             print(line)
         print("完成。请重启后端再打开前端。")
         return 0
-    except Exception as e:
+    except BOUNDARY_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"失败: {e}", file=sys.stderr)
         return 1
 

@@ -5,10 +5,10 @@ import type { Material, MaterialCreateDTO, MaterialUpdateDTO } from '@/types/mat
 import { asRecord } from '@/utils/typeGuards'
 
 interface OperationResult {
-  success: boolean;
-  data?: unknown;
-  message?: string;
-  total?: number;
+  success: boolean
+  data?: unknown
+  message?: string
+  total?: number
 }
 
 export const useMaterialsStore = defineStore('materials', () => {
@@ -22,18 +22,12 @@ export const useMaterialsStore = defineStore('materials', () => {
     return materials.value.filter((m) => {
       const row = asRecord(m)
       const minStock = row.min_stock
-      return (
-        m.quantity != null
-        && typeof minStock === 'number'
-        && m.quantity < minStock
-      )
+      return m.quantity != null && typeof minStock === 'number' && m.quantity < minStock
     })
   })
 
   const categories = computed(() => {
-    const cats = new Set(
-      materials.value.map((m) => asRecord(m).category).filter(Boolean),
-    )
+    const cats = new Set(materials.value.map((m) => asRecord(m).category).filter(Boolean))
     return Array.from(cats)
   })
 
@@ -104,7 +98,7 @@ export const useMaterialsStore = defineStore('materials', () => {
     try {
       const data = await materialsApi.deleteMaterial(id)
       if (data.success) {
-        materials.value = materials.value.filter(m => m.id !== id)
+        materials.value = materials.value.filter((m) => m.id !== id)
         return { success: true }
       } else {
         error.value = data.message || '删除原材料失败'
@@ -124,7 +118,7 @@ export const useMaterialsStore = defineStore('materials', () => {
     try {
       const data = await materialsApi.batchDeleteMaterials(ids)
       if (data.success) {
-        materials.value = materials.value.filter(m => !ids.includes(m.id))
+        materials.value = materials.value.filter((m) => !ids.includes(m.id))
         return { success: true }
       } else {
         error.value = data.message || '批量删除失败'
@@ -154,6 +148,6 @@ export const useMaterialsStore = defineStore('materials', () => {
     updateMaterial,
     deleteMaterial,
     batchDelete,
-    exportMaterials
+    exportMaterials,
   }
 })

@@ -5,11 +5,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 
 def test_excel_routing_keywords():
-    from modstore_server.excel_tabular_runtime import is_excel_full_read, is_excel_generate
+    from modstore_server.excel_tabular_runtime import (
+        is_excel_full_read,
+        is_excel_generate,
+    )
 
     assert is_excel_full_read("制作 Excel读取员工，上传 xlsx 读 sheet 表头 单元格全量")
     assert not is_excel_generate("制作 Excel读取员工，上传 xlsx 读 sheet 表头 单元格全量")
@@ -50,10 +51,9 @@ def test_excel_read_convert_writes_json(tmp_path: Path):
     assert result["sheet_count"] >= 1
 
 
-@pytest.mark.xfail(
-    strict=False, reason="excel_tabular_runtime generate/convert pre-existing failure"
-)
 def test_excel_generate_convert_writes_xlsx(tmp_path: Path):
+    import asyncio
+
     from modstore_server.excel_tabular_runtime import (
         minimal_json_fixture_bytes,
         render_excel_generate_convert_module,
@@ -68,13 +68,18 @@ def test_excel_generate_convert_writes_xlsx(tmp_path: Path):
     src = root / "table.json"
     src.write_bytes(minimal_json_fixture_bytes())
     out = root / "outputs" / "output.xlsx"
-    convert_file(
-        src,
-        out,
-        template_path=None,
-        payload={},
-        ctx={},
-        rule_spec={"default_output_relpath": "outputs/output.xlsx", "output_schema": []},
+    asyncio.run(
+        convert_file(
+            src,
+            out,
+            template_path=None,
+            payload={},
+            ctx={},
+            rule_spec={
+                "default_output_relpath": "outputs/output.xlsx",
+                "output_schema": [],
+            },
+        )
     )
     assert out.is_file()
     from openpyxl import load_workbook

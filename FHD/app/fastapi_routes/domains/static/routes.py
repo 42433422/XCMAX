@@ -16,6 +16,7 @@ from app.traditional_mode_fs import (
     list_files_response,
     move_response,
     read_file_response,
+    resolve_path_under_root,
     resolve_safe_path,
     root_info_response,
     sse_watch_events,
@@ -24,12 +25,22 @@ from app.traditional_mode_fs import (
     write_text_response,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.utils.path_utils import get_base_dir
-from app.utils.secure_filename import secure_filename
+from app.utils.path_io.path_utils import get_base_dir
+from app.utils.security.secure_filename import secure_filename
 
 logger = logging.getLogger(__name__)
+_STATIC_ROOT_COMPAT = ROOT_DIR
 
 router = APIRouter(tags=["legacy-static"], deprecated=True)
+
+
+def _resolved_child(parent: str, name: str) -> str | None:
+    root = os.path.realpath(os.path.abspath(parent))
+    candidate = os.path.realpath(os.path.abspath(os.path.join(parent, name)))
+    try:
+        return candidate if os.path.commonpath((root, candidate)) == root else None
+    except ValueError:
+        return None
 
 
 @router.get("/")
@@ -52,8 +63,8 @@ def _vue_dist_dir() -> str:
 def gap_batch2_serve_static(path: str):
     vue_dist_dir = _vue_dist_dir()
     static_dir = os.path.join(vue_dist_dir, "static")
-    static_path = os.path.join(static_dir, path)
-    if os.path.exists(static_path) and not os.path.isdir(static_path):
+    static_path = resolve_path_under_root(static_dir, path)
+    if static_path and os.path.isfile(static_path):  # lgtm[py/path-injection]
         return FileResponse(static_path)
     return JSONResponse({"success": False, "message": f"静态资源不存在：{path}"}, status_code=404)
 
@@ -157,7 +168,7 @@ def gap_batch2_favicon():
 @router.get("/outputs/{filename:path}")
 def gap_batch2_outputs(filename: str):
     try:
-        from app.utils.path_utils import get_app_data_dir, get_resource_path
+        from app.utils.path_io.path_utils import get_app_data_dir, get_resource_path
 
         shipment_outputs_dir = os.path.join(get_app_data_dir(), "shipment_outputs")
         if os.path.isdir(shipment_outputs_dir):
@@ -170,14 +181,19 @@ def gap_batch2_outputs(filename: str):
             return JSONResponse(
                 {"success": False, "message": f"输出目录不存在: {outputs_dir}"}, status_code=404
             )
-        file_path = os.path.join(outputs_dir, filename)
-        if not os.path.exists(file_path):
+        file_path = resolve_path_under_root(outputs_dir, filename)
+        if not file_path or not os.path.isfile(file_path):  # lgtm[py/path-injection]
             return JSONResponse(
                 {"success": False, "message": f"文件不存在：{filename}"}, status_code=404
             )
-        return FileResponse(file_path, filename=os.path.basename(filename))
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": f"下载失败：{str(e)}"}, status_code=500)
+        return FileResponse(
+            file_path, filename=os.path.basename(filename)
+        )  # lgtm[py/path-injection]
+    except RECOVERABLE_ERRORS:
+        logger.exception("输出文件下载失败")
+        return JSONResponse(
+            {"success": False, "message": "文件下载服务暂时不可用，请稍后重试"}, status_code=500
+        )
 
 
 @router.get("/test-buttons")
@@ -300,10 +316,11 @@ def traditional_mode_write(body: dict = Body(default_factory=dict)):
             {"success": False, "error": "openpyxl 未安装，无法写入 Excel 文件"}, status_code=500
         )
     parent_dir = os.path.dirname(full_path)
-    if parent_dir and not os.path.exists(parent_dir):
-        os.makedirs(parent_dir, exist_ok=True)
+    if parent_dir and not os.path.exists(parent_dir):  # lgtm[py/path-injection]
+        os.makedirs(parent_dir, exist_ok=True)  # lgtm[py/path-injection]
     wb = openpyxl.Workbook()
     default_sheet = wb.active
+    assert default_sheet is not None
     default_sheet.title = file_data.get("active_sheet", "Sheet")
     sheets_content = file_data.get("content", {})
     if isinstance(sheets_content, dict):
@@ -316,6 +333,7 @@ def traditional_mode_write(body: dict = Body(default_factory=dict)):
             for r_idx, row in enumerate(rows, start=1):
                 for c_idx, cell_value in enumerate(row, start=1):
                     if cell_value is not None:
+                        assert ws is not None
                         ws.cell(row=r_idx, column=c_idx, value=cell_value)
     if len(wb.sheetnames) > 1 and default_sheet.title in wb.sheetnames:
         if not sheets_content or default_sheet.title not in sheets_content:
@@ -339,8 +357,8 @@ def traditional_mode_mkdir(body: dict = Body(default_factory=dict)):
     full_parent = resolve_safe_path(rel_path)
     if full_parent is None:
         return JSONResponse({"success": False, "error": "路径越权访问被拒绝"}, status_code=403)
-    full_new_path = os.path.join(full_parent, folder_name)
-    if not os.path.abspath(full_new_path).startswith(os.path.abspath(ROOT_DIR)):
+    full_new_path = _resolved_child(full_parent, folder_name)
+    if full_new_path is None:
         return JSONResponse({"success": False, "error": "路径越权访问被拒绝"}, status_code=403)
     if os.path.exists(full_new_path):
         return JSONResponse({"success": False, "error": "文件夹已存在"}, status_code=409)
@@ -358,16 +376,14 @@ def traditional_mode_rename(body: dict = Body(default_factory=dict)):
     new_name = (data.get("new_name") or "").strip()
     if not old_name or not new_name:
         return JSONResponse({"success": False, "error": "旧名称和新名称不能为空"}, status_code=400)
-    if "/" in new_name or "\\" in new_name or ".." in new_name:
-        return JSONResponse({"success": False, "error": "新名称包含非法字符"}, status_code=400)
+    if any("/" in name or "\\" in name or ".." in name for name in (old_name, new_name)):
+        return JSONResponse({"success": False, "error": "名称包含非法字符"}, status_code=400)
     full_parent = resolve_safe_path(rel_path)
     if full_parent is None:
         return JSONResponse({"success": False, "error": "路径越权访问被拒绝"}, status_code=403)
-    full_old_path = os.path.join(full_parent, old_name)
-    full_new_path = os.path.join(full_parent, new_name)
-    if not os.path.abspath(full_old_path).startswith(os.path.abspath(ROOT_DIR)):
-        return JSONResponse({"success": False, "error": "路径越权访问被拒绝"}, status_code=403)
-    if not os.path.abspath(full_new_path).startswith(os.path.abspath(ROOT_DIR)):
+    full_old_path = _resolved_child(full_parent, old_name)
+    full_new_path = _resolved_child(full_parent, new_name)
+    if full_old_path is None or full_new_path is None:
         return JSONResponse({"success": False, "error": "路径越权访问被拒绝"}, status_code=403)
     if not os.path.exists(full_old_path):
         return JSONResponse({"success": False, "error": "源文件或文件夹不存在"}, status_code=404)
@@ -386,11 +402,13 @@ def traditional_mode_delete(body: dict = Body(default_factory=dict)):
     name = (data.get("name") or "").strip()
     if not name:
         return JSONResponse({"success": False, "error": "名称不能为空"}, status_code=400)
+    if "/" in name or "\\" in name or ".." in name:
+        return JSONResponse({"success": False, "error": "名称包含非法字符"}, status_code=400)
     full_parent = resolve_safe_path(rel_path)
     if full_parent is None:
         return JSONResponse({"success": False, "error": "路径越权访问被拒绝"}, status_code=403)
-    full_target = os.path.join(full_parent, name)
-    if not os.path.abspath(full_target).startswith(os.path.abspath(ROOT_DIR)):
+    full_target = _resolved_child(full_parent, name)
+    if full_target is None:
         return JSONResponse({"success": False, "error": "路径越权访问被拒绝"}, status_code=403)
     if not os.path.exists(full_target):
         return JSONResponse({"success": False, "error": "文件或文件夹不存在"}, status_code=404)
@@ -416,13 +434,19 @@ async def traditional_mode_upload(
         filename = "uploaded_file"
     if not os.path.exists(full_target_dir):
         os.makedirs(full_target_dir, exist_ok=True)
-    save_path = os.path.join(full_target_dir, filename)
+    save_path = _resolved_child(full_target_dir, filename)
+    if save_path is None:
+        return JSONResponse({"success": False, "error": "路径越权访问被拒绝"}, status_code=403)
     if os.path.exists(save_path):
         base, ext = os.path.splitext(filename)
         counter = 1
         while os.path.exists(save_path):
             filename = f"{base}_{counter}{ext}"
-            save_path = os.path.join(full_target_dir, filename)
+            save_path = _resolved_child(full_target_dir, filename)
+            if save_path is None:
+                return JSONResponse(
+                    {"success": False, "error": "路径越权访问被拒绝"}, status_code=403
+                )
             counter += 1
     content = await file.read()
     with open(save_path, "wb") as f:
@@ -457,12 +481,11 @@ def customers_batch_delete_delete(
         result = get_customer_app_service().batch_delete(id_list, force=force_b)
         code = 200 if result["success"] else (409 if result.get("has_associations") else 400)
         return JSONResponse(result, status_code=code)
-    except ValueError as e:
-        return JSONResponse(
-            {"success": False, "message": f"ID 格式错误：{str(e)}"}, status_code=400
-        )
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": f"删除失败：{str(e)}"}, status_code=500)
+    except ValueError:
+        return JSONResponse({"success": False, "message": "ID 格式错误"}, status_code=400)
+    except RECOVERABLE_ERRORS:
+        logger.exception("customer batch delete failed")
+        return JSONResponse({"success": False, "message": "删除失败"}, status_code=500)
 
 
 @router.delete("/api/preferences/{key}")
@@ -472,5 +495,6 @@ def preferences_delete_key(key: str, user_id: str = Query(default="default")):
 
         success = get_user_preference_service().delete_preference(user_id, key)
         return {"success": success, "message": "偏好已删除" if success else "删除失败"}
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("preference delete failed")
+        return JSONResponse({"success": False, "message": "偏好删除失败"}, status_code=500)

@@ -13,6 +13,7 @@ from typing import Any
 
 from langchain_protocol import Event, SubscribeParams
 
+from langgraph_sdk._exception_policy import BOUNDARY_ERRORS
 from langgraph_sdk.stream.subscription import compute_union_filter, filter_covers
 from langgraph_sdk.stream.transport import (
     SyncEventStreamHandle,
@@ -182,7 +183,7 @@ class SyncStreamController:
                     # before None.
                     if _is_root_terminal_lifecycle(event):
                         self.signal_paused()
-            except Exception:
+            except BOUNDARY_ERRORS:
                 pass  # transport drop — attempt reconnect below
 
             with self._lock:
@@ -211,7 +212,7 @@ class SyncStreamController:
                 params = self._filter_with_since(base_filter)
             try:
                 new_stream = self._transport.open_event_stream(params)
-            except Exception:
+            except BOUNDARY_ERRORS:
                 continue
             with self._lock:
                 self._shared_stream = new_stream
@@ -276,7 +277,7 @@ class SyncStreamController:
                 for sub in subscriptions:
                     if matches_subscription(event, sub.params):
                         sub.queue.put(event)
-        except Exception as err:
+        except BOUNDARY_ERRORS as err:
             _logger.debug("rotation drain exception: %r", err)
         finally:
             with contextlib.suppress(Exception):
@@ -316,7 +317,7 @@ class SyncStreamController:
                     with contextlib.suppress(Exception):
                         old.close()
                 return True
-            except Exception as err:
+            except BOUNDARY_ERRORS as err:
                 _logger.debug("sync reconnect attempt %d failed: %r", attempt, err)
         return False
 

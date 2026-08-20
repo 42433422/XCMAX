@@ -238,11 +238,9 @@ describe('approvalApi', () => {
         title: 'test',
       }
       const result = await approvalApi.submitRequest(data)
-      expect(apiPostMock).toHaveBeenCalledWith(
-        '/api/approval/requests',
-        data,
-        { headers: { 'X-User-ID': '42' } },
-      )
+      expect(apiPostMock).toHaveBeenCalledWith('/api/approval/requests', data, {
+        headers: { 'X-User-ID': '42' },
+      })
       expect(result).toEqual({ success: true })
     })
 
@@ -253,11 +251,9 @@ describe('approvalApi', () => {
         business_type: 'b',
         title: 't',
       })
-      expect(apiPostMock).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.any(Object),
-        { headers: { 'X-User-ID': '4' } },
-      )
+      expect(apiPostMock).toHaveBeenCalledWith(expect.any(String), expect.any(Object), {
+        headers: { 'X-User-ID': '4' },
+      })
     })
 
     it('returns error on failure', async () => {
@@ -276,11 +272,7 @@ describe('approvalApi', () => {
     it('posts withdraw action', async () => {
       apiPostMock.mockResolvedValue({ success: true })
       const result = await approvalApi.withdraw(1, 5)
-      expect(apiPostMock).toHaveBeenCalledWith(
-        '/api/approval/requests/1/withdraw',
-        {},
-        { headers: { 'X-User-ID': '5' } },
-      )
+      expect(apiPostMock).toHaveBeenCalledWith('/api/approval/requests/1/withdraw', {}, { headers: { 'X-User-ID': '5' } })
       expect(result).toEqual({ success: true })
     })
 
@@ -299,11 +291,7 @@ describe('approvalApi', () => {
         data: { deleted: 1, request_id: 1 },
       })
       const result = await approvalApi.deleteRequest(1, 5)
-      expect(apiDeleteMock).toHaveBeenCalledWith(
-        '/api/approval/requests/1',
-        {},
-        { headers: { 'X-User-ID': '5' } },
-      )
+      expect(apiDeleteMock).toHaveBeenCalledWith('/api/approval/requests/1', {}, { headers: { 'X-User-ID': '5' } })
       expect(result.success).toBe(true)
     })
 
@@ -337,10 +325,9 @@ describe('approvalApi', () => {
     it('toggles flow active via PATCH', async () => {
       apiPatchMock.mockResolvedValue({ success: true })
       const result = await approvalApi.toggleFlowActive(1, false)
-      expect(apiPatchMock).toHaveBeenCalledWith(
-        '/api/approval/flows/1/active',
-        { is_active: false },
-      )
+      expect(apiPatchMock).toHaveBeenCalledWith('/api/approval/flows/1/active', {
+        is_active: false,
+      })
       expect(result).toEqual({ success: true })
     })
 

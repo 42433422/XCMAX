@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 """考勤工作簿导入服务（attendance_import_app_service）单元测试。
 
 覆盖：schema 建表、单元格首行提取、钉钉「每日统计」/固定模板「明细」两种解析、

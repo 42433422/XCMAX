@@ -16,7 +16,12 @@ describe('SidebarMenuItem.vue', () => {
   it('shows "name · description" tooltip when description is present', () => {
     const wrapper = mount(SidebarMenuItem, {
       props: {
-        item: { key: 'chat', name: '智能对话', iconClass: 'fa-comments-o', description: '找小C办事、下指令、看任务进度' },
+        item: {
+          key: 'chat',
+          name: '智能对话',
+          iconClass: 'fa-comments-o',
+          description: '找小C办事、下指令、看任务进度',
+        },
         activeView: 'chat',
       },
     })
@@ -50,7 +55,7 @@ describe('SidebarMenuItem.vue', () => {
       await child.trigger('pointerup', { button: 0 })
       await child.trigger('click')
 
-      expect(wrapper.emitted('select-view')).toEqual([[ 'workflow-employee-space' ]])
+      expect(wrapper.emitted('select-view')).toEqual([['workflow-employee-space']])
     } finally {
       vi.useRealTimers()
     }
@@ -248,9 +253,7 @@ describe('SidebarMenuItem.vue', () => {
           key: 'parent',
           name: '父',
           iconClass: 'fa-parent',
-          children: [
-            { key: 'child-1', name: '子', iconClass: 'fa-child', description: '子说明' },
-          ],
+          children: [{ key: 'child-1', name: '子', iconClass: 'fa-child', description: '子说明' }],
         },
         activeView: 'parent',
         isExpanded: true,

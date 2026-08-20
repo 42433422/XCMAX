@@ -89,8 +89,8 @@ class BertIntentClassifier:
         else:
             self.device = device
 
-        self.model = None
-        self.tokenizer = None
+        self.model: Any = None
+        self.tokenizer: Any = None
         self._initialized = False
 
     def load_model(self) -> bool:
@@ -143,8 +143,13 @@ class BertIntentClassifier:
             return False
 
     def predict(self, text: str) -> dict[str, Any]:
-        if not self._initialized:
-            self.load_model()
+        if not self._initialized and not self.load_model():
+            return {
+                "intent": "unk",
+                "confidence": 0.0,
+                "probabilities": {},
+                "error": "BERT 模型不可用",
+            }
 
         if not text or not text.strip():
             return {"intent": "unk", "confidence": 0.0, "probabilities": {}}

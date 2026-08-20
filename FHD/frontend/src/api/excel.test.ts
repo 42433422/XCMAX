@@ -14,7 +14,9 @@ describe('excelApi', () => {
   it('getTemplates normalizes template list', async () => {
     apiMock.get.mockResolvedValueOnce({
       success: true,
-      data: { templates: [{ id: 1, template_type: '标签打印', exists: true, file_path: '/p' }, { id: 2 }] },
+      data: {
+        templates: [{ id: 1, template_type: '标签打印', exists: true, file_path: '/p' }, { id: 2 }],
+      },
     })
     const res = await excelApi.getTemplates()
     expect(res.data.templates[0].category).toBe('label_print')

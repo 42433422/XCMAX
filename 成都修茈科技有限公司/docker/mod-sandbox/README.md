@@ -6,12 +6,12 @@
 
 ## 本目录内容
 
-| 文件 | 说明 |
-|------|------|
-| `Dockerfile` | 多阶段 Mod 沙箱镜像 |
-| `context.dockerignore` | 与 `docker build --ignorefile` 联用，缩小 build context |
-| `build.ps1` / `build.sh` | 在仓库根执行，无需 `--ignorefile` |
-| `README.md` | 本说明 |
+| 文件                     | 说明                                                    |
+| ------------------------ | ------------------------------------------------------- |
+| `Dockerfile`             | 多阶段 Mod 沙箱镜像                                     |
+| `context.dockerignore`   | 与 `docker build --ignorefile` 联用，缩小 build context |
+| `build.ps1` / `build.sh` | 在仓库根执行，无需 `--ignorefile`                       |
+| `README.md`              | 本说明                                                  |
 
 ## 构建
 
@@ -68,14 +68,14 @@ services:
   mod-sandbox:
     image: xcagi-mod-sandbox:latest
     ports:
-      - "127.0.0.1:5000:5000"
+      - '127.0.0.1:5000:5000'
     environment:
       DATABASE_URL: sqlite:////app/data/sandbox.db
       VECTOR_DB_URL: sqlite:////app/data/sandbox_vectors.db
       XCAGI_MODS_ROOT: /mods
-      XCAGI_NEURO_INTENT: "0"
-      FLASK_DEBUG: "0"
-      XCAGI_MOD_SANDBOX: "1"
+      XCAGI_NEURO_INTENT: '0'
+      FLASK_DEBUG: '0'
+      XCAGI_MOD_SANDBOX: '1'
       SECRET_KEY: sandbox-not-for-production
     volumes:
       - /path/to/mods_root:/mods:ro

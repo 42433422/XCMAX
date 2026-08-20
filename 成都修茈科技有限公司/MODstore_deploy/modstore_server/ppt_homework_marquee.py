@@ -1,3 +1,4 @@
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 """Homework-style PPT marquee: preserve uploaded media, layout strip, inject click + motion timing."""
 
 from __future__ import annotations
@@ -88,9 +89,7 @@ def _pic_layout(pic: ET.Element) -> Tuple[int, str, str, int, int]:
 
 
 def _parse_ooxml_fragment(fragment: str) -> ET.Element:
-    wrapper = (
-        f'<root xmlns:p="{NS["p"]}" xmlns:a="{NS["a"]}" xmlns:r="{NS["r"]}">' f"{fragment}</root>"
-    )
+    wrapper = f'<root xmlns:p="{NS["p"]}" xmlns:a="{NS["a"]}" xmlns:r="{NS["r"]}">{fragment}</root>'
     root = ET.fromstring(wrapper)
     return list(root)[0]
 

@@ -119,7 +119,7 @@ def seed_demo_user_row(*, session_factory) -> None:
     """幂等写入演示企业本地用户（role=user，非 admin）及有效 SaaS 订阅。"""
     from app.db.models.tenant import Tenant
     from app.db.models.user import User
-    from app.utils.password_hash import generate_password_hash
+    from app.utils.security.password_hash import generate_password_hash
     from app.utils.time import utc_now_naive
 
     cfg = demo_account_config()

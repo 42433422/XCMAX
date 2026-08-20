@@ -9,7 +9,9 @@ import { api } from '../../api'
 import { getMarketPageKnowledge, getStructuredPageSummary } from '../../content/siteKnowledge'
 
 let _msgId = 0
-function nextId() { return `msg-${Date.now()}-${++_msgId}` }
+function nextId() {
+  return `msg-${Date.now()}-${++_msgId}`
+}
 
 function makeUserMsg(content: string): AgentMessage {
   return { id: nextId(), role: 'user', content, timestamp: Date.now() }
@@ -20,7 +22,7 @@ function makeAssistantMsg(content: string, isLoading = false): AgentMessage {
 }
 
 export function useAgentEngine() {
-  const router = useRouter()
+  const _router = useRouter()
   const route = useRoute()
   const agentStore = useAgentStore()
   const executor = useActionExecutor()
@@ -84,14 +86,9 @@ export function useAgentEngine() {
     }
   }
 
-  async function callLLMBrain(
-    context: AgentContext,
-    opts: { withScreenshot: boolean; imageDataUrl?: string | null },
-  ) {
+  async function callLLMBrain(context: AgentContext, opts: { withScreenshot: boolean; imageDataUrl?: string | null }) {
     let screenshotDataUrl: string | null =
-      typeof opts.imageDataUrl === 'string' && opts.imageDataUrl.trim()
-        ? opts.imageDataUrl.trim()
-        : null
+      typeof opts.imageDataUrl === 'string' && opts.imageDataUrl.trim() ? opts.imageDataUrl.trim() : null
     if (!screenshotDataUrl && opts.withScreenshot) {
       try {
         const { captureViewport } = await import('../../utils/agent/screenshotCapture')
@@ -129,7 +126,7 @@ export function useAgentEngine() {
 
     let response: LLMResponse
     try {
-      response = (await (api as any).agentButlerChat({
+      response = (await api.agentButlerChat({
         messages,
         conversation_id: agentStore.currentConversationId,
         page_context: context.pageSummary,
@@ -139,7 +136,10 @@ export function useAgentEngine() {
       const fallbackSkill = skillRegistry.matchByIntent(context)
       if (fallbackSkill) {
         const result = await fallbackSkill.execute(context)
-        agentStore.updateLastMessage({ content: result.assistantReply || result.message, isLoading: false })
+        agentStore.updateLastMessage({
+          content: result.assistantReply || result.message,
+          isLoading: false,
+        })
       } else {
         agentStore.updateLastMessage({
           content: '我暂时无法连接到 AI 大脑，请稍后再试。您也可以直接告诉我要去哪个页面。',
@@ -190,9 +190,7 @@ export function useAgentEngine() {
         result = await executor.read()
         break
       case 'enhance_current_page':
-        result = await executor.enhanceCurrentPage(
-          args as Parameters<typeof executor.enhanceCurrentPage>[0],
-        )
+        result = await executor.enhanceCurrentPage(args as Parameters<typeof executor.enhanceCurrentPage>[0])
         break
       default: {
         // 尝试 E-Skill

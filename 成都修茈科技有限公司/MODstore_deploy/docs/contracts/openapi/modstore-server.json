@@ -17,10 +17,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "source_node_id",
-          "target_node_id"
-        ],
+        "required": ["source_node_id", "target_node_id"],
         "title": "AddWorkflowEdgeBody",
         "type": "object"
       },
@@ -54,10 +51,7 @@
             "type": "number"
           }
         },
-        "required": [
-          "node_type",
-          "name"
-        ],
+        "required": ["node_type", "name"],
         "title": "AddWorkflowNodeBody",
         "type": "object"
       },
@@ -75,9 +69,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "amount"
-        ],
+        "required": ["amount"],
         "title": "AdminSelfCreditDTO",
         "type": "object"
       },
@@ -145,9 +137,7 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "auto_renew"
-        ],
+        "required": ["auto_renew"],
         "title": "AutoRenewDTO",
         "type": "object"
       },
@@ -203,11 +193,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "pkg_id",
-          "version",
-          "name"
-        ],
+        "required": ["pkg_id", "version", "name"],
         "title": "Body_api_admin_upload_catalog_api_admin_catalog_post",
         "type": "object"
       },
@@ -255,12 +241,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "session_id",
-          "pkg_id",
-          "version",
-          "name"
-        ],
+        "required": ["session_id", "pkg_id", "version", "name"],
         "title": "Body_api_complete_upload_api_admin_upload_complete_post",
         "type": "object"
       },
@@ -272,9 +253,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "file"
-        ],
+        "required": ["file"],
         "title": "Body_api_extract_text_api_knowledge_extract_text_post",
         "type": "object"
       },
@@ -286,9 +265,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "file"
-        ],
+        "required": ["file"],
         "title": "Body_api_import_mod_api_mods_import_post",
         "type": "object"
       },
@@ -307,11 +284,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "file_name",
-          "total_size",
-          "chunk_size"
-        ],
+        "required": ["file_name", "total_size", "chunk_size"],
         "title": "Body_api_initiate_upload_api_admin_upload_initiate_post",
         "type": "object"
       },
@@ -334,9 +307,7 @@
             "title": "Metadata"
           }
         },
-        "required": [
-          "file"
-        ],
+        "required": ["file"],
         "title": "Body_api_package_audit_api_package_audit_post",
         "type": "object"
       },
@@ -356,11 +327,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "session_id",
-          "chunk_index",
-          "file"
-        ],
+        "required": ["session_id", "chunk_index", "file"],
         "title": "Body_api_upload_chunk_api_admin_upload_chunk_post",
         "type": "object"
       },
@@ -394,9 +361,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "file"
-        ],
+        "required": ["file"],
         "title": "Body_api_upload_document_api_knowledge_documents_post",
         "type": "object"
       },
@@ -430,9 +395,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "file"
-        ],
+        "required": ["file"],
         "title": "Body_api_upload_document_api_knowledge_v2_collections__coll_id__documents_post",
         "type": "object"
       },
@@ -449,10 +412,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "metadata",
-          "file"
-        ],
+        "required": ["metadata", "file"],
         "title": "Body_api_upload_package_v1_packages_post",
         "type": "object"
       },
@@ -472,9 +432,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "metadata"
-        ],
+        "required": ["metadata"],
         "title": "Body_create_workbench_script_session_api_workbench_script_sessions_post",
         "type": "object"
       },
@@ -543,9 +501,7 @@
             "title": "Provider"
           }
         },
-        "required": [
-          "brief_json"
-        ],
+        "required": ["brief_json"],
         "title": "Body_start_session_api_script_workflows_sessions_post",
         "type": "object"
       },
@@ -583,9 +539,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "action"
-        ],
+        "required": ["action"],
         "title": "ButlerActionDTO",
         "type": "object"
       },
@@ -635,9 +589,7 @@
             "title": "Page Context"
           }
         },
-        "required": [
-          "messages"
-        ],
+        "required": ["messages"],
         "title": "ButlerChatDTO",
         "type": "object"
       },
@@ -651,10 +603,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "role",
-          "content"
-        ],
+        "required": ["role", "content"],
         "title": "ButlerMessageDTO",
         "type": "object"
       },
@@ -733,11 +682,7 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "target_type",
-          "target_id",
-          "brief"
-        ],
+        "required": ["target_type", "target_id", "brief"],
         "title": "ButlerOrchestrateBody",
         "type": "object"
       },
@@ -748,9 +693,7 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "is_active"
-        ],
+        "required": ["is_active"],
         "title": "ButlerSkillActiveDTO",
         "type": "object"
       },
@@ -779,9 +722,7 @@
             "type": "number"
           }
         },
-        "required": [
-          "action"
-        ],
+        "required": ["action"],
         "title": "CatalogComplaintReviewDTO",
         "type": "object"
       },
@@ -805,9 +746,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "reason"
-        ],
+        "required": ["reason"],
         "title": "CatalogComplaintSubmitDTO",
         "type": "object"
       },
@@ -819,9 +758,7 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "is_public"
-        ],
+        "required": ["is_public"],
         "title": "CatalogItemAdminPatchDTO",
         "type": "object"
       },
@@ -848,10 +785,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "role",
-          "content"
-        ],
+        "required": ["role", "content"],
         "title": "ChatMessageDTO",
         "type": "object"
       },
@@ -905,11 +839,7 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "request_id",
-          "timestamp",
-          "signature"
-        ],
+        "required": ["request_id", "timestamp", "signature"],
         "title": "CheckoutDTO",
         "type": "object"
       },
@@ -979,9 +909,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "name"
-        ],
+        "required": ["name"],
         "title": "CollectionCreateBody",
         "type": "object"
       },
@@ -1043,9 +971,7 @@
             "type": "object"
           }
         },
-        "required": [
-          "name"
-        ],
+        "required": ["name"],
         "title": "CommitSessionBody",
         "type": "object"
       },
@@ -1077,9 +1003,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "host_url"
-        ],
+        "required": ["host_url"],
         "title": "ConnectRequest",
         "type": "object"
       },
@@ -1119,9 +1043,7 @@
             "type": "object"
           }
         },
-        "required": [
-          "name"
-        ],
+        "required": ["name"],
         "title": "CreateESkillBody",
         "type": "object"
       },
@@ -1140,10 +1062,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "mod_id",
-          "display_name"
-        ],
+        "required": ["mod_id", "display_name"],
         "title": "CreateModDTO",
         "type": "object"
       },
@@ -1186,10 +1105,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "name",
-          "target_url"
-        ],
+        "required": ["name", "target_url"],
         "title": "CreateSubscriptionBody",
         "type": "object"
       },
@@ -1223,9 +1139,7 @@
             "type": "array"
           }
         },
-        "required": [
-          "name"
-        ],
+        "required": ["name"],
         "title": "CreateTokenBody",
         "type": "object"
       },
@@ -1244,9 +1158,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "name"
-        ],
+        "required": ["name"],
         "title": "CreateWorkflowBody",
         "type": "object"
       },
@@ -1264,9 +1176,7 @@
             "type": "object"
           }
         },
-        "required": [
-          "auth_type"
-        ],
+        "required": ["auth_type"],
         "title": "CredentialBody",
         "type": "object"
       },
@@ -1295,9 +1205,7 @@
             "title": "Session Id"
           }
         },
-        "required": [
-          "message"
-        ],
+        "required": ["message"],
         "title": "CustomerServiceChatBody",
         "type": "object"
       },
@@ -1350,9 +1258,7 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "task_description"
-        ],
+        "required": ["task_description"],
         "title": "DispatchRequest",
         "type": "object"
       },
@@ -1387,9 +1293,7 @@
             "title": "Provider"
           }
         },
-        "required": [
-          "hint"
-        ],
+        "required": ["hint"],
         "title": "EditWithAiBody",
         "type": "object"
       },
@@ -1438,9 +1342,7 @@
             "title": "Suggested Id"
           }
         },
-        "required": [
-          "brief"
-        ],
+        "required": ["brief"],
         "title": "EmployeeAiDraftBody",
         "type": "object"
       },
@@ -1489,10 +1391,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "current_prompt",
-          "instruction"
-        ],
+        "required": ["current_prompt", "instruction"],
         "title": "EmployeeAiRefinePromptBody",
         "type": "object"
       },
@@ -1541,9 +1440,7 @@
             "title": "Provider"
           }
         },
-        "required": [
-          "employee_id"
-        ],
+        "required": ["employee_id"],
         "title": "EmployeeBenchRequest",
         "type": "object"
       },
@@ -1574,9 +1471,7 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "manifest"
-        ],
+        "required": ["manifest"],
         "title": "EmployeeExportBody",
         "type": "object"
       },
@@ -1605,9 +1500,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "employee_id"
-        ],
+        "required": ["employee_id"],
         "title": "EmployeePublishRequest",
         "type": "object"
       },
@@ -1665,9 +1558,7 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "manifest"
-        ],
+        "required": ["manifest"],
         "title": "EmployeeSaveBody",
         "type": "object"
       },
@@ -1739,9 +1630,7 @@
             "title": "Provider"
           }
         },
-        "required": [
-          "employee_id"
-        ],
+        "required": ["employee_id"],
         "title": "EmployeeSyncTestRequest",
         "type": "object"
       },
@@ -1776,11 +1665,7 @@
             "type": "array"
           }
         },
-        "required": [
-          "recipient_public_key_spki_b64",
-          "current_password",
-          "token_ids"
-        ],
+        "required": ["recipient_public_key_spki_b64", "current_password", "token_ids"],
         "title": "ExportBundleBody",
         "type": "object"
       },
@@ -1804,9 +1689,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "hint"
-        ],
+        "required": ["hint"],
         "title": "FeedbackBody",
         "type": "object"
       },
@@ -1818,9 +1701,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "mod_id"
-        ],
+        "required": ["mod_id"],
         "title": "FocusPrimaryDTO",
         "type": "object"
       },
@@ -1847,10 +1728,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "period_start",
-          "period_end"
-        ],
+        "required": ["period_start", "period_end"],
         "title": "GenerateDTO",
         "type": "object"
       },
@@ -1949,9 +1827,7 @@
             "title": "Spec Url"
           }
         },
-        "required": [
-          "name"
-        ],
+        "required": ["name"],
         "title": "ImportConnectorBody",
         "type": "object"
       },
@@ -2008,9 +1884,7 @@
             "title": "Workflow Id"
           }
         },
-        "required": [
-          "name"
-        ],
+        "required": ["name"],
         "title": "IntegrationBody",
         "type": "object"
       },
@@ -2051,10 +1925,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "order_ids",
-          "title"
-        ],
+        "required": ["order_ids", "title"],
         "title": "InvoiceApplyDTO",
         "type": "object"
       },
@@ -2078,9 +1949,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "action"
-        ],
+        "required": ["action"],
         "title": "InvoiceReviewDTO",
         "type": "object"
       },
@@ -2124,9 +1993,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "query"
-        ],
+        "required": ["query"],
         "title": "KnowledgeSearchBody",
         "type": "object"
       },
@@ -2140,9 +2007,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "api_key"
-        ],
+        "required": ["api_key"],
         "title": "LlmBareKeyDetectDTO",
         "type": "object"
       },
@@ -2189,11 +2054,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "provider",
-          "model",
-          "messages"
-        ],
+        "required": ["provider", "model", "messages"],
         "title": "LlmChatDTO",
         "type": "object"
       },
@@ -2218,9 +2079,7 @@
             "title": "Base Url"
           }
         },
-        "required": [
-          "api_key"
-        ],
+        "required": ["api_key"],
         "title": "LlmCredentialDTO",
         "type": "object"
       },
@@ -2255,10 +2114,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "provider",
-          "prompt"
-        ],
+        "required": ["provider", "prompt"],
         "title": "LlmImageDTO",
         "type": "object"
       },
@@ -2283,9 +2139,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "markdown"
-        ],
+        "required": ["markdown"],
         "title": "LlmPptxDTO",
         "type": "object"
       },
@@ -2304,10 +2158,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "provider",
-          "model"
-        ],
+        "required": ["provider", "model"],
         "title": "LlmPreferenceDTO",
         "type": "object"
       },
@@ -2354,10 +2205,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "provider",
-          "model"
-        ],
+        "required": ["provider", "model"],
         "title": "LlmPriceDTO",
         "type": "object"
       },
@@ -2372,10 +2220,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "username",
-          "password"
-        ],
+        "required": ["username", "password"],
         "title": "LoginDTO",
         "type": "object"
       },
@@ -2390,10 +2235,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "email",
-          "code"
-        ],
+        "required": ["email", "code"],
         "title": "LoginWithCodeDTO",
         "type": "object"
       },
@@ -2412,10 +2254,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "phone",
-          "code"
-        ],
+        "required": ["phone", "code"],
         "title": "LoginWithPhoneCodeDTO",
         "type": "object"
       },
@@ -2427,9 +2266,7 @@
             "type": "object"
           }
         },
-        "required": [
-          "manifest"
-        ],
+        "required": ["manifest"],
         "title": "ManifestPutDTO",
         "type": "object"
       },
@@ -2477,9 +2314,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "brief"
-        ],
+        "required": ["brief"],
         "title": "ModAiScaffoldDTO",
         "type": "object"
       },
@@ -2496,9 +2331,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "path"
-        ],
+        "required": ["path"],
         "title": "ModFilePutDTO",
         "type": "object"
       },
@@ -2531,9 +2364,7 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "enabled"
-        ],
+        "required": ["enabled"],
         "title": "OperationToggleBody",
         "type": "object"
       },
@@ -2587,9 +2418,7 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "task_description"
-        ],
+        "required": ["task_description"],
         "title": "OrchestrateRequest",
         "type": "object"
       },
@@ -2607,10 +2436,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "current_password",
-          "new_password"
-        ],
+        "required": ["current_password", "new_password"],
         "title": "PasswordChangeDTO",
         "type": "object"
       },
@@ -2674,9 +2500,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "username"
-        ],
+        "required": ["username"],
         "title": "ProfileUpdateDTO",
         "type": "object"
       },
@@ -2689,9 +2513,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "from_version"
-        ],
+        "required": ["from_version"],
         "title": "PromoteBody",
         "type": "object"
       },
@@ -2734,10 +2556,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "name",
-          "email"
-        ],
+        "required": ["name", "email"],
         "title": "PublicContactDTO",
         "type": "object"
       },
@@ -2813,10 +2632,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "workflow_id",
-          "operation_id"
-        ],
+        "required": ["workflow_id", "operation_id"],
         "title": "PublishWorkflowNodeBody",
         "type": "object"
       },
@@ -2831,10 +2647,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "host_url",
-          "mod_id"
-        ],
+        "required": ["host_url", "mod_id"],
         "title": "PushAndTestRequest",
         "type": "object"
       },
@@ -2856,9 +2669,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "amount"
-        ],
+        "required": ["amount"],
         "title": "RechargeDTO",
         "type": "object"
       },
@@ -2869,9 +2680,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "refresh_token"
-        ],
+        "required": ["refresh_token"],
         "title": "RefreshTokenDTO",
         "type": "object"
       },
@@ -2890,10 +2699,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "order_no",
-          "reason"
-        ],
+        "required": ["order_no", "reason"],
         "title": "RefundApplyBody",
         "type": "object"
       },
@@ -2922,19 +2728,14 @@
             "title": "Refund Reason"
           }
         },
-        "required": [
-          "out_trade_no"
-        ],
+        "required": ["out_trade_no"],
         "title": "RefundDTO",
         "type": "object"
       },
       "RefundReviewBody": {
         "properties": {
           "action": {
-            "enum": [
-              "approve",
-              "reject"
-            ],
+            "enum": ["approve", "reject"],
             "title": "Action",
             "type": "string"
           },
@@ -2945,9 +2746,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "action"
-        ],
+        "required": ["action"],
         "title": "RefundReviewBody",
         "type": "object"
       },
@@ -2979,12 +2778,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "username",
-          "password",
-          "email",
-          "verification_code"
-        ],
+        "required": ["username", "password", "email", "verification_code"],
         "title": "RegisterDTO",
         "type": "object"
       },
@@ -3007,11 +2801,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "email",
-          "code",
-          "new_password"
-        ],
+        "required": ["email", "code", "new_password"],
         "title": "ResetPasswordDTO",
         "type": "object"
       },
@@ -3111,9 +2901,7 @@
             "title": "Workflow Id"
           }
         },
-        "required": [
-          "query"
-        ],
+        "required": ["query"],
         "title": "RetrieveBody",
         "type": "object"
       },
@@ -3132,9 +2920,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "rating"
-        ],
+        "required": ["rating"],
         "title": "ReviewSubmitDTO",
         "type": "object"
       },
@@ -3188,9 +2974,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "mod_id"
-        ],
+        "required": ["mod_id"],
         "title": "SandboxDTO",
         "type": "object"
       },
@@ -3260,9 +3044,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "name"
-        ],
+        "required": ["name"],
         "title": "SaveAsTemplateBody",
         "type": "object"
       },
@@ -3273,9 +3055,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "email"
-        ],
+        "required": ["email"],
         "title": "SendCodeDTO",
         "type": "object"
       },
@@ -3288,9 +3068,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "phone"
-        ],
+        "required": ["phone"],
         "title": "SendPhoneCodeDTO",
         "type": "object"
       },
@@ -3302,9 +3080,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "to"
-        ],
+        "required": ["to"],
         "title": "SendTestEmailBody",
         "type": "object"
       },
@@ -3319,9 +3095,7 @@
             "type": "array"
           }
         },
-        "required": [
-          "earning_ids"
-        ],
+        "required": ["earning_ids"],
         "title": "SettleDTO",
         "type": "object"
       },
@@ -3347,10 +3121,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "grantee_kind",
-          "grantee_id"
-        ],
+        "required": ["grantee_kind", "grantee_id"],
         "title": "ShareBody",
         "type": "object"
       },
@@ -3433,9 +3204,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "name"
-        ],
+        "required": ["name"],
         "title": "StandardBody",
         "type": "object"
       },
@@ -3585,9 +3354,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "name"
-        ],
+        "required": ["name"],
         "title": "UpsertPackageBody",
         "type": "object"
       },
@@ -3616,11 +3383,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "loc",
-          "msg",
-          "type"
-        ],
+        "required": ["loc", "msg", "type"],
         "title": "ValidationError",
         "type": "object"
       },
@@ -3633,9 +3396,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "code"
-        ],
+        "required": ["code"],
         "title": "VerifyAdminDigestCodeDTO",
         "type": "object"
       },
@@ -3672,9 +3433,7 @@
             "type": "number"
           }
         },
-        "required": [
-          "amount"
-        ],
+        "required": ["amount"],
         "title": "WithdrawDTO",
         "type": "object"
       },
@@ -3695,10 +3454,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "withdrawal_id",
-          "action"
-        ],
+        "required": ["withdrawal_id", "action"],
         "title": "WithdrawalActionDTO",
         "type": "object"
       },
@@ -3726,9 +3482,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "text"
-        ],
+        "required": ["text"],
         "title": "WorkbenchEdgeTtsBody",
         "type": "object"
       },
@@ -3742,12 +3496,7 @@
           },
           "intent": {
             "default": "skill",
-            "enum": [
-              "workflow",
-              "mod",
-              "employee",
-              "skill"
-            ],
+            "enum": ["workflow", "mod", "employee", "skill"],
             "title": "Intent",
             "type": "string"
           },
@@ -3774,9 +3523,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "brief"
-        ],
+        "required": ["brief"],
         "title": "WorkbenchResearchBody",
         "type": "object"
       },
@@ -3797,10 +3544,7 @@
           },
           "mode": {
             "default": "brief_first",
-            "enum": [
-              "brief_first",
-              "direct"
-            ],
+            "enum": ["brief_first", "direct"],
             "title": "Mode",
             "type": "string"
           },
@@ -3872,9 +3616,7 @@
             "title": "Skill Id"
           }
         },
-        "required": [
-          "brief"
-        ],
+        "required": ["brief"],
         "title": "WorkbenchVibeCodeSkillBody",
         "type": "object"
       },
@@ -3946,10 +3688,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "label"
-        ],
+        "required": ["id", "label"],
         "title": "WorkflowEmployeeScaffoldDTO",
         "type": "object"
       },
@@ -3989,9 +3728,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "trigger_type"
-        ],
+        "required": ["trigger_type"],
         "title": "WorkflowTriggerBody",
         "type": "object"
       },
@@ -4004,11 +3741,7 @@
             "type": "string"
           },
           "kind": {
-            "enum": [
-              "group",
-              "c2c",
-              "channel"
-            ],
+            "enum": ["group", "c2c", "channel"],
             "title": "Kind",
             "type": "string"
           },
@@ -4033,11 +3766,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "kind",
-          "target_id",
-          "content"
-        ],
+        "required": ["kind", "target_id", "content"],
         "title": "_PushDTO",
         "type": "object"
       },
@@ -4057,10 +3786,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "username",
-          "new_password"
-        ],
+        "required": ["username", "new_password"],
         "title": "AdminResetUserPasswordDTO",
         "type": "object"
       },
@@ -4079,10 +3805,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "username",
-          "new_password"
-        ],
+        "required": ["username", "new_password"],
         "title": "AdminResetUserPasswordDTO",
         "type": "object"
       },
@@ -4261,9 +3984,7 @@
           }
         },
         "summary": "Admin List Author Earnings",
-        "tags": [
-          "author-earnings"
-        ]
+        "tags": ["author-earnings"]
       }
     },
     "/api/admin/author-earnings/settle": {
@@ -4319,9 +4040,7 @@
           }
         },
         "summary": "Admin Settle Earnings",
-        "tags": [
-          "author-earnings"
-        ]
+        "tags": ["author-earnings"]
       }
     },
     "/api/admin/author-withdrawals": {
@@ -4406,9 +4125,7 @@
           }
         },
         "summary": "Admin List Withdrawals",
-        "tags": [
-          "author-earnings"
-        ]
+        "tags": ["author-earnings"]
       }
     },
     "/api/admin/author-withdrawals/action": {
@@ -4464,9 +4181,7 @@
           }
         },
         "summary": "Admin Process Withdrawal",
-        "tags": [
-          "author-earnings"
-        ]
+        "tags": ["author-earnings"]
       }
     },
     "/api/admin/catalog": {
@@ -4534,9 +4249,7 @@
           }
         },
         "summary": "Api Admin List Catalog",
-        "tags": [
-          "market"
-        ]
+        "tags": ["market"]
       },
       "post": {
         "operationId": "api_admin_upload_catalog_api_admin_catalog_post",
@@ -4589,9 +4302,7 @@
           }
         },
         "summary": "管理员上传 MOD 到市场（支持文件上传）",
-        "tags": [
-          "market"
-        ]
+        "tags": ["market"]
       }
     },
     "/api/admin/catalog/complaints": {
@@ -4670,9 +4381,7 @@
           }
         },
         "summary": "Api Admin List Catalog Complaints",
-        "tags": [
-          "market"
-        ]
+        "tags": ["market"]
       }
     },
     "/api/admin/catalog/complaints/{complaint_id}/review": {
@@ -4736,9 +4445,7 @@
           }
         },
         "summary": "Api Admin Review Catalog Complaint",
-        "tags": [
-          "market"
-        ]
+        "tags": ["market"]
       }
     },
     "/api/admin/catalog/sync-from-xc-packages": {
@@ -4784,9 +4491,7 @@
           }
         },
         "summary": "从 XC catalog_store 同步缺失条目到市场库",
-        "tags": [
-          "market"
-        ]
+        "tags": ["market"]
       }
     },
     "/api/admin/catalog/{item_id}": {
@@ -4841,9 +4546,7 @@
           }
         },
         "summary": "Api Admin Delete Catalog",
-        "tags": [
-          "market"
-        ]
+        "tags": ["market"]
       },
       "patch": {
         "description": "入库默认不公开展示；需要上架时 ``PATCH {\"is_public\": true}``。",
@@ -4906,9 +4609,7 @@
           }
         },
         "summary": "更新商品是否对 AI 市场公开展示",
-        "tags": [
-          "market"
-        ]
+        "tags": ["market"]
       }
     },
     "/api/admin/change-requests": {
@@ -4983,9 +4684,7 @@
           }
         },
         "summary": "List Change Requests",
-        "tags": [
-          "admin-change-requests"
-        ]
+        "tags": ["admin-change-requests"]
       }
     },
     "/api/admin/change-requests/{change_request_id}": {
@@ -5043,9 +4742,7 @@
           }
         },
         "summary": "Get Change Request",
-        "tags": [
-          "admin-change-requests"
-        ]
+        "tags": ["admin-change-requests"]
       }
     },
     "/api/admin/change-requests/{change_request_id}/approve": {
@@ -5103,9 +4800,7 @@
           }
         },
         "summary": "Approve Change Request",
-        "tags": [
-          "admin-change-requests"
-        ]
+        "tags": ["admin-change-requests"]
       }
     },
     "/api/admin/change-requests/{change_request_id}/reject": {
@@ -5174,9 +4869,7 @@
           }
         },
         "summary": "Reject Change Request",
-        "tags": [
-          "admin-change-requests"
-        ]
+        "tags": ["admin-change-requests"]
       }
     },
     "/api/admin/duty-graph/health": {
@@ -5226,9 +4919,7 @@
           }
         },
         "summary": "Duty Graph Health",
-        "tags": [
-          "admin-duty-graph"
-        ]
+        "tags": ["admin-duty-graph"]
       }
     },
     "/api/admin/duty-graph/no-key-employees": {
@@ -5278,9 +4969,7 @@
           }
         },
         "summary": "Get Duty Graph No Key Employees",
-        "tags": [
-          "admin-duty-graph"
-        ]
+        "tags": ["admin-duty-graph"]
       }
     },
     "/api/admin/duty-graph/runs": {
@@ -5340,9 +5029,7 @@
           }
         },
         "summary": "Create Duty Graph Run",
-        "tags": [
-          "admin-duty-graph"
-        ]
+        "tags": ["admin-duty-graph"]
       }
     },
     "/api/admin/duty-graph/runs/{run_id}": {
@@ -5400,9 +5087,7 @@
           }
         },
         "summary": "Get Duty Graph Run",
-        "tags": [
-          "admin-duty-graph"
-        ]
+        "tags": ["admin-duty-graph"]
       }
     },
     "/api/admin/email/digest-now": {
@@ -5448,9 +5133,7 @@
           }
         },
         "summary": "立即发送每日运维摘要邮件（管理员）",
-        "tags": [
-          "admin-email"
-        ]
+        "tags": ["admin-email"]
       }
     },
     "/api/admin/email/status": {
@@ -5496,9 +5179,7 @@
           }
         },
         "summary": "查看邮件服务当前生效配置（脱敏）",
-        "tags": [
-          "admin-email"
-        ]
+        "tags": ["admin-email"]
       }
     },
     "/api/admin/email/test": {
@@ -5553,9 +5234,7 @@
           }
         },
         "summary": "发一封测试邮件验证 SMTP 凭证（管理员）",
-        "tags": [
-          "admin-email"
-        ]
+        "tags": ["admin-email"]
       }
     },
     "/api/admin/employee-autonomy/brief-tasks": {
@@ -5628,9 +5307,7 @@
           }
         },
         "summary": "List Brief Tasks",
-        "tags": [
-          "admin-employee-autonomy"
-        ]
+        "tags": ["admin-employee-autonomy"]
       }
     },
     "/api/admin/employee-autonomy/collab/threads": {
@@ -5703,9 +5380,7 @@
           }
         },
         "summary": "List Collab Threads",
-        "tags": [
-          "admin-employee-autonomy"
-        ]
+        "tags": ["admin-employee-autonomy"]
       },
       "post": {
         "operationId": "create_collab_thread_api_api_admin_employee_autonomy_collab_threads_post",
@@ -5763,9 +5438,7 @@
           }
         },
         "summary": "Create Collab Thread Api",
-        "tags": [
-          "admin-employee-autonomy"
-        ]
+        "tags": ["admin-employee-autonomy"]
       }
     },
     "/api/admin/employee-autonomy/collab/threads/{thread_id}/messages": {
@@ -5835,9 +5508,7 @@
           }
         },
         "summary": "List Collab Messages",
-        "tags": [
-          "admin-employee-autonomy"
-        ]
+        "tags": ["admin-employee-autonomy"]
       },
       "post": {
         "operationId": "post_collab_message_api_api_admin_employee_autonomy_collab_threads__thread_id__messages_post",
@@ -5904,9 +5575,7 @@
           }
         },
         "summary": "Post Collab Message Api",
-        "tags": [
-          "admin-employee-autonomy"
-        ]
+        "tags": ["admin-employee-autonomy"]
       }
     },
     "/api/admin/employee-autonomy/dashboard": {
@@ -5967,9 +5636,7 @@
           }
         },
         "summary": "Get Autonomy Dashboard",
-        "tags": [
-          "admin-employee-autonomy"
-        ]
+        "tags": ["admin-employee-autonomy"]
       }
     },
     "/api/admin/employee-autonomy/dispatch/brief-tasks": {
@@ -6029,9 +5696,7 @@
           }
         },
         "summary": "Run Brief Task Dispatch",
-        "tags": [
-          "admin-employee-autonomy"
-        ]
+        "tags": ["admin-employee-autonomy"]
       }
     },
     "/api/admin/employee-autonomy/dispatch/suggestions": {
@@ -6091,9 +5756,7 @@
           }
         },
         "summary": "Run Suggestion Dispatch",
-        "tags": [
-          "admin-employee-autonomy"
-        ]
+        "tags": ["admin-employee-autonomy"]
       }
     },
     "/api/admin/employee-autonomy/evolution/scan": {
@@ -6153,9 +5816,7 @@
           }
         },
         "summary": "Trigger Evolution Scan",
-        "tags": [
-          "admin-employee-autonomy"
-        ]
+        "tags": ["admin-employee-autonomy"]
       }
     },
     "/api/admin/employee-autonomy/suggestions": {
@@ -6251,9 +5912,7 @@
           }
         },
         "summary": "List Employee Suggestions",
-        "tags": [
-          "admin-employee-autonomy"
-        ]
+        "tags": ["admin-employee-autonomy"]
       }
     },
     "/api/admin/employee-autonomy/suggestions/batch-review": {
@@ -6313,9 +5972,7 @@
           }
         },
         "summary": "Batch Review Employee Suggestions",
-        "tags": [
-          "admin-employee-autonomy"
-        ]
+        "tags": ["admin-employee-autonomy"]
       }
     },
     "/api/admin/employee-autonomy/suggestions/{suggestion_id}/approve": {
@@ -6384,9 +6041,7 @@
           }
         },
         "summary": "Approve Employee Suggestion",
-        "tags": [
-          "admin-employee-autonomy"
-        ]
+        "tags": ["admin-employee-autonomy"]
       }
     },
     "/api/admin/employee-autonomy/suggestions/{suggestion_id}/reject": {
@@ -6455,9 +6110,7 @@
           }
         },
         "summary": "Reject Employee Suggestion",
-        "tags": [
-          "admin-employee-autonomy"
-        ]
+        "tags": ["admin-employee-autonomy"]
       }
     },
     "/api/admin/employee-packs/align-llm-from-deepseek": {
@@ -6515,9 +6168,7 @@
           }
         },
         "summary": "Api Admin Align Employee Llm From Deepseek",
-        "tags": [
-          "market"
-        ]
+        "tags": ["market"]
       }
     },
     "/api/admin/employee-packs/align-llm-to-auto": {
@@ -6575,9 +6226,7 @@
           }
         },
         "summary": "Api Admin Align Employee Llm To Auto",
-        "tags": [
-          "market"
-        ]
+        "tags": ["market"]
       }
     },
     "/api/admin/employee-packs/purge-all": {
@@ -6623,9 +6272,7 @@
           }
         },
         "summary": "Api Admin Purge All Employee Packs",
-        "tags": [
-          "market"
-        ]
+        "tags": ["market"]
       }
     },
     "/api/admin/employee-packs/{pkg_id}": {
@@ -6680,9 +6327,7 @@
           }
         },
         "summary": "Api Admin Delete Employee Pack",
-        "tags": [
-          "market"
-        ]
+        "tags": ["market"]
       }
     },
     "/api/admin/employee-packs/{pkg_id}/align-llm-to-auto-single": {
@@ -6749,9 +6394,7 @@
           }
         },
         "summary": "Api Admin Align Single Employee Llm To Auto",
-        "tags": [
-          "market"
-        ]
+        "tags": ["market"]
       }
     },
     "/api/admin/employees/execution-capabilities": {
@@ -6811,9 +6454,7 @@
           }
         },
         "summary": "Post Employee Execution Capabilities",
-        "tags": [
-          "admin-duty-graph"
-        ]
+        "tags": ["admin-duty-graph"]
       }
     },
     "/api/admin/employees/{employee_id}/execution-capability": {
@@ -6871,9 +6512,7 @@
           }
         },
         "summary": "Get Employee Execution Capability",
-        "tags": [
-          "admin-duty-graph"
-        ]
+        "tags": ["admin-duty-graph"]
       }
     },
     "/api/admin/employees/{employee_id}/execution-metrics": {
@@ -6973,9 +6612,7 @@
           }
         },
         "summary": "List Employee Execution Metrics",
-        "tags": [
-          "admin-employees"
-        ]
+        "tags": ["admin-employees"]
       }
     },
     "/api/admin/events/dlq": {
@@ -7030,9 +6667,7 @@
           }
         },
         "summary": "Admin List Dlq",
-        "tags": [
-          "admin-events"
-        ]
+        "tags": ["admin-events"]
       }
     },
     "/api/admin/events/dlq/{row_id}/discard": {
@@ -7086,9 +6721,7 @@
           }
         },
         "summary": "Admin Discard Dlq",
-        "tags": [
-          "admin-events"
-        ]
+        "tags": ["admin-events"]
       }
     },
     "/api/admin/events/replay": {
@@ -7186,9 +6819,7 @@
           }
         },
         "summary": "Admin Replay Outbox",
-        "tags": [
-          "admin-events"
-        ]
+        "tags": ["admin-events"]
       }
     },
     "/api/admin/invoices": {
@@ -7275,9 +6906,7 @@
           }
         },
         "summary": "Admin List Invoices",
-        "tags": [
-          "invoices"
-        ]
+        "tags": ["invoices"]
       }
     },
     "/api/admin/invoices/{invoice_id}": {
@@ -7342,9 +6971,7 @@
           }
         },
         "summary": "Admin Review Invoice",
-        "tags": [
-          "invoices"
-        ]
+        "tags": ["invoices"]
       }
     },
     "/api/admin/mods/purge-all": {
@@ -7390,9 +7017,7 @@
           }
         },
         "summary": "Api Admin Purge All Mods",
-        "tags": [
-          "market"
-        ]
+        "tags": ["market"]
       }
     },
     "/api/admin/ops/approval-tokens": {
@@ -7453,9 +7078,7 @@
           }
         },
         "summary": "List Ops Approval Tokens",
-        "tags": [
-          "admin-ops"
-        ]
+        "tags": ["admin-ops"]
       }
     },
     "/api/admin/ops/audit": {
@@ -7534,9 +7157,7 @@
           }
         },
         "summary": "List Ops Audit Logs",
-        "tags": [
-          "admin-ops"
-        ]
+        "tags": ["admin-ops"]
       }
     },
     "/api/admin/ops/staged-changes": {
@@ -7615,9 +7236,7 @@
           }
         },
         "summary": "List Ops Staged Changes",
-        "tags": [
-          "admin-ops"
-        ]
+        "tags": ["admin-ops"]
       }
     },
     "/api/admin/reconciliation": {
@@ -7704,9 +7323,7 @@
           }
         },
         "summary": "Api List Reports",
-        "tags": [
-          "reconciliation"
-        ]
+        "tags": ["reconciliation"]
       }
     },
     "/api/admin/reconciliation/generate": {
@@ -7762,9 +7379,7 @@
           }
         },
         "summary": "Api Generate Report",
-        "tags": [
-          "reconciliation"
-        ]
+        "tags": ["reconciliation"]
       }
     },
     "/api/admin/reconciliation/{report_id}": {
@@ -7831,9 +7446,7 @@
           }
         },
         "summary": "Api Get Report",
-        "tags": [
-          "reconciliation"
-        ]
+        "tags": ["reconciliation"]
       }
     },
     "/api/admin/reconciliation/{report_id}/confirm": {
@@ -7888,9 +7501,7 @@
           }
         },
         "summary": "Api Confirm Report",
-        "tags": [
-          "reconciliation"
-        ]
+        "tags": ["reconciliation"]
       }
     },
     "/api/admin/reset-user-password": {
@@ -7927,11 +7538,7 @@
           }
         },
         "summary": "管理员重置用户密码（MODSTORE_ADMIN_RECHARGE_TOKEN）",
-        "tags": [
-          "auth",
-          "auth",
-          "admin"
-        ]
+        "tags": ["auth", "auth", "admin"]
       }
     },
     "/api/admin/runtime-allowlist": {
@@ -7980,9 +7587,7 @@
           }
         },
         "summary": "列出脚本沙箱可用的第三方包（已审核 allowlist）",
-        "tags": [
-          "runtime-allowlist"
-        ]
+        "tags": ["runtime-allowlist"]
       },
       "post": {
         "operationId": "upsert_package_api_admin_runtime_allowlist_post",
@@ -8039,9 +7644,7 @@
           }
         },
         "summary": "新增 / 更新审核包（管理员）",
-        "tags": [
-          "runtime-allowlist"
-        ]
+        "tags": ["runtime-allowlist"]
       }
     },
     "/api/admin/runtime-allowlist/{name}": {
@@ -8099,9 +7702,7 @@
           }
         },
         "summary": "移除审核包（管理员）",
-        "tags": [
-          "runtime-allowlist"
-        ]
+        "tags": ["runtime-allowlist"]
       }
     },
     "/api/admin/status": {
@@ -8146,11 +7747,7 @@
           }
         },
         "summary": "管理端概要统计（需管理员 JWT）",
-        "tags": [
-          "auth",
-          "auth",
-          "admin"
-        ]
+        "tags": ["auth", "auth", "admin"]
       }
     },
     "/api/admin/transactions": {
@@ -8218,9 +7815,7 @@
           }
         },
         "summary": "Api Admin List Transactions",
-        "tags": [
-          "market"
-        ]
+        "tags": ["market"]
       }
     },
     "/api/admin/upload/chunk": {
@@ -8276,9 +7871,7 @@
           }
         },
         "summary": "上传文件块",
-        "tags": [
-          "market"
-        ]
+        "tags": ["market"]
       }
     },
     "/api/admin/upload/complete": {
@@ -8334,9 +7927,7 @@
           }
         },
         "summary": "完成分块上传",
-        "tags": [
-          "market"
-        ]
+        "tags": ["market"]
       }
     },
     "/api/admin/upload/initiate": {
@@ -8392,9 +7983,7 @@
           }
         },
         "summary": "初始化分块上传",
-        "tags": [
-          "market"
-        ]
+        "tags": ["market"]
       }
     },
     "/api/admin/users": {
@@ -8462,9 +8051,7 @@
           }
         },
         "summary": "Api Admin List Users",
-        "tags": [
-          "market"
-        ]
+        "tags": ["market"]
       }
     },
     "/api/admin/users/{user_id}/admin": {
@@ -8527,9 +8114,7 @@
           }
         },
         "summary": "Api Admin Set Admin Status",
-        "tags": [
-          "market"
-        ]
+        "tags": ["market"]
       }
     },
     "/api/admin/wallets": {
@@ -8597,9 +8182,7 @@
           }
         },
         "summary": "Api Admin List Wallets",
-        "tags": [
-          "market"
-        ]
+        "tags": ["market"]
       }
     },
     "/api/admin/yuangon-onboard/run": {
@@ -8660,9 +8243,7 @@
           }
         },
         "summary": "Yuangon Onboard Run",
-        "tags": [
-          "admin-yuangon-onboard"
-        ]
+        "tags": ["admin-yuangon-onboard"]
       }
     },
     "/api/admin/yuangon-onboard/status": {
@@ -8711,9 +8292,7 @@
           }
         },
         "summary": "Yuangon Onboard Status",
-        "tags": [
-          "admin-yuangon-onboard"
-        ]
+        "tags": ["admin-yuangon-onboard"]
       }
     },
     "/api/agent/butler/actions": {
@@ -8769,9 +8348,7 @@
           }
         },
         "summary": "Record Butler Action",
-        "tags": [
-          "butler"
-        ]
+        "tags": ["butler"]
       }
     },
     "/api/agent/butler/all-hands-report": {
@@ -8827,9 +8404,7 @@
           }
         },
         "summary": "Butler All Hands Report",
-        "tags": [
-          "butler"
-        ]
+        "tags": ["butler"]
       }
     },
     "/api/agent/butler/all-hands-report/sessions": {
@@ -8885,9 +8460,7 @@
           }
         },
         "summary": "Butler All Hands Report Session Start",
-        "tags": [
-          "butler"
-        ]
+        "tags": ["butler"]
       }
     },
     "/api/agent/butler/chat": {
@@ -8943,9 +8516,7 @@
           }
         },
         "summary": "Butler Chat",
-        "tags": [
-          "butler"
-        ]
+        "tags": ["butler"]
       }
     },
     "/api/agent/butler/chat/stream": {
@@ -9001,9 +8572,7 @@
           }
         },
         "summary": "Butler Chat Stream",
-        "tags": [
-          "butler"
-        ]
+        "tags": ["butler"]
       }
     },
     "/api/agent/butler/orchestrate": {
@@ -9059,9 +8628,7 @@
           }
         },
         "summary": "Butler Orchestrate",
-        "tags": [
-          "butler"
-        ]
+        "tags": ["butler"]
       }
     },
     "/api/agent/butler/qq/by-employee/{employee_id}/webhook": {
@@ -9100,9 +8667,7 @@
           }
         },
         "summary": "Qq Employee Webhook Probe",
-        "tags": [
-          "butler-qq"
-        ]
+        "tags": ["butler-qq"]
       },
       "post": {
         "description": "通用入站渠道：``/api/agent/butler/qq/by-employee/{employee_id}/webhook``。\n\n无需改代码、无需 ENV，只要 admin 在账号池里把 QQ 账号挂到这个员工名下，\nURL 就会自动生效。是 ``/{webhook_key}/webhook`` 的命名空间安全版本，\n避免和静态 ``task-router`` / ``employee-interview`` 撞车。",
@@ -9139,9 +8704,7 @@
           }
         },
         "summary": "Qq Employee Webhook",
-        "tags": [
-          "butler-qq"
-        ]
+        "tags": ["butler-qq"]
       }
     },
     "/api/agent/butler/qq/cache/reload": {
@@ -9163,9 +8726,7 @@
           }
         },
         "summary": "Qq Reload Cache",
-        "tags": [
-          "butler-qq"
-        ]
+        "tags": ["butler-qq"]
       }
     },
     "/api/agent/butler/qq/push": {
@@ -9206,9 +8767,7 @@
           }
         },
         "summary": "Qq Push",
-        "tags": [
-          "butler-qq"
-        ]
+        "tags": ["butler-qq"]
       }
     },
     "/api/agent/butler/qq/status": {
@@ -9229,9 +8788,7 @@
           }
         },
         "summary": "Qq Status",
-        "tags": [
-          "butler-qq"
-        ]
+        "tags": ["butler-qq"]
       }
     },
     "/api/agent/butler/qq/webhook": {
@@ -9249,9 +8806,7 @@
           }
         },
         "summary": "Qq Webhook Probe",
-        "tags": [
-          "butler-qq"
-        ]
+        "tags": ["butler-qq"]
       },
       "post": {
         "operationId": "qq_webhook_api_agent_butler_qq_webhook_post",
@@ -9266,9 +8821,7 @@
           }
         },
         "summary": "Qq Webhook",
-        "tags": [
-          "butler-qq"
-        ]
+        "tags": ["butler-qq"]
       }
     },
     "/api/agent/butler/qq/{webhook_key}/webhook": {
@@ -9307,9 +8860,7 @@
           }
         },
         "summary": "Qq Specific Webhook Probe",
-        "tags": [
-          "butler-qq"
-        ]
+        "tags": ["butler-qq"]
       },
       "post": {
         "operationId": "qq_specific_webhook_api_agent_butler_qq__webhook_key__webhook_post",
@@ -9345,9 +8896,7 @@
           }
         },
         "summary": "Qq Specific Webhook",
-        "tags": [
-          "butler-qq"
-        ]
+        "tags": ["butler-qq"]
       }
     },
     "/api/agent/butler/skills": {
@@ -9393,9 +8942,7 @@
           }
         },
         "summary": "List Butler Skills",
-        "tags": [
-          "butler"
-        ]
+        "tags": ["butler"]
       }
     },
     "/api/agent/butler/skills/{skill_id}": {
@@ -9460,9 +9007,7 @@
           }
         },
         "summary": "Update Butler Skill Active",
-        "tags": [
-          "butler"
-        ]
+        "tags": ["butler"]
       }
     },
     "/api/analytics/dashboard": {
@@ -9507,9 +9052,7 @@
           }
         },
         "summary": "Dashboard",
-        "tags": [
-          "analytics"
-        ]
+        "tags": ["analytics"]
       }
     },
     "/api/auth/change-password": {
@@ -9564,9 +9107,7 @@
           }
         },
         "summary": "已登录用户修改密码",
-        "tags": [
-          "auth"
-        ]
+        "tags": ["auth"]
       }
     },
     "/api/auth/login": {
@@ -9603,9 +9144,7 @@
           }
         },
         "summary": "用户名密码登录，返回 JWT",
-        "tags": [
-          "auth"
-        ]
+        "tags": ["auth"]
       }
     },
     "/api/auth/login-with-code": {
@@ -9642,9 +9181,7 @@
           }
         },
         "summary": "邮箱验证码登录",
-        "tags": [
-          "auth"
-        ]
+        "tags": ["auth"]
       }
     },
     "/api/auth/login-with-phone-code": {
@@ -9682,9 +9219,7 @@
           }
         },
         "summary": "手机验证码登录",
-        "tags": [
-          "auth"
-        ]
+        "tags": ["auth"]
       }
     },
     "/api/auth/me": {
@@ -9729,9 +9264,7 @@
           }
         },
         "summary": "当前用户资料与等级（含 Java 侧叠加字段）",
-        "tags": [
-          "auth"
-        ]
+        "tags": ["auth"]
       }
     },
     "/api/auth/profile": {
@@ -9786,9 +9319,7 @@
           }
         },
         "summary": "修改当前用户显示名",
-        "tags": [
-          "auth"
-        ]
+        "tags": ["auth"]
       }
     },
     "/api/auth/refresh": {
@@ -9825,9 +9356,7 @@
           }
         },
         "summary": "用 refresh_token 换取新的 access_token",
-        "tags": [
-          "auth"
-        ]
+        "tags": ["auth"]
       }
     },
     "/api/auth/register": {
@@ -9864,9 +9393,7 @@
           }
         },
         "summary": "注册用户（邮箱验证码通过 send-register-code）",
-        "tags": [
-          "auth"
-        ]
+        "tags": ["auth"]
       }
     },
     "/api/auth/reset-password": {
@@ -9903,9 +9430,7 @@
           }
         },
         "summary": "凭邮箱验证码重置密码",
-        "tags": [
-          "auth"
-        ]
+        "tags": ["auth"]
       }
     },
     "/api/auth/send-code": {
@@ -9942,9 +9467,7 @@
           }
         },
         "summary": "向已注册邮箱发送登录验证码",
-        "tags": [
-          "auth"
-        ]
+        "tags": ["auth"]
       }
     },
     "/api/auth/send-phone-code": {
@@ -9982,9 +9505,7 @@
           }
         },
         "summary": "发送手机短信验证码",
-        "tags": [
-          "auth"
-        ]
+        "tags": ["auth"]
       }
     },
     "/api/auth/send-register-code": {
@@ -10021,9 +9542,7 @@
           }
         },
         "summary": "向新邮箱发送注册验证码",
-        "tags": [
-          "auth"
-        ]
+        "tags": ["auth"]
       }
     },
     "/api/auth/send-reset-password-code": {
@@ -10060,9 +9579,7 @@
           }
         },
         "summary": "发送重置密码验证码",
-        "tags": [
-          "auth"
-        ]
+        "tags": ["auth"]
       }
     },
     "/api/auth/verify-admin-digest-code": {
@@ -10118,11 +9635,7 @@
           }
         },
         "summary": "校验每日摘要邮件中的 6 位身份码以解锁管理端 UI",
-        "tags": [
-          "auth",
-          "auth",
-          "admin"
-        ]
+        "tags": ["auth", "auth", "admin"]
       }
     },
     "/api/author/earnings": {
@@ -10209,9 +9722,7 @@
           }
         },
         "summary": "Get Author Earnings",
-        "tags": [
-          "author-earnings"
-        ]
+        "tags": ["author-earnings"]
       }
     },
     "/api/author/withdraw": {
@@ -10267,9 +9778,7 @@
           }
         },
         "summary": "Post Author Withdraw",
-        "tags": [
-          "author-earnings"
-        ]
+        "tags": ["author-earnings"]
       }
     },
     "/api/authoring/extension-surface": {
@@ -10308,9 +9817,7 @@
           }
         },
         "summary": "Api Authoring Extension Surface",
-        "tags": [
-          "authoring"
-        ]
+        "tags": ["authoring"]
       }
     },
     "/api/config": {
@@ -10327,9 +9834,7 @@
           }
         },
         "summary": "Get Config",
-        "tags": [
-          "config"
-        ]
+        "tags": ["config"]
       },
       "put": {
         "operationId": "put_config_api_config_put",
@@ -10364,9 +9869,7 @@
           }
         },
         "summary": "Put Config",
-        "tags": [
-          "config"
-        ]
+        "tags": ["config"]
       }
     },
     "/api/csp-report": {
@@ -10384,9 +9887,7 @@
           }
         },
         "summary": "Csp Report",
-        "tags": [
-          "csp"
-        ]
+        "tags": ["csp"]
       }
     },
     "/api/customer-service/actions": {
@@ -10459,9 +9960,7 @@
           }
         },
         "summary": "List Actions",
-        "tags": [
-          "customer-service"
-        ]
+        "tags": ["customer-service"]
       }
     },
     "/api/customer-service/chat": {
@@ -10516,9 +10015,7 @@
           }
         },
         "summary": "Customer Service Chat",
-        "tags": [
-          "customer-service"
-        ]
+        "tags": ["customer-service"]
       }
     },
     "/api/customer-service/integrations": {
@@ -10563,9 +10060,7 @@
           }
         },
         "summary": "List Integrations",
-        "tags": [
-          "customer-service"
-        ]
+        "tags": ["customer-service"]
       },
       "post": {
         "operationId": "create_integration_api_customer_service_integrations_post",
@@ -10618,9 +10113,7 @@
           }
         },
         "summary": "Create Integration",
-        "tags": [
-          "customer-service"
-        ]
+        "tags": ["customer-service"]
       }
     },
     "/api/customer-service/integrations/{integration_id}": {
@@ -10684,9 +10177,7 @@
           }
         },
         "summary": "Update Integration",
-        "tags": [
-          "customer-service"
-        ]
+        "tags": ["customer-service"]
       }
     },
     "/api/customer-service/sessions": {
@@ -10743,9 +10234,7 @@
           }
         },
         "summary": "List Sessions",
-        "tags": [
-          "customer-service"
-        ]
+        "tags": ["customer-service"]
       }
     },
     "/api/customer-service/sessions/{session_id}": {
@@ -10799,9 +10288,7 @@
           }
         },
         "summary": "Session Detail",
-        "tags": [
-          "customer-service"
-        ]
+        "tags": ["customer-service"]
       }
     },
     "/api/customer-service/standards": {
@@ -10846,9 +10333,7 @@
           }
         },
         "summary": "List Standards",
-        "tags": [
-          "customer-service"
-        ]
+        "tags": ["customer-service"]
       },
       "post": {
         "operationId": "create_standard_api_customer_service_standards_post",
@@ -10901,9 +10386,7 @@
           }
         },
         "summary": "Create Standard",
-        "tags": [
-          "customer-service"
-        ]
+        "tags": ["customer-service"]
       }
     },
     "/api/customer-service/standards/{standard_id}": {
@@ -10967,9 +10450,7 @@
           }
         },
         "summary": "Update Standard",
-        "tags": [
-          "customer-service"
-        ]
+        "tags": ["customer-service"]
       }
     },
     "/api/customer-service/tickets": {
@@ -11036,9 +10517,7 @@
           }
         },
         "summary": "List Tickets",
-        "tags": [
-          "customer-service"
-        ]
+        "tags": ["customer-service"]
       }
     },
     "/api/customer-service/tickets/{ticket_id}": {
@@ -11092,9 +10571,7 @@
           }
         },
         "summary": "Ticket Detail",
-        "tags": [
-          "customer-service"
-        ]
+        "tags": ["customer-service"]
       }
     },
     "/api/debug/focus-primary": {
@@ -11149,9 +10626,7 @@
           }
         },
         "summary": "Api Debug Focus Primary",
-        "tags": [
-          "debug"
-        ]
+        "tags": ["debug"]
       }
     },
     "/api/debug/sandbox": {
@@ -11206,9 +10681,7 @@
           }
         },
         "summary": "Api Debug Sandbox",
-        "tags": [
-          "debug"
-        ]
+        "tags": ["debug"]
       }
     },
     "/api/developer/key-export/audit": {
@@ -11263,10 +10736,7 @@
           }
         },
         "summary": "当前用户最近的密钥导出审计记录",
-        "tags": [
-          "developer",
-          "key-export"
-        ]
+        "tags": ["developer", "key-export"]
       }
     },
     "/api/developer/key-export/bundle": {
@@ -11321,10 +10791,7 @@
           }
         },
         "summary": "加密导出 PAT 包到桌面公钥（须密码确认；默认轮换所选 Token）",
-        "tags": [
-          "developer",
-          "key-export"
-        ]
+        "tags": ["developer", "key-export"]
       }
     },
     "/api/developer/tokens": {
@@ -11369,9 +10836,7 @@
           }
         },
         "summary": "开发者 Token 列表",
-        "tags": [
-          "developer"
-        ]
+        "tags": ["developer"]
       },
       "post": {
         "operationId": "create_developer_token_api_developer_tokens_post",
@@ -11424,9 +10889,7 @@
           }
         },
         "summary": "创建开发者 Token（明文仅返回一次）",
-        "tags": [
-          "developer"
-        ]
+        "tags": ["developer"]
       }
     },
     "/api/developer/tokens/{token_id}": {
@@ -11480,9 +10943,7 @@
           }
         },
         "summary": "吊销开发者 Token（软删除，保留审计）",
-        "tags": [
-          "developer"
-        ]
+        "tags": ["developer"]
       }
     },
     "/api/developer/webhooks": {
@@ -11527,10 +10988,7 @@
           }
         },
         "summary": "Webhook 订阅列表",
-        "tags": [
-          "developer",
-          "webhooks"
-        ]
+        "tags": ["developer", "webhooks"]
       },
       "post": {
         "operationId": "create_subscription_api_developer_webhooks_post",
@@ -11583,10 +11041,7 @@
           }
         },
         "summary": "创建 Webhook 订阅",
-        "tags": [
-          "developer",
-          "webhooks"
-        ]
+        "tags": ["developer", "webhooks"]
       }
     },
     "/api/developer/webhooks/deliveries/{delivery_id}/retry": {
@@ -11640,10 +11095,7 @@
           }
         },
         "summary": "手动重试一次失败的投递（产生一条新投递记录）",
-        "tags": [
-          "developer",
-          "webhooks"
-        ]
+        "tags": ["developer", "webhooks"]
       }
     },
     "/api/developer/webhooks/event-catalog": {
@@ -11661,10 +11113,7 @@
           }
         },
         "summary": "可订阅的业务事件清单",
-        "tags": [
-          "developer",
-          "webhooks"
-        ]
+        "tags": ["developer", "webhooks"]
       }
     },
     "/api/developer/webhooks/{subscription_id}": {
@@ -11718,10 +11167,7 @@
           }
         },
         "summary": "删除订阅（投递日志保留）",
-        "tags": [
-          "developer",
-          "webhooks"
-        ]
+        "tags": ["developer", "webhooks"]
       },
       "get": {
         "operationId": "get_subscription_api_developer_webhooks__subscription_id__get",
@@ -11773,10 +11219,7 @@
           }
         },
         "summary": "订阅详情",
-        "tags": [
-          "developer",
-          "webhooks"
-        ]
+        "tags": ["developer", "webhooks"]
       },
       "put": {
         "operationId": "update_subscription_api_developer_webhooks__subscription_id__put",
@@ -11838,10 +11281,7 @@
           }
         },
         "summary": "更新订阅",
-        "tags": [
-          "developer",
-          "webhooks"
-        ]
+        "tags": ["developer", "webhooks"]
       }
     },
     "/api/developer/webhooks/{subscription_id}/deliveries": {
@@ -11936,10 +11376,7 @@
           }
         },
         "summary": "投递日志（按订阅）",
-        "tags": [
-          "developer",
-          "webhooks"
-        ]
+        "tags": ["developer", "webhooks"]
       }
     },
     "/api/developer/webhooks/{subscription_id}/test": {
@@ -11993,10 +11430,7 @@
           }
         },
         "summary": "向订阅发送一条测试事件 (modstore.webhook_test)",
-        "tags": [
-          "developer",
-          "webhooks"
-        ]
+        "tags": ["developer", "webhooks"]
       }
     },
     "/api/employees/": {
@@ -12042,9 +11476,7 @@
           }
         },
         "summary": "获取员工列表",
-        "tags": [
-          "employees"
-        ]
+        "tags": ["employees"]
       }
     },
     "/api/employees/{employee_id}/execute": {
@@ -12126,9 +11558,7 @@
           }
         },
         "summary": "执行员工任务",
-        "tags": [
-          "employees"
-        ]
+        "tags": ["employees"]
       }
     },
     "/api/employees/{employee_id}/manifest": {
@@ -12183,9 +11613,7 @@
           }
         },
         "summary": "获取员工包完整 manifest",
-        "tags": [
-          "employees"
-        ]
+        "tags": ["employees"]
       }
     },
     "/api/employees/{employee_id}/status": {
@@ -12240,9 +11668,7 @@
           }
         },
         "summary": "获取员工状态",
-        "tags": [
-          "employees"
-        ]
+        "tags": ["employees"]
       }
     },
     "/api/eskills": {
@@ -12287,9 +11713,7 @@
           }
         },
         "summary": "List Eskills",
-        "tags": [
-          "eskills"
-        ]
+        "tags": ["eskills"]
       },
       "post": {
         "operationId": "create_eskill_api_eskills_post",
@@ -12342,9 +11766,7 @@
           }
         },
         "summary": "Create Eskill",
-        "tags": [
-          "eskills"
-        ]
+        "tags": ["eskills"]
       }
     },
     "/api/eskills/": {
@@ -12389,9 +11811,7 @@
           }
         },
         "summary": "List Eskills",
-        "tags": [
-          "eskills"
-        ]
+        "tags": ["eskills"]
       },
       "post": {
         "operationId": "create_eskill_api_eskills__post",
@@ -12444,9 +11864,7 @@
           }
         },
         "summary": "Create Eskill",
-        "tags": [
-          "eskills"
-        ]
+        "tags": ["eskills"]
       }
     },
     "/api/eskills/{eskill_id}": {
@@ -12500,9 +11918,7 @@
           }
         },
         "summary": "Get Eskill",
-        "tags": [
-          "eskills"
-        ]
+        "tags": ["eskills"]
       }
     },
     "/api/eskills/{eskill_id}/run": {
@@ -12566,9 +11982,7 @@
           }
         },
         "summary": "Run Eskill",
-        "tags": [
-          "eskills"
-        ]
+        "tags": ["eskills"]
       }
     },
     "/api/export/fhd-shell-mods": {
@@ -12604,9 +12018,7 @@
           }
         },
         "summary": "Api Export Fhd Shell Mods",
-        "tags": [
-          "config"
-        ]
+        "tags": ["config"]
       }
     },
     "/api/fhd/db-tokens/status": {
@@ -12623,9 +12035,7 @@
           }
         },
         "summary": "Api Fhd Db Tokens Status",
-        "tags": [
-          "debug"
-        ]
+        "tags": ["debug"]
       }
     },
     "/api/health": {
@@ -12644,9 +12054,7 @@
           }
         },
         "summary": "Health",
-        "tags": [
-          "health"
-        ]
+        "tags": ["health"]
       }
     },
     "/api/inbound/webhooks/dingtalk": {
@@ -12695,9 +12103,7 @@
           }
         },
         "summary": "Receive Dingtalk Webhook",
-        "tags": [
-          "inbound-webhooks"
-        ]
+        "tags": ["inbound-webhooks"]
       }
     },
     "/api/inbound/webhooks/feishu": {
@@ -12714,9 +12120,7 @@
           }
         },
         "summary": "Receive Feishu Webhook",
-        "tags": [
-          "inbound-webhooks"
-        ]
+        "tags": ["inbound-webhooks"]
       }
     },
     "/api/inbound/webhooks/generic": {
@@ -12766,9 +12170,7 @@
           }
         },
         "summary": "Receive Generic Webhook",
-        "tags": [
-          "inbound-webhooks"
-        ]
+        "tags": ["inbound-webhooks"]
       }
     },
     "/api/inbound/webhooks/github": {
@@ -12817,9 +12219,7 @@
           }
         },
         "summary": "Receive Github Webhook",
-        "tags": [
-          "inbound-webhooks"
-        ]
+        "tags": ["inbound-webhooks"]
       }
     },
     "/api/inbound/webhooks/status": {
@@ -12841,9 +12241,7 @@
           }
         },
         "summary": "Status Overview",
-        "tags": [
-          "inbound-webhooks"
-        ]
+        "tags": ["inbound-webhooks"]
       }
     },
     "/api/invoice/apply": {
@@ -12899,9 +12297,7 @@
           }
         },
         "summary": "Api Invoice Apply",
-        "tags": [
-          "invoices"
-        ]
+        "tags": ["invoices"]
       }
     },
     "/api/invoice/list": {
@@ -12970,9 +12366,7 @@
           }
         },
         "summary": "Api Invoice List",
-        "tags": [
-          "invoices"
-        ]
+        "tags": ["invoices"]
       }
     },
     "/api/knowledge/documents": {
@@ -13018,9 +12412,7 @@
           }
         },
         "summary": "Api List Documents",
-        "tags": [
-          "knowledge"
-        ]
+        "tags": ["knowledge"]
       },
       "post": {
         "operationId": "api_upload_document_api_knowledge_documents_post",
@@ -13073,9 +12465,7 @@
           }
         },
         "summary": "Api Upload Document",
-        "tags": [
-          "knowledge"
-        ]
+        "tags": ["knowledge"]
       }
     },
     "/api/knowledge/documents/{doc_id}": {
@@ -13129,9 +12519,7 @@
           }
         },
         "summary": "Api Delete Document",
-        "tags": [
-          "knowledge"
-        ]
+        "tags": ["knowledge"]
       }
     },
     "/api/knowledge/extract-text": {
@@ -13187,9 +12575,7 @@
           }
         },
         "summary": "Api Extract Text",
-        "tags": [
-          "knowledge"
-        ]
+        "tags": ["knowledge"]
       }
     },
     "/api/knowledge/search": {
@@ -13244,9 +12630,7 @@
           }
         },
         "summary": "Api Search Knowledge",
-        "tags": [
-          "knowledge"
-        ]
+        "tags": ["knowledge"]
       }
     },
     "/api/knowledge/status": {
@@ -13291,9 +12675,7 @@
           }
         },
         "summary": "Api Knowledge Status",
-        "tags": [
-          "knowledge"
-        ]
+        "tags": ["knowledge"]
       }
     },
     "/api/knowledge/v2/collections": {
@@ -13370,9 +12752,7 @@
           }
         },
         "summary": "Api List Collections",
-        "tags": [
-          "knowledge-v2"
-        ]
+        "tags": ["knowledge-v2"]
       },
       "post": {
         "operationId": "api_create_collection_api_knowledge_v2_collections_post",
@@ -13425,9 +12805,7 @@
           }
         },
         "summary": "Api Create Collection",
-        "tags": [
-          "knowledge-v2"
-        ]
+        "tags": ["knowledge-v2"]
       }
     },
     "/api/knowledge/v2/collections/{coll_id}": {
@@ -13481,9 +12859,7 @@
           }
         },
         "summary": "Api Delete Collection",
-        "tags": [
-          "knowledge-v2"
-        ]
+        "tags": ["knowledge-v2"]
       },
       "patch": {
         "operationId": "api_update_collection_api_knowledge_v2_collections__coll_id__patch",
@@ -13545,9 +12921,7 @@
           }
         },
         "summary": "Api Update Collection",
-        "tags": [
-          "knowledge-v2"
-        ]
+        "tags": ["knowledge-v2"]
       }
     },
     "/api/knowledge/v2/collections/{coll_id}/documents": {
@@ -13601,9 +12975,7 @@
           }
         },
         "summary": "Api List Documents",
-        "tags": [
-          "knowledge-v2"
-        ]
+        "tags": ["knowledge-v2"]
       },
       "post": {
         "operationId": "api_upload_document_api_knowledge_v2_collections__coll_id__documents_post",
@@ -13665,9 +13037,7 @@
           }
         },
         "summary": "Api Upload Document",
-        "tags": [
-          "knowledge-v2"
-        ]
+        "tags": ["knowledge-v2"]
       }
     },
     "/api/knowledge/v2/collections/{coll_id}/documents/{doc_id}": {
@@ -13730,9 +13100,7 @@
           }
         },
         "summary": "Api Delete Document",
-        "tags": [
-          "knowledge-v2"
-        ]
+        "tags": ["knowledge-v2"]
       }
     },
     "/api/knowledge/v2/collections/{coll_id}/share": {
@@ -13796,9 +13164,7 @@
           }
         },
         "summary": "Api Share Collection",
-        "tags": [
-          "knowledge-v2"
-        ]
+        "tags": ["knowledge-v2"]
       }
     },
     "/api/knowledge/v2/collections/{coll_id}/share/{membership_id}": {
@@ -13861,9 +13227,7 @@
           }
         },
         "summary": "Api Unshare Collection",
-        "tags": [
-          "knowledge-v2"
-        ]
+        "tags": ["knowledge-v2"]
       }
     },
     "/api/knowledge/v2/retrieve": {
@@ -13918,9 +13282,7 @@
           }
         },
         "summary": "Api Retrieve",
-        "tags": [
-          "knowledge-v2"
-        ]
+        "tags": ["knowledge-v2"]
       }
     },
     "/api/knowledge/v2/status": {
@@ -13969,9 +13331,7 @@
           }
         },
         "summary": "Api Status",
-        "tags": [
-          "knowledge-v2"
-        ]
+        "tags": ["knowledge-v2"]
       }
     },
     "/api/llm/admin/pricing": {
@@ -14026,9 +13386,7 @@
           }
         },
         "summary": "Llm Admin Put Price",
-        "tags": [
-          "llm"
-        ]
+        "tags": ["llm"]
       }
     },
     "/api/llm/catalog": {
@@ -14085,9 +13443,7 @@
           }
         },
         "summary": "Llm Catalog",
-        "tags": [
-          "llm"
-        ]
+        "tags": ["llm"]
       }
     },
     "/api/llm/chat": {
@@ -14142,9 +13498,7 @@
           }
         },
         "summary": "Llm Chat",
-        "tags": [
-          "llm"
-        ]
+        "tags": ["llm"]
       }
     },
     "/api/llm/chat/stream": {
@@ -14199,9 +13553,7 @@
           }
         },
         "summary": "Llm Chat Stream",
-        "tags": [
-          "llm"
-        ]
+        "tags": ["llm"]
       }
     },
     "/api/llm/conversations": {
@@ -14269,9 +13621,7 @@
           }
         },
         "summary": "Llm Conversations",
-        "tags": [
-          "llm"
-        ]
+        "tags": ["llm"]
       }
     },
     "/api/llm/conversations/{conversation_id}": {
@@ -14325,9 +13675,7 @@
           }
         },
         "summary": "Llm Conversation Detail",
-        "tags": [
-          "llm"
-        ]
+        "tags": ["llm"]
       }
     },
     "/api/llm/credentials/detect-bare": {
@@ -14382,9 +13730,7 @@
           }
         },
         "summary": "Post Detect Bare Credential",
-        "tags": [
-          "llm"
-        ]
+        "tags": ["llm"]
       }
     },
     "/api/llm/credentials/{provider}": {
@@ -14438,9 +13784,7 @@
           }
         },
         "summary": "Delete Llm Credentials",
-        "tags": [
-          "llm"
-        ]
+        "tags": ["llm"]
       },
       "put": {
         "operationId": "put_llm_credentials_api_llm_credentials__provider__put",
@@ -14502,9 +13846,7 @@
           }
         },
         "summary": "Put Llm Credentials",
-        "tags": [
-          "llm"
-        ]
+        "tags": ["llm"]
       }
     },
     "/api/llm/image": {
@@ -14559,9 +13901,7 @@
           }
         },
         "summary": "Llm Image",
-        "tags": [
-          "llm"
-        ]
+        "tags": ["llm"]
       }
     },
     "/api/llm/pptx": {
@@ -14616,9 +13956,7 @@
           }
         },
         "summary": "Llm Pptx",
-        "tags": [
-          "llm"
-        ]
+        "tags": ["llm"]
       }
     },
     "/api/llm/preferences": {
@@ -14673,9 +14011,7 @@
           }
         },
         "summary": "Put Llm Preferences",
-        "tags": [
-          "llm"
-        ]
+        "tags": ["llm"]
       }
     },
     "/api/llm/pricing": {
@@ -14720,9 +14056,7 @@
           }
         },
         "summary": "Llm Pricing",
-        "tags": [
-          "llm"
-        ]
+        "tags": ["llm"]
       }
     },
     "/api/llm/resolve-chat-default": {
@@ -14768,9 +14102,7 @@
           }
         },
         "summary": "Resolve Chat Default",
-        "tags": [
-          "llm"
-        ]
+        "tags": ["llm"]
       }
     },
     "/api/llm/status": {
@@ -14815,9 +14147,7 @@
           }
         },
         "summary": "Llm Status",
-        "tags": [
-          "llm"
-        ]
+        "tags": ["llm"]
       }
     },
     "/api/llm/usage": {
@@ -14885,9 +14215,7 @@
           }
         },
         "summary": "Llm Usage",
-        "tags": [
-          "llm"
-        ]
+        "tags": ["llm"]
       }
     },
     "/api/market/catalog": {
@@ -15051,9 +14379,7 @@
           }
         },
         "summary": "Api Market Catalog",
-        "tags": [
-          "market"
-        ]
+        "tags": ["market"]
       }
     },
     "/api/market/catalog/{item_id}": {
@@ -15107,9 +14433,7 @@
           }
         },
         "summary": "Api Market Catalog Detail",
-        "tags": [
-          "market"
-        ]
+        "tags": ["market"]
       }
     },
     "/api/market/catalog/{item_id}/buy": {
@@ -15163,9 +14487,7 @@
           }
         },
         "summary": "Api Buy Item",
-        "tags": [
-          "market"
-        ]
+        "tags": ["market"]
       }
     },
     "/api/market/catalog/{item_id}/complaints": {
@@ -15229,9 +14551,7 @@
           }
         },
         "summary": "Api Submit Catalog Complaint",
-        "tags": [
-          "market"
-        ]
+        "tags": ["market"]
       }
     },
     "/api/market/catalog/{item_id}/download": {
@@ -15285,9 +14605,7 @@
           }
         },
         "summary": "Api Download Item",
-        "tags": [
-          "market"
-        ]
+        "tags": ["market"]
       }
     },
     "/api/market/catalog/{item_id}/favorite": {
@@ -15341,9 +14659,7 @@
           }
         },
         "summary": "Api Toggle Favorite",
-        "tags": [
-          "market"
-        ]
+        "tags": ["market"]
       }
     },
     "/api/market/catalog/{item_id}/review": {
@@ -15407,9 +14723,7 @@
           }
         },
         "summary": "Api Submit Review",
-        "tags": [
-          "market"
-        ]
+        "tags": ["market"]
       }
     },
     "/api/market/catalog/{item_id}/reviews": {
@@ -15447,9 +14761,7 @@
           }
         },
         "summary": "Api Catalog Reviews",
-        "tags": [
-          "market"
-        ]
+        "tags": ["market"]
       }
     },
     "/api/market/facets": {
@@ -15466,9 +14778,7 @@
           }
         },
         "summary": "Api Market Facets",
-        "tags": [
-          "market"
-        ]
+        "tags": ["market"]
       }
     },
     "/api/mods": {
@@ -15513,9 +14823,7 @@
           }
         },
         "summary": "Api List Mods",
-        "tags": [
-          "mods"
-        ]
+        "tags": ["mods"]
       }
     },
     "/api/mods/ai-scaffold": {
@@ -15570,9 +14878,7 @@
           }
         },
         "summary": "Api Mod Ai Scaffold",
-        "tags": [
-          "authoring"
-        ]
+        "tags": ["authoring"]
       }
     },
     "/api/mods/create": {
@@ -15627,9 +14933,7 @@
           }
         },
         "summary": "Api Create Mod",
-        "tags": [
-          "mods"
-        ]
+        "tags": ["mods"]
       }
     },
     "/api/mods/import": {
@@ -15694,9 +14998,7 @@
           }
         },
         "summary": "Api Import Mod",
-        "tags": [
-          "mods"
-        ]
+        "tags": ["mods"]
       }
     },
     "/api/mods/shell-ui": {
@@ -15735,9 +15037,7 @@
           }
         },
         "summary": "Api Mods Shell Ui",
-        "tags": [
-          "mods"
-        ]
+        "tags": ["mods"]
       }
     },
     "/api/mods/{mod_id}": {
@@ -15791,9 +15091,7 @@
           }
         },
         "summary": "Api Delete Mod",
-        "tags": [
-          "mods"
-        ]
+        "tags": ["mods"]
       },
       "get": {
         "operationId": "api_get_mod_api_mods__mod_id__get",
@@ -15845,9 +15143,7 @@
           }
         },
         "summary": "Api Get Mod",
-        "tags": [
-          "mods"
-        ]
+        "tags": ["mods"]
       }
     },
     "/api/mods/{mod_id}/authoring-summary": {
@@ -15901,9 +15197,7 @@
           }
         },
         "summary": "Api Mod Authoring Summary",
-        "tags": [
-          "authoring"
-        ]
+        "tags": ["authoring"]
       }
     },
     "/api/mods/{mod_id}/blueprint-routes": {
@@ -15957,9 +15251,7 @@
           }
         },
         "summary": "Api Mod Blueprint Routes",
-        "tags": [
-          "authoring"
-        ]
+        "tags": ["authoring"]
       }
     },
     "/api/mods/{mod_id}/export": {
@@ -16013,9 +15305,7 @@
           }
         },
         "summary": "Api Export Mod",
-        "tags": [
-          "mods"
-        ]
+        "tags": ["mods"]
       }
     },
     "/api/mods/{mod_id}/export-employee-pack": {
@@ -16079,9 +15369,7 @@
           }
         },
         "summary": "Api Export Workflow Employee Pack",
-        "tags": [
-          "authoring"
-        ]
+        "tags": ["authoring"]
       }
     },
     "/api/mods/{mod_id}/file": {
@@ -16144,9 +15432,7 @@
           }
         },
         "summary": "Api Get Mod File",
-        "tags": [
-          "mods"
-        ]
+        "tags": ["mods"]
       },
       "put": {
         "operationId": "api_put_mod_file_api_mods__mod_id__file_put",
@@ -16208,9 +15494,7 @@
           }
         },
         "summary": "Api Put Mod File",
-        "tags": [
-          "mods"
-        ]
+        "tags": ["mods"]
       }
     },
     "/api/mods/{mod_id}/frontend/regenerate": {
@@ -16274,9 +15558,7 @@
           }
         },
         "summary": "Api Mod Frontend Regenerate",
-        "tags": [
-          "authoring"
-        ]
+        "tags": ["authoring"]
       }
     },
     "/api/mods/{mod_id}/manifest": {
@@ -16340,9 +15622,7 @@
           }
         },
         "summary": "Api Put Manifest",
-        "tags": [
-          "mods"
-        ]
+        "tags": ["mods"]
       }
     },
     "/api/mods/{mod_id}/patch-workflow-employee-nodes": {
@@ -16396,9 +15676,7 @@
           }
         },
         "summary": "Api Patch Workflow Employee Nodes",
-        "tags": [
-          "authoring"
-        ]
+        "tags": ["authoring"]
       }
     },
     "/api/mods/{mod_id}/register-workflow-employee-catalog": {
@@ -16462,9 +15740,7 @@
           }
         },
         "summary": "Api Register Workflow Employee Catalog",
-        "tags": [
-          "authoring"
-        ]
+        "tags": ["authoring"]
       }
     },
     "/api/mods/{mod_id}/workflow-employees/scaffold": {
@@ -16528,9 +15804,7 @@
           }
         },
         "summary": "Api Mod Workflow Employee Scaffold",
-        "tags": [
-          "authoring"
-        ]
+        "tags": ["authoring"]
       }
     },
     "/api/my-store": {
@@ -16598,9 +15872,7 @@
           }
         },
         "summary": "Api My Store",
-        "tags": [
-          "market"
-        ]
+        "tags": ["market"]
       }
     },
     "/api/notifications/": {
@@ -16679,9 +15951,7 @@
           }
         },
         "summary": "List Notifications",
-        "tags": [
-          "notifications"
-        ]
+        "tags": ["notifications"]
       }
     },
     "/api/notifications/read-all": {
@@ -16726,9 +15996,7 @@
           }
         },
         "summary": "Mark All Read",
-        "tags": [
-          "notifications"
-        ]
+        "tags": ["notifications"]
       }
     },
     "/api/notifications/{notification_id}/read": {
@@ -16782,9 +16050,7 @@
           }
         },
         "summary": "Mark Read",
-        "tags": [
-          "notifications"
-        ]
+        "tags": ["notifications"]
       }
     },
     "/api/openapi-connectors/": {
@@ -16829,9 +16095,7 @@
           }
         },
         "summary": "列出当前用户的连接器",
-        "tags": [
-          "openapi-connectors"
-        ]
+        "tags": ["openapi-connectors"]
       }
     },
     "/api/openapi-connectors/import": {
@@ -16886,9 +16150,7 @@
           }
         },
         "summary": "导入或更新 OpenAPI 连接器",
-        "tags": [
-          "openapi-connectors"
-        ]
+        "tags": ["openapi-connectors"]
       }
     },
     "/api/openapi-connectors/{connector_id}": {
@@ -16942,9 +16204,7 @@
           }
         },
         "summary": "删除连接器及其 operation/凭据/日志",
-        "tags": [
-          "openapi-connectors"
-        ]
+        "tags": ["openapi-connectors"]
       },
       "get": {
         "operationId": "get_connector_api_openapi_connectors__connector_id__get",
@@ -16996,9 +16256,7 @@
           }
         },
         "summary": "获取连接器详情与 operation 列表",
-        "tags": [
-          "openapi-connectors"
-        ]
+        "tags": ["openapi-connectors"]
       }
     },
     "/api/openapi-connectors/{connector_id}/credentials": {
@@ -17052,9 +16310,7 @@
           }
         },
         "summary": "清除连接器鉴权配置",
-        "tags": [
-          "openapi-connectors"
-        ]
+        "tags": ["openapi-connectors"]
       },
       "put": {
         "operationId": "put_credentials_api_openapi_connectors__connector_id__credentials_put",
@@ -17116,9 +16372,7 @@
           }
         },
         "summary": "保存连接器鉴权配置",
-        "tags": [
-          "openapi-connectors"
-        ]
+        "tags": ["openapi-connectors"]
       }
     },
     "/api/openapi-connectors/{connector_id}/logs": {
@@ -17195,9 +16449,7 @@
           }
         },
         "summary": "查看调用记录",
-        "tags": [
-          "openapi-connectors"
-        ]
+        "tags": ["openapi-connectors"]
       }
     },
     "/api/openapi-connectors/{connector_id}/operations/{operation_id}": {
@@ -17270,9 +16522,7 @@
           }
         },
         "summary": "启用/禁用 operation",
-        "tags": [
-          "openapi-connectors"
-        ]
+        "tags": ["openapi-connectors"]
       }
     },
     "/api/openapi-connectors/{connector_id}/operations/{operation_id}/test": {
@@ -17345,9 +16595,7 @@
           }
         },
         "summary": "服务端试调用 operation",
-        "tags": [
-          "openapi-connectors"
-        ]
+        "tags": ["openapi-connectors"]
       }
     },
     "/api/openapi-connectors/{connector_id}/publish-workflow-node": {
@@ -17411,9 +16659,7 @@
           }
         },
         "summary": "把 operation 发布为工作流节点",
-        "tags": [
-          "openapi-connectors"
-        ]
+        "tags": ["openapi-connectors"]
       }
     },
     "/api/ops/employee-status": {
@@ -17459,9 +16705,7 @@
           }
         },
         "summary": "员工任务状态看板",
-        "tags": [
-          "ops"
-        ]
+        "tags": ["ops"]
       }
     },
     "/api/ops/orchestrate": {
@@ -17517,9 +16761,7 @@
           }
         },
         "summary": "立即触发编排任务（同步）",
-        "tags": [
-          "ops"
-        ]
+        "tags": ["ops"]
       }
     },
     "/api/ops/orchestrate/async": {
@@ -17575,9 +16817,7 @@
           }
         },
         "summary": "异步触发编排任务（返回 job_id）",
-        "tags": [
-          "ops"
-        ]
+        "tags": ["ops"]
       }
     },
     "/api/ops/orchestrate/jobs": {
@@ -17632,9 +16872,7 @@
           }
         },
         "summary": "查询当前用户最近的异步编排任务列表",
-        "tags": [
-          "ops"
-        ]
+        "tags": ["ops"]
       }
     },
     "/api/ops/orchestrate/jobs/{job_id}": {
@@ -17688,9 +16926,7 @@
           }
         },
         "summary": "查询异步编排任务状态",
-        "tags": [
-          "ops"
-        ]
+        "tags": ["ops"]
       }
     },
     "/api/ops/release-gates": {
@@ -17735,9 +16971,7 @@
           }
         },
         "summary": "Get Release Gates",
-        "tags": [
-          "ops"
-        ]
+        "tags": ["ops"]
       },
       "put": {
         "operationId": "put_release_gates_api_ops_release_gates_put",
@@ -17794,9 +17028,7 @@
           }
         },
         "summary": "Put Release Gates",
-        "tags": [
-          "ops"
-        ]
+        "tags": ["ops"]
       }
     },
     "/api/package-audit": {
@@ -17852,9 +17084,7 @@
           }
         },
         "summary": "Api Package Audit",
-        "tags": [
-          "market"
-        ]
+        "tags": ["market"]
       }
     },
     "/api/payment/cancel/{order_no}": {
@@ -17909,9 +17139,7 @@
           }
         },
         "summary": "Api Payment Cancel Order",
-        "tags": [
-          "payment"
-        ]
+        "tags": ["payment"]
       }
     },
     "/api/payment/checkout": {
@@ -17967,9 +17195,7 @@
           }
         },
         "summary": "Api Payment Checkout",
-        "tags": [
-          "payment"
-        ]
+        "tags": ["payment"]
       }
     },
     "/api/payment/diagnostics": {
@@ -18015,9 +17241,7 @@
           }
         },
         "summary": "Api Payment Diagnostics",
-        "tags": [
-          "payment"
-        ]
+        "tags": ["payment"]
       }
     },
     "/api/payment/entitlements": {
@@ -18063,9 +17287,7 @@
           }
         },
         "summary": "Api Payment Entitlements",
-        "tags": [
-          "payment"
-        ]
+        "tags": ["payment"]
       }
     },
     "/api/payment/my-plan": {
@@ -18110,9 +17332,7 @@
           }
         },
         "summary": "Api My Plan",
-        "tags": [
-          "payment"
-        ]
+        "tags": ["payment"]
       }
     },
     "/api/payment/notify/alipay": {
@@ -18130,9 +17350,7 @@
           }
         },
         "summary": "Api Payment Notify Alipay",
-        "tags": [
-          "payment"
-        ]
+        "tags": ["payment"]
       }
     },
     "/api/payment/orders": {
@@ -18217,9 +17435,7 @@
           }
         },
         "summary": "Api Payment List Orders",
-        "tags": [
-          "payment"
-        ]
+        "tags": ["payment"]
       }
     },
     "/api/payment/orders/dismiss-non-active": {
@@ -18265,9 +17481,7 @@
           }
         },
         "summary": "Api Payment Dismiss Non Active Orders",
-        "tags": [
-          "payment"
-        ]
+        "tags": ["payment"]
       }
     },
     "/api/payment/plans": {
@@ -18285,9 +17499,7 @@
           }
         },
         "summary": "Api Payment Plans",
-        "tags": [
-          "payment"
-        ]
+        "tags": ["payment"]
       }
     },
     "/api/payment/query/{out_trade_no}": {
@@ -18342,9 +17554,7 @@
           }
         },
         "summary": "Api Payment Query",
-        "tags": [
-          "payment"
-        ]
+        "tags": ["payment"]
       }
     },
     "/api/payment/refund": {
@@ -18399,9 +17609,7 @@
           }
         },
         "summary": "Api Payment Refund",
-        "tags": [
-          "payment"
-        ]
+        "tags": ["payment"]
       }
     },
     "/api/payment/sign-checkout": {
@@ -18457,9 +17665,7 @@
           }
         },
         "summary": "Api Sign Checkout",
-        "tags": [
-          "payment"
-        ]
+        "tags": ["payment"]
       }
     },
     "/api/payment/usage-metrics": {
@@ -18504,9 +17710,7 @@
           }
         },
         "summary": "Api Usage Metrics",
-        "tags": [
-          "payment"
-        ]
+        "tags": ["payment"]
       }
     },
     "/api/plan/auto-renew": {
@@ -18562,9 +17766,7 @@
           }
         },
         "summary": "Patch Auto Renew",
-        "tags": [
-          "subscription"
-        ]
+        "tags": ["subscription"]
       }
     },
     "/api/public/contact": {
@@ -18601,10 +17803,7 @@
           }
         },
         "summary": "落地页联系表单（匿名，入库）",
-        "tags": [
-          "auth",
-          "market"
-        ]
+        "tags": ["auth", "market"]
       }
     },
     "/api/refunds/admin/pending": {
@@ -18649,9 +17848,7 @@
           }
         },
         "summary": "Admin Pending Refunds",
-        "tags": [
-          "refunds"
-        ]
+        "tags": ["refunds"]
       }
     },
     "/api/refunds/admin/{refund_id}/review": {
@@ -18715,9 +17912,7 @@
           }
         },
         "summary": "Admin Review Refund",
-        "tags": [
-          "refunds"
-        ]
+        "tags": ["refunds"]
       }
     },
     "/api/refunds/apply": {
@@ -18772,9 +17967,7 @@
           }
         },
         "summary": "Apply Refund",
-        "tags": [
-          "refunds"
-        ]
+        "tags": ["refunds"]
       }
     },
     "/api/refunds/my": {
@@ -18819,9 +18012,7 @@
           }
         },
         "summary": "My Refunds",
-        "tags": [
-          "refunds"
-        ]
+        "tags": ["refunds"]
       }
     },
     "/api/sandbox/connect": {
@@ -18876,9 +18067,7 @@
           }
         },
         "summary": "Api Sandbox Connect",
-        "tags": [
-          "sandbox"
-        ]
+        "tags": ["sandbox"]
       }
     },
     "/api/sandbox/host-status": {
@@ -18923,9 +18112,7 @@
           }
         },
         "summary": "Api Sandbox Host Status",
-        "tags": [
-          "sandbox"
-        ]
+        "tags": ["sandbox"]
       }
     },
     "/api/sandbox/push-and-test": {
@@ -18980,9 +18167,7 @@
           }
         },
         "summary": "Api Sandbox Push And Test",
-        "tags": [
-          "sandbox"
-        ]
+        "tags": ["sandbox"]
       }
     },
     "/api/script-workflows": {
@@ -19043,9 +18228,7 @@
           }
         },
         "summary": "列出当前用户的脚本工作流",
-        "tags": [
-          "script-workflow"
-        ]
+        "tags": ["script-workflow"]
       }
     },
     "/api/script-workflows/sessions": {
@@ -19100,9 +18283,7 @@
           }
         },
         "summary": "启动 agent 会话（multipart：brief_json + 文件，SSE 响应）",
-        "tags": [
-          "script-workflow"
-        ]
+        "tags": ["script-workflow"]
       }
     },
     "/api/script-workflows/sessions/{sid}": {
@@ -19156,9 +18337,7 @@
           }
         },
         "summary": "拉取会话状态与全部已发生事件（用于轮询/重连）",
-        "tags": [
-          "script-workflow"
-        ]
+        "tags": ["script-workflow"]
       }
     },
     "/api/script-workflows/sessions/{sid}/commit": {
@@ -19222,9 +18401,7 @@
           }
         },
         "summary": "会话验收通过后落库为正式脚本工作流（状态 = sandbox_testing）",
-        "tags": [
-          "script-workflow"
-        ]
+        "tags": ["script-workflow"]
       }
     },
     "/api/script-workflows/sessions/{sid}/feedback": {
@@ -19288,9 +18465,7 @@
           }
         },
         "summary": "用户给反馈，重启一轮 agent loop（SSE 续流）",
-        "tags": [
-          "script-workflow"
-        ]
+        "tags": ["script-workflow"]
       }
     },
     "/api/script-workflows/{workflow_id}": {
@@ -19344,9 +18519,7 @@
           }
         },
         "summary": "删除脚本工作流（含版本与运行记录）",
-        "tags": [
-          "script-workflow"
-        ]
+        "tags": ["script-workflow"]
       },
       "get": {
         "operationId": "get_workflow_api_script_workflows__workflow_id__get",
@@ -19398,9 +18571,7 @@
           }
         },
         "summary": "脚本工作流详情",
-        "tags": [
-          "script-workflow"
-        ]
+        "tags": ["script-workflow"]
       },
       "put": {
         "operationId": "update_workflow_api_script_workflows__workflow_id__put",
@@ -19462,9 +18633,7 @@
           }
         },
         "summary": "编辑工作流元信息（不改脚本，要走 edit-with-ai）",
-        "tags": [
-          "script-workflow"
-        ]
+        "tags": ["script-workflow"]
       }
     },
     "/api/script-workflows/{workflow_id}/activate": {
@@ -19518,9 +18687,7 @@
           }
         },
         "summary": "启用脚本工作流（强校验：必须有过 successful manual_sandbox run）",
-        "tags": [
-          "script-workflow"
-        ]
+        "tags": ["script-workflow"]
       }
     },
     "/api/script-workflows/{workflow_id}/deactivate": {
@@ -19574,9 +18741,7 @@
           }
         },
         "summary": "停用脚本工作流（status=deprecated）",
-        "tags": [
-          "script-workflow"
-        ]
+        "tags": ["script-workflow"]
       }
     },
     "/api/script-workflows/{workflow_id}/edit-with-ai": {
@@ -19640,9 +18805,7 @@
           }
         },
         "summary": "对已保存脚本继续 agent loop 改（SSE）",
-        "tags": [
-          "script-workflow"
-        ]
+        "tags": ["script-workflow"]
       }
     },
     "/api/script-workflows/{workflow_id}/run": {
@@ -19705,9 +18868,7 @@
           }
         },
         "summary": "生产调用（mode=production；仅 active 可调）",
-        "tags": [
-          "script-workflow"
-        ]
+        "tags": ["script-workflow"]
       }
     },
     "/api/script-workflows/{workflow_id}/runs": {
@@ -19800,9 +18961,7 @@
           }
         },
         "summary": "历史运行记录",
-        "tags": [
-          "script-workflow"
-        ]
+        "tags": ["script-workflow"]
       }
     },
     "/api/script-workflows/{workflow_id}/runs/{run_id}/files/{filename}": {
@@ -19874,9 +19033,7 @@
           }
         },
         "summary": "下载脚本工作流单次运行产物",
-        "tags": [
-          "script-workflow"
-        ]
+        "tags": ["script-workflow"]
       }
     },
     "/api/script-workflows/{workflow_id}/sandbox-run": {
@@ -19939,9 +19096,7 @@
           }
         },
         "summary": "用户人工沙箱跑（multipart：上传真实输入；mode=manual_sandbox）",
-        "tags": [
-          "script-workflow"
-        ]
+        "tags": ["script-workflow"]
       }
     },
     "/api/script-workflows/{workflow_id}/versions": {
@@ -19995,9 +19150,7 @@
           }
         },
         "summary": "历史版本",
-        "tags": [
-          "script-workflow"
-        ]
+        "tags": ["script-workflow"]
       }
     },
     "/api/sync/pull": {
@@ -20052,9 +19205,7 @@
           }
         },
         "summary": "Api Sync Pull",
-        "tags": [
-          "sync"
-        ]
+        "tags": ["sync"]
       }
     },
     "/api/sync/push": {
@@ -20109,9 +19260,7 @@
           }
         },
         "summary": "Api Sync Push",
-        "tags": [
-          "sync"
-        ]
+        "tags": ["sync"]
       }
     },
     "/api/templates": {
@@ -20209,9 +19358,7 @@
           }
         },
         "summary": "模板市场列表（按类别/难度/关键字过滤）",
-        "tags": [
-          "templates"
-        ]
+        "tags": ["templates"]
       }
     },
     "/api/templates/categories": {
@@ -20228,9 +19375,7 @@
           }
         },
         "summary": "模板类别清单（含计数）",
-        "tags": [
-          "templates"
-        ]
+        "tags": ["templates"]
       }
     },
     "/api/templates/from-workflow/{workflow_id}": {
@@ -20294,9 +19439,7 @@
           }
         },
         "summary": "把当前工作流另存为模板（仅本人）",
-        "tags": [
-          "templates"
-        ]
+        "tags": ["templates"]
       }
     },
     "/api/templates/{template_id}": {
@@ -20334,9 +19477,7 @@
           }
         },
         "summary": "模板详情（含 graph_snapshot 预览）",
-        "tags": [
-          "templates"
-        ]
+        "tags": ["templates"]
       }
     },
     "/api/templates/{template_id}/install": {
@@ -20390,9 +19531,7 @@
           }
         },
         "summary": "一键安装：把模板克隆为当前用户的工作流",
-        "tags": [
-          "templates"
-        ]
+        "tags": ["templates"]
       }
     },
     "/api/wallet/admin-self-credit": {
@@ -20448,9 +19587,7 @@
           }
         },
         "summary": "Api Wallet Admin Self Credit",
-        "tags": [
-          "market"
-        ]
+        "tags": ["market"]
       }
     },
     "/api/wallet/balance": {
@@ -20495,9 +19632,7 @@
           }
         },
         "summary": "Api Wallet Balance",
-        "tags": [
-          "market"
-        ]
+        "tags": ["market"]
       }
     },
     "/api/wallet/overview": {
@@ -20566,9 +19701,7 @@
           }
         },
         "summary": "Api Wallet Overview",
-        "tags": [
-          "market"
-        ]
+        "tags": ["market"]
       }
     },
     "/api/wallet/recharge": {
@@ -20624,9 +19757,7 @@
           }
         },
         "summary": "Api Wallet Recharge",
-        "tags": [
-          "market"
-        ]
+        "tags": ["market"]
       }
     },
     "/api/wallet/transactions": {
@@ -20694,9 +19825,7 @@
           }
         },
         "summary": "Api Wallet Transactions",
-        "tags": [
-          "market"
-        ]
+        "tags": ["market"]
       }
     },
     "/api/webhooks/admin/replay": {
@@ -20751,9 +19880,7 @@
           }
         },
         "summary": "Admin Replay Webhook",
-        "tags": [
-          "webhooks"
-        ]
+        "tags": ["webhooks"]
       }
     },
     "/api/workbench/dispatch": {
@@ -20809,9 +19936,7 @@
           }
         },
         "summary": "任务拆解路由 → 多员工并行执行",
-        "tags": [
-          "workbench"
-        ]
+        "tags": ["workbench"]
       }
     },
     "/api/workbench/employee-ai/draft": {
@@ -20867,9 +19992,7 @@
           }
         },
         "summary": "6 阶段 AI 员工生成（SSE 流式）",
-        "tags": [
-          "workbench"
-        ]
+        "tags": ["workbench"]
       }
     },
     "/api/workbench/employee-ai/refine-prompt": {
@@ -20925,9 +20048,7 @@
           }
         },
         "summary": "LLM 优化 system prompt",
-        "tags": [
-          "workbench"
-        ]
+        "tags": ["workbench"]
       }
     },
     "/api/workbench/employee-bench-test": {
@@ -20983,9 +20104,7 @@
           }
         },
         "summary": "员工上架前基准测试（LLM 生成任务 + 执行 + 五维审核）",
-        "tags": [
-          "workbench"
-        ]
+        "tags": ["workbench"]
       }
     },
     "/api/workbench/employee-export": {
@@ -21041,9 +20160,7 @@
           }
         },
         "summary": "根据当前 manifest 生成完整 .xcemp 并下载（不落盘）",
-        "tags": [
-          "workbench"
-        ]
+        "tags": ["workbench"]
       }
     },
     "/api/workbench/employee-publish": {
@@ -21099,9 +20216,7 @@
           }
         },
         "summary": "员工包上架到商店目录",
-        "tags": [
-          "workbench"
-        ]
+        "tags": ["workbench"]
       }
     },
     "/api/workbench/employee-save": {
@@ -21157,9 +20272,7 @@
           }
         },
         "summary": "保存/持久化编辑器当前 manifest 到服务器库并注册 ESkill",
-        "tags": [
-          "workbench"
-        ]
+        "tags": ["workbench"]
       }
     },
     "/api/workbench/employee-sync-test": {
@@ -21215,9 +20328,7 @@
           }
         },
         "summary": "员工同步测试：bench→发布→推送到宿主安装",
-        "tags": [
-          "workbench"
-        ]
+        "tags": ["workbench"]
       }
     },
     "/api/workbench/research-context": {
@@ -21273,9 +20384,7 @@
           }
         },
         "summary": "联网检索摘要 + GitHub 公开资料（供需求规划）",
-        "tags": [
-          "workbench"
-        ]
+        "tags": ["workbench"]
       }
     },
     "/api/workbench/script-sessions": {
@@ -21330,9 +20439,7 @@
           }
         },
         "summary": "启动 AI + Python 文件处理任务",
-        "tags": [
-          "workbench"
-        ]
+        "tags": ["workbench"]
       }
     },
     "/api/workbench/sessions": {
@@ -21377,9 +20484,7 @@
           }
         },
         "summary": "启动工作台 AI 编排（异步）",
-        "tags": [
-          "workbench"
-        ]
+        "tags": ["workbench"]
       }
     },
     "/api/workbench/sessions/{session_id}": {
@@ -21433,9 +20538,7 @@
           }
         },
         "summary": "查询编排会话（轮询）",
-        "tags": [
-          "workbench"
-        ]
+        "tags": ["workbench"]
       }
     },
     "/api/workbench/sessions/{session_id}/files/{filename}": {
@@ -21498,9 +20601,7 @@
           }
         },
         "summary": "下载脚本执行结果文件",
-        "tags": [
-          "workbench"
-        ]
+        "tags": ["workbench"]
       }
     },
     "/api/workbench/tts/edge": {
@@ -21555,9 +20656,7 @@
           }
         },
         "summary": "微软在线神经 TTS（edge-tts，返回 MP3）",
-        "tags": [
-          "workbench"
-        ]
+        "tags": ["workbench"]
       }
     },
     "/api/workbench/tts/edge/stream": {
@@ -21615,9 +20714,7 @@
           }
         },
         "summary": "微软在线神经 TTS（edge-tts，chunked MP3 流）",
-        "tags": [
-          "workbench"
-        ]
+        "tags": ["workbench"]
       }
     },
     "/api/workbench/vibe-code-skill": {
@@ -21673,9 +20770,7 @@
           }
         },
         "summary": "vibe-coding NL → CodeSkill 全闭环",
-        "tags": [
-          "workbench"
-        ]
+        "tags": ["workbench"]
       }
     },
     "/api/workflow-hooks/webhook/{trigger_key}": {
@@ -21714,9 +20809,7 @@
           }
         },
         "summary": "公开 Webhook 触发工作流（需在触发器 config 配置 secret）",
-        "tags": [
-          "workflow-hooks"
-        ]
+        "tags": ["workflow-hooks"]
       }
     },
     "/api/workflow/": {
@@ -21778,9 +20871,7 @@
           }
         },
         "summary": "获取工作流列表",
-        "tags": [
-          "workflow"
-        ]
+        "tags": ["workflow"]
       },
       "post": {
         "description": "创建新的工作流（JSON body：name, description）。",
@@ -21834,9 +20925,7 @@
           }
         },
         "summary": "创建工作流",
-        "tags": [
-          "workflow"
-        ]
+        "tags": ["workflow"]
       }
     },
     "/api/workflow/by-employee": {
@@ -21893,9 +20982,7 @@
           }
         },
         "summary": "按员工查询关联工作流",
-        "tags": [
-          "workflow"
-        ]
+        "tags": ["workflow"]
       }
     },
     "/api/workflow/edges/{edge_id}": {
@@ -21950,9 +21037,7 @@
           }
         },
         "summary": "删除工作流边",
-        "tags": [
-          "workflow"
-        ]
+        "tags": ["workflow"]
       }
     },
     "/api/workflow/employee-eligible": {
@@ -21997,9 +21082,7 @@
           }
         },
         "summary": "获取员工可绑定的工作流",
-        "tags": [
-          "workflow"
-        ]
+        "tags": ["workflow"]
       }
     },
     "/api/workflow/executions/{execution_id}": {
@@ -22054,9 +21137,7 @@
           }
         },
         "summary": "获取执行详情",
-        "tags": [
-          "workflow"
-        ]
+        "tags": ["workflow"]
       }
     },
     "/api/workflow/nodes/{node_id}": {
@@ -22111,9 +21192,7 @@
           }
         },
         "summary": "删除工作流节点",
-        "tags": [
-          "workflow"
-        ]
+        "tags": ["workflow"]
       },
       "put": {
         "description": "更新工作流节点（JSON body）。",
@@ -22176,9 +21255,7 @@
           }
         },
         "summary": "更新工作流节点",
-        "tags": [
-          "workflow"
-        ]
+        "tags": ["workflow"]
       }
     },
     "/api/workflow/{workflow_id}": {
@@ -22233,9 +21310,7 @@
           }
         },
         "summary": "删除工作流",
-        "tags": [
-          "workflow"
-        ]
+        "tags": ["workflow"]
       },
       "get": {
         "description": "获取工作流的详细信息，包括节点和边",
@@ -22288,9 +21363,7 @@
           }
         },
         "summary": "获取工作流详情",
-        "tags": [
-          "workflow"
-        ]
+        "tags": ["workflow"]
       },
       "put": {
         "description": "更新工作流信息（JSON body：name, description, is_active）。",
@@ -22353,9 +21426,7 @@
           }
         },
         "summary": "更新工作流",
-        "tags": [
-          "workflow"
-        ]
+        "tags": ["workflow"]
       }
     },
     "/api/workflow/{workflow_id}/edges": {
@@ -22420,9 +21491,7 @@
           }
         },
         "summary": "添加工作流边",
-        "tags": [
-          "workflow"
-        ]
+        "tags": ["workflow"]
       }
     },
     "/api/workflow/{workflow_id}/execute": {
@@ -22487,9 +21556,7 @@
           }
         },
         "summary": "执行工作流",
-        "tags": [
-          "workflow"
-        ]
+        "tags": ["workflow"]
       }
     },
     "/api/workflow/{workflow_id}/executions": {
@@ -22567,9 +21634,7 @@
           }
         },
         "summary": "获取工作流执行记录",
-        "tags": [
-          "workflow"
-        ]
+        "tags": ["workflow"]
       }
     },
     "/api/workflow/{workflow_id}/nodes": {
@@ -22634,9 +21699,7 @@
           }
         },
         "summary": "添加工作流节点",
-        "tags": [
-          "workflow"
-        ]
+        "tags": ["workflow"]
       }
     },
     "/api/workflow/{workflow_id}/sandbox-run": {
@@ -22702,9 +21765,7 @@
           }
         },
         "summary": "[已弃用] 节点图沙盒运行；新工作流请用 /api/script-workflows/{id}/sandbox-run",
-        "tags": [
-          "workflow"
-        ]
+        "tags": ["workflow"]
       }
     },
     "/api/workflow/{workflow_id}/triggers": {
@@ -22758,9 +21819,7 @@
           }
         },
         "summary": "获取工作流触发器",
-        "tags": [
-          "workflow"
-        ]
+        "tags": ["workflow"]
       },
       "post": {
         "operationId": "create_workflow_trigger_api_workflow__workflow_id__triggers_post",
@@ -22822,9 +21881,7 @@
           }
         },
         "summary": "新增工作流触发器",
-        "tags": [
-          "workflow"
-        ]
+        "tags": ["workflow"]
       }
     },
     "/api/workflow/{workflow_id}/triggers/{trigger_id}": {
@@ -22887,9 +21944,7 @@
           }
         },
         "summary": "删除或停用工作流触发器",
-        "tags": [
-          "workflow"
-        ]
+        "tags": ["workflow"]
       }
     },
     "/api/workflow/{workflow_id}/validate": {
@@ -22943,9 +21998,7 @@
           }
         },
         "summary": "校验工作流（静态 + 拓扑提示）",
-        "tags": [
-          "workflow"
-        ]
+        "tags": ["workflow"]
       }
     },
     "/api/workflow/{workflow_id}/versions": {
@@ -23022,9 +22075,7 @@
           }
         },
         "summary": "工作流版本列表（按 version_no 倒序）",
-        "tags": [
-          "workflow"
-        ]
+        "tags": ["workflow"]
       }
     },
     "/api/workflow/{workflow_id}/versions/publish": {
@@ -23088,9 +22139,7 @@
           }
         },
         "summary": "发布工作流版本（快照当前图）",
-        "tags": [
-          "workflow"
-        ]
+        "tags": ["workflow"]
       }
     },
     "/api/workflow/{workflow_id}/versions/{version_id}": {
@@ -23153,9 +22202,7 @@
           }
         },
         "summary": "工作流版本详情（含 graph_snapshot）",
-        "tags": [
-          "workflow"
-        ]
+        "tags": ["workflow"]
       }
     },
     "/api/workflow/{workflow_id}/versions/{version_id}/rollback": {
@@ -23218,9 +22265,7 @@
           }
         },
         "summary": "回滚到指定版本（重建节点/边，不动触发器）",
-        "tags": [
-          "workflow"
-        ]
+        "tags": ["workflow"]
       }
     },
     "/api/workflow/{workflow_id}/webhook-run": {
@@ -23286,9 +22331,7 @@
           }
         },
         "summary": "Webhook 方式触发执行工作流（需已配置 webhook 触发器）",
-        "tags": [
-          "workflow"
-        ]
+        "tags": ["workflow"]
       }
     },
     "/api/xcagi/installed-mods": {
@@ -23305,9 +22348,7 @@
           }
         },
         "summary": "Api Xcagi Installed Mods",
-        "tags": [
-          "sync"
-        ]
+        "tags": ["sync"]
       }
     },
     "/api/xcagi/loading-status": {
@@ -23324,9 +22365,7 @@
           }
         },
         "summary": "Api Xcagi Loading Status",
-        "tags": [
-          "debug"
-        ]
+        "tags": ["debug"]
       }
     },
     "/health/": {
@@ -23343,9 +22382,7 @@
           }
         },
         "summary": "Health Check",
-        "tags": [
-          "health"
-        ]
+        "tags": ["health"]
       }
     },
     "/health/live": {
@@ -23362,9 +22399,7 @@
           }
         },
         "summary": "Liveness Check",
-        "tags": [
-          "health"
-        ]
+        "tags": ["health"]
       }
     },
     "/health/ready": {
@@ -23381,9 +22416,7 @@
           }
         },
         "summary": "Readiness Check",
-        "tags": [
-          "health"
-        ]
+        "tags": ["health"]
       }
     },
     "/v1/catalog/industries": {
@@ -23400,9 +22433,7 @@
           }
         },
         "summary": "获取标准化行业分类树",
-        "tags": [
-          "catalog"
-        ]
+        "tags": ["catalog"]
       }
     },
     "/v1/catalog/recommend-similar": {
@@ -23454,9 +22485,7 @@
           }
         },
         "summary": "相似商品推荐",
-        "tags": [
-          "catalog"
-        ]
+        "tags": ["catalog"]
       }
     },
     "/v1/catalog/search-semantic": {
@@ -23544,9 +22573,7 @@
           }
         },
         "summary": "语义搜索商品",
-        "tags": [
-          "catalog"
-        ]
+        "tags": ["catalog"]
       }
     },
     "/v1/index.json": {
@@ -23563,9 +22590,7 @@
           }
         },
         "summary": "轻量全量索引",
-        "tags": [
-          "catalog"
-        ]
+        "tags": ["catalog"]
       }
     },
     "/v1/mod-sync/export-zip/{mod_id}": {
@@ -23619,9 +22644,7 @@
           }
         },
         "summary": "下载 Mod zip（供本机 modman remote-deploy）",
-        "tags": [
-          "catalog-mod-sync"
-        ]
+        "tags": ["catalog-mod-sync"]
       }
     },
     "/v1/mod-sync/mods": {
@@ -23666,9 +22689,7 @@
           }
         },
         "summary": "列出当前账号可同步的 Mod（与 /api/mods 范围一致）",
-        "tags": [
-          "catalog-mod-sync"
-        ]
+        "tags": ["catalog-mod-sync"]
       }
     },
     "/v1/mod-sync/pull": {
@@ -23722,9 +22743,7 @@
           }
         },
         "summary": "XCAGI/mods → 库（账号/PAT）",
-        "tags": [
-          "catalog-mod-sync"
-        ]
+        "tags": ["catalog-mod-sync"]
       }
     },
     "/v1/mod-sync/push": {
@@ -23778,9 +22797,7 @@
           }
         },
         "summary": "库 → XCAGI/mods（账号/PAT）",
-        "tags": [
-          "catalog-mod-sync"
-        ]
+        "tags": ["catalog-mod-sync"]
       }
     },
     "/v1/packages": {
@@ -23864,9 +22881,7 @@
           }
         },
         "summary": "分页列出包",
-        "tags": [
-          "catalog"
-        ]
+        "tags": ["catalog"]
       },
       "post": {
         "operationId": "api_upload_package_v1_packages_post",
@@ -23919,9 +22934,7 @@
           }
         },
         "summary": "登记新包（multipart：metadata JSON + file）",
-        "tags": [
-          "catalog"
-        ]
+        "tags": ["catalog"]
       }
     },
     "/v1/packages/by-id/{pkg_id}/versions": {
@@ -23959,9 +22972,7 @@
           }
         },
         "summary": "同 id 下所有版本（含 draft/stable）",
-        "tags": [
-          "catalog"
-        ]
+        "tags": ["catalog"]
       }
     },
     "/v1/packages/{pkg_id}/promote": {
@@ -24025,9 +23036,7 @@
           }
         },
         "summary": "将 draft 版本复制为新的 stable（semver patch+1）",
-        "tags": [
-          "catalog"
-        ]
+        "tags": ["catalog"]
       }
     },
     "/v1/packages/{pkg_id}/{version}": {
@@ -24074,9 +23083,7 @@
           }
         },
         "summary": "包详情",
-        "tags": [
-          "catalog"
-        ]
+        "tags": ["catalog"]
       }
     },
     "/v1/packages/{pkg_id}/{version}/download": {
@@ -24123,9 +23130,7 @@
           }
         },
         "summary": "下载已上传包文件",
-        "tags": [
-          "catalog"
-        ]
+        "tags": ["catalog"]
       }
     }
   },

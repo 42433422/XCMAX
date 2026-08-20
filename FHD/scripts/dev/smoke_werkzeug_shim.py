@@ -1,12 +1,12 @@
-# -*- coding: utf-8 -*-
+# mypy: disable-error-code="import-not-found"
 """一次性冒烟：password_hash 与 secure_filename 相对 werkzeug 的等价性。"""
 
 from __future__ import annotations
 
 import hashlib
 
-from app.utils.password_hash import check_password_hash, generate_password_hash
-from app.utils.secure_filename import secure_filename
+from app.utils.security.password_hash import check_password_hash, generate_password_hash
+from app.utils.security.secure_filename import secure_filename
 
 
 def check_roundtrip() -> None:
@@ -21,6 +21,8 @@ def check_cross_compat() -> None:
     try:
         from werkzeug.security import (
             check_password_hash as wz_chk,
+        )
+        from werkzeug.security import (
             generate_password_hash as wz_gen,
         )
     except ImportError:

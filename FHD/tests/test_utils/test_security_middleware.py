@@ -1,4 +1,4 @@
-"""Tests for app.utils.security_middleware."""
+"""Tests for app.utils.security.security_middleware."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.utils.security_middleware import (
+from app.utils.security.security_middleware import (
     SECURITY_HEADERS,
     PermissionMatrix,
     _apply_security_headers,
@@ -288,7 +288,7 @@ class TestRegisterDefaultPermissions:
 
 
 class TestApiSecurity:
-    @patch("app.utils.security_middleware.get_current_http_request")
+    @patch("app.utils.security.security_middleware.get_current_http_request")
     def test_no_auth_no_rate_limit(self, mock_req):
         mock_req.return_value = None
 
@@ -300,7 +300,7 @@ class TestApiSecurity:
         # Should apply security headers
         assert result is not None
 
-    @patch("app.utils.security_middleware.get_current_http_request")
+    @patch("app.utils.security.security_middleware.get_current_http_request")
     def test_validate_json_invalid(self, mock_req):
         mock_request = MagicMock()
         mock_request.headers = {"content-type": "application/json"}
@@ -315,7 +315,7 @@ class TestApiSecurity:
         # Should return a tuple with error response
         assert result is not None
 
-    @patch("app.utils.security_middleware.get_current_http_request")
+    @patch("app.utils.security.security_middleware.get_current_http_request")
     def test_validate_json_valid(self, mock_req):
         mock_request = MagicMock()
         mock_request.headers = {"content-type": "application/json"}
@@ -331,7 +331,7 @@ class TestApiSecurity:
         result = my_endpoint()
         assert result is not None
 
-    @patch("app.utils.security_middleware.get_current_http_request")
+    @patch("app.utils.security.security_middleware.get_current_http_request")
     def test_validate_json_non_json_content_type(self, mock_req):
         mock_request = MagicMock()
         mock_request.headers = {"content-type": "text/plain"}
@@ -346,7 +346,7 @@ class TestApiSecurity:
         result = my_endpoint()
         assert result is not None
 
-    @patch("app.utils.security_middleware.get_current_http_request")
+    @patch("app.utils.security.security_middleware.get_current_http_request")
     def test_rate_limit_no_request_returns_500(self, mock_req):
         mock_req.return_value = None
 
@@ -358,9 +358,9 @@ class TestApiSecurity:
         # Should return error tuple
         assert result is not None
 
-    @patch("app.utils.security_middleware.check_rate_limit")
-    @patch("app.utils.security_middleware.get_current_user")
-    @patch("app.utils.security_middleware.get_current_http_request")
+    @patch("app.utils.security.security_middleware.check_rate_limit")
+    @patch("app.utils.security.security_middleware.get_current_user")
+    @patch("app.utils.security.security_middleware.get_current_http_request")
     def test_rate_limit_exceeded(self, mock_req, mock_user, mock_rate):
         mock_request = MagicMock()
         mock_request.client = MagicMock()
@@ -379,9 +379,9 @@ class TestApiSecurity:
         result = my_endpoint()
         assert result is not None
 
-    @patch("app.utils.security_middleware.check_rate_limit")
-    @patch("app.utils.security_middleware.get_current_user")
-    @patch("app.utils.security_middleware.get_current_http_request")
+    @patch("app.utils.security.security_middleware.check_rate_limit")
+    @patch("app.utils.security.security_middleware.get_current_user")
+    @patch("app.utils.security.security_middleware.get_current_http_request")
     def test_rate_limit_allowed(self, mock_req, mock_user, mock_rate):
         mock_request = MagicMock()
         mock_request.client = MagicMock()

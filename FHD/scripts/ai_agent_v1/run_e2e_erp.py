@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mypy: disable-error-code="assignment"
 """AI Agent V1 端到端 — ERP：客户下单 → AI 自动审单 → 自动发货 → 通知 → Excel。
 
 完整链路：
@@ -10,12 +11,13 @@
 
 证据：docs/evidence/ai-agent-v1/e2e-erp-<stamp>.json
 """
+
 from __future__ import annotations
 
 import argparse
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -131,16 +133,24 @@ def _build_erp_plan(plan_id: str) -> Any:
     )
 
 
-def _mock_e2e_dispatcher(
-    tool_id: str, action: str, params: dict[str, Any]
-) -> dict[str, Any]:
+def _mock_e2e_dispatcher(tool_id: str, action: str, params: dict[str, Any]) -> dict[str, Any]:
     if tool_id == "order_parse" and action == "run":
         return {
             "success": True,
             "customers": ["上海宏达", "北京天元"],
             "items": [
-                {"customer": "上海宏达", "model_number": "9702-C", "quantity": 1000, "unit_price": 12.5},
-                {"customer": "北京天元", "model_number": "8801-A", "quantity": 500, "unit_price": 25.0},
+                {
+                    "customer": "上海宏达",
+                    "model_number": "9702-C",
+                    "quantity": 1000,
+                    "unit_price": 12.5,
+                },
+                {
+                    "customer": "北京天元",
+                    "model_number": "8801-A",
+                    "quantity": 500,
+                    "unit_price": 25.0,
+                },
             ],
             "message": "mock: 解析 2 个客户 2 条商品",
         }
@@ -164,7 +174,10 @@ def _mock_e2e_dispatcher(
         return {
             "success": True,
             "data": [
-                {"order_number": f"ERP-{i+1:03d}", "amount": (it.get("quantity", 1) * it.get("unit_price", 0))}
+                {
+                    "order_number": f"ERP-{i + 1:03d}",
+                    "amount": (it.get("quantity", 1) * it.get("unit_price", 0)),
+                }
                 for i, it in enumerate(items)
             ],
             "message": f"mock: 已生成 {len(items)} 张发货单",
@@ -202,7 +215,7 @@ def run_erp_e2e(strategy: str = "auto") -> dict[str, Any]:
     engine = WorkflowEngine(tool_dispatcher=_mock_e2e_dispatcher)
     gated = ApprovalGatedEngine(engine=engine)
 
-    plan_id = f"e2e-erp-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
+    plan_id = f"e2e-erp-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}"
     plan = _build_erp_plan(plan_id)
     runtime_ctx: dict[str, Any] = {
         "user_id": "e2e_erp_demo",
@@ -220,7 +233,7 @@ def run_erp_e2e(strategy: str = "auto") -> dict[str, Any]:
     )
     evidence["e2e_scenario"] = "erp_order_to_shipment"
 
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     out = EVIDENCE_DIR / f"e2e-erp-{stamp}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(evidence, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -244,7 +257,7 @@ def main(argv: list[str] | None = None) -> int:
         f"  approved={decision.get('all_approved')} pending={decision.get('pending_approval')} "
         f"rejected={decision.get('any_rejected')}"
     )
-    for nr in (evidence.get("node_results_summary") or []):
+    for nr in evidence.get("node_results_summary") or []:
         print(f"  {nr.get('node_id')}: success={nr.get('success')} action={nr.get('action')}")
     print(f"  evidence: {evidence.get('_evidence_path')}")
     return 0

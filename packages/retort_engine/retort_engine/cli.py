@@ -4,6 +4,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any, cast
 
 from retort_engine.absorption_continuity_probe import build_absorption_continuity_probe
 from retort_engine.absorption_hardening_run import record_post_absorption_hardening_run
@@ -737,39 +738,39 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "sandbox_rolled_back" else 1
     if args.command == "publish-pr-live-probe":
-        output = args.output or "retort_pr_live_publish_probe.json"
-        result = write_live_pr_comment_probe(args.pr_url, output, body=args.body)
+        output_path = str(args.output or "retort_pr_live_publish_probe.json")
+        result = write_live_pr_comment_probe(args.pr_url, output_path, body=args.body)
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(f"Retort PR live publish probe status: {result['status']}")
             print(f"Created: {result['summary']['created_comment_count']}")
             print(f"Rolled back: {result['summary']['rolled_back_comment_count']}")
-            print(f"Output: {output}")
+            print(f"Output: {output_path}")
         return (
             0
             if result["status"] in {"live_rolled_back", "permission_denied_degraded"}
             else 1
         )
     if args.command == "publish-pr-readonly-probe":
-        output = args.output or "retort_pr_readonly_degradation_probe.json"
-        result = write_readonly_pr_degradation_probe(args.pr_url, output)
+        output_path = str(args.output or "retort_pr_readonly_degradation_probe.json")
+        result = write_readonly_pr_degradation_probe(args.pr_url, output_path)
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(f"Retort PR readonly probe status: {result['status']}")
             print(f"Readable: {result['summary']['pull_status'] < 400}")
-            print(f"Output: {output}")
+            print(f"Output: {output_path}")
         return 0 if result["status"] == "read_only_degraded" else 1
     if args.command == "publish-pr-low-permission-probe":
-        output = args.output or "retort_pr_low_permission_probe.json"
-        result = write_low_permission_pr_degradation_probe(args.pr_url, output)
+        output_path = str(args.output or "retort_pr_low_permission_probe.json")
+        result = write_low_permission_pr_degradation_probe(args.pr_url, output_path)
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(f"Retort PR low-permission probe status: {result['status']}")
             print(f"Write denied: {result['summary']['permission_denied']}")
-            print(f"Output: {output}")
+            print(f"Output: {output_path}")
         return 0 if result["status"] == "permission_denied_degraded" else 1
     if args.command == "pr-long-run-review":
         result = build_pr_long_run_review(
@@ -1518,7 +1519,7 @@ def main(argv: list[str] | None = None) -> int:
 def _format_scores(title: str, scores: list[dict[str, object]]) -> str:
     lines = [title + ":"]
     for score in scores:
-        value = float(score["value"])
+        value = float(cast(Any, score["value"]))
         lines.append(
             f"- {score['dimension']}: {value:.1f} ({'PASS' if value > 90 else 'NEEDS_WORK'})"
         )

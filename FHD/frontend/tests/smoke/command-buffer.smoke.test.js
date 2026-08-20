@@ -5,7 +5,7 @@ import {
   getCommandBufferLimit,
   loadBuffer,
   recordCommandHit,
-  saveBuffer
+  saveBuffer,
 } from '@/utils/commandBuffer'
 
 describe('command buffer smoke', () => {
@@ -25,7 +25,7 @@ describe('command buffer smoke', () => {
     recordCommandHit({
       message: text,
       intent: 'sales_contract',
-      handlerKey: 'handleSalesContractCommand'
+      handlerKey: 'handleSalesContractCommand',
     })
 
     const cached = findRunnableCachedCommand(text)
@@ -38,7 +38,7 @@ describe('command buffer smoke', () => {
     recordCommandHit({
       message: '帮我打一下百木鼎家具有限公司的一个销售合同一个8828和一个303和一桶的779',
       intent: 'sales_contract',
-      handlerKey: 'handleSalesContractCommand'
+      handlerKey: 'handleSalesContractCommand',
     })
     const similar = '打一下销售合同 8828 303 779'
     const cached = findRunnableCachedCommand(similar)
@@ -52,7 +52,7 @@ describe('command buffer smoke', () => {
       recordCommandHit({
         message: `生成价格表 客户${i}`,
         intent: 'price_list',
-        handlerKey: 'handlePriceListCommand'
+        handlerKey: 'handlePriceListCommand',
       })
     }
     const rows = loadBuffer()

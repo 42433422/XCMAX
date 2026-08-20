@@ -216,7 +216,10 @@ describe('useAccountProfileStore', () => {
   it('waits for tenant preference hydration before refresh resolves', async () => {
     let releaseHydration: (() => void) | undefined
     vi.mocked(refreshTenantScopedClientStores).mockImplementationOnce(
-      () => new Promise<void>((resolve) => { releaseHydration = resolve }),
+      () =>
+        new Promise<void>((resolve) => {
+          releaseHydration = resolve
+        }),
     )
     const { authApi } = await import('@/api/auth')
     vi.mocked(authApi.getCurrentUser).mockResolvedValueOnce({
@@ -225,7 +228,9 @@ describe('useAccountProfileStore', () => {
     })
     const store = useAccountProfileStore()
     let resolved = false
-    const refresh = store.refreshFromServer().then(() => { resolved = true })
+    const refresh = store.refreshFromServer().then(() => {
+      resolved = true
+    })
 
     await vi.waitFor(() => expect(store.loaded).toBe(true))
     expect(resolved).toBe(false)

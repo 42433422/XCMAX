@@ -1,6 +1,6 @@
-import openpyxl
-from openpyxl import load_workbook
 import os
+
+from openpyxl import load_workbook
 
 folder = r"e:\FHD\424"
 files = [f for f in os.listdir(folder) if f.endswith(".xlsx") and not f.startswith("~$")]

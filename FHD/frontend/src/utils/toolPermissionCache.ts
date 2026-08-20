@@ -23,7 +23,7 @@ function readStore(storage: Storage, key: string): PermissionStore {
     const raw = storage.getItem(key)
     if (!raw) return {}
     const parsed = JSON.parse(raw)
-    return parsed && typeof parsed === 'object' ? parsed as PermissionStore : {}
+    return parsed && typeof parsed === 'object' ? (parsed as PermissionStore) : {}
   } catch {
     return {}
   }

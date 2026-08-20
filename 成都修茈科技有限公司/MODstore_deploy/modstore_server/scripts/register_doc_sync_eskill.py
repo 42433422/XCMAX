@@ -87,9 +87,7 @@ def main() -> int:
 
     sf = get_session_factory()
     with sf() as session:
-        admin = (
-            session.query(User).filter(User.is_admin == True).order_by(User.id.asc()).first()
-        )  # noqa: E712
+        admin = session.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).first()
         if not admin:
             print("No admin user found in DB.", file=sys.stderr)
             return 3

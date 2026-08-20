@@ -1,15 +1,11 @@
 import html
 import json
-import re
 
 from starlette.types import ASGIApp, Receive, Scope, Send
-
-_SCRIPT_RE = re.compile(r"<\s*script[^>]*>.*?<\s*/\s*script\s*>", re.IGNORECASE | re.DOTALL)
 
 
 def _sanitize_value(value):
     if isinstance(value, str):
-        value = _SCRIPT_RE.sub("", value)
         return html.escape(value)
     if isinstance(value, dict):
         return {k: _sanitize_value(v) for k, v in value.items()}

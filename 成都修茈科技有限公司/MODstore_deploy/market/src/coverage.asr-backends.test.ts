@@ -1,35 +1,49 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 
+type GenericCallback = (...args: unknown[]) => unknown
+
 const asrMocks = vi.hoisted(() => {
   class FakeAudioCapture {
     static instances: FakeAudioCapture[] = []
     sampleRate = 48000
-    opts: any = null
+    opts: UnsafeTestValue = null
     stopped = false
-    constructor() { FakeAudioCapture.instances.push(this) }
-    async start(opts: any) {
+    constructor() {
+      FakeAudioCapture.instances.push(this)
+    }
+    async start(opts: UnsafeTestValue) {
       this.opts = opts
       opts.onAudioLevel?.(0.42)
       opts.onAudioData?.(new Float32Array(2200).fill(0.2))
     }
-    stop() { this.stopped = true }
+    stop() {
+      this.stopped = true
+    }
   }
 
   class FakeRecognizer {
-    handlers: Record<string, Function> = {}
+    handlers: Record<string, GenericCallback> = {}
     accepted: Array<{ pcm: Float32Array; rate: number }> = []
     removed = false
-    on(event: string, cb: Function) { this.handlers[event] = cb }
-    acceptWaveformFloat(pcm: Float32Array, rate: number) { this.accepted.push({ pcm, rate }) }
-    retrieveFinalResult() { return { result: { text: 'vosk final' } } }
-    remove() { this.removed = true }
+    on(event: string, cb: GenericCallback) {
+      this.handlers[event] = cb
+    }
+    acceptWaveformFloat(pcm: Float32Array, rate: number) {
+      this.accepted.push({ pcm, rate })
+    }
+    retrieveFinalResult() {
+      return { result: { text: 'vosk final' } }
+    }
+    remove() {
+      this.removed = true
+    }
   }
 
   return {
     FakeAudioCapture,
     FakeRecognizer,
     createVoskClient: vi.fn(async () => ({ KaldiRecognizer: FakeRecognizer })),
-    workers: [] as any[],
+    workers: [] as UnsafeTestValue[],
   }
 })
 
@@ -45,11 +59,13 @@ vi.mock('@lichess-org/vosk-browser', () => ({
 class FakeWorker {
   onmessage: ((e: MessageEvent) => void) | null = null
   onerror: ((e: ErrorEvent) => void) | null = null
-  listeners: Record<string, Function[]> = { message: [], error: [] }
+  listeners: Record<string, GenericCallback[]> = { message: [], error: [] }
   terminated = false
   messages: unknown[] = []
-  constructor() { asrMocks.workers.push(this) }
-  postMessage(msg: any) {
+  constructor() {
+    asrMocks.workers.push(this)
+  }
+  postMessage(msg: UnsafeTestValue) {
     this.messages.push(msg)
     if (msg.type === 'init') {
       setTimeout(() => this.emitMessage({ type: 'ready' }), 0)
@@ -58,10 +74,17 @@ class FakeWorker {
       setTimeout(() => this.emitMessage({ type: 'result', jobId: msg.jobId, data: 'whisper text' }), 0)
     }
   }
-  addEventListener(type: string, cb: Function) { this.listeners[type] ||= []; this.listeners[type].push(cb) }
-  removeEventListener(type: string, cb: Function) { this.listeners[type] = (this.listeners[type] || []).filter((x) => x !== cb) }
-  terminate() { this.terminated = true }
-  emitMessage(data: any) {
+  addEventListener(type: string, cb: GenericCallback) {
+    this.listeners[type] ||= []
+    this.listeners[type].push(cb)
+  }
+  removeEventListener(type: string, cb: GenericCallback) {
+    this.listeners[type] = (this.listeners[type] || []).filter((x) => x !== cb)
+  }
+  terminate() {
+    this.terminated = true
+  }
+  emitMessage(data: UnsafeTestValue) {
     const event = { data } as MessageEvent
     this.onmessage?.(event)
     for (const cb of this.listeners.message || []) cb(event)
@@ -74,7 +97,7 @@ class FakeWorker {
 }
 
 function finalEvent(text: string, isFinal = true) {
-  const seg: any = [{ transcript: text }]
+  const seg: UnsafeTestValue = [{ transcript: text }]
   seg.isFinal = isFinal
   return { resultIndex: 0, results: [seg] }
 }
@@ -102,39 +125,51 @@ afterEach(() => {
 describe('coverage ASR backends', () => {
   it('covers WebSpeech recognition lifecycle, errors and iOS restart', async () => {
     const { WebSpeechBackend } = await import('./composables/asr/WebSpeechBackend')
-    const recs: any[] = []
+    const recs: UnsafeTestValue[] = []
     class FakeSpeechRecognition {
       lang = ''
       interimResults = false
       continuous = false
-      onresult: any = null
-      onerror: any = null
-      onend: any = null
+      onresult: UnsafeTestValue = null
+      onerror: UnsafeTestValue = null
+      onend: UnsafeTestValue = null
       start = vi.fn()
       stop = vi.fn()
       abort = vi.fn()
-      constructor() { recs.push(this) }
+      constructor() {
+        recs.push(this)
+      }
     }
-    Object.defineProperty(window, 'SpeechRecognition', { configurable: true, value: FakeSpeechRecognition })
+    Object.defineProperty(window, 'SpeechRecognition', {
+      configurable: true,
+      value: FakeSpeechRecognition,
+    })
 
     const backend = new WebSpeechBackend()
     expect(backend.isAvailable()).toBe(true)
     expect(backend.isLoading()).toBe(false)
-    const results: any[] = []
+    const results: UnsafeTestValue[] = []
     const errors: string[] = []
     const levels: number[] = []
     const ready = vi.fn()
-    await backend.start((r) => results.push(r), (e) => errors.push(e), (l) => levels.push(l), ready)
+    await backend.start(
+      (r) => results.push(r),
+      (e) => errors.push(e),
+      (l) => levels.push(l),
+      ready,
+    )
     expect(ready).toHaveBeenCalled()
     const rec = recs[0]
     rec.onresult(finalEvent('临时文本', false))
     rec.onresult(finalEvent('最终文本', true))
     rec.onerror({ error: 'network' })
     rec.onerror({ error: 'no-speech' })
-    expect(results).toEqual(expect.arrayContaining([
-      { text: '临时文本', isFinal: false },
-      { text: '最终文本', isFinal: true },
-    ]))
+    expect(results).toEqual(
+      expect.arrayContaining([
+        { text: '临时文本', isFinal: false },
+        { text: '最终文本', isFinal: true },
+      ]),
+    )
     expect(errors[0]).toContain('语音服务连接失败')
     expect(levels).toContain(0.42)
     await expect(backend.flushUtterance()).resolves.toBe('最终文本')
@@ -146,7 +181,10 @@ describe('coverage ASR backends', () => {
 
     Object.defineProperty(navigator, 'userAgent', { configurable: true, value: 'iPhone Safari' })
     const ios = new WebSpeechBackend()
-    await ios.start(() => undefined, () => undefined)
+    await ios.start(
+      () => undefined,
+      () => undefined,
+    )
     const iosRec = recs[1]
     iosRec.onend()
     await vi.advanceTimersByTimeAsync(280)
@@ -160,30 +198,41 @@ describe('coverage ASR backends', () => {
     const unavailable = new WebSpeechBackend()
     const unsupportedErrors: string[] = []
     expect(unavailable.isAvailable()).toBe(false)
-    await unavailable.start(() => undefined, (e) => unsupportedErrors.push(e))
+    await unavailable.start(
+      () => undefined,
+      (e) => unsupportedErrors.push(e),
+    )
     expect(unsupportedErrors[0]).toContain('不支持语音识别')
 
-    const recs: any[] = []
+    const recs: UnsafeTestValue[] = []
     class FakeWebkitRecognition {
       lang = ''
       interimResults = false
       continuous = false
-      onresult: any = null
-      onerror: any = null
-      onend: any = null
+      onresult: UnsafeTestValue = null
+      onerror: UnsafeTestValue = null
+      onend: UnsafeTestValue = null
       start = vi.fn()
       stop = vi.fn()
       abort = vi.fn()
-      constructor() { recs.push(this) }
+      constructor() {
+        recs.push(this)
+      }
     }
-    Object.defineProperty(window, 'webkitSpeechRecognition', { configurable: true, value: FakeWebkitRecognition })
+    Object.defineProperty(window, 'webkitSpeechRecognition', {
+      configurable: true,
+      value: FakeWebkitRecognition,
+    })
     const backend = new WebSpeechBackend()
     expect(backend.isAvailable()).toBe(true)
-    const results: any[] = []
+    const results: UnsafeTestValue[] = []
     const errors: string[] = []
-    await backend.start((r) => results.push(r), (e) => errors.push(e))
+    await backend.start(
+      (r) => results.push(r),
+      (e) => errors.push(e),
+    )
     const rec = recs[0]
-    const emptySeg: any = [{}]
+    const emptySeg: UnsafeTestValue = [{}]
     emptySeg.isFinal = false
     rec.onresult({ resultIndex: 0, results: [emptySeg] })
     rec.onresult(finalEvent('  临时 flush  ', false))
@@ -202,11 +251,20 @@ describe('coverage ASR backends', () => {
         throw new Error('start boom')
       })
     }
-    Object.defineProperty(window, 'SpeechRecognition', { configurable: true, value: ThrowingRecognition })
-    Object.defineProperty(window, 'webkitSpeechRecognition', { configurable: true, value: undefined })
+    Object.defineProperty(window, 'SpeechRecognition', {
+      configurable: true,
+      value: ThrowingRecognition,
+    })
+    Object.defineProperty(window, 'webkitSpeechRecognition', {
+      configurable: true,
+      value: undefined,
+    })
     const errorStart = new WebSpeechBackend()
     const startErrors: string[] = []
-    await errorStart.start(() => undefined, (e) => startErrors.push(e))
+    await errorStart.start(
+      () => undefined,
+      (e) => startErrors.push(e),
+    )
     expect(startErrors).toContain('start boom')
 
     class StringThrowingRecognition extends FakeWebkitRecognition {
@@ -214,19 +272,32 @@ describe('coverage ASR backends', () => {
         throw 'string boom'
       })
     }
-    Object.defineProperty(window, 'SpeechRecognition', { configurable: true, value: StringThrowingRecognition })
+    Object.defineProperty(window, 'SpeechRecognition', {
+      configurable: true,
+      value: StringThrowingRecognition,
+    })
     const stringStart = new WebSpeechBackend()
-    await stringStart.start(() => undefined, (e) => startErrors.push(e))
+    await stringStart.start(
+      () => undefined,
+      (e) => startErrors.push(e),
+    )
     expect(startErrors).toContain('string boom')
 
     const originalAudioStart = asrMocks.FakeAudioCapture.prototype.start
     asrMocks.FakeAudioCapture.prototype.start = vi.fn(async () => {
       throw new Error('level capture failed')
     })
-    Object.defineProperty(window, 'SpeechRecognition', { configurable: true, value: FakeWebkitRecognition })
+    Object.defineProperty(window, 'SpeechRecognition', {
+      configurable: true,
+      value: FakeWebkitRecognition,
+    })
     const levelFallback = new WebSpeechBackend()
-    await levelFallback.start(() => undefined, (e) => startErrors.push(e), () => undefined)
-    expect((levelFallback as any).levelCapture).toBe(null)
+    await levelFallback.start(
+      () => undefined,
+      (e) => startErrors.push(e),
+      () => undefined,
+    )
+    expect((levelFallback as UnsafeTestValue).levelCapture).toBe(null)
     asrMocks.FakeAudioCapture.prototype.start = originalAudioStart
     await levelFallback.stop()
 
@@ -238,62 +309,82 @@ describe('coverage ASR backends', () => {
 
   it('covers WebSpeech iOS restart guard and failure branches', async () => {
     const { WebSpeechBackend } = await import('./composables/asr/WebSpeechBackend')
-    const recs: any[] = []
+    const recs: UnsafeTestValue[] = []
     class FakeSpeechRecognition {
       lang = ''
       interimResults = false
       continuous = false
-      onresult: any = null
-      onerror: any = null
-      onend: any = null
+      onresult: UnsafeTestValue = null
+      onerror: UnsafeTestValue = null
+      onend: UnsafeTestValue = null
       start = vi.fn()
       stop = vi.fn()
       abort = vi.fn()
-      constructor() { recs.push(this) }
+      constructor() {
+        recs.push(this)
+      }
     }
-    Object.defineProperty(window, 'SpeechRecognition', { configurable: true, value: FakeSpeechRecognition })
+    Object.defineProperty(window, 'SpeechRecognition', {
+      configurable: true,
+      value: FakeSpeechRecognition,
+    })
     Object.defineProperty(navigator, 'userAgent', { configurable: true, value: 'iPhone Safari' })
 
     const clearPending = new WebSpeechBackend()
-    await clearPending.start(() => undefined, () => undefined)
+    await clearPending.start(
+      () => undefined,
+      () => undefined,
+    )
     const pendingRec = recs.at(-1)
     pendingRec.onend()
     pendingRec.onend()
     clearPending.abort()
 
     const maxRestarts = new WebSpeechBackend()
-    await maxRestarts.start(() => undefined, () => undefined)
+    await maxRestarts.start(
+      () => undefined,
+      () => undefined,
+    )
     const maxRestartRec = recs.at(-1)
-    ;(maxRestarts as any)._restartCount = 200
+    ;(maxRestarts as UnsafeTestValue)._restartCount = 200
     maxRestartRec.onend()
     await vi.advanceTimersByTimeAsync(500)
     expect(maxRestartRec.start).toHaveBeenCalledTimes(1)
 
     const maxFailures = new WebSpeechBackend()
-    await maxFailures.start(() => undefined, () => undefined)
+    await maxFailures.start(
+      () => undefined,
+      () => undefined,
+    )
     const maxFailureRec = recs.at(-1)
-    ;(maxFailures as any)._restartFailures = 8
+    ;(maxFailures as UnsafeTestValue)._restartFailures = 8
     maxFailureRec.onend()
     await vi.advanceTimersByTimeAsync(500)
     expect(maxFailureRec.start).toHaveBeenCalledTimes(1)
 
     const stale = new WebSpeechBackend()
-    await stale.start(() => undefined, () => undefined)
+    await stale.start(
+      () => undefined,
+      () => undefined,
+    )
     const staleRec = recs.at(-1)
     staleRec.onend()
-    ;(stale as any).rec = {}
+    ;(stale as UnsafeTestValue).rec = {}
     await vi.advanceTimersByTimeAsync(280)
     expect(staleRec.start).toHaveBeenCalledTimes(1)
 
     const failed = new WebSpeechBackend()
-    await failed.start(() => undefined, () => undefined)
+    await failed.start(
+      () => undefined,
+      () => undefined,
+    )
     const failedRec = recs.at(-1)
     failedRec.start.mockImplementation(() => {
       throw new Error('busy')
     })
     failedRec.onend()
     await vi.advanceTimersByTimeAsync(280)
-    expect((failed as any)._restartFailures).toBe(1)
+    expect((failed as UnsafeTestValue)._restartFailures).toBe(1)
     failed.abort()
   })
 
@@ -302,26 +393,34 @@ describe('coverage ASR backends', () => {
     mod.invalidateVoskCache()
     const backend = new mod.VoskBackend()
     expect(backend.isAvailable()).toBe(true)
-    const results: any[] = []
+    const results: UnsafeTestValue[] = []
     const errors: string[] = []
     const ready = vi.fn()
-    await backend.start((r) => results.push(r), (e) => errors.push(e), undefined, ready)
+    await backend.start(
+      (r) => results.push(r),
+      (e) => errors.push(e),
+      undefined,
+      ready,
+    )
     expect(ready).toHaveBeenCalled()
     const capture = asrMocks.FakeAudioCapture.instances.at(-1)!
-    const recognizer = (capture.opts && asrMocks.createVoskClient.mock.results.length) ? null : null
+    const _recognizer = capture.opts && asrMocks.createVoskClient.mock.results.length ? null : null
     expect(errors).toEqual([])
     const client = await asrMocks.createVoskClient.mock.results.at(-1)!.value
     const rec = new client.KaldiRecognizer(16000)
     rec.handlers.partialresult = vi.fn()
     expect(rec).toBeTruthy()
 
-    const backendAny = backend as any
+    const backendAny = backend as UnsafeTestValue
     backendAny.recognizer.handlers.partialresult({ result: { partial: 'vosk partial' } })
     backendAny.recognizer.handlers.result({ result: { text: 'vosk done' } })
     expect(results).toContainEqual({ text: 'vosk partial', isFinal: false })
     expect(results).toContainEqual({ text: 'vosk done', isFinal: true })
     await expect(backend.stop()).resolves.toBe('vosk final')
-    await backend.start(() => undefined, (e) => errors.push(e))
+    await backend.start(
+      () => undefined,
+      (e) => errors.push(e),
+    )
     backend.abort()
   })
 
@@ -330,17 +429,22 @@ describe('coverage ASR backends', () => {
     const backend = new WhisperWebBackend()
     expect(backend.isAvailable()).toBe(true)
     expect(backend.isLoading()).toBe(true)
-    const results: any[] = []
+    const results: UnsafeTestValue[] = []
     const errors: string[] = []
     const ready = vi.fn()
-    const startPromise = backend.start((r) => results.push(r), (e) => errors.push(e), undefined, ready)
+    const startPromise = backend.start(
+      (r) => results.push(r),
+      (e) => errors.push(e),
+      undefined,
+      ready,
+    )
     await vi.advanceTimersByTimeAsync(0)
     await startPromise
     expect(ready).toHaveBeenCalled()
     expect(errors).toEqual([])
     const firstCapture = asrMocks.FakeAudioCapture.instances.at(-1)!
     firstCapture.opts.onAudioData(new Float32Array(2200).fill(0.25))
-    ;(backend as any).processChunk()
+    ;(backend as UnsafeTestValue).processChunk()
     await vi.advanceTimersByTimeAsync(0)
     expect(results).toContainEqual({ text: 'whisper text', isFinal: false })
 
@@ -361,25 +465,28 @@ describe('coverage ASR backends', () => {
   it('covers Whisper worker error, timeout, stale job, microphone failure, and stop fallbacks', async () => {
     const { WhisperWebBackend } = await import('./composables/asr/WhisperWebBackend')
 
-    const noWorkerBackend = new WhisperWebBackend() as any
+    const noWorkerBackend = new WhisperWebBackend() as UnsafeTestValue
     await expect(noWorkerBackend.waitForModelReady(1)).resolves.toBe(false)
 
     const errors: string[] = []
     const timeoutBackend = new WhisperWebBackend()
     class SilentWorker extends FakeWorker {
-      postMessage(msg: any) {
+      postMessage(msg: UnsafeTestValue) {
         this.messages.push(msg)
       }
     }
     Object.defineProperty(globalThis, 'Worker', { configurable: true, value: SilentWorker })
-    const timeoutStart = timeoutBackend.start(() => undefined, (e) => errors.push(e))
+    const timeoutStart = timeoutBackend.start(
+      () => undefined,
+      (e) => errors.push(e),
+    )
     await vi.advanceTimersByTimeAsync(18_000)
     await timeoutStart
     expect(errors.at(-1)).toContain('Whisper 模型加载失败')
 
     errors.length = 0
     class InitErrorWorker extends FakeWorker {
-      postMessage(msg: any) {
+      postMessage(msg: UnsafeTestValue) {
         this.messages.push(msg)
         if (msg.type === 'init') {
           setTimeout(() => this.emitMessage({ type: 'error', data: '模型坏了' }), 0)
@@ -387,20 +494,26 @@ describe('coverage ASR backends', () => {
       }
     }
     Object.defineProperty(globalThis, 'Worker', { configurable: true, value: InitErrorWorker })
-    const initErrorStart = new WhisperWebBackend().start(() => undefined, (e) => errors.push(e))
+    const initErrorStart = new WhisperWebBackend().start(
+      () => undefined,
+      (e) => errors.push(e),
+    )
     await vi.advanceTimersByTimeAsync(0)
     await initErrorStart
     expect(errors.at(-1)).toBe('模型坏了')
 
     errors.length = 0
     class StartupErrorWorker extends FakeWorker {
-      postMessage(msg: any) {
+      postMessage(msg: UnsafeTestValue) {
         this.messages.push(msg)
         if (msg.type === 'init') setTimeout(() => this.emitError(''), 0)
       }
     }
     Object.defineProperty(globalThis, 'Worker', { configurable: true, value: StartupErrorWorker })
-    const startupErrorStart = new WhisperWebBackend().start(() => undefined, (e) => errors.push(e))
+    const startupErrorStart = new WhisperWebBackend().start(
+      () => undefined,
+      (e) => errors.push(e),
+    )
     await vi.advanceTimersByTimeAsync(0)
     await startupErrorStart
     expect(errors.at(-1)).toContain('Whisper Worker 错误')
@@ -410,16 +523,22 @@ describe('coverage ASR backends', () => {
     asrMocks.FakeAudioCapture.prototype.start = async () => {
       throw new Error('permission denied')
     }
-    const micErrorStart = new WhisperWebBackend().start(() => undefined, (e) => errors.push(e))
+    const micErrorStart = new WhisperWebBackend().start(
+      () => undefined,
+      (e) => errors.push(e),
+    )
     await vi.advanceTimersByTimeAsync(0)
     await micErrorStart
     expect(errors.at(-1)).toContain('麦克风启动失败：permission denied')
     asrMocks.FakeAudioCapture.prototype.start = originalStart
 
-    const backend = new WhisperWebBackend() as any
-    const results: any[] = []
+    const backend = new WhisperWebBackend() as UnsafeTestValue
+    const results: UnsafeTestValue[] = []
     const runtimeErrors: string[] = []
-    const startPromise = backend.start((r: any) => results.push(r), (e: string) => runtimeErrors.push(e))
+    const startPromise = backend.start(
+      (r: UnsafeTestValue) => results.push(r),
+      (e: string) => runtimeErrors.push(e),
+    )
     await vi.advanceTimersByTimeAsync(0)
     await startPromise
     expect(backend.ensureWorker()).toBe(backend.ensureWorker())
@@ -449,7 +568,10 @@ describe('coverage ASR backends', () => {
     expect(results).toContainEqual({ text: 'last partial', isFinal: true })
 
     const abortBackend = new WhisperWebBackend()
-    const abortStart = abortBackend.start(() => undefined, () => undefined)
+    const abortStart = abortBackend.start(
+      () => undefined,
+      () => undefined,
+    )
     await vi.advanceTimersByTimeAsync(0)
     await abortStart
     abortBackend.abort()

@@ -80,7 +80,9 @@ class TestModuleHelpers:
 
     def test_get_deepseek_api_key_missing_returns_empty(self, monkeypatch):
         monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
-        with patch("app.utils.path_utils.get_resource_path", return_value="/no/such/config.py"):
+        with patch(
+            "app.utils.path_io.path_utils.get_resource_path", return_value="/no/such/config.py"
+        ):
             assert get_deepseek_api_key() == ""
 
     def test_get_deepseek_recognizer_singleton(self):
@@ -117,7 +119,9 @@ class TestGetApiKey:
 
     def test_empty_when_no_key_anywhere(self, monkeypatch):
         monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
-        with patch("app.utils.path_utils.get_resource_path", return_value="/no/such/cfg.py"):
+        with patch(
+            "app.utils.path_io.path_utils.get_resource_path", return_value="/no/such/cfg.py"
+        ):
             r = DeepSeekIntentRecognizer(api_key=None)
             assert r._get_api_key() == ""
 

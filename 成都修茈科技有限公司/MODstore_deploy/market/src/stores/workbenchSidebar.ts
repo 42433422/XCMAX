@@ -1,12 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Conversation } from '../utils/conversationStore'
-import {
-  loadConversations,
-  saveConversations,
-  loadActiveId,
-  saveActiveId,
-} from '../utils/conversationStore'
+import { loadConversations, saveConversations, loadActiveId, saveActiveId } from '../utils/conversationStore'
 
 export const useWorkbenchSidebarStore = defineStore('workbenchSidebar', () => {
   const conversations = ref<Conversation[]>([])
@@ -15,9 +10,7 @@ export const useWorkbenchSidebarStore = defineStore('workbenchSidebar', () => {
   const sidebarCollapsed = ref(false)
   const mobileOpen = ref(false)
 
-  const activeConversation = computed(() =>
-    conversations.value.find((c) => c.id === activeConversationId.value) ?? null,
-  )
+  const activeConversation = computed(() => conversations.value.find((c) => c.id === activeConversationId.value) ?? null)
 
   function initConversations() {
     try {
@@ -89,9 +82,7 @@ export const useWorkbenchSidebarStore = defineStore('workbenchSidebar', () => {
   }
 
   function updateConversation(id: string, patch: Partial<Conversation>) {
-    conversations.value = conversations.value.map((c) =>
-      c.id === id ? { ...c, ...patch, updatedAt: Date.now() } : c,
-    )
+    conversations.value = conversations.value.map((c) => (c.id === id ? { ...c, ...patch, updatedAt: Date.now() } : c))
     persistConversations()
   }
 

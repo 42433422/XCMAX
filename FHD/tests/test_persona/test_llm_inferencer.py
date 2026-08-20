@@ -59,7 +59,7 @@ class TestLlmInferencer:
 
     @pytest.mark.asyncio
     async def test_infer_llm_failure_returns_neutral(self, mock_llm_client):
-        mock_llm_client.chat_completion = AsyncMock(side_effect=Exception("LLM down"))
+        mock_llm_client.chat_completion = AsyncMock(side_effect=RuntimeError("LLM down"))
         inferencer = LlmInferencer(mock_llm_client)
         result = await inferencer.infer(
             "user-1",

@@ -45,7 +45,8 @@ ST_RETIRED = "⛔"
 
 def _read_json(path: Path) -> dict:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        return payload if isinstance(payload, dict) else {}
     except (OSError, json.JSONDecodeError):
         return {}
 
@@ -58,7 +59,8 @@ def _read_jsonl_last(path: Path) -> dict:
     if not lines:
         return {}
     try:
-        return json.loads(lines[-1])
+        payload = json.loads(lines[-1])
+        return payload if isinstance(payload, dict) else {}
     except json.JSONDecodeError:
         return {}
 
@@ -81,9 +83,7 @@ def _snapshot_age_days(
     now: datetime.datetime | None = None,
 ) -> int | None:
     try:
-        generated = datetime.datetime.fromisoformat(
-            generated_at.replace("Z", "+00:00")
-        )
+        generated = datetime.datetime.fromisoformat(generated_at.replace("Z", "+00:00"))
     except (AttributeError, TypeError, ValueError):
         return None
     now = now or datetime.datetime.now(datetime.UTC)

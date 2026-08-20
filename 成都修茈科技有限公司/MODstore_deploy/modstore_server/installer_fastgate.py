@@ -13,19 +13,26 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Dict
+
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 logger = logging.getLogger(__name__)
 
 
 def _env_bool(name: str, default: str = "1") -> bool:
-    return (os.environ.get(name, default) or "").strip().lower() in ("1", "true", "yes", "on")
+    return (os.environ.get(name, default) or "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
 
 
 def verify_installer_fastgate(*, release_train: str, release_kind: str) -> Dict[str, Any]:
     """推 COS 前置门禁。返回 {ok, skipped, reason, smoke?, ...}；ok=False 时调用方应阻断推送。"""
-    at = datetime.now(timezone.utc).isoformat()
+    at = datetime.now(UTC).isoformat()
     base = {"release_train": release_train, "release_kind": release_kind, "at": at}
 
     if not _env_bool("MODSTORE_INSTALLER_FASTGATE_ENABLED", "1"):
@@ -40,9 +47,14 @@ def verify_installer_fastgate(*, release_train: str, release_kind: str) -> Dict[
         from modstore_server.post_deploy_smoke import run_post_deploy_smoke
 
         smoke = run_post_deploy_smoke()
-    except Exception as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         logger.exception("installer fastgate: smoke probe error")
-        return {"ok": False, "skipped": False, "reason": f"smoke probe error: {exc}", **base}
+        return {
+            "ok": False,
+            "skipped": False,
+            "reason": f"smoke probe error: {exc}",
+            **base,
+        }
 
     if smoke.get("skipped"):
         # smoke 被显式关闭：不阻断（保留旧行为），但留痕

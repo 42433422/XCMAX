@@ -3,12 +3,7 @@
  * 目标：覆盖 pushErpPage、resolveErpPagePath 边界、resolveErpPageRedirectForRouteName 边界
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
-import {
-  resolveErpPagePath,
-  resolveErpPageRedirectForRouteName,
-  pushErpPage,
-  useErpModPages,
-} from './erpPagePaths'
+import { resolveErpPagePath, resolveErpPageRedirectForRouteName, pushErpPage, useErpModPages } from './erpPagePaths'
 import type { Router } from 'vue-router'
 
 describe('erpPagePaths – useErpModPages', () => {
@@ -64,7 +59,7 @@ describe('erpPagePaths – resolveErpPagePath 边界', () => {
     expect(resolveErpPagePath('/materials')).toBe('/mod/xcagi-erp-domain-bridge/materials')
     expect(resolveErpPagePath('/materials-list')).toBe('/mod/xcagi-erp-domain-bridge/materials')
     expect(resolveErpPagePath('/traditional-mode')).toBe('/mod/xcagi-erp-domain-bridge/traditional-mode')
-expect(resolveErpPagePath('/business-docking')).toBe('/business-docking')
+    expect(resolveErpPagePath('/business-docking')).toBe('/business-docking')
     expect(resolveErpPagePath('/data-sources')).toBe('/mod/xcagi-erp-domain-bridge/data-sources')
     expect(resolveErpPagePath('/print')).toBe('/mod/xcagi-erp-domain-bridge/print')
     expect(resolveErpPagePath('/printer-list')).toBe('/mod/xcagi-erp-domain-bridge/printer-list')
@@ -129,7 +124,7 @@ describe('erpPagePaths – resolveErpPageRedirectForRouteName 边界', () => {
     expect(resolveErpPageRedirectForRouteName('materials')).toBe('/mod/xcagi-erp-domain-bridge/materials')
     expect(resolveErpPageRedirectForRouteName('materials-list')).toBe('/mod/xcagi-erp-domain-bridge/materials')
     expect(resolveErpPageRedirectForRouteName('traditional-mode')).toBe('/mod/xcagi-erp-domain-bridge/traditional-mode')
-expect(resolveErpPageRedirectForRouteName('business-docking')).toBeNull()
+    expect(resolveErpPageRedirectForRouteName('business-docking')).toBeNull()
     expect(resolveErpPageRedirectForRouteName('data-sources')).toBe('/mod/xcagi-erp-domain-bridge/data-sources')
     expect(resolveErpPageRedirectForRouteName('print')).toBe('/mod/xcagi-erp-domain-bridge/print')
     expect(resolveErpPageRedirectForRouteName('printer-list')).toBe('/mod/xcagi-erp-domain-bridge/printer-list')
@@ -184,7 +179,11 @@ describe('erpPagePaths – pushErpPage', () => {
 
   it('对象路由名带 query 和 hash 时一并传递', async () => {
     vi.stubGlobal('localStorage', { getItem: () => '1' })
-    pushErpPage(mockRouter as unknown as Router, { name: 'products', query: { page: '1' }, hash: '#top' })
+    pushErpPage(mockRouter as unknown as Router, {
+      name: 'products',
+      query: { page: '1' },
+      hash: '#top',
+    })
     expect(mockRouter.push).toHaveBeenCalledWith({
       path: '/mod/xcagi-erp-domain-bridge/products',
       query: { page: '1' },

@@ -17,6 +17,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from app.application.shipment_excel_etl_security import ShipmentEtlPathError, resolve_etl_path
 from app.domain.employee.perception_spec import (
     PERCEPTION_AUDIO,
     PERCEPTION_DOCUMENT,
@@ -56,22 +57,47 @@ class PerceptionPipeline:
 
     def process(self, payload: dict[str, Any] | None) -> dict[str, Any]:
         payload = dict(payload or {})
-        file_path = str(payload.get("file_path") or payload.get("path") or "").strip()
+        requested_path = str(payload.get("file_path") or payload.get("path") or "").strip()
+        file_path = ""
+        path_rejected = False
+        if requested_path:
+            try:
+                file_path = str(
+                    resolve_etl_path(
+                        requested_path,
+                        workspace_root=str(payload.get("workspace_root") or "") or None,
+                    )
+                )
+            except ShipmentEtlPathError:
+                logger.warning("employee perception rejected path outside workspace")
+                path_rejected = True
         task_hint = str(
             payload.get("user_request") or payload.get("task") or payload.get("query") or ""
         ).strip()
         artifacts: dict[str, Any] = {}
 
         if self.spec.has(PERCEPTION_DOCUMENT):
-            doc = self._perceive_document(payload, file_path, task_hint)
+            doc = (
+                {"status": "skipped", "reason": "文件路径不在允许工作区", "file": ""}
+                if path_rejected
+                else self._perceive_document(payload, file_path, task_hint)
+            )
             if doc:
                 artifacts["document"] = doc
         if self.spec.has(PERCEPTION_IMAGE):
-            vis = self._perceive_vision(file_path)
+            vis = (
+                {"status": "skipped", "reason": "文件路径不在允许工作区", "file": ""}
+                if path_rejected
+                else self._perceive_vision(file_path)
+            )
             if vis:
                 artifacts["vision"] = vis
         if self.spec.has(PERCEPTION_AUDIO):
-            aud = self._perceive_audio(payload, file_path)
+            aud = (
+                {"status": "skipped", "reason": "文件路径不在允许工作区", "file": ""}
+                if path_rejected
+                else self._perceive_audio(payload, file_path)
+            )
             if aud:
                 artifacts["audio"] = aud
 
@@ -93,11 +119,13 @@ class PerceptionPipeline:
                 return v[:_MAX_DOC_CHARS], f"payload.{key}"
         if file_path:
             p = Path(file_path)
-            if p.suffix.lower() in _TEXT_EXT and p.is_file():
+            if (
+                p.suffix.lower() in _TEXT_EXT and p.is_file()
+            ):  # lgtm[py/path-injection] -- process() resolves the path in the ETL sandbox
                 try:
                     return p.read_text(encoding="utf-8", errors="ignore")[:_MAX_DOC_CHARS], "file"
                 except OSError:
-                    logger.debug("perception read text failed: %s", file_path, exc_info=True)
+                    logger.debug("perception read text failed", exc_info=True)
         return "", ""
 
     def _perceive_document(
@@ -149,14 +177,18 @@ class PerceptionPipeline:
     def _perceive_vision(self, file_path: str) -> dict[str, Any] | None:
         if not file_path or Path(file_path).suffix.lower() not in _IMAGE_EXT:
             return None
-        if not Path(file_path).is_file():
+        if not Path(
+            file_path
+        ).is_file():  # lgtm[py/path-injection] -- process() resolves the path in the ETL sandbox
             return {"status": "skipped", "reason": "图像文件不存在", "file": file_path}
         try:
             from PIL import Image
 
             from app.services.ocr_service import get_ocr_service
 
-            with Image.open(file_path) as img:
+            with Image.open(
+                file_path
+            ) as img:  # lgtm[py/path-injection] -- process() resolves the path in the ETL sandbox
                 text = get_ocr_service().recognize(img) or ""
             text = text.strip()
             if not text:
@@ -169,7 +201,7 @@ class PerceptionPipeline:
         except ImportError:
             return {"status": "unavailable", "reason": "OCR/PIL 依赖未安装", "file": file_path}
         except RECOVERABLE_ERRORS:
-            logger.debug("perceive_vision failed: %s", file_path, exc_info=True)
+            logger.debug("perceive_vision failed", exc_info=True)
             return {"status": "error", "file": file_path}
 
     # ---- audio ----

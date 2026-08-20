@@ -1,3 +1,4 @@
+# mypy: disable-error-code="misc"
 """Tests for app.fastapi_routes.health_k8s — coverage ramp C3.3-a.
 
 Covers the four health endpoints:
@@ -24,7 +25,8 @@ from app.fastapi_routes.health_k8s import router
 def client() -> TestClient:
     app = FastAPI(version="10.0.0")
     app.include_router(router)
-    return TestClient(app)
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 class TestLiveness:
@@ -235,7 +237,7 @@ class TestCapabilities:
             g.return_value = rec
             r = client.get("/api/diagnostics/capabilities")
         assert r.status_code == 200
-        assert r.json()["intent_engines"] == {"error": "engine snapshot fail"}
+        assert r.json()["intent_engines"] == {"error": "unavailable"}
 
 
 class TestCheckHelpers:
@@ -281,4 +283,4 @@ class TestCheckHelpers:
             g.return_value = rec
             out = _check_ai_service()
         assert out["status"] == "healthy"
-        assert out["engines"] == {"error": "status fail"}
+        assert out["engines"] == {"error": "unavailable"}

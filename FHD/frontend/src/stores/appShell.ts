@@ -20,4 +20,3 @@ export const useAppShellStore = defineStore('appShell', () => {
     setChatOwnsInput,
   }
 })
-

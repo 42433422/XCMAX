@@ -9,7 +9,6 @@ unconditionally.
 from __future__ import annotations
 
 import os
-import sys
 from pathlib import Path
 
 import pytest
@@ -22,6 +21,7 @@ from vibe_coding.agent.sandbox import (
 )
 from vibe_coding.agent.sandbox.docker_driver import _docker_path, _extract_json
 from vibe_coding.agent.sandbox.driver import docker_available
+from vibe_coding.operational_errors import BOUNDARY_ERRORS
 
 
 def test_docker_path_posix(tmp_path: Path) -> None:
@@ -38,7 +38,7 @@ def test_docker_path_windows() -> None:
 
 
 def test_extract_json_handles_stray_logs() -> None:
-    out = "spam line\nmore noise\n{\"success\": true, \"output\": {}}\n"
+    out = 'spam line\nmore noise\n{"success": true, "output": {}}\n'
     data = _extract_json(out)
     assert data is not None and data["success"] is True
 
@@ -154,6 +154,7 @@ def _image_available(image: str) -> bool:
     if not docker_available():
         return False
     import subprocess as _sp
+
     try:
         result = _sp.run(
             ["docker", "image", "inspect", image],
@@ -162,7 +163,7 @@ def _image_available(image: str) -> bool:
             check=False,
         )
         return result.returncode == 0
-    except Exception:
+    except BOUNDARY_ERRORS:
         return False
 
 
