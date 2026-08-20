@@ -246,11 +246,11 @@ def execute_registered_capability(
         decision, run_result = ApprovalGatedEngine(
             WorkflowEngine(tool_dispatcher=_dispatch_registered_tool)
         ).run(plan, runtime_context=runtime_context, strategy="interactive")
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         return json.dumps(
             {
                 "success": False,
-                "error": f"ERP capability 风险门检查失败，未执行：{exc}",
+                "error": "ERP capability 风险门检查失败，未执行",
                 "tool_id": tool_id,
                 "action": action,
             },

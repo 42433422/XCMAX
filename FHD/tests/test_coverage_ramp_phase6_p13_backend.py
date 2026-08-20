@@ -2312,7 +2312,7 @@ class TestHandleExcelAnalysis:
                 {"file_path": str(p), "action": "read"}, workspace_root=str(tmp_path)
             )
             assert result["success"] is False
-            assert "read failed" in result["error"]
+        assert result["error"] == "read_excel_failed"
 
 
 class TestRunNaturalLanguagePandas:

@@ -37,10 +37,10 @@ def run_natural_language_pandas(
         if code and code.strip():
             generated_code = code
             result_df = _facade()._safe_exec_pandas(code, df)
-    except ValueError as e:
-        error_msg = str(e)
-    except _facade().RECOVERABLE_ERRORS as e:
-        error_msg = str(e)
+    except ValueError:
+        error_msg = "invalid_pandas_query"
+    except _facade().RECOVERABLE_ERRORS:
+        error_msg = "excel_query_failed"
     records = _facade().json.loads(
         result_df.head(200).replace({float("nan"): None}).to_json(orient="records")
     )
@@ -68,8 +68,13 @@ def handle_excel_analysis(
     root = workspace_root or str(_facade().Path.cwd())
     try:
         p = _facade().resolve_safe_excel_path(root, file_path)
-    except _facade().RECOVERABLE_ERRORS as e:
-        return {"success": False, "error": str(e), "workspace_root": root, "file_path": file_path}
+    except _facade().RECOVERABLE_ERRORS:
+        return {
+            "success": False,
+            "error": "invalid_excel_path",
+            "workspace_root": root,
+            "file_path": file_path,
+        }
     if not p.exists():
         return {
             "success": False,
@@ -80,10 +85,10 @@ def handle_excel_analysis(
         }
     try:
         df = _facade()._read_excel_dataframe(p, sheet_name=sheet_name, header_row_1based=header_1b)
-    except _facade().RECOVERABLE_ERRORS as e:
+    except _facade().RECOVERABLE_ERRORS:
         return {
             "success": False,
-            "error": f"read failed: {e}",
+            "error": "read_excel_failed",
             "file_path": file_path,
             "resolved_path": str(p),
             "sheet_name": sheet_name,

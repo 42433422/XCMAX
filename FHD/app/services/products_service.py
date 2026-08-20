@@ -216,9 +216,9 @@ class ProductsService(NeuroEventPublisherMixin):
                 "success": True,
                 "data": result.to_dict() if hasattr(result, "to_dict") else result,
             }
-        except RECOVERABLE_ERRORS as e:
-            logger.error("创建产品失败: %s", e)
-            return {"success": False, "message": str(e)}
+        except RECOVERABLE_ERRORS:
+            logger.exception("创建产品失败")
+            return {"success": False, "message": "产品创建失败，请稍后重试"}
 
     def update_product(self, product_id: int, data: dict[str, Any]) -> dict[str, Any]:
         if self._repository is None:
@@ -276,9 +276,9 @@ class ProductsService(NeuroEventPublisherMixin):
             self._invalidate_product_cache()
             return result
 
-        except RECOVERABLE_ERRORS as e:
-            logger.error("批量添加产品失败: %s", e)
-            return {"success": False, "message": str(e)}
+        except RECOVERABLE_ERRORS:
+            logger.exception("批量添加产品失败")
+            return {"success": False, "message": "批量添加失败，请稍后重试"}
 
     def batch_delete_products(self, product_ids: list[int]) -> dict[str, Any]:
         if self._repository is None:

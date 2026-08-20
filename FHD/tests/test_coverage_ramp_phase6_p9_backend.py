@@ -880,7 +880,8 @@ def test_execute_planner_tool_from_body_recoverable_error() -> None:
     ):
         out = execute_planner_tool_from_body({"tool_name": "fail_tool"})
     assert out["success"] is False
-    assert "exec boom" in out["error"]
+    assert out["error"] == "工具执行失败，请稍后重试"
+    assert out["error_code"] == "planner_tool_execution_failed"
     assert out["tool_name"] == "fail_tool"
 
 
@@ -918,7 +919,8 @@ def test_execute_planner_tool_from_body_propagates_structured_failure() -> None:
     ):
         out = execute_planner_tool_from_body({"tool_name": "word-full-read-employee"})
     assert out["success"] is False
-    assert out["error"] == "employee output is missing"
+    assert out["error"] == "工具执行失败，请检查输入后重试"
+    assert "employee output is missing" not in out["result"]
     assert out["execution_path"] == "mod_facade"
 
 

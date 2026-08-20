@@ -164,6 +164,31 @@ def test_print_document_validation(print_client, tmp_path) -> None:
     assert ok.status_code == 200
 
 
+def test_print_document_rejects_existing_path_outside_allowed_roots(
+    print_client, tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    app_data = tmp_path / "app-data"
+    temp_root = tmp_path / "temp-root"
+    app_data.mkdir()
+    temp_root.mkdir()
+    outside = tmp_path / "outside.pdf"
+    outside.write_bytes(b"private")
+    monkeypatch.setattr(
+        "app.utils.path_io.path_utils.get_app_data_dir",
+        lambda: str(app_data),
+    )
+    monkeypatch.setattr(print_routes.tempfile, "gettempdir", lambda: str(temp_root))
+    monkeypatch.delenv("XCAGI_PRINT_ALLOWED_ROOTS", raising=False)
+
+    response = print_client.post(
+        "/api/print/document",
+        json={"file_path": str(outside)},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["message"] == "文件不存在"
+
+
 def test_print_label_confirm_flow(print_client, tmp_path) -> None:
     label = tmp_path / "label.png"
     label.write_bytes(b"\x89PNG\r\n")

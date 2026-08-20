@@ -213,8 +213,10 @@ def execute_workflow_tool(
                 return _facade().json.dumps(
                     {"success": False, "error": f"unknown action: {action}"}, ensure_ascii=False
                 )
-        except _facade().RECOVERABLE_ERRORS as e:
-            return _facade().json.dumps({"success": False, "error": str(e)}, ensure_ascii=False)
+        except _facade().RECOVERABLE_ERRORS:
+            return _facade().json.dumps(
+                {"success": False, "error": "excel_tool_failed"}, ensure_ascii=False
+            )
     if name == "excel_prophet":
         try:
             file_path = str(args.get("file_path") or "")
@@ -270,9 +272,10 @@ def execute_workflow_tool(
                 },
                 ensure_ascii=False,
             )
-        except _facade().RECOVERABLE_ERRORS as e:
+        except _facade().RECOVERABLE_ERRORS:
             return _facade().json.dumps(
-                {"action": "forecast", "future_forecast": [], "error": str(e)}, ensure_ascii=False
+                {"action": "forecast", "future_forecast": [], "error": "forecast_failed"},
+                ensure_ascii=False,
             )
     if name == "excel_schema_understand":
         try:
@@ -297,9 +300,13 @@ def execute_workflow_tool(
             svc = _facade().ExcelSchemaUnderstandingService()
             out = svc.understand_dataframe(df, file_path=file_path)
             return _facade().json.dumps(out, ensure_ascii=False)
-        except _facade().RECOVERABLE_ERRORS as e:
+        except _facade().RECOVERABLE_ERRORS:
             return _facade().json.dumps(
-                {"success": False, "error": str(e), "message": f"读取 Excel 文件失败: {e}"},
+                {
+                    "success": False,
+                    "error": "read_excel_failed",
+                    "message": "读取 Excel 文件失败，请检查文件后重试",
+                },
                 ensure_ascii=False,
             )
     if name == "products_bulk_import":
@@ -396,8 +403,11 @@ def execute_workflow_tool(
                 },
                 ensure_ascii=False,
             )
-        except _facade().RECOVERABLE_ERRORS as e:
-            return _facade().json.dumps({"success": False, "error": str(e)}, ensure_ascii=False)
+        except _facade().RECOVERABLE_ERRORS:
+            return _facade().json.dumps(
+                {"success": False, "error": "office_document_generation_failed"},
+                ensure_ascii=False,
+            )
     business_db_result = _facade().try_execute_business_db_tool(name, args)
     if business_db_result is not None:
         return _facade().json.dumps(business_db_result, ensure_ascii=False)
@@ -406,8 +416,10 @@ def execute_workflow_tool(
         try:
             result = new_tool_dispatch(args)
             return _facade().json.dumps(result, ensure_ascii=False)
-        except _facade().RECOVERABLE_ERRORS as e:
-            return _facade().json.dumps({"success": False, "error": str(e)}, ensure_ascii=False)
+        except _facade().RECOVERABLE_ERRORS:
+            return _facade().json.dumps(
+                {"success": False, "error": "tool_dispatch_failed"}, ensure_ascii=False
+            )
     return _facade().json.dumps(
         {"success": False, "error": "unknown_tool", "tool": name}, ensure_ascii=False
     )

@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import tempfile
 import time
 import uuid
 from pathlib import Path
@@ -26,6 +27,10 @@ from app.fastapi_routes.print_agent_helpers import (
     run_print_agent as _run_print_agent,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.security.safe_download_path import (
+    UnsafeDownloadPathError,
+    resolve_under_allowed_dirs,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +47,27 @@ __all__ = [
 _PRINT_CONFIRM_TTL_SECONDS = 300
 _PRINT_UNAVAILABLE = "打印服务暂时不可用，请稍后重试"
 _print_confirm_cache: dict[str, dict[str, Any]] = {}
+
+
+def _resolve_print_input_path(file_arg: object) -> Path | None:
+    """Resolve a print input below app-owned or explicitly configured roots."""
+    from app.utils.path_io.path_utils import get_app_data_dir
+
+    roots = {
+        Path(get_app_data_dir()).resolve(),
+        Path(tempfile.gettempdir()).resolve(),
+    }
+    configured = os.environ.get("XCAGI_PRINT_ALLOWED_ROOTS", "")
+    roots.update(
+        Path(value.strip()).expanduser().resolve()
+        for value in configured.split(os.pathsep)
+        if value.strip()
+    )
+    try:
+        candidate = resolve_under_allowed_dirs(str(file_arg or ""), sorted(roots, key=str))
+    except (OSError, UnsafeDownloadPathError):
+        return None
+    return candidate if candidate.is_file() else None
 
 
 def _cleanup_print_confirm_cache() -> None:
@@ -149,13 +175,14 @@ def print_document(request: Request, data: dict[str, Any] = Body(default_factory
         use_automation = data.get("use_automation", False)
         if not file_path:
             return JSONResponse({"success": False, "message": "文件路径不能为空"}, status_code=400)
-        if not os.path.isfile(str(file_path)):
+        resolved_file = _resolve_print_input_path(file_path)
+        if resolved_file is None:
             return JSONResponse({"success": False, "message": "文件不存在"}, status_code=400)
         result = _run_print_agent(
             request=request,
             action="print_document",
             params={
-                "file_path": str(file_path),
+                "file_path": str(resolved_file),
                 "printer_name": printer_name,
                 "use_automation": use_automation,
             },

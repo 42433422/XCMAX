@@ -20,12 +20,12 @@ try:
 
     _PRINT_BACKEND_AVAILABLE = True
     _PRINT_BACKEND_ERROR = ""
-except ImportError as _print_import_error:
+except ImportError:
     pythoncom = None
     win32api = None
     win32print = None
     _PRINT_BACKEND_AVAILABLE = False
-    _PRINT_BACKEND_ERROR = str(_print_import_error)
+    _PRINT_BACKEND_ERROR = "Windows printing dependencies unavailable"
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

@@ -1,3 +1,5 @@
+"""Contract coverage for the label-code rendering infrastructure."""
+
 from __future__ import annotations
 
 import sys

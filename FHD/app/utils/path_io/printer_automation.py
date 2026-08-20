@@ -15,13 +15,13 @@ try:
 
     _WIN32_AUTOMATION_AVAILABLE = True
     _WIN32_AUTOMATION_ERROR = ""
-except ImportError as _win32_import_error:
+except ImportError:
     win32api = None
     win32con = None
     win32gui = None
     win32print = None
     _WIN32_AUTOMATION_AVAILABLE = False
-    _WIN32_AUTOMATION_ERROR = str(_win32_import_error)
+    _WIN32_AUTOMATION_ERROR = "Windows printing dependencies unavailable"
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"

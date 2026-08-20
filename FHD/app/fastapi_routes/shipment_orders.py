@@ -18,6 +18,7 @@ import logging
 import os
 import re
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request
@@ -29,6 +30,10 @@ from app.bootstrap import get_shipment_application_service_core
 from app.db.models import ShipmentRecord
 from app.fastapi_routes import shipment_agent_runtime as _shipment_agent_runtime
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.security.safe_download_path import (
+    UnsafeDownloadPathError,
+    resolve_under_allowed_dirs,
+)
 from app.utils.security.secure_filename import secure_filename
 
 _agent_node_output = _shipment_agent_runtime.agent_node_output
@@ -43,6 +48,17 @@ router = APIRouter(tags=["shipment-orders-compat"])
 
 def _svc():
     return get_shipment_application_service_core()
+
+
+def _resolve_shipment_output_path(file_arg: object) -> Path | None:
+    from app.utils.path_io.path_utils import get_app_data_dir
+
+    output_dir = Path(get_app_data_dir()).resolve() / "shipment_outputs"
+    try:
+        candidate = resolve_under_allowed_dirs(str(file_arg or ""), [output_dir])
+    except (OSError, UnsafeDownloadPathError):
+        return None
+    return candidate if candidate.is_file() else None
 
 
 def _safe_shipment_export_path(result: dict[str, Any]) -> str | None:
@@ -156,7 +172,8 @@ def shipment_print(request: Request, payload: dict[str, Any] = Body(default_fact
 
     if not file_path:
         raise HTTPException(status_code=400, detail="文件路径不能为空")
-    if not os.path.isfile(str(file_path)):
+    resolved_file = _resolve_shipment_output_path(file_path)
+    if resolved_file is None:
         return JSONResponse(
             {"success": False, "message": "文件不存在"},
             status_code=404,
@@ -171,7 +188,7 @@ def shipment_print(request: Request, payload: dict[str, Any] = Body(default_fact
             request=request,
             action="print",
             params={
-                "file_path": str(file_path),
+                "file_path": str(resolved_file),
                 "order_id": order_id,
                 "printer_name": printer_name,
             },

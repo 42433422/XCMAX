@@ -95,6 +95,7 @@ resources/wechat-decrypt/decrypted/
 
 # Full API image / CI: shrink context (see docker/Dockerfile.fhd-api)
 MODstore/
+XCAGI/node_modules/
 XCAGI/mods/
 XCAGI/release-bundle/
 XCAGI/dist/

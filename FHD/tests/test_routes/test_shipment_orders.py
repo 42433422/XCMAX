@@ -19,8 +19,10 @@ def client() -> TestClient:
 
 
 @pytest.fixture(autouse=True)
-def _mock_svc():
+def _mock_svc(tmp_path, monkeypatch: pytest.MonkeyPatch):
     """默认 mock shipment application service。"""
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+    (tmp_path / "shipment_outputs").mkdir(exist_ok=True)
     mock = MagicMock()
     with patch.object(shipment_orders, "_svc", return_value=mock):
         yield mock
@@ -143,26 +145,34 @@ class TestShipmentPrint:
         assert r.status_code == 404
 
     def test_with_order_id(self, client: TestClient, _mock_svc: MagicMock, tmp_path):
-        test_file = tmp_path / "test.xlsx"
+        test_file = tmp_path / "shipment_outputs" / "test.xlsx"
         test_file.write_bytes(b"fake")
         _mock_svc.mark_as_printed.return_value = {"success": True}
         r = client.post("/api/shipment/print", json={"file_path": str(test_file), "order_id": 1})
         assert r.status_code == 200
 
     def test_without_order_id(self, client: TestClient, _mock_svc: MagicMock, tmp_path):
-        test_file = tmp_path / "test.xlsx"
+        test_file = tmp_path / "shipment_outputs" / "test.xlsx"
         test_file.write_bytes(b"fake")
         r = client.post("/api/shipment/print", json={"file_path": str(test_file)})
         assert r.status_code == 200
         assert r.json()["updated"] is False
 
     def test_invalid_order_id(self, client: TestClient, _mock_svc: MagicMock, tmp_path):
-        test_file = tmp_path / "test.xlsx"
+        test_file = tmp_path / "shipment_outputs" / "test.xlsx"
         test_file.write_bytes(b"fake")
         r = client.post(
             "/api/shipment/print", json={"file_path": str(test_file), "order_id": "abc"}
         )
         assert r.status_code == 400
+
+    def test_rejects_existing_file_outside_shipment_outputs(
+        self, client: TestClient, _mock_svc: MagicMock, tmp_path
+    ):
+        outside = tmp_path / "outside.xlsx"
+        outside.write_bytes(b"private")
+        r = client.post("/api/shipment/print", json={"file_path": str(outside)})
+        assert r.status_code == 404
 
 
 # ---------------------------------------------------------------------------

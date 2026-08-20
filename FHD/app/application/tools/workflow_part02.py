@@ -181,11 +181,11 @@ def _handle_import_excel_to_database(
                 header_1b = None
         try:
             df = _facade()._read_excel_dataframe(p, sheet_name=sheet_n, header_row_1based=header_1b)
-        except _facade().RECOVERABLE_ERRORS as e:
+        except _facade().RECOVERABLE_ERRORS:
             return _facade().json.dumps(
                 {
                     "success": False,
-                    "error": f"read_excel_failed: {e}",
+                    "error": "read_excel_failed",
                     "sheet_name": sheet_n,
                     "header_row": header_1b,
                 },
@@ -265,8 +265,10 @@ def _handle_import_excel_to_database(
                 },
                 ensure_ascii=False,
             )
-    except _facade().RECOVERABLE_ERRORS as e:
-        return _facade().json.dumps({"success": False, "error": str(e)}, ensure_ascii=False)
+    except _facade().RECOVERABLE_ERRORS:
+        return _facade().json.dumps(
+            {"success": False, "error": "excel_import_failed"}, ensure_ascii=False
+        )
 
 
 def _infer_product_field_mapping(
