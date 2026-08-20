@@ -15,6 +15,8 @@ src/**/*.template.html
 src/domain/yuangonDutyRoster.ts
 src/constants/enterpriseWorkflowEstablishment.ts
 src/constants/topology.ts
+src/constants/databaseStorageModes.generated.ts
+src/constants/deploymentModes.generated.ts
 src/types/agentRunEvents.generated.ts
 
 # Source-governance oversized files keep their compact hand-maintained layout.
