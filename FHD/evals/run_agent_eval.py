@@ -4055,7 +4055,9 @@ def _run_shipment_orders_route_agent_task(task: dict[str, Any]) -> dict[str, Any
     method = "POST"
     path = "/api/shipment/generate"
     with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp_dir:
-        shipment_file = Path(tmp_dir) / "shipment.xlsx"
+        shipment_output_dir = Path(tmp_dir) / "shipment_outputs"
+        shipment_output_dir.mkdir()
+        shipment_file = shipment_output_dir / "shipment.xlsx"
         shipment_file.write_bytes(b"fake")
         service.generate_shipment_document.return_value = {
             "success": True,
@@ -4106,6 +4108,7 @@ def _run_shipment_orders_route_agent_task(task: dict[str, Any]) -> dict[str, Any
         client = TestClient(app, raise_server_exceptions=False)
 
         env_patch = {
+            "XCAGI_DATA_DIR": str(Path(tmp_dir)),
             "MODEL_USAGE_LEDGER_PATH": str(Path(tmp_dir) / "usage.json"),
             "MODEL_USAGE_WALLET_BACKEND": "audit",
             "MODEL_USAGE_WALLET_REQUIRED": "",
@@ -4245,6 +4248,7 @@ def _run_print_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
         client = TestClient(app, raise_server_exceptions=False)
 
         env_patch = {
+            "XCAGI_PRINT_ALLOWED_ROOTS": str(Path(tmp_dir)),
             "MODEL_USAGE_LEDGER_PATH": str(Path(tmp_dir) / "usage.json"),
             "MODEL_USAGE_WALLET_BACKEND": "audit",
             "MODEL_USAGE_WALLET_REQUIRED": "",

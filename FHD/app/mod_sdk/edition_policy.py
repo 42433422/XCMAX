@@ -154,8 +154,10 @@ def _seed_bundled_employee_packs(bundle: Path, root: Path) -> list[dict[str, str
         try:
             shutil.copytree(source, destination)
             results.append({"mod_id": result_id, "status": "seeded", "message": str(destination)})
-        except OSError as exc:
-            results.append({"mod_id": result_id, "status": "error", "message": str(exc)})
+        except OSError:
+            results.append(
+                {"mod_id": result_id, "status": "error", "message": "employee pack seed failed"}
+            )
     return results
 
 
@@ -226,8 +228,8 @@ def seed_edition_mods_from_bundle(
         try:
             shutil.copytree(src, dst)
             results.append({"mod_id": mod_id, "status": "seeded", "message": str(dst)})
-        except OSError as exc:
-            results.append({"mod_id": mod_id, "status": "error", "message": str(exc)})
+        except OSError:
+            results.append({"mod_id": mod_id, "status": "error", "message": "mod seed failed"})
 
     results.extend(_seed_bundled_employee_packs(bundle, root))
     return results

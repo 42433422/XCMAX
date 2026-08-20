@@ -37,7 +37,10 @@ def test_shipment_order_routes_execute_through_agent_orchestrator(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     repo = InMemoryAgentRunRepository()
-    shipment_file = tmp_path / "shipment.xlsx"
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+    shipment_outputs = tmp_path / "shipment_outputs"
+    shipment_outputs.mkdir()
+    shipment_file = shipment_outputs / "shipment.xlsx"
     shipment_file.write_bytes(b"fake")
     svc = MagicMock()
     svc.generate_shipment_document.return_value = {

@@ -162,9 +162,10 @@ def _import_products_preview_or_execute(
             },
             ensure_ascii=False,
         )
-    except _facade().RECOVERABLE_ERRORS as e:
+    except _facade().RECOVERABLE_ERRORS:
         return _facade().json.dumps(
-            {"success": False, "error": f"导入失败: {str(e)}"}, ensure_ascii=False
+            {"success": False, "error": "产品导入失败，请检查文件后重试"},
+            ensure_ascii=False,
         )
 
 
@@ -219,9 +220,10 @@ def _import_customers_preview_or_execute(df, columns, confirm, row_count):
             },
             ensure_ascii=False,
         )
-    except _facade().RECOVERABLE_ERRORS as e:
+    except _facade().RECOVERABLE_ERRORS:
         return _facade().json.dumps(
-            {"success": False, "error": f"导入失败: {str(e)}"}, ensure_ascii=False
+            {"success": False, "error": "客户导入失败，请检查文件后重试"},
+            ensure_ascii=False,
         )
 
 
@@ -324,7 +326,8 @@ def _import_orders_preview_or_execute(df, columns, unit_name, confirm, row_count
             },
             ensure_ascii=False,
         )
-    except _facade().RECOVERABLE_ERRORS as e:
+    except _facade().RECOVERABLE_ERRORS:
         return _facade().json.dumps(
-            {"success": False, "error": f"订单导入失败: {str(e)}"}, ensure_ascii=False
+            {"success": False, "error": "订单导入失败，请检查文件后重试"},
+            ensure_ascii=False,
         )

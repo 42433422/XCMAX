@@ -406,9 +406,14 @@ def compat_print_shipment_file(filename: str, payload: dict[str, Any] = Body(def
         return _fail("文件不存在", 404)
 
     result = _printer_svc().print_document(str(file_path), printer_name=printer_name)
-    status = 200 if result.get("success") else 400
+    ok = bool(result.get("success"))
+    status = 200 if ok else 400
+    public_result = {
+        "success": ok,
+        "message": "打印任务已提交" if ok else "打印服务暂时不可用，请稍后重试",
+    }
     traced = _trace_ai_assistant_route(
-        dict(result),
+        public_result,
         route="/api/print/{filename}",
         action="print_shipment_file",
         body={"filename": filename, **dict(payload or {})},

@@ -864,7 +864,8 @@ def test_ai_print_file_failure(
     monkeypatch.setattr(ai_routes_mod, "_printer_svc", lambda: printer)
     r = ai_client.post("/api/print/fail.docx", json={"printer_name": "HP"})
     assert r.status_code == 400
-    assert r.json()["message"] == "offline"
+    assert r.json()["message"] == "打印服务暂时不可用，请稍后重试"
+    assert "offline" not in r.text
 
 
 def test_ai_print_pdf_labels_501(ai_client: TestClient) -> None:

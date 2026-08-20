@@ -324,12 +324,12 @@ class ShipmentDocumentWorkflowMixin:
                     "doc_name": None,
                     "file_path": None,
                 }
-        except RECOVERABLE_ERRORS as exc:
-            logger.warning("模版库解析失败，回退 legacy: %s", exc)
+        except RECOVERABLE_ERRORS:
+            logger.exception("模版库解析失败，回退 legacy")
             if strict:
                 return {
                     "success": False,
-                    "message": f"模版解析失败：{exc}",
+                    "message": "模版解析失败，请稍后重试",
                     "error_code": "TEMPLATE_RESOLVE_FAILED",
                     "doc_name": None,
                     "file_path": None,
