@@ -2,6 +2,9 @@
 # Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
 name: Neuro-DDD Migration Check
 
+env:
+  PYTHONPATH: .
+
 on:
   push:
     branches: [ main, develop, feature/neuro-migration ]

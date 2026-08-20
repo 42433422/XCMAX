@@ -131,14 +131,14 @@ async def ensure_local_user_after_market(
         ensure_runtime_auth_bootstrap(swallow_errors=True)
         with get_db() as db:
             exists = db.query(User).filter(User.username == username).first()
-    except RECOVERABLE_ERRORS as db_exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("enterprise login user lookup failed")
         return None, JSONResponse(
             {
                 "success": False,
                 "error": {
                     "code": "DATABASE_ERROR",
-                    "message": f"本地用户库不可用：{db_exc}",
+                    "message": "本地用户库暂不可用",
                 },
             },
             status_code=503,
@@ -286,21 +286,9 @@ async def run_market_first_login(
     login_username = username
     if sku == "enterprise":
         if market_result is None and login_market_fn and password:
-            logger.info(
-                "enterprise market-first login start username=%s account_kind=%s sku=%s",
-                username,
-                account_kind,
-                sku,
-            )
+            logger.info("enterprise market-first login started")
             market_result = await login_market_fn(username, password)
-            logger.info(
-                "enterprise market-first login result username=%s success=%s is_enterprise=%s is_market_admin=%s base=%s",
-                username,
-                bool((market_result or {}).get("success")),
-                bool((market_result or {}).get("is_enterprise")),
-                bool((market_result or {}).get("is_market_admin")),
-                (market_result or {}).get("market_base_url"),
-            )
+            logger.info("enterprise market-first login completed")
         if not (market_result or {}).get("success"):
             if account_kind == "admin" and password:
                 # 市场不可达的本地管理员应急登录：不阻断于本地 MFA

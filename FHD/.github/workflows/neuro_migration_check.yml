@@ -1,5 +1,8 @@
 name: Neuro-DDD Migration Check
 
+env:
+  PYTHONPATH: .
+
 on:
   push:
     branches: [ main, develop, feature/neuro-migration ]

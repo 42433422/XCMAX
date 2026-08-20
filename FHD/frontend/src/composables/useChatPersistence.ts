@@ -10,6 +10,7 @@ import {
 } from '@/utils/chatStorageKeys'
 import { isIndustryWelcomePlainText } from '@/constants/industryPresets'
 import { hasAgentRunExecutionEvidence } from '@/utils/agentRunExecution'
+import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
 
 /** 刷新后仍能把「分析 Excel」结果随 /api/ai/chat 的 context 带上，避免「加入数据库」落 LLM 空转 */
 export const EXCEL_ANALYSIS_STORAGE_PREFIX = 'xcagi_excel_analysis_ctx_'
@@ -248,11 +249,7 @@ export function isVerifiedAgentTask(task: TaskItem): boolean {
 }
 
 export function toPlainText(raw: unknown): string {
-  return String(raw || '')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<[^>]*>/g, '')
-    .replace(/&nbsp;/gi, ' ')
-    .trim()
+  return plainTextFromChatHtml(String(raw || '')).trim()
 }
 
 export function isWelcomeMessage(msg: { role?: unknown; content?: unknown }): boolean {

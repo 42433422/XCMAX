@@ -416,8 +416,9 @@ async def customers_import(request: Request, file: UploadFile = File(...)) -> di
         return cast("dict[Any, Any]", gate)
     try:
         content = await file.read()
-    except RECOVERABLE_ERRORS as e:
-        raise HTTPException(status_code=400, detail=f"读取上传文件失败：{e}") from e
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("customer import upload read failed")
+        raise HTTPException(status_code=400, detail="读取上传文件失败") from exc
     from app.application.excel_imports import run_customers_excel_import_bytes
 
     out = run_customers_excel_import_bytes(content)

@@ -196,7 +196,7 @@ class PrinterAutomation:
                 except RECOVERABLE_ERRORS:
                     pass
 
-            return {"success": False, "message": f"自动化打印失败: {str(e)}"}
+            return {"success": False, "message": "自动化打印失败"}
 
 
 class EnhancedPrinterUtils:
@@ -225,6 +225,6 @@ class EnhancedPrinterUtils:
                     "dict[Any, Any]", self.automation.print_with_automation(file_path, printer_name)
                 )
 
-        except RECOVERABLE_ERRORS as e:
-            logger.error("增强打印失败: %s", e)
-            return {"success": False, "message": f"增强打印失败: {str(e)}"}
+        except RECOVERABLE_ERRORS:
+            logger.exception("增强打印失败")
+            return {"success": False, "message": "增强打印失败"}

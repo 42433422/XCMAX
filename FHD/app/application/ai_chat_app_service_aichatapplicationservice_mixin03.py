@@ -50,15 +50,9 @@ class _AIChatApplicationServicePart03Mixin:
             from app.application.facades.tools_facade import execute_registered_workflow_tool
 
             return execute_registered_workflow_tool(tool_id=tool_id, action=action, params=params)
-        except _facade().RECOVERABLE_ERRORS as err:
-            _facade().logger.error(
-                "workflow 工具调度失败 tool=%s action=%s err=%s",
-                tool_id,
-                action,
-                err,
-                exc_info=True,
-            )
-            return {"success": False, "message": str(err)}
+        except _facade().RECOVERABLE_ERRORS:
+            _facade().logger.exception("workflow 工具调度失败")
+            return {"success": False, "message": "工作流工具调度失败"}
 
     def _hydrate_pending_workflow(self, user_id: str) -> bool:
         """从 DB 载入用户最近的可续跑计划并水合到内存待确认槽。

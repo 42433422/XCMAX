@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -23,8 +22,9 @@ from app.utils.path_io.path_utils import get_app_data_dir
 
 
 def _safe_template_name(value: str, fallback: str) -> str:
-    text = str(value or fallback).strip()[:120]
-    text = re.sub(r"[\\/:*?\"<>|]+", "-", text).strip(" .-")
+    raw = str(value or fallback).strip()[:120]
+    text = "".join(char if char.isalnum() or char in {" ", "-", "_"} else "-" for char in raw)
+    text = text.strip(" .-")
     return text or "发货单版式"
 
 
@@ -217,7 +217,10 @@ class ShipmentTemplateServiceMixin:
             / "document_templates"
             / str(owner_user_id)
         )
-        destination = (template_dir / f"{base_name}-{run.file_sha256[:12]}.xlsx").resolve()
+        digest_prefix = "".join(char for char in str(run.file_sha256)[:12].lower() if char in "0123456789abcdef")
+        if len(digest_prefix) != 12:
+            raise EtlError("ETL_SHIPMENT_TEMPLATE_DIGEST_INVALID", "发货单版式来源摘要无效")
+        destination = (template_dir / f"{base_name}-{digest_prefix}.xlsx").resolve()
         if template_dir.resolve() not in destination.parents:
             raise EtlError("ETL_SHIPMENT_TEMPLATE_PATH_INVALID", "发货单版式保存路径无效")
 

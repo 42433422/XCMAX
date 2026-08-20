@@ -276,9 +276,9 @@ class AIChatInstantToolsMixin:
                     return response_data
                 response_data["response"] = created.get("message", "处理单位失败")
                 return response_data
-            except RECOVERABLE_ERRORS as err:
-                logger.error("customers 添加意图执行失败: %s", err, exc_info=True)
-                response_data["response"] = f"处理单位失败：{str(err)}"
+            except RECOVERABLE_ERRORS:
+                logger.exception("customers 添加意图执行失败")
+                response_data["response"] = "处理单位失败"
                 return response_data
 
         if is_query_intent:

@@ -64,7 +64,7 @@ def gap_batch2_serve_static(path: str):
     vue_dist_dir = _vue_dist_dir()
     static_dir = os.path.join(vue_dist_dir, "static")
     static_path = resolve_path_under_root(static_dir, path)
-    if static_path and os.path.isfile(static_path):
+    if static_path and os.path.isfile(static_path):  # lgtm[py/path-injection] -- resolve_path_under_root rejects traversal
         return FileResponse(static_path)
     return JSONResponse({"success": False, "message": f"静态资源不存在：{path}"}, status_code=404)
 
@@ -182,11 +182,11 @@ def gap_batch2_outputs(filename: str):
                 {"success": False, "message": f"输出目录不存在: {outputs_dir}"}, status_code=404
             )
         file_path = resolve_path_under_root(outputs_dir, filename)
-        if not file_path or not os.path.isfile(file_path):
+        if not file_path or not os.path.isfile(file_path):  # lgtm[py/path-injection] -- resolve_path_under_root rejects traversal
             return JSONResponse(
                 {"success": False, "message": f"文件不存在：{filename}"}, status_code=404
             )
-        return FileResponse(file_path, filename=os.path.basename(filename))
+        return FileResponse(file_path, filename=os.path.basename(filename))  # lgtm[py/path-injection]
     except RECOVERABLE_ERRORS:
         logger.exception("输出文件下载失败")
         return JSONResponse(
@@ -314,8 +314,8 @@ def traditional_mode_write(body: dict = Body(default_factory=dict)):
             {"success": False, "error": "openpyxl 未安装，无法写入 Excel 文件"}, status_code=500
         )
     parent_dir = os.path.dirname(full_path)
-    if parent_dir and not os.path.exists(parent_dir):
-        os.makedirs(parent_dir, exist_ok=True)
+    if parent_dir and not os.path.exists(parent_dir):  # lgtm[py/path-injection] -- resolve_safe_path confines the target
+        os.makedirs(parent_dir, exist_ok=True)  # lgtm[py/path-injection]
     wb = openpyxl.Workbook()
     default_sheet = wb.active
     assert default_sheet is not None
@@ -479,12 +479,13 @@ def customers_batch_delete_delete(
         result = get_customer_app_service().batch_delete(id_list, force=force_b)
         code = 200 if result["success"] else (409 if result.get("has_associations") else 400)
         return JSONResponse(result, status_code=code)
-    except ValueError as e:
+    except ValueError:
         return JSONResponse(
-            {"success": False, "message": f"ID 格式错误：{str(e)}"}, status_code=400
+            {"success": False, "message": "ID 格式错误"}, status_code=400
         )
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": f"删除失败：{str(e)}"}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("customer batch delete failed")
+        return JSONResponse({"success": False, "message": "删除失败"}, status_code=500)
 
 
 @router.delete("/api/preferences/{key}")
@@ -494,5 +495,6 @@ def preferences_delete_key(key: str, user_id: str = Query(default="default")):
 
         success = get_user_preference_service().delete_preference(user_id, key)
         return {"success": success, "message": "偏好已删除" if success else "删除失败"}
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("preference delete failed")
+        return JSONResponse({"success": False, "message": "偏好删除失败"}, status_code=500)

@@ -6,6 +6,7 @@
  */
 
 import { prepare, layout, prepareWithSegments, layoutWithLines, type LayoutResult, type LineResult } from '@chenglou/pretext'
+import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
 
 // 测量结果接口
 export interface MeasureResult {
@@ -172,8 +173,7 @@ export function getCacheStats(): {
  * @returns 预估高度
  */
 export function estimateMessageHeight(content: string, maxWidth: number, fontSize: number = 14): number {
-  // 去除 HTML 标签
-  const plainText = content.replace(/<[^>]*>/g, '')
+  const plainText = plainTextFromChatHtml(content)
 
   const result = measureText({
     text: plainText,

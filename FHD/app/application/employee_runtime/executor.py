@@ -22,6 +22,7 @@ from app.application.employee_runtime.loader import (
 from app.application.shipment_excel_etl_security import (
     ShipmentEtlPathError,
     resolve_etl_output_path,
+    resolve_etl_path,
 )
 from app.mod_sdk.employee_specialized_tools import get_employee_tools, handle_specialized
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -123,12 +124,11 @@ def _resolve_file_path(args: dict[str, Any], workspace_root: str | None) -> Path
     raw = str(args.get("file_path") or args.get("path") or "").strip()
     if not raw:
         return None
-    p = Path(raw)
-    if p.is_file():
-        return p.resolve()
-    base = Path(workspace_root or os.getcwd()).resolve()
-    candidate = (base / raw).resolve()
-    return candidate if candidate.is_file() else None
+    try:
+        candidate = resolve_etl_path(raw, workspace_root=workspace_root)
+    except ShipmentEtlPathError:
+        return None
+    return candidate if candidate.is_file() else None  # lgtm[py/path-injection]
 
 
 def _import_module_from_path(module_path: Path, module_label: str):
@@ -357,12 +357,13 @@ def _cognition_fhd(
         from app.application.employee_runtime.agent_runner import _chat_completion, _run_async
 
         raw = _run_async(_chat_completion(messages, max_tokens=max_tokens))
-    except RECOVERABLE_ERRORS as exc:
-        return {"reasoning": "", "error": str(exc)[:800], "input": normalized, "memory": memory}
+    except RECOVERABLE_ERRORS:
+        logger.exception("employee cognition failed")
+        return {"reasoning": "", "error": "员工推理暂不可用", "input": normalized, "memory": memory}
     if raw.get("error"):
         return {
             "reasoning": "",
-            "error": raw["error"],
+            "error": "员工推理暂不可用",
             "error_code": raw.get("error_code"),
             "retryable": raw.get("retryable"),
             "input": normalized,

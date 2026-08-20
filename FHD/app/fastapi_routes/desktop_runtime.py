@@ -31,6 +31,10 @@ from app.desktop_runtime.support_bundle import build_support_bundle_zip
 from app.infrastructure.auth.dependencies import get_logged_in_user
 from app.runtime_integrity import runtime_integrity_snapshot
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.security.safe_download_path import (
+    UnsafeDownloadPathError,
+    resolve_under_allowed_dirs,
+)
 
 router = APIRouter(prefix="/api/desktop", tags=["desktop-runtime"])
 
@@ -296,7 +300,14 @@ def download_model_asset(request: DownloadModelRequest, _user=Depends(get_logged
 def install_manifest(path: str, _user=Depends(get_logged_in_user)):
     if not is_desktop_mode():
         raise HTTPException(status_code=409, detail="模型下载仅在桌面模式下可写入 userData")
-    manifest_path = Path(path)
+    dirs = ensure_desktop_dirs(os.environ.get("XCAGI_DATA_DIR"))
+    try:
+        manifest_path = resolve_under_allowed_dirs(
+            path,
+            [dirs["uploads"], dirs["cache"], dirs["models"]],
+        )
+    except UnsafeDownloadPathError as exc:
+        raise HTTPException(status_code=400, detail="manifest path is outside desktop storage") from exc
     if not manifest_path.is_file():
         raise HTTPException(status_code=404, detail="manifest not found")
     targets = [

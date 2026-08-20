@@ -55,9 +55,9 @@ class CustomerCrudMixin:
             finally:
                 session.close()
 
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("获取客户列表失败: %s", e)
-            return {"success": False, "message": str(e), "data": [], "total": 0}
+        except RECOVERABLE_ERRORS:
+            logger.exception("获取客户列表失败")
+            return {"success": False, "message": "获取客户列表失败", "data": [], "total": 0}
 
     def get_by_id(self, customer_id: int) -> dict[str, Any]:
         """根据 ID 获取单个购买单位"""
@@ -90,9 +90,9 @@ class CustomerCrudMixin:
             finally:
                 session.close()
 
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("获取客户失败: %s", e)
-            return {"success": False, "message": str(e), "data": None}
+        except RECOVERABLE_ERRORS:
+            logger.exception("获取客户失败")
+            return {"success": False, "message": "获取客户失败", "data": None}
 
     def create(self, data: dict[str, Any]) -> dict[str, Any]:
         """创建购买单位"""
@@ -152,9 +152,9 @@ class CustomerCrudMixin:
             finally:
                 session.close()
 
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("创建客户失败: %s", e)
-            return {"success": False, "message": str(e)}
+        except RECOVERABLE_ERRORS:
+            logger.exception("创建客户失败")
+            return {"success": False, "message": "创建客户失败"}
 
     def update(self, customer_id: int, data: dict[str, Any]) -> dict[str, Any]:
         """更新购买单位"""
@@ -222,9 +222,9 @@ class CustomerCrudMixin:
             finally:
                 session.close()
 
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("更新客户失败: %s", e)
-            return {"success": False, "message": str(e)}
+        except RECOVERABLE_ERRORS:
+            logger.exception("更新客户失败")
+            return {"success": False, "message": "更新客户失败"}
 
     def _check_shipment_associations(self, unit_name: str) -> dict[str, Any]:
         """检查购买单位是否有关联的发货记录
@@ -271,13 +271,13 @@ class CustomerCrudMixin:
                     "shipment_count": total_count,
                     "sample_records": sample_records,
                 }
-        except RECOVERABLE_ERRORS as e:
-            logger.warning("检查发货记录关联失败: %s", e)
+        except RECOVERABLE_ERRORS:
+            logger.warning("检查发货记录关联失败", exc_info=True)
             return {
                 "has_associations": False,
                 "shipment_count": 0,
                 "sample_records": [],
-                "message": str(e),
+                "message": "关联发货记录检查失败",
             }
 
     def delete(self, customer_id: int, force: bool = False) -> dict[str, Any]:
@@ -344,9 +344,9 @@ class CustomerCrudMixin:
             finally:
                 session.close()
 
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("删除客户失败: %s", e)
-            return {"success": False, "message": str(e), "deleted_count": 0}
+        except RECOVERABLE_ERRORS:
+            logger.exception("删除客户失败")
+            return {"success": False, "message": "删除客户失败", "deleted_count": 0}
 
     def batch_delete(self, ids: list[int], force: bool = False) -> dict[str, Any]:
         """批量删除购买单位
@@ -405,6 +405,6 @@ class CustomerCrudMixin:
             finally:
                 session.close()
 
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("批量删除失败: %s", e)
-            return {"success": False, "message": str(e), "deleted_count": 0}
+        except RECOVERABLE_ERRORS:
+            logger.exception("批量删除失败")
+            return {"success": False, "message": "批量删除失败", "deleted_count": 0}

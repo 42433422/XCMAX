@@ -237,10 +237,10 @@ def create_agent_task(
         return JSONResponse(
             response, status_code=202 if result.run.status == "waiting_user" else 200
         )
-    except UnifiedTaskConflictError as exc:
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=409)
-    except UnifiedTaskError as exc:
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
+    except UnifiedTaskConflictError:
+        return JSONResponse({"success": False, "message": "任务状态冲突"}, status_code=409)
+    except UnifiedTaskError:
+        return JSONResponse({"success": False, "message": "任务参数无效"}, status_code=400)
     except RECOVERABLE_ERRORS:
         return internal_error_response("create agent task")
 

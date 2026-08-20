@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Body, File, Query, Request, UploadFile
@@ -10,6 +11,10 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from app.application.workflow.types import normalize_workflow_risk
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.security.safe_download_path import (
+    UnsafeDownloadPathError,
+    resolve_under_allowed_dirs,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -136,9 +141,9 @@ async def products_import_price_list_template(
 ):
     try:
         from app.infrastructure.documents.template_registry import fhd_repo_root
-    except RECOVERABLE_ERRORS as e:
+    except RECOVERABLE_ERRORS:
         logger.exception("template_registry import failed")
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+        return JSONResponse({"success": False, "message": "模板服务暂不可用"}, status_code=500)
 
     if template_file is None or not template_file.filename:
         return JSONResponse({"success": False, "message": "请上传 .docx 模板文件"}, status_code=400)
@@ -146,9 +151,9 @@ async def products_import_price_list_template(
         return JSONResponse({"success": False, "message": "只支持 .docx 格式"}, status_code=400)
     try:
         body = await template_file.read()
-    except RECOVERABLE_ERRORS as e:
+    except RECOVERABLE_ERRORS:
         logger.exception("price list template read failed")
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+        return JSONResponse({"success": False, "message": "模板文件读取失败"}, status_code=500)
     if len(body) < 64:
         return JSONResponse({"success": False, "message": "文件过小或已损坏"}, status_code=400)
     if not body.startswith(b"PK"):
@@ -162,9 +167,9 @@ async def products_import_price_list_template(
         dest = dest_dir / "price_list_default.docx"
         dest.write_bytes(body)
         rel = dest.relative_to(fhd_repo_root())
-    except RECOVERABLE_ERRORS as e:
+    except RECOVERABLE_ERRORS:
         logger.exception("price list template write failed")
-        return JSONResponse({"success": False, "message": f"保存失败：{e}"}, status_code=500)
+        return JSONResponse({"success": False, "message": "保存失败"}, status_code=500)
     return {
         "success": True,
         "message": f"已保存价目表 Word 模板（{rel.as_posix()}），导出 Word 价目表时将使用该文件。",
@@ -177,17 +182,21 @@ def products_export_xlsx(
     keyword: str | None = Query(default=None),
     template_id: str | None = Query(default=None),
 ):
-    import os as _os
-
     service = _svc()
     result = service.export_to_excel(unit_name=unit, keyword=keyword, template_id=template_id)
     if not result.get("success"):
         return JSONResponse(result, status_code=400)
     file_path = result.get("file_path")
     filename = result.get("filename")
-    if file_path and _os.path.exists(file_path):
+    from app.utils.path_io.path_utils import get_data_dir
+
+    try:
+        safe_file_path = resolve_under_allowed_dirs(str(file_path or ""), [Path(get_data_dir())])
+    except UnsafeDownloadPathError:
+        return JSONResponse({"success": False, "message": "导出文件路径无效"}, status_code=500)
+    if safe_file_path.is_file():  # lgtm[py/path-injection] -- resolved under application data
         return FileResponse(
-            file_path,
+            safe_file_path,
             filename=filename,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )

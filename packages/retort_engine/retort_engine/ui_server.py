@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from retort_engine.operational_errors import BOUNDARY_ERRORS
-
 import json
 import mimetypes
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -9,6 +7,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from retort_engine.operational_errors import BOUNDARY_ERRORS
 from retort_engine.service import RetortService
 
 

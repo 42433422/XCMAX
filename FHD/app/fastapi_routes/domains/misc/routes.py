@@ -225,8 +225,8 @@ def memory_v2_list(
             "memories": records,
             "summary": svc.get_memory_v2_summary(user_id),
         }
-    except ValueError as exc:
-        return _memory_v2_error({"success": False, "message": str(exc)}, 400)
+    except ValueError:
+        return _memory_v2_error({"success": False, "message": "记忆查询参数无效"}, 400)
 
 
 @router.get("/memory/v2/summary")
@@ -419,10 +419,10 @@ def butler_profile_get(
         uid = _resolve_user_id_int(request, {"user_id": user_id})
         view = _persona_backed_profile_view(uid)
         return {"success": True, "profile": view}
-    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - 路由边界统一兜底返回 JSON
-        logger.warning("读取 butler profile 失败: %s", exc)
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - 路由边界统一兜底返回 JSON
+        logger.exception("读取 butler profile 失败")
         return JSONResponse(
-            {"success": False, "message": f"读取 profile 失败: {exc}"},
+            {"success": False, "message": "读取 profile 失败"},
             status_code=500,
         )
 
@@ -454,10 +454,10 @@ def butler_profile_infer(
                 "source": "persona",
             },
         }
-    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - 路由边界统一兜底返回 JSON
-        logger.warning("butler profile 刷新失败: %s", exc)
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - 路由边界统一兜底返回 JSON
+        logger.exception("butler profile 刷新失败")
         return JSONResponse(
-            {"success": False, "message": f"刷新失败: {exc}"},
+            {"success": False, "message": "刷新失败"},
             status_code=500,
         )
 
@@ -478,10 +478,10 @@ def butler_profile_record_interaction(
     try:
         _resolve_user_id_int(request, body)  # 保持用户解析/错误语义
         return {"success": True, "source": "persona"}
-    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - 路由边界统一兜底返回 JSON
-        logger.warning("记录 butler 互动失败: %s", exc)
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - 路由边界统一兜底返回 JSON
+        logger.exception("记录 butler 互动失败")
         return JSONResponse(
-            {"success": False, "message": f"记录互动失败: {exc}"},
+            {"success": False, "message": "记录互动失败"},
             status_code=500,
         )
 

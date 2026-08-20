@@ -107,16 +107,16 @@ class _DynamicWorkflowPendingResumeMixin:
                                 ) or {"request_no": request_id}
                                 metadata["agent_run_id"] = agent_run.run_id
                                 approval_requests.append(metadata)
-                    except RuntimeError as exc:
+                    except RuntimeError:
                         self._pending_workflows.pop(user_id, None)
                         return (
                             True,
                             {
                                 "success": False,
                                 "message": "审批请求创建失败",
-                                "response": f"审批请求创建失败，数据库未写入：{exc}",
+                                "response": "审批请求创建失败，数据库未写入",
                                 "data": {
-                                    "text": f"审批请求创建失败，数据库未写入：{exc}",
+                                    "text": "审批请求创建失败，数据库未写入",
                                     "action": "approval_failed",
                                     "data": {"plan_id": pending_plan.plan_id},
                                 },

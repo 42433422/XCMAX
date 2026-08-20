@@ -151,8 +151,9 @@ async def serve_surface_image(
 
     try:
         authorization = await _resolve_market_authorization(request)
-    except RuntimeError as exc:
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+    except RuntimeError:
+        logger.exception("market authorization resolution failed")
+        return JSONResponse({"success": False, "message": "市场授权暂不可用"}, status_code=500)
 
     raw = await _load_surface_png_bytes(
         lane, index, prefer_remote=prefer_remote, authorization=authorization
@@ -179,16 +180,18 @@ async def build_terminal_payload(
         from app.fastapi_routes.market_account import (
             _market_base_url,
         )
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
+        logger.exception("market surface proxy unavailable")
         return JSONResponse(
-            {"success": False, "message": f"market proxy unavailable: {exc}"},
+            {"success": False, "message": "市场代理暂不可用"},
             status_code=500,
         )
 
     try:
         authorization = await _resolve_market_authorization(request)
-    except RuntimeError as exc:
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+    except RuntimeError:
+        logger.exception("market authorization resolution failed")
+        return JSONResponse({"success": False, "message": "市场授权暂不可用"}, status_code=500)
 
     surface, surface_note = await _resolve_surface_audit(
         lane, refresh=refresh, authorization=authorization, compact=compact
@@ -254,8 +257,9 @@ async def fetch_surface_page_payload(
 
     try:
         authorization = await _resolve_market_authorization(request)
-    except RuntimeError as exc:
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+    except RuntimeError:
+        logger.exception("market authorization resolution failed")
+        return JSONResponse({"success": False, "message": "市场授权暂不可用"}, status_code=500)
 
     if lane in ("P-App", "P-S") or not authorization:
         try:
@@ -290,8 +294,9 @@ async def fetch_surface_page_payload(
                     },
                 },
             }
-        except RECOVERABLE_ERRORS as exc:
-            return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+        except RECOVERABLE_ERRORS:
+            logger.exception("surface audit capture failed")
+            return JSONResponse({"success": False, "message": "界面巡检暂不可用"}, status_code=500)
 
     from app.fastapi_routes.market_account import _proxy_json
 

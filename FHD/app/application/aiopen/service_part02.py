@@ -27,15 +27,14 @@ def openclaw_chat_proxy(message: str) -> tuple[dict[str, _facade().Any], int]:
                 parsed = {"raw": raw}
             return ({"success": True, "target": target_url, "data": parsed}, 200)
     except _facade().urllib.error.HTTPError as err:
-        body = err.read().decode("utf-8", errors="replace")
         return (
             {
                 "success": False,
                 "target": target_url,
                 "status_code": err.code,
-                "message": body or str(err),
+                "message": "上游服务请求失败",
             },
             502,
         )
-    except _facade().RECOVERABLE_ERRORS as err:
-        return ({"success": False, "target": target_url, "message": str(err)}, 502)
+    except _facade().RECOVERABLE_ERRORS:
+        return ({"success": False, "target": target_url, "message": "上游服务请求失败"}, 502)

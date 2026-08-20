@@ -1,5 +1,4 @@
 from __future__ import annotations
-from retort_engine.operational_errors import BOUNDARY_ERRORS
 
 import argparse
 import json
@@ -11,6 +10,7 @@ from typing import Any, cast
 from retort_engine.employee_patch_closure import run_employee_patch_closure_suite
 from retort_engine.history import RetortHistoryStore
 from retort_engine.models import EmployeeTaskResult
+from retort_engine.operational_errors import BOUNDARY_ERRORS
 from retort_engine.pr_review import review_diff
 
 
@@ -151,7 +151,7 @@ def _apply_behavior_synthesis(
         )
         result["artifact"] = str(artifact)
         return result
-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001 - worker must report failure without crashing the parent
+    except BOUNDARY_ERRORS as exc:
         return {"status": "failed", "error": str(exc), "changed_files": []}
 
 

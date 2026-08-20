@@ -102,10 +102,10 @@ def build_kitten_business_snapshot(
             suf = f" | 供应商:{sup}" if sup else ""
             lines.append(f"  · {name} | 类:{cat} | 存量:{qty}{u} | 单价:{up}{suf}")
         lines.append("")
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("kitten snapshot materials failed: %s", e)
+    except RECOVERABLE_ERRORS:
+        logger.exception("kitten snapshot materials failed")
         lines.append("【原材料】读取失败，可提示用户检查原材料模块或数据库。")
-        stats["materials_error"] = str(e)
+        stats["materials_error"] = "materials_unavailable"
 
     # —— 产品库：全库聚合 + 明细样例 ——
     try:
@@ -152,10 +152,10 @@ def build_kitten_business_snapshot(
                 f"| 单位:{r.get('unit')} | 存量:{r.get('quantity')} | 单价:{r.get('price')}"
             )
         lines.append("")
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("kitten snapshot products failed: %s", e)
+    except RECOVERABLE_ERRORS:
+        logger.exception("kitten snapshot products failed")
         lines.append("【成品/产品库】读取失败。")
-        stats["products_error"] = str(e)
+        stats["products_error"] = "products_unavailable"
 
     # —— 出货：最近若干条（非全历史） ——
     try:
@@ -183,10 +183,10 @@ def build_kitten_business_snapshot(
         if len(recs) > show:
             lines.append(f"  … 另有 {len(recs) - show} 条未列出")
         lines.append("")
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("kitten snapshot shipments failed: %s", e)
+    except RECOVERABLE_ERRORS:
+        logger.exception("kitten snapshot shipments failed")
         lines.append("【出货记录】读取失败。")
-        stats["shipments_error"] = str(e)
+        stats["shipments_error"] = "shipments_unavailable"
 
     text = "\n".join(lines)
     if len(text) > max_text_chars:

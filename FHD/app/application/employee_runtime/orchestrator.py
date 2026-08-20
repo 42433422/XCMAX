@@ -102,9 +102,9 @@ def _employee_dispatcher(
             "employee_id": tool_id,
             "output": result,
         }
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("employee orchestrator step failed emp=%s", tool_id)
-        return {"success": False, "error": str(exc)[:400], "employee_id": tool_id}
+    except RECOVERABLE_ERRORS:
+        logger.exception("employee orchestrator step failed")
+        return {"success": False, "error": "员工协作步骤失败", "employee_id": tool_id}
 
 
 class EmployeeOrchestrator:

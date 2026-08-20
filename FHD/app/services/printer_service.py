@@ -155,9 +155,9 @@ class PrinterService:
                 "count": len(printers),
                 **classified_info,
             }
-        except RECOVERABLE_ERRORS as e:
-            logger.error("获取打印机列表失败: %s", e)
-            return {"success": False, "message": str(e), "printers": []}
+        except RECOVERABLE_ERRORS:
+            logger.exception("获取打印机列表失败")
+            return {"success": False, "message": "获取打印机列表失败", "printers": []}
 
     def list_printers(self) -> list[dict[str, Any]]:
         return cast("list[dict[str, Any]]", self.printer_utils.get_available_printers())
@@ -169,9 +169,9 @@ class PrinterService:
                 return {"success": True, "printer": printer}
             else:
                 return {"success": False, "message": "未找到默认打印机"}
-        except RECOVERABLE_ERRORS as e:
-            logger.error("获取默认打印机失败: %s", e)
-            return {"success": False, "message": str(e)}
+        except RECOVERABLE_ERRORS:
+            logger.exception("获取默认打印机失败")
+            return {"success": False, "message": "获取默认打印机失败"}
 
     def set_default_printer(self, printer_name: str) -> bool:
         return bool(self.enhanced_utils.set_default_printer(printer_name))
@@ -218,9 +218,9 @@ class PrinterService:
                         file_path, printer_name, use_default_printer=False
                     ),
                 )
-        except RECOVERABLE_ERRORS as e:
-            logger.error("打印文档失败: %s", e)
-            return {"success": False, "message": str(e)}
+        except RECOVERABLE_ERRORS:
+            logger.exception("打印文档失败")
+            return {"success": False, "message": "打印文档失败"}
 
     def print_label(self, file_path: str, printer_name: str | None = None, copies: int = 1) -> dict:
         try:
@@ -245,9 +245,9 @@ class PrinterService:
                 "successful": success_count,
                 "details": results,
             }
-        except RECOVERABLE_ERRORS as e:
-            logger.error("打印标签失败: %s", e)
-            return {"success": False, "message": str(e)}
+        except RECOVERABLE_ERRORS:
+            logger.exception("打印标签失败")
+            return {"success": False, "message": "打印标签失败"}
 
     def print_labels(self, label_data: list[dict[str, Any]]) -> dict[str, Any]:
         """Fail closed when callers provide label data without a rendered label file.
@@ -317,7 +317,7 @@ class PrinterService:
                 "success": False,
                 "available": False,
                 "printer": printer_name,
-                "message": str(e),
+                "message": "打印机可用性检查失败",
             }
 
     def validate_printer_separation(self) -> dict:
@@ -342,9 +342,9 @@ class PrinterService:
                 }
 
             return {"valid": True, "doc_printer": doc_printer, "label_printer": label_printer}
-        except RECOVERABLE_ERRORS as e:
-            logger.error("验证打印机分离失败: %s", e)
-            return {"valid": False, "message": str(e)}
+        except RECOVERABLE_ERRORS:
+            logger.exception("验证打印机分离失败")
+            return {"valid": False, "message": "验证打印机分离失败"}
 
 
 printer_service = PrinterService()

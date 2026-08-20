@@ -452,6 +452,6 @@ def _parse_order_text(order_text: str) -> dict:
             "message": f"无法解析订单文本：{order_text}，请使用格式：发货单 + 单位名 + 数量 + 桶 + 型号 + 规格",
         }
 
-    except RECOVERABLE_ERRORS as e:
-        logger.error("解析订单文本失败：%s", e)
-        return {"success": False, "message": f"解析失败：{str(e)}"}
+    except RECOVERABLE_ERRORS:
+        logger.exception("解析订单文本失败")
+        return {"success": False, "message": "解析失败"}

@@ -268,9 +268,9 @@ class PrinterUtils(PrinterCupsMixin, PrinterFileMixin):
 
             return print_result
 
-        except RECOVERABLE_ERRORS as e:
-            logger.error("打印文件失败: %s", e)
-            return {"success": False, "message": f"打印失败: {str(e)}"}
+        except RECOVERABLE_ERRORS:
+            logger.exception("打印文件失败")
+            return {"success": False, "message": "打印失败"}
 
     def get_default_printer(self) -> str | None:
         if not self._is_print_backend_available():
@@ -327,7 +327,7 @@ class PrinterUtils(PrinterCupsMixin, PrinterFileMixin):
                 "success": False,
                 "available": False,
                 "printer": printer_name,
-                "message": str(e),
+                "message": "打印机可用性检查失败",
             }
 
     def get_document_printer(self) -> str | None:

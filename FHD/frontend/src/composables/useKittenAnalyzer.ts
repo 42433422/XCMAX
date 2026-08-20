@@ -9,6 +9,7 @@ import { resolvePlannerChatPath } from '@/utils/plannerChatPaths'
 import { readPlannerSseResponse, isChatStreamEnabled, type PlannerSseEvent } from '@/utils/chatSseStream'
 import type { KittenFieldProfile } from '@/utils/kittenDatasetParser'
 import { openDocumentPreviewFromBlob } from '@/state/documentPreviewPip'
+import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
 const MAX_CHAT_MESSAGES = 120
 const KITTEN_SNAPSHOT_CACHE_MS = 90_000
 /** Planner + 工具（如 generate_office_document）可能远超过 120s；过短会 Abort 后走 JSON 再次挂死且无超时 */
@@ -92,7 +93,11 @@ function makeKittenUserId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return `kitten_${crypto.randomUUID()}`
   }
-  return `kitten_${Date.now()}_${Math.random().toString(16).slice(2)}`
+  if (typeof crypto !== 'undefined') {
+    const nonce = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, '0')).join('')
+    return `kitten_${nonce}`
+  }
+  return `kitten_${Date.now()}`
 }
 
 function pushBounded<T>(arrRef: Ref<T[]>, item: T, maxSize: number) {
@@ -422,10 +427,7 @@ export function useKittenAnalyzer() {
   const buildKittenChatPayload = (query: string) => {
     const compactHistory = (messages.value || []).slice(-6).map((m) => ({
       role: m.role,
-      content: String(m.content || '')
-        .replace(/<br\s*\/?>/gi, '\n')
-        .replace(/<[^>]*>/g, '')
-        .slice(0, 500),
+      content: plainTextFromChatHtml(m.content).slice(0, 500),
     }))
     return {
       message: query,

@@ -87,8 +87,8 @@
 
 <script setup lang="ts">
 import { computed, ref, watch, onMounted } from 'vue'
-import DOMPurify from 'dompurify'
 import { measureText, type MeasureResult } from '@/utils/pretext'
+import { plainTextFromChatHtml, sanitizeChatBubbleHtml } from '@/utils/sanitizeHtml'
 import type { UiChatMessage } from '@/types/chat-ui'
 import ContextSummaryPills from '@/components/chat/ContextSummaryPills.vue'
 import CollapsedMessagePreview from '@/components/chat/CollapsedMessagePreview.vue'
@@ -123,12 +123,12 @@ const isCollapsed = ref(props.defaultCollapsed)
 
 // 清理后的内容
 const sanitizedContent = computed(() => {
-  return DOMPurify.sanitize(props.message.content)
+  return sanitizeChatBubbleHtml(props.message.content)
 })
 
 // 折叠预览文本
 const collapsedPreview = computed(() => {
-  const text = props.message.content.replace(/<[^>]*>/g, '')
+  const text = plainTextFromChatHtml(props.message.content)
   return text.slice(0, 100) + (text.length > 100 ? '...' : '')
 })
 
@@ -163,12 +163,13 @@ const messageStyle = computed(() => {
 
 // 执行文本测量
 function performMeasure() {
+  const plainText = plainTextFromChatHtml(props.message.content)
   // 使用 requestIdleCallback 在空闲时测量，避免阻塞主线程
   if ('requestIdleCallback' in window) {
     requestIdleCallback(
       () => {
         measureResult.value = measureText({
-          text: props.message.content.replace(/<[^>]*>/g, ''),
+          text: plainText,
           width: props.maxWidth - 32, // 减去 padding
           fontSize: 14,
           lineHeight: 1.5,
@@ -180,7 +181,7 @@ function performMeasure() {
     // 降级方案：setTimeout
     setTimeout(() => {
       measureResult.value = measureText({
-        text: props.message.content.replace(/<[^>]*>/g, ''),
+        text: plainText,
         width: props.maxWidth - 32,
         fontSize: 14,
         lineHeight: 1.5,

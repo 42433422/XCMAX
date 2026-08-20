@@ -150,9 +150,9 @@ async def ai_analyze_post(
                 runtime_context={"query": str(query or "")},
             )
         return JSONResponse({"success": False, "message": "请提供文件或查询内容"}, status_code=400)
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("ai analyze: %s", e)
-        return JSONResponse({"success": False, "message": f"服务器错误: {str(e)}"}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("ai analyze failed")
+        return JSONResponse({"success": False, "message": "分析服务暂不可用"}, status_code=500)
 
 
 @router.post("/api/ai/file/analyze")
@@ -215,9 +215,10 @@ async def ai_file_analyze(
                 data.setdefault("run_id", run_id)
                 data.setdefault("agent_run_id", run_id)
         return JSONResponse(result, status_code=200 if result.get("success") else 400)
-    except RECOVERABLE_ERRORS as e:
+    except RECOVERABLE_ERRORS:
+        logger.exception("file analysis failed")
         return JSONResponse(
-            {"success": False, "message": f"文件分析失败：{str(e)}"}, status_code=500
+            {"success": False, "message": "文件分析失败"}, status_code=500
         )
 
 
@@ -309,8 +310,9 @@ def ai_sqlite_import_unit_products(body: dict = Body(default_factory=dict)):
             },
             status_code=202 if run.status in {"waiting_user", "blocked"} else 200,
         )
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": f"导入失败：{str(e)}"}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("unit products import failed")
+        return JSONResponse({"success": False, "message": "导入失败"}, status_code=500)
 
 
 @router.post("/api/skills/analyze/excel")
