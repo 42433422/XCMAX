@@ -213,8 +213,8 @@ def run_document_template_agent(
                 from app.fastapi_routes.domains.system import routes as route_facade
 
                 runtime_context["template_base_dir"] = route_facade.get_base_dir()
-            except RECOVERABLE_ERRORS as exc:
-                return {"success": False, "message": f"删除失败：{str(exc)}"}, 500
+            except RECOVERABLE_ERRORS:
+                return {"success": False, "message": "删除模板失败"}, 500
     orchestrator = AgentOrchestrator()
     run = orchestrator.start_run_from_plan(
         user_id=user_id,

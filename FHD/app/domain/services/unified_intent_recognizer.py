@@ -60,18 +60,18 @@ class UnifiedIntentRecognizer:
             if callable(loader):
                 loader()
             logger.info("BERT识别器已加载")
-        except RECOVERABLE_ERRORS as e:
-            logger.warning("BERT识别器加载失败：%s", e)
-            self._engine_errors["bert"] = str(e)
+        except RECOVERABLE_ERRORS:
+            logger.exception("BERT识别器加载失败")
+            self._engine_errors["bert"] = "engine_unavailable"
 
         try:
             from app.services.distilled_intent_service import get_distilled_recognizer
 
             self.distilled_recognizer = get_distilled_recognizer()
             logger.info("蒸馏模型识别器已加载")
-        except RECOVERABLE_ERRORS as e:
-            logger.warning("蒸馏模型加载失败：%s", e)
-            self._engine_errors["distilled"] = str(e)
+        except RECOVERABLE_ERRORS:
+            logger.exception("蒸馏模型加载失败")
+            self._engine_errors["distilled"] = "engine_unavailable"
 
         try:
             # 兼容两套命名：ai_engines 用 DeepseekIntentClassifier；services 用 DeepSeekIntentRecognizer。
@@ -86,9 +86,9 @@ class UnifiedIntentRecognizer:
             if callable(loader):
                 loader()
             logger.info("DeepSeek识别器已加载")
-        except RECOVERABLE_ERRORS as e:
-            logger.warning("DeepSeek识别器加载失败：%s", e)
-            self._engine_errors["deepseek"] = str(e)
+        except RECOVERABLE_ERRORS:
+            logger.exception("DeepSeek识别器加载失败")
+            self._engine_errors["deepseek"] = "engine_unavailable"
 
         try:
             # 首选深度落地版（app.ai_engines.rasa）；保留旧入口作为兼容 fallback。
@@ -99,9 +99,9 @@ class UnifiedIntentRecognizer:
             self.rasa_recognizer = RasaNLUService()
             self.rasa_recognizer.load_model()
             logger.info("RASA NLU已加载")
-        except RECOVERABLE_ERRORS as e:
-            logger.warning("RASA NLU加载失败：%s", e)
-            self._engine_errors["rasa"] = str(e)
+        except RECOVERABLE_ERRORS:
+            logger.exception("RASA NLU加载失败")
+            self._engine_errors["rasa"] = "engine_unavailable"
 
         self._initialized = True
         logger.info("混合意图服务已加载")
@@ -230,8 +230,8 @@ class UnifiedIntentRecognizer:
         if callable(getter):
             try:
                 entry.update(getter())
-            except RECOVERABLE_ERRORS as e:
-                entry["status_error"] = str(e)
+            except RECOVERABLE_ERRORS:
+                entry["status_error"] = "unavailable"
         return entry
 
 

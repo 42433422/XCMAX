@@ -40,6 +40,23 @@ _INTENT_PACKAGES_STATE: dict[str, bool] = {
 }
 
 
+def _public_unified_chat_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Keep provider/tool exception details behind the public chat boundary."""
+    if bool(payload.get("success")):
+        return payload
+    raw_status = payload.get("_http_status", 500)
+    try:
+        status = max(400, min(int(raw_status), 599))
+    except (TypeError, ValueError):
+        status = 500
+    return {
+        "success": False,
+        "message": "AI 服务暂时不可用，请稍后重试",
+        "error_code": str(payload.get("error_code") or "ai_service_unavailable")[:64],
+        "_http_status": status,
+    }
+
+
 def _attach_unified_chat_run(
     payload: dict[str, Any],
     *,
@@ -124,13 +141,15 @@ def ai_chat_unified_alias(request: Request, body: dict = Body(default_factory=di
     message = (body.get("message", "") or "").strip()
     if not message:
         return JSONResponse({"success": False, "message": "消息内容不能为空"}, status_code=400)
-    payload = unified_chat_single_payload(
-        message,
-        str(body.get("user_id") or ""),
-        request.client.host if request.client else "",
-        (body.get("source") or "").strip().lower(),
-        body.get("mode"),
-        body.get("context") or {},
+    payload = _public_unified_chat_payload(
+        unified_chat_single_payload(
+            message,
+            str(body.get("user_id") or ""),
+            request.client.host if request.client else "",
+            (body.get("source") or "").strip().lower(),
+            body.get("mode"),
+            body.get("context") or {},
+        )
     )
     status = int(payload.pop("_http_status", 200))
     payload = _attach_unified_chat_run(
@@ -157,13 +176,15 @@ def ai_chat_unified_batch_alias(request: Request, body: dict = Body(default_fact
         return JSONResponse({"success": False, "message": "单次批量最多 20 条"}, status_code=400)
     results: list = []
     for msg in messages:
-        payload = unified_chat_single_payload(
-            msg,
-            str(body.get("user_id") or ""),
-            request.client.host if request.client else "",
-            (body.get("source") or "").strip().lower(),
-            body.get("mode"),
-            body.get("context") or {},
+        payload = _public_unified_chat_payload(
+            unified_chat_single_payload(
+                msg,
+                str(body.get("user_id") or ""),
+                request.client.host if request.client else "",
+                (body.get("source") or "").strip().lower(),
+                body.get("mode"),
+                body.get("context") or {},
+            )
         )
         status = int(payload.pop("_http_status", 200))
         if status >= 400:

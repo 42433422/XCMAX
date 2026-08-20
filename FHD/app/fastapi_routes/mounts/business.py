@@ -112,9 +112,9 @@ def _mount(
                 f"business_route:{name}",
                 ok=False,
                 required=name in _DESKTOP_REQUIRED_ROUTES,
-                detail=str(exc),
+                detail=f"business route unavailable: {name}",
             )
-        logger.warning("%s not available: %s", name, exc)
+        logger.exception("business route unavailable: %s", name)
 
 
 def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
