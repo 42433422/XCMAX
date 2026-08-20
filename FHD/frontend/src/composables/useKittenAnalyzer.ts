@@ -93,11 +93,8 @@ function makeKittenUserId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return `kitten_${crypto.randomUUID()}`
   }
-  if (typeof crypto !== 'undefined') {
-    const nonce = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, '0')).join('')
-    return `kitten_${nonce}`
-  }
-  return `kitten_${Date.now()}`
+  const nonce = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, '0')).join('')
+  return `kitten_${nonce}`
 }
 
 function pushBounded<T>(arrRef: Ref<T[]>, item: T, maxSize: number) {
