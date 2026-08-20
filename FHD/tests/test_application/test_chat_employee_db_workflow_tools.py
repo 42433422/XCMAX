@@ -1174,8 +1174,8 @@ def test_chat_formats_recovery_hint_for_non_retryable_failure():
     assert "恢复建议" in result["response"]
     node_result = result["data"]["data"]["node_results"][0]
     assert node_result["retryable"] is False
-    assert node_result["recovery_hint"] == "请核对数据库状态后手动重试。"
-    assert result["data"]["data"]["workflow_status"]["state"] == "failed"
+    assert node_result["recovery_hint"] == "请检查依赖服务后重试"
+    assert result["data"]["data"]["workflow_status"] == {}
 
 
 def test_ai_chat_explicit_employee_intent_runs_without_pro_source():

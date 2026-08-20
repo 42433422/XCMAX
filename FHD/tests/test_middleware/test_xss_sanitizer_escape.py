@@ -92,6 +92,7 @@ def test_script_with_attributes(app):
     payload = {"x": "<SCRIPT type='text/javascript'>evil()</SCRIPT>after"}
     r = client.post("/api/echo", json=payload)
     raw = r.json()["raw"]
-    assert "evil" not in raw.lower() or "script" not in raw.lower()
+    assert "<script" not in raw.lower()
+    assert "&lt;script" in raw.lower()
     # 内容片段可保留（不在 <script> 块内）
     assert "after" in raw

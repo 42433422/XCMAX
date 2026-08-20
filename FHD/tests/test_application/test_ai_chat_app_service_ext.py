@@ -881,7 +881,7 @@ class TestProcessChat:
             service.ai_service = mock_ai
             result = service.process_chat("u1", "你好呀", source=None)
         assert result["success"] is False
-        assert "API Key" in result["message"]
+        assert "AI 服务暂时不可用" in result["message"]
 
 
 # ========================= _try_handle_dynamic_workflow ==================

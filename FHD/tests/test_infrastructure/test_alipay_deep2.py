@@ -295,7 +295,7 @@ class TestQueryOrder:
         with patch.object(alipay_mod, "build_client", side_effect=RuntimeError("no sdk")):
             result = alipay_mod.query_order(out_trade_no="O1")
         assert result["success"] is False
-        assert "no sdk" in result["message"]
+        assert result["message"] == "支付宝服务暂时不可用"
 
     def test_success_with_out_trade_no(self, monkeypatch):
         fake_client = MagicMock()
@@ -342,7 +342,7 @@ class TestQueryOrder:
         with patch.object(alipay_mod, "build_client", return_value=fake_client):
             result = alipay_mod.query_order(out_trade_no="O1")
         assert result["success"] is False
-        assert "net fail" in result["message"]
+        assert result["message"] == "支付宝服务暂时不可用"
 
     def test_non_dict_response(self, monkeypatch):
         fake_client = MagicMock()

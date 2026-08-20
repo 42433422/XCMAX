@@ -156,6 +156,11 @@ def shipment_print(request: Request, payload: dict[str, Any] = Body(default_fact
 
     if not file_path:
         raise HTTPException(status_code=400, detail="文件路径不能为空")
+    if not os.path.isfile(str(file_path)):
+        return JSONResponse(
+            {"success": False, "message": "文件不存在"},
+            status_code=404,
+        )
     try:
         if order_id:
             try:

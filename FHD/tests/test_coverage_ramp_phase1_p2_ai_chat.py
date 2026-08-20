@@ -265,7 +265,7 @@ def test_process_chat_api_key_error(chat_svc: AIChatApplicationService) -> None:
 
     chat_svc.ai_service.chat = _fail
     out = chat_svc.process_chat("u1", "hi")
-    assert "API Key" in out["response"] or "api" in out["message"].lower()
+    assert "AI 服务暂时不可用" in out["message"]
 
 
 def test_process_chat_with_file_context_enriches_excel(chat_svc: AIChatApplicationService) -> None:

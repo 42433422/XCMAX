@@ -2150,7 +2150,7 @@ class TestChartDataServiceRevenueChart:
         ):
             result = svc.get_revenue_chart_data()
         assert result["success"] is False
-        assert "no db" in result["message"]
+        assert result["message"] == "营收图表暂不可用"
 
     def test_revenue_chart_success(self):
         from app.services.kitten_report.chart_data_service import ChartDataService

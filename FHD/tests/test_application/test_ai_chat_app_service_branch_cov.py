@@ -404,7 +404,7 @@ class TestWorkflowOutputPreview:
 
     def test_dict_with_error_field(self):
         result = AIChatApplicationService._workflow_output_preview({"error": "boom"})
-        assert "boom" in result
+        assert result == "{}"
 
 
 # ---------------------------------------------------------------------------
@@ -425,7 +425,7 @@ class TestWorkflowOutputMessage:
         assert AIChatApplicationService._workflow_output_message({"message": "hello"}) == "hello"
 
     def test_dict_with_error_only(self):
-        assert AIChatApplicationService._workflow_output_message({"error": "boom"}) == "boom"
+        assert AIChatApplicationService._workflow_output_message({"error": "boom"}) == ""
 
     def test_dict_message_takes_priority_over_error(self):
         assert (
@@ -893,7 +893,8 @@ class TestFormatAgentRunResponse:
             steps=[_make_step(status="failed", error="boom")],
         )
         result = svc._format_agent_run_response(plan, agent_run)
-        assert "boom" in result["response"]
+        assert "工作流执行失败，详细信息已记录" in result["response"]
+        assert "boom" not in result["response"]
 
     def test_step_not_completed_no_error(self):
         svc = _make_svc()
@@ -903,7 +904,7 @@ class TestFormatAgentRunResponse:
             steps=[_make_step(status="pending", error="")],
         )
         result = svc._format_agent_run_response(plan, agent_run)
-        assert "未完成" in result["response"]
+        assert "工作流执行失败，详细信息已记录" in result["response"]
 
     def test_with_artifacts(self):
         svc = _make_svc()
@@ -1708,7 +1709,8 @@ class TestDispatchWorkflowTool:
         ):
             result = svc._dispatch_workflow_tool("products", "query", {})
         assert result["success"] is False
-        assert "tool crashed" in result["message"]
+        assert result["message"] == "工作流工具调度失败"
+        assert "tool crashed" not in result["message"]
 
 
 # ---------------------------------------------------------------------------
