@@ -48,8 +48,16 @@ def tool_route_agent_payload(run: Any, node_id: str) -> dict[str, Any]:
                 break
     if not output:
         output = {"success": getattr(run, "status", "") in {"completed", "waiting_user"}}
-    if not output.get("success") and getattr(run, "error", False) and not output.get("message"):
-        output["message"] = getattr(run, "error", False)
+    if not output.get("success"):
+        # Tool implementations historically returned ``str(exc)`` and persisted
+        # tracebacks in their failure payload.  Rebuild the public failure shape
+        # from stable fields so neither can cross the HTTP boundary.
+        raw_error_code = str(output.get("error_code") or "tool_failed")[:64]
+        output = {
+            "success": False,
+            "message": "工具执行失败，请稍后重试",
+            "error_code": raw_error_code,
+        }
     run_id = str(getattr(run, "run_id", "") or "")
     if run_id:
         output["run_id"] = run_id

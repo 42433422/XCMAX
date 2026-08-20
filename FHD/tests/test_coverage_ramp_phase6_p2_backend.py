@@ -755,7 +755,10 @@ def test_chat_unified_propagates_explicit_http_status(
         }
         r = ai_intent_client.post("/api/ai/chat-unified", json={"message": "测试"})
     assert r.status_code == 500
-    assert r.json()["success"] is False
+    body = r.json()
+    assert body["success"] is False
+    assert body["message"] == "AI 服务暂时不可用，请稍后重试"
+    assert "AI 服务错误" not in body["message"]
 
 
 # ---------------------------------------------------------------------------

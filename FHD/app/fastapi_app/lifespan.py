@@ -312,11 +312,11 @@ def _initialize_databases_sync(app: FastAPI):
             from app.runtime_integrity import clear_runtime_issue
 
             clear_runtime_issue("ai_action_audit")
-        except RECOVERABLE_ERRORS as audit_err:
+        except RECOVERABLE_ERRORS:
             from app.runtime_integrity import record_runtime_issue
 
-            record_runtime_issue("ai_action_audit", str(audit_err), ttl_seconds=3600)
-            logger.warning("AI审计表初始化失败（不影响主流程）: %s", audit_err)
+            record_runtime_issue("ai_action_audit", "AI action audit unavailable", ttl_seconds=3600)
+            logger.exception("AI审计表初始化失败（不影响主流程）")
     except RECOVERABLE_ERRORS as e:
         safe_url = str(database_url or "").strip()
         try:

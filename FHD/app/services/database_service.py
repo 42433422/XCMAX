@@ -101,11 +101,11 @@ class DatabaseService(NeuroEventPublisherMixin):
                 "filename": backup_filename,
             }
 
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("数据库备份失败：%s", e)
+        except RECOVERABLE_ERRORS:
+            logger.exception("数据库备份失败")
             return {
                 "success": False,
-                "message": f"备份失败：{str(e)}",
+                "message": "数据库备份失败",
                 "file_path": None,
                 "filename": None,
             }
@@ -188,9 +188,9 @@ class DatabaseService(NeuroEventPublisherMixin):
 
             return {"success": True, "message": "数据库恢复成功"}
 
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("数据库恢复失败：%s", e)
-            return {"success": False, "message": f"恢复失败：{str(e)}"}
+        except RECOVERABLE_ERRORS:
+            logger.exception("数据库恢复失败")
+            return {"success": False, "message": "数据库恢复失败"}
 
     def list_backups(self) -> dict[str, Any]:
         """
@@ -228,11 +228,11 @@ class DatabaseService(NeuroEventPublisherMixin):
 
             return {"success": True, "backups": backups, "count": len(backups)}
 
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("列出备份失败：%s", e)
+        except RECOVERABLE_ERRORS:
+            logger.exception("列出备份失败")
             return {
                 "success": False,
-                "message": f"列出备份失败：{str(e)}",
+                "message": "数据库备份列表暂时不可用",
                 "backups": [],
                 "count": 0,
             }
@@ -263,9 +263,9 @@ class DatabaseService(NeuroEventPublisherMixin):
 
             return {"success": True, "message": "备份文件删除成功"}
 
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("删除备份失败：%s", e)
-            return {"success": False, "message": f"删除失败：{str(e)}"}
+        except RECOVERABLE_ERRORS:
+            logger.exception("删除备份失败")
+            return {"success": False, "message": "删除数据库备份失败"}
 
 
 def get_database_service() -> DatabaseService:

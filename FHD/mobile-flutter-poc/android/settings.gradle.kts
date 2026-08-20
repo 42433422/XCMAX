@@ -11,12 +11,14 @@ pluginManagement {
     includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
 
     repositories {
-        mavenLocal()
-        maven("https://maven.aliyun.com/repository/google")
-        maven("https://maven.aliyun.com/repository/public")
         google()
         mavenCentral()
         gradlePluginPortal()
+        mavenLocal()
+        // Regional mirrors are fallback-only: a transient 5xx response can
+        // disable the repository for the entire Gradle resolution session.
+        maven("https://maven.aliyun.com/repository/google")
+        maven("https://maven.aliyun.com/repository/public")
     }
 }
 

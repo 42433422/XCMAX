@@ -66,9 +66,9 @@ class PrinterFileMixin:
                     except _facade().RECOVERABLE_ERRORS as e3:
                         _facade().logger.error("方法3也失败: %s", e3)
                         raise Exception(f"所有打印方法都失败: {e1}; {e2}; {e3}")
-        except _facade().RECOVERABLE_ERRORS as e:
-            _facade().logger.error("打印Excel文件失败: %s", e)
-            return {"success": False, "message": f"打印失败: {str(e)}"}
+        except _facade().RECOVERABLE_ERRORS:
+            _facade().logger.exception("打印Excel文件失败")
+            return {"success": False, "message": "打印 Excel 文件失败"}
 
     def _print_pdf(self, file_path: str, printer_name: str) -> dict:
         printer = cast(Any, self)
@@ -131,9 +131,9 @@ class PrinterFileMixin:
             except _facade().RECOVERABLE_ERRORS as e:
                 _facade().logger.warning("subprocess方法失败: %s", e)
             raise Exception("所有PDF打印方法都失败")
-        except _facade().RECOVERABLE_ERRORS as e:
-            _facade().logger.error("打印PDF文件失败: %s", e)
-            return {"success": False, "message": f"打印PDF失败: {str(e)}"}
+        except _facade().RECOVERABLE_ERRORS:
+            _facade().logger.exception("打印PDF文件失败")
+            return {"success": False, "message": "打印 PDF 文件失败"}
 
     def _print_default(self, file_path: str, printer_name: str, show_app: bool = False) -> dict:
         printer = cast(Any, self)
@@ -159,6 +159,6 @@ class PrinterFileMixin:
                 "printer": printer_name,
                 "show_app": show_app,
             }
-        except _facade().RECOVERABLE_ERRORS as e:
-            _facade().logger.error("打印文件失败: %s", e)
-            return {"success": False, "message": f"打印失败: {str(e)}"}
+        except _facade().RECOVERABLE_ERRORS:
+            _facade().logger.exception("打印文件失败")
+            return {"success": False, "message": "打印文件失败"}

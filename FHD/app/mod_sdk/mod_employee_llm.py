@@ -242,11 +242,9 @@ def _prefer_vlm_candidates(
     # VLM 优先，其余去重后跟进
     seen = {(str(p.get("provider")), str(p.get("model"))) for p in promoted}
     rest = [c for c in candidates if (str(c.get("provider")), str(c.get("model"))) not in seen]
-    logger.info(
-        "mod_employee_complete: 启用 VLM 路由 %s/%s",
-        provider,
-        model,
-    )
+    # Provider/model names may come from tenant-private routing configuration.
+    # Record only that a visual route was selected, never the configured values.
+    logger.info("mod_employee_complete: 启用 VLM 路由")
     return promoted + rest
 
 
