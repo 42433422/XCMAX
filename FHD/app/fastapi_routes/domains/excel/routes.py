@@ -217,9 +217,7 @@ async def ai_file_analyze(
         return JSONResponse(result, status_code=200 if result.get("success") else 400)
     except RECOVERABLE_ERRORS:
         logger.exception("file analysis failed")
-        return JSONResponse(
-            {"success": False, "message": "文件分析失败"}, status_code=500
-        )
+        return JSONResponse({"success": False, "message": "文件分析失败"}, status_code=500)
 
 
 @router.post("/api/ai/sqlite/import_unit_products")

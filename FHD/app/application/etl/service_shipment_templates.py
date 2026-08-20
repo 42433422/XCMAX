@@ -217,7 +217,9 @@ class ShipmentTemplateServiceMixin:
             / "document_templates"
             / str(owner_user_id)
         )
-        digest_prefix = "".join(char for char in str(run.file_sha256)[:12].lower() if char in "0123456789abcdef")
+        digest_prefix = "".join(
+            char for char in str(run.file_sha256)[:12].lower() if char in "0123456789abcdef"
+        )
         if len(digest_prefix) != 12:
             raise EtlError("ETL_SHIPMENT_TEMPLATE_DIGEST_INVALID", "发货单版式来源摘要无效")
         destination = (template_dir / f"{base_name}-{digest_prefix}.xlsx").resolve()

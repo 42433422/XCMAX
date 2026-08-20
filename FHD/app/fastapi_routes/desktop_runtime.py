@@ -307,7 +307,9 @@ def install_manifest(path: str, _user=Depends(get_logged_in_user)):
             [dirs["uploads"], dirs["cache"], dirs["models"]],
         )
     except UnsafeDownloadPathError as exc:
-        raise HTTPException(status_code=400, detail="manifest path is outside desktop storage") from exc
+        raise HTTPException(
+            status_code=400, detail="manifest path is outside desktop storage"
+        ) from exc
     if not manifest_path.is_file():
         raise HTTPException(status_code=404, detail="manifest not found")
     targets = [
