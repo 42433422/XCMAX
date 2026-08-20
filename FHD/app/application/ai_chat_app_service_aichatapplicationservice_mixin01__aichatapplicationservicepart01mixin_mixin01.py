@@ -248,7 +248,9 @@ class __AIChatApplicationServicePart01MixinPart01Mixin:
         except _facade().RECOVERABLE_ERRORS:
             _facade().logger.exception("AI 服务处理异常")
             loop.close()
-            return _finalize(self._build_fallback_response(message, "AI 服务暂时不可用，请稍后重试"))
+            return _finalize(
+                self._build_fallback_response(message, "AI 服务暂时不可用，请稍后重试")
+            )
         finally:
             loop.close()
         _facade().logger.info(

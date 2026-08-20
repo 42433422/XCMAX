@@ -119,7 +119,9 @@ class PerceptionPipeline:
                 return v[:_MAX_DOC_CHARS], f"payload.{key}"
         if file_path:
             p = Path(file_path)
-            if p.suffix.lower() in _TEXT_EXT and p.is_file():  # lgtm[py/path-injection] -- process() resolves the path in the ETL sandbox
+            if (
+                p.suffix.lower() in _TEXT_EXT and p.is_file()
+            ):  # lgtm[py/path-injection] -- process() resolves the path in the ETL sandbox
                 try:
                     return p.read_text(encoding="utf-8", errors="ignore")[:_MAX_DOC_CHARS], "file"
                 except OSError:
@@ -175,14 +177,18 @@ class PerceptionPipeline:
     def _perceive_vision(self, file_path: str) -> dict[str, Any] | None:
         if not file_path or Path(file_path).suffix.lower() not in _IMAGE_EXT:
             return None
-        if not Path(file_path).is_file():  # lgtm[py/path-injection] -- process() resolves the path in the ETL sandbox
+        if not Path(
+            file_path
+        ).is_file():  # lgtm[py/path-injection] -- process() resolves the path in the ETL sandbox
             return {"status": "skipped", "reason": "图像文件不存在", "file": file_path}
         try:
             from PIL import Image
 
             from app.services.ocr_service import get_ocr_service
 
-            with Image.open(file_path) as img:  # lgtm[py/path-injection] -- process() resolves the path in the ETL sandbox
+            with Image.open(
+                file_path
+            ) as img:  # lgtm[py/path-injection] -- process() resolves the path in the ETL sandbox
                 text = get_ocr_service().recognize(img) or ""
             text = text.strip()
             if not text:

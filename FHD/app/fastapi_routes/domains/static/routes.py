@@ -64,7 +64,7 @@ def gap_batch2_serve_static(path: str):
     vue_dist_dir = _vue_dist_dir()
     static_dir = os.path.join(vue_dist_dir, "static")
     static_path = resolve_path_under_root(static_dir, path)
-    if static_path and os.path.isfile(static_path):  # lgtm[py/path-injection] -- resolve_path_under_root rejects traversal
+    if static_path and os.path.isfile(static_path):  # lgtm[py/path-injection]
         return FileResponse(static_path)
     return JSONResponse({"success": False, "message": f"静态资源不存在：{path}"}, status_code=404)
 
@@ -182,11 +182,13 @@ def gap_batch2_outputs(filename: str):
                 {"success": False, "message": f"输出目录不存在: {outputs_dir}"}, status_code=404
             )
         file_path = resolve_path_under_root(outputs_dir, filename)
-        if not file_path or not os.path.isfile(file_path):  # lgtm[py/path-injection] -- resolve_path_under_root rejects traversal
+        if not file_path or not os.path.isfile(file_path):  # lgtm[py/path-injection]
             return JSONResponse(
                 {"success": False, "message": f"文件不存在：{filename}"}, status_code=404
             )
-        return FileResponse(file_path, filename=os.path.basename(filename))  # lgtm[py/path-injection]
+        return FileResponse(
+            file_path, filename=os.path.basename(filename)
+        )  # lgtm[py/path-injection]
     except RECOVERABLE_ERRORS:
         logger.exception("输出文件下载失败")
         return JSONResponse(
@@ -314,7 +316,7 @@ def traditional_mode_write(body: dict = Body(default_factory=dict)):
             {"success": False, "error": "openpyxl 未安装，无法写入 Excel 文件"}, status_code=500
         )
     parent_dir = os.path.dirname(full_path)
-    if parent_dir and not os.path.exists(parent_dir):  # lgtm[py/path-injection] -- resolve_safe_path confines the target
+    if parent_dir and not os.path.exists(parent_dir):  # lgtm[py/path-injection]
         os.makedirs(parent_dir, exist_ok=True)  # lgtm[py/path-injection]
     wb = openpyxl.Workbook()
     default_sheet = wb.active
@@ -480,9 +482,7 @@ def customers_batch_delete_delete(
         code = 200 if result["success"] else (409 if result.get("has_associations") else 400)
         return JSONResponse(result, status_code=code)
     except ValueError:
-        return JSONResponse(
-            {"success": False, "message": "ID 格式错误"}, status_code=400
-        )
+        return JSONResponse({"success": False, "message": "ID 格式错误"}, status_code=400)
     except RECOVERABLE_ERRORS:
         logger.exception("customer batch delete failed")
         return JSONResponse({"success": False, "message": "删除失败"}, status_code=500)

@@ -163,9 +163,7 @@ def ai_approval_request(body: dict = Body(default_factory=dict)):
         )
     except RECOVERABLE_ERRORS:
         logger.exception("approval request failed")
-        return JSONResponse(
-            {"success": False, "message": "创建审批请求失败"}, status_code=500
-        )
+        return JSONResponse({"success": False, "message": "创建审批请求失败"}, status_code=500)
 
 
 @router.post("/api/ai/approval/approve")
@@ -283,6 +281,4 @@ def ai_approval_reject(body: dict = Body(default_factory=dict)):
         return JSONResponse({"success": False, "message": "审批拒绝失败"}, status_code=400)
     except RECOVERABLE_ERRORS:
         logger.exception("approval reject failed")
-        return JSONResponse(
-            {"success": False, "message": "审批拒绝失败"}, status_code=500
-        )
+        return JSONResponse({"success": False, "message": "审批拒绝失败"}, status_code=500)

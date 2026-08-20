@@ -91,7 +91,11 @@ class __AgentOrchestratorPart01MixinPart02Mixin:
                 output = self._tool_executor.execute(step, runtime_context=ctx)
             except _facade().RECOVERABLE_ERRORS:
                 _facade().logger.exception("agent tool execution failed")
-                output = {"success": False, "error_code": "tool_exception", "message": "工具执行失败"}
+                output = {
+                    "success": False,
+                    "error_code": "tool_exception",
+                    "message": "工具执行失败",
+                }
         step.output = dict(output or {})
         step.finished_at = _facade().utc_now_iso()
         step.duration_ms = int((_facade().time.perf_counter() - started) * 1000)

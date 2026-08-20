@@ -245,7 +245,10 @@ class ChartDataService(NeuroEventPublisherMixin):
         except RECOVERABLE_ERRORS as e:
             from sqlalchemy.exc import ProgrammingError
 
-            if isinstance(e, ProgrammingError) and getattr(getattr(e, "orig", None), "pgcode", None) == "42P01":
+            if (
+                isinstance(e, ProgrammingError)
+                and getattr(getattr(e, "orig", None), "pgcode", None) == "42P01"
+            ):
                 return {
                     "success": True,
                     "type": "doughnut",
