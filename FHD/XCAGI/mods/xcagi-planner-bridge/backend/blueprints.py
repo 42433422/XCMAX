@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 
 from fastapi import APIRouter, Body, Request
 from fastapi.responses import StreamingResponse
@@ -109,15 +108,11 @@ def register_fastapi_routes(app, mod_id: str) -> None:
     @router.get("/host-capabilities")
     async def host_capabilities():
         try:
-            import httpx
+            from app.mod_sdk.platform_shell import build_runtime_platform_shell_payload
 
-            base = os.environ.get("XCAGI_HOST_BASE_URL", "http://127.0.0.1:5000").rstrip("/")
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                r = await client.get(f"{base}/api/platform-shell/capabilities")
-                if r.status_code < 400:
-                    return r.json()
-        except BOUNDARY_ERRORS as exc:
-            logger.warning("host-capabilities proxy failed: %s", exc)
+            return {"success": True, "data": build_runtime_platform_shell_payload()}
+        except BOUNDARY_ERRORS:
+            logger.exception("host-capabilities local inventory failed")
         return {"success": False, "error": "platform-shell unavailable"}
 
     app.include_router(router)
