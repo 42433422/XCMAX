@@ -149,9 +149,9 @@ class CustomerRelationshipMixin:
                 return {"success": True, "message": "地址添加成功", "data": addr.to_dict()}
             finally:
                 session.close()
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("添加客户地址失败: %s", e)
-            return {"success": False, "message": str(e)}
+        except RECOVERABLE_ERRORS:
+            logger.exception("添加客户地址失败")
+            return {"success": False, "message": "添加客户地址失败"}
 
     def get_addresses(self, customer_id: int) -> dict[str, Any]:
         """查询客户所有地址。"""
@@ -173,9 +173,9 @@ class CustomerRelationshipMixin:
                 }
             finally:
                 session.close()
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("查询客户地址失败: %s", e)
-            return {"success": False, "message": str(e), "data": [], "count": 0}
+        except RECOVERABLE_ERRORS:
+            logger.exception("查询客户地址失败")
+            return {"success": False, "message": "查询客户地址失败", "data": [], "count": 0}
 
     def set_credit_limit(self, customer_id: int, limit: float | Decimal) -> dict[str, Any]:
         """设置客户信用额度。"""
@@ -206,9 +206,9 @@ class CustomerRelationshipMixin:
                 }
             finally:
                 session.close()
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("设置信用额度失败: %s", e)
-            return {"success": False, "message": str(e)}
+        except RECOVERABLE_ERRORS:
+            logger.exception("设置信用额度失败")
+            return {"success": False, "message": "设置信用额度失败"}
 
     def get_suppliers(
         self, status: str | None = None, keyword: str | None = None

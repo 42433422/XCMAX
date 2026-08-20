@@ -1,11 +1,11 @@
 from __future__ import annotations
-from retort_engine.operational_errors import BOUNDARY_ERRORS
 
 import json
 from pathlib import Path
 from typing import Any, cast
 
 from retort_engine.codebase_graph import build_codebase_graph
+from retort_engine.operational_errors import BOUNDARY_ERRORS
 
 CORE_COMPONENT_CONTRACTS = {
     "review_pipeline": {
@@ -301,7 +301,7 @@ def _refactor_steps(component: str) -> list[str]:
 def _safe_code_graph(root: Path) -> dict[str, Any]:
     try:
         return build_codebase_graph(root, include_tests=True, max_files=400)
-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001 - graph adapters are an isolation boundary
+    except BOUNDARY_ERRORS as exc:
         return {
             "status": "error",
             "summary": {"error": type(exc).__name__},

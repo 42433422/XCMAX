@@ -143,6 +143,28 @@ export function sanitizeChatBubbleMarkdown(raw: string | undefined | null): stri
   return DOMPurify.sanitize(html, CHAT_MARKDOWN_CONFIG)
 }
 
+function sanitizedHtmlToPlainText(sanitizedHtml: string): string {
+  if (!sanitizedHtml) return ''
+  if (typeof DOMParser === 'undefined') {
+    return DOMPurify.sanitize(sanitizedHtml, { ALLOWED_TAGS: [], ALLOWED_ATTR: [], KEEP_CONTENT: true })
+  }
+  const doc = new DOMParser().parseFromString(sanitizedHtml, 'text/html')
+  const text = String(doc.body.textContent || '').replace(/\u00a0/g, ' ')
+  if (!text.includes('&')) return text
+  const decoded = new DOMParser().parseFromString(text, 'text/html')
+  return String(decoded.body.textContent || '').replace(/\u00a0/g, ' ')
+}
+
+/** 将不可信 HTML 转成纯文本；先由 DOMPurify 消毒，再由 DOM 解析器提取 textContent。 */
+export function plainTextFromChatHtml(raw: string | undefined | null): string {
+  return sanitizedHtmlToPlainText(sanitizeChatBubbleHtml(raw))
+}
+
+/** 将不可信 Markdown 转成纯文本，供预览、TTS 与请求上下文使用。 */
+export function plainTextFromChatMarkdown(raw: string | undefined | null): string {
+  return sanitizedHtmlToPlainText(sanitizeChatBubbleMarkdown(raw))
+}
+
 export type TaskSummarySanitizeInput = {
   type?: string
   summary?: string

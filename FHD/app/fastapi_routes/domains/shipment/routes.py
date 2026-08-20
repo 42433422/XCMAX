@@ -116,9 +116,9 @@ def ai_config_approval_post(body: dict = Body(default_factory=dict)):
             body=payload,
             intent="approval_config_update",
         )
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("save approval config: %s", e)
-        return JSONResponse({"success": False, "message": f"保存失败：{str(e)}"}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("save approval config failed")
+        return JSONResponse({"success": False, "message": "保存失败"}, status_code=500)
 
 
 @router.post("/api/ai/approval/request")
@@ -161,10 +161,10 @@ def ai_approval_request(body: dict = Body(default_factory=dict)):
             body=payload,
             intent="approval_request_create",
         )
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("approval request: %s", e)
+    except RECOVERABLE_ERRORS:
+        logger.exception("approval request failed")
         return JSONResponse(
-            {"success": False, "message": f"创建审批请求失败：{str(e)}"}, status_code=500
+            {"success": False, "message": "创建审批请求失败"}, status_code=500
         )
 
 
@@ -239,9 +239,9 @@ def ai_approval_approve(body: dict = Body(default_factory=dict)):
             body=payload,
             intent="approval_decision_approve",
         )
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("approval approve: %s", e)
-        return JSONResponse({"success": False, "message": f"审批失败：{str(e)}"}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("approval approve failed")
+        return JSONResponse({"success": False, "message": "审批失败"}, status_code=500)
 
 
 @router.post("/api/ai/approval/reject")
@@ -281,8 +281,8 @@ def ai_approval_reject(body: dict = Body(default_factory=dict)):
                 intent="approval_decision_reject",
             )
         return JSONResponse({"success": False, "message": "审批拒绝失败"}, status_code=400)
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("approval reject: %s", e)
+    except RECOVERABLE_ERRORS:
+        logger.exception("approval reject failed")
         return JSONResponse(
-            {"success": False, "message": f"审批拒绝失败：{str(e)}"}, status_code=500
+            {"success": False, "message": "审批拒绝失败"}, status_code=500
         )

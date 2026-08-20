@@ -102,9 +102,9 @@ class ShipmentApplicationService(ShipmentDocumentWorkflowMixin):
                 "shipment": payload,
             }
 
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("创建发货单失败: %s", e)
-            return {"success": False, "message": f"创建失败: {str(e)}"}
+        except RECOVERABLE_ERRORS:
+            logger.exception("创建发货单失败")
+            return {"success": False, "message": "创建失败"}
 
     def get_shipment(self, shipment_id: int) -> Shipment | None:
         """获取发货单"""
@@ -133,9 +133,9 @@ class ShipmentApplicationService(ShipmentDocumentWorkflowMixin):
                 "per_page": per_page,
             }
 
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("查询发货单失败: %s", e)
-            return {"success": False, "message": str(e), "data": []}
+        except RECOVERABLE_ERRORS:
+            logger.exception("查询发货单失败")
+            return {"success": False, "message": "查询发货单失败", "data": []}
 
     def query_shipment_orders(
         self,
@@ -275,9 +275,9 @@ class ShipmentApplicationService(ShipmentDocumentWorkflowMixin):
                 "printed_at": datetime.now().isoformat(),
             }
 
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("标记打印失败: %s", e)
-            return {"success": False, "message": str(e)}
+        except RECOVERABLE_ERRORS:
+            logger.exception("标记打印失败")
+            return {"success": False, "message": "标记打印失败"}
 
     def cancel_shipment(self, shipment_id: int) -> dict[str, Any]:
         """取消发货单"""
@@ -291,9 +291,9 @@ class ShipmentApplicationService(ShipmentDocumentWorkflowMixin):
 
             return {"success": True, "message": "发货单已取消"}
 
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("取消发货单失败: %s", e)
-            return {"success": False, "message": str(e)}
+        except RECOVERABLE_ERRORS:
+            logger.exception("取消发货单失败")
+            return {"success": False, "message": "取消发货单失败"}
 
     def delete_shipment(self, shipment_id: int) -> dict[str, Any]:
         """删除发货单"""
@@ -303,9 +303,9 @@ class ShipmentApplicationService(ShipmentDocumentWorkflowMixin):
                 return {"success": True, "message": "发货单已删除"}
             return {"success": False, "message": "发货单不存在"}
 
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("删除发货单失败: %s", e)
-            return {"success": False, "message": str(e)}
+        except RECOVERABLE_ERRORS:
+            logger.exception("删除发货单失败")
+            return {"success": False, "message": "删除发货单失败"}
 
     def calculate_totals(self, items_data: list[dict[str, Any]]) -> dict[str, Any]:
         """计算发货单汇总"""

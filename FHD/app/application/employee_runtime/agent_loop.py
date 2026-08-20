@@ -182,12 +182,12 @@ def run_employee_agent_loop(
 
         require_api_key()
         client = get_openai_compatible_client()
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         return {
             "handler": "agent",
             "ok": False,
             "degraded": True,
-            "error": f"LLM 不可用，agent 多轮循环降级：{str(exc)[:200]}",
+            "error": "LLM 不可用，agent 多轮循环已降级",
             "error_code": "employee_llm_not_configured",
             "retryable": False,
             "output": "",
@@ -388,9 +388,9 @@ def run_employee_agent_loop(
                 from app.application.tools.workflow import execute_workflow_tool
 
                 result_raw = execute_workflow_tool(tool_name, args, workspace_root)
-            except RECOVERABLE_ERRORS as exc:
+            except RECOVERABLE_ERRORS:
                 result_raw = json.dumps(
-                    {"success": False, "error": str(exc)[:300]}, ensure_ascii=False
+                    {"success": False, "error": "工具执行失败"}, ensure_ascii=False
                 )
             tool_success, tool_error, verified = _tool_result_state(str(result_raw))
             tool_trace.append(

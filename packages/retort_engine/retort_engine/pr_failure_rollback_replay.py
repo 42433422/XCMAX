@@ -1,5 +1,4 @@
 from __future__ import annotations
-from retort_engine.operational_errors import BOUNDARY_ERRORS
 
 import json
 import subprocess
@@ -9,6 +8,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
+from retort_engine.operational_errors import BOUNDARY_ERRORS
 from retort_engine.pr_dry_run import review_pr_url
 
 DEFAULT_FAILURE_ROLLBACK_PR_URLS = (
@@ -166,7 +166,7 @@ def _run_case(url: str, reviewer: Reviewer, runner: Runner) -> dict[str, Any]:
 def _safe_review(url: str, reviewer: Reviewer) -> dict[str, Any]:
     try:
         return reviewer(url)
-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001 - injected reviewers are untrusted adapters
+    except BOUNDARY_ERRORS as exc:
         return {
             "status": "failed",
             "pr_url": url,

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from retort_engine.operational_errors import BOUNDARY_ERRORS
-
 import hashlib
 import json
 import time
@@ -12,6 +10,7 @@ from typing import Any, cast
 
 from retort_engine.architecture_contracts import evaluate_architecture_contracts
 from retort_engine.codebase_graph import build_codebase_graph
+from retort_engine.operational_errors import BOUNDARY_ERRORS
 from retort_engine.ui_features import (
     blackhole_ui_operation_replay,
     blackhole_ui_structure,

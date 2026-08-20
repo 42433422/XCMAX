@@ -204,8 +204,8 @@ def _tool_api_call(app: _facade().Any, args: dict[str, _facade().Any]) -> dict[s
             "status_code": status_code,
             "data": data,
         }
-    except _facade().RECOVERABLE_ERRORS as err:
-        return {"success": False, "path": raw_path, "method": method, "message": str(err)}
+    except _facade().RECOVERABLE_ERRORS:
+        return {"success": False, "path": raw_path, "method": method, "message": "请求执行失败"}
 
 
 def _tool_chat(app: _facade().Any, args: dict[str, _facade().Any]) -> dict[str, _facade().Any]:

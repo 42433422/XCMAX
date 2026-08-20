@@ -56,9 +56,9 @@ class ChartDataService(NeuroEventPublisherMixin):
                 "data": chart_data,
                 "title": "月度营收趋势",
             }
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("get_revenue_chart_data failed: %s", e)
-            return {"success": False, "message": str(e)}
+        except RECOVERABLE_ERRORS:
+            logger.exception("get_revenue_chart_data failed")
+            return {"success": False, "message": "营收图表暂不可用"}
 
     def get_product_pie_chart_data(self) -> dict[str, Any]:
         try:
@@ -95,9 +95,9 @@ class ChartDataService(NeuroEventPublisherMixin):
                 },
                 "title": "产品销售占比（本月）",
             }
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("get_product_pie_chart_data failed: %s", e)
-            return {"success": False, "message": str(e)}
+        except RECOVERABLE_ERRORS:
+            logger.exception("get_product_pie_chart_data failed")
+            return {"success": False, "message": "产品图表暂不可用"}
 
     def get_customer_bar_chart_data(self) -> dict[str, Any]:
         try:
@@ -142,9 +142,9 @@ class ChartDataService(NeuroEventPublisherMixin):
                 "data": data,
                 "title": "客户销售额排行（本月）",
             }
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("get_customer_bar_chart_data failed: %s", e)
-            return {"success": False, "message": str(e)}
+        except RECOVERABLE_ERRORS:
+            logger.exception("get_customer_bar_chart_data failed")
+            return {"success": False, "message": "客户图表暂不可用"}
 
     def get_profit_trend_chart_data(self, months: int = 6) -> dict[str, Any]:
         try:
@@ -195,9 +195,9 @@ class ChartDataService(NeuroEventPublisherMixin):
                 "data": chart_data,
                 "title": "营收成本利润趋势",
             }
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("get_profit_trend_chart_data failed: %s", e)
-            return {"success": False, "message": str(e)}
+        except RECOVERABLE_ERRORS:
+            logger.exception("get_profit_trend_chart_data failed")
+            return {"success": False, "message": "利润图表暂不可用"}
 
     def get_inventory_chart_data(self) -> dict[str, Any]:
         try:
@@ -245,15 +245,15 @@ class ChartDataService(NeuroEventPublisherMixin):
         except RECOVERABLE_ERRORS as e:
             from sqlalchemy.exc import ProgrammingError
 
-            if isinstance(e, ProgrammingError) and "does not exist" in str(e):
+            if isinstance(e, ProgrammingError) and getattr(getattr(e, "orig", None), "pgcode", None) == "42P01":
                 return {
                     "success": True,
                     "type": "doughnut",
                     "data": {"labels": [], "values": []},
                     "title": "原材料库存价值分布",
                 }
-            logger.exception("get_inventory_chart_data failed: %s", e)
-            return {"success": False, "message": str(e)}
+            logger.exception("get_inventory_chart_data failed")
+            return {"success": False, "message": "库存图表暂不可用"}
 
     def get_all_charts_data(self) -> dict[str, Any]:
         return {

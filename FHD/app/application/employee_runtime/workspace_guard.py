@@ -75,7 +75,7 @@ def _compile_globs(globs: list[str]) -> list[tuple[re.Pattern[str], bool]]:
         try:
             compiled.append((re.compile(_glob_to_regex(gs)), "/" in gs))
         except re.error:
-            logger.debug("invalid glob skipped: %s", g, exc_info=True)
+            logger.debug("invalid workspace glob skipped", exc_info=True)
     return compiled
 
 

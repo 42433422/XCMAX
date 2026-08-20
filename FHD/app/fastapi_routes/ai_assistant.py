@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import os
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Body, Query
@@ -21,6 +22,10 @@ from app.fastapi_routes.ai_assistant_responses import fail as _fail
 from app.fastapi_routes.ai_assistant_responses import ok as _ok
 from app.fastapi_routes.ai_assistant_tts import router as tts_router
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.security.safe_download_path import (
+    UnsafeDownloadPathError,
+    resolve_under_allowed_dirs,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -392,13 +397,15 @@ def compat_print_shipment_file(filename: str, payload: dict[str, Any] = Body(def
     from app.utils.path_io.path_utils import get_app_data_dir
 
     printer_name = payload.get("printer_name") or payload.get("printer")
-    output_dir = os.path.join(get_app_data_dir(), "shipment_outputs")
-    safe = os.path.basename(filename) or filename
-    file_path = os.path.join(output_dir, safe)
-    if not file_path or not os.path.exists(file_path):
+    output_dir = Path(get_app_data_dir()).resolve() / "shipment_outputs"
+    try:
+        file_path = resolve_under_allowed_dirs(filename, [output_dir])
+    except UnsafeDownloadPathError:
+        return _fail("文件路径无效", 400)
+    if not file_path.is_file():  # lgtm[py/path-injection] -- resolved under shipment_outputs
         return _fail("文件不存在", 404)
 
-    result = _printer_svc().print_document(file_path, printer_name=printer_name)
+    result = _printer_svc().print_document(str(file_path), printer_name=printer_name)
     status = 200 if result.get("success") else 400
     traced = _trace_ai_assistant_route(
         dict(result),

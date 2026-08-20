@@ -371,7 +371,10 @@ function handleFileSelect(files) {
     return
   }
 
-  const uploadSessionId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+  const uploadNonce = crypto.randomUUID
+    ? crypto.randomUUID()
+    : Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, '0')).join('')
+  const uploadSessionId = `${Date.now()}_${uploadNonce}`
   activeUploadSessionId = uploadSessionId
   isUploadProcessing = true
 

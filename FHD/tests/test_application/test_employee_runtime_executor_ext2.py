@@ -397,7 +397,7 @@ class TestCognitionFhd:
         ):
             out = exec_mod._cognition_fhd({}, {"normalized_input": {}}, {}, "task")
             assert out["reasoning"] == ""
-            assert "llm down" in out["error"]
+        assert out["error"] == "员工推理暂不可用"
 
     def test_returns_error_when_raw_has_error(self):
         with (
@@ -412,7 +412,7 @@ class TestCognitionFhd:
         ):
             out = exec_mod._cognition_fhd({}, {"normalized_input": {}}, {}, "task")
             assert out["reasoning"] == ""
-            assert "bad request" in out["error"]
+        assert out["error"] == "员工推理暂不可用"
 
     def test_empty_choices(self):
         with (

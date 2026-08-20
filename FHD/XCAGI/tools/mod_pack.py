@@ -199,8 +199,8 @@ def cmd_info(args):
 
         if manifest.get("workflow_employees"):
             print("\n=== 工作流员工 ===")
-            for emp in manifest["workflow_employees"]:
-                print(f"   - {emp.get('label')} ({emp.get('id')})")
+            employees = manifest["workflow_employees"]
+            print(f"   已声明 {len(employees)} 个工作流员工（标识不写入日志）")
 
         print()
         return 0

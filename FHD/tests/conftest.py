@@ -18,8 +18,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.utils.operational_errors import BOUNDARY_ERRORS
-
 os.environ.setdefault("SECRET_KEY", "xcagi-test-only-secret-key-32-bytes-minimum")
 
 _PYTEST_RUNTIME_ROOT = Path(tempfile.mkdtemp(prefix="xcagi_fhd_pytest_"))
@@ -52,6 +50,8 @@ os.environ.setdefault("XCAGI_REQUIRE_SIGNED_MODS", "0")
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
+
+from app.utils.operational_errors import BOUNDARY_ERRORS  # noqa: E402
 
 # A few legacy coverage modules install minimal ``sys.modules`` stubs during
 # collection. Preload the real host-policy modules used by the application

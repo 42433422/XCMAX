@@ -1,5 +1,4 @@
 from __future__ import annotations
-from retort_engine.operational_errors import BOUNDARY_ERRORS
 
 import json
 import os
@@ -10,6 +9,7 @@ import uuid
 from pathlib import Path
 from typing import Any, cast
 
+from retort_engine.operational_errors import BOUNDARY_ERRORS
 from retort_engine.paibi_prompting import (
     build_retort_paibi_panel_prompt as _prompting_build_retort_paibi_panel_prompt,
 )
@@ -359,7 +359,7 @@ class PaibiLLMClient:
                 },
                 "response": task_body,
             }
-        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:
             return self._outbox(
                 project, title, prompt, f"paibi_dispatch_error: {str(exc)[:400]}"
             )
@@ -482,7 +482,7 @@ class PaibiLLMClient:
                 ),
                 "dispatches": dispatches,
             }
-        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:
             return self._group_outbox(
                 project, title, prompts, f"paibi_dispatch_error: {str(exc)[:400]}"
             )

@@ -118,12 +118,12 @@ class __AIChatApplicationServicePart02MixinPart03Mixin(_DynamicWorkflowPendingRe
                             "message": result.get("error", "价格表生成失败"),
                             "response": f"抱歉，价格表生成失败：{result.get('error', '未知错误')}",
                         }
-                except _facade().RECOVERABLE_ERRORS as e:
-                    _facade().logger.error("价格表生成异常：%s", e, exc_info=True)
+                except _facade().RECOVERABLE_ERRORS:
+                    _facade().logger.exception("价格表生成异常")
                     return {
                         "success": False,
-                        "message": f"价格表生成异常：{str(e)}",
-                        "response": f"抱歉，价格表生成时出现错误：{str(e)}",
+                        "message": "价格表生成异常",
+                        "response": "抱歉，价格表生成时出现错误，请稍后重试。",
                     }
         pending_handled, pending_result = self._resume_pending_dynamic_workflow(
             user_id, message, text

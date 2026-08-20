@@ -32,6 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
+      PYTHONPATH: .
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GITHUB_REPOSITORY: ${{ github.repository }}
       PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}

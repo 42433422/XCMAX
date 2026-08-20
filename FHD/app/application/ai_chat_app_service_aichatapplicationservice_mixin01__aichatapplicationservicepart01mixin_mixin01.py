@@ -245,24 +245,10 @@ class __AIChatApplicationServicePart01MixinPart01Mixin:
             _facade().logger.error("AI 服务请求超时：%s", timeout_err)
             loop.close()
             return _finalize(self._build_fallback_response(message, "AI 服务响应超时，请稍后重试"))
-        except _facade().RECOVERABLE_ERRORS as e:
-            _facade().logger.error("AI 服务处理异常：%s", e, exc_info=True)
+        except _facade().RECOVERABLE_ERRORS:
+            _facade().logger.exception("AI 服务处理异常")
             loop.close()
-            error_msg = str(e)
-            if "api_key" in error_msg.lower() or "apikey" in error_msg.lower():
-                return _finalize(
-                    self._build_fallback_response(
-                        message, "AI 服务 API Key 未配置或无效，请联系管理员"
-                    )
-                )
-            elif "connection" in error_msg.lower():
-                return _finalize(
-                    self._build_fallback_response(message, "无法连接到 AI 服务，请检查网络设置")
-                )
-            else:
-                return _finalize(
-                    self._build_fallback_response(message, f"AI 服务暂时不可用：{error_msg[:100]}")
-                )
+            return _finalize(self._build_fallback_response(message, "AI 服务暂时不可用，请稍后重试"))
         finally:
             loop.close()
         _facade().logger.info(

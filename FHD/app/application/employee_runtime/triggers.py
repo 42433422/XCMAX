@@ -135,9 +135,9 @@ def refresh_employee_triggers(pack_id: str | None = None) -> dict[str, Any]:
         from app.neuro_bus.bus import get_neuro_bus
 
         bus = get_neuro_bus()
-    except RECOVERABLE_ERRORS as exc:
-        logger.debug("refresh_employee_triggers: NeuroBus unavailable: %s", exc)
-        return {"registered": [], "error": str(exc)[:200]}
+    except RECOVERABLE_ERRORS:
+        logger.debug("refresh_employee_triggers: NeuroBus unavailable", exc_info=True)
+        return {"registered": [], "error": "NeuroBus unavailable"}
 
     pid_filter = str(pack_id or "").strip()
     registered: list[dict[str, Any]] = []
@@ -174,11 +174,7 @@ def refresh_employee_triggers(pack_id: str | None = None) -> dict[str, Any]:
 
         if subs:
             _ACTIVE_SUBSCRIPTIONS[eid] = subs
-            logger.info(
-                "employee triggers registered emp=%s events=%s",
-                eid,
-                [e for e, _ in subs],
-            )
+            logger.info("employee triggers registered (event_count=%d)", len(subs))
 
     return {
         "registered": registered,

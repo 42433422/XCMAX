@@ -112,7 +112,11 @@ def resolve_etl_path(
     避免 ``Path.exists`` 被静态分析标为 path-injection sink。
     """
     _ = must_exist
-    return _safe_under_roots(str(file_path or ""), etl_allowed_roots(workspace_root))
+    roots = etl_allowed_roots(workspace_root)
+    preferred = Path(workspace_root).resolve() if workspace_root else Path.cwd().resolve()
+    if preferred in roots:
+        roots = [preferred, *(root for root in roots if root != preferred)]
+    return _safe_under_roots(str(file_path or ""), roots)
 
 
 def resolve_etl_output_path(
@@ -134,7 +138,7 @@ def resolve_etl_output_path(
         parent = roots[0]
     else:
         parent = _safe_under_roots(parent_raw, etl_allowed_roots(workspace_root))
-    parent.mkdir(parents=True, exist_ok=True)
+    parent.mkdir(parents=True, exist_ok=True)  # lgtm[py/path-injection] -- parent passed _safe_under_roots
     # 文件名只用 basename，切断用户路径 taint
     return parent / name
 

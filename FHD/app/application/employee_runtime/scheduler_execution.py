@@ -52,9 +52,9 @@ def _execute_job_task(
         if not error:
             error = "employee task failed"
         return (ok, result, error)
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("run employee cron job failed job_id=%s", job.job_id)
-        return (False, {"success": False, "error": str(exc)[:800]}, str(exc)[:800])
+    except RECOVERABLE_ERRORS:
+        logger.exception("run employee cron job failed")
+        return (False, {"success": False, "error": "员工定时任务执行失败"}, "员工定时任务执行失败")
 
 
 def _apply_job_outcome(

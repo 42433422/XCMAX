@@ -54,9 +54,9 @@ def handle_price_list_export(
         )
         raw_products = result.get("data") if isinstance(result, dict) else []
         products = list(raw_products) if isinstance(raw_products, list) else []
-    except RECOVERABLE_ERRORS as e:
-        logger.error("price_list_export: 获取产品失败: %s", e)
-        return {"success": False, "message": f"获取产品列表失败: {e}"}
+    except RECOVERABLE_ERRORS:
+        logger.exception("price_list_export: 获取产品失败")
+        return {"success": False, "message": "获取产品列表失败"}
 
     # 2. 生成 Word 文件
     try:
@@ -72,9 +72,9 @@ def handle_price_list_export(
             quote_date=export_date,
             products=products,
         )
-    except RECOVERABLE_ERRORS as e:
-        logger.error("price_list_export: 生成 Word 失败: %s", e)
-        return {"success": False, "message": f"价格表生成失败: {e}"}
+    except RECOVERABLE_ERRORS:
+        logger.exception("price_list_export: 生成 Word 失败")
+        return {"success": False, "message": "价格表生成失败"}
 
     # 3. 写入临时文件
     try:
@@ -95,6 +95,6 @@ def handle_price_list_export(
             "customer_name": customer_name,
             "product_count": len(products),
         }
-    except RECOVERABLE_ERRORS as e:
-        logger.error("price_list_export: 写文件失败: %s", e)
-        return {"success": False, "message": f"写文件失败: {e}"}
+    except RECOVERABLE_ERRORS:
+        logger.exception("price_list_export: 写文件失败")
+        return {"success": False, "message": "写文件失败"}

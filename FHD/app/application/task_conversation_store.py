@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import re
 from datetime import datetime
+from html.parser import HTMLParser
 from typing import Any
 
 from app.db.models import AIConversation, AIConversationSession
@@ -18,8 +18,20 @@ def durable_user_id(value: Any) -> int | None:
     return parsed if parsed > 0 else None
 
 
+class _PlainTextParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+
+    def handle_data(self, data: str) -> None:
+        self.parts.append(data)
+
+
 def _plain_text(value: Any) -> str:
-    return re.sub(r"<[^>]+>", "", str(value or "")).strip()
+    parser = _PlainTextParser()
+    parser.feed(str(value or ""))
+    parser.close()
+    return "".join(parser.parts).strip()
 
 
 def _session_row(session: AIConversationSession) -> dict[str, Any]:

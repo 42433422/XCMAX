@@ -39,8 +39,9 @@ class DataAnalysisService(NeuroEventPublisherMixin):
                 "download_url": f"/api/ai/analyze/export/{uuid.uuid4().hex[:12]}",
             }
             return result
-        except RECOVERABLE_ERRORS as e:
-            return {"success": False, "message": f"分析失败: {str(e)}"}
+        except RECOVERABLE_ERRORS:
+            logger.exception("data analysis failed")
+            return {"success": False, "message": "分析失败"}
 
     def _load_file(self, file_path: str) -> pd.DataFrame | None:
         """加载不同格式的文件"""

@@ -191,9 +191,9 @@ def ai_qclaw_test_route(request: Request, body: dict = Body(default_factory=dict
             channel="qclaw_route_smoke",
             intent="qclaw_route_smoke",
         )
-    except RECOVERABLE_ERRORS as err:
+    except RECOVERABLE_ERRORS:
         return JSONResponse(
-            {"success": False, "path": path, "method": method, "message": str(err)},
+            {"success": False, "path": path, "method": method, "message": "请求执行失败"},
             status_code=500,
         )
 

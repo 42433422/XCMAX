@@ -1,5 +1,4 @@
 from __future__ import annotations
-from retort_engine.operational_errors import BOUNDARY_ERRORS
 
 import json
 import re
@@ -8,6 +7,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from retort_engine.git_status import GENERATED_ABSORPTION_NAMES
+from retort_engine.operational_errors import BOUNDARY_ERRORS
 
 BEHAVIOR_SUFFIXES = {".py", ".js", ".ts", ".tsx", ".jsx", ".go"}
 MIN_TEST_TO_SOURCE_RATIO = 0.8
@@ -545,7 +545,7 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
             adjudication_false_negative_count = int(
                 adjudication_summary.get("false_negative_count") or 0
             )
-        except BOUNDARY_ERRORS:  # noqa: BLE001 - optional audit evidence must fail closed
+        except BOUNDARY_ERRORS:
             sample_comment_count = 0
     return {
         "runtime": source.is_file()

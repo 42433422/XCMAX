@@ -1,5 +1,7 @@
 /** Cursor 式聊天气泡展示：剥离泄漏的工具参数 JSON，转为可读 chip。 */
 
+import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
+
 export type ToolInvocationChip = {
   label: string
   detail?: string
@@ -15,17 +17,7 @@ const ACTION_LABELS: Record<string, string> = {
 }
 
 export function plainTextFromMessageContent(raw: string | undefined | null): string {
-  return String(raw || '')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<[^>]*>/g, '')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/gi, '"')
-    .replace(/&#34;/g, '"')
-    .replace(/&#39;/g, "'")
-    .trim()
+  return plainTextFromChatHtml(raw).trim()
 }
 
 function isToolInvocationObject(obj: Record<string, unknown>): boolean {

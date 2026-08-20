@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from retort_engine.operational_errors import BOUNDARY_ERRORS
-
 import json
 import re
 import subprocess
 from pathlib import Path
 from typing import Any, cast
+
+from retort_engine.operational_errors import BOUNDARY_ERRORS
 
 DEPTH_TERMS = {
     "pr": 10,

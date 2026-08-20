@@ -57,7 +57,7 @@ async def run_office_read_employee(
         meta = get_mod_registry().get_mod_metadata(mod_id)
         mod_path = str(getattr(meta, "mod_path", "") or "")
     except RECOVERABLE_ERRORS:
-        logger.debug("office parse mod lookup failed mod=%s", mod_id, exc_info=True)
+        logger.debug("office parse mod lookup failed", exc_info=True)
 
     if not mod_path:
         from pathlib import Path as _Path

@@ -129,10 +129,10 @@ class ProductExportMixin:
                     "count": len(products),
                 }
 
-        except RECOVERABLE_ERRORS as e:
+        except RECOVERABLE_ERRORS:
             return {
                 "success": False,
-                "message": f"导出失败：{str(e)}",
+                "message": "导出失败",
                 "file_path": None,
                 "filename": None,
             }
