@@ -103,3 +103,20 @@ def build_platform_shell_payload(installed_mod_ids: list[str] | None = None) -> 
         "profile_validation_errors": build_host_profile_api_payload().get("validation_errors")
         or [],
     }
+
+
+def build_runtime_platform_shell_payload() -> dict[str, Any]:
+    """Build the shell payload from the host's local Mod inventory.
+
+    Mod code must only cross the host boundary through ``app.mod_sdk``.  Keep
+    the infrastructure lookup here so bridge Mods do not import the host's
+    internal Mod manager directly.
+    """
+    from app.infrastructure.mods.mod_manager import get_mod_manager
+
+    installed = [
+        str(item.get("id") or "").strip()
+        for item in get_mod_manager().list_all_mods()
+        if str(item.get("id") or "").strip()
+    ]
+    return build_platform_shell_payload(installed)

@@ -108,15 +108,9 @@ def register_fastapi_routes(app, mod_id: str) -> None:
     @router.get("/host-capabilities")
     async def host_capabilities():
         try:
-            from app.infrastructure.mods.mod_manager import get_mod_manager
-            from app.mod_sdk.platform_shell import build_platform_shell_payload
+            from app.mod_sdk.platform_shell import build_runtime_platform_shell_payload
 
-            installed = [
-                str(item.get("id") or "").strip()
-                for item in get_mod_manager().list_all_mods()
-                if str(item.get("id") or "").strip()
-            ]
-            return {"success": True, "data": build_platform_shell_payload(installed)}
+            return {"success": True, "data": build_runtime_platform_shell_payload()}
         except BOUNDARY_ERRORS:
             logger.exception("host-capabilities local inventory failed")
         return {"success": False, "error": "platform-shell unavailable"}

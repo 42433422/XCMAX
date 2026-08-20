@@ -8,6 +8,7 @@ from app.mod_sdk.platform_shell import (
     MINIMAL_HOST_MOD_IDS,
     PROTECTED_CLIENT_MOD_IDS,
     build_platform_shell_payload,
+    build_runtime_platform_shell_payload,
 )
 
 
@@ -43,6 +44,23 @@ def test_build_platform_shell_payload(monkeypatch):
     assert "frontend_shell_hint" in data
     assert data.get("edition") == "full"
     assert "generic_host_mod_ids" in data
+
+
+def test_build_runtime_platform_shell_payload_uses_host_inventory(monkeypatch):
+    class _Manager:
+        @staticmethod
+        def list_all_mods():
+            return [{"id": "xcagi-planner-bridge"}, {"id": ""}, {}]
+
+    monkeypatch.setattr(
+        "app.infrastructure.mods.mod_manager.get_mod_manager",
+        lambda: _Manager(),
+    )
+
+    data = build_runtime_platform_shell_payload()
+
+    bridges = {item["mod_id"]: item for item in data["bridge_mods"]}
+    assert bridges["xcagi-planner-bridge"]["installed"] is True
 
 
 def test_build_platform_shell_generic_edition(monkeypatch):

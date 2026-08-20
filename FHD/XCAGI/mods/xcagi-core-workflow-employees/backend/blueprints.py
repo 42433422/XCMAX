@@ -146,7 +146,9 @@ async def _dispatch_run(mod_id: str, emp_id: str, stem: str, payload: Optional[D
             out = await out
         return {"success": True, "data": out}
     except BOUNDARY_ERRORS:  # noqa: BLE001
-        logger.exception("employee run failed emp=%s", emp_id)
+        # Employee identifiers can originate from account-scoped workflow data.
+        # Keep the traceback for operators without copying that identifier into logs.
+        logger.exception("employee run failed")
         return _unified_err("employee run failed", employee_id=emp_id)
 
 
