@@ -14,9 +14,15 @@ def _safe_command_tokens(command: str) -> Optional[list[str]]:
     """Tokenize a reported command without guessing past malformed quoting."""
 
     try:
-        return shlex.split(command)
+        lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|")
+        lexer.commenters = ""
+        lexer.whitespace_split = True
+        tokens = list(lexer)
     except ValueError:
         return None
+    if any(set(token) <= set(";&|") and token != "&&" for token in tokens):
+        return None
+    return tokens
 
 
 def _shell_command_segments(tokens: list[str]) -> list[list[str]]:

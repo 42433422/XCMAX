@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "kind": "fix",
+  "created_at": "2026-08-21T18:23:37+00:00",
+  "symptom": "Self-maintenance structured QA accepted Black, isort, and source-governance command evidence containing an unquoted embedded ampersand such as extra&true, allowing the required command to run in the background while true supplied a misleading exit code 0.",
+  "root_cause": "The command evidence tokenizer used shlex.split without shell punctuation recognition, so an embedded ampersand remained inside an ordinary argument token and the matchers saw the required scopes or script path but not the background control operator.",
+  "fix_diff": "diff --git a/成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_quality_gate.py b/成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_quality_gate.py\nindex 82acd22da..2145050ef 100644\n--- a/成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_quality_gate.py\n+++ b/成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_quality_gate.py\n@@ -14,9 +14,15 @@ def _safe_command_tokens(command: str) -> Optional[list[str]]:\n     \"\"\"Tokenize a reported command without guessing past malformed quoting.\"\"\"\n \n     try:\n-        return shlex.split(command)\n+        lexer = shlex.shlex(command, posix=True, punctuation_chars=\";&|\")\n+        lexer.commenters = \"\"\n+        lexer.whitespace_split = True\n+        tokens = list(lexer)\n     except ValueError:\n         return None\n+    if any(set(token) <= set(\";&|\") and token != \"&&\" for token in tokens):\n+        return None\n+    return tokens\n \n \n def _shell_command_segments(tokens: list[str]) -> list[list[str]]:\ndiff --git a/成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py b/成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py\nindex 8183bf79d..9082d9794 100644\n--- a/成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py\n+++ b/成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py\n@@ -2620,6 +2620,27 @@ def test_quality_command_matchers_require_real_commands_and_scopes():\n     )\n \n \n+@pytest.mark.parametrize(\n+    (\"matcher\", \"command\"),\n+    [\n+        (\n+            matches_black_check_command,\n+            \"python3 -m black --check modman/ modstore_server/ tests/ extra&true\",\n+        ),\n+        (\n+            matches_isort_check_command,\n+            \"python3 -m isort --check-only --diff modman/ modstore_server/ tests/ extra&true\",\n+        ),\n+        (\n+            matches_source_governance_command,\n+            \"python3 scripts/dev/source_governance.py --top 10&true\",\n+        ),\n+    ],\n+)\n+def test_quality_command_matchers_reject_embedded_background_operator(matcher, command):\n+    assert matcher(command) is False\n+\n+\n def test_quality_gate_accepts_worker_env_prefixes_on_real_commands():\n     diff_prefix = (\n         \"cd /tmp/target && GIT_DIR=/tmp/repo/.git GIT_WORK_TREE=/tmp/target \"\n",
+  "metadata": {
+    "component": "self_maintenance_quality_gate",
+    "files": [
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_quality_gate.py",
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py"
+    ]
+  },
+  "executable_template": {
+    "applicability_check": "Submit Black, isort, or source-governance evidence with an unquoted embedded background operator immediately before a successful command, and confirm whether the corresponding matcher incorrectly returns true.",
+    "patch_strategy": "Tokenize reported commands with POSIX shell punctuation enabled, preserve only fail-propagating && command chains, and reject background, pipeline, fallback, or sequencing control tokens before any executable or scope matching; retain exact base and target ref checks.",
+    "rollback_plan": "Revert the punctuation-aware tokenizer and the embedded-background regression together; disable unattended merge-quality evidence acceptance until an equivalent fail-closed shell parser is in place.",
+    "required_tests": [
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py::test_quality_command_matchers_reject_embedded_background_operator",
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py::test_quality_command_matchers_require_real_commands_and_scopes",
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py::test_quality_gate_accepts_worker_env_prefixes_on_real_commands"
+    ]
+  }
+}
