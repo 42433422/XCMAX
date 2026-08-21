@@ -10,6 +10,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 FHD_ROOT="$(cd -- "$SCRIPT_DIR/../.." &>/dev/null && pwd)"
 REPO_ROOT="$(cd -- "$FHD_ROOT/.." &>/dev/null && pwd)"
 DR_RELEASE_SYNC="$REPO_ROOT/ops/dr/xcmax_release_sync.sh"
+DR_RELEASE_SYNC_PRUNE="$REPO_ROOT/ops/dr/xcmax_release_sync_prune.py"
 # shellcheck source=lib/deploy_emit.sh
 . "$SCRIPT_DIR/lib/deploy_emit.sh"
 export DEPLOY_SCRIPT_ID="fhd_pack_release"
@@ -73,6 +74,10 @@ fi
 }
 [[ -x "$DR_RELEASE_SYNC" ]] || {
   echo "[err] DR release sync helper is missing or not executable: $DR_RELEASE_SYNC" >&2
+  exit 1
+}
+[[ -r "$DR_RELEASE_SYNC_PRUNE" ]] || {
+  echo "[err] DR release sync prune helper is missing: $DR_RELEASE_SYNC_PRUNE" >&2
   exit 1
 }
 ADMIN_CONSOLE_SHA256="$(python3 "$ADMIN_VERIFY" --root "$ADMIN_DIST" --stamp-git-sha "$GIT_SHA" | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha256"])')"
@@ -162,6 +167,7 @@ cp "$SCRIPT_DIR/fhd-auto-update.sh" \
   "$SCRIPT_DIR/prune_release_cache.py" \
   "$STAGING/scripts/deploy/"
 cp "$DR_RELEASE_SYNC" "$STAGING/scripts/deploy/xcmax-release-sync.sh"
+cp "$DR_RELEASE_SYNC_PRUNE" "$STAGING/scripts/deploy/xcmax_release_sync_prune.py"
 cp "$SCRIPT_DIR/lib/deploy_emit.sh" \
   "$SCRIPT_DIR/lib/dora_event.sh" \
   "$SCRIPT_DIR/lib/autonomy_gate.sh" \
