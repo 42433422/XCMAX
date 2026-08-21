@@ -27,7 +27,7 @@ on:
           - freeze-manifest
           - unfreeze-manifest
       action_id:
-        description: Optional autonomy action id for audit correlation
+        description: Required for production apply-latest; exact release:<40-char git sha>
         required: false
         type: string
         default: ""
@@ -105,6 +105,67 @@ jobs:
              done
              echo "fhd-full.service did not become HTTP-ready after autonomy config sync" >&2
              exit 1'
+
+      - name: Authorize exact production release in autonomy ledger
+        if: ${{ inputs.environment == 'production' && inputs.action == 'apply-latest' }}
+        env:
+          ACTION_ID: ${{ inputs.action_id }}
+          FHD_PUSH_HOST: ${{ secrets.FHD_PUSH_HOST }}
+          FHD_PUSH_USER: ${{ secrets.FHD_PUSH_USER }}
+          FHD_PUSH_SSH_KEY_RAW: ${{ secrets.FHD_PUSH_SSH_KEY }}
+          AUTONOMY_CALLBACK_URL: ${{ vars.AUTONOMY_CALLBACK_URL }}
+          AUTONOMY_WEBHOOK_TOKEN: ${{ secrets.MODSTORE_OPS_INGEST_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$ACTION_ID" =~ ^release:[0-9a-f]{40}$ ]]; then
+            echo "::error::production apply-latest requires action_id=release:<40-char git sha>."
+            exit 1
+          fi
+          if [[ "$AUTONOMY_CALLBACK_URL" != */github-approval ]]; then
+            echo "::error::AUTONOMY_CALLBACK_URL must end with /github-approval."
+            exit 1
+          fi
+          test -n "${AUTONOMY_WEBHOOK_TOKEN:-}"
+          host="${FHD_PUSH_HOST:-119.27.178.147}"
+          user="${FHD_PUSH_USER:-root}"
+          key_file="${RUNNER_TEMP}/fhd_release_approval_key"
+          printf '%s\n' "$FHD_PUSH_SSH_KEY_RAW" > "$key_file"
+          chmod 600 "$key_file"
+          release_sha="$(ssh -i "$key_file" \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=30 \
+            "${user}@${host}" \
+            "python3 -c 'import json; print(json.load(open(\"/var/www/update/releases/stable/server/fhd-manifest.json\", encoding=\"utf-8\"))[\"git_sha\"])'")"
+          if [ "$ACTION_ID" != "release:${release_sha}" ]; then
+            echo "::error::action_id does not match the exact stable manifest SHA."
+            exit 1
+          fi
+          request_url="${AUTONOMY_CALLBACK_URL%/github-approval}/actions/request"
+          request_payload="$(jq -nc \
+            --arg action_id "$ACTION_ID" \
+            --arg actor "$GITHUB_ACTOR" \
+            --arg run_id "$GITHUB_RUN_ID" \
+            '{action:"apply_release_to_cvm",action_id:$action_id,source:"github.workflow_dispatch",payload:{requested_by:$actor,workflow_run_id:$run_id,workflow_action:"apply-latest"}}')"
+          request_response="$(curl --fail-with-body --silent --show-error \
+            -X POST "$request_url" \
+            -H "Authorization: Bearer $AUTONOMY_WEBHOOK_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data "$request_payload")"
+          echo "$request_response" | jq -e '.ok == true and (.state == "pending_approval" or .state == "approval_requested")' >/dev/null
+
+          approval_payload="$(jq -nc \
+            --arg action_id "$ACTION_ID" \
+            --arg approval_id "$GITHUB_RUN_ID" \
+            --arg approver "$GITHUB_ACTOR" \
+            '{action_id:$action_id,approval_id:$approval_id,approver:$approver,workflow_action:"apply-latest",decision:"approved",defer_execution:true}')"
+          approval_response="$(curl --fail-with-body --silent --show-error \
+            -X POST "$AUTONOMY_CALLBACK_URL" \
+            -H "Authorization: Bearer $AUTONOMY_WEBHOOK_TOKEN" \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Actor: $GITHUB_ACTOR" \
+            --data "$approval_payload")"
+          echo "$approval_response" | jq -e '.ok == true and .action.state == "approved"' >/dev/null
+          echo "Exact release action approved by authenticated GitHub actor ${GITHUB_ACTOR}."
 
       - name: SSH rolling restart / apply
         env:
@@ -198,10 +259,14 @@ jobs:
               exit 1
             fi
           else
-            AUTO="${DEPLOY_ROOT}/scripts/deploy/fhd-auto-update.sh"
-            if [ ! -x "\$AUTO" ] && [ ! -f "\$AUTO" ]; then
-              AUTO="/root/XCMAX/FHD/scripts/deploy/fhd-auto-update.sh"
-            fi
+            ARTIFACT="\$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["artifact"])' "${MANIFEST}")"
+            TARBALL="\$(dirname "${MANIFEST}")/\$ARTIFACT"
+            test -f "\$TARBALL"
+            BOOTSTRAP="\$(mktemp -d /tmp/fhd-deploy-bootstrap.XXXXXX)"
+            trap 'rm -rf -- "\$BOOTSTRAP"' EXIT
+            tar -xzf "\$TARBALL" -C "\$BOOTSTRAP" ./scripts/deploy
+            AUTO="\$BOOTSTRAP/scripts/deploy/fhd-auto-update.sh"
+            test -x "\$AUTO"
             # Force re-apply even if digest matches: clear local digest stamp when present
             rm -f "${DEPLOY_ROOT}/.deploy-image-digest" "${DEPLOY_ROOT}/.deploy-sha256" 2>/dev/null || true
             bash "\$AUTO"
