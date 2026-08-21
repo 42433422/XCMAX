@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import json
-import re
+from html.parser import HTMLParser
 
 from starlette.requests import Request
 from starlette.types import ASGIApp, Receive, Scope, Send
-
-_SCRIPT_RE = re.compile(r"<\s*script[^>]*>.*?<\s*/\s*script\s*>", re.IGNORECASE | re.DOTALL)
 
 # Paths whose bodies must NOT be rewritten: signatures are computed over the
 # raw bytes, and any mutation (even stripping <script>) breaks the HMAC/RSA
@@ -28,10 +26,77 @@ def _is_bypass_path(path: str) -> bool:
     return False
 
 
+class _ScriptRemovingParser(HTMLParser):
+    """Remove script elements with HTML tokenization, not a bypassable regex."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=False)
+        self._script_depth = 0
+        self._chunks: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs) -> None:
+        if tag.lower() == "script":
+            self._script_depth += 1
+        elif self._script_depth == 0:
+            raw_tag = self.get_starttag_text()
+            if raw_tag is not None:
+                self._chunks.append(raw_tag)
+
+    def handle_startendtag(self, tag: str, attrs) -> None:
+        if tag.lower() != "script" and self._script_depth == 0:
+            raw_tag = self.get_starttag_text()
+            if raw_tag is not None:
+                self._chunks.append(raw_tag)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() == "script":
+            self._script_depth = max(0, self._script_depth - 1)
+        elif self._script_depth == 0:
+            self._chunks.append(f"</{tag}>")
+
+    def handle_data(self, data: str) -> None:
+        if self._script_depth == 0:
+            self._chunks.append(data)
+
+    def handle_entityref(self, name: str) -> None:
+        if self._script_depth == 0:
+            self._chunks.append(f"&{name};")
+
+    def handle_charref(self, name: str) -> None:
+        if self._script_depth == 0:
+            self._chunks.append(f"&#{name};")
+
+    def handle_comment(self, data: str) -> None:
+        if self._script_depth == 0:
+            self._chunks.append(f"<!--{data}-->")
+
+    def handle_decl(self, decl: str) -> None:
+        if self._script_depth == 0:
+            self._chunks.append(f"<!{decl}>")
+
+    def handle_pi(self, data: str) -> None:
+        if self._script_depth == 0:
+            self._chunks.append(f"<?{data}>")
+
+    def unknown_decl(self, data: str) -> None:
+        if self._script_depth == 0:
+            self._chunks.append(f"<![{data}]>")
+
+    def result(self) -> str:
+        return "".join(self._chunks)
+
+
+def _strip_script_elements(value: str) -> str:
+    parser = _ScriptRemovingParser()
+    parser.feed(value)
+    parser.close()
+    return parser.result()
+
+
 def _sanitize_value(value):
     if isinstance(value, str):
         # 仅剥离 ``<script>`` 片段；勿对 JSON 字符串做 ``html.escape``，否则会破坏 OpenAPI/YAML 等合法载荷。
-        return _SCRIPT_RE.sub("", value)
+        return _strip_script_elements(value)
     if isinstance(value, dict):
         return {k: _sanitize_value(v) for k, v in value.items()}
     if isinstance(value, list):
