@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+set -euo pipefail
+
 # 本机：打包 FHD API 发布物并原子 scp 到 update 服务器（供 cron 拉取式应用）。
 #
 # 用法（FHD 根目录或任意目录）:
@@ -16,7 +18,9 @@
 #   FHD_PUSH_APPLY_NOW           1 上传后立刻远端应用并验证；strict CI 默认 1
 #   FHD_PUSH_REMOTE_DEPLOY_ROOT  默认 /opt/fhd-full
 #   FHD_PUSH_HEALTH_URL          远端本机健康地址，默认 http://127.0.0.1:5100/api/health?lite=true
-set -euo pipefail
+#   FHD_PUSH_APPLY_LOCK_WAIT_SECONDS  严格发布等待远端 updater 锁，默认 360
+#   FHD_PUSH_HEALTH_RETRIES      exact-SHA 健康轮询次数，默认 120
+#   FHD_PUSH_HEALTH_INTERVAL     健康轮询间隔秒数，默认 3
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 FHD_ROOT="$(cd -- "$SCRIPT_DIR/../.." &>/dev/null && pwd)"
@@ -220,11 +224,32 @@ fi
 if [[ "$APPLY_NOW" == "1" ]]; then
   REMOTE_DEPLOY_ROOT="${FHD_PUSH_REMOTE_DEPLOY_ROOT:-/opt/fhd-full}"
   REMOTE_HEALTH_URL="${FHD_PUSH_HEALTH_URL:-http://127.0.0.1:5100/api/health?lite=true}"
+  APPLY_LOCK_WAIT_SECONDS="${FHD_PUSH_APPLY_LOCK_WAIT_SECONDS:-360}"
+  HEALTH_RETRIES="${FHD_PUSH_HEALTH_RETRIES:-120}"
+  HEALTH_INTERVAL="${FHD_PUSH_HEALTH_INTERVAL:-3}"
+  case "$APPLY_LOCK_WAIT_SECONDS" in
+    '' | *[!0-9]*)
+      echo "[err] FHD_PUSH_APPLY_LOCK_WAIT_SECONDS 必须为非负整数" >&2
+      exit 64
+      ;;
+  esac
+  case "$HEALTH_RETRIES" in
+    '' | *[!0-9]* | 0)
+      echo "[err] FHD_PUSH_HEALTH_RETRIES 必须为正整数" >&2
+      exit 64
+      ;;
+  esac
+  case "$HEALTH_INTERVAL" in
+    '' | *[!0-9]*)
+      echo "[err] FHD_PUSH_HEALTH_INTERVAL 必须为非负整数" >&2
+      exit 64
+      ;;
+  esac
   REMOTE_MANIFEST="${REMOTE_DIR}/fhd-manifest.json"
   REMOTE_TARBALL="${REMOTE_DIR}/${ARTIFACT}"
   printf -v APPLY_COMMAND \
-    'set -euo pipefail; BOOTSTRAP=$(mktemp -d /tmp/fhd-release-bootstrap.XXXXXX); trap '\''rm -rf -- "$BOOTSTRAP"'\'' EXIT; tar -xzf %q -C "$BOOTSTRAP" ./scripts/deploy; test -x "$BOOTSTRAP/scripts/deploy/fhd-auto-update.sh"; FHD_MANIFEST_PATH=%q FHD_ARTIFACT_DIR=%q FHD_DEPLOY_ROOT=%q bash "$BOOTSTRAP/scripts/deploy/fhd-auto-update.sh"' \
-    "$REMOTE_TARBALL" "$REMOTE_MANIFEST" "$REMOTE_DIR" "$REMOTE_DEPLOY_ROOT"
+    'set -euo pipefail; BOOTSTRAP=$(mktemp -d /tmp/fhd-release-bootstrap.XXXXXX); trap '\''rm -rf -- "$BOOTSTRAP"'\'' EXIT; tar -xzf %q -C "$BOOTSTRAP" ./scripts/deploy; test -x "$BOOTSTRAP/scripts/deploy/fhd-auto-update.sh"; FHD_AUTO_UPDATE_LOCK_WAIT_SECONDS=%q FHD_MANIFEST_PATH=%q FHD_ARTIFACT_DIR=%q FHD_DEPLOY_ROOT=%q bash "$BOOTSTRAP/scripts/deploy/fhd-auto-update.sh"' \
+    "$REMOTE_TARBALL" "$APPLY_LOCK_WAIT_SECONDS" "$REMOTE_MANIFEST" "$REMOTE_DIR" "$REMOTE_DEPLOY_ROOT"
 
   deploy_emit apply started "host=$HOST git_sha=$GIT_SHA mode=${DEPLOY_MODE:-tarball}"
   if ! "${SSH[@]}" "$REMOTE" "$APPLY_COMMAND"; then
@@ -233,25 +258,36 @@ if [[ "$APPLY_NOW" == "1" ]]; then
     exit 1
   fi
 
-  deploy_emit verify started "url=$REMOTE_HEALTH_URL git_sha=$GIT_SHA"
-  printf -v HEALTH_COMMAND 'curl --noproxy "*" -fsS --max-time 10 %q' "$REMOTE_HEALTH_URL"
-  if ! REMOTE_HEALTH_PAYLOAD="$("${SSH[@]}" "$REMOTE" "$HEALTH_COMMAND")"; then
-    deploy_emit verify failed "remote_health_unreachable"
-    echo "[err] 远端健康检查不可达；发布未通过" >&2
-    exit 1
-  fi
   EXPECTED_RUNTIME_IMAGE_DIGEST=""
   if [[ "${DEPLOY_MODE:-tarball}" == "image" ]]; then
     EXPECTED_RUNTIME_IMAGE_DIGEST="${IMAGE_DIGEST:-}"
   fi
-  if ! verify_release_identity_payload \
-      "$REMOTE_HEALTH_PAYLOAD" \
-      "$GIT_SHA" \
-      "$EXPECTED_RUNTIME_IMAGE_DIGEST" \
-      "$SHA256" \
-      "$ADMIN_CONSOLE_SHA256"; then
-    deploy_emit verify failed "remote_identity_mismatch"
-    echo "[err] 远端运行版本与本次发布身份不一致；发布未通过" >&2
+  deploy_emit verify started \
+    "url=$REMOTE_HEALTH_URL git_sha=$GIT_SHA retries=$HEALTH_RETRIES interval=${HEALTH_INTERVAL}s"
+  printf -v HEALTH_COMMAND 'curl --noproxy "*" -fsS --max-time 10 %q 2>/dev/null' "$REMOTE_HEALTH_URL"
+  REMOTE_HEALTH_PAYLOAD=""
+  HEALTH_STATE="remote_health_unreachable"
+  HEALTH_READY=0
+  for ((attempt = 1; attempt <= HEALTH_RETRIES; attempt++)); do
+    if REMOTE_HEALTH_PAYLOAD="$("${SSH[@]}" "$REMOTE" "$HEALTH_COMMAND")"; then
+      HEALTH_STATE="remote_identity_mismatch"
+      if verify_release_identity_payload \
+          "$REMOTE_HEALTH_PAYLOAD" \
+          "$GIT_SHA" \
+          "$EXPECTED_RUNTIME_IMAGE_DIGEST" \
+          "$SHA256" \
+          "$ADMIN_CONSOLE_SHA256"; then
+        HEALTH_READY=1
+        break
+      fi
+    fi
+    if [[ "$attempt" -lt "$HEALTH_RETRIES" ]]; then
+      sleep "$HEALTH_INTERVAL"
+    fi
+  done
+  if [[ "$HEALTH_READY" != "1" ]]; then
+    deploy_emit verify failed "$HEALTH_STATE attempts=$HEALTH_RETRIES"
+    echo "[err] 远端 exact-SHA 健康身份在 ${HEALTH_RETRIES} 次探测内未就绪；发布未通过" >&2
     exit 1
   fi
   deploy_emit verify ok "git_sha=$GIT_SHA"

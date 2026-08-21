@@ -100,6 +100,9 @@ def test_strict_push_applies_and_verifies_exact_sha() -> None:
     assert '"${DEPLOY_MODE:-tarball}" == "image"' in script
     assert '"$EXPECTED_RUNTIME_IMAGE_DIGEST"' in script
     assert '"$ADMIN_CONSOLE_SHA256"' in script
+    assert "FHD_AUTO_UPDATE_LOCK_WAIT_SECONDS=%q" in script
+    assert 'HEALTH_RETRIES="${FHD_PUSH_HEALTH_RETRIES:-120}"' in script
+    assert "for ((attempt = 1; attempt <= HEALTH_RETRIES; attempt++))" in script
     assert "remote_identity_mismatch" in script
 
 
@@ -140,7 +143,13 @@ def test_tarball_apply_ignores_optional_image_digest_but_verifies_artifact(
         "#!/usr/bin/env bash\n"
         "cmd=${!#}\n"
         'case "$cmd" in\n'
-        "  *curl*) printf '%s\\n' \"$HEALTH_PAYLOAD\" ;;\n"
+        "  *curl*)\n"
+        "    attempts=$(cat \"$HEALTH_ATTEMPTS\" 2>/dev/null || printf '0')\n"
+        "    attempts=$((attempts + 1))\n"
+        '    printf \'%s\' "$attempts" > "$HEALTH_ATTEMPTS"\n'
+        '    if [ "$attempts" -lt 2 ]; then exit 1; fi\n'
+        "    printf '%s\\n' \"$HEALTH_PAYLOAD\"\n"
+        "    ;;\n"
         "  *REMOTE_SZ*) printf 'OK_MOVED\\n' ;;\n"
         "esac\n",
         encoding="utf-8",
@@ -155,6 +164,7 @@ def test_tarball_apply_ignores_optional_image_digest_but_verifies_artifact(
             }
         }
     )
+    health_attempts = tmp_path / "health-attempts"
 
     result = subprocess.run(
         ["bash", str(FHD_ROOT / "scripts/deploy/fhd-push-release.sh")],
@@ -163,11 +173,14 @@ def test_tarball_apply_ignores_optional_image_digest_but_verifies_artifact(
             **os.environ,
             "PATH": f"{mock_bin}:{os.environ['PATH']}",
             "HEALTH_PAYLOAD": health_payload,
+            "HEALTH_ATTEMPTS": str(health_attempts),
             "FHD_SKIP_PACK": "1",
             "FHD_RELEASE_OUT_DIR": str(out_dir),
             "FHD_PUSH_HOST": "example.invalid",
             "FHD_PUSH_IMAGE_TAR": "0",
             "FHD_PUSH_APPLY_NOW": "1",
+            "FHD_PUSH_HEALTH_RETRIES": "3",
+            "FHD_PUSH_HEALTH_INTERVAL": "0",
         },
         check=False,
         capture_output=True,
@@ -175,6 +188,7 @@ def test_tarball_apply_ignores_optional_image_digest_but_verifies_artifact(
     )
 
     assert result.returncode == 0, result.stderr
+    assert health_attempts.read_text(encoding="utf-8") == "2"
     assert '"git_sha": "' + "b" * 40 in result.stdout
     assert "image digest mismatch" not in result.stderr
 
