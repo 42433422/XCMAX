@@ -58,7 +58,18 @@ def _server_blocks(lines: list[str]) -> list[tuple[int, int]]:
             stack.append((index, depth + 1))
         depth += opens - closes
         if depth < 0:
-            raise ValueError(f"unbalanced nginx closing brace at line {index + 1}")
+            recent = ", ".join(f"{start + 1}-{end + 1}" for start, end in blocks[-4:])
+            context = "\n".join(
+                f"{line_no + 1}: {lines[line_no]}"
+                for line_no in range(max(0, index - 8), min(len(lines), index + 9))
+            )
+            prior_ends = "\n".join(
+                f"prior server end {end + 1}: {lines[end]}" for _, end in blocks[-4:]
+            )
+            raise ValueError(
+                f"unbalanced nginx closing brace at line {index + 1}; "
+                f"recent server blocks={recent or 'none'}\n{prior_ends}\n{context}"
+            )
         while stack and depth < stack[-1][1]:
             start, _ = stack.pop()
             blocks.append((start, index))
