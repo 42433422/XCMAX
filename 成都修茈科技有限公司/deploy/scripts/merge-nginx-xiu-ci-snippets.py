@@ -18,6 +18,26 @@ MANAGED_INCLUDES = (
     "include /etc/nginx/snippets/founder-autonomy-admin.inc.conf;",
 )
 
+MANAGED_LOCATION_HEADERS = (
+    "location ~ ^/(styles\\.css|main\\.js|contact-intake\\.js|contact-channels\\.js|visualization\\.js|world-will\\.js|world-will-ticker\\.js|world-will-ticker\\.css)$ {",
+    "location = /admin/founder-autonomy {",
+    "location = /admin/founder-autonomy/ {",
+    "location ^~ /admin/assets/ {",
+    "location = /admin/vite.svg {",
+    "location = /api/xcmax/ops/founder-autonomy {",
+    "location = /download-founder-autonomy.json {",
+    "location ^~ /market/assets/assets/ {",
+    "location ^~ /market/assets/ {",
+    "location = /market/main.js {",
+    "location = /market/styles.css {",
+    "location = /market {",
+    "location /market/ {",
+    "location = /site/main.js {",
+    "location = /site/styles.css {",
+    "location = /download-release.json {",
+    "location /releases/stable/ {",
+)
+
 
 def _nginx_syntax(line: str) -> str:
     """Return text whose braces are structural, excluding quotes and comments."""
@@ -165,18 +185,20 @@ def _strip_legacy_blocks(text: str) -> str:
     return text
 
 
-def _strip_legacy_xcagi_locations(text: str) -> str:
-    """Remove direct locations now owned by xcagi-cos-alias.inc.conf."""
+def _is_managed_location(line: str) -> bool:
+    header = " ".join(line.strip().split())
+    return header in MANAGED_LOCATION_HEADERS or header.startswith(
+        "location ~ ^/xcagi-v"
+    )
+
+
+def _strip_managed_locations(text: str) -> str:
+    """Remove direct locations now owned by the managed snippet files."""
 
     lines = text.splitlines()
-    prefixes = (
-        "location = /download-release.json {",
-        "location /releases/stable/ {",
-        "location ~ ^/xcagi-v",
-    )
     index = 0
     while index < len(lines):
-        if not lines[index].strip().startswith(prefixes):
+        if not _is_managed_location(lines[index]):
             index += 1
             continue
         depth = 0
@@ -188,7 +210,7 @@ def _strip_legacy_xcagi_locations(text: str) -> str:
                 closing_index = candidate_index
                 break
         if closing_index is None:
-            raise ValueError(f"unclosed legacy XCAGI location at line {index + 1}")
+            raise ValueError(f"unclosed managed nginx location at line {index + 1}")
         del lines[index : closing_index + 1]
         while index < len(lines) and not lines[index].strip():
             del lines[index]
@@ -199,7 +221,7 @@ def merge_managed_includes(text: str) -> str:
     """Return an idempotent config with includes in the TLS server block."""
 
     text = _strip_legacy_blocks(text)
-    text = _strip_legacy_xcagi_locations(text)
+    text = _strip_managed_locations(text)
     managed = set(MANAGED_INCLUDES)
     # A previous deploy inserted these lines beside every marker, including a
     # marker nested in `location`. Remove all managed lines before rebuilding.

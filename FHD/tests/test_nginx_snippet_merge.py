@@ -121,3 +121,55 @@ server {
     assert "location = /download-release.json" not in merged
     assert "location /releases/stable/" not in merged
     assert merged.count("xcagi-cos-alias.inc.conf") == 1
+
+
+def test_every_managed_snippet_location_has_a_direct_block_cleanup_contract() -> None:
+    module = _module()
+    snippet_dir = REPO_ROOT / "成都修茈科技有限公司" / "deploy" / "nginx" / "snippets"
+    managed_snippets = (
+        "marketing-site-static.inc.conf",
+        "corp-main-styles.inc.conf",
+        "xcagi-cos-alias.inc.conf",
+        "market-static.inc.conf",
+        "founder-autonomy-admin.inc.conf",
+    )
+    headers = []
+    for name in managed_snippets:
+        headers.extend(
+            line
+            for line in (snippet_dir / name).read_text(encoding="utf-8").splitlines()
+            if line.startswith("location ")
+        )
+
+    assert headers
+    assert all(module._is_managed_location(header) for header in headers)
+
+
+def test_merge_removes_market_and_site_routes_before_including_snippets() -> None:
+    module = _module()
+    source = """
+server {
+    listen 443 ssl;
+    server_name xiu-ci.com;
+    location = /market {
+        return 301 /market/;
+    }
+    location /market/ {
+        alias /legacy/market/;
+    }
+    location = /site/main.js {
+        alias /legacy/main.js;
+    }
+    location ~ ^/(styles\\.css|main\\.js|contact-intake\\.js|contact-channels\\.js|visualization\\.js|world-will\\.js|world-will-ticker\\.js|world-will-ticker\\.css)$ {
+        root /legacy/site;
+    }
+}
+""".lstrip()
+
+    merged = module.merge_managed_includes(source)
+    assert "location = /market" not in merged
+    assert "location /market/" not in merged
+    assert "location = /site/main.js" not in merged
+    assert "location ~ ^/(styles\\.css" not in merged
+    assert merged.count("market-static.inc.conf") == 1
+    assert merged.count("marketing-site-static.inc.conf") == 1
