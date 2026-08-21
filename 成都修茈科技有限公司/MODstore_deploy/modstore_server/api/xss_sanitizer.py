@@ -38,11 +38,15 @@ class _ScriptRemovingParser(HTMLParser):
         if tag.lower() == "script":
             self._script_depth += 1
         elif self._script_depth == 0:
-            self._chunks.append(self.get_starttag_text())
+            raw_tag = self.get_starttag_text()
+            if raw_tag is not None:
+                self._chunks.append(raw_tag)
 
     def handle_startendtag(self, tag: str, attrs) -> None:
         if tag.lower() != "script" and self._script_depth == 0:
-            self._chunks.append(self.get_starttag_text())
+            raw_tag = self.get_starttag_text()
+            if raw_tag is not None:
+                self._chunks.append(raw_tag)
 
     def handle_endtag(self, tag: str) -> None:
         if tag.lower() == "script":
