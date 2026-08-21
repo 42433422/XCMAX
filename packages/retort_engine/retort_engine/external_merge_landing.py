@@ -323,6 +323,11 @@ def _run(
     command: list[str], cwd: Path, env: dict[str, str] | None = None
 ) -> dict[str, Any]:
     _validate_command(command)
+    # Security boundary: _validate_command accepts only the literal git/pytest
+    # shapes used by this isolated proof repository. Dynamic branch names are
+    # slugged to a strict alphabet and commit messages are single arguments;
+    # no shell is involved. CodeQL cannot infer that closed command language.
+    # lgtm[py/command-line-injection]
     completed = subprocess.run(
         command,
         cwd=cwd,
@@ -330,6 +335,7 @@ def _run(
         capture_output=True,
         text=True,
         check=False,
+        shell=False,
     )
     return {
         "command": command,
