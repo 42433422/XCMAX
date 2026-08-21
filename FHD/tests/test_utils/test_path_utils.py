@@ -3,6 +3,7 @@
 """
 
 import os
+from pathlib import Path
 
 import pytest
 
@@ -12,6 +13,8 @@ from app.utils.path_io.path_utils import (
     get_data_dir,
     get_desktop_state_dir,
 )
+
+FHD_ROOT = Path(__file__).resolve().parents[2]
 
 
 class TestPathUtils:
@@ -26,6 +29,11 @@ class TestPathUtils:
         base_dir = get_base_dir()
         assert base_dir is not None
         assert os.path.exists(base_dir)
+
+    def test_get_base_dir_resolves_fhd_root_in_source_mode(self):
+        assert Path(get_base_dir()).resolve() == FHD_ROOT
+        assert (Path(get_base_dir()) / "templates").is_dir()
+        assert (Path(get_base_dir()) / "app" / "fastapi_app").is_dir()
 
     def test_ensure_dir(self):
         test_dir = os.path.join(get_data_dir(), "test_dir_" + str(os.getpid()))
