@@ -322,6 +322,20 @@ def test_desktop_package_preserves_vendored_langgraph_provenance() -> None:
         assert f'"{module_name}"' in spec
 
 
+def test_desktop_package_includes_and_probes_dynamic_xcmax_sync_appliers() -> None:
+    spec = (REPO_ROOT / "scripts" / "package" / "xcagi_backend.spec").read_text(encoding="utf-8")
+    entrypoint = (REPO_ROOT / "XCAGI" / "run_fastapi.py").read_text(encoding="utf-8")
+
+    for module_name in (
+        "app.services.xcmax_sync_basic_appliers",
+        "app.services.xcmax_sync_extended_appliers",
+    ):
+        assert f'"{module_name}"' in spec
+    assert "from app.services.xcmax_sync_service import _ENTITY_APPLIERS" in entrypoint
+    assert '"account_entitlements"' in entrypoint
+    assert "missing_sync_appliers" in entrypoint
+
+
 def test_frozen_excel_temp_files_use_writable_app_data() -> None:
     modules = [
         REPO_ROOT / "app" / "application" / "excel_template_http_app_service.py",
@@ -417,6 +431,9 @@ def test_missing_industry_seed_does_not_block_desktop_release() -> None:
 
     assert "Skipped missing industry seed mod(s)" in ps_stage
     assert "Skipped missing industry seed mod(s)" in sh_stage
+    assert '"${ROOT}/mods"' in sh_stage
+    assert '"${ROOT}/XCAGI/mods"' in sh_stage
+    assert 'for mods_root in "${MODS_ROOTS[@]}"' in sh_stage
     assert "Skipped missing industry seed mod(s)" in ps_verify
     assert 'throw "Missing industry seed mod(s)' not in ps_stage
     assert 'throw "industry-seeds/ missing open industry mod(s)' not in ps_verify

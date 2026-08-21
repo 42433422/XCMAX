@@ -174,6 +174,34 @@ def _verify_frozen_critical_runtime() -> None:
     from reportlab.pdfbase.cidfonts import UnicodeCIDFont  # type: ignore[import-untyped]
     from reportlab.pdfgen import canvas  # type: ignore[import-untyped]
 
+    # xcmax_sync_service loads its applier modules through importlib strings,
+    # which PyInstaller cannot infer. Import the real service and validate the
+    # registry here so release CI fails before publishing a desktop package
+    # whose entitlement-sync endpoint would return 500 at runtime.
+    from app.services.xcmax_sync_service import _ENTITY_APPLIERS
+
+    required_sync_appliers = {
+        "personnel",
+        "department",
+        "attendance",
+        "approval",
+        "approval_flow",
+        "print_job",
+        "template",
+        "model_config",
+        "ecosystem",
+        "im_message",
+        "im_read_state",
+        "workflow_employee",
+        "account_entitlements",
+        "private_mod_delivery",
+    }
+    missing_sync_appliers = required_sync_appliers.difference(_ENTITY_APPLIERS)
+    if missing_sync_appliers:
+        raise RuntimeError(
+            f"frozen XCMAX sync applier probe missing: {sorted(missing_sync_appliers)!r}"
+        )
+
     with tempfile.TemporaryDirectory(prefix="xcagi-office-probe-") as tmp:
         output = Path(tmp) / "probe.pdf"
         font_name = "STSong-Light"
@@ -214,7 +242,8 @@ def _verify_frozen_critical_runtime() -> None:
                 )
     print(
         "[run_fastapi] frozen critical runtime probe OK: "
-        f"pypdf + reportlab + PyAV {av.__version__} + faster-whisper {faster_whisper.__version__}"
+        "XCMAX sync appliers + pypdf + reportlab + "
+        f"PyAV {av.__version__} + faster-whisper {faster_whisper.__version__}"
     )
 
 

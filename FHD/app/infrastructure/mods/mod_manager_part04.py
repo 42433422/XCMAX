@@ -231,32 +231,60 @@ def ensure_mod_api_ready(mod_id: str, session_id: str | None = None) -> bool:
         return employee_pack_ready
     if mid not in mm._loaded_mods:
         if mm.resolve_mod_directory(mid) is None:
-            _facade().mark_mod_missing_locally(mid)
-            return False
+            recovered = False
+            try:
+                from app.mod_sdk.industry_seed import (
+                    open_industry_seed_mod_ids,
+                    seed_industry_mod,
+                )
+
+                if mid in set(open_industry_seed_mod_ids()):
+                    seed_result = seed_industry_mod(mid)
+                    recovered = bool(seed_result.get("success"))
+                    if recovered:
+                        _facade().clear_mod_missing_locally(mid)
+                        _facade().logger.info(
+                            "[ModManager] restored bundled industry seed before API mount: %s",
+                            mid,
+                        )
+                    else:
+                        _facade().logger.warning(
+                            "[ModManager] bundled industry seed restore failed for %s: %s",
+                            mid,
+                            seed_result.get("message") or seed_result.get("status"),
+                        )
+            except _facade().RECOVERABLE_ERRORS as exc:
+                _facade().logger.warning(
+                    "[ModManager] bundled industry seed restore error for %s: %s", mid, exc
+                )
+            if not recovered:
+                _facade().mark_mod_missing_locally(mid)
+                return False
         _facade().clear_mod_missing_locally(mid)
-        retry_at = _facade()._MOD_API_FAILURE_RETRY_AT.get(mid, 0.0)
-        if retry_at > _facade().time.monotonic():
-            _facade().logger.debug(
-                "[ModManager] ensure_mod_api_ready: load_mod(%s) retry delay active", mid
-            )
-            return False
-        if not mm.load_mod(mid):
-            _facade()._MOD_API_FAILURE_RETRY_AT[mid] = (
-                _facade().time.monotonic() + _facade()._MOD_API_FAILURE_BACKOFF_SECONDS
-            )
-            from app.runtime_integrity import record_runtime_issue
+        if mid not in mm._loaded_mods:
+            retry_at = _facade()._MOD_API_FAILURE_RETRY_AT.get(mid, 0.0)
+            if retry_at > _facade().time.monotonic():
+                _facade().logger.debug(
+                    "[ModManager] ensure_mod_api_ready: load_mod(%s) retry delay active", mid
+                )
+                return False
+            if not mm.load_mod(mid):
+                _facade()._MOD_API_FAILURE_RETRY_AT[mid] = (
+                    _facade().time.monotonic() + _facade()._MOD_API_FAILURE_BACKOFF_SECONDS
+                )
+                from app.runtime_integrity import record_runtime_issue
 
-            record_runtime_issue(
-                f"industry_mod:{mid}",
-                f"Industry MOD failed to load: {mid}",
-                ttl_seconds=max(_facade()._MOD_API_FAILURE_BACKOFF_SECONDS * 2, 30.0),
-            )
-            _facade().logger.warning("[ModManager] ensure_mod_api_ready: load_mod(%s) failed", mid)
-            return False
-        _facade()._MOD_API_FAILURE_RETRY_AT.pop(mid, None)
-        from app.runtime_integrity import clear_runtime_issue
-
-        clear_runtime_issue(f"industry_mod:{mid}")
+                record_runtime_issue(
+                    f"industry_mod:{mid}",
+                    f"Industry MOD failed to load: {mid}",
+                    ttl_seconds=max(_facade()._MOD_API_FAILURE_BACKOFF_SECONDS * 2, 30.0),
+                )
+                _facade().logger.warning(
+                    "[ModManager] ensure_mod_api_ready: load_mod(%s) failed", mid
+                )
+                return False
+            _facade()._MOD_API_FAILURE_RETRY_AT.pop(mid, None)
+            _facade().clear_mod_missing_locally(mid)
     if mid in mm._http_routes_registered:
         return True
     try:

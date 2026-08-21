@@ -26,3 +26,6 @@ def mark_mod_missing_locally(mod_id: str) -> None:
 
 def clear_mod_missing_locally(mod_id: str) -> None:
     _MISSING_LOCAL.discard(mod_id)
+    from app.runtime_integrity import clear_runtime_issue
+
+    clear_runtime_issue(f"industry_mod:{mod_id}")
