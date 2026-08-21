@@ -41,6 +41,7 @@ def test_script_help_imports_app_from_fhd_working_directory() -> None:
 
     assert completed.returncode == 0, completed.stderr
 
+
 # =====================================================================
 # fixtures
 # =====================================================================
