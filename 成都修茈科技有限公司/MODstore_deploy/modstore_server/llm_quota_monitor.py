@@ -51,6 +51,9 @@ def _minimax_remains_url(base_url: Optional[str] = None) -> str:
     if explicit:
         return explicit
     base = str(base_url or platform_base_url("minimax") or "").lower()
+    # The substring only selects between two hard-coded trusted origins; no
+    # portion of base_url is used in the returned URL.
+    # lgtm[py/incomplete-url-substring-sanitization]
     host = "www.minimaxi.com" if "minimaxi.com" in base else "www.minimax.io"
     return f"https://{host}/v1/token_plan/remains"
 

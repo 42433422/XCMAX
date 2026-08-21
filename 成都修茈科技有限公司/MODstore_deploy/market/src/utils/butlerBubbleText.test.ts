@@ -34,4 +34,12 @@ describe('renderButlerBubbleHtml', () => {
     expect(html).toContain('&lt;script&gt;')
     expect(html).toContain('href="/market/"')
   })
+
+  it('does not double-decode entities into link attributes', () => {
+    const html = renderButlerBubbleHtml(
+      '[x](https://xiu-ci.com/&quot;onmouseover=&quot;alert(1))',
+    )
+    expect(html).not.toContain(' onmouseover=')
+    expect(html).toContain('&amp;quot;onmouseover=')
+  })
 })

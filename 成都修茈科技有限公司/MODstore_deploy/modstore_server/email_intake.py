@@ -78,6 +78,8 @@ def _decode_payload(part: Message) -> str:
 
 
 def _strip_html(html: str) -> str:
+    # This path extracts inert plain text from email; it never emits HTML.
+    # lgtm[py/bad-tag-filter]
     text = re.sub(r"(?is)<script.*?>.*?</script>", "", html or "")
     text = re.sub(r"(?is)<style.*?>.*?</style>", "", text)
     text = re.sub(r"<[^>]+>", " ", text)

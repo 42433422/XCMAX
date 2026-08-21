@@ -24,20 +24,16 @@ function isSafeHref(href: string): boolean {
 function anchor(href: string, label: string): string {
   const abs = SAFE_ABS.test(href)
   const extra = abs ? ' target="_blank" rel="noopener noreferrer"' : ''
-  return `<a class="bubble-link" href="${href}"${extra}>${label}</a>`
+  return `<a class="bubble-link" href="${escapeHtml(href)}"${extra}>${label}</a>`
 }
 
 /** 将已转义文本中的 markdown 链接、裸 URL、站内路径变成 <a> */
 export function renderButlerBubbleHtml(content: string): string {
   let html = escapeHtml(content)
 
-  // [文案](url) —— url 已转义，还原常见实体后校验
+  // [文案](url) —— 仅还原查询串所需的 ampersand，不将引号/尖括号二次解码。
   html = html.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, label: string, rawHref: string) => {
-    const href = rawHref
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&quot;/g, '"')
+    const href = rawHref.replace(/&amp;/g, '&')
     if (!isSafeHref(href)) return label
     return anchor(href, label)
   })

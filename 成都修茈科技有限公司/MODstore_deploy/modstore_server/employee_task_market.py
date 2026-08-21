@@ -88,6 +88,8 @@ def _scope_from_incident(source: str, payload: Dict[str, Any]) -> str:
             payload.get("_unregistered_event_type"),
         )
     ).lower()
+    # Classification only: this value is never accepted as or copied into a URL.
+    # lgtm[py/incomplete-url-substring-sanitization]
     if "xiu-ci.com" in text or "official" in text or "官网" in text:
         return "official_site"
     if "/fhd/" in text or "fhd" in text:
