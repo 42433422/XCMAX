@@ -51,6 +51,7 @@ def test_desktop_enterprise_installer_builds_full_frontend() -> None:
     assert "templates/admin-vue-dist" not in spec
     assert "app/application/agent_orchestrator/tool_spec_data/input_schemas.json" in spec
     assert "app/application/agent_orchestrator/tool_spec_data/output_schemas.json" in spec
+    assert '"app.legacy.routes"' in spec
     assert "admin-console" not in ps_sync
     assert "does not include admin-vue-dist" in ps_sync
     assert "vue-dist gate" in sh_backend
@@ -294,6 +295,31 @@ def test_desktop_package_includes_commercial_safe_office_employee_runtimes() -> 
     assert 'bundled_root = Path(sys._MEIPASS) / "mods" / "_employees"' in entrypoint
     assert "installed != bundled" in entrypoint
     assert workflow.count("--verify-frozen-critical-runtime") == 2
+
+
+def test_desktop_package_preserves_vendored_langgraph_provenance() -> None:
+    spec = (REPO_ROOT / "scripts" / "package" / "xcagi_backend.spec").read_text(encoding="utf-8")
+
+    assert 'f"vendored-provenance/{package_dir}"' in spec
+    assert "raise FileNotFoundError" in spec
+    for package_dir in (
+        "xcagi_langgraph_core",
+        "xcagi_langgraph_prebuilt",
+        "xcagi_langgraph_checkpoint",
+        "xcagi_langgraph_checkpoint_backends/checkpoint-sqlite",
+        "xcagi_langgraph_checkpoint_backends/checkpoint-postgres",
+        "xcagi_langgraph_sdk",
+    ):
+        assert f'"{package_dir}"' in spec
+    for module_name in (
+        "langgraph.graph.state",
+        "langgraph.prebuilt.tool_node",
+        "langgraph.checkpoint.base",
+        "langgraph.checkpoint.sqlite",
+        "langgraph.checkpoint.postgres",
+        "langgraph_sdk.client",
+    ):
+        assert f'"{module_name}"' in spec
 
 
 def test_frozen_excel_temp_files_use_writable_app_data() -> None:
