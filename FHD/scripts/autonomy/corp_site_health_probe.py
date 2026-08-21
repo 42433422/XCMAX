@@ -21,10 +21,19 @@ cvm_autonomy_watcher.py 共享 fhd-full venv，单文件可独立运行）。
 
 from __future__ import annotations
 
+import sys
+
+# When this file is launched by absolute path, Python prepends its directory to
+# sys.path. That directory also contains ``types.py``, which can shadow the
+# standard-library ``types`` module during a clean interpreter startup. Remove
+# only this script-directory entry before importing the standard library.
+_SCRIPT_DIR = __file__.replace("\\", "/").rsplit("/", 1)[0]
+if sys.path and sys.path[0].replace("\\", "/").rstrip("/") == _SCRIPT_DIR:
+    sys.path.pop(0)
+
 import argparse
 import json
 import os
-import sys
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path

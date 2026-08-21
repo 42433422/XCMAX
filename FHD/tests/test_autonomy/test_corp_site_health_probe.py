@@ -11,7 +11,7 @@ def test_cli_bootstraps_fhd_import_path_outside_repo(tmp_path: Path) -> None:
     )
 
     completed = subprocess.run(
-        [sys.executable, str(script), "--help"],
+        [sys.executable, "-S", str(script), "--help"],
         cwd=tmp_path,
         capture_output=True,
         text=True,
