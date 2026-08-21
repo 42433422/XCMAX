@@ -210,6 +210,7 @@
     "upstream_tag": "1.2.10"
   },
   "vendored_modules": {
+    "langgraph.checkpoint.base": "xcagi_langgraph_checkpoint",
     "langgraph.checkpoint.postgres": "xcagi_langgraph_checkpoint_backends/checkpoint-postgres",
     "langgraph.checkpoint.sqlite": "xcagi_langgraph_checkpoint_backends/checkpoint-sqlite",
     "langgraph.graph.state": "xcagi_langgraph_core",
