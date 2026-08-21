@@ -15,7 +15,8 @@ def test_versioned_public_download_routes_are_not_pinned_to_a_retired_release() 
         / "xcagi-cos-alias.inc.conf"
     ).read_text(encoding="utf-8")
 
-    assert 'location ~ "^/xcagi-v[0-9]+(?:\\.[0-9]+){3}/' in snippet
+    assert "location ~ ^/xcagi-v[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+/" in snippet
+    assert "{3}" not in snippet
     assert "root /var/www;" in snippet
     assert "try_files $uri =404;" in snippet
     assert "xcagi-v8.0.0" not in snippet
@@ -27,7 +28,8 @@ def test_standalone_vhost_uses_the_same_versioned_public_download_contract() -> 
         encoding="utf-8"
     )
 
-    assert 'location ~ "^/xcagi-v[0-9]+(?:\\.[0-9]+){3}/' in config
+    assert "location ~ ^/xcagi-v[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+/" in config
+    assert "{3}" not in config
     assert "location ^~ /xcagi-v1.0.0.0/" not in config
     assert "alias /root/成都修茈科技有限公司/download-release.json;" in config
 
