@@ -194,6 +194,19 @@ class TestExtractBusinessDbWriteNode:
         assert node.params["payload"]["unit_name"] == "CHATCRUD-TEST-涂料门店"
         assert node.params["payload"]["contact_person"] == "张三"
 
+    def test_customer_explicit_name_label_does_not_leak_into_value(self) -> None:
+        node = _extract_business_db_write_node(
+            "请新建一个测试客户。客户名称：安装验收客户-20260822-0112；"
+            "联系人：最终验收；联系电话：13800000112；地址：成都市最终验收路112号。"
+        )
+
+        assert node is not None
+        assert node.params["payload"]["unit_name"] == "安装验收客户-20260822-0112"
+        assert node.params["payload"]["customer_name"] == "安装验收客户-20260822-0112"
+        assert node.params["payload"]["contact_person"] == "最终验收"
+        assert node.params["payload"]["contact_phone"] == "13800000112"
+        assert node.params["payload"]["contact_address"] == "成都市最终验收路112号"
+
     def test_customers_missing_unit_name_returns_none(self) -> None:
         node = _extract_business_db_write_node("新增客户")
         assert node is None
@@ -210,6 +223,15 @@ class TestExtractBusinessDbWriteNode:
         node = _extract_business_db_write_node("新增产品：九零后 型号：9803 到 客户：七彩乐园")
         assert node is not None
         assert node.params["payload"].get("model_number") == "9803"
+
+    def test_product_explicit_name_label_does_not_leak_into_value(self) -> None:
+        node = _extract_business_db_write_node(
+            "请新建产品。产品名称：安装验收产品-0112；产品编号：ACCEPT-0112；"
+            "计量单位：个；销售单价：123.45。"
+        )
+
+        assert node is not None
+        assert node.params["payload"]["product_name"] == "安装验收产品-0112"
 
     def test_products_missing_product_name_returns_none(self) -> None:
         # "产品数据库" → product_name pattern captures "数据库" → cleaned to "" (数据库 token replaced)
