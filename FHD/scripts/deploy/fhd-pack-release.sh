@@ -100,6 +100,8 @@ deploy_emit pack started "artifact=$ARTIFACT"
 RSYNC_EXCLUDES=(
   --exclude '.git'
   --exclude '.venv'
+  --exclude '__pycache__'
+  --exclude '*/__pycache__'
   --exclude '**/__pycache__'
   --exclude '**/*.pyc'
   --exclude 'node_modules'
@@ -176,6 +178,17 @@ cp "$SCRIPT_DIR/lib/deploy_emit.sh" \
   "$SCRIPT_DIR/lib/verify_release_identity.sh" \
   "$STAGING/scripts/deploy/lib/"
 cp "$FHD_ROOT/docker/docker-compose.fhd-prod.yml" "$STAGING/docker/"
+
+# The scheduled CVM watcher must execute the exact autonomy code shipped by
+# this release.  Falling back to an unrelated server-side Git worktree makes a
+# successful production deploy continue running stale probes.  Bundle the
+# autonomy package and the two optional notification/approval clients it uses.
+mkdir -p "$STAGING/scripts/autonomy" "$STAGING/scripts/ci"
+rsync -a "${RSYNC_EXCLUDES[@]}" \
+  "$FHD_ROOT/scripts/autonomy/" "$STAGING/scripts/autonomy/"
+cp "$FHD_ROOT/scripts/ci/_approval_ledger_client.py" \
+  "$FHD_ROOT/scripts/ci/_im_notify_client.py" \
+  "$STAGING/scripts/ci/"
 
 BUILT_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 COMMIT_AT="$(git -C "$FHD_ROOT" show -s --format=%cI "$GIT_SHA")"

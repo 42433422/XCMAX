@@ -31,9 +31,12 @@ def test_nginx_sync_installs_founder_cockpit_snippet() -> None:
     sync_script = (
         REPO_ROOT / "成都修茈科技有限公司" / "deploy" / "scripts" / "sync-nginx-xiu-ci-snippets.sh"
     ).read_text(encoding="utf-8")
+    merge_script = (
+        REPO_ROOT / "成都修茈科技有限公司" / "deploy" / "scripts" / "merge-nginx-xiu-ci-snippets.py"
+    ).read_text(encoding="utf-8")
 
     assert "founder-autonomy-admin.inc.conf" in sync_script
-    assert "include /etc/nginx/snippets/founder-autonomy-admin.inc.conf;" in sync_script
+    assert "include /etc/nginx/snippets/founder-autonomy-admin.inc.conf;" in merge_script
 
 
 def test_immutable_release_preserves_public_founder_projection() -> None:

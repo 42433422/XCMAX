@@ -15,7 +15,8 @@ def test_versioned_public_download_routes_are_not_pinned_to_a_retired_release() 
         / "xcagi-cos-alias.inc.conf"
     ).read_text(encoding="utf-8")
 
-    assert "location ~ ^/xcagi-v[0-9]+(?:\\.[0-9]+){3}/" in snippet
+    assert "location ~ ^/xcagi-v[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+/" in snippet
+    assert "{3}" not in snippet
     assert "root /var/www;" in snippet
     assert "try_files $uri =404;" in snippet
     assert "xcagi-v8.0.0" not in snippet
@@ -27,7 +28,8 @@ def test_standalone_vhost_uses_the_same_versioned_public_download_contract() -> 
         encoding="utf-8"
     )
 
-    assert "location ~ ^/xcagi-v[0-9]+(?:\\.[0-9]+){3}/" in config
+    assert "location ~ ^/xcagi-v[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+/" in config
+    assert "{3}" not in config
     assert "location ^~ /xcagi-v1.0.0.0/" not in config
     assert "alias /root/成都修茈科技有限公司/download-release.json;" in config
 
@@ -41,8 +43,10 @@ def test_corporate_deploy_syncs_the_versioned_download_snippet_before_nginx_relo
     ).read_text(encoding="utf-8")
 
     assert 'bash "${SITE_ROOT}/deploy/scripts/sync-nginx-xiu-ci-snippets.sh"' in workflow
+    assert 'git -C "${REMOTE_ROOT}" reset --hard "origin/${BRANCH}"' in workflow
+    assert "exact server worktree sha=${DEPLOY_SHA}" in workflow
     assert "xcagi-cos-alias.inc.conf" in sync_script
-    assert "for include in includes:" in sync_script
+    assert "merge-nginx-xiu-ci-snippets.py" in sync_script
 
 
 def test_site_refreshes_preserve_a_verified_desktop_release_pointer() -> None:
