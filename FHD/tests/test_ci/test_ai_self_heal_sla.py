@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -29,6 +30,19 @@ if str(CI_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(CI_SCRIPTS))
 
 import ai_self_heal_sla as sla  # noqa: E402, I001
+
+
+def test_script_help_imports_app_from_fhd_working_directory() -> None:
+    """The scheduled workflow executes the script by path from ``FHD``."""
+    completed = subprocess.run(
+        [sys.executable, "-I", "scripts/ci/ai_self_heal_sla.py", "--help"],
+        cwd=FHD_ROOT,
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
 
 
 # =====================================================================
