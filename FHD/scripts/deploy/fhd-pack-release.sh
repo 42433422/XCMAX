@@ -122,6 +122,31 @@ for item in app XCAGI alembic alembic.ini config mods xcagi_common resources req
   fi
 done
 
+# The server runs the same audited LangGraph sources as CI and the frozen
+# desktop backend.  Do not rely on a PyPI install or an operator's site-packages
+# state: the release must carry all six maintained source trees plus their
+# external dependency lock surface.
+LANGGRAPH_PACKAGE_DIRS=(
+  xcagi_langgraph_core
+  xcagi_langgraph_checkpoint
+  xcagi_langgraph_checkpoint_backends/checkpoint-sqlite
+  xcagi_langgraph_checkpoint_backends/checkpoint-postgres
+  xcagi_langgraph_prebuilt
+  xcagi_langgraph_sdk
+)
+mkdir -p "$STAGING/packages"
+for package_dir in "${LANGGRAPH_PACKAGE_DIRS[@]}"; do
+  src="$FHD_ROOT/packages/$package_dir"
+  [[ -d "$src" ]] || {
+    echo "[err] missing vendored LangGraph package: $src" >&2
+    exit 1
+  }
+  mkdir -p "$STAGING/packages/$(dirname "$package_dir")"
+  rsync -a "${RSYNC_EXCLUDES[@]}" "$src" "$STAGING/packages/$(dirname "$package_dir")/"
+done
+cp "$FHD_ROOT/deploy/requirements-langgraph-runtime.txt" \
+  "$STAGING/requirements-langgraph-runtime.txt"
+
 mkdir -p "$STAGING/templates/admin-vue-dist"
 rsync -a --delete "$ADMIN_DIST/" "$STAGING/templates/admin-vue-dist/"
 
