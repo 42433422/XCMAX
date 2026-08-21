@@ -30,6 +30,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+# The watcher executes this file by absolute path on CVM. In that mode Python
+# places ``scripts/autonomy`` on sys.path, not the FHD deployment root, so the
+# sibling ``app`` package is otherwise unavailable. Keep the probe genuinely
+# standalone regardless of the caller's working directory.
+FHD_ROOT = Path(__file__).resolve().parents[2]
+if str(FHD_ROOT) not in sys.path:
+    sys.path.insert(0, str(FHD_ROOT))
+
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 try:
