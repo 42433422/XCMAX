@@ -1,6 +1,6 @@
 """Tests for :class:`MODstoreClient` + :class:`SkillPublisher`.
 
-The HTTP layer is exercised with a stub ``urllib.request.urlopen`` so we
+The HTTP layer is exercised with a stub of the no-redirect opener so we
 don't need a running MODstore. Only the contract — request shape, auth
 header, JSON parsing — is verified here. End-to-end tests live in the
 deployment repo.
@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import io
 import json
+import threading
 from contextlib import contextmanager
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -75,14 +77,17 @@ class _FakeResponse:
 
 @contextmanager
 def _patched_urlopen(handler):
-    """``handler(req) -> _FakeResponse``; called for each ``urlopen``."""
+    """``handler(req) -> _FakeResponse``; called for each safe open."""
     captured: list[Any] = []
 
-    def fake_urlopen(req, timeout=None, context=None):
+    def fake_urlopen(req, *, timeout=None, context=None):
         captured.append(req)
         return handler(req)
 
-    with patch("urllib.request.urlopen", fake_urlopen):
+    with patch(
+        "vibe_coding.agent.marketplace.client._open_no_redirect",
+        fake_urlopen,
+    ):
         yield captured
 
 
@@ -124,6 +129,33 @@ def test_client_private_network_requires_explicit_opt_in() -> None:
     )
 
     assert client.base_url == "http://127.0.0.1:9999"
+
+
+def test_client_does_not_follow_cross_origin_redirects() -> None:
+    class RedirectHandler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            self.send_response(302)
+            self.send_header("Location", "http://127.0.0.1:1/private")
+            self.end_headers()
+
+        def log_message(self, format: str, *args: Any) -> None:
+            return None
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), RedirectHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        client = MODstoreClient(
+            base_url=f"http://127.0.0.1:{server.server_port}",
+            access_token="t",
+            allow_private_network=True,
+        )
+        with pytest.raises(MODstoreError, match="302"):
+            client.list_catalog()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
 
 
 def test_client_login_raises_auth_error_on_401() -> None:

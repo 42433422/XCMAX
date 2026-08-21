@@ -45,6 +45,34 @@ class MODstoreAuthError(MODstoreError):
     """Raised when login fails or a protected call returns 401."""
 
 
+class _RejectRedirects(urllib.request.HTTPRedirectHandler):
+    """Keep a validated MODstore origin from redirecting to another target."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def _open_no_redirect(
+    request: urllib.request.Request,
+    *,
+    timeout: float,
+    context,
+):
+    """Open one validated-origin request without proxies or redirects."""
+    opener = urllib.request.build_opener(
+        urllib.request.ProxyHandler({}),
+        urllib.request.HTTPHandler(),
+        urllib.request.HTTPSHandler(context=context),
+        _RejectRedirects(),
+    )
+    # The caller permits only an origin-relative path, rejects credentials,
+    # re-resolves the configured host immediately before this call, and blocks
+    # every non-public address unless the operator explicitly opts into a
+    # private MODstore. Redirects and ambient proxy rewriting are disabled.
+    # lgtm[py/full-ssrf]
+    return opener.open(request, timeout=timeout)
+
+
 @dataclass(slots=True)
 class UploadResult:
     """Outcome of a successful ``POST /api/admin/catalog`` call."""
@@ -252,7 +280,7 @@ class MODstoreClient:
         req = urllib.request.Request(url=url, data=body, method=method, headers=h)
         try:
             ctx = self._ssl_context()
-            with urllib.request.urlopen(req, timeout=self.timeout_s, context=ctx) as resp:
+            with _open_no_redirect(req, timeout=self.timeout_s, context=ctx) as resp:
                 raw = resp.read().decode("utf-8", errors="replace")
                 return _parse_json_response(raw)
         except urllib.error.HTTPError as exc:
