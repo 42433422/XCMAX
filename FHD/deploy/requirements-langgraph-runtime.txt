@@ -3,7 +3,7 @@
 # The LangGraph projects themselves are shipped under packages/ and exposed to
 # the service interpreter through an audited .pth file.  Keep this list aligned
 # with the six vendored pyproject.toml files without installing PyPI LangGraph.
-langchain-core>=1.4.7,<2
+langchain-core>=1.5.6,<2
 ormsgpack>=1.12.0
 xxhash>=3.5.0
 pydantic>=2.7.4
