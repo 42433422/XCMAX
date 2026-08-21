@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -27,6 +28,18 @@ for _p in (DEV_SCRIPTS, CI_SCRIPTS):
         sys.path.insert(0, str(_p))
 
 import escalate_to_human as esc  # noqa: E402
+
+
+def test_script_help_imports_app_from_fhd_working_directory() -> None:
+    completed = subprocess.run(
+        [sys.executable, "-I", "scripts/dev/escalate_to_human.py", "--help"],
+        cwd=FHD_ROOT,
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
 
 # =====================================================================
 # fixtures
