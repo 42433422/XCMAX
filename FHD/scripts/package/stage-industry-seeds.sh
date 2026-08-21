@@ -14,7 +14,10 @@ case "${SKU}" in
 esac
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-MODS_ROOT="${ROOT}/mods"
+MODS_ROOTS=(
+  "${ROOT}/mods"
+  "${ROOT}/XCAGI/mods"
+)
 STAGE_DIR="${ROOT}/build/staged-industry-seeds-${SKU}"
 READ_SCRIPT="${ROOT}/scripts/package/read-open-industry-seed-ids.py"
 PYTHON="${PYTHON:-python3}"
@@ -43,10 +46,17 @@ done < <("${PYTHON}" -c "import json,sys; print('\n'.join(json.loads(sys.argv[1]
 
 MISSING=()
 for mod_id in "${IDS[@]}"; do
-  src="${MODS_ROOT}/${mod_id}"
-  if [[ ! -d "${src}" ]]; then
+  src=""
+  for mods_root in "${MODS_ROOTS[@]}"; do
+    candidate="${mods_root}/${mod_id}"
+    if [[ -d "${candidate}" ]]; then
+      src="${candidate}"
+      break
+    fi
+  done
+  if [[ -z "${src}" ]]; then
     MISSING+=("${mod_id}")
-    echo "WARN: Industry seed mod not found, skip: ${mod_id} (${src})" >&2
+    echo "WARN: Industry seed mod not found, skip: ${mod_id} (${MODS_ROOTS[*]})" >&2
     continue
   fi
   cp -R "${src}" "${STAGE_DIR}/${mod_id}"
