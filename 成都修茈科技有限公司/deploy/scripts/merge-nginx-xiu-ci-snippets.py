@@ -57,12 +57,14 @@ def _server_blocks(lines: list[str]) -> list[tuple[int, int]]:
         if re.match(r"^\s*server\s*\{", syntax):
             stack.append((index, depth + 1))
         depth += opens - closes
+        if depth < 0:
+            raise ValueError(f"unbalanced nginx closing brace at line {index + 1}")
         while stack and depth < stack[-1][1]:
             start, _ = stack.pop()
             blocks.append((start, index))
 
-    if stack:
-        raise ValueError("unclosed nginx server block")
+    if stack or depth:
+        raise ValueError("unbalanced or unclosed nginx block")
     return blocks
 
 
@@ -97,6 +99,19 @@ def _strip_legacy_blocks(text: str) -> str:
     )
     for pattern in blocks:
         text = re.sub(pattern, "\n", text, flags=re.DOTALL)
+
+    # An older non-atomic cleanup could delete only the opening `location`
+    # line before nginx validation failed. Repair that exact production residue
+    # before parsing block depth, otherwise its orphan `}` looks like the end of
+    # the containing server block.
+    text = re.sub(
+        r"\n    # market 静态 chunk：[^\n]*\n(?:\s*\n)*"
+        r"        alias /root/成都修茈科技有限公司/MODstore_deploy/market/dist/assets/;\n"
+        r"        add_header Cache-Control \"public, max-age=31536000, immutable\";\n"
+        r"(?:\s*\n)*    \}\n",
+        "\n",
+        text,
+    )
     return text
 
 

@@ -57,3 +57,41 @@ def test_merge_refuses_config_without_xiu_ci_server() -> None:
         assert "xiu-ci.com" in str(exc)
     else:
         raise AssertionError("expected missing xiu-ci.com server to fail closed")
+
+
+def test_merge_repairs_orphaned_market_assets_block_from_legacy_deploy() -> None:
+    module = _module()
+    source = """
+server {
+    listen 443 ssl;
+    server_name xiu-ci.com;
+
+    # market 静态 chunk：禁止落入 SPA index.html（避免旧 index 引用缺失 chunk 时 404/HTML 混乱）
+
+        alias /root/成都修茈科技有限公司/MODstore_deploy/market/dist/assets/;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+
+    }
+    location = /download {
+        try_files /download.html =404;
+    }
+}
+""".lstrip()
+
+    merged = module.merge_managed_includes(source)
+    assert "market 静态 chunk" not in merged
+    assert "alias /root/成都修茈科技有限公司/MODstore_deploy/market/dist/assets/;" not in merged
+    assert "location = /download" in merged
+    for include in module.MANAGED_INCLUDES:
+        assert merged.count(include) == 1
+
+
+def test_merge_rejects_unbalanced_config_after_known_repairs() -> None:
+    module = _module()
+    source = "server { listen 443 ssl; server_name xiu-ci.com; }\n}\n"
+    try:
+        module.merge_managed_includes(source)
+    except ValueError as exc:
+        assert "unbalanced" in str(exc)
+    else:
+        raise AssertionError("expected malformed nginx braces to fail closed")
