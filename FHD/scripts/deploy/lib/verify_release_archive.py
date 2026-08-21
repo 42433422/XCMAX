@@ -20,6 +20,17 @@ FORBIDDEN_PARTS = {
     "node_modules",
 }
 FORBIDDEN_SUFFIXES = (".pyc", ".pyo")
+REQUIRED_RUNTIME_MEMBERS = {
+    ".build-identity.json",
+    "requirements-langgraph-runtime.txt",
+    "templates/admin-vue-dist/index.html",
+    "packages/xcagi_langgraph_core/langgraph/graph/state.py",
+    "packages/xcagi_langgraph_checkpoint/langgraph/checkpoint/base/__init__.py",
+    "packages/xcagi_langgraph_checkpoint_backends/checkpoint-sqlite/langgraph/checkpoint/sqlite/__init__.py",
+    "packages/xcagi_langgraph_checkpoint_backends/checkpoint-postgres/langgraph/checkpoint/postgres/__init__.py",
+    "packages/xcagi_langgraph_prebuilt/langgraph/prebuilt/tool_node.py",
+    "packages/xcagi_langgraph_sdk/langgraph_sdk/client.py",
+}
 
 
 def _normalise(raw_name: str) -> str:
@@ -87,6 +98,10 @@ def verify_archive(path: Path) -> dict[str, int | str]:
                 violations.append(f"unsafe symlink target: {name} -> {member.linkname}")
             if member.islnk() and not _safe_relative(member.linkname):
                 violations.append(f"unsafe hardlink target: {name} -> {member.linkname}")
+
+    missing = sorted(REQUIRED_RUNTIME_MEMBERS.difference(seen))
+    if missing:
+        violations.append("missing required runtime members: " + ", ".join(missing))
 
     if violations:
         preview = "; ".join(violations[:12])

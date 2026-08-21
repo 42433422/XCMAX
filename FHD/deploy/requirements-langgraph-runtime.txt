@@ -1,0 +1,17 @@
+# External dependencies for the XCAGI-maintained vendored LangGraph runtime.
+#
+# The LangGraph projects themselves are shipped under packages/ and exposed to
+# the service interpreter through an audited .pth file.  Keep this list aligned
+# with the six vendored pyproject.toml files without installing PyPI LangGraph.
+langchain-core>=1.4.7,<2
+ormsgpack>=1.12.0
+xxhash>=3.5.0
+pydantic>=2.7.4
+httpx>=0.25.2
+orjson>=3.11.5
+langchain-protocol>=0.0.15
+websockets>=14,<17
+aiosqlite>=0.20
+sqlite-vec>=0.1.6
+psycopg>=3.2.0
+psycopg-pool>=3.2.0

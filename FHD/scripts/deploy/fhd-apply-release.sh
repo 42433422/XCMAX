@@ -9,6 +9,8 @@
 #   FHD_HEALTH_PORT      默认 5100
 #   FHD_RUN_MIGRATIONS   1 时执行 alembic upgrade head
 #   FHD_SKIP_PIP         1 跳过 pip install
+#   FHD_SERVICE_PYTHON   服务实际使用的 Python（默认 /usr/bin/python3）
+#   FHD_SKIP_LANGGRAPH_BOOTSTRAP  1 时跳过受管 LangGraph 依赖/.pth 引导
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
@@ -83,7 +85,7 @@ mkdir -p "$BACKUP_ROOT"
 BACKUP="$BACKUP_ROOT/pre-$TS"
 mkdir -p "$BACKUP"
 
-for item in .build-identity.json app XCAGI alembic alembic.ini config mods xcagi_common resources requirements-base.txt requirements.txt pyproject.toml; do
+for item in .build-identity.json app XCAGI alembic alembic.ini config mods xcagi_common resources packages requirements-langgraph-runtime.txt requirements-base.txt requirements.txt pyproject.toml; do
   if [[ -e "$DEPLOY_ROOT/$item" ]]; then
     rsync -a "$DEPLOY_ROOT/$item" "$BACKUP/"
   fi
@@ -116,7 +118,7 @@ unset _dir _retained
 rollback_from_backup() {
   autonomy_evaluate_action "rollback_release" "rollback:${TARBALL_SHA256:0:16}"
   log "执行回滚: $BACKUP"
-  for item in .build-identity.json app XCAGI alembic alembic.ini config mods xcagi_common requirements-base.txt requirements.txt pyproject.toml; do
+  for item in .build-identity.json app XCAGI alembic alembic.ini config mods xcagi_common packages requirements-langgraph-runtime.txt requirements-base.txt requirements.txt pyproject.toml; do
     if [[ -e "$BACKUP/$item" ]]; then
       rsync -a --delete "$BACKUP/$item" "$DEPLOY_ROOT/"
     fi
@@ -177,7 +179,7 @@ python3 "$ADMIN_VERIFY" \
   --expected-sha256 "$EXPECTED_ADMIN_CONSOLE_SHA256"
 
 MUTATION_STARTED=1
-for item in .build-identity.json app XCAGI alembic alembic.ini config mods xcagi_common requirements-base.txt requirements.txt pyproject.toml; do
+for item in .build-identity.json app XCAGI alembic alembic.ini config mods xcagi_common packages requirements-langgraph-runtime.txt requirements-base.txt requirements.txt pyproject.toml; do
   if [[ -e "$TMP/$item" ]]; then
     rsync -a --delete "$TMP/$item" "$DEPLOY_ROOT/"
   fi
@@ -200,6 +202,71 @@ if [[ -d "$TMP/docker" ]]; then
   rsync -a "$TMP/docker/" "$DEPLOY_ROOT/docker/"
 fi
 log "代码已同步至 $DEPLOY_ROOT"
+
+bootstrap_vendored_langgraph() {
+  local service_python="${FHD_SERVICE_PYTHON:-/usr/bin/python3}"
+  local requirements="$DEPLOY_ROOT/requirements-langgraph-runtime.txt"
+  local package_dirs=(
+    "$DEPLOY_ROOT/packages/xcagi_langgraph_core"
+    "$DEPLOY_ROOT/packages/xcagi_langgraph_checkpoint"
+    "$DEPLOY_ROOT/packages/xcagi_langgraph_checkpoint_backends/checkpoint-sqlite"
+    "$DEPLOY_ROOT/packages/xcagi_langgraph_checkpoint_backends/checkpoint-postgres"
+    "$DEPLOY_ROOT/packages/xcagi_langgraph_prebuilt"
+    "$DEPLOY_ROOT/packages/xcagi_langgraph_sdk"
+  )
+
+  [[ -x "$service_python" ]] || {
+    log "ERROR: service Python 不可执行: $service_python"
+    return 1
+  }
+  [[ -f "$requirements" ]] || {
+    log "ERROR: 缺少 LangGraph 运行时依赖清单: $requirements"
+    return 1
+  }
+  local package_dir
+  for package_dir in "${package_dirs[@]}"; do
+    [[ -f "$package_dir/PROVENANCE.json" ]] || {
+      log "ERROR: 缺少受管 LangGraph provenance: $package_dir/PROVENANCE.json"
+      return 1
+    }
+  done
+
+  deploy_emit pip started "scope=vendored_langgraph python=$service_python"
+  PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_ROOT_USER_ACTION=ignore \
+    "$service_python" -m pip install --quiet --no-cache-dir -r "$requirements"
+
+  local purelib
+  purelib="$($service_python -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')"
+  [[ -d "$purelib" ]] || {
+    log "ERROR: Python purelib 目录不存在: $purelib"
+    return 1
+  }
+  local pth_tmp="$TMP/xcagi_vendored_langgraph.pth"
+  "$service_python" - "$pth_tmp" "${package_dirs[@]}" <<'PY'
+import sys
+
+target, *paths = sys.argv[1:]
+line = (
+    "import sys; _xcagi_vendored_paths="
+    + repr(paths)
+    + "; sys.path[:0]=[p for p in _xcagi_vendored_paths if p not in sys.path]\n"
+)
+with open(target, "w", encoding="utf-8") as fh:
+    fh.write(line)
+PY
+  install -m 0644 "$pth_tmp" "$purelib/xcagi_vendored_langgraph.pth"
+
+  PYTHONPATH="$DEPLOY_ROOT" "$service_python" - <<'PY'
+from app.infrastructure.workflow.langgraph_assert import assert_vendored_sources
+
+assert_vendored_sources()
+PY
+  deploy_emit pip ok "scope=vendored_langgraph"
+}
+
+if [[ "${FHD_SKIP_LANGGRAPH_BOOTSTRAP:-0}" != "1" ]]; then
+  bootstrap_vendored_langgraph
+fi
 
 if [[ "${FHD_SKIP_PIP:-0}" != "1" ]]; then
   deploy_emit pip started
