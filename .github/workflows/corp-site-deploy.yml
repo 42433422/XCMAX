@@ -35,6 +35,8 @@ on:
       - '成都修茈科技有限公司/MODstore_deploy/scripts/install-site-auto-update-cron.sh'
       - '成都修茈科技有限公司/MODstore_deploy/scripts/fix-nginx-corp-partials.py'
       - '成都修茈科技有限公司/MODstore_deploy/scripts/fix-nginx-corp-download-routes.py'
+      - '成都修茈科技有限公司/deploy/scripts/merge-nginx-xiu-ci-snippets.py'
+      - '成都修茈科技有限公司/deploy/scripts/sync-nginx-xiu-ci-snippets.sh'
       - '成都修茈科技有限公司/MODstore_deploy/market/public/download-release.json'
       - '成都修茈科技有限公司/download-action-board.json'
       - '成都修茈科技有限公司/download-action-board.js'

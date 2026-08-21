@@ -46,7 +46,7 @@ def test_corporate_deploy_syncs_the_versioned_download_snippet_before_nginx_relo
     assert 'git -C "${REMOTE_ROOT}" reset --hard "origin/${BRANCH}"' in workflow
     assert "exact server worktree sha=${DEPLOY_SHA}" in workflow
     assert "xcagi-cos-alias.inc.conf" in sync_script
-    assert "for include in includes:" in sync_script
+    assert "merge-nginx-xiu-ci-snippets.py" in sync_script
 
 
 def test_site_refreshes_preserve_a_verified_desktop_release_pointer() -> None:
