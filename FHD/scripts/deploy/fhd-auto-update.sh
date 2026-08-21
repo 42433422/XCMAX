@@ -31,6 +31,7 @@ MANIFEST="${FHD_MANIFEST_PATH:-/var/www/update/releases/stable/server/fhd-manife
 ARTIFACT_DIR="${FHD_ARTIFACT_DIR:-$(dirname "$MANIFEST")}"
 DEPLOY_ROOT="${FHD_DEPLOY_ROOT:-/opt/fhd-full}"
 LOCK="${FHD_AUTO_UPDATE_LOCK:-/tmp/fhd-auto-update.lock}"
+LOCK_WAIT_SECONDS="${FHD_AUTO_UPDATE_LOCK_WAIT_SECONDS:-0}"
 FREEZE_MARKER="${FHD_MANIFEST_FREEZE_MARKER:-${MANIFEST}.frozen}"
 AUTONOMY_DATA_DIR="${XCAGI_AUTONOMY_DATA_DIR:-/var/lib/xcagi/autonomy}"
 AUTONOMY_PYTHON="${FHD_AUTONOMY_PYTHON:-$DEPLOY_ROOT/.venv/bin/python}"
@@ -148,8 +149,20 @@ sync_dr_release() {
   [[ "${FHD_DR_SYNC_STRICT:-1}" != "1" ]]
 }
 
+case "$LOCK_WAIT_SECONDS" in
+  '' | *[!0-9]*)
+    log "ERROR: FHD_AUTO_UPDATE_LOCK_WAIT_SECONDS 必须为非负整数"
+    exit 64
+    ;;
+esac
+
 exec 9>"$LOCK"
-if ! flock -n 9; then
+if [[ "$LOCK_WAIT_SECONDS" -gt 0 ]]; then
+  if ! flock -w "$LOCK_WAIT_SECONDS" 9; then
+    log "等待另一更新实例超时 (${LOCK_WAIT_SECONDS}s)"
+    exit 75
+  fi
+elif ! flock -n 9; then
   log "另一实例运行中，跳过"
   exit 0
 fi
