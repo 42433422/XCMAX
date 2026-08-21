@@ -43,6 +43,8 @@ def test_corporate_deploy_syncs_the_versioned_download_snippet_before_nginx_relo
     ).read_text(encoding="utf-8")
 
     assert 'bash "${SITE_ROOT}/deploy/scripts/sync-nginx-xiu-ci-snippets.sh"' in workflow
+    assert 'git -C "${REMOTE_ROOT}" reset --hard "origin/${BRANCH}"' in workflow
+    assert "exact server worktree sha=${DEPLOY_SHA}" in workflow
     assert "xcagi-cos-alias.inc.conf" in sync_script
     assert "for include in includes:" in sync_script
 

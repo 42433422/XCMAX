@@ -78,6 +78,19 @@ jobs:
             export XCMAX_ROOT="${REMOTE_ROOT}"
             export XCMAX_GIT_BRANCH="${BRANCH}"
             export XCMAX_GIT_RESET_HARD=1
+            # Bootstrap from the requested remote branch before invoking the
+            # repository-owned updater.  Otherwise an old updater can decide
+            # that its stale worktree is current and republish stale nginx
+            # snippets before it ever refreshes itself.
+            git -C "${REMOTE_ROOT}" fetch origin "${BRANCH}"
+            git -C "${REMOTE_ROOT}" reset --hard "origin/${BRANCH}"
+            DEPLOY_SHA="$(git -C "${REMOTE_ROOT}" rev-parse HEAD)"
+            REMOTE_SHA="$(git -C "${REMOTE_ROOT}" rev-parse "origin/${BRANCH}")"
+            if [ "${DEPLOY_SHA}" != "${REMOTE_SHA}" ]; then
+              echo "[err] server worktree did not converge to origin/${BRANCH}"
+              exit 1
+            fi
+            echo "[info] exact server worktree sha=${DEPLOY_SHA}"
             # Always republish static chrome into the nginx live root (immutable
             # release symlink). Git sync alone only updates /root/XCMAX.
             export XCMAX_FORCE_SITE_PUBLISH=1
