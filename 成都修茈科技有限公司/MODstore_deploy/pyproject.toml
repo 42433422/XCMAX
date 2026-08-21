@@ -8,7 +8,7 @@ dependencies = []
 [project.optional-dependencies]
 web = [
     "fastapi>=0.115",
-    "uvicorn[standard]>=0.27",
+    "uvicorn[standard]>=0.52.3",
     "python-multipart>=0.0.6",
     "httpx[socks]>=0.27",
     "socksio>=1.0",
