@@ -80,6 +80,45 @@ def _server_blocks(lines: list[str]) -> list[tuple[int, int]]:
 
 
 def _strip_legacy_blocks(text: str) -> str:
+    # Repair the partially deleted assets location left by the former inline
+    # updater. Use line structure instead of whitespace-sensitive regex because
+    # the production file has passed through several generations of formatters.
+    lines = text.splitlines()
+    asset_alias = (
+        "alias /root/成都修茈科技有限公司/MODstore_deploy/market/dist/assets/;"
+    )
+    for alias_index, line in enumerate(lines):
+        if asset_alias not in line:
+            continue
+        search_start = max(0, alias_index - 10)
+        comment_index = next(
+            (
+                index
+                for index in range(alias_index - 1, search_start - 1, -1)
+                if "market 静态 chunk" in lines[index]
+            ),
+            None,
+        )
+        if comment_index is None:
+            continue
+        if any(
+            "location" in candidate and "{" in candidate
+            for candidate in lines[comment_index:alias_index]
+        ):
+            continue
+        closing_index = next(
+            (
+                index
+                for index in range(alias_index + 1, min(len(lines), alias_index + 10))
+                if lines[index].strip() == "}"
+            ),
+            None,
+        )
+        if closing_index is not None:
+            del lines[comment_index : closing_index + 1]
+            text = "\n".join(lines) + ("\n" if text.endswith("\n") else "")
+        break
+
     # Remove the dangerous full-site market SPA fallback.
     text = re.sub(
         r"\n    # MODstore 仅通过 /market/.*?\n",
