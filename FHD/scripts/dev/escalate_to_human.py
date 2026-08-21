@@ -13,6 +13,12 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List
 
+# Direct path execution only adds ``scripts/dev`` to ``sys.path``. Make the
+# FHD application package importable before importing shared error contracts.
+_FHD_ROOT = Path(__file__).resolve().parents[2]
+if str(_FHD_ROOT) not in sys.path:
+    sys.path.insert(0, str(_FHD_ROOT))
+
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 # 修复：plan 中是 parent.parent.parent（3 层），但脚本在 FHD/scripts/dev/，
