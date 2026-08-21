@@ -30,6 +30,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+# When this file is executed by path, Python only adds ``scripts/ci`` to
+# ``sys.path``. Keep the FHD package root importable regardless of the
+# caller's working directory (including GitHub Actions' working directory).
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 try:

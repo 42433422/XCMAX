@@ -93,6 +93,8 @@ id_rsa*
 id_ed25519*
 *secret*
 !*secret*.example
+!modstore_server/ai_employee_account_secrets.py
+!tests/test_ai_employee_account_secrets.py
 *credential*
 !market/src/domain/llm/providerCredential.ts
 *token*.json

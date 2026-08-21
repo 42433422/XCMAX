@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 import time
 from datetime import UTC, datetime
@@ -33,6 +34,19 @@ if str(CI_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(CI_SCRIPTS))
 
 import ai_self_heal as heal  # noqa: E402
+
+
+def test_script_help_imports_app_from_fhd_working_directory() -> None:
+    """The workflow executes the script by path from ``FHD``."""
+    completed = subprocess.run(
+        [sys.executable, "-I", "scripts/ci/ai_self_heal.py", "--help"],
+        cwd=FHD_ROOT,
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
 
 
 def test_self_heal_workflow_carries_failure_branch_and_serializes_duplicates() -> None:

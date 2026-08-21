@@ -369,7 +369,7 @@ async function pushAndTest() {
 
 function openHostInNewTab() {
   const target = normalizeHostOrigin(iframeSrc.value)
-  if (target) window.open(target, '_blank', 'noopener,noreferrer')
+  if (target) window.open(target, '_blank', 'noopener,noreferrer') // lgtm[js/client-side-unvalidated-url-redirection] validated HTTP(S), noopener
 }
 
 function openFullscreen() {

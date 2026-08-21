@@ -319,7 +319,8 @@ def _run_ssh(
 
     key_file = _validate_key_path(key_path)
     client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.load_system_host_keys()
+    client.set_missing_host_key_policy(paramiko.RejectPolicy())
     t0 = time.perf_counter()
     try:
         client.connect(

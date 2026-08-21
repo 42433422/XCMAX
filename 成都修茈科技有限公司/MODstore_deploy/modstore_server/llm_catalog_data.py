@@ -31,6 +31,9 @@ def load_fallback() -> Dict[str, List[Any]]:
 
 def cache_key(user_id: int, provider: str, api_key: str) -> str:
     payload = f"{user_id}:{provider}:{api_key}".encode("utf-8")
+    # Keyed HMAC with a process-random 256-bit salt; this is a cache identity,
+    # not password verification. SHA-256 is appropriate for HMAC here.
+    # lgtm[py/weak-sensitive-data-hashing]
     digest = hmac.new(_CACHE_KEY_SALT, payload, hashlib.sha256).hexdigest()[:20]
     return f"{provider}:{digest}"
 

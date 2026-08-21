@@ -136,6 +136,9 @@ def _is_low_signal_action_item(text: str) -> bool:
 
 def _dedupe_key(day: str, kind: str, eid: str, text: str) -> str:
     raw = f"{day}|{kind}|{eid}|{text}".encode("utf-8", "replace")
+    # Non-security content identity for same-day deduplication, not password or
+    # integrity protection; keeping SHA-1 preserves durable record identities.
+    # lgtm[py/weak-sensitive-data-hashing]
     return hashlib.sha1(raw).hexdigest()
 
 
