@@ -32,6 +32,10 @@ REQUIRED_RUNTIME_MEMBERS = {
     "packages/xcagi_langgraph_sdk/langgraph_sdk/client.py",
     "scripts/deploy/xcmax-release-sync.sh",
     "scripts/deploy/xcmax_release_sync_prune.py",
+    "scripts/autonomy/corp_site_health_probe.py",
+    "scripts/autonomy/cvm_autonomy_watcher.py",
+    "scripts/ci/_approval_ledger_client.py",
+    "scripts/ci/_im_notify_client.py",
 }
 
 

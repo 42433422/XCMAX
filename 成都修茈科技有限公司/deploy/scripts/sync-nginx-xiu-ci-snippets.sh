@@ -14,63 +14,12 @@ for f in market-static.inc.conf corp-main-styles.inc.conf xcagi-cos-alias.inc.co
 done
 
 cp -a "$CONF" "${CONF}.bak.$(date +%Y%m%d%H%M%S)"
+python3 "$REPO_ROOT/deploy/scripts/merge-nginx-xiu-ci-snippets.py" "$CONF"
 
-python3 << 'PY'
-import re
-from pathlib import Path
-
-conf = Path("/etc/nginx/conf.d/xiu-ci.com.conf")
-t = conf.read_text(encoding="utf-8")
-
-# 删除危险的整站 market SPA 回退
-t = re.sub(
-    r"\n    # MODstore 仅通过 /market/.*?\n",
-    "\n",
-    t,
-    flags=re.DOTALL,
-)
-t = re.sub(
-    r"\n    # MODstore 前端根路径\n    location / \{\n        root /root/成都修茈科技有限公司/MODstore_deploy/market/dist;\n        index index\.html;\n        try_files \$uri \$uri/ /index\.html;\n        add_header Cache-Control \"no-cache\";\n    \}\n",
-    "\n",
-    t,
-    count=1,
-)
-
-# 去掉旧版重复的 market / COS / main 块（由 include 替代）
-blocks = [
-    r"\n    # Vite 偶发解析出 /market/assets/assets/.*?location \^~ /market/assets/ \{[^}]+\}\n",
-    r"\n    # 旧缓存页请求 /market/main\.js.*?add_header Cache-Control \"no-cache, must-revalidate\" always;\n    \}\n",
-    r"\n    # market 静态 chunk：.*?location \^~ /market/assets/ \{[^}]+\}\n",
-    r"\n    location /market/ \{\n        alias /root/成都修茈科技有限公司/MODstore_deploy/market/dist/;\n        try_files \$uri \$uri/ /market/index\.html;[^}]+\}\n",
-    r"\n    # 避免 /market/main\.js.*?location = /market/styles\.css \{[^}]+\}\n",
-    r"\n    ## XCAGI_COS_ALIAS_BEGIN.*?## XCAGI_RELEASES_END\n",
-]
-for pat in blocks:
-    t = re.sub(pat, "\n", t, flags=re.DOTALL)
-
-marker = "    ## CORP_SITE_END"
-includes = [
-    "include /etc/nginx/snippets/marketing-site-static.inc.conf;",
-    "include /etc/nginx/snippets/corp-main-styles.inc.conf;",
-    "include /etc/nginx/snippets/xcagi-cos-alias.inc.conf;",
-    "include /etc/nginx/snippets/market-static.inc.conf;",
-]
-for include in includes:
-    # 线上可能已经只同步了部分静态片段；逐项补齐，不能因为 market 片段
-    # 已存在而遗漏版本化 XCAGI 下载路由。
-    if include not in t:
-        t = t.replace(marker, marker + "\n    " + include)
-
-founder_include = """
-    include /etc/nginx/snippets/founder-autonomy-admin.inc.conf;
-"""
-if "snippets/founder-autonomy-admin.inc.conf" not in t:
-    t = t.replace(marker, marker + founder_include)
-
-conf.write_text(t, encoding="utf-8")
-print("merged includes into xiu-ci.com.conf")
-PY
-
-nginx -t
+if ! nginx -t; then
+  echo "[err] merged nginx configuration is invalid; managed include context follows"
+  grep -n -B 8 -A 8 '/etc/nginx/snippets/.*\.inc\.conf' "$CONF" || true
+  exit 1
+fi
 nginx -s reload
 echo "nginx reload ok"
