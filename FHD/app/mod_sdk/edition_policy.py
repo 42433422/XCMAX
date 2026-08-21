@@ -5,8 +5,11 @@ from __future__ import annotations
 import logging
 import os
 import shutil
+from datetime import UTC, datetime
+from hashlib import sha256
 from pathlib import Path
 from typing import Literal, cast
+from uuid import uuid4
 
 from app.mod_sdk.platform_shell import GENERIC_HOST_MOD_IDS, MINIMAL_HOST_MOD_IDS
 from app.mod_sdk.product_skus import (
@@ -133,6 +136,61 @@ def _resolve_mod_seed_source(mod_id: str, primary: Path) -> Path | None:
     return None
 
 
+_BUNDLED_MOD_IGNORES = ("__pycache__", "*.py[co]", ".DS_Store")
+
+
+def _bundled_mod_digest(root: Path) -> str:
+    """Return a stable digest for bundled Mod source files, excluding runtime caches."""
+    digest = sha256()
+    for path in sorted(root.rglob("*"), key=lambda item: item.as_posix()):
+        relative = path.relative_to(root)
+        if "__pycache__" in relative.parts or path.name == ".DS_Store":
+            continue
+        if path.is_dir() or path.suffix in {".pyc", ".pyo"}:
+            continue
+        digest.update(relative.as_posix().encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def _refresh_bundled_mod(src: Path, dst: Path, root: Path) -> tuple[str, str]:
+    """Seed or atomically refresh one official Mod, archiving replaced contents."""
+    source_digest = _bundled_mod_digest(src)
+    if dst.is_dir() and _bundled_mod_digest(dst) == source_digest:
+        return ("skipped", "already current")
+
+    stage = root / f".xcagi-seed-{dst.name}-{uuid4().hex}"
+    archive: Path | None = None
+    try:
+        shutil.copytree(src, stage, ignore=shutil.ignore_patterns(*_BUNDLED_MOD_IGNORES))
+        if dst.exists():
+            replaced_digest = _bundled_mod_digest(dst) if dst.is_dir() else "non-directory"
+            timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+            archive = (
+                root.parent
+                / "bundled-mod-backups"
+                / dst.name
+                / (f"{timestamp}-{replaced_digest[:12]}")
+            )
+            archive.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(dst, archive)
+        try:
+            os.replace(stage, dst)
+        except OSError:
+            if archive is not None and archive.exists() and not dst.exists():
+                os.replace(archive, dst)
+            raise
+    finally:
+        if stage.exists():
+            shutil.rmtree(stage, ignore_errors=True)
+
+    if archive is None:
+        return ("seeded", str(dst))
+    return ("refreshed", f"archived previous copy: {archive}")
+
+
 def _seed_bundled_employee_packs(bundle: Path, root: Path) -> list[dict[str, str]]:
     """Seed missing official employee packs from the read-only desktop bundle."""
     source_root = bundle / "_employees"
@@ -197,7 +255,12 @@ def seed_edition_mods_from_bundle(
     *,
     mods_root: str | Path | None = None,
 ) -> list[dict[str, str]]:
-    """将内置 Mod 目录复制到用户 mods 目录（已存在则跳过）。"""
+    """Materialize the exact official bridge Mods shipped with this desktop build.
+
+    Existing official Mods are content-compared with the read-only bundle. A
+    stale copy is archived outside the active Mods directory and atomically
+    replaced. Customer-installed Mods and employee packs remain untouched.
+    """
     from app.infrastructure.mods.mod_manager import get_mod_manager
 
     bundle = bundled_mods_dir()
@@ -212,9 +275,6 @@ def seed_edition_mods_from_bundle(
 
     for mod_id in edition_mod_ids(edition):
         dst = root / mod_id
-        if dst.is_dir():
-            results.append({"mod_id": mod_id, "status": "skipped", "message": "already present"})
-            continue
         src = _resolve_mod_seed_source(mod_id, bundle)
         if src is None:
             results.append(
@@ -226,8 +286,8 @@ def seed_edition_mods_from_bundle(
             )
             continue
         try:
-            shutil.copytree(src, dst)
-            results.append({"mod_id": mod_id, "status": "seeded", "message": str(dst)})
+            status, message = _refresh_bundled_mod(src, dst, root)
+            results.append({"mod_id": mod_id, "status": status, "message": message})
         except OSError:
             results.append({"mod_id": mod_id, "status": "error", "message": "mod seed failed"})
 

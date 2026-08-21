@@ -318,7 +318,12 @@ class TestSeedEditionModsFromBundle:
         mods_root.mkdir()
 
         mod_id = "xcagi-planner-bridge"
-        (mods_root / mod_id).mkdir()  # already present
+        source = bundle / mod_id
+        source.mkdir()
+        (source / "manifest.json").write_text("{}", encoding="utf-8")
+        destination = mods_root / mod_id
+        destination.mkdir()
+        (destination / "manifest.json").write_text("{}", encoding="utf-8")
 
         mm = MagicMock()
         mm.mods_root = str(mods_root)
