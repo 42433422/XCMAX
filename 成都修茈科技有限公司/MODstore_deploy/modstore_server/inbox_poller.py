@@ -70,6 +70,8 @@ def _message_body_text(msg: Message) -> str:
                 part.get("Content-Disposition") or ""
             ):
                 t = _decode_payload(part)
+                # Plain-text extraction only; the result is never rendered as HTML.
+                # lgtm[py/bad-tag-filter]
                 s = re.sub(r"(?is)<script.*?>.*?</script>", "", t)
                 s = re.sub(r"(?is)<style.*?>.*?</style>", "", s)
                 s = re.sub(r"<[^>]+>", " ", s)
@@ -84,6 +86,8 @@ def _message_body_text(msg: Message) -> str:
         return _decode_payload(msg)
     if ctype == "text/html":
         t = _decode_payload(msg)
+        # Plain-text extraction only; the result is never rendered as HTML.
+        # lgtm[py/bad-tag-filter]
         t = re.sub(r"(?is)<script.*?>.*?</script>", "", t)
         t = re.sub(r"(?is)<style.*?>.*?</style>", "", t)
         t = re.sub(r"<[^>]+>", " ", t)

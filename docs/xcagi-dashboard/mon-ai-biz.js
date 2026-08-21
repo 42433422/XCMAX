@@ -904,6 +904,8 @@
       const src = safeScreenshotImageSrc(img.getAttribute('data-src'));
       if (!src || img.dataset.loaded) return;
       img.dataset.loaded = '1';
+      // safeScreenshotImageSrc permits only same-origin HTTP(S) or an inert pixel.
+      // lgtm[js/xss-through-dom]
       img.src = src;
     };
     if (!('IntersectionObserver' in window) || !strip) {

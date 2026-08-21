@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import subprocess
+import sys
+from types import SimpleNamespace
 
 import pytest
 
@@ -117,3 +119,51 @@ def test_subprocess_timeout_exit(tmp_path, monkeypatch: pytest.MonkeyPatch) -> N
     )
     assert out.get("exit_code") == -1
     assert recorded
+
+
+def test_ssh_rejects_unknown_host_keys(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    key_dir = tmp_path / "ssh_keys"
+    key_dir.mkdir()
+    key_file = key_dir / "ops-key"
+    key_file.write_text("test", encoding="utf-8")
+    monkeypatch.setattr(ops, "_ssh_keys_dir", lambda: key_dir)
+
+    calls: list[str] = []
+
+    class FakeStream:
+        channel = SimpleNamespace(recv_exit_status=lambda: 0)
+
+        def read(self) -> bytes:
+            return b""
+
+    class FakeClient:
+        def load_system_host_keys(self) -> None:
+            calls.append("load")
+
+        def set_missing_host_key_policy(self, policy: object) -> None:
+            calls.append(type(policy).__name__)
+
+        def connect(self, *args: object, **kwargs: object) -> None:
+            calls.append("connect")
+
+        def exec_command(self, *args: object, **kwargs: object):
+            return None, FakeStream(), FakeStream()
+
+        def close(self) -> None:
+            calls.append("close")
+
+    class RejectPolicy:
+        pass
+
+    fake_paramiko = SimpleNamespace(SSHClient=FakeClient, RejectPolicy=RejectPolicy)
+    monkeypatch.setitem(sys.modules, "paramiko", fake_paramiko)
+
+    result = ops._run_ssh(
+        {"hostname": "example.com", "user": "ops", "key_path": str(key_file)},
+        ["true"],
+        timeout=5,
+        capture_max=100,
+    )
+
+    assert result == (0, "", "")
+    assert calls[:3] == ["load", "RejectPolicy", "connect"]

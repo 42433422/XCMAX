@@ -353,6 +353,8 @@ def proxy_modstore_api(subpath: str):
         lk = key.lower()
         if lk in excluded_resp or lk.startswith("access-control-"):
             continue
+        if "\r" in key or "\n" in key or "\r" in value or "\n" in value:
+            continue
         resp.headers[key] = value
     _apply_cors_headers(resp)
     return resp
@@ -746,4 +748,4 @@ def admin_news():
 
 if __name__ == "__main__":
     init_default_activities()
-    app.run(host="0.0.0.0", port=9999, debug=True)
+    app.run(host="0.0.0.0", port=9999, debug=False)
