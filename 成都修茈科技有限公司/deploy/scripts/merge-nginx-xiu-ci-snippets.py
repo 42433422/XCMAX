@@ -165,10 +165,41 @@ def _strip_legacy_blocks(text: str) -> str:
     return text
 
 
+def _strip_legacy_xcagi_locations(text: str) -> str:
+    """Remove direct locations now owned by xcagi-cos-alias.inc.conf."""
+
+    lines = text.splitlines()
+    prefixes = (
+        "location = /download-release.json {",
+        "location /releases/stable/ {",
+        "location ~ ^/xcagi-v",
+    )
+    index = 0
+    while index < len(lines):
+        if not lines[index].strip().startswith(prefixes):
+            index += 1
+            continue
+        depth = 0
+        closing_index: int | None = None
+        for candidate_index in range(index, len(lines)):
+            syntax = _nginx_syntax(lines[candidate_index])
+            depth += syntax.count("{") - syntax.count("}")
+            if depth == 0:
+                closing_index = candidate_index
+                break
+        if closing_index is None:
+            raise ValueError(f"unclosed legacy XCAGI location at line {index + 1}")
+        del lines[index : closing_index + 1]
+        while index < len(lines) and not lines[index].strip():
+            del lines[index]
+    return "\n".join(lines) + ("\n" if text.endswith("\n") else "")
+
+
 def merge_managed_includes(text: str) -> str:
     """Return an idempotent config with includes in the TLS server block."""
 
     text = _strip_legacy_blocks(text)
+    text = _strip_legacy_xcagi_locations(text)
     managed = set(MANAGED_INCLUDES)
     # A previous deploy inserted these lines beside every marker, including a
     # marker nested in `location`. Remove all managed lines before rebuilding.

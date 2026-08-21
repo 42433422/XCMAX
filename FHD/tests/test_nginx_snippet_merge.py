@@ -95,3 +95,29 @@ def test_merge_rejects_unbalanced_config_after_known_repairs() -> None:
         assert "unbalanced" in str(exc)
     else:
         raise AssertionError("expected malformed nginx braces to fail closed")
+
+
+def test_merge_removes_direct_xcagi_locations_owned_by_managed_snippet() -> None:
+    module = _module()
+    source = """
+server {
+    listen 443 ssl;
+    server_name xiu-ci.com;
+    location ~ ^/xcagi-v[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+/ {
+        root /var/www;
+    }
+    location = /download-release.json {
+        alias /root/成都修茈科技有限公司/download-release.json;
+        default_type application/json;
+    }
+    location /releases/stable/ {
+        root /var/www/update;
+    }
+}
+""".lstrip()
+
+    merged = module.merge_managed_includes(source)
+    assert "location ~ ^/xcagi-v" not in merged
+    assert "location = /download-release.json" not in merged
+    assert "location /releases/stable/" not in merged
+    assert merged.count("xcagi-cos-alias.inc.conf") == 1
