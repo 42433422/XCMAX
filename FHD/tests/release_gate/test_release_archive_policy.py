@@ -21,6 +21,10 @@ REQUIRED_RUNTIME_MEMBERS = [
     "./packages/xcagi_langgraph_sdk/langgraph_sdk/client.py",
     "./scripts/deploy/xcmax-release-sync.sh",
     "./scripts/deploy/xcmax_release_sync_prune.py",
+    "./scripts/autonomy/corp_site_health_probe.py",
+    "./scripts/autonomy/cvm_autonomy_watcher.py",
+    "./scripts/ci/_approval_ledger_client.py",
+    "./scripts/ci/_im_notify_client.py",
 ]
 
 
@@ -106,3 +110,11 @@ def test_pack_release_bundles_immutable_dr_sync_helper() -> None:
         'cp "$DR_RELEASE_SYNC_PRUNE" "$STAGING/scripts/deploy/xcmax_release_sync_prune.py"' in pack
     )
     assert 'bundled_sync="$DEPLOY_ROOT/scripts/deploy/xcmax-release-sync.sh"' in auto_update
+
+
+def test_pack_release_bundles_exact_autonomy_runtime() -> None:
+    pack = (FHD_ROOT / "scripts/deploy/fhd-pack-release.sh").read_text(encoding="utf-8")
+
+    assert '"$FHD_ROOT/scripts/autonomy/" "$STAGING/scripts/autonomy/"' in pack
+    assert '"$FHD_ROOT/scripts/ci/_approval_ledger_client.py"' in pack
+    assert '"$FHD_ROOT/scripts/ci/_im_notify_client.py"' in pack
