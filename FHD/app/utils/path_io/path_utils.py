@@ -21,8 +21,14 @@ def get_base_dir() -> str:
     """
     if hasattr(sys, "_MEIPASS"):
         return cast("str", sys._MEIPASS)
-    # path_utils.py 位于 app/utils/，仓库根目录为向上 3 级（含 FHD 根与 backend/ 等）
-    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    # Source/server mode must resolve the FHD repository root.  ``path_utils.py``
+    # lives under ``app/utils/path_io``; the historical three-level dirname
+    # returned ``.../FHD/app`` and made production look for static releases at
+    # ``.../FHD/app/templates`` instead of the packaged ``.../FHD/templates``.
+    root = resolve_fhd_repo_root(Path(__file__))
+    if root is not None:
+        return str(root)
+    return str(Path(__file__).resolve().parents[3])
 
 
 def resolve_fhd_repo_root(anchor: Path | None = None) -> Path | None:

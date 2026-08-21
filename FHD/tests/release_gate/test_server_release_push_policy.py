@@ -10,6 +10,28 @@ FHD_ROOT = Path(__file__).resolve().parents[2]
 REPO_ROOT = FHD_ROOT.parent
 
 
+def test_server_release_bundles_and_bootstraps_vendored_langgraph() -> None:
+    pack = (FHD_ROOT / "scripts/deploy/fhd-pack-release.sh").read_text(encoding="utf-8")
+    apply = (FHD_ROOT / "scripts/deploy/fhd-apply-release.sh").read_text(encoding="utf-8")
+
+    for package in (
+        "xcagi_langgraph_core",
+        "xcagi_langgraph_checkpoint",
+        "xcagi_langgraph_checkpoint_backends/checkpoint-sqlite",
+        "xcagi_langgraph_checkpoint_backends/checkpoint-postgres",
+        "xcagi_langgraph_prebuilt",
+        "xcagi_langgraph_sdk",
+    ):
+        assert package in pack
+        assert package in apply
+
+    assert "requirements-langgraph-runtime.txt" in pack
+    assert "requirements-langgraph-runtime.txt" in apply
+    assert "xcagi_vendored_langgraph.pth" in apply
+    assert "assert_vendored_sources" in apply
+    assert "FHD_SERVICE_PYTHON" in apply
+
+
 def test_normal_cvm_release_skips_optional_image_archive() -> None:
     script = (FHD_ROOT / "scripts/deploy/fhd-push-release.sh").read_text(encoding="utf-8")
 

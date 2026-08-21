@@ -9,6 +9,17 @@ import pytest
 
 FHD_ROOT = Path(__file__).resolve().parents[2]
 VERIFIER = FHD_ROOT / "scripts/deploy/lib/verify_release_archive.py"
+REQUIRED_RUNTIME_MEMBERS = [
+    "./.build-identity.json",
+    "./requirements-langgraph-runtime.txt",
+    "./templates/admin-vue-dist/index.html",
+    "./packages/xcagi_langgraph_core/langgraph/graph/state.py",
+    "./packages/xcagi_langgraph_checkpoint/langgraph/checkpoint/base/__init__.py",
+    "./packages/xcagi_langgraph_checkpoint_backends/checkpoint-sqlite/langgraph/checkpoint/sqlite/__init__.py",
+    "./packages/xcagi_langgraph_checkpoint_backends/checkpoint-postgres/langgraph/checkpoint/postgres/__init__.py",
+    "./packages/xcagi_langgraph_prebuilt/langgraph/prebuilt/tool_node.py",
+    "./packages/xcagi_langgraph_sdk/langgraph_sdk/client.py",
+]
 
 
 def _write_archive(path: Path, names: list[str]) -> None:
@@ -31,12 +42,23 @@ def _verify(path: Path) -> subprocess.CompletedProcess[str]:
 
 def test_release_archive_accepts_clean_members(tmp_path: Path) -> None:
     archive = tmp_path / "clean.tar.gz"
-    _write_archive(archive, ["./app/main.py", "./templates/admin-vue-dist/index.html"])
+    _write_archive(archive, ["./app/main.py", *REQUIRED_RUNTIME_MEMBERS])
 
     result = _verify(archive)
 
     assert result.returncode == 0, result.stderr
     assert '"status": "verified"' in result.stdout
+
+
+def test_release_archive_rejects_missing_vendored_runtime(tmp_path: Path) -> None:
+    archive = tmp_path / "missing-runtime.tar.gz"
+    _write_archive(archive, ["./app/main.py", "./templates/admin-vue-dist/index.html"])
+
+    result = _verify(archive)
+
+    assert result.returncode != 0
+    assert "missing required runtime members" in result.stderr
+    assert "xcagi_langgraph_core" in result.stderr
 
 
 @pytest.mark.parametrize(
