@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import sys
 from pathlib import Path
 from typing import Final
 
@@ -39,6 +40,7 @@ EXPECTED_PROVENANCE: Final[dict[str, tuple[str | None, str, str | None]]] = {
 REQUIRED_VENDORED_MODULES: Final[dict[str, str]] = {
     "langgraph.graph.state": "xcagi_langgraph_core",
     "langgraph.prebuilt.tool_node": "xcagi_langgraph_prebuilt",
+    "langgraph.checkpoint.base": "xcagi_langgraph_checkpoint",
     "langgraph.checkpoint.sqlite": "xcagi_langgraph_checkpoint_backends/checkpoint-sqlite",
     "langgraph.checkpoint.postgres": "xcagi_langgraph_checkpoint_backends/checkpoint-postgres",
     "langgraph_sdk.client": "xcagi_langgraph_sdk",
@@ -50,12 +52,41 @@ def _packages_root() -> Path:
     return Path(__file__).resolve().parents[3] / "packages"
 
 
+def _frozen_root() -> Path | None:
+    """Return PyInstaller's signed application root, or ``None`` in source mode."""
+    if not getattr(sys, "frozen", False):
+        return None
+    raw_root = getattr(sys, "_MEIPASS", None)
+    if not raw_root:
+        raise AssertionError("冻结运行时缺少 sys._MEIPASS")
+    return Path(str(raw_root)).resolve()
+
+
+def _provenance_root() -> Path:
+    frozen_root = _frozen_root()
+    if frozen_root is not None:
+        return frozen_root / "vendored-provenance"
+    return _packages_root()
+
+
+def _frozen_module_candidates(frozen_root: Path, module_name: str) -> tuple[Path, Path]:
+    module_path = frozen_root.joinpath(*module_name.split("."))
+    return module_path.with_suffix(".py"), module_path / "__init__.py"
+
+
 def _assert_module_source(module_name: str, expected_pkg: str) -> None:
     module = importlib.import_module(module_name)
     source = getattr(module, "__file__", "") or ""
     if not source:
         raise AssertionError(f"{module_name} 缺少 __file__（疑似命名空间包）")
     resolved = Path(source).resolve()
+    frozen_root = _frozen_root()
+    if frozen_root is not None:
+        if not resolved.is_relative_to(frozen_root):
+            raise AssertionError(f"{module_name} 逃逸冻结应用目录: {resolved}")
+        if resolved not in _frozen_module_candidates(frozen_root, module_name):
+            raise AssertionError(f"{module_name} 冻结模块路径与模块名不匹配: {resolved}")
+        return
     if not resolved.is_relative_to(_packages_root()):
         raise AssertionError(f"{module_name} 未解析到 vendored packages: {resolved}")
     if expected_pkg not in resolved.as_posix():
@@ -63,7 +94,7 @@ def _assert_module_source(module_name: str, expected_pkg: str) -> None:
 
 
 def _assert_provenance(package_dir: str) -> None:
-    prov_path = _packages_root() / package_dir / "PROVENANCE.json"
+    prov_path = _provenance_root() / package_dir / "PROVENANCE.json"
     if not prov_path.exists():
         raise AssertionError(f"缺少 PROVENANCE.json: {prov_path}")
     data = json.loads(prov_path.read_text(encoding="utf-8"))

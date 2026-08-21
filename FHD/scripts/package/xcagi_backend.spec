@@ -55,6 +55,23 @@ if _staged_mods and Path(_staged_mods).is_dir():
 else:
     datas.extend(add_data("mods"))
 
+# PyInstaller flattens vendored Python packages into its signed ``_MEIPASS``
+# runtime tree. Preserve the audited provenance records separately so the
+# boot-time LangGraph source gate can remain fail-closed in packaged apps.
+langgraph_vendor_packages = [
+    "xcagi_langgraph_core",
+    "xcagi_langgraph_prebuilt",
+    "xcagi_langgraph_checkpoint",
+    "xcagi_langgraph_checkpoint_backends/checkpoint-sqlite",
+    "xcagi_langgraph_checkpoint_backends/checkpoint-postgres",
+    "xcagi_langgraph_sdk",
+]
+for package_dir in langgraph_vendor_packages:
+    provenance = ROOT / "packages" / package_dir / "PROVENANCE.json"
+    if not provenance.is_file():
+        raise FileNotFoundError(f"missing LangGraph vendor provenance: {provenance}")
+    datas.append((str(provenance), f"vendored-provenance/{package_dir}"))
+
 _staged_industry = (os.environ.get("XCAGI_STAGED_INDUSTRY_SEEDS_DIR") or "").strip()
 if _staged_industry and Path(_staged_industry).is_dir():
     datas.append((str(Path(_staged_industry).resolve()), "industry-seeds"))
@@ -74,6 +91,7 @@ for module in [
     "app.desktop_runtime",
     "app.fastapi_app",
     "app.fastapi_routes",
+    "app.legacy.routes",
     "app.db",
     "app.db.models",
     "app.middleware",
@@ -108,6 +126,20 @@ hiddenimports.extend(
         "app.services.ai_action_audit_service",
         "app.services.ocr_service",
         "app.runtime_integrity",
+    ]
+)
+
+# The boot-time vendored-source gate imports these modules dynamically from a
+# declarative mapping. PyInstaller cannot infer those imports from string keys,
+# so keep the exact audited runtime surface explicit in the frozen bundle.
+hiddenimports.extend(
+    [
+        "langgraph.graph.state",
+        "langgraph.prebuilt.tool_node",
+        "langgraph.checkpoint.base",
+        "langgraph.checkpoint.sqlite",
+        "langgraph.checkpoint.postgres",
+        "langgraph_sdk.client",
     ]
 )
 
