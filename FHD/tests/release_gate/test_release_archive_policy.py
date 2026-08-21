@@ -19,6 +19,8 @@ REQUIRED_RUNTIME_MEMBERS = [
     "./packages/xcagi_langgraph_checkpoint_backends/checkpoint-postgres/langgraph/checkpoint/postgres/__init__.py",
     "./packages/xcagi_langgraph_prebuilt/langgraph/prebuilt/tool_node.py",
     "./packages/xcagi_langgraph_sdk/langgraph_sdk/client.py",
+    "./scripts/deploy/xcmax-release-sync.sh",
+    "./scripts/deploy/xcmax_release_sync_prune.py",
 ]
 
 
@@ -98,5 +100,9 @@ def test_pack_release_bundles_immutable_dr_sync_helper() -> None:
     auto_update = (FHD_ROOT / "scripts/deploy/fhd-auto-update.sh").read_text(encoding="utf-8")
 
     assert 'DR_RELEASE_SYNC="$REPO_ROOT/ops/dr/xcmax_release_sync.sh"' in pack
+    assert 'DR_RELEASE_SYNC_PRUNE="$REPO_ROOT/ops/dr/xcmax_release_sync_prune.py"' in pack
     assert 'cp "$DR_RELEASE_SYNC" "$STAGING/scripts/deploy/xcmax-release-sync.sh"' in pack
+    assert (
+        'cp "$DR_RELEASE_SYNC_PRUNE" "$STAGING/scripts/deploy/xcmax_release_sync_prune.py"' in pack
+    )
     assert 'bundled_sync="$DEPLOY_ROOT/scripts/deploy/xcmax-release-sync.sh"' in auto_update

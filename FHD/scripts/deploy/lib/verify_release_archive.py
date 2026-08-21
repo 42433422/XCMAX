@@ -30,6 +30,8 @@ REQUIRED_RUNTIME_MEMBERS = {
     "packages/xcagi_langgraph_checkpoint_backends/checkpoint-postgres/langgraph/checkpoint/postgres/__init__.py",
     "packages/xcagi_langgraph_prebuilt/langgraph/prebuilt/tool_node.py",
     "packages/xcagi_langgraph_sdk/langgraph_sdk/client.py",
+    "scripts/deploy/xcmax-release-sync.sh",
+    "scripts/deploy/xcmax_release_sync_prune.py",
 }
 
 
