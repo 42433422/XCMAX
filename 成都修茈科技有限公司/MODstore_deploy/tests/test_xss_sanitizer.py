@@ -25,6 +25,4 @@ def test_sanitize_value_recurses_without_html_escaping_legitimate_text() -> None
         ],
     }
 
-    assert _sanitize_value(value) == {
-        "nested": ["a & b", "<!DOCTYPE html><b>kept</b>"]
-    }
+    assert _sanitize_value(value) == {"nested": ["a & b", "<!DOCTYPE html><b>kept</b>"]}
