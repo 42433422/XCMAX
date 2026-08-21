@@ -22,7 +22,7 @@ dependencies = []
 
 [project.optional-dependencies]
 llm = ["openai>=1.0.0"]
-test = ["pytest>=7.0"]
+test = ["pytest>=9.1.1"]
 agent = []
 agent-treesitter = ["tree-sitter>=0.21", "tree-sitter-python>=0.21"]
 sandbox-docker = []
