@@ -75,6 +75,7 @@ dev = [
   "jsonschema>=4.21",
   "mypy>=1.8",
   "openpyxl>=3.1",
+  "pypdf>=4.0",
   # test_cache_extra imports RedisError directly; keep the release-gate
   # environment self-contained instead of relying on runner-global packages.
   "redis>=5.0",
