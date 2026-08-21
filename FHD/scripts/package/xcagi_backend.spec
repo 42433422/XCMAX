@@ -125,6 +125,11 @@ hiddenimports.extend(
         "app.application.chat_business_safety",
         "app.services.ai_action_audit_service",
         "app.services.ocr_service",
+        # XCMAX sync registers these appliers through importlib strings. Static
+        # analysis cannot see them, but the installed desktop entitlement API
+        # imports xcmax_sync_service and must have both modules available.
+        "app.services.xcmax_sync_basic_appliers",
+        "app.services.xcmax_sync_extended_appliers",
         "app.runtime_integrity",
     ]
 )
