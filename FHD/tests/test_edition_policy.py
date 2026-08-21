@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from unittest.mock import patch
 
 import pytest
 
@@ -73,7 +74,7 @@ def test_configure_edition_defaults_desktop(monkeypatch):
     assert resolve_edition() == "generic"
 
 
-def test_seed_skips_existing(tmp_path, monkeypatch):
+def test_seed_refreshes_stale_existing_and_archives_it(tmp_path, monkeypatch):
     bundle = tmp_path / "bundle"
     mods = bundle / "xcagi-planner-bridge"
     mods.mkdir(parents=True)
@@ -82,7 +83,9 @@ def test_seed_skips_existing(tmp_path, monkeypatch):
     )
     target = tmp_path / "user-mods"
     target.mkdir()
-    (target / "xcagi-planner-bridge").mkdir()
+    existing = target / "xcagi-planner-bridge"
+    existing.mkdir()
+    (existing / "legacy.py").write_text("old bridge", encoding="utf-8")
     monkeypatch.setenv("XCAGI_BUNDLED_MODS_DIR", str(bundle))
     from app.infrastructure.mods.mod_manager import ModManager
 
@@ -93,7 +96,74 @@ def test_seed_skips_existing(tmp_path, monkeypatch):
     )
     out = seed_edition_mods_from_bundle("minimal")
     row = next(r for r in out if r["mod_id"] == "xcagi-planner-bridge")
-    assert row["status"] == "skipped"
+    assert row["status"] == "refreshed"
+    assert (existing / "manifest.json").is_file()
+    assert not (existing / "legacy.py").exists()
+    backups = list((target.parent / "bundled-mod-backups" / "xcagi-planner-bridge").iterdir())
+    assert len(backups) == 1
+    assert (backups[0] / "legacy.py").read_text(encoding="utf-8") == "old bridge"
+
+
+def test_seed_skips_existing_when_content_matches_bundle(tmp_path, monkeypatch):
+    bundle = tmp_path / "bundle"
+    source = bundle / "xcagi-planner-bridge"
+    source.mkdir(parents=True)
+    (source / "manifest.json").write_text('{"id":"xcagi-planner-bridge"}', encoding="utf-8")
+    target = tmp_path / "user-mods"
+    existing = target / "xcagi-planner-bridge"
+    existing.mkdir(parents=True)
+    (existing / "manifest.json").write_text('{"id":"xcagi-planner-bridge"}', encoding="utf-8")
+    (existing / "__pycache__").mkdir()
+    (existing / "__pycache__" / "legacy.pyc").write_bytes(b"runtime cache")
+    monkeypatch.setenv("XCAGI_BUNDLED_MODS_DIR", str(bundle))
+    from app.infrastructure.mods.mod_manager import ModManager
+
+    mm = ModManager(mods_root=str(target))
+    monkeypatch.setattr("app.infrastructure.mods.mod_manager.get_mod_manager", lambda: mm)
+    monkeypatch.setattr(
+        "app.mod_sdk.edition_policy.edition_mod_ids", lambda _edition: ("xcagi-planner-bridge",)
+    )
+
+    out = seed_edition_mods_from_bundle("minimal")
+
+    assert out[0]["status"] == "skipped"
+    assert not (target.parent / "bundled-mod-backups").exists()
+
+
+def test_seed_refresh_rolls_back_when_atomic_install_fails(tmp_path, monkeypatch):
+    bundle = tmp_path / "bundle"
+    source = bundle / "xcagi-planner-bridge"
+    source.mkdir(parents=True)
+    (source / "bridge.py").write_text("new bridge", encoding="utf-8")
+    target = tmp_path / "user-mods"
+    existing = target / "xcagi-planner-bridge"
+    existing.mkdir(parents=True)
+    (existing / "bridge.py").write_text("old bridge", encoding="utf-8")
+    monkeypatch.setenv("XCAGI_BUNDLED_MODS_DIR", str(bundle))
+    from app.infrastructure.mods.mod_manager import ModManager
+
+    mm = ModManager(mods_root=str(target))
+    monkeypatch.setattr("app.infrastructure.mods.mod_manager.get_mod_manager", lambda: mm)
+    monkeypatch.setattr(
+        "app.mod_sdk.edition_policy.edition_mod_ids", lambda _edition: ("xcagi-planner-bridge",)
+    )
+
+    real_replace = os.replace
+    replace_calls = 0
+
+    def fail_new_copy_once(source_path, destination_path):
+        nonlocal replace_calls
+        replace_calls += 1
+        if replace_calls == 2:
+            raise OSError("simulated install failure")
+        return real_replace(source_path, destination_path)
+
+    with patch("app.mod_sdk.edition_policy.os.replace", side_effect=fail_new_copy_once):
+        out = seed_edition_mods_from_bundle("minimal")
+
+    assert out[0]["status"] == "error"
+    assert (existing / "bridge.py").read_text(encoding="utf-8") == "old bridge"
+    assert not list(target.glob(".xcagi-seed-*"))
 
 
 def test_seed_copies_bundled_employee_packs_without_overwriting_existing(tmp_path, monkeypatch):

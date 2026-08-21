@@ -201,13 +201,17 @@ def _extract_business_db_write_node(message: str) -> _facade().WorkflowNode | No
             idempotent=False,
         )
     if entity == "customers":
-        unit_name = _facade()._extract_named_slot(
-            message,
-            (
-                "(?:客户|单位|购买单位)\\s*[:：是为]?\\s*([^\\s，,。；;]+)",
-                "(?:新增|添加|创建|写入|保存)\\s*([^\\s，,。；;]+)\\s*(?:客户|单位)",
-            ),
+        unit_name = _facade()._extract_marked_value(
+            message, ("客户名称", "客户名", "购买单位名称", "单位名称", "名称")
         )
+        if not unit_name:
+            unit_name = _facade()._extract_named_slot(
+                message,
+                (
+                    "(?:客户(?!名称|名)|单位(?!名称)|购买单位(?!名称))\\s*[:：是为]?\\s*([^\\s，,。；;]+)",
+                    "(?:新增|添加|创建|写入|保存)\\s*([^\\s，,。；;]+)\\s*(?:客户|单位)",
+                ),
+            )
         if not unit_name:
             return None
         payload = {"unit_name": unit_name, "customer_name": unit_name}
@@ -226,13 +230,17 @@ def _extract_business_db_write_node(message: str) -> _facade().WorkflowNode | No
             idempotent=True,
         )
     if entity == "products":
-        product_name = _facade()._extract_named_slot(
-            message,
-            (
-                "(?:产品|商品)\\s*[:：是为]?\\s*([^\\s，,。；;]+)",
-                "(?:新增|添加|创建|写入|保存)\\s*([^\\s，,。；;]+)\\s*(?:产品|商品)",
-            ),
+        product_name = _facade()._extract_marked_value(
+            message, ("产品名称", "商品名称", "产品名", "商品名", "名称")
         )
+        if not product_name:
+            product_name = _facade()._extract_named_slot(
+                message,
+                (
+                    "(?:产品(?!名称|名)|商品(?!名称|名))\\s*[:：是为]?\\s*([^\\s，,。；;]+)",
+                    "(?:新增|添加|创建|写入|保存)\\s*([^\\s，,。；;]+)\\s*(?:产品|商品)",
+                ),
+            )
         if not product_name:
             return None
         model_match = _facade().re.search(
@@ -267,7 +275,11 @@ def _extract_business_db_write_node(message: str) -> _facade().WorkflowNode | No
             idempotent=False,
         )
     if entity == "materials":
-        name = _facade()._extract_marked_value(message, ("原材料", "物料"))
+        name = _facade()._extract_marked_value(
+            message, ("原材料名称", "物料名称", "原材料名", "物料名", "名称")
+        )
+        if not name:
+            name = _facade()._extract_marked_value(message, ("原材料", "物料"))
         if not name:
             return None
         payload = {"name": name}
