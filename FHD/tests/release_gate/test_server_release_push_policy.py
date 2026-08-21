@@ -271,6 +271,8 @@ def test_ci_requires_explicit_manual_opt_in_for_image_archive() -> None:
             "FHD_PUSH_IMAGE_TAR: ${{ github.event_name == 'workflow_dispatch' "
             "&& inputs.push_image_tar && '1' || '0' }}"
         ) in workflow
+        assert "FHD_PUSH_APPLY_NOW:" in workflow
+        assert "== 'staging' && '1' || '0'" in workflow
         assert 'FHD_CVM_PUSH_TIMEOUT: "75m"' in workflow
         assert "timeout-minutes: 90" in workflow
 
@@ -328,6 +330,13 @@ def test_autonomy_deploy_has_no_human_environment_approval() -> None:
     assert "actions/runs/${GITHUB_RUN_ID}/approvals" not in deploy
     assert "Resume approved autonomy action" not in deploy
     assert "XCAGI_AUTONOMY_MEDIUM_RISK_POLICY=auto_approve" in deploy
+    assert "Authorize exact production release in autonomy ledger" in deploy
+    assert "action_id=release:<40-char git sha>" in deploy
+    assert 'decision:"approved",defer_execution:true' in deploy
+    assert 'approval_source": "autonomy_approval_ledger"' not in deploy
+    assert "fhd-deploy-bootstrap" in deploy
+    assert 'tar -xzf "\\$TARBALL"' in deploy
+    assert 'AUTO="\\$BOOTSTRAP/scripts/deploy/fhd-auto-update.sh"' in deploy
 
 
 def test_forced_self_maintenance_survives_its_own_service_restart() -> None:

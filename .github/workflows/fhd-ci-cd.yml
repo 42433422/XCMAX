@@ -614,6 +614,9 @@ jobs:
           FHD_RELEASE_CHANNEL: ${{ github.event_name == 'workflow_dispatch' && inputs.release_channel || (contains(github.ref, '-rc') && 'staging' || 'stable') }}
           FHD_CVM_PUSH_STRICT: "true"
           FHD_PUSH_IMAGE_TAR: ${{ github.event_name == 'workflow_dispatch' && inputs.push_image_tar && '1' || '0' }}
+          # Stable artifacts are uploaded atomically, then await the audited
+          # fhd-deploy workflow approval. Staging remains immediate.
+          FHD_PUSH_APPLY_NOW: ${{ (github.event_name == 'workflow_dispatch' && inputs.release_channel || (contains(github.ref, '-rc') && 'staging' || 'stable')) == 'staging' && '1' || '0' }}
           # The production link currently needs roughly 42-50 minutes for the
           # normal release tarball. Keep a measured transfer margin while the
           # rsync .part file preserves progress across interrupted runs.

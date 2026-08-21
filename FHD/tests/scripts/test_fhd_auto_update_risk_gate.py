@@ -17,6 +17,7 @@ def _runtime(tmp_path: Path) -> tuple[Path, Path, dict[str, str]]:
     (deploy_root / ".venv" / "bin").mkdir(parents=True)
     (deploy_root / "app").symlink_to(FHD_ROOT / "app", target_is_directory=True)
     (deploy_root / "config").symlink_to(FHD_ROOT / "config", target_is_directory=True)
+    (deploy_root / "resources").symlink_to(FHD_ROOT / "resources", target_is_directory=True)
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     flock = bin_dir / "flock"
@@ -93,16 +94,46 @@ def test_stable_auto_update_requires_human_approval(tmp_path: Path) -> None:
     assert "artifact 不存在" not in log
 
 
-def test_auto_update_and_deploy_bridge_have_no_human_approval_dependency() -> None:
+def test_auto_update_trusts_only_ledger_approval_not_env_or_manifest() -> None:
     auto_update = SCRIPT.read_text(encoding="utf-8")
     bridge = AUTONOMY_BRIDGE.read_text(encoding="utf-8")
 
     for source in (auto_update, bridge):
         assert "FHD_AUTONOMY_APPROVED_BY" not in source
         assert "FHD_AUTONOMY_APPROVAL_ID" not in source
-        assert '"human_approved"' not in source
-        assert '"approved_by"' not in source
-    assert "autonomy_approval" not in auto_update
+    assert 'doc.get("autonomy_approval")' not in auto_update
+    assert "get_action_state(action_id)" in auto_update
+    assert 'approval.get("state") == "approved"' in auto_update
+    assert '"approval_source": "autonomy_approval_ledger"' in auto_update
+
+
+def test_stable_auto_update_accepts_exact_ledger_approval(tmp_path: Path) -> None:
+    _, manifest, env = _runtime(tmp_path)
+    manifest.write_text(json.dumps(_manifest(approved=False)), encoding="utf-8")
+    approval = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "from app.application.autonomy.approval_resume import request_action, resume_action; "
+                "request_action('apply_release_to_cvm', action_id='release:abc123'); "
+                "resume_action('release:abc123', approver='42433422', "
+                "approval_id='run-42', defer_execution=True)"
+            ),
+        ],
+        cwd=FHD_ROOT,
+        env={**env, "PYTHONPATH": str(FHD_ROOT)},
+        text=True,
+        capture_output=True,
+    )
+    assert approval.returncode == 0, approval.stderr
+
+    result = subprocess.run(["bash", str(SCRIPT)], env=env, text=True, capture_output=True)
+
+    assert result.returncode == 1
+    log = (tmp_path / "deploy.log").read_text(encoding="utf-8")
+    assert "autonomy_guard 已批准稳定通道发布" in log
+    assert "artifact 不存在" in log
 
 
 def test_auto_update_prefers_bundled_dr_sync_for_immutable_release(

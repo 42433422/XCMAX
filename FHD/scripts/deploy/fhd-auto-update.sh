@@ -75,19 +75,41 @@ authorize_production_release() {
 import json
 import sys
 
+from app.application.autonomy.approval_resume import get_action_state, record_pending_action
 from app.domain.autonomy.autonomy_guard import evaluate_risk
 
 release_id = sys.argv[1]
+action_id = f"release:{release_id}"
+approval = get_action_state(action_id) or {}
+context = {
+    "trigger": "fhd_auto_update",
+    "execution_mode": "automatic",
+    "release_id": release_id,
+}
+if approval.get("state") == "approved" and str(approval.get("approver") or "").strip():
+    context.update(
+        {
+            "human_approved": True,
+            "approved_by": str(approval["approver"]),
+            "approval_id": str(approval.get("approval_id") or ""),
+            "approval_source": "autonomy_approval_ledger",
+        }
+    )
 decision = evaluate_risk(
     "apply_release_to_cvm",
-    {
-        "trigger": "fhd_auto_update",
-        "execution_mode": "automatic",
-        "release_id": release_id,
-    },
-    action_id=f"release:{release_id}",
+    context,
+    action_id=action_id,
     source="fhd_auto_update.cron",
 )
+if not decision.allowed and decision.requires_confirmation:
+    record_pending_action(
+        action="apply_release_to_cvm",
+        action_id=action_id,
+        payload={"release_id": release_id, "channel": "stable"},
+        decision=decision,
+        source="fhd_auto_update.cron",
+        executor_name="github_deploy",
+    )
 print(json.dumps(decision.to_dict(), ensure_ascii=False))
 raise SystemExit(0 if decision.allowed else 42)
 PY
