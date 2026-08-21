@@ -116,11 +116,11 @@ def _strip_legacy_blocks(text: str) -> str:
     # before parsing block depth, otherwise its orphan `}` looks like the end of
     # the containing server block.
     text = re.sub(
-        r"\n    # market 静态 chunk：[^\n]*\n(?:\s*\n)*"
-        r"        alias /root/成都修茈科技有限公司/MODstore_deploy/market/dist/assets/;\n"
-        r"        add_header Cache-Control \"public, max-age=31536000, immutable\";\n"
-        r"(?:\s*\n)*    \}\n",
-        "\n",
+        r"(?m)^[ \t]*# market 静态 chunk：[^\n]*\n(?:^[ \t]*\n)*"
+        r"^[ \t]+alias[ \t]+/root/成都修茈科技有限公司/MODstore_deploy/market/dist/assets/;[ \t]*\n"
+        r"^[ \t]+add_header[ \t]+Cache-Control[ \t]+\"public, max-age=31536000, immutable\";[ \t]*\n"
+        r"(?:^[ \t]*\n)*^[ \t]*\}[ \t]*\n",
+        "",
         text,
     )
     return text

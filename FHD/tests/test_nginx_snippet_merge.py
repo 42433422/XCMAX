@@ -66,12 +66,12 @@ server {
     listen 443 ssl;
     server_name xiu-ci.com;
 
-    # market 静态 chunk：禁止落入 SPA index.html（避免旧 index 引用缺失 chunk 时 404/HTML 混乱）
+\t# market 静态 chunk：禁止落入 SPA index.html（避免旧 index 引用缺失 chunk 时 404/HTML 混乱）
 
-        alias /root/成都修茈科技有限公司/MODstore_deploy/market/dist/assets/;
-        add_header Cache-Control "public, max-age=31536000, immutable";
+            alias   /root/成都修茈科技有限公司/MODstore_deploy/market/dist/assets/;
+            add_header  Cache-Control  "public, max-age=31536000, immutable";
 
-    }
+\t}
     location = /download {
         try_files /download.html =404;
     }
