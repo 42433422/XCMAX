@@ -35,10 +35,11 @@ import sys
 import time
 from pathlib import Path
 
-from app.utils.operational_errors import RECOVERABLE_ERRORS
-
 FHD_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(FHD_ROOT))
+if str(FHD_ROOT) not in sys.path:
+    sys.path.insert(0, str(FHD_ROOT))
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 DEFAULT_LOG = FHD_ROOT / "resources" / "routing_policies" / "routing_decisions.jsonl"
 STATE_FILE = FHD_ROOT / "resources" / "routing_policies" / ".online_update_state.json"
