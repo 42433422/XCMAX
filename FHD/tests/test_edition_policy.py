@@ -166,6 +166,33 @@ def test_seed_refresh_rolls_back_when_atomic_install_fails(tmp_path, monkeypatch
     assert not list(target.glob(".xcagi-seed-*"))
 
 
+def test_seed_archives_retired_official_mod_without_touching_database(tmp_path, monkeypatch):
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    target = tmp_path / "user-mods"
+    retired = target / "xcagi-wechat-bridge"
+    retired.mkdir(parents=True)
+    (retired / "legacy.py").write_text("removed host import", encoding="utf-8")
+    database = target.parent / "products__xcagi_wechat_bridge.db"
+    database.write_bytes(b"durable business data")
+    monkeypatch.setenv("XCAGI_BUNDLED_MODS_DIR", str(bundle))
+    from app.infrastructure.mods.mod_manager import ModManager
+
+    mm = ModManager(mods_root=str(target))
+    monkeypatch.setattr("app.infrastructure.mods.mod_manager.get_mod_manager", lambda: mm)
+    monkeypatch.setattr("app.mod_sdk.edition_policy.edition_mod_ids", lambda _edition: ())
+
+    out = seed_edition_mods_from_bundle("minimal")
+
+    assert out[0]["mod_id"] == "xcagi-wechat-bridge"
+    assert out[0]["status"] == "retired"
+    assert not retired.exists()
+    backups = list((target.parent / "bundled-mod-backups" / "xcagi-wechat-bridge").iterdir())
+    assert len(backups) == 1
+    assert (backups[0] / "legacy.py").read_text(encoding="utf-8") == "removed host import"
+    assert database.read_bytes() == b"durable business data"
+
+
 def test_seed_copies_bundled_employee_packs_without_overwriting_existing(tmp_path, monkeypatch):
     bundle = tmp_path / "bundle"
     employees = bundle / "_employees"

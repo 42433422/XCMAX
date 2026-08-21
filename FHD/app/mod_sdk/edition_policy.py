@@ -137,6 +137,7 @@ def _resolve_mod_seed_source(mod_id: str, primary: Path) -> Path | None:
 
 
 _BUNDLED_MOD_IGNORES = ("__pycache__", "*.py[co]", ".DS_Store")
+_RETIRED_BUNDLED_MOD_IDS = ("xcagi-wechat-bridge",)
 
 
 def _bundled_mod_digest(root: Path) -> str:
@@ -155,6 +156,17 @@ def _bundled_mod_digest(root: Path) -> str:
     return digest.hexdigest()
 
 
+def _archive_bundled_mod(dst: Path, root: Path) -> Path:
+    replaced_digest = _bundled_mod_digest(dst) if dst.is_dir() else "non-directory"
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+    archive = (
+        root.parent / "bundled-mod-backups" / dst.name / (f"{timestamp}-{replaced_digest[:12]}")
+    )
+    archive.parent.mkdir(parents=True, exist_ok=True)
+    os.replace(dst, archive)
+    return archive
+
+
 def _refresh_bundled_mod(src: Path, dst: Path, root: Path) -> tuple[str, str]:
     """Seed or atomically refresh one official Mod, archiving replaced contents."""
     source_digest = _bundled_mod_digest(src)
@@ -166,16 +178,7 @@ def _refresh_bundled_mod(src: Path, dst: Path, root: Path) -> tuple[str, str]:
     try:
         shutil.copytree(src, stage, ignore=shutil.ignore_patterns(*_BUNDLED_MOD_IGNORES))
         if dst.exists():
-            replaced_digest = _bundled_mod_digest(dst) if dst.is_dir() else "non-directory"
-            timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
-            archive = (
-                root.parent
-                / "bundled-mod-backups"
-                / dst.name
-                / (f"{timestamp}-{replaced_digest[:12]}")
-            )
-            archive.parent.mkdir(parents=True, exist_ok=True)
-            os.replace(dst, archive)
+            archive = _archive_bundled_mod(dst, root)
         try:
             os.replace(stage, dst)
         except OSError:
@@ -189,6 +192,29 @@ def _refresh_bundled_mod(src: Path, dst: Path, root: Path) -> tuple[str, str]:
     if archive is None:
         return ("seeded", str(dst))
     return ("refreshed", f"archived previous copy: {archive}")
+
+
+def _archive_retired_bundled_mods(root: Path) -> list[dict[str, str]]:
+    """Remove retired official code from the active scan root without deleting it."""
+    results: list[dict[str, str]] = []
+    for mod_id in _RETIRED_BUNDLED_MOD_IDS:
+        dst = root / mod_id
+        if not dst.exists():
+            continue
+        try:
+            archive = _archive_bundled_mod(dst, root)
+            results.append(
+                {
+                    "mod_id": mod_id,
+                    "status": "retired",
+                    "message": f"archived retired copy: {archive}",
+                }
+            )
+        except OSError:
+            results.append(
+                {"mod_id": mod_id, "status": "error", "message": "retired mod archive failed"}
+            )
+    return results
 
 
 def _seed_bundled_employee_packs(bundle: Path, root: Path) -> list[dict[str, str]]:
@@ -291,6 +317,7 @@ def seed_edition_mods_from_bundle(
         except OSError:
             results.append({"mod_id": mod_id, "status": "error", "message": "mod seed failed"})
 
+    results.extend(_archive_retired_bundled_mods(root))
     results.extend(_seed_bundled_employee_packs(bundle, root))
     return results
 
