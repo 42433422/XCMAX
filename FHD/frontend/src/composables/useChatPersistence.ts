@@ -437,6 +437,14 @@ export function useChatHistoryPersistence(deps: ChatHistoryPersistenceDeps) {
     })
   }
 
+  function removeLocalSessionCache(targetSessionId: string): void {
+    const sid = String(targetSessionId || '').trim()
+    if (!sid || typeof localStorage === 'undefined') return
+    const mod = getActiveModId()
+    localStorage.removeItem(buildChatMessagesKey(sid, mod))
+    localStorage.removeItem(buildChatSessionMetaKey(sid, mod))
+  }
+
   return {
     normalizeHistorySessions,
     readLocalMessagesBySession,
@@ -446,6 +454,7 @@ export function useChatHistoryPersistence(deps: ChatHistoryPersistenceDeps) {
     listLocalHistorySessions,
     mergeHistorySessions,
     clearLocalHistoryCache,
+    removeLocalSessionCache,
     toPlainText,
     isWelcomeMessage,
     toHistoryTimestamp,

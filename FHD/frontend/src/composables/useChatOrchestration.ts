@@ -269,6 +269,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     showHistoryPanel,
     loadSession: loadSessionFromHistory,
     clearHistorySessions,
+    renameSession,
+    deleteSession,
     newConversation: newConversationFromHistory,
     registerHistoryModWatch,
   } = sessionHistory
@@ -1500,6 +1502,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     onExcelAnalyzeFileChange,
     showHistoryPanel,
     clearHistorySessions,
+    renameSession,
+    deleteSession,
     handleShipmentDownloadClick,
     startPrintFromTaskCard,
     copyAssistantPushContent,

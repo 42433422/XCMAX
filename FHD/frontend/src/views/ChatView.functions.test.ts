@@ -39,6 +39,7 @@ const mockChatViewApi = {
   latestAssistantPush: { value: null },
   taskList: { value: [] },
   filteredTaskList: { value: [] },
+  activeTaskId: { value: '' },
   expandedTaskIds: { value: [] },
   taskFilter: { value: 'all' },
   showHistory: showHistoryRef,
@@ -532,11 +533,10 @@ describe('ChatView task panel layout', () => {
     resetMockRefs()
   })
 
-  it('does not reserve a wide empty task panel before any task exists', async () => {
+  it('always reserves the side panel for the task/conversation switcher', async () => {
     const { wrapper } = await mountChatView()
-    expect((wrapper.vm as any).hasTaskPanelContent).toBe(false)
-    expect(wrapper.findComponent({ name: 'ChatTaskPanel' }).exists()).toBe(false)
-    expect(wrapper.find('.chat-pane-handle-slot').exists()).toBe(false)
+    expect(wrapper.findComponent({ name: 'ChatTaskPanel' }).exists()).toBe(true)
+    expect(wrapper.find('.chat-pane-handle-slot').exists()).toBe(true)
     wrapper.unmount()
   })
 })

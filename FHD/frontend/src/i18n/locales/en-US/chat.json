@@ -86,6 +86,13 @@
     "officeDockingBusy": "Parsing file",
     "officeDockingTitle": "Read Word, Excel, CSV, PDF, or PPT and review before saving",
     "newConversationTitle": "New conversation",
-    "historyTitleBtn": "History"
+    "historyTitleBtn": "History",
+    "taskTab": "Tasks",
+    "conversationTab": "Chats",
+    "newConversation": "New chat",
+    "renameSession": "Rename session",
+    "deleteSession": "Delete session",
+    "renamePlaceholder": "Enter session name",
+    "renameConfirm": "Confirm"
   }
 }

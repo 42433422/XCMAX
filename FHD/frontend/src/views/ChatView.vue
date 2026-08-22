@@ -27,7 +27,7 @@
         @approval-confirm="confirmWorkflowFromCard"
         @approval-cancel="cancelWorkflowFromCard"
       />
-      <div v-if="isTaskPaneResizable && hasTaskPanelContent" class="chat-pane-handle-slot">
+      <div v-if="isTaskPaneResizable" class="chat-pane-handle-slot">
         <PaneResizeHandle
           orientation="vertical"
           label="调整任务面板宽度"
@@ -36,7 +36,6 @@
         />
       </div>
       <ChatTaskPanel
-        v-if="hasTaskPanelContent"
         :current-task="currentTask"
         :task-list="visibleTaskList"
         :filtered-task-list="visibleFilteredTaskList"
@@ -54,6 +53,10 @@
         :format-task-source-label="formatTaskSourceLabel"
         :workflow-task-dot-status-class="workflowTaskDotStatusClassForTask"
         :workflow-task-dot-title="workflowTaskDotTitleForTask"
+        :history-sessions="historySessions"
+        :current-session-id="currentSessionId"
+        :history-loading="historyLoading"
+        :history-error="historyError"
         @confirm-task="confirmTask"
         @cancel-task="cancelTask"
         @refetch-order-number="refetchTaskOrderNumber"
@@ -74,6 +77,12 @@
         @cancel-task-by-id="cancelTaskById"
         @copy-assistant-push="copyAssistantPushContent"
         @open-assistant-float="openAssistantFloatFromTaskPanel"
+        @new-conversation="newConversation"
+        @show-history="showHistoryPanel"
+        @clear-history-sessions="clearHistorySessions"
+        @load-session="loadSession"
+        @rename-session="renameSession"
+        @delete-session="deleteSession"
       />
     </div>
     <div class="input-area" data-tour="chat-input-area">
@@ -304,6 +313,8 @@ const {
   showHistoryPanel,
   loadSession,
   clearHistorySessions,
+  renameSession,
+  deleteSession,
   newConversation,
   handleShipmentDownloadClick,
   startPrintFromTaskCard,
@@ -386,8 +397,6 @@ const inputPlaceholder = computed(() => {
   const preset = getIndustryPreset(currentIndustryId.value)
   return preset.placeholderNormal
 })
-
-const hasTaskPanelContent = computed(() => !!currentTask.value || visibleTaskList.value.length > 0 || !!latestAssistantPush.value)
 
 const canSendMessage = computed(() => !!messageInput.value.trim() && !isLoading.value)
 const sendButtonTitle = computed(() => {

@@ -168,6 +168,14 @@ export const chatApi = {
     return api.get<ApiResponse<ChatSession>>(`/api/conversations/${sessionId}`)
   },
 
+  renameConversation(sessionId: string, title: string): Promise<ApiResponse<{ success: boolean }>> {
+    return api.put<ApiResponse<{ success: boolean }>>(`/api/conversations/${sessionId}/title`, { title })
+  },
+
+  deleteConversation(sessionId: string): Promise<ApiResponse<{ success: boolean }>> {
+    return api.delete<ApiResponse<{ success: boolean }>>(`/api/conversations/${sessionId}`)
+  },
+
   saveMessage(payload: unknown): Promise<ApiResponse<unknown>> {
     return api.post<ApiResponse<unknown>>('/api/conversations/message', payload)
   },
