@@ -78,7 +78,7 @@
         @copy-assistant-push="copyAssistantPushContent"
         @open-assistant-float="openAssistantFloatFromTaskPanel"
         @new-conversation="newConversation"
-        @show-history="showHistoryPanel"
+        @refresh-history="refreshHistorySessions"
         @clear-history-sessions="clearHistorySessions"
         @load-session="loadSession"
         @rename-session="renameSession"
@@ -310,6 +310,7 @@ const {
   approveTask,
   cancelTaskById,
   jumpToTaskMessage,
+  refreshHistorySessions,
   showHistoryPanel,
   loadSession,
   clearHistorySessions,

@@ -176,6 +176,7 @@ vi.mock('./useChatSessionHistory', () => ({
     historySessions: ref([]),
     historyLoading: ref(false),
     historyError: ref(''),
+    refreshHistorySessions: vi.fn(),
     showHistoryPanel: vi.fn(),
     loadSession: vi.fn(),
     clearHistorySessions: vi.fn(),

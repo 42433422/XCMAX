@@ -72,6 +72,7 @@ const mockChatViewApi = {
   retryTask: vi.fn(),
   cancelTaskById: vi.fn(),
   jumpToTaskMessage: vi.fn(),
+  refreshHistorySessions: vi.fn(),
   showHistoryPanel: vi.fn(),
   loadSession: vi.fn(),
   clearHistorySessions: vi.fn(),

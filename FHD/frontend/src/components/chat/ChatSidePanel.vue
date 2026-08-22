@@ -17,7 +17,7 @@
         role="tab"
         :aria-selected="activeTab === 'conversation'"
         :class="{ 'panel-tab--active': activeTab === 'conversation' }"
-        @click="activeTab = 'conversation'"
+        @click="activateConversationTab"
       >
         {{ $t('chat.conversationTab') }}
       </button>
@@ -71,7 +71,7 @@
       :loading="historyLoading"
       :error="historyError"
       @new="$emit('new-conversation')"
-      @refresh="$emit('show-history')"
+      @refresh="$emit('refresh-history')"
       @clear="$emit('clear-history-sessions')"
       @load="(sessionId) => $emit('load-session', sessionId)"
       @rename="(sessionId, title) => $emit('rename-session', sessionId, title)"
@@ -81,7 +81,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { ShipmentTask } from '@/composables/useShipmentTask'
 import type { TaskFilter, TaskItem } from '@/composables/useChatPersistence'
@@ -117,7 +117,7 @@ const props = defineProps<{
   historyError: string
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   'confirm-task': []
   'cancel-task': []
   'refetch-order-number': []
@@ -139,7 +139,7 @@ defineEmits<{
   'copy-assistant-push': []
   'open-assistant-float': []
   'new-conversation': []
-  'show-history': []
+  'refresh-history': []
   'clear-history-sessions': []
   'load-session': [sessionId: string]
   'rename-session': [sessionId: string, title: string]
@@ -147,6 +147,15 @@ defineEmits<{
 }>()
 
 const activeTab = ref<'task' | 'conversation'>(props.currentTask || props.taskList.length ? 'task' : 'conversation')
+
+function activateConversationTab() {
+  activeTab.value = 'conversation'
+  emit('refresh-history')
+}
+
+onMounted(() => {
+  if (activeTab.value === 'conversation') emit('refresh-history')
+})
 </script>
 
 <style scoped>

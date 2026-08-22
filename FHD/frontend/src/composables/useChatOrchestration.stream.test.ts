@@ -10,6 +10,7 @@ const {
   sendChatStream,
   readPlannerSseResponse,
   requestChatByModeWithTimeout,
+  refreshHistorySessions,
 } = vi.hoisted(() => ({
   handleChatRequiresToken: vi.fn(),
   applyPlainTextToMessageIndex: vi.fn(),
@@ -18,6 +19,7 @@ const {
   sendChatStream: vi.fn(),
   readPlannerSseResponse: vi.fn(),
   requestChatByModeWithTimeout: vi.fn(),
+  refreshHistorySessions: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('./useChatMessages', async () => {
@@ -187,6 +189,7 @@ vi.mock('./useChatSessionHistory', () => ({
     historySessions: ref([]),
     historyLoading: ref(false),
     historyError: ref(''),
+    refreshHistorySessions,
     showHistoryPanel: vi.fn(),
     loadSession: vi.fn(),
     clearHistorySessions: vi.fn(),
@@ -240,6 +243,7 @@ describe('useChatOrchestration stream', () => {
     expect(sendChatStream).toHaveBeenCalled()
     expect(readPlannerSseResponse).toHaveBeenCalled()
     expect(applyPlainTextToMessageIndex).toHaveBeenCalled()
+    expect(refreshHistorySessions).toHaveBeenCalledOnce()
     expect(saveMessage).not.toHaveBeenCalled()
     expect(requestChatByModeWithTimeout).not.toHaveBeenCalled()
   })

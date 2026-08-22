@@ -189,6 +189,22 @@ describe('useChatSessionHistory — coverage ramp', () => {
   // showHistoryPanel
   // -----------------------------------------------------------------------
   describe('showHistoryPanel', () => {
+    it('refreshes sidebar sessions without opening the history modal', async () => {
+      chatApiMock.getConversations.mockResolvedValue({
+        success: true,
+        sessions: [{ session_id: 'side-1', title: '侧栏会话', message_count: 2 }],
+      })
+      const { deps } = makeDeps()
+      const { refreshHistorySessions, showHistory, historySessions } = useChatSessionHistory(deps)
+
+      await refreshHistorySessions()
+
+      expect(showHistory.value).toBe(false)
+      expect(historySessions.value).toEqual([
+        expect.objectContaining({ session_id: 'side-1', title: '侧栏会话', message_count: 2 }),
+      ])
+    })
+
     it('loads server sessions successfully and merges with local', async () => {
       chatApiMock.getConversations.mockResolvedValue({
         success: true,
