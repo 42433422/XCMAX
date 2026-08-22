@@ -114,9 +114,7 @@ def test_pack_release_bundles_immutable_dr_sync_helper() -> None:
 
 def test_pack_release_bundles_exact_autonomy_runtime() -> None:
     pack = (FHD_ROOT / "scripts/deploy/fhd-pack-release.sh").read_text(encoding="utf-8")
-    apply_release = (FHD_ROOT / "scripts/deploy/fhd-apply-release.sh").read_text(
-        encoding="utf-8"
-    )
+    apply_release = (FHD_ROOT / "scripts/deploy/fhd-apply-release.sh").read_text(encoding="utf-8")
 
     assert '"$FHD_ROOT/scripts/autonomy/" "$STAGING/scripts/autonomy/"' in pack
     assert '"$FHD_ROOT/scripts/ci/_approval_ledger_client.py"' in pack
@@ -128,9 +126,7 @@ def test_pack_release_bundles_exact_autonomy_runtime() -> None:
 
 
 def test_cvm_watcher_sets_pythonpath_for_release_and_fallback_probes() -> None:
-    watcher = (FHD_ROOT / ".github/workflows/cvm-autonomy-watcher.yml").read_text(
-        encoding="utf-8"
-    )
+    watcher = (FHD_ROOT / ".github/workflows/cvm-autonomy-watcher.yml").read_text(encoding="utf-8")
 
     assert 'PROBE_ROOT="${PROBE_DEPLOY_ROOT}"' in watcher
     assert 'PROBE_ROOT="/opt/xcmax/current/FHD"' in watcher
