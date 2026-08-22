@@ -13,12 +13,16 @@ import { ref, type Ref } from 'vue'
 import { setActivePinia, createPinia } from 'pinia'
 
 vi.mock('@/api/agentRuns', () => ({
-  default: { observeTool: vi.fn().mockResolvedValue({ success: true }) },
+  default: {
+    observeTool: vi.fn().mockResolvedValue({ success: true }),
+    taskEventStreamPath: vi.fn(() => '/api/agent/tasks/events/stream'),
+  },
 }))
 
 // ── vi.hoisted：所有在 vi.mock 工厂中引用的 vi.fn 必须在此定义 ───
 const {
   mockAddAndSaveMessage,
+  mockAddMessage,
   mockExecutePrintTask,
   mockBuildPrintSummaryMessage,
   mockHandleChatRequiresToken,
@@ -67,6 +71,7 @@ const {
   state,
 } = vi.hoisted(() => ({
   mockAddAndSaveMessage: vi.fn().mockResolvedValue(undefined),
+  mockAddMessage: vi.fn(),
   mockExecutePrintTask: vi.fn(),
   mockBuildPrintSummaryMessage: vi.fn(() => '打印完成'),
   mockHandleChatRequiresToken: vi.fn(),
@@ -138,7 +143,7 @@ vi.mock('./useChatMessages', async () => {
   return {
     useChatMessages: () => ({
       messages: ref([]),
-      addMessage: vi.fn(),
+      addMessage: mockAddMessage,
       addAndSaveMessage: mockAddAndSaveMessage,
       saveMessage: mockSaveMessage,
       pushStreamingAiShell: mockPushStreamingAiShell,
@@ -1299,7 +1304,7 @@ describe('useChatOrchestration coverage – executeRemoteChatRound 批量', () =
     const api = createApi()
     await api.sendMessage('批量')
     await vi.waitFor(() => {
-      expect(mockAddAndSaveMessage).toHaveBeenCalledWith(expect.stringContaining('part-2 失败'), 'ai', undefined, expect.any(Object))
+      expect(mockAddMessage).toHaveBeenCalledWith(expect.stringContaining('part-2 失败'), 'ai', undefined, expect.any(Object))
     })
   })
 
@@ -1313,7 +1318,7 @@ describe('useChatOrchestration coverage – executeRemoteChatRound 批量', () =
     const api = createApi()
     await api.sendMessage('批量')
     await vi.waitFor(() => {
-      expect(mockAddAndSaveMessage).toHaveBeenCalledWith(expect.stringContaining('批量请求失败'), 'ai', undefined, expect.any(Object))
+      expect(mockAddMessage).toHaveBeenCalledWith(expect.stringContaining('批量请求失败'), 'ai', undefined, expect.any(Object))
     })
   })
 
@@ -1407,14 +1412,14 @@ describe('useChatOrchestration coverage – executeRemoteChatRound 单条 JSON',
     })
     const api = createApi()
     await api.sendMessage('普通')
-    expect(mockAddAndSaveMessage).toHaveBeenCalledWith(expect.stringContaining('处理出错'), 'ai', undefined, expect.any(Object))
+    expect(mockAddMessage).toHaveBeenCalledWith(expect.stringContaining('处理出错'), 'ai', undefined, expect.any(Object))
   })
 
   it('单条请求抛出异常', async () => {
     mockRequestChatByModeWithTimeout.mockRejectedValue(new Error('请求超时'))
     const api = createApi()
     await api.sendMessage('普通')
-    expect(mockAddAndSaveMessage).toHaveBeenCalledWith(expect.stringContaining('请求超时'), 'ai', undefined, expect.any(Object))
+    expect(mockAddMessage).toHaveBeenCalledWith(expect.stringContaining('请求超时'), 'ai', undefined, expect.any(Object))
   })
 
   it('单条请求抛出非 Error 类型', async () => {
@@ -1422,7 +1427,7 @@ describe('useChatOrchestration coverage – executeRemoteChatRound 单条 JSON',
     const api = createApi()
     await api.sendMessage('普通')
     await vi.waitFor(() => {
-      expect(mockAddAndSaveMessage).toHaveBeenCalledWith(expect.stringContaining('字符串错误'), 'ai', undefined, expect.any(Object))
+      expect(mockAddMessage).toHaveBeenCalledWith(expect.stringContaining('字符串错误'), 'ai', undefined, expect.any(Object))
     })
   })
 
@@ -1530,7 +1535,8 @@ describe('useChatOrchestration coverage – executeRemoteChatRound 流式', () =
     })
     const api = createApi()
     await api.sendMessage('hello')
-    expect(mockSaveMessage).toHaveBeenCalled()
+    expect(mockApplyPlainTextToMessageIndex).toHaveBeenLastCalledWith(0, '纯文本')
+    expect(mockSaveMessage).not.toHaveBeenCalled()
   })
 
   it('流式 done 有 result 但无 response 时用 streamPlain', async () => {
@@ -1540,7 +1546,8 @@ describe('useChatOrchestration coverage – executeRemoteChatRound 流式', () =
     })
     const api = createApi()
     await api.sendMessage('hello')
-    expect(mockSaveMessage).toHaveBeenCalled()
+    expect(mockApplyPlainTextToMessageIndex).toHaveBeenLastCalledWith(0, '内容')
+    expect(mockSaveMessage).not.toHaveBeenCalled()
   })
 
   it('流式 SSE error 事件时报告错误', async () => {

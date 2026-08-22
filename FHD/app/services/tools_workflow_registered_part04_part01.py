@@ -88,25 +88,46 @@ def _registered_router_business_db(
     if not prepared.get("success"):
         return dict(prepared)
     payload = dict(prepared.get("payload") or {})
+
+    def verified(result: dict) -> dict:
+        from app.application.business_db_write_verification import verify_business_db_write
+
+        return verify_business_db_write(
+            entity=entity,
+            operation=operation,
+            payload=payload,
+            result=result,
+        )
+
     if entity == "customers":
         if operation in ("create", "ensure_exists", "upsert"):
-            return _facade()._registered_router_customers(
-                operation, payload, runtime_context, profile, user_message
+            return verified(
+                _facade()._registered_router_customers(
+                    operation, payload, runtime_context, profile, user_message
+                )
             )
         if operation == "update":
             fields = _facade()._business_db_update_fields(payload)
             if not fields:
                 return {"success": False, "message": "customers.update 缺少 changes/fields。"}
-            return _facade()._registered_router_customers(
-                "update", {"id": payload["id"], **fields}, runtime_context, profile, user_message
+            return verified(
+                _facade()._registered_router_customers(
+                    "update",
+                    {"id": payload["id"], **fields},
+                    runtime_context,
+                    profile,
+                    user_message,
+                )
             )
         if operation == "delete":
-            return _facade()._registered_router_customers(
-                "delete",
-                {"id": payload["id"], "force": False},
-                runtime_context,
-                profile,
-                user_message,
+            return verified(
+                _facade()._registered_router_customers(
+                    "delete",
+                    {"id": payload["id"], "force": False},
+                    runtime_context,
+                    profile,
+                    user_message,
+                )
             )
         return {
             "success": False,
@@ -114,32 +135,50 @@ def _registered_router_business_db(
         }
     if entity == "products":
         if operation == "create":
-            return _facade()._registered_router_products(
-                "create", payload, runtime_context, profile, user_message
+            return verified(
+                _facade()._registered_router_products(
+                    "create", payload, runtime_context, profile, user_message
+                )
             )
         if operation == "update":
             fields = _facade()._business_db_update_fields(payload)
             if not fields:
                 return {"success": False, "message": "products.update 缺少 changes/fields。"}
-            return _facade()._registered_router_products(
-                "update", {"id": payload["id"], **fields}, runtime_context, profile, user_message
+            return verified(
+                _facade()._registered_router_products(
+                    "update",
+                    {"id": payload["id"], **fields},
+                    runtime_context,
+                    profile,
+                    user_message,
+                )
             )
         if operation == "delete":
-            return _facade()._registered_router_products(
-                "delete", {"id": payload["id"]}, runtime_context, profile, user_message
+            return verified(
+                _facade()._registered_router_products(
+                    "delete", {"id": payload["id"]}, runtime_context, profile, user_message
+                )
             )
         return {"success": False, "message": "products 支持 create/update/delete；查询请用 read。"}
     if entity == "materials":
         if operation == "create":
-            return _facade()._registered_router_materials(
-                "create", payload, runtime_context, profile, user_message
+            return verified(
+                _facade()._registered_router_materials(
+                    "create", payload, runtime_context, profile, user_message
+                )
             )
         if operation == "update":
             fields = _facade()._business_db_update_fields(payload)
             if not fields:
                 return {"success": False, "message": "materials.update 缺少 changes/fields。"}
-            return _facade()._registered_router_materials(
-                "update", {"id": payload["id"], **fields}, runtime_context, profile, user_message
+            return verified(
+                _facade()._registered_router_materials(
+                    "update",
+                    {"id": payload["id"], **fields},
+                    runtime_context,
+                    profile,
+                    user_message,
+                )
             )
         if operation == "delete":
             result = _facade()._registered_router_materials(
@@ -164,12 +203,14 @@ def _registered_router_business_db(
                         "success": False,
                         "message": "原材料软删除后物理清理未命中唯一租户记录。",
                     }
-            return result
+            return verified(result)
         return {"success": False, "message": "materials 支持 create/update/delete。"}
     if entity == "shipment_records":
         if operation == "create":
-            return _facade()._registered_router_shipment_records(
-                "create", payload, runtime_context, profile, user_message
+            return verified(
+                _facade()._registered_router_shipment_records(
+                    "create", payload, runtime_context, profile, user_message
+                )
             )
         if operation == "update":
             fields = _facade()._business_db_update_fields(payload)
@@ -178,12 +219,20 @@ def _registered_router_business_db(
                     "success": False,
                     "message": "shipment_records.update 缺少 changes/fields。",
                 }
-            return _facade()._registered_router_shipment_records(
-                "update", {"id": payload["id"], **fields}, runtime_context, profile, user_message
+            return verified(
+                _facade()._registered_router_shipment_records(
+                    "update",
+                    {"id": payload["id"], **fields},
+                    runtime_context,
+                    profile,
+                    user_message,
+                )
             )
         if operation == "delete":
-            return _facade()._registered_router_shipment_records(
-                "delete", {"id": payload["id"]}, runtime_context, profile, user_message
+            return verified(
+                _facade()._registered_router_shipment_records(
+                    "delete", {"id": payload["id"]}, runtime_context, profile, user_message
+                )
             )
         return {"success": False, "message": "shipment_records 支持 create/update/delete。"}
     return {"success": False, "message": f"不支持的 entity: {entity}"}

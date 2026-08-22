@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 import type { AgentRun } from '@/api/agentRuns'
 import type { TaskItem } from './useChatPersistence'
@@ -14,6 +14,7 @@ const apiMock = vi.hoisted(() => ({
   getRun: vi.fn(),
   continueRun: vi.fn(),
   markTaskRead: vi.fn(),
+  taskEventStreamPath: vi.fn(),
 }))
 
 vi.mock('@/api/agentRuns', () => ({ default: apiMock }))
@@ -60,6 +61,8 @@ function serverTask(status = 'running') {
 }
 
 describe('useAgentTaskWorkspace', () => {
+  const originalEventSource = globalThis.EventSource
+
   beforeEach(() => {
     localStorage.clear()
     Object.values(apiMock).forEach((mock) => mock.mockReset().mockResolvedValue({ success: true }))
@@ -70,6 +73,12 @@ describe('useAgentTaskWorkspace', () => {
       data: serverRun('waiting_user'),
       approval: { grant: 'bound-grant' },
     })
+    apiMock.taskEventStreamPath.mockReturnValue('/api/agent/tasks/events/stream')
+  })
+
+  afterEach(() => {
+    globalThis.EventSource = originalEventSource
+    vi.useRealTimers()
   })
 
   function setup() {
@@ -143,5 +152,48 @@ describe('useAgentTaskWorkspace', () => {
       approval_grant: 'bound-grant',
     })
     expect(apiMock.listTasks).toHaveBeenCalledTimes(2)
+  })
+
+  it('uses task snapshots as the live clock and keeps polling as a slow fallback', async () => {
+    class FakeEventSource {
+      static instances: FakeEventSource[] = []
+      readonly listeners = new Map<string, (event: MessageEvent) => void>()
+      onerror: (() => void) | null = null
+      closed = false
+
+      constructor(readonly url: string) {
+        FakeEventSource.instances.push(this)
+      }
+
+      addEventListener(type: string, listener: EventListenerOrEventListenerObject): void {
+        this.listeners.set(type, listener as (event: MessageEvent) => void)
+      }
+
+      emit(type: string, payload: unknown): void {
+        this.listeners.get(type)?.({ data: JSON.stringify(payload) } as MessageEvent)
+      }
+
+      close(): void {
+        this.closed = true
+      }
+    }
+
+    globalThis.EventSource = FakeEventSource as unknown as typeof EventSource
+    vi.useFakeTimers()
+    const state = setup()
+    state.workspace.start()
+    await Promise.resolve()
+
+    expect(FakeEventSource.instances[0]?.url).toContain('/api/agent/tasks/events/stream')
+    FakeEventSource.instances[0]?.emit('task.snapshot', [serverTask('completed')])
+    expect(state.taskList.value[0]?.status).toBe('success')
+
+    await vi.advanceTimersByTimeAsync(14_999)
+    expect(apiMock.listTasks).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(apiMock.listTasks).toHaveBeenCalledTimes(2)
+
+    state.workspace.stop()
+    expect(FakeEventSource.instances[0]?.closed).toBe(true)
   })
 })

@@ -1259,6 +1259,20 @@ class TestNormalizeBusinessDbEntity:
 class TestBusinessDbRouter:
     """_registered_router_business_db 分支覆盖。"""
 
+    @pytest.fixture(autouse=True)
+    def _stub_readback_verification(self):
+        def verified(**kwargs):
+            return {
+                **kwargs["result"],
+                "business_verification": {"verified": True, "state": "present"},
+            }
+
+        with patch(
+            "app.application.business_db_write_verification.verify_business_db_write",
+            side_effect=verified,
+        ):
+            yield
+
     def test_missing_entity(self) -> None:
         result = _registered_router_business_db("read", {}, _ctx(), "normal", "")
         assert result["success"] is False

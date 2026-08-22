@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -91,7 +92,7 @@ def _session_to_dict(session: object) -> dict:
 
 def _message_to_dict(message: object) -> dict:
     if isinstance(message, dict):
-        return {
+        result = {
             "id": message.get("id"),
             "session_id": message.get("session_id"),
             "user_id": message.get("user_id"),
@@ -101,8 +102,8 @@ def _message_to_dict(message: object) -> dict:
             "metadata": message.get("metadata") or message.get("conversation_metadata") or "",
             "created_at": message.get("created_at"),
         }
-    if isinstance(message, tuple):
-        return {
+    elif isinstance(message, tuple):
+        result = {
             "id": message[0] if len(message) > 0 else None,
             "session_id": message[1] if len(message) > 1 else None,
             "user_id": message[2] if len(message) > 2 else None,
@@ -112,16 +113,32 @@ def _message_to_dict(message: object) -> dict:
             "metadata": (message[6] if len(message) > 6 else "") or "",
             "created_at": message[7] if len(message) > 7 else None,
         }
-    return {
-        "id": getattr(message, "id", None),
-        "session_id": getattr(message, "session_id", None),
-        "user_id": getattr(message, "user_id", None),
-        "role": getattr(message, "role", None),
-        "content": getattr(message, "content", None),
-        "intent": getattr(message, "intent", "") or "",
-        "metadata": getattr(message, "conversation_metadata", "") or "",
-        "created_at": getattr(message, "created_at", None),
-    }
+    else:
+        result = {
+            "id": getattr(message, "id", None),
+            "session_id": getattr(message, "session_id", None),
+            "user_id": getattr(message, "user_id", None),
+            "role": getattr(message, "role", None),
+            "content": getattr(message, "content", None),
+            "intent": getattr(message, "intent", "") or "",
+            "metadata": getattr(message, "conversation_metadata", "") or "",
+            "created_at": getattr(message, "created_at", None),
+        }
+    metadata = result.get("metadata")
+    try:
+        parsed_metadata = (
+            json.loads(metadata) if isinstance(metadata, str) and metadata else metadata
+        )
+    except (TypeError, ValueError, json.JSONDecodeError):
+        parsed_metadata = {}
+    if isinstance(parsed_metadata, dict):
+        ui_payload = parsed_metadata.get("ui")
+        if isinstance(ui_payload, dict):
+            result["ui_payload"] = ui_payload
+        harness = parsed_metadata.get("business_harness")
+        if isinstance(harness, dict):
+            result["business_harness"] = harness
+    return result
 
 
 def _dispatch_tool_for_approval(

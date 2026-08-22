@@ -128,6 +128,15 @@ def _approve_ai_workflow_request_without_node(
     notification = _facade().completed_workflow_notification(req) if req.applicant_id else None
     db.commit()
     db.refresh(req)
+    if workflow_execution and workflow_execution.get("agent_run_id"):
+        from app.application.business_harness_projection import (
+            project_terminal_run_to_conversation,
+        )
+
+        project_terminal_run_to_conversation(
+            str(workflow_execution.get("agent_run_id") or ""),
+            approval_request_id=str(req.request_no or ""),
+        )
     if _execution_success and notification is not None:
         _facade().notify_mobile_user(*notification)
     data = _facade()._request_to_dict(req, include_records=True)

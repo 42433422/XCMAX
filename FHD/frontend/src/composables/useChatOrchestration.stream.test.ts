@@ -240,7 +240,7 @@ describe('useChatOrchestration stream', () => {
     expect(sendChatStream).toHaveBeenCalled()
     expect(readPlannerSseResponse).toHaveBeenCalled()
     expect(applyPlainTextToMessageIndex).toHaveBeenCalled()
-    expect(saveMessage).toHaveBeenCalledWith('ai', '你好', 's')
+    expect(saveMessage).not.toHaveBeenCalled()
     expect(requestChatByModeWithTimeout).not.toHaveBeenCalled()
   })
 
