@@ -50,6 +50,10 @@ install -d -m 0700 -o "$PG_OS_USER" -g "$PG_OS_USER" \
 install -d -m 0700 "$STATE" "$(dirname "$LOG")"
 touch "$LOG"
 
+# shellcheck source=../lib/wal_archive_command.sh
+# shellcheck disable=SC1091
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../lib" &>/dev/null && pwd)/wal_archive_command.sh"
+
 exec 9>"$LOCK"
 flock -n 9 || exit 0
 
@@ -78,7 +82,7 @@ if [[ "$(pg_show archive_mode)" != "on" ]]; then
     "ALTER SYSTEM SET archive_mode TO 'on'" postgres
   restart_required=1
 fi
-archive_cmd="test ! -f ${ARCHIVE}/%f && cp %p ${ARCHIVE}/%f"
+archive_cmd="$(xcmax_wal_archive_command "$ARCHIVE")"
 escaped_archive_cmd="${archive_cmd//\'/\'\'}"
 if [[ "$(pg_show archive_command)" != "$archive_cmd" ]]; then
   sudo -u "$PG_OS_USER" psql -v ON_ERROR_STOP=1 -qc \
