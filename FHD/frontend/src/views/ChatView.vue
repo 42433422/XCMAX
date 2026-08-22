@@ -35,7 +35,7 @@
           @reset="resetTaskPaneWidth"
         />
       </div>
-      <ChatTaskPanel
+      <ChatSidePanel
         :current-task="currentTask"
         :task-list="visibleTaskList"
         :filtered-task-list="visibleFilteredTaskList"
@@ -209,7 +209,7 @@ import { useRouter } from 'vue-router'
 import PaneResizeHandle from '@/components/PaneResizeHandle.vue'
 import ChatQuickActions from '@/components/chat/ChatQuickActions.vue'
 import ChatMessageList from '@/components/chat/ChatMessageList.vue'
-import ChatTaskPanel from '@/components/chat/ChatTaskPanel.vue'
+import ChatSidePanel from '@/components/chat/ChatSidePanel.vue'
 import ChatInputToolbar from '@/components/chat/ChatInputToolbar.vue'
 import ChatHistoryModal from '@/components/chat/ChatHistoryModal.vue'
 import ChatOfficeDockingReview from '@/components/chat/ChatOfficeDockingReview.vue'

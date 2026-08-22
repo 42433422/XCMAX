@@ -192,6 +192,14 @@ vi.mock('@/components/chat/ChatTaskPanel.vue', () => ({
   default: defineComponent({ name: 'ChatTaskPanel', setup: () => () => h('div') }),
 }))
 
+vi.mock('@/components/chat/ChatConversationPanel.vue', () => ({
+  default: defineComponent({ name: 'ChatConversationPanel', setup: () => () => h('div') }),
+}))
+
+vi.mock('@/components/chat/ChatSidePanel.vue', () => ({
+  default: defineComponent({ name: 'ChatSidePanel', setup: () => () => h('div') }),
+}))
+
 vi.mock('@/components/chat/ChatInputToolbar.vue', () => ({
   default: defineComponent({ name: 'ChatInputToolbar', setup: () => () => h('div') }),
 }))
@@ -535,7 +543,7 @@ describe('ChatView task panel layout', () => {
 
   it('always reserves the side panel for the task/conversation switcher', async () => {
     const { wrapper } = await mountChatView()
-    expect(wrapper.findComponent({ name: 'ChatTaskPanel' }).exists()).toBe(true)
+    expect(wrapper.findComponent({ name: 'ChatSidePanel' }).exists()).toBe(true)
     expect(wrapper.find('.chat-pane-handle-slot').exists()).toBe(true)
     wrapper.unmount()
   })

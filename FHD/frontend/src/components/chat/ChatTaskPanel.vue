@@ -1,28 +1,5 @@
 <template>
-  <div class="right-panel">
-    <div class="panel-header panel-header-tabs">
-      <button
-        type="button"
-        class="panel-tab"
-        :class="{ 'panel-tab--active': activeTab === 'task' }"
-        :aria-selected="activeTab === 'task'"
-        role="tab"
-        @click="activeTab = 'task'"
-      >
-        {{ $t('chat.taskTab') }}
-      </button>
-      <button
-        type="button"
-        class="panel-tab"
-        :class="{ 'panel-tab--active': activeTab === 'conversation' }"
-        :aria-selected="activeTab === 'conversation'"
-        role="tab"
-        @click="activeTab = 'conversation'"
-      >
-        {{ $t('chat.conversationTab') }}
-      </button>
-    </div>
-    <div v-if="activeTab === 'task'" class="panel-content panel-content-task" id="taskPanel">
+  <div class="panel-content panel-content-task" id="taskPanel">
       <div class="task-panel-body">
         <template v-if="currentTask">
           <div class="task-card" :class="{ 'excel-import-task': currentTask?.type === 'excel_import' }">
@@ -281,30 +258,14 @@
         <div v-else-if="!currentTask && !taskList.length" class="empty-state">{{ $t('chat.noActiveTasks') }}</div>
       </div>
     </div>
-    <ChatConversationPanel
-      v-else
-      :sessions="historySessions"
-      :current-session-id="currentSessionId"
-      :loading="historyLoading"
-      :error="historyError"
-      @new="$emit('new-conversation')"
-      @refresh="$emit('show-history')"
-      @clear="$emit('clear-history-sessions')"
-      @load="(sid) => $emit('load-session', sid)"
-      @rename="(sid, title) => $emit('rename-session', sid, title)"
-      @delete="(sid) => $emit('delete-session', sid)"
-    />
-  </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { ShipmentTask } from '@/composables/useShipmentTask'
 import type { TaskFilter, TaskItem } from '@/composables/useChatPersistence'
-import type { HistorySessionItem } from '@/composables/useChatSessionHistory'
 import AgentTaskRuntimePanel from './AgentTaskRuntimePanel.vue'
-import ChatConversationPanel from './ChatConversationPanel.vue'
 import { workflowProgressIsIdle } from '@/workflow/coreWorkflowTaskUi'
 import { normalizeTaskDisplayText } from '@/utils/chatTaskLabels'
 useI18n()
@@ -345,10 +306,6 @@ const props = defineProps<{
   formatTaskSourceLabel: (source: string) => string
   workflowTaskDotStatusClass: (task: TaskItem) => string
   workflowTaskDotTitle: (task: TaskItem) => string
-  historySessions: HistorySessionItem[]
-  currentSessionId: string
-  historyLoading: boolean
-  historyError: string
 }>()
 const emit = defineEmits<{
   'confirm-task': []
@@ -370,54 +327,13 @@ const emit = defineEmits<{
   'cancel-task-by-id': [id: string]
   'copy-assistant-push': []
   'open-assistant-float': []
-  'new-conversation': []
-  'show-history': []
-  'clear-history-sessions': []
-  'load-session': [sessionId: string]
-  'rename-session': [sessionId: string, title: string]
-  'delete-session': [sessionId: string]
 }>()
-const activeTab = ref<'task' | 'conversation'>(props.currentTask || props.taskList.length ? 'task' : 'conversation')
 const customOrderNumberModel = computed({
   get: () => props.currentTask?.customOrderNumber ?? '',
   set: (value: string) => emit('set-custom-order-number', value),
 })
 </script>
 <style scoped>
-.panel-header-tabs {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  padding: 10px 12px;
-}
-
-.panel-tab {
-  flex: 1;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--app-text-muted, #64748b);
-  border-radius: 8px;
-  padding: 7px 10px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition:
-    background 150ms ease,
-    color 150ms ease,
-    border-color 150ms ease;
-}
-
-.panel-tab:hover {
-  background: rgba(0, 0, 0, 0.04);
-  color: var(--app-text-strong, #1f2329);
-}
-
-.panel-tab--active {
-  background: rgba(0, 82, 217, 0.08);
-  color: var(--app-interactive, #0052d9);
-  border-color: rgba(0, 82, 217, 0.18);
-}
-
 .panel-content.panel-content-task {
   display: flex;
   flex-direction: column;
