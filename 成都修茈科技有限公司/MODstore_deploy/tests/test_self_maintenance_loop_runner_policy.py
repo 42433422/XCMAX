@@ -2618,6 +2618,37 @@ def test_quality_command_matchers_require_real_commands_and_scopes():
     assert not matches_source_governance_command(
         "echo python3 scripts/dev/source_governance.py --top 10"
     )
+    assert not matches_source_governance_command("python3 scripts/dev/source_governance.py --help")
+    assert not matches_source_governance_command("python3 scripts/dev/source_governance.py --top 1")
+    assert not matches_source_governance_command(
+        "python3 scripts/dev/source_governance.py --top 10 --repo-root /tmp"
+    )
+
+
+def test_quality_gate_rejects_noncanonical_source_governance_command():
+    qa_json = {
+        "quality_checks": {
+            "black": {
+                "command": "python3 -m black --check modman/ modstore_server/ tests/",
+                "exit_code": 0,
+                "status": "passed",
+            },
+            "isort": {
+                "command": (
+                    "python3 -m isort --check-only --diff " "modman/ modstore_server/ tests/"
+                ),
+                "exit_code": 0,
+                "status": "passed",
+            },
+            "source_governance": {
+                "command": "python3 scripts/dev/source_governance.py --help",
+                "exit_code": 0,
+                "status": "passed",
+            },
+        }
+    }
+
+    assert quality_check_failure(qa_json) == "structured_qa_source_governance_not_passed"
 
 
 @pytest.mark.parametrize(

@@ -260,7 +260,7 @@ def matches_isort_check_command(
 
 
 def matches_source_governance_command(command: Any) -> bool:
-    """Require execution of the repository source-governance ratchet."""
+    """Require the canonical repository source-governance ratchet command."""
 
     tokens = _safe_command_tokens(str(command or "").strip())
     if tokens is None:
@@ -276,7 +276,7 @@ def matches_source_governance_command(command: Any) -> bool:
         if normalized == "scripts/dev/source_governance.py" or normalized.endswith(
             "/scripts/dev/source_governance.py"
         ):
-            return True
+            return segment[2:] == ["--top", "10"]
     return False
 
 
