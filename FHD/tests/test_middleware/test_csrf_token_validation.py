@@ -73,6 +73,10 @@ def client():
     def autonomy_ingest():
         return {"ok": True}
 
+    @app.post("/api/xcmax/ops/founder-autonomy/refresh-internal")
+    def founder_autonomy_refresh():
+        return {"success": True}
+
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -238,6 +242,34 @@ def test_ops_autonomy_ingest_requires_token_header(client):
     assert rejected.status_code == 403
     assert allowed.status_code == 200
     assert allowed.json() == {"ok": True}
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {},
+        {"X-Autonomy-Token": "automation-secret"},
+        {"Authorization": "Bearer market-admin-jwt"},
+    ],
+)
+def test_founder_autonomy_internal_refresh_requires_both_machine_credentials(client, headers):
+    rejected = client.post(
+        "/api/xcmax/ops/founder-autonomy/refresh-internal",
+        headers=headers,
+    )
+    assert rejected.status_code == 403
+
+
+def test_founder_autonomy_internal_refresh_bypasses_csrf_with_both_credentials(client):
+    allowed = client.post(
+        "/api/xcmax/ops/founder-autonomy/refresh-internal",
+        headers={
+            "Authorization": "Bearer market-admin-jwt",
+            "X-Autonomy-Token": "automation-secret",
+        },
+    )
+    assert allowed.status_code == 200
+    assert allowed.json() == {"success": True}
 
 
 def test_non_http_scope_passthrough():

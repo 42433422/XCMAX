@@ -124,6 +124,23 @@ def _csrf_exempt_ops_autonomy(scope: Scope) -> bool:
     return auth.startswith(b"bearer ")
 
 
+def _csrf_exempt_founder_autonomy_refresh(scope: Scope) -> bool:
+    """Allow the unattended scorecard refresh through the browser CSRF gate.
+
+    This is deliberately narrower than a founder-autonomy prefix exemption:
+    the route must be the internal refresh endpoint and must present both
+    credentials that the route validates independently.  A bearer alone or an
+    automation token alone is not sufficient.
+    """
+    path = (scope.get("path") or "").rstrip("/")
+    if not path.endswith("/api/xcmax/ops/founder-autonomy/refresh-internal"):
+        return False
+    headers = {k: v for k, v in (scope.get("headers") or [])}
+    autonomy_token = (headers.get(b"x-autonomy-token") or b"").strip()
+    authorization = (headers.get(b"authorization") or b"").strip().lower()
+    return bool(autonomy_token) and authorization.startswith(b"bearer ")
+
+
 class CSRFMiddleware:
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
@@ -177,6 +194,9 @@ class CSRFMiddleware:
                 await self.app(scope, receive, send)
                 return
             if _csrf_exempt_ops_autonomy(scope):
+                await self.app(scope, receive, send)
+                return
+            if _csrf_exempt_founder_autonomy_refresh(scope):
                 await self.app(scope, receive, send)
                 return
             path = (scope.get("path") or "").rstrip("/")
