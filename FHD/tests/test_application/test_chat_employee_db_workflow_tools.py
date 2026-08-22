@@ -235,11 +235,11 @@ def test_business_db_write_and_read_use_real_sqlite_services(monkeypatch, tmp_pa
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_file}")
 
     import app.db as db_mod
+    from app.application.business_db_write_verification import verify_business_db_write
     from app.db.base import Base
     from app.db.models.product import Product, UomCategory, UomUnit
     from app.db.models.purchase_unit import PurchaseUnit
     from app.infrastructure.tenant_scope import tenant_scope
-    from app.services.business_db_write_verification import verify_business_db_write
     from app.services.tools_workflow_registered import execute_registered_workflow_tool
 
     db_mod.dispose_and_recreate_engine()

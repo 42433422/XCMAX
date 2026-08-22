@@ -1268,7 +1268,7 @@ class TestBusinessDbRouter:
             }
 
         with patch(
-            "app.services.business_db_write_verification.verify_business_db_write",
+            "app.application.business_db_write_verification.verify_business_db_write",
             side_effect=verified,
         ):
             yield

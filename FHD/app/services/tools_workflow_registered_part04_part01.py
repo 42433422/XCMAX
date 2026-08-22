@@ -90,7 +90,7 @@ def _registered_router_business_db(
     payload = dict(prepared.get("payload") or {})
 
     def verified(result: dict) -> dict:
-        from app.services.business_db_write_verification import verify_business_db_write
+        from app.application.business_db_write_verification import verify_business_db_write
 
         return verify_business_db_write(
             entity=entity,
