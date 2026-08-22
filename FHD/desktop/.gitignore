@@ -9,3 +9,5 @@ dist/
 /.vitest-cache/
 # build-installer.sh 生成的临时 electron-builder 配置，构建后即删除，不入仓
 /.electron-builder.release.yml
+# Playwright-Electron E2E 运行产物
+/test-results/

@@ -1164,6 +1164,25 @@ select.settings-item__control,
   margin-top: 12px;
 }
 
+.settings-about-autolaunch {
+  margin: 10px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #334155;
+  cursor: pointer;
+  user-select: none;
+}
+
+.settings-about-autolaunch input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  accent-color: #2563eb;
+  cursor: pointer;
+}
+
 .settings-about-web-hint {
   margin: 0;
   font-size: 12px;

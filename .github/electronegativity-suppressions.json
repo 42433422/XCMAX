@@ -1,8 +1,8 @@
 [
   {
     "ruleId": "CONTEXT_ISOLATION_JS_CHECK",
-    "filenamePattern": "main.ts",
-    "reason": "electronegativity 1.10.3 的 scope.resolveVarValue 无法解析 TS 编译后 winOpts 变量(类型注解 + 后续 mutation),实际 webPreferences.contextIsolation: true 已设置,见 main.ts:753。属已知误报。",
+    "filenamePattern": "window-manager.ts",
+    "reason": "electronegativity 1.10.3 的 scope.resolveVarValue 无法解析 TS 编译后 winOpts 变量(类型注解 + 后续 mutation),实际 webPreferences.contextIsolation: true 已设置,见 window-manager.ts 的 createWindow。属已知误报。",
     "expires": "2026-10-01",
     "addedBy": "platform-wave2",
     "addedAt": "2026-07-05",
@@ -10,8 +10,8 @@
   },
   {
     "ruleId": "CONTEXT_ISOLATION_JS_CHECK",
-    "filenamePattern": "dist/main.js",
-    "reason": "同上,TS 编译产物 main.js 中的 BrowserWindow 构造,effective contextIsolation: true。",
+    "filenamePattern": "dist/window-manager.js",
+    "reason": "同上,TS 编译产物 window-manager.js 中的 BrowserWindow 构造,effective contextIsolation: true。",
     "expires": "2026-10-01",
     "addedBy": "platform-wave2",
     "addedAt": "2026-07-05",
@@ -19,8 +19,8 @@
   },
   {
     "ruleId": "SANDBOX_JS_CHECK",
-    "filenamePattern": "main.ts",
-    "reason": "同 CONTEXT_ISOLATION_JS_CHECK,scope.resolveVarValue 误报。实际 webPreferences.sandbox: true 已设置,见 main.ts:755。",
+    "filenamePattern": "window-manager.ts",
+    "reason": "同 CONTEXT_ISOLATION_JS_CHECK,scope.resolveVarValue 误报。实际 webPreferences.sandbox: true 已设置,见 window-manager.ts 的 createWindow。",
     "expires": "2026-10-01",
     "addedBy": "platform-wave2",
     "addedAt": "2026-07-05",
@@ -28,7 +28,7 @@
   },
   {
     "ruleId": "SANDBOX_JS_CHECK",
-    "filenamePattern": "dist/main.js",
+    "filenamePattern": "dist/window-manager.js",
     "reason": "同上,TS 编译产物 effective sandbox: true。",
     "expires": "2026-10-01",
     "addedBy": "platform-wave2",

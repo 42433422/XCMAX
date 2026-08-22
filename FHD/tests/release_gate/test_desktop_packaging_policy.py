@@ -11,6 +11,10 @@ pytestmark = pytest.mark.release_gate
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
+def _desktop_runtime_source(*names: str) -> str:
+    return "\n".join((REPO_ROOT / "desktop" / name).read_text(encoding="utf-8") for name in names)
+
+
 def test_desktop_enterprise_installer_builds_full_frontend() -> None:
     scripts = REPO_ROOT / "scripts" / "package"
     ps_backend = (scripts / "build-backend.ps1").read_text(encoding="utf-8")
@@ -65,7 +69,7 @@ def test_desktop_enterprise_installer_builds_full_frontend() -> None:
 
 
 def test_desktop_windows_runtime_matches_mac_shell_policy() -> None:
-    desktop_main = (REPO_ROOT / "desktop" / "main.ts").read_text(encoding="utf-8")
+    desktop_runtime = _desktop_runtime_source("main.ts", "desktop-config.ts")
     ps_installer = (REPO_ROOT / "scripts" / "package" / "build-installer.ps1").read_text(
         encoding="utf-8"
     )
@@ -81,8 +85,8 @@ def test_desktop_windows_runtime_matches_mac_shell_policy() -> None:
     router = (REPO_ROOT / "frontend" / "src" / "router" / "index.ts").read_text(encoding="utf-8")
     spec = (REPO_ROOT / "scripts" / "package" / "xcagi_backend.spec").read_text(encoding="utf-8")
 
-    assert "return 17500" in desktop_main
-    assert "process.platform === 'darwin' ? 17500 : 5000" not in desktop_main
+    assert "return 17500" in desktop_runtime
+    assert "process.platform === 'darwin' ? 17500 : 5000" not in desktop_runtime
     assert '"return 17500"' in ps_installer
     assert '"return 17500"' in sh_installer
     assert '"backendHealthMs"' in ps_installer
@@ -202,26 +206,26 @@ def test_windows_release_scripts_are_parsed_on_a_real_windows_ci_runner() -> Non
 
 
 def test_desktop_update_rollback_is_fail_closed_and_windows_full_app() -> None:
-    main = (REPO_ROOT / "desktop" / "main.ts").read_text(encoding="utf-8")
+    runtime = _desktop_runtime_source("main.ts", "backend-process.ts", "window-manager.ts")
     rollback = (REPO_ROOT / "desktop" / "rollback.ts").read_text(encoding="utf-8")
     windows = (REPO_ROOT / "desktop" / "rollback-windows.ts").read_text(encoding="utf-8")
     updater = (REPO_ROOT / "desktop" / "updater.ts").read_text(encoding="utf-8")
     entrypoint = (REPO_ROOT / "XCAGI" / "run_fastapi.py").read_text(encoding="utf-8")
 
-    assert "继续更新但不支持回滚" not in main
-    assert "cancelPreparedRollback()" in main
-    assert "attachDatabaseBackupToRollback" in main
-    assert "consumeRollbackApplied()" in main
+    assert "继续更新但不支持回滚" not in runtime
+    assert "cancelPreparedRollback()" in runtime
+    assert "attachDatabaseBackupToRollback" in runtime
+    assert "consumeRollbackApplied()" in runtime
     assert (
         "if (pendingRollback) {\n"
         "          await waitForMainApplicationReady()\n"
         "          await waitForPostUpdateStartupStability()\n"
         "          commitRollback()"
-    ) in main
-    assert "mainApplicationReady = ready" in main
-    assert "POST_UPDATE_STABILITY_MS = 5_000" in main
-    assert "rendererFailedDuringStartup = true" in main
-    assert "throw error" in main
+    ) in runtime
+    assert "mainApplicationReady = ready" in runtime
+    assert "POST_UPDATE_STABILITY_MS = 5_000" in runtime
+    assert "rendererFailedDuringStartup = true" in runtime
+    assert "throw error" in runtime
     assert "mode: 'windows-full'" in rollback
     assert "launchWindowsFullRollback" in rollback
     assert "windows-app-current" in rollback
