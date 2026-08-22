@@ -32,6 +32,7 @@ import {
 } from './backend-process'
 import {
   createWindow,
+  showMainWindow,
   toggleMainWindow,
   updateSplashProgress,
   waitForMainApplicationReady,
@@ -150,29 +151,32 @@ function bootstrap(): void {
       if (!isE2ERun) {
         // 全局快捷键：唤起 / 隐藏主窗口（常驻模式直达）
         try {
-          globalShortcut.register('CommandOrControl+Shift+X', () => toggleMainWindow())
-        } catch {
-          /* 全局快捷键注册失败不阻塞启动 */
+          const okToggle = globalShortcut.register('CommandOrControl+Shift+X', () => toggleMainWindow())
+          if (!okToggle) writeBackendLog('[shortcut] 注册 CommandOrControl+Shift+X 失败（可能被占用）\n')
+        } catch (error) {
+          writeBackendLog(`[shortcut] 注册 CommandOrControl+Shift+X 异常：${error instanceof Error ? error.message : error}\n`)
         }
         // 全局截图：截图数据写入数据目录 + 复制到剪贴板，并通知渲染端。
         try {
-          globalShortcut.register('CommandOrControl+Shift+5', () => {
+          const okShot = globalShortcut.register('CommandOrControl+Shift+5', () => {
             void captureFullScreenScreenshot().then(result => {
               broadcastToRenderer('xcagi:screenshot-captured', result)
               if (result.ok) writeBackendLog(`[capture] saved ${result.path}\n`)
             })
           })
-        } catch {
-          /* ignore */
+          if (!okShot) writeBackendLog('[shortcut] 注册 CommandOrControl+Shift+5 失败（可能被占用）\n')
+        } catch (error) {
+          writeBackendLog(`[shortcut] 注册 CommandOrControl+Shift+5 异常：${error instanceof Error ? error.message : error}\n`)
         }
-        // 语音唤起：唤起窗口并通知渲染端聚焦/展开语音输入（具体语音交互由前端实现）。
+        // 语音唤起：唤起窗口（只显示不隐藏）并通知渲染端聚焦/展开语音输入（具体语音交互由前端实现）。
         try {
-          globalShortcut.register('CommandOrControl+Shift+V', () => {
-            toggleMainWindow()
+          const okVoice = globalShortcut.register('CommandOrControl+Shift+V', () => {
+            showMainWindow()
             broadcastToRenderer('xcagi:voice-invoke')
           })
-        } catch {
-          /* ignore */
+          if (!okVoice) writeBackendLog('[shortcut] 注册 CommandOrControl+Shift+V 失败（可能被占用）\n')
+        } catch (error) {
+          writeBackendLog(`[shortcut] 注册 CommandOrControl+Shift+V 异常：${error instanceof Error ? error.message : error}\n`)
         }
       }
 

@@ -92,10 +92,23 @@ export function toggleMainWindow(): void {
   if (mainWindow.isVisible()) {
     mainWindow.hide()
   } else {
-    mainWindow.show()
-    if (mainWindow.isMinimized()) mainWindow.restore()
-    mainWindow.focus()
+    showMainWindow()
   }
+}
+
+/**
+ * 仅显示并聚焦主窗口（不隐藏），用于语音唤起、深链等"确保窗口可见"场景，
+ * 区别于 toggleMainWindow 的显隐切换语义。
+ */
+export function showMainWindow(): void {
+  const mainWindow = desktopRuntime.mainWindow
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    void createWindow()
+    return
+  }
+  mainWindow.show()
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.focus()
 }
 
 /** macOS 全屏/恢复后窗口可能只剩顶部一条，拉回工作区。 */

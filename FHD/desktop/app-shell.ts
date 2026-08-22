@@ -217,11 +217,12 @@ export async function exportSupportBundleInteractive(): Promise<void> {
 }
 
 export function openKellaiDesktop(): Promise<{ ok: boolean; reason?: string }> {
+  const notInstalledReason = '未检测到客来来桌面端，请先安装并打开一次客来来。'
   if (process.platform !== 'darwin') {
     return shell
       .openExternal('kellai://messages?source=xcmax')
       .then(() => ({ ok: true }))
-      .catch(error => ({ ok: false, reason: error instanceof Error ? error.message : String(error) }))
+      .catch(() => ({ ok: false, reason: notInstalledReason }))
   }
 
   return new Promise(resolve => {
@@ -230,7 +231,7 @@ export function openKellaiDesktop(): Promise<{ ok: boolean; reason?: string }> {
         resolve({ ok: true })
         return
       }
-      resolve({ ok: false, reason: '未检测到客来来桌面端，请先安装并打开一次客来来。' })
+      resolve({ ok: false, reason: notInstalledReason })
     })
   })
 }
