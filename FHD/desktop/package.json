@@ -33,7 +33,7 @@
     "electron": "41.10.3",
     "electron-builder": "26.15.3",
     "typescript": "6.0.3",
-    "vitest": "^3.2.6"
+    "vitest": "^4.1.11"
   },
   "overrides": {
     "@noble/hashes": "$@noble/hashes",
