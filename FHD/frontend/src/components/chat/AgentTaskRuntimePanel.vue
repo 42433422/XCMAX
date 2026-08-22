@@ -108,11 +108,44 @@ const artifacts = computed(() => (Array.isArray(payload.value.artifacts) ? paylo
 const resultSummary = computed(() => {
   const output = payload.value.finalOutput
   if (!output || typeof output !== 'object') return ''
+  const businessResult =
+    output.business_result && typeof output.business_result === 'object' ? (output.business_result as Record<string, unknown>) : null
+  const projectedSummary = businessResult?.summary
+  if (typeof projectedSummary === 'string' && projectedSummary.trim()) {
+    const facts = businessResult?.facts && typeof businessResult.facts === 'object' ? (businessResult.facts as Record<string, unknown>) : {}
+    const factLabels: Record<string, string> = {
+      customer_id: '客户 ID',
+      product_id: '产品 ID',
+      material_id: '原材料 ID',
+      order_id: '订单 ID',
+      record_id: '记录 ID',
+      request_no: '请求单号',
+      order_number: '业务单号',
+      doc_name: '文档',
+      created: '新增',
+      updated: '更新',
+      count: '数量',
+      total: '合计',
+    }
+    const renderedFacts = Object.entries(facts)
+      .filter(([, value]) => value !== '' && value !== null && value !== undefined)
+      .map(([key, value]) => `${factLabels[key] || key}：${String(value)}`)
+    return [projectedSummary.trim(), ...renderedFacts].join('；').slice(0, 800)
+  }
   const chatPayload = output.chat_payload
   const chatRecord = chatPayload && typeof chatPayload === 'object' ? (chatPayload as Record<string, unknown>) : null
   const candidates = [chatRecord?.response, chatRecord?.message, output.response, output.message]
   const summary = candidates.find((value) => typeof value === 'string' && value.trim())
-  return typeof summary === 'string' ? summary.trim().slice(0, 800) : ''
+  if (typeof summary === 'string') return summary.trim().slice(0, 800)
+  const nodeOutputs = output.node_outputs && typeof output.node_outputs === 'object' ? Object.values(output.node_outputs) : []
+  const lastOutput = [...nodeOutputs].reverse().find((value) => value && typeof value === 'object') as Record<string, unknown> | undefined
+  if (!lastOutput) return ''
+  const nodeMessage = [lastOutput.message, lastOutput.summary].find((value) => typeof value === 'string' && value.trim())
+  if (typeof nodeMessage === 'string') return nodeMessage.trim().slice(0, 800)
+  const idEntry = Object.entries(lastOutput).find(
+    ([key, value]) => /(?:^id$|_id$|_number$)/.test(key) && ['string', 'number'].includes(typeof value),
+  )
+  return lastOutput.success === true ? `业务操作执行成功${idEntry ? `；${idEntry[0]}：${String(idEntry[1])}` : ''}` : ''
 })
 const finalOutputText = computed(() => {
   const output = payload.value.finalOutput

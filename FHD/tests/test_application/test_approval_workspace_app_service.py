@@ -1812,6 +1812,34 @@ class TestRejectRequest:
         assert result["message"] == "审批已拒绝，但清理 AI 工作流失败"
         assert "boom-secret-db" not in str(result.get("message", ""))
 
+    def test_drop_pending_ai_workflow_cancels_bound_agent_run_before_removal(self):
+        svc = MagicMock()
+        svc.reject.return_value = True
+        svc.get_pending_workflow.return_value = {"agent_run_id": "run-approval-1"}
+        svc.remove_pending_workflow.return_value = {"agent_run_id": "run-approval-1"}
+        orchestrator = MagicMock()
+        orchestrator.cancel_run.return_value = SimpleNamespace(run_id="run-approval-1")
+
+        with (
+            patch("app.application.workflow.get_approval_service", return_value=svc),
+            patch(
+                "app.application.agent_orchestrator.AgentOrchestrator",
+                return_value=orchestrator,
+            ),
+        ):
+            result = _drop_pending_ai_workflow_after_rejection(
+                request_no="req-ai-1",
+                reason="拒绝",
+            )
+
+        assert result["code"] == "approval_rejected"
+        assert result["agent_run_id"] == "run-approval-1"
+        orchestrator.cancel_run.assert_called_once_with(
+            "run-approval-1",
+            requested_by="approval_rejected",
+        )
+        svc.remove_pending_workflow.assert_called_once_with("req-ai-1")
+
 
 # ========================= withdraw_request ==============================
 

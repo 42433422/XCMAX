@@ -81,6 +81,11 @@ class InMemoryAgentRunRepository:
         self._lock = threading.RLock()
 
     def save(self, run: AgentRun) -> AgentRun:
+        from app.application.agent_orchestrator.business_harness import (
+            ensure_terminal_business_result,
+        )
+
+        ensure_terminal_business_result(run)
         run.touch()
         with self._lock:
             self._runs[run.run_id] = copy.deepcopy(run)

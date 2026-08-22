@@ -1,5 +1,7 @@
 import type { Ref } from 'vue'
 import agentRunsApi from '@/api/agentRuns'
+import type { AgentTaskSummary } from '@/api/agentRuns'
+import { buildFullApiUrl } from '@/api/core'
 import type { TaskItem } from './useChatPersistence'
 import { activeRunIdOfTask, conversationIdOfTask, groupAgentRunsIntoTasks, taskSummariesToTaskItems } from '@/utils/agentTaskWorkspaceModel'
 
@@ -15,7 +17,25 @@ export interface UseAgentTaskWorkspaceOptions {
 
 export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
   let refreshTimer: number | null = null
+  let reconnectTimer: number | null = null
+  let taskStream: EventSource | null = null
   let refreshInFlight = false
+
+  function applyTaskItems(serverTasks: TaskItem[]): void {
+    const localTasks = options.taskList.value.filter((task) => !['agent_task', 'agent_run'].includes(task.type))
+    options.taskList.value = [...serverTasks, ...localTasks]
+    const known = new Set(options.taskList.value.map((task) => task.id))
+    options.expandedTaskIds.value = options.expandedTaskIds.value.filter((id) => known.has(id))
+    if (!known.has(options.activeTaskId.value)) {
+      options.activeTaskId.value = options.taskList.value[0]?.id || ''
+    }
+    options.sortTaskList()
+    options.onPersist?.()
+  }
+
+  function applyServerTasks(tasks: AgentTaskSummary[]): void {
+    applyTaskItems(taskSummariesToTaskItems(tasks))
+  }
 
   async function refreshTasks(): Promise<void> {
     if (refreshInFlight) return
@@ -32,15 +52,7 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
         const runs = Array.isArray(response?.data) ? response.data : []
         serverTasks = groupAgentRunsIntoTasks(runs)
       }
-      const localTasks = options.taskList.value.filter((task) => !['agent_task', 'agent_run'].includes(task.type))
-      options.taskList.value = [...serverTasks, ...localTasks]
-      const known = new Set(options.taskList.value.map((task) => task.id))
-      options.expandedTaskIds.value = options.expandedTaskIds.value.filter((id) => known.has(id))
-      if (!known.has(options.activeTaskId.value)) {
-        options.activeTaskId.value = options.taskList.value[0]?.id || ''
-      }
-      options.sortTaskList()
-      options.onPersist?.()
+      applyTaskItems(serverTasks)
     } catch {
       // Keep the last durable snapshot in the panel while offline.
     } finally {
@@ -48,15 +60,53 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
     }
   }
 
+  function scheduleReconnect(): void {
+    if (reconnectTimer !== null || typeof window === 'undefined') return
+    reconnectTimer = window.setTimeout(() => {
+      reconnectTimer = null
+      connectTaskStream()
+    }, 1500)
+  }
+
+  function connectTaskStream(): void {
+    if (typeof window === 'undefined' || typeof EventSource === 'undefined') return
+    if (typeof agentRunsApi.taskEventStreamPath !== 'function') return
+    taskStream?.close()
+    taskStream = new EventSource(buildFullApiUrl(agentRunsApi.taskEventStreamPath()), { withCredentials: true })
+    taskStream.addEventListener('task.snapshot', (event) => {
+      try {
+        const snapshot = JSON.parse((event as MessageEvent).data)
+        if (Array.isArray(snapshot)) applyServerTasks(snapshot as AgentTaskSummary[])
+      } catch {
+        // Keep the last durable snapshot; the 15s fallback will retry.
+      }
+    })
+    taskStream.addEventListener('stream.closed', () => {
+      taskStream?.close()
+      taskStream = null
+      scheduleReconnect()
+    })
+    taskStream.onerror = () => {
+      taskStream?.close()
+      taskStream = null
+      scheduleReconnect()
+    }
+  }
+
   function start(): void {
     void refreshTasks()
+    connectTaskStream()
     if (refreshTimer !== null) return
-    refreshTimer = window.setInterval(() => void refreshTasks(), 4000)
+    refreshTimer = window.setInterval(() => void refreshTasks(), 15000)
   }
 
   function stop(): void {
     if (refreshTimer !== null) window.clearInterval(refreshTimer)
+    if (reconnectTimer !== null) window.clearTimeout(reconnectTimer)
+    taskStream?.close()
+    taskStream = null
     refreshTimer = null
+    reconnectTimer = null
   }
 
   async function selectTask(task: TaskItem): Promise<void> {

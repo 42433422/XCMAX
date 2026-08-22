@@ -78,6 +78,58 @@ import type { UiChatMessage, UiChatMessageExtras } from '@/types/chat-ui'
 export type ChatMessage = UiChatMessage
 export type ChatMessageExtras = UiChatMessageExtras
 
+function metadataRecord(raw: unknown): Record<string, unknown> {
+  if (raw && typeof raw === 'object') return asRecord(raw)
+  if (typeof raw !== 'string' || !raw.trim()) return {}
+  try {
+    return asRecord(JSON.parse(raw))
+  } catch {
+    return {}
+  }
+}
+
+/** Restore only the structured UI fields that the chat renderer understands. */
+export function chatMessageExtrasFromServerRow(raw: unknown): ChatMessageExtras {
+  const row = asRecord(raw)
+  const metadata = metadataRecord(row.metadata)
+  const ui = asRecord(row.ui_payload || metadata.ui)
+  const stringArray = (value: unknown) =>
+    asArray(value)
+      .map((item) => asString(item).trim())
+      .filter(Boolean)
+  const objectArray = (value: unknown) =>
+    asArray(value)
+      .map((item) => asRecord(item))
+      .filter((item) => Object.keys(item).length > 0)
+  const extras: ChatMessageExtras = {}
+  const thinkingSteps = asString(ui.thinkingSteps).trim()
+  const workflowAction = asString(ui.workflowAction).trim()
+  const contextSummary = asString(ui.contextSummary).trim()
+  const downloadUrl = asString(ui.downloadUrl).trim()
+  const shipmentDownloadUrl = asString(ui.shipmentDownloadUrl).trim()
+  if (thinkingSteps) extras.thinkingSteps = thinkingSteps
+  if (workflowAction) extras.workflowAction = workflowAction
+  if (contextSummary) extras.contextSummary = contextSummary
+  if (downloadUrl) extras.downloadUrl = downloadUrl
+  if (shipmentDownloadUrl) extras.shipmentDownloadUrl = shipmentDownloadUrl
+  const todoSteps = stringArray(ui.todoSteps)
+  if (todoSteps.length) extras.todoSteps = todoSteps
+  const nodeResults = objectArray(ui.nodeResults)
+  if (nodeResults.length) extras.nodeResults = nodeResults as NonNullable<ChatMessageExtras['nodeResults']>
+  const executionProgress = objectArray(ui.executionProgress)
+  if (executionProgress.length)
+    extras.executionProgress = executionProgress as unknown as NonNullable<ChatMessageExtras['executionProgress']>
+  const attachments = objectArray(ui.attachments)
+  if (attachments.length) extras.attachments = attachments
+  const approvalCard = asRecord(ui.approvalCard)
+  if (Object.keys(approvalCard).length) extras.approvalCard = approvalCard
+  const agentRunTrace = asRecord(ui.agentRunTrace)
+  if (Object.keys(agentRunTrace).length) extras.agentRunTrace = agentRunTrace as unknown as NonNullable<ChatMessageExtras['agentRunTrace']>
+  const businessResult = asRecord(ui.businessResult)
+  if (Object.keys(businessResult).length) extras.businessResult = businessResult
+  return extras
+}
+
 export function useChatMessages(sessionId: Ref<string>) {
   const modsStore = useModsStore()
   const industryStore = useIndustryStore()
@@ -257,6 +309,7 @@ export function useChatMessages(sessionId: Ref<string>) {
           time: asString(row.time).trim() || new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
           ...(streamingShell ? { streamingShell: true } : {}),
           ...(toolProgressLabel ? { toolProgressLabel } : {}),
+          ...chatMessageExtrasFromServerRow({ ui_payload: row }),
         } as ChatMessage
       })
       .filter((m): m is ChatMessage => !!m)
@@ -288,7 +341,12 @@ export function useChatMessages(sessionId: Ref<string>) {
     }
   }
 
-  async function saveMessage(role: 'user' | 'ai' | 'task', content: string, targetSessionId?: string): Promise<void> {
+  async function saveMessage(
+    role: 'user' | 'ai' | 'task',
+    content: string,
+    targetSessionId?: string,
+    extras?: ChatMessageExtras,
+  ): Promise<void> {
     const visibleContent = role === 'ai' ? stripModelToolProtocol(content) : content
     if (!hasMeaningfulContent(visibleContent)) return
     try {
@@ -297,6 +355,7 @@ export function useChatMessages(sessionId: Ref<string>) {
         user_id: 'default',
         role,
         content: visibleContent,
+        ...(extras && Object.keys(extras).length ? { metadata: JSON.stringify({ ui: extras }) } : {}),
       })
     } catch (e) {
       console.error('保存消息失败:', e)
@@ -311,7 +370,7 @@ export function useChatMessages(sessionId: Ref<string>) {
   ): Promise<void> {
     if (!hasMeaningfulContent(content)) return
     if (!options?.sessionId || options.sessionId === sessionId.value) addMessage(content, role, extras, options)
-    await saveMessage(role, content, options?.sessionId)
+    await saveMessage(role, content, options?.sessionId, extras)
   }
 
   /** 流式回复：先占位一条 AI 消息，返回其在 messages 中的下标 */
@@ -368,6 +427,7 @@ export function useChatMessages(sessionId: Ref<string>) {
           role,
           content: normalizeServerContentToHtml(role === 'ai' ? stripModelToolProtocol(row.content) : row.content),
           time: formatChatMessageTime(row.time ?? row.timestamp ?? row.created_at ?? row.createdAt ?? row.updated_at),
+          ...chatMessageExtrasFromServerRow(row),
         }
       })
       const sanitized = sanitizeMessagesList(mapped)
@@ -393,6 +453,29 @@ export function useChatMessages(sessionId: Ref<string>) {
     () => {
       messages.value = readCachedMessages()
     },
+  )
+
+  // Cards and traces are mutated after a reply is inserted. Observe only these
+  // structured fields so SSE token updates do not cause a localStorage write
+  // for every token.
+  watch(
+    () =>
+      messages.value.map((message) => ({
+        thinkingSteps: message.thinkingSteps,
+        todoSteps: message.todoSteps,
+        workflowAction: message.workflowAction,
+        nodeResults: message.nodeResults,
+        contextSummary: message.contextSummary,
+        executionProgress: message.executionProgress,
+        downloadUrl: message.downloadUrl,
+        shipmentDownloadUrl: message.shipmentDownloadUrl,
+        approvalCard: message.approvalCard,
+        agentRunTrace: message.agentRunTrace,
+        attachments: message.attachments,
+        businessResult: message.businessResult,
+      })),
+    () => persistMessagesCache(),
+    { deep: true, flush: 'post' },
   )
 
   return {

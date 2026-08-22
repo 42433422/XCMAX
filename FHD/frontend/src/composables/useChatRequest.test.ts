@@ -95,10 +95,13 @@ describe('useChatRequest', () => {
   it('uses an immutable task scope after the visible conversation switches', () => {
     const { body } = request.buildPlannerChatRequestPayload('continue', undefined, {
       sessionId: 'task-original',
+      turnId: 'turn-original',
+      taskId: 'task-original',
       messages: [{ role: 'user', content: 'original context', time: '10:00' }],
     })
     const ctx = body.context as Record<string, unknown>
     expect(ctx.task_id).toBe('task-original')
+    expect(ctx.turn_id).toBe('turn-original')
     expect(ctx.conversation_id).toBe('task-original')
     expect(ctx.recent_messages).toEqual([{ role: 'user', content: 'original context' }])
   })

@@ -146,6 +146,15 @@ def approve_request(
                 )
         db.commit()
         db.refresh(req)
+        if workflow_execution and workflow_execution.get("agent_run_id"):
+            from app.application.business_harness_projection import (
+                project_terminal_run_to_conversation,
+            )
+
+            project_terminal_run_to_conversation(
+                str(workflow_execution.get("agent_run_id") or ""),
+                approval_request_id=str(req.request_no or ""),
+            )
         if workflow_execution is not None and (
             not (workflow_execution.get("workflow_executed") and workflow_execution.get("success"))
         ):
@@ -249,6 +258,15 @@ def reject_request(
                 workflow_execution = _facade()._drop_pending_ai_workflow_after_rejection(
                     request_no=str(req.request_no or ""), reason=reason
                 )
+                if workflow_execution and workflow_execution.get("agent_run_id"):
+                    from app.application.business_harness_projection import (
+                        project_terminal_run_to_conversation,
+                    )
+
+                    project_terminal_run_to_conversation(
+                        str(workflow_execution.get("agent_run_id") or ""),
+                        approval_request_id=str(req.request_no or ""),
+                    )
                 if req.applicant_id:
                     _facade().notify_mobile_user(
                         int(req.applicant_id),

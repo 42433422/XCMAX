@@ -1534,9 +1534,9 @@ class TestBuildWorkflowThinkingSteps:
             ]
         )
         result = svc._build_workflow_thinking_steps(plan, "reason")
-        assert "n1" in result
-        assert "n0" in result
-        assert "无" in result
+        assert "查询产品资料" in result
+        assert "n1" not in result
+        assert "n0" not in result
 
     def test_with_memory_rag_summary(self):
         svc = _make_svc()
@@ -1566,8 +1566,9 @@ class TestBuildWorkflowThinkingSteps:
             }
         )
         result = svc._build_workflow_thinking_steps(plan, "r")
-        assert "products" in result
-        assert "preview data" in result
+        assert "能力预检: 已确认 1 项业务能力可用" in result
+        assert "products" not in result
+        assert "preview data" not in result
 
     def test_tool_probe_outputs_not_list(self):
         svc = _make_svc()
@@ -1598,7 +1599,8 @@ class TestBuildWorkflowThinkingSteps:
             }
         )
         result = svc._build_workflow_thinking_steps(plan, "r")
-        assert "…" in result
+        assert "能力预检: 已确认 1 项业务能力可用" in result
+        assert long_preview not in result
 
 
 # ---------------------------------------------------------------------------

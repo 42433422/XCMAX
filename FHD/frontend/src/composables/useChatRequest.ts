@@ -3,7 +3,14 @@ import type { ChatMessage } from './useChatMessages'
 import chatApi from '../api/chat'
 import type { ChatPlannerPayload, ChatRequest } from '@/types/chat'
 import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
-export type ChatRequestScope = { sessionId: string; messages: ChatMessage[] }
+import { createBusinessHarnessId } from '@/utils/businessHarnessIds'
+export type ChatRequestScope = {
+  sessionId: string
+  messages: ChatMessage[]
+  turnId?: string
+  taskId?: string
+}
+
 export interface UseChatRequestDeps {
   messages: Ref<ChatMessage[]>
   sessionId?: Ref<string>
@@ -45,11 +52,14 @@ export function useChatRequest(deps: UseChatRequestDeps) {
       content: plainTextFromChatHtml(m.content).slice(0, 500),
     }))
     const scopedSessionId = String(scope?.sessionId || sessionId?.value || '').trim()
+    const turnId = String(scope?.turnId || '').trim() || createBusinessHarnessId('turn')
+    const taskId = String(scope?.taskId || '').trim() || createBusinessHarnessId('task')
     const contextPayload: Record<string, unknown> = {
       recent_messages: compactHistory,
       conversation_id: scopedSessionId,
       session_id: scopedSessionId,
-      task_id: scopedSessionId,
+      turn_id: turnId,
+      task_id: taskId,
       task_title: String(message || '')
         .trim()
         .slice(0, 80),
@@ -111,11 +121,14 @@ export function useChatRequest(deps: UseChatRequestDeps) {
       content: plainTextFromChatHtml(m.content).slice(0, 500),
     }))
     const scopedSessionId = String(scope?.sessionId || sessionId?.value || '').trim()
+    const turnId = String(scope?.turnId || '').trim() || createBusinessHarnessId('turn')
+    const taskId = String(scope?.taskId || '').trim() || createBusinessHarnessId('task')
     const contextPayload: Record<string, unknown> = {
       recent_messages: compactHistory,
       conversation_id: scopedSessionId,
       session_id: scopedSessionId,
-      task_id: scopedSessionId,
+      turn_id: turnId,
+      task_id: taskId,
       task_title: String(batchTexts[0] || '')
         .trim()
         .slice(0, 80),
