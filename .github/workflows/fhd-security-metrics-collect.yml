@@ -46,7 +46,7 @@ jobs:
       # 门禁语义由 gitleaks.yml（PR-only）负责。
       # GITLEAKS_CONFIG 指向项目自定义 allowlist（默认只查 .gitleaks.toml 根目录）。
       - name: Run gitleaks scan
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
