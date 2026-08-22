@@ -90,6 +90,14 @@ for item in .build-identity.json app XCAGI alembic alembic.ini config mods xcagi
     rsync -a "$DEPLOY_ROOT/$item" "$BACKUP/"
   fi
 done
+if [[ -d "$DEPLOY_ROOT/scripts/autonomy" ]]; then
+  mkdir -p "$BACKUP/scripts"
+  rsync -a "$DEPLOY_ROOT/scripts/autonomy" "$BACKUP/scripts/"
+fi
+if [[ -d "$DEPLOY_ROOT/scripts/ci" ]]; then
+  mkdir -p "$BACKUP/scripts"
+  rsync -a "$DEPLOY_ROOT/scripts/ci" "$BACKUP/scripts/"
+fi
 ADMIN_BACKUP_PRESENT=0
 if [[ -d "$DEPLOY_ROOT/templates/admin-vue-dist" ]]; then
   mkdir -p "$BACKUP/templates"
@@ -135,6 +143,18 @@ rollback_from_backup() {
     rsync -a --delete "$BACKUP/templates/admin-vue-dist/" "$DEPLOY_ROOT/templates/admin-vue-dist/"
   else
     rm -rf -- "$DEPLOY_ROOT/templates/admin-vue-dist"
+  fi
+  if [[ -d "$BACKUP/scripts/autonomy" ]]; then
+    mkdir -p "$DEPLOY_ROOT/scripts/autonomy"
+    rsync -a --delete "$BACKUP/scripts/autonomy/" "$DEPLOY_ROOT/scripts/autonomy/"
+  else
+    rm -rf -- "$DEPLOY_ROOT/scripts/autonomy"
+  fi
+  if [[ -d "$BACKUP/scripts/ci" ]]; then
+    mkdir -p "$DEPLOY_ROOT/scripts/ci"
+    rsync -a --delete "$BACKUP/scripts/ci/" "$DEPLOY_ROOT/scripts/ci/"
+  else
+    rm -rf -- "$DEPLOY_ROOT/scripts/ci"
   fi
   for stamp in .deploy-last.tar.gz .deploy-git-sha .deploy-sha256 .deploy-admin-console-sha256; do
     if [[ -f "$BACKUP/$stamp" ]]; then
@@ -196,6 +216,14 @@ rsync -a --delete "$TMP/templates/admin-vue-dist/" "$DEPLOY_ROOT/templates/admin
 if [[ -d "$TMP/scripts/deploy" ]]; then
   mkdir -p "$DEPLOY_ROOT/scripts"
   rsync -a --delete "$TMP/scripts/deploy/" "$DEPLOY_ROOT/scripts/deploy/"
+fi
+if [[ -d "$TMP/scripts/autonomy" ]]; then
+  mkdir -p "$DEPLOY_ROOT/scripts/autonomy"
+  rsync -a --delete "$TMP/scripts/autonomy/" "$DEPLOY_ROOT/scripts/autonomy/"
+fi
+if [[ -d "$TMP/scripts/ci" ]]; then
+  mkdir -p "$DEPLOY_ROOT/scripts/ci"
+  rsync -a "$TMP/scripts/ci/" "$DEPLOY_ROOT/scripts/ci/"
 fi
 if [[ -d "$TMP/docker" ]]; then
   mkdir -p "$DEPLOY_ROOT/docker"

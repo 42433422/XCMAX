@@ -126,8 +126,10 @@ jobs:
             set +a
           fi
           export FHD_API_BASE_URL="\${FHD_API_BASE_URL:-http://127.0.0.1:5100}"
+          PROBE_ROOT="${PROBE_DEPLOY_ROOT}"
           PROBE_SCRIPT="${PROBE_DEPLOY_ROOT}/scripts/autonomy/corp_site_health_probe.py"
           if [ ! -f "\$PROBE_SCRIPT" ]; then
+            PROBE_ROOT="/opt/xcmax/current/FHD"
             PROBE_SCRIPT="/opt/xcmax/current/FHD/scripts/autonomy/corp_site_health_probe.py"
           fi
           test -f "\$PROBE_SCRIPT"
@@ -137,6 +139,7 @@ jobs:
           AUTONOMY_WEBHOOK_TOKEN="\${AUTONOMY_WEBHOOK_TOKEN:-}" \
           MODSTORE_OPS_INGEST_TOKEN="\${MODSTORE_OPS_INGEST_TOKEN:-}" \
           CORP_SITE_BASE_URL='${CORP_SITE_BASE_URL}' \
+          PYTHONPATH="\$PROBE_ROOT\${PYTHONPATH:+:\$PYTHONPATH}" \
           python3 "\$PROBE_SCRIPT" \
             --base-url '${CORP_SITE_BASE_URL}' \
             --audit-dir "${PROBE_AUDIT_DIR}" \
@@ -171,8 +174,10 @@ jobs:
             set +a
           fi
           export FHD_API_BASE_URL="\${FHD_API_BASE_URL:-\$API_BASE}"
+          WATCHER_ROOT="${DEPLOY_ROOT}"
           WATCHER_SCRIPT="${DEPLOY_ROOT}/scripts/autonomy/cvm_autonomy_watcher.py"
           if [ ! -f "\$WATCHER_SCRIPT" ]; then
+            WATCHER_ROOT="/opt/xcmax/current/FHD"
             WATCHER_SCRIPT="/opt/xcmax/current/FHD/scripts/autonomy/cvm_autonomy_watcher.py"
           fi
           test -f "\$WATCHER_SCRIPT"
@@ -181,6 +186,7 @@ jobs:
           FHD_API_BASE_URL="\$FHD_API_BASE_URL" \
           AUTONOMY_WEBHOOK_TOKEN="\${AUTONOMY_WEBHOOK_TOKEN:-}" \
           MODSTORE_OPS_INGEST_TOKEN="\${MODSTORE_OPS_INGEST_TOKEN:-}" \
+          PYTHONPATH="\$WATCHER_ROOT\${PYTHONPATH:+:\$PYTHONPATH}" \
           python3 "\$WATCHER_SCRIPT" \
             --deploy-root "${DEPLOY_ROOT}" \
             --manifest-path "${MANIFEST}" \

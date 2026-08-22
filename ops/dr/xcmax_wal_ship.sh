@@ -116,7 +116,7 @@ ssh_opts=(
 (
   flock -w "$TRANSFER_WAIT_SECONDS" 8 || exit 1
   xcmax_run_bounded_transfer "$TRANSFER_MAX_SECONDS" "postgres10-wal" "$LOG" \
-    rsync -a --ignore-existing --delay-updates --partial \
+    rsync -az --ignore-existing --delay-updates --partial \
     -e "ssh ${ssh_opts[*]}" \
     "$ARCHIVE/" "${TARGET}:${REMOTE_ROOT}/wal/archive/"
   xcmax_run_bounded_transfer "$TRANSFER_MAX_SECONDS" "postgres10-wal-status" "$LOG" \
