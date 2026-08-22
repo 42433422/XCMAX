@@ -266,6 +266,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     historySessions,
     historyLoading,
     historyError,
+    refreshHistorySessions,
     showHistoryPanel,
     loadSession: loadSessionFromHistory,
     clearHistorySessions,
@@ -1374,22 +1375,28 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     const previewModified = await handleShipmentModify(message)
     if (previewModified) {
       await saveMessage('user', message, taskSessionId)
+      await refreshHistorySessions()
       return
     }
 
     const printHandled = await handleStartPrintCommand(message)
     if (printHandled) {
       await saveMessage('user', message, taskSessionId)
+      await refreshHistorySessions()
       return
     }
 
     const debounceMs = getChatBatchDebounceMs()
     if (debounceMs <= 0) {
-      await executeRemoteChatRound([message], undefined, requestScope)
+      try {
+        await executeRemoteChatRound([message], undefined, requestScope)
+      } finally {
+        await refreshHistorySessions()
+      }
       return
     }
     enqueueChatBatchMessage(message, debounceMs, (msgs) => {
-      void executeRemoteChatRound(msgs, undefined, requestScope)
+      void executeRemoteChatRound(msgs, undefined, requestScope).finally(() => refreshHistorySessions())
     })
   }
   function handleShipmentDownloadClick() {
@@ -1475,6 +1482,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     historySessions,
     historyLoading,
     historyError,
+    refreshHistorySessions,
     chatMessagesRef,
     pushCopied,
     loadingProgressText,

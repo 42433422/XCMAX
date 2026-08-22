@@ -73,9 +73,8 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
   const historyLoading = ref(false)
   const historyError = ref('')
 
-  async function showHistoryPanel() {
+  async function refreshHistorySessions() {
     if (historyLoading.value) return
-    showHistory.value = true
     historyLoading.value = true
     historyError.value = ''
     try {
@@ -93,6 +92,11 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
     } finally {
       historyLoading.value = false
     }
+  }
+
+  async function showHistoryPanel() {
+    showHistory.value = true
+    await refreshHistorySessions()
   }
 
   async function loadSession(targetSessionId: string) {
@@ -278,6 +282,7 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
     historySessions,
     historyLoading,
     historyError,
+    refreshHistorySessions,
     showHistoryPanel,
     loadSession,
     clearHistorySessions,
