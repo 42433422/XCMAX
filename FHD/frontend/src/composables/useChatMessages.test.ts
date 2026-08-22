@@ -106,6 +106,33 @@ describe('useChatMessages', () => {
     expect(messages.messages.value[1]).toHaveProperty('attachments')
   })
 
+  it('keeps Business Harness cards and terminal results in the local cache', () => {
+    messages.addMessage('等待审批', 'ai', {
+      todoSteps: ['核对客户', '创建订单'],
+      approvalCard: { run_id: 'run-1', status: 'pending' },
+      businessResult: { status: 'completed', summary: '订单创建成功', order_id: 42 },
+    })
+
+    const restored = useChatMessages(ref('session-1'))
+    const row = restored.messages.value.at(-1)
+    expect(row?.todoSteps).toEqual(['核对客户', '创建订单'])
+    expect(row?.approvalCard?.run_id).toBe('run-1')
+    expect(row?.businessResult?.summary).toBe('订单创建成功')
+  })
+
+  it('persists an approval-card status mutated after the message is rendered', async () => {
+    messages.addMessage('等待审批', 'ai', {
+      approvalCard: { run_id: 'run-2', status: 'pending' },
+    })
+    const row = messages.messages.value.at(-1)
+    if (!row?.approvalCard) throw new Error('approval card was not rendered')
+    row.approvalCard.status = 'confirmed'
+    await nextTick()
+
+    const restored = useChatMessages(ref('session-1'))
+    expect(restored.messages.value.at(-1)?.approvalCard?.status).toBe('confirmed')
+  })
+
   it('lastMessage returns last message', () => {
     messages.addMessage('first', 'user')
     messages.addMessage('second', 'ai')
@@ -196,6 +223,21 @@ describe('useChatMessages', () => {
     messages.addMessage('test', 'user')
     await messages.saveMessage('user', 'test')
     expect(chatApi.saveMessage).toHaveBeenCalled()
+  })
+
+  it('saveMessage persists only the structured UI payload passed by the caller', async () => {
+    const chatApi = (await import('@/api/chat')).default
+    await messages.saveMessage('ai', '订单创建成功', undefined, {
+      businessResult: { status: 'completed', summary: '订单创建成功' },
+    })
+
+    expect(chatApi.saveMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: JSON.stringify({
+          ui: { businessResult: { status: 'completed', summary: '订单创建成功' } },
+        }),
+      }),
+    )
   })
 
   it('saveMessage ignores empty content', async () => {
@@ -328,6 +370,37 @@ describe('useChatMessages', () => {
     })
     const result = await messages.syncFromServer()
     expect(result).toBe(true)
+  })
+
+  it('syncFromServer restores approval, trace, and terminal business result metadata', async () => {
+    const chatApi = (await import('@/api/chat')).default
+    vi.mocked(chatApi.getConversation).mockResolvedValueOnce({
+      messages: [
+        {
+          role: 'assistant',
+          content: '审批已完成',
+          metadata: JSON.stringify({
+            ui: {
+              approvalCard: { run_id: 'run-9', status: 'confirmed' },
+              agentRunTrace: {
+                run_id: 'run-9',
+                intent: 'create_order',
+                status: 'success',
+                phases: [],
+                terminal: true,
+              },
+              businessResult: { status: 'completed', facts: { order_id: 9 } },
+            },
+          }),
+        },
+      ],
+    })
+
+    expect(await messages.syncFromServer()).toBe(true)
+    const row = messages.messages.value[0]
+    expect(row.approvalCard?.status).toBe('confirmed')
+    expect(row.agentRunTrace?.run_id).toBe('run-9')
+    expect(row.businessResult?.facts).toEqual({ order_id: 9 })
   })
 
   it('syncFromServer handles empty response', async () => {

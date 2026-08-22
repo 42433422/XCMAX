@@ -4,6 +4,7 @@
 提供对话历史和会话管理的业务逻辑。
 """
 
+import json
 import logging
 import uuid
 from datetime import datetime
@@ -47,6 +48,8 @@ class ConversationService(NeuroEventPublisherMixin):
         content: str,
         intent: str = "",
         metadata: str = "",
+        *,
+        idempotency_key: str = "",
     ) -> int:
         """
         保存对话消息
@@ -64,6 +67,39 @@ class ConversationService(NeuroEventPublisherMixin):
         """
         with get_db() as db:
             try:
+                message_user_id = str(user_id) if user_id is not None else None
+                normalized_key = str(idempotency_key or "").strip()[:256]
+                if normalized_key:
+                    try:
+                        metadata_payload = json.loads(metadata) if metadata else {}
+                    except (TypeError, ValueError, json.JSONDecodeError):
+                        metadata_payload = {}
+                    if not isinstance(metadata_payload, dict):
+                        metadata_payload = {}
+                    metadata_payload["idempotency_key"] = normalized_key
+                    metadata = json.dumps(metadata_payload, ensure_ascii=False, default=str)
+                    candidates = (
+                        db.query(AIConversation)
+                        .filter(
+                            AIConversation.session_id == session_id,
+                            AIConversation.user_id == message_user_id,
+                            AIConversation.role == role,
+                            AIConversation.intent == intent,
+                        )
+                        .order_by(AIConversation.id.desc())
+                        .limit(100)
+                        .all()
+                    )
+                    for candidate in candidates:
+                        try:
+                            candidate_metadata = json.loads(candidate.conversation_metadata or "{}")
+                        except (TypeError, ValueError, json.JSONDecodeError):
+                            continue
+                        if (
+                            isinstance(candidate_metadata, dict)
+                            and candidate_metadata.get("idempotency_key") == normalized_key
+                        ):
+                            return int(candidate.id)
                 # 更新或创建会话（必须先创建会话，因为消息有外键依赖）
                 session = (
                     db.query(AIConversationSession)
@@ -90,7 +126,7 @@ class ConversationService(NeuroEventPublisherMixin):
                 # 保存消息
                 conversation = AIConversation(
                     session_id=session_id,
-                    user_id=str(user_id) if user_id is not None else None,
+                    user_id=message_user_id,
                     role=role,
                     content=content,
                     intent=intent,

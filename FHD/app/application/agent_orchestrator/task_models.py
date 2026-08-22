@@ -159,6 +159,9 @@ def task_from_run(run: AgentRun, *, existing: AgentTask | None = None) -> AgentT
         "task_request": dict(run.metadata.get("task_request") or {}),
         "task_request_fingerprint": str(run.metadata.get("task_request_fingerprint") or ""),
         "progress": task_progress_snapshot(run),
+        "business_result": dict(run.final_output.get("business_result") or {})
+        if isinstance(run.final_output.get("business_result"), dict)
+        else {},
     }
     current.updated_at = run.updated_at
     return current

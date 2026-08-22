@@ -235,9 +235,11 @@ def test_business_db_write_and_read_use_real_sqlite_services(monkeypatch, tmp_pa
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_file}")
 
     import app.db as db_mod
+    from app.application.business_db_write_verification import verify_business_db_write
     from app.db.base import Base
     from app.db.models.product import Product, UomCategory, UomUnit
     from app.db.models.purchase_unit import PurchaseUnit
+    from app.infrastructure.tenant_scope import tenant_scope
     from app.services.tools_workflow_registered import execute_registered_workflow_tool
 
     db_mod.dispose_and_recreate_engine()
@@ -265,6 +267,26 @@ def test_business_db_write_and_read_use_real_sqlite_services(monkeypatch, tmp_pa
             },
         )
         assert customer_write["success"] is True
+        assert customer_write["business_verification"]["verified"] is True
+        assert customer_write["business_verification"]["entity"] == "customers"
+        mismatched_readback = verify_business_db_write(
+            entity="customers",
+            operation="upsert",
+            payload={"customer_name": customer_name, "contact_person": "错误联系人"},
+            result=customer_write,
+        )
+        assert mismatched_readback["success"] is False
+        assert mismatched_readback["error_code"] == "business_write_verification_failed"
+        assert mismatched_readback["business_verification"]["reason"] == "field_mismatch"
+        with tenant_scope(2):
+            cross_tenant_readback = verify_business_db_write(
+                entity="customers",
+                operation="upsert",
+                payload={"customer_name": customer_name},
+                result=customer_write,
+            )
+        assert cross_tenant_readback["success"] is False
+        assert cross_tenant_readback["business_verification"]["reason"] == "record_not_found"
 
         customer_read = execute_registered_workflow_tool(
             "business_db",
@@ -294,6 +316,7 @@ def test_business_db_write_and_read_use_real_sqlite_services(monkeypatch, tmp_pa
             },
         )
         assert customer_update["success"] is True
+        assert customer_update["business_verification"]["verified"] is True
 
         updated_customer_read = execute_registered_workflow_tool(
             "business_db",
@@ -325,6 +348,8 @@ def test_business_db_write_and_read_use_real_sqlite_services(monkeypatch, tmp_pa
             },
         )
         assert product_write["success"] is True
+        assert product_write["business_verification"]["verified"] is True
+        assert product_write["business_verification"]["entity"] == "products"
 
         product_read = execute_registered_workflow_tool(
             "business_db",

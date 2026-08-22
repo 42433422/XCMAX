@@ -4,6 +4,7 @@ import { asArray, asRecord, asString } from '@/utils/typeGuards'
 
 export interface AgentTaskContext {
   task_id: string
+  turn_id: string
   title: string
   conversation_id: string
   root_run_id: string
@@ -25,7 +26,8 @@ function taskContextOf(run: AgentRun): AgentTaskContext {
   const runtime = asRecord(metadata.runtime_context)
   const conversationId = asString(raw.conversation_id || runtime.conversation_id || runtime.session_id).trim()
   return {
-    task_id: asString(raw.task_id || conversationId || run.run_id).trim(),
+    task_id: asString(raw.task_id || run.run_id).trim(),
+    turn_id: asString(raw.turn_id || runtime.turn_id).trim(),
     title: asString(raw.title || run.message).trim(),
     conversation_id: conversationId,
     root_run_id: asString(raw.root_run_id || run.run_id).trim(),
@@ -153,6 +155,7 @@ export function groupAgentRunsIntoTasks(runs: AgentRun[]): TaskItem[] {
         payload: {
           serverBacked: true,
           taskId,
+          turnId: context.turn_id || firstContext.turn_id,
           conversationId: context.conversation_id || firstContext.conversation_id,
           activeRunId: current.run_id,
           rootRunId: context.root_run_id,
@@ -199,6 +202,8 @@ export function taskSummariesToTaskItems(tasks: AgentTaskSummary[]): TaskItem[] 
       const canonicalProgress = Number(summary.progress?.percent)
       const hasCanonicalProgress = Number.isFinite(canonicalProgress)
       if (!base) {
+        const summaryMetadata = asRecord(summary.metadata)
+        const businessResult = asRecord(summaryMetadata.business_result)
         return {
           id: `agent_task_${summary.task_id}`,
           type: 'agent_task',
@@ -213,6 +218,10 @@ export function taskSummariesToTaskItems(tasks: AgentTaskSummary[]): TaskItem[] 
           payload: {
             serverBacked: true,
             taskId: summary.task_id,
+            conversationId: summary.conversation_id,
+            workspaceId: summary.workspace_id,
+            workspacePath: summary.workspace_path,
+            workspaceIsolation: summary.workspace_isolation,
             activeRunId: summary.active_run_id,
             runCount: Number(summary.run_count || 0),
             attentionState: summary.attention_state || '',
@@ -220,6 +229,7 @@ export function taskSummariesToTaskItems(tasks: AgentTaskSummary[]): TaskItem[] 
             execution: summary.execution,
             capabilities: summary.capabilities || {},
             rawRunStatus: rawStatus,
+            finalOutput: Object.keys(businessResult).length ? { business_result: businessResult } : {},
           },
         }
       }

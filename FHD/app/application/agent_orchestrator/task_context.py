@@ -70,9 +70,9 @@ def build_task_context(
     if len(title) == 80 and len(str(context.get("task_title") or run.message or "").strip()) > 80:
         title = title.rstrip() + "…"
 
-    return {
+    task_context = {
         "task_id": _text(
-            context.get("task_id") or previous.get("task_id") or conversation_id or run.run_id,
+            context.get("task_id") or previous.get("task_id") or run.run_id,
             limit=160,
         ),
         "title": title or f"智能任务 {run.run_id[-8:]}",
@@ -86,6 +86,10 @@ def build_task_context(
         "workspace_path": workspace_path,
         "isolation": isolation,
     }
+    turn_id = _text(context.get("turn_id") or previous.get("turn_id"), limit=160)
+    if turn_id:
+        task_context["turn_id"] = turn_id
+    return task_context
 
 
 def apply_task_context(

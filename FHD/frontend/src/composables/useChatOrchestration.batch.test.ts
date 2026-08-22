@@ -6,6 +6,7 @@ const {
   requestChatByModeWithTimeout,
   requestChatByModeBatchWithTimeout,
   enqueueChatBatchMessage,
+  addMessage,
   addAndSaveMessage,
   upsertTask,
   agentListEvents,
@@ -13,6 +14,7 @@ const {
   requestChatByModeWithTimeout: vi.fn(),
   requestChatByModeBatchWithTimeout: vi.fn(),
   enqueueChatBatchMessage: vi.fn(),
+  addMessage: vi.fn(),
   addAndSaveMessage: vi.fn().mockResolvedValue(undefined),
   upsertTask: vi.fn(),
   agentListEvents: vi.fn(),
@@ -23,7 +25,7 @@ vi.mock('./useChatMessages', async () => {
   return {
     useChatMessages: () => ({
       messages: ref([]),
-      addMessage: vi.fn(),
+      addMessage,
       addAndSaveMessage,
       saveMessage: vi.fn(),
       pushStreamingAiShell: vi.fn(() => 0),
@@ -246,7 +248,8 @@ describe('useChatOrchestration batch/json', () => {
       expect.any(Number),
       expect.objectContaining({ sessionId: 's' }),
     )
-    expect(addAndSaveMessage).toHaveBeenCalledWith('part-1', 'ai', undefined, expect.any(Object))
+    expect(addMessage).toHaveBeenCalledWith('part-1', 'ai', undefined, expect.any(Object))
+    expect(addAndSaveMessage).not.toHaveBeenCalled()
   })
 
   it('single json path handles workflow confirmation response', async () => {
@@ -263,7 +266,8 @@ describe('useChatOrchestration batch/json', () => {
     await api.sendMessage('执行计划')
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(requestChatByModeWithTimeout).toHaveBeenCalled()
-    expect(addAndSaveMessage).toHaveBeenCalledWith('请确认', 'ai', undefined, expect.any(Object))
+    expect(addMessage).toHaveBeenCalledWith('请确认', 'ai', undefined, expect.any(Object))
+    expect(addAndSaveMessage).not.toHaveBeenCalled()
     expect(agentListEvents).toHaveBeenCalledWith('run_1', {})
     // A confirmation response has not executed a tool yet. It must remain a
     // queued workflow, rather than showing the user a false "agent success".

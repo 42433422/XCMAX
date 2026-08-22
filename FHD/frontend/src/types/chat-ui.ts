@@ -60,6 +60,8 @@ export interface UiChatMessage {
   agentRunTrace?: AgentRunTraceData
   /** 附件（Excel 分析等 Mod 回传的结构化数据） */
   attachments?: Record<string, unknown>[]
+  /** XCAGI Business Harness 终态业务结果。 */
+  businessResult?: Record<string, unknown>
 }
 
 export type UiChatMessageExtras = Partial<UiChatMessage>

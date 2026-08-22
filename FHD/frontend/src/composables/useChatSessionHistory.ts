@@ -10,7 +10,7 @@ import {
   type TaskFilter,
 } from './useChatPersistence'
 import type { ShipmentTask } from './useShipmentTask'
-import type { ChatMessage } from './useChatMessages'
+import { chatMessageExtrasFromServerRow, type ChatMessage } from './useChatMessages'
 import { asRecord, asArray, asString } from '@/utils/typeGuards'
 import { formatChatMessageTime } from '@/utils/chatTaskLabels'
 
@@ -121,6 +121,7 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
               role: roleRaw === 'user' || roleRaw === 'task' ? roleRaw : 'ai',
               content: normalizeServerContentToHtml(asString(row.content)),
               time: formatChatMessageTime(row.time ?? row.timestamp ?? row.created_at ?? row.createdAt ?? row.updated_at),
+              ...chatMessageExtrasFromServerRow(row),
             }
           }),
         )
@@ -134,6 +135,7 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
               // 本地缓存已经是可展示内容；再次 HTML 转义会把 &quot; 变成可见实体。
               content: asString(row.content || (msg as { content?: string }).content),
               time: formatChatMessageTime(row.time ?? row.timestamp ?? row.created_at),
+              ...chatMessageExtrasFromServerRow({ ui_payload: row }),
             }
           }),
         )
@@ -160,6 +162,7 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
               role: roleRaw === 'user' || roleRaw === 'task' ? roleRaw : 'ai',
               content: asString(row.content || (msg as { content?: string }).content),
               time: formatChatMessageTime(row.time ?? row.timestamp ?? row.created_at),
+              ...chatMessageExtrasFromServerRow({ ui_payload: row }),
             }
           }),
         )

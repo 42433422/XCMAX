@@ -49,7 +49,8 @@ def test_agent_orchestrator_persists_stable_error_codes_not_exception_details():
         assert run.status == "failed"
         assert run.error == "agent_run_internal_error"
         assert secret not in str(run.to_dict())
-        assert run.events[-1].data == {"error_code": "agent_run_internal_error"}
+    assert run.events[-1].data["error_code"] == "agent_run_internal_error"
+    assert run.events[-1].data["harness"]["protocol"] == "xcagi.business-harness.v1"
 
 
 def test_agent_orchestrator_executes_low_risk_tool_and_records_events():
