@@ -102,7 +102,7 @@ ssh_cmd="ssh -i $KEY -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChec
 (
   flock -w "$TRANSFER_WAIT_SECONDS" 8 || exit 1
   xcmax_run_bounded_transfer "$TRANSFER_MAX_SECONDS" "postgres16-wal" "$LOG" \
-    rsync -a --ignore-existing --delay-updates --partial \
+    rsync -az --ignore-existing --delay-updates --partial \
     -e "$ssh_cmd" \
     "$ARCHIVE/" "${TARGET}:${REMOTE_ROOT}/wal-pg16/archive/"
   xcmax_run_bounded_transfer "$TRANSFER_MAX_SECONDS" "postgres16-wal-status" "$LOG" \
