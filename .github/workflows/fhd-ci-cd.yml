@@ -500,7 +500,7 @@ jobs:
       # ── Supply-chain trust (only when image was pushed → digest present) ──
       - name: Install Cosign
         if: steps.build_fhd.outputs.digest != ''
-        uses: sigstore/cosign-installer@v3.7.0
+        uses: sigstore/cosign-installer@v4.1.2
 
       - name: Sign xcagi-fhd-api image (keyless / Sigstore OIDC)
         if: steps.build_fhd.outputs.digest != ''
