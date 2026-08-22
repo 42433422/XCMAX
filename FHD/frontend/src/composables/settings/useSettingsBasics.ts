@@ -363,6 +363,41 @@ export function useSettingsBasics() {
     }
   }
 
+  // 开机自启：仅桌面壳可用，其余平台自动隐藏。
+  const autoLaunch = ref(false)
+  const autoLaunchBusy = ref(false)
+  const autoLaunchMessage = ref('')
+
+  async function loadAutoLaunch() {
+    if (!window.xcagiDesktop?.getAutoLaunch) return
+    try {
+      autoLaunch.value = Boolean(await window.xcagiDesktop.getAutoLaunch())
+    } catch {
+      /* 读取失败保持默认关闭 */
+    }
+  }
+
+  async function onAutoLaunchChange(value: boolean) {
+    if (!window.xcagiDesktop?.setAutoLaunch) return
+    autoLaunchBusy.value = true
+    autoLaunchMessage.value = ''
+    try {
+      const result = await window.xcagiDesktop.setAutoLaunch(value)
+      if (result?.ok) {
+        autoLaunch.value = value
+        autoLaunchMessage.value = t('settings.autoLaunchUpdated')
+      } else {
+        autoLaunch.value = !value
+        autoLaunchMessage.value = `${t('settings.autoLaunchFailed')}：${result?.reason || t('settings.unknownError')}`
+      }
+    } catch {
+      autoLaunch.value = !value
+      autoLaunchMessage.value = t('settings.autoLaunchFailed')
+    } finally {
+      autoLaunchBusy.value = false
+    }
+  }
+
   return {
     appLocale,
     onLocaleChange,
@@ -413,5 +448,10 @@ export function useSettingsBasics() {
     onSidebarThemeChange,
     loadDistillationVersions,
     onCheckForUpdates,
+    autoLaunch,
+    autoLaunchBusy,
+    autoLaunchMessage,
+    loadAutoLaunch,
+    onAutoLaunchChange,
   }
 }

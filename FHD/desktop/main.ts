@@ -5,6 +5,7 @@ import {
   Tray,
   app,
   clipboard,
+  desktopCapturer,
   dialog,
   globalShortcut,
   ipcMain,
@@ -26,6 +27,7 @@ import {
   installUpdate,
   isForceUpgradeRequired,
   readLocalBuildSha,
+  readLocalProductVersion,
   runUpdateCheckWithDirectNet,
 } from './updater'
 import {
@@ -48,9 +50,15 @@ import { DesktopAutonomyAdapter } from './autonomy/desktop-adapter'
 import { backendCrashPolicy } from './autonomy/policies/backend-crash.policy'
 import { degradedRemediationPolicy } from './autonomy/policies/degraded-remediation.policy'
 import { updateRollbackPolicy } from './autonomy/policies/update-rollback.policy'
-import { createForceUpgradeHandler, initializeLocalCrashReporting } from './desktop-resilience'
+import { createForceUpgradeHandler, initializeLocalCrashReporting, reportRendererError } from './desktop-resilience'
 import { readJsonTextFile, sanitizeBackendProxyEnv } from './backend-env-utils'
-import { handleDesktopWindowOpen, isBenignDesktopLoadAbort, isTrustedDesktopOrigin } from './desktop-navigation'
+import {
+  findDeepLinkArg,
+  handleDesktopWindowOpen,
+  isBenignDesktopLoadAbort,
+  isTrustedDesktopOrigin,
+  parseDesktopDeepLink,
+} from './desktop-navigation'
 import { assertSelfUpdateInstallSupported, getDesktopInstallIdentity } from './desktop-install-update'
 import { warmPersistedDesktopSessionCookieStore } from './session-cookie-warmup'
 
@@ -374,6 +382,139 @@ let desktopBootstrapSessionHintAvailable = false
 
 // 自治控制器（与现有更新观察期/backend 重启逻辑共存，零回归；阶段 1 接入）
 let autonomyController: AutonomyController | null = null
+
+// 深链（xcagi://）：pending 供渲染端在启动后一次性拉取，也通过事件推送实时路径。
+let pendingDeepLink: string | null = null
+
+// ---------- 设置持久化（开机自启初始化标记 / 遥测开关等） ----------
+function desktopSettingsPath(): string {
+  return path.join(app.getPath('userData'), 'desktop-settings.json')
+}
+function readDesktopSettings(): Record<string, unknown> {
+  try {
+    const raw = fs.readFileSync(desktopSettingsPath(), 'utf8')
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {}
+  } catch {
+    return {}
+  }
+}
+function patchDesktopSettings(patch: Record<string, unknown>): void {
+  try {
+    const prev = readDesktopSettings()
+    fs.writeFileSync(desktopSettingsPath(), JSON.stringify({ ...prev, ...patch }, null, 2), 'utf8')
+  } catch {
+    /* 设置落盘失败不阻塞启动 */
+  }
+}
+
+// ---------- 开机自启 ----------
+export function getAutoLaunchEnabled(): boolean {
+  try {
+    return app.getLoginItemSettings().openAtLogin
+  } catch {
+    return false
+  }
+}
+export function setAutoLaunchEnabled(enabled: boolean): { ok: boolean; reason?: string } {
+  try {
+    app.setLoginItemSettings({ openAtLogin: enabled })
+    return { ok: true }
+  } catch (error) {
+    return { ok: false, reason: error instanceof Error ? error.message : String(error) }
+  }
+}
+
+// ---------- 首次引导 + 更新日志（What's New） ----------
+const RELEASE_NOTES: Record<string, string> = {
+  '1.0.0.1':
+    '· 桌面端新增：开机自启、xcagi:// 深链唤起、渲染错误遥测、全局截图与语音唤起快捷键\n' +
+    '· 继续保持更新观察期自动回滚与稳定性保障',
+}
+function releaseNoteStatePath(): string {
+  return path.join(app.getPath('userData'), 'release-note-state.json')
+}
+export function consumeReleaseNotes(): {
+  isFirstRun: boolean
+  fromVersion: string | null
+  toVersion: string
+  notes: string
+} | null {
+  const toVersion = readLocalProductVersion()
+  let lastSeen: string | null = null
+  try {
+    const raw = JSON.parse(fs.readFileSync(releaseNoteStatePath(), 'utf8'))
+    if (typeof raw?.version === 'string') lastSeen = raw.version
+  } catch {
+    /* 首次运行或损坏状态，等同首次 */
+  }
+  if (lastSeen === toVersion) return null
+  const isFirstRun = lastSeen === null
+  const notes = RELEASE_NOTES[toVersion] ?? `已更新到 v${toVersion}。`
+  try {
+    fs.writeFileSync(
+      releaseNoteStatePath(),
+      JSON.stringify({ version: toVersion, seenAt: new Date().toISOString() }),
+      'utf8',
+    )
+  } catch {
+    /* 忽略记录失败 */
+  }
+  return { isFirstRun, fromVersion: lastSeen, toVersion, notes }
+}
+
+// ---------- 全局截图 / 语音唤起 ----------
+function screenshotOutputDir(): string {
+  const dir = path.join(app.getPath('userData'), 'captures')
+  fs.mkdirSync(dir, { recursive: true })
+  return dir
+}
+export async function captureFullScreenScreenshot(): Promise<{
+  ok: boolean
+  path?: string
+  error?: string
+}> {
+  try {
+    if (!desktopCapturer?.getSources) return { ok: false, error: 'desktopCapturer unavailable' }
+    const primary = screen.getPrimaryDisplay()
+    const sources = await desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize: { width: primary.size.width, height: primary.size.height },
+    })
+    const source = sources.find(s => s.display_id === String(primary.id)) || sources[0]
+    if (!source || source.thumbnail.isEmpty()) return { ok: false, error: 'no screenshot source' }
+    const image = source.thumbnail
+    clipboard.writeImage(image)
+    const outPath = path.join(screenshotOutputDir(), `screenshot-${Date.now()}.png`)
+    fs.writeFileSync(outPath, image.toPNG())
+    return { ok: true, path: outPath }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) }
+  }
+}
+
+function broadcastToRenderer(channel: string, payload?: unknown): void {
+  if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.webContents.isLoading()) {
+    mainWindow.webContents.send(channel, payload)
+  }
+}
+
+/**
+ * 深链入口：同时处理 second-instance argv（win/linux）与 mac open-url。
+ * 唤起窗口 + 逻辑置为 pending，若渲染端已就绪则实时推送。
+ */
+function handleDeepLink(rawUrl: string): void {
+  const parsed = parseDesktopDeepLink(rawUrl)
+  if (!parsed) return
+  pendingDeepLink = parsed.raw
+  writeBackendLog(`[deeplink] received host=${parsed.host} path=${parsed.path}\n`)
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.show()
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.focus()
+    broadcastToRenderer('xcagi:deep-link', parsed.raw)
+  }
+}
 
 /**
  * 常驻模式下切换主窗口的显示/隐藏。
@@ -1520,9 +1661,22 @@ function bootstrap(): void {
     app.quit()
   } else {
     initializeLocalCrashReporting({ port: DEFAULT_PORT, writeLog: writeBackendLog })
-    app.on('second-instance', () => {
-      if (mainWindow) {
+
+    // macOS：深链通过 open-url 到达（独立于 single-instance argv）。
+    app.on('open-url', (event, rawUrl) => {
+      event.preventDefault()
+      if (!rawUrl?.startsWith('xcagi://')) return
+      handleDeepLink(rawUrl)
+    })
+
+    app.on('second-instance', (_event, commandLine) => {
+      const deepLink = findDeepLinkArg(commandLine)
+      if (deepLink) {
+        handleDeepLink(deepLink)
+      }
+      if (mainWindow && !mainWindow.isDestroyed()) {
         if (mainWindow.isMinimized()) mainWindow.restore()
+        mainWindow.show()
         mainWindow.focus()
       }
     })
@@ -1560,6 +1714,22 @@ function bootstrap(): void {
       // 嵌入 Ed25519 公钥，启用 update 元数据二次签名校验
       if (!process.env.XCAGI_UPDATE_ED25519_PUBLIC_KEY) {
         process.env.XCAGI_UPDATE_ED25519_PUBLIC_KEY = ED25519_PUBLIC_KEY_PEM
+      }
+
+      // 注册系统默认协议处理器（xcagi:// 深链），失败不阻塞启动。
+      try {
+        app.setAsDefaultProtocolClient('xcagi')
+      } catch {
+        /* 深链注册失败仅降低对外唤起能力 */
+      }
+
+      // 开机自启：首次运行默认开启（匹配"常驻托盘 + 秒开"定位），用户可随时关闭。
+      if (!readDesktopSettings().autoLaunchInitialized) {
+        const init = setAutoLaunchEnabled(true)
+        patchDesktopSettings({ autoLaunchInitialized: true })
+        if (!init.ok) {
+          writeBackendLog(`[autolaunch] initial enable failed: ${init.reason}\n`)
+        }
       }
       function getLanIPv4(): string {
         const nets = networkInterfaces()
@@ -1686,6 +1856,45 @@ function bootstrap(): void {
         return { ok: !err, reason: err || undefined }
       })
 
+      // 开机自启开关。
+      ipcMain.handle('xcagi:get-auto-launch', () => getAutoLaunchEnabled())
+      ipcMain.handle('xcagi:set-auto-launch', (_event, enabled: boolean) =>
+        setAutoLaunchEnabled(Boolean(enabled)),
+      )
+
+      // 深链：渲染端启动后可一次性拉取在窗口就绪前到达的唤起。
+      ipcMain.handle('xcagi:consume-deep-link', () => {
+        const url = pendingDeepLink
+        pendingDeepLink = null
+        return url
+      })
+
+      // 渲染进程错误遥测：复用后端 crash-report 通道（opt-in 由后端统一聚合），best-effort。
+      ipcMain.handle(
+        'xcagi:report-error',
+        (_event, payload: { type?: string; error?: string; stack?: string }) => {
+          const p = payload && typeof payload === 'object' ? payload : {}
+          reportRendererError(
+            { port: DEFAULT_PORT, writeLog: writeBackendLog },
+            {
+              type: String(p.type || 'renderer:error'),
+              error: String(p.error || 'unknown'),
+              stack: typeof p.stack === 'string' ? p.stack : undefined,
+            },
+          )
+        },
+      )
+
+      // 首次引导 + 更新日志。
+      ipcMain.handle('xcagi:consume-release-notes', () => consumeReleaseNotes())
+
+      // 全局截图（渲染端主动触发 / 快捷键触发共用）。
+      ipcMain.handle('xcagi:capture-screenshot', async () => {
+        const result = await captureFullScreenScreenshot()
+        broadcastToRenderer('xcagi:screenshot-captured', result)
+        return result
+      })
+
       configureDesktopMediaPermissions()
       installDesktopCspDefenseInDepth()
       createMenu()
@@ -1695,6 +1904,26 @@ function bootstrap(): void {
         globalShortcut.register('CommandOrControl+Shift+X', () => toggleMainWindow())
       } catch {
         /* 全局快捷键注册失败不阻塞启动 */
+      }
+      // 全局截图：截图数据写入数据目录 + 复制到剪贴板，并通知渲染端。
+      try {
+        globalShortcut.register('CommandOrControl+Shift+5', () => {
+          void captureFullScreenScreenshot().then(result => {
+            broadcastToRenderer('xcagi:screenshot-captured', result)
+            if (result.ok) writeBackendLog(`[capture] saved ${result.path}\n`)
+          })
+        })
+      } catch {
+        /* ignore */
+      }
+      // 语音唤起：唤起窗口并通知渲染端聚焦/展开语音输入（具体语音交互由前端实现）。
+      try {
+        globalShortcut.register('CommandOrControl+Shift+V', () => {
+          toggleMainWindow()
+          broadcastToRenderer('xcagi:voice-invoke')
+        })
+      } catch {
+        /* ignore */
       }
 
       // 更新后首次启动观察期：检查 rollback marker
@@ -1740,6 +1969,26 @@ function bootstrap(): void {
           await waitForPostUpdateStartupStability()
           commitRollback()
           writeBackendLog(`[rollback] 后端、业务路由、主界面与观察期就绪，已提交（marker 删除）\n`)
+        }
+        // 更新日志（What's New）：版本变化时弹一次原生提示（首次运行与测试模式跳过）。
+        if (!process.env.XCAGI_DESKTOP_TEST) {
+          const releaseNote = consumeReleaseNotes()
+          if (releaseNote && !releaseNote.isFirstRun) {
+            const fromText = releaseNote.fromVersion ? `（${releaseNote.fromVersion} → ${releaseNote.toVersion}）` : ''
+            const options: Electron.MessageBoxOptions = {
+              type: 'info',
+              title: `${APP_NAME} 已更新${fromText}`,
+              message: `XCAGI 已更新到 v${releaseNote.toVersion}`,
+              detail: releaseNote.notes,
+              buttons: ['知道了'],
+              defaultId: 0,
+            }
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              void dialog.showMessageBox(mainWindow, options)
+            } else {
+              void dialog.showMessageBox(options)
+            }
+          }
         }
         // 启动自治控制器（与现有更新观察期/backend 重启逻辑共存，零回归）
         // 控制器提供新增能力：5min 内 backend 崩溃 ≥3 次自动回滚、磁盘满自动清日志、配置漂移自动纠正

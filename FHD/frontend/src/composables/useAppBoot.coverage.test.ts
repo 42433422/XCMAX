@@ -68,6 +68,7 @@ const testState = vi.hoisted(() => {
       clearFailsafeTimer: vi.fn(),
     },
     shellBridge: {
+      installDesktopShellIntegrations: vi.fn(),
       installSwitchViewBridge: vi.fn(),
       installSandboxBridge: vi.fn(),
       bindLegacyUploadHooks: vi.fn(),
@@ -184,6 +185,7 @@ function resetTestState() {
   testState.splash.createMinSplashElapsed = vi.fn(() => Promise.resolve())
   testState.splash.teardownOnUnmount = vi.fn()
   testState.splash.clearFailsafeTimer = vi.fn()
+  testState.shellBridge.installDesktopShellIntegrations = vi.fn()
   testState.shellBridge.installSwitchViewBridge = vi.fn()
   testState.shellBridge.installSandboxBridge = vi.fn()
   testState.shellBridge.bindLegacyUploadHooks = vi.fn()
@@ -473,6 +475,12 @@ describe('useAppBoot - coverage ramp', () => {
     it('调用 createMinSplashElapsed', () => {
       const { wrapper } = mountWithBoot()
       expect(testState.splash.createMinSplashElapsed).toHaveBeenCalled()
+      wrapper.unmount()
+    })
+
+    it('调用 shellBridge.installDesktopShellIntegrations', () => {
+      const { wrapper } = mountWithBoot()
+      expect(testState.shellBridge.installDesktopShellIntegrations).toHaveBeenCalled()
       wrapper.unmount()
     })
 

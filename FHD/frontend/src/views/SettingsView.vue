@@ -854,10 +854,26 @@
                   >
                     {{ aboutUpdateBusy ? $t('settings.checkingUpdates') : $t('settings.checkForUpdates') }}
                   </button>
+                  <label v-if="isDesktopShell" class="settings-about-autolaunch" :title="$t('settings.autoLaunchHint')">
+                    <input
+                      type="checkbox"
+                      :checked="autoLaunch"
+                      :disabled="autoLaunchBusy"
+                      @change="onAutoLaunchChange(($event.target as HTMLInputElement).checked)"
+                    />
+                    <span>{{ $t('settings.desktopLaunchAtStartup') }}</span>
+                  </label>
                   <p v-else class="muted settings-about-web-hint">
                     {{ $t('settings.updateWebHint') }}
                   </p>
                 </div>
+                <p
+                  v-if="autoLaunchMessage"
+                  class="settings-about-update-msg"
+                  :class="{ 'is-error': autoLaunchMessage !== $t('settings.autoLaunchUpdated') }"
+                >
+                  {{ autoLaunchMessage }}
+                </p>
                 <p v-if="aboutUpdateMessage" class="settings-about-update-msg" :class="{ 'is-error': aboutUpdateError }">
                   {{ aboutUpdateMessage }}
                 </p>
@@ -1063,6 +1079,11 @@ const {
   onSidebarThemeChange,
   loadDistillationVersions,
   onCheckForUpdates,
+  autoLaunch,
+  autoLaunchBusy,
+  autoLaunchMessage,
+  loadAutoLaunch,
+  onAutoLaunchChange,
 } = useSettingsBasics()
 
 function scrollToSettingsSection() {
@@ -1103,7 +1124,8 @@ onMounted(async () => {
   }
   await loadCurrentIndustryDetail()
   await loadIntentPackages()
-  loadPreferences()
+  void loadPreferences()
+  loadAutoLaunch()
   void loadMemoryV2()
   void loadPersyProfile()
   loadDistillationVersions()
