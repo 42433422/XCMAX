@@ -11,5 +11,15 @@
     "forceConsistentCasingInFileNames": true,
     "types": ["node"]
   },
-  "include": ["main.ts", "preload.ts", "updater.ts", "data-bridge.ts", "secure-store.ts", "build/**/*.cjs", "**/*.test.ts"]
+  "include": ["**/*.ts", "build/**/*.cjs"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "resources",
+    "release",
+    "e2e",
+    "**/*.test.ts",
+    "vitest.config.ts",
+    "playwright.config.ts"
+  ]
 }

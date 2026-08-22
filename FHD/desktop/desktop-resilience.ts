@@ -116,6 +116,17 @@ export function initializeLocalCrashReporting(options: CrashReportingOptions): v
   setTimeout(() => void uploadCrashReports(options), 30_000)
 }
 
+/**
+ * 渲染进程错误遥测：复用现有后端 crash-report 通道持久化（后端负责聚合与上报），
+ * 避免再造新端点。best-effort，后端不可用则静默丢弃。
+ */
+export function reportRendererError(
+  options: CrashReportingOptions,
+  payload: { type: string; error: string; stack?: string },
+): void {
+  void sendJsCrashReport(options, payload)
+}
+
 export function createForceUpgradeHandler(options: ForceUpgradeOptions): () => Promise<void> {
   let dialogOpen = false
   return async () => {

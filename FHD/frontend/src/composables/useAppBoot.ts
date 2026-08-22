@@ -177,6 +177,7 @@ export function useAppBoot() {
       /* v8 ignore end */
     })()
 
+    shellBridge.installDesktopShellIntegrations()
     shellBridge.installSwitchViewBridge()
     shellBridge.installSandboxBridge(isSandboxMode)
     shellBridge.bindLegacyUploadHooks(String(route.name || ''))

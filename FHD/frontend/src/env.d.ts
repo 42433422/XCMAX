@@ -33,6 +33,12 @@ interface Window {
     getPairingQrPayload?: () => Promise<string>
     showNotification: (title: string, body: string) => Promise<void>
     setBadge: (count: number) => Promise<void>
+    getAutoLaunch?: () => Promise<boolean>
+    setAutoLaunch?: (enabled: boolean) => Promise<{ ok: boolean; reason?: string }>
+    /** @returns pending xcagi:// deep link URL once, or null. */
+    consumeDeepLink?: () => Promise<string | null>
+    onDeepLink?: (callback: (url: string) => void) => () => void
+    onVoiceInvoke?: (callback: () => void) => () => void
   }
   handleAutoAction?: (action: unknown, userMessage?: string) => void
 }
