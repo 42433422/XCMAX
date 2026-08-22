@@ -1,5 +1,6 @@
 """测试 ConversationService.save_message 在 assistant 消息时触发推送。"""
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -29,6 +30,36 @@ def _mock_db_with_session(user_id=42, conversation_id=99):
 
 
 class TestSaveMessagePush:
+    def test_idempotency_key_returns_existing_message_without_duplicate_write(self, svc):
+        existing = MagicMock()
+        existing.id = 77
+        existing.conversation_metadata = json.dumps({"idempotency_key": "turn-1:assistant"})
+        mock_db = MagicMock()
+        mock_db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [
+            existing
+        ]
+
+        with (
+            patch("app.services.conversation_service.get_db") as mock_get_db,
+            patch("app.services.conversation_service.notify_user") as mock_notify,
+        ):
+            mock_get_db.return_value.__enter__.return_value = mock_db
+            mock_get_db.return_value.__exit__.return_value = False
+            result = svc.save_message(
+                session_id="sess-123",
+                user_id="42",
+                role="assistant",
+                content="订单创建成功",
+                intent="business_harness_result",
+                metadata="{}",
+                idempotency_key="turn-1:assistant",
+            )
+
+        assert result == 77
+        mock_db.add.assert_not_called()
+        mock_db.commit.assert_not_called()
+        mock_notify.assert_not_called()
+
     def test_assistant_message_triggers_notify_user(self, svc):
         """assistant 消息保存后应触发 notify_user 推送。"""
         mock_db = _mock_db_with_session(user_id=42, conversation_id=99)

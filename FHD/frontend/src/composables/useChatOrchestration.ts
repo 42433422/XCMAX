@@ -38,6 +38,7 @@ import type { UseChatViewOptions } from './useChatView'
 import type { ChatAutoAction, ChatPlannerPayload, ChatRequest } from '@/types/chat'
 import { collapseExactDuplicateReply } from '@/utils/chatReplyNormalization'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
+import { createBusinessHarnessId } from '@/utils/businessHarnessIds'
 type XcagiChatWindow = Window & {
   __VUE_CHAT_FILL__?: (value: string) => boolean
   legacyAutoActionHandler?: (action: ChatAutoAction, userMessage: string) => void
@@ -969,7 +970,9 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     if (!remoteMessages.length) return
     const requestScope = scope || { sessionId: sessionId.value, messages: [...messages.value] }
     const round = chatSessionActivity.forSession(requestScope.sessionId)
-    const addRoundMessage = (text: string) => addAndSaveMessage(text, 'ai', undefined, requestScope.sessionId)
+    const addRoundMessage = async (text: string) => {
+      if (round.isActive()) addMessage(text, 'ai', undefined, { speak: ttsEnabled.value })
+    }
     if (!opts?.fromWriteUnlock) {
       pendingDbWriteChatRetryMessages.value = null
       plannerWriteUnlockResumeDraft.value = ''
@@ -1027,6 +1030,10 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         const totalFromApi = typeof respRow.total === 'number' ? respRow.total : rows.length
         await recordProductFastPathTask(requestScope.sessionId, primaryText, kwFast, mappedRows, totalFromApi, responseText)
         await addRoundMessage(payload.response || '')
+        await Promise.all([
+          saveMessage('user', primaryText, requestScope.sessionId),
+          saveMessage('ai', payload.response || '', requestScope.sessionId),
+        ])
         if (!round.isActive()) return
         syncTaskFromChatResponse(payload, primaryText)
         attachContextSummaryToLastAiMessage()
@@ -1152,7 +1159,6 @@ export function useChatOrchestration(options: UseChatViewOptions) {
             flushTtsFromStream(streamPlain, true)
           }
         }
-        await saveMessage('ai', finalText, requestScope.sessionId)
         if (!round.isActive()) return
         const wrap: ChatPlannerPayload = doneResult && typeof doneResult === 'object' ? donePayload : { success: true, response: finalText }
         syncTaskFromChatResponse(wrap, primaryText)
@@ -1185,7 +1191,6 @@ export function useChatOrchestration(options: UseChatViewOptions) {
             ? `请求超时（>${Math.floor(timeoutMsS / 1000)}s）或已中断`
             : errorMessage(err, '流式对话失败')
         if (round.isActive()) applyPlainTextToMessageIndex(msgIndex, `处理失败：${errText}`)
-        await saveMessage('ai', `处理失败：${errText}`, requestScope.sessionId)
       } finally {
         round.setStreaming(false)
         window.clearTimeout(killTimer)
@@ -1357,15 +1362,24 @@ export function useChatOrchestration(options: UseChatViewOptions) {
 
   async function sendMessage(message: string) {
     const taskSessionId = String(sessionId.value || '').trim() || 'default'
-    const saveUserMessage = addAndSaveMessage(message, 'user')
-    const requestScope = { sessionId: taskSessionId, messages: [...messages.value] }
-    await saveUserMessage
-
+    addMessage(message, 'user')
+    const requestScope = {
+      sessionId: taskSessionId,
+      messages: [...messages.value],
+      turnId: createBusinessHarnessId('turn'),
+      taskId: createBusinessHarnessId('task'),
+    }
     const previewModified = await handleShipmentModify(message)
-    if (previewModified) return
+    if (previewModified) {
+      await saveMessage('user', message, taskSessionId)
+      return
+    }
 
     const printHandled = await handleStartPrintCommand(message)
-    if (printHandled) return
+    if (printHandled) {
+      await saveMessage('user', message, taskSessionId)
+      return
+    }
 
     const debounceMs = getChatBatchDebounceMs()
     if (debounceMs <= 0) {

@@ -328,12 +328,27 @@ def _drop_pending_ai_workflow_after_rejection(
 
         approval_service = get_approval_service()
         rejected_in_memory = approval_service.reject(approval_request_id, reason)
+        workflow_data = approval_service.get_pending_workflow(approval_request_id)
+        workflow_data = workflow_data if isinstance(workflow_data, dict) else {}
+        agent_run_id = str(workflow_data.get("agent_run_id") or "").strip()
+        cancelled_run_id = ""
+        if agent_run_id:
+            from app.application.agent_orchestrator import AgentOrchestrator
+
+            cancelled = AgentOrchestrator().cancel_run(
+                agent_run_id,
+                requested_by="approval_rejected",
+            )
+            cancelled_run_id = str(getattr(cancelled, "run_id", "") or "")
         removed = approval_service.remove_pending_workflow(approval_request_id)
         return {
             "workflow_executed": False,
             "approval_request_id": approval_request_id,
+            "agent_run_id": cancelled_run_id or agent_run_id,
             "rejected_in_memory": rejected_in_memory,
             "discarded_pending_workflow": removed is not None,
+            "success": False,
+            "code": "approval_rejected",
             "message": "审批已拒绝，AI 工作流已取消",
         }
     except _facade().RECOVERABLE_ERRORS as exc:

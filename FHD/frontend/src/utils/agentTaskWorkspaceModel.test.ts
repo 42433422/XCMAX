@@ -165,7 +165,7 @@ describe('groupAgentRunsIntoTasks', () => {
 
     const [task] = groupAgentRunsIntoTasks([ignored, taskless])
 
-    expect(task.id).toBe('agent_task_session-runtime')
+    expect(task.id).toBe('agent_task_run-runtime-only')
     expect(task.title).toBe('运行时兜底任务')
     expect(task.status).toBe('failed')
     expect(task.error).toBe('任务执行失败')

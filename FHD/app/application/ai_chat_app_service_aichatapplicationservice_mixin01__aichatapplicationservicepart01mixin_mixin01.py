@@ -55,7 +55,14 @@ class __AIChatApplicationServicePart01MixinPart01Mixin:
         runtime_ctx: dict[str, _facade().Any] = {"user_id": user_id, "message": message}
         _facade().AIChatWorkflowResponseMixin._attach_task_tenant(runtime_ctx)
         if isinstance(context, dict):
-            for key in ("session_id", "conversation_id", "local_user_id", "actor_id"):
+            for key in (
+                "session_id",
+                "conversation_id",
+                "turn_id",
+                "task_id",
+                "local_user_id",
+                "actor_id",
+            ):
                 if key in context and context[key]:
                     runtime_ctx[key] = str(context[key]).strip()
             for key in ("ui_surface", "intent_channel", "tool_execution_profile"):
@@ -95,8 +102,12 @@ class __AIChatApplicationServicePart01MixinPart01Mixin:
             neuro_notify_chat_received(user_id, message, source)
         except _facade().RECOVERABLE_ERRORS:
             _facade().logger.debug("neuro_notify_chat_received skipped", exc_info=True)
-        ctx = context or {}
-        ctx = self._inject_excel_vector_context(message=message, context=dict(ctx))
+        from app.application.agent_orchestrator.business_harness import (
+            ensure_business_harness_context,
+        )
+
+        ctx = ensure_business_harness_context(context, message=message)
+        ctx = self._inject_excel_vector_context(message=message, context=ctx)
         chat_run = None
         chat_run_context: dict[str, _facade().Any] = {}
 

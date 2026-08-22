@@ -162,4 +162,26 @@ describe('AgentTaskRuntimePanel', () => {
     expect(wrapper.find('.agent-result-evidence summary').text()).toBe('技术明细（高级）')
     expect(wrapper.find('.agent-result-evidence').attributes('open')).toBeUndefined()
   })
+
+  it('renders the canonical Business Harness summary and facts before raw node output', () => {
+    const wrapper = mountTask({
+      status: 'success',
+      payload: {
+        finalOutput: {
+          business_result: {
+            status: 'completed',
+            summary: '订单创建成功',
+            facts: { order_id: 41, order_number: 'SO-0041' },
+          },
+          node_outputs: { order: { message: '内部节点文本' } },
+        },
+      },
+    })
+
+    const summary = wrapper.find('.agent-result-summary').text()
+    expect(summary).toContain('订单创建成功')
+    expect(summary).toContain('订单 ID：41')
+    expect(summary).toContain('业务单号：SO-0041')
+    expect(summary).not.toContain('内部节点文本')
+  })
 })

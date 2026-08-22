@@ -414,11 +414,15 @@ class AgentRun:
         message: str = "",
         data: dict[str, Any] | None = None,
     ) -> RunEvent:
+        from app.application.agent_orchestrator.business_harness import harness_event_context
+
+        payload = dict(data or {})
+        payload.setdefault("harness", harness_event_context(self))
         event = RunEvent(
             run_id=self.run_id,
             event_type=event_type,
             message=message,
-            data=dict(data or {}),
+            data=payload,
         )
         self.events.append(event)
         self.touch()

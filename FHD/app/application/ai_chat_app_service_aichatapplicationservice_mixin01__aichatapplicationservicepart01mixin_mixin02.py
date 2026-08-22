@@ -38,6 +38,12 @@ class __AIChatApplicationServicePart01MixinPart02Mixin:
             inner_payload = {}
         if not isinstance(tool_call, dict):
             tool_call = {}
+        reply = str(
+            response_data.get("response")
+            or inner.get("text")
+            or (response_data.get("message") if not response_data.get("success") else "")
+            or ""
+        )[:8000]
         intent = str(
             inner_payload.get("intent")
             or inner_payload.get("tool_key")
@@ -57,12 +63,67 @@ class __AIChatApplicationServicePart01MixinPart02Mixin:
             "excel_import": inner_payload.get("result")
             if inner_payload.get("intent") == "excel_import_to_db"
             else None,
+            "task_id": context.get("task_id"),
+            "turn_id": context.get("turn_id"),
+            "run_id": response_data.get("run_id")
+            or response_data.get("agent_run_id")
+            or inner.get("run_id")
+            or inner.get("agent_run_id"),
         }
+        ui_payload = {
+            "thinkingSteps": inner_payload.get("thinking_steps")
+            or inner.get("thinking_steps")
+            or response_data.get("thinking_steps"),
+            "todoSteps": inner_payload.get("todo"),
+            "workflowAction": inner.get("action"),
+            "nodeResults": inner_payload.get("node_results"),
+            "approvalCard": inner_payload.get("approval_card"),
+            "attachments": inner_payload.get("attachments"),
+        }
+        ui_payload = {key: value for key, value in ui_payload.items() if value not in (None, "", [])}
+        harness_metadata = {
+            "protocol": context.get("business_harness_protocol")
+            or "xcagi.business-harness.v1",
+            "task_id": context.get("task_id"),
+            "turn_id": context.get("turn_id"),
+            "conversation_id": session_id,
+            "run_id": summary.get("run_id"),
+        }
+        turn_id = str(context.get("turn_id") or "").strip()
+        user_fingerprint = _facade().uuid.uuid5(
+            _facade().uuid.NAMESPACE_URL,
+            str(message)[:8000],
+        ).hex
+        assistant_fingerprint = _facade().uuid.uuid5(
+            _facade().uuid.NAMESPACE_URL,
+            reply,
+        ).hex
+        user_idempotency_key = (
+            f"xcagi.business-harness.v1:{turn_id}:user:{user_fingerprint}" if turn_id else ""
+        )
+        assistant_idempotency_key = (
+            f"xcagi.business-harness.v1:{turn_id}:assistant:{assistant_fingerprint}"
+            if turn_id
+            else ""
+        )
         meta_user = _facade().json.dumps(
-            {"role_hint": "user", "summary": summary}, ensure_ascii=False
+            {
+                "role_hint": "user",
+                "summary": summary,
+                "business_harness": harness_metadata,
+            },
+            ensure_ascii=False,
+            default=str,
         )[:12000]
         meta_assistant = _facade().json.dumps(
-            {"role_hint": "assistant", "summary": summary}, ensure_ascii=False
+            {
+                "role_hint": "assistant",
+                "summary": summary,
+                "business_harness": harness_metadata,
+                "ui": ui_payload,
+            },
+            ensure_ascii=False,
+            default=str,
         )[:12000]
         conv = get_conversation_service()
         conv.save_message(
@@ -72,10 +133,10 @@ class __AIChatApplicationServicePart01MixinPart02Mixin:
             content=str(message)[:8000],
             intent=intent or "chat",
             metadata=meta_user,
+            idempotency_key=user_idempotency_key,
         )
         if not isinstance(response_data, dict):
             response_data = {}
-        reply = str(response_data.get("response") or inner.get("text") or "")[:8000]
         conv.save_message(
             session_id=session_id,
             user_id=user_id,
@@ -83,6 +144,7 @@ class __AIChatApplicationServicePart01MixinPart02Mixin:
             content=reply,
             intent=intent or "assistant_reply",
             metadata=meta_assistant,
+            idempotency_key=assistant_idempotency_key,
         )
 
     def _inject_excel_vector_context(
