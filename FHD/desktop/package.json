@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "npm run build && electron .",
     "build": "node scripts/inject-version.cjs && tsc -p tsconfig.json && cp resources/splash.html dist/splash.html",
+    "typecheck": "tsc -p tsconfig.test.json",
     "pack": "npm run build && electron-builder --dir --config electron-builder.yml",
     "dist": "npm run build && electron-builder --config electron-builder.yml",
     "dist:win": "npm run build && electron-builder --win --config electron-builder.yml",
@@ -16,6 +17,7 @@
     "test": "XCAGI_DESKTOP_TEST=1 vitest run",
     "test:watch": "XCAGI_DESKTOP_TEST=1 vitest",
     "test:coverage": "XCAGI_DESKTOP_TEST=1 vitest run --coverage",
+    "test:e2e": "npm run build && playwright test",
     "security:scan": "bash scripts/security-scan.sh",
     "security:scan:medium": "bash scripts/security-scan.sh --gate-severity medium"
   },
@@ -25,6 +27,7 @@
   "devDependencies": {
     "@electron/notarize": "3.1.1",
     "@noble/hashes": "^1.8.0",
+    "@playwright/test": "^1.62.1",
     "@types/node": "25.6.0",
     "@vitest/coverage-v8": "^3.2.6",
     "electron": "41.10.3",
