@@ -66,7 +66,7 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
     sessionId,
     getActiveModId: () => String(modsStore.activeModId || ''),
   })
-  const { mergeHistorySessions, clearLocalHistoryCache, readLocalMessagesBySession } = historyPersistence
+  const { mergeHistorySessions, clearLocalHistoryCache, removeLocalSessionCache, readLocalMessagesBySession } = historyPersistence
 
   const showHistory = ref(false)
   const historySessions = ref<HistorySessionItem[]>([])
@@ -201,6 +201,45 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
     }
   }
 
+  async function renameSession(targetSessionId: string, title: string): Promise<boolean> {
+    const sid = String(targetSessionId || '').trim()
+    const next = String(title || '').trim()
+    if (!sid || !next || historyLoading.value) return false
+    historyError.value = ''
+    try {
+      const data = await chatApi.renameConversation(sid, next)
+      if (!data?.success) throw new Error(asString((data as { message?: unknown }).message, '重命名失败'))
+      historySessions.value = historySessions.value.map((s) =>
+        s.session_id === sid ? { ...s, title: next } : s,
+      )
+      return true
+    } catch (e) {
+      historyError.value = e instanceof Error ? e.message : '重命名失败，请稍后重试'
+      console.error('重命名会话失败:', e)
+      return false
+    }
+  }
+
+  async function deleteSession(targetSessionId: string): Promise<boolean> {
+    const sid = String(targetSessionId || '').trim()
+    if (!sid || historyLoading.value) return false
+    historyError.value = ''
+    try {
+      const data = await chatApi.deleteConversation(sid)
+      if (!data?.success) throw new Error(asString((data as { message?: unknown }).message, '删除会话失败'))
+      removeLocalSessionCache(sid)
+      historySessions.value = historySessions.value.filter((s) => s.session_id !== sid)
+      if (sid === String(sessionId.value || '').trim()) {
+        newConversation()
+      }
+      return true
+    } catch (e) {
+      historyError.value = e instanceof Error ? e.message : '删除会话失败，请稍后重试'
+      console.error('删除会话失败:', e)
+      return false
+    }
+  }
+
   function newConversation() {
     const prev = String(sessionId.value || '').trim() || 'default'
     persistTaskPanelStateForSession(prev)
@@ -242,6 +281,8 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
     showHistoryPanel,
     loadSession,
     clearHistorySessions,
+    renameSession,
+    deleteSession,
     newConversation,
     registerHistoryModWatch,
   }

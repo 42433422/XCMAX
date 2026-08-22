@@ -86,6 +86,13 @@
     "officeDockingBusy": "文件解析中",
     "officeDockingTitle": "读取 Word、Excel、CSV、PDF 或 PPT，并在写入前审核",
     "newConversationTitle": "新建对话",
-    "historyTitleBtn": "历史记录"
+    "historyTitleBtn": "历史记录",
+    "taskTab": "任务",
+    "conversationTab": "对话",
+    "newConversation": "新建对话",
+    "renameSession": "重命名会话",
+    "deleteSession": "删除会话",
+    "renamePlaceholder": "输入会话名称",
+    "renameConfirm": "确定"
   }
 }

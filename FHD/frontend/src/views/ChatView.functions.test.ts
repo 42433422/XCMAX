@@ -39,6 +39,7 @@ const mockChatViewApi = {
   latestAssistantPush: { value: null },
   taskList: { value: [] },
   filteredTaskList: { value: [] },
+  activeTaskId: { value: '' },
   expandedTaskIds: { value: [] },
   taskFilter: { value: 'all' },
   showHistory: showHistoryRef,
@@ -189,6 +190,14 @@ vi.mock('@/components/chat/ChatMessageList.vue', () => ({
 
 vi.mock('@/components/chat/ChatTaskPanel.vue', () => ({
   default: defineComponent({ name: 'ChatTaskPanel', setup: () => () => h('div') }),
+}))
+
+vi.mock('@/components/chat/ChatConversationPanel.vue', () => ({
+  default: defineComponent({ name: 'ChatConversationPanel', setup: () => () => h('div') }),
+}))
+
+vi.mock('@/components/chat/ChatSidePanel.vue', () => ({
+  default: defineComponent({ name: 'ChatSidePanel', setup: () => () => h('div') }),
 }))
 
 vi.mock('@/components/chat/ChatInputToolbar.vue', () => ({
@@ -532,11 +541,10 @@ describe('ChatView task panel layout', () => {
     resetMockRefs()
   })
 
-  it('does not reserve a wide empty task panel before any task exists', async () => {
+  it('always reserves the side panel for the task/conversation switcher', async () => {
     const { wrapper } = await mountChatView()
-    expect((wrapper.vm as any).hasTaskPanelContent).toBe(false)
-    expect(wrapper.findComponent({ name: 'ChatTaskPanel' }).exists()).toBe(false)
-    expect(wrapper.find('.chat-pane-handle-slot').exists()).toBe(false)
+    expect(wrapper.findComponent({ name: 'ChatSidePanel' }).exists()).toBe(true)
+    expect(wrapper.find('.chat-pane-handle-slot').exists()).toBe(true)
     wrapper.unmount()
   })
 })

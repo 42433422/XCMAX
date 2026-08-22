@@ -1,7 +1,5 @@
 <template>
-  <div class="right-panel">
-    <div class="panel-header">{{ $t('chat.currentTask') }}</div>
-    <div class="panel-content panel-content-task" id="taskPanel">
+  <div class="panel-content panel-content-task" id="taskPanel">
       <div class="task-panel-body">
         <template v-if="currentTask">
           <div class="task-card" :class="{ 'excel-import-task': currentTask?.type === 'excel_import' }">
@@ -260,7 +258,6 @@
         <div v-else-if="!currentTask && !taskList.length" class="empty-state">{{ $t('chat.noActiveTasks') }}</div>
       </div>
     </div>
-  </div>
 </template>
 
 <script setup lang="ts">

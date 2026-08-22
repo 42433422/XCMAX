@@ -27,7 +27,7 @@
         @approval-confirm="confirmWorkflowFromCard"
         @approval-cancel="cancelWorkflowFromCard"
       />
-      <div v-if="isTaskPaneResizable && hasTaskPanelContent" class="chat-pane-handle-slot">
+      <div v-if="isTaskPaneResizable" class="chat-pane-handle-slot">
         <PaneResizeHandle
           orientation="vertical"
           label="调整任务面板宽度"
@@ -35,8 +35,7 @@
           @reset="resetTaskPaneWidth"
         />
       </div>
-      <ChatTaskPanel
-        v-if="hasTaskPanelContent"
+      <ChatSidePanel
         :current-task="currentTask"
         :task-list="visibleTaskList"
         :filtered-task-list="visibleFilteredTaskList"
@@ -54,6 +53,10 @@
         :format-task-source-label="formatTaskSourceLabel"
         :workflow-task-dot-status-class="workflowTaskDotStatusClassForTask"
         :workflow-task-dot-title="workflowTaskDotTitleForTask"
+        :history-sessions="historySessions"
+        :current-session-id="currentSessionId"
+        :history-loading="historyLoading"
+        :history-error="historyError"
         @confirm-task="confirmTask"
         @cancel-task="cancelTask"
         @refetch-order-number="refetchTaskOrderNumber"
@@ -74,6 +77,12 @@
         @cancel-task-by-id="cancelTaskById"
         @copy-assistant-push="copyAssistantPushContent"
         @open-assistant-float="openAssistantFloatFromTaskPanel"
+        @new-conversation="newConversation"
+        @show-history="showHistoryPanel"
+        @clear-history-sessions="clearHistorySessions"
+        @load-session="loadSession"
+        @rename-session="renameSession"
+        @delete-session="deleteSession"
       />
     </div>
     <div class="input-area" data-tour="chat-input-area">
@@ -200,7 +209,7 @@ import { useRouter } from 'vue-router'
 import PaneResizeHandle from '@/components/PaneResizeHandle.vue'
 import ChatQuickActions from '@/components/chat/ChatQuickActions.vue'
 import ChatMessageList from '@/components/chat/ChatMessageList.vue'
-import ChatTaskPanel from '@/components/chat/ChatTaskPanel.vue'
+import ChatSidePanel from '@/components/chat/ChatSidePanel.vue'
 import ChatInputToolbar from '@/components/chat/ChatInputToolbar.vue'
 import ChatHistoryModal from '@/components/chat/ChatHistoryModal.vue'
 import ChatOfficeDockingReview from '@/components/chat/ChatOfficeDockingReview.vue'
@@ -304,6 +313,8 @@ const {
   showHistoryPanel,
   loadSession,
   clearHistorySessions,
+  renameSession,
+  deleteSession,
   newConversation,
   handleShipmentDownloadClick,
   startPrintFromTaskCard,
@@ -386,8 +397,6 @@ const inputPlaceholder = computed(() => {
   const preset = getIndustryPreset(currentIndustryId.value)
   return preset.placeholderNormal
 })
-
-const hasTaskPanelContent = computed(() => !!currentTask.value || visibleTaskList.value.length > 0 || !!latestAssistantPush.value)
 
 const canSendMessage = computed(() => !!messageInput.value.trim() && !isLoading.value)
 const sendButtonTitle = computed(() => {
