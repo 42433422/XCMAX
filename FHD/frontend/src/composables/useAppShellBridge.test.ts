@@ -69,7 +69,7 @@ describe('navigateByDeepLink', () => {
   beforeEach(() => {
     vi.mocked(navigateFromSidebarKey).mockReset()
     vi.mocked(navigateFromSidebarKey).mockResolvedValue(true)
-    document.body.innerHTML = ''
+    document.body.replaceChildren()
   })
 
   it('chat 意图跳对话页并回填 q 参数', () => {
