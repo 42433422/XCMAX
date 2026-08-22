@@ -764,8 +764,9 @@ class TestBuildWorkflowThinkingSteps:
         mock_plan.nodes = []
         mock_plan.metadata = {}
         result = service._build_workflow_thinking_steps(mock_plan, "low risk")
-        assert "product_query" in result
-        assert "low risk" in result
+        assert "查询产品资料" in result
+        assert "product_query" not in result
+        assert "low risk" not in result
 
     def test_with_nodes(self):
         service = _make_service()
@@ -780,8 +781,9 @@ class TestBuildWorkflowThinkingSteps:
         mock_plan.nodes = [mock_node]
         mock_plan.metadata = {}
         result = service._build_workflow_thinking_steps(mock_plan, "ok")
-        assert "n1" in result
-        assert "products.query" in result
+        assert "查询产品资料" in result
+        assert "n1" not in result
+        assert "products.query" not in result
 
     def test_with_user_memory_rag(self):
         service = _make_service()
@@ -809,7 +811,8 @@ class TestBuildWorkflowThinkingSteps:
             ]
         }
         result = service._build_workflow_thinking_steps(mock_plan, "ok")
-        assert "products.query" in result
+        assert "能力预检: 已确认 1 项业务能力可用" in result
+        assert "products.query" not in result
 
 
 # ========================= _workflow_products_float_query =================

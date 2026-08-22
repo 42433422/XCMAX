@@ -46,6 +46,11 @@ class SQLAlchemyAgentRunRepository:
 
     def save(self, run: AgentRun) -> AgentRun:
         self._ensure_schema()
+        from app.application.agent_orchestrator.business_harness import (
+            ensure_terminal_business_result,
+        )
+
+        ensure_terminal_business_result(run)
         run.touch()
         payload = json.dumps(run.to_dict(), ensure_ascii=False, default=str)
         with self._session_scope() as db:
