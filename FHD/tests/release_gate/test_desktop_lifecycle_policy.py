@@ -5,6 +5,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def _desktop_runtime_source(*names: str) -> str:
+    return "\n".join((ROOT / "desktop" / name).read_text(encoding="utf-8") for name in names)
+
+
 def test_windows_uninstall_preserves_user_data_and_cleans_scheduled_task() -> None:
     builder = (ROOT / "desktop/electron-builder.yml").read_text(encoding="utf-8")
     installer = (ROOT / "desktop/build/installer.nsh").read_text(encoding="utf-8")
@@ -16,14 +20,14 @@ def test_windows_uninstall_preserves_user_data_and_cleans_scheduled_task() -> No
 
 def test_release_contains_upgrade_rollback_crash_and_window_recovery() -> None:
     builder = (ROOT / "desktop/electron-builder.yml").read_text(encoding="utf-8")
-    main = (ROOT / "desktop/main.ts").read_text(encoding="utf-8")
+    runtime = _desktop_runtime_source("main.ts", "window-manager.ts")
     resilience = (ROOT / "desktop/desktop-resilience.ts").read_text(encoding="utf-8")
     assert "- zip" in builder, "electron-updater requires a ZIP artifact on macOS"
-    assert "checkPendingRollback" in main and "triggerRollbackSafe" in main
-    assert "render-process-gone" in main
-    assert "initializeLocalCrashReporting" in main
+    assert "checkPendingRollback" in runtime and "triggerRollbackSafe" in runtime
+    assert "render-process-gone" in runtime
+    assert "initializeLocalCrashReporting" in runtime
     assert "crashReporter.start" in resilience
-    assert "readWindowState" in main and "writeWindowState" in main
+    assert "readWindowState" in runtime and "writeWindowState" in runtime
 
 
 def test_soak_gate_defaults_to_at_least_eight_hours_and_fails_closed() -> None:
