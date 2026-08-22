@@ -53,6 +53,10 @@ docker exec -u postgres "$CONTAINER" \
   install -d -m 0700 -o postgres -g postgres \
   "/var/lib/postgresql/data/$ARCHIVE_NAME"
 touch "$LOG"
+
+# shellcheck source=../lib/wal_archive_command.sh
+# shellcheck disable=SC1091
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../lib" &>/dev/null && pwd)/wal_archive_command.sh"
 exec 9>"$LOCK"
 flock -n 9 || exit 0
 
@@ -77,7 +81,7 @@ if [[ "$(pg_show archive_mode)" != "on" ]]; then
     'psql -U "$POSTGRES_USER" -d postgres -v ON_ERROR_STOP=1 -qc "ALTER SYSTEM SET archive_mode TO '\''on'\''"'
   restart_required=1
 fi
-archive_cmd="test ! -f /var/lib/postgresql/data/$ARCHIVE_NAME/%f && cp %p /var/lib/postgresql/data/$ARCHIVE_NAME/%f"
+archive_cmd="$(xcmax_wal_archive_command "/var/lib/postgresql/data/$ARCHIVE_NAME")"
 escaped_archive_cmd="${archive_cmd//\'/\'\'}"
 if [[ "$(pg_show archive_command)" != "$archive_cmd" ]]; then
   docker exec -u postgres "$CONTAINER" sh -ceu \
