@@ -415,9 +415,7 @@ class AgentRun:
         data: dict[str, Any] | None = None,
     ) -> RunEvent:
         from app.application.agent_orchestrator.business_harness import harness_event_context
-
-        payload = dict(data or {})
-        payload.setdefault("harness", harness_event_context(self))
+        payload = {"harness": harness_event_context(self), **dict(data or {})}
         event = RunEvent(
             run_id=self.run_id,
             event_type=event_type,
