@@ -68,9 +68,7 @@ def test_approval_result_projection_is_idempotency_keyed_and_readable() -> None:
     }
     apply_task_context(run, run.metadata["runtime_context"])
     run.final_output = {
-        "node_outputs": {
-            "write": {"success": True, "message": "客户创建成功", "customer_id": 23}
-        }
+        "node_outputs": {"write": {"success": True, "message": "客户创建成功", "customer_id": 23}}
     }
     conversation = Mock()
     conversation.save_message.return_value = 91

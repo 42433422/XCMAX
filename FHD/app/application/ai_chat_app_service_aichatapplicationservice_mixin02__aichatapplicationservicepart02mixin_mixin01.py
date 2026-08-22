@@ -75,7 +75,11 @@ class __AIChatApplicationServicePart02MixinPart01Mixin:
         raw_intent = str(getattr(plan, "intent", "") or "").strip()
         intent_text = intent_labels.get(raw_intent, "处理当前业务请求")
         risks = {str(getattr(node, "risk", "low") or "low") for node in (plan.nodes or [])}
-        risk_text = "涉及业务变更，执行前需要确认或审批" if risks & {"medium", "high", "critical"} else "只读或低风险操作，可直接执行"
+        risk_text = (
+            "涉及业务变更，执行前需要确认或审批"
+            if risks & {"medium", "high", "critical"}
+            else "只读或低风险操作，可直接执行"
+        )
         return (
             f"工作编排:\n1) 业务目标: {intent_text}\n"
             f"2) 执行计划: 共 {len(node_lines)} 个业务步骤\n"

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal, cast
 
+from app.application.agent_orchestrator.business_harness import harness_event_context
 from app.application.agent_orchestrator.run_events import RunEvent, run_event_from_dict
 from app.application.agent_orchestrator.run_model_support import (
     coerce_float as _coerce_float,
@@ -414,7 +415,6 @@ class AgentRun:
         message: str = "",
         data: dict[str, Any] | None = None,
     ) -> RunEvent:
-        from app.application.agent_orchestrator.business_harness import harness_event_context
         payload = {"harness": harness_event_context(self), **dict(data or {})}
         event = RunEvent(
             run_id=self.run_id,

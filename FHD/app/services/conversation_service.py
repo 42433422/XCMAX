@@ -92,9 +92,7 @@ class ConversationService(NeuroEventPublisherMixin):
                     )
                     for candidate in candidates:
                         try:
-                            candidate_metadata = json.loads(
-                                candidate.conversation_metadata or "{}"
-                            )
+                            candidate_metadata = json.loads(candidate.conversation_metadata or "{}")
                         except (TypeError, ValueError, json.JSONDecodeError):
                             continue
                         if (

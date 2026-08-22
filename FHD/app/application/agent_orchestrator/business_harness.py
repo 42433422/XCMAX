@@ -80,7 +80,9 @@ def harness_event_context(run: Any) -> dict[str, Any]:
         attempt = 1
     return {
         "protocol": BUSINESS_HARNESS_PROTOCOL,
-        "task_id": _text(task.get("task_id") or runtime.get("task_id") or getattr(run, "run_id", ""), limit=160),
+        "task_id": _text(
+            task.get("task_id") or runtime.get("task_id") or getattr(run, "run_id", ""), limit=160
+        ),
         "turn_id": _text(task.get("turn_id") or runtime.get("turn_id"), limit=160),
         "conversation_id": _text(
             task.get("conversation_id")
@@ -117,7 +119,8 @@ def _result_summary(run: Any, payloads: list[dict[str, Any]]) -> str:
     if status == "cancelled":
         return "业务任务已取消，未继续执行"
     for payload in reversed(payloads):
-        nested = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+        raw_nested = payload.get("data")
+        nested: dict[str, Any] = raw_nested if isinstance(raw_nested, dict) else {}
         for candidate in (
             payload.get("response"),
             payload.get("message"),
@@ -133,7 +136,8 @@ def _result_summary(run: Any, payloads: list[dict[str, Any]]) -> str:
 def _result_facts(payloads: list[dict[str, Any]]) -> dict[str, Any]:
     facts: dict[str, Any] = {}
     for payload in payloads:
-        nested = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+        raw_nested = payload.get("data")
+        nested: dict[str, Any] = raw_nested if isinstance(raw_nested, dict) else {}
         for source in (payload, nested):
             for key in _FACT_KEYS:
                 value = source.get(key)

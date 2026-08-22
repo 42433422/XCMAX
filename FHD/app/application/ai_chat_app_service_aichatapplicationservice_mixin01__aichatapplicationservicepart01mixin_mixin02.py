@@ -80,24 +80,33 @@ class __AIChatApplicationServicePart01MixinPart02Mixin:
             "approvalCard": inner_payload.get("approval_card"),
             "attachments": inner_payload.get("attachments"),
         }
-        ui_payload = {key: value for key, value in ui_payload.items() if value not in (None, "", [])}
+        ui_payload = {
+            key: value for key, value in ui_payload.items() if value not in (None, "", [])
+        }
         harness_metadata = {
-            "protocol": context.get("business_harness_protocol")
-            or "xcagi.business-harness.v1",
+            "protocol": context.get("business_harness_protocol") or "xcagi.business-harness.v1",
             "task_id": context.get("task_id"),
             "turn_id": context.get("turn_id"),
             "conversation_id": session_id,
             "run_id": summary.get("run_id"),
         }
         turn_id = str(context.get("turn_id") or "").strip()
-        user_fingerprint = _facade().uuid.uuid5(
-            _facade().uuid.NAMESPACE_URL,
-            str(message)[:8000],
-        ).hex
-        assistant_fingerprint = _facade().uuid.uuid5(
-            _facade().uuid.NAMESPACE_URL,
-            reply,
-        ).hex
+        user_fingerprint = (
+            _facade()
+            .uuid.uuid5(
+                _facade().uuid.NAMESPACE_URL,
+                str(message)[:8000],
+            )
+            .hex
+        )
+        assistant_fingerprint = (
+            _facade()
+            .uuid.uuid5(
+                _facade().uuid.NAMESPACE_URL,
+                reply,
+            )
+            .hex
+        )
         user_idempotency_key = (
             f"xcagi.business-harness.v1:{turn_id}:user:{user_fingerprint}" if turn_id else ""
         )

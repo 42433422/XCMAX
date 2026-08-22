@@ -126,7 +126,9 @@ def _message_to_dict(message: object) -> dict:
         }
     metadata = result.get("metadata")
     try:
-        parsed_metadata = json.loads(metadata) if isinstance(metadata, str) and metadata else metadata
+        parsed_metadata = (
+            json.loads(metadata) if isinstance(metadata, str) and metadata else metadata
+        )
     except (TypeError, ValueError, json.JSONDecodeError):
         parsed_metadata = {}
     if isinstance(parsed_metadata, dict):
