@@ -622,6 +622,20 @@ class TestNormalizeBusinessDbEntity:
 
 
 class TestBusinessDbRouter:
+    @pytest.fixture(autouse=True)
+    def _stub_readback_verification(self):
+        def verified(**kwargs):
+            return {
+                **kwargs["result"],
+                "business_verification": {"verified": True, "state": "present"},
+            }
+
+        with patch(
+            "app.services.business_db_write_verification.verify_business_db_write",
+            side_effect=verified,
+        ):
+            yield
+
     def test_missing_entity(self):
         result = _registered_router_business_db("read", {}, {}, "admin", "")
         assert result["success"] is False
