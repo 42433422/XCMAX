@@ -16,7 +16,7 @@ function makeRouter() {
 
 describe('useAppShellBridge', () => {
   beforeEach(() => {
-    document.body.innerHTML = ''
+    document.body.replaceChildren()
   })
 
   afterEach(() => {
