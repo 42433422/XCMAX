@@ -1,4 +1,4 @@
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useTutorialStore } from '@/stores/tutorial'
 import { useModsStore } from '@/stores/mods'
 import {
@@ -33,6 +33,7 @@ import { useChatResponseAttach } from './useChatResponseAttach'
 import { useChatSessionHistory } from './useChatSessionHistory'
 import { useAgentRunEventSync } from './useAgentRunEvents'
 import { useChatTaskRuntimeBridge } from './useChatTaskRuntimeBridge'
+import { useApprovalMode } from './useApprovalMode'
 import { useCanonicalChatTaskBridge } from './useCanonicalChatTaskBridge'
 import type { UseChatViewOptions } from './useChatView'
 import type { ChatAutoAction, ChatPlannerPayload, ChatRequest } from '@/types/chat'
@@ -1366,6 +1367,18 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     }
     await sendMessage('取消')
   }
+
+  // 审批模式：自动档时，出现待审批卡片即自动确认（审批工作台仍由后端留记录）。
+  const { state: approvalModeState } = useApprovalMode()
+  watch(
+    messages,
+    (list) => {
+      if (!approvalModeState.enabled || approvalModeState.mode !== 'auto') return
+      const hasPendingApproval = list.some((msg) => msg?.role === 'ai' && msg.approvalCard?.status === 'pending')
+      if (hasPendingApproval) void confirmWorkflowFromCard()
+    },
+    { deep: true },
+  )
 
   async function sendMessage(message: string) {
     const taskSessionId = String(sessionId.value || '').trim() || 'default'

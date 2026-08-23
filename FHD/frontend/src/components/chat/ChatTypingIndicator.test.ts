@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ChatTypingIndicator from './ChatTypingIndicator.vue'
 
@@ -46,5 +46,21 @@ describe('ChatTypingIndicator', () => {
   it('has aria-live=polite for accessibility', () => {
     const wrapper = mount(ChatTypingIndicator)
     expect(wrapper.find('.chat-typing-indicator').attributes('aria-live')).toBe('polite')
+  })
+
+  it('shows elapsed time ticking when showElapsed is true', async () => {
+    vi.useFakeTimers()
+    const wrapper = mount(ChatTypingIndicator, { props: { label: '正在思考…', showElapsed: true } })
+    expect(wrapper.text()).toContain('0s')
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(wrapper.text()).toContain('3s')
+    wrapper.unmount()
+    vi.useRealTimers()
+  })
+
+  it('does not show elapsed time when showElapsed is absent', () => {
+    const wrapper = mount(ChatTypingIndicator, { props: { label: '正在思考…' } })
+    expect(wrapper.text()).not.toContain('0s')
+    expect(wrapper.text()).toBe('正在思考…')
   })
 })
