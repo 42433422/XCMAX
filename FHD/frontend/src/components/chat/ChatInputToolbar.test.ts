@@ -1,7 +1,8 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { ref } from 'vue'
 import ChatInputToolbar from './ChatInputToolbar.vue'
+import { useApprovalMode } from '@/composables/useApprovalMode'
 
 function mountToolbar(propsOverrides = {}) {
   return mount(ChatInputToolbar, {
@@ -21,6 +22,12 @@ function mountToolbar(propsOverrides = {}) {
 }
 
 describe('ChatInputToolbar', () => {
+  beforeEach(() => {
+    const { setEnabled, setMode } = useApprovalMode()
+    setEnabled(false)
+    setMode('manual')
+  })
+
   it('renders toolbar container', () => {
     const wrapper = mountToolbar()
     expect(wrapper.find('.input-toolbar').exists()).toBe(true)
@@ -33,11 +40,16 @@ describe('ChatInputToolbar', () => {
     expect(btn.text()).toContain('shell.newChat')
   })
 
-  it('renders history button', () => {
+  it('renders approval mode toggle button', () => {
     const wrapper = mountToolbar()
-    const btn = wrapper.find('#historyPanelBtn')
+    const btn = wrapper.find('#approvalModeBtn')
     expect(btn.exists()).toBe(true)
-    expect(btn.text()).toContain('shell.history')
+    expect(btn.text()).toContain('chat.approvalMode')
+  })
+
+  it('does not show approval choices when disabled', () => {
+    const wrapper = mountToolbar()
+    expect(wrapper.find('.approval-mode__choices').exists()).toBe(false)
   })
 
   it('renders upload button', () => {
@@ -53,10 +65,19 @@ describe('ChatInputToolbar', () => {
     expect(wrapper.emitted('new-conversation')).toHaveLength(1)
   })
 
-  it('emits show-history when history button clicked', async () => {
+  it('shows manual/auto choices when approval toggled on', async () => {
     const wrapper = mountToolbar()
-    await wrapper.find('#historyPanelBtn').trigger('click')
-    expect(wrapper.emitted('show-history')).toHaveLength(1)
+    await wrapper.find('#approvalModeBtn').trigger('click')
+    expect(wrapper.find('.approval-mode__choices').exists()).toBe(true)
+    expect(wrapper.find('#approvalModeBtn').attributes('aria-pressed')).toBe('true')
+  })
+
+  it('selects auto mode when auto choice clicked', async () => {
+    const wrapper = mountToolbar()
+    await wrapper.find('#approvalModeBtn').trigger('click')
+    const choices = wrapper.findAll('.approval-mode__choice')
+    await choices[1].trigger('click')
+    expect(choices[1].classes()).toContain('is-active')
   })
 
   it('opens hidden file input on upload click', async () => {
@@ -211,8 +232,8 @@ describe('ChatInputToolbar', () => {
     expect(wrapper.find('#newConversationBtn').attributes('title')).toBe('chat.newConversationTitle')
   })
 
-  it('history button has correct title', () => {
+  it('approval mode button has correct title', () => {
     const wrapper = mountToolbar()
-    expect(wrapper.find('#historyPanelBtn').attributes('title')).toBe('chat.historyTitleBtn')
+    expect(wrapper.find('#approvalModeBtn').attributes('title')).toBe('chat.approvalModeTitle')
   })
 })

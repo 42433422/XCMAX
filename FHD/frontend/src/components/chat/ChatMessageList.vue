@@ -14,7 +14,7 @@
           @expand="$emit('expand-message', idx)"
         />
         <template v-else>
-          <ChatTypingIndicator v-if="msg.role === 'ai' && msg.streamingShell" label="正在思考…" />
+          <ChatTypingIndicator v-if="msg.role === 'ai' && msg.streamingShell" label="正在思考…" show-elapsed />
           <AgentRunTrace
             v-if="msg.role === 'ai' && hasOrchestrationTrace(msg)"
             :trace="orchestrationTraceFor(msg)"

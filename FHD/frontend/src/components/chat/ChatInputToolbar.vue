@@ -3,9 +3,44 @@
     <button class="toolbar-btn" id="newConversationBtn" :title="$t('chat.newConversationTitle')" @click="$emit('new-conversation')">
       <i class="fa fa-plus" aria-hidden="true"></i> {{ $t('shell.newChat') }}
     </button>
-    <button class="toolbar-btn" id="historyPanelBtn" :title="$t('chat.historyTitleBtn')" @click="$emit('show-history')">
-      <i class="fa fa-history" aria-hidden="true"></i> {{ $t('shell.history') }}
-    </button>
+    <div class="approval-mode" data-testid="approval-mode-toggle">
+      <button
+        class="toolbar-btn approval-mode__toggle"
+        id="approvalModeBtn"
+        type="button"
+        :title="$t('chat.approvalModeTitle')"
+        :aria-pressed="approvalMode.state.enabled"
+        :class="{ 'is-active': approvalMode.state.enabled }"
+        @click="toggleApproval"
+      >
+        <i class="fa fa-shield" aria-hidden="true"></i> {{ $t('chat.approvalMode') }}
+      </button>
+      <div
+        v-if="approvalMode.state.enabled"
+        class="approval-mode__choices"
+        role="radiogroup"
+        :aria-label="$t('chat.approvalMode')"
+      >
+        <button
+          type="button"
+          class="approval-mode__choice"
+          :class="{ 'is-active': approvalMode.state.mode === 'manual' }"
+          :aria-pressed="approvalMode.state.mode === 'manual'"
+          @click="approvalMode.setMode('manual')"
+        >
+          {{ $t('chat.approvalManual') }}
+        </button>
+        <button
+          type="button"
+          class="approval-mode__choice"
+          :class="{ 'is-active': approvalMode.state.mode === 'auto' }"
+          :aria-pressed="approvalMode.state.mode === 'auto'"
+          @click="approvalMode.setMode('auto')"
+        >
+          {{ $t('chat.approvalAuto') }}
+        </button>
+      </div>
+    </div>
     <button
       class="toolbar-btn"
       type="button"
@@ -76,8 +111,11 @@
 <script setup lang="ts">
 import { ref, watch, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useApprovalMode } from '@/composables/useApprovalMode'
 
 useI18n()
+
+const approvalMode = useApprovalMode()
 
 const props = defineProps<{
   excelAnalyzeUploading: boolean
@@ -90,7 +128,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'new-conversation': []
-  'show-history': []
   'trigger-office-docking': []
   'register-excel-input': [input: HTMLInputElement | null]
   'excel-file-change': [event: Event]
@@ -99,6 +136,10 @@ const emit = defineEmits<{
 }>()
 
 const fileInputRef = ref<HTMLInputElement | null>(null)
+
+function toggleApproval() {
+  approvalMode.setEnabled(!approvalMode.state.enabled)
+}
 
 watch(
   fileInputRef,
@@ -130,5 +171,39 @@ function onAutoRefreshChange(event: Event) {
 .input-toolbar {
   align-items: center;
   flex-wrap: wrap;
+}
+
+.approval-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.approval-mode__toggle.is-active {
+  color: var(--xc-color-primary, #0d47a1);
+  border-color: var(--xc-color-primary, #0d47a1);
+}
+
+.approval-mode__choices {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding-left: 2px;
+  border-left: 2px solid var(--xc-color-primary, #0d47a1);
+}
+
+.approval-mode__choice {
+  background: transparent;
+  border: none;
+  padding: 2px 8px;
+  font-size: var(--app-font-size-caption, 12px);
+  color: var(--app-text-muted, #667085);
+  cursor: pointer;
+  border-radius: 2px;
+}
+
+.approval-mode__choice.is-active {
+  color: var(--xc-color-primary, #0d47a1);
+  background: rgba(13, 71, 161, 0.08);
 }
 </style>
