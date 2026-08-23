@@ -94,7 +94,6 @@
         :excel-analyze-input-ref="chatRefBag.excelAnalyzeInputRef"
         :office-docking-processing="officeDockingProcessing"
         @new-conversation="newConversation"
-        @show-history="showHistoryPanel"
         @trigger-office-docking="triggerOfficeDocking"
         @excel-file-change="onExcelAnalyzeFileChange"
         @auto-refresh-change="onAutoRefreshToolbarChange"
