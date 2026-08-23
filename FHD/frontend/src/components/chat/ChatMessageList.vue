@@ -5,88 +5,109 @@
         v-for="(msg, idx) in messages"
         :key="idx"
         :class="['message', msg.role]"
-        :style="{ minHeight: messageHeights.get(idx) ? messageHeights.get(idx) + 'px' : 'auto' }"
+        :style="{ minHeight: !isMessageCollapsed(msg, idx) && messageHeights.get(idx) ? messageHeights.get(idx) + 'px' : 'auto' }"
       >
-        <ChatTypingIndicator v-if="msg.role === 'ai' && msg.streamingShell" label="正在思考…" />
-        <div
-          v-else
-          class="message-html"
-          v-html="
-            msg.role === 'ai' ? sanitizeChatBubbleMarkdown(aiMarkdownSourceFromContent(msg.content)) : sanitizeChatBubbleHtml(msg.content)
-          "
-        ></div>
-        <details
-          v-if="msg.role === 'ai' && (msg.toolProgressLabel || msg.executionProgress?.length)"
-          class="execution-timeline"
-          :open="!!msg.streamingShell"
-        >
-          <summary>
-            <i v-if="msg.streamingShell" class="fa fa-spinner fa-spin execution-timeline__spinner" aria-hidden="true"></i>
-            <span class="execution-timeline__current">
-              {{ msg.toolProgressLabel || latestExecutionLabel(msg) }}
-            </span>
-            <span v-if="msg.executionProgress?.length" class="execution-timeline__count"> {{ msg.executionProgress.length }} 步 </span>
-          </summary>
-          <ol v-if="msg.executionProgress?.length" class="execution-timeline__list">
-            <li v-for="(item, progressIndex) in msg.executionProgress" :key="`${item.at}-${progressIndex}`" :class="`is-${item.status}`">
-              <span class="execution-timeline__marker">{{ executionMarker(item.status) }}</span>
-              <span>{{ item.label }}</span>
-            </li>
-          </ol>
-        </details>
-        <div v-if="msg.role === 'ai' && msg.shipmentDownloadUrl" class="message-shipment-actions">
-          <a class="btn btn-primary btn-sm" :href="msg.shipmentDownloadUrl" download @click="$emit('shipment-download-click')">
-            {{ $t('chat.downloadShipment') }}
-          </a>
-        </div>
-        <div v-if="showDiagnosticMetadata && msg.role === 'ai' && msg.contextSummary" class="context-summary">
-          {{ msg.contextSummary }}
-        </div>
-        <details v-if="showDiagnosticMetadata && msg.role === 'ai' && msg.thinkingSteps" class="thinking-panel">
-          <summary>{{ $t('chat.viewThinkingSteps') }}</summary>
-          <pre>{{ msg.thinkingSteps }}</pre>
-        </details>
-        <div v-if="msg.role === 'ai' && msg.todoSteps && msg.todoSteps.length" class="todo-panel">
-          <div class="todo-title">{{ $t('chat.executeTodo') }}</div>
-          <ul>
-            <li v-for="(step, tIdx) in msg.todoSteps" :key="tIdx">{{ step }}</li>
-          </ul>
-        </div>
-        <ChatApprovalInlineCard
-          v-if="msg.role === 'ai' && msg.approvalCard && msg.approvalCard.status === 'pending'"
-          :card="msg.approvalCard"
-          @confirm="$emit('approval-confirm')"
-          @cancel="$emit('approval-cancel')"
+        <CollapsedMessagePreview
+          v-if="isMessageCollapsed(msg, idx)"
+          :preview="getCollapsedPreview(msg.content)"
+          expand-label="展开详情"
+          @expand="$emit('expand-message', idx)"
         />
-        <div
-          v-if="showDiagnosticMetadata && msg.role === 'ai' && (msg.workflowAction || (msg.nodeResults && msg.nodeResults.length))"
-          class="trace-panel"
-        >
-          <div class="trace-title">{{ $t('chat.traceTitle') }}</div>
-          <div class="trace-stages">
-            <span class="trace-chip">{{ $t('chat.traceThinking') }}</span>
-            <span class="trace-chip">{{ $t('chat.tracePlan') }}</span>
-            <span class="trace-chip">{{ $t('chat.traceExecute') }}</span>
+        <template v-else>
+          <ChatTypingIndicator v-if="msg.role === 'ai' && msg.streamingShell" label="正在思考…" />
+          <AgentRunTrace
+            v-if="msg.role === 'ai' && hasOrchestrationTrace(msg)"
+            :trace="orchestrationTraceFor(msg)"
+            @auto-approve-tool="$emit('approval-confirm')"
+          />
+          <div v-if="msg.role === 'ai' && shouldCondenseOrchestrationBody(msg)" class="message-orchestration-intro">
+            执行计划已整理为任务编排，展开卡片可查看工具、步骤和运行详情。
           </div>
-          <div class="trace-action" v-if="msg.workflowAction">
-            {{ $t('chat.statusLabel', { status: msg.workflowAction }) }}
+          <div
+            v-else
+            class="message-html"
+            v-html="
+              msg.role === 'ai' ? sanitizeChatBubbleMarkdown(aiMarkdownSourceFromContent(msg.content)) : sanitizeChatBubbleHtml(msg.content)
+            "
+          ></div>
+          <details
+            v-if="msg.role === 'ai' && !hasOrchestrationTrace(msg) && (msg.toolProgressLabel || msg.executionProgress?.length)"
+            class="execution-timeline"
+            :open="!!msg.streamingShell"
+          >
+            <summary>
+              <i v-if="msg.streamingShell" class="fa fa-spinner fa-spin execution-timeline__spinner" aria-hidden="true"></i>
+              <span class="execution-timeline__current">
+                {{ msg.toolProgressLabel || latestExecutionLabel(msg) }}
+              </span>
+              <span v-if="msg.executionProgress?.length" class="execution-timeline__count"> {{ msg.executionProgress.length }} 步 </span>
+            </summary>
+            <ol v-if="msg.executionProgress?.length" class="execution-timeline__list">
+              <li v-for="(item, progressIndex) in msg.executionProgress" :key="`${item.at}-${progressIndex}`" :class="`is-${item.status}`">
+                <span class="execution-timeline__marker">{{ executionMarker(item.status) }}</span>
+                <span>{{ item.label }}</span>
+              </li>
+            </ol>
+          </details>
+          <div v-if="msg.role === 'ai' && msg.shipmentDownloadUrl" class="message-shipment-actions">
+            <a class="btn btn-primary btn-sm" :href="msg.shipmentDownloadUrl" download @click="$emit('shipment-download-click')">
+              {{ $t('chat.downloadShipment') }}
+            </a>
           </div>
-          <ul v-if="msg.nodeResults && msg.nodeResults.length" class="trace-list">
-            <li v-for="(nr, nIdx) in msg.nodeResults" :key="nIdx">
-              <span :class="['trace-status', nr.success ? 'ok' : 'fail']">{{ nr.success ? $t('chat.success') : $t('chat.failed') }}</span>
-              <span>{{ nr.node_id }} · {{ nr.tool_id }}.{{ nr.action }}</span>
-              <span v-if="nr.retries || nr.duration_ms" class="trace-node-meta">
-                <template v-if="nr.retries">重试 {{ nr.retries }} 次</template>
-                <template v-if="nr.retries && nr.duration_ms"> · </template>
-                <template v-if="nr.duration_ms">{{ nr.duration_ms }}ms</template>
-              </span>
-              <span v-if="nr.error || nr.message" class="trace-node-error">
-                {{ nr.error || nr.message }}
-              </span>
-              <span v-if="nr.recovery_hint" class="trace-node-hint"> 恢复建议：{{ nr.recovery_hint }} </span>
-            </li>
-          </ul>
-        </div>
+          <div v-if="showDiagnosticMetadata && msg.role === 'ai' && msg.contextSummary" class="context-summary">
+            {{ msg.contextSummary }}
+          </div>
+          <details v-if="showDiagnosticMetadata && msg.role === 'ai' && msg.thinkingSteps" class="thinking-panel">
+            <summary>{{ $t('chat.viewThinkingSteps') }}</summary>
+            <pre>{{ msg.thinkingSteps }}</pre>
+          </details>
+          <div v-if="msg.role === 'ai' && !hasOrchestrationTrace(msg) && msg.todoSteps && msg.todoSteps.length" class="todo-panel">
+            <div class="todo-title">{{ $t('chat.executeTodo') }}</div>
+            <ul>
+              <li v-for="(step, tIdx) in msg.todoSteps" :key="tIdx">{{ step }}</li>
+            </ul>
+          </div>
+          <ChatApprovalInlineCard
+            v-if="msg.role === 'ai' && msg.approvalCard && msg.approvalCard.status === 'pending'"
+            :card="msg.approvalCard"
+            @confirm="$emit('approval-confirm')"
+            @cancel="$emit('approval-cancel')"
+          />
+          <div
+            v-if="showDiagnosticMetadata && msg.role === 'ai' && (msg.workflowAction || (msg.nodeResults && msg.nodeResults.length))"
+            class="trace-panel"
+          >
+            <div class="trace-title">{{ $t('chat.traceTitle') }}</div>
+            <div class="trace-stages">
+              <span class="trace-chip">{{ $t('chat.traceThinking') }}</span>
+              <span class="trace-chip">{{ $t('chat.tracePlan') }}</span>
+              <span class="trace-chip">{{ $t('chat.traceExecute') }}</span>
+            </div>
+            <div class="trace-action" v-if="msg.workflowAction">
+              {{ $t('chat.statusLabel', { status: msg.workflowAction }) }}
+            </div>
+            <ul v-if="msg.nodeResults && msg.nodeResults.length" class="trace-list">
+              <li v-for="(nr, nIdx) in msg.nodeResults" :key="nIdx">
+                <span :class="['trace-status', nr.success ? 'ok' : 'fail']">{{ nr.success ? $t('chat.success') : $t('chat.failed') }}</span>
+                <span>{{ nr.node_id }} · {{ nr.tool_id }}.{{ nr.action }}</span>
+                <span v-if="nr.retries || nr.duration_ms" class="trace-node-meta">
+                  <template v-if="nr.retries">重试 {{ nr.retries }} 次</template>
+                  <template v-if="nr.retries && nr.duration_ms"> · </template>
+                  <template v-if="nr.duration_ms">{{ nr.duration_ms }}ms</template>
+                </span>
+                <span v-if="nr.error || nr.message" class="trace-node-error">
+                  {{ nr.error || nr.message }}
+                </span>
+                <span v-if="nr.recovery_hint" class="trace-node-hint"> 恢复建议：{{ nr.recovery_hint }} </span>
+              </li>
+            </ul>
+          </div>
+          <MessageCollapseLink
+            v-if="msg.role === 'ai' && idx < latestAiMessageIndex"
+            label="收起详情"
+            @collapse="$emit('collapse-message', idx)"
+          />
+        </template>
         <div :class="msg.role === 'ai' ? 'message-footer' : 'message-footer message-footer--user'">
           <div class="time">{{ msg.time }}</div>
           <button
@@ -120,6 +141,11 @@ import { sanitizeChatBubbleHtml, sanitizeChatBubbleMarkdown } from '@/utils/sani
 import { aiMarkdownSourceFromContent } from '@/utils/chatBubbleDisplay'
 import ChatApprovalInlineCard from '@/components/chat/ChatApprovalInlineCard.vue'
 import ChatTypingIndicator from '@/components/chat/ChatTypingIndicator.vue'
+import AgentRunTrace from '@/components/chat/AgentRunTrace.vue'
+import CollapsedMessagePreview from '@/components/chat/CollapsedMessagePreview.vue'
+import MessageCollapseLink from '@/components/chat/MessageCollapseLink.vue'
+import { buildApprovalCardTrace } from '@/utils/chatOrchestrationTrace'
+import type { AgentRunTraceData } from '@/utils/agentRunTraceModel'
 
 useI18n()
 
@@ -164,6 +190,33 @@ function executionMarker(status: string): string {
   return '●'
 }
 
+function shouldCondenseOrchestrationBody(message: ChatMessage): boolean {
+  if (!hasOrchestrationTrace(message)) return false
+  const body = aiMarkdownSourceFromContent(message.content)
+  return /(动态工作流计划|工作编排|工具探测概览|执行编排|节点图|风险判断|需要审批后执行|requires human risk approval)/i.test(body)
+}
+
+function approvalTraceFor(message: ChatMessage): AgentRunTraceData | null {
+  return buildApprovalCardTrace(message.approvalCard)
+}
+
+function hasOrchestrationTrace(message: ChatMessage): boolean {
+  return Boolean(message.agentRunTrace || approvalTraceFor(message))
+}
+
+function orchestrationTraceFor(message: ChatMessage): AgentRunTraceData {
+  return (
+    message.agentRunTrace ||
+    approvalTraceFor(message) || {
+      run_id: 'pending',
+      intent: '',
+      status: 'running',
+      phases: [],
+      terminal: false,
+    }
+  )
+}
+
 watch(
   messagesHostRef,
   (el) => {
@@ -182,6 +235,13 @@ watch(
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
+}
+
+.message-orchestration-intro {
+  margin: 8px 0 2px;
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .chat-loading-row {

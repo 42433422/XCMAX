@@ -154,4 +154,51 @@ describe('useChatResponseAttach', () => {
     attachContextSummaryToLastAiMessage()
     expect(messages.value[0].contextSummary).toBe('ctx summary')
   })
+
+  it('attaches a structured trace from a durable Business Harness agent task', () => {
+    const { messages, taskList, attachAgentRunTraceToLastAiMessage } = makeDeps()
+    taskList.value = [
+      {
+        id: 'agent_task_task_1',
+        type: 'agent_task',
+        source: 'agent',
+        title: '写入业务数据',
+        status: 'blocked',
+        payload: {
+          activeRunId: 'run_business_1',
+          agentEvents: [
+            {
+              event_id: 'event_1',
+              event_type: 'tool.started',
+              created_at: '2026-08-23T03:39:00Z',
+              message: '准备写入业务数据库',
+              data: {
+                intent: 'business_db_write',
+                node_id: 'write_business_product',
+                tool_id: 'business_db',
+                action: 'write',
+              },
+            },
+            {
+              event_id: 'event_2',
+              event_type: 'step.waiting_user',
+              created_at: '2026-08-23T03:39:01Z',
+              message: '等待用户确认',
+              data: { node_id: 'write_business_product' },
+            },
+          ],
+        },
+      },
+    ]
+
+    attachAgentRunTraceToLastAiMessage()
+
+    expect(messages.value[1].agentRunTrace).toEqual(
+      expect.objectContaining({
+        run_id: 'run_business_1',
+        intent: 'business_db_write',
+        status: 'waiting',
+      }),
+    )
+  })
 })
