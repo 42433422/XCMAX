@@ -9,6 +9,7 @@ export function hasAiMessageSidecar(msg: ChatMessage): boolean {
   if (msg.contextSummary || msg.thinkingSteps) return true
   if (msg.todoSteps && msg.todoSteps.length) return true
   if (msg.workflowAction || (msg.nodeResults && msg.nodeResults.length)) return true
+  if (msg.agentRunTrace || msg.approvalCard) return true
   return extractToolInvocationChips(msg.content).length > 0
 }
 

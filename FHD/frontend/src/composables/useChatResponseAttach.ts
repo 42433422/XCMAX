@@ -130,14 +130,14 @@ export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
     const messageRef = getLastAiMessageRef()
     if (!messageRef) return
     const target = taskList.value.find((t) => {
-      if (t.type !== 'agent_run') return false
+      if (t.type !== 'agent_run' && t.type !== 'agent_task') return false
       if (t.messageRef && t.messageRef !== messageRef) return false
       const events = asArray(asRecord(t.payload).agentEvents)
       return events.length > 0
     })
     if (!target) return
     const payload = asRecord(target.payload)
-    const runId = asString(payload.agentRunId) || target.id.replace(/^agent_/, '')
+    const runId = asString(payload.activeRunId || payload.agentRunId) || target.id.replace(/^agent_(?:task_)?/, '')
     const events = asArray<AgentRunEvent>(payload.agentEvents)
     if (!events.length) return
     const trace = buildAgentRunTraceFromEvents(events, runId)

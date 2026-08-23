@@ -193,6 +193,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     attachTodoStepsToLastAiMessage,
     attachWorkflowTraceToLastAiMessage,
     attachApprovalCardToLastAiMessage,
+    attachAgentRunTraceToLastAiMessage = () => undefined,
     attachContextSummaryToLastAiMessage,
     syncTaskFromChatResponse,
   } = responseAttach
@@ -1166,6 +1167,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         const wrap: ChatPlannerPayload = doneResult && typeof doneResult === 'object' ? donePayload : { success: true, response: finalText }
         syncTaskFromChatResponse(wrap, primaryText)
         await syncAgentRunFromPayload(wrap, primaryText)
+        attachAgentRunTraceToLastAiMessage()
         consumeStateUpdates(wrap)
         attachContextSummaryToLastAiMessage()
         attachThinkingStepsToLastAiMessage(wrap)
@@ -1263,6 +1265,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
             await addRoundMessage(part.response || '')
             syncTaskFromChatResponse(part, primaryText)
             await syncAgentRunFromPayload(part, primaryText)
+            attachAgentRunTraceToLastAiMessage()
           } else {
             await addRoundMessage('处理失败: ' + (part.message || '未知错误'))
           }
@@ -1311,6 +1314,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       await addRoundMessage(data.response || '')
       syncTaskFromChatResponse(data, primaryText)
       await syncAgentRunFromPayload(data, primaryText)
+      attachAgentRunTraceToLastAiMessage()
       consumeStateUpdates(data)
       attachContextSummaryToLastAiMessage()
       attachThinkingStepsToLastAiMessage(data)

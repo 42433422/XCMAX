@@ -1,171 +1,308 @@
 <template>
-  <div :class="['art-trace', `is-${trace.status}`]">
-    <!-- 单行 header：状态点 + intent + 状态文字 + 耗时 -->
-    <div class="art-head">
-      <span class="art-dot" aria-hidden="true"></span>
-      <span v-if="trace.intent" class="art-intent">{{ trace.intent }}</span>
-      <span v-else class="art-intent">智能任务</span>
-      <span class="art-status">{{ statusLabel }}</span>
-      <span v-if="durationLabel" class="art-dur">{{ durationLabel }}</span>
-      <span v-if="!trace.terminal" class="art-pulse" aria-hidden="true"></span>
-    </div>
+  <details
+    :class="['art-trace', `is-${trace.status}`]"
+    :open="defaultOpen"
+    data-testid="agent-run-trace"
+  >
+    <summary class="art-summary">
+      <span class="art-disclosure" aria-hidden="true">
+        <i class="fa fa-chevron-right"></i>
+      </span>
+      <span class="art-harness-icon" aria-hidden="true">
+        <i class="fa fa-sitemap"></i>
+      </span>
+      <span class="art-heading">
+        <span class="art-eyebrow">XCAGI Business Harness</span>
+        <span class="art-task-title">{{ taskTitle }}</span>
+      </span>
+      <span v-if="toolCount" class="art-tool-count">{{ toolCount }} 个工具</span>
+      <span :class="['art-status-pill', `is-${trace.status}`]">
+        <i class="fa" :class="statusIconClass(trace.status)" aria-hidden="true"></i>
+        {{ statusLabel }}
+      </span>
+      <span v-if="durationLabel" class="art-duration">{{ durationLabel }}</span>
+    </summary>
 
-    <!-- phase 流：每行一个，无 box -->
-    <div class="art-stream">
-      <div
-        v-for="(phase, idx) in trace.phases"
-        :key="phase.started_event_id || idx"
-        :class="['art-row', `row-${phase.kind}`, `row-${phase.status}`]"
-      >
-        <span class="art-marker" aria-hidden="true">{{ markerFor(phase) }}</span>
-        <div class="art-row-main">
-          <div class="art-row-title">
-            <span class="art-title">{{ phase.title || fallbackTitle(phase) }}</span>
-            <span v-if="phase.subtitle" class="art-sub">{{ phase.subtitle }}</span>
-            <span v-if="phase.duration_ms != null" class="art-ms">{{ phase.duration_ms }}ms</span>
-            <span v-if="isTool(phase) && phase.retries > 0" class="art-retry" title="重试次数">↻{{ phase.retries }}</span>
-            <span v-if="isTool(phase) && phase.waiting_approval" class="art-wait">等待确认</span>
-            <span
-              v-if="isTool(phase) && getPermissionBadge(phase.tool_id)"
-              class="art-perm"
-              :class="`perm-${getPermissionBadge(phase.tool_id)}`"
-            >
-              {{ getPermissionBadge(phase.tool_id) === 'session' ? '会话授权' : '永久授权' }}
-            </span>
-            <button
-              v-if="isTool(phase) && phase.waiting_approval && getPermissionBadge(phase.tool_id)"
-              type="button"
-              class="art-auto-btn"
-              @click.stop="onAutoApprove(phase.tool_id)"
-            >自动确认</button>
-          </div>
-
-          <!-- 工具调用 inline 折叠（无 terminal box） -->
-          <details
-            v-if="isTool(phase) && (phase.params_json || phase.output_preview || phase.error || phase.observations.length || phase.repair_history.length)"
-            class="art-tool-detail"
-          >
-            <summary>
-              <code v-if="phase.tool_id">{{ phase.tool_id }}</code>
-              <span v-if="phase.action" class="art-action">{{ phase.action }}</span>
-              <span v-if="phase.node_id" class="art-node">#{{ phase.node_id }}</span>
-            </summary>
-            <div class="art-tool-body">
-              <pre v-if="phase.params_json" class="art-params">{{ phase.params_json }}</pre>
-              <pre v-if="phase.output_preview" class="art-out">{{ phase.output_preview }}</pre>
-              <pre v-if="phase.error" class="art-err">{{ phase.error }}</pre>
-              <ul v-if="phase.observations.length" class="art-obs">
-                <li v-for="(o, oIdx) in phase.observations" :key="oIdx">{{ o }}</li>
-              </ul>
-              <ul v-if="phase.repair_history.length" class="art-repairs">
-                <li v-for="(r, rIdx) in phase.repair_history" :key="rIdx">{{ r }}</li>
-              </ul>
-            </div>
-          </details>
-
-          <!-- Run phase 最终输出 -->
-          <pre v-else-if="isRun(phase) && phase.final_output_preview" class="art-final">{{ phase.final_output_preview }}</pre>
-
-          <!-- Planner 详情 -->
-          <pre v-else-if="isPlanner(phase) && phase.detail" class="art-planner-detail">{{ phase.detail }}</pre>
-        </div>
+    <div class="art-body">
+      <div class="art-overview">
+        <span><i class="fa fa-list-ul" aria-hidden="true"></i>{{ trace.phases.length }} 个步骤</span>
+        <span v-if="waitingCount" class="is-warning"><i class="fa fa-shield" aria-hidden="true"></i>{{ waitingCount }} 项待确认</span>
+        <span v-if="failedCount" class="is-danger"><i class="fa fa-exclamation-circle" aria-hidden="true"></i>{{ failedCount }} 项异常</span>
+        <span v-if="trace.last_event_id" class="art-run-id">Run · {{ shortRunId }}</span>
       </div>
-    </div>
 
-    <!-- mermaid：仅多工具复杂链路；单工具默认不展示（难看且无信息量） -->
-    <details v-if="showPlanGraph && mermaidSource" class="art-mermaid" @toggle="onMermaidToggle">
-      <summary>查看执行计划图</summary>
-      <div ref="mermaidHostRef" class="mermaid-host" v-html="mermaidSvg"></div>
-    </details>
-  </div>
+      <div class="art-stream">
+        <details
+          v-for="(phase, idx) in trace.phases"
+          :key="phase.started_event_id || idx"
+          :class="['art-step', `is-${phase.kind}`, `is-${phase.status}`, { 'has-detail': hasPhaseDetails(phase) }]"
+          :open="shouldOpenPhase(phase)"
+        >
+          <summary
+            class="art-step-summary"
+            :aria-disabled="hasPhaseDetails(phase) ? undefined : 'true'"
+            @click="!hasPhaseDetails(phase) && $event.preventDefault()"
+          >
+            <span class="art-step-icon" aria-hidden="true">
+              <i class="fa" :class="phaseIconClass(phase)"></i>
+            </span>
+            <span class="art-step-heading">
+              <span class="art-step-title">{{ phaseDisplayTitle(phase) }}</span>
+              <span v-if="phaseDisplaySubtitle(phase)" class="art-step-subtitle">{{ phaseDisplaySubtitle(phase) }}</span>
+            </span>
+            <span v-if="isTool(phase) && phase.retries > 0" class="art-step-badge is-retry">重试 {{ phase.retries }}</span>
+            <span v-if="isTool(phase) && phase.waiting_approval" class="art-step-badge is-waiting">需确认</span>
+            <span v-if="phase.duration_ms != null" class="art-step-duration">{{ formatDuration(phase.duration_ms) }}</span>
+            <i class="fa art-step-status" :class="statusIconClass(phase.status)" aria-hidden="true"></i>
+            <i v-if="hasPhaseDetails(phase)" class="fa fa-chevron-right art-step-chevron" aria-hidden="true"></i>
+          </summary>
+
+          <div v-if="hasPhaseDetails(phase)" class="art-step-detail">
+            <template v-if="isTool(phase)">
+              <div class="art-tool-meta">
+                <code>{{ phase.tool_id || 'tool' }}<template v-if="phase.action">.{{ phase.action }}</template></code>
+                <span v-if="phase.node_id">节点 {{ phase.node_id }}</span>
+                <span v-if="getPermissionBadge(phase.tool_id)" :class="['art-permission', `is-${getPermissionBadge(phase.tool_id)}`]">
+                  {{ getPermissionBadge(phase.tool_id) === 'session' ? '本次会话已授权' : '已记住授权' }}
+                </span>
+              </div>
+              <section v-if="phase.params_json" class="art-detail-section">
+                <div class="art-detail-label"><i class="fa fa-sign-in" aria-hidden="true"></i>输入</div>
+                <pre>{{ phase.params_json }}</pre>
+              </section>
+              <section v-if="phase.output_preview" class="art-detail-section is-output">
+                <div class="art-detail-label"><i class="fa fa-check-circle" aria-hidden="true"></i>输出</div>
+                <pre>{{ phase.output_preview }}</pre>
+              </section>
+              <section v-if="phase.error" class="art-detail-section is-error">
+                <div class="art-detail-label"><i class="fa fa-exclamation-triangle" aria-hidden="true"></i>错误</div>
+                <pre>{{ phase.error }}</pre>
+              </section>
+              <section v-if="phase.observations.length" class="art-detail-section">
+                <div class="art-detail-label"><i class="fa fa-eye" aria-hidden="true"></i>观察</div>
+                <ul>
+                  <li v-for="(observation, observationIndex) in phase.observations" :key="observationIndex">{{ observation }}</li>
+                </ul>
+              </section>
+              <section v-if="phase.repair_history.length" class="art-detail-section">
+                <div class="art-detail-label"><i class="fa fa-wrench" aria-hidden="true"></i>修复记录</div>
+                <ul>
+                  <li v-for="(repair, repairIndex) in phase.repair_history" :key="repairIndex">{{ repair }}</li>
+                </ul>
+              </section>
+              <button
+                v-if="phase.waiting_approval && getPermissionBadge(phase.tool_id)"
+                type="button"
+                class="art-auto-approve"
+                @click.stop="onAutoApprove(phase.tool_id)"
+              >
+                <i class="fa fa-check" aria-hidden="true"></i>按已授权规则确认
+              </button>
+            </template>
+            <pre v-else-if="isRun(phase) && phase.final_output_preview" class="art-final-output">{{ phase.final_output_preview }}</pre>
+            <pre v-else-if="isPlanner(phase) && phase.detail" class="art-final-output is-error">{{ phase.detail }}</pre>
+          </div>
+        </details>
+      </div>
+
+      <details v-if="showPlanGraph && mermaidSource" class="art-plan-graph" @toggle="onMermaidToggle">
+        <summary><i class="fa fa-share-alt" aria-hidden="true"></i>查看执行关系图</summary>
+        <div ref="mermaidHostRef" class="mermaid-host" v-html="mermaidSvg"></div>
+      </details>
+    </div>
+  </details>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type {
   AgentRunTraceData,
   TracePhase,
   TracePlannerPhase,
-  TraceToolPhase,
   TraceRunPhase,
+  TraceToolPhase,
 } from '@/utils/agentRunTraceModel'
 import { shouldShowAgentRunPlanGraph } from '@/utils/agentRunTraceModel'
 import { traceToMermaid } from '@/utils/agentRunTraceToMermaid'
-import {
-  getToolPermission,
-  setToolPermission,
-  type ToolPermissionScope,
-} from '@/utils/toolPermissionCache'
+import { getToolPermission, setToolPermission, type ToolPermissionScope } from '@/utils/toolPermissionCache'
 
 const props = defineProps<{
   trace: AgentRunTraceData
 }>()
 
 const emit = defineEmits<{
-  /** 用户点击"自动确认"：父组件可据此调用现有的审批确认流程 */
   'auto-approve-tool': [toolId: string]
-  /** 用户主动授权某工具（按 scope 记忆） */
   'grant-tool-permission': [toolId: string, scope: ToolPermissionScope]
 }>()
 
 const STATUS_LABELS: Record<string, string> = {
   running: '执行中',
-  success: '完成',
-  failed: '失败',
+  success: '已完成',
+  failed: '执行失败',
   waiting: '等待确认',
   blocked: '已阻断',
 }
 
-const statusLabel = computed(() => STATUS_LABELS[props.trace.status] || props.trace.status)
+const TOOL_LABELS: Array<[RegExp, string]> = [
+  [/business[_-]?db|database|sql/i, '业务数据库'],
+  [/browser|web/i, '浏览器'],
+  [/search/i, '搜索'],
+  [/shell|terminal|command|exec/i, '终端'],
+  [/file|document|word|pdf/i, '文档'],
+  [/excel|sheet/i, '表格'],
+  [/mail|message|wechat|wecom/i, '消息'],
+  [/approval|approve/i, '审批中心'],
+  [/customer/i, '客户资料'],
+  [/product|material|inventory/i, '业务资料'],
+]
 
+const ACTION_LABELS: Record<string, string> = {
+  write: '写入',
+  create: '创建',
+  update: '更新',
+  delete: '删除',
+  query: '查询',
+  list: '读取列表',
+  search: '搜索',
+  read: '读取',
+  import: '导入',
+  export: '导出',
+  execute: '执行',
+  send: '发送',
+  approve: '审批',
+}
+
+const INTENT_LABELS: Record<string, string> = {
+  business_db_write: '业务数据写入',
+  business_db_read: '业务数据查询',
+  excel_import: '表格数据导入',
+  document_generation: '办公文档生成',
+}
+
+const statusLabel = computed(() => STATUS_LABELS[props.trace.status] || props.trace.status)
+const defaultOpen = computed(() => props.trace.status !== 'success')
 const showPlanGraph = computed(() => shouldShowAgentRunPlanGraph(props.trace))
+const toolPhases = computed(() => props.trace.phases.filter((phase): phase is TraceToolPhase => phase.kind === 'tool'))
+const toolCount = computed(() => toolPhases.value.length)
+const waitingCount = computed(() => toolPhases.value.filter((phase) => phase.waiting_approval || phase.status === 'waiting').length)
+const failedCount = computed(() => props.trace.phases.filter((phase) => phase.status === 'failed' || phase.status === 'blocked').length)
+const shortRunId = computed(() => {
+  const raw = String(props.trace.run_id || '').replace(/^run[_-]?/, '')
+  return raw.length > 10 ? `${raw.slice(0, 8)}…` : raw || '—'
+})
+
+const taskTitle = computed(() => {
+  const intent = String(props.trace.intent || '').trim()
+  if (INTENT_LABELS[intent]) return INTENT_LABELS[intent]
+  const primary = toolPhases.value[0]
+  if (primary && toolPhases.value.length === 1) {
+    return `${toolDisplayName(primary.tool_id)} · ${actionDisplayName(primary.action)}`
+  }
+  if (intent) {
+    const readable = intent.replace(/[_-]+/g, ' ').trim()
+    return readable.length > 36 ? `${readable.slice(0, 36)}…` : readable
+  }
+  return toolPhases.value.length > 1 ? '多工具协同任务' : '智能任务'
+})
 
 const durationLabel = computed(() => {
   const ms = props.trace.total_duration_ms
-  if (ms == null) return ''
-  if (ms < 1000) return `${ms}ms`
-  return `${(ms / 1000).toFixed(2)}s`
+  return ms == null ? '' : formatDuration(ms)
 })
 
-function isTool(p: TracePhase): p is TraceToolPhase {
-  return p.kind === 'tool'
-}
-function isPlanner(p: TracePhase): p is TracePlannerPhase {
-  return p.kind === 'planner'
-}
-function isRun(p: TracePhase): p is TraceRunPhase {
-  return p.kind === 'run'
+function isTool(phase: TracePhase): phase is TraceToolPhase {
+  return phase.kind === 'tool'
 }
 
-function markerFor(p: TracePhase): string {
-  if (p.kind === 'planner') {
-    return p.status === 'success' ? '●' : p.status === 'failed' ? '✗' : '◌'
+function isPlanner(phase: TracePhase): phase is TracePlannerPhase {
+  return phase.kind === 'planner'
+}
+
+function isRun(phase: TracePhase): phase is TraceRunPhase {
+  return phase.kind === 'run'
+}
+
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`
+  if (ms < 60_000) return `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)}s`
+  return `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`
+}
+
+function toolDisplayName(toolId: string): string {
+  const raw = String(toolId || '').trim()
+  const match = TOOL_LABELS.find(([pattern]) => pattern.test(raw))
+  return match?.[1] || raw.replace(/[_-]+/g, ' ') || '工具'
+}
+
+function actionDisplayName(action: string): string {
+  const raw = String(action || '').trim().toLowerCase()
+  return ACTION_LABELS[raw] || raw.replace(/[_-]+/g, ' ') || '执行'
+}
+
+function toolIconClass(toolId: string, action = ''): string {
+  const raw = `${toolId} ${action}`
+  if (/business[_-]?db|database|sql|customer|product|material|inventory/i.test(raw)) return 'fa-database'
+  if (/browser|web/i.test(raw)) return 'fa-globe'
+  if (/search|query|find/i.test(raw)) return 'fa-search'
+  if (/shell|terminal|command|exec|code/i.test(raw)) return 'fa-terminal'
+  if (/excel|sheet|table/i.test(raw)) return 'fa-table'
+  if (/file|document|word|pdf/i.test(raw)) return 'fa-file-text-o'
+  if (/mail|message|wechat|wecom|send/i.test(raw)) return 'fa-envelope-o'
+  if (/approval|approve/i.test(raw)) return 'fa-check-square-o'
+  if (/upload|import/i.test(raw)) return 'fa-upload'
+  return 'fa-wrench'
+}
+
+function phaseIconClass(phase: TracePhase): string {
+  if (isTool(phase)) return toolIconClass(phase.tool_id, phase.action)
+  if (isPlanner(phase)) return 'fa-list-ul'
+  return 'fa-flag-checkered'
+}
+
+function statusIconClass(status: string): string {
+  if (status === 'success') return 'fa-check-circle'
+  if (status === 'failed') return 'fa-times-circle'
+  if (status === 'waiting') return 'fa-pause-circle'
+  if (status === 'blocked') return 'fa-ban'
+  return 'fa-circle-o-notch fa-spin'
+}
+
+function phaseDisplayTitle(phase: TracePhase): string {
+  if (isTool(phase)) return toolDisplayName(phase.tool_id)
+  if (isPlanner(phase)) return phase.status === 'success' ? '执行计划已生成' : phase.title || '正在生成执行计划'
+  return phase.status === 'success' ? '任务执行完成' : phase.title || '任务结束'
+}
+
+function phaseDisplaySubtitle(phase: TracePhase): string {
+  if (isTool(phase)) return actionDisplayName(phase.action)
+  if (isPlanner(phase) && phase.step_count) return `${phase.step_count} 个计划步骤`
+  return phase.subtitle || ''
+}
+
+function hasPhaseDetails(phase: TracePhase): boolean {
+  if (isTool(phase)) {
+    return Boolean(
+      phase.params_json ||
+        phase.output_preview ||
+        phase.error ||
+        phase.observations.length ||
+        phase.repair_history.length ||
+        (phase.waiting_approval && getPermissionBadge(phase.tool_id)),
+    )
   }
-  if (p.kind === 'tool') {
-    if (p.status === 'success') return '✓'
-    if (p.status === 'failed') return '✗'
-    if (p.status === 'waiting') return '⏸'
-    if (p.status === 'blocked') return '⚠'
-    return '▸'
-  }
-  return p.status === 'success' ? '●' : '✗'
+  if (isPlanner(phase)) return Boolean(phase.detail)
+  return Boolean(phase.final_output_preview)
 }
 
-function fallbackTitle(p: TracePhase): string {
-  if (p.kind === 'planner') return '执行计划'
-  if (p.kind === 'tool') return '工具调用'
-  return '运行结束'
+function shouldOpenPhase(phase: TracePhase): boolean {
+  return phase.status === 'failed' || phase.status === 'blocked' || phase.status === 'waiting'
 }
-
-/* ---------------- mermaid 计划图渲染 ---------------- */
 
 const mermaidSource = computed(() => traceToMermaid(props.trace))
 const mermaidHostRef = ref<HTMLDivElement | null>(null)
-const mermaidSvg = ref<string>('')
+const mermaidSvg = ref('')
 
-let mermaidApi: {
-  render: (id: string, text: string) => Promise<{ svg: string }>
-} | null = null
+let mermaidApi: { render: (id: string, text: string) => Promise<{ svg: string }> } | null = null
 let mermaidInit = false
 
 async function getMermaid() {
@@ -174,10 +311,10 @@ async function getMermaid() {
     mermaidApi = mod.default as never
   }
   if (!mermaidInit) {
-    ;(mermaidApi as never as { initialize: (c: Record<string, unknown>) => void }).initialize({
+    ;(mermaidApi as never as { initialize: (config: Record<string, unknown>) => void }).initialize({
       startOnLoad: false,
       securityLevel: 'strict',
-      theme: 'dark',
+      theme: 'neutral',
       fontFamily: 'ui-sans-serif, system-ui, sans-serif',
     })
     mermaidInit = true
@@ -186,45 +323,35 @@ async function getMermaid() {
 }
 
 async function renderMermaid() {
-  const src = mermaidSource.value
-  if (!src) {
+  const source = mermaidSource.value
+  if (!source) {
     mermaidSvg.value = ''
     return
   }
   try {
-    const mer = await getMermaid()
+    const mermaid = await getMermaid()
     const id = `trace_graph_${props.trace.run_id.replace(/[^a-zA-Z0-9]/g, '')}`.slice(0, 40)
-    const { svg } = await mer.render(id, src)
+    const { svg } = await mermaid.render(id, source)
     mermaidSvg.value = svg
-  } catch (e) {
-    mermaidSvg.value = `<div class="mermaid-fail">流程图解析失败：${(e as Error)?.message || e}</div>`
+  } catch (error) {
+    mermaidSvg.value = `<div class="mermaid-fail">流程图解析失败：${(error as Error)?.message || error}</div>`
   }
 }
 
-async function onMermaidToggle(ev: Event) {
-  const open = (ev.target as HTMLDetailsElement).open
-  if (!open || mermaidSvg.value) return
+async function onMermaidToggle(event: Event) {
+  if (!(event.target as HTMLDetailsElement).open || mermaidSvg.value) return
   await renderMermaid()
 }
 
-onMounted(() => {
-  // details 默认关闭，等用户打开才渲染
-})
-
 watch(
   () => mermaidSource.value,
-  async (src, prev) => {
-    if (src && src !== prev && mermaidSvg.value) {
-      await renderMermaid()
-    }
+  async (source, previous) => {
+    if (source && source !== previous && mermaidSvg.value) await renderMermaid()
   },
 )
 
-/* ---------------- 工具权限缓存 ---------------- */
-
 function getPermissionBadge(toolId: string): ToolPermissionScope | null {
-  if (!toolId) return null
-  return getToolPermission(toolId)
+  return toolId ? getToolPermission(toolId) : null
 }
 
 function onAutoApprove(toolId: string) {
@@ -234,372 +361,4 @@ function onAutoApprove(toolId: string) {
 }
 </script>
 
-<style scoped>
-/* Trae/Cursor 风格：无 box、左侧色条、inline 折叠、融入消息流 */
-.art-trace {
-  --art-fg: var(--xc-color-text-primary, #1f2937);
-  --art-muted: #6b7280;
-  --art-muted-2: #9ca3af;
-  --art-blue: #3b82f6;
-  --art-green: #10b981;
-  --art-red: #ef4444;
-  --art-amber: #f59e0b;
-  --art-gray: #9ca3af;
-  --art-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
-
-  position: relative;
-  margin-top: 6px;
-  padding: 2px 0 2px 10px;
-  font-size: 12px;
-  line-height: 1.6;
-  color: var(--art-fg);
-  /* 左侧 2px 色条（无 box 边框） */
-  border-left: 2px solid var(--art-gray);
-}
-
-/* 状态色条 */
-.art-trace.is-running { border-left-color: var(--art-blue); }
-.art-trace.is-success { border-left-color: var(--art-green); }
-.art-trace.is-failed { border-left-color: var(--art-red); }
-.art-trace.is-waiting { border-left-color: var(--art-amber); }
-.art-trace.is-blocked { border-left-color: var(--art-gray); }
-
-/* Header：单行 inline */
-.art-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  color: var(--art-muted);
-  font-size: 11px;
-  margin-bottom: 2px;
-}
-
-.art-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--art-gray);
-  flex-shrink: 0;
-}
-.is-running .art-dot { background: var(--art-blue); }
-.is-success .art-dot { background: var(--art-green); }
-.is-failed .art-dot { background: var(--art-red); }
-.is-waiting .art-dot { background: var(--art-amber); }
-
-.art-intent {
-  color: var(--art-fg);
-  font-weight: 500;
-  font-family: var(--art-mono);
-  font-size: 11px;
-}
-
-.art-status {
-  color: var(--art-muted-2);
-  font-size: 10px;
-}
-
-.art-dur {
-  color: var(--art-muted-2);
-  font-family: var(--art-mono);
-  font-size: 10px;
-}
-
-.art-pulse {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--art-blue);
-  animation: art-pulse 1.2s ease-in-out infinite;
-}
-
-@keyframes art-pulse {
-  0%, 100% { opacity: 0.3; transform: scale(0.7); }
-  50% { opacity: 1; transform: scale(1.1); }
-}
-
-/* Stream：无 ol 样式，紧凑行 */
-.art-stream {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
-.art-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  padding: 1px 0;
-}
-
-.art-marker {
-  flex-shrink: 0;
-  width: 12px;
-  text-align: center;
-  font-size: 10px;
-  line-height: 1.6;
-  color: var(--art-muted-2);
-  font-family: var(--art-mono);
-}
-
-.row-success .art-marker { color: var(--art-green); }
-.row-failed .art-marker { color: var(--art-red); }
-.row-waiting .art-marker { color: var(--art-amber); }
-.row-running .art-marker { color: var(--art-blue); }
-
-.art-row-main {
-  flex: 1;
-  min-width: 0;
-}
-
-.art-row-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  color: var(--art-fg);
-  font-size: 12px;
-}
-
-.art-title {
-  color: var(--art-fg);
-}
-
-.art-sub {
-  color: var(--art-muted);
-  font-family: var(--art-mono);
-  font-size: 10px;
-}
-
-.art-ms {
-  color: var(--art-muted-2);
-  font-family: var(--art-mono);
-  font-size: 10px;
-}
-
-.art-retry {
-  color: var(--art-amber);
-  font-size: 10px;
-}
-
-.art-wait {
-  color: #b45309;
-  font-size: 10px;
-  background: rgba(245, 158, 11, 0.12);
-  padding: 0 5px;
-  border-radius: 2px;
-}
-
-.art-perm {
-  font-size: 10px;
-  padding: 0 5px;
-  border-radius: 2px;
-}
-.art-perm.perm-session {
-  color: #1e40af;
-  background: rgba(59, 130, 246, 0.12);
-}
-.art-perm.perm-persistent {
-  color: #065f46;
-  background: rgba(16, 185, 129, 0.12);
-}
-
-.art-auto-btn {
-  background: transparent;
-  color: #065f46;
-  border: 1px solid rgba(16, 185, 129, 0.4);
-  padding: 0 6px;
-  border-radius: 2px;
-  font-size: 10px;
-  cursor: pointer;
-  line-height: 1.4;
-}
-.art-auto-btn:hover {
-  background: rgba(16, 185, 129, 0.1);
-}
-
-/* 工具调用 inline 折叠（无 terminal box） */
-.art-tool-detail {
-  margin-top: 2px;
-  margin-left: 0;
-}
-
-.art-tool-detail > summary {
-  cursor: pointer;
-  user-select: none;
-  color: var(--art-muted);
-  font-size: 11px;
-  font-family: var(--art-mono);
-  list-style: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.art-tool-detail > summary::before {
-  content: '▸';
-  font-size: 9px;
-  color: var(--art-muted-2);
-}
-.art-tool-detail[open] > summary::before {
-  content: '▾';
-}
-.art-tool-detail > summary::-webkit-details-marker {
-  display: none;
-}
-
-.art-tool-detail > summary code {
-  background: rgba(59, 130, 246, 0.1);
-  color: var(--art-blue);
-  padding: 0 4px;
-  border-radius: 2px;
-  font-size: 11px;
-  font-family: var(--art-mono);
-}
-
-.art-action {
-  color: var(--art-muted);
-  font-size: 10px;
-}
-
-.art-node {
-  color: var(--art-muted-2);
-  font-size: 10px;
-}
-
-.art-tool-body {
-  margin-top: 4px;
-  padding-left: 8px;
-  border-left: 1px solid rgba(127, 127, 127, 0.2);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.art-params,
-.art-out,
-.art-err,
-.art-final,
-.art-planner-detail {
-  margin: 0;
-  padding: 4px 6px;
-  font-family: var(--art-mono);
-  font-size: 11px;
-  white-space: pre-wrap;
-  word-break: break-word;
-  background: rgba(127, 127, 127, 0.05);
-  border-radius: 3px;
-  color: #4b5563;
-  max-height: 160px;
-  overflow: auto;
-}
-
-.art-err {
-  color: var(--art-red);
-  background: rgba(239, 68, 68, 0.06);
-}
-
-.art-final {
-  color: #374151;
-  background: rgba(16, 185, 129, 0.05);
-  border-left: 2px solid var(--art-green);
-  border-radius: 0 3px 3px 0;
-}
-
-.art-planner-detail {
-  color: var(--art-red);
-  background: rgba(239, 68, 68, 0.06);
-  border-left: 2px solid var(--art-red);
-  border-radius: 0 3px 3px 0;
-}
-
-.art-obs,
-.art-repairs {
-  margin: 0;
-  padding-left: 16px;
-  font-size: 11px;
-  color: var(--art-muted);
-  font-family: var(--art-mono);
-}
-.art-obs li,
-.art-repairs li {
-  word-break: break-word;
-}
-
-/* mermaid 折叠入口极轻量 */
-.art-mermaid {
-  margin-top: 4px;
-}
-.art-mermaid > summary {
-  cursor: pointer;
-  user-select: none;
-  color: var(--art-muted-2);
-  font-size: 10px;
-  list-style: none;
-  display: inline-block;
-}
-.art-mermaid > summary::before {
-  content: '▸ ';
-}
-.art-mermaid[open] > summary::before {
-  content: '▾ ';
-}
-.art-mermaid > summary::-webkit-details-marker {
-  display: none;
-}
-.mermaid-host {
-  margin-top: 4px;
-  padding: 4px 0;
-  text-align: left;
-  overflow-x: auto;
-}
-.mermaid-host :deep(svg) {
-  max-width: 100%;
-  height: auto;
-}
-.mermaid-fail {
-  color: var(--art-red);
-  font-size: 11px;
-  padding: 4px 0;
-}
-
-/* Dark theme — 跟随 prefers-color-scheme */
-@media (prefers-color-scheme: dark) {
-  .art-trace {
-    --art-fg: #e5e7eb;
-    --art-muted: #9ca3af;
-    --art-muted-2: #6b7280;
-  }
-  .art-title,
-  .art-intent {
-    color: #e5e7eb;
-  }
-  .art-params,
-  .art-out {
-    background: rgba(255, 255, 255, 0.04);
-    color: #d1d5db;
-  }
-  .art-final {
-    background: rgba(16, 185, 129, 0.08);
-    color: #d1d5db;
-  }
-  .art-obs li,
-  .art-repairs li {
-    color: #9ca3af;
-  }
-  .art-tool-body {
-    border-left-color: rgba(255, 255, 255, 0.15);
-  }
-  .art-perm.perm-session {
-    color: #93c5fd;
-    background: rgba(59, 130, 246, 0.2);
-  }
-  .art-perm.perm-persistent {
-    color: #6ee7b7;
-    background: rgba(16, 185, 129, 0.2);
-  }
-  .art-auto-btn {
-    color: #6ee7b7;
-    border-color: rgba(16, 185, 129, 0.5);
-  }
-}
-</style>
+<style scoped src="./AgentRunTrace.css"></style>
