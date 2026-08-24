@@ -1,5 +1,11 @@
 # mypy: disable-error-code="method-assign"
-"""COVERAGE_RAMP Phase 1 (p1-p0-core): system/product/excel/conversation/shipment/misc routes."""
+"""P1 行为契约测试：system/product/excel/conversation/shipment/misc 路由。
+
+B2 转正（2026-08-24，见 docs/coverage-ramp-retirement-plan.md）：原
+``test_coverage_ramp_phase1_p1_domains_routes.py`` 断言为真实行为契约
+（路由状态码、agent_run 元数据深度断言、审批工作流），仅因文件名前缀
+被误归入 ``coverage_ramp`` marker，现改名脱离该 marker，计入行为覆盖率口径。
+"""
 
 from __future__ import annotations
 

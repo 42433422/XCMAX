@@ -1,4 +1,11 @@
-"""COVERAGE_RAMP Phase 1 (p1-p0-core): auth domain routes + helpers (mocked)."""
+"""P1 行为契约测试：auth 域路由 + 纯函数 helpers。
+
+B2 转正（2026-08-24，见 docs/coverage-ramp-retirement-plan.md）：原
+``test_coverage_ramp_phase1_p1_auth_routes.py`` 断言为真实行为契约
+（/api/auth/me 三态、登录/注册校验、session validate、用户 CRUD），
+仅因文件名前缀被误归入 ``coverage_ramp`` marker，现改名脱离该 marker，
+计入行为覆盖率口径。
+"""
 
 from __future__ import annotations
 
@@ -206,7 +213,7 @@ def test_auth_login_phone_code_success(
 
 def test_auth_forgot_account_empty(auth_client: TestClient) -> None:
     r = auth_client.post("/api/auth/forgot-account", json={})
-    assert r.status_code in (200, 400)
+    assert r.status_code == 400
 
 
 @patch("app.application.auth_app_service.get_auth_app_service")
@@ -221,7 +228,7 @@ def test_auth_register_disabled_enterprise(
             "/api/auth/register",
             json={"username": "new", "password": "Secret123!", "email": "n@x.com"},
         )
-    assert r.status_code in (200, 400, 403)
+    assert r.status_code == 400
 
 
 def test_auth_oidc_status(auth_client: TestClient) -> None:
@@ -245,7 +252,7 @@ def test_auth_qr_status_not_found(auth_client: TestClient) -> None:
         svc.get_qr_login_status.return_value = None
         mock_get.return_value = svc
         r = auth_client.get("/api/auth/qr/status", params={"qr_id": "missing"})
-    assert r.status_code in (200, 404)
+    assert r.status_code == 404
 
 
 # ---------------------------------------------------------------------------
@@ -256,7 +263,7 @@ def test_auth_qr_status_not_found(auth_client: TestClient) -> None:
 def test_auth_profile_unauthenticated(auth_client: TestClient) -> None:
     with patch.object(auth_routes, "resolve_session_user", return_value=None):
         r = auth_client.get("/api/auth/profile")
-    assert r.status_code in (200, 401)
+    assert r.status_code == 401
 
 
 @patch("app.application.auth_app_service.get_auth_app_service")
@@ -282,7 +289,7 @@ def test_auth_profile_authenticated(mock_get_svc: MagicMock, auth_client: TestCl
 def test_auth_logout_no_session(auth_client: TestClient) -> None:
     with patch.object(auth_routes, "session_id_from_request", return_value=None):
         r = auth_client.post("/api/auth/logout")
-    assert r.status_code in (200, 400)
+    assert r.status_code == 400
 
 
 @patch("app.application.auth_app_service.get_auth_app_service")
@@ -302,7 +309,7 @@ def test_auth_password_change_missing(auth_client: TestClient) -> None:
     app.dependency_overrides[auth_routes.get_logged_in_user] = lambda: user
     client = TestClient(app, raise_server_exceptions=False)
     r = client.post("/api/auth/password/change", json={})
-    assert r.status_code in (200, 400)
+    assert r.status_code == 400
 
 
 # ---------------------------------------------------------------------------
@@ -341,13 +348,13 @@ def test_users_get_by_id(mock_get_svc: MagicMock, admin_auth_client: TestClient)
 @patch("app.application.auth_app_service.get_auth_app_service")
 def test_users_create_validation(mock_get_svc: MagicMock, admin_auth_client: TestClient) -> None:
     r = admin_auth_client.post("/api/users", json={})
-    assert r.status_code in (200, 400)
+    assert r.status_code == 400
 
 
 @patch("app.application.auth_app_service.get_auth_app_service")
 def test_users_delete_self_blocked(mock_get_svc: MagicMock, admin_auth_client: TestClient) -> None:
     r = admin_auth_client.delete("/api/users/1")
-    assert r.status_code in (200, 400, 403)
+    assert r.status_code == 400
 
 
 @patch("app.db.session.get_db")

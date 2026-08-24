@@ -1,4 +1,11 @@
-"""COVERAGE_RAMP Phase 1 (p1-p0-core): conversation helpers + xcagi_compat_chat_helpers."""
+"""P1 行为契约测试：conversation helpers + xcagi_compat_chat_helpers。
+
+B2 转正（2026-08-24，见 docs/coverage-ramp-retirement-plan.md）：原
+``test_coverage_ramp_phase1_p1_chat_helpers.py`` 断言为真实行为契约
+（db-read token 鉴权、错误码映射 504/402/503、grace 生命周期），
+仅因文件名前缀被误归入 ``coverage_ramp`` marker，现改名脱离该 marker，
+计入行为覆盖率口径。
+"""
 
 from __future__ import annotations
 
@@ -94,4 +101,6 @@ def test_xcagi_chat_http_exc_runtime() -> None:
 
 def test_ensure_vector_index_no_file() -> None:
     hint = _ensure_vector_index_if_needed("向量检索", {})
-    assert hint is None or isinstance(hint, str)
+    # 无 Excel 路径时必须返回引导用户提供路径的提示文案
+    assert hint is not None
+    assert "Excel" in hint or "路径" in hint

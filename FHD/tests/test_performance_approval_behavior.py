@@ -1,4 +1,10 @@
-"""COVERAGE_RAMP Phase 1 (p1-p0-core): system routes full sweep + approval_workspace (mocked)."""
+"""P1 行为契约测试：performance 路由 + approval_workspace helpers。
+
+B2 转正（2026-08-24，见 docs/coverage-ramp-retirement-plan.md）：原
+``test_coverage_ramp_phase1_p1_system_approval.py`` 断言为真实行为契约
+（performance 端点、审批节点推进、请求号唯一性），仅因文件名前缀
+被误归入 ``coverage_ramp`` marker，现改名脱离该 marker，计入行为覆盖率口径。
+"""
 
 from __future__ import annotations
 
@@ -90,7 +96,7 @@ def test_performance_cache_clear(mock_get: MagicMock, system_client: TestClient)
 def test_performance_cache_invalidate(mock_get: MagicMock, system_client: TestClient) -> None:
     mock_get.return_value = _optimizer_mock()
     r = system_client.post("/api/performance/cache/invalidate", json={"key": "k"})
-    assert r.status_code in (200, 400)
+    assert r.status_code == 400
 
 
 @patch("app.utils.performance.performance_initializer.get_performance_optimizer")
@@ -135,24 +141,24 @@ def test_templates_progress(mock_prog: MagicMock, system_client: TestClient) -> 
 
 def test_templates_delete_validation(system_client: TestClient) -> None:
     r = system_client.delete("/api/templates/delete")
-    assert r.status_code in (200, 400, 405, 422)
+    assert r.status_code == 400
 
 
 @patch("app.infrastructure.skills.get_skill_registry")
 def test_skills_list(mock_reg: MagicMock, system_client: TestClient) -> None:
     mock_reg.return_value.list_skills.return_value = []
     r = system_client.get("/api/skills/list")
-    assert r.status_code in (200, 500)
+    assert r.status_code == 200
 
 
 def test_skills_execute_empty(system_client: TestClient) -> None:
     r = system_client.post("/api/skills/execute", json={})
-    assert r.status_code in (200, 400, 422, 500)
+    assert r.status_code == 400
 
 
 def test_tools_execute_empty(system_client: TestClient) -> None:
     r = system_client.post("/api/tools/execute", json={})
-    assert r.status_code in (200, 400, 422, 500)
+    assert r.status_code == 400
 
 
 def test_admin_llm_reload(system_client: TestClient) -> None:

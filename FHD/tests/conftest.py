@@ -70,8 +70,8 @@ for _stable_module in (
 def pytest_collection_modifyitems(config, items):
     """按文件名自动给行覆盖率填充 stub 打 ``coverage_ramp`` 标记。
 
-    历史遗留 79 个 ``test_coverage_ramp_*.py``（约 4567 用例，
-    2026-08-24 B1 转正后实测；数量由 ``scripts/dev/count_coverage_ramp_stubs.py``
+    历史遗留 72 个 ``test_coverage_ramp_*.py``（约 4404 用例，
+    2026-08-24 B2 转正后实测；数量由 ``scripts/dev/count_coverage_ramp_stubs.py``
     棘轮锁定只减不增）断言弱、杀变体能力低。打标后可用
     ``-m 'not coverage_ramp'`` 测量真实行为套件覆盖率，
     与对外覆盖率口径分离（见 docs/coverage-ramp-retirement-plan.md）。默认仍全量运行。

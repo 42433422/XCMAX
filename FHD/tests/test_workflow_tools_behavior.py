@@ -1,4 +1,10 @@
-"""COVERAGE_RAMP Phase 1 (p1-p0-core): workflow tools + planner execute_tool (mocked)."""
+"""P1 行为契约测试：workflow tools + planner execute_tool。
+
+B2 转正（2026-08-24，见 docs/coverage-ramp-retirement-plan.md）：原
+``test_coverage_ramp_phase1_p1_workflow_tools.py`` 断言为真实行为契约
+（Excel 单元格解析、工具注册表、价格表导出错误码），仅因文件名前缀
+被误归入 ``coverage_ramp`` marker，现改名脱离该 marker，计入行为覆盖率口径。
+"""
 
 from __future__ import annotations
 
@@ -48,7 +54,10 @@ def test_looks_like_contract_or_footer_line() -> None:
 def test_infer_product_field_mapping() -> None:
     cols = ["产品名称", "规格", "数量", "单价", "金额"]
     mapping = _infer_product_field_mapping(cols)
-    assert mapping.get("name") is not None or mapping.get("product_name") is not None
+    assert mapping["name"] == "产品名称"
+    assert mapping["specification"] == "规格"
+    assert mapping["quantity"] == "数量"
+    assert mapping["price"] == "单价"
 
 
 def test_workflow_tool_registry_roundtrip() -> None:
@@ -78,7 +87,10 @@ def test_parse_excel_header_row_edge_cases() -> None:
 def test_get_tool_registry_keys() -> None:
     reg = get_tool_registry()
     assert isinstance(reg, dict)
-    assert "products" in reg or "price_list" in reg
+    # 核心业务工具必须注册在案
+    assert "products" in reg
+    assert "customers" in reg
+    assert "materials" in reg
 
 
 def test_execute_tool_unknown() -> None:

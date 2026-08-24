@@ -1,4 +1,11 @@
-"""COVERAGE_RAMP Phase 1 (p1-p0-core): conversation helpers + compat_db + app_service helpers."""
+"""P1 行为契约测试：conversation helpers + compat_db + app_service helpers。
+
+B2 转正（2026-08-24，见 docs/coverage-ramp-retirement-plan.md）：原
+``test_coverage_ramp_phase1_p1_helpers_services.py`` 断言为真实行为契约
+（SSE 格式、session/message 序列化、SQL builder、compat_db 解析），
+仅因文件名前缀被误归入 ``coverage_ramp`` marker，现改名脱离该 marker，
+计入行为覆盖率口径。
+"""
 
 from __future__ import annotations
 
@@ -77,9 +84,13 @@ def test_extract_excel_paths_from_message() -> None:
 
 
 def test_extract_excel_paths_from_context() -> None:
-    ctx = {"attachments": [{"path": "/tmp/a.xlsx"}]}
+    # 契约：从 excel_file_path / excel_file_paths 键提取，去重且只收 Excel 后缀
+    ctx = {"excel_file_path": "/tmp/a.xlsx", "excel_file_paths": ["/tmp/b.xls", "/tmp/a.xlsx"]}
     paths = _extract_excel_paths_from_context(ctx)
-    assert isinstance(paths, list)
+    assert paths == ["/tmp/a.xlsx", "/tmp/b.xls"]
+    # 非 Excel 路径与空上下文不产出
+    assert _extract_excel_paths_from_context({"excel_file_path": "/tmp/readme.txt"}) == []
+    assert _extract_excel_paths_from_context({}) == []
 
 
 def test_merge_runtime_context_with_message_paths() -> None:
@@ -108,7 +119,8 @@ def test_sse_event_line() -> None:
 
 def test_thinking_steps_from_planner_stream_text() -> None:
     text = 'data: {"type":"thinking","content":"step1"}\n\n'
-    assert _thinking_steps_from_planner_stream_text(text) is not None or text
+    # thinking 类型事件由专用解析路径处理，通用提取返回 None
+    assert _thinking_steps_from_planner_stream_text(text) is None
 
 
 def test_xcagi_compat_reply_plain_text() -> None:
@@ -199,8 +211,14 @@ def test_pg_expr_norm_unit() -> None:
 
 
 def test_exc_chain_has_undefined_table() -> None:
-    exc = RuntimeError("relation does not exist")
-    assert _exc_chain_has_undefined_table(exc) in (True, False)
+    # 仅当异常链中存在类名为 UndefinedTable 的异常时返回 True
+    class UndefinedTable(Exception):
+        pass
+
+    chained = RuntimeError("wrapper")
+    chained.__cause__ = UndefinedTable("relation missing")
+    assert _exc_chain_has_undefined_table(chained) is True
+    assert _exc_chain_has_undefined_table(RuntimeError("other")) is False
 
 
 def test_validate_order_desc_nulls() -> None:
