@@ -21,7 +21,7 @@
 |------|------|------|
 | B1 | ✅ 完成（2026-08-24） | 3 个 `phase1_p0_*` 文件**全部转正**：断言经逐一审查为真实行为契约（登录/中间件/错误码/路由状态码），仅因文件名前缀被误归入 `coverage_ramp`。改名为 `test_core_services_behavior.py` / `test_market_approval_mobile_behavior.py` / `test_static_rbac_mobile_routes_behavior.py`，补强 2 处弱断言，116 测试全通过。行为覆盖率 79.26%→84.15% 行 / 70.87%→76.34% 分支，floor 棘轮至 83/75，stub 基线 82→79。 |
 | B2 | 待执行 | `phase1_p1_*`（7 个）转正或删除 |
-| B3 | 待执行 | 其余 phase2+（69 个）逐文件判定，默认清退 |
+| B3 | 待执行 | 其余（含 phase1_p2_* 与 phase2+，72 个）逐文件判定，默认清退 |
 
 ## 决策
 
