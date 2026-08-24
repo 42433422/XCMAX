@@ -4,6 +4,7 @@
  */
 
 import { DEFAULT_INDUSTRY_ID } from '@/constants/industryDefaults'
+import { resolveIndustryNavigationLabel } from '@/constants/industryNavigationProfiles'
 import { INDUSTRY_PRESETS } from '@/constants/industryPresets'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 
@@ -59,7 +60,7 @@ export const MENU_DEFAULT_NAMES: Record<string, string> = {
 }
 
 /**
- * 行业层名称：与 MainLayout.viewTitles、shellMenuLabels 等多处共用。
+ * 重点细分行业的历史名称层；九大行业骨架由 industryNavigationProfiles 负责。
  */
 export const INDUSTRY_MENU_LABELS: Record<string, Record<string, string>> = {
   涂料: {
@@ -154,8 +155,14 @@ export function resolveCoreNavLabel(menuKey: string, industryId: string, modsFor
   if (!key) return ''
   const fromMod = modLabelOverride(key, modsForUi)
   if (fromMod) return fromMod
-  const byInd = INDUSTRY_MENU_LABELS[industryId] || INDUSTRY_MENU_LABELS[DEFAULT_INDUSTRY_ID]
-  if (byInd[key]) return byInd[key]
+  const exactIndustryLabels = INDUSTRY_MENU_LABELS[industryId]
+  // 管理端不属于企业入门九类，继续使用自己的运维导航；企业行业统一以九类/细分骨架为准。
+  if (industryId === '管理端' && exactIndustryLabels?.[key]) return exactIndustryLabels[key]
+  const fromIndustryProfile = resolveIndustryNavigationLabel(industryId, key)
+  if (fromIndustryProfile) return fromIndustryProfile
+  if (exactIndustryLabels?.[key]) return exactIndustryLabels[key]
+  const defaultIndustryLabels = INDUSTRY_MENU_LABELS[DEFAULT_INDUSTRY_ID]
+  if (defaultIndustryLabels?.[key]) return defaultIndustryLabels[key]
   if (key === 'other-tools' && isAdminConsoleSpa()) return '编制图谱'
   return MENU_DEFAULT_NAMES[key] || ''
 }

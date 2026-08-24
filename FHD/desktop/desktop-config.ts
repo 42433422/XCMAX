@@ -127,7 +127,8 @@ export function backendEditionEnv(): Record<string, string> {
       XCAGI_GENERIC_EDITION: '1',
       XCAGI_PLATFORM_SHELL: '1',
       XCAGI_DEFAULT_EDITION: 'generic',
-      FHD_ETL_CENTER_ENABLED: process.env.FHD_ETL_CENTER_ENABLED || '0'
+      // generic 前端会展示数据对接中心；通用宿主必须同步启用后端能力。
+      FHD_ETL_CENTER_ENABLED: process.env.FHD_ETL_CENTER_ENABLED || '1'
     }
   }
   const edition = SKU_RUNTIME_EDITION[sku]

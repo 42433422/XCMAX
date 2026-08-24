@@ -33,13 +33,23 @@ function jsonResponse(body: unknown, status = 200): Response {
   } as unknown as Response
 }
 
-function fileEvent(file?: File): Event {
+function fileEvent(file?: File | File[], options: { directory?: boolean } = {}): Event {
   const input = document.createElement('input')
+  if (options.directory) input.setAttribute('webkitdirectory', '')
   Object.defineProperty(input, 'files', {
     configurable: true,
-    value: file ? [file] : [],
+    value: Array.isArray(file) ? file : file ? [file] : [],
   })
   return { target: input } as unknown as Event
+}
+
+function directoryFile(name: string, relativePath: string): File {
+  const file = new File(['fixture'], name)
+  Object.defineProperty(file, 'webkitRelativePath', {
+    configurable: true,
+    value: relativePath,
+  })
+  return file
 }
 
 function createHarness() {
@@ -129,10 +139,23 @@ describe('useChatOfficeDocking', () => {
     expect(item.databaseTargetLabel).toBe('客户/产品/发货单')
     expect(item.shipmentEtlPreview?.note_count).toBe(1)
     expect(item.summary).toContain('送货单 1 张')
+    expect(item.templateName).toBe('国圣送货单 · 发货单模板')
+    expect(item.templateScope).toBe('orders')
+    expect(mocks.apiFetch.mock.calls.some(([url]) => String(url) === '/api/templates/upload')).toBe(false)
+    expect(mocks.apiFetch.mock.calls.some(([url]) => String(url).includes('/shipment-etl/execute'))).toBe(false)
+    expect(deps.addAndSaveMessage).toHaveBeenCalledWith(
+      expect.stringContaining('[AI 对接建议] 我已阅读「国圣送货单.xlsx」'),
+      'ai',
+    )
 
-    docking.toggleOfficeDockingTarget(item.id, 'knowledge', false)
     await docking.confirmOfficeDockingReview()
 
+    expect(mocks.apiFetch).toHaveBeenCalledWith('/api/templates/upload', expect.objectContaining({ method: 'POST' }))
+    const templateUploadCall = mocks.apiFetch.mock.calls.find(([url]) => String(url) === '/api/templates/upload')
+    const templateUploadBody = templateUploadCall?.[1]?.body as FormData
+    expect(templateUploadBody.get('template_name')).toBe('国圣送货单 · 发货单模板')
+    expect(templateUploadBody.get('template_scope')).toBe('orders')
+    expect(templateUploadBody.get('source')).toBe('chat_office_docking_ai_advice')
     expect(mocks.apiFetch).toHaveBeenCalledWith('/api/excel/data/shipment-etl/execute', expect.objectContaining({ method: 'POST' }))
     expect(deps.stageExcelAnalysisContext).not.toHaveBeenCalled()
     expect(deps.sendDatabaseImportMessage).not.toHaveBeenCalled()
@@ -178,22 +201,28 @@ describe('useChatOfficeDocking', () => {
     expect(item.fieldNames).toEqual(['客户', '产品', '型号', '价格'])
     expect(item.warnings).toEqual(['列名已标准化', '空行已忽略'])
 
-    docking.toggleOfficeDockingTarget('missing', 'knowledge', false)
-    docking.toggleOfficeDockingTarget(item.id, 'knowledge', false)
-    docking.toggleOfficeDockingTarget(item.id, 'knowledge', true)
+    docking.toggleOfficeDockingTarget('missing', 'template', false)
+    docking.toggleOfficeDockingTarget(item.id, 'template', false)
+    docking.toggleOfficeDockingTarget(item.id, 'template', true)
+    docking.updateOfficeDockingTemplateName(item.id, '客户产品 · 标准模板')
     docking.toggleOfficeDockingTarget(item.id, 'database', false)
     docking.toggleOfficeDockingTarget(item.id, 'database', true)
     await docking.confirmOfficeDockingReview()
 
     expect(mocks.primeCsrfCookie).toHaveBeenCalled()
-    expect(mocks.apiFetch).toHaveBeenCalledWith(
-      '/api/knowledge/v1/datasets/persy-knowledge/documents',
-      expect.objectContaining({ method: 'POST' }),
-    )
+    expect(mocks.apiFetch).toHaveBeenCalledWith('/api/templates/upload', expect.objectContaining({ method: 'POST' }))
     expect(deps.stageExcelAnalysisContext).toHaveBeenCalledWith(item.excelAnalysis)
     expect(deps.sendDatabaseImportMessage).toHaveBeenCalledWith('导入数据库，确认导入：客户产品.csv')
     expect(item.commitStatus).toBe('committed')
-    expect(deps.addAndSaveMessage).toHaveBeenLastCalledWith('[对接] 审核提交完成：成功 1 个。', 'ai')
+    expect(deps.addAndSaveMessage).toHaveBeenCalledWith('[对接] 「客户产品.csv」已处理到 模板库、客户/产品库。', 'ai')
+    expect(deps.addAndSaveMessage).toHaveBeenLastCalledWith('[对接] 本批文件已逐个处理完成。', 'ai')
+
+    item.commitStatus = 'failed'
+    item.databaseCommitStatus = 'failed'
+    mocks.apiFetch.mockClear()
+    await docking.confirmOfficeDockingReview()
+    expect(mocks.apiFetch.mock.calls.some(([url]) => String(url) === '/api/templates/upload')).toBe(false)
+    expect(deps.sendDatabaseImportMessage).toHaveBeenCalledTimes(2)
 
     docking.clearOfficeDockingReview()
     expect(docking.officeDockingPanelOpen.value).toBe(false)
@@ -238,7 +267,6 @@ describe('useChatOfficeDocking', () => {
     expect(item.intentId).toBe('attendance_roster')
     expect(item.databaseAction).toBe('attendance_import')
     expect(item.rowCount).toBe(4)
-    docking.toggleOfficeDockingTarget(item.id, 'knowledge', false)
     await docking.confirmOfficeDockingReview()
 
     expect(mocks.apiFetch).toHaveBeenCalledWith(
@@ -249,7 +277,7 @@ describe('useChatOfficeDocking', () => {
     expect(item.summary).toBe('考勤入库完成：人员 3 条，部门 1 条')
   })
 
-  it('handles unsupported input, trigger state, and failed knowledge ingestion', async () => {
+  it('handles unsupported input, trigger state, and failed template archiving', async () => {
     const { deps, docking } = createHarness()
     const click = vi.fn()
     docking.officeDockingInputRef.value = { click } as unknown as HTMLInputElement
@@ -284,7 +312,7 @@ describe('useChatOfficeDocking', () => {
         },
       },
     ])
-    mocks.apiFetch.mockResolvedValue(jsonResponse({ success: false, message: '向量库不可用' }, 503))
+    mocks.apiFetch.mockResolvedValue(jsonResponse({ success: false, message: '模板服务不可用' }, 503))
     await docking.onOfficeDockingFileChange(fileEvent(new File(['pptx'], '复盘.pptx')))
 
     const item = docking.officeDockingReviewItems.value[0]
@@ -292,7 +320,80 @@ describe('useChatOfficeDocking', () => {
     expect(item.intentId).toBe('document')
     await docking.confirmOfficeDockingReview()
     expect(item.commitStatus).toBe('failed')
-    expect(item.error).toBe('向量库不可用')
-    expect(deps.addAndSaveMessage).toHaveBeenLastCalledWith('[对接] 审核提交完成：成功 0 个，失败 1 个。', 'ai')
+    expect(item.templateCommitStatus).toBe('failed')
+    expect(item.error).toBe('模板服务不可用')
+    expect(deps.addAndSaveMessage).toHaveBeenLastCalledWith(
+      '[对接] 「复盘.pptx」处理失败：模板服务不可用。请调整后重试或跳过。',
+      'ai',
+    )
+  })
+
+  it('selects a whole folder, ignores system files, and stages every supported file for review', async () => {
+    mocks.isSupported.mockImplementation((name: string) => name.toLowerCase().endsWith('.xlsx'))
+    mocks.resolveEmployee.mockReturnValue(EXCEL_FULL_READ_EMPLOYEE_ID)
+    mocks.runEmployee.mockResolvedValue({
+      summary: '工作簿已读取',
+      output_path: 'outputs/workbook.json',
+    })
+    mocks.readOutputs.mockResolvedValue([
+      {
+        path: 'outputs/workbook.json',
+        kind: 'json',
+        json: { sheets: [{ sheet_name: '送货单', row_count: 1 }] },
+      },
+    ])
+    mocks.mapExcel.mockReturnValue({
+      fields: ['购货单位', '品名', '型号', '数量'],
+      preview_data: {
+        sheet_names: ['送货单'],
+        sample_rows: [{ 购货单位: '甲公司', 品名: '底漆', 型号: 'A1', 数量: 1 }],
+      },
+      sheets: [{ sheet_name: '送货单', fields: ['购货单位', '品名', '型号', '数量'] }],
+    })
+
+    const { deps, docking } = createHarness()
+    const folderClick = vi.fn()
+    docking.officeDockingFolderInputRef.value = { click: folderClick } as unknown as HTMLInputElement
+    docking.triggerOfficeDockingFolder()
+    expect(folderClick).toHaveBeenCalledTimes(1)
+
+    const files = [
+      directoryFile('国圣化工.xlsx', '发货单/国圣化工.xlsx'),
+      directoryFile('侯雪梅.xlsx', '发货单/客户/侯雪梅.xlsx'),
+      directoryFile('.DS_Store', '发货单/.DS_Store'),
+    ]
+    await docking.onOfficeDockingFileChange(fileEvent(files, { directory: true }))
+
+    expect(mocks.uploadFile).toHaveBeenCalledTimes(2)
+    expect(docking.officeDockingReviewItems.value.map((item) => item.fileName)).toEqual([
+      '发货单/国圣化工.xlsx',
+      '发货单/客户/侯雪梅.xlsx',
+    ])
+    expect(docking.officeDockingReviewItems.value.every((item) => item.status === 'ready')).toBe(true)
+    expect(deps.addAndSaveMessage).toHaveBeenCalledWith(
+      '[对接] 已收到文件夹「发货单」中的 2 个可识别文件，已忽略 1 个系统或不支持的文件，开始调用办公员工识别。',
+      'ai',
+    )
+    expect(deps.addAndSaveMessage).toHaveBeenCalledWith(
+      expect.stringContaining('[AI 对接建议] 我已阅读「发货单/国圣化工.xlsx」'),
+      'ai',
+    )
+
+    const [first, second] = docking.officeDockingReviewItems.value
+    docking.toggleOfficeDockingTarget(first.id, 'database', false)
+    docking.toggleOfficeDockingTarget(second.id, 'database', false)
+    await docking.confirmOfficeDockingReview()
+
+    expect(first.commitStatus).toBe('committed')
+    expect(second.commitStatus).toBe('')
+    expect(mocks.apiFetch.mock.calls.filter(([url]) => String(url) === '/api/templates/upload')).toHaveLength(1)
+    expect(deps.addAndSaveMessage).toHaveBeenCalledWith(
+      expect.stringContaining('[AI 对接建议] 我已阅读「发货单/客户/侯雪梅.xlsx」'),
+      'ai',
+    )
+
+    await docking.skipCurrentOfficeDockingReview()
+    expect(second.commitStatus).toBe('skipped')
+    expect(deps.addAndSaveMessage).toHaveBeenLastCalledWith('[对接] 本批文件已逐个处理完成。', 'ai')
   })
 })

@@ -20,9 +20,9 @@ import {
 } from '@/utils/officeEmployeeReadApi'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
 
-type OfficeDockingTarget = 'knowledge' | 'database'
+type OfficeDockingTarget = 'template' | 'database'
 type OfficeDockingStatus = 'running' | 'ready' | 'error'
-type OfficeDockingCommitStatus = '' | 'committing' | 'committed' | 'failed'
+type OfficeDockingCommitStatus = '' | 'committing' | 'committed' | 'failed' | 'skipped'
 type OfficeDockingIntentId =
   | 'pending'
   | 'attendance_roster'
@@ -68,14 +68,20 @@ export type ChatOfficeDockingReviewItem = {
   databaseTargetLabel: string
   databaseAction: OfficeDockingDatabaseAction
   databaseDisabledReason: string
-  selectedKnowledge: boolean
+  selectedTemplate: boolean
   selectedDatabase: boolean
+  templateName: string
+  templateScope: string
+  templateTargetLabel: string
+  templateCommitStatus: OfficeDockingCommitStatus
+  databaseCommitStatus: OfficeDockingCommitStatus
   summary: string
   warnings: string[]
   error: string
   upload?: OfficeFileUploadResult
   outputFiles: OfficeEmployeeOutputFile[]
-  knowledgeText: string
+  sourceFile?: File
+  templateResult?: Record<string, unknown>
   excelAnalysis?: Record<string, unknown>
   shipmentEtlPreview?: ShipmentEtlPreview
   fieldNames: string[]
@@ -108,6 +114,56 @@ const KIND_LABELS: Record<string, string> = {
 
 function newItemId(): string {
   return `office-docking-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+type DirectoryFile = File & { webkitRelativePath?: string }
+
+function officeDockingRelativePath(file: File): string {
+  return String((file as DirectoryFile).webkitRelativePath || file.name || '')
+    .replace(/\\/g, '/')
+    .replace(/^\/+/, '')
+    .trim()
+}
+
+function isDirectorySystemFile(file: File): boolean {
+  const segments = officeDockingRelativePath(file).split('/').filter(Boolean)
+  return segments.some((segment) =>
+    segment === '__MACOSX' || segment.startsWith('.') || segment.startsWith('~$'),
+  )
+}
+
+function directoryRootLabel(files: File[]): string {
+  const path = files.map(officeDockingRelativePath).find((value) => value.includes('/')) || ''
+  return path.split('/')[0] || '所选文件夹'
+}
+
+function fileStem(fileName: string): string {
+  const base = String(fileName || '').replace(/\\/g, '/').split('/').pop() || '办公文件'
+  return base.replace(/\.[^.]+$/, '').trim() || '办公文件'
+}
+
+function applyTemplateRecommendation(item: ChatOfficeDockingReviewItem): void {
+  const stem = fileStem(item.fileName)
+  const recommendations: Record<OfficeDockingIntentId, { label: string; scope: string }> = {
+    pending: { label: '办公文件模板', scope: '' },
+    attendance_roster: { label: '考勤模板', scope: '' },
+    attendance_source: { label: '考勤模板', scope: '' },
+    shipment_delivery: { label: '发货单模板', scope: 'orders' },
+    customer_product: { label: '客户产品模板', scope: 'products' },
+    generic_table: { label: '通用表格模板', scope: '' },
+    document: { label: '文档模板', scope: '' },
+  }
+  const recommendation = recommendations[item.intentId] || recommendations.pending
+  item.templateTargetLabel = recommendation.label
+  item.templateScope = recommendation.scope
+  item.templateName = `${stem} · ${recommendation.label}`
+}
+
+function buildAdviceMessage(item: ChatOfficeDockingReviewItem): string {
+  const databaseAdvice = item.databaseAction
+    ? `同步到「${item.databaseTargetLabel}」`
+    : `暂不写业务数据库（${item.databaseDisabledReason || '没有识别到可靠的数据库目标'}）`
+  return `[AI 对接建议] 我已阅读「${item.fileName}」，判断为“${item.intentLabel}”。建议归档为模板「${item.templateName}」，并${databaseAdvice}。要按这个方案处理吗？请在建议卡确认；我会一次只处理一个文件。`
 }
 
 function outputRelpathFor(itemId: string, employeeId: string): string {
@@ -194,7 +250,7 @@ function inferOfficeDockingIntent(item: {
     return {
       intentId: 'document',
       intentLabel: '普通办公文档',
-      intentSummary: '适合先进入知识库，未发现可结构化写库的表格上下文',
+      intentSummary: '已读取正文，建议归档为文档模板；未发现可安全写入业务库的表格结构',
       databaseTargetLabel: '',
       databaseAction: '',
       databaseDisabledReason: '该文件不是可入库表格',
@@ -268,7 +324,7 @@ function inferOfficeDockingIntent(item: {
   return {
     intentId: 'generic_table',
     intentLabel: '通用表格',
-    intentSummary: '已读取表格，但业务目标不明确；先进入知识库，避免误写数据库',
+    intentSummary: '已读取表格，但业务目标不明确；建议先归档模板，避免误写数据库',
     databaseTargetLabel: '',
     databaseAction: '',
     databaseDisabledReason: '未识别到明确的业务库目标',
@@ -457,50 +513,23 @@ function buildPptText(jsonData: Record<string, unknown>): string {
   return truncate(lines.join('\n'), 12_000) || stringifyPreview(jsonData, 12_000)
 }
 
-function buildKnowledgeText(item: {
-  fileName: string
-  employeeLabel: string
-  kindLabel: string
-  intentLabel: string
-  intentSummary: string
-  summary: string
-  fieldNames: string[]
-  sampleRows: Record<string, unknown>[]
-  textPreview: string
-}): string {
-  const lines = [
-    `文件：${item.fileName}`,
-    `类型：${item.kindLabel}`,
-    `识别员工：${item.employeeLabel}`,
-    item.intentLabel ? `业务意图：${item.intentLabel}` : '',
-    item.intentSummary ? `意图说明：${item.intentSummary}` : '',
-    item.summary ? `识别摘要：${item.summary}` : '',
-  ].filter(Boolean)
-  if (item.fieldNames.length) lines.push(`字段：${item.fieldNames.join('、')}`)
-  if (item.sampleRows.length) lines.push(`样例行：\n${stringifyPreview(item.sampleRows, 4000)}`)
-  if (item.textPreview) lines.push(`正文预览：\n${truncate(item.textPreview, 8000)}`)
-  return lines.join('\n')
-}
-
-async function ingestKnowledge(item: ChatOfficeDockingReviewItem): Promise<void> {
-  const text = item.knowledgeText.trim()
-  if (!text) throw new Error('知识库文本为空')
+async function archiveTemplateLibrary(item: ChatOfficeDockingReviewItem): Promise<Record<string, unknown>> {
+  if (!item.sourceFile) throw new Error('缺少原始文件，无法归档模板')
   await primeCsrfCookie()
-  // Governed Persy dataset path (legacy /ingest still dual-writes server-side).
-  const res = await apiFetch('/api/knowledge/v1/datasets/persy-knowledge/documents', {
+  const fd = new FormData()
+  fd.append('file', item.sourceFile)
+  fd.append('template_name', item.templateName || fileStem(item.fileName))
+  if (item.templateScope) fd.append('template_scope', item.templateScope)
+  fd.append('source', 'chat_office_docking_ai_advice')
+  const res = await apiFetch('/api/templates/upload', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      source: item.fileName,
-      text,
-      chunk_strategy: 'semantic',
-      metadata: { entrypoint: 'chat_office_docking' },
-    }),
+    body: fd,
   })
   const body = await res.json().catch(() => ({}))
   if (!res.ok || body?.success === false) {
-    throw new Error(String(body?.message || '知识库入库失败'))
+    throw new Error(String(body?.message || body?.error || '模板库归档失败'))
   }
+  return asRecord(body)
 }
 
 async function ingestAttendanceDatabase(item: ChatOfficeDockingReviewItem): Promise<Record<string, unknown>> {
@@ -525,25 +554,33 @@ async function ingestAttendanceDatabase(item: ChatOfficeDockingReviewItem): Prom
 
 export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
   const officeDockingInputRef = ref<HTMLInputElement | null>(null)
+  const officeDockingFolderInputRef = ref<HTMLInputElement | null>(null)
   const officeDockingProcessing = ref(false)
   const officeDockingPanelOpen = ref(false)
   const officeDockingReviewItems = ref<ChatOfficeDockingReviewItem[]>([])
-  const officeDockingPendingCount = computed(() => officeDockingReviewItems.value.filter((item) => item.status === 'ready').length)
+  const officeDockingPendingCount = computed(() => officeDockingReviewItems.value.filter(
+    (item) => item.status === 'ready' && item.commitStatus !== 'committed' && item.commitStatus !== 'skipped',
+  ).length)
 
   function triggerOfficeDocking() {
     if (officeDockingProcessing.value) return
     officeDockingInputRef.value?.click()
   }
 
+  function triggerOfficeDockingFolder() {
+    if (officeDockingProcessing.value) return
+    officeDockingFolderInputRef.value?.click()
+  }
+
   function touchItems() {
     officeDockingReviewItems.value = [...officeDockingReviewItems.value]
   }
 
-  async function analyzeFile(file: File): Promise<void> {
+  async function analyzeFile(file: File, displayName = file.name): Promise<void> {
     const employeeId = resolveOfficeReadEmployeeForFile(file.name)
     const item: ChatOfficeDockingReviewItem = {
       id: newItemId(),
-      fileName: file.name,
+      fileName: displayName,
       employeeId,
       employeeLabel: EMPLOYEE_LABELS[employeeId] || employeeId || '办公员工',
       kindLabel: KIND_LABELS[employeeId] || '办公文件',
@@ -555,13 +592,18 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
       databaseTargetLabel: '',
       databaseAction: '',
       databaseDisabledReason: '',
-      selectedKnowledge: true,
+      selectedTemplate: true,
       selectedDatabase: false,
+      templateName: `${fileStem(displayName)} · 办公文件模板`,
+      templateScope: '',
+      templateTargetLabel: '办公文件模板',
+      templateCommitStatus: '',
+      databaseCommitStatus: '',
       summary: '正在调用办公员工识别...',
       warnings: [],
       error: '',
       outputFiles: [],
-      knowledgeText: '',
+      sourceFile: file,
       fieldNames: [],
       sampleRows: [],
       rowCount: 0,
@@ -649,7 +691,7 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
         }
       }
 
-      item.knowledgeText = buildKnowledgeText(item)
+      applyTemplateRecommendation(item)
       item.status = 'ready'
       const shipmentNoteCount = Number(item.shipmentEtlPreview?.note_count || 0)
       item.summary = shipmentNoteCount
@@ -666,49 +708,99 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
 
   async function onOfficeDockingFileChange(event: Event) {
     const input = event.target as HTMLInputElement | null
-    const files = Array.from(input?.files || [])
+    const selectedFiles = Array.from(input?.files || [])
+    const isDirectorySelection = Boolean(
+      input?.hasAttribute('webkitdirectory') || selectedFiles.some((file) => officeDockingRelativePath(file).includes('/')),
+    )
+    const folderLabel = directoryRootLabel(selectedFiles)
+    const files = isDirectorySelection
+      ? selectedFiles.filter((file) => !isDirectorySystemFile(file) && isOfficeDockingFileSupported(file.name))
+      : selectedFiles
+    const skippedCount = selectedFiles.length - files.length
     if (input) input.value = ''
-    if (!files.length) return
+    if (!selectedFiles.length) return
+    if (!files.length) {
+      await deps.addAndSaveMessage(`[对接] 文件夹「${folderLabel}」中没有可识别的办公文件。`, 'ai')
+      return
+    }
     officeDockingPanelOpen.value = true
     officeDockingProcessing.value = true
     officeDockingReviewItems.value = []
-    await deps.addAndSaveMessage(`[对接] 已收到 ${files.length} 个文件，开始调用办公员工识别。`, 'ai')
+    const skippedText = skippedCount ? `，已忽略 ${skippedCount} 个系统或不支持的文件` : ''
+    const sourceText = isDirectorySelection ? `文件夹「${folderLabel}」中的 ` : ''
+    await deps.addAndSaveMessage(
+      `[对接] 已收到${sourceText}${files.length} 个可识别文件${skippedText}，开始调用办公员工识别。`,
+      'ai',
+    )
     try {
       for (const file of files) {
-        await analyzeFile(file)
+        await analyzeFile(file, isDirectorySelection ? officeDockingRelativePath(file) : file.name)
       }
     } finally {
       officeDockingProcessing.value = false
     }
+    const firstReady = officeDockingReviewItems.value.find((item) => item.status === 'ready' && !item.commitStatus)
+    if (firstReady) await deps.addAndSaveMessage(buildAdviceMessage(firstReady), 'ai')
   }
 
   function toggleOfficeDockingTarget(id: string, target: OfficeDockingTarget, enabled: boolean) {
     const item = officeDockingReviewItems.value.find((row) => row.id === id)
     if (!item) return
-    if (target === 'knowledge') item.selectedKnowledge = enabled
+    if (target === 'template') item.selectedTemplate = enabled
     if (target === 'database' && item.excelAnalysis && item.databaseAction) {
       item.selectedDatabase = enabled
     }
     touchItems()
   }
 
-  async function confirmOfficeDockingReview() {
-    const ready = officeDockingReviewItems.value.filter(
-      (item) =>
-        item.status === 'ready' &&
-        item.commitStatus !== 'committed' &&
-        item.commitStatus !== 'committing' &&
-        (item.selectedKnowledge || item.selectedDatabase),
+  function updateOfficeDockingTemplateName(id: string, value: string) {
+    const item = officeDockingReviewItems.value.find((row) => row.id === id)
+    if (!item || item.commitStatus === 'committing') return
+    item.templateName = String(value || '').trimStart()
+    touchItems()
+  }
+
+  function currentReviewItem(): ChatOfficeDockingReviewItem | undefined {
+    return officeDockingReviewItems.value.find(
+      (item) => item.commitStatus !== 'committed' && item.commitStatus !== 'skipped',
     )
-    if (!ready.length) return
-    for (const item of ready) {
-      item.commitStatus = 'committing'
-      touchItems()
-      try {
-        if (item.selectedKnowledge) {
-          await ingestKnowledge(item)
+  }
+
+  async function announceNextAdvice(): Promise<void> {
+    const next = currentReviewItem()
+    if (next?.status === 'ready') await deps.addAndSaveMessage(buildAdviceMessage(next), 'ai')
+    if (!next && officeDockingReviewItems.value.length) {
+      await deps.addAndSaveMessage('[对接] 本批文件已逐个处理完成。', 'ai')
+    }
+  }
+
+  async function confirmOfficeDockingReview() {
+    const item = currentReviewItem()
+    if (
+      !item ||
+      item.status !== 'ready' ||
+      item.commitStatus === 'committing' ||
+      (!item.selectedTemplate && !item.selectedDatabase)
+    ) return
+    item.commitStatus = 'committing'
+    item.error = ''
+    touchItems()
+    try {
+      if (item.selectedTemplate && item.templateCommitStatus !== 'committed') {
+        item.templateCommitStatus = 'committing'
+        touchItems()
+        try {
+          item.templateResult = await archiveTemplateLibrary(item)
+          item.templateCommitStatus = 'committed'
+        } catch (error) {
+          item.templateCommitStatus = 'failed'
+          throw error
         }
-        if (item.selectedDatabase) {
+      }
+      if (item.selectedDatabase && item.databaseCommitStatus !== 'committed') {
+        item.databaseCommitStatus = 'committing'
+        touchItems()
+        try {
           if (!item.excelAnalysis) {
             throw new Error('该文件没有可导入数据库的表格上下文')
           }
@@ -729,21 +821,35 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
           } else {
             throw new Error(item.databaseDisabledReason || '未识别到可写入的业务数据库')
           }
+          item.databaseCommitStatus = 'committed'
+        } catch (error) {
+          item.databaseCommitStatus = 'failed'
+          throw error
         }
-        item.commitStatus = 'committed'
-      } catch (err) {
-        item.commitStatus = 'failed'
-        item.error = err instanceof Error ? err.message : String(err || '提交失败')
-      } finally {
-        touchItems()
       }
+      item.commitStatus = 'committed'
+    } catch (err) {
+      item.commitStatus = 'failed'
+      item.error = err instanceof Error ? err.message : String(err || '提交失败')
+    } finally {
+      touchItems()
     }
-    const okCount = ready.filter((item) => item.commitStatus === 'committed').length
-    const failCount = ready.filter((item) => item.commitStatus === 'failed').length
-    await deps.addAndSaveMessage(
-      `[对接] 审核提交完成：成功 ${okCount} 个${failCount ? `，失败 ${failCount} 个` : ''}。`,
-      failCount ? 'ai' : 'ai',
-    )
+    if (item.commitStatus === 'failed') {
+      await deps.addAndSaveMessage(`[对接] 「${item.fileName}」处理失败：${item.error}。请调整后重试或跳过。`, 'ai')
+      return
+    }
+    const targets = [item.selectedTemplate ? '模板库' : '', item.selectedDatabase ? item.databaseTargetLabel : ''].filter(Boolean)
+    await deps.addAndSaveMessage(`[对接] 「${item.fileName}」已处理到 ${targets.join('、')}。`, 'ai')
+    await announceNextAdvice()
+  }
+
+  async function skipCurrentOfficeDockingReview() {
+    const item = currentReviewItem()
+    if (!item || item.commitStatus === 'committing') return
+    item.commitStatus = 'skipped'
+    touchItems()
+    await deps.addAndSaveMessage(`[对接] 已跳过「${item.fileName}」，没有执行新的归档或数据库写入。`, 'ai')
+    await announceNextAdvice()
   }
 
   function clearOfficeDockingReview() {
@@ -753,14 +859,18 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
 
   return {
     officeDockingInputRef,
+    officeDockingFolderInputRef,
     officeDockingProcessing,
     officeDockingPanelOpen,
     officeDockingReviewItems,
     officeDockingPendingCount,
     triggerOfficeDocking,
+    triggerOfficeDockingFolder,
     onOfficeDockingFileChange,
     toggleOfficeDockingTarget,
+    updateOfficeDockingTemplateName,
     confirmOfficeDockingReview,
+    skipCurrentOfficeDockingReview,
     clearOfficeDockingReview,
   }
 }

@@ -127,6 +127,20 @@ describe('ChatInputToolbar', () => {
     expect(btn.text()).toContain('(3)')
   })
 
+  it('opens folder docking directly and retains a separate multi-file action', async () => {
+    const wrapper = mountToolbar()
+    const folderButton = wrapper.get('[data-tutorial-id="toolbar-office-docking"]')
+    const filesButton = wrapper.get('[data-testid="office-docking-files"]')
+
+    await folderButton.trigger('click')
+    await filesButton.trigger('click')
+
+    expect(wrapper.emitted('trigger-office-docking-folder')).toHaveLength(1)
+    expect(wrapper.emitted('trigger-office-docking-files')).toHaveLength(1)
+    expect(folderButton.attributes('title')).toBe('chat.officeDockingFolderTitle')
+    expect(filesButton.attributes('title')).toBe('chat.officeDockingFileTitle')
+  })
+
   it('does not show pending count when multimodalPendingCount is 0', () => {
     const wrapper = mountToolbar({ multimodalPendingCount: 0 })
     const btn = wrapper.find('[data-tutorial-id="toolbar-excel-analyze"]')

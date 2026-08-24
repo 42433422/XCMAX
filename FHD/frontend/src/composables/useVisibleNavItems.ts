@@ -26,6 +26,7 @@ import {
 import { resolveNavRouteName } from '@/constants/navRouteAliases'
 import { resolveCoreNavLabel } from '@/utils/coreNavLabel'
 import { isCustomerServiceNavVisible } from '@/constants/customerServiceNav'
+import { resolveIndustryNavigationProfile } from '@/constants/industryNavigationProfiles'
 import { mergeSidebarMenuItems, type ResolvedSidebarMenuItem } from '@/utils/mergeSidebarMenuItems'
 import { pinSidebarMenuItemsTop } from '@/utils/pinSidebarMenuItemsTop'
 import { buildRoleMenuProfile, canShowCoreMenuKey } from '@/utils/roleMenuProfile'
@@ -54,6 +55,7 @@ export type { ResolvedSidebarMenuItem } from '@/utils/mergeSidebarMenuItems'
 
 const isSandboxMode = () => new URLSearchParams(window.location.search).has('sandbox')
 const isPlatformShellMode = () => isPlatformShellModeEnabled()
+const INDUSTRY_DELIVERY_ITEM_BY_KEY = new Map(INDUSTRY_DELIVERY_CORE_ITEMS.map((item) => [item.key, item]))
 
 /**
  * 依赖引用相等的同步 memo：deps 数组每一项都与上次严格 ===（引用相等）时直接返回上次结果。
@@ -223,7 +225,10 @@ export function useVisibleNavItems() {
         const industryDelivery: ResolvedSidebarMenuItem[] = []
         const shouldInjectIndustryDelivery = !isPlatformShellMode() || exposeIndustrySidebar.value
         if (!adminShell && shouldInjectIndustryDelivery) {
-          for (const item of INDUSTRY_DELIVERY_CORE_ITEMS) {
+          const industryProfile = resolveIndustryNavigationProfile(id)
+          for (const menuKey of industryProfile.businessMenuKeys) {
+            const item = INDUSTRY_DELIVERY_ITEM_BY_KEY.get(menuKey)
+            if (!item) continue
             const override = coreMenuOverrides.value.get(item.key)
             industryDelivery.push({
               ...item,
@@ -273,8 +278,9 @@ export function useVisibleNavItems() {
   )
 
   const modItemsResolved = computed((): ResolvedSidebarMenuItem[] =>
-    memoModItemsResolved([modMenuItems.value, roleMenuProfile.value, accountProfileStore.isAdminAccount], () => {
+    memoModItemsResolved([modMenuItems.value, roleMenuProfile.value, accountProfileStore.isAdminAccount, industryId.value], () => {
       const adminShell = isAdminConsoleSpa() && accountProfileStore.isAdminAccount
+      const industryBusinessKeys = new Set<string>(resolveIndustryNavigationProfile(industryId.value).businessMenuKeys)
       return modMenuItems.value
         .filter((item) => {
           const navKey = normalizeModSidebarNavKey(String(item.key || ''))
@@ -290,6 +296,12 @@ export function useVisibleNavItems() {
           if (modId && ADMIN_OPERATOR_HIDDEN_MOD_IDS.has(modId)) return false
           if (modId && ADMIN_OPERATOR_ATTENDANCE_MOD_IDS.has(modId)) return false
           return true
+        })
+        .filter((item) => {
+          if (String(item.modId || '').trim() !== 'xcagi-erp-domain-bridge') return true
+          const navKey = normalizeModSidebarNavKey(String(item.key || ''))
+          const hostKey = navKey.replace(/^mod-erp-/, '')
+          return !hostKey || industryBusinessKeys.has(hostKey)
         })
         .map((item) => ({
           key: item.key,

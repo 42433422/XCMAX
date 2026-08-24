@@ -92,7 +92,7 @@ def build_platform_shell_payload(installed_mod_ids: list[str] | None = None) -> 
         "platform_shell_mode": shell_mode or edition in ("minimal", "generic"),
         "frontend_shell_hint": (
             "npm run build:minimal — OpenClaw shell (chat + mod-store); "
-            "build:generic — full industry mod pack. ?full=1 for legacy ERP."
+            "build:generic — host shell with the built-in ERP foundation and installable industry packs."
         ),
         "policy": "new_business_features_should_ship_as_mod_or_employee_pack",
         "host_profile": {

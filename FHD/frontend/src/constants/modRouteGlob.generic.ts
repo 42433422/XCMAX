@@ -1,4 +1,7 @@
 type RouteModuleLoader = () => Promise<Record<string, unknown>>
 
-/** 干净通用宿主：Mod 路由由回装后动态注册，构建期不 glob 空 mods 目录 */
-export const modRouteGlob = {} as Record<string, RouteModuleLoader>
+/** 通用宿主预注册内置 ERP 与审批路由；其余可选行业 Mod 仍按交付策略加载。 */
+export const modRouteGlob = {
+  ...import.meta.glob('../../../mods/xcagi-erp-domain-bridge/frontend/routes.js'),
+  ...import.meta.glob('../../../mods/xcagi-approval-bridge/frontend/routes.js'),
+} as Record<string, RouteModuleLoader>

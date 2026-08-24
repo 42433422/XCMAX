@@ -2,8 +2,11 @@
   <div class="page-view" id="view-template-preview">
     <div class="page-content">
       <div class="page-header">
-        <h2>模板预览</h2>
-        <p class="muted" style="margin:0;font-size:13px;">展示导出用 Excel 与 Word 模板：可按业务分组管理，也可选「自定义」自由新建任意模板；Word 若有「适用业务」或可从文件名推断则归入对应分组，否则在各分组中均显示。</p>
+        <div class="industry-template-heading">
+          <h2>{{ industryTemplateProfile.industryLabel }} · 模板库</h2>
+          <span class="industry-template-heading__category">{{ industryTemplateProfile.categoryLabel }}</span>
+        </div>
+        <p class="muted" style="margin:0;font-size:13px;">模板分类来自当前行业的真实侧栏能力；行业包声明了字段结构时，必备词条同步采用该结构。仍可选「自定义」自由创建其他 Excel 或 Word 模板。</p>
       </div>
 
       <div class="template-preview-toolbar" style="display:flex;gap:8px;align-items:center;margin:12px 0 16px;flex-wrap:wrap;">
@@ -23,7 +26,7 @@
         </button>
       </div>
       <div class="template-rule-hint">
-        模板替换会校验功能词条完整性：Excel 按表头/单元格词条；Word 按正文与页眉页脚中的占位符（如 <span v-pre>{{产品型号}}</span>）；须覆盖对应业务的全部必备词条后才允许保存。
+        模板替换会校验功能词条完整性：Excel 按表头/单元格词条；Word 按正文与页眉页脚中的占位符（如 <code>{{ templatePlaceholderExample }}</code>）；须覆盖对应业务的全部必备词条后才允许保存。
       </div>
       <div class="grid-tool-card">
         <div class="grid-tool-title">Excel 网格映射工具</div>
@@ -418,10 +421,12 @@ import ExcelPreview from '@/components/template/ExcelPreview.vue'
 import LabelPreview from '@/components/template/LabelPreview.vue'
 import templateScopeRules from '@/shared/templateScopeRules.json'
 import { stripGridPreviewData, stripSampleRowsKeepTemplateShape } from '@/shared/templatePreviewSanitize.js'
+import { buildIndustryTemplateScopeConfig, resolveIndustryTemplateProfile } from '@/constants/industryTemplateProfiles'
+import { useIndustryStore } from '@/stores/industry'
 import { appAlert, appConfirm } from '@/utils/appDialog'
 import { pushErpPage } from '@/utils/erpPagePaths'
 
-const TEMPLATE_SCOPE_CONFIG = templateScopeRules
+const BASE_TEMPLATE_SCOPE_CONFIG = templateScopeRules
 const EXPORT_TEMPLATE_SOURCES = new Set([
   'db',
   'generated',
@@ -463,7 +468,9 @@ export default {
     LabelPreview
   },
   data() {
+    const industryStore = useIndustryStore()
     return {
+      industryStore,
       activeTab: 'all',
       activeScopeTab: 'all',
       templates: [],
@@ -507,17 +514,39 @@ export default {
     }
   },
   computed: {
+    industryTemplateProfile() {
+      return resolveIndustryTemplateProfile(
+        String(this.industryStore.currentIndustryId || ''),
+        this.industryStore.currentConfig
+      )
+    },
+    activeTemplateScopeConfig() {
+      return buildIndustryTemplateScopeConfig(this.industryTemplateProfile)
+    },
+    activeTemplateScopeKeySet() {
+      return new Set(Object.keys(this.activeTemplateScopeConfig))
+    },
+    templatePlaceholderExample() {
+      const firstTerm = this.industryTemplateProfile.scopes[0]?.requiredTerms?.[0] || '字段名称'
+      return `{{${firstTerm}}}`
+    },
     scopeTabs() {
       return [
         { key: 'all', label: '全部' },
-        ...Object.entries(TEMPLATE_SCOPE_CONFIG).map(([scopeKey, meta]) => ({
+        ...Object.entries(this.activeTemplateScopeConfig).map(([scopeKey, meta]) => ({
           key: scopeKey,
           label: meta?.label || scopeKey
         }))
       ]
     },
     exportScopedTemplates() {
-      const realTemplates = Array.isArray(this.templates) ? this.templates.filter(t => this.isExportTemplate(t)) : []
+      const realTemplates = Array.isArray(this.templates)
+        ? this.templates.filter((tpl) => {
+            if (!this.isExportTemplate(tpl)) return false
+            const scopeKey = this.getTemplateScopeKey(tpl)
+            return !scopeKey || scopeKey === 'custom' || this.activeTemplateScopeKeySet.has(scopeKey)
+          })
+        : []
       const scopedExcelTemplates = realTemplates.filter(t => t.category === 'excel')
       const existingScopes = new Set(
         scopedExcelTemplates
@@ -525,8 +554,7 @@ export default {
           .filter(Boolean)
       )
 
-      for (const scopeKey of Object.keys(TEMPLATE_SCOPE_CONFIG)) {
-        if (scopeKey === 'custom') continue
+      for (const scopeKey of Object.keys(this.activeTemplateScopeConfig)) {
         if (!existingScopes.has(scopeKey)) {
           realTemplates.push(this.createVirtualTemplate(scopeKey))
         }
@@ -546,14 +574,11 @@ export default {
       })
     },
     scopeOptions() {
-      const options = Object.entries(TEMPLATE_SCOPE_CONFIG).map(([value, meta]) => ({
+      const options = Object.entries(this.activeTemplateScopeConfig).map(([value, meta]) => ({
         value,
-        label: value === 'custom' ? '自定义（不限业务）' : meta.label
+        label: meta.label
       }))
-      // 保证「自定义」始终在末尾可选（即便 JSON 未含 custom）
-      if (!options.some((item) => item.value === 'custom')) {
-        options.push({ value: 'custom', label: '自定义（不限业务）' })
-      }
+      options.push({ value: 'custom', label: '自定义（不限业务）' })
       return options
     },
     isCustomScope() {
@@ -680,7 +705,7 @@ export default {
 
     applyRouteScope() {
       const queryScope = String(this.$route?.query?.scope || '').trim()
-      if (queryScope && Object.prototype.hasOwnProperty.call(TEMPLATE_SCOPE_CONFIG, queryScope)) {
+      if (queryScope && Object.prototype.hasOwnProperty.call(this.activeTemplateScopeConfig, queryScope)) {
         this.activeScopeTab = queryScope
       } else if (!this.activeScopeTab) {
         this.activeScopeTab = 'all'
@@ -825,7 +850,7 @@ export default {
       this.createStep = 1
       this.selectedFile = null
       this.templateName = ''
-      this.templateScope = 'orders'
+      this.templateScope = this.industryTemplateProfile.scopes[0]?.key || 'custom'
       this.customScopeLabel = ''
       this.customTemplateType = ''
       this.recognizedType = null
@@ -1332,11 +1357,14 @@ export default {
     getScopeMeta(scopeKey) {
       const key = String(scopeKey || '').trim()
       if (!key) return null
-      if (Object.prototype.hasOwnProperty.call(TEMPLATE_SCOPE_CONFIG, key)) {
-        return TEMPLATE_SCOPE_CONFIG[key]
+      if (Object.prototype.hasOwnProperty.call(this.activeTemplateScopeConfig, key)) {
+        return this.activeTemplateScopeConfig[key]
       }
       if (key === 'custom') {
         return { label: '自定义', templateType: '自定义模板', requiredTerms: [] }
+      }
+      if (Object.prototype.hasOwnProperty.call(BASE_TEMPLATE_SCOPE_CONFIG, key)) {
+        return BASE_TEMPLATE_SCOPE_CONFIG[key]
       }
       return null
     },
@@ -1344,7 +1372,7 @@ export default {
     isKnownScopeKey(scopeKey) {
       const key = String(scopeKey || '').trim()
       if (!key) return false
-      return Object.prototype.hasOwnProperty.call(TEMPLATE_SCOPE_CONFIG, key) || key === 'custom'
+      return Object.prototype.hasOwnProperty.call(BASE_TEMPLATE_SCOPE_CONFIG, key) || key === 'custom'
     },
 
     getRequiredTermsByScope(scopeKey) {
@@ -1564,8 +1592,7 @@ export default {
       if (tpl?.category !== 'excel' && tpl?.category !== 'word') return []
       const termSet = this.extractTemplateTermSet(tpl?.fields, tpl?.preview_data)
       const matched = []
-      for (const scopeKey of Object.keys(TEMPLATE_SCOPE_CONFIG)) {
-        if (scopeKey === 'custom') continue
+      for (const scopeKey of Object.keys(this.activeTemplateScopeConfig)) {
         const required = this.getRequiredTermsByScope(scopeKey)
         if (required.length && required.every(term => this.hasEquivalentTerm(termSet, term))) {
           matched.push(scopeKey)
@@ -1663,6 +1690,27 @@ export default {
 </script>
 
 <style scoped>
+.industry-template-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.industry-template-heading h2 {
+  margin: 0;
+}
+
+.industry-template-heading__category {
+  padding: 4px 9px;
+  border: 1px solid rgba(47, 111, 237, 0.16);
+  border-radius: 999px;
+  background: rgba(47, 111, 237, 0.08);
+  color: #2f6fed;
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .template-preview-section {
   margin-top: 10px;
 }

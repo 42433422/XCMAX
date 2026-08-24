@@ -94,7 +94,8 @@
         :excel-analyze-input-ref="chatRefBag.excelAnalyzeInputRef"
         :office-docking-processing="officeDockingProcessing"
         @new-conversation="newConversation"
-        @trigger-office-docking="triggerOfficeDocking"
+        @trigger-office-docking-files="triggerOfficeDocking"
+        @trigger-office-docking-folder="triggerOfficeDockingFolder"
         @excel-file-change="onExcelAnalyzeFileChange"
         @auto-refresh-change="onAutoRefreshToolbarChange"
         @toggle-tts="setTtsEnabled"
@@ -187,12 +188,24 @@
       style="display: none"
       @change="onOfficeDockingFileChange"
     />
+    <input
+      ref="officeDockingFolderInputRef"
+      type="file"
+      multiple
+      webkitdirectory
+      directory
+      accept=".xlsx,.xlsm,.xls,.csv,.docx,.doc,.pdf,.pptx,.ppt"
+      style="display: none"
+      @change="onOfficeDockingFileChange"
+    />
     <ChatOfficeDockingReview
       v-if="officeDockingPanelOpen"
       :items="officeDockingReviewItems"
       :processing="officeDockingProcessing"
       @toggle-target="toggleOfficeDockingTarget"
+      @update-template-name="updateOfficeDockingTemplateName"
       @confirm="confirmOfficeDockingReview"
+      @skip="skipCurrentOfficeDockingReview"
       @close="clearOfficeDockingReview"
     />
   </div>
@@ -422,13 +435,17 @@ const sendMessage = async () => {
 
 const {
   officeDockingInputRef,
+  officeDockingFolderInputRef,
   officeDockingProcessing,
   officeDockingPanelOpen,
   officeDockingReviewItems,
   triggerOfficeDocking,
+  triggerOfficeDockingFolder,
   onOfficeDockingFileChange,
   toggleOfficeDockingTarget,
+  updateOfficeDockingTemplateName,
   confirmOfficeDockingReview,
+  skipCurrentOfficeDockingReview,
   clearOfficeDockingReview,
 } = useChatOfficeDocking({
   addAndSaveMessage,

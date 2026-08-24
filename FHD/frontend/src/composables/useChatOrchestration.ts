@@ -321,14 +321,15 @@ export function useChatOrchestration(options: UseChatViewOptions) {
             sheets: Array.isArray(result?.sheets) ? result.sheets : [],
           }
           lastExcelAnalysisContext.value = payload
-          linkedExcelAllSheets.value = false
           const sheetOptions = resolveExcelSheetOptionsFromContext(payload)
+          linkedExcelAllSheets.value = sheetOptions.length > 0
           linkedExcelSheet.value = sheetOptions[0] || null
           window.dispatchEvent(
             new CustomEvent('xcagi:excel-sheet-context', {
               detail: {
-                select_all_sheets: false,
+                select_all_sheets: linkedExcelAllSheets.value,
                 selected_sheet: linkedExcelSheet.value,
+                ...(linkedExcelAllSheets.value ? { selected_sheets: sheetOptions } : {}),
                 excel_analysis: payload,
               },
             }),
@@ -1466,7 +1467,10 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     }
     if (!linkedExcelSheet.value) {
       const first = excelSheetOptions.value[0]
-      if (first) linkedExcelSheet.value = first
+      if (first) {
+        linkedExcelSheet.value = first
+        linkedExcelAllSheets.value = true
+      }
     }
     window.addEventListener(FHD_DB_WRITE_UNLOCKED_EVENT, dbGate.onDbWriteUnlockedForChatRetry)
     workflowPanel.mountWorkflowPanel()

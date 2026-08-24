@@ -164,8 +164,11 @@ describe('modRouteGlob variants', () => {
     }
   })
 
-  it('modRouteGlob.generic is empty (mods registered at runtime)', () => {
-    expect(Object.keys(modRouteGlobGeneric)).toHaveLength(0)
+  it('modRouteGlob.generic bundles the built-in ERP and approval routes', () => {
+    const keys = Object.keys(modRouteGlobGeneric)
+    expect(keys.some((k) => k.includes('/mods/xcagi-erp-domain-bridge/frontend/routes.js'))).toBe(true)
+    expect(keys.some((k) => k.includes('/mods/xcagi-approval-bridge/frontend/routes.js'))).toBe(true)
+    expect(keys.every((k) => ['xcagi-erp-domain-bridge', 'xcagi-approval-bridge'].some((id) => k.includes(id)))).toBe(true)
   })
 
   it('modRouteGlob re-export matches modRouteGlob.full', () => {
@@ -197,8 +200,12 @@ describe('modPhysicalViewGlob variants', () => {
     expect(Object.keys(modPhysicalViewGlobEnterprise).length).toBeGreaterThanOrEqual(0)
   })
 
-  it('modPhysicalViewGlob.generic is empty', () => {
-    expect(Object.keys(modPhysicalViewGlobGeneric)).toHaveLength(0)
+  it('modPhysicalViewGlob.generic bundles real ERP and approval views', () => {
+    const keys = Object.keys(modPhysicalViewGlobGeneric)
+    expect(keys.some((k) => k.endsWith('/mods/xcagi-erp-domain-bridge/frontend/views/ProductsView.vue'))).toBe(true)
+    expect(keys.some((k) => k.endsWith('/mods/xcagi-erp-domain-bridge/frontend/views/OrdersView.vue'))).toBe(true)
+    expect(keys.some((k) => k.endsWith('/mods/xcagi-approval-bridge/frontend/views/ApprovalWorkspaceView.vue'))).toBe(true)
+    expect(keys.every((k) => ['xcagi-erp-domain-bridge', 'xcagi-approval-bridge'].some((id) => k.includes(id)))).toBe(true)
   })
 })
 

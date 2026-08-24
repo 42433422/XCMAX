@@ -9,6 +9,13 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 _TEMPLATE_SCOPE_REQUIRED_TERMS_CACHE = None
+_TEMPLATE_SCOPE_SUBSYSTEM_KEYS = {
+    "orders": "orders",
+    "shipmentRecords": "shipment-records",
+    "products": "products",
+    "materials": "materials",
+    "customers": "customers",
+}
 _DEFAULT_TEMPLATE_SCOPE_RULES = {
     "orders": {
         "templateType": "出货明细",
@@ -78,7 +85,67 @@ def _get_template_scope_required_terms():
     global _TEMPLATE_SCOPE_REQUIRED_TERMS_CACHE
     if _TEMPLATE_SCOPE_REQUIRED_TERMS_CACHE is None:
         _TEMPLATE_SCOPE_REQUIRED_TERMS_CACHE = _load_template_scope_required_terms()
-    return _TEMPLATE_SCOPE_REQUIRED_TERMS_CACHE
+    return _merge_industry_subsystem_required_terms(
+        _TEMPLATE_SCOPE_REQUIRED_TERMS_CACHE,
+        _get_request_industry_subsystems(),
+    )
+
+
+def _merge_industry_subsystem_required_terms(base_rules, subsystems):
+    """Overlay template terms with the current industry's real subsystem fields."""
+    merged = {scope: list(terms or []) for scope, terms in (base_rules or {}).items()}
+    if not isinstance(subsystems, dict):
+        return merged
+    for scope_key, subsystem_key in _TEMPLATE_SCOPE_SUBSYSTEM_KEYS.items():
+        subsystem = subsystems.get(subsystem_key)
+        if not isinstance(subsystem, dict):
+            continue
+        fields = subsystem.get("fields")
+        if not isinstance(fields, list):
+            continue
+        labels = []
+        for field in fields:
+            if not isinstance(field, dict):
+                continue
+            label = str(field.get("label") or "").strip()
+            if label and label not in labels:
+                labels.append(label)
+        if labels:
+            merged[scope_key] = labels
+    return merged
+
+
+def _get_request_industry_subsystems():
+    """Resolve per-request industry schema; background work keeps generic rules."""
+    try:
+        from app.infrastructure.request_context import get_current_request
+        from resources.config.industry_config import get_industry_profile
+
+        request = get_current_request()
+        industry_id = str(getattr(getattr(request, "state", None), "industry_id", "") or "").strip()
+        if not industry_id:
+            return {}
+        try:
+            from app.application.tenant_workspace_prefs import (
+                get_selected_industry_id,
+                resolve_workspace_owner_id,
+            )
+            from app.infrastructure.auth.dependencies import resolve_session_user
+
+            user = resolve_session_user(request)
+            if user is not None:
+                owner_id = resolve_workspace_owner_id(request, user)
+                saved_industry_id = str(get_selected_industry_id(owner_id) or "").strip()
+                if saved_industry_id:
+                    industry_id = saved_industry_id
+        except RECOVERABLE_ERRORS:
+            logger.debug("workspace industry preference unavailable; use request industry", exc_info=True)
+        profile = get_industry_profile(industry_id)
+        subsystems = getattr(profile, "subsystems", {})
+        return subsystems if isinstance(subsystems, dict) else {}
+    except RECOVERABLE_ERRORS:
+        logger.debug("industry template schema unavailable; use generic terms", exc_info=True)
+        return {}
 
 
 def _normalize_term(value):

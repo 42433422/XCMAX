@@ -9,9 +9,13 @@
       <div class="etl-card dock-card">
         <div class="dock-card-title">选择文件</div>
         <div class="etl-actions">
-          <button type="button" class="btn btn-primary etl-upload-btn" :disabled="processing" @click="triggerOfficeDocking">
-            <i class="fa fa-upload" aria-hidden="true"></i>
-            {{ processing ? '识别中...' : '选择并上传文件' }}
+          <button type="button" class="btn btn-primary etl-upload-btn" :disabled="processing" @click="triggerOfficeDockingFolder">
+            <i class="fa fa-folder-open-o" aria-hidden="true"></i>
+            {{ processing ? '识别中...' : '选择文件夹' }}
+          </button>
+          <button type="button" class="btn btn-secondary etl-upload-btn" :disabled="processing" @click="triggerOfficeDocking">
+            <i class="fa fa-file-o" aria-hidden="true"></i>
+            选择文件
           </button>
           <span class="muted etl-hint">支持 .xlsx / .xls / .csv / .pdf / .docx / .pptx</span>
         </div>
@@ -26,13 +30,25 @@
         style="display: none"
         @change="onOfficeDockingFileChange"
       />
+      <input
+        ref="officeDockingFolderInputRef"
+        type="file"
+        multiple
+        webkitdirectory
+        directory
+        accept=".xlsx,.xlsm,.xls,.csv,.docx,.doc,.pdf,.pptx,.ppt"
+        style="display: none"
+        @change="onOfficeDockingFileChange"
+      />
 
       <ChatOfficeDockingReview
         v-if="officeDockingPanelOpen || officeDockingReviewItems.length"
         :items="officeDockingReviewItems"
         :processing="processing"
         @toggle-target="toggleOfficeDockingTarget"
+        @update-template-name="updateOfficeDockingTemplateName"
         @confirm="confirmOfficeDockingReview"
+        @skip="skipCurrentOfficeDockingReview"
         @close="clearOfficeDockingReview"
       />
 
@@ -49,13 +65,17 @@ import { useChatOfficeDocking } from '@/composables/useChatOfficeDocking'
 
 const {
   officeDockingInputRef,
+  officeDockingFolderInputRef,
   officeDockingProcessing,
   officeDockingPanelOpen,
   officeDockingReviewItems,
   triggerOfficeDocking,
+  triggerOfficeDockingFolder,
   onOfficeDockingFileChange,
   toggleOfficeDockingTarget,
+  updateOfficeDockingTemplateName,
   confirmOfficeDockingReview,
+  skipCurrentOfficeDockingReview,
   clearOfficeDockingReview,
 } = useChatOfficeDocking({
   // 独立页无聊天上下文：写库结果以审核面板摘要呈现，聊天相关回调置空。

@@ -13,6 +13,7 @@ from app.services.document_templates.variables import (
     _get_equivalent_normalized_terms,
     _has_equivalent_term,
     _infer_business_scope,
+    _merge_industry_subsystem_required_terms,
     _normalize_term,
     _validate_required_terms,
 )
@@ -114,6 +115,58 @@ class TestValidateRequiredTerms:
         ]
         ok, missing = _validate_required_terms(cells, fields, "orders")
         assert ok is True
+
+    def test_industry_subsystem_fields_replace_generic_terms(self):
+        generic = {
+            "products": ["产品型号", "产品名称", "规格", "单价"],
+            "orders": ["产品型号", "产品名称", "数量", "单价", "金额"],
+        }
+        attendance_subsystems = {
+            "products": {
+                "fields": [
+                    {"key": "model_number", "label": "工号"},
+                    {"key": "name", "label": "姓名"},
+                    {"key": "specification", "label": "班次"},
+                    {"key": "duplicate", "label": "班次"},
+                ]
+            },
+            "orders": {
+                "fields": [
+                    {"key": "purchase_unit", "label": "部门"},
+                    {"key": "quantity_kg", "label": "工时 (小时)"},
+                ]
+            },
+        }
+
+        resolved = _merge_industry_subsystem_required_terms(generic, attendance_subsystems)
+
+        assert resolved["products"] == ["工号", "姓名", "班次"]
+        assert resolved["orders"] == ["部门", "工时 (小时)"]
+        assert generic["products"] == ["产品型号", "产品名称", "规格", "单价"]
+
+    @patch(
+        "app.services.document_templates.variables._get_request_industry_subsystems",
+        return_value={
+            "orders": {
+                "fields": [
+                    {"key": "purchase_unit", "label": "部门"},
+                    {"key": "quantity_kg", "label": "工时 (小时)"},
+                ]
+            }
+        },
+    )
+    def test_validation_uses_request_industry_schema(self, _mock_subsystems):
+        ok, missing = _validate_required_terms(
+            {},
+            [
+                {"label": "部门", "name": "department", "value": ""},
+                {"label": "工时 (小时)", "name": "hours", "value": ""},
+            ],
+            "orders",
+        )
+
+        assert ok is True
+        assert missing == []
 
 
 # ========================= _build_scope_template_type_map ================

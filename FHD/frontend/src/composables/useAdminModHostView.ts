@@ -1,4 +1,4 @@
-import { shallowRef, type Component } from 'vue'
+import { ref, shallowRef, type Component } from 'vue'
 import ModRequiredView from '@/components/ModRequiredView.vue'
 import { findModViewLoader } from '@/router/modViews'
 
@@ -13,6 +13,7 @@ export function useAdminModHostView(modId: string, viewFile: string, title: stri
   const modProps = { modId, title }
 
   const load = findModViewLoader(modId, viewFile)
+  const loading = ref(Boolean(load))
   if (load) {
     void load()
       .then((m) => {
@@ -21,7 +22,10 @@ export function useAdminModHostView(modId: string, viewFile: string, title: stri
       .catch(() => {
         /* 保持 ModRequiredView */
       })
+      .finally(() => {
+        loading.value = false
+      })
   }
 
-  return { View, modProps }
+  return { View, modProps, loading }
 }

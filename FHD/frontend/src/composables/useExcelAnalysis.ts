@@ -61,6 +61,49 @@ interface UseExcelAnalysisOptions {
   onAnalyzeDone?: (payload: { fileName: string; success: boolean; message?: string }) => void
 }
 
+function resolveAnalyzedSheetNames(result: ExcelAnalysisResult): string[] {
+  const fromSheets = asArray<ExcelSheetDetail>(result?.sheets)
+    .map((sheet) => asString(sheet?.sheet_name).trim())
+    .filter(Boolean)
+  const fromPreview = asArray(result?.preview_data?.sheet_names)
+    .map((name) => asString(name).trim())
+    .filter(Boolean)
+  const primary = asString(result?.preview_data?.sheet_name).trim()
+  return Array.from(new Set([...fromSheets, ...fromPreview, ...(primary ? [primary] : [])]))
+}
+
+/**
+ * 文件读完后先确认用户目标，不把“解析成功”误当成一项完整任务。
+ * 示例只用于启发自由表达；真正的业务写入仍由后续预览和人工确认控制。
+ */
+export function buildExcelNextStepPrompt(fileName: string, result: ExcelAnalysisResult): string {
+  const sheetNames = resolveAnalyzedSheetNames(result)
+  const visibleSheets = sheetNames.slice(0, 5)
+  const sheetLabel = visibleSheets.length
+    ? `识别到 ${sheetNames.length} 个工作表：${visibleSheets.join('、')}${sheetNames.length > visibleSheets.length ? '等' : ''}。`
+    : '已经识别出表格结构和字段。'
+  const searchable = sheetNames.join(' ')
+  const examples: string[] = []
+
+  if (/(发货|出货|送货|销售|订单)/i.test(searchable)) {
+    examples.push('把发货或出货记录整理好，先给我看导入预览')
+  }
+  if (/(借料|借原材料|原材料|库存|物料)/i.test(searchable)) {
+    examples.push('核对借入借出、原材料或库存明细')
+  }
+  examples.push('检查数量、单价、金额和重复数据有没有异常')
+  examples.push(visibleSheets.length > 1 ? `只处理“${visibleSheets[0]}”工作表` : '按客户、产品或业务日期做汇总')
+
+  return [
+    `我已经读完「${fileName || '这个 Excel 文件'}」，${sheetLabel}`,
+    '',
+    '接下来你想让我做什么？你可以直接用自己的话说，也可以参考：',
+    ...examples.slice(0, 4).map((example) => `- ${example}`),
+    '',
+    '我会先分析或生成预览；涉及业务数据写入时，会再等你确认。',
+  ].join('\n')
+}
+
 async function extractSingleSheetDetail(file: File, sheetName: string): Promise<ExcelSheetDetail | null> {
   try {
     await ensureCsrfReady()
@@ -320,6 +363,7 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
             })
             const summary = summarizeExcelAnalysisResult(data as ExcelAnalysisResult)
             appendChatLine(summary, 'ai')
+            appendChatLine(buildExcelNextStepPrompt(file.name, data as ExcelAnalysisResult), 'ai')
             options.onAnalyzed?.({
               fileName: file.name,
               summary,

@@ -4,6 +4,12 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+const mockFindModViewLoader = vi.hoisted(() => vi.fn())
+
+vi.mock('@/router/modViews', () => ({
+  findModViewLoader: mockFindModViewLoader,
+}))
+
 // Mock ModRequiredView to avoid importing the actual component
 vi.mock('@/components/ModRequiredView.vue', () => ({
   default: {
@@ -18,12 +24,14 @@ vi.mock('@/components/ModRequiredView.vue', () => ({
 describe('useAdminModHostView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockFindModViewLoader.mockReturnValue(undefined)
   })
 
   it('returns ModRequiredView when no loader exists for the given modId/viewFile', async () => {
     const { useAdminModHostView } = await import('./useAdminModHostView')
-    const { View, modProps } = useAdminModHostView('nonexistent-mod', 'MainView', 'Test Title')
+    const { View, modProps, loading } = useAdminModHostView('nonexistent-mod', 'MainView', 'Test Title')
     expect(View.value).toBeTruthy()
+    expect(loading.value).toBe(false)
     expect(modProps).toEqual({
       modId: 'nonexistent-mod',
       title: 'Test Title',
@@ -44,6 +52,29 @@ describe('useAdminModHostView', () => {
     expect(View).toHaveProperty('value')
     // Default value should be truthy (ModRequiredView)
     expect(View.value).toBeTruthy()
+  })
+
+  it('keeps a loading state until a real built-in view resolves', async () => {
+    const LoadedView = { name: 'LoadedView', template: '<div />' }
+    mockFindModViewLoader.mockReturnValue(() => Promise.resolve({ default: LoadedView }))
+
+    const { useAdminModHostView } = await import('./useAdminModHostView')
+    const { View, loading } = useAdminModHostView('xcagi-erp-domain-bridge', 'TemplatePreviewView', '模板库')
+
+    expect(loading.value).toBe(true)
+    await vi.waitFor(() => expect(loading.value).toBe(false))
+    expect(View.value).toBe(LoadedView)
+  })
+
+  it('shows the unavailable fallback only after a real loader fails', async () => {
+    mockFindModViewLoader.mockReturnValue(() => Promise.reject(new Error('chunk failed')))
+
+    const { useAdminModHostView } = await import('./useAdminModHostView')
+    const { View, loading } = useAdminModHostView('xcagi-erp-domain-bridge', 'TemplatePreviewView', '模板库')
+
+    expect(loading.value).toBe(true)
+    await vi.waitFor(() => expect(loading.value).toBe(false))
+    expect((View.value as { name?: string }).name).toBe('ModRequiredView')
   })
 
   it('loaderKey constructs correct path', async () => {

@@ -1,89 +1,115 @@
 <template>
-  <section class="office-docking-review" aria-label="办公文件对接审核">
+  <section class="office-docking-review" aria-label="AI 办公文件对接建议">
     <header class="office-docking-review__head">
       <div>
-        <strong>办公文件对接审核</strong>
-        <span>{{ processing ? '员工识别中' : `待确认 ${readyCount} 个` }}</span>
+        <strong><i class="fa fa-magic" aria-hidden="true"></i> AI 对接建议</strong>
+        <span v-if="processing">AI 正在阅读 {{ items.length }} 个文件</span>
+        <span v-else-if="activeItem">第 {{ activeIndex + 1 }} / {{ items.length }} 个 · 逐个确认</span>
+        <span v-else>本批 {{ items.length }} 个文件已处理完毕</span>
       </div>
-      <button type="button" class="office-docking-review__icon-btn" title="关闭" @click="$emit('close')">
+      <button type="button" class="office-docking-review__icon-btn" title="结束对接" @click="$emit('close')">
         <i class="fa fa-times" aria-hidden="true"></i>
       </button>
     </header>
 
-    <div class="office-docking-review__list">
-      <article
-        v-for="item in items"
-        :key="item.id"
-        class="office-docking-review__item"
-        :class="`office-docking-review__item--${item.status}`"
-      >
-        <div class="office-docking-review__meta">
-          <div>
-            <strong>{{ item.fileName }}</strong>
-            <span>{{ item.kindLabel }} · {{ item.employeeLabel }}</span>
-          </div>
-          <span class="office-docking-review__status">{{ statusText(item) }}</span>
+    <div v-if="activeItem" class="office-docking-review__list">
+      <article class="office-docking-review__item" :class="`office-docking-review__item--${activeItem.status}`">
+        <div class="office-docking-review__progress" aria-label="当前对接步骤">
+          <span class="is-complete">1 · AI 已阅读</span>
+          <span :class="{ 'is-current': activeItem.commitStatus !== 'committing' }">2 · 等待你的决定</span>
+          <span :class="{ 'is-current': activeItem.commitStatus === 'committing' }">3 · 确认后执行</span>
         </div>
 
-        <p v-if="item.summary" class="office-docking-review__summary">{{ item.summary }}</p>
-        <p v-if="item.intentSummary" class="office-docking-review__intent">
-          意图：{{ item.intentLabel }}{{ item.databaseTargetLabel ? ` · ${item.databaseTargetLabel}` : '' }}，{{ item.intentSummary }}
+        <div class="office-docking-review__meta">
+          <div>
+            <strong>{{ activeItem.fileName }}</strong>
+            <span>{{ activeItem.kindLabel }} · {{ activeItem.employeeLabel }}</span>
+          </div>
+          <span class="office-docking-review__status">{{ statusText(activeItem) }}</span>
+        </div>
+
+        <p v-if="activeItem.summary" class="office-docking-review__summary">{{ activeItem.summary }}</p>
+        <p v-if="activeItem.intentSummary" class="office-docking-review__intent">
+          AI 判断：{{ activeItem.intentLabel }}。{{ activeItem.intentSummary }}
         </p>
-        <ul v-if="item.warnings.length" class="office-docking-review__warnings" aria-label="风险提示">
-          <li v-for="(warn, idx) in item.warnings.slice(0, 4)" :key="`${item.id}-warn-${idx}`">
+        <ul v-if="activeItem.warnings.length" class="office-docking-review__warnings" aria-label="风险提示">
+          <li v-for="(warn, idx) in activeItem.warnings.slice(0, 4)" :key="`${activeItem.id}-warn-${idx}`">
             {{ warn }}
           </li>
         </ul>
-        <ul v-if="shipmentNotes(item).length" class="office-docking-review__shipment-notes" aria-label="送货单预览">
-          <li v-for="(note, idx) in shipmentNotes(item).slice(0, 5)" :key="`${item.id}-note-${idx}`">
+        <ul v-if="shipmentNotes(activeItem).length" class="office-docking-review__shipment-notes" aria-label="送货单预览">
+          <li v-for="(note, idx) in shipmentNotes(activeItem).slice(0, 5)" :key="`${activeItem.id}-note-${idx}`">
             {{ noteLabel(note) }}
           </li>
-          <li v-if="shipmentNotes(item).length > 5">…另有 {{ shipmentNotes(item).length - 5 }} 张</li>
+          <li v-if="shipmentNotes(activeItem).length > 5">…另有 {{ shipmentNotes(activeItem).length - 5 }} 张</li>
         </ul>
-        <p v-if="item.error" class="office-docking-review__error">{{ item.error }}</p>
+        <p v-if="activeItem.error" class="office-docking-review__error">{{ activeItem.error }}</p>
 
-        <div v-if="item.fieldNames.length" class="office-docking-review__chips">
-          <span v-for="field in item.fieldNames.slice(0, 12)" :key="field">{{ field }}</span>
+        <div v-if="activeItem.fieldNames.length" class="office-docking-review__chips">
+          <span v-for="field in activeItem.fieldNames.slice(0, 12)" :key="field">{{ field }}</span>
         </div>
-
-        <p v-if="previewSnippet(item)" class="office-docking-review__preview-snippet">
-          {{ previewSnippet(item) }}
+        <p v-if="previewSnippet(activeItem)" class="office-docking-review__preview-snippet">
+          {{ previewSnippet(activeItem) }}
         </p>
-        <details v-if="hasDetailedPreview(item)" class="office-docking-review__preview-details">
-          <summary>{{ detailsSummary(item) }}</summary>
-          <pre class="office-docking-review__preview">{{ detailedPreview(item) }}</pre>
+        <details v-if="hasDetailedPreview(activeItem)" class="office-docking-review__preview-details">
+          <summary>{{ detailsSummary(activeItem) }}</summary>
+          <pre class="office-docking-review__preview">{{ detailedPreview(activeItem) }}</pre>
         </details>
 
-        <div class="office-docking-review__targets">
-          <label>
+        <div class="office-docking-review__advice">
+          <div class="office-docking-review__advice-title">
+            <i class="fa fa-lightbulb-o" aria-hidden="true"></i>
+            <strong>我建议这样处理，可以吗？</strong>
+          </div>
+          <label class="office-docking-review__target-card">
             <input
               type="checkbox"
-              :checked="item.selectedKnowledge"
-              :disabled="item.status !== 'ready' || item.commitStatus === 'committing'"
-              @change="onToggle(item.id, 'knowledge', $event)"
+              :checked="activeItem.selectedTemplate"
+              :disabled="activeItem.status !== 'ready' || activeItem.commitStatus === 'committing' || activeItem.templateCommitStatus === 'committed'"
+              @change="onToggle(activeItem.id, 'template', $event)"
             />
-            入知识库
+            <span>
+              <strong>归档到模板库</strong>
+              <small>{{ activeItem.templateTargetLabel }} · {{ targetStatusText(activeItem.templateCommitStatus) }}</small>
+            </span>
           </label>
-          <label :class="{ muted: !item.databaseAction }" :title="item.databaseDisabledReason">
+          <input
+            class="office-docking-review__template-name"
+            type="text"
+            :value="activeItem.templateName"
+            :disabled="!activeItem.selectedTemplate || activeItem.commitStatus === 'committing' || activeItem.templateCommitStatus === 'committed'"
+            aria-label="建议模板名称"
+            @input="onTemplateNameInput(activeItem.id, $event)"
+          />
+          <label class="office-docking-review__target-card" :class="{ 'is-disabled': !activeItem.databaseAction }" :title="activeItem.databaseDisabledReason">
             <input
               type="checkbox"
-              :checked="item.selectedDatabase"
-              :disabled="!item.excelAnalysis || !item.databaseAction || item.status !== 'ready' || item.commitStatus === 'committing'"
-              @change="onToggle(item.id, 'database', $event)"
+              :checked="activeItem.selectedDatabase"
+              :disabled="!activeItem.excelAnalysis || !activeItem.databaseAction || activeItem.status !== 'ready' || activeItem.commitStatus === 'committing' || activeItem.databaseCommitStatus === 'committed'"
+              @change="onToggle(activeItem.id, 'database', $event)"
             />
-            入数据库{{ item.databaseTargetLabel ? `（${item.databaseTargetLabel}）` : '' }}
+            <span>
+              <strong>{{ activeItem.databaseAction ? `同步到 ${activeItem.databaseTargetLabel}` : '暂不写业务数据库' }}</strong>
+              <small>{{ activeItem.databaseAction ? targetStatusText(activeItem.databaseCommitStatus) : activeItem.databaseDisabledReason }}</small>
+            </span>
           </label>
         </div>
-        <p v-if="item.status === 'ready' && !item.databaseAction && item.databaseDisabledReason" class="office-docking-review__hint">
-          {{ item.databaseDisabledReason }}
-        </p>
       </article>
+    </div>
+
+    <div v-else class="office-docking-review__complete">
+      <i class="fa fa-check-circle-o" aria-hidden="true"></i>
+      <strong>这批文件已经逐个处理完成</strong>
+      <span>已处理 {{ completedCount }} 个，跳过 {{ skippedCount }} 个</span>
     </div>
 
     <footer class="office-docking-review__foot">
       <span class="office-docking-review__selection-hint">{{ selectionHint }}</span>
-      <button type="button" class="btn" @click="$emit('close')">取消</button>
-      <button type="button" class="btn btn-primary" :disabled="processing || !selectedReadyCount || committing" @click="$emit('confirm')">
+      <button v-if="activeItem" type="button" class="btn" :disabled="processing || committing" @click="$emit('skip')">
+        跳过这个文件
+      </button>
+      <button v-else type="button" class="btn" @click="$emit('close')">关闭</button>
+      <button v-if="activeItem" type="button" class="btn btn-primary" :disabled="!canConfirm" @click="$emit('confirm')">
         {{ confirmLabel }}
       </button>
     </footer>
@@ -102,53 +128,60 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: []
   confirm: []
-  toggleTarget: [id: string, target: 'knowledge' | 'database', enabled: boolean]
+  skip: []
+  toggleTarget: [id: string, target: 'template' | 'database', enabled: boolean]
+  updateTemplateName: [id: string, value: string]
 }>()
 
-const readyCount = computed(() => props.items.filter((item) => item.status === 'ready' && item.commitStatus !== 'committed').length)
-const committing = computed(() => props.items.some((item) => item.commitStatus === 'committing'))
-const selectedReadyItems = computed(() =>
-  props.items.filter(
-    (item) =>
-      item.status === 'ready' &&
-      item.commitStatus !== 'committed' &&
-      item.commitStatus !== 'committing' &&
-      (item.selectedKnowledge || item.selectedDatabase),
-  ),
-)
-const selectedReadyCount = computed(() => selectedReadyItems.value.length)
-
-const databaseTargets = computed(() => [
-  ...new Set(selectedReadyItems.value.filter((item) => item.selectedDatabase).map((item) => item.databaseTargetLabel || '业务数据库')),
-])
-const hasKnowledgeTarget = computed(() => selectedReadyItems.value.some((item) => item.selectedKnowledge))
+const activeItem = computed(() => props.items.find(
+  (item) => item.commitStatus !== 'committed' && item.commitStatus !== 'skipped',
+) || null)
+const activeIndex = computed(() => activeItem.value ? props.items.findIndex((item) => item.id === activeItem.value?.id) : -1)
+const completedCount = computed(() => props.items.filter((item) => item.commitStatus === 'committed').length)
+const skippedCount = computed(() => props.items.filter((item) => item.commitStatus === 'skipped').length)
+const committing = computed(() => activeItem.value?.commitStatus === 'committing')
+const hasSelectedTarget = computed(() => Boolean(activeItem.value?.selectedTemplate || activeItem.value?.selectedDatabase))
+const canConfirm = computed(() => Boolean(
+  activeItem.value &&
+  !props.processing &&
+  activeItem.value.status === 'ready' &&
+  !committing.value &&
+  hasSelectedTarget.value &&
+  (!activeItem.value.selectedTemplate || activeItem.value.templateName.trim()),
+))
 
 const selectionHint = computed(() => {
-  if (!selectedReadyCount.value) return '请选择至少一种处理方式'
-  const targets: string[] = []
-  if (hasKnowledgeTarget.value) targets.push('知识库')
-  targets.push(...databaseTargets.value)
-  const base = `将写入：${targets.join('、')}`
-  return databaseTargets.value.length ? base : `${base}；不会修改业务数据库`
+  const item = activeItem.value
+  if (!item) return '所有文件均已得到明确处理结果'
+  if (props.processing) return 'AI 阅读完成后会逐个询问，不会自动写入'
+  if (!hasSelectedTarget.value) return '请选择模板归档或数据库目标'
+  const targets = [item.selectedTemplate ? `模板库「${item.templateName || '未命名模板'}」` : '', item.selectedDatabase ? item.databaseTargetLabel : ''].filter(Boolean)
+  return `确认后仅处理当前文件：${targets.join('、')}`
 })
 
 const confirmLabel = computed(() => {
-  if (committing.value) return '正在提交...'
-  if (!selectedReadyCount.value) return '请选择处理方式'
-  if (hasKnowledgeTarget.value && !databaseTargets.value.length) return '确认加入知识库'
-  if (!hasKnowledgeTarget.value && databaseTargets.value.length === 1) {
-    return `确认写入${databaseTargets.value[0]}`
-  }
-  return '确认按所选方式写入'
+  const item = activeItem.value
+  if (committing.value) return '正在处理这个文件...'
+  if (!item || !hasSelectedTarget.value) return '请先选择处理方式'
+  if (item.selectedTemplate && !item.selectedDatabase) return '确认归档这个模板'
+  if (!item.selectedTemplate && item.selectedDatabase) return `确认写入${item.databaseTargetLabel}`
+  return '按 AI 建议处理这个文件'
 })
 
 function statusText(item: ChatOfficeDockingReviewItem): string {
-  if (item.commitStatus === 'committed') return '已提交'
-  if (item.commitStatus === 'failed') return '提交失败'
-  if (item.commitStatus === 'committing') return '提交中'
-  if (item.status === 'running') return '识别中'
-  if (item.status === 'error') return '识别失败'
-  return '待确认'
+  if (item.commitStatus === 'committed') return '已处理'
+  if (item.commitStatus === 'failed') return '处理失败，可重试'
+  if (item.commitStatus === 'committing') return '正在执行你的决定'
+  if (item.status === 'running') return 'AI 阅读中'
+  if (item.status === 'error') return 'AI 阅读失败'
+  return '等待你的决定'
+}
+
+function targetStatusText(status: ChatOfficeDockingReviewItem['commitStatus']): string {
+  if (status === 'committed') return '已完成'
+  if (status === 'failed') return '失败，可重试'
+  if (status === 'committing') return '执行中'
+  return '建议执行'
 }
 
 function samplePreview(item: ChatOfficeDockingReviewItem): string {
@@ -229,8 +262,12 @@ function hasDetailedPreview(item: ChatOfficeDockingReviewItem): boolean {
   return normalizedTextPreview(item).length > 220
 }
 
-function onToggle(id: string, target: 'knowledge' | 'database', event: Event) {
+function onToggle(id: string, target: 'template' | 'database', event: Event) {
   emit('toggleTarget', id, target, (event.target as HTMLInputElement).checked)
+}
+
+function onTemplateNameInput(id: string, event: Event) {
+  emit('updateTemplateName', id, (event.target as HTMLInputElement).value)
 }
 </script>
 
@@ -269,6 +306,18 @@ function onToggle(id: string, target: 'knowledge' | 'database', event: Event) {
   font-size: var(--app-font-size-caption, 12px);
 }
 
+.office-docking-review__head strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--app-text, #172033);
+}
+
+.office-docking-review__head strong i,
+.office-docking-review__advice-title i {
+  color: var(--app-interactive, #175cd3);
+}
+
 .office-docking-review__shipment-notes {
   margin: 0;
   padding-left: 1.1rem;
@@ -297,7 +346,7 @@ function onToggle(id: string, target: 'knowledge' | 'database', event: Event) {
 .office-docking-review__list {
   display: grid;
   gap: 8px;
-  max-height: 260px;
+  max-height: min(60vh, 620px);
   overflow: auto;
 }
 
@@ -311,6 +360,31 @@ function onToggle(id: string, target: 'knowledge' | 'database', event: Event) {
 
 .office-docking-review__item--error {
   border-color: #f5b5b5;
+}
+
+.office-docking-review__progress {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.office-docking-review__progress span {
+  border: 1px solid var(--app-border-color, #d7dde8);
+  border-radius: 999px;
+  padding: 3px 8px;
+  color: var(--app-text-muted, #667085);
+  font-size: 11px;
+}
+
+.office-docking-review__progress .is-complete {
+  border-color: rgba(23, 92, 211, 0.22);
+  background: rgba(23, 92, 211, 0.08);
+  color: var(--app-interactive, #175cd3);
+}
+
+.office-docking-review__progress .is-current {
+  border-color: rgba(23, 92, 211, 0.38);
+  color: var(--app-interactive, #175cd3);
 }
 
 .office-docking-review__status {
@@ -368,6 +442,89 @@ function onToggle(id: string, target: 'knowledge' | 'database', event: Event) {
   color: var(--app-interactive, #175cd3);
   cursor: pointer;
   font-size: 12px;
+}
+
+.office-docking-review__advice {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(23, 92, 211, 0.2);
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(23, 92, 211, 0.055), rgba(255, 255, 255, 0.72));
+}
+
+.office-docking-review__advice-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+}
+
+.office-docking-review__target-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--app-border-color, #d7dde8);
+  border-radius: 7px;
+  background: var(--app-surface, #fff);
+}
+
+.office-docking-review__target-card > span {
+  display: grid;
+  gap: 2px;
+}
+
+.office-docking-review__target-card strong {
+  color: var(--app-text, #111827);
+  font-size: 12px;
+}
+
+.office-docking-review__target-card small {
+  color: var(--app-text-muted, #667085);
+  font-size: 11px;
+}
+
+.office-docking-review__target-card.is-disabled {
+  opacity: 0.64;
+}
+
+.office-docking-review__template-name {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--app-border-color, #d7dde8);
+  border-radius: 7px;
+  padding: 8px 10px;
+  background: var(--app-surface, #fff);
+  color: var(--app-text, #111827);
+  font: inherit;
+  font-size: 12px;
+}
+
+.office-docking-review__template-name:focus {
+  outline: 2px solid rgba(23, 92, 211, 0.16);
+  border-color: var(--app-interactive, #175cd3);
+}
+
+.office-docking-review__complete {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  padding: 20px;
+  border: 1px dashed rgba(23, 92, 211, 0.28);
+  border-radius: 8px;
+  color: var(--app-text-muted, #667085);
+  font-size: 12px;
+}
+
+.office-docking-review__complete i {
+  color: var(--app-interactive, #175cd3);
+  font-size: 24px;
+}
+
+.office-docking-review__complete strong {
+  color: var(--app-text, #111827);
+  font-size: 13px;
 }
 
 .office-docking-review__selection-hint {

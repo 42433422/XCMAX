@@ -25,14 +25,29 @@ from app.schemas.etl_schema import (
 )
 
 
+_TRUE_ENV_VALUES = {"1", "true", "yes", "on"}
+
+
+def _env_enabled(name: str) -> bool:
+    return str(os.environ.get(name) or "").strip().lower() in _TRUE_ENV_VALUES
+
+
+def _is_generic_platform_host() -> bool:
+    """开发/通用宿主承载企业业务壳，但不伪装成正式 enterprise SKU。"""
+    return (
+        str(os.environ.get("XCAGI_PRODUCT_SKU") or "").strip().lower() == "generic"
+        and _env_enabled("XCAGI_GENERIC_EDITION")
+        and _env_enabled("XCAGI_PLATFORM_SHELL")
+    )
+
+
 def _feature_gate() -> None:
-    flag = str(os.environ.get("FHD_ETL_CENTER_ENABLED") or "").strip().lower()
-    if flag not in {"1", "true", "yes", "on"}:
+    if not _env_enabled("FHD_ETL_CENTER_ENABLED"):
         raise HTTPException(
             status_code=403,
             detail={"code": "ETL_CENTER_DISABLED", "message": "数据对接中心尚未启用"},
         )
-    if resolve_product_sku() != "enterprise":
+    if resolve_product_sku() != "enterprise" and not _is_generic_platform_host():
         raise HTTPException(
             status_code=403,
             detail={

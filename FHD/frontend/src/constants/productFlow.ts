@@ -42,25 +42,25 @@ export interface ProductFlowStepMeta {
   subtitle: string
 }
 
-/** 宿主入门步骤轨：1 认识 → 2 行业 → 3 准备菜单（随后进入对话） */
+/** 数字公司创建步骤轨：1 公司 → 2 行业 → 3 AI 配置（随后进入工作空间） */
 export const PRODUCT_FLOW_STEPS: ProductFlowStepMeta[] = [
   {
     id: 'welcome',
     index: 1,
-    title: '认识XC',
-    subtitle: '专属于您的数字公司 · 先装 Mod，AI 员工按需再来',
+    title: '公司',
+    subtitle: '告诉 XC 您的公司名称',
   },
   {
     id: 'industry',
     index: 2,
-    title: '行业定型',
-    subtitle: '先定行业方向；日常默认只有智能对话与智能生态',
+    title: '行业',
+    subtitle: '选择最接近的行业方向，也可以自由搜索',
   },
   {
     id: 'host-pack',
     index: 3,
-    title: '准备菜单',
-    subtitle: '一键装齐本行业侧栏菜单，即可进入对话',
+    title: 'AI 配置',
+    subtitle: '由 XC 生成专属能力方案',
   },
   {
     id: 'done',

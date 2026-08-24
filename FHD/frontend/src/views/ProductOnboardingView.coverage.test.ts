@@ -32,6 +32,7 @@ const mockContainer = vi.hoisted(() => ({
   readBuildEdition: vi.fn(),
   isEnterpriseEdition: vi.fn(),
   patchWorkspacePrefs: vi.fn(),
+  queueWorkspacePrefsSync: vi.fn(),
   // productFlow 工具
   setRuntimeOnboardingOpenIndustryIds: vi.fn(),
   readProductFlowCompleted: vi.fn(),
@@ -100,6 +101,7 @@ vi.mock('@/utils/hostPackOnboardingGate', () => ({
 
 vi.mock('@/utils/workspacePrefsApi', () => ({
   patchWorkspacePrefs: mockContainer.patchWorkspacePrefs,
+  queueWorkspacePrefsSync: mockContainer.queueWorkspacePrefsSync,
 }))
 
 vi.mock('@/constants/productFlow', async () => {
@@ -338,12 +340,14 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
 
   // ===== 1. 基础渲染 - welcome 步骤 =====
 
-  it('welcome 步骤渲染主标题与下一步按钮', async () => {
+  it('welcome 步骤渲染公司名称输入与 AI 主按钮', async () => {
     const { wrapper } = await mountComponent()
     expect(wrapper.find('.welcome-hero').exists()).toBe(true)
-    expect(wrapper.find('h1').text()).toBe('认识 XC')
+    expect(wrapper.find('h1').text()).toBe('您的公司叫什么？')
+    expect(wrapper.find('.company-name-input').exists()).toBe(true)
     const nextBtn = wrapper.find('.actions .btn.primary')
-    expect(nextBtn.text()).toContain('下一步：行业定型')
+    expect(nextBtn.text()).toContain('让 XC 认识我的公司')
+    expect(nextBtn.attributes('disabled')).toBeDefined()
   })
 
   it('welcome 步骤渲染欢迎 logo 图片', async () => {
@@ -356,6 +360,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
   it('点击 welcome 下一步按钮跳转到 industry 步骤', async () => {
     const { wrapper, router } = await mountComponent()
     const replaceSpy = vi.spyOn(router, 'replace')
+    await wrapper.find('.company-name-input').setValue('修茈科技')
     const nextBtn = wrapper.find('.actions .btn.primary')
     await nextBtn.trigger('click')
     await flushPromises()
@@ -369,10 +374,10 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
   it('industry 步骤渲染行业 chip 列表（默认 preset 模式）', async () => {
     const { wrapper } = await mountComponent({ route: { step: 'industry' } })
     await flushPromises()
-    expect(wrapper.find('h1').text()).toBe('先定行业')
-    // 默认开放行业为 涂料 与 考勤
+    expect(wrapper.find('h1').text()).toContain('属于什么行业')
+    // AI 入门允许探索全部内置方向
     const chips = wrapper.findAll('.industry-pick--open .industry-chip')
-    expect(chips.length).toBeGreaterThan(0)
+    expect(chips.length).toBeGreaterThan(5)
   })
 
   it('industry 步骤：catalog 提供 open_packages 时使用 catalog 数据', async () => {
@@ -395,15 +400,12 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     })
     await flushPromises()
     const chips = wrapper.findAll('.industry-pick--open .industry-chip')
-    expect(chips.length).toBe(1)
-    expect(chips[0].text()).toContain('涂料包')
-    // 预览区也渲染
-    const previewChips = wrapper.findAll('.industry-pick--preview .industry-chip--locked')
-    expect(previewChips.length).toBe(1)
-    expect(previewChips[0].text()).toContain('餐饮包')
+    expect(chips.length).toBeGreaterThan(5)
+    expect(chips.find((chip) => chip.text().includes('涂料包'))).toBeTruthy()
+    expect(chips.find((chip) => chip.text().includes('餐饮包'))).toBeTruthy()
   })
 
-  it('industry 步骤：openIndustryLeadNames 多个时显示"N 套行业方向"', async () => {
+  it('industry 步骤：账号开放方向显示专属方案', async () => {
     const catalog = {
       open_packages: [
         { industry_id: '涂料', name: '涂料', scenario: '', product_name: '' },
@@ -416,11 +418,12 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
       catalog,
     })
     await flushPromises()
-    const lead = wrapper.find('.lead')
-    expect(lead.text()).toContain('2 套行业方向')
+    const chips = wrapper.findAll('.industry-chip')
+    expect(chips.find((chip) => chip.text().includes('涂料'))?.text()).toContain('专属方案')
+    expect(chips.find((chip) => chip.text().includes('考勤'))?.text()).toContain('专属方案')
   })
 
-  it('industry 步骤：openIndustryLeadNames 单个时显示"行业方向"', async () => {
+  it('industry 步骤：非账号开放方向仍可用通用能力', async () => {
     const catalog = {
       open_packages: [{ industry_id: '涂料', name: '涂料', scenario: '', product_name: '' }],
       open_industry_ids: ['涂料'],
@@ -430,20 +433,24 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
       catalog,
     })
     await flushPromises()
-    const lead = wrapper.find('.lead')
-    expect(lead.text()).toContain('行业方向')
-    expect(lead.text()).not.toContain('套行业方向')
+    const chips = wrapper.findAll('.industry-chip')
+    const wholesaleChip = chips.find((chip) => chip.find('.industry-chip-name').text().includes('批发'))
+    expect(wholesaleChip?.text()).toContain('通用能力可用')
   })
 
-  it('industry 步骤：openIndustryOptions 为空时显示加载提示', async () => {
+  it('industry 步骤：搜索无结果时显示自由选择提示', async () => {
     const { wrapper } = await mountComponent({
       route: { step: 'industry' },
       isEnterprise: true,
       catalog: { open_packages: [], open_industry_ids: [] },
     })
     await flushPromises()
+    await wrapper.find('.industry-search input').setValue('不存在的行业方向')
     expect(wrapper.find('.industry-loading-hint').exists()).toBe(true)
-    expect(wrapper.find('.industry-loading-hint').text()).toContain('正在加载行业权限')
+    expect(wrapper.find('.industry-loading-hint').text()).toContain('没有完全匹配')
+    expect(wrapper.find('.custom-industry-option').text()).toContain('不存在的行业方向')
+    await wrapper.find('.custom-industry-option').trigger('click')
+    expect(wrapper.find('.industry-chip.active').text()).toContain('不存在的行业方向')
   })
 
   it('industry 步骤：点击行业 chip 选中', async () => {
@@ -455,7 +462,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     expect(chip.classes()).toContain('active')
   })
 
-  it('industry 步骤：未选行业时下一步按钮 disabled', async () => {
+  it('industry 步骤：始终提供通用行业兜底', async () => {
     const { wrapper } = await mountComponent({
       route: { step: 'industry' },
       isEnterprise: true,
@@ -463,32 +470,29 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     })
     await flushPromises()
     const nextBtn = wrapper.find('.actions .btn.primary')
-    expect(nextBtn.attributes('disabled')).toBeDefined()
+    expect(nextBtn.attributes('disabled')).toBeUndefined()
+    expect(wrapper.text()).toContain('通用')
   })
 
-  it('industry 步骤：点击"打开扩展市场"按钮跳转 mod-store', async () => {
-    const { wrapper, router } = await mountComponent({ route: { step: 'industry' } })
-    await flushPromises()
-    const pushSpy = vi.spyOn(router, 'push')
-    const modStoreBtn = wrapper.find('.btn.ghost')
-    expect(modStoreBtn.text()).toContain('打开扩展市场')
-    await modStoreBtn.trigger('click')
-    await flushPromises()
-    expect(pushSpy).toHaveBeenCalled()
-    const callArg = pushSpy.mock.calls[0][0]
-    expect(callArg.name).toBe('mod-store')
-    expect(callArg.query.onboarding).toBe('1')
-  })
-
-  it('industry 步骤：点击"先跳过，直接用对话"按钮', async () => {
+  it('industry 步骤：搜索会过滤行业方向', async () => {
     const { wrapper } = await mountComponent({ route: { step: 'industry' } })
     await flushPromises()
-    const skipBtn = wrapper.find('.btn.link')
-    expect(skipBtn.text()).toContain('先跳过')
-    await skipBtn.trigger('click')
+    await wrapper.find('.industry-search input').setValue('物流')
     await flushPromises()
-    // finishToChat -> finishHostPackFlow -> markHostPackSkippedThisSession
-    expect(mockContainer.markHostPackSkippedThisSession).toHaveBeenCalled()
+    const chips = wrapper.findAll('.industry-pick--open .industry-chip')
+    expect(chips).toHaveLength(1)
+    expect(chips[0].text()).toContain('物流')
+  })
+
+  it('industry 步骤：可返回修改公司名称', async () => {
+    const { wrapper, router } = await mountComponent({ route: { step: 'industry' } })
+    await flushPromises()
+    const replaceSpy = vi.spyOn(router, 'replace')
+    const backBtn = wrapper.find('.btn.link')
+    expect(backBtn.text()).toContain('返回修改公司名称')
+    await backBtn.trigger('click')
+    await flushPromises()
+    expect(replaceSpy).toHaveBeenCalledWith(expect.objectContaining({ query: expect.objectContaining({ step: 'welcome' }) }))
   })
 
   it('industry 步骤：点击"下一步"调用 confirmIndustryAndNext', async () => {
@@ -496,7 +500,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     await flushPromises()
     const replaceSpy = vi.spyOn(router, 'replace')
     // 先选中一个行业
-    const chip = wrapper.findAll('.industry-pick--open .industry-chip')[0]
+    const chip = wrapper.findAll('.industry-pick--open .industry-chip').find((item) => item.text().includes('涂料'))!
     await chip.trigger('click')
     await flushPromises()
     const nextBtn = wrapper.find('.actions .btn.primary')
@@ -593,10 +597,10 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     expect(statusCard.exists()).toBe(true)
     expect(statusCard.classes()).not.toContain('warn')
     // loading 状态下显示 spinner
-    expect(wrapper.find('.fa-spinner').exists()).toBe(true)
+    expect(wrapper.find('.fa-circle-o-notch').exists()).toBe(true)
   })
 
-  it('host-pack 步骤：baselineOk 时显示已齐状态', async () => {
+  it('host-pack 步骤：baselineOk 时显示基础能力已就绪', async () => {
     const { wrapper } = await mountComponent({
       route: { step: 'host-pack' },
       baseline: createBaselinePlan({ baseline_ready: true }),
@@ -605,10 +609,10 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     await flushPromises()
     const statusCard = wrapper.find('.status-card')
     expect(statusCard.classes()).toContain('ok')
-    expect(statusCard.text()).toContain('已齐')
+    expect(statusCard.text()).toContain('基础能力已就绪')
   })
 
-  it('host-pack 步骤：!baselineOk 时显示缺项', async () => {
+  it('host-pack 步骤：!baselineOk 时说明创建时自动准备能力', async () => {
     const { wrapper } = await mountComponent({
       route: { step: 'host-pack' },
       baseline: createBaselinePlan({
@@ -621,7 +625,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     await flushPromises()
     const statusCard = wrapper.find('.status-card')
     expect(statusCard.classes()).toContain('warn')
-    expect(statusCard.text()).toContain('还差')
+    expect(statusCard.text()).toContain('创建时会自动准备')
   })
 
   it('host-pack 步骤：!baselineOk 且 missingIndustryPackageCount>0 时明细里提示行业包', async () => {
@@ -645,7 +649,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     })
     await flushPromises()
     await flushPromises()
-    expect(wrapper.find('.status-card').text()).toContain('还差')
+    expect(wrapper.find('.status-card').text()).toContain('方案已生成')
     const details = wrapper.find('.host-pack-details')
     expect(details.exists()).toBe(true)
     // 展开明细后才看到行业包提示
@@ -733,8 +737,8 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     })
     await flushPromises()
     await flushPromises()
-    expect(wrapper.text()).toContain('一键装齐')
-    expect(wrapper.text()).toContain('查看明细')
+    expect(wrapper.text()).toContain('创建您的公司工作空间')
+    expect(wrapper.text()).toContain('查看配置详情')
     expect(wrapper.find('.baseline-list .mono').exists()).toBe(false)
     const details = wrapper.find('.host-pack-details')
     details.element.setAttribute('open', '')
@@ -779,7 +783,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     expect(wrapper.text()).toContain('行业模块')
   })
 
-  it('host-pack 步骤：industrySidebarPreviewLabels 渲染（考勤特殊）', async () => {
+  it('host-pack 步骤：industrySidebarPreviewLabels 渲染真实考勤骨架', async () => {
     const { wrapper } = await mountComponent({
       route: { step: 'host-pack' },
       baseline: createBaselinePlan({ baseline_ready: true }),
@@ -791,11 +795,8 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     })
     await flushPromises()
     await flushPromises()
-    // 考勤行业会 unshift '考勤表转换'
-    const preview = wrapper.find('.sidebar-preview')
-    if (preview.exists()) {
-      expect(preview.text()).toContain('考勤')
-    }
+    expect(wrapper.find('.sidebar-preview-list').text()).toContain('考勤单管理')
+    expect(wrapper.find('.capability-integrity-note').text()).toContain('以上入口均有可用页面')
   })
 
   it('host-pack 步骤：showNoAccountCustomHint 企业版无账号定制时显示', async () => {
@@ -825,7 +826,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     expect(wrapper.find('.account-custom-empty-hint').exists()).toBe(true)
   })
 
-  it('host-pack 步骤：baselineOk 时显示「完成并进入对话」按钮', async () => {
+  it('host-pack 步骤：baselineOk 时显示进入公司按钮', async () => {
     const { wrapper } = await mountComponent({
       route: { step: 'host-pack' },
       baseline: createBaselinePlan({ baseline_ready: true }),
@@ -833,11 +834,11 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     await flushPromises()
     await flushPromises()
     const buttons = wrapper.findAll('.actions .btn.primary')
-    const nextBtn = buttons.find((b) => b.text().trim() === '完成并进入对话')
+    const nextBtn = buttons.find((b) => b.text().trim() === '进入您的公司')
     expect(nextBtn).toBeTruthy()
   })
 
-  it('host-pack 步骤：点击"重新检测"按钮触发 refreshStatus', async () => {
+  it('host-pack 步骤：点击"重新核对"按钮触发 refreshStatus', async () => {
     const { wrapper } = await mountComponent({
       route: { step: 'host-pack' },
       baseline: createBaselinePlan({
@@ -859,7 +860,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     details.element.setAttribute('open', '')
     await flushPromises()
     const refreshBtn = wrapper.find('.host-pack-details .btn.ghost')
-    expect(refreshBtn.text()).toContain('重新检测')
+    expect(refreshBtn.text()).toContain('重新核对')
     await refreshBtn.trigger('click')
     await flushPromises()
     expect(mockContainer.fetchIndustryBaseline).toHaveBeenCalled()
@@ -867,7 +868,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
 
   // ===== 4. runBootstrap 测试 =====
 
-  it('runBootstrap：成功装齐后调用 promptAdvancedTutorialAfterInstall', async () => {
+  it('runBootstrap：成功创建后完成流程并进入工作空间', async () => {
     const { wrapper } = await mountComponent({
       route: { step: 'host-pack' },
       baseline: createBaselinePlan({ baseline_ready: false }),
@@ -878,18 +879,23 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     mockContainer.fetchIndustryBaseline
       .mockResolvedValueOnce(createBaselinePlan({ baseline_ready: false }))
       .mockResolvedValueOnce(createBaselinePlan({ baseline_ready: true }))
-    mockContainer.promptAdvancedTutorialAfterInstall.mockClear()
+    mockContainer.queueWorkspacePrefsSync.mockClear()
+    mockContainer.flowState.completeFlowAndGoChat.mockClear()
     const bootstrapBtn = wrapper.find('.btn.primary')
-    expect(bootstrapBtn.text()).toContain('一键装齐')
+    expect(bootstrapBtn.text()).toContain('创建您的公司工作空间')
     await bootstrapBtn.trigger('click')
     await flushPromises()
     await flushPromises()
     await flushPromises()
     expect(mockContainer.installHostFoundation).toHaveBeenCalled()
-    expect(mockContainer.promptAdvancedTutorialAfterInstall).toHaveBeenCalled()
+    expect(mockContainer.queueWorkspacePrefsSync).toHaveBeenCalledWith(
+      expect.objectContaining({ product_flow_completed: true }),
+    )
+    expect(mockContainer.flowState.completeFlowAndGoChat).toHaveBeenCalled()
+    expect(mockContainer.promptAdvancedTutorialAfterInstall).not.toHaveBeenCalled()
   })
 
-  it('runBootstrap：promptAdvancedTutorialAfterInstall 返回 already_completed 时调用 appAlert', async () => {
+  it('runBootstrap：成功创建后不再弹出进阶教程', async () => {
     const { wrapper } = await mountComponent({
       route: { step: 'host-pack' },
       baseline: createBaselinePlan({ baseline_ready: false }),
@@ -899,14 +905,14 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     mockContainer.fetchIndustryBaseline
       .mockResolvedValueOnce(createBaselinePlan({ baseline_ready: false }))
       .mockResolvedValueOnce(createBaselinePlan({ baseline_ready: true }))
-    mockContainer.promptAdvancedTutorialAfterInstall.mockResolvedValue('already_completed')
-    mockContainer.appAlert.mockClear()
+    mockContainer.promptAdvancedTutorialAfterInstall.mockClear()
     const bootstrapBtn = wrapper.find('.btn.primary')
     await bootstrapBtn.trigger('click')
     await flushPromises()
     await flushPromises()
     await flushPromises()
-    expect(mockContainer.appAlert).toHaveBeenCalled()
+    expect(mockContainer.promptAdvancedTutorialAfterInstall).not.toHaveBeenCalled()
+    expect(mockContainer.appAlert).not.toHaveBeenCalled()
   })
 
   it('runBootstrap：装齐失败时调用 appAlert 显示错误', async () => {
@@ -1265,12 +1271,12 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
 
   // ===== 6. fromTutorial 模式 =====
 
-  it('fromTutorial 模式：header 显示"新手教程 · 宿主入门"', async () => {
+  it('fromTutorial 模式：header 显示重新认识数字公司', async () => {
     const { wrapper } = await mountComponent({
       route: { from: 'tutorial', redirect: '/chat' },
     })
     await flushPromises()
-    expect(wrapper.find('.brand').text()).toContain('新手教程 · 宿主入门')
+    expect(wrapper.find('.brand').text()).toContain('重新认识您的数字公司')
   })
 
   it('fromTutorial 模式：footer 显示"返回上一页"按钮', async () => {
@@ -1294,11 +1300,11 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     expect(replaceSpy).toHaveBeenCalledWith('/chat')
   })
 
-  it('非 fromTutorial 模式：footer 显示"跳过引导"按钮', async () => {
+  it('非 fromTutorial 模式：footer 显示"稍后设置"按钮', async () => {
     const { wrapper } = await mountComponent()
     await flushPromises()
     const footerBtn = wrapper.find('.product-flow-footer .btn.text')
-    expect(footerBtn.text()).toContain('跳过引导')
+    expect(footerBtn.text()).toContain('稍后设置')
   })
 
   it('非 fromTutorial 模式：点击"跳过引导"调用 skipEntireFlow', async () => {
@@ -1323,19 +1329,17 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     expect(replaceSpy).toHaveBeenCalledWith('/chat')
   })
 
-  it('fromTutorial 模式：openModStore 跳转不带 onboarding 参数', async () => {
+  it('fromTutorial 模式：返回修改公司名称时保留教程参数', async () => {
     const { wrapper, router } = await mountComponent({
       route: { step: 'industry', from: 'tutorial', redirect: '/chat' },
     })
     await flushPromises()
-    const pushSpy = vi.spyOn(router, 'push')
-    const modStoreBtn = wrapper.find('.btn.ghost')
-    await modStoreBtn.trigger('click')
+    const replaceSpy = vi.spyOn(router, 'replace')
+    const backBtn = wrapper.find('.actions .btn.link')
+    await backBtn.trigger('click')
     await flushPromises()
-    expect(pushSpy).toHaveBeenCalled()
-    const callArg = pushSpy.mock.calls[0][0]
-    expect(callArg.name).toBe('mod-store')
-    expect(callArg.query).toEqual({})
+    const callArg = replaceSpy.mock.calls[0][0]
+    expect(callArg.query).toEqual({ step: 'welcome', from: 'tutorial', redirect: '/chat' })
   })
 
   // ===== 7. editionLabel 测试 =====
@@ -1343,31 +1347,31 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
   it('editionLabel：enterprise SKU 显示"企业版"', async () => {
     const { wrapper } = await mountComponent({ productSku: 'enterprise' })
     await flushPromises()
-    expect(wrapper.find('.edition-tag').text()).toContain('企业版 enterprise')
+    expect(wrapper.find('.edition-tag').text()).toContain('企业版 · AI 引导')
   })
 
   it('editionLabel：personal SKU 显示"个人版"', async () => {
     const { wrapper } = await mountComponent({ productSku: 'personal' })
     await flushPromises()
-    expect(wrapper.find('.edition-tag').text()).toContain('个人版 personal')
+    expect(wrapper.find('.edition-tag').text()).toContain('个人版 · AI 引导')
   })
 
-  it('editionLabel：minimal edition 显示"空壳"', async () => {
+  it('editionLabel：minimal edition 显示"轻量版"', async () => {
     const { wrapper } = await mountComponent({ buildEdition: 'minimal' })
     await flushPromises()
-    expect(wrapper.find('.edition-tag').text()).toContain('空壳 minimal')
+    expect(wrapper.find('.edition-tag').text()).toContain('轻量版 · AI 引导')
   })
 
   it('editionLabel：generic edition 显示"通用"', async () => {
     const { wrapper } = await mountComponent({ buildEdition: 'generic' })
     await flushPromises()
-    expect(wrapper.find('.edition-tag').text()).toContain('通用 generic')
+    expect(wrapper.find('.edition-tag').text()).toContain('通用版 · AI 引导')
   })
 
   it('editionLabel：full edition 显示"完整"', async () => {
     const { wrapper } = await mountComponent({ buildEdition: 'full' })
     await flushPromises()
-    expect(wrapper.find('.edition-tag').text()).toContain('完整 full')
+    expect(wrapper.find('.edition-tag').text()).toContain('完整体验 · AI 引导')
   })
 
   // ===== 8. onWelcomeLogoError 测试 =====
@@ -1471,7 +1475,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     await router.push({ name: 'product-onboarding', query: { step: 'industry' } })
     await flushPromises()
     await flushPromises()
-    expect(wrapper.find('h1').text()).toBe('先定行业')
+    expect(wrapper.find('h1').text()).toContain('属于什么行业')
   })
 
   it('watcher：currentStep 变为 host-pack 时触发 refreshStatus', async () => {
@@ -1510,18 +1514,18 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
 
   // ===== 11. footerHint 测试 =====
 
-  it('footerHint：fromTutorial 模式显示教程提示', async () => {
+  it('footerHint：fromTutorial 模式说明不影响已有数据', async () => {
     const { wrapper } = await mountComponent({
       route: { from: 'tutorial', redirect: '/chat' },
     })
     await flushPromises()
-    expect(wrapper.find('.doc-hint').text()).toContain('新手教程')
+    expect(wrapper.find('.doc-hint').text()).toContain('不会影响已有业务数据')
   })
 
-  it('footerHint：非 fromTutorial 模式显示文档提示', async () => {
+  it('footerHint：非 fromTutorial 模式说明信息用途', async () => {
     const { wrapper } = await mountComponent()
     await flushPromises()
-    expect(wrapper.find('.doc-hint').text()).toContain('PRODUCT_USER_FLOW.md')
+    expect(wrapper.find('.doc-hint').text()).toContain('信息仅用于生成工作空间')
   })
 
   // ===== 12. currentStepMeta subtitle 测试 =====
@@ -1534,11 +1538,11 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     expect(brandLead.text()).toContain('行业')
   })
 
-  it('currentStepMeta：welcome 步骤不显示 subtitle', async () => {
+  it('currentStepMeta：welcome 步骤显示公司名称提示', async () => {
     const { wrapper } = await mountComponent()
     await flushPromises()
-    // welcome 步骤 currentStepMeta.subtitle 存在但 currentStep === 'welcome'，所以 v-if 不渲染
-    expect(wrapper.find('.brand-lead').exists()).toBe(false)
+    expect(wrapper.find('.brand-lead').exists()).toBe(true)
+    expect(wrapper.find('.brand-lead').text()).toContain('公司名称')
   })
 
   // ===== 13. step-rail 渲染 =====
@@ -1564,9 +1568,9 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     expect(doneItems.length).toBe(2)
   })
 
-  // ===== 14. industryPackageLabel 测试 =====
+  // ===== 14. industryAvailabilityLabel 测试 =====
 
-  it('industryPackageLabel：catalog 有 product_name 时返回 product_name', async () => {
+  it('industryAvailabilityLabel：catalog 开放方向显示专属方案', async () => {
     const { wrapper } = await mountComponent({
       route: { step: 'industry' },
       catalog: {
@@ -1575,16 +1579,22 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
       },
     })
     await flushPromises()
-    const chip = wrapper.find('.industry-pick--open .industry-chip')
-    expect(chip.text()).toContain('涂料专业版')
+    const chip = wrapper
+      .findAll('.industry-pick--open .industry-chip')
+      .find((item) => item.find('.industry-chip-name').text().includes('涂料'))
+    expect(chip?.text()).toContain('专属方案')
   })
 
-  it('industryPackageLabel：preset 有 name 时返回"X行业包"', async () => {
-    const { wrapper } = await mountComponent({ route: { step: 'industry' } })
+  it('industryAvailabilityLabel：未开放方向显示通用能力可用', async () => {
+    const { wrapper } = await mountComponent({
+      route: { step: 'industry' },
+      catalog: { open_packages: [], open_industry_ids: ['涂料'] },
+    })
     await flushPromises()
-    // 默认 preset 模式，无 catalog，无 productName
-    const chip = wrapper.find('.industry-pick--open .industry-chip')
-    expect(chip.text()).toContain('行业包')
+    const chip = wrapper
+      .findAll('.industry-pick--open .industry-chip')
+      .find((item) => item.find('.industry-chip-name').text().includes('考勤'))
+    expect(chip?.text()).toContain('通用能力可用')
   })
 
   // ===== 15. chipScenarioText 测试 =====
@@ -1616,7 +1626,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     expect(wrapper.find('.industry-pick--preview').exists()).toBe(false)
   })
 
-  it('previewIndustryOptions：catalog 有 preview_packages 时使用 catalog', async () => {
+  it('previewIndustryOptions：catalog 预览方向合并到自由选择列表', async () => {
     const { wrapper } = await mountComponent({
       route: { step: 'industry' },
       catalog: {
@@ -1626,10 +1636,11 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
       },
     })
     await flushPromises()
-    const previewHint = wrapper.find('.industry-preview-hint')
-    expect(previewHint.exists()).toBe(true)
-    const previewChips = wrapper.findAll('.industry-pick--preview .industry-chip--locked')
-    expect(previewChips.length).toBe(1)
+    const restaurantChip = wrapper
+      .findAll('.industry-pick--open .industry-chip')
+      .find((item) => item.find('.industry-chip-name').text().includes('餐饮'))
+    expect(restaurantChip).toBeTruthy()
+    expect(restaurantChip?.text()).toContain('通用能力可用')
   })
 
   // ===== 17. finishHostPackFlow 测试 =====
@@ -1673,7 +1684,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     mockContainer.flowState.completeFlowAndGoChat.mockClear()
 
     const skipChatBtn = wrapper.find('.actions .btn.link')
-    expect(skipChatBtn.text()).toContain('先进入对话')
+    expect(skipChatBtn.text()).toContain('先进入，以后再完善')
     await skipChatBtn.trigger('click')
     await flushPromises()
 
@@ -1755,45 +1766,33 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     expect(mockContainer.flowState.markHostPackAcknowledged).toHaveBeenCalled()
   })
 
-  // ===== 19. openModStore 测试 =====
+  // ===== 19. 公司名称自由输入测试 =====
 
-  it('openModStore：非 fromTutorial 且未 completed 时调用 markProductFlowCompleted', async () => {
-    mockContainer.readProductFlowCompleted.mockReturnValue(false)
-    const { wrapper } = await mountComponent({ route: { step: 'industry' } })
-    await flushPromises()
-    mockContainer.flowState.markProductFlowCompleted.mockClear()
-    const modStoreBtn = wrapper.find('.btn.ghost')
-    await modStoreBtn.trigger('click')
-    await flushPromises()
-    expect(mockContainer.flowState.markProductFlowCompleted).toHaveBeenCalled()
+  it('公司名称：空白时不允许继续，单字符名称也可使用', async () => {
+    const { wrapper } = await mountComponent()
+    await wrapper.find('.company-name-input').setValue(' ')
+    expect(wrapper.find('.actions .btn.primary').attributes('disabled')).toBeDefined()
+    await wrapper.find('.company-name-input').setValue('X')
+    expect(wrapper.find('.actions .btn.primary').attributes('disabled')).toBeUndefined()
   })
 
-  it('openModStore：非 fromTutorial 时总是调用 markProductFlowCompleted', async () => {
-    // 逻辑：if (!fromTutorial.value || !readProductFlowCompleted()) markProductFlowCompleted()
-    // 非 fromTutorial 时，无论是否 completed 都会调用
-    mockContainer.readProductFlowCompleted.mockReturnValue(true)
-    const { wrapper } = await mountComponent({ route: { step: 'industry' } })
-    await flushPromises()
-    mockContainer.flowState.markProductFlowCompleted.mockClear()
-    const modStoreBtn = wrapper.find('.btn.ghost')
-    await modStoreBtn.trigger('click')
-    await flushPromises()
-    expect(mockContainer.flowState.markProductFlowCompleted).toHaveBeenCalled()
+  it('公司名称：输入后身份种子同步显示公司名称', async () => {
+    const { wrapper } = await mountComponent()
+    await wrapper.find('.company-name-input').setValue('自然智能实验室')
+    expect(wrapper.find('.company-seed').text()).toContain('自然智能实验室')
+    expect(wrapper.find('.company-seed').classes()).toContain('awake')
   })
 
-  it('openModStore：fromTutorial 且已 completed 时不调用 markProductFlowCompleted', async () => {
-    // 逻辑：fromTutorial && readProductFlowCompleted() 时不调用
-    const { wrapper } = await mountComponent({
-      route: { step: 'industry', from: 'tutorial', redirect: '/chat' },
-    })
+  it('公司名称：输入后可进入行业选择', async () => {
+    const { wrapper, router } = await mountComponent()
     await flushPromises()
-    // 在 mountComponent 之后设置 mock，避免被默认 mock 覆盖
-    mockContainer.readProductFlowCompleted.mockReturnValue(true)
-    mockContainer.flowState.markProductFlowCompleted.mockClear()
-    const modStoreBtn = wrapper.find('.btn.ghost')
-    await modStoreBtn.trigger('click')
+    const replaceSpy = vi.spyOn(router, 'replace')
+    await wrapper.find('.company-name-input').setValue('修茈科技')
+    await wrapper.find('.actions .btn.primary').trigger('click')
     await flushPromises()
-    expect(mockContainer.flowState.markProductFlowCompleted).not.toHaveBeenCalled()
+    expect(replaceSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ query: expect.objectContaining({ step: 'industry' }) }),
+    )
   })
 
   // ===== 20. goStep fromTutorial 分支 =====
@@ -1804,6 +1803,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     })
     await flushPromises()
     const replaceSpy = vi.spyOn(router, 'replace')
+    await wrapper.find('.company-name-input').setValue('修茈科技')
     const nextBtn = wrapper.find('.actions .btn.primary')
     await nextBtn.trigger('click')
     await flushPromises()
@@ -1887,7 +1887,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     expect(activeChip.text()).toContain('考勤')
   })
 
-  it('resolveDefaultPickedIndustryId：selected 不可选时回退到 openIds[0]', async () => {
+  it('resolveDefaultPickedIndustryId：内置但未开放的 selected 仍可自由选择', async () => {
     const { wrapper } = await mountComponent({
       route: { step: 'industry' },
       catalog: {
@@ -1898,7 +1898,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     })
     await flushPromises()
     const activeChip = wrapper.find('.industry-chip.active')
-    expect(activeChip.text()).toContain('涂料')
+    expect(activeChip.text()).toContain('考勤')
   })
 
   // ===== 25. confirmIndustryAndNext 不再调用 switchIndustry（行业由后端 SSOT 决定） =====

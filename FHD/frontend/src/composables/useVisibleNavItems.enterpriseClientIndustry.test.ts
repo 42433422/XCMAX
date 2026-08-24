@@ -127,9 +127,11 @@ describe('useVisibleNavItems · 企业完整包客户行业侧栏', () => {
     expect(keys).toContain('products')
     expect(keys).toContain('customers')
     expect(keys).toContain('data-sources')
+    expect(keys).toContain('template-preview')
     expect(keys).not.toContain('mod-erp-data-sources')
     expect(visibleNavItems.value.find((i) => i.key === 'products')?.name).toBe('人员管理')
     expect(visibleNavItems.value.find((i) => i.key === 'customers')?.name).toBe('部门管理')
+    expect(visibleNavItems.value.find((i) => i.key === 'template-preview')?.name).toBe('考勤模板库')
   })
 
   it('账号定制已开放侧栏时不依赖主 ERP 上下文', () => {
@@ -141,6 +143,7 @@ describe('useVisibleNavItems · 企业完整包客户行业侧栏', () => {
     expect(keys).toContain('products')
     expect(keys).toContain('customers')
     expect(keys).toContain('data-sources')
+    expect(keys).toContain('template-preview')
     expect(visibleNavItems.value.find((i) => i.key === 'products')?.name).toBe('人员管理')
   })
 
@@ -154,7 +157,8 @@ describe('useVisibleNavItems · 企业完整包客户行业侧栏', () => {
     expect(keys).toContain('products')
     expect(keys).toContain('customers')
     expect(keys).toContain('orders')
-    expect(keys).toContain('inventory')
-    expect(keys).toContain('approval-hub')
+    expect(keys).toContain('shipment-records')
+    expect(keys).toContain('template-preview')
+    expect(keys).not.toContain('inventory')
   })
 })

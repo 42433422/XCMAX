@@ -13,4 +13,12 @@ describe('resolveCoreNavLabel generic host defaults', () => {
     expect(resolveCoreNavLabel('orders', '考勤', [])).toBe('考勤单管理')
     expect(resolveCoreNavLabel('materials', '考勤', [])).toBe('排班资源')
   })
+
+  it('uses the nine-category skeleton for broader onboarding industries', () => {
+    expect(resolveCoreNavLabel('products', '制造业', [])).toBe('产品管理')
+    expect(resolveCoreNavLabel('materials', '制造业', [])).toBe('物料管理')
+    expect(resolveCoreNavLabel('customers', '软件信息', [])).toBe('客户管理')
+    expect(resolveCoreNavLabel('orders', '软件信息', [])).toBe('服务订单')
+    expect(resolveCoreNavLabel('shipment-records', '软件信息', [])).toBe('交付记录')
+  })
 })

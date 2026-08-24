@@ -469,3 +469,35 @@ async def templates_extract_grid(
             "all_sheets": [one],
         },
     }
+
+
+@router.post("/templates/upload")
+async def templates_upload(
+    file: UploadFile = File(...),
+    template_name: str = Form(default=""),
+    name: str = Form(default=""),
+    template_scope: str = Form(default=""),
+    type: str = Form(default=""),
+    source: str = Form(default="office_upload"),
+):
+    """当前宿主的模板归档入口：解析办公文件并写入模板库。"""
+    from fastapi.responses import JSONResponse
+
+    from app.application.office_template_ingest_app_service import (
+        ingest_office_bytes_to_template_library,
+    )
+
+    raw = await file.read()
+    display_name = str(template_name or name or "").strip()
+    scope = str(template_scope or type or "").strip()
+    # 历史上传参数 type=excel|word 等表示文件类型，不是业务范围。
+    if scope.lower() in {"excel", "word", "logo", "label", "image"}:
+        scope = ""
+    data, code = ingest_office_bytes_to_template_library(
+        file_body=raw,
+        filename=str(file.filename or "upload.bin"),
+        template_name=display_name,
+        template_scope=scope,
+        source=str(source or "office_upload").strip() or "office_upload",
+    )
+    return JSONResponse(data, status_code=code)

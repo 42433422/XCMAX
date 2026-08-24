@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ref } from 'vue'
 import { setActivePinia, createPinia } from 'pinia'
 
+const mockIndustry = vi.hoisted(() => ({ id: '考勤' }))
+
 // 平台壳模式开启；其余 platformShellMode 行为保留真实实现（含 resolvePlatformShellMenuKeys / shouldExposeIndustrySidebar）
 vi.mock('@/constants/platformShellMode', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/constants/platformShellMode')>()
@@ -9,7 +11,7 @@ vi.mock('@/constants/platformShellMode', async (importOriginal) => {
 })
 
 vi.mock('@/stores/industry', () => ({
-  useIndustryStore: () => ({ currentIndustryId: '考勤' }),
+  useIndustryStore: () => ({ get currentIndustryId() { return mockIndustry.id } }),
 }))
 vi.mock('@/stores/sidebarLayout', () => ({
   useSidebarLayoutStore: () => ({
@@ -68,6 +70,12 @@ vi.mock('@/composables/useModRoutes', async () => {
           path: '/mod/xcagi-erp-domain-bridge/business-docking',
           modId: 'xcagi-erp-domain-bridge',
         },
+        {
+          key: 'mod-erp-materials',
+          name: '资源库',
+          path: '/mod/xcagi-erp-domain-bridge/materials',
+          modId: 'xcagi-erp-domain-bridge',
+        },
       ]),
     }),
   }
@@ -91,6 +99,7 @@ describe('useVisibleNavItems · 平台壳第三步完成后长出行业菜单', 
   beforeEach(() => {
     setActivePinia(createPinia())
     localStorage.clear()
+    mockIndustry.id = '考勤'
   })
 
   it('未完成补基础线（host ack=false）：主导航不长出 ERP 业务项', () => {
@@ -109,13 +118,13 @@ describe('useVisibleNavItems · 平台壳第三步完成后长出行业菜单', 
     expect(keys).toContain('products')
     expect(keys).toContain('customers')
     expect(keys).toContain('orders')
-    expect(keys).toContain('inventory')
-    expect(keys).toContain('approval-hub')
+    expect(keys).not.toContain('inventory')
+    expect(keys).not.toContain('approval-hub')
     expect(keys).toContain('business-docking')
     expect(keys).toContain('data-sources')
     expect(keys).toContain('template-preview')
-    expect(keys).toContain('printer-list')
     expect(keys).toContain('print')
+    expect(keys).not.toContain('printer-list')
     expect(keys).not.toContain('mod-erp-print')
     expect(keys).not.toContain('mod-erp-business-docking')
     expect(keys).not.toContain('enterprise-customer-service')
@@ -132,5 +141,24 @@ describe('useVisibleNavItems · 平台壳第三步完成后长出行业菜单', 
     expect(printSlots.length).toBe(1)
     const businessDockingSlots = visibleNavItems.value.filter((i) => i.key === 'business-docking' || i.key === 'mod-erp-business-docking')
     expect(businessDockingSlots.length).toBe(1)
+  })
+
+  it('软件行业只长出真实服务业务页，不把订单页伪装成项目或合同', () => {
+    mockIndustry.id = '软件信息'
+    markHostPackAcknowledged()
+
+    const { visibleNavItems } = useVisibleNavItems()
+    const byKey = new Map(visibleNavItems.value.map((item) => [item.key, item.name]))
+
+    expect(byKey.get('customers')).toBe('客户管理')
+    expect(byKey.get('products')).toBe('服务产品')
+    expect(byKey.get('orders')).toBe('服务订单')
+    expect(byKey.get('shipment-records')).toBe('交付记录')
+    expect(byKey.get('persy-knowledge')).toBe('知识库')
+    expect(byKey.get('template-preview')).toBe('模板库')
+    expect(byKey.has('materials')).toBe(false)
+    expect(byKey.has('inventory')).toBe(false)
+    expect(byKey.has('mod-erp-materials')).toBe(false)
+    expect([...byKey.values()]).not.toEqual(expect.arrayContaining(['项目管理', '合同管理']))
   })
 })

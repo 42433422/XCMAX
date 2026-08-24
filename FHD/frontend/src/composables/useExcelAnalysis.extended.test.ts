@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { useExcelAnalysis } from './useExcelAnalysis'
+import { buildExcelNextStepPrompt, useExcelAnalysis } from './useExcelAnalysis'
 
 const addMessage = vi.fn()
 const saveMessage = vi.fn().mockResolvedValue(undefined)
@@ -130,7 +130,27 @@ describe('useExcelAnalysis - extended', () => {
     expect(onAnalyzeStart).toHaveBeenCalledWith({ fileName: 'test.xlsx' })
     expect(onAnalyzed).toHaveBeenCalledWith(expect.objectContaining({ fileName: 'test.xlsx' }))
     expect(onAnalyzeDone).toHaveBeenCalledWith({ fileName: 'test.xlsx', success: true })
+    expect(addMessage.mock.calls.some((call) => String(call[0]).includes('接下来你想让我做什么？'))).toBe(true)
     expect(api.excelAnalyzeUploading.value).toBe(false)
+  })
+
+  it('asks a contextual but open-ended next-step question after analyzing a delivery workbook', () => {
+    const prompt = buildExcelNextStepPrompt('国圣化工.xlsx', {
+      sheets: [
+        { sheet_index: 1, sheet_name: '国圣' },
+        { sheet_index: 2, sheet_name: '出货记录' },
+        { sheet_index: 3, sheet_name: '借原材料明细' },
+      ],
+      preview_data: { sheet_name: '国圣', sheet_names: ['国圣', '出货记录', '借原材料明细'] },
+    })
+
+    expect(prompt).toContain('我已经读完「国圣化工.xlsx」')
+    expect(prompt).toContain('国圣、出货记录、借原材料明细')
+    expect(prompt).toContain('接下来你想让我做什么？')
+    expect(prompt).toContain('发货或出货记录')
+    expect(prompt).toContain('借入借出、原材料或库存明细')
+    expect(prompt).toContain('可以直接用自己的话说')
+    expect(prompt).toContain('涉及业务数据写入时，会再等你确认')
   })
 
   it('onExcelAnalyzeFileChange handles server error', async () => {

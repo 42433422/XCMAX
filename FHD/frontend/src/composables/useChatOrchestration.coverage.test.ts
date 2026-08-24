@@ -490,7 +490,12 @@ describe('useChatOrchestration coverage – ExcelAnalysis 回调', () => {
   it('onAnalyzed 有 persistedPath 时设置 file_path', () => {
     createApi()
     mockResolveExcelFilePathFromAnalysis.mockReturnValue('/tmp/test.xlsx')
-    mockResolveExcelSheetOptionsFromContext.mockReturnValue([{ name: 'Sheet1' }])
+    const sheets = [
+      { sheet_name: 'Sheet1', sheet_index: 1 },
+      { sheet_name: 'Sheet2', sheet_index: 2 },
+    ]
+    mockResolveExcelSheetOptionsFromContext.mockReturnValue(sheets)
+    const dispatchSpy = vi.spyOn(window, 'dispatchEvent')
     capturedExcelCallbacks.onAnalyzed!({
       fileName: 'test.xlsx',
       summary: '摘要',
@@ -498,6 +503,14 @@ describe('useChatOrchestration coverage – ExcelAnalysis 回调', () => {
     })
     expect(mockPersistExcelAnalysisContext).toHaveBeenCalled()
     expect(state.lastExcelAnalysisContext!.value).toBeTruthy()
+    expect(state.linkedExcelAllSheets!.value).toBe(true)
+    expect(state.linkedExcelSheet!.value).toEqual(sheets[0])
+    const contextEvent = dispatchSpy.mock.calls
+      .map(([event]) => event as CustomEvent)
+      .find((event) => event.type === 'xcagi:excel-sheet-context')
+    expect(contextEvent?.detail.select_all_sheets).toBe(true)
+    expect(contextEvent?.detail.selected_sheets).toEqual(sheets)
+    dispatchSpy.mockRestore()
   })
 
   it('onAnalyzed 无 persistedPath 时不设置 file_path', () => {
@@ -1649,6 +1662,7 @@ describe('useChatOrchestration coverage – 生命周期钩子', () => {
     expect(mockReadPersistedExcelAnalysisContext).toHaveBeenCalledWith('lifecycle')
     expect(state.lastExcelAnalysisContext!.value).toBeTruthy()
     expect(state.linkedExcelSheet!.value).toEqual({ name: 'Sheet1' })
+    expect(state.linkedExcelAllSheets!.value).toBe(true)
     app.unmount()
   })
 

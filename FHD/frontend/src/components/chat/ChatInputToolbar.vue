@@ -53,17 +53,30 @@
       {{ excelAnalyzeUploading ? $t('shell.uploadAnalyzing') : $t('chat.uploadAttachment') }}
       {{ multimodalPendingCount ? `(${multimodalPendingCount})` : '' }}
     </button>
-    <button
-      class="toolbar-btn"
-      type="button"
-      data-tutorial-id="toolbar-office-docking"
-      :title="$t('chat.officeDockingTitle')"
-      @click="$emit('trigger-office-docking')"
-      :disabled="officeDockingProcessing"
-    >
-      <i class="fa fa-file-text-o" aria-hidden="true"></i>
-      {{ officeDockingProcessing ? $t('chat.officeDockingBusy') : $t('chat.officeDocking') }}
-    </button>
+    <div class="office-docking-actions">
+      <button
+        class="toolbar-btn office-docking-actions__folder"
+        type="button"
+        data-tutorial-id="toolbar-office-docking"
+        :title="$t('chat.officeDockingFolderTitle')"
+        @click="$emit('trigger-office-docking-folder')"
+        :disabled="officeDockingProcessing"
+      >
+        <i class="fa fa-folder-open-o" aria-hidden="true"></i>
+        {{ officeDockingProcessing ? $t('chat.officeDockingBusy') : $t('chat.officeDocking') }}
+      </button>
+      <button
+        class="toolbar-btn office-docking-actions__files"
+        type="button"
+        data-testid="office-docking-files"
+        :title="$t('chat.officeDockingFileTitle')"
+        :aria-label="$t('chat.officeDockingFileTitle')"
+        @click="$emit('trigger-office-docking-files')"
+        :disabled="officeDockingProcessing"
+      >
+        <i class="fa fa-file-o" aria-hidden="true"></i>
+      </button>
+    </div>
     <input
       ref="fileInputRef"
       type="file"
@@ -128,7 +141,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'new-conversation': []
-  'trigger-office-docking': []
+  'trigger-office-docking-files': []
+  'trigger-office-docking-folder': []
   'register-excel-input': [input: HTMLInputElement | null]
   'excel-file-change': [event: Event]
   'auto-refresh-change': [enabled: boolean]
@@ -177,6 +191,24 @@ function onAutoRefreshChange(event: Event) {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+
+.office-docking-actions {
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.office-docking-actions__folder {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.office-docking-actions__files {
+  min-width: 34px;
+  padding-inline: 9px;
+  border-left: 1px solid var(--app-border-color, rgba(30, 68, 96, 0.16));
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
 }
 
 .approval-mode__toggle.is-active {
