@@ -1,4 +1,9 @@
-"""Attendance workbook import service for Sunbird desktop workflows."""
+"""Legacy side-database importer retained for rollback-compatible upgrades.
+
+New ERP/ETL writes must use ``erp_attendance_app_service``.  This module only
+reads or repairs pre-migration customer data and must not be used as the
+canonical attendance store.
+"""
 
 from __future__ import annotations
 
@@ -372,9 +377,9 @@ def import_attendance_workbook(
     db_path: Path,
     *,
     source_file_key: str | None = None,
-    sync_ui_tables: bool = True,
+    sync_ui_tables: bool = False,
 ) -> dict[str, Any]:
-    """Import an attendance workbook into the Sunbird private database.
+    """Import into a legacy Sunbird private database during controlled migration.
 
     ``每日统计`` workbooks write daily records plus roster tables. Fixed-template
     ``明细`` workbooks write roster tables only, because converted result files no

@@ -5,6 +5,7 @@ import sqlite3
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.legacy.routes import xcmax_personnel_compat as compat
 from app.legacy.routes.xcmax_personnel_compat import (
     MOD_ID,
     register_xcmax_personnel_routes,
@@ -114,6 +115,24 @@ def test_xcmax_personnel_sync_remote_yuangon_returns_current_counts(tmp_path, mo
     assert resp.json()["data"] == {
         "employees": 2,
         "departments": 2,
-        "source": "taiyangniao-pro",
+        "source": "legacy:taiyangniao-pro",
         "synced": False,
+        "migration_required": True,
+    }
+
+
+def test_xcmax_personnel_sync_reports_erp_as_canonical(tmp_path, monkeypatch) -> None:
+    _seed_db(tmp_path)
+    monkeypatch.setattr(compat, "_erp_counts", lambda: (80, 11))
+    client = _client(tmp_path, monkeypatch)
+
+    resp = client.post(f"/api/mod/{MOD_ID}/employees/sync-remote-yuangon", json={})
+
+    assert resp.status_code == 200
+    assert resp.json()["data"] == {
+        "employees": 80,
+        "departments": 11,
+        "source": "erp",
+        "synced": False,
+        "migration_required": False,
     }

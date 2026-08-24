@@ -1,9 +1,8 @@
-"""Host compat API for the admin console personnel bridge.
+"""Compatibility API exposing ERP personnel under historical route names.
 
-The admin console historically addresses personnel data through
-``/api/mod/xcmax-personnel``.  Desktop builds may not install that Mod, while
-the same personnel mirror already lives in the bundled ``taiyangniao-pro``
-SQLite side database.
+The admin console still addresses ``/api/mod/xcmax-personnel``. Canonical
+records now live in the host ERP database; the old Mod-private SQLite is a
+read-only fallback until an administrator confirms its one-time migration.
 """
 
 from __future__ import annotations
@@ -14,6 +13,9 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Body, Query
+from sqlalchemy import or_
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +63,119 @@ def _table_count(conn: sqlite3.Connection, table: str) -> int:
         return 0
 
 
+def _erp_employees_page(page: int, page_size: int, search: str) -> dict[str, Any] | None:
+    from app.db import HostSessionLocal
+    from app.db.models.hr_attendance import ErpEmployee
+
+    db = HostSessionLocal()
+    try:
+        query = db.query(ErpEmployee).filter(ErpEmployee.is_active.is_(True))
+        value = str(search or "").strip()
+        if value:
+            like = f"%{value}%"
+            query = query.filter(
+                or_(
+                    ErpEmployee.employee_name.ilike(like),
+                    ErpEmployee.department.ilike(like),
+                    ErpEmployee.employee_no.ilike(like),
+                    ErpEmployee.position.ilike(like),
+                    ErpEmployee.external_user_id.ilike(like),
+                )
+            )
+        total = query.count()
+        if total == 0:
+            return None
+        rows = query.order_by(ErpEmployee.id).offset((page - 1) * page_size).limit(page_size).all()
+        return {
+            "success": True,
+            "data": {
+                "items": [
+                    {
+                        "id": row.id,
+                        "employee_name": row.employee_name,
+                        "department": row.department,
+                        "main_department": row.main_department,
+                        "attendance_group": row.attendance_group,
+                        "employee_no": row.employee_no,
+                        "position": row.position,
+                        "user_id": row.external_user_id,
+                    }
+                    for row in rows
+                ],
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+                "source": "erp:erp_employees",
+            },
+        }
+    except RECOVERABLE_ERRORS:
+        return None
+    finally:
+        db.close()
+
+
+def _erp_departments_page(page: int, page_size: int, search: str) -> dict[str, Any] | None:
+    from app.db import HostSessionLocal
+    from app.db.models.hr_attendance import ErpDepartment
+
+    db = HostSessionLocal()
+    try:
+        query = db.query(ErpDepartment).filter(ErpDepartment.is_active.is_(True))
+        value = str(search or "").strip()
+        if value:
+            like = f"%{value}%"
+            query = query.filter(
+                or_(
+                    ErpDepartment.name.ilike(like),
+                    ErpDepartment.parent_name.ilike(like),
+                    ErpDepartment.attendance_group.ilike(like),
+                )
+            )
+        total = query.count()
+        if total == 0:
+            return None
+        rows = (
+            query.order_by(ErpDepartment.id).offset((page - 1) * page_size).limit(page_size).all()
+        )
+        return {
+            "success": True,
+            "data": {
+                "items": [
+                    {
+                        "id": row.id,
+                        "department": row.name,
+                        "main_department": row.parent_name,
+                        "attendance_group": row.attendance_group,
+                    }
+                    for row in rows
+                ],
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+                "source": "erp:erp_departments",
+            },
+        }
+    except RECOVERABLE_ERRORS:
+        return None
+    finally:
+        db.close()
+
+
+def _erp_counts() -> tuple[int, int] | None:
+    from app.db import HostSessionLocal
+    from app.db.models.hr_attendance import ErpDepartment, ErpEmployee
+
+    db = HostSessionLocal()
+    try:
+        employees = db.query(ErpEmployee).filter(ErpEmployee.is_active.is_(True)).count()
+        departments = db.query(ErpDepartment).filter(ErpDepartment.is_active.is_(True)).count()
+        return employees, departments
+    except RECOVERABLE_ERRORS:
+        return None
+    finally:
+        db.close()
+
+
 def build_xcmax_personnel_router() -> APIRouter:
     router = APIRouter(prefix=f"/api/mod/{MOD_ID}", tags=[f"mod-{MOD_ID}"])
 
@@ -71,6 +186,9 @@ def build_xcmax_personnel_router() -> APIRouter:
         search: str = Query(""),
     ):
         page, page_size = _safe_page(page, page_size)
+        erp_page = _erp_employees_page(page, page_size, search)
+        if erp_page is not None:
+            return erp_page
         conn = _connect_existing()
         if conn is None:
             return _empty_page(page, page_size)
@@ -123,6 +241,9 @@ def build_xcmax_personnel_router() -> APIRouter:
         search: str = Query(""),
     ):
         page, page_size = _safe_page(page, page_size)
+        erp_page = _erp_departments_page(page, page_size, search)
+        if erp_page is not None:
+            return erp_page
         conn = _connect_existing()
         if conn is None:
             return _empty_page(page, page_size)
@@ -167,10 +288,21 @@ def build_xcmax_personnel_router() -> APIRouter:
     def sync_remote_yuangon(_body: dict = Body(default_factory=dict)):
         """Desktop fallback for the admin console sync button.
 
-        In local desktop mode the bundled personnel mirror is already materialized
-        in ``taiyangniao_pro.db``.  Return the current mirror counts so the
-        operator action completes instead of falling through to a 404.
+        This action reports ERP master-data counts. If only a legacy side database
+        exists, report it as pending migration instead of pretending it was synced.
         """
+        erp_counts = _erp_counts()
+        if erp_counts is not None and any(erp_counts):
+            return {
+                "success": True,
+                "data": {
+                    "employees": erp_counts[0],
+                    "departments": erp_counts[1],
+                    "source": "erp",
+                    "synced": False,
+                    "migration_required": False,
+                },
+            }
         conn = _connect_existing()
         if conn is None:
             return {
@@ -178,8 +310,9 @@ def build_xcmax_personnel_router() -> APIRouter:
                 "data": {
                     "employees": 0,
                     "departments": 0,
-                    "source": "taiyangniao-pro",
+                    "source": "erp",
                     "synced": False,
+                    "migration_required": False,
                 },
             }
         try:
@@ -190,8 +323,9 @@ def build_xcmax_personnel_router() -> APIRouter:
                 "data": {
                     "employees": employees,
                     "departments": departments,
-                    "source": "taiyangniao-pro",
+                    "source": "legacy:taiyangniao-pro",
                     "synced": False,
+                    "migration_required": bool(employees or departments),
                 },
             }
         finally:

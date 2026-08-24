@@ -11,6 +11,7 @@ import sqlite3
 from typing import Any
 
 from app.mod_sdk.private_sqlite import resolve_mod_private_sqlite_path
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 def _names_from_host_units(payload: dict[str, Any] | None) -> set[str]:
@@ -33,6 +34,24 @@ def attendance_unit_names(host_units: dict[str, Any] | None = None) -> list[str]
     """Return real department/unit names without requiring a current Mod build."""
 
     names = _names_from_host_units(host_units)
+    try:
+        from app.db import HostSessionLocal
+        from app.db.models.hr_attendance import ErpDepartment, ErpEmployee
+
+        db = HostSessionLocal()
+        try:
+            for name, parent in db.query(ErpDepartment.name, ErpDepartment.parent_name).all():
+                names.update(
+                    value for value in (str(name or "").strip(), str(parent or "").strip()) if value
+                )
+            for (department,) in db.query(ErpEmployee.department).distinct().all():
+                value = str(department or "").strip()
+                if value:
+                    names.add(value)
+        finally:
+            db.close()
+    except RECOVERABLE_ERRORS:
+        pass
     db_path = resolve_mod_private_sqlite_path("taiyangniao_pro.db")
     if not db_path.is_file():
         return sorted(names, key=str.casefold)

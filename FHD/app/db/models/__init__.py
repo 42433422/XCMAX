@@ -51,6 +51,13 @@ from app.db.models.etl import (
     EtlUpload,
 )
 from app.db.models.finance import FinancialTransaction
+from app.db.models.hr_attendance import (
+    AttendanceDailyRecord,
+    AttendanceImportBatch,
+    AttendanceLeaveRecord,
+    ErpDepartment,
+    ErpEmployee,
+)
 from app.db.models.inventory import (
     InventoryLedger,
     InventoryTransaction,
@@ -127,6 +134,11 @@ __all__ = [
     "EtlRunRow",
     "EtlTargetConfig",
     "FinancialTransaction",
+    "ErpDepartment",
+    "ErpEmployee",
+    "AttendanceImportBatch",
+    "AttendanceDailyRecord",
+    "AttendanceLeaveRecord",
     "ChartOfAccount",
     "JournalEntry",
     "JournalEntryLine",

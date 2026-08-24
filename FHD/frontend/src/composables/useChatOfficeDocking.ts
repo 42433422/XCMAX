@@ -489,8 +489,8 @@ function inferOfficeDockingIntent(item: {
     return {
       intentId: 'attendance_roster',
       intentLabel: '考勤转换结果/人员部门表',
-      intentSummary: '识别到「明细/月度统计」结构，应写入太阳鸟考勤库，不走客户产品入库',
-      databaseTargetLabel: '考勤库',
+      intentSummary: '识别到「明细/月度统计」结构，应写入 ERP 人事考勤，不走客户产品入库',
+      databaseTargetLabel: 'ERP 人事考勤',
       databaseAction: 'attendance_import',
       databaseDisabledReason: '',
       selectedDatabase: true,
@@ -501,8 +501,8 @@ function inferOfficeDockingIntent(item: {
     return {
       intentId: 'attendance_source',
       intentLabel: '钉钉考勤原始表',
-      intentSummary: '识别到考勤统计结构，应写入太阳鸟考勤库',
-      databaseTargetLabel: '考勤库',
+      intentSummary: '识别到考勤统计结构，应写入 ERP 人事考勤',
+      databaseTargetLabel: 'ERP 人事考勤',
       databaseAction: 'attendance_import',
       databaseDisabledReason: '',
       selectedDatabase: true,
@@ -802,25 +802,25 @@ async function rollbackArchivedTemplate(result?: Record<string, unknown>): Promi
 async function ingestAttendanceDatabase(item: ChatOfficeDockingReviewItem): Promise<Record<string, unknown>> {
   if (!item.upload?.file_path) throw new Error('缺少已上传文件路径')
   await primeCsrfCookie()
-  const res = await apiFetch('/api/mod/taiyangniao-pro/attendance/import-workbook', {
+  const res = await apiFetch('/api/platform-shell/office/confirm', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
+      intent: 'attendance',
       file_path: item.upload.file_path,
       workspace_root: item.upload.workspace_root,
       source_name: item.fileName,
-      sync_ui_tables: true,
     }),
   })
   const body = await res.json().catch(() => ({}))
   if (!res.ok || body?.success === false) {
-    throw new Error(String(body?.error || body?.message || `考勤入库失败 HTTP ${res.status}`))
+    throw new Error(String(body?.detail || body?.error || body?.message || `考勤入库失败 HTTP ${res.status}`))
   }
   return asRecord(body?.data || body)
 }
 
 const ETL_TARGET_LABELS: Record<string, string> = {
-  attendance: '考勤库',
+  attendance: 'ERP 人事考勤',
   customer_products: '客户/产品库',
   customers: '客户库',
   products: '产品库',

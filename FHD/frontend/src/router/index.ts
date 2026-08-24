@@ -145,6 +145,24 @@ if (import.meta.env.VITE_XCAGI_EDITION !== 'minimal') {
       meta: { title: '业务对象' },
     },
     {
+      path: '/erp/hr/employees',
+      name: 'attendance-employees',
+      component: () => import('../views/AttendanceErpView.vue'),
+      meta: { title: '人员管理', attendanceSection: 'employees' },
+    },
+    {
+      path: '/erp/hr/departments',
+      name: 'attendance-departments',
+      component: () => import('../views/AttendanceErpView.vue'),
+      meta: { title: '部门管理', attendanceSection: 'departments' },
+    },
+    {
+      path: '/erp/hr/attendance-records',
+      name: 'attendance-records',
+      component: () => import('../views/AttendanceErpView.vue'),
+      meta: { title: '考勤记录', attendanceSection: 'records' },
+    },
+    {
       path: '/materials',
       name: 'materials',
       component: () => import('../views/MaterialsView.vue'),

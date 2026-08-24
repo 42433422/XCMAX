@@ -109,26 +109,33 @@ def _load_convert_attendance_file() -> Callable[..., dict[str, Any]]:
 
 def _load_products_personnel_roster_from_host() -> list[tuple[str, str, str]]:
     try:
-        from app.db.models.product import Product
-        from app.db.session import get_db
+        from app.db import HostSessionLocal
+        from app.db.models.hr_attendance import ErpEmployee
     except RECOVERABLE_ERRORS:
         return []
 
     out: list[tuple[str, str, str]] = []
     seen: set[str] = set()
     try:
-        with get_db() as db:
-            q = db.query(Product).filter(Product.is_active == 1).order_by(Product.id)
+        db = HostSessionLocal()
+        try:
+            q = (
+                db.query(ErpEmployee)
+                .filter(ErpEmployee.is_active.is_(True))
+                .order_by(ErpEmployee.id)
+            )
             for p in q:
-                name = (getattr(p, "name", None) or "").strip()
+                name = (getattr(p, "employee_name", None) or "").strip()
                 if not name or name in seen:
                     continue
                 seen.add(name)
-                dept = (getattr(p, "unit", None) or "").strip()
-                spec = (getattr(p, "specification", None) or "").strip()
+                dept = (getattr(p, "department", None) or "").strip()
+                spec = (getattr(p, "position", None) or "").strip()
                 out.append((dept, spec, name))
+        finally:
+            db.close()
     except RECOVERABLE_ERRORS:
-        logger.exception("读取主库人员(products)失败")
+        logger.exception("读取 ERP 人员档案失败")
         return []
     return out
 

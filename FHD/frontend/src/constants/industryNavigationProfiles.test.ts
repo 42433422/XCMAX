@@ -57,6 +57,11 @@ describe('industry navigation profiles', () => {
     const attendance = resolveIndustryNavigationProfile('考勤')
     expect(attendance.menuLabels.products).toBe('人员管理')
     expect(attendance.businessMenuKeys).not.toContain('inventory')
+    expect(attendance.businessMenuKeys).not.toContain('orders')
+    expect(attendance.businessMenuKeys).not.toContain('materials')
+    expect(attendance.businessMenuKeys).toEqual(
+      expect.arrayContaining(['products', 'customers', 'shipment-records', 'business-docking']),
+    )
     expect(attendance.businessMenuKeys).toContain('template-preview')
     expect(attendance.previewMenuKeys).toContain('template-preview')
 

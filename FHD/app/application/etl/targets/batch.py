@@ -7,7 +7,7 @@ import itertools
 from collections.abc import Iterable
 from pathlib import Path
 from threading import Event
-from typing import Any, cast
+from typing import Any
 
 from app.application.etl.errors import EtlError
 from app.application.etl.secrets import read_webhook_secret
@@ -36,41 +36,48 @@ class AttendanceAdapter(TargetAdapter):
 
     @staticmethod
     def _db_path() -> Path:
+        """Legacy side-db location retained only as a compatibility seam."""
+
         return Path(get_app_data_dir()) / "data" / "mod_dbs" / "taiyangniao-pro.db"
 
     def _existing_batch(
         self,
         context: dict[str, Any],
     ) -> dict[str, Any] | None:
-        import sqlite3
-
         cache = context.get("_preview_cache")
         cache_key = f"attendance_batch:{self._source_file_key(context)}"
         if isinstance(cache, dict) and cache_key in cache:
-            return cast("dict[str, Any] | None", cache[cache_key])
-        db_path = self._db_path()
+            cached = cache[cache_key]
+            return cached if isinstance(cached, dict) else None
         match = None
-        if db_path.is_file():
+        from app.application.erp_attendance_app_service import erp_attendance_schema_available
+        from app.db import HostSessionLocal
+        from app.db.models.hr_attendance import AttendanceImportBatch
+        from app.infrastructure.tenant_scope import tenant_scope
+
+        tenant_id = context.get("tenant_id")
+        with tenant_scope(int(tenant_id) if tenant_id is not None else None):
+            db = HostSessionLocal()
             try:
-                with sqlite3.connect(str(db_path)) as conn:
-                    row = conn.execute(
-                        """
-                        SELECT id, rows_written, imported_at
-                        FROM attendance_import_batches
-                        WHERE source_file = ?
-                        ORDER BY id DESC
-                        LIMIT 1
-                        """,
-                        (self._source_file_key(context),),
-                    ).fetchone()
+                if not erp_attendance_schema_available(db):
+                    if isinstance(cache, dict):
+                        cache[cache_key] = None
+                    return None
+                row = (
+                    db.query(AttendanceImportBatch)
+                    .filter(AttendanceImportBatch.source_file == self._source_file_key(context))
+                    .order_by(AttendanceImportBatch.id.desc())
+                    .first()
+                )
                 if row:
                     match = {
-                        "batch_id": int(row[0]),
-                        "rows_written": int(row[1] or 0),
-                        "imported_at": str(row[2] or ""),
+                        "batch_id": int(row.id),
+                        "rows_written": int(row.rows_written or 0),
+                        "imported_at": row.imported_at.isoformat() if row.imported_at else "",
+                        "storage": "erp",
                     }
-            except sqlite3.OperationalError:
-                match = None
+            finally:
+                db.close()
         if isinstance(cache, dict):
             cache[cache_key] = match
         return match
@@ -112,7 +119,11 @@ class AttendanceAdapter(TargetAdapter):
     def execute_batch(
         self, rows: Iterable[dict[str, Any]], context: dict[str, Any]
     ) -> dict[str, Any]:
-        from app.application.attendance_import_app_service import import_attendance_workbook
+        from app.application.erp_attendance_app_service import (
+            import_attendance_workbook_to_erp,
+        )
+        from app.db import HostSessionLocal
+        from app.infrastructure.tenant_scope import tenant_scope
 
         source_path = Path(str(context["upload_path"]))
         if source_path.suffix.lower() not in {".xlsx", ".xlsm"}:
@@ -123,13 +134,32 @@ class AttendanceAdapter(TargetAdapter):
                 "考勤文件在预演后已导入，请重新预演",
                 status_code=409,
             )
-        db_path = self._db_path()
-        result = import_attendance_workbook(
-            source_path,
-            db_path,
-            source_file_key=self._source_file_key(context),
-            sync_ui_tables=True,
-        )
+        tenant_id = context.get("tenant_id")
+        with tenant_scope(int(tenant_id) if tenant_id is not None else None):
+            db = HostSessionLocal()
+            try:
+                result = import_attendance_workbook_to_erp(
+                    source_path,
+                    db,
+                    owner_user_id=int(context.get("owner_user_id") or 0) or None,
+                    source_file_key=self._source_file_key(context),
+                    source_hash=str(context.get("file_sha256") or ""),
+                )
+                db.commit()
+            except ValueError as exc:
+                db.rollback()
+                if str(exc) == "attendance_source_already_imported":
+                    raise EtlError(
+                        "ETL_MATCH_CHANGED",
+                        "考勤文件在预演后已导入，请重新预演",
+                        status_code=409,
+                    ) from exc
+                raise
+            except RECOVERABLE_ERRORS:
+                db.rollback()
+                raise
+            finally:
+                db.close()
         row_count = int(context.get("row_count") or 0)
         callback = context.get("progress_callback")
         if callable(callback):
@@ -137,38 +167,29 @@ class AttendanceAdapter(TargetAdapter):
         return {"receipt": result, "executed": row_count}
 
     def rollback_batch(self, context: dict[str, Any], receipt: dict[str, Any]) -> int:
-        import sqlite3
-
         source_file = str(receipt.get("source_file") or "")
-        db_path = Path(str(receipt.get("db_path") or ""))
-        if not source_file or not db_path.is_file():
+        if not source_file:
             raise EtlError("ETL_ATTENDANCE_ROLLBACK_DATA_MISSING", "考勤撤销依据不存在")
-        conn = sqlite3.connect(str(db_path))
-        try:
-            conn.execute("BEGIN")
-            deleted = 0
-            for statement in (
-                "DELETE FROM attendance_daily_records WHERE source_file = ?",
-                "DELETE FROM attendance_employees WHERE source_file = ?",
-                "DELETE FROM attendance_departments WHERE source_file = ?",
-                "DELETE FROM products WHERE source_file = ?",
-                "DELETE FROM customers WHERE source_file = ?",
-            ):
-                try:
-                    cursor = conn.execute(statement, (source_file,))
-                    deleted += int(cursor.rowcount or 0)
-                except sqlite3.OperationalError:
-                    continue
-            batch_id = int(receipt.get("batch_id") or 0)
-            if batch_id:
-                conn.execute("DELETE FROM attendance_import_batches WHERE id = ?", (batch_id,))
-            conn.commit()
-            return deleted
-        except RECOVERABLE_ERRORS:
-            conn.rollback()
-            raise
-        finally:
-            conn.close()
+        from app.application.erp_attendance_app_service import rollback_attendance_import
+        from app.db import HostSessionLocal
+        from app.infrastructure.tenant_scope import tenant_scope
+
+        tenant_id = context.get("tenant_id")
+        with tenant_scope(int(tenant_id) if tenant_id is not None else None):
+            db = HostSessionLocal()
+            try:
+                deleted = rollback_attendance_import(
+                    db,
+                    source_file=source_file,
+                    batch_id=int(receipt.get("batch_id") or 0) or None,
+                )
+                db.commit()
+                return deleted
+            except RECOVERABLE_ERRORS:
+                db.rollback()
+                raise
+            finally:
+                db.close()
 
 
 class ExportAdapter(TargetAdapter):

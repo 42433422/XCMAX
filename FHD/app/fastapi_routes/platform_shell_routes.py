@@ -199,20 +199,37 @@ async def platform_shell_office_confirm(body: OfficeConfirmBody, request: Reques
     if intent == "attendance":
         if not body.file_path:
             raise HTTPException(status_code=400, detail="file_path ??")
-        from pathlib import Path
+        import hashlib
 
-        from app.application.attendance_import_app_service import import_attendance_workbook
+        from app.application.erp_attendance_app_service import import_attendance_workbook_to_erp
+        from app.db import HostSessionLocal
+        from app.infrastructure.auth.dependencies import resolve_session_user
         from app.mod_sdk.workspace import resolve_existing_workspace_file
-        from app.utils.path_io.path_utils import get_app_data_dir
 
         excel_path = resolve_existing_workspace_file(body.file_path)
-        db_path = Path(get_app_data_dir()) / "data" / "mod_dbs" / "taiyangniao-pro.db"
-        result = import_attendance_workbook(
-            excel_path,
-            db_path,
-            source_file_key=body.source_name or body.file_path,
-            sync_ui_tables=True,
-        )
+        digest = hashlib.sha256(excel_path.read_bytes()).hexdigest()
+        source_key = f"{digest}:{excel_path.name}"
+        user = resolve_session_user(request)
+        db = HostSessionLocal()
+        try:
+            result = import_attendance_workbook_to_erp(
+                excel_path,
+                db,
+                owner_user_id=int(getattr(user, "id", 0) or 0) or None,
+                source_file_key=source_key,
+                source_hash=digest,
+            )
+            db.commit()
+        except ValueError as exc:
+            db.rollback()
+            if str(exc) == "attendance_source_already_imported":
+                raise HTTPException(status_code=409, detail="该考勤文件已导入 ERP，本次未重复写入") from exc
+            raise HTTPException(status_code=400, detail=f"考勤文件解析失败：{exc}") from exc
+        except RECOVERABLE_ERRORS:
+            db.rollback()
+            raise
+        finally:
+            db.close()
         return {"success": True, "data": result}
     if intent == "erp_products":
         return {

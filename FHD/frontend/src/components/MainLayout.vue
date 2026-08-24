@@ -294,6 +294,18 @@ const currentViewTitle = computed(() => {
 })
 
 async function navigateToView(viewKey) {
+  if (String(industryStore.currentIndustryId || '').trim() === '考勤') {
+    const attendanceRoutes = {
+      products: 'attendance-employees',
+      customers: 'attendance-departments',
+      'shipment-records': 'attendance-records',
+    }
+    const attendanceRoute = attendanceRoutes[String(viewKey || '')]
+    if (attendanceRoute && router.hasRoute(attendanceRoute)) {
+      await router.push({ name: attendanceRoute })
+      return
+    }
+  }
   await navigateFromSidebarKey(router, viewKey, {
     modMenuItems: modMenuItems.value,
     routeNameMap,

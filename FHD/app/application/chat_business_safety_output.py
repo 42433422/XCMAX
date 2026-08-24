@@ -12,7 +12,6 @@ from app.application.chat_business_safety_attendance import (
     _json_list,
 )
 from app.application.chat_business_safety_core import (
-    _DB_NAME,
     BusinessActorIdentity,
     BusinessChatIntent,
     _new_receipt,
@@ -81,7 +80,7 @@ def _handle_attendance_export(
     if error:
         return _attendance_error_payload(intent, error, meta)
     if not rows:
-        source = f"{_DB_NAME}:attendance_daily_records"
+        source = str(meta.get("data_source") or "erp:erp_attendance_daily_records")
         return _not_executed(
             intent,
             "考勤表未生成：已查询真实考勤库，但指定范围没有记录。",
@@ -96,7 +95,7 @@ def _handle_attendance_export(
             intent,
             "考勤表未生成：文件写出失败。",
             reason=f"attendance_export_failed:{exc}",
-            source=f"{_DB_NAME}:attendance_daily_records",
+            source=str(meta.get("data_source") or "erp:erp_attendance_daily_records"),
             status="failed",
             details=meta,
         )
@@ -113,7 +112,7 @@ def _handle_attendance_export(
         status="completed",
         executed=True,
         verified=output.is_file() and output.stat().st_size > 0,
-        source=f"{_DB_NAME}:attendance_daily_records",
+        source=str(meta.get("data_source") or "erp:erp_attendance_daily_records"),
         affected_rows=len(rows),
         artifacts=[artifact],
         details=meta,
@@ -143,7 +142,7 @@ def _handle_attendance_print(
             intent,
             "打印未执行：指定范围没有可核验的考勤记录。",
             reason="no_attendance_rows",
-            source=f"{_DB_NAME}:attendance_daily_records",
+            source=str(meta.get("data_source") or "erp:erp_attendance_daily_records"),
             details=meta,
         )
     try:

@@ -16,8 +16,9 @@ export type IndustryBusinessMenuKey =
   | 'print'
   | 'printer-list'
   | 'template-preview'
+  | 'business-docking'
 
-export type IndustrySidebarPreviewKey = IndustryBusinessMenuKey | 'persy-knowledge' | 'business-docking'
+export type IndustrySidebarPreviewKey = IndustryBusinessMenuKey | 'persy-knowledge'
 
 export type IndustryNavigationProfile = {
   id: string
@@ -226,8 +227,8 @@ const FINE_GRAINED_INDUSTRY_PROFILES: Record<string, Partial<IndustryNavigationP
     deferredCapabilities: ['配方管理', '批次质检', '生产工单'],
   },
   考勤: {
-    businessMenuKeys: ['products', 'customers', 'orders', 'shipment-records', 'materials', 'data-sources', 'print', 'template-preview'],
-    previewMenuKeys: ['products', 'customers', 'orders', 'shipment-records', 'materials', 'data-sources', 'print'],
+    businessMenuKeys: ['products', 'customers', 'shipment-records', 'business-docking', 'data-sources', 'print', 'template-preview'],
+    previewMenuKeys: ['products', 'customers', 'shipment-records', 'business-docking', 'print'],
     menuLabels: {
       products: '人员管理',
       customers: '部门管理',

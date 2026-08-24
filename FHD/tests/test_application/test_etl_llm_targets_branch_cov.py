@@ -2075,14 +2075,18 @@ def test_customer_products_rollback_customer_created_modified(session):
 
 def test_attendance_adapter_preview(session, monkeypatch, tmp_path):
     from app.application.etl.targets.batch import AttendanceAdapter
+    from app.db.base import Base
+    from sqlalchemy.orm import sessionmaker
 
     monkeypatch.setattr("app.application.etl.targets.batch.get_app_data_dir", lambda: tmp_path)
+    Base.metadata.create_all(session.bind)
+    monkeypatch.setattr("app.db.HostSessionLocal", sessionmaker(bind=session.bind))
     a = AttendanceAdapter()
     context = {"upload_path": str(tmp_path / "a.csv"), "file_sha256": "f"}
     d = a.preview(MagicMock(), [], allowed_update_fields=set(), context=context)
     assert d.action == "error" and d.reason == "unsupported_attendance_file"
 
-    ctx2 = {"upload_path": str(tmp_path / "a.xlsx"), "file_sha256": "f"}
+    ctx2 = {"upload_path": str(tmp_path / "a.xlsx"), "file_sha256": "f", "tenant_id": 1}
     d2 = a.preview(MagicMock(), [], allowed_update_fields=set(), context=ctx2)
     assert d2.action == "new" and d2.reason == "new_attendance_source"
 
@@ -2098,45 +2102,65 @@ def test_attendance_adapter_preview(session, monkeypatch, tmp_path):
 
 def test_attendance_existing_batch_db(session, tmp_path):
     from app.application.etl.targets.batch import AttendanceAdapter
+    from app.db.base import Base
+    from app.db.models.hr_attendance import AttendanceImportBatch
+    from app.infrastructure.tenant_scope import tenant_scope
+    from sqlalchemy.orm import sessionmaker
+    from datetime import datetime, timezone
 
     a = AttendanceAdapter()
-    db_path = tmp_path / "data" / "mod_dbs" / "taiyangniao-pro.db"
-    db_path.parent.mkdir(parents=True)
-    conn = sqlite3.connect(str(db_path))
-    conn.execute(
-        "CREATE TABLE attendance_import_batches (id INTEGER, rows_written INTEGER, imported_at TEXT, source_file TEXT)"
-    )
-    conn.execute("INSERT INTO attendance_import_batches VALUES (5, 3, '2024-01-01', 'f:a.xlsx')")
-    conn.commit()
-    conn.close()
-
-    with patch.object(AttendanceAdapter, "_db_path", return_value=db_path):
-        match = a._existing_batch(
-            {"upload_path": str(tmp_path / "a.xlsx"), "file_sha256": "f", "_preview_cache": {}}
-        )
-        assert match["batch_id"] == 5
-
-        # cached
-        cache = {}
-        match2 = a._existing_batch(
-            {"upload_path": str(tmp_path / "a.xlsx"), "file_sha256": "f", "_preview_cache": cache}
-        )
-        match3 = a._existing_batch(
-            {"upload_path": str(tmp_path / "a.xlsx"), "file_sha256": "f", "_preview_cache": cache}
-        )
-        assert match2["batch_id"] == 5 and match3["batch_id"] == 5
-
-        # operational error (valid sqlite db but missing the query table)
-        db_path2 = tmp_path / "other.db"
-        conn2 = sqlite3.connect(str(db_path2))
-        conn2.execute("CREATE TABLE unrelated (id INTEGER)")
-        conn2.commit()
-        conn2.close()
-        with patch.object(AttendanceAdapter, "_db_path", return_value=db_path2):
-            m = a._existing_batch(
-                {"upload_path": str(tmp_path / "a.xlsx"), "file_sha256": "f", "_preview_cache": {}}
+    Base.metadata.create_all(session.bind)
+    factory = sessionmaker(bind=session.bind)
+    with tenant_scope(1):
+        db = factory()
+        db.add(
+            AttendanceImportBatch(
+                tenant_id=1,
+                owner_user_id=1,
+                source_file="f:a.xlsx",
+                source_name="a.xlsx",
+                source_hash="f",
+                month_label="2024-01",
+                workbook_kind="dingtalk",
+                rows_in=3,
+                rows_written=3,
+                department_rows=1,
+                employee_rows=1,
+                receipt_json="{}",
+                imported_at=datetime.now(timezone.utc),
             )
-            assert m is None
+        )
+        db.commit()
+        db.close()
+        with patch("app.db.HostSessionLocal", factory):
+            context = {
+                "upload_path": str(tmp_path / "a.xlsx"),
+                "file_sha256": "f",
+                "tenant_id": 1,
+                "_preview_cache": {},
+            }
+            match = a._existing_batch(context)
+            assert match["rows_written"] == 3
+
+            # cached
+            cache = {}
+            context["_preview_cache"] = cache
+            match2 = a._existing_batch(context)
+            match3 = a._existing_batch(context)
+            assert match2["batch_id"] == match3["batch_id"]
+
+    # Missing ERP schema is treated as not-yet-migrated, never as a private DB match.
+    empty_engine = create_engine(f"sqlite:///{tmp_path / 'empty.db'}")
+    with patch("app.db.HostSessionLocal", sessionmaker(bind=empty_engine)):
+        match = a._existing_batch(
+            {
+                "upload_path": str(tmp_path / "a.xlsx"),
+                "file_sha256": "f",
+                "tenant_id": 1,
+                "_preview_cache": {},
+            }
+        )
+        assert match is None
 
 
 def test_attendance_execute_and_rollback(tmp_path, monkeypatch):
@@ -2164,13 +2188,14 @@ def test_attendance_execute_and_rollback(tmp_path, monkeypatch):
     ctx2 = {
         "upload_path": str(tmp_path / "a.xlsx"),
         "file_sha256": "f",
+        "tenant_id": 1,
         "row_count": 3,
         "progress_callback": lambda *a: None,
     }
     with patch(
-        "app.application.attendance_import_app_service.import_attendance_workbook",
-        return_value={"ok": True},
-    ):
+        "app.application.erp_attendance_app_service.import_attendance_workbook_to_erp",
+        return_value={"storage": "erp", "source_file": "f:a.xlsx", "batch_id": 1},
+    ), patch.object(a, "_existing_batch", return_value=None):
         r = a.execute_batch([], ctx2)
     assert r["executed"] == 3
 
@@ -2180,19 +2205,14 @@ def test_attendance_execute_and_rollback(tmp_path, monkeypatch):
             a.rollback_batch({}, {"source_file": ""})
         assert ex3.value.code == "ETL_ATTENDANCE_ROLLBACK_DATA_MISSING"
 
-    # rollback success
-    db_path = tmp_path / "roll.db"
-    conn = sqlite3.connect(str(db_path))
-    conn.execute("CREATE TABLE attendance_daily_records (source_file TEXT)")
-    conn.execute("CREATE TABLE attendance_employees (source_file TEXT)")
-    conn.execute("CREATE TABLE attendance_departments (source_file TEXT)")
-    conn.execute("CREATE TABLE products (source_file TEXT)")
-    conn.execute("CREATE TABLE customers (source_file TEXT)")
-    conn.execute("CREATE TABLE attendance_import_batches (id INTEGER)")
-    conn.execute("INSERT INTO attendance_import_batches VALUES (1)")
-    conn.commit()
-    conn.close()
-    deleted = a.rollback_batch({}, {"source_file": "f", "db_path": str(db_path), "batch_id": 1})
+    # rollback success delegates to the ERP source-scoped rollback.
+    with patch(
+        "app.application.erp_attendance_app_service.rollback_attendance_import",
+        return_value=4,
+    ):
+        deleted = a.rollback_batch(
+            {"tenant_id": 1}, {"source_file": "f:a.xlsx", "batch_id": 1}
+        )
     assert deleted >= 0
 
 

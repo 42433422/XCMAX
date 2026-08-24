@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import sys
+from datetime import UTC
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -15,132 +16,280 @@ def _facade() -> Any:
 
 @_facade().register_entity_applier("personnel")
 def _apply_personnel(item: dict[str, Any]) -> None:
-    """人员变更：写入 taiyangniao-pro attendance_employees / products。"""
+    """人员变更：写入 ERP 人员档案，不再镜像成产品。"""
     payload = item.get("payload") or {}
     name = str(payload.get("name") or payload.get("employee_name") or "").strip()
     if not name:
         return
     try:
-        import sqlite3
-        from datetime import datetime
+        from app.application.erp_attendance_app_service import employee_identity_key
+        from app.db import HostSessionLocal
+        from app.db.models.hr_attendance import ErpDepartment, ErpEmployee
+        from app.infrastructure.tenant_scope import (
+            current_tenant_id,
+            tenant_id_for_write,
+            tenant_scope,
+        )
 
-        from app.mod_sdk.private_sqlite import resolve_mod_private_sqlite_path
-
-        db_path = resolve_mod_private_sqlite_path("taiyangniao_pro.db")
-        conn = sqlite3.connect(str(db_path))
-        now = datetime.now().isoformat(timespec="seconds")
         dept = str(payload.get("department") or "").strip()
-        conn.execute(
-            "\n            INSERT OR IGNORE INTO attendance_employees\n                (source_file, employee_name, department, main_department,\n                 attendance_group, employee_no, position, user_id)\n            VALUES (?, ?, ?, ?, ?, ?, ?, ?)\n            ",
-            (
-                "xcmax_sync",
-                name,
-                dept,
-                dept,
-                payload.get("attendance_group") or "XCmax",
-                payload.get("employee_no") or "",
-                payload.get("position") or "",
-                payload.get("user_id") or "",
-            ),
-        )
-        conn.execute(
-            "\n            INSERT INTO products (source_file, model_number, name, specification, price, unit, created_at, updated_at)\n            VALUES (?, ?, ?, ?, ?, ?, ?, ?)\n            ",
-            (
-                "xcmax_sync",
-                payload.get("employee_id") or name,
-                name,
-                payload.get("position") or "",
-                0.0,
-                dept,
-                now,
-                now,
-            ),
-        )
-        conn.commit()
-        conn.close()
+        requested_tenant = payload.get("tenant_id") or item.get("tenant_id") or current_tenant_id()
+        with tenant_scope(int(requested_tenant) if requested_tenant is not None else None):
+            db = HostSessionLocal()
+            try:
+                department = None
+                if dept:
+                    parent = str(payload.get("main_department") or "").strip()
+                    department = (
+                        db.query(ErpDepartment)
+                        .filter(ErpDepartment.name == dept, ErpDepartment.parent_name == parent)
+                        .first()
+                    )
+                    if department is None:
+                        department = ErpDepartment(
+                            tenant_id=tenant_id_for_write(),
+                            name=dept,
+                            parent_name=parent,
+                            attendance_group=str(payload.get("attendance_group") or "XCmax"),
+                            source_system="xcmax_sync",
+                            source_key=str(item.get("entity_id") or dept),
+                        )
+                        db.add(department)
+                        db.flush()
+                identity = employee_identity_key(
+                    employee_name=name,
+                    department=dept,
+                    employee_no=str(payload.get("employee_no") or ""),
+                    external_user_id=str(payload.get("user_id") or ""),
+                )
+                obj = db.query(ErpEmployee).filter(ErpEmployee.identity_key == identity).first()
+                if str(item.get("operation") or "sync") == "delete":
+                    if obj:
+                        obj.is_active = False
+                        db.commit()
+                    return
+                if obj is None:
+                    obj = ErpEmployee(
+                        tenant_id=tenant_id_for_write(),
+                        identity_key=identity,
+                        employee_name=name,
+                        department_id=department.id if department else None,
+                        department=dept,
+                        main_department=str(payload.get("main_department") or dept),
+                        attendance_group=str(payload.get("attendance_group") or "XCmax"),
+                        employee_no=str(payload.get("employee_no") or ""),
+                        position=str(payload.get("position") or ""),
+                        external_user_id=str(payload.get("user_id") or ""),
+                        account_user_id=(
+                            int(payload["account_user_id"])
+                            if str(payload.get("account_user_id") or "").isdigit()
+                            else None
+                        ),
+                        source_system="xcmax_sync",
+                        source_key=str(item.get("entity_id") or payload.get("employee_id") or name),
+                        is_active=True,
+                    )
+                    db.add(obj)
+                else:
+                    obj.employee_name = name
+                    obj.department_id = department.id if department else obj.department_id
+                    obj.department = dept
+                    obj.main_department = str(payload.get("main_department") or dept)
+                    obj.attendance_group = str(
+                        payload.get("attendance_group") or obj.attendance_group or "XCmax"
+                    )
+                    obj.employee_no = str(payload.get("employee_no") or obj.employee_no or "")
+                    obj.position = str(payload.get("position") or obj.position or "")
+                    obj.external_user_id = str(payload.get("user_id") or obj.external_user_id or "")
+                    obj.is_active = True
+                db.commit()
+            finally:
+                db.close()
     except _facade().RECOVERABLE_ERRORS as exc:
         _facade().logger.warning("apply_personnel failed for %s: %s", name, exc)
 
 
 @_facade().register_entity_applier("department")
 def _apply_department(item: dict[str, Any]) -> None:
-    """部门变更：写入 attendance_departments / customers。"""
+    """部门变更：写入 ERP 组织档案，不再镜像成客户。"""
     payload = item.get("payload") or {}
     dept = str(payload.get("department") or payload.get("customer_name") or "").strip()
     if not dept:
         return
     try:
-        import sqlite3
-        from datetime import datetime
-
-        from app.mod_sdk.private_sqlite import resolve_mod_private_sqlite_path
-
-        db_path = resolve_mod_private_sqlite_path("taiyangniao_pro.db")
-        conn = sqlite3.connect(str(db_path))
-        now = datetime.now().isoformat(timespec="seconds")
-        conn.execute(
-            "\n            INSERT OR IGNORE INTO attendance_departments\n                (source_file, department, main_department, attendance_group)\n            VALUES (?, ?, ?, ?)\n            ",
-            ("xcmax_sync", dept, dept, payload.get("attendance_group") or "XCmax"),
+        from app.db import HostSessionLocal
+        from app.db.models.hr_attendance import ErpDepartment
+        from app.infrastructure.tenant_scope import (
+            current_tenant_id,
+            tenant_id_for_write,
+            tenant_scope,
         )
-        conn.execute(
-            "\n            INSERT INTO customers (source_file, customer_name, contact_person, contact_phone,\n                                   address, purchase_unit, created_at, updated_at)\n            VALUES (?, ?, ?, ?, ?, ?, ?, ?)\n            ",
-            ("xcmax_sync", dept, "", "", "", "", now, now),
-        )
-        conn.commit()
-        conn.close()
+
+        requested_tenant = payload.get("tenant_id") or item.get("tenant_id") or current_tenant_id()
+        with tenant_scope(int(requested_tenant) if requested_tenant is not None else None):
+            db = HostSessionLocal()
+            try:
+                parent = str(payload.get("main_department") or dept).strip()
+                obj = (
+                    db.query(ErpDepartment)
+                    .filter(ErpDepartment.name == dept, ErpDepartment.parent_name == parent)
+                    .first()
+                )
+                if str(item.get("operation") or "sync") == "delete":
+                    if obj:
+                        obj.is_active = False
+                        db.commit()
+                    return
+                if obj is None:
+                    obj = ErpDepartment(
+                        tenant_id=tenant_id_for_write(),
+                        name=dept,
+                        parent_name=parent,
+                        attendance_group=str(payload.get("attendance_group") or "XCmax"),
+                        source_system="xcmax_sync",
+                        source_key=str(item.get("entity_id") or dept),
+                        is_active=True,
+                    )
+                    db.add(obj)
+                else:
+                    obj.attendance_group = str(
+                        payload.get("attendance_group") or obj.attendance_group or "XCmax"
+                    )
+                    obj.is_active = True
+                db.commit()
+            finally:
+                db.close()
     except _facade().RECOVERABLE_ERRORS as exc:
         _facade().logger.warning("apply_department failed for %s: %s", dept, exc)
 
 
 @_facade().register_entity_applier("attendance")
 def _apply_attendance(item: dict[str, Any]) -> None:
-    """考勤记录变更：写入主库 shipment_records 表（考勤行业语义）。"""
+    """考勤记录变更：写入 ERP 考勤表，不再复用发货记录。"""
     payload = item.get("payload") or {}
     operation = item.get("operation", "sync")
     try:
-        from datetime import datetime as _dt
+        import json
+        from datetime import date, datetime
 
-        from app.db import get_db
-        from app.db.models.shipment import ShipmentRecord
+        from app.application.erp_attendance_app_service import find_employee
+        from app.db import HostSessionLocal
+        from app.db.models.hr_attendance import AttendanceDailyRecord, AttendanceImportBatch
+        from app.infrastructure.tenant_scope import (
+            current_tenant_id,
+            tenant_id_for_write,
+            tenant_scope,
+        )
 
-        with get_db() as db:
-            record_id = payload.get("id")
-            if operation == "delete" and record_id:
-                obj = db.query(ShipmentRecord).filter(ShipmentRecord.id == record_id).first()
-                if obj:
-                    db.delete(obj)
-                    db.commit()
-                return
-            purchase_unit = str(
-                payload.get("purchase_unit") or payload.get("employee_name") or ""
-            ).strip()
-            product_name = str(
-                payload.get("product_name") or payload.get("attendance_group") or ""
-            ).strip()
-            if not purchase_unit or not product_name:
-                return
-            if record_id:
-                obj = db.query(ShipmentRecord).filter(ShipmentRecord.id == record_id).first()
-            else:
-                obj = None
-            if obj:
-                for col in ("purchase_unit", "product_name", "model_number", "status", "raw_text"):
-                    if col in payload:
-                        setattr(obj, col, payload[col])
-                obj.updated_at = _dt.now()
-            else:
-                obj = ShipmentRecord(
-                    purchase_unit=purchase_unit,
-                    product_name=product_name,
-                    model_number=str(payload.get("model_number") or ""),
-                    quantity_kg=float(payload.get("quantity_kg") or 0),
-                    quantity_tins=int(payload.get("quantity_tins") or 0),
-                    status=str(payload.get("status") or "pending"),
-                    created_at=_dt.now(),
-                    updated_at=_dt.now(),
+        employee_name = str(
+            payload.get("employee_name") or payload.get("purchase_unit") or ""
+        ).strip()
+        work_date_raw = str(payload.get("work_date") or payload.get("date") or "").strip()
+        if not employee_name or not work_date_raw:
+            return
+        work_date = date.fromisoformat(work_date_raw[:10])
+        source_key = f"xcmax_sync:{item.get('entity_id') or payload.get('id') or employee_name + ':' + work_date.isoformat()}"
+        requested_tenant = payload.get("tenant_id") or item.get("tenant_id") or current_tenant_id()
+        with tenant_scope(int(requested_tenant) if requested_tenant is not None else None):
+            db = HostSessionLocal()
+            try:
+                batch = (
+                    db.query(AttendanceImportBatch)
+                    .filter(AttendanceImportBatch.source_file == source_key)
+                    .first()
                 )
-                db.add(obj)
-            db.commit()
+                if operation == "delete":
+                    if batch:
+                        db.query(AttendanceDailyRecord).filter(
+                            AttendanceDailyRecord.batch_id == batch.id
+                        ).delete(synchronize_session=False)
+                        db.delete(batch)
+                        db.commit()
+                    return
+                employee = find_employee(
+                    db,
+                    employee_name=employee_name,
+                    employee_no=str(payload.get("employee_no") or ""),
+                )
+                if employee is None:
+                    logger.warning(
+                        "apply_attendance skipped unknown ERP employee: %s", employee_name
+                    )
+                    return
+                now = datetime.now(UTC)
+                if batch is None:
+                    batch = AttendanceImportBatch(
+                        tenant_id=tenant_id_for_write(),
+                        owner_user_id=None,
+                        source_file=source_key,
+                        source_name="XCmax sync",
+                        source_hash="",
+                        month_label=work_date.strftime("%Y-%m"),
+                        workbook_kind="xcmax_sync",
+                        rows_in=1,
+                        rows_written=1,
+                        department_rows=0,
+                        employee_rows=0,
+                        receipt_json=json.dumps(
+                            {"storage": "erp", "source_file": source_key}, ensure_ascii=False
+                        ),
+                        imported_at=now,
+                    )
+                    db.add(batch)
+                    db.flush()
+                row = (
+                    db.query(AttendanceDailyRecord)
+                    .filter(
+                        AttendanceDailyRecord.source_file == source_key,
+                        AttendanceDailyRecord.source_row == int(payload.get("source_row") or 1),
+                    )
+                    .first()
+                )
+                values = {
+                    "employee_id": employee.id,
+                    "department_id": employee.department_id,
+                    "employee_name": employee.employee_name,
+                    "attendance_group": str(
+                        payload.get("attendance_group") or employee.attendance_group or ""
+                    ),
+                    "department": str(payload.get("department") or employee.department or ""),
+                    "employee_no": employee.employee_no,
+                    "position": employee.position,
+                    "external_user_id": employee.external_user_id,
+                    "work_date": work_date,
+                    "shift_name": str(payload.get("shift_name") or ""),
+                    "daily_times_json": json.dumps(
+                        payload.get("daily_times") or [], ensure_ascii=False
+                    ),
+                    "raw_times_json": json.dumps(
+                        payload.get("raw_times") or [], ensure_ascii=False
+                    ),
+                    "all_times_json": json.dumps(
+                        payload.get("all_times") or [], ensure_ascii=False
+                    ),
+                    "leave_hours": float(payload.get("leave_hours") or 0),
+                    "absent_days": float(payload.get("absent_days") or 0),
+                    "late_count_hint": float(payload.get("late_count_hint") or 0),
+                    "early_count_hint": float(payload.get("early_count_hint") or 0),
+                    "missing_card_count": float(payload.get("missing_card_count") or 0),
+                    "notes_json": json.dumps(payload.get("notes") or [], ensure_ascii=False),
+                    "imported_at": now,
+                }
+                if row is None:
+                    row = AttendanceDailyRecord(
+                        tenant_id=tenant_id_for_write(),
+                        batch_id=batch.id,
+                        source_file=source_key,
+                        month_label=work_date.strftime("%Y-%m"),
+                        source_row=int(payload.get("source_row") or 1),
+                        **values,
+                    )
+                    db.add(row)
+                else:
+                    for field, value in values.items():
+                        setattr(row, field, value)
+                db.commit()
+            finally:
+                db.close()
     except _facade().RECOVERABLE_ERRORS as exc:
         _facade().logger.warning("apply_attendance failed: %s", exc)
 

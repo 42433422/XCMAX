@@ -143,6 +143,7 @@ def row_context(run: EtlRun, upload: EtlUpload, source_row: int) -> dict[str, An
     return {
         "run_id": run.id,
         "owner_user_id": run.owner_user_id,
+        "tenant_id": run.tenant_id,
         "file_sha256": upload.sha256,
         "file_name": upload.file_name,
         "relative_path": upload.relative_path or upload.file_name,

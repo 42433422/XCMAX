@@ -395,12 +395,12 @@ class TestImportAttendanceWorkbook:
         assert result["month_label"] == "2026-03"
         assert result["employee_rows"] == 2
         assert result["department_rows"] == 2
-        assert result["product_rows"] == 2
-        assert result["customer_rows"] == 2
+        assert result["product_rows"] == 0
+        assert result["customer_rows"] == 0
         assert result["daily_rows_in"] == 1
         assert result["daily_rows_written"] == 1
         assert result["batch_id"] >= 1
-        assert result["sync_ui_tables"] is True
+        assert result["sync_ui_tables"] is False
 
         conn = sqlite3.connect(str(db))
         assert conn.execute("SELECT COUNT(*) FROM attendance_daily_records").fetchone()[0] == 1
@@ -428,15 +428,21 @@ class TestImportAttendanceWorkbook:
         assert batch == (result["employee_rows"], result["employee_rows"])
         conn.close()
 
-    def test_rollback_on_insert_error(self, monkeypatch, tmp_path):
+    def test_rollback_on_insert_error(self, tmp_path):
         excel = _mingxi_xlsx(tmp_path / "明细.xlsx")
         db = tmp_path / "db.sqlite"
-
-        def _boom(*args, **kwargs):
-            raise sqlite3.OperationalError("disk full")
-
-        monkeypatch.setattr(svc, "_sync_products_customers", _boom)
-        with pytest.raises(sqlite3.OperationalError):
+        conn = sqlite3.connect(str(db))
+        svc._ensure_schema(conn)
+        conn.execute(
+            """
+            CREATE TRIGGER fail_attendance_batch
+            BEFORE INSERT ON attendance_import_batches
+            BEGIN SELECT RAISE(ABORT, 'disk full'); END
+            """
+        )
+        conn.commit()
+        conn.close()
+        with pytest.raises(sqlite3.IntegrityError):
             svc.import_attendance_workbook(excel, db)
         # 回滚后无残留部门/员工行
         conn = sqlite3.connect(str(db))

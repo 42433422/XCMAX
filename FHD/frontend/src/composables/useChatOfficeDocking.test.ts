@@ -316,7 +316,7 @@ describe('useChatOfficeDocking', () => {
     expect(docking.officeDockingReviewItems.value).toEqual([])
   })
 
-  it('recognizes an attendance workbook and writes it to the attendance database', async () => {
+  it('recognizes an attendance workbook and writes it to ERP personnel attendance', async () => {
     mocks.resolveEmployee.mockReturnValue(EXCEL_FULL_READ_EMPLOYEE_ID)
     mocks.runEmployee.mockResolvedValue({
       summary: '工作簿已读取',
@@ -353,12 +353,17 @@ describe('useChatOfficeDocking', () => {
     const item = docking.officeDockingReviewItems.value[0]
     expect(item.intentId).toBe('attendance_roster')
     expect(item.databaseAction).toBe('attendance_import')
+    expect(item.databaseTargetLabel).toBe('ERP 人事考勤')
+    expect(item.intentSummary).not.toContain('太阳鸟考勤库')
     expect(item.rowCount).toBe(4)
     await docking.confirmOfficeDockingReview()
 
     expect(mocks.apiFetch).toHaveBeenCalledWith(
-      '/api/mod/taiyangniao-pro/attendance/import-workbook',
-      expect.objectContaining({ method: 'POST' }),
+      '/api/platform-shell/office/confirm',
+      expect.objectContaining({
+        method: 'POST',
+        body: expect.stringContaining('"intent":"attendance"'),
+      }),
     )
     expect(item.commitStatus).toBe('committed')
     expect(item.summary).toBe('考勤入库完成：人员 3 条，部门 1 条')

@@ -25,6 +25,7 @@ from app.application.chat_business_safety_core import (
     _resolve_person_from_actor,
     _table_exists,
 )
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 def _parse_date_scope(message: str, *, now: date | None = None) -> tuple[str, str, str] | None:
@@ -76,7 +77,7 @@ def _parse_date_scope(message: str, *, now: date | None = None) -> tuple[str, st
     return None
 
 
-def _attendance_rows(
+def _legacy_attendance_rows(
     message: str,
     *,
     actor: BusinessActorIdentity,
@@ -161,6 +162,101 @@ def _attendance_rows(
         conn.close()
 
 
+def _attendance_rows(
+    message: str,
+    *,
+    actor: BusinessActorIdentity,
+    require_scope: bool = True,
+) -> tuple[list[dict[str, Any]], dict[str, Any], str | None]:
+    """Read the ERP attendance domain, with legacy side-db fallback before migration."""
+
+    scope = _parse_date_scope(message)
+    if require_scope and scope is None:
+        return [], {}, "missing_date_scope"
+    try:
+        from app.application.erp_attendance_app_service import (
+            ERP_ATTENDANCE_SOURCE,
+            attendance_rows,
+            erp_attendance_schema_available,
+            find_employee,
+        )
+        from app.db import HostSessionLocal
+        from app.db.models.hr_attendance import AttendanceImportBatch, ErpEmployee
+
+        db = HostSessionLocal()
+        try:
+            if not erp_attendance_schema_available(db):
+                return _legacy_attendance_rows(message, actor=actor, require_scope=require_scope)
+            meta: dict[str, Any] = {"data_source": ERP_ATTENDANCE_SOURCE}
+            start = end = ""
+            if scope:
+                scope_kind, start, end = scope
+                meta.update({"scope": scope_kind, "date_start": start, "date_end": end})
+            employee_no = _extract_employee_no(message)
+            person_name = _extract_person_name(message)
+            department = _extract_department(message)
+            if employee_no:
+                meta["employee_no"] = employee_no
+            elif person_name:
+                meta["employee_name"] = person_name
+            elif re.search(r"我|本人|我的", message):
+                identifiers = [
+                    item
+                    for item in (
+                        actor.local_user_id,
+                        actor.username,
+                        actor.trusted_client_user_id,
+                    )
+                    if item
+                ]
+                names = [item for item in (actor.display_name, actor.username) if item]
+                person = find_employee(db, identifiers=identifiers, names=names)
+                if person is None:
+                    # Only fall back while the ERP domain has no personnel data.
+                    if db.query(ErpEmployee.id).first() is None:
+                        return _legacy_attendance_rows(
+                            message, actor=actor, require_scope=require_scope
+                        )
+                    return [], {**meta, "actor": asdict(actor)}, "current_user_not_mapped"
+                person_name = person.employee_name
+                employee_no = person.employee_no
+                meta.update(
+                    {
+                        "actor": asdict(actor),
+                        "employee_name": person_name,
+                        "employee_no": employee_no,
+                    }
+                )
+            elif department:
+                meta["department"] = department
+            rows = attendance_rows(
+                db,
+                date_start=start,
+                date_end=end,
+                employee_name=person_name,
+                employee_no=employee_no,
+                department=department,
+            )
+            # A tenant with no ERP import at all may still be awaiting explicit
+            # migration of its old local side database. Keep that data readable,
+            # but never mix it into an established ERP attendance ledger.
+            if not rows and db.query(AttendanceImportBatch.id).first() is None:
+                legacy_rows, legacy_meta, legacy_error = _legacy_attendance_rows(
+                    message, actor=actor, require_scope=require_scope
+                )
+                if legacy_rows or legacy_error not in {
+                    "attendance_database_missing",
+                    "attendance_records_missing",
+                }:
+                    legacy_meta["data_source"] = f"legacy:{_DB_NAME}:attendance_daily_records"
+                    return legacy_rows, legacy_meta, legacy_error
+            return rows, meta, None
+        finally:
+            db.close()
+    except RECOVERABLE_ERRORS as exc:
+        return [], {}, f"attendance_query_failed:{exc}"
+
+
 def _json_list(value: Any) -> list[str]:
     try:
         parsed = json.loads(str(value or "[]"))
@@ -172,7 +268,7 @@ def _json_list(value: Any) -> list[str]:
 def _attendance_error_payload(
     intent: BusinessChatIntent, error: str, meta: dict[str, Any]
 ) -> dict[str, Any]:
-    source = f"{_DB_NAME}:attendance_daily_records"
+    source = str(meta.get("data_source") or "erp:erp_attendance_daily_records")
     if error == "missing_date_scope":
         text = "考勤查询未执行：请明确要查询的日期或月份，例如“今天”“2026年7月14日”或“本月”。"
     elif error == "current_user_not_mapped":
@@ -198,7 +294,7 @@ def _handle_attendance_read(
     if error:
         return _attendance_error_payload(intent, error, meta)
 
-    source = f"{_DB_NAME}:attendance_daily_records"
+    source = str(meta.get("data_source") or "erp:erp_attendance_daily_records")
     receipt = _new_receipt(
         intent,
         status="verified" if rows else "verified_empty",
