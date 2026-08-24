@@ -23,7 +23,7 @@ function buildScopeInput(
   }
 }
 
-function syncTenantScopedStoresFromProfile(
+async function syncTenantScopedStoresFromProfile(
   tenantId: number | null,
   marketUserId: number | null,
   localUserId: number | null,
@@ -32,7 +32,20 @@ function syncTenantScopedStoresFromProfile(
 ): Promise<void> {
   const input = buildScopeInput(tenantId, marketUserId, localUserId, accountKind, marketUsername)
   setRuntimeTenantStorageScopeInput(input)
-  return refreshTenantScopedClientStores(input)
+  await refreshTenantScopedClientStores(input)
+
+  // MainLayout can mount during the desktop's provisional entry, before the
+  // background session validation has restored the authenticated tenant. In
+  // that window the industry store legitimately receives the unauthenticated
+  // "通用" profile and marks itself loaded. Refresh it after the account scope
+  // is established so the sidebar follows User/workspace industry immediately.
+  try {
+    const { useIndustryStore } = await import('@/stores/industry')
+    await useIndustryStore().loadFromServer()
+  } catch {
+    // Industry copy remains on the safe generic fallback when the service is
+    // temporarily unavailable; the next authenticated refresh will retry.
+  }
 }
 
 export const useAccountProfileStore = defineStore('accountProfile', () => {

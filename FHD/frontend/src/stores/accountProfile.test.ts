@@ -3,6 +3,8 @@ import { createPinia, setActivePinia } from 'pinia'
 import { useAccountProfileStore } from './accountProfile'
 import { refreshTenantScopedClientStores } from '@/utils/refreshTenantScopedClientStores'
 
+const mockLoadIndustryFromServer = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+
 vi.mock('@/api/auth', () => ({
   authApi: {
     getCurrentUser: vi.fn().mockResolvedValue({ success: true, data: {} }),
@@ -27,10 +29,15 @@ vi.mock('@/utils/tenantStorageScopeRuntime', () => ({
   setRuntimeTenantStorageScopeInput: vi.fn(),
 }))
 
+vi.mock('@/stores/industry', () => ({
+  useIndustryStore: () => ({ loadFromServer: mockLoadIndustryFromServer }),
+}))
+
 describe('useAccountProfileStore', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
+    mockLoadIndustryFromServer.mockResolvedValue(undefined)
   })
 
   it('initializes with default state', () => {
@@ -238,5 +245,30 @@ describe('useAccountProfileStore', () => {
     releaseHydration?.()
     await refresh
     expect(resolved).toBe(true)
+  })
+
+  it('reloads the authenticated industry after the tenant scope is ready', async () => {
+    const store = useAccountProfileStore()
+    await store.applyFromMeData({
+      account_kind: 'enterprise',
+      tenant_id: 1,
+      local_user_id: 2,
+      industry_id: '涂料',
+    })
+
+    expect(refreshTenantScopedClientStores).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 1, localUserId: 2 }))
+    expect(mockLoadIndustryFromServer).toHaveBeenCalledOnce()
+  })
+
+  it('keeps login usable when the authenticated industry refresh fails', async () => {
+    mockLoadIndustryFromServer.mockRejectedValueOnce(new Error('industry unavailable'))
+    const store = useAccountProfileStore()
+
+    await expect(
+      store.applyFromLoginPayload({
+        data: { account_kind: 'enterprise', tenant_id: 1, local_user_id: 2 },
+      }),
+    ).resolves.toBeUndefined()
+    expect(store.loaded).toBe(true)
   })
 })

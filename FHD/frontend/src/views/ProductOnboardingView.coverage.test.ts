@@ -165,6 +165,7 @@ function createIndustryState(overrides: Record<string, unknown> = {}) {
     loading: false,
     error: null,
     initialize: vi.fn(async () => undefined),
+    loadFromServer: vi.fn(async () => undefined),
     ...overrides,
   }
 }
@@ -507,6 +508,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     await nextBtn.trigger('click')
     await flushPromises()
     expect(mockContainer.patchWorkspacePrefs).toHaveBeenCalledWith(expect.objectContaining({ selected_industry_id: '涂料' }))
+    expect(mockContainer.industryState.loadFromServer).toHaveBeenCalledOnce()
     expect(replaceSpy).toHaveBeenCalled()
     const callArg = replaceSpy.mock.calls[replaceSpy.mock.calls.length - 1][0]
     expect(callArg.query.step).toBe('host-pack')

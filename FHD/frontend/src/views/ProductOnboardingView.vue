@@ -871,6 +871,10 @@ async function confirmIndustryAndNext() {
       selected_industry_id: pickedIndustryId.value,
       industry_mod_id: industryPackageModId(pickedIndustryId.value) || undefined,
     })
+    // The sidebar reads the authenticated industry store, not the onboarding
+    // catalog preview. Force a server refresh after binding so leaving this
+    // page changes both the menu structure and its industry labels at once.
+    await industryStore.loadFromServer()
     clearDeliverableStatusCache()
     try {
       onboardingCatalog.value = await fetchOnboardingIndustryCatalog()
