@@ -1,0 +1,2170 @@
+{
+  "_note": "coverage_ramp 分诊结果。union_unique_lines 自检应≈全量-行为覆盖差(4937,±10%)。",
+  "behavior_baseline": "coverage-behavior.json",
+  "union_unique_lines": 5689,
+  "buckets": {
+    "convert": 72
+  },
+  "files": [
+    {
+      "file": "tests/test_coverage_ramp_phase90_low_modules.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 763,
+      "unique_branches": 13,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/neuro_bus/event_types_generated.py",
+          160
+        ],
+        [
+          "app/fastapi_routes/workflow_definitions.py",
+          56
+        ],
+        [
+          "app/domain/user_memory/models.py",
+          46
+        ],
+        [
+          "app/fastapi_routes/etl.py",
+          46
+        ],
+        [
+          "app/mod_sdk/client_primary_erp.py",
+          38
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase6_p22_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 493,
+      "unique_branches": 121,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/fastapi_routes/ai_assistant.py",
+          96
+        ],
+        [
+          "app/neuro_bus/domains/product_domain_handlers.py",
+          66
+        ],
+        [
+          "app/fastapi_routes/mods_routes.py",
+          62
+        ],
+        [
+          "app/neuro_bus/domains/shipment_domain_handlers.py",
+          59
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          46
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase6_p20_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 435,
+      "unique_branches": 158,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/application/user_memory_vector_app_service.py",
+          60
+        ],
+        [
+          "app/application/employee_runtime/config_v2_adapter.py",
+          58
+        ],
+        [
+          "app/fastapi_routes/domains/shipment/routes.py",
+          57
+        ],
+        [
+          "app/services/finance_unified_archive.py",
+          52
+        ],
+        [
+          "app/neuro_bus/transports/redis_pubsub.py",
+          42
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase6_p17_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 421,
+      "unique_branches": 95,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/kitten_report/chart_data_service.py",
+          92
+        ],
+        [
+          "app/services/operations_line_bridge.py",
+          74
+        ],
+        [
+          "app/neuro_bus/sandbox.py",
+          64
+        ],
+        [
+          "app/infrastructure/mods/employee_registry.py",
+          60
+        ],
+        [
+          "app/services/user_cs_delivery_signoff.py",
+          29
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase6_p19_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 414,
+      "unique_branches": 154,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/distillation_data_collector.py",
+          60
+        ],
+        [
+          "app/fastapi_routes/template_api.py",
+          57
+        ],
+        [
+          "app/infrastructure/db/mod_database_url.py",
+          56
+        ],
+        [
+          "app/shell/xcagi_mods_discover.py",
+          52
+        ],
+        [
+          "app/utils/performance/performance_initializer.py",
+          45
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_routes.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 384,
+      "unique_branches": 59,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/infrastructure/mods/catalog_client.py",
+          55
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          46
+        ],
+        [
+          "app/fastapi_routes/etl.py",
+          46
+        ],
+        [
+          "app/schemas/etl_schema.py",
+          28
+        ],
+        [
+          "app/fastapi_routes/mods_routes.py",
+          23
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase6_p21_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 371,
+      "unique_branches": 92,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/conversation/handlers.py",
+          81
+        ],
+        [
+          "app/services/modstore_library_sync.py",
+          60
+        ],
+        [
+          "app/infrastructure/skills/template_manager/template_manager.py",
+          50
+        ],
+        [
+          "app/infrastructure/payment/order_store.py",
+          46
+        ],
+        [
+          "app/services/distilled_intent_service.py",
+          44
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase6_p16_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 338,
+      "unique_branches": 90,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/paddle_ocr_runner.py",
+          69
+        ],
+        [
+          "app/domain/neuro/processors/conscious.py",
+          66
+        ],
+        [
+          "app/fastapi_routes/domains/excel/routes.py",
+          64
+        ],
+        [
+          "app/infrastructure/repositories/customer_repository_impl.py",
+          56
+        ],
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase54_routes.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 325,
+      "unique_branches": 36,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/fastapi_routes/ai_assistant.py",
+          94
+        ],
+        [
+          "app/fastapi_routes/reports.py",
+          23
+        ],
+        [
+          "app/application/inventory_app_service.py",
+          22
+        ],
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase6_p7_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 302,
+      "unique_branches": 53,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/fastapi_routes/ai_assistant.py",
+          170
+        ],
+        [
+          "app/infrastructure/skills/template_manager/template_manager.py",
+          43
+        ],
+        [
+          "app/fastapi_routes/ai_assistant_tts.py",
+          17
+        ],
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase6_p24_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 298,
+      "unique_branches": 92,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/fastapi_routes/print_routes.py",
+          82
+        ],
+        [
+          "app/mod_sdk/industry_seed.py",
+          48
+        ],
+        [
+          "app/services/session_service.py",
+          30
+        ],
+        [
+          "app/infrastructure/skills/__init__.py",
+          25
+        ],
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase6_p10_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 270,
+      "unique_branches": 53,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/application/employee_runtime/agent.py",
+          89
+        ],
+        [
+          "app/neuro_bus/domains/product_domain_handlers.py",
+          70
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          35
+        ],
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase6_p18_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 266,
+      "unique_branches": 87,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/infrastructure/repositories/product_repository_impl.py",
+          67
+        ],
+        [
+          "app/services/ocr_service.py",
+          61
+        ],
+        [
+          "app/mod_sdk/industry_seed.py",
+          44
+        ],
+        [
+          "app/application/workflow/engine_workflowengine_mixin01__workflowenginepart01mixin_mixin02.py",
+          19
+        ],
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase6_p3_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 265,
+      "unique_branches": 68,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/infrastructure/payment/order_store.py",
+          143
+        ],
+        [
+          "app/services/hybrid_intent_service.py",
+          64
+        ],
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase6_p12_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 264,
+      "unique_branches": 61,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/fastapi_routes/service_bridge.py",
+          72
+        ],
+        [
+          "app/services/distilled_intent_service.py",
+          67
+        ],
+        [
+          "app/services/modstore_library_sync.py",
+          67
+        ],
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase4_p18_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 253,
+      "unique_branches": 79,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/utils/user_memory.py",
+          159
+        ],
+        [
+          "app/utils/user_memory_analysis.py",
+          28
+        ],
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase4_p21_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 250,
+      "unique_branches": 90,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/application/workflow/v1_builtin_nodes.py",
+          186
+        ],
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          6
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase6_p15_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 243,
+      "unique_branches": 102,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/infrastructure/mods/catalog_client.py",
+          137
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          46
+        ],
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase2_p2_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 240,
+      "unique_branches": 42,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/kitten_report/docx_export.py",
+          72
+        ],
+        [
+          "app/infrastructure/payment/order_store.py",
+          58
+        ],
+        [
+          "app/services/conversation/handlers.py",
+          36
+        ],
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase6_p4_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 228,
+      "unique_branches": 64,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/conversation/handlers.py",
+          109
+        ],
+        [
+          "app/services/conversation/intent.py",
+          58
+        ],
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase6_p9_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 224,
+      "unique_branches": 47,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/mod_sdk/planner_tools.py",
+          83
+        ],
+        [
+          "app/neuro_bus/domains/shipment_domain_handlers.py",
+          77
+        ],
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase6_p11_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 223,
+      "unique_branches": 39,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/fastapi_routes/mods_routes.py",
+          91
+        ],
+        [
+          "app/enterprise/mod_entitlements.py",
+          74
+        ],
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase6_p2_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 216,
+      "unique_branches": 55,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/fastapi_routes/ai_intent.py",
+          102
+        ],
+        [
+          "app/application/workflow/approval_gated_engine.py",
+          44
+        ],
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase4_p20_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 215,
+      "unique_branches": 53,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/service_optimizers.py",
+          157
+        ],
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          6
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase6_p5_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 186,
+      "unique_branches": 52,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/mod_sdk/mod_employee_llm.py",
+          64
+        ],
+        [
+          "app/infrastructure/db/sync_engine.py",
+          56
+        ],
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase6_p14_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 185,
+      "unique_branches": 36,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/conversation/manager.py",
+          70
+        ],
+        [
+          "app/security/mobile_jwt.py",
+          27
+        ],
+        [
+          "app/fastapi_routes/mobile_api.py",
+          25
+        ],
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase6_p1_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 178,
+      "unique_branches": 40,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/conversation_service.py",
+          60
+        ],
+        [
+          "app/infrastructure/persistence/shipment_record_command_impl.py",
+          58
+        ],
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase5_routes.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 174,
+      "unique_branches": 42,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/fastapi_routes/print_routes.py",
+          71
+        ],
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/fastapi_routes/domains/misc/helpers.py",
+          13
+        ],
+        [
+          "app/fastapi_routes/state.py",
+          10
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase6_p25_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 137,
+      "unique_branches": 16,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/conversation_service.py",
+          41
+        ],
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/fastapi_routes/rbac.py",
+          15
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase6_p8_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 128,
+      "unique_branches": 37,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/mod_sdk/industry_baseline.py",
+          52
+        ],
+        [
+          "app/mod_sdk/industry_baseline_plans.py",
+          18
+        ],
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase4_p16_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 122,
+      "unique_branches": 24,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/xcmax_sync_extended_appliers.py",
+          48
+        ],
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/xcmax_sync_service.py",
+          16
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase4_p9_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 108,
+      "unique_branches": 35,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/utils/excel/template_export_utils.py",
+          43
+        ],
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/utils/path_io/upload_helpers.py",
+          7
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase6_p13_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 107,
+      "unique_branches": 36,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/application/employee_runtime/loader.py",
+          46
+        ],
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/http/json_response.py",
+          6
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase1_p2_planner_helpers.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 104,
+      "unique_branches": 35,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/application/employee_runtime/loader.py",
+          46
+        ],
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/http/json_response.py",
+          6
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase2_p3_ext_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 104,
+      "unique_branches": 36,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/application/employee_runtime/loader.py",
+          46
+        ],
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/http/json_response.py",
+          6
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase4_p26_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 104,
+      "unique_branches": 35,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/application/employee_runtime/loader.py",
+          46
+        ],
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/http/json_response.py",
+          6
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase3_p1_deep_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 97,
+      "unique_branches": 9,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/fastapi_routes/excel_extract.py",
+          18
+        ],
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/shell/mod_row_scope.py",
+          7
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase4_p17_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 92,
+      "unique_branches": 14,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/inventory_movements.py",
+          27
+        ],
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          6
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase2_p1_biz_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 91,
+      "unique_branches": 7,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/infrastructure/rag/rag_service.py",
+          19
+        ],
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/infrastructure/persistence/sqlite_vector_store.py",
+          14
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase1_p2_routes_ext.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 88,
+      "unique_branches": 1,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/fastapi_routes/domains/misc/routes.py",
+          15
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/legacy/routes/conversation/compat_routes.py",
+          7
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase2_p2_ext_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 87,
+      "unique_branches": 4,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/kitten_report/chart_data_service.py",
+          29
+        ],
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          6
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase31_routes.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 84,
+      "unique_branches": 6,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/fastapi_routes/domains/customer/routes.py",
+          15
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          6
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase4_p11_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 78,
+      "unique_branches": 5,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/infrastructure/llm/structured_output.py",
+          14
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          6
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase2_p3_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 73,
+      "unique_branches": 4,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/infrastructure/documents/template_registry.py",
+          14
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          6
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase41_routes.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 71,
+      "unique_branches": 0,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          6
+        ],
+        [
+          "app/fastapi_routes/finance.py",
+          6
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase56_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 68,
+      "unique_branches": 4,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          6
+        ],
+        [
+          "app/http/json_response.py",
+          6
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase56_routes.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 68,
+      "unique_branches": 3,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/fastapi_routes/domains/misc/helpers.py",
+          10
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          6
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase1_p2_ai_chat.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 66,
+      "unique_branches": 2,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          6
+        ],
+        [
+          "app/http/json_response.py",
+          6
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase32_routes.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 64,
+      "unique_branches": 0,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          6
+        ],
+        [
+          "app/http/json_response.py",
+          6
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase3_p2_services_routes.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 64,
+      "unique_branches": 0,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          6
+        ],
+        [
+          "app/http/json_response.py",
+          6
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase3_p3_planner_legacy.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 64,
+      "unique_branches": 0,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          6
+        ],
+        [
+          "app/http/json_response.py",
+          6
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase4_p12_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 64,
+      "unique_branches": 0,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          6
+        ],
+        [
+          "app/http/json_response.py",
+          6
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase4_p27_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 64,
+      "unique_branches": 0,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          6
+        ],
+        [
+          "app/http/json_response.py",
+          6
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase4_p24_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 64,
+      "unique_branches": 2,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/application/ai_circle_service.py",
+          6
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          6
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase4_p28_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 64,
+      "unique_branches": 0,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          6
+        ],
+        [
+          "app/http/json_response.py",
+          6
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase4_p30_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 64,
+      "unique_branches": 0,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          6
+        ],
+        [
+          "app/http/json_response.py",
+          6
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase4_p34_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 64,
+      "unique_branches": 2,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          6
+        ],
+        [
+          "app/http/json_response.py",
+          6
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase4_p6_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 64,
+      "unique_branches": 0,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          6
+        ],
+        [
+          "app/http/json_response.py",
+          6
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase4_p7_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 64,
+      "unique_branches": 0,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          6
+        ],
+        [
+          "app/http/json_response.py",
+          6
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase55_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 59,
+      "unique_branches": 0,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          6
+        ],
+        [
+          "app/http/json_response.py",
+          6
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase2_p4_routes_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 58,
+      "unique_branches": 0,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          6
+        ],
+        [
+          "app/http/json_response.py",
+          6
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase2_p5_misc_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 58,
+      "unique_branches": 0,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          6
+        ],
+        [
+          "app/http/json_response.py",
+          6
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase4_p10_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 58,
+      "unique_branches": 0,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          6
+        ],
+        [
+          "app/http/json_response.py",
+          6
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase4_p15_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 58,
+      "unique_branches": 0,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          6
+        ],
+        [
+          "app/http/json_response.py",
+          6
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase4_p13_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 58,
+      "unique_branches": 0,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          6
+        ],
+        [
+          "app/http/json_response.py",
+          6
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase4_p19_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 58,
+      "unique_branches": 0,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          6
+        ],
+        [
+          "app/http/json_response.py",
+          6
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase4_p25_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 58,
+      "unique_branches": 0,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          6
+        ],
+        [
+          "app/http/json_response.py",
+          6
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase4_p29_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 58,
+      "unique_branches": 0,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          6
+        ],
+        [
+          "app/http/json_response.py",
+          6
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase4_p31_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 58,
+      "unique_branches": 0,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          6
+        ],
+        [
+          "app/http/json_response.py",
+          6
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase4_p32_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 58,
+      "unique_branches": 0,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          6
+        ],
+        [
+          "app/http/json_response.py",
+          6
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase4_p33_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 58,
+      "unique_branches": 0,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          6
+        ],
+        [
+          "app/http/json_response.py",
+          6
+        ]
+      ]
+    },
+    {
+      "file": "tests/test_coverage_ramp_phase4_p8_backend.py",
+      "status": "ok",
+      "rc": 0,
+      "unique_lines": 58,
+      "unique_branches": 0,
+      "bucket": "convert",
+      "top_unique_modules": [
+        [
+          "app/services/document_templates/analyzer.py",
+          17
+        ],
+        [
+          "app/services/document_templates/storage.py",
+          17
+        ],
+        [
+          "app/services/document_templates/variables.py",
+          9
+        ],
+        [
+          "app/application/employee_runtime/loader.py",
+          6
+        ],
+        [
+          "app/http/json_response.py",
+          6
+        ]
+      ]
+    }
+  ]
+}
