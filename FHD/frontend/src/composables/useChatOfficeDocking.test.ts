@@ -445,6 +445,15 @@ describe('useChatOfficeDocking', () => {
     expect(batchMessage).toContain('你想怎么处理这批文件')
     expect(batchMessage).not.toContain('AI 对接建议')
     expect(batchMessage).not.toContain('逐个确认')
+    const decisionExtras = deps.addAndSaveMessage.mock.calls[1][2] as {
+      decisionOptions?: Array<Record<string, unknown>>
+    }
+    expect(decisionExtras.decisionOptions).toHaveLength(3)
+    expect(decisionExtras.decisionOptions).toEqual([
+      expect.objectContaining({ id: 'recommended', label: '按 AI 建议处理', message: '按建议处理', recommended: true }),
+      expect.objectContaining({ id: 'template-only', label: '仅归档模板库', message: '全部只归档到模板库' }),
+      expect.objectContaining({ id: 'custom', label: '自定义处理方式', composePrefill: '我想这样处理：' }),
+    ])
     expect(mocks.apiFetch.mock.calls.some(([url]) => String(url) === '/api/templates/upload')).toBe(false)
     expect(mocks.apiFetch.mock.calls.some(([url]) => String(url).includes('/shipment-etl/execute'))).toBe(false)
 

@@ -26,6 +26,15 @@ export interface ChatApprovalCard {
   status?: 'pending' | 'confirmed' | 'cancelled'
 }
 
+export interface ChatDecisionOption {
+  id: string
+  label: string
+  description?: string
+  message?: string
+  composePrefill?: string
+  recommended?: boolean
+}
+
 export interface UiChatMessage {
   role: 'user' | 'ai' | 'task'
   content: string
@@ -62,6 +71,8 @@ export interface UiChatMessage {
   attachments?: Record<string, unknown>[]
   /** XCAGI Business Harness 终态业务结果。 */
   businessResult?: Record<string, unknown>
+  /** AI 回复末尾的结构化对话选项；点击后仍通过正常对话链路处理。 */
+  decisionOptions?: ChatDecisionOption[]
 }
 
 export type UiChatMessageExtras = Partial<UiChatMessage>

@@ -19,6 +19,7 @@ import {
   type OfficeFileUploadResult,
 } from '@/utils/officeEmployeeReadApi'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
+import type { ChatDecisionOption } from '@/types/chat-ui'
 
 type OfficeDockingTarget = 'template' | 'database'
 type OfficeDockingStatus = 'running' | 'ready' | 'error'
@@ -102,6 +103,28 @@ type OfficeDockingBatchPlan = {
   templateItemIds: string[]
   databaseItemIds: string[]
 }
+
+const OFFICE_DOCKING_DECISION_OPTIONS: ChatDecisionOption[] = [
+  {
+    id: 'recommended',
+    label: '按 AI 建议处理',
+    description: '归档模板，并同步目标明确、可以安全执行的业务数据',
+    message: '按建议处理',
+    recommended: true,
+  },
+  {
+    id: 'template-only',
+    label: '仅归档模板库',
+    description: '整理为对应行业模板，不写入任何业务数据库',
+    message: '全部只归档到模板库',
+  },
+  {
+    id: 'custom',
+    label: '自定义处理方式',
+    description: '继续告诉 AI 哪些归档、哪些入库，或先问清楚再决定',
+    composePrefill: '我想这样处理：',
+  },
+]
 
 const EMPLOYEE_LABELS: Record<string, string> = {
   [EXCEL_FULL_READ_EMPLOYEE_ID]: 'Excel 读取员',
@@ -218,7 +241,7 @@ function buildBatchInsightMessage(
       ? [`- ${mappingRequired.length} 个客户/产品业务表虽然找到了目标库，但字段映射还需要进一步核对，我不会把它们算作可直接写库。`]
       : []),
     '',
-    '你想怎么处理这批文件？可以直接说“按建议处理”“全部只归档到模板库”或“发货单入库，其余归档”；也可以先问我、改方案。',
+    '你想怎么处理这批文件？可以从下面选择，也可以继续在对话里问我或调整方案。',
   ].join('\n')
 }
 
@@ -808,6 +831,7 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
       await deps.addAndSaveMessage(
         buildBatchInsightMessage(officeDockingReviewItems.value, sourceLabel, skippedCount),
         'ai',
+        { decisionOptions: OFFICE_DOCKING_DECISION_OPTIONS },
       )
       return
     }

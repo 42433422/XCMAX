@@ -58,6 +58,93 @@ describe('ChatMessageList', () => {
     expect(wrapper.get('.trace-panel').text()).toContain('internal_node')
   })
 
+  it('renders three AI decision options and emits the selected conversation action', async () => {
+    const wrapper = mount(ChatMessageList, {
+      props: {
+        messages: [
+          {
+            role: 'ai' as const,
+            content: '整批文件已经读完，请选择下一步。',
+            time: '13:54',
+            decisionOptions: [
+              {
+                id: 'recommended',
+                label: '按 AI 建议处理',
+                description: '归档模板并同步可安全执行的业务数据',
+                message: '按建议处理',
+                recommended: true,
+              },
+              {
+                id: 'template-only',
+                label: '仅归档模板库',
+                description: '不写业务数据库',
+                message: '全部只归档到模板库',
+              },
+              {
+                id: 'custom',
+                label: '自定义处理方式',
+                description: '继续和 AI 商量',
+                composePrefill: '我想这样处理：',
+              },
+            ],
+          },
+        ],
+        isLoading: false,
+        isStreamingReply: false,
+        loadingProgressText: '',
+        messageHeights: new Map<number, number>(),
+        latestAiMessageIndex: 0,
+        playingMsgIdx: -1,
+        isMessageCollapsed: () => false,
+        getCollapsedPreview: () => '',
+        canSpeakMessage: () => false,
+        decisionOptionsEnabled: true,
+      },
+    })
+
+    const buttons = wrapper.findAll('.decision-option')
+    expect(buttons).toHaveLength(3)
+    expect(buttons.map((button) => button.text())).toEqual([
+      expect.stringContaining('按 AI 建议处理'),
+      expect.stringContaining('仅归档模板库'),
+      expect.stringContaining('自定义处理方式'),
+    ])
+    expect(buttons[0].classes()).toContain('is-recommended')
+    await buttons[1].trigger('click')
+    expect(wrapper.emitted('decision-option')?.[0]).toEqual([
+      expect.objectContaining({ id: 'template-only', message: '全部只归档到模板库' }),
+      0,
+    ])
+  })
+
+  it('keeps resolved historical decision options visible but disabled', () => {
+    const wrapper = mount(ChatMessageList, {
+      props: {
+        messages: [
+          {
+            role: 'ai' as const,
+            content: '请选择下一步。',
+            time: '13:54',
+            decisionOptions: [{ id: 'recommended', label: '按 AI 建议处理', message: '按建议处理' }],
+          },
+        ],
+        isLoading: false,
+        isStreamingReply: false,
+        loadingProgressText: '',
+        messageHeights: new Map<number, number>(),
+        latestAiMessageIndex: 0,
+        playingMsgIdx: -1,
+        isMessageCollapsed: () => false,
+        getCollapsedPreview: () => '',
+        canSpeakMessage: () => false,
+        decisionOptionsEnabled: false,
+      },
+    })
+
+    expect(wrapper.get('.decision-option').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('.decision-options__resolved').text()).toContain('这组选择已结束')
+  })
+
   it('renders a structured Business Harness trace and condenses planner narration', () => {
     const wrapper = mount(ChatMessageList, {
       props: {

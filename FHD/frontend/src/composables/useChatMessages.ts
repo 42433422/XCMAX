@@ -72,7 +72,7 @@ export function clearVoiceQueue() {
   stopSpeaking()
 }
 
-import type { UiChatMessage, UiChatMessageExtras } from '@/types/chat-ui'
+import type { ChatDecisionOption, UiChatMessage, UiChatMessageExtras } from '@/types/chat-ui'
 
 /** UI 聊天消息（与 ApiChatMessage 不同：role 用 ai、时间字段为 time） */
 export type ChatMessage = UiChatMessage
@@ -127,6 +127,23 @@ export function chatMessageExtrasFromServerRow(raw: unknown): ChatMessageExtras 
   if (Object.keys(agentRunTrace).length) extras.agentRunTrace = agentRunTrace as unknown as NonNullable<ChatMessageExtras['agentRunTrace']>
   const businessResult = asRecord(ui.businessResult)
   if (Object.keys(businessResult).length) extras.businessResult = businessResult
+  const decisionOptions = objectArray(ui.decisionOptions)
+    .map((option) => {
+      const id = asString(option.id).trim()
+      const label = asString(option.label).trim()
+      if (!id || !label) return null
+      const normalized: ChatDecisionOption = { id, label }
+      const description = asString(option.description).trim()
+      const message = asString(option.message).trim()
+      const composePrefill = asString(option.composePrefill).trim()
+      if (description) normalized.description = description
+      if (message) normalized.message = message
+      if (composePrefill) normalized.composePrefill = composePrefill
+      if (asBoolean(option.recommended)) normalized.recommended = true
+      return normalized
+    })
+    .filter((option): option is ChatDecisionOption => !!option)
+  if (decisionOptions.length) extras.decisionOptions = decisionOptions
   return extras
 }
 

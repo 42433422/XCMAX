@@ -54,6 +54,12 @@
               {{ $t('chat.downloadShipment') }}
             </a>
           </div>
+          <ChatDecisionOptions
+            v-if="msg.role === 'ai' && msg.decisionOptions?.length"
+            :options="msg.decisionOptions"
+            :disabled="decisionOptionsEnabled === false"
+            @select="$emit('decision-option', $event, idx)"
+          />
           <div v-if="showDiagnosticMetadata && msg.role === 'ai' && msg.contextSummary" class="context-summary">
             {{ msg.contextSummary }}
           </div>
@@ -146,6 +152,8 @@ import CollapsedMessagePreview from '@/components/chat/CollapsedMessagePreview.v
 import MessageCollapseLink from '@/components/chat/MessageCollapseLink.vue'
 import { buildApprovalCardTrace } from '@/utils/chatOrchestrationTrace'
 import type { AgentRunTraceData } from '@/utils/agentRunTraceModel'
+import type { ChatDecisionOption } from '@/types/chat-ui'
+import ChatDecisionOptions from '@/components/chat/ChatDecisionOptions.vue'
 
 useI18n()
 
@@ -163,6 +171,7 @@ const props = defineProps<{
   chatMessagesRef?: Ref<HTMLElement | null>
   /** 默认不向普通用户暴露内部上下文计数；诊断界面可显式开启。 */
   showDiagnosticMetadata?: boolean
+  decisionOptionsEnabled?: boolean
 }>()
 
 defineEmits<{
@@ -172,6 +181,7 @@ defineEmits<{
   'shipment-download-click': []
   'approval-confirm': []
   'approval-cancel': []
+  'decision-option': [option: ChatDecisionOption, messageIndex: number]
 }>()
 
 const messagesHostRef = ref<HTMLElement | null>(null)

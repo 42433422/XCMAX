@@ -120,6 +120,31 @@ describe('useChatMessages', () => {
     expect(row?.businessResult?.summary).toBe('订单创建成功')
   })
 
+  it('keeps AI decision options in the local cache', () => {
+    messages.addMessage('请选择下一步', 'ai', {
+      decisionOptions: [
+        {
+          id: 'recommended',
+          label: '按 AI 建议处理',
+          description: '归档并同步安全目标',
+          message: '按建议处理',
+          recommended: true,
+        },
+        {
+          id: 'custom',
+          label: '自定义处理方式',
+          composePrefill: '我想这样处理：',
+        },
+      ],
+    })
+
+    const restored = useChatMessages(ref('session-1'))
+    expect(restored.messages.value.at(-1)?.decisionOptions).toEqual([
+      expect.objectContaining({ id: 'recommended', message: '按建议处理', recommended: true }),
+      expect.objectContaining({ id: 'custom', composePrefill: '我想这样处理：' }),
+    ])
+  })
+
   it('persists an approval-card status mutated after the message is rendered', async () => {
     messages.addMessage('等待审批', 'ai', {
       approvalCard: { run_id: 'run-2', status: 'pending' },

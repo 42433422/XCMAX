@@ -19,6 +19,7 @@
         :is-message-collapsed="isMessageCollapsed"
         :get-collapsed-preview="getCollapsedPreview"
         :can-speak-message="canSpeakMessage"
+        :decision-options-enabled="officeDockingAwaitingDecision"
         :chat-messages-ref="chatRefBag.chatMessagesRef"
         @expand-message="expandMessage"
         @collapse-message="collapseMessage"
@@ -26,6 +27,7 @@
         @shipment-download-click="handleShipmentDownloadClick"
         @approval-confirm="confirmWorkflowFromCard"
         @approval-cancel="cancelWorkflowFromCard"
+        @decision-option="handleDecisionOption"
       />
       <div v-if="isTaskPaneResizable" class="chat-pane-handle-slot">
         <PaneResizeHandle
@@ -202,7 +204,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useIndustryStore } from '@/stores/industry'
 import { useAgentTaskCenterStore } from '@/stores/agentTaskCenter'
@@ -226,6 +228,7 @@ import { workflowTaskDotStatusClassForTask, workflowTaskDotTitleForTask } from '
 import { formatTaskTime, formatTaskSourceLabel } from '@/utils/chatTaskLabels'
 import { readAiSessionIdFromStorage, writeAiSessionIdToStorage } from '@/utils/xcagiStorageKeys'
 import { resolveWorkspaceSessionId, useRoutedTaskWorkspace } from '@/composables/useRoutedTaskWorkspace'
+import type { ChatDecisionOption } from '@/types/chat-ui'
 
 const props = withDefaults(
   defineProps<{
@@ -427,6 +430,7 @@ const {
   officeDockingInputRef,
   officeDockingFolderInputRef,
   officeDockingProcessing,
+  officeDockingAwaitingDecision,
   triggerOfficeDocking,
   triggerOfficeDockingFolder,
   onOfficeDockingFileChange,
@@ -440,6 +444,20 @@ const {
     await sendMessage()
   },
 })
+
+const handleDecisionOption = async (option: ChatDecisionOption) => {
+  if (option.composePrefill) {
+    messageInput.value = option.composePrefill
+    await nextTick()
+    const input = document.getElementById('messageInput') as HTMLTextAreaElement | null
+    input?.focus()
+    input?.setSelectionRange(messageInput.value.length, messageInput.value.length)
+    return
+  }
+  if (!option.message) return
+  messageInput.value = option.message
+  await sendMessage()
+}
 
 const sendQuick = (text: string) => {
   messageInput.value = text
