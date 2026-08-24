@@ -128,6 +128,9 @@ jobs:
       - name: Big files ratchet (巨文件只减不增)
         run: python scripts/dev/count_big_files.py
 
+      - name: Client big files ratchet (前端/移动端巨文件只减不增)
+        run: python scripts/dev/count_client_big_files.py
+
       - name: Route integrity tests
         env:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"

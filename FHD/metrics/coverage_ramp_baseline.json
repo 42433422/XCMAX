@@ -1,5 +1,5 @@
 {
   "_note": "coverage_ramp stub 配额基线（只减不增）。统计口径与 tests/conftest.py 打标规则一致：tests/**/test_coverage_ramp_*.py（basename 前缀，排除 __pycache__）。由 scripts/dev/count_coverage_ramp_stubs.py --bump 维护（只降方向）。2026-08-01 立账：86 个 test_coverage_ramp_phase*.py + 1 个 test_coverage_ramp_routes.py = 87。",
-  "updated": "2026-08-01",
-  "stub_count": 87
+  "updated": "2026-08-24",
+  "stub_count": 82
 }

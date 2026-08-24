@@ -1,0 +1,33 @@
+{
+  "_note": "客户端巨型文件棘轮基线（只减不增）。守护 frontend/src 生产源码（排除 *.test.ts/*.spec.ts）与 mobile-flutter-poc/lib 中 >1000 行的文件。由 scripts/dev/count_client_big_files.py --update-baseline 维护（只降方向）。新代码请按职责拆分（视图拆子组件、composable 拆子 hook、repository/api 拆领域模块）。",
+  "updated": "2026-08-24",
+  "oversized_count": 22,
+  "max_lines": 3768,
+  "file_line_limits": {
+    "mobile-flutter-poc/lib/src/data/mobile_repository.dart": 3768,
+    "mobile-flutter-poc/lib/src/api/mobile_api.dart": 2899,
+    "mobile-flutter-poc/lib/src/features/chat/chat_screen.dart": 2397,
+    "mobile-flutter-poc/lib/src/features/groups/ai_group_screens.dart": 2181,
+    "frontend/src/views/ModStore.vue": 1634,
+    "frontend/src/views/PersyKnowledgeView.vue": 1621,
+    "frontend/src/composables/useChatOrchestration.ts": 1550,
+    "frontend/src/views/AdminEntitlementsView.vue": 1546,
+    "frontend/src/components/workflow/StitchStage.vue": 1535,
+    "frontend/src/components/TopAssistantFloat.vue": 1510,
+    "frontend/src/composables/useChatWorkflowPanel.ts": 1396,
+    "frontend/src/components/aiopen/AIOpenPanel.vue": 1325,
+    "frontend/src/views/ProductOnboardingView.vue": 1303,
+    "mobile-flutter-poc/lib/src/features/messages/message_list_screen.dart": 1243,
+    "frontend/src/views/LoginView.vue": 1220,
+    "mobile-flutter-poc/lib/src/features/profile/profile_screen.dart": 1220,
+    "frontend/src/views/SettingsView.vue": 1142,
+    "mobile-flutter-poc/lib/src/features/scan/scan_qr_screen.dart": 1141,
+    "mobile-flutter-poc/lib/src/features/auth/auth_screen.dart": 1042,
+    "frontend/src/composables/useKittenAnalyzer.ts": 1038,
+    "frontend/src/components/workflow/EmployeeWorkspaceScene.vue": 1012,
+    "mobile-flutter-poc/lib/src/api/mobile_models.dart": 1001
+  },
+  "thresholds": {
+    "file_lines_soft_cap": 1000
+  }
+}

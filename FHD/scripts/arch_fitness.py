@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import re
 import sys
 from pathlib import Path
 
@@ -22,6 +23,10 @@ MODSTORE_SERVER_DIR = (
 
 MAX_FILE_LINES = 500
 BASELINE_FILE = Path(__file__).resolve().parent / "arch_fitness_baseline.txt"
+
+# 机械式拆分命名：_partNN / _mixinNN（行数切割而非语义模块化）。
+# 注意不匹配 `_part_1`（带下划线的数据 schema 分片，如 output_schemas_part_1）。
+MECHANICAL_SPLIT_PATTERN = re.compile(r"_(?:part|mixin)\d+")
 
 VIOLATIONS: list[str] = []
 
@@ -148,6 +153,23 @@ def check_no_giant_files_in_modstore_server() -> None:
             )
 
 
+def check_no_mechanical_split_files() -> None:
+    """禁止新增 `_partNN` / `_mixinNN` 机械拆分文件。
+
+    此类命名是按行数切割的产物（如 `chat_trace_part01_part02.py`），
+    不是语义模块化。存量已入基线，新增即失败；收口合并后从基线移除。
+    """
+    for py in APP_DIR.rglob("*.py"):
+        if _is_excluded_path(py):
+            continue
+        if not MECHANICAL_SPLIT_PATTERN.search(py.stem):
+            continue
+        rel = py.relative_to(REPO_ROOT)
+        VIOLATIONS.append(
+            f"[mechanical-split] {rel} — _part/_mixin 机械拆分文件，应按语义职责合并重构"
+        )
+
+
 def check_legacy_boundary() -> None:
     """legacy_* / *_compat / compat_* 文件必须收容在 app/legacy/ 下，禁止散落。
 
@@ -191,6 +213,7 @@ def main(argv: list[str] | None = None) -> int:
     check_domain_not_depend_on_infrastructure()
     check_no_giant_files_in_app()
     check_no_giant_files_in_modstore_server()
+    check_no_mechanical_split_files()
     check_legacy_boundary()
 
     if args.update_baseline:

@@ -2,12 +2,12 @@
 
 ## Supported Versions
 
+> 版本口径与 [`VERSION.md`](VERSION.md)（版本域 SSOT）保持一致。
+
 | Version | Supported          |
 | ------- | ------------------ |
-| 10.0.x  | :white_check_mark: |
-| 8.0.x   | :x:                |
-| 7.0.x   | :x:                |
-| < 7.0   | :x:                |
+| 1.0.x   | :white_check_mark: |
+| < 1.0   | :x:                |
 
 ## Reporting a Vulnerability
 
