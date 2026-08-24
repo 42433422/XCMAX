@@ -58,28 +58,39 @@ sync_one() {
   [[ -d "${parent}" ]] || return 1
   mkdir -p "${parent}"
   rsync -a --delete "${SRC}/" "${dst}/"
-  [[ -f "${dst}/index.html" ]]
+  [[ -f "${dst}/index.html" ]] && cmp -s "${SRC}/index.html" "${dst}/index.html"
+}
+
+sign_and_verify() {
+  local app="$1"
+  codesign --force --deep --sign - "${app}" >/dev/null
+  codesign --verify --deep --strict "${app}" >/dev/null
 }
 
 synced=0
-if sync_one "/Applications/XCAGI.app/Contents/Resources/backend/_internal/templates/vue-dist" 2>/dev/null; then
+if sync_one "/Applications/XCAGI.app/Contents/Resources/backend/_internal/templates/vue-dist" 2>/dev/null \
+  && sign_and_verify "/Applications/XCAGI.app" 2>/dev/null; then
   synced=$((synced + 1))
-  echo "[ok] synced /Applications/XCAGI.app (may need re-sign / replace from Desktop if Gatekeeper blocks)"
+  echo "[ok] synced and locally signed /Applications/XCAGI.app"
 else
-  echo "[warn] cannot write /Applications/XCAGI.app — building Desktop/XCAGI-fixed.app"
+  echo "[warn] /Applications/XCAGI.app is protected or could not be re-signed — building a verified local preview app"
   APP_SRC="/Applications/XCAGI.app"
-  APP_DST="${HOME}/Desktop/XCAGI-fixed.app"
+  APP_DST="${XCAGI_FAST_PREVIEW_APP:-${HOME}/Desktop/XCAGI-fixed.app}"
   if [[ ! -d "${APP_SRC}" ]]; then
     echo "[err] ${APP_SRC} not found" >&2
     exit 1
   fi
-  rm -rf "${APP_DST}"
+  if [[ -e "${APP_DST}" ]]; then
+    APP_ARCHIVE="${APP_DST}.previous-$(date +%Y%m%d-%H%M%S)"
+    mv "${APP_DST}" "${APP_ARCHIVE}"
+    echo "[info] retained previous preview at ${APP_ARCHIVE}"
+  fi
   ditto "${APP_SRC}" "${APP_DST}"
-  sync_one "${APP_DST}/Contents/Resources/backend/_internal/templates/vue-dist"
-  codesign --force --deep --sign - "${APP_DST}" >/dev/null
   xattr -cr "${APP_DST}" 2>/dev/null || true
+  sync_one "${APP_DST}/Contents/Resources/backend/_internal/templates/vue-dist"
+  sign_and_verify "${APP_DST}"
   synced=$((synced + 1))
-  echo "[ok] wrote ${APP_DST} (ad-hoc signed). Open that app, not /Applications/XCAGI.app"
+  echo "[ok] wrote ${APP_DST} (local signature verified). Open that app, not /Applications/XCAGI.app"
 fi
 
 UD="${HOME}/Library/Application Support/XCAGI"
