@@ -1,10 +1,10 @@
 <template>
-  <section class="office-docking-review" aria-label="AI 办公文件对接建议">
+  <section class="office-docking-review" aria-label="办公文件对接审核">
     <header class="office-docking-review__head">
       <div>
-        <strong><i class="fa fa-magic" aria-hidden="true"></i> AI 对接建议</strong>
-        <span v-if="processing">AI 正在阅读 {{ items.length }} 个文件</span>
-        <span v-else-if="activeItem">第 {{ activeIndex + 1 }} / {{ items.length }} 个 · 逐个确认</span>
+        <strong><i class="fa fa-files-o" aria-hidden="true"></i> 办公文件批次审核</strong>
+        <span v-if="processing">正在读取 {{ items.length }} 个文件</span>
+        <span v-else-if="activeItem">待审核 {{ pendingCount }} 个 · 当前 {{ activeIndex + 1 }} / {{ items.length }}</span>
         <span v-else>本批 {{ items.length }} 个文件已处理完毕</span>
       </div>
       <button type="button" class="office-docking-review__icon-btn" title="结束对接" @click="$emit('close')">
@@ -99,7 +99,7 @@
 
     <div v-else class="office-docking-review__complete">
       <i class="fa fa-check-circle-o" aria-hidden="true"></i>
-      <strong>这批文件已经逐个处理完成</strong>
+      <strong>这批文件已经审核完成</strong>
       <span>已处理 {{ completedCount }} 个，跳过 {{ skippedCount }} 个</span>
     </div>
 
@@ -137,6 +137,9 @@ const activeItem = computed(() => props.items.find(
   (item) => item.commitStatus !== 'committed' && item.commitStatus !== 'skipped',
 ) || null)
 const activeIndex = computed(() => activeItem.value ? props.items.findIndex((item) => item.id === activeItem.value?.id) : -1)
+const pendingCount = computed(() => props.items.filter(
+  (item) => item.commitStatus !== 'committed' && item.commitStatus !== 'skipped',
+).length)
 const completedCount = computed(() => props.items.filter((item) => item.commitStatus === 'committed').length)
 const skippedCount = computed(() => props.items.filter((item) => item.commitStatus === 'skipped').length)
 const committing = computed(() => activeItem.value?.commitStatus === 'committing')
@@ -153,7 +156,7 @@ const canConfirm = computed(() => Boolean(
 const selectionHint = computed(() => {
   const item = activeItem.value
   if (!item) return '所有文件均已得到明确处理结果'
-  if (props.processing) return 'AI 阅读完成后会逐个询问，不会自动写入'
+  if (props.processing) return '读取完成前不会自动归档或写入'
   if (!hasSelectedTarget.value) return '请选择模板归档或数据库目标'
   const targets = [item.selectedTemplate ? `模板库「${item.templateName || '未命名模板'}」` : '', item.selectedDatabase ? item.databaseTargetLabel : ''].filter(Boolean)
   return `确认后仅处理当前文件：${targets.join('、')}`
@@ -165,7 +168,7 @@ const confirmLabel = computed(() => {
   if (!item || !hasSelectedTarget.value) return '请先选择处理方式'
   if (item.selectedTemplate && !item.selectedDatabase) return '确认归档这个模板'
   if (!item.selectedTemplate && item.selectedDatabase) return `确认写入${item.databaseTargetLabel}`
-  return '按 AI 建议处理这个文件'
+  return '按当前选择处理这个文件'
 })
 
 function statusText(item: ChatOfficeDockingReviewItem): string {

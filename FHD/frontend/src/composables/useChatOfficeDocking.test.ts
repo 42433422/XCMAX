@@ -52,13 +52,13 @@ function directoryFile(name: string, relativePath: string): File {
   return file
 }
 
-function createHarness() {
+function createHarness(mode: 'conversation' | 'review' = 'review') {
   const deps = {
     addAndSaveMessage: vi.fn().mockResolvedValue(undefined),
     stageExcelAnalysisContext: vi.fn(),
     sendDatabaseImportMessage: vi.fn().mockResolvedValue(undefined),
   }
-  return { deps, docking: useChatOfficeDocking(deps) }
+  return { deps, docking: useChatOfficeDocking({ ...deps, mode }) }
 }
 
 describe('useChatOfficeDocking', () => {
@@ -144,7 +144,7 @@ describe('useChatOfficeDocking', () => {
     expect(mocks.apiFetch.mock.calls.some(([url]) => String(url) === '/api/templates/upload')).toBe(false)
     expect(mocks.apiFetch.mock.calls.some(([url]) => String(url).includes('/shipment-etl/execute'))).toBe(false)
     expect(deps.addAndSaveMessage).toHaveBeenCalledWith(
-      expect.stringContaining('[AI 对接建议] 我已阅读「国圣送货单.xlsx」'),
+      expect.stringContaining('[对接审核] 已阅读「国圣送货单.xlsx」'),
       'ai',
     )
 
@@ -215,7 +215,7 @@ describe('useChatOfficeDocking', () => {
     expect(deps.sendDatabaseImportMessage).toHaveBeenCalledWith('导入数据库，确认导入：客户产品.csv')
     expect(item.commitStatus).toBe('committed')
     expect(deps.addAndSaveMessage).toHaveBeenCalledWith('[对接] 「客户产品.csv」已处理到 模板库、客户/产品库。', 'ai')
-    expect(deps.addAndSaveMessage).toHaveBeenLastCalledWith('[对接] 本批文件已逐个处理完成。', 'ai')
+    expect(deps.addAndSaveMessage).toHaveBeenLastCalledWith('[对接] 本批文件审核完成。', 'ai')
 
     item.commitStatus = 'failed'
     item.databaseCommitStatus = 'failed'
@@ -375,7 +375,7 @@ describe('useChatOfficeDocking', () => {
       'ai',
     )
     expect(deps.addAndSaveMessage).toHaveBeenCalledWith(
-      expect.stringContaining('[AI 对接建议] 我已阅读「发货单/国圣化工.xlsx」'),
+      expect.stringContaining('[对接审核] 已阅读「发货单/国圣化工.xlsx」'),
       'ai',
     )
 
@@ -388,12 +388,97 @@ describe('useChatOfficeDocking', () => {
     expect(second.commitStatus).toBe('')
     expect(mocks.apiFetch.mock.calls.filter(([url]) => String(url) === '/api/templates/upload')).toHaveLength(1)
     expect(deps.addAndSaveMessage).toHaveBeenCalledWith(
-      expect.stringContaining('[AI 对接建议] 我已阅读「发货单/客户/侯雪梅.xlsx」'),
+      expect.stringContaining('[对接审核] 已阅读「发货单/客户/侯雪梅.xlsx」'),
       'ai',
     )
 
     await docking.skipCurrentOfficeDockingReview()
     expect(second.commitStatus).toBe('skipped')
-    expect(deps.addAndSaveMessage).toHaveBeenLastCalledWith('[对接] 本批文件已逐个处理完成。', 'ai')
+    expect(deps.addAndSaveMessage).toHaveBeenLastCalledWith('[对接] 本批文件审核完成。', 'ai')
+  })
+
+  it('reads the whole folder before offering one batch recommendation in chat', async () => {
+    mocks.isSupported.mockImplementation((name: string) => name.toLowerCase().endsWith('.xlsx'))
+    mocks.resolveEmployee.mockReturnValue(EXCEL_FULL_READ_EMPLOYEE_ID)
+    mocks.runEmployee.mockResolvedValue({ summary: '工作簿已读取', output_path: 'outputs/workbook.json' })
+    mocks.readOutputs.mockResolvedValue([
+      { path: 'outputs/workbook.json', kind: 'json', json: { sheets: [{ sheet_name: '送货单', row_count: 1 }] } },
+    ])
+    mocks.mapExcel.mockReturnValue({
+      fields: ['购货单位', '品名', '型号', '数量'],
+      preview_data: {
+        sheet_names: ['送货单'],
+        sample_rows: [{ 购货单位: '甲公司', 品名: '底漆', 型号: 'A1', 数量: 1 }],
+      },
+      sheets: [{ sheet_name: '送货单', fields: ['购货单位', '品名', '型号', '数量'] }],
+    })
+    mocks.apiFetch.mockImplementation(async (url: string) => {
+      if (String(url).includes('/shipment-etl/preview')) {
+        return jsonResponse({
+          success: true,
+          note_count: 1,
+          notes: [{ sheet_name: '送货单', unit_name: '甲公司', item_count: 1 }],
+        })
+      }
+      if (String(url).includes('/shipment-etl/execute')) {
+        return jsonResponse({ success: true, note_count: 1, shipment_created: 1, product_result: { imported: 1 } })
+      }
+      return jsonResponse({ success: true })
+    })
+
+    const { deps, docking } = createHarness('conversation')
+    const files = [
+      directoryFile('国圣化工.xlsx', '发货单/国圣化工.xlsx'),
+      directoryFile('侯雪梅.xlsx', '发货单/客户/侯雪梅.xlsx'),
+      directoryFile('.DS_Store', '发货单/.DS_Store'),
+    ]
+    await docking.onOfficeDockingFileChange(fileEvent(files, { directory: true }))
+
+    expect(docking.officeDockingPanelOpen.value).toBe(false)
+    expect(docking.officeDockingAwaitingDecision.value).toBe(true)
+    expect(deps.addAndSaveMessage).toHaveBeenCalledTimes(2)
+    const batchMessage = String(deps.addAndSaveMessage.mock.calls[1][0])
+    expect(batchMessage).toContain('文件夹「发货单」里的文件全部读完了')
+    expect(batchMessage).toContain('发货单/国圣化工.xlsx')
+    expect(batchMessage).toContain('发货单/客户/侯雪梅.xlsx')
+    expect(batchMessage).toContain('我的建议')
+    expect(batchMessage).toContain('你想怎么处理这批文件')
+    expect(batchMessage).not.toContain('AI 对接建议')
+    expect(batchMessage).not.toContain('逐个确认')
+    expect(mocks.apiFetch.mock.calls.some(([url]) => String(url) === '/api/templates/upload')).toBe(false)
+    expect(mocks.apiFetch.mock.calls.some(([url]) => String(url).includes('/shipment-etl/execute'))).toBe(false)
+
+    expect(await docking.handleOfficeDockingConversationDecision('你觉得呢？')).toBe(false)
+    expect(await docking.handleOfficeDockingConversationDecision('按建议处理')).toBe(true)
+    expect(deps.addAndSaveMessage).toHaveBeenLastCalledWith(
+      expect.stringContaining('现在还没有执行；如果理解正确，请回复“确认执行”'),
+      'ai',
+    )
+    expect(mocks.apiFetch.mock.calls.some(([url]) => String(url) === '/api/templates/upload')).toBe(false)
+    expect(mocks.apiFetch.mock.calls.some(([url]) => String(url).includes('/shipment-etl/execute'))).toBe(false)
+
+    expect(await docking.handleOfficeDockingConversationDecision('确认执行')).toBe(true)
+    expect(mocks.apiFetch.mock.calls.filter(([url]) => String(url) === '/api/templates/upload')).toHaveLength(2)
+    expect(mocks.apiFetch.mock.calls.filter(([url]) => String(url).includes('/shipment-etl/execute'))).toHaveLength(2)
+    expect(docking.officeDockingReviewItems.value.every((item) => item.commitStatus === 'committed')).toBe(true)
+    expect(docking.officeDockingAwaitingDecision.value).toBe(false)
+  })
+
+  it('supports a template-only batch instruction without writing any business database', async () => {
+    mocks.resolveEmployee.mockReturnValue(PPT_FULL_READ_EMPLOYEE_ID)
+    mocks.runEmployee.mockResolvedValue({ output_path: 'outputs/slides.json' })
+    mocks.readOutputs.mockResolvedValue([
+      { path: 'outputs/slides.json', kind: 'json', json: { title: '培训材料', slides: [{ index: 1, title: '安全' }] } },
+    ])
+
+    const { deps, docking } = createHarness('conversation')
+    await docking.onOfficeDockingFileChange(fileEvent(new File(['pptx'], '培训.pptx')))
+
+    expect(await docking.handleOfficeDockingConversationDecision('全部只归档到模板库')).toBe(true)
+    expect(await docking.handleOfficeDockingConversationDecision('确认执行')).toBe(true)
+    expect(mocks.apiFetch.mock.calls.filter(([url]) => String(url) === '/api/templates/upload')).toHaveLength(1)
+    expect(mocks.apiFetch.mock.calls.some(([url]) => String(url).includes('/shipment-etl/execute'))).toBe(false)
+    expect(mocks.apiFetch.mock.calls.some(([url]) => String(url).includes('/attendance/import-workbook'))).toBe(false)
+    expect(deps.sendDatabaseImportMessage).not.toHaveBeenCalled()
   })
 })

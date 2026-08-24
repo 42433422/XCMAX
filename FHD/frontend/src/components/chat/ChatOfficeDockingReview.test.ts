@@ -74,7 +74,7 @@ describe('ChatOfficeDockingReview', () => {
       props: { items: [reviewItem(), documentItem()], processing: false },
     })
 
-    expect(wrapper.get('.office-docking-review__head').text()).toContain('第 1 / 2 个')
+    expect(wrapper.get('.office-docking-review__head').text()).toContain('待审核 2 个 · 当前 1 / 2')
     expect(wrapper.text()).toContain('发货单/国圣化工.xlsx')
     expect(wrapper.text()).not.toContain('说明.docx')
     expect(wrapper.text()).toContain('我建议这样处理，可以吗？')
@@ -87,7 +87,7 @@ describe('ChatOfficeDockingReview', () => {
       props: { items: [reviewItem({ commitStatus: 'committed' }), documentItem()], processing: false },
     })
 
-    expect(wrapper.get('.office-docking-review__head').text()).toContain('第 2 / 2 个')
+    expect(wrapper.get('.office-docking-review__head').text()).toContain('待审核 1 个 · 当前 2 / 2')
     expect(wrapper.text()).toContain('说明.docx')
     expect(wrapper.text()).not.toContain('发货单/国圣化工.xlsx')
   })
@@ -121,7 +121,7 @@ describe('ChatOfficeDockingReview', () => {
     await wrapper.findAll('button').find((button) => button.text().includes('跳过这个文件'))!.trigger('click')
     expect(wrapper.emitted('confirm')).toHaveLength(1)
     expect(wrapper.emitted('skip')).toHaveLength(1)
-    expect(wrapper.get('button.btn-primary').text()).toBe('按 AI 建议处理这个文件')
+    expect(wrapper.get('button.btn-primary').text()).toBe('按当前选择处理这个文件')
   })
 
   it('keeps documents template-only when no safe database target exists', () => {
@@ -138,9 +138,9 @@ describe('ChatOfficeDockingReview', () => {
     const wrapper = mount(ChatOfficeDockingReview, {
       props: { items: [reviewItem()], processing: true },
     })
-    expect(wrapper.get('.office-docking-review__head').text()).toContain('AI 正在阅读 1 个文件')
+    expect(wrapper.get('.office-docking-review__head').text()).toContain('正在读取 1 个文件')
     expect(wrapper.get('button.btn-primary').attributes('disabled')).toBeDefined()
-    expect(wrapper.get('.office-docking-review__selection-hint').text()).toContain('不会自动写入')
+    expect(wrapper.get('.office-docking-review__selection-hint').text()).toContain('不会自动归档或写入')
   })
 
   it('shows target-level retry state without repeating a successful template archive', () => {
@@ -172,7 +172,7 @@ describe('ChatOfficeDockingReview', () => {
         processing: false,
       },
     })
-    expect(wrapper.get('.office-docking-review__complete').text()).toContain('逐个处理完成')
+    expect(wrapper.get('.office-docking-review__complete').text()).toContain('审核完成')
     expect(wrapper.get('.office-docking-review__complete').text()).toContain('已处理 1 个，跳过 1 个')
     expect(wrapper.find('button.btn-primary').exists()).toBe(false)
   })

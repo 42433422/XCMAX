@@ -198,16 +198,6 @@
       style="display: none"
       @change="onOfficeDockingFileChange"
     />
-    <ChatOfficeDockingReview
-      v-if="officeDockingPanelOpen"
-      :items="officeDockingReviewItems"
-      :processing="officeDockingProcessing"
-      @toggle-target="toggleOfficeDockingTarget"
-      @update-template-name="updateOfficeDockingTemplateName"
-      @confirm="confirmOfficeDockingReview"
-      @skip="skipCurrentOfficeDockingReview"
-      @close="clearOfficeDockingReview"
-    />
   </div>
 </template>
 
@@ -224,7 +214,6 @@ import ChatMessageList from '@/components/chat/ChatMessageList.vue'
 import ChatSidePanel from '@/components/chat/ChatSidePanel.vue'
 import ChatInputToolbar from '@/components/chat/ChatInputToolbar.vue'
 import ChatHistoryModal from '@/components/chat/ChatHistoryModal.vue'
-import ChatOfficeDockingReview from '@/components/chat/ChatOfficeDockingReview.vue'
 import TaskWorkspaceContextBar from '@/components/chat/TaskWorkspaceContextBar.vue'
 import { useChatOfficeDocking } from '@/composables/useChatOfficeDocking'
 import { useResizablePane } from '@/composables/useResizablePane'
@@ -430,6 +419,7 @@ const sendMessage = async () => {
   const message = raw.trim()
   if (!message || isLoading.value) return
   messageInput.value = ''
+  if (await handleOfficeDockingConversationDecision(message)) return
   await chatSendMessage(message)
 }
 
@@ -437,19 +427,14 @@ const {
   officeDockingInputRef,
   officeDockingFolderInputRef,
   officeDockingProcessing,
-  officeDockingPanelOpen,
-  officeDockingReviewItems,
   triggerOfficeDocking,
   triggerOfficeDockingFolder,
   onOfficeDockingFileChange,
-  toggleOfficeDockingTarget,
-  updateOfficeDockingTemplateName,
-  confirmOfficeDockingReview,
-  skipCurrentOfficeDockingReview,
-  clearOfficeDockingReview,
+  handleOfficeDockingConversationDecision,
 } = useChatOfficeDocking({
   addAndSaveMessage,
   stageExcelAnalysisContext,
+  mode: 'conversation',
   sendDatabaseImportMessage: async (message: string) => {
     messageInput.value = message
     await sendMessage()

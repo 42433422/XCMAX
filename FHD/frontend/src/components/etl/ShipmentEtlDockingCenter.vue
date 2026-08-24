@@ -81,6 +81,7 @@ const {
   // 独立页无聊天上下文：写库结果以审核面板摘要呈现，聊天相关回调置空。
   addAndSaveMessage: async () => {},
   stageExcelAnalysisContext: () => {},
+  mode: 'review',
   sendDatabaseImportMessage: async () => {},
 })
 
