@@ -175,3 +175,36 @@ FHD/docs/evidence/e2e/m01-mac-local-*/**/*cookies*.txt
 FHD/docs/evidence/e2e/m01-mac-local-*/**/*login-tries*.txt
 FHD/docs/evidence/e2e/m01-mac-local-*/**/*admin-login*.json
 FHD/docs/evidence/e2e/m01-mac-local-*/**/*enterprise-login*.json
+
+# ============================================================================
+# 大文件防复发（2026-08-24，git filter-repo 剥离 2.9GB 历史后补强）
+# 原则：构建产物/二进制制品一律走 GitHub Release 资产（gh release upload），
+# 不进 git 历史。历史教训：1.38GB bloated DB、Android build APK、AI 生成音频
+# 曾把仓库撑到 11GB。
+# ============================================================================
+
+# release/ 下只保留文本清单（VERSION/README/MOBILE_VERSION），二进制走 Release 资产
+release/**/*.apk
+release/**/*.hap
+release/**/*.zip
+release/**/*.ipa
+release/**/*.exe
+release/**/*.dmg
+
+# Android/iOS 构建产物（任何层级）
+**/build/outputs/apk/
+**/build/outputs/bundle/
+
+# AI 员工生成的测试素材（音频/模型权重/索引，只留代码与说明）
+ai员工生成测试/
+
+# DB 膨胀快照/备份副本（诊断用，本地留存）
+*.bloated-*
+*.db.bloated*
+
+# 覆盖率报告快照（生成物，不入库；CI 每次重跑）
+FHD/coverage-*.json
+FHD/coverage_*.json
+
+# onnxruntime 本地二进制缓存（e2e 依赖，npm 安装时重建）
+FHD/frontend/.nm-e2e/

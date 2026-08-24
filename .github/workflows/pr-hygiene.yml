@@ -8,7 +8,8 @@ name: pr-hygiene
 #   2. 并发上限：同一 author 超过 5 个 open PR → 打 `blocked-pr-limit` 标签
 #   3. 无人认领：无 assignee 的 open PR → 打 `unclaimed` 标签
 #   4. 删除已合并分支（默认分支与受保护分支除外）
-#   5. 删除 `autonomy/` / `codex/` 来源、30 天无提交且无 open PR 的僵尸分支
+#   5. 删除机器来源（autonomy/ codex/ devfleet/ ai-impl/ automation/
+#      auto/daily- cursor/ trae/）、30 天无提交且无 open PR 的僵尸分支
 #
 # 设计取舍：
 #   - 仅用 runner 自带 `gh` CLI + GITHUB_TOKEN，无第三方依赖。
@@ -51,7 +52,16 @@ jobs:
           PR_TTL_DAYS = 21
           MAX_OPEN_PRS_PER_AUTHOR = 5
           ZOMBIE_DAYS = 30
-          ZOMBIE_PREFIXES = ("autonomy/", "codex/")
+          ZOMBIE_PREFIXES = (
+              "autonomy/",
+              "codex/",
+              "devfleet/",
+              "ai-impl/",
+              "automation/",
+              "auto/daily-",
+              "cursor/",
+              "trae/",
+          )
 
           def gh_api(path, method="GET", body=None):
               cmd = ["gh", "api", "-X", method, f"/repos/{REPO}/{path}"]
