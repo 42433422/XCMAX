@@ -63,7 +63,7 @@ surface-audit-android:
 	SURFACE_AUDIT_ANDROID=1 bash $(FHD)/scripts/dev/run_app_surface_audit.sh
 
 android-apk-debug:
-	cd $(FHD)/mobile-android && ./gradlew :app:assemblePersonalDebug
+	cd $(FHD)/mobile-flutter-poc && flutter build apk --debug
 
 android-emulator-setup:
 	bash $(FHD)/scripts/dev/setup_android_emulator.sh
