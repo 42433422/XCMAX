@@ -1,4 +1,10 @@
-"""COVERAGE_RAMP Phase 1 (p0-core) batch 2: market, compat chat helpers, approval, mobile ext."""
+"""P0 行为契约测试：market 代理路由、compat chat helpers、approval 工作流、mobile 扩展。
+
+B1 转正（2026-08-24，见 docs/coverage-ramp-retirement-plan.md）：原
+``test_coverage_ramp_phase1_p0_more.py`` 断言为真实行为契约（路由可达性、
+审批节点推进、会话令牌存取），仅因文件名前缀被误归入 ``coverage_ramp``
+marker，现改名脱离该 marker，计入行为覆盖率口径。
+"""
 
 from __future__ import annotations
 

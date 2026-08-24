@@ -1,5 +1,11 @@
 # mypy: disable-error-code="misc, union-attr"
-"""COVERAGE_RAMP Phase 1 (p0-core): auth, middleware, db, app_service helpers (mocked I/O)."""
+"""P0 核心行为契约测试：auth、middleware、error handler、db validators、app_service。
+
+B1 转正（2026-08-24，见 docs/coverage-ramp-retirement-plan.md）：本文件断言为
+真实行为契约（登录成功/失败、订阅门禁 403、错误码映射、校验器抛错），
+原 ``test_coverage_ramp_phase1_p0_core.py`` 仅因文件名前缀被误归入
+``coverage_ramp`` marker，现改名脱离该 marker，计入行为覆盖率口径。
+"""
 
 from __future__ import annotations
 
@@ -467,7 +473,15 @@ def test_clear_impersonation(mock_get_db: MagicMock) -> None:
 @patch("app.application.session_account_meta.load_session_account_meta")
 def test_audit_admin_action_no_crash(mock_load: MagicMock) -> None:
     mock_load.return_value = {"impersonating_username": "admin"}
-    audit_admin_action(SimpleNamespace(), "test.action", target_user_id=1)
+    # 审计是 fire-and-forget：内部异常必须被吞掉，不得向调用方冒泡
+    assert audit_admin_action(SimpleNamespace(), "test.action", target_user_id=1) is None
+
+
+@patch("app.application.session_account_meta.load_session_account_meta")
+def test_audit_admin_action_swallows_errors(mock_load: MagicMock) -> None:
+    mock_load.side_effect = RuntimeError("db down")
+    # 即使元数据加载失败，审计函数也必须静默返回 None
+    assert audit_admin_action(SimpleNamespace(), "test.action") is None
 
 
 # ---------------------------------------------------------------------------
@@ -619,7 +633,8 @@ def test_model_validators_email_phone() -> None:
 
 
 def test_register_model_validators_runs() -> None:
-    assert register_model_validators() in (True, False)
+    # 正常环境下 5 个核心模型均可导入，注册应成功返回 True
+    assert register_model_validators() is True
 
 
 def test_app_error_to_dict() -> None:

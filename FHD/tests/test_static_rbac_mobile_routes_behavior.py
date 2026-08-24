@@ -1,4 +1,10 @@
-"""COVERAGE_RAMP Phase 1 (p0-core): routes/domains static, rbac, mobile ext (mocked TestClient)."""
+"""P0 行为契约测试：RBAC 路由 CRUD、静态/SPA 资源、mobile 扩展、租户上下文。
+
+B1 转正（2026-08-24，见 docs/coverage-ramp-retirement-plan.md）：原
+``test_coverage_ramp_phase1_p0_routes.py`` 断言为真实行为契约（路由状态码、
+403 路径拦截、401 未授权、租户解析降级），仅因文件名前缀被误归入
+``coverage_ramp`` marker，现改名脱离该 marker，计入行为覆盖率口径。
+"""
 
 from __future__ import annotations
 

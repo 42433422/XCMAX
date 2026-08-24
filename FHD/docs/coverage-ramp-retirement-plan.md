@@ -1,19 +1,27 @@
 # coverage_ramp stub 转正/清退计划（2026-08-24）
 
-> 目标：停止用 82 个 `test_coverage_ramp_*` stub 稀释真实覆盖率；对外口径统一为
-> **行为覆盖率（当前 79.26% 行 / 70.87% 分支）**。
+> 目标：停止用 79 个 `test_coverage_ramp_*` stub 稀释真实覆盖率；对外口径统一为
+> **行为覆盖率（B1 转正后实测 84.15% 行 / 76.34% 分支，2026-08-24）**。
 
 ## 现状（诚实披露）
 
 | 口径 | 行 | 分支 | 说明 |
 |------|---:|---:|------|
-| 全量（含 stub） | 88.19% | 81.5% | 名义值，含注水 |
-| **行为（排除 stub）** | **79.26%** | **70.87%** | 真实契约覆盖，唯一硬 gate（ADR-0001） |
+| 全量（含 stub） | 88.28% | 80.66% | 名义值，含注水 |
+| **行为（排除 stub）** | **84.15%** | **76.34%** | 真实契约覆盖，唯一硬 gate（ADR-0001） |
 
-- stub 规模：**82 个文件 / 63,866 行**（`tests/test_coverage_ramp_phase*.py`）
+- stub 规模：**79 个文件 / 62,496 行**（`tests/test_coverage_ramp_phase*.py`，B1 转正后）
 - pyproject markers 自承：「断言弱、杀变体能力低；非行为契约测试」
-- 测试膨胀棘轮（`metrics/test-bloat-history.jsonl`）显示 ratio 1.759 → 1.848 持续上升，
-  stub 行数只增不减，正在逼近红线。
+- 测试膨胀棘轮（`metrics/test-bloat-history.jsonl`）：ratio 已从 1.848 回落至 **1.663**
+  （B1 转正 116 个行为测试脱离 stub 口径），长期目标 ≤1.5。
+
+## 批次进度
+
+| 批次 | 状态 | 结果 |
+|------|------|------|
+| B1 | ✅ 完成（2026-08-24） | 3 个 `phase1_p0_*` 文件**全部转正**：断言经逐一审查为真实行为契约（登录/中间件/错误码/路由状态码），仅因文件名前缀被误归入 `coverage_ramp`。改名为 `test_core_services_behavior.py` / `test_market_approval_mobile_behavior.py` / `test_static_rbac_mobile_routes_behavior.py`，补强 2 处弱断言，116 测试全通过。行为覆盖率 79.26%→84.15% 行 / 70.87%→76.34% 分支，floor 棘轮至 83/75，stub 基线 82→79。 |
+| B2 | 待执行 | `phase1_p1_*`（7 个）转正或删除 |
+| B3 | 待执行 | 其余 phase2+（69 个）逐文件判定，默认清退 |
 
 ## 决策
 
