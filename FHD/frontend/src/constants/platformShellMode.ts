@@ -59,6 +59,10 @@ export const SHELL_CORE_ROUTE_NAMES = new Set([
 
 /** 账号定制 Mod 装齐后开放的宿主 ERP 侧栏（与 industry preset menuLabels 对齐） */
 export const INDUSTRY_DELIVERY_ERP_MENU_KEYS = [
+  'erp-hr',
+  'attendance-employees',
+  'attendance-departments',
+  'attendance-records',
   'products',
   'customers',
   'orders',

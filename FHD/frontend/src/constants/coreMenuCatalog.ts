@@ -41,6 +41,36 @@ export const EMPLOYEE_WORKFLOW_MENU_ITEM: CoreMenuCatalogItem = {
   children: EMPLOYEE_WORKFLOW_MENU_CHILDREN,
 }
 
+/** ERP 公共人事域：所有行业共享同一套人员、部门与考勤主数据。 */
+export const ERP_HR_MENU_CHILDREN: CoreMenuCatalogItem[] = [
+  {
+    key: 'attendance-employees',
+    name: '人员管理',
+    iconClass: 'fa-id-card-o',
+    description: '查看 ERP 主库中的人员档案',
+  },
+  {
+    key: 'attendance-departments',
+    name: '部门管理',
+    iconClass: 'fa-sitemap',
+    description: '查看 ERP 主库中的组织与部门',
+  },
+  {
+    key: 'attendance-records',
+    name: '考勤记录',
+    iconClass: 'fa-calendar-check-o',
+    description: '查看 ERP 主库中的考勤结果与导入批次',
+  },
+]
+
+export const ERP_HR_MENU_ITEM: CoreMenuCatalogItem = {
+  key: 'erp-hr',
+  name: '人事考勤',
+  iconClass: 'fa-address-card-o',
+  description: 'ERP 人员、部门与考勤数据',
+  children: ERP_HR_MENU_CHILDREN,
+}
+
 /**
  * 两个「看起来都像聊天」的入口说明文案（SSOT）：
  * - 智能对话 = 找小 C 办事、下指令、看任务进度（对话入口轴）
@@ -88,6 +118,7 @@ export const CORE_MENU_ITEMS_BASE: CoreMenuCatalogItem[] = [
  * key 与宿主 router name 一致，去重时占用对应宿主槽位（抑制 erp-domain-bridge 的同名 mod 入口）。
  */
 export const INDUSTRY_DELIVERY_CORE_ITEMS: CoreMenuCatalogItem[] = [
+  ERP_HR_MENU_ITEM,
   { key: 'products', name: '业务对象', iconClass: 'fa-cubes' },
   { key: 'customers', name: '组织管理', iconClass: 'fa-users' },
   { key: 'orders', name: '业务单据', iconClass: 'fa-file-text-o' },

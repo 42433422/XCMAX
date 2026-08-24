@@ -37,6 +37,10 @@ const ENTERPRISE_GENERIC_CORE_KEYS = new Set([
 ])
 
 const ENTERPRISE_BUSINESS_CORE_KEYS = new Set([
+  'erp-hr',
+  'attendance-employees',
+  'attendance-departments',
+  'attendance-records',
   'products',
   'materials',
   'traditional-mode',

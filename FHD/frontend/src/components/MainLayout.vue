@@ -211,6 +211,10 @@ const viewTitlesBase = {
   tools: '工具表',
   'other-tools': '员工视图',
   'employee-workflow': '员工工作台',
+  'erp-hr': '人事考勤',
+  'attendance-employees': '人员管理',
+  'attendance-departments': '部门管理',
+  'attendance-records': '考勤记录',
   'workflow-employee-space': '员工空间',
   'workflow-visualization': '流程可视化',
   purchase: '耗材申领',
@@ -294,18 +298,6 @@ const currentViewTitle = computed(() => {
 })
 
 async function navigateToView(viewKey) {
-  if (String(industryStore.currentIndustryId || '').trim() === '考勤') {
-    const attendanceRoutes = {
-      products: 'attendance-employees',
-      customers: 'attendance-departments',
-      'shipment-records': 'attendance-records',
-    }
-    const attendanceRoute = attendanceRoutes[String(viewKey || '')]
-    if (attendanceRoute && router.hasRoute(attendanceRoute)) {
-      await router.push({ name: attendanceRoute })
-      return
-    }
-  }
   await navigateFromSidebarKey(router, viewKey, {
     modMenuItems: modMenuItems.value,
     routeNameMap,

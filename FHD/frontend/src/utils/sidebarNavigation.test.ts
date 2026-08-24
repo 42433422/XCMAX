@@ -9,7 +9,7 @@ vi.mock('@/utils/desktopShell', () => ({
 vi.mock('@/constants/platformShellMode', () => ({
   isEnterpriseProductSkuBuild: () => true,
   isPlatformShellModeEnabled: () => false,
-  INDUSTRY_DELIVERY_ERP_MENU_KEYS: ['print', 'products', 'customers'],
+  INDUSTRY_DELIVERY_ERP_MENU_KEYS: ['print', 'products', 'customers', 'erp-hr'],
 }))
 
 vi.mock('@/utils/adminConsoleUrl', () => ({
@@ -26,7 +26,7 @@ vi.mock('@/stores/mods', () => ({
   }),
 }))
 
-function makeRouter(hasRoutes: string[] = ['print', 'workflow-employee-space', 'customers']) {
+function makeRouter(hasRoutes: string[] = ['print', 'workflow-employee-space', 'customers', 'attendance-employees']) {
   const push = vi.fn(async () => undefined)
   return {
     push,
@@ -51,6 +51,12 @@ describe('sidebarNavigation', () => {
     const router = makeRouter()
     await navigateFromSidebarKey(router, 'employee-workflow')
     expect(router.push).toHaveBeenCalledWith({ name: 'workflow-employee-space' })
+  })
+
+  it('ERP 人事考勤父项进入人员管理真实页', async () => {
+    const router = makeRouter()
+    await navigateFromSidebarKey(router, 'erp-hr')
+    expect(router.push).toHaveBeenCalledWith({ name: 'attendance-employees' })
   })
 
   it('print 在 Enterprise 桌面优先走宿主 print 路由', async () => {

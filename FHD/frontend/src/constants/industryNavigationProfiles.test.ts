@@ -17,6 +17,8 @@ describe('industry navigation profiles', () => {
       expect(new Set(profile.businessMenuKeys).size).toBe(profile.businessMenuKeys.length)
       expect(profile.businessMenuKeys).toContain('template-preview')
       expect(profile.previewMenuKeys).toContain('template-preview')
+      expect(profile.businessMenuKeys).toContain('erp-hr')
+      expect(profile.previewMenuKeys).toContain('erp-hr')
       expect(profile.deferredCapabilities.length).toBeGreaterThan(0)
     }
   })
@@ -27,6 +29,8 @@ describe('industry navigation profiles', () => {
       expect(resolved.categoryId).toBe(option.categoryId)
       expect(resolved.businessMenuKeys).toContain('template-preview')
       expect(resolved.previewMenuKeys).toContain('template-preview')
+      expect(resolved.businessMenuKeys).toContain('erp-hr')
+      expect(resolved.previewMenuKeys).toContain('erp-hr')
     }
   })
 
@@ -52,15 +56,19 @@ describe('industry navigation profiles', () => {
     expect(coating.menuLabels.print).toBe('标签打印')
     expect(coating.businessMenuKeys).toContain('template-preview')
     expect(coating.previewMenuKeys).toContain('template-preview')
+    expect(coating.businessMenuKeys).toContain('erp-hr')
     expect(coating.deferredCapabilities).toContain('批次质检')
 
     const attendance = resolveIndustryNavigationProfile('考勤')
-    expect(attendance.menuLabels.products).toBe('人员管理')
+    expect(attendance.menuLabels['erp-hr']).toBe('人事考勤')
     expect(attendance.businessMenuKeys).not.toContain('inventory')
     expect(attendance.businessMenuKeys).not.toContain('orders')
     expect(attendance.businessMenuKeys).not.toContain('materials')
+    expect(attendance.businessMenuKeys).not.toContain('products')
+    expect(attendance.businessMenuKeys).not.toContain('customers')
+    expect(attendance.businessMenuKeys).not.toContain('shipment-records')
     expect(attendance.businessMenuKeys).toEqual(
-      expect.arrayContaining(['products', 'customers', 'shipment-records', 'business-docking']),
+      expect.arrayContaining(['erp-hr', 'business-docking']),
     )
     expect(attendance.businessMenuKeys).toContain('template-preview')
     expect(attendance.previewMenuKeys).toContain('template-preview')

@@ -5,6 +5,7 @@ import {
 } from '@/constants/onboardingIndustryCatalog'
 
 export type IndustryBusinessMenuKey =
+  | 'erp-hr'
   | 'products'
   | 'customers'
   | 'orders'
@@ -31,8 +32,13 @@ export type IndustryNavigationProfile = {
   deferredCapabilities: string[]
 }
 
-function withDefaultTemplateLibrary<T extends IndustrySidebarPreviewKey>(keys: T[]): Array<T | 'template-preview'> {
-  return keys.some((key) => key === 'template-preview') ? [...keys] : [...keys, 'template-preview']
+function withDefaultErpFoundation<T extends IndustrySidebarPreviewKey>(
+  keys: T[],
+): Array<T | 'erp-hr' | 'template-preview'> {
+  const out: Array<T | 'erp-hr' | 'template-preview'> = [...keys]
+  if (!out.some((key) => key === 'erp-hr')) out.push('erp-hr')
+  if (!out.some((key) => key === 'template-preview')) out.push('template-preview')
+  return out
 }
 
 const categoryLabelById = Object.fromEntries(ONBOARDING_INDUSTRY_CATEGORIES.map((item) => [item.id, item.label])) as Record<
@@ -50,8 +56,8 @@ const profile = (
   id: categoryId,
   categoryId,
   categoryLabel: categoryLabelById[categoryId],
-  businessMenuKeys: withDefaultTemplateLibrary(businessMenuKeys),
-  previewMenuKeys: withDefaultTemplateLibrary(previewMenuKeys),
+  businessMenuKeys: withDefaultErpFoundation(businessMenuKeys),
+  previewMenuKeys: withDefaultErpFoundation(previewMenuKeys),
   menuLabels,
   deferredCapabilities,
 })
@@ -227,14 +233,10 @@ const FINE_GRAINED_INDUSTRY_PROFILES: Record<string, Partial<IndustryNavigationP
     deferredCapabilities: ['配方管理', '批次质检', '生产工单'],
   },
   考勤: {
-    businessMenuKeys: ['products', 'customers', 'shipment-records', 'business-docking', 'data-sources', 'print', 'template-preview'],
-    previewMenuKeys: ['products', 'customers', 'shipment-records', 'business-docking', 'print'],
+    businessMenuKeys: ['erp-hr', 'business-docking', 'data-sources', 'print', 'template-preview'],
+    previewMenuKeys: ['erp-hr', 'business-docking', 'print'],
     menuLabels: {
-      products: '人员管理',
-      customers: '部门管理',
-      orders: '考勤单管理',
-      'shipment-records': '考勤记录',
-      materials: '排班资源',
+      'erp-hr': '人事考勤',
       'data-sources': '考勤数据源',
       print: '考勤表打印',
       'template-preview': '考勤模板库',
@@ -299,8 +301,8 @@ export function resolveIndustryNavigationProfile(industryId: string): IndustryNa
     id: id || base.id,
     categoryId: base.categoryId,
     categoryLabel: base.categoryLabel,
-    businessMenuKeys: withDefaultTemplateLibrary(fineGrained.businessMenuKeys || base.businessMenuKeys),
-    previewMenuKeys: withDefaultTemplateLibrary(fineGrained.previewMenuKeys || base.previewMenuKeys),
+    businessMenuKeys: withDefaultErpFoundation(fineGrained.businessMenuKeys || base.businessMenuKeys),
+    previewMenuKeys: withDefaultErpFoundation(fineGrained.previewMenuKeys || base.previewMenuKeys),
     menuLabels: { ...base.menuLabels, ...(fineGrained.menuLabels || {}) },
     deferredCapabilities: [...(fineGrained.deferredCapabilities || base.deferredCapabilities)],
   }

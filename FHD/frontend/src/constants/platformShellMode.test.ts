@@ -131,6 +131,8 @@ describe('platformShellMode', () => {
     // 第三步「补基础线」确认后：即便没有定制 Mod，主导航也长出行业业务项
     expect(shouldExposeIndustrySidebar(['attendance-industry'], true)).toBe(true)
     expect(resolvePlatformShellMenuKeys(['attendance-industry'], true).has('products')).toBe(true)
+    expect(resolvePlatformShellMenuKeys(['attendance-industry'], true).has('erp-hr')).toBe(true)
+    expect(resolvePlatformShellMenuKeys(['attendance-industry'], true).has('attendance-records')).toBe(true)
   })
 
   it('isIndustryDeliveryRouteName honours host pack acknowledgement', async () => {
