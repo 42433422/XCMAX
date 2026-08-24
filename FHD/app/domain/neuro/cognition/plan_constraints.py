@@ -15,6 +15,10 @@ from pathlib import Path
 from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.path_io.ai_runtime_artifacts import (
+    mutable_ai_artifact_path,
+    readable_ai_artifact_path,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -58,15 +62,32 @@ def default_constraints() -> SoftConstraints:
     return SoftConstraints()
 
 
-def _constraints_path() -> Path:
-    override = (os.environ.get("XCAGI_SOFT_CONSTRAINTS_PATH") or "").strip()
-    if override:
-        return Path(override)
+def _bundled_constraints_path() -> Path:
     return (
         Path(__file__).resolve().parents[4]
         / "resources"
         / "routing_policies"
         / "soft_constraints.json"
+    )
+
+
+def _constraints_path() -> Path:
+    override = (os.environ.get("XCAGI_SOFT_CONSTRAINTS_PATH") or "").strip()
+    if override:
+        return Path(override)
+    return readable_ai_artifact_path(
+        "routing_policies/soft_constraints.json",
+        bundled_default=_bundled_constraints_path(),
+    )
+
+
+def _writable_constraints_path() -> Path:
+    override = (os.environ.get("XCAGI_SOFT_CONSTRAINTS_PATH") or "").strip()
+    if override:
+        return Path(override)
+    return mutable_ai_artifact_path(
+        "routing_policies/soft_constraints.json",
+        source_fallback=_bundled_constraints_path(),
     )
 
 
@@ -108,7 +129,7 @@ def load_soft_constraints(path: Path | None = None) -> SoftConstraints:
 
 
 def save_soft_constraints(constraints: SoftConstraints, path: Path | None = None) -> Path:
-    p = path or _constraints_path()
+    p = path or _writable_constraints_path()
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(
         json.dumps(constraints.to_dict(), ensure_ascii=False, indent=2) + "\n",

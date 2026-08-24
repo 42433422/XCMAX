@@ -16,6 +16,10 @@ from app.neuro_bus.routing.policy_nn import (
     save_policy_state_dict,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.path_io.ai_runtime_artifacts import (
+    mutable_ai_artifact_path,
+    readable_ai_artifact_path,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,12 +31,28 @@ except ImportError:  # pragma: no cover
     nn = None  # type: ignore[assignment]
 
 
-def _manifest_path() -> Path:
+def _bundled_manifest_path() -> Path:
     return Path(__file__).resolve().parents[3] / "resources" / "routing_policies" / "manifest.json"
 
 
+def _manifest_path(*, for_write: bool = False) -> Path:
+    if for_write:
+        return mutable_ai_artifact_path(
+            "routing_policies/manifest.json",
+            source_fallback=_bundled_manifest_path(),
+        )
+    return readable_ai_artifact_path(
+        "routing_policies/manifest.json",
+        bundled_default=_bundled_manifest_path(),
+    )
+
+
 def _policies_dir() -> Path:
-    return Path(__file__).resolve().parents[3] / "resources" / "routing_policies"
+    source_dir = Path(__file__).resolve().parents[3] / "resources" / "routing_policies"
+    return mutable_ai_artifact_path(
+        "routing_policies",
+        source_fallback=source_dir,
+    )
 
 
 class OnlineLearner:
@@ -192,7 +212,7 @@ class OnlineLearner:
 
     def _update_manifest(self, version: str, weights_path: Path) -> None:
         """更新 manifest.json：追加新版本，设置 active_version。"""
-        manifest_file = _manifest_path()
+        manifest_file = _manifest_path(for_write=True)
         try:
             if manifest_file.is_file():
                 manifest = json.loads(manifest_file.read_text(encoding="utf-8"))

@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.path_io.ai_runtime_artifacts import mutable_ai_artifact_path
 
 logger = logging.getLogger(__name__)
 
@@ -85,11 +86,15 @@ def _ledger_path() -> Path:
     override = (os.environ.get("XCAGI_REFLECTION_LEDGER") or "").strip()
     if override:
         return Path(override)
-    return (
+    bundled_default = (
         Path(__file__).resolve().parents[4]
         / "resources"
         / "routing_policies"
         / "reflection_ledger.jsonl"
+    )
+    return mutable_ai_artifact_path(
+        "routing_policies/reflection_ledger.jsonl",
+        source_fallback=bundled_default,
     )
 
 

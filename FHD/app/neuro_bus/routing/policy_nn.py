@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.path_io.ai_runtime_artifacts import readable_ai_artifact_path
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +49,13 @@ _policy_device: str = "cpu"
 
 
 def _manifest_path() -> Path:
-    return Path(__file__).resolve().parents[3] / "resources" / "routing_policies" / "manifest.json"
+    bundled_default = (
+        Path(__file__).resolve().parents[3] / "resources" / "routing_policies" / "manifest.json"
+    )
+    return readable_ai_artifact_path(
+        "routing_policies/manifest.json",
+        bundled_default=bundled_default,
+    )
 
 
 def load_active_policy() -> RoutingMLP | None:
@@ -73,7 +80,7 @@ def load_active_policy() -> RoutingMLP | None:
     for p in manifest.get("policies") or []:
         if str(p.get("version")) == ver:
             rel = p.get("path") or f"policy_v{ver}.pt"
-            weights = Path(__file__).resolve().parents[3] / "resources" / "routing_policies" / rel
+            weights = manifest_file.parent / rel
             break
     if weights is None or not weights.is_file():
         logger.debug("routing policy weights not found for version=%s", ver)

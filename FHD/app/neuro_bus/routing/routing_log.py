@@ -8,12 +8,19 @@ import time
 from pathlib import Path
 from typing import Any
 
+from app.utils.path_io.ai_runtime_artifacts import mutable_ai_artifact_path
+
 
 def _default_log_path() -> Path:
     root = Path(__file__).resolve().parents[3]
-    d = root / "resources" / "routing_policies"
+    source_default = root / "resources" / "routing_policies" / "routing_decisions.jsonl"
+    path = mutable_ai_artifact_path(
+        "routing_policies/routing_decisions.jsonl",
+        source_fallback=source_default,
+    )
+    d = path.parent
     d.mkdir(parents=True, exist_ok=True)
-    return d / "routing_decisions.jsonl"
+    return path
 
 
 def append_routing_decision(
