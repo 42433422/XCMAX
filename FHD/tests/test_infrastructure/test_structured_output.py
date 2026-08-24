@@ -57,6 +57,38 @@ class TestCompleteStructured:
         assert result.attempts == 1 and result.repaired is False
         assert mock_call.await_count == 1
 
+    async def test_forwards_explicit_owner_provider(self):
+        owner_provider = object()
+        conversation_service = object()
+        with patch(
+            "app.infrastructure.llm.invoke.chat_completion_openai_format",
+            new=AsyncMock(return_value=_llm_payload('{"intent": "owner"}')),
+        ) as mock_call:
+            result = await so.complete_structured(
+                [{"role": "user", "content": "hi"}],
+                schema=SCHEMA,
+                provider=owner_provider,
+                conversation_service=conversation_service,
+            )
+        assert result.data["intent"] == "owner"
+        assert mock_call.await_args.kwargs["provider"] is owner_provider
+        assert mock_call.await_args.kwargs["conversation_service"] is conversation_service
+
+    async def test_explicit_owner_provider_runs_end_to_end(self):
+        class OwnerProvider:
+            async def chat_completion(self, messages, **kwargs):
+                assert messages[0]["content"] == "hi"
+                assert kwargs["temperature"] == 0.3
+                return _llm_payload('{"intent": "session-owner"}')
+
+        result = await so.complete_structured(
+            [{"role": "user", "content": "hi"}],
+            schema=SCHEMA,
+            provider=OwnerProvider(),
+            max_repairs=0,
+        )
+        assert result.data["intent"] == "session-owner"
+
     async def test_bad_json_repaired_on_second_try(self):
         responses = [
             _llm_payload("不是 JSON"),

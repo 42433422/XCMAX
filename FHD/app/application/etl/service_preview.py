@@ -38,7 +38,7 @@ from app.application.etl.targets import TargetAdapter, get_adapter
 from app.application.etl.transforms import apply_mapping
 from app.db.models.etl import EtlRun, EtlRunRow, EtlUpload
 from app.infrastructure.tenant_scope import tenant_id_for_write, tenant_scope
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -329,7 +329,7 @@ class PreviewServiceMixin:
             self._update_linked_companion_summary(db, run, status="preview_ready")
             db.commit()
             self._record_preview_metrics(run, started_at, status="success")
-        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001 - background-task boundary must persist terminal state
             db.rollback()
             code, message = safe_error(exc)
             try:
@@ -341,7 +341,7 @@ class PreviewServiceMixin:
                 self._update_linked_companion_summary(db, run, status="failed")
                 db.commit()
                 self._record_preview_metrics(run, started_at, status="failed")
-            except RECOVERABLE_ERRORS:  # noqa: BLE001
+            except BOUNDARY_ERRORS:  # noqa: BLE001 - final persistence boundary
                 db.rollback()
                 logger.exception("Unable to persist ETL preview failure for run %s", run_id)
         finally:

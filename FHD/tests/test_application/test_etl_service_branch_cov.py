@@ -1489,6 +1489,31 @@ class TestServicePreview:
         etl_db.expire_all()
         assert etl_db.get(EtlRun, run.id).status == "failed"
 
+    def test_preview_worker_unexpected_failure_is_terminal(
+        self,
+        etl_db,
+        svc,
+        app_data,
+        fake_adapter,
+        same_session,
+        no_background,
+        monkeypatch,
+        mock_etl_metrics,
+    ):
+        _make_upload_file(app_data, etl_db, id="upx", file_name="a.xlsx")
+        run = _make_run(etl_db, upload_id="upx", status="queued")
+        etl_db.commit()
+
+        def _boom(*_args, **_kwargs):
+            raise TypeError("provider contract drift")
+
+        monkeypatch.setattr("app.application.etl.service_preview.parse_file", _boom)
+        svc._preview_worker(run.id, 1)
+        etl_db.expire_all()
+        failed = etl_db.get(EtlRun, run.id)
+        assert failed.status == "failed"
+        assert failed.error_code == "ETL_INTERNAL_ERROR"
+
     def test_preview_worker_rich(
         self,
         etl_db,

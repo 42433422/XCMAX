@@ -25,7 +25,7 @@ from app.application.etl.targets import TargetAdapter, get_adapter
 from app.application.etl.transforms import ALLOWED_TRANSFORMS, apply_mapping
 from app.db.models.etl import EtlRun, EtlRunRow
 from app.infrastructure.tenant_scope import tenant_id_for_write, tenant_scope
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +125,7 @@ class DraftServiceMixin:
                     self._revalidate_existing_rows(db, run_id, owner_user_id)
                     if overrides:
                         self._apply_row_overrides(db, run_id, owner_user_id, overrides)
-            except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
+            except BOUNDARY_ERRORS as exc:  # noqa: BLE001 - background-task boundary must persist terminal state
                 db.rollback()
                 code, message = safe_error(exc)
                 try:
@@ -136,7 +136,7 @@ class DraftServiceMixin:
                         run.error_code = code
                         run.error_message = message[:500]
                         db.commit()
-                except RECOVERABLE_ERRORS:  # noqa: BLE001
+                except BOUNDARY_ERRORS:  # noqa: BLE001 - final persistence boundary
                     db.rollback()
                     logger.exception("Unable to persist ETL revalidation failure for %s", run_id)
             finally:
