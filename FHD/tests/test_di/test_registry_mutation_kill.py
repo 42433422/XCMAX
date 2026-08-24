@@ -263,7 +263,7 @@ def test_slots_count_matches_expected():
         "_product_import_service",
         "_shipment_application_service_core",
         "_shipment_event_primary_facade",
-        # LG-W1-T9-E workflow 运行时组合根槽位（sep=chr95 机械拼装一致）。
+        # LG-W1-T9-E workflow 运行时组合根槽位
         "_workflow_runtime",
         "_workflow_checkpointer",
         "_workflow_shadow_checkpointer",

@@ -45,8 +45,8 @@
 
 ## 稳定版发布 tag 约定
 
-- **产品版本锚点**：产品 `1.0.0.0`，工具链 `1.0.0`（见 `FHD/VERSION.md`）。
-- **Git tag（发版触发）**：`FHD/v1.0.0.0`；制品身份同时记录 `git_sha` + `sha256`。
+- **产品版本锚点**：产品 `1.0.0.1`，工具链 `1.0.0`（见 `FHD/VERSION.md`）。
+- **Git tag（发版触发）**：`FHD/v1.0.0.1`；制品身份同时记录 `git_sha` + `sha256`。
 - **串联（单一编排入口）**：`FHD/v*` tag 仅触发两个 workflow —— `fhd-ci-cd.yml`（测试+镜像+CVM）与 `fhd-release-orchestrator.yml`。后者先跑 `verify-version-anchors`，再 **dispatch** 客户端 `fhd-release-desktop/web/android.yml`（**仅 Android**；服务器由 `fhd-ci-cd` 的 `cvm-push-release` 负责）。这些被编排的 workflow **已移除自身 `FHD/v*` tag 触发**，避免 tag 推送时双重运行。详见 [FHD/docs/deploy/RELEASE_CHECKLIST.md](FHD/docs/deploy/RELEASE_CHECKLIST.md)。
 
 ## 多环境 channel（stable / staging）
@@ -177,7 +177,7 @@ FHD_RELEASE_TARBALL=/opt/fhd-full/.deploy-last.tar.gz bash /opt/fhd-full/scripts
 
 ## FHD 生产服务器部署 runbook（compose 镜像 · Phase 2）
 
-**原则**：与 tarball **双模共存**；manifest `deploy_mode` 决定 cron 路由。镜像身份用 digest 钉扎，产品版本保持 `1.0.0.0`。
+**原则**：与 tarball **双模共存**；manifest `deploy_mode` 决定 cron 路由。镜像身份用 digest 钉扎，产品版本保持 `1.0.0.1`。
 
 | 步骤 | 命令 / 说明 |
 |------|-------------|
@@ -257,7 +257,7 @@ bash /opt/fhd-full/scripts/deploy/fhd-apply-release-compose.sh
 
 - 身份正则：`^https://github.com/<org>/<repo>/.github/workflows/.+@refs/(heads/main|tags/FHD/v.+)$`
 - **Break-glass**：设仓库变量 `COSIGN_VERIFY_DISABLE=1` 临时跳过验证（仅紧急；恢复后清除）。
-- 制品身份仍为 `git_sha` + `sha256` + cosign digest，产品版本保持 `1.0.0.0`。
+- 制品身份仍为 `git_sha` + `sha256` + cosign digest，产品版本保持 `1.0.0.1`。
 
 ## Codecov（FHD 后端）
 

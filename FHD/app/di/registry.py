@@ -15,11 +15,6 @@ from typing import TYPE_CHECKING, Any, Optional, cast
 
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
-# LG-W1-T9-A 组合根：下划线是唯一合法的标识符分隔符。所有涉及 workflow 运行时
-# 装配的精确标识符都必须用 ``sep``（即 ``chr(95)`` == ``_``）机械拼装，避免任何
-# 依赖下划线显示缺失的脆弱写法。
-sep = chr(95)
-
 if TYPE_CHECKING:
     from app.application.ai_chat_app_service import AIChatApplicationService
     from app.application.customer_app_service import CustomerApplicationService
@@ -64,12 +59,11 @@ class ServiceContainer:
         "_product_import_service",
         "_shipment_application_service_core",
         "_shipment_event_primary_facade",
-        # LG-W1-T9-A workflow 运行时组合根槽位（_ + workflow + _ + ...）
-        # 名称 = "_" + "workflow" + "_" + <suffix>，与 sep 机械拼装一致。
-        "_" + "workflow" + "_" + "runtime",
-        "_" + "workflow" + "_" + "checkpointer",
-        "_" + "workflow" + "_" + "shadow" + "_" + "checkpointer",
-        "_" + "workflow" + "_" + "resource" + "_" + "stack",
+        # LG-W1-T9-A workflow 运行时组合根槽位
+        "_workflow_runtime",
+        "_workflow_checkpointer",
+        "_workflow_shadow_checkpointer",
+        "_workflow_resource_stack",
     )
 
     def __init__(self) -> None:
@@ -153,8 +147,7 @@ class ServiceContainer:
             from app.application.ai_chat_app_service import AIChatApplicationService
 
             # LG-W1-T9-A：AI 聊天工厂以关键字参数直接注入 workflow 运行时与 checkpointer
-            # （组合根职责），由已更新的构造函数消费；参数名即 sep 拼装的
-            # "workflow" + "_" + "runtime" / "workflow" + "_" + "checkpointer"。
+            # （组合根职责），由已更新的构造函数消费。
             return AIChatApplicationService(
                 workflow_runtime=self.workflow_runtime,
                 workflow_checkpointer=self.workflow_checkpointer,

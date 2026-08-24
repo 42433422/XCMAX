@@ -56,11 +56,6 @@ __all__ = [
     "deterministic_canary_selected",
 ]
 
-# The injected LangGraph checkpointer is an object injection (not a name
-# string). ``sep`` is the underscore separator; the exact constructor parameter
-# identifier is ``"shadow" + sep + "checkpointer"`` == ``shadow_checkpointer``.
-sep = chr(95)
-
 # ---------------------------------------------------------------------------
 # Read-only tool dispatcher (shadow phase)
 # ---------------------------------------------------------------------------
@@ -137,9 +132,8 @@ class ShadowCanaryRouter(WorkflowRuntime):
         canary_ratio: float = 0.1,
         diff_sink: Callable[[ShadowDiff], None] | None = None,
         shadow_safe: bool = False,
-        # ``"shadow" + sep + "checkpointer"`` == ``shadow_checkpointer``: an
-        # object injection (never a name string) forwarded to the LangGraph
-        # runtime during shadow run/resume/replay.
+        # ``shadow_checkpointer``: an object injection (never a name string)
+        # forwarded to the LangGraph runtime during shadow run/resume/replay.
         shadow_checkpointer: Any | None = None,
     ) -> None:
         if legacy_runtime is langgraph_runtime:
