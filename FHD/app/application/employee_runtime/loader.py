@@ -88,12 +88,39 @@ def candidate_pack_ids(pack_id: str) -> list[str]:
 
 
 def resolve_pack_dir(pack_id: str) -> Path | None:
+    matches: list[Path] = []
     for root in _employee_roots():
         for cid in candidate_pack_ids(pack_id):
             pdir = root / cid
             if (pdir / "manifest.json").is_file():
-                return pdir
-    return None
+                matches.append(pdir)
+                break
+    if not matches:
+        return None
+
+    preferred = matches[0]
+    if len(matches) == 1 or not pack_has_direct_python_runtime(preferred):
+        return preferred
+
+    preferred_trusted, preferred_reason = verify_direct_python_pack_trust(preferred)
+    if preferred_trusted:
+        return preferred
+    for fallback in matches[1:]:
+        if not pack_has_direct_python_runtime(fallback):
+            continue
+        fallback_trusted, fallback_reason = verify_direct_python_pack_trust(fallback)
+        if fallback_trusted:
+            logger.warning(
+                "ignore untrusted writable employee override pack=%s path=%s reason=%s; "
+                "using trusted bundled pack path=%s trust=%s",
+                pack_id,
+                preferred,
+                preferred_reason,
+                fallback,
+                fallback_reason,
+            )
+            return fallback
+    return preferred
 
 
 def normalize_manifest_legacy_deepseek_to_auto(manifest: dict[str, Any]) -> None:
