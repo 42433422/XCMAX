@@ -73,8 +73,8 @@
     <div class="sidebar-footer">
       <div class="sidebar-status-mods-row">
         <div class="status-indicator">
-          <span class="status-dot online"></span>
-          <span>系统正常</span>
+          <span class="status-dot" :class="healthPresentation.tone"></span>
+          <span :title="healthPresentation.detail">{{ healthPresentation.label }}</span>
           <DesktopAppUpdatePrompt />
           <span
             v-if="adminDeployStatusText"
@@ -129,6 +129,7 @@ import { useVisibleNavItems } from '@/composables/useVisibleNavItems'
 import { useImUnreadBadge } from '@/composables/useImUnreadBadge'
 import { primeCsrfCookie } from '@/api/core'
 import { xcmaxAdminApi } from '@/api/xcmaxAdmin'
+import { presentHealth } from '@/utils/healthPresentation'
 import SidebarMenuItem from '@/components/SidebarMenuItem.vue'
 import DesktopAppUpdatePrompt from '@/components/DesktopAppUpdatePrompt.vue'
 import packageJson from '../../package.json'
@@ -186,6 +187,7 @@ const entitlementSyncStatusError = ref('')
 const entitlementSyncLoading = ref(false)
 const entitlementSyncNoticeUntil = ref(0)
 const healthAppVersion = ref('')
+const healthPresentation = ref({ label: '状态检测中', detail: '正在读取系统健康状态', tone: 'unknown' })
 let activeReorderPointerId = null
 let pressTimer = null
 let boundWindowPointerMove = null
@@ -196,6 +198,7 @@ let pendingDragPoint = null
 let adminDeployPollTimer = null
 let entitlementSyncPollTimer = null
 let entitlementSyncNoticeTimer = null
+let healthPollTimer = null
 /** @type {{ key: string, midY: number }[]} */
 let menuHitCache = []
 
@@ -304,11 +307,15 @@ async function refreshHealthAppVersion() {
   if (shouldShowAdminDeployStatus.value) return
   try {
     const res = await fetch('/api/health', { credentials: 'same-origin' })
-    if (!res.ok) return
+    if (!res.ok) {
+      healthPresentation.value = presentHealth(null, false)
+      return
+    }
     const data = await res.json()
     healthAppVersion.value = String(data?.version || '').trim()
+    healthPresentation.value = presentHealth(data)
   } catch {
-    /* 健康检查失败时回退 package.json 版本 */
+    healthPresentation.value = presentHealth(null, false)
   }
 }
 
@@ -828,12 +835,17 @@ onMounted(async () => {
   syncAdminDeployStatusPolling()
   syncEntitlementSyncPolling()
   void refreshHealthAppVersion()
+  healthPollTimer = window.setInterval(refreshHealthAppVersion, 60_000)
 })
 
 onBeforeUnmount(() => {
   clearReorderGesture()
   stopAdminDeployStatusPolling()
   stopEntitlementSyncPolling()
+  if (healthPollTimer != null) {
+    window.clearInterval(healthPollTimer)
+    healthPollTimer = null
+  }
   if (entitlementSyncNoticeTimer != null) {
     window.clearTimeout(entitlementSyncNoticeTimer)
     entitlementSyncNoticeTimer = null
@@ -903,6 +915,20 @@ onBeforeUnmount(() => {
   color: #475569;
   background: #e2e8f0;
   border-color: #cbd5e1;
+}
+
+.status-indicator .status-dot.degraded {
+  background: #e6a23c;
+  box-shadow: 0 0 0 3px rgba(230, 162, 60, 0.12);
+}
+
+.status-indicator .status-dot.offline {
+  background: #d84f4f;
+  box-shadow: 0 0 0 3px rgba(216, 79, 79, 0.12);
+}
+
+.status-indicator .status-dot.unknown {
+  background: #94a3b8;
 }
 
 .sidebar-mods-badges {

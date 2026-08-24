@@ -83,7 +83,7 @@
     "uploadTitle": "上传 Excel、图片或 PDF",
     "uploadAttachment": "上传附件",
     "officeDocking": "对接模式",
-    "officeDockingBusy": "文件解析中",
+    "officeDockingBusy": "阅读任务进行中",
     "officeDockingTitle": "对接模式：AI 先读完整批 Word、Excel、CSV、PDF 或 PPT，再在对话中给出整体建议并询问处理方式",
     "officeDockingFolderTitle": "选择整个文件夹；AI 全部读完后在对话中汇总并询问处理方式",
     "officeDockingFileTitle": "选择一个或多个办公文件进行对接",

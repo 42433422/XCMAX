@@ -23,6 +23,13 @@
       </button>
     </div>
 
+    <OfficeDockingProgressCard
+      v-if="activeTab === 'task' && officeDockingProgress"
+      :progress="officeDockingProgress"
+      compact
+      @cancel="$emit('office-docking-cancel')"
+    />
+
     <ChatTaskPanel
       v-if="activeTab === 'task'"
       :current-task="currentTask"
@@ -81,13 +88,15 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { ShipmentTask } from '@/composables/useShipmentTask'
 import type { TaskFilter, TaskItem } from '@/composables/useChatPersistence'
 import type { HistorySessionItem } from '@/composables/useChatSessionHistory'
 import ChatTaskPanel from './ChatTaskPanel.vue'
 import ChatConversationPanel from './ChatConversationPanel.vue'
+import OfficeDockingProgressCard from './OfficeDockingProgressCard.vue'
+import type { ChatOfficeDockingProgress } from '@/composables/useChatOfficeDocking'
 
 defineOptions({ name: 'ChatSidePanel' })
 
@@ -115,6 +124,7 @@ const props = defineProps<{
   currentSessionId: string
   historyLoading: boolean
   historyError: string
+  officeDockingProgress?: ChatOfficeDockingProgress | null
 }>()
 
 const emit = defineEmits<{
@@ -144,9 +154,17 @@ const emit = defineEmits<{
   'load-session': [sessionId: string]
   'rename-session': [sessionId: string, title: string]
   'delete-session': [sessionId: string]
+  'office-docking-cancel': []
 }>()
 
-const activeTab = ref<'task' | 'conversation'>(props.currentTask || props.taskList.length ? 'task' : 'conversation')
+const activeTab = ref<'task' | 'conversation'>(
+  props.currentTask ||
+    props.taskList.length ||
+    props.officeDockingProgress?.phase === 'reading' ||
+    props.officeDockingProgress?.phase === 'stopping'
+    ? 'task'
+    : 'conversation',
+)
 
 function activateConversationTab() {
   activeTab.value = 'conversation'
@@ -156,6 +174,13 @@ function activateConversationTab() {
 onMounted(() => {
   if (activeTab.value === 'conversation') emit('refresh-history')
 })
+
+watch(
+  () => props.officeDockingProgress?.phase,
+  (phase) => {
+    if (phase === 'reading' || phase === 'stopping') activeTab.value = 'task'
+  },
+)
 </script>
 
 <style scoped>

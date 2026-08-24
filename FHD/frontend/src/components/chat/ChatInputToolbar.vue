@@ -8,36 +8,34 @@
         class="toolbar-btn approval-mode__toggle"
         id="approvalModeBtn"
         type="button"
-        :title="$t('chat.approvalModeTitle')"
+        :title="officeDockingProcessing ? '文件阅读期间不会执行审批或写库' : $t('chat.approvalModeTitle')"
         :aria-pressed="approvalMode.state.enabled"
         :class="{ 'is-active': approvalMode.state.enabled }"
+        :disabled="officeDockingProcessing"
         @click="toggleApproval"
       >
-        <i class="fa fa-shield" aria-hidden="true"></i> {{ $t('chat.approvalMode') }}
+        <i class="fa fa-shield" aria-hidden="true"></i> {{ approvalModeLabel }}
       </button>
-      <div
-        v-if="approvalMode.state.enabled"
-        class="approval-mode__choices"
-        role="radiogroup"
-        :aria-label="$t('chat.approvalMode')"
-      >
+      <div v-if="approvalMode.state.enabled" class="approval-mode__choices" role="radiogroup" :aria-label="$t('chat.approvalMode')">
         <button
           type="button"
           class="approval-mode__choice"
           :class="{ 'is-active': approvalMode.state.mode === 'manual' }"
           :aria-pressed="approvalMode.state.mode === 'manual'"
+          :disabled="officeDockingProcessing"
           @click="approvalMode.setMode('manual')"
         >
-          {{ $t('chat.approvalManual') }}
+          手动确认
         </button>
         <button
           type="button"
           class="approval-mode__choice"
           :class="{ 'is-active': approvalMode.state.mode === 'auto' }"
           :aria-pressed="approvalMode.state.mode === 'auto'"
+          :disabled="officeDockingProcessing"
           @click="approvalMode.setMode('auto')"
         >
-          {{ $t('chat.approvalAuto') }}
+          自动通过
         </button>
       </div>
     </div>
@@ -62,7 +60,7 @@
         @click="$emit('trigger-office-docking-folder')"
         :disabled="officeDockingProcessing"
       >
-        <i class="fa fa-folder-open-o" aria-hidden="true"></i>
+        <i class="fa" :class="officeDockingProcessing ? 'fa-circle-o-notch fa-spin' : 'fa-folder-open-o'" aria-hidden="true"></i>
         {{ officeDockingProcessing ? $t('chat.officeDockingBusy') : $t('chat.officeDocking') }}
       </button>
       <button
@@ -122,11 +120,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, type Ref } from 'vue'
+import { computed, ref, watch, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApprovalMode } from '@/composables/useApprovalMode'
 
-useI18n()
+const { t } = useI18n()
 
 const approvalMode = useApprovalMode()
 
@@ -148,6 +146,11 @@ const emit = defineEmits<{
   'auto-refresh-change': [enabled: boolean]
   'toggle-tts': [enabled: boolean]
 }>()
+
+const approvalModeLabel = computed(() => {
+  if (!approvalMode.state.enabled) return `${t('chat.approvalMode')}：关闭`
+  return `${t('chat.approvalMode')}：${approvalMode.state.mode === 'auto' ? '自动' : '手动'}`
+})
 
 const fileInputRef = ref<HTMLInputElement | null>(null)
 
@@ -237,5 +240,11 @@ function onAutoRefreshChange(event: Event) {
 .approval-mode__choice.is-active {
   color: var(--xc-color-primary, #0d47a1);
   background: rgba(13, 71, 161, 0.08);
+}
+
+.approval-mode__toggle:disabled,
+.approval-mode__choice:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 </style>

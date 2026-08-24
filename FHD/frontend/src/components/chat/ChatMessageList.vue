@@ -128,6 +128,7 @@
           </button>
         </div>
       </div>
+      <OfficeDockingProgressCard v-if="officeDockingProgress" :progress="officeDockingProgress" @cancel="$emit('office-docking-cancel')" />
       <div v-if="isLoading && !isStreamingReply" class="message ai">
         <div class="chat-loading-row">
           <i class="fa fa-spinner fa-spin chat-loading-spinner" aria-hidden="true"></i>
@@ -140,7 +141,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, type Ref } from 'vue'
+import { nextTick, ref, watch, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { ChatMessage } from '@/composables/useChatMessages'
 import { sanitizeChatBubbleHtml, sanitizeChatBubbleMarkdown } from '@/utils/sanitizeHtml'
@@ -154,6 +155,8 @@ import { buildApprovalCardTrace } from '@/utils/chatOrchestrationTrace'
 import type { AgentRunTraceData } from '@/utils/agentRunTraceModel'
 import type { ChatDecisionOption } from '@/types/chat-ui'
 import ChatDecisionOptions from '@/components/chat/ChatDecisionOptions.vue'
+import OfficeDockingProgressCard from '@/components/chat/OfficeDockingProgressCard.vue'
+import type { ChatOfficeDockingProgress } from '@/composables/useChatOfficeDocking'
 
 useI18n()
 
@@ -172,6 +175,7 @@ const props = defineProps<{
   /** 默认不向普通用户暴露内部上下文计数；诊断界面可显式开启。 */
   showDiagnosticMetadata?: boolean
   decisionOptionsEnabled?: boolean
+  officeDockingProgress?: ChatOfficeDockingProgress | null
 }>()
 
 defineEmits<{
@@ -182,6 +186,7 @@ defineEmits<{
   'approval-confirm': []
   'approval-cancel': []
   'decision-option': [option: ChatDecisionOption, messageIndex: number]
+  'office-docking-cancel': []
 }>()
 
 const messagesHostRef = ref<HTMLElement | null>(null)
@@ -235,6 +240,16 @@ watch(
     bag.value = el
   },
   { immediate: true },
+)
+
+watch(
+  () => [props.officeDockingProgress?.phase, props.officeDockingProgress?.completed, props.officeDockingProgress?.currentFile],
+  async () => {
+    if (!props.officeDockingProgress) return
+    await nextTick()
+    const el = messagesHostRef.value
+    if (el) el.scrollTop = el.scrollHeight
+  },
 )
 </script>
 

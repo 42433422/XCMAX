@@ -44,7 +44,7 @@ describe('ChatInputToolbar', () => {
     const wrapper = mountToolbar()
     const btn = wrapper.find('#approvalModeBtn')
     expect(btn.exists()).toBe(true)
-    expect(btn.text()).toContain('chat.approvalMode')
+    expect(btn.text()).toContain('审批：关闭')
   })
 
   it('does not show approval choices when disabled', () => {
@@ -70,6 +70,21 @@ describe('ChatInputToolbar', () => {
     await wrapper.find('#approvalModeBtn').trigger('click')
     expect(wrapper.find('.approval-mode__choices').exists()).toBe(true)
     expect(wrapper.find('#approvalModeBtn').attributes('aria-pressed')).toBe('true')
+  })
+
+  it('makes the approval safety boundary explicit while files are being read', () => {
+    const { setEnabled } = useApprovalMode()
+    setEnabled(true)
+    const wrapper = mountToolbar({ officeDockingProcessing: true })
+    const approval = wrapper.get('#approvalModeBtn')
+    const folder = wrapper.get('[data-tutorial-id="toolbar-office-docking"]')
+
+    expect(approval.attributes('disabled')).toBeDefined()
+    expect(approval.attributes('title')).toContain('不会执行审批或写库')
+    expect(approval.text()).toContain('手动')
+    expect(wrapper.findAll('.approval-mode__choice').every((choice) => choice.attributes('disabled') !== undefined)).toBe(true)
+    expect(folder.text()).toContain('chat.officeDockingBusy')
+    expect(folder.find('.fa-spin').exists()).toBe(true)
   })
 
   it('selects auto mode when auto choice clicked', async () => {

@@ -143,10 +143,7 @@ describe('useChatOfficeDocking', () => {
     expect(item.templateScope).toBe('orders')
     expect(mocks.apiFetch.mock.calls.some(([url]) => String(url) === '/api/templates/upload')).toBe(false)
     expect(mocks.apiFetch.mock.calls.some(([url]) => String(url).includes('/shipment-etl/execute'))).toBe(false)
-    expect(deps.addAndSaveMessage).toHaveBeenCalledWith(
-      expect.stringContaining('[对接审核] 已阅读「国圣送货单.xlsx」'),
-      'ai',
-    )
+    expect(deps.addAndSaveMessage).toHaveBeenCalledWith(expect.stringContaining('[对接审核] 已阅读「国圣送货单.xlsx」'), 'ai')
 
     await docking.confirmOfficeDockingReview()
 
@@ -322,10 +319,7 @@ describe('useChatOfficeDocking', () => {
     expect(item.commitStatus).toBe('failed')
     expect(item.templateCommitStatus).toBe('failed')
     expect(item.error).toBe('模板服务不可用')
-    expect(deps.addAndSaveMessage).toHaveBeenLastCalledWith(
-      '[对接] 「复盘.pptx」处理失败：模板服务不可用。请调整后重试或跳过。',
-      'ai',
-    )
+    expect(deps.addAndSaveMessage).toHaveBeenLastCalledWith('[对接] 「复盘.pptx」处理失败：模板服务不可用。请调整后重试或跳过。', 'ai')
   })
 
   it('selects a whole folder, ignores system files, and stages every supported file for review', async () => {
@@ -365,21 +359,24 @@ describe('useChatOfficeDocking', () => {
     await docking.onOfficeDockingFileChange(fileEvent(files, { directory: true }))
 
     expect(mocks.uploadFile).toHaveBeenCalledTimes(2)
-    expect(docking.officeDockingReviewItems.value.map((item) => item.fileName)).toEqual([
-      '发货单/国圣化工.xlsx',
-      '发货单/客户/侯雪梅.xlsx',
-    ])
+    expect(docking.officeDockingReviewItems.value.map((item) => item.fileName)).toEqual(['发货单/国圣化工.xlsx', '发货单/客户/侯雪梅.xlsx'])
     expect(docking.officeDockingReviewItems.value.every((item) => item.status === 'ready')).toBe(true)
     expect(docking.officeDockingReviewItems.value.every((item) => item.databaseAction === '')).toBe(true)
     expect(docking.officeDockingReviewItems.value.every((item) => item.databaseDisabledReason.includes('profile_target'))).toBe(true)
     expect(deps.addAndSaveMessage).toHaveBeenCalledWith(
-      '[对接] 已收到文件夹「发货单」中的 2 个可识别文件，已忽略 1 个系统或不支持的文件，开始调用办公员工识别。',
+      '已收到文件夹「发货单」中的 2 个可读取文件，另有 1 个文件已跳过（可在进度卡查看原因），现在开始阅读。',
       'ai',
     )
-    expect(deps.addAndSaveMessage).toHaveBeenCalledWith(
-      expect.stringContaining('[对接审核] 已阅读「发货单/国圣化工.xlsx」'),
-      'ai',
-    )
+    expect(docking.officeDockingProgress.value).toMatchObject({
+      phase: 'completed',
+      total: 2,
+      completed: 2,
+      success: 2,
+      failed: 0,
+      percent: 100,
+      ignored: [{ fileName: '发货单/.DS_Store', reason: '系统或临时文件' }],
+    })
+    expect(deps.addAndSaveMessage).toHaveBeenCalledWith(expect.stringContaining('[对接审核] 已阅读「发货单/国圣化工.xlsx」'), 'ai')
 
     const [first, second] = docking.officeDockingReviewItems.value
     docking.toggleOfficeDockingTarget(first.id, 'database', false)
@@ -389,10 +386,7 @@ describe('useChatOfficeDocking', () => {
     expect(first.commitStatus).toBe('committed')
     expect(second.commitStatus).toBe('')
     expect(mocks.apiFetch.mock.calls.filter(([url]) => String(url) === '/api/templates/upload')).toHaveLength(1)
-    expect(deps.addAndSaveMessage).toHaveBeenCalledWith(
-      expect.stringContaining('[对接审核] 已阅读「发货单/客户/侯雪梅.xlsx」'),
-      'ai',
-    )
+    expect(deps.addAndSaveMessage).toHaveBeenCalledWith(expect.stringContaining('[对接审核] 已阅读「发货单/客户/侯雪梅.xlsx」'), 'ai')
 
     await docking.skipCurrentOfficeDockingReview()
     expect(second.commitStatus).toBe('skipped')
@@ -438,6 +432,7 @@ describe('useChatOfficeDocking', () => {
 
     expect(docking.officeDockingPanelOpen.value).toBe(false)
     expect(docking.officeDockingAwaitingDecision.value).toBe(true)
+    expect(docking.officeDockingProgress.value).toMatchObject({ phase: 'completed', total: 2, completed: 2, percent: 100 })
     expect(deps.addAndSaveMessage).toHaveBeenCalledTimes(2)
     const batchMessage = String(deps.addAndSaveMessage.mock.calls[1][0])
     expect(batchMessage).toContain('文件夹「发货单」里的文件全部读完了')
@@ -461,10 +456,7 @@ describe('useChatOfficeDocking', () => {
 
     expect(await docking.handleOfficeDockingConversationDecision('你觉得呢？')).toBe(false)
     expect(await docking.handleOfficeDockingConversationDecision('按建议处理')).toBe(true)
-    expect(deps.addAndSaveMessage).toHaveBeenLastCalledWith(
-      expect.stringContaining('现在还没有执行；如果理解正确，请回复“确认执行”'),
-      'ai',
-    )
+    expect(deps.addAndSaveMessage).toHaveBeenLastCalledWith(expect.stringContaining('现在还没有执行；如果理解正确，请回复“确认执行”'), 'ai')
     expect(mocks.apiFetch.mock.calls.some(([url]) => String(url) === '/api/templates/upload')).toBe(false)
     expect(mocks.apiFetch.mock.calls.some(([url]) => String(url).includes('/shipment-etl/execute'))).toBe(false)
 
@@ -473,6 +465,52 @@ describe('useChatOfficeDocking', () => {
     expect(mocks.apiFetch.mock.calls.filter(([url]) => String(url).includes('/shipment-etl/execute'))).toHaveLength(2)
     expect(docking.officeDockingReviewItems.value.every((item) => item.commitStatus === 'committed')).toBe(true)
     expect(docking.officeDockingAwaitingDecision.value).toBe(false)
+  })
+
+  it('shows cooperative cancellation and never offers execution options for an incomplete batch', async () => {
+    mocks.isSupported.mockReturnValue(true)
+    mocks.resolveEmployee.mockReturnValue(EXCEL_FULL_READ_EMPLOYEE_ID)
+    let finishRead!: (value: Record<string, unknown>) => void
+    mocks.runEmployee.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishRead = resolve
+        }),
+    )
+    mocks.readOutputs.mockResolvedValue([
+      { path: 'outputs/workbook.json', kind: 'json', json: { sheets: [{ sheet_name: '数据', row_count: 1 }] } },
+    ])
+    mocks.mapExcel.mockReturnValue({
+      fields: ['名称'],
+      preview_data: { sample_rows: [{ 名称: '样例' }] },
+      sheets: [{ sheet_name: '数据', fields: ['名称'] }],
+    })
+
+    const { deps, docking } = createHarness('conversation')
+    const reading = docking.onOfficeDockingFileChange(fileEvent([new File(['a'], '第一份.xlsx'), new File(['b'], '第二份.xlsx')]))
+    await vi.waitFor(() => expect(mocks.runEmployee).toHaveBeenCalledTimes(1))
+
+    expect(docking.officeDockingProgress.value).toMatchObject({
+      phase: 'reading',
+      total: 2,
+      currentIndex: 1,
+      currentFile: '第一份.xlsx',
+    })
+    docking.cancelOfficeDockingReading()
+    expect(docking.officeDockingProgress.value?.phase).toBe('stopping')
+
+    finishRead({ summary: '工作簿已读取', output_path: 'outputs/workbook.json' })
+    await reading
+
+    expect(docking.officeDockingProgress.value).toMatchObject({
+      phase: 'cancelled',
+      total: 2,
+      completed: 1,
+      success: 1,
+    })
+    expect(docking.officeDockingAwaitingDecision.value).toBe(false)
+    expect(deps.addAndSaveMessage).toHaveBeenLastCalledWith(expect.stringContaining('已停止这次阅读：完成 1/2 个'), 'ai')
+    expect(deps.addAndSaveMessage.mock.calls.some((call) => call[2]?.decisionOptions)).toBe(false)
   })
 
   it('obeys preview_only profile_target and never schedules the shipment database write', async () => {
@@ -491,13 +529,15 @@ describe('useChatOfficeDocking', () => {
         return jsonResponse({
           success: true,
           note_count: 1,
-          notes: [{
-            sheet_name: '送货单',
-            unit_name: '国圣化工',
-            item_count: 1,
-            profile_id: 'generic_delivery_preview',
-            profile_target: 'preview_only',
-          }],
+          notes: [
+            {
+              sheet_name: '送货单',
+              unit_name: '国圣化工',
+              item_count: 1,
+              profile_id: 'generic_delivery_preview',
+              profile_target: 'preview_only',
+            },
+          ],
         })
       }
       return jsonResponse({ success: true })

@@ -83,7 +83,7 @@
     "uploadTitle": "Upload Excel, image, or PDF",
     "uploadAttachment": "Upload attachment",
     "officeDocking": "Integration mode",
-    "officeDockingBusy": "Parsing file",
+    "officeDockingBusy": "Reading in progress",
     "officeDockingTitle": "Integration mode: AI reads the whole Word, Excel, CSV, PDF, or PPT batch, then discusses its overall recommendations in chat",
     "officeDockingFolderTitle": "Choose a folder; AI reads the whole batch, summarizes it in chat, and asks how you want it handled",
     "officeDockingFileTitle": "Choose one or more office files to integrate",

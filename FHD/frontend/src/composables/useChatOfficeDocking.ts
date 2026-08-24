@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue'
+import { computed, getCurrentScope, onScopeDispose, ref } from 'vue'
 import { primeCsrfCookie } from '@/api/core'
 import {
   CSV_FULL_READ_EMPLOYEE_ID,
@@ -33,6 +33,28 @@ type OfficeDockingIntentId =
   | 'generic_table'
   | 'document'
 type OfficeDockingDatabaseAction = '' | 'attendance_import' | 'shipment_etl_execute' | 'customer_product_import'
+
+export type OfficeDockingProgressPhase = 'idle' | 'reading' | 'stopping' | 'completed' | 'cancelled'
+
+export type OfficeDockingIgnoredFile = {
+  fileName: string
+  reason: string
+}
+
+export type ChatOfficeDockingProgress = {
+  phase: OfficeDockingProgressPhase
+  sourceLabel: string
+  total: number
+  completed: number
+  currentIndex: number
+  currentFile: string
+  success: number
+  failed: number
+  failures: Array<{ fileName: string; reason: string }>
+  ignored: OfficeDockingIgnoredFile[]
+  elapsedSeconds: number
+  percent: number
+}
 
 export type ShipmentEtlNotePreview = {
   sheet_name?: string
@@ -162,9 +184,14 @@ function officeDockingRelativePath(file: File): string {
 
 function isDirectorySystemFile(file: File): boolean {
   const segments = officeDockingRelativePath(file).split('/').filter(Boolean)
-  return segments.some((segment) =>
-    segment === '__MACOSX' || segment.startsWith('.') || segment.startsWith('~$'),
-  )
+  return segments.some((segment) => segment === '__MACOSX' || segment.startsWith('.') || segment.startsWith('~$'))
+}
+
+function ignoredDirectoryFile(file: File): OfficeDockingIgnoredFile | null {
+  const fileName = officeDockingRelativePath(file) || file.name || '未命名文件'
+  if (isDirectorySystemFile(file)) return { fileName, reason: '系统或临时文件' }
+  if (!isOfficeDockingFileSupported(file.name)) return { fileName, reason: '当前不支持的文件类型' }
+  return null
 }
 
 function directoryRootLabel(files: File[]): string {
@@ -173,7 +200,11 @@ function directoryRootLabel(files: File[]): string {
 }
 
 function fileStem(fileName: string): string {
-  const base = String(fileName || '').replace(/\\/g, '/').split('/').pop() || '办公文件'
+  const base =
+    String(fileName || '')
+      .replace(/\\/g, '/')
+      .split('/')
+      .pop() || '办公文件'
   return base.replace(/\.[^.]+$/, '').trim() || '办公文件'
 }
 
@@ -211,11 +242,7 @@ function isDirectDatabaseAction(item: ChatOfficeDockingReviewItem): boolean {
   return item.databaseAction === 'attendance_import' || item.databaseAction === 'shipment_etl_execute'
 }
 
-function buildBatchInsightMessage(
-  items: ChatOfficeDockingReviewItem[],
-  sourceLabel: string,
-  skippedCount: number,
-): string {
+function buildBatchInsightMessage(items: ChatOfficeDockingReviewItem[], sourceLabel: string, skippedCount: number): string {
   const ready = items.filter((item) => item.status === 'ready')
   const failed = items.filter((item) => item.status === 'error')
   const directDatabase = ready.filter((item) => item.selectedDatabase && isDirectDatabaseAction(item))
@@ -495,11 +522,13 @@ async function previewShipmentExcelEtl(filePath: string, workspaceRoot?: string)
 
 async function executeShipmentExcelEtl(item: ChatOfficeDockingReviewItem): Promise<Record<string, unknown>> {
   if (!item.upload?.file_path) throw new Error('缺少已上传文件路径')
-  const unsupportedTargets = [...new Set(
-    asArray<ShipmentEtlNotePreview>(item.shipmentEtlPreview?.notes)
-      .map((note) => asString(note.profile_target).trim() || 'shipment')
-      .filter((target) => target !== 'shipment'),
-  )]
+  const unsupportedTargets = [
+    ...new Set(
+      asArray<ShipmentEtlNotePreview>(item.shipmentEtlPreview?.notes)
+        .map((note) => asString(note.profile_target).trim() || 'shipment')
+        .filter((target) => target !== 'shipment'),
+    ),
+  ]
   if (unsupportedTargets.length) {
     throw new Error(`后端 profile_target=${unsupportedTargets.join('、')}，当前只允许预览，不能写入发货单数据库`)
   }
@@ -698,9 +727,73 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
   const officeDockingReviewItems = ref<ChatOfficeDockingReviewItem[]>([])
   const officeDockingAwaitingDecision = ref(false)
   const officeDockingBatchPlan = ref<OfficeDockingBatchPlan | null>(null)
-  const officeDockingPendingCount = computed(() => officeDockingReviewItems.value.filter(
-    (item) => item.status === 'ready' && item.commitStatus !== 'committed' && item.commitStatus !== 'skipped',
-  ).length)
+  const officeDockingProgressPhase = ref<OfficeDockingProgressPhase>('idle')
+  const officeDockingProgressSourceLabel = ref('')
+  const officeDockingProgressTotal = ref(0)
+  const officeDockingProgressCurrentIndex = ref(0)
+  const officeDockingProgressCurrentFile = ref('')
+  const officeDockingProgressIgnored = ref<OfficeDockingIgnoredFile[]>([])
+  const officeDockingProgressStartedAt = ref(0)
+  const officeDockingProgressNow = ref(0)
+  const officeDockingCancelRequested = ref(false)
+  let officeDockingProgressTimer: number | null = null
+  const officeDockingPendingCount = computed(
+    () =>
+      officeDockingReviewItems.value.filter(
+        (item) => item.status === 'ready' && item.commitStatus !== 'committed' && item.commitStatus !== 'skipped',
+      ).length,
+  )
+  const officeDockingProgress = computed<ChatOfficeDockingProgress | null>(() => {
+    if (officeDockingProgressPhase.value === 'idle') return null
+    const completed = officeDockingReviewItems.value.filter((item) => item.status !== 'running').length
+    const success = officeDockingReviewItems.value.filter((item) => item.status === 'ready').length
+    const failed = officeDockingReviewItems.value.filter((item) => item.status === 'error').length
+    const failures = officeDockingReviewItems.value
+      .filter((item) => item.status === 'error')
+      .map((item) => ({ fileName: item.fileName, reason: item.error || '未知错误' }))
+    const total = officeDockingProgressTotal.value
+    return {
+      phase: officeDockingProgressPhase.value,
+      sourceLabel: officeDockingProgressSourceLabel.value,
+      total,
+      completed,
+      currentIndex: officeDockingProgressCurrentIndex.value,
+      currentFile: officeDockingProgressCurrentFile.value,
+      success,
+      failed,
+      failures,
+      ignored: officeDockingProgressIgnored.value,
+      elapsedSeconds: officeDockingProgressStartedAt.value
+        ? Math.max(0, Math.floor((officeDockingProgressNow.value - officeDockingProgressStartedAt.value) / 1000))
+        : 0,
+      percent: total ? Math.min(100, Math.round((completed / total) * 100)) : 100,
+    }
+  })
+
+  function stopOfficeDockingClock() {
+    if (officeDockingProgressTimer !== null) {
+      window.clearInterval(officeDockingProgressTimer)
+      officeDockingProgressTimer = null
+    }
+    officeDockingProgressNow.value = Date.now()
+  }
+
+  function startOfficeDockingClock() {
+    stopOfficeDockingClock()
+    officeDockingProgressStartedAt.value = Date.now()
+    officeDockingProgressNow.value = officeDockingProgressStartedAt.value
+    officeDockingProgressTimer = window.setInterval(() => {
+      officeDockingProgressNow.value = Date.now()
+    }, 1000)
+  }
+
+  if (getCurrentScope()) onScopeDispose(stopOfficeDockingClock)
+
+  function cancelOfficeDockingReading() {
+    if (officeDockingProgressPhase.value !== 'reading') return
+    officeDockingCancelRequested.value = true
+    officeDockingProgressPhase.value = 'stopping'
+  }
 
   function triggerOfficeDocking() {
     if (officeDockingProcessing.value) return
@@ -739,7 +832,7 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
       templateTargetLabel: '办公文件模板',
       templateCommitStatus: '',
       databaseCommitStatus: '',
-      summary: '正在调用办公员工识别...',
+      summary: '正在读取文件内容…',
       warnings: [],
       error: '',
       templateError: '',
@@ -766,7 +859,7 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
     try {
       const upload = await uploadChatOfficeFile(file)
       item.upload = upload
-      item.summary = `已上传，正在由 ${item.employeeLabel} 读取...`
+      item.summary = '文件已就绪，正在读取内容…'
       touchItems()
       const employeeData = await runOfficeEmployeeRead(employeeId, upload.file_path, upload.workspace_root, {
         outputRelpath: outputRelpathFor(item.id, employeeId),
@@ -858,44 +951,88 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
       input?.hasAttribute('webkitdirectory') || selectedFiles.some((file) => officeDockingRelativePath(file).includes('/')),
     )
     const folderLabel = directoryRootLabel(selectedFiles)
-    const files = isDirectorySelection
-      ? selectedFiles.filter((file) => !isDirectorySystemFile(file) && isOfficeDockingFileSupported(file.name))
-      : selectedFiles
-    const skippedCount = selectedFiles.length - files.length
+    const ignoredFiles = isDirectorySelection
+      ? selectedFiles.map(ignoredDirectoryFile).filter((item): item is OfficeDockingIgnoredFile => Boolean(item))
+      : []
+    const files = isDirectorySelection ? selectedFiles.filter((file) => !ignoredDirectoryFile(file)) : selectedFiles
+    const skippedCount = ignoredFiles.length
     if (input) input.value = ''
     if (!selectedFiles.length) return
+    officeDockingReviewItems.value = []
+    officeDockingAwaitingDecision.value = false
+    officeDockingBatchPlan.value = null
+    officeDockingCancelRequested.value = false
+    officeDockingProgressSourceLabel.value = isDirectorySelection ? `文件夹「${folderLabel}」` : '所选文件'
+    officeDockingProgressTotal.value = files.length
+    officeDockingProgressCurrentIndex.value = 0
+    officeDockingProgressCurrentFile.value = ''
+    officeDockingProgressIgnored.value = ignoredFiles
     if (!files.length) {
-      await deps.addAndSaveMessage(`[对接] 文件夹「${folderLabel}」中没有可识别的办公文件。`, 'ai')
+      officeDockingProgressPhase.value = 'completed'
+      officeDockingProgressStartedAt.value = Date.now()
+      officeDockingProgressNow.value = officeDockingProgressStartedAt.value
+      const ignoredSummary = ignoredFiles.map((item) => `「${item.fileName}」：${item.reason}`).join('；')
+      await deps.addAndSaveMessage(
+        `文件夹「${folderLabel}」中没有可读取的办公文件。${ignoredSummary ? `已跳过：${ignoredSummary}。` : ''}没有归档模板，也没有写入数据库。`,
+        'ai',
+      )
       return
     }
     officeDockingPanelOpen.value = mode === 'review'
     officeDockingProcessing.value = true
-    officeDockingReviewItems.value = []
-    officeDockingAwaitingDecision.value = false
-    officeDockingBatchPlan.value = null
-    const skippedText = skippedCount ? `，已忽略 ${skippedCount} 个系统或不支持的文件` : ''
+    officeDockingProgressPhase.value = 'reading'
+    startOfficeDockingClock()
+    const skippedText = skippedCount ? `，另有 ${skippedCount} 个文件已跳过（可在进度卡查看原因）` : ''
     const sourceText = isDirectorySelection ? `文件夹「${folderLabel}」中的 ` : ''
     await deps.addAndSaveMessage(
       mode === 'conversation'
-        ? `[对接] 已收到${sourceText}${files.length} 个可识别文件${skippedText}。我会先把这一批全部读完，再一次和你商量怎么处理；读取阶段不会归档模板或写入数据库。`
-        : `[对接] 已收到${sourceText}${files.length} 个可识别文件${skippedText}，开始调用办公员工识别。`,
+        ? `已收到${sourceText}${files.length} 个可读取文件${skippedText}。我会先全部看完，再一次和你商量怎么处理；阅读期间不会归档模板，也不会写入数据库。`
+        : `已收到${sourceText}${files.length} 个可读取文件${skippedText}，现在开始阅读。`,
       'ai',
     )
     try {
-      for (const file of files) {
+      const progressUpdateEvery = Math.max(5, Math.ceil(files.length / 4))
+      for (const [index, file] of files.entries()) {
+        if (officeDockingCancelRequested.value) break
+        officeDockingProgressCurrentIndex.value = index + 1
+        officeDockingProgressCurrentFile.value = isDirectorySelection ? officeDockingRelativePath(file) : file.name
         await analyzeFile(file, isDirectorySelection ? officeDockingRelativePath(file) : file.name)
+        const completed = officeDockingReviewItems.value.filter((item) => item.status !== 'running').length
+        if (
+          mode === 'conversation' &&
+          files.length >= 6 &&
+          completed < files.length &&
+          completed % progressUpdateEvery === 0 &&
+          !officeDockingCancelRequested.value
+        ) {
+          const success = officeDockingReviewItems.value.filter((item) => item.status === 'ready').length
+          const failed = officeDockingReviewItems.value.filter((item) => item.status === 'error').length
+          await deps.addAndSaveMessage(
+            `进度更新：已读 ${completed}/${files.length}，成功 ${success}，失败 ${failed}。我会继续阅读，仍然不会归档或写库。`,
+            'ai',
+          )
+        }
       }
     } finally {
       officeDockingProcessing.value = false
+      stopOfficeDockingClock()
     }
+    if (officeDockingCancelRequested.value) {
+      officeDockingProgressPhase.value = 'cancelled'
+      const completed = officeDockingReviewItems.value.filter((item) => item.status !== 'running').length
+      await deps.addAndSaveMessage(
+        `已停止这次阅读：完成 ${completed}/${files.length} 个。已经读到的内容仅保留在本次对话中，没有归档模板，也没有写入数据库。`,
+        'ai',
+      )
+      return
+    }
+    officeDockingProgressPhase.value = 'completed'
     if (mode === 'conversation') {
       officeDockingAwaitingDecision.value = officeDockingReviewItems.value.some((item) => item.status === 'ready')
       const sourceLabel = isDirectorySelection ? `文件夹「${folderLabel}」里的文件` : '这批文件'
-      await deps.addAndSaveMessage(
-        buildBatchInsightMessage(officeDockingReviewItems.value, sourceLabel, skippedCount),
-        'ai',
-        { decisionOptions: OFFICE_DOCKING_DECISION_OPTIONS },
-      )
+      await deps.addAndSaveMessage(buildBatchInsightMessage(officeDockingReviewItems.value, sourceLabel, skippedCount), 'ai', {
+        decisionOptions: OFFICE_DOCKING_DECISION_OPTIONS,
+      })
       return
     }
     const firstReady = officeDockingReviewItems.value.find((item) => item.status === 'ready' && !item.commitStatus)
@@ -920,9 +1057,7 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
   }
 
   function currentReviewItem(): ChatOfficeDockingReviewItem | undefined {
-    return officeDockingReviewItems.value.find(
-      (item) => item.commitStatus !== 'committed' && item.commitStatus !== 'skipped',
-    )
+    return officeDockingReviewItems.value.find((item) => item.commitStatus !== 'committed' && item.commitStatus !== 'skipped')
   }
 
   async function announceNextAdvice(): Promise<void> {
@@ -988,9 +1123,7 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
               await rollbackArchivedTemplate(item.templateResult)
               item.templateCommitStatus = 'rolled_back'
             } catch (rollbackError) {
-              item.rollbackError = rollbackError instanceof Error
-                ? rollbackError.message
-                : String(rollbackError || '模板回滚失败')
+              item.rollbackError = rollbackError instanceof Error ? rollbackError.message : String(rollbackError || '模板回滚失败')
             }
           }
           throw error
@@ -1016,12 +1149,7 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
 
   async function confirmOfficeDockingReview() {
     const item = currentReviewItem()
-    if (
-      !item ||
-      item.status !== 'ready' ||
-      item.commitStatus === 'committing' ||
-      (!item.selectedTemplate && !item.selectedDatabase)
-    ) return
+    if (!item || item.status !== 'ready' || item.commitStatus === 'committing' || (!item.selectedTemplate && !item.selectedDatabase)) return
     await executeOfficeDockingItem(item)
     if (item.commitStatus === 'failed' || item.commitStatus === 'partial') {
       await deps.addAndSaveMessage(`[对接] 「${item.fileName}」处理失败：${item.error}。请调整后重试或跳过。`, 'ai')
@@ -1040,7 +1168,11 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
     return items.filter((item) => item.selectedDatabase && isDirectDatabaseAction(item))
   }
 
-  function makeBatchPlan(label: string, templateItems: ChatOfficeDockingReviewItem[], databaseItems: ChatOfficeDockingReviewItem[]): OfficeDockingBatchPlan {
+  function makeBatchPlan(
+    label: string,
+    templateItems: ChatOfficeDockingReviewItem[],
+    databaseItems: ChatOfficeDockingReviewItem[],
+  ): OfficeDockingBatchPlan {
     return {
       label,
       templateItemIds: templateItems.map((item) => item.id),
@@ -1059,9 +1191,9 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
     if (
       /(全部|所有|这批).*(只归档|仅归档|只放|只存).*(模板|模版)/.test(normalized) ||
       /(全部|所有|这批).*(模板|模版).*(不入库|不写库|不写数据库)/.test(normalized) ||
-      !/[吗么？?]|能否|可以不/.test(normalized) &&
+      (!/[吗么？?]|能否|可以不/.test(normalized) &&
         /(全部|所有|这批|都|统一).*(归档|保存|存到|放到|收进).*(模板|模版)/.test(normalized) &&
-        !/(入库|同步|写入).*(数据库|业务库|对应库)/.test(normalized)
+        !/(入库|同步|写入).*(数据库|业务库|对应库)/.test(normalized))
     ) {
       return makeBatchPlan('全部只归档到模板库', items, [])
     }
@@ -1133,11 +1265,7 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
     const skipped = items.filter((item) => item.commitStatus === 'skipped')
     const lines = items.map((item, index) => {
       if (item.commitStatus === 'skipped') return `${index + 1}. ${item.fileName}：未处理`
-      const state = item.commitStatus === 'committed'
-        ? '完整成功'
-        : item.commitStatus === 'partial'
-          ? '部分成功'
-          : '失败'
+      const state = item.commitStatus === 'committed' ? '完整成功' : item.commitStatus === 'partial' ? '部分成功' : '失败'
       const details = executionTargetDetails(item)
       return `${index + 1}. ${item.fileName}：${state}${details.length ? `；${details.join('；')}` : ''}`
     })
@@ -1180,7 +1308,10 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
       touchItems()
       officeDockingAwaitingDecision.value = false
       officeDockingBatchPlan.value = null
-      await deps.addAndSaveMessage('好的，这批文件先不处理。没有归档模板，也没有写入数据库。以后需要时可以重新上传或继续告诉我处理方案。', 'ai')
+      await deps.addAndSaveMessage(
+        '好的，这批文件先不处理。没有归档模板，也没有写入数据库。以后需要时可以重新上传或继续告诉我处理方案。',
+        'ai',
+      )
       return true
     }
     officeDockingBatchPlan.value = plan
@@ -1201,10 +1332,18 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
   }
 
   function clearOfficeDockingReview() {
+    stopOfficeDockingClock()
     officeDockingPanelOpen.value = false
     officeDockingReviewItems.value = []
     officeDockingAwaitingDecision.value = false
     officeDockingBatchPlan.value = null
+    officeDockingProgressPhase.value = 'idle'
+    officeDockingProgressSourceLabel.value = ''
+    officeDockingProgressTotal.value = 0
+    officeDockingProgressCurrentIndex.value = 0
+    officeDockingProgressCurrentFile.value = ''
+    officeDockingProgressIgnored.value = []
+    officeDockingCancelRequested.value = false
   }
 
   return {
@@ -1215,8 +1354,10 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
     officeDockingReviewItems,
     officeDockingPendingCount,
     officeDockingAwaitingDecision,
+    officeDockingProgress,
     triggerOfficeDocking,
     triggerOfficeDockingFolder,
+    cancelOfficeDockingReading,
     onOfficeDockingFileChange,
     toggleOfficeDockingTarget,
     updateOfficeDockingTemplateName,

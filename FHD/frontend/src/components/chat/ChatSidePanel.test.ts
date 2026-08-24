@@ -4,6 +4,8 @@ import type { TaskItem } from '@/composables/useChatPersistence'
 import ChatConversationPanel from './ChatConversationPanel.vue'
 import ChatSidePanel from './ChatSidePanel.vue'
 import ChatTaskPanel from './ChatTaskPanel.vue'
+import OfficeDockingProgressCard from './OfficeDockingProgressCard.vue'
+import type { ChatOfficeDockingProgress } from '@/composables/useChatOfficeDocking'
 
 const formatter = vi.fn(() => '')
 
@@ -17,7 +19,7 @@ const task: TaskItem = {
   updatedAt: 1,
 }
 
-function mountPanel(taskList: TaskItem[] = []) {
+function mountPanel(taskList: TaskItem[] = [], officeDockingProgress: ChatOfficeDockingProgress | null = null) {
   return shallowMount(ChatSidePanel, {
     props: {
       currentTask: null,
@@ -41,6 +43,7 @@ function mountPanel(taskList: TaskItem[] = []) {
       currentSessionId: 'session-current',
       historyLoading: false,
       historyError: '',
+      officeDockingProgress,
     },
   })
 }
@@ -115,6 +118,33 @@ describe('ChatSidePanel', () => {
     expect(wrapper.emitted('delete-session')?.at(-1)).toEqual(['session-1'])
 
     await wrapper.findAll('[role="tab"]')[0].trigger('click')
+    expect(wrapper.get('[role="tab"][aria-selected="true"]').text()).toContain('任务')
+  })
+
+  it('opens the real task tab for a running office-reading task and forwards cancel', async () => {
+    const progress: ChatOfficeDockingProgress = {
+      phase: 'reading',
+      sourceLabel: '文件夹「发货单」',
+      total: 17,
+      completed: 2,
+      currentIndex: 3,
+      currentFile: '发货单/国圣化工.xlsx',
+      success: 2,
+      failed: 0,
+      failures: [],
+      ignored: [],
+      elapsedSeconds: 8,
+      percent: 12,
+    }
+    const wrapper = mountPanel([], progress)
+
+    expect(wrapper.get('[role="tab"][aria-selected="true"]').text()).toContain('任务')
+    const progressCard = wrapper.findComponent(OfficeDockingProgressCard)
+    expect(progressCard.exists()).toBe(true)
+    progressCard.vm.$emit('cancel')
+    expect(wrapper.emitted('office-docking-cancel')).toHaveLength(1)
+
+    await wrapper.setProps({ officeDockingProgress: { ...progress, phase: 'stopping' } })
     expect(wrapper.get('[role="tab"][aria-selected="true"]').text()).toContain('任务')
   })
 })

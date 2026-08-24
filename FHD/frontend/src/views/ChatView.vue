@@ -20,6 +20,7 @@
         :get-collapsed-preview="getCollapsedPreview"
         :can-speak-message="canSpeakMessage"
         :decision-options-enabled="officeDockingAwaitingDecision"
+        :office-docking-progress="officeDockingProgress"
         :chat-messages-ref="chatRefBag.chatMessagesRef"
         @expand-message="expandMessage"
         @collapse-message="collapseMessage"
@@ -28,6 +29,7 @@
         @approval-confirm="confirmWorkflowFromCard"
         @approval-cancel="cancelWorkflowFromCard"
         @decision-option="handleDecisionOption"
+        @office-docking-cancel="cancelOfficeDockingReading"
       />
       <div v-if="isTaskPaneResizable" class="chat-pane-handle-slot">
         <PaneResizeHandle
@@ -59,6 +61,7 @@
         :current-session-id="currentSessionId"
         :history-loading="historyLoading"
         :history-error="historyError"
+        :office-docking-progress="officeDockingProgress"
         @confirm-task="confirmTask"
         @cancel-task="cancelTask"
         @refetch-order-number="refetchTaskOrderNumber"
@@ -85,6 +88,7 @@
         @load-session="loadSession"
         @rename-session="renameSession"
         @delete-session="deleteSession"
+        @office-docking-cancel="cancelOfficeDockingReading"
       />
     </div>
     <div class="input-area" data-tour="chat-input-area">
@@ -431,8 +435,10 @@ const {
   officeDockingFolderInputRef,
   officeDockingProcessing,
   officeDockingAwaitingDecision,
+  officeDockingProgress,
   triggerOfficeDocking,
   triggerOfficeDockingFolder,
+  cancelOfficeDockingReading,
   onOfficeDockingFileChange,
   handleOfficeDockingConversationDecision,
 } = useChatOfficeDocking({
