@@ -191,6 +191,27 @@ _BUSINESS_DB_CONTROL_FIELDS = frozenset(
 
 _RECENT_BUSINESS_DB_TARGETS: dict[str, dict[str, Any]] = {}
 
+
+def _registered_router_erp_hr(
+    action: str, params: dict, runtime_context: dict, profile: str, user_message: str
+) -> dict:
+    del profile, user_message
+    from app.application.erp_hr_management_app_service import execute_erp_hr_management
+    from app.infrastructure.tenant_scope import current_tenant_id, tenant_scope
+
+    if current_tenant_id() is not None:
+        return execute_erp_hr_management(action, params)
+    trusted_tenant_id = runtime_context.get("tenant_id")
+    if trusted_tenant_id in (None, ""):
+        return {
+            "success": False,
+            "message": "缺少已认证租户上下文，拒绝 ERP 人员管理操作",
+            "error_code": "erp_hr_tenant_context_missing",
+        }
+    with tenant_scope(int(trusted_tenant_id)):
+        return execute_erp_hr_management(action, params)
+
+
 _REGISTERED_WORKFLOW_ROUTERS: dict[str, Callable[..., dict]] = _WorkflowRouterMap(
     {
         "normal_slot_dispatch": _registered_router_normal_slot_dispatch,
@@ -219,6 +240,7 @@ _REGISTERED_WORKFLOW_ROUTERS: dict[str, Callable[..., dict]] = _WorkflowRouterMa
         "printer_list": _registered_router_printer_list,
         "settings": _registered_router_settings,
         "employee": _registered_router_employee,
+        "erp_hr": _registered_router_erp_hr,
         "business_db": _registered_router_business_db,
         "dataset_rag": _registered_router_dataset_rag,
         "memory_v2": _registered_router_memory_v2,

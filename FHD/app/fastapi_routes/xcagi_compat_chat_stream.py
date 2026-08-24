@@ -25,6 +25,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
     runtime_context = _facade()._runtime_context_with_authenticated_actor(request, runtime_context)
     runtime_context = _facade().runtime_context_with_tier(runtime_context, ai_tier)
     from app.application import get_ai_chat_app_service
+    from app.application.chat_tool_intent import looks_like_erp_hr_management_intent
     from app.application.normal_chat_dispatch import route_normal_mode_message
     from app.application.workflow.planner import _looks_like_business_db_write
 
@@ -42,6 +43,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         token in str(body.message or "")
         for token in ("客户", "购买单位", "产品", "商品", "原材料", "物料", "出货", "发货")
     )
+    erp_hr_management = looks_like_erp_hr_management_intent(str(body.message or ""))
     from app.infrastructure.tenant_scope import tenant_scope
 
     authenticated_tenant_id = runtime_context.get("tenant_id")
@@ -51,6 +53,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
     if (
         has_pending_workflow
         or sales_closed_loop_route
+        or erp_hr_management
         or (
             controlled_entity_named
             and _looks_like_business_db_write(
@@ -121,6 +124,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
     workspace_root = _facade().os.environ.get("WORKSPACE_ROOT", _facade().os.getcwd())
     llm_client = _facade().create_modstore_openai_client_from_request(request)
     reply_parts: list[str] = []
+    legacy_tool_records: list[dict] = []
     pre_run = None
     planner_runtime_context = dict(runtime_context or {})
     try:
@@ -204,6 +208,10 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
                 break
             elif et == "done":
                 continue
+            elif et == "legacy_tool_records":
+                records = ev.get("records")
+                if isinstance(records, list):
+                    legacy_tool_records = [item for item in records if isinstance(item, dict)]
             else:
                 yield _facade()._sse_event_line(ev)
         if halted_for_write_token:
@@ -233,12 +241,34 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
                 )
             )
             return
-        thinking = _facade()._thinking_steps_from_planner_stream_text(merged)
-        if thinking:
-            done_reply: str | dict = {"response": merged, "thinking_steps": thinking}
+        from app.application.planner_display_markers import strip_planner_stream_markers
+
+        visible_text, thinking = strip_planner_stream_markers(merged)
+        unverified_tool_claim = bool(
+            thinking and "正在调用工具" in thinking and not legacy_tool_records
+        )
+        if unverified_tool_claim:
+            failure_text = (
+                "AI 提出了工具调用，但没有产生可验证的工具回执；本次未执行任何数据操作。"
+                "请重试，或明确说明要管理的业务对象。"
+            )
+            visible_text = f"{visible_text}\n\n{failure_text}".strip()
+        if thinking or legacy_tool_records:
+            done_reply: str | dict = {
+                "response": visible_text or merged,
+                "thinking_steps": thinking,
+                "legacy_tool_records": legacy_tool_records,
+            }
         else:
-            done_reply = merged
+            done_reply = visible_text or merged
         payload = _facade()._xcagi_compat_reply_payload(done_reply)
+        if unverified_tool_claim:
+            payload["success"] = False
+            payload["message"] = "工具调用未产生可验证回执"
+            data = payload.get("data")
+            if isinstance(data, dict):
+                data["action"] = "tool_execution_unverified"
+                data["tool_execution_verified"] = False
         if pre_run is not None:
             payload = _facade().finalize_legacy_chat_run(
                 pre_run.run_id,

@@ -182,6 +182,15 @@ class _DynamicWorkflowPendingResumeMixin:
                     ),
                 )
             if text.lower() in cancel_words or text in cancel_words:
+                pending_plan = _facade().cast("PlanGraph | None", pending.get("plan"))
+                runtime_ctx = pending.get("runtime_context", {})
+                if pending_plan is not None:
+                    self._persist_plan_state(
+                        pending_plan,
+                        runtime_ctx if isinstance(runtime_ctx, dict) else {},
+                        status="cancelled",
+                        message="用户取消工作流执行",
+                    )
                 self._pending_workflows.pop(user_id, None)
                 return (
                     True,
@@ -192,7 +201,10 @@ class _DynamicWorkflowPendingResumeMixin:
                         "data": {
                             "text": "已取消本次工作流执行。",
                             "action": "workflow_cancelled",
-                            "data": {},
+                            "data": {
+                                "plan_id": getattr(pending_plan, "plan_id", ""),
+                                "persisted_status": "cancelled",
+                            },
                         },
                     },
                 )

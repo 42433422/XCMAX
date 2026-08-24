@@ -362,6 +362,11 @@ def _xcagi_guarded_planner_stream_events(
                 client=client,
             ):
                 event_queue.put(ev)
+            from app.legacy.chat.legacy_chat_adapter import get_last_tool_records
+
+            records = get_last_tool_records()
+            if records:
+                event_queue.put({"type": "legacy_tool_records", "records": records})
         except BOUNDARY_ERRORS as exc:
             event_queue.put(exc)
         finally:

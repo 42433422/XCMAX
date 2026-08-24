@@ -20,8 +20,38 @@ class _LLMWorkflowPlannerPart02Mixin:
         nodes: list[_facade().WorkflowNode] = []
         todo = ["理解用户目标", "执行可用工具", "输出执行结果"]
         intent = "generic_workflow"
+        from app.application.chat_tool_intent import looks_like_erp_hr_management_intent
+
+        if looks_like_erp_hr_management_intent(message) and "erp_hr" in tool_registry:
+            from app.application.erp_hr_management_app_service import (
+                build_erp_hr_workflow_node,
+            )
+
+            intent = "erp_hr_management"
+            node = build_erp_hr_workflow_node(message)
+            nodes.append(node)
+            impact = node.params.get("impact_preview") if isinstance(node.params, dict) else None
+            if isinstance(impact, dict):
+                employee_count = int(impact.get("active_employees") or 0)
+                department_count = int(impact.get("active_departments") or 0)
+                history = impact.get("history_preserved") or {}
+                todo = [
+                    f"确认影响范围：{employee_count} 名员工、{department_count} 个部门",
+                    (
+                        "采用可恢复软停用；保留 "
+                        f"{int(history.get('attendance_records') or 0)} 条考勤和 "
+                        f"{int(history.get('leave_records') or 0)} 条请假历史"
+                    ),
+                    "审批通过后按预览数量原子执行；数据变化则自动拒绝并回滚",
+                    "返回执行回执和每项失败原因",
+                ]
+            elif node.action == "list":
+                todo = ["读取当前租户 ERP 人员主数据", "返回查询数量、来源和执行回执"]
+            else:
+                todo = ["校验人员/部门唯一目标", "原子执行 ERP 主数据变更", "返回执行回执"]
         if (
-            any(k in message for k in ("员工", "employee", "调用", "交给"))
+            not nodes
+            and (any(k in message for k in ("employee", "调用", "交给", "AI员工", "员工包")))
             and "employee" in tool_registry
         ):
             intent = "employee_dispatch"

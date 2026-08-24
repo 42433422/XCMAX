@@ -1555,6 +1555,52 @@
         }
       }
     },
+    "erp_hr": {
+      "description": "宿主 ERP 人员与部门主数据管理。list/preview 只读；create/update 写入；deactivate/bulk_deactivate 只做可恢复软停用并保留考勤历史。",
+      "availability": "shared",
+      "actions": {
+        "list": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": ["entity"],
+          "availability": "shared"
+        },
+        "preview": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": ["scope"],
+          "availability": "shared"
+        },
+        "create": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": ["entity", "payload"],
+          "availability": "shared",
+          "action_class": "business_db.write"
+        },
+        "update": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": ["entity", "selector", "changes"],
+          "availability": "shared",
+          "action_class": "business_db.write"
+        },
+        "deactivate": {
+          "risk": "high",
+          "idempotent": true,
+          "required_params": ["entity", "selector"],
+          "availability": "shared",
+          "action_class": "delete.batch"
+        },
+        "bulk_deactivate": {
+          "risk": "high",
+          "idempotent": true,
+          "required_params": ["scope", "all", "expected_active_employees", "expected_active_departments"],
+          "availability": "shared",
+          "action_class": "delete.batch"
+        }
+      }
+    },
     "business_db": {
       "description": "受控业务数据库读写工具。只允许通过业务服务访问 customers、products、materials、shipment_records，不接受任意 SQL。read 用于查询，write 用于create/update/delete 等受控写入。",
       "availability": "shared",

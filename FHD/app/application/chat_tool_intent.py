@@ -78,12 +78,98 @@ def looks_like_business_db_write(message: str, lower: str | None = None) -> bool
     return business_entity and unambiguous_mutation
 
 
+def looks_like_erp_hr_management_intent(message: str) -> bool:
+    """Recognize host ERP personnel/department management, not AI employee packs."""
+    value = str(message or "").strip()
+    if not value:
+        return False
+    lower = value.lower()
+    if any(token in value for token in ("AI员工", "智能员工", "员工包")):
+        return False
+    if (
+        any(token in value for token in ("调用", "交给", "让员工", "运行员工"))
+        and "部门" not in value
+        and not any(token in value for token in ("人员档案", "员工档案", "员工信息"))
+    ):
+        return False
+    entity_named = (
+        any(
+            token in value
+            for token in (
+                "人员",
+                "人事",
+                "部门",
+                "员工档案",
+                "员工名单",
+                "员工信息",
+                "在职员工",
+                "离职员工",
+            )
+        )
+        or "department" in lower
+        or "personnel" in lower
+    )
+    if not entity_named and "员工" in value:
+        entity_named = any(
+            token in value
+            for token in (
+                "查询",
+                "查看",
+                "名单",
+                "档案",
+                "新增",
+                "新建",
+                "创建",
+                "修改",
+                "更新",
+                "删除",
+                "移除",
+                "停用",
+                "归档",
+                "所有",
+                "全部",
+            )
+        )
+    if not entity_named:
+        return False
+    action_named = any(
+        token in value
+        for token in (
+            "查",
+            "看",
+            "列出",
+            "名单",
+            "档案",
+            "新增",
+            "新建",
+            "创建",
+            "添加",
+            "修改",
+            "更新",
+            "改为",
+            "改成",
+            "调到",
+            "删除",
+            "移除",
+            "清空",
+            "停用",
+            "归档",
+        )
+    ) or any(
+        token in lower
+        for token in ("list", "query", "create", "update", "delete", "deactivate", "archive")
+    )
+    return action_named
+
+
 def looks_like_explicit_workflow_tool_intent(text: str) -> bool:
     """Return whether the user explicitly asked for an executable workflow tool."""
     value = str(text or "").strip()
     if not value:
         return False
     lower = value.lower()
+    if looks_like_erp_hr_management_intent(value):
+        return True
     employee_mentioned = any(k in value for k in ("员工", "调用", "交给")) or "employee" in lower
     employee_action = any(k in value for k in ("调用", "执行", "运行", "交给", "让")) or any(
         k in lower for k in ("call", "run", "execute", "employee")

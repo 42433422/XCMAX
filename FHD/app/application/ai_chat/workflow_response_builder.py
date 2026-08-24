@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import TYPE_CHECKING, Any
 
 from app.application import agent_task_context
@@ -89,7 +90,8 @@ class AIChatWorkflowResponseMixin:
                     )
                 )
             else:
-                lines.append(f"- {step.node_id}: {step.status}（{_PUBLIC_WORKFLOW_FAILURE}）")
+                reason = self._workflow_failure_reason(step)
+                lines.append(f"- {step.node_id}: {step.status}（{reason}）")
 
         success = agent_run.status == "completed"
         cost_units_total = int((agent_run.metadata or {}).get("cost_units_total") or 0)
@@ -148,7 +150,7 @@ class AIChatWorkflowResponseMixin:
                             "message": (
                                 self._workflow_output_message(step.output)
                                 if step.status == "completed"
-                                else _PUBLIC_WORKFLOW_FAILURE
+                                else self._workflow_failure_reason(step)
                             ),
                             "output_preview": (
                                 self._workflow_output_preview(step.output)
@@ -251,6 +253,33 @@ class AIChatWorkflowResponseMixin:
             return ""
         return str(output.get("message") or "").strip()
 
+    @staticmethod
+    def _workflow_failure_reason(item: Any) -> str:
+        """Expose the useful business failure while redacting credential-like text."""
+        output = getattr(item, "output", None)
+        candidates: list[Any] = []
+        if isinstance(output, dict):
+            candidates.extend(
+                [
+                    output.get("message"),
+                    output.get("error"),
+                    output.get("raw_message"),
+                    output.get("raw_error_code"),
+                    output.get("error_code"),
+                ]
+            )
+        candidates.extend([getattr(item, "error", None), getattr(item, "message", None)])
+        reason = next((str(value).strip() for value in candidates if str(value or "").strip()), "")
+        if not reason:
+            return _PUBLIC_WORKFLOW_FAILURE
+        reason = re.sub(
+            r"(?i)(authorization|api[_-]?key|token|password|secret)\s*[:=]\s*[^\s，,；;]+",
+            r"\1=[已隐藏]",
+            reason,
+        )
+        reason = re.sub(r"\s+", " ", reason).strip()
+        return reason[:300] + ("…" if len(reason) > 300 else "")
+
     def _format_workflow_tool_success_line(
         self,
         item,
@@ -334,7 +363,8 @@ class AIChatWorkflowResponseMixin:
                 node_params = node_params_by_id.get(str(item.node_id), {})
                 lines.extend(self._format_workflow_tool_success_line(item, node_params))
             else:
-                lines.append(f"- {item.node_id}: 失败（{_PUBLIC_WORKFLOW_FAILURE}）")
+                failure_reason = self._workflow_failure_reason(item)
+                lines.append(f"- {item.node_id}: 失败（{failure_reason}）")
                 retryable = getattr(item, "retryable", True)
                 retryable = retryable if isinstance(retryable, bool) else True
                 try:
@@ -375,7 +405,7 @@ class AIChatWorkflowResponseMixin:
                             "message": (
                                 self._workflow_output_message(r.output)
                                 if r.success
-                                else _PUBLIC_WORKFLOW_FAILURE
+                                else self._workflow_failure_reason(r)
                             ),
                             "output_preview": self._workflow_output_preview(r.output)
                             if r.success

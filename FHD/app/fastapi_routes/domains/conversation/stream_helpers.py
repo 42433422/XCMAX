@@ -46,6 +46,11 @@ def _xcagi_guarded_planner_stream_events(
                 client=client,
             ):
                 event_queue.put(ev)
+            from app.legacy.chat.legacy_chat_adapter import get_last_tool_records
+
+            records = get_last_tool_records()
+            if records:
+                event_queue.put({"type": "legacy_tool_records", "records": records})
         except BOUNDARY_ERRORS as exc:
             event_queue.put(exc)
         finally:
@@ -218,6 +223,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
     workspace_root = os.environ.get("WORKSPACE_ROOT", os.getcwd())
     llm_client = _facade().create_modstore_openai_client_from_request(request)
     reply_parts: list[str] = []
+    legacy_tool_records: list[dict] = []
     try:
         halted_for_write_token = False
         for ev in _facade()._xcagi_guarded_planner_stream_events(
@@ -238,6 +244,10 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
                 break
             elif et == "done":
                 continue
+            elif et == "legacy_tool_records":
+                records = ev.get("records")
+                if isinstance(records, list):
+                    legacy_tool_records = [item for item in records if isinstance(item, dict)]
             else:
                 yield _facade()._sse_event_line(ev)
         if halted_for_write_token:
@@ -247,12 +257,27 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
             msg = "模型服务已完成请求，但没有返回可显示的正文。若附带图片，请确认当前账号已启用视觉模型，或上传文字更清晰的截图。"
             yield _facade()._sse_event_line({"type": "error", "message": msg})
             return
-        thinking = _facade()._thinking_steps_from_planner_stream_text(merged)
-        if thinking:
-            done_reply: str | dict = {"response": merged, "thinking_steps": thinking}
+        visible_text, thinking = strip_planner_stream_markers(merged)
+        unverified_tool_claim = bool(
+            thinking and "正在调用工具" in thinking and not legacy_tool_records
+        )
+        if unverified_tool_claim:
+            visible_text = (
+                f"{visible_text}\n\nAI 提出了工具调用，但没有产生可验证的工具回执；"
+                "本次未执行任何数据操作。"
+            ).strip()
+        if thinking or legacy_tool_records:
+            done_reply: str | dict = {
+                "response": visible_text or merged,
+                "thinking_steps": thinking,
+                "legacy_tool_records": legacy_tool_records,
+            }
         else:
-            done_reply = merged
+            done_reply = visible_text or merged
         payload = _facade()._xcagi_compat_reply_payload(done_reply)
+        if unverified_tool_claim:
+            payload["success"] = False
+            payload["message"] = "工具调用未产生可验证回执"
         payload = _facade().attach_chat_trace_run(
             payload,
             message=body.message,
