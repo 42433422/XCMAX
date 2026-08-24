@@ -56,6 +56,29 @@ class EtlPreviewRequest(BaseModel):
     template_id: str | None = None
     compatibility_preset_id: str | None = Field(default=None, max_length=180)
     target_config_id: str | None = None
+    llm_advice_enabled: bool = True
+
+
+class EtlBatchAdviceItem(BaseModel):
+    file_name: str = Field(max_length=500)
+    target_type: str = Field(max_length=80)
+    database_target_label: str = Field(default="", max_length=120)
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    sheet_count: int = Field(default=0, ge=0)
+    row_count: int = Field(default=0, ge=0)
+    new_count: int = Field(default=0, ge=0)
+    update_count: int = Field(default=0, ge=0)
+    skip_count: int = Field(default=0, ge=0)
+    error_count: int = Field(default=0, ge=0)
+    template_count: int = Field(default=0, ge=0)
+    knowledge_ready: bool = False
+    database_recommended: bool = False
+    warnings: list[str] = Field(default_factory=list, max_length=20)
+
+
+class EtlBatchAdviceRequest(BaseModel):
+    source_label: str = Field(default="这批办公资料", max_length=500)
+    items: list[EtlBatchAdviceItem] = Field(min_length=1, max_length=100)
 
 
 class EtlDraftPatch(BaseModel):

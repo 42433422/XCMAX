@@ -186,7 +186,7 @@ def _complete(
                 billing=dict(result.billing or {}),
                 data=dict(result.data),
             )
-        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - LLM failure must never own ETL execution
+        except BOUNDARY_ERRORS as exc:  # noqa: BLE001 - advisory LLM must never own ETL execution
             degradation_code = _degradation_code(exc)
             _open_circuit(circuit_key, degradation_code)
             logger.info(
@@ -479,8 +479,88 @@ def advise_row_decisions(payloads: list[dict[str, Any]]) -> LlmAssistResult:
     return result
 
 
+_BATCH_ADVICE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "required": ["overall_judgment", "reasoning", "cautions", "questions"],
+    "properties": {
+        "overall_judgment": {"type": "string"},
+        "reasoning": {"type": "array", "items": {"type": "string"}},
+        "cautions": {"type": "array", "items": {"type": "string"}},
+        "questions": {"type": "array", "items": {"type": "string"}},
+    },
+    "additionalProperties": False,
+}
+
+
+def advise_batch_plan(items: list[dict[str, Any]], source_label: str) -> LlmAssistResult:
+    """Review the completed deterministic corpus once, after every file was read."""
+    if not items:
+        return LlmAssistResult()
+    bounded_items: list[dict[str, Any]] = []
+    for item in items[:100]:
+        bounded_items.append(
+            {
+                "file_name": str(item.get("file_name") or "")[:500],
+                "target_type": str(item.get("target_type") or "")[:80],
+                "database_target_label": str(item.get("database_target_label") or "")[:120],
+                "confidence": item.get("confidence") or 0,
+                "sheet_count": item.get("sheet_count") or 0,
+                "row_count": item.get("row_count") or 0,
+                "preview_counts": {
+                    "new": item.get("new_count") or 0,
+                    "update": item.get("update_count") or 0,
+                    "skip": item.get("skip_count") or 0,
+                    "error": item.get("error_count") or 0,
+                },
+                "template_count": item.get("template_count") or 0,
+                "knowledge_ready": bool(item.get("knowledge_ready")),
+                "database_recommended": bool(item.get("database_recommended")),
+                "warnings": [str(value)[:300] for value in list(item.get("warnings") or [])[:20]],
+            }
+        )
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "你是企业办公资料对接顾问。所有文件已经由确定性解析器完整读取并完成无写入预演。"
+                "请综合全部文件后给出自然、具体的中文建议，不要逐个要求用户确认。"
+                "数据库建议必须服从 database_recommended；存在阻断错误、低置信度或目标不明时不得建议强行入库。"
+                "只有 template_count 大于零才可称为真实模板。不得声称已经写入任何目标。返回 JSON。"
+            ),
+        },
+        {
+            "role": "user",
+            "content": json.dumps(
+                {
+                    "task": "review_office_docking_batch_after_complete_read",
+                    "source_label": str(source_label or "这批办公资料")[:500],
+                    "items": bounded_items,
+                    "requested_output": {
+                        "overall_judgment": "一段总体判断",
+                        "reasoning": "最多4条处理思路",
+                        "cautions": "最多4条风险提示",
+                        "questions": "最多3个值得和用户商量的问题",
+                    },
+                },
+                ensure_ascii=False,
+            ),
+        },
+    ]
+    result = _complete(messages, schema=_BATCH_ADVICE_SCHEMA, max_tokens=1400)
+    if not result.data:
+        return result
+    result.data = {
+        "overall_judgment": str(result.data.get("overall_judgment") or "")[:1200],
+        "reasoning": [str(value)[:500] for value in list(result.data.get("reasoning") or [])[:4]],
+        "cautions": [str(value)[:500] for value in list(result.data.get("cautions") or [])[:4]],
+        "questions": [str(value)[:500] for value in list(result.data.get("questions") or [])[:3]],
+    }
+    return result
+
+
 __all__ = [
     "LlmAssistResult",
+    "advise_batch_plan",
     "advise_field_mappings",
     "advise_row_decisions",
     "advise_workbook_regions",

@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   uploadFile: vi.fn(),
   etlUpload: vi.fn(),
   etlPreview: vi.fn(),
+  etlBatchAdvice: vi.fn(),
   etlRun: vi.fn(),
   etlExecute: vi.fn(),
   etlRollback: vi.fn(),
@@ -24,6 +25,7 @@ vi.mock('@/api/etl', () => ({
   etlApi: {
     upload: mocks.etlUpload,
     preview: mocks.etlPreview,
+    batchAdvice: mocks.etlBatchAdvice,
     run: mocks.etlRun,
     execute: mocks.etlExecute,
     rollback: mocks.etlRollback,
@@ -144,6 +146,17 @@ describe('useChatOfficeDocking', () => {
       })
     })
     mocks.etlRun.mockImplementation(async (id: string) => etlRun({ id }))
+    mocks.etlBatchAdvice.mockResolvedValue({
+      used_llm: true,
+      degraded: false,
+      model: 'xiaomi/mimo-v2.5',
+      advice: {
+        overall_judgment: '这批资料以发货单为主，应先保留原始证据，再谨慎同步高置信业务记录。',
+        reasoning: ['重复内容只保留一份', '真实版式可以沉淀为模板'],
+        cautions: ['有阻断错误的文件不要强行入库'],
+        questions: ['是否要把低置信文件统一留在知识库？'],
+      },
+    })
     mocks.etlExecute.mockImplementation(async (id: string) => etlRun({ id, status: 'completed', stage: 'completed', summary: { new: 1, update: 0, skip: 0, error: 0, executed: 1 } }))
     mocks.etlRollback.mockImplementation(async (id: string) => etlRun({ id, status: 'completed', rollback_status: 'completed' }))
     mocks.etlSaveTemplate.mockResolvedValue({ template_id: 'etl:template-1', name: '版式', file_path: '/templates/one.xlsx', message: 'ok' })
@@ -516,6 +529,9 @@ describe('useChatOfficeDocking', () => {
     expect(batchMessage).toContain('发货单/国圣化工.xlsx')
     expect(batchMessage).toContain('发货单/客户/侯雪梅.xlsx')
     expect(batchMessage).toContain('我的建议')
+    expect(batchMessage).toContain('AI 综合意见')
+    expect(batchMessage).toContain('这批资料以发货单为主')
+    expect(batchMessage).toContain('xiaomi/mimo-v2.5')
     expect(batchMessage).toContain('你想怎么处理这批资料')
     expect(batchMessage).not.toContain('AI 对接建议')
     expect(batchMessage).not.toContain('逐个确认')
@@ -530,6 +546,8 @@ describe('useChatOfficeDocking', () => {
     ])
     expect(mocks.etlSaveTemplate).not.toHaveBeenCalled()
     expect(mocks.etlExecute).not.toHaveBeenCalled()
+    expect(mocks.etlBatchAdvice).toHaveBeenCalledTimes(1)
+    expect(mocks.etlPreview).toHaveBeenCalledWith(expect.objectContaining({ llm_advice_enabled: false }))
 
     expect(await docking.handleOfficeDockingConversationDecision('你觉得呢？')).toBe(false)
     expect(await docking.handleOfficeDockingConversationDecision('按建议处理')).toBe(true)

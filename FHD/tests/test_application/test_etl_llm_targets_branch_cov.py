@@ -146,15 +146,15 @@ def test_llm_assist_mode_and_limits(monkeypatch):
     assert llm_assist.etl_llm_mode() == "auto"
 
     monkeypatch.delenv("FHD_ETL_LLM_TIMEOUT", raising=False)
-    assert llm_assist.etl_llm_timeout_seconds() == 6.0
+    assert llm_assist.etl_llm_timeout_seconds() == 30.0
     monkeypatch.setenv("FHD_ETL_LLM_TIMEOUT", "5")
     assert llm_assist.etl_llm_timeout_seconds() == 5.0
     monkeypatch.setenv("FHD_ETL_LLM_TIMEOUT", "99")
-    assert llm_assist.etl_llm_timeout_seconds() == 12.0
+    assert llm_assist.etl_llm_timeout_seconds() == 60.0
     monkeypatch.setenv("FHD_ETL_LLM_TIMEOUT", "-1")
     assert llm_assist.etl_llm_timeout_seconds() == 1.0
     monkeypatch.setenv("FHD_ETL_LLM_TIMEOUT", "abc")
-    assert llm_assist.etl_llm_timeout_seconds() == 6.0
+    assert llm_assist.etl_llm_timeout_seconds() == 30.0
 
     monkeypatch.delenv("FHD_ETL_LLM_ROW_ADVICE_LIMIT", raising=False)
     assert llm_assist.etl_row_advice_limit() == 20
@@ -164,6 +164,22 @@ def test_llm_assist_mode_and_limits(monkeypatch):
     assert llm_assist.etl_row_advice_limit() == 100
     monkeypatch.setenv("FHD_ETL_LLM_ROW_ADVICE_LIMIT", "bad")
     assert llm_assist.etl_row_advice_limit() == 20
+
+
+def test_llm_assist_request_scope_can_disable_model(monkeypatch):
+    from app.application.etl import llm_assist
+    from app.application.etl.llm_assist_runtime import (
+        bind_request_llm_enabled,
+        reset_request_llm_enabled,
+    )
+
+    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    token = bind_request_llm_enabled(False)
+    try:
+        assert llm_assist.etl_llm_mode() == "off"
+    finally:
+        reset_request_llm_enabled(token)
+    assert llm_assist.etl_llm_mode() == "on"
 
 
 def test_llm_assist_public_metadata():
@@ -424,6 +440,67 @@ def test_llm_assist_complete_success_and_circuit(monkeypatch):
         assert r2.degraded is True and r2.degradation_code == "ETL_LLM_QUOTA_EXHAUSTED"
         r3 = llm_assist._complete([], schema={}, max_tokens=1)
         assert r3.degraded is True and r3.degradation_code == "ETL_LLM_QUOTA_EXHAUSTED"
+
+
+def test_llm_assist_batch_advice_reviews_all_items(monkeypatch):
+    from app.application.etl import llm_assist
+
+    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    _patch_complete(
+        monkeypatch,
+        {
+            "overall_judgment": "先完整留存，再按预演结果入库",
+            "reasoning": ["高置信资料可入库"] * 6,
+            "cautions": ["阻断错误先修复"],
+            "questions": ["是否保留低置信资料？"],
+        },
+    )
+    with patch(
+        "app.application.etl.llm_assist._active_software_llm", return_value=(True, None, None)
+    ):
+        result = llm_assist.advise_batch_plan(
+            [
+                {
+                    "file_name": "发货单/国圣化工.xlsx",
+                    "target_type": "shipment_records",
+                    "database_recommended": True,
+                    "knowledge_ready": True,
+                },
+                {
+                    "file_name": "发货单/对账.xlsx",
+                    "target_type": "knowledge",
+                    "database_recommended": False,
+                    "knowledge_ready": True,
+                },
+            ],
+            "发货单文件夹",
+        )
+
+    assert result.used_llm is True
+    assert result.data["overall_judgment"] == "先完整留存，再按预演结果入库"
+    assert len(result.data["reasoning"]) == 4
+    assert llm_assist.advise_batch_plan([], "空批次").used_llm is False
+
+
+def test_llm_assist_complete_unexpected_provider_error_degrades(monkeypatch):
+    from app.application.etl import llm_assist
+
+    class ProviderContractError(Exception):
+        pass
+
+    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    monkeypatch.setattr(
+        "app.infrastructure.llm.structured_output.complete_structured_sync",
+        lambda *args, **kwargs: (_ for _ in ()).throw(ProviderContractError("bad output")),
+    )
+    with patch(
+        "app.application.etl.llm_assist._active_software_llm", return_value=(True, None, None)
+    ):
+        result = llm_assist._complete([], schema={}, max_tokens=1)
+
+    assert result.used_llm is True
+    assert result.degraded is True
+    assert result.degradation_code == "ETL_LLM_UNAVAILABLE"
 
 
 def test_llm_assist_circuit_blocked_before_call(monkeypatch):

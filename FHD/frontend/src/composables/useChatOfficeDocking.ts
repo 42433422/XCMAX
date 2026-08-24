@@ -149,6 +149,19 @@ type OfficeDockingBatchPlan = {
   knowledgeItemIds: string[]
 }
 
+type OfficeDockingBatchAdvice = {
+  used_llm: boolean
+  degraded: boolean
+  degradation_code?: string
+  model?: string
+  advice?: {
+    overall_judgment?: string
+    reasoning?: string[]
+    cautions?: string[]
+    questions?: string[]
+  }
+}
+
 const OFFICE_DOCKING_DECISION_OPTIONS: ChatDecisionOption[] = [
   {
     id: 'recommended',
@@ -260,7 +273,12 @@ function isDirectDatabaseAction(item: ChatOfficeDockingReviewItem): boolean {
   return item.databaseAction === 'attendance_import' || item.databaseAction === 'shipment_etl_execute' || item.databaseAction === 'universal_etl_execute'
 }
 
-function buildBatchInsightMessage(items: ChatOfficeDockingReviewItem[], sourceLabel: string, skippedCount: number): string {
+function buildBatchInsightMessage(
+  items: ChatOfficeDockingReviewItem[],
+  sourceLabel: string,
+  skippedCount: number,
+  batchAdvice?: OfficeDockingBatchAdvice | null,
+): string {
   const ready = items.filter((item) => item.status === 'ready')
   const failed = items.filter((item) => item.status === 'error')
   const directDatabase = ready.filter((item) => item.selectedDatabase && isDirectDatabaseAction(item))
@@ -280,15 +298,33 @@ function buildBatchInsightMessage(items: ChatOfficeDockingReviewItem[], sourceLa
     return `${index + 1}. ${item.fileName}：${item.intentLabel}；建议 ${targets.join(' + ') || '仅保留预览'}${held}`
   })
   const skipped = skippedCount ? `；跳过 ${skippedCount} 个系统、不支持或内容重复的文件` : ''
-  const llmText = llmDegraded
-    ? `其中 ${llmDegraded} 个文件的模型语义建议不可用，已明确降级为确定性结构分析，未把它们伪装成 AI 结论。`
-    : llmUsed
-      ? `模型已参与 ${llmUsed} 个文件的语义建议；所有写入动作仍由确定性规则校验。`
-      : '本批由确定性结构分析形成建议；模型没有参与写入决策。'
+  const llmText = batchAdvice?.used_llm && !batchAdvice.degraded
+    ? `模型已在全部文件完成结构预演后进行整批复核（${batchAdvice.model || '当前账号模型'}）；所有写入动作仍由确定性规则校验。`
+    : llmDegraded || batchAdvice?.degraded
+      ? '整批模型复核暂时不可用，已明确降级为确定性结构分析，未把规则结论伪装成 AI 意见。'
+      : llmUsed
+        ? `模型已参与 ${llmUsed} 个文件的语义建议；所有写入动作仍由确定性规则校验。`
+        : '本批由确定性结构分析形成建议；模型没有参与写入决策。'
+  const aiAdvice = asRecord(batchAdvice?.advice)
+  const overallJudgment = asString(aiAdvice.overall_judgment).trim()
+  const aiReasoning = asArray<unknown>(aiAdvice.reasoning).map((value) => asString(value).trim()).filter(Boolean)
+  const aiCautions = asArray<unknown>(aiAdvice.cautions).map((value) => asString(value).trim()).filter(Boolean)
+  const aiQuestions = asArray<unknown>(aiAdvice.questions).map((value) => asString(value).trim()).filter(Boolean)
+  const aiSection = overallJudgment
+    ? [
+        '',
+        'AI 综合意见：',
+        overallJudgment,
+        ...aiReasoning.map((value) => `- ${value}`),
+        ...aiCautions.map((value) => `- 注意：${value}`),
+        ...aiQuestions.map((value) => `- 想和你确认：${value}`),
+      ]
+    : []
   return [
     `我已经把${sourceLabel}完整分析完了：有效文件 ${ready.length} 个，失败 ${failed.length} 个，共检查 ${sheetCount} 个工作表${skipped}。目前没有写入知识库、数据库或模板库。`,
     '',
     `整体判断：${batchIntentSummary(ready)}。${llmText}`,
+    ...aiSection,
     '',
     '逐文件建议：',
     ...details,
@@ -301,6 +337,45 @@ function buildBatchInsightMessage(items: ChatOfficeDockingReviewItem[], sourceLa
     '',
     '你想怎么处理这批资料？可以选下面的方案，也可以继续用自然语言调整。',
   ].join('\n')
+}
+
+async function requestBatchAdvice(
+  items: ChatOfficeDockingReviewItem[],
+  sourceLabel: string,
+): Promise<OfficeDockingBatchAdvice | null> {
+  const ready = items.filter((item) => item.status === 'ready' && item.databaseRun && item.knowledgeRun)
+  if (!ready.length) return null
+  try {
+    return await etlApi.batchAdvice({
+      source_label: sourceLabel,
+      items: ready.map((item) => {
+        const detection = asRecord(item.databaseRun?.source_features?.target_detection || item.databaseRun?.details?.target_detection)
+        return {
+          file_name: item.fileName,
+          target_type: item.databaseRun?.target_type || '',
+          database_target_label: item.databaseTargetLabel,
+          confidence: Number(detection.confidence || 0),
+          sheet_count: Number(item.knowledgeRun?.source_features?.sheet_count || 0),
+          row_count: item.rowCount,
+          new_count: Number(item.databaseRun?.summary.new || 0),
+          update_count: Number(item.databaseRun?.summary.update || 0),
+          skip_count: Number(item.databaseRun?.summary.skip || 0),
+          error_count: Number(item.databaseRun?.summary.error || 0),
+          template_count: item.templateCandidates?.length || 0,
+          knowledge_ready: Boolean(item.selectedKnowledge),
+          database_recommended: Boolean(item.selectedDatabase),
+          warnings: item.warnings.slice(0, 20),
+        }
+      }),
+    })
+  } catch {
+    return {
+      used_llm: false,
+      degraded: true,
+      degradation_code: 'ETL_BATCH_ADVICE_UNAVAILABLE',
+      advice: {},
+    }
+  }
 }
 
 function outputRelpathFor(itemId: string, employeeId: string): string {
@@ -1166,8 +1241,8 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
     try {
       officeDockingProgressPhase.value = 'reasoning'
       const [databaseStart, knowledgeStart] = await Promise.all([
-        etlApi.preview({ upload_id: prepared.upload.upload_id, target_type: 'auto' }),
-        etlApi.preview({ upload_id: prepared.upload.upload_id, target_type: 'knowledge' }),
+        etlApi.preview({ upload_id: prepared.upload.upload_id, target_type: 'auto', llm_advice_enabled: false }),
+        etlApi.preview({ upload_id: prepared.upload.upload_id, target_type: 'knowledge', llm_advice_enabled: false }),
       ])
       const [databaseRun, knowledgeRun] = await Promise.all([
         waitForEtlRun(databaseStart, () => officeDockingCancelRequested.value),
@@ -1338,7 +1413,8 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
       officeDockingProgressPhase.value = 'planning'
       officeDockingAwaitingDecision.value = officeDockingReviewItems.value.some((item) => item.status === 'ready')
       const sourceLabel = isDirectorySelection ? `文件夹「${folderLabel}」里的文件` : '这批文件'
-      await deps.addAndSaveMessage(buildBatchInsightMessage(officeDockingReviewItems.value, sourceLabel, skippedCount), 'ai', {
+      const batchAdvice = await requestBatchAdvice(officeDockingReviewItems.value, sourceLabel)
+      await deps.addAndSaveMessage(buildBatchInsightMessage(officeDockingReviewItems.value, sourceLabel, skippedCount, batchAdvice), 'ai', {
         decisionOptions: OFFICE_DOCKING_DECISION_OPTIONS,
       })
       officeDockingProgressPhase.value = 'completed'

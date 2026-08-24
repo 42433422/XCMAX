@@ -188,8 +188,45 @@ export const etlApi = {
     template_id?: string
     compatibility_preset_id?: string
     target_config_id?: string
+    llm_advice_enabled?: boolean
   }) =>
     request<EtlRun>('/api/etl/runs/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  batchAdvice: (body: {
+    source_label: string
+    items: Array<{
+      file_name: string
+      target_type: string
+      database_target_label: string
+      confidence: number
+      sheet_count: number
+      row_count: number
+      new_count: number
+      update_count: number
+      skip_count: number
+      error_count: number
+      template_count: number
+      knowledge_ready: boolean
+      database_recommended: boolean
+      warnings: string[]
+    }>
+  }) =>
+    request<{
+      used_llm: boolean
+      advisory_only: boolean
+      degraded: boolean
+      degradation_code?: string
+      model?: string
+      advice: {
+        overall_judgment?: string
+        reasoning?: string[]
+        cautions?: string[]
+        questions?: string[]
+      }
+    }>('/api/etl/batch-advice', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),

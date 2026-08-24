@@ -26,6 +26,7 @@ def test_configure_desktop_environment_sets_local_defaults(tmp_path, monkeypatch
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.delenv("CACHE_REDIS_URL", raising=False)
     monkeypatch.delenv("CELERY_BROKER_URL", raising=False)
+    monkeypatch.delenv("XCAGI_MARKET_BASE_URL", raising=False)
 
     data_dir = configure_desktop_environment(tmp_path)
 
@@ -35,10 +36,20 @@ def test_configure_desktop_environment_sets_local_defaults(tmp_path, monkeypatch
     assert os.environ["XCAGI_MOD_ISOLATED_DATABASES"] == "0"
     assert os.environ["CACHE_REDIS_URL"] == ""
     assert os.environ["CELERY_BROKER_URL"] == "memory://"
+    assert os.environ["XCAGI_MARKET_BASE_URL"] == "https://xiu-ci.com"
     prof_path, profile = load_or_create_profile(tmp_path)
     assert prof_path.is_file()
     assert profile["mode"] == "local"
     assert profile["remote"]["enabled"] is False
+
+
+def test_configure_desktop_environment_preserves_market_override(tmp_path, monkeypatch):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "http://127.0.0.1:8765")
+
+    configure_desktop_environment(tmp_path)
+
+    assert os.environ["XCAGI_MARKET_BASE_URL"] == "http://127.0.0.1:8765"
 
 
 def test_database_profile_creates_default_json(tmp_path):

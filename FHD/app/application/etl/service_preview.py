@@ -62,6 +62,7 @@ class PreviewServiceMixin:
         template_id: str | None = None,
         compatibility_preset_id: str | None = None,
         target_config_id: str | None = None,
+        llm_advice_enabled: bool = True,
     ) -> dict[str, Any]:
         upload = self._owned_upload(db, upload_id, owner_user_id)
         target_detection: dict[str, Any] | None = None
@@ -89,6 +90,7 @@ class PreviewServiceMixin:
             "action_rules": {"duplicate": "skip"},
             "target_config_id": target_config_id,
             "ocr_confirmed": False,
+            "llm_advice_enabled": bool(llm_advice_enabled),
         }
         requested_preset_id = str(compatibility_preset_id or "").strip()
         if template_id:
@@ -183,6 +185,7 @@ class PreviewServiceMixin:
                 "action_rules": {"duplicate": "skip"},
                 "target_config_id": None,
                 "ocr_confirmed": False,
+                "llm_advice_enabled": bool(llm_advice_enabled),
                 "linked_preview": {
                     "kind": "shipment_companion_customer_products",
                     "parent_run_id": run_id,
@@ -246,12 +249,17 @@ class PreviewServiceMixin:
         EXECUTOR.submit(work)
 
     def _preview_worker(self, run_id: str, owner_user_id: int) -> None:
+        from app.application.etl.llm_assist_runtime import (
+            bind_request_llm_enabled,
+            reset_request_llm_enabled,
+        )
         from app.application.etl.llm_session_provider import (
             bind_etl_llm_owner,
             reset_etl_llm_owner,
         )
 
         llm_owner_token = bind_etl_llm_owner(owner_user_id)
+        llm_request_token = None
         db = new_session()
         started_at = time.monotonic()
         try:
@@ -265,6 +273,9 @@ class PreviewServiceMixin:
             db.commit()
 
             draft = load_json(run.draft_json, {})
+            llm_request_token = bind_request_llm_enabled(
+                bool(draft.get("llm_advice_enabled", True))
+            )
             compatibility_preset_id = str(draft.get("compatibility_preset_id") or "").strip()
             dataset = parse_file(
                 upload.storage_path,
@@ -346,6 +357,8 @@ class PreviewServiceMixin:
                 logger.exception("Unable to persist ETL preview failure for run %s", run_id)
         finally:
             db.close()
+            if llm_request_token is not None:
+                reset_request_llm_enabled(llm_request_token)
             reset_etl_llm_owner(llm_owner_token)
 
     @staticmethod

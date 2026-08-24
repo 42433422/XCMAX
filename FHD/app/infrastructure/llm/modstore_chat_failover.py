@@ -24,6 +24,13 @@ _FAILOVER_NEEDLES = (
     "payment required",
 )
 
+_MISSING_MODEL_NEEDLES = (
+    "invalidendpointormodel",
+    "model or endpoint",
+    "model does not exist",
+    "endpoint does not exist",
+)
+
 
 def chat_failover_max_attempts() -> int:
     try:
@@ -43,6 +50,12 @@ def is_market_chat_failoverable(status_code: Optional[int], error_text: str) -> 
     if m and int(m.group(1)) in {402, 403, 429}:
         return True
     low = text.lower()
+    # A stale account preference can still resolve successfully while the
+    # upstream model deployment has been retired. Only treat a 404 as
+    # failoverable when its body explicitly identifies the model/endpoint;
+    # unrelated missing routes must remain terminal.
+    if status_code == 404 or (m and int(m.group(1)) == 404):
+        return any(needle in low for needle in _MISSING_MODEL_NEEDLES)
     return any(n in text or n in low for n in _FAILOVER_NEEDLES)
 
 

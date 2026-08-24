@@ -1349,6 +1349,22 @@ class TestServicePreview:
         assert run["id"]
         assert etl_db.query(EtlRun).filter(EtlRun.upload_id == "upx").count() >= 1
 
+    def test_create_preview_can_defer_llm_until_batch_advice(
+        self, etl_db, svc, app_data, fake_adapter, no_background
+    ):
+        _make_upload_file(app_data, etl_db, id="upx", file_name="a.xlsx")
+        fake_adapter.type = "shipment_records"
+
+        run = svc.create_preview(
+            etl_db,
+            owner_user_id=1,
+            upload_id="upx",
+            target_type="shipment_records",
+            llm_advice_enabled=False,
+        )
+
+        assert run["draft"]["llm_advice_enabled"] is False
+
     def test_create_preview_auto_detection(
         self, etl_db, svc, app_data, fake_adapter, no_background, monkeypatch
     ):

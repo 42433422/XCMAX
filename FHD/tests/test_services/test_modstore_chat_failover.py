@@ -8,6 +8,16 @@ def test_failoverable_status_and_markers():
     assert is_market_chat_failoverable(429, "insufficient_quota")
     assert is_market_chat_failoverable(None, "平台错误(402): 余额不足")
     assert is_market_chat_failoverable(403, "配额不足")
+    assert is_market_chat_failoverable(
+        404,
+        '{"error":{"code":"InvalidEndpointOrModel.NotFound",'
+        '"message":"The model or endpoint retired-model does not exist"}}',
+    )
+    assert is_market_chat_failoverable(
+        None,
+        "平台错误(404): model or endpoint retired-model does not exist",
+    )
+    assert not is_market_chat_failoverable(404, "route not found")
     assert not is_market_chat_failoverable(401, "凭证无效")
 
 

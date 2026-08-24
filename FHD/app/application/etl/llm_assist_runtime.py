@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import threading
 import time
+from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -13,6 +14,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 _CIRCUIT_LOCK = threading.Lock()
 _CIRCUIT_OPEN_UNTIL: dict[str, tuple[float, str]] = {}
 _OWNER_CALL_LOCKS: dict[str, threading.Lock] = {}
+_REQUEST_LLM_ENABLED: ContextVar[bool] = ContextVar("etl_request_llm_enabled", default=True)
 
 
 @dataclass(slots=True)
@@ -40,6 +42,8 @@ class LlmAssistResult:
 
 
 def etl_llm_mode() -> str:
+    if not _REQUEST_LLM_ENABLED.get():
+        return "off"
     raw = str(os.environ.get("FHD_ETL_LLM") or "auto").strip().lower()
     if raw in {"0", "false", "no", "off", "disabled"}:
         return "off"
@@ -48,12 +52,20 @@ def etl_llm_mode() -> str:
     return "auto"
 
 
+def bind_request_llm_enabled(enabled: bool) -> Token[bool]:
+    return _REQUEST_LLM_ENABLED.set(bool(enabled))
+
+
+def reset_request_llm_enabled(token: Token[bool]) -> None:
+    _REQUEST_LLM_ENABLED.reset(token)
+
+
 def etl_llm_timeout_seconds() -> float:
-    raw = str(os.environ.get("FHD_ETL_LLM_TIMEOUT") or "6").strip()
+    raw = str(os.environ.get("FHD_ETL_LLM_TIMEOUT") or "30").strip()
     try:
-        return min(12.0, max(1.0, float(raw)))
+        return min(60.0, max(1.0, float(raw)))
     except ValueError:
-        return 6.0
+        return 30.0
 
 
 def etl_row_advice_limit() -> int:

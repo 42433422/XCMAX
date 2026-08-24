@@ -106,6 +106,11 @@ def configure_desktop_environment(data_dir: str | os.PathLike[str] | None = None
     os.environ.setdefault("XCAGI_MODS_ROOT", str(dirs["mods"]))
     os.environ.setdefault("XCAGI_MODELS_DIR", str(dirs["models"]))
     os.environ.setdefault("XCAGI_LOG_DIR", str(dirs["logs"]))
+    # Packaged desktop builds authenticate against the hosted XCAGI platform.
+    # The historical backend fallback points at the local market development
+    # server (127.0.0.1:8765), which is not shipped with the desktop app and
+    # silently disables owner-scoped LLM assistance after login.
+    os.environ.setdefault("XCAGI_MARKET_BASE_URL", "https://xiu-ci.com")
 
     # Desktop mode should not require Redis/Celery to be installed or running.
     os.environ.setdefault("XCAGI_FORCE_SYNC_TASKS", "1")

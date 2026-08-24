@@ -16,6 +16,7 @@ from app.db.session import get_db_dependency
 from app.infrastructure.auth.dependencies import require_permission
 from app.mod_sdk.product_skus import resolve_product_sku
 from app.schemas.etl_schema import (
+    EtlBatchAdviceRequest,
     EtlDraftPatch,
     EtlExecuteRequest,
     EtlPreviewRequest,
@@ -23,7 +24,6 @@ from app.schemas.etl_schema import (
     EtlTemplateRequest,
     EtlTemplateUpdateRequest,
 )
-
 
 _TRUE_ENV_VALUES = {"1", "true", "yes", "on"}
 
@@ -131,8 +131,34 @@ def create_preview(
         template_id=body.template_id,
         compatibility_preset_id=body.compatibility_preset_id,
         target_config_id=body.target_config_id,
+        llm_advice_enabled=body.llm_advice_enabled,
     )
     return {"success": True, "data": data}
+
+
+@router.post("/batch-advice")
+def batch_advice(
+    body: EtlBatchAdviceRequest,
+    user: Any = Depends(_read),
+):
+    from app.application.etl.llm_assist import advise_batch_plan
+    from app.application.etl.llm_session_provider import (
+        bind_etl_llm_owner,
+        reset_etl_llm_owner,
+    )
+
+    owner_token = bind_etl_llm_owner(_user_id(user))
+    try:
+        result = advise_batch_plan([item.model_dump() for item in body.items], body.source_label)
+    finally:
+        reset_etl_llm_owner(owner_token)
+    return {
+        "success": True,
+        "data": {
+            **result.public_metadata(),
+            "advice": result.data,
+        },
+    }
 
 
 @router.get("/runs")
