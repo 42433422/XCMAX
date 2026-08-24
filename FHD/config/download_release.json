@@ -35,12 +35,12 @@
     "mac": "latest-mac.yml"
   },
   "last_push": {
-    "at": "2026-07-13T11:50:17.736612+00:00",
-    "release_train": "1.0.0.0",
-    "release_kind": "stable-enterprise",
-    "git_sha": "821b46ab784a5176bce24a519c09eb740e77ad3c",
-    "cos_uploaded": true,
-    "by": "release-desktop-workflow"
+    "at": "2026-08-24T00:09:07.635494+00:00",
+    "release_train": "1.0.3.0",
+    "release_kind": "installer",
+    "git_sha": null,
+    "cos_uploaded": false,
+    "by": "installer-employee-chain"
   },
   "release_history": [
     {
