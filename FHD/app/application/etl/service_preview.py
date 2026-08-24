@@ -27,7 +27,9 @@ from app.application.etl.service_support import (
     EXECUTOR,
     SUBMITTED,
     SUBMITTED_LOCK,
+    active_mod_scope,
     apply_validation_rules,
+    current_active_mod_id,
     dump_json,
     load_json,
     new_id,
@@ -75,6 +77,7 @@ class PreviewServiceMixin:
             )
             target_type = str(target_detection["target_type"])
         adapter = get_adapter(target_type)
+        active_mod_id = current_active_mod_id()
         if upload.suffix in KNOWLEDGE_ONLY_SUFFIXES and adapter.type != "knowledge":
             raise EtlError(
                 "ETL_KNOWLEDGE_ONLY_FILE",
@@ -154,6 +157,7 @@ class PreviewServiceMixin:
                     "relative_path": upload.relative_path or upload.file_name,
                     "requested_target_type": "auto" if target_detection else target_type,
                     "target_detection": target_detection or {},
+                    "active_mod_id": active_mod_id,
                 }
             ),
             draft_json=dump_json(draft),
@@ -210,6 +214,7 @@ class PreviewServiceMixin:
                         "relative_path": upload.relative_path or upload.file_name,
                         "linked_from_shipment_preview": run_id,
                         "preview_only": True,
+                        "active_mod_id": active_mod_id,
                     }
                 ),
                 draft_json=dump_json(companion_draft),
@@ -226,13 +231,19 @@ class PreviewServiceMixin:
             }
             run.summary_json = dump_json(primary_summary)
         db.commit()
-        self._submit_preview(run_id, tenant_id, owner_user_id)
+        self._submit_preview(run_id, tenant_id, owner_user_id, active_mod_id)
         if companion_run is not None:
-            self._submit_preview(companion_run.id, tenant_id, owner_user_id)
+            self._submit_preview(companion_run.id, tenant_id, owner_user_id, active_mod_id)
         db.expire_all()
         return cast("dict[str, Any]", self.get_run(db, run_id=run_id, owner_user_id=owner_user_id))
 
-    def _submit_preview(self, run_id: str, tenant_id: int, owner_user_id: int) -> None:
+    def _submit_preview(
+        self,
+        run_id: str,
+        tenant_id: int,
+        owner_user_id: int,
+        active_mod_id: str = "",
+    ) -> None:
         with SUBMITTED_LOCK:
             if run_id in SUBMITTED:
                 return
@@ -240,7 +251,7 @@ class PreviewServiceMixin:
 
         def work() -> None:
             try:
-                with tenant_scope(tenant_id):
+                with active_mod_scope(active_mod_id), tenant_scope(tenant_id):
                     self._preview_worker(run_id, owner_user_id)
             finally:
                 with SUBMITTED_LOCK:

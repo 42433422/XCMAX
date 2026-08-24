@@ -304,7 +304,7 @@ const loadCustomers = async ({ reset = true } = {}) => {
     const data = await customersApi.getCustomers({
       page: nextPage,
       per_page: perPage,
-      ...(pu ? { purchase_unit: pu } : {})
+      ...(pu ? { keyword: pu } : {})
     });
     if (data.success) {
       const incoming = data.customers || data.data || [];

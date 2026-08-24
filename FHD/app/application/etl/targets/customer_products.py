@@ -25,6 +25,7 @@ from app.application.etl.targets.customer_product_support import (
 )
 from app.application.etl.targets.helpers import (
     assert_created_row_unchanged,
+    assert_execution_snapshot,
     assert_rollback_image_matches,
     decimal_or_zero,
     model_values,
@@ -44,6 +45,7 @@ class CustomerProductsAdapter(CustomerProductPreviewMixin, TargetAdapter):
     reversible = True
     actions = ("new", "update", "skip")
     default_match_keys = ("customer_name", "model_number")
+    execution_integrity_verifiable = True
     fields = (
         TargetField(
             "customer_name",
@@ -432,3 +434,37 @@ class CustomerProductsAdapter(CustomerProductPreviewMixin, TargetAdapter):
                     status_code=409,
                 )
             db.delete(customer)
+
+    def verify_execution_row(self, db, *, match_ref, before, after, context):
+        customer_id, product_id = self._parse_match_ref(match_ref)
+        if not customer_id or not product_id:
+            raise EtlError("ETL_MATCH_REF_INVALID", "客户及产品执行回执缺少关联记录 ID")
+        customer = owned_query(db, PurchaseUnit).filter(PurchaseUnit.id == customer_id).first()
+        if not customer:
+            raise EtlError(
+                "ETL_EXECUTION_TARGET_MISSING",
+                f"关联客户记录 {customer_id} 不存在",
+                status_code=409,
+            )
+        product = owned_query(db, Product).filter(Product.id == product_id).first()
+        if not product:
+            raise EtlError(
+                "ETL_EXECUTION_TARGET_MISSING",
+                f"关联产品记录 {product_id} 不存在",
+                status_code=409,
+            )
+        customer_after = after.get("customer") if isinstance(after.get("customer"), dict) else {}
+        product_after = after.get("product") if isinstance(after.get("product"), dict) else {}
+        if not customer_image_matches(customer, customer_after):
+            raise EtlError(
+                "ETL_EXECUTION_POSTCONDITION_FAILED",
+                f"关联客户记录 {customer_id} 与执行回执不一致",
+                status_code=409,
+            )
+        assert_execution_snapshot(product, product_after, "关联产品记录")
+        if str(product.unit or "").strip() != str(customer.unit_name or "").strip():
+            raise EtlError(
+                "ETL_EXECUTION_RELATIONSHIP_BROKEN",
+                f"客户“{customer.unit_name}”与产品“{product.name}”的购买单位关系不一致",
+                status_code=409,
+            )

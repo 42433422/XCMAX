@@ -866,11 +866,30 @@ async function executeEtlRun(run: EtlRun): Promise<EtlRun> {
     await sleep(500)
     current = await etlApi.run(current.id)
   }
-  if (current.status !== 'completed') throw new Error(runFailure(current))
+  if (current.status !== 'completed' || current.execution_integrity?.status === 'drifted') throw new Error(runFailure(current))
   return current
 }
 
 function runFailure(run: EtlRun): string {
+  if (run.execution_integrity?.status === 'drifted') {
+    const failures = run.execution_integrity.failures || []
+    const details = failures
+      .slice(0, 8)
+      .map((failure) => `${failure.source_sheet || '工作表'} 第 ${failure.source_row || '?'} 行：${failure.message}`)
+    const remaining = Math.max(0, Number(run.execution_integrity.failure_count || failures.length) - details.length)
+    return `执行结果复查失败：${details.join('；')}${remaining ? `；另有 ${remaining} 行失败` : ''}`
+  }
+  const receiptFailures = Array.isArray(run.receipt?.execution_failures)
+    ? (run.receipt.execution_failures as Array<Record<string, unknown>>)
+    : []
+  if (receiptFailures.length) {
+    return receiptFailures
+      .map(
+        (failure) =>
+          `${String(failure.source_sheet || '工作表')} 第 ${String(failure.source_row || '?')} 行：${String(failure.message || '执行失败')}`,
+      )
+      .join('；')
+  }
   return run.error?.message || `${run.target_type} 预演${run.status === 'interrupted' ? '被中断' : '失败'}`
 }
 

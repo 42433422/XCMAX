@@ -7,6 +7,7 @@ import logging
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -60,6 +61,31 @@ def new_session():
     from app.application.etl import service
 
     return service.SessionLocal()
+
+
+def current_active_mod_id() -> str:
+    """Capture the business storage context before work leaves the request thread."""
+    from app.request_active_mod_ctx import get_request_active_mod_id
+
+    return str(get_request_active_mod_id() or "").strip()
+
+
+def run_active_mod_id(run: Any) -> str:
+    """Resolve the persisted storage context, with request context as a legacy fallback."""
+    summary = load_json(getattr(run, "summary_json", None), {})
+    return str(summary.get("active_mod_id") or current_active_mod_id()).strip()
+
+
+@contextmanager
+def active_mod_scope(active_mod_id: str | None):
+    """Bind a Mod database context around background session creation and use."""
+    from app.request_active_mod_ctx import reset_request_active_mod_id, set_request_active_mod_id
+
+    token = set_request_active_mod_id(active_mod_id)
+    try:
+        yield
+    finally:
+        reset_request_active_mod_id(token)
 
 
 def clean_filename(value: str) -> str:

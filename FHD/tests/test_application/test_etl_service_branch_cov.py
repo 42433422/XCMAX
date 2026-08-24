@@ -825,6 +825,54 @@ class TestServiceHistory:
         assert d["id"] == run.id
         assert d["file_name"] == "f.xlsx"
 
+    def test_get_run_reports_historical_customer_product_drift(self, etl_db, svc, app_data):
+        from app.application.etl.targets.customer_products import CustomerProductsAdapter
+        from app.db.models.product import Product
+        from app.db.models.purchase_unit import PurchaseUnit
+
+        Base.metadata.create_all(
+            bind=etl_db.bind,
+            tables=[PurchaseUnit.__table__, Product.__table__],
+        )
+        up = _make_upload(etl_db, id="up-integrity", file_name="国圣化工.xlsx")
+        run = _make_run(
+            etl_db,
+            upload_id=up.id,
+            status="completed",
+            target_type="customer_products",
+        )
+        adapter = CustomerProductsAdapter()
+        result = adapter.execute_row(
+            etl_db,
+            {"customer_name": "国圣化工", "name": "水性漆", "model_number": "GS-01"},
+            action="new",
+            match_ref="",
+            allowed_update_fields=set(),
+            context={},
+        )
+        row = _make_row(
+            etl_db,
+            run_id=run.id,
+            id_seq=1,
+            final_action="new",
+            execution_status="success",
+        )
+        row.match_ref = result["match_ref"]
+        row.after_json = dump_json(result["after"])
+        run.executed_rows = 1
+        etl_db.commit()
+
+        verified = svc.get_run(etl_db, run_id=run.id, owner_user_id=1)
+        assert verified["execution_integrity"]["status"] == "verified"
+
+        _customer_id, product_id = adapter._parse_match_ref(result["match_ref"])
+        etl_db.delete(etl_db.get(Product, product_id))
+        etl_db.commit()
+        drifted = svc.get_run(etl_db, run_id=run.id, owner_user_id=1)
+        assert drifted["execution_integrity"]["status"] == "drifted"
+        assert drifted["execution_integrity"]["failure_count"] == 1
+        assert drifted["execution_integrity"]["failures"][0]["code"] == "ETL_EXECUTION_TARGET_MISSING"
+
     def test_get_run_marks_interrupted_when_stale(self, etl_db, svc, app_data, fake_adapter):
         up = _make_upload(etl_db, id="up1")
         run = _make_run(etl_db, upload_id="up1", status="executing")
@@ -1121,6 +1169,31 @@ class TestServiceDraft:
 
 
 class TestServiceExecution:
+    def test_submit_execution_binds_and_restores_active_mod(self, svc, monkeypatch):
+        from app.request_active_mod_ctx import get_request_active_mod_id
+
+        seen: dict[str, str] = {}
+        monkeypatch.setattr(
+            "app.application.etl.service_execution.EXECUTOR.submit",
+            lambda fn, *args, **kwargs: fn(),
+        )
+        monkeypatch.setattr(
+            svc,
+            "_execute_worker",
+            lambda run_id, owner_user_id, valid_rows_only: seen.update(
+                active_mod_id=get_request_active_mod_id(),
+                run_id=run_id,
+            ),
+        )
+
+        svc._submit_execution("mod-run", 1, 1, False, "xcagi-erp-domain-bridge")
+
+        assert seen == {
+            "active_mod_id": "xcagi-erp-domain-bridge",
+            "run_id": "mod-run",
+        }
+        assert get_request_active_mod_id() == ""
+
     def test_execute_requires_confirmation(self, etl_db, svc, app_data, fake_adapter):
         run = _make_run(etl_db)
         with pytest.raises(EtlError) as ei:
@@ -1303,6 +1376,62 @@ class TestServiceExecution:
         etl_db.expire_all()
         assert etl_db.get(EtlRun, run.id).status == "failed"
 
+    def test_execute_worker_uses_real_customer_row_adapter(
+        self,
+        etl_db,
+        svc,
+        app_data,
+        same_session,
+        mock_etl_metrics,
+        monkeypatch,
+    ):
+        """A base-class batch placeholder must not divert canonical business writes."""
+        from app.application.etl.targets.customers import CustomerAdapter
+        from app.db.models.purchase_unit import PurchaseUnit
+
+        PurchaseUnit.__table__.create(bind=etl_db.bind, checkfirst=True)
+        adapter = CustomerAdapter()
+        monkeypatch.setattr(
+            "app.application.etl.service_execution.get_adapter",
+            lambda _target_type: adapter,
+        )
+        _make_upload_file(app_data, etl_db, id="upx", file_name="customers.xlsx")
+        run = _make_run(
+            etl_db,
+            upload_id="upx",
+            target_type="customers",
+            status="executing",
+            new_rows=1,
+        )
+        row = _make_row(
+            etl_db,
+            run_id=run.id,
+            id_seq=1,
+            final_action="new",
+            execution_status=None,
+        )
+        row.normalized_json = dump_json(
+            {
+                "customer_name": "隔离库客户",
+                "contact_person": "王工",
+                "contact_phone": "13800000000",
+                "contact_address": "测试地址",
+            }
+        )
+        row.after_json = row.normalized_json
+        etl_db.commit()
+
+        svc._execute_worker(run.id, 1, False)
+
+        etl_db.expire_all()
+        persisted_run = etl_db.get(EtlRun, run.id)
+        persisted_row = etl_db.get(EtlRunRow, row.id)
+        customer = etl_db.query(PurchaseUnit).filter_by(unit_name="隔离库客户").one()
+        assert persisted_run.status == "completed"
+        assert persisted_row.execution_status == "success"
+        assert persisted_row.match_ref == str(customer.id)
+        assert load_json(persisted_run.receipt_json, {})["execution_integrity"]["status"] == "verified"
+
     def test_execute_rows_success(
         self, etl_db, svc, app_data, fake_adapter, same_session, mock_etl_metrics
     ):
@@ -1337,6 +1466,33 @@ class TestServiceExecution:
 
 
 class TestServicePreview:
+    def test_create_preview_persists_active_mod_for_background_workers(
+        self,
+        etl_db,
+        svc,
+        app_data,
+        fake_adapter,
+        no_background,
+    ):
+        from app.request_active_mod_ctx import (
+            reset_request_active_mod_id,
+            set_request_active_mod_id,
+        )
+
+        _make_upload_file(app_data, etl_db, id="upx", file_name="a.xlsx")
+        token = set_request_active_mod_id("xcagi-erp-domain-bridge")
+        try:
+            run = svc.create_preview(
+                etl_db,
+                owner_user_id=1,
+                upload_id="upx",
+                target_type="shipment_records",
+            )
+        finally:
+            reset_request_active_mod_id(token)
+
+        assert run["details"]["active_mod_id"] == "xcagi-erp-domain-bridge"
+
     def test_create_preview_simple(self, etl_db, svc, app_data, fake_adapter, no_background):
         up = _make_upload_file(app_data, etl_db, id="upx", file_name="a.xlsx")
         fake_adapter.type = "shipment_records"

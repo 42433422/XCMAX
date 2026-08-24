@@ -4,6 +4,12 @@ import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
 import ProductsView from './ProductsView.vue'
 
+const industryState = vi.hoisted(() => ({ id: '涂料' }))
+
+vi.mock('@/stores/industry', () => ({
+  useIndustryStore: () => ({ get currentIndustryId() { return industryState.id } }),
+}))
+
 const mockFetchProducts = vi.fn().mockResolvedValue({
   success: true,
   data: [{ id: 1, model_number: 'A1', name: 'P1', price: 10 }],
@@ -87,6 +93,7 @@ function mountProducts() {
 describe('ProductsView deep', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+    industryState.id = '涂料'
     vi.clearAllMocks()
   })
 
@@ -118,7 +125,14 @@ describe('ProductsView deep', () => {
     await exportBtn!.trigger('click')
   })
 
-  it('toggles attendance detail import checkbox', async () => {
+  it('does not leak the attendance importer into a normal product page', async () => {
+    const wrapper = await mountProducts()
+    const checkbox = wrapper.find('input[type="checkbox"]')
+    expect(checkbox.exists()).toBe(false)
+  })
+
+  it('keeps the attendance detail importer available in the attendance industry', async () => {
+    industryState.id = '考勤'
     const wrapper = await mountProducts()
     const checkbox = wrapper.find('input[type="checkbox"]')
     expect(checkbox.exists()).toBe(true)

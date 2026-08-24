@@ -1217,6 +1217,40 @@ def test_customers_execute_row(session):
     assert ex2.value.code == "ETL_MATCH_DISAPPEARED"
 
 
+def test_customer_execution_integrity_detects_missing_target(session):
+    from app.application.etl.targets.customers import CustomerAdapter
+    from app.db.models.purchase_unit import PurchaseUnit
+
+    adapter = CustomerAdapter()
+    result = adapter.execute_row(
+        session,
+        {"customer_name": "真值客户", "contact_person": "王"},
+        action="new",
+        match_ref="",
+        allowed_update_fields=set(),
+        context={},
+    )
+    adapter.verify_execution_row(
+        session,
+        match_ref=result["match_ref"],
+        before={},
+        after=result["after"],
+        context={},
+    )
+    customer = session.get(PurchaseUnit, int(result["match_ref"]))
+    session.delete(customer)
+    session.flush()
+    with pytest.raises(EtlError) as exc:
+        adapter.verify_execution_row(
+            session,
+            match_ref=result["match_ref"],
+            before={},
+            after=result["after"],
+            context={},
+        )
+    assert exc.value.code == "ETL_EXECUTION_TARGET_MISSING"
+
+
 def test_customers_rollback_row(session):
     from app.application.etl.targets.customers import CustomerAdapter
 
@@ -1758,6 +1792,44 @@ def test_customer_products_execute(session):
         context={},
     )
     assert r2["after"]["_etl"]["product_updated"] is True
+
+
+def test_customer_products_execution_integrity_checks_both_sides_and_relation(session):
+    from app.application.etl.targets.customer_products import CustomerProductsAdapter
+    from app.db.models.product import Product
+
+    adapter = CustomerProductsAdapter()
+    result = adapter.execute_row(
+        session,
+        {"customer_name": "国圣化工", "name": "水性漆", "model_number": "GS-01"},
+        action="new",
+        match_ref="",
+        allowed_update_fields=set(),
+        context={},
+    )
+    adapter.verify_execution_row(
+        session,
+        match_ref=result["match_ref"],
+        before={},
+        after=result["after"],
+        context={},
+    )
+    _customer_id, product_id = adapter._parse_match_ref(result["match_ref"])
+    product = session.get(Product, product_id)
+    product.unit = "错误客户"
+    session.flush()
+    with pytest.raises(EtlError) as exc:
+        adapter.verify_execution_row(
+            session,
+            match_ref=result["match_ref"],
+            before={},
+            after={
+                **result["after"],
+                "product": {**result["after"]["product"], "unit": "错误客户"},
+            },
+            context={},
+        )
+    assert exc.value.code == "ETL_EXECUTION_RELATIONSHIP_BROKEN"
 
 
 def test_customer_products_parse_match_ref():

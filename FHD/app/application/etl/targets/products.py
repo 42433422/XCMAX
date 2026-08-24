@@ -20,6 +20,7 @@ from app.application.etl.targets.base import (
 from app.application.etl.targets.customer_product_support import owned_query
 from app.application.etl.targets.helpers import (
     assert_created_row_unchanged,
+    assert_execution_snapshot,
     assert_rollback_image_matches,
     decimal_or_zero,
     model_values,
@@ -35,6 +36,7 @@ class ProductAdapter(TargetAdapter):
     reversible = True
     actions = ("new", "update", "skip")
     default_match_keys = ("unit", "model_number")
+    execution_integrity_verifiable = True
     fields = (
         TargetField(
             "unit",
@@ -212,6 +214,20 @@ class ProductAdapter(TargetAdapter):
         elif obj:
             assert_created_row_unchanged(obj, after, self.fields, "产品")
             db.delete(obj)
+
+    def verify_execution_row(self, db, *, match_ref, before, after, context):
+        try:
+            product_id = int(match_ref)
+        except (TypeError, ValueError) as exc:
+            raise EtlError("ETL_MATCH_REF_INVALID", "产品执行回执缺少有效记录 ID") from exc
+        obj = owned_query(db, Product).filter(Product.id == product_id).first()
+        if not obj:
+            raise EtlError(
+                "ETL_EXECUTION_TARGET_MISSING",
+                f"产品记录 {product_id} 不存在，不能认定本行写入成功",
+                status_code=409,
+            )
+        assert_execution_snapshot(obj, after, "产品记录")
 
     @staticmethod
     def _match_key(data: dict[str, Any]) -> tuple[str, str, str]:

@@ -14,7 +14,9 @@ from app.application.etl.service_support import (
     load_json,
     utcnow,
 )
+from app.application.etl.targets import get_adapter
 from app.db.models.etl import EtlRun, EtlRunRow, EtlUpload
+from app.utils.operational_errors import BOUNDARY_ERRORS
 from app.utils.path_io.path_utils import get_app_data_dir
 
 
@@ -32,12 +34,87 @@ class HistoryServiceMixin:
             run.error_message = "上次执行被意外中断，请重新预演或重试"
             db.commit()
         upload = self._owned_upload_record(db, run.upload_id, owner_user_id)
+        execution_integrity = self._audit_execution_integrity(db, run, upload)
         return self.run_dict(
             run,
             file_name=upload.file_name,
             batch_id=upload.batch_id,
             relative_path=upload.relative_path,
+            execution_integrity=execution_integrity,
         )
+
+    def _audit_execution_integrity(
+        self,
+        db: Session,
+        run: EtlRun,
+        upload: EtlUpload,
+    ) -> dict[str, Any]:
+        adapter = get_adapter(run.target_type)
+        if run.status not in {"completed", "failed", "interrupted"}:
+            return {
+                "status": "pending",
+                "checked_rows": 0,
+                "failure_count": 0,
+                "failures": [],
+            }
+        if not getattr(adapter, "execution_integrity_verifiable", False):
+            return {
+                "status": "not_applicable",
+                "checked_rows": 0,
+                "failure_count": 0,
+                "failures": [],
+            }
+        if run.rollback_status == "completed":
+            return {
+                "status": "rolled_back",
+                "checked_rows": 0,
+                "failure_count": 0,
+                "failures": [],
+            }
+        rows = (
+            db.query(EtlRunRow)
+            .filter(
+                EtlRunRow.run_id == run.id,
+                EtlRunRow.owner_user_id == run.owner_user_id,
+                EtlRunRow.execution_status == "success",
+            )
+            .order_by(EtlRunRow.id)
+            .all()
+        )
+        failures: list[dict[str, Any]] = []
+        for row in rows:
+            try:
+                adapter.verify_execution_row(
+                    db,
+                    match_ref=str(row.match_ref or ""),
+                    before=load_json(row.before_json, {}),
+                    after=load_json(row.after_json, {}),
+                    context={
+                        "run_id": run.id,
+                        "file_name": upload.file_name,
+                        "file_sha256": run.file_sha256,
+                        "source_row": row.source_row,
+                    },
+                )
+            except BOUNDARY_ERRORS as exc:  # audit must report every stale receipt row
+                code = str(getattr(exc, "code", None) or "ETL_EXECUTION_INTEGRITY_ERROR")
+                message = str(getattr(exc, "message", None) or str(exc) or "执行结果复查失败")
+                failures.append(
+                    {
+                        "row_id": row.id,
+                        "source_sheet": row.source_sheet,
+                        "source_row": row.source_row,
+                        "match_ref": row.match_ref,
+                        "code": code,
+                        "message": message[:500],
+                    }
+                )
+        return {
+            "status": "drifted" if failures else ("verified" if rows else "not_executed"),
+            "checked_rows": len(rows),
+            "failure_count": len(failures),
+            "failures": failures,
+        }
 
     def list_runs(
         self,
@@ -156,8 +233,10 @@ class HistoryServiceMixin:
         file_name: str | None = None,
         batch_id: str | None = None,
         relative_path: str | None = None,
+        execution_integrity: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         details = load_json(run.summary_json, {})
+        receipt = load_json(run.receipt_json, {})
         return {
             "id": run.id,
             "upload_id": run.upload_id,
@@ -183,7 +262,15 @@ class HistoryServiceMixin:
             "details": details,
             "source_features": load_json(run.source_features_json, {}),
             "draft": load_json(run.draft_json, {}),
-            "receipt": load_json(run.receipt_json, {}),
+            "receipt": receipt,
+            "execution_integrity": execution_integrity
+            or receipt.get("execution_integrity")
+            or {
+                "status": "pending" if run.status in {"queued", "previewing", "preview_ready", "executing"} else "unknown",
+                "checked_rows": 0,
+                "failure_count": 0,
+                "failures": [],
+            },
             "reversible": run.reversible,
             "rollback_status": run.rollback_status,
             "error": (

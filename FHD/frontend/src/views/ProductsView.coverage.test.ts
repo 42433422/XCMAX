@@ -18,6 +18,7 @@ const {
   mockListTemplates,
   mockApiPost,
   mockAppAlert,
+  industryState,
 } = vi.hoisted(() => ({
   mockFetchProducts: vi.fn(),
   mockCreateProduct: vi.fn(),
@@ -30,6 +31,7 @@ const {
   mockListTemplates: vi.fn(),
   mockApiPost: vi.fn(),
   mockAppAlert: vi.fn(),
+  industryState: { id: '涂料' },
 }))
 
 // ===== Mock 模块 =====
@@ -47,6 +49,10 @@ vi.mock('@/stores/products', async () => {
     }),
   }
 })
+
+vi.mock('@/stores/industry', () => ({
+  useIndustryStore: () => ({ get currentIndustryId() { return industryState.id } }),
+}))
 
 // mock storeToRefs 以兼容 mock store（直接返回 store 上的 ref 属性）
 vi.mock('pinia', async () => {
@@ -188,6 +194,7 @@ function getSetupRefValue(wrapper: any, key: string): any {
 
 describe('ProductsView.coverage', () => {
   beforeEach(() => {
+    industryState.id = '涂料'
     setActivePinia(createPinia())
     vi.clearAllMocks()
     // mock URL.createObjectURL / revokeObjectURL（jsdom 不提供）
@@ -900,10 +907,11 @@ describe('ProductsView.coverage', () => {
       const event = { target: { files: [file], value: 'test.xlsx' } }
       await state.handleImport(event)
       await flushPromises()
-      expect(mockAppAlert).toHaveBeenCalledWith('未解析到任何数据行，请检查表头或换用「考勤统计表·明细导入人员」。')
+      expect(mockAppAlert).toHaveBeenCalledWith('未解析到任何产品数据行，请检查工作表和表头。')
     })
 
     it('解析成功但无数据行时弹告警（考勤明细模式）', async () => {
+      industryState.id = '考勤'
       mockApiPost.mockResolvedValueOnce({ success: true, rows: [], headers: [] })
       const wrapper = await mountProducts()
       await flushPromises()
@@ -991,6 +999,7 @@ describe('ProductsView.coverage', () => {
     })
 
     it('考勤明细模式时传递 parse_mode 并启用 replace', async () => {
+      industryState.id = '考勤'
       mockApiPost.mockResolvedValueOnce({
         success: true,
         rows: [{ name: 'P1' }],

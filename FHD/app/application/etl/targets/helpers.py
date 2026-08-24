@@ -150,6 +150,19 @@ def assert_snapshot_unchanged(
             )
 
 
+def assert_execution_snapshot(obj: Any, snapshot: dict[str, Any], label: str) -> None:
+    """Fail closed when a just-written or historical target no longer matches its receipt."""
+    for key, expected in snapshot.items():
+        if key in {"id", "created_at", "updated_at"} or not hasattr(obj, key):
+            continue
+        if not _values_equal(getattr(obj, key), expected):
+            raise EtlError(
+                "ETL_EXECUTION_POSTCONDITION_FAILED",
+                f"{label}已存在，但字段“{key}”与执行回执不一致",
+                status_code=409,
+            )
+
+
 def is_uploaded_document_path(document_path: str, context: dict[str, Any]) -> bool:
     upload_path = str(context.get("upload_path") or "").strip()
     if not upload_path:

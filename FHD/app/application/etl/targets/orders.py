@@ -16,6 +16,7 @@ from app.application.etl.targets.base import (
     json_safe,
 )
 from app.application.etl.targets.helpers import (
+    assert_execution_snapshot,
     assert_snapshot_unchanged,
     decimal_or_zero,
     issue,
@@ -62,6 +63,7 @@ class PurchaseOrderAdapter(TargetAdapter):
         TargetField("unit_price", "单价", type="number", aliases=("单价", "价格")),
     )
     default_match_keys = ("external_order_no",)
+    execution_integrity_verifiable = True
 
     def preview(self, db, data, *, allowed_update_fields, context):
         issues = self.validate(data)
@@ -199,6 +201,29 @@ class PurchaseOrderAdapter(TargetAdapter):
                     )
                     db.delete(order)
 
+    def verify_execution_row(self, db, *, match_ref, before, after, context):
+        try:
+            item_id = int(match_ref)
+        except (TypeError, ValueError) as exc:
+            raise EtlError("ETL_MATCH_REF_INVALID", "采购订单执行回执缺少有效明细 ID") from exc
+        item = db.get(PurchaseOrderItem, item_id)
+        if not item:
+            raise EtlError(
+                "ETL_EXECUTION_TARGET_MISSING",
+                f"采购订单明细 {item_id} 不存在",
+                status_code=409,
+            )
+        order_id = int(after.get("order_id") or 0)
+        order = db.get(PurchaseOrder, order_id) if order_id else None
+        if not order:
+            raise EtlError(
+                "ETL_EXECUTION_TARGET_MISSING",
+                f"采购订单 {order_id or '(未知)'} 不存在",
+                status_code=409,
+            )
+        assert_execution_snapshot(item, after.get("item_snapshot") or {}, "采购订单明细")
+        assert_execution_snapshot(order, after.get("order_snapshot") or {}, "采购订单")
+
 
 class ShipmentAdapter(TargetAdapter):
     type = "shipment_records"
@@ -220,6 +245,7 @@ class ShipmentAdapter(TargetAdapter):
         TargetField("amount", "金额", type="number", aliases=("金额", "合计")),
     )
     default_match_keys = ("source_fingerprint", "external_order_no")
+    execution_integrity_verifiable = True
 
     def _fingerprint(self, data: dict[str, Any], context: dict[str, Any]) -> str:
         supplied = str(data.get("source_fingerprint") or "").strip()
@@ -425,3 +451,30 @@ class ShipmentAdapter(TargetAdapter):
         db.query(ShipmentEtlImportFingerprint).filter(
             ShipmentEtlImportFingerprint.shipment_id == int(match_ref)
         ).delete(synchronize_session=False)
+
+    def verify_execution_row(self, db, *, match_ref, before, after, context):
+        try:
+            shipment_id = int(match_ref)
+        except (TypeError, ValueError) as exc:
+            raise EtlError("ETL_MATCH_REF_INVALID", "发货记录执行回执缺少有效记录 ID") from exc
+        obj = db.get(ShipmentRecord, shipment_id)
+        if not obj:
+            raise EtlError(
+                "ETL_EXECUTION_TARGET_MISSING",
+                f"发货记录 {shipment_id} 不存在",
+                status_code=409,
+            )
+        assert_execution_snapshot(obj, after, "发货记录")
+        from app.db.models.shipment_etl_fingerprint import ShipmentEtlImportFingerprint
+
+        fingerprint = (
+            db.query(ShipmentEtlImportFingerprint)
+            .filter(ShipmentEtlImportFingerprint.shipment_id == shipment_id)
+            .first()
+        )
+        if not fingerprint:
+            raise EtlError(
+                "ETL_EXECUTION_RELATIONSHIP_BROKEN",
+                f"发货记录 {shipment_id} 缺少幂等指纹，后续重试可能重复写入",
+                status_code=409,
+            )

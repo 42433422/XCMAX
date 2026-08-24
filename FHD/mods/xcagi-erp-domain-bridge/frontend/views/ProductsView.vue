@@ -33,12 +33,12 @@
           <option v-for="tpl in wordTemplateOptions" :key="tpl.id" :value="tpl.id">{{ tpl.name }}</option>
         </select>
         <input v-model="searchQuery" type="text" placeholder="搜索产品型号或名称..." @input="loadProducts">
-        <label class="lbl-inline" title="从考勤统计表「明细」工作表读取：第4行起每6行一块，A部门 B性质 C姓名">
+        <label v-if="supportsAttendanceDetailImport" class="lbl-inline" title="从考勤统计表「明细」工作表读取：第4行起每6行一块，A部门 B性质 C姓名">
           <input v-model="useAttendanceDetailImport" type="checkbox" />
           考勤统计表·明细导入人员
         </label>
         <label
-          v-show="useAttendanceDetailImport"
+          v-if="supportsAttendanceDetailImport && useAttendanceDetailImport"
           class="lbl-inline"
           title="仅删除此前通过本导入方式写入的记录（内部标记），不动其它产品"
         >
@@ -129,8 +129,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useProductsStore } from '@/stores/products';
+import { useIndustryStore } from '@/stores/industry';
 import { storeToRefs } from 'pinia';
 import customersApi from '@/api/customers';
 import productsApi from '@/api/products';
@@ -142,6 +143,8 @@ import { appAlert } from '@/utils/appDialog';
 import { useCoreNavLabel } from '@/composables/useCoreNavLabel';
 
 const pageNavTitle = useCoreNavLabel('products');
+const industryStore = useIndustryStore();
+const supportsAttendanceDetailImport = computed(() => String(industryStore.currentIndustryId || '') === '考勤');
 
 const store = useProductsStore();
 const { products, loading } = storeToRefs(store);
@@ -419,7 +422,7 @@ const handleImport = async (e) => {
     // 1. 上传并提取Excel数据 (使用 extract/upload 端点)
     const formData = new FormData();
     formData.append('excel_file', file);
-    if (useAttendanceDetailImport.value) {
+    if (supportsAttendanceDetailImport.value && useAttendanceDetailImport.value) {
       formData.append('parse_mode', 'attendance_detail');
     }
     const extractRes = await api.post('/api/excel/data/extract/upload', formData, {
@@ -433,9 +436,11 @@ const handleImport = async (e) => {
     const rows = extractRes.rows || [];
     if (!rows.length) {
       await appAlert(
-        useAttendanceDetailImport.value
+        supportsAttendanceDetailImport.value && useAttendanceDetailImport.value
           ? '未从「明细」表解析到任何人员行。请确认 Excel 含「明细」工作表，且第4行起为每人6行（A部门、B性质、C姓名）。'
-          : '未解析到任何数据行，请检查表头或换用「考勤统计表·明细导入人员」。'
+          : supportsAttendanceDetailImport.value
+            ? '未解析到任何数据行，请检查表头或换用「考勤统计表·明细导入人员」。'
+            : '未解析到任何产品数据行，请检查工作表和表头。'
       );
       return;
     }
@@ -453,7 +458,7 @@ const handleImport = async (e) => {
         validate_before_import: true,
         clean_data: true,
         replace_attendance_detail_tagged:
-          useAttendanceDetailImport.value && replaceTaggedAttendancePersonnel.value,
+          supportsAttendanceDetailImport.value && useAttendanceDetailImport.value && replaceTaggedAttendancePersonnel.value,
       }
     });
 

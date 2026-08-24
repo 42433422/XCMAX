@@ -681,6 +681,56 @@ describe('useChatOfficeDocking', () => {
     expect(item.commitStatus).toBe('committed')
   })
 
+  it('treats a drifted ETL receipt as failure and reports row reasons in chat', async () => {
+    mocks.etlExecute.mockImplementation(async (id: string) => {
+      if (id.startsWith('database-')) {
+        return etlRun({
+          id,
+          status: 'completed',
+          stage: 'completed',
+          summary: { new: 2, update: 0, skip: 0, error: 0, executed: 2 },
+          execution_integrity: {
+            status: 'drifted',
+            checked_rows: 2,
+            failure_count: 2,
+            failures: [
+              {
+                row_id: 21,
+                source_sheet: '客户',
+                source_row: 2,
+                code: 'ETL_EXECUTION_TARGET_MISSING',
+                message: '关联客户记录不存在',
+              },
+              {
+                row_id: 22,
+                source_sheet: '产品',
+                source_row: 5,
+                code: 'ETL_EXECUTION_RELATIONSHIP_BROKEN',
+                message: '客户产品关系断裂',
+              },
+            ],
+          },
+        })
+      }
+      return etlRun({ id, status: 'completed', stage: 'completed' })
+    })
+
+    const { deps, docking } = createHarness('conversation')
+    await docking.onOfficeDockingFileChange(fileEvent(new File(['xlsx'], '国圣化工.xlsx')))
+    await docking.handleOfficeDockingConversationDecision('按建议处理')
+    await docking.handleOfficeDockingConversationDecision('确认执行')
+
+    const item = docking.officeDockingReviewItems.value[0]
+    expect(item.commitStatus).toBe('failed')
+    expect(item.databaseCommitStatus).toBe('failed')
+    expect(item.databaseError).toContain('客户 第 2 行：关联客户记录不存在')
+    expect(item.databaseError).toContain('产品 第 5 行：客户产品关系断裂')
+    const receipt = String(deps.addAndSaveMessage.mock.calls.at(-1)?.[0])
+    expect(receipt).toContain('国圣化工.xlsx：失败')
+    expect(receipt).toContain('客户 第 2 行：关联客户记录不存在')
+    expect(receipt).toContain('产品 第 5 行：客户产品关系断裂')
+  })
+
   it('rolls back a completed database run when the later knowledge write fails', async () => {
     mocks.etlExecute.mockImplementation(async (id: string) => {
       if (id.startsWith('knowledge-')) throw new Error('知识库索引服务暂不可用')

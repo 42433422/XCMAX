@@ -52,6 +52,7 @@ class TargetAdapter:
     fields: tuple[TargetField, ...] = ()
     default_match_keys: tuple[str, ...] = ()
     allow_dynamic_fields = False
+    execution_integrity_verifiable = False
 
     def capability(self) -> dict[str, Any]:
         return {
@@ -63,6 +64,7 @@ class TargetAdapter:
             "supported_actions": list(self.actions),
             "reversible": self.reversible,
             "allow_dynamic_fields": self.allow_dynamic_fields,
+            "execution_integrity_verifiable": self.execution_integrity_verifiable,
         }
 
     def validate(self, data: dict[str, Any]) -> list[dict[str, Any]]:
@@ -114,6 +116,23 @@ class TargetAdapter:
         context: dict[str, Any],
     ) -> None:
         raise EtlError("ETL_TARGET_NOT_REVERSIBLE", f"{self.label}不可撤销")
+
+    def verify_execution_row(
+        self,
+        db: Session,
+        *,
+        match_ref: str,
+        before: dict[str, Any],
+        after: dict[str, Any],
+        context: dict[str, Any],
+    ) -> None:
+        """Verify that a successful receipt still resolves to its persisted target."""
+        if self.execution_integrity_verifiable:
+            raise EtlError(
+                "ETL_EXECUTION_VERIFIER_MISSING",
+                f"{self.label}缺少执行结果校验器，不能标记为成功",
+                status_code=500,
+            )
 
     def execute_batch(self, rows: Any, context: dict[str, Any]) -> dict[str, Any]:
         raise EtlError("ETL_TARGET_NOT_IMPLEMENTED", f"{self.label}不支持批量执行")

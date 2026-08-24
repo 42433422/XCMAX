@@ -26,6 +26,7 @@ class CustomerAdapter(TargetAdapter):
     reversible = True
     actions = ("new", "update", "skip")
     default_match_keys = ("customer_name",)
+    execution_integrity_verifiable = True
     fields = (
         TargetField(
             "customer_name", "客户名称", required=True, aliases=("客户", "单位", "购货单位")
@@ -138,3 +139,22 @@ class CustomerAdapter(TargetAdapter):
                     status_code=409,
                 )
             db.delete(obj)
+
+    def verify_execution_row(self, db, *, match_ref, before, after, context):
+        try:
+            customer_id = int(match_ref)
+        except (TypeError, ValueError) as exc:
+            raise EtlError("ETL_MATCH_REF_INVALID", "客户执行回执缺少有效记录 ID") from exc
+        obj = owned_query(db, PurchaseUnit).filter(PurchaseUnit.id == customer_id).first()
+        if not obj:
+            raise EtlError(
+                "ETL_EXECUTION_TARGET_MISSING",
+                f"客户记录 {customer_id} 不存在，不能认定本行写入成功",
+                status_code=409,
+            )
+        if not customer_image_matches(obj, after):
+            raise EtlError(
+                "ETL_EXECUTION_POSTCONDITION_FAILED",
+                f"客户记录 {customer_id} 与执行回执不一致",
+                status_code=409,
+            )

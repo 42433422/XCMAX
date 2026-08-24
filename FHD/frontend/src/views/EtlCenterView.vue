@@ -211,10 +211,19 @@ const plannedBusinessRows = computed(() => {
 const runOutcomeText = computed(() => {
   if (!currentRun.value) return ''
   const summary = currentRun.value.summary
+  if (currentRun.value.execution_integrity?.status === 'drifted') {
+    return `执行回执已失效：复查 ${currentRun.value.execution_integrity.checked_rows} 行，发现 ${currentRun.value.execution_integrity.failure_count} 行目标数据缺失或不一致`
+  }
   if (currentRun.value.status === 'completed') {
     return `已写入 ${summary.executed} 行；新增 ${summary.new}、更新 ${summary.update}、跳过 ${summary.skip}`
   }
   return `计划处理 ${plannedBusinessRows.value} 行；新增 ${summary.new}、更新 ${summary.update}、跳过 ${summary.skip}`
+})
+const executionIntegrityFailures = computed(() => currentRun.value?.execution_integrity?.failures || [])
+const executionIntegrityDrifted = computed(() => currentRun.value?.execution_integrity?.status === 'drifted')
+const executionIntegrityVerified = computed(() => {
+  const status = currentRun.value?.execution_integrity?.status
+  return status === 'verified' || status === 'not_applicable'
 })
 const regionSummary = computed<Record<string, unknown> | null>(() => {
   const value = currentRun.value?.source_features?.region_summary

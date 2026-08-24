@@ -36,6 +36,7 @@ export type EtlTargetCapability = {
   supported_actions: EtlAction[]
   reversible: boolean
   allow_dynamic_fields?: boolean
+  execution_integrity_verifiable?: boolean
 }
 
 export type EtlCapabilities = {
@@ -81,6 +82,19 @@ export type EtlRun = {
     ocr_confirmed?: boolean
   }
   receipt: Record<string, unknown>
+  execution_integrity?: {
+    status: 'pending' | 'verified' | 'drifted' | 'not_executed' | 'not_applicable' | 'rolled_back' | 'unknown' | string
+    checked_rows: number
+    failure_count: number
+    failures: Array<{
+      row_id?: number
+      source_sheet?: string
+      source_row?: number
+      match_ref?: string | null
+      code: string
+      message: string
+    }>
+  }
   reversible: boolean
   rollback_status?: string | null
   error?: { code: string; message: string } | null

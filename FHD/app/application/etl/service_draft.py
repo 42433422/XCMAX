@@ -15,10 +15,12 @@ from app.application.etl.service_support import (
     EXECUTOR,
     SUBMITTED,
     SUBMITTED_LOCK,
+    active_mod_scope,
     apply_validation_rules,
     dump_json,
     load_json,
     new_session,
+    run_active_mod_id,
     safe_error,
 )
 from app.application.etl.targets import TargetAdapter, get_adapter
@@ -80,12 +82,14 @@ class DraftServiceMixin:
         run.error_code = None
         run.error_message = None
         tenant_id = tenant_id_for_write()
+        active_mod_id = run_active_mod_id(run)
         db.commit()
         self._submit_revalidation(
             run.id,
             tenant_id,
             owner_user_id,
             overrides if isinstance(overrides, dict) else {},
+            active_mod_id,
         )
         self._record_correction_metrics(
             mapping_changed=patch.get("field_mappings") is not None,
@@ -112,6 +116,7 @@ class DraftServiceMixin:
         tenant_id: int,
         owner_user_id: int,
         overrides: dict[str, Any] | None = None,
+        active_mod_id: str = "",
     ) -> None:
         with SUBMITTED_LOCK:
             if run_id in SUBMITTED:
@@ -119,9 +124,10 @@ class DraftServiceMixin:
             SUBMITTED.add(run_id)
 
         def work() -> None:
-            db = new_session()
+            with active_mod_scope(active_mod_id):
+                db = new_session()
             try:
-                with tenant_scope(tenant_id):
+                with active_mod_scope(active_mod_id), tenant_scope(tenant_id):
                     self._revalidate_existing_rows(db, run_id, owner_user_id)
                     if overrides:
                         self._apply_row_overrides(db, run_id, owner_user_id, overrides)
@@ -129,7 +135,7 @@ class DraftServiceMixin:
                 db.rollback()
                 code, message = safe_error(exc)
                 try:
-                    with tenant_scope(tenant_id):
+                    with active_mod_scope(active_mod_id), tenant_scope(tenant_id):
                         run = self._owned_run(db, run_id, owner_user_id)
                         run.status = "failed"
                         run.stage = "failed"

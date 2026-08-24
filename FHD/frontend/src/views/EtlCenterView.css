@@ -603,6 +603,17 @@ button:disabled {
   background: #fff0f1;
   border: 1px solid #efbdc2;
 }
+
+.etl-integrity-failures {
+  max-height: 240px;
+  margin: 10px 0 0;
+  padding-left: 22px;
+  overflow: auto;
+}
+
+.etl-integrity-failures li + li {
+  margin-top: 6px;
+}
 .etl-actions {
   display: flex;
   gap: 8px;

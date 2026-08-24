@@ -15,9 +15,11 @@ from app.application.etl.service_support import (
     EXECUTOR,
     SUBMITTED,
     SUBMITTED_LOCK,
+    active_mod_scope,
     dump_json,
     load_json,
     new_session,
+    run_active_mod_id,
     safe_error,
     utcnow,
 )
@@ -73,8 +75,15 @@ class ExecutionServiceMixin:
         run.error_code = None
         run.error_message = None
         tenant_id = tenant_id_for_write()
+        active_mod_id = run_active_mod_id(run)
         db.commit()
-        self._submit_execution(run.id, tenant_id, owner_user_id, valid_rows_only)
+        self._submit_execution(
+            run.id,
+            tenant_id,
+            owner_user_id,
+            valid_rows_only,
+            active_mod_id,
+        )
         db.expire_all()
         return cast("dict[str, Any]", self.get_run(db, run_id=run.id, owner_user_id=owner_user_id))
 
@@ -84,6 +93,7 @@ class ExecutionServiceMixin:
         tenant_id: int,
         owner_user_id: int,
         valid_rows_only: bool,
+        active_mod_id: str = "",
     ) -> None:
         with SUBMITTED_LOCK:
             if run_id in SUBMITTED:
@@ -92,7 +102,7 @@ class ExecutionServiceMixin:
 
         def work() -> None:
             try:
-                with tenant_scope(tenant_id):
+                with active_mod_scope(active_mod_id), tenant_scope(tenant_id):
                     self._execute_worker(run_id, owner_user_id, valid_rows_only)
             finally:
                 with SUBMITTED_LOCK:
@@ -149,7 +159,12 @@ class ExecutionServiceMixin:
                 db.commit()
 
             context["progress_callback"] = progress_callback
-            if hasattr(adapter, "execute_batch"):
+            execute_batch = getattr(adapter, "execute_batch", None)
+            uses_batch_execution = callable(execute_batch) and (
+                not isinstance(adapter, TargetAdapter)
+                or type(adapter).execute_batch is not TargetAdapter.execute_batch
+            )
+            if uses_batch_execution:
                 previous = (
                     db.query(EtlRunRow)
                     .filter(
@@ -178,7 +193,7 @@ class ExecutionServiceMixin:
                             last_id = row.id
                             yield load_json(row.normalized_json, {})
 
-                result = adapter.execute_batch(normalized_rows(), context)
+                result = execute_batch(normalized_rows(), context)
                 db.query(EtlRunRow).filter(*eligible_filters).update(
                     {
                         EtlRunRow.execution_status: "success",
@@ -209,6 +224,11 @@ class ExecutionServiceMixin:
             run.progress = 100
             run.executed_at = utcnow()
             receipt = load_json(run.receipt_json, {})
+            integrity_status = (
+                "verified"
+                if getattr(adapter, "execution_integrity_verifiable", False)
+                else "not_applicable"
+            )
             receipt.update(
                 {
                     "run_id": run.id,
@@ -220,6 +240,12 @@ class ExecutionServiceMixin:
                     "error_rows": run.error_rows,
                     "reversible": run.reversible,
                     "partial": bool(valid_rows_only and run.error_rows),
+                    "execution_integrity": {
+                        "status": integrity_status,
+                        "checked_rows": run.executed_rows if integrity_status == "verified" else 0,
+                        "failure_count": 0,
+                        "failures": [],
+                    },
                 }
             )
             run.receipt_json = dump_json(receipt)
@@ -234,6 +260,36 @@ class ExecutionServiceMixin:
                 run.stage = "failed"
                 run.error_code = code
                 run.error_message = message[:500]
+                failed_rows = (
+                    db.query(EtlRunRow)
+                    .filter(
+                        EtlRunRow.run_id == run.id,
+                        EtlRunRow.owner_user_id == owner_user_id,
+                        EtlRunRow.execution_status == "failed",
+                    )
+                    .order_by(EtlRunRow.id)
+                    .all()
+                )
+                receipt = load_json(run.receipt_json, {})
+                receipt.update(
+                    {
+                        "run_id": run.id,
+                        "target_type": run.target_type,
+                        "executed_rows": run.executed_rows,
+                        "partial": bool(run.executed_rows),
+                        "execution_failures": [
+                            {
+                                "row_id": item.id,
+                                "source_sheet": item.source_sheet,
+                                "source_row": item.source_row,
+                                "code": item.execution_error_code or code,
+                                "message": item.execution_error_message or message,
+                            }
+                            for item in failed_rows
+                        ],
+                    }
+                )
+                run.receipt_json = dump_json(receipt)
                 db.commit()
                 self._record_execution_metrics(run, started_at, "failed")
             except BOUNDARY_ERRORS:  # noqa: BLE001 - final persistence boundary
@@ -285,6 +341,14 @@ class ExecutionServiceMixin:
                     )
                     row.match_ref = str(result.get("match_ref") or row.match_ref or "")
                     row.after_json = dump_json(result.get("after") or load_json(row.after_json, {}))
+                    if getattr(adapter, "execution_integrity_verifiable", False):
+                        adapter.verify_execution_row(
+                            db,
+                            match_ref=str(row.match_ref or ""),
+                            before=load_json(row.before_json, {}),
+                            after=load_json(row.after_json, {}),
+                            context=context,
+                        )
                     row.execution_status = "success"
                     row.execution_error_code = None
                     row.execution_error_message = None
@@ -320,6 +384,14 @@ class ExecutionServiceMixin:
                     completed_row.after_json = dump_json(
                         result.get("after") or load_json(completed_row.after_json, {})
                     )
+                    if getattr(adapter, "execution_integrity_verifiable", False):
+                        adapter.verify_execution_row(
+                            db,
+                            match_ref=str(completed_row.match_ref or ""),
+                            before=load_json(completed_row.before_json, {}),
+                            after=load_json(completed_row.after_json, {}),
+                            context=context,
+                        )
                     completed_row.execution_status = "success"
                     completed_row.execution_error_code = None
                     completed_row.execution_error_message = None
@@ -337,6 +409,30 @@ class ExecutionServiceMixin:
                 run.executed_rows = executed
                 db.commit()
                 raise
+            if getattr(adapter, "execution_integrity_verifiable", False):
+                for committed_row in chunk:
+                    persisted = db.get(EtlRunRow, committed_row.id)
+                    if persisted is None or persisted.execution_status != "success":
+                        continue
+                    context = {
+                        **base_context,
+                        "source_row": persisted.source_row,
+                    }
+                    try:
+                        adapter.verify_execution_row(
+                            db,
+                            match_ref=str(persisted.match_ref or ""),
+                            before=load_json(persisted.before_json, {}),
+                            after=load_json(persisted.after_json, {}),
+                            context=context,
+                        )
+                    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
+                        code, message = safe_error(exc)
+                        persisted.execution_status = "failed"
+                        persisted.execution_error_code = code
+                        persisted.execution_error_message = message[:500]
+                        db.commit()
+                        raise
 
     def retry(self, db: Session, *, run_id: str, owner_user_id: int) -> dict[str, Any]:
         run = self._owned_run(db, run_id, owner_user_id)
@@ -360,6 +456,7 @@ class ExecutionServiceMixin:
         run.error_code = None
         run.error_message = None
         tenant_id = tenant_id_for_write()
+        active_mod_id = run_active_mod_id(run)
         db.commit()
         try:
             from app.utils.metrics import etl_retries_total
@@ -368,9 +465,14 @@ class ExecutionServiceMixin:
         except RECOVERABLE_ERRORS:  # noqa: BLE001
             logger.debug("ETL retry metrics unavailable", exc_info=True)
         if rerun_parse:
-            self._submit_preview(run_id, tenant_id, owner_user_id)
+            self._submit_preview(run_id, tenant_id, owner_user_id, active_mod_id)
         else:
-            self._submit_revalidation(run_id, tenant_id, owner_user_id)
+            self._submit_revalidation(
+                run_id,
+                tenant_id,
+                owner_user_id,
+                active_mod_id=active_mod_id,
+            )
         db.expire_all()
         return cast("dict[str, Any]", self.get_run(db, run_id=run_id, owner_user_id=owner_user_id))
 

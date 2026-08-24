@@ -179,6 +179,7 @@ function completedRun(id = 'completed-run') {
     stage: 'completed',
     summary: { new: 2, update: 1, skip: 1, error: 0, executed: 3 },
     receipt: { customer_ids: ['customer-1'], product_ids: ['product-1', 'product-2'] },
+    execution_integrity: { status: 'verified', checked_rows: 3, failure_count: 0, failures: [] },
     created_at: '2026-07-27T06:00:00Z',
   }
 }
@@ -904,6 +905,49 @@ describe('EtlCenterView folder workflow', () => {
     await buttonByText(wrapper, '重新导入')?.trigger('click')
     await flushPromises()
     expect(etlApiMock.retry).toHaveBeenCalledWith(failed.id)
+    wrapper.unmount()
+  })
+
+  it('invalidates a completed receipt and lists every drifted business row', async () => {
+    const drifted = {
+      ...completedRun('drifted-run'),
+      file_name: '客户产品漂移.xlsx',
+      execution_integrity: {
+        status: 'drifted',
+        checked_rows: 3,
+        failure_count: 2,
+        failures: [
+          {
+            row_id: 11,
+            source_sheet: '客户',
+            source_row: 2,
+            code: 'ETL_EXECUTION_TARGET_MISSING',
+            message: '关联客户记录 7 不存在',
+          },
+          {
+            row_id: 12,
+            source_sheet: '产品',
+            source_row: 5,
+            code: 'ETL_EXECUTION_RELATIONSHIP_BROKEN',
+            message: '客户与产品的购买单位关系不一致',
+          },
+        ],
+      },
+    }
+    etlApiMock.runs.mockResolvedValue([drifted])
+    etlApiMock.run.mockResolvedValue(drifted)
+
+    const wrapper = await mountView()
+    await buttonByText(wrapper, '运行历史')?.trigger('click')
+    await buttonByText(wrapper, '客户产品漂移.xlsx')?.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="etl-execution-integrity-error"]').text()).toContain('原“已写入”回执已失效')
+    expect(wrapper.text()).toContain('客户 第 2 行：关联客户记录 7 不存在')
+    expect(wrapper.text()).toContain('产品 第 5 行：客户与产品的购买单位关系不一致')
+    expect(wrapper.text()).not.toContain('已关联写入客户库和产品库')
+    expect(wrapper.find('a[href="/customers"]').exists()).toBe(false)
+    expect(wrapper.find('a[href="/products"]').exists()).toBe(false)
     wrapper.unmount()
   })
 
