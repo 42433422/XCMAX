@@ -9,10 +9,28 @@ const mocks = vi.hoisted(() => ({
   resolveEmployee: vi.fn(),
   runEmployee: vi.fn(),
   uploadFile: vi.fn(),
+  etlUpload: vi.fn(),
+  etlPreview: vi.fn(),
+  etlRun: vi.fn(),
+  etlExecute: vi.fn(),
+  etlRollback: vi.fn(),
+  etlSaveTemplate: vi.fn(),
+  etlDeleteTemplate: vi.fn(),
 }))
 
 vi.mock('@/api/core', () => ({ primeCsrfCookie: mocks.primeCsrfCookie }))
 vi.mock('@/utils/apiBase', () => ({ apiFetch: mocks.apiFetch }))
+vi.mock('@/api/etl', () => ({
+  etlApi: {
+    upload: mocks.etlUpload,
+    preview: mocks.etlPreview,
+    run: mocks.etlRun,
+    execute: mocks.etlExecute,
+    rollback: mocks.etlRollback,
+    saveShipmentTemplate: mocks.etlSaveTemplate,
+    deleteTemplate: mocks.etlDeleteTemplate,
+  },
+}))
 vi.mock('@/utils/officeEmployeeReadApi', () => ({
   isOfficeDockingFileSupported: mocks.isSupported,
   mapOfficeExcelReadToAnalysisResult: mocks.mapExcel,
@@ -24,6 +42,32 @@ vi.mock('@/utils/officeEmployeeReadApi', () => ({
 
 import { CSV_FULL_READ_EMPLOYEE_ID, EXCEL_FULL_READ_EMPLOYEE_ID, PPT_FULL_READ_EMPLOYEE_ID } from '@/constants/officeEmployeePack'
 import { useChatOfficeDocking } from './useChatOfficeDocking'
+import type { EtlRun } from '@/api/etl'
+
+const uploadedNames = new Map<string, string>()
+
+function etlRun(overrides: Partial<EtlRun> = {}): EtlRun {
+  const target = overrides.target_type || 'shipment_records'
+  return {
+    id: overrides.id || `${target}-run`,
+    upload_id: overrides.upload_id || 'upload-1',
+    file_name: overrides.file_name || '资料.xlsx',
+    file_sha256: overrides.file_sha256 || 'sha',
+    target_type: target,
+    status: overrides.status || 'preview_ready',
+    stage: overrides.stage || 'preview_ready',
+    progress: overrides.progress ?? 100,
+    total_rows: overrides.total_rows ?? 1,
+    processed_rows: overrides.processed_rows ?? 1,
+    summary: overrides.summary || { new: 1, update: 0, skip: 0, error: 0, executed: 0 },
+    details: overrides.details || {},
+    source_features: overrides.source_features || {},
+    draft: overrides.draft || { field_mappings: [{ source: '购货单位', target: 'purchase_unit', transforms: [], confidence: 1, required: true }] },
+    receipt: overrides.receipt || {},
+    reversible: overrides.reversible ?? true,
+    ...overrides,
+  }
+}
 
 function jsonResponse(body: unknown, status = 200): Response {
   return {
@@ -64,6 +108,7 @@ function createHarness(mode: 'conversation' | 'review' = 'review') {
 describe('useChatOfficeDocking', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    uploadedNames.clear()
     mocks.isSupported.mockReturnValue(true)
     mocks.primeCsrfCookie.mockResolvedValue(undefined)
     mocks.uploadFile.mockImplementation(async (file: File) => ({
@@ -71,6 +116,38 @@ describe('useChatOfficeDocking', () => {
       workspace_root: '/workspace',
       filename: file.name,
     }))
+    mocks.etlUpload.mockImplementation(async (file: File) => {
+      const uploadId = `upload-${file.name}`
+      uploadedNames.set(uploadId, file.name)
+      return { upload_id: uploadId, file_name: file.name, sha256: `sha-${file.name}`, relative_path: file.name }
+    })
+    mocks.etlPreview.mockImplementation(async (body: { upload_id: string; target_type: string }) => {
+      const fileName = uploadedNames.get(body.upload_id) || '资料.xlsx'
+      if (body.target_type === 'knowledge') {
+        return etlRun({
+          id: `knowledge-${body.upload_id}`,
+          upload_id: body.upload_id,
+          file_name: fileName,
+          target_type: 'knowledge',
+          source_features: { kind: 'document', sheet_count: fileName.endsWith('.xlsx') ? 1 : 0, workbook_inventory: fileName.endsWith('.xlsx') ? [{ name: '送货单' }] : [] },
+        })
+      }
+      return etlRun({
+        id: `database-${body.upload_id}`,
+        upload_id: body.upload_id,
+        file_name: fileName,
+        source_features: {
+          target_detection: { confidence: 0.98, document_type: 'delivery_note_workbook' },
+          llm_mapping: { used_llm: true, degraded: false },
+          shipment_template_candidates: [{ name: `${fileName} · 发货单版式`, source_region_id: 'region-1' }],
+        },
+      })
+    })
+    mocks.etlRun.mockImplementation(async (id: string) => etlRun({ id }))
+    mocks.etlExecute.mockImplementation(async (id: string) => etlRun({ id, status: 'completed', stage: 'completed', summary: { new: 1, update: 0, skip: 0, error: 0, executed: 1 } }))
+    mocks.etlRollback.mockImplementation(async (id: string) => etlRun({ id, status: 'completed', rollback_status: 'completed' }))
+    mocks.etlSaveTemplate.mockResolvedValue({ template_id: 'etl:template-1', name: '版式', file_path: '/templates/one.xlsx', message: 'ok' })
+    mocks.etlDeleteTemplate.mockResolvedValue(true)
     mocks.apiFetch.mockImplementation(async (url: string) => {
       if (String(url).includes('/shipment-etl/')) {
         return jsonResponse({ success: true, notes: [] })
@@ -435,11 +512,11 @@ describe('useChatOfficeDocking', () => {
     expect(docking.officeDockingProgress.value).toMatchObject({ phase: 'completed', total: 2, completed: 2, percent: 100 })
     expect(deps.addAndSaveMessage).toHaveBeenCalledTimes(2)
     const batchMessage = String(deps.addAndSaveMessage.mock.calls[1][0])
-    expect(batchMessage).toContain('文件夹「发货单」里的文件全部读完了')
+    expect(batchMessage).toContain('文件夹「发货单」里的文件完整分析完了')
     expect(batchMessage).toContain('发货单/国圣化工.xlsx')
     expect(batchMessage).toContain('发货单/客户/侯雪梅.xlsx')
     expect(batchMessage).toContain('我的建议')
-    expect(batchMessage).toContain('你想怎么处理这批文件')
+    expect(batchMessage).toContain('你想怎么处理这批资料')
     expect(batchMessage).not.toContain('AI 对接建议')
     expect(batchMessage).not.toContain('逐个确认')
     const decisionExtras = deps.addAndSaveMessage.mock.calls[1][2] as {
@@ -448,50 +525,93 @@ describe('useChatOfficeDocking', () => {
     expect(decisionExtras.decisionOptions).toHaveLength(3)
     expect(decisionExtras.decisionOptions).toEqual([
       expect.objectContaining({ id: 'recommended', label: '按 AI 建议处理', message: '按建议处理', recommended: true }),
-      expect.objectContaining({ id: 'template-only', label: '仅归档模板库', message: '全部只归档到模板库' }),
+      expect.objectContaining({ id: 'knowledge-only', label: '仅进入知识库', message: '全部只进入知识库' }),
       expect.objectContaining({ id: 'custom', label: '自定义处理方式', composePrefill: '我想这样处理：' }),
     ])
-    expect(mocks.apiFetch.mock.calls.some(([url]) => String(url) === '/api/templates/upload')).toBe(false)
-    expect(mocks.apiFetch.mock.calls.some(([url]) => String(url).includes('/shipment-etl/execute'))).toBe(false)
+    expect(mocks.etlSaveTemplate).not.toHaveBeenCalled()
+    expect(mocks.etlExecute).not.toHaveBeenCalled()
 
     expect(await docking.handleOfficeDockingConversationDecision('你觉得呢？')).toBe(false)
     expect(await docking.handleOfficeDockingConversationDecision('按建议处理')).toBe(true)
     expect(deps.addAndSaveMessage).toHaveBeenLastCalledWith(expect.stringContaining('现在还没有执行；如果理解正确，请回复“确认执行”'), 'ai')
-    expect(mocks.apiFetch.mock.calls.some(([url]) => String(url) === '/api/templates/upload')).toBe(false)
-    expect(mocks.apiFetch.mock.calls.some(([url]) => String(url).includes('/shipment-etl/execute'))).toBe(false)
+    expect(mocks.etlSaveTemplate).not.toHaveBeenCalled()
+    expect(mocks.etlExecute).not.toHaveBeenCalled()
 
     expect(await docking.handleOfficeDockingConversationDecision('确认执行')).toBe(true)
-    expect(mocks.apiFetch.mock.calls.filter(([url]) => String(url) === '/api/templates/upload')).toHaveLength(2)
-    expect(mocks.apiFetch.mock.calls.filter(([url]) => String(url).includes('/shipment-etl/execute'))).toHaveLength(2)
+    expect(mocks.etlSaveTemplate).toHaveBeenCalledTimes(2)
+    expect(mocks.etlExecute).toHaveBeenCalledTimes(4)
     expect(docking.officeDockingReviewItems.value.every((item) => item.commitStatus === 'committed')).toBe(true)
     expect(docking.officeDockingAwaitingDecision.value).toBe(false)
   })
 
+  it('deduplicates renamed files by server SHA-256 before creating previews', async () => {
+    mocks.etlUpload.mockImplementation(async (file: File) => {
+      const uploadId = `upload-${file.name}`
+      uploadedNames.set(uploadId, file.name)
+      return { upload_id: uploadId, file_name: file.name, sha256: 'same-content-sha', relative_path: file.name }
+    })
+    const { docking } = createHarness('conversation')
+
+    await docking.onOfficeDockingFileChange(fileEvent([
+      new File(['same'], '迎扬李总.xlsx'),
+      new File(['same'], '迎扬李总(1).xlsx'),
+    ]))
+
+    expect(docking.officeDockingReviewItems.value).toHaveLength(1)
+    expect(mocks.etlPreview).toHaveBeenCalledTimes(2)
+    expect(docking.officeDockingProgress.value).toMatchObject({
+      total: 1,
+      completed: 1,
+      ignored: [{ fileName: '迎扬李总(1).xlsx', reason: '内容与「迎扬李总.xlsx」完全相同' }],
+    })
+  })
+
+  it('includes the linked customer-product preview when a shipment workbook has supporting sheets', async () => {
+    mocks.etlPreview.mockImplementation(async (body: { upload_id: string; target_type: string }) => {
+      if (body.target_type === 'knowledge') return etlRun({ id: 'knowledge-linked', target_type: 'knowledge' })
+      return etlRun({
+        id: 'shipment-primary',
+        target_type: 'shipment_records',
+        details: { linked_customer_products_preview: { run_id: 'customer-products-linked' } },
+        source_features: { target_detection: { confidence: 0.98 } },
+      })
+    })
+    mocks.etlRun.mockImplementation(async (id: string) =>
+      etlRun({ id, target_type: id === 'customer-products-linked' ? 'customer_products' : 'shipment_records' }),
+    )
+    const { docking } = createHarness('conversation')
+
+    await docking.onOfficeDockingFileChange(fileEvent(new File(['xlsx'], '混合发货资料.xlsx')))
+    const item = docking.officeDockingReviewItems.value[0]
+    expect(item.databaseRuns?.map((run) => run.id)).toEqual(['shipment-primary', 'customer-products-linked'])
+    expect(item.summary).toContain('含客户/产品关系附表')
+
+    await docking.handleOfficeDockingConversationDecision('按建议处理')
+    await docking.handleOfficeDockingConversationDecision('确认执行')
+    expect(mocks.etlExecute.mock.calls.map(([id]) => id)).toEqual([
+      'customer-products-linked',
+      'shipment-primary',
+      'knowledge-linked',
+    ])
+  })
+
   it('shows cooperative cancellation and never offers execution options for an incomplete batch', async () => {
     mocks.isSupported.mockReturnValue(true)
-    mocks.resolveEmployee.mockReturnValue(EXCEL_FULL_READ_EMPLOYEE_ID)
-    let finishRead!: (value: Record<string, unknown>) => void
-    mocks.runEmployee.mockImplementation(
-      () =>
+    let finishUpload!: (value: Record<string, unknown>) => void
+    mocks.etlUpload.mockImplementationOnce(
+      (file: File) =>
         new Promise((resolve) => {
-          finishRead = resolve
+          finishUpload = resolve
+          uploadedNames.set(`upload-${file.name}`, file.name)
         }),
     )
-    mocks.readOutputs.mockResolvedValue([
-      { path: 'outputs/workbook.json', kind: 'json', json: { sheets: [{ sheet_name: '数据', row_count: 1 }] } },
-    ])
-    mocks.mapExcel.mockReturnValue({
-      fields: ['名称'],
-      preview_data: { sample_rows: [{ 名称: '样例' }] },
-      sheets: [{ sheet_name: '数据', fields: ['名称'] }],
-    })
 
     const { deps, docking } = createHarness('conversation')
     const reading = docking.onOfficeDockingFileChange(fileEvent([new File(['a'], '第一份.xlsx'), new File(['b'], '第二份.xlsx')]))
-    await vi.waitFor(() => expect(mocks.runEmployee).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(mocks.etlUpload).toHaveBeenCalledTimes(1))
 
     expect(docking.officeDockingProgress.value).toMatchObject({
-      phase: 'reading',
+      phase: 'inventory',
       total: 2,
       currentIndex: 1,
       currentFile: '第一份.xlsx',
@@ -499,96 +619,54 @@ describe('useChatOfficeDocking', () => {
     docking.cancelOfficeDockingReading()
     expect(docking.officeDockingProgress.value?.phase).toBe('stopping')
 
-    finishRead({ summary: '工作簿已读取', output_path: 'outputs/workbook.json' })
+    finishUpload({ upload_id: 'upload-第一份.xlsx', file_name: '第一份.xlsx', sha256: 'sha-first', relative_path: '第一份.xlsx' })
     await reading
 
     expect(docking.officeDockingProgress.value).toMatchObject({
       phase: 'cancelled',
-      total: 2,
-      completed: 1,
-      success: 1,
+      total: 1,
+      completed: 0,
+      success: 0,
     })
     expect(docking.officeDockingAwaitingDecision.value).toBe(false)
-    expect(deps.addAndSaveMessage).toHaveBeenLastCalledWith(expect.stringContaining('已停止这次阅读：完成 1/2 个'), 'ai')
+    expect(deps.addAndSaveMessage).toHaveBeenLastCalledWith(expect.stringContaining('已停止这次分析：完成 0/1 个'), 'ai')
     expect(deps.addAndSaveMessage.mock.calls.some((call) => call[2]?.decisionOptions)).toBe(false)
   })
 
-  it('obeys preview_only profile_target and never schedules the shipment database write', async () => {
-    mocks.resolveEmployee.mockReturnValue(EXCEL_FULL_READ_EMPLOYEE_ID)
-    mocks.runEmployee.mockResolvedValue({ summary: '工作簿已读取', output_path: 'outputs/workbook.json' })
-    mocks.readOutputs.mockResolvedValue([
-      { path: 'outputs/workbook.json', kind: 'json', json: { sheets: [{ sheet_name: '送货单', row_count: 1 }] } },
-    ])
-    mocks.mapExcel.mockReturnValue({
-      fields: ['购货单位', '品名', '型号', '数量'],
-      preview_data: { sample_rows: [{ 购货单位: '国圣化工', 品名: '底漆', 型号: 'A1', 数量: 1 }] },
-      sheets: [{ sheet_name: '送货单', fields: ['购货单位', '品名', '型号', '数量'] }],
-    })
-    mocks.apiFetch.mockImplementation(async (url: string) => {
-      if (String(url).includes('/shipment-etl/preview')) {
-        return jsonResponse({
-          success: true,
-          note_count: 1,
-          notes: [
-            {
-              sheet_name: '送货单',
-              unit_name: '国圣化工',
-              item_count: 1,
-              profile_id: 'generic_delivery_preview',
-              profile_target: 'preview_only',
-            },
-          ],
-        })
-      }
-      return jsonResponse({ success: true })
+  it('holds a low-confidence database target while still offering the knowledge preview', async () => {
+    mocks.etlPreview.mockImplementation(async (body: { upload_id: string; target_type: string }) => {
+      if (body.target_type === 'knowledge') return etlRun({ id: 'knowledge-low', target_type: 'knowledge' })
+      return etlRun({
+        id: 'database-low',
+        target_type: 'customer_products',
+        source_features: { target_detection: { confidence: 0.35, document_type: 'generic_structured_table' } },
+      })
     })
 
     const { deps, docking } = createHarness('conversation')
     await docking.onOfficeDockingFileChange(fileEvent(new File(['xlsx'], '国圣化工.xlsx')))
 
     const item = docking.officeDockingReviewItems.value[0]
-    expect(item.intentId).toBe('shipment_delivery')
-    expect(item.databaseAction).toBe('')
+    expect(item.intentId).toBe('customer_product')
+    expect(item.databaseAction).toBe('universal_etl_execute')
     expect(item.selectedDatabase).toBe(false)
-    expect(item.databaseDisabledReason).toContain('profile_target=preview_only')
-    expect(String(deps.addAndSaveMessage.mock.calls[1][0])).toContain('profile_target=preview_only')
+    expect(item.selectedKnowledge).toBe(true)
+    expect(item.selectedTemplate).toBe(false)
+    expect(item.databaseDisabledReason).toContain('置信度仅 35%')
+    expect(String(deps.addAndSaveMessage.mock.calls[1][0])).toContain('置信度仅 35%')
 
     expect(await docking.handleOfficeDockingConversationDecision('按建议处理')).toBe(true)
     expect(await docking.handleOfficeDockingConversationDecision('确认执行')).toBe(true)
-    expect(mocks.apiFetch.mock.calls.filter(([url]) => String(url) === '/api/templates/upload')).toHaveLength(1)
-    expect(mocks.apiFetch.mock.calls.some(([url]) => String(url).includes('/shipment-etl/execute'))).toBe(false)
+    expect(mocks.etlSaveTemplate).not.toHaveBeenCalled()
+    expect(mocks.etlExecute).toHaveBeenCalledTimes(1)
+    expect(mocks.etlExecute).toHaveBeenCalledWith('knowledge-low')
     expect(item.commitStatus).toBe('committed')
   })
 
-  it('rolls back a template created in the same attempt when the database write fails', async () => {
-    mocks.resolveEmployee.mockReturnValue(EXCEL_FULL_READ_EMPLOYEE_ID)
-    mocks.runEmployee.mockResolvedValue({ summary: '工作簿已读取', output_path: 'outputs/workbook.json' })
-    mocks.readOutputs.mockResolvedValue([
-      { path: 'outputs/workbook.json', kind: 'json', json: { sheets: [{ sheet_name: '送货单', row_count: 1 }] } },
-    ])
-    mocks.mapExcel.mockReturnValue({
-      fields: ['购货单位', '品名', '型号', '数量'],
-      preview_data: { sample_rows: [{ 购货单位: '国圣化工', 品名: '底漆', 型号: 'A1', 数量: 1 }] },
-      sheets: [{ sheet_name: '送货单', fields: ['购货单位', '品名', '型号', '数量'] }],
-    })
-    mocks.apiFetch.mockImplementation(async (url: string) => {
-      if (String(url).includes('/shipment-etl/preview')) {
-        return jsonResponse({
-          success: true,
-          note_count: 1,
-          notes: [{ sheet_name: '送货单', unit_name: '国圣化工', item_count: 1, profile_target: 'shipment' }],
-        })
-      }
-      if (String(url) === '/api/templates/upload') {
-        return jsonResponse({ success: true, template: { id: 'db:42', db_id: 42 } })
-      }
-      if (String(url).includes('/shipment-etl/execute')) {
-        return jsonResponse({ success: false, message: '客户字段缺失，无法写入发货单' }, 400)
-      }
-      if (String(url) === '/api/templates/delete') {
-        return jsonResponse({ success: true, deleted: { id: 'db:42', db_id: 42 } })
-      }
-      return jsonResponse({ success: true })
+  it('rolls back a completed database run when the later knowledge write fails', async () => {
+    mocks.etlExecute.mockImplementation(async (id: string) => {
+      if (id.startsWith('knowledge-')) throw new Error('知识库索引服务暂不可用')
+      return etlRun({ id, status: 'completed', stage: 'completed' })
     })
 
     const { deps, docking } = createHarness('conversation')
@@ -598,49 +676,35 @@ describe('useChatOfficeDocking', () => {
 
     const item = docking.officeDockingReviewItems.value[0]
     expect(item.commitStatus).toBe('failed')
-    expect(item.templateCommitStatus).toBe('rolled_back')
-    expect(item.databaseCommitStatus).toBe('failed')
-    expect(item.databaseError).toBe('客户字段缺失，无法写入发货单')
-    expect(mocks.apiFetch).toHaveBeenCalledWith(
-      '/api/templates/delete',
-      expect.objectContaining({ method: 'POST', body: JSON.stringify({ id: 'db:42' }) }),
-    )
+    expect(item.databaseCommitStatus).toBe('rolled_back')
+    expect(item.knowledgeCommitStatus).toBe('failed')
+    expect(item.knowledgeError).toBe('知识库索引服务暂不可用')
+    expect(mocks.etlRollback).toHaveBeenCalledWith(expect.stringContaining('database-upload-国圣化工.xlsx'))
+    expect(mocks.etlSaveTemplate).not.toHaveBeenCalled()
     const receipt = String(deps.addAndSaveMessage.mock.calls.at(-1)?.[0])
     expect(receipt).toContain('国圣化工.xlsx：失败')
-    expect(receipt).toContain('模板库已自动回滚')
-    expect(receipt).toContain('客户/产品/发货单失败（客户字段缺失，无法写入发货单）')
+    expect(receipt).toContain('客户/产品/发货单已自动回滚')
+    expect(receipt).toContain('知识库失败（知识库索引服务暂不可用）')
   })
 
-  it('reports partial success and both failure reasons when template rollback also fails', async () => {
-    mocks.resolveEmployee.mockReturnValue(EXCEL_FULL_READ_EMPLOYEE_ID)
-    mocks.runEmployee.mockResolvedValue({ summary: '工作簿已读取', output_path: 'outputs/workbook.json' })
-    mocks.readOutputs.mockResolvedValue([
-      { path: 'outputs/workbook.json', kind: 'json', json: { sheets: [{ sheet_name: '送货单', row_count: 1 }] } },
-    ])
-    mocks.mapExcel.mockReturnValue({
-      fields: ['购货单位', '品名', '型号', '数量'],
-      preview_data: { sample_rows: [{ 购货单位: '国圣化工', 品名: '底漆', 型号: 'A1', 数量: 1 }] },
-      sheets: [{ sheet_name: '送货单', fields: ['购货单位', '品名', '型号', '数量'] }],
+  it('reports partial success and both reasons when a later template and its rollback fail', async () => {
+    mocks.etlPreview.mockImplementation(async (body: { upload_id: string; target_type: string }) => {
+      if (body.target_type === 'knowledge') return etlRun({ id: `knowledge-${body.upload_id}`, target_type: 'knowledge' })
+      return etlRun({
+        id: `database-${body.upload_id}`,
+        source_features: {
+          target_detection: { confidence: 0.98 },
+          shipment_template_candidates: [
+            { name: '版式一', source_region_id: 'region-1' },
+            { name: '版式二', source_region_id: 'region-2' },
+          ],
+        },
+      })
     })
-    mocks.apiFetch.mockImplementation(async (url: string) => {
-      if (String(url).includes('/shipment-etl/preview')) {
-        return jsonResponse({
-          success: true,
-          note_count: 1,
-          notes: [{ sheet_name: '送货单', unit_name: '国圣化工', item_count: 1, profile_target: 'shipment' }],
-        })
-      }
-      if (String(url) === '/api/templates/upload') {
-        return jsonResponse({ success: true, template: { id: 'db:43', db_id: 43 } })
-      }
-      if (String(url).includes('/shipment-etl/execute')) {
-        return jsonResponse({ success: false, message: '客户字段缺失，无法写入发货单' }, 400)
-      }
-      if (String(url) === '/api/templates/delete') {
-        return jsonResponse({ success: false, message: '模板回滚服务暂不可用' }, 503)
-      }
-      return jsonResponse({ success: true })
-    })
+    mocks.etlSaveTemplate
+      .mockResolvedValueOnce({ template_id: 'etl:template-1', name: '版式一', file_path: '/templates/one.xlsx', message: 'ok' })
+      .mockRejectedValueOnce(new Error('第二套模板保存失败'))
+    mocks.etlDeleteTemplate.mockRejectedValue(new Error('模板回滚服务暂不可用'))
 
     const { deps, docking } = createHarness('conversation')
     await docking.onOfficeDockingFileChange(fileEvent(new File(['xlsx'], '国圣化工.xlsx')))
@@ -649,31 +713,27 @@ describe('useChatOfficeDocking', () => {
 
     const item = docking.officeDockingReviewItems.value[0]
     expect(item.commitStatus).toBe('partial')
-    expect(item.templateCommitStatus).toBe('committed')
-    expect(item.databaseCommitStatus).toBe('failed')
-    expect(item.rollbackError).toBe('模板回滚服务暂不可用')
+    expect(item.templateCommitStatus).toBe('failed')
+    expect(item.databaseCommitStatus).toBe('rolled_back')
+    expect(item.knowledgeCommitStatus).toBe('rolled_back')
+    expect(item.rollbackError).toContain('模板 etl:template-1：模板回滚服务暂不可用')
     const receipt = String(deps.addAndSaveMessage.mock.calls.at(-1)?.[0])
     expect(receipt).toContain('部分成功 1 个')
-    expect(receipt).toContain('模板库成功')
-    expect(receipt).toContain('客户/产品/发货单失败（客户字段缺失，无法写入发货单）')
-    expect(receipt).toContain('模板自动回滚失败（模板回滚服务暂不可用）')
+    expect(receipt).toContain('模板库失败（第二套模板保存失败）')
+    expect(receipt).toContain('客户/产品/发货单已自动回滚')
+    expect(receipt).toContain('知识库已自动回滚')
+    expect(receipt).toContain('模板自动回滚失败')
   })
 
-  it('supports a template-only batch instruction without writing any business database', async () => {
-    mocks.resolveEmployee.mockReturnValue(PPT_FULL_READ_EMPLOYEE_ID)
-    mocks.runEmployee.mockResolvedValue({ output_path: 'outputs/slides.json' })
-    mocks.readOutputs.mockResolvedValue([
-      { path: 'outputs/slides.json', kind: 'json', json: { title: '培训材料', slides: [{ index: 1, title: '安全' }] } },
-    ])
-
+  it('supports a knowledge-only batch instruction without writing any business database or template', async () => {
     const { deps, docking } = createHarness('conversation')
     await docking.onOfficeDockingFileChange(fileEvent(new File(['pptx'], '培训.pptx')))
 
-    expect(await docking.handleOfficeDockingConversationDecision('全部只归档到模板库')).toBe(true)
+    expect(await docking.handleOfficeDockingConversationDecision('全部只进入知识库')).toBe(true)
     expect(await docking.handleOfficeDockingConversationDecision('确认执行')).toBe(true)
-    expect(mocks.apiFetch.mock.calls.filter(([url]) => String(url) === '/api/templates/upload')).toHaveLength(1)
-    expect(mocks.apiFetch.mock.calls.some(([url]) => String(url).includes('/shipment-etl/execute'))).toBe(false)
-    expect(mocks.apiFetch.mock.calls.some(([url]) => String(url).includes('/attendance/import-workbook'))).toBe(false)
+    expect(mocks.etlExecute).toHaveBeenCalledTimes(1)
+    expect(mocks.etlExecute).toHaveBeenCalledWith(expect.stringContaining('knowledge-'))
+    expect(mocks.etlSaveTemplate).not.toHaveBeenCalled()
     expect(deps.sendDatabaseImportMessage).not.toHaveBeenCalled()
   })
 })

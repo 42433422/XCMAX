@@ -160,6 +160,7 @@ class TemplateServiceMixin:
     def delete_template(self, db: Session, *, template_id: str, owner_user_id: int) -> None:
         template = self._owned_template(db, template_id, owner_user_id)
         template.is_active = False
+        db.commit()
 
     def template_dict(self, template: EtlTemplate, version: EtlTemplateVersion) -> dict[str, Any]:
         return {

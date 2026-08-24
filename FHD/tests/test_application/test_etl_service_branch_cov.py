@@ -670,6 +670,7 @@ class TestServiceTemplates:
         versions = svc.template_versions(etl_db, template_id=tpl.id, owner_user_id=1)
         assert len(versions) == 1
         svc.delete_template(etl_db, template_id=tpl.id, owner_user_id=1)
+        etl_db.expire_all()
         assert etl_db.get(EtlTemplate, tpl.id).is_active is False
 
     def test_owned_template_not_found(self, etl_db, svc, fake_adapter):

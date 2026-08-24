@@ -30,6 +30,58 @@ KNOWLEDGE_ONLY_SUFFIXES = {".doc", ".docx", ".ppt", ".pptx"}
 SUPPORTED_SUFFIXES = STRUCTURED_SUFFIXES | OCR_SUFFIXES | KNOWLEDGE_ONLY_SUFFIXES
 
 
+def _parse_structured_knowledge_document(path: Path) -> ParsedDataset:
+    """Keep a structured source intact when the destination is the knowledge base.
+
+    Business-table parsing is still performed by the separate database preview.
+    The knowledge preview deliberately references the original upload so formulas,
+    merged cells, hidden sheets, and layout evidence are not flattened or lost.
+    """
+
+    inventory: list[dict[str, Any]] = []
+    if path.suffix.lower() in {".xlsx", ".xlsm"}:
+        from openpyxl import load_workbook
+
+        workbook = load_workbook(
+            path,
+            read_only=True,
+            data_only=False,
+            keep_links=False,
+        )
+        try:
+            inventory = [
+                {
+                    "name": worksheet.title,
+                    "state": worksheet.sheet_state,
+                    "max_row": int(worksheet.max_row or 0),
+                    "max_column": int(worksheet.max_column or 0),
+                }
+                for worksheet in workbook.worksheets
+            ]
+        finally:
+            workbook.close()
+
+    return ParsedDataset(
+        headers=["document_path", "source_key"],
+        rows=[
+            ParsedRow(
+                sheet="原文件",
+                row_number=1,
+                values={"document_path": str(path), "source_key": path.name},
+                provenance={"original_file": path.name, "structured_source": True},
+            )
+        ],
+        source_features={
+            "kind": "document",
+            "knowledge_only": False,
+            "structured_source": True,
+            "workbook_inventory": inventory,
+            "sheet_count": len(inventory),
+            "preserves_original_layout": True,
+        },
+    )
+
+
 def _aligned_headers_by_sheet(
     candidates: list[tuple[Any, Any]],
     target_type: str,
@@ -379,6 +431,8 @@ def parse_file(
                 "ETL_COMPATIBILITY_PRESET_FILE_UNSUPPORTED",
                 "兼容预设仅适用于 XLSX/XLSM 文件；CSV 请使用自动识别",
             )
+        if target_type == "knowledge":
+            return _parse_structured_knowledge_document(source)
         return _parse_csv(source, max_rows, target_type)
     if suffix in STRUCTURED_SUFFIXES:
         if compatibility_preset_id and target_type not in {
@@ -391,6 +445,8 @@ def parse_file(
                 "ETL_COMPATIBILITY_PRESET_TARGET_MISMATCH",
                 "兼容预设不适用于当前目标",
             )
+        if target_type == "knowledge":
+            return _parse_structured_knowledge_document(source)
         if target_type in {"customer_products", "shipment_records"} and not compatibility_preset_id:
             try:
                 from app.application.etl.parser_regions import (

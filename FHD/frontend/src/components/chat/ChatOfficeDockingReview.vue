@@ -85,12 +85,24 @@
             <input
               type="checkbox"
               :checked="activeItem.selectedDatabase"
-              :disabled="!activeItem.excelAnalysis || !activeItem.databaseAction || activeItem.status !== 'ready' || activeItem.commitStatus === 'committing' || activeItem.databaseCommitStatus === 'committed'"
+              :disabled="(!activeItem.excelAnalysis && !activeItem.databaseRun) || !activeItem.databaseAction || activeItem.status !== 'ready' || activeItem.commitStatus === 'committing' || activeItem.databaseCommitStatus === 'committed'"
               @change="onToggle(activeItem.id, 'database', $event)"
             />
             <span>
               <strong>{{ activeItem.databaseAction ? `同步到 ${activeItem.databaseTargetLabel}` : '暂不写业务数据库' }}</strong>
               <small>{{ activeItem.databaseAction ? targetStatusText(activeItem.databaseCommitStatus) : activeItem.databaseDisabledReason }}</small>
+            </span>
+          </label>
+          <label class="office-docking-review__target-card" :class="{ 'is-disabled': !activeItem.knowledgeRun }" :title="activeItem.knowledgeDisabledReason">
+            <input
+              type="checkbox"
+              :checked="activeItem.selectedKnowledge"
+              :disabled="!activeItem.knowledgeRun || activeItem.knowledgeRun.status !== 'preview_ready' || activeItem.status !== 'ready' || activeItem.commitStatus === 'committing' || activeItem.knowledgeCommitStatus === 'committed'"
+              @change="onToggle(activeItem.id, 'knowledge', $event)"
+            />
+            <span>
+              <strong>{{ activeItem.knowledgeRun ? '保留原文件到知识库' : '知识库预演不可用' }}</strong>
+              <small>{{ activeItem.knowledgeRun ? targetStatusText(activeItem.knowledgeCommitStatus) : activeItem.knowledgeDisabledReason }}</small>
             </span>
           </label>
         </div>
@@ -129,7 +141,7 @@ const emit = defineEmits<{
   close: []
   confirm: []
   skip: []
-  toggleTarget: [id: string, target: 'template' | 'database', enabled: boolean]
+  toggleTarget: [id: string, target: 'template' | 'database' | 'knowledge', enabled: boolean]
   updateTemplateName: [id: string, value: string]
 }>()
 
@@ -143,7 +155,7 @@ const pendingCount = computed(() => props.items.filter(
 const completedCount = computed(() => props.items.filter((item) => item.commitStatus === 'committed').length)
 const skippedCount = computed(() => props.items.filter((item) => item.commitStatus === 'skipped').length)
 const committing = computed(() => activeItem.value?.commitStatus === 'committing')
-const hasSelectedTarget = computed(() => Boolean(activeItem.value?.selectedTemplate || activeItem.value?.selectedDatabase))
+const hasSelectedTarget = computed(() => Boolean(activeItem.value?.selectedTemplate || activeItem.value?.selectedDatabase || activeItem.value?.selectedKnowledge))
 const canConfirm = computed(() => Boolean(
   activeItem.value &&
   !props.processing &&
@@ -156,9 +168,9 @@ const canConfirm = computed(() => Boolean(
 const selectionHint = computed(() => {
   const item = activeItem.value
   if (!item) return '所有文件均已得到明确处理结果'
-  if (props.processing) return '读取完成前不会自动归档或写入'
-  if (!hasSelectedTarget.value) return '请选择模板归档或数据库目标'
-  const targets = [item.selectedTemplate ? `模板库「${item.templateName || '未命名模板'}」` : '', item.selectedDatabase ? item.databaseTargetLabel : ''].filter(Boolean)
+  if (props.processing) return '分析完成前不会自动归档或写入任何目标'
+  if (!hasSelectedTarget.value) return '请选择知识库、模板库或数据库目标'
+  const targets = [item.selectedKnowledge ? '知识库' : '', item.selectedTemplate ? `模板库「${item.templateName || '未命名模板'}」` : '', item.selectedDatabase ? item.databaseTargetLabel : ''].filter(Boolean)
   return `确认后仅处理当前文件：${targets.join('、')}`
 })
 
@@ -167,7 +179,8 @@ const confirmLabel = computed(() => {
   if (committing.value) return '正在处理这个文件...'
   if (!item || !hasSelectedTarget.value) return '请先选择处理方式'
   if (item.selectedTemplate && !item.selectedDatabase) return '确认归档这个模板'
-  if (!item.selectedTemplate && item.selectedDatabase) return `确认写入${item.databaseTargetLabel}`
+  if (!item.selectedTemplate && item.selectedDatabase && !item.selectedKnowledge) return `确认写入${item.databaseTargetLabel}`
+  if (!item.selectedTemplate && !item.selectedDatabase && item.selectedKnowledge) return '确认进入知识库'
   return '按当前选择处理这个文件'
 })
 
@@ -181,7 +194,7 @@ function statusText(item: ChatOfficeDockingReviewItem): string {
   return '等待你的决定'
 }
 
-function targetStatusText(status: ChatOfficeDockingReviewItem['commitStatus']): string {
+function targetStatusText(status: ChatOfficeDockingReviewItem['commitStatus'] | undefined): string {
   if (status === 'committed') return '已完成'
   if (status === 'rolled_back') return '失败后已自动回滚'
   if (status === 'failed') return '失败，可重试'
@@ -267,7 +280,7 @@ function hasDetailedPreview(item: ChatOfficeDockingReviewItem): boolean {
   return normalizedTextPreview(item).length > 220
 }
 
-function onToggle(id: string, target: 'template' | 'database', event: Event) {
+function onToggle(id: string, target: 'template' | 'database' | 'knowledge', event: Event) {
   emit('toggleTarget', id, target, (event.target as HTMLInputElement).checked)
 }
 

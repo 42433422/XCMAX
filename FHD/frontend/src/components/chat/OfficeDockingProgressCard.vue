@@ -15,8 +15,8 @@
         <strong>{{ title }}</strong>
         <span>{{ progress.completed }}/{{ progress.total }} · {{ elapsedText }}</span>
       </div>
-      <button v-if="progress.phase === 'reading'" type="button" class="office-reading-card__cancel" @click="$emit('cancel')">
-        停止阅读
+      <button v-if="canCancel" type="button" class="office-reading-card__cancel" @click="$emit('cancel')">
+        停止分析
       </button>
       <span v-else-if="progress.phase === 'stopping'" class="office-reading-card__stopping">正在停止…</span>
     </div>
@@ -27,17 +27,17 @@
       :aria-valuenow="progress.percent"
       aria-valuemin="0"
       aria-valuemax="100"
-      :aria-label="`文件阅读进度 ${progress.percent}%`"
+      :aria-label="`资料分析进度 ${progress.percent}%`"
     >
       <span :style="{ width: `${progress.percent}%` }"></span>
     </div>
 
     <div v-if="isActive && progress.currentFile" class="office-reading-card__current">
-      <span>正在看第 {{ progress.currentIndex }} 个</span>
+      <span>{{ currentStage }}</span>
       <strong :title="progress.currentFile">{{ progress.currentFile }}</strong>
     </div>
 
-    <div class="office-reading-card__stats" aria-label="阅读结果统计">
+    <div class="office-reading-card__stats" aria-label="分析结果统计">
       <span class="is-success"><i class="fa fa-check-circle" aria-hidden="true"></i> 成功 {{ progress.success }}</span>
       <span class="is-failed"><i class="fa fa-exclamation-circle" aria-hidden="true"></i> 失败 {{ progress.failed }}</span>
       <span class="is-ignored"><i class="fa fa-minus-circle" aria-hidden="true"></i> 跳过 {{ progress.ignored.length }}</span>
@@ -65,7 +65,7 @@
 
     <p class="office-reading-card__safety">
       <i class="fa fa-shield" aria-hidden="true"></i>
-      当前只阅读和分析，不会归档模板，也不会写入数据库
+      当前只做内容指纹、结构与语义预演，不会归档模板，也不会写入数据库；知识库同样不会写入
     </p>
   </section>
 </template>
@@ -88,13 +88,25 @@ defineEmits<{
   cancel: []
 }>()
 
-const isActive = computed(() => props.progress.phase === 'reading' || props.progress.phase === 'stopping')
+const activePhases = ['inventory', 'reading', 'reasoning', 'planning']
+const isActive = computed(() => activePhases.includes(props.progress.phase) || props.progress.phase === 'stopping')
+const canCancel = computed(() => activePhases.includes(props.progress.phase))
+
+const currentStage = computed(() => {
+  if (props.progress.phase === 'inventory') return '内容指纹与去重'
+  if (props.progress.phase === 'reasoning') return '结构与语义分析'
+  if (props.progress.phase === 'planning') return '生成三路处理方案'
+  return `正在分析第 ${props.progress.currentIndex} 个`
+})
 
 const title = computed(() => {
+  if (props.progress.phase === 'inventory') return `正在清点${props.progress.sourceLabel}`
   if (props.progress.phase === 'reading') return `正在阅读${props.progress.sourceLabel}`
-  if (props.progress.phase === 'stopping') return '正在安全停止阅读'
-  if (props.progress.phase === 'cancelled') return '阅读已停止'
-  return props.progress.failed ? '阅读完成，部分文件需要处理' : '全部阅读完成'
+  if (props.progress.phase === 'reasoning') return '正在分析工作表与业务关系'
+  if (props.progress.phase === 'planning') return '正在形成数据库、知识库和模板方案'
+  if (props.progress.phase === 'stopping') return '正在安全停止分析'
+  if (props.progress.phase === 'cancelled') return '分析已停止'
+  return props.progress.failed ? '分析完成，部分文件需要处理' : '全部分析完成'
 })
 
 const elapsedText = computed(() => {

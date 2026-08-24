@@ -491,6 +491,38 @@ def test_parse_file_docx_knowledge(tmp_path):
     assert ds.rows[0].values["document_path"] == str(p.resolve())
 
 
+def test_parse_file_xlsx_knowledge_preserves_original_document_and_inventory(tmp_path):
+    from openpyxl import Workbook
+
+    from app.application.etl.parsers import parse_file
+
+    p = tmp_path / "mixed-business.xlsx"
+    workbook = Workbook()
+    workbook.active.title = "发货单"
+    workbook.active.append(["购货单位", "产品名称", "数量"])
+    workbook.active.append(["国圣化工", "面漆", 10])
+    hidden = workbook.create_sheet("对账")
+    hidden.sheet_state = "hidden"
+    hidden.append(["回款", 100])
+    workbook.save(p)
+
+    ds = parse_file(p, target_type="knowledge")
+
+    assert ds.headers == ["document_path", "source_key"]
+    assert len(ds.rows) == 1
+    assert ds.rows[0].values == {
+        "document_path": str(p.resolve()),
+        "source_key": p.name,
+    }
+    assert ds.source_features["kind"] == "document"
+    assert ds.source_features["structured_source"] is True
+    assert ds.source_features["preserves_original_layout"] is True
+    assert ds.source_features["workbook_inventory"] == [
+        {"name": "发货单", "state": "visible", "max_row": 2, "max_column": 3},
+        {"name": "对账", "state": "hidden", "max_row": 1, "max_column": 2},
+    ]
+
+
 def test_parse_file_csv_with_preset_rejected(tmp_path):
     from app.application.etl.parsers import parse_file
 
@@ -804,12 +836,13 @@ def test_parse_workbook_row_limit(tmp_path):
     assert exc.value.code == "ETL_ROW_LIMIT_EXCEEDED"
 
 
-def test_parse_workbook_dynamic_fields_knowledge(tmp_path):
+def test_parse_workbook_knowledge_keeps_original_source(tmp_path):
     from openpyxl import Workbook
 
     from app.application.etl.parsers import parse_file
 
-    # knowledge target -> allow_dynamic_fields branch in _aligned_headers_by_sheet
+    # Knowledge ingestion keeps the original workbook instead of flattening it
+    # into generic rows; the database preview performs tabular parsing separately.
     path = tmp_path / "kb.xlsx"
     wb = Workbook()
     ws = wb.active
@@ -818,13 +851,11 @@ def test_parse_workbook_dynamic_fields_knowledge(tmp_path):
     ws.append(["第一条", "正文内容"])
     wb.save(path)
 
-    with patch(
-        "app.application.etl.shipment_compat_parser.parse_delivery_note_with_compat_profile"
-    ) as compat:
-        compat.return_value = None
-        ds = parse_file(path, target_type="knowledge")
-    assert ds.source_features["kind"] == "workbook"
+    ds = parse_file(path, target_type="knowledge")
+    assert ds.source_features["kind"] == "document"
+    assert ds.source_features["workbook_inventory"][0]["name"] == "知识"
     assert len(ds.rows) == 1
+    assert ds.rows[0].values["document_path"] == str(path.resolve())
 
 
 # ---------------------------------------------------------------------------

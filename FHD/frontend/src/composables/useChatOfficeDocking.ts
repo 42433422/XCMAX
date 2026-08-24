@@ -1,5 +1,6 @@
 import { computed, getCurrentScope, onScopeDispose, ref } from 'vue'
 import { primeCsrfCookie } from '@/api/core'
+import { etlApi, type EtlRun } from '@/api/etl'
 import {
   CSV_FULL_READ_EMPLOYEE_ID,
   EXCEL_FULL_READ_EMPLOYEE_ID,
@@ -21,7 +22,7 @@ import {
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
 import type { ChatDecisionOption } from '@/types/chat-ui'
 
-type OfficeDockingTarget = 'template' | 'database'
+type OfficeDockingTarget = 'template' | 'database' | 'knowledge'
 type OfficeDockingStatus = 'running' | 'ready' | 'error'
 type OfficeDockingCommitStatus = '' | 'committing' | 'committed' | 'partial' | 'failed' | 'rolled_back' | 'skipped'
 type OfficeDockingIntentId =
@@ -32,9 +33,9 @@ type OfficeDockingIntentId =
   | 'customer_product'
   | 'generic_table'
   | 'document'
-type OfficeDockingDatabaseAction = '' | 'attendance_import' | 'shipment_etl_execute' | 'customer_product_import'
+type OfficeDockingDatabaseAction = '' | 'attendance_import' | 'shipment_etl_execute' | 'customer_product_import' | 'universal_etl_execute'
 
-export type OfficeDockingProgressPhase = 'idle' | 'reading' | 'stopping' | 'completed' | 'cancelled'
+export type OfficeDockingProgressPhase = 'idle' | 'inventory' | 'reading' | 'reasoning' | 'planning' | 'stopping' | 'completed' | 'cancelled'
 
 export type OfficeDockingIgnoredFile = {
   fileName: string
@@ -95,16 +96,19 @@ export type ChatOfficeDockingReviewItem = {
   databaseDisabledReason: string
   selectedTemplate: boolean
   selectedDatabase: boolean
+  selectedKnowledge?: boolean
   templateName: string
   templateScope: string
   templateTargetLabel: string
   templateCommitStatus: OfficeDockingCommitStatus
   databaseCommitStatus: OfficeDockingCommitStatus
+  knowledgeCommitStatus?: OfficeDockingCommitStatus
   summary: string
   warnings: string[]
   error: string
   templateError?: string
   databaseError?: string
+  knowledgeError?: string
   rollbackError?: string
   upload?: OfficeFileUploadResult
   outputFiles: OfficeEmployeeOutputFile[]
@@ -112,6 +116,19 @@ export type ChatOfficeDockingReviewItem = {
   templateResult?: Record<string, unknown>
   excelAnalysis?: Record<string, unknown>
   shipmentEtlPreview?: ShipmentEtlPreview
+  databaseRun?: EtlRun
+  databaseRuns?: EtlRun[]
+  knowledgeRun?: EtlRun
+  etlUpload?: {
+    upload_id: string
+    file_name: string
+    sha256: string
+    relative_path?: string
+  }
+  templateCandidates?: Array<{ name: string; source_region_id: string }>
+  createdEtlTemplateIds?: string[]
+  knowledgeDisabledReason?: string
+  llmAdviceState?: 'used' | 'deterministic' | 'degraded'
   fieldNames: string[]
   sampleRows: Record<string, unknown>[]
   rowCount: number
@@ -129,21 +146,22 @@ type OfficeDockingBatchPlan = {
   label: string
   templateItemIds: string[]
   databaseItemIds: string[]
+  knowledgeItemIds: string[]
 }
 
 const OFFICE_DOCKING_DECISION_OPTIONS: ChatDecisionOption[] = [
   {
     id: 'recommended',
     label: '按 AI 建议处理',
-    description: '归档模板，并同步目标明确、可以安全执行的业务数据',
+    description: '写入知识库，并同步高置信业务数据和真实可复用模板',
     message: '按建议处理',
     recommended: true,
   },
   {
-    id: 'template-only',
-    label: '仅归档模板库',
-    description: '整理为对应行业模板，不写入任何业务数据库',
-    message: '全部只归档到模板库',
+    id: 'knowledge-only',
+    label: '仅进入知识库',
+    description: '保留全部原始资料供 AI 检索，不写业务库或创建模板',
+    message: '全部只进入知识库',
   },
   {
     id: 'custom',
@@ -239,41 +257,49 @@ function batchIntentSummary(items: ChatOfficeDockingReviewItem[]): string {
 }
 
 function isDirectDatabaseAction(item: ChatOfficeDockingReviewItem): boolean {
-  return item.databaseAction === 'attendance_import' || item.databaseAction === 'shipment_etl_execute'
+  return item.databaseAction === 'attendance_import' || item.databaseAction === 'shipment_etl_execute' || item.databaseAction === 'universal_etl_execute'
 }
 
 function buildBatchInsightMessage(items: ChatOfficeDockingReviewItem[], sourceLabel: string, skippedCount: number): string {
   const ready = items.filter((item) => item.status === 'ready')
   const failed = items.filter((item) => item.status === 'error')
   const directDatabase = ready.filter((item) => item.selectedDatabase && isDirectDatabaseAction(item))
-  const mappingRequired = ready.filter((item) => item.databaseAction === 'customer_product_import')
+  const knowledge = ready.filter((item) => item.selectedKnowledge)
+  const templates = ready.filter((item) => item.selectedTemplate && item.templateCandidates?.length)
+  const sheetCount = ready.reduce((sum, item) => sum + Number(item.knowledgeRun?.source_features?.sheet_count || 0), 0)
+  const llmUsed = ready.filter((item) => item.llmAdviceState === 'used').length
+  const llmDegraded = ready.filter((item) => item.llmAdviceState === 'degraded').length
   const details = items.map((item, index) => {
-    if (item.status === 'error') return `${index + 1}. ${item.fileName}：读取失败（${item.error || '未知错误'}）`
-    const target = directDatabase.includes(item)
-      ? `可归档「${item.templateTargetLabel}」并同步「${item.databaseTargetLabel}」`
-      : mappingRequired.includes(item)
-        ? `建议先归档「${item.templateTargetLabel}」；客户/产品字段映射需另行核对`
-        : `建议归档「${item.templateTargetLabel}」，暂不写业务库（${item.databaseDisabledReason || '没有可靠的数据库目标'}）`
-    return `${index + 1}. ${item.fileName}：${item.intentLabel}，${target}`
+    if (item.status === 'error') return `${index + 1}. ${item.fileName}：分析失败（${item.error || '未知错误'}）`
+    const targets = [
+      item.selectedKnowledge ? '知识库' : '',
+      item.selectedDatabase ? item.databaseTargetLabel : '',
+      item.selectedTemplate ? `${item.templateCandidates?.length || 0} 套真实模板` : '',
+    ].filter(Boolean)
+    const held = item.selectedDatabase ? '' : `；业务库暂缓（${item.databaseDisabledReason || '置信度不足'}）`
+    return `${index + 1}. ${item.fileName}：${item.intentLabel}；建议 ${targets.join(' + ') || '仅保留预览'}${held}`
   })
-  const skipped = skippedCount ? `；另忽略 ${skippedCount} 个系统或不支持的文件` : ''
+  const skipped = skippedCount ? `；跳过 ${skippedCount} 个系统、不支持或内容重复的文件` : ''
+  const llmText = llmDegraded
+    ? `其中 ${llmDegraded} 个文件的模型语义建议不可用，已明确降级为确定性结构分析，未把它们伪装成 AI 结论。`
+    : llmUsed
+      ? `模型已参与 ${llmUsed} 个文件的语义建议；所有写入动作仍由确定性规则校验。`
+      : '本批由确定性结构分析形成建议；模型没有参与写入决策。'
   return [
-    `我已经把${sourceLabel}全部读完了：成功 ${ready.length} 个，失败 ${failed.length} 个${skipped}。目前没有归档模板，也没有写入数据库。`,
+    `我已经把${sourceLabel}完整分析完了：有效文件 ${ready.length} 个，失败 ${failed.length} 个，共检查 ${sheetCount} 个工作表${skipped}。目前没有写入知识库、数据库或模板库。`,
     '',
-    `整体判断：${batchIntentSummary(ready)}。`,
+    `整体判断：${batchIntentSummary(ready)}。${llmText}`,
     '',
-    '逐文件判断：',
+    '逐文件建议：',
     ...details,
     '',
     '我的建议：',
-    `- 将 ${ready.length} 个读取成功的文件归档到各自对应的模板分类。`,
-    `- 将其中 ${directDatabase.length} 个业务目标明确、具备确定性接口的文件同步到对应数据库。`,
-    '- 读取失败或业务目标不明确的文件不写数据库。',
-    ...(mappingRequired.length
-      ? [`- ${mappingRequired.length} 个客户/产品业务表虽然找到了目标库，但字段映射还需要进一步核对，我不会把它们算作可直接写库。`]
-      : []),
+    `- 将 ${knowledge.length} 个原始文件完整进入知识库，保留公式、合并单元格和隐藏工作表等原始证据。`,
+    `- 只将 ${directDatabase.length} 个目标明确、预演无阻断错误的文件写入对应业务库。`,
+    `- 只保存 ${templates.reduce((sum, item) => sum + (item.templateCandidates?.length || 0), 0)} 套从真实发货单版式提取出的模板；没有真实候选的文件不假装成模板。`,
+    '- 财务、对账、物料或无法可靠映射的工作表保留在知识库，暂不写业务表。',
     '',
-    '你想怎么处理这批文件？可以从下面选择，也可以继续在对话里问我或调整方案。',
+    '你想怎么处理这批资料？可以选下面的方案，也可以继续用自然语言调整。',
   ].join('\n')
 }
 
@@ -718,6 +744,151 @@ async function ingestAttendanceDatabase(item: ChatOfficeDockingReviewItem): Prom
   return asRecord(body?.data || body)
 }
 
+const ETL_TARGET_LABELS: Record<string, string> = {
+  attendance: '考勤库',
+  customer_products: '客户/产品库',
+  customers: '客户库',
+  products: '产品库',
+  purchase_orders: '采购单库',
+  shipment_records: '客户/产品/发货单',
+}
+
+const ETL_INTENT_LABELS: Record<string, string> = {
+  attendance: '考勤业务资料',
+  customer_products: '客户/产品业务资料',
+  customers: '客户资料',
+  products: '产品资料',
+  purchase_orders: '采购业务资料',
+  shipment_records: '送货单/发货单资料',
+  knowledge: '知识资料',
+}
+
+type PreparedCorpusFile = {
+  file: File
+  displayName: string
+  upload: NonNullable<ChatOfficeDockingReviewItem['etlUpload']>
+}
+
+function sleep(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds))
+}
+
+async function waitForEtlRun(run: EtlRun, cancelled: () => boolean): Promise<EtlRun> {
+  const terminal = new Set(['preview_ready', 'completed', 'failed', 'interrupted'])
+  let current = run
+  for (let attempt = 0; !terminal.has(current.status) && attempt < 240; attempt += 1) {
+    if (cancelled()) throw new Error('用户停止了本次分析')
+    await sleep(500)
+    current = await etlApi.run(current.id)
+  }
+  if (!terminal.has(current.status)) throw new Error('分析超时，任务仍在后台运行，请稍后重试')
+  return current
+}
+
+async function executeEtlRun(run: EtlRun): Promise<EtlRun> {
+  let current = run.status === 'completed' ? run : await etlApi.execute(run.id)
+  for (let attempt = 0; !['completed', 'failed', 'interrupted'].includes(current.status) && attempt < 240; attempt += 1) {
+    await sleep(500)
+    current = await etlApi.run(current.id)
+  }
+  if (current.status !== 'completed') throw new Error(runFailure(current))
+  return current
+}
+
+function runFailure(run: EtlRun): string {
+  return run.error?.message || `${run.target_type} 预演${run.status === 'interrupted' ? '被中断' : '失败'}`
+}
+
+function etlWarnings(run?: EtlRun): string[] {
+  if (!run) return []
+  return asArray<Record<string, unknown>>(run.details?.warnings)
+    .map((warning) => asString(warning.message).trim())
+    .filter(Boolean)
+}
+
+function etlLlmAdviceState(run?: EtlRun): ChatOfficeDockingReviewItem['llmAdviceState'] {
+  if (!run) return 'deterministic'
+  const structure = asRecord(run.source_features?.llm_structure)
+  const mapping = asRecord(run.source_features?.llm_mapping)
+  if (structure.degraded === true || mapping.degraded === true) return 'degraded'
+  if (structure.used_llm === true || mapping.used_llm === true) return 'used'
+  return 'deterministic'
+}
+
+function shipmentTemplateCandidates(run?: EtlRun): Array<{ name: string; source_region_id: string }> {
+  return asArray<Record<string, unknown>>(run?.source_features?.shipment_template_candidates)
+    .map((candidate) => ({
+      name: asString(candidate.name).trim(),
+      source_region_id: asString(candidate.source_region_id).trim(),
+    }))
+    .filter((candidate) => candidate.name && candidate.source_region_id)
+}
+
+function applyCorpusRuns(item: ChatOfficeDockingReviewItem, databaseRun: EtlRun, knowledgeRun: EtlRun, linkedDatabaseRuns: EtlRun[] = []): void {
+  item.databaseRun = databaseRun
+  item.databaseRuns = [databaseRun, ...linkedDatabaseRuns]
+  item.knowledgeRun = knowledgeRun
+  const databaseReady = item.databaseRuns.every((run) => run.status === 'preview_ready')
+  const knowledgeReady = knowledgeRun.status === 'preview_ready'
+  if (!databaseReady && !knowledgeReady) {
+    throw new Error(`数据库预演：${runFailure(databaseRun)}；知识库预演：${runFailure(knowledgeRun)}`)
+  }
+
+  const detection = asRecord(databaseRun.source_features?.target_detection || databaseRun.details?.target_detection)
+  const confidence = Number(detection.confidence || 0)
+  const actionable = item.databaseRuns.reduce((sum, run) => sum + Number(run.summary.new || 0) + Number(run.summary.update || 0), 0)
+  const blockingErrors = item.databaseRuns.reduce((sum, run) => sum + Number(run.summary.error || 0), 0)
+  item.databaseTargetLabel = ETL_TARGET_LABELS[databaseRun.target_type] || databaseRun.target_type
+  item.databaseAction = databaseReady ? 'universal_etl_execute' : ''
+  item.selectedDatabase = databaseReady && confidence >= 0.7 && actionable > 0 && blockingErrors === 0
+  item.databaseDisabledReason = item.selectedDatabase
+    ? ''
+    : !databaseReady
+      ? runFailure(databaseRun)
+      : confidence < 0.7
+        ? `自动识别置信度仅 ${Math.round(confidence * 100)}%，需人工指定业务目标`
+        : blockingErrors
+          ? `预演发现 ${blockingErrors} 条阻断错误，暂不允许写库`
+          : '没有新增或可更新的业务记录'
+
+  item.selectedKnowledge = knowledgeReady && Number(knowledgeRun.summary.error || 0) === 0 && Number(knowledgeRun.summary.skip || 0) === 0
+  item.knowledgeDisabledReason = item.selectedKnowledge
+    ? ''
+    : !knowledgeReady
+      ? runFailure(knowledgeRun)
+      : Number(knowledgeRun.summary.skip || 0)
+        ? '内容指纹已存在，知识库会幂等跳过'
+        : '知识库预演存在阻断错误'
+
+  item.templateCandidates = shipmentTemplateCandidates(databaseRun)
+  item.selectedTemplate = item.templateCandidates.length > 0
+  item.templateTargetLabel = item.selectedTemplate ? '真实发货单版式' : '无可保存模板'
+  item.templateName = item.templateCandidates[0]?.name || ''
+  item.templateScope = item.selectedTemplate ? 'orders' : ''
+  item.databaseAction = item.selectedDatabase || databaseReady ? 'universal_etl_execute' : ''
+
+  item.intentLabel = ETL_INTENT_LABELS[databaseRun.target_type] || '混合办公资料'
+  item.intentId = databaseRun.target_type === 'shipment_records' ? 'shipment_delivery' : databaseRun.target_type === 'customer_products' ? 'customer_product' : 'generic_table'
+  item.intentSummary = item.selectedDatabase
+    ? `业务目标置信度 ${Math.round(confidence * 100)}%，预演新增 ${databaseRun.summary.new}、更新 ${databaseRun.summary.update}、跳过 ${databaseRun.summary.skip}`
+    : `已完成业务结构预演，但${item.databaseDisabledReason}`
+  const inventory = asArray<Record<string, unknown>>(knowledgeRun.source_features?.workbook_inventory)
+  item.rowCount = item.databaseRuns.reduce((sum, run) => sum + run.total_rows, 0)
+  item.fieldNames = asArray<Record<string, unknown>>(databaseRun.draft?.field_mappings)
+    .map((mapping) => asString(mapping.source).trim())
+    .filter(Boolean)
+    .slice(0, 40)
+  item.sampleRows = []
+  item.llmAdviceState = etlLlmAdviceState(databaseRun)
+  item.warnings = [...item.databaseRuns.flatMap((run) => etlWarnings(run)), ...etlWarnings(knowledgeRun)]
+  if (!databaseReady) {
+    item.warnings.push(...item.databaseRuns.filter((run) => run.status !== 'preview_ready').map((run) => `${ETL_TARGET_LABELS[run.target_type] || run.target_type}预演失败：${runFailure(run)}`))
+  }
+  if (!knowledgeReady) item.warnings.push(`知识库预演失败：${runFailure(knowledgeRun)}`)
+  if (item.llmAdviceState === 'degraded') item.warnings.push('模型语义建议不可用；当前结论来自确定性结构分析，未伪装成 AI 结果')
+  item.summary = `已完整检查 ${inventory.length} 个工作表；业务预演 ${item.rowCount} 行${linkedDatabaseRuns.length ? '（含客户/产品关系附表）' : ''}；知识库 ${knowledgeRun.summary.new ? '可新增原文件' : '无新增'}；真实模板候选 ${item.templateCandidates.length} 套`
+}
+
 export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
   const mode = deps.mode || 'review'
   const officeDockingInputRef = ref<HTMLInputElement | null>(null)
@@ -790,7 +961,7 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
   if (getCurrentScope()) onScopeDispose(stopOfficeDockingClock)
 
   function cancelOfficeDockingReading() {
-    if (officeDockingProgressPhase.value !== 'reading') return
+    if (!['inventory', 'reading', 'reasoning', 'planning'].includes(officeDockingProgressPhase.value)) return
     officeDockingCancelRequested.value = true
     officeDockingProgressPhase.value = 'stopping'
   }
@@ -827,16 +998,19 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
       databaseDisabledReason: '',
       selectedTemplate: true,
       selectedDatabase: false,
+      selectedKnowledge: false,
       templateName: `${fileStem(displayName)} · 办公文件模板`,
       templateScope: '',
       templateTargetLabel: '办公文件模板',
       templateCommitStatus: '',
       databaseCommitStatus: '',
+      knowledgeCommitStatus: '',
       summary: '正在读取文件内容…',
       warnings: [],
       error: '',
       templateError: '',
       databaseError: '',
+      knowledgeError: '',
       rollbackError: '',
       outputFiles: [],
       sourceFile: file,
@@ -944,6 +1118,114 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
     }
   }
 
+  async function analyzeCorpusFile(prepared: PreparedCorpusFile): Promise<void> {
+    const item: ChatOfficeDockingReviewItem = {
+      id: newItemId(),
+      fileName: prepared.displayName,
+      employeeId: 'universal-etl',
+      employeeLabel: 'AI 对接引擎',
+      kindLabel: prepared.file.name.split('.').pop()?.toUpperCase() || '办公文件',
+      status: 'running',
+      commitStatus: '',
+      intentId: 'pending',
+      intentLabel: '正在判断',
+      intentSummary: '正在同时生成业务数据库预演和知识库预演',
+      databaseTargetLabel: '',
+      databaseAction: '',
+      databaseDisabledReason: '',
+      selectedTemplate: false,
+      selectedDatabase: false,
+      selectedKnowledge: false,
+      templateName: '',
+      templateScope: '',
+      templateTargetLabel: '无可保存模板',
+      templateCommitStatus: '',
+      databaseCommitStatus: '',
+      knowledgeCommitStatus: '',
+      summary: '正在读取全部工作表、公式、隐藏页和业务区域…',
+      warnings: [],
+      error: '',
+      templateError: '',
+      databaseError: '',
+      knowledgeError: '',
+      rollbackError: '',
+      outputFiles: [],
+      sourceFile: prepared.file,
+      etlUpload: prepared.upload,
+      fieldNames: [],
+      sampleRows: [],
+      rowCount: 0,
+      textPreview: '',
+      templateCandidates: [],
+      createdEtlTemplateIds: [],
+      knowledgeDisabledReason: '',
+      llmAdviceState: 'deterministic',
+    }
+    officeDockingReviewItems.value.push(item)
+    touchItems()
+    try {
+      officeDockingProgressPhase.value = 'reasoning'
+      const [databaseStart, knowledgeStart] = await Promise.all([
+        etlApi.preview({ upload_id: prepared.upload.upload_id, target_type: 'auto' }),
+        etlApi.preview({ upload_id: prepared.upload.upload_id, target_type: 'knowledge' }),
+      ])
+      const [databaseRun, knowledgeRun] = await Promise.all([
+        waitForEtlRun(databaseStart, () => officeDockingCancelRequested.value),
+        waitForEtlRun(knowledgeStart, () => officeDockingCancelRequested.value),
+      ])
+      const linkedPreview = asRecord(databaseRun.details?.linked_customer_products_preview)
+      const linkedRunId = asString(linkedPreview.run_id).trim()
+      const linkedDatabaseRuns = linkedRunId
+        ? [await waitForEtlRun(await etlApi.run(linkedRunId), () => officeDockingCancelRequested.value)]
+        : []
+      applyCorpusRuns(item, databaseRun, knowledgeRun, linkedDatabaseRuns)
+      item.status = 'ready'
+    } catch (error) {
+      item.status = 'error'
+      item.summary = ''
+      item.error = error instanceof Error ? error.message : String(error || '文件分析失败')
+    } finally {
+      touchItems()
+    }
+  }
+
+  function recordCorpusFailure(file: File, displayName: string, error: unknown): void {
+    officeDockingReviewItems.value.push({
+      id: newItemId(),
+      fileName: displayName,
+      employeeId: 'universal-etl',
+      employeeLabel: 'AI 对接引擎',
+      kindLabel: file.name.split('.').pop()?.toUpperCase() || '办公文件',
+      status: 'error',
+      commitStatus: '',
+      intentId: 'pending',
+      intentLabel: '分析失败',
+      intentSummary: '',
+      databaseTargetLabel: '',
+      databaseAction: '',
+      databaseDisabledReason: '',
+      selectedTemplate: false,
+      selectedDatabase: false,
+      selectedKnowledge: false,
+      templateName: '',
+      templateScope: '',
+      templateTargetLabel: '无可保存模板',
+      templateCommitStatus: '',
+      databaseCommitStatus: '',
+      knowledgeCommitStatus: '',
+      summary: '',
+      warnings: [],
+      error: error instanceof Error ? error.message : String(error || '上传失败'),
+      outputFiles: [],
+      sourceFile: file,
+      fieldNames: [],
+      sampleRows: [],
+      rowCount: 0,
+      textPreview: '',
+    })
+    touchItems()
+  }
+
   async function onOfficeDockingFileChange(event: Event) {
     const input = event.target as HTMLInputElement | null
     const selectedFiles = Array.from(input?.files || [])
@@ -955,7 +1237,7 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
       ? selectedFiles.map(ignoredDirectoryFile).filter((item): item is OfficeDockingIgnoredFile => Boolean(item))
       : []
     const files = isDirectorySelection ? selectedFiles.filter((file) => !ignoredDirectoryFile(file)) : selectedFiles
-    const skippedCount = ignoredFiles.length
+    let skippedCount = ignoredFiles.length
     if (input) input.value = ''
     if (!selectedFiles.length) return
     officeDockingReviewItems.value = []
@@ -986,31 +1268,56 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
     const sourceText = isDirectorySelection ? `文件夹「${folderLabel}」中的 ` : ''
     await deps.addAndSaveMessage(
       mode === 'conversation'
-        ? `已收到${sourceText}${files.length} 个可读取文件${skippedText}。我会先全部看完，再一次和你商量怎么处理；阅读期间不会归档模板，也不会写入数据库。`
+        ? `已收到${sourceText}${files.length} 个可读取文件${skippedText}。我会先做内容指纹去重，再完整分析工作表和业务关系，最后一次和你商量怎么进入知识库、数据库和模板库；分析期间不会写入任何目标。`
         : `已收到${sourceText}${files.length} 个可读取文件${skippedText}，现在开始阅读。`,
       'ai',
     )
     try {
-      const progressUpdateEvery = Math.max(5, Math.ceil(files.length / 4))
-      for (const [index, file] of files.entries()) {
-        if (officeDockingCancelRequested.value) break
-        officeDockingProgressCurrentIndex.value = index + 1
-        officeDockingProgressCurrentFile.value = isDirectorySelection ? officeDockingRelativePath(file) : file.name
-        await analyzeFile(file, isDirectorySelection ? officeDockingRelativePath(file) : file.name)
-        const completed = officeDockingReviewItems.value.filter((item) => item.status !== 'running').length
-        if (
-          mode === 'conversation' &&
-          files.length >= 6 &&
-          completed < files.length &&
-          completed % progressUpdateEvery === 0 &&
-          !officeDockingCancelRequested.value
-        ) {
-          const success = officeDockingReviewItems.value.filter((item) => item.status === 'ready').length
-          const failed = officeDockingReviewItems.value.filter((item) => item.status === 'error').length
-          await deps.addAndSaveMessage(
-            `进度更新：已读 ${completed}/${files.length}，成功 ${success}，失败 ${failed}。我会继续阅读，仍然不会归档或写库。`,
-            'ai',
-          )
+      if (mode === 'conversation') {
+        officeDockingProgressPhase.value = 'inventory'
+        const batchId = typeof globalThis.crypto?.randomUUID === 'function'
+          ? globalThis.crypto.randomUUID()
+          : `10000000-1000-4000-8000-${Date.now().toString().padStart(12, '0').slice(-12)}`
+        const seenContent = new Map<string, string>()
+        const prepared: PreparedCorpusFile[] = []
+        for (const [index, file] of files.entries()) {
+          if (officeDockingCancelRequested.value) break
+          const displayName = isDirectorySelection ? officeDockingRelativePath(file) : file.name
+          officeDockingProgressCurrentIndex.value = index + 1
+          officeDockingProgressCurrentFile.value = displayName
+          try {
+            const upload = await etlApi.upload(file, { batchId, relativePath: displayName })
+            const duplicateOf = seenContent.get(upload.sha256)
+            if (duplicateOf) {
+              officeDockingProgressIgnored.value.push({ fileName: displayName, reason: `内容与「${duplicateOf}」完全相同` })
+              continue
+            }
+            seenContent.set(upload.sha256, displayName)
+            prepared.push({ file, displayName, upload })
+          } catch (error) {
+            recordCorpusFailure(file, displayName, error)
+          }
+        }
+        skippedCount = officeDockingProgressIgnored.value.length
+        officeDockingProgressTotal.value = prepared.length + officeDockingReviewItems.value.length
+        officeDockingProgressPhase.value = 'reading'
+        let cursor = 0
+        async function worker() {
+          while (cursor < prepared.length && !officeDockingCancelRequested.value) {
+            const index = cursor++
+            const current = prepared[index]
+            officeDockingProgressCurrentIndex.value = index + 1
+            officeDockingProgressCurrentFile.value = current.displayName
+            await analyzeCorpusFile(current)
+          }
+        }
+        await Promise.all(Array.from({ length: Math.min(2, Math.max(1, prepared.length)) }, () => worker()))
+      } else {
+        for (const [index, file] of files.entries()) {
+          if (officeDockingCancelRequested.value) break
+          officeDockingProgressCurrentIndex.value = index + 1
+          officeDockingProgressCurrentFile.value = isDirectorySelection ? officeDockingRelativePath(file) : file.name
+          await analyzeFile(file, isDirectorySelection ? officeDockingRelativePath(file) : file.name)
         }
       }
     } finally {
@@ -1021,18 +1328,20 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
       officeDockingProgressPhase.value = 'cancelled'
       const completed = officeDockingReviewItems.value.filter((item) => item.status !== 'running').length
       await deps.addAndSaveMessage(
-        `已停止这次阅读：完成 ${completed}/${files.length} 个。已经读到的内容仅保留在本次对话中，没有归档模板，也没有写入数据库。`,
+        `已停止这次分析：完成 ${completed}/${officeDockingProgressTotal.value} 个。已生成的都只是预演，没有写入知识库、数据库或模板库。`,
         'ai',
       )
       return
     }
     officeDockingProgressPhase.value = 'completed'
     if (mode === 'conversation') {
+      officeDockingProgressPhase.value = 'planning'
       officeDockingAwaitingDecision.value = officeDockingReviewItems.value.some((item) => item.status === 'ready')
       const sourceLabel = isDirectorySelection ? `文件夹「${folderLabel}」里的文件` : '这批文件'
       await deps.addAndSaveMessage(buildBatchInsightMessage(officeDockingReviewItems.value, sourceLabel, skippedCount), 'ai', {
         decisionOptions: OFFICE_DOCKING_DECISION_OPTIONS,
       })
+      officeDockingProgressPhase.value = 'completed'
       return
     }
     const firstReady = officeDockingReviewItems.value.find((item) => item.status === 'ready' && !item.commitStatus)
@@ -1043,9 +1352,10 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
     const item = officeDockingReviewItems.value.find((row) => row.id === id)
     if (!item) return
     if (target === 'template') item.selectedTemplate = enabled
-    if (target === 'database' && item.excelAnalysis && item.databaseAction) {
+    if (target === 'database' && (item.excelAnalysis || item.databaseRun) && item.databaseAction) {
       item.selectedDatabase = enabled
     }
+    if (target === 'knowledge' && item.knowledgeRun?.status === 'preview_ready') item.selectedKnowledge = enabled
     touchItems()
   }
 
@@ -1068,7 +1378,110 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
     }
   }
 
+  async function executeCorpusItem(item: ChatOfficeDockingReviewItem): Promise<void> {
+    item.commitStatus = 'committing'
+    item.error = ''
+    item.templateError = ''
+    item.databaseError = ''
+    item.knowledgeError = ''
+    item.rollbackError = ''
+    const executedRuns: Array<{ target: 'database' | 'knowledge'; run: EtlRun }> = []
+    const createdTemplateIds: string[] = []
+    let stage: 'database' | 'knowledge' | 'template' = 'database'
+    touchItems()
+    try {
+      if (item.selectedDatabase) {
+        const availableRuns = item.databaseRuns?.length ? item.databaseRuns : item.databaseRun ? [item.databaseRun] : []
+        if (!availableRuns.length || availableRuns.some((run) => run.status !== 'preview_ready')) throw new Error('缺少可执行的数据库预演')
+        item.databaseCommitStatus = 'committing'
+        touchItems()
+        const orderedRuns = availableRuns.length > 1 ? [...availableRuns.slice(1), availableRuns[0]] : availableRuns
+        const completedRuns: EtlRun[] = []
+        for (const run of orderedRuns) {
+          const completed = await executeEtlRun(run)
+          completedRuns.push(completed)
+          executedRuns.push({ target: 'database', run: completed })
+        }
+        item.databaseRuns = completedRuns
+        item.databaseRun = completedRuns.find((run) => run.id === item.databaseRun?.id) || item.databaseRun
+        item.databaseCommitStatus = 'committed'
+      } else {
+        item.databaseCommitStatus = 'skipped'
+      }
+
+      stage = 'knowledge'
+      if (item.selectedKnowledge) {
+        if (!item.knowledgeRun || item.knowledgeRun.status !== 'preview_ready') throw new Error('缺少可执行的知识库预演')
+        item.knowledgeCommitStatus = 'committing'
+        touchItems()
+        item.knowledgeRun = await executeEtlRun(item.knowledgeRun)
+        executedRuns.push({ target: 'knowledge', run: item.knowledgeRun })
+        item.knowledgeCommitStatus = 'committed'
+      } else {
+        item.knowledgeCommitStatus = 'skipped'
+      }
+
+      stage = 'template'
+      if (item.selectedTemplate) {
+        if (!item.databaseRun || !item.templateCandidates?.length) throw new Error('没有经过预演的真实模板候选')
+        item.templateCommitStatus = 'committing'
+        touchItems()
+        for (const candidate of item.templateCandidates) {
+          const saved = await etlApi.saveShipmentTemplate(item.databaseRun.id, candidate.name, candidate.source_region_id)
+          createdTemplateIds.push(saved.template_id)
+        }
+        item.createdEtlTemplateIds = createdTemplateIds
+        item.templateCommitStatus = 'committed'
+      } else {
+        item.templateCommitStatus = 'skipped'
+      }
+      item.commitStatus = 'committed'
+      item.summary = `执行完成：数据库 ${item.selectedDatabase ? '成功' : '未选'}；知识库 ${item.selectedKnowledge ? '成功' : '未选'}；模板 ${item.selectedTemplate ? `${createdTemplateIds.length} 套成功` : '未选'}`
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error || '执行失败')
+      if (stage === 'database') {
+        item.databaseCommitStatus = 'failed'
+        item.databaseError = reason
+      } else if (stage === 'knowledge') {
+        item.knowledgeCommitStatus = 'failed'
+        item.knowledgeError = reason
+      } else {
+        item.templateCommitStatus = 'failed'
+        item.templateError = reason
+      }
+      const rollbackFailures: string[] = []
+      for (const templateId of [...createdTemplateIds].reverse()) {
+        try {
+          await etlApi.deleteTemplate(templateId)
+        } catch (rollbackError) {
+          rollbackFailures.push(`模板 ${templateId}：${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`)
+        }
+      }
+      if (createdTemplateIds.length && !rollbackFailures.some((failure) => failure.startsWith('模板'))) item.templateCommitStatus = 'rolled_back'
+      for (const executed of [...executedRuns].reverse()) {
+        try {
+          await etlApi.rollback(executed.run.id)
+          if (executed.target === 'database') item.databaseCommitStatus = 'rolled_back'
+          if (executed.target === 'knowledge') item.knowledgeCommitStatus = 'rolled_back'
+        } catch (rollbackError) {
+          rollbackFailures.push(`${executed.target === 'database' ? '数据库' : '知识库'}：${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`)
+        }
+      }
+      item.rollbackError = rollbackFailures.join('；')
+      item.commitStatus = rollbackFailures.length ? 'partial' : 'failed'
+      item.error = rollbackFailures.length
+        ? `${stage === 'database' ? '数据库' : stage === 'knowledge' ? '知识库' : '模板库'}失败：${reason}；部分回滚失败：${item.rollbackError}`
+        : `${stage === 'database' ? '数据库' : stage === 'knowledge' ? '知识库' : '模板库'}失败：${reason}；本文件本次已写入内容已自动回滚`
+    } finally {
+      touchItems()
+    }
+  }
+
   async function executeOfficeDockingItem(item: ChatOfficeDockingReviewItem): Promise<void> {
+    if (item.databaseAction === 'universal_etl_execute' || item.databaseRun || item.knowledgeRun) {
+      await executeCorpusItem(item)
+      return
+    }
     item.commitStatus = 'committing'
     item.error = ''
     item.templateError = ''
@@ -1149,13 +1562,13 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
 
   async function confirmOfficeDockingReview() {
     const item = currentReviewItem()
-    if (!item || item.status !== 'ready' || item.commitStatus === 'committing' || (!item.selectedTemplate && !item.selectedDatabase)) return
+    if (!item || item.status !== 'ready' || item.commitStatus === 'committing' || (!item.selectedTemplate && !item.selectedDatabase && !item.selectedKnowledge)) return
     await executeOfficeDockingItem(item)
     if (item.commitStatus === 'failed' || item.commitStatus === 'partial') {
       await deps.addAndSaveMessage(`[对接] 「${item.fileName}」处理失败：${item.error}。请调整后重试或跳过。`, 'ai')
       return
     }
-    const targets = [item.selectedTemplate ? '模板库' : '', item.selectedDatabase ? item.databaseTargetLabel : ''].filter(Boolean)
+    const targets = [item.selectedKnowledge ? '知识库' : '', item.selectedTemplate ? '模板库' : '', item.selectedDatabase ? item.databaseTargetLabel : ''].filter(Boolean)
     await deps.addAndSaveMessage(`[对接] 「${item.fileName}」已处理到 ${targets.join('、')}。`, 'ai')
     await announceNextAdvice()
   }
@@ -1168,15 +1581,25 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
     return items.filter((item) => item.selectedDatabase && isDirectDatabaseAction(item))
   }
 
+  function recommendedKnowledgeItems(items: ChatOfficeDockingReviewItem[]): ChatOfficeDockingReviewItem[] {
+    return items.filter((item) => item.selectedKnowledge && item.knowledgeRun?.status === 'preview_ready')
+  }
+
+  function recommendedTemplateItems(items: ChatOfficeDockingReviewItem[]): ChatOfficeDockingReviewItem[] {
+    return items.filter((item) => item.selectedTemplate && Boolean(item.templateCandidates?.length))
+  }
+
   function makeBatchPlan(
     label: string,
     templateItems: ChatOfficeDockingReviewItem[],
     databaseItems: ChatOfficeDockingReviewItem[],
+    knowledgeItems: ChatOfficeDockingReviewItem[] = [],
   ): OfficeDockingBatchPlan {
     return {
       label,
       templateItemIds: templateItems.map((item) => item.id),
       databaseItemIds: databaseItems.map((item) => item.id),
+      knowledgeItemIds: knowledgeItems.map((item) => item.id),
     }
   }
 
@@ -1186,7 +1609,13 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
     if (!normalized || !items.length) return null
     if (/^(先不处理|暂不处理|取消这批|不要处理|先放着|全部跳过)[。！!]*$/.test(normalized)) return 'cancel'
     if (/^(按建议处理|就按(这个|你的|AI的)?建议处理?|照你的建议处理?|按你说的(方案)?处理?|都按你说的办)[。！!]*$/.test(normalized)) {
-      return makeBatchPlan('按 AI 建议处理', items, recommendedDatabaseItems(items))
+      return makeBatchPlan('按 AI 建议处理', recommendedTemplateItems(items), recommendedDatabaseItems(items), recommendedKnowledgeItems(items))
+    }
+    if (
+      /(全部|所有|这批).*(只进入|仅进入|只放|只存).*(知识库)/.test(normalized) ||
+      /(全部|所有|这批).*(知识库).*(不入库|不写业务库|不建模板)/.test(normalized)
+    ) {
+      return makeBatchPlan('全部只进入知识库', [], [], recommendedKnowledgeItems(items))
     }
     if (
       /(全部|所有|这批).*(只归档|仅归档|只放|只存).*(模板|模版)/.test(normalized) ||
@@ -1195,20 +1624,20 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
         /(全部|所有|这批|都|统一).*(归档|保存|存到|放到|收进).*(模板|模版)/.test(normalized) &&
         !/(入库|同步|写入).*(数据库|业务库|对应库)/.test(normalized))
     ) {
-      return makeBatchPlan('全部只归档到模板库', items, [])
+      return makeBatchPlan('只保存真实模板候选', recommendedTemplateItems(items), [], [])
     }
     if (/(发货单|送货单).*(入库|同步).*(其余|其他).*(归档|模板|模版)/.test(normalized)) {
       const shipments = items.filter((item) => item.intentId === 'shipment_delivery' && isDirectDatabaseAction(item))
-      return makeBatchPlan('发货单入库，其余归档', items, shipments)
+      return makeBatchPlan('发货单入库，其余进入知识库', recommendedTemplateItems(items), shipments, recommendedKnowledgeItems(items))
     }
     if (/(考勤).*(入库|同步).*(其余|其他).*(归档|模板|模版)/.test(normalized)) {
       const attendance = items.filter(
         (item) => (item.intentId === 'attendance_roster' || item.intentId === 'attendance_source') && isDirectDatabaseAction(item),
       )
-      return makeBatchPlan('考勤表入库，其余归档', items, attendance)
+      return makeBatchPlan('考勤表入库，其余进入知识库', recommendedTemplateItems(items), attendance, recommendedKnowledgeItems(items))
     }
     if (/(全部|所有|这批).*(入库|同步|写入).*(数据库|业务库|对应库)/.test(normalized)) {
-      return makeBatchPlan('全部归档，并将可确定执行的文件写入对应库', items, recommendedDatabaseItems(items))
+      return makeBatchPlan('高置信资料写入对应库，并保留知识和真实模板', recommendedTemplateItems(items), recommendedDatabaseItems(items), recommendedKnowledgeItems(items))
     }
     return null
   }
@@ -1223,7 +1652,7 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
     const databaseText = plan.databaseItemIds.length
       ? [...databaseTargets.entries()].map(([label, count]) => `${label} ${count} 个`).join('、')
       : '不写数据库'
-    return `模板库 ${plan.templateItemIds.length} 个；${databaseText}`
+    return `知识库 ${plan.knowledgeItemIds.length} 个；模板库 ${plan.templateItemIds.length} 个；${databaseText}`
   }
 
   async function executeBatchPlan(plan: OfficeDockingBatchPlan): Promise<void> {
@@ -1231,7 +1660,8 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
     for (const item of items) {
       item.selectedTemplate = plan.templateItemIds.includes(item.id)
       item.selectedDatabase = plan.databaseItemIds.includes(item.id)
-      if (!item.selectedTemplate && !item.selectedDatabase) {
+      item.selectedKnowledge = plan.knowledgeItemIds.includes(item.id)
+      if (!item.selectedTemplate && !item.selectedDatabase && !item.selectedKnowledge) {
         item.commitStatus = 'skipped'
         continue
       }
@@ -1251,8 +1681,15 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
     if (item.selectedDatabase) {
       const target = item.databaseTargetLabel || '业务数据库'
       if (item.databaseCommitStatus === 'committed') details.push(`${target}成功`)
+      else if (item.databaseCommitStatus === 'rolled_back') details.push(`${target}已自动回滚`)
       else if (item.databaseCommitStatus === 'failed') details.push(`${target}失败（${item.databaseError || item.error || '未知原因'}）`)
       else details.push(`${target}未执行${item.templateError ? '（模板归档先失败）' : ''}`)
+    }
+    if (item.selectedKnowledge) {
+      if (item.knowledgeCommitStatus === 'committed') details.push('知识库成功')
+      else if (item.knowledgeCommitStatus === 'rolled_back') details.push('知识库已自动回滚')
+      else if (item.knowledgeCommitStatus === 'failed') details.push(`知识库失败（${item.knowledgeError || item.error || '未知原因'}）`)
+      else details.push('知识库未执行')
     }
     if (item.rollbackError) details.push(`模板自动回滚失败（${item.rollbackError}）`)
     return details
@@ -1287,7 +1724,7 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
       await deps.addAndSaveMessage(message, 'user')
       const plan = officeDockingBatchPlan.value
       if (!plan) {
-        await deps.addAndSaveMessage('还没有形成明确的整批处理方案。请先告诉我想怎么处理，例如“按建议处理”或“全部只归档到模板库”。', 'ai')
+        await deps.addAndSaveMessage('还没有形成明确的整批处理方案。请先告诉我想怎么处理，例如“按建议处理”或“全部只进入知识库”。', 'ai')
         return true
       }
       await deps.addAndSaveMessage(`收到，开始执行“${plan.label}”。`, 'ai')
@@ -1309,7 +1746,7 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
       officeDockingAwaitingDecision.value = false
       officeDockingBatchPlan.value = null
       await deps.addAndSaveMessage(
-        '好的，这批文件先不处理。没有归档模板，也没有写入数据库。以后需要时可以重新上传或继续告诉我处理方案。',
+        '好的，这批文件先不处理。没有写入知识库、数据库或模板库。以后需要时可以重新上传或继续告诉我处理方案。',
         'ai',
       )
       return true

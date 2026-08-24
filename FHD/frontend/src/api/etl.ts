@@ -230,6 +230,17 @@ export const etlApi = {
     }),
   retry: (id: string) => request<EtlRun>(`/api/etl/runs/${encodeURIComponent(id)}/retry`, { method: 'POST' }),
   rollback: (id: string) => request<EtlRun>(`/api/etl/runs/${encodeURIComponent(id)}/rollback`, { method: 'POST' }),
+  deleteTemplate: async (id: string) => {
+    await primeCsrfCookie()
+    const normalized = id.startsWith('etl:') ? id.slice(4) : id
+    const res = await apiFetch(`/api/etl/templates/${encodeURIComponent(normalized)}`, { method: 'DELETE' })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      const detail = body?.detail || body || {}
+      throw new Error(String(detail.message || body?.message || `模板回滚失败 HTTP ${res.status}`))
+    }
+    return true
+  },
   templates: () => request<EtlTemplate[]>('/api/etl/templates'),
   createTemplate: (body: {
     name: string
