@@ -370,6 +370,8 @@ describe('useChatOfficeDocking', () => {
       '发货单/客户/侯雪梅.xlsx',
     ])
     expect(docking.officeDockingReviewItems.value.every((item) => item.status === 'ready')).toBe(true)
+    expect(docking.officeDockingReviewItems.value.every((item) => item.databaseAction === '')).toBe(true)
+    expect(docking.officeDockingReviewItems.value.every((item) => item.databaseDisabledReason.includes('profile_target'))).toBe(true)
     expect(deps.addAndSaveMessage).toHaveBeenCalledWith(
       '[对接] 已收到文件夹「发货单」中的 2 个可识别文件，已忽略 1 个系统或不支持的文件，开始调用办公员工识别。',
       'ai',
@@ -471,6 +473,150 @@ describe('useChatOfficeDocking', () => {
     expect(mocks.apiFetch.mock.calls.filter(([url]) => String(url).includes('/shipment-etl/execute'))).toHaveLength(2)
     expect(docking.officeDockingReviewItems.value.every((item) => item.commitStatus === 'committed')).toBe(true)
     expect(docking.officeDockingAwaitingDecision.value).toBe(false)
+  })
+
+  it('obeys preview_only profile_target and never schedules the shipment database write', async () => {
+    mocks.resolveEmployee.mockReturnValue(EXCEL_FULL_READ_EMPLOYEE_ID)
+    mocks.runEmployee.mockResolvedValue({ summary: '工作簿已读取', output_path: 'outputs/workbook.json' })
+    mocks.readOutputs.mockResolvedValue([
+      { path: 'outputs/workbook.json', kind: 'json', json: { sheets: [{ sheet_name: '送货单', row_count: 1 }] } },
+    ])
+    mocks.mapExcel.mockReturnValue({
+      fields: ['购货单位', '品名', '型号', '数量'],
+      preview_data: { sample_rows: [{ 购货单位: '国圣化工', 品名: '底漆', 型号: 'A1', 数量: 1 }] },
+      sheets: [{ sheet_name: '送货单', fields: ['购货单位', '品名', '型号', '数量'] }],
+    })
+    mocks.apiFetch.mockImplementation(async (url: string) => {
+      if (String(url).includes('/shipment-etl/preview')) {
+        return jsonResponse({
+          success: true,
+          note_count: 1,
+          notes: [{
+            sheet_name: '送货单',
+            unit_name: '国圣化工',
+            item_count: 1,
+            profile_id: 'generic_delivery_preview',
+            profile_target: 'preview_only',
+          }],
+        })
+      }
+      return jsonResponse({ success: true })
+    })
+
+    const { deps, docking } = createHarness('conversation')
+    await docking.onOfficeDockingFileChange(fileEvent(new File(['xlsx'], '国圣化工.xlsx')))
+
+    const item = docking.officeDockingReviewItems.value[0]
+    expect(item.intentId).toBe('shipment_delivery')
+    expect(item.databaseAction).toBe('')
+    expect(item.selectedDatabase).toBe(false)
+    expect(item.databaseDisabledReason).toContain('profile_target=preview_only')
+    expect(String(deps.addAndSaveMessage.mock.calls[1][0])).toContain('profile_target=preview_only')
+
+    expect(await docking.handleOfficeDockingConversationDecision('按建议处理')).toBe(true)
+    expect(await docking.handleOfficeDockingConversationDecision('确认执行')).toBe(true)
+    expect(mocks.apiFetch.mock.calls.filter(([url]) => String(url) === '/api/templates/upload')).toHaveLength(1)
+    expect(mocks.apiFetch.mock.calls.some(([url]) => String(url).includes('/shipment-etl/execute'))).toBe(false)
+    expect(item.commitStatus).toBe('committed')
+  })
+
+  it('rolls back a template created in the same attempt when the database write fails', async () => {
+    mocks.resolveEmployee.mockReturnValue(EXCEL_FULL_READ_EMPLOYEE_ID)
+    mocks.runEmployee.mockResolvedValue({ summary: '工作簿已读取', output_path: 'outputs/workbook.json' })
+    mocks.readOutputs.mockResolvedValue([
+      { path: 'outputs/workbook.json', kind: 'json', json: { sheets: [{ sheet_name: '送货单', row_count: 1 }] } },
+    ])
+    mocks.mapExcel.mockReturnValue({
+      fields: ['购货单位', '品名', '型号', '数量'],
+      preview_data: { sample_rows: [{ 购货单位: '国圣化工', 品名: '底漆', 型号: 'A1', 数量: 1 }] },
+      sheets: [{ sheet_name: '送货单', fields: ['购货单位', '品名', '型号', '数量'] }],
+    })
+    mocks.apiFetch.mockImplementation(async (url: string) => {
+      if (String(url).includes('/shipment-etl/preview')) {
+        return jsonResponse({
+          success: true,
+          note_count: 1,
+          notes: [{ sheet_name: '送货单', unit_name: '国圣化工', item_count: 1, profile_target: 'shipment' }],
+        })
+      }
+      if (String(url) === '/api/templates/upload') {
+        return jsonResponse({ success: true, template: { id: 'db:42', db_id: 42 } })
+      }
+      if (String(url).includes('/shipment-etl/execute')) {
+        return jsonResponse({ success: false, message: '客户字段缺失，无法写入发货单' }, 400)
+      }
+      if (String(url) === '/api/templates/delete') {
+        return jsonResponse({ success: true, deleted: { id: 'db:42', db_id: 42 } })
+      }
+      return jsonResponse({ success: true })
+    })
+
+    const { deps, docking } = createHarness('conversation')
+    await docking.onOfficeDockingFileChange(fileEvent(new File(['xlsx'], '国圣化工.xlsx')))
+    await docking.handleOfficeDockingConversationDecision('按建议处理')
+    await docking.handleOfficeDockingConversationDecision('确认执行')
+
+    const item = docking.officeDockingReviewItems.value[0]
+    expect(item.commitStatus).toBe('failed')
+    expect(item.templateCommitStatus).toBe('rolled_back')
+    expect(item.databaseCommitStatus).toBe('failed')
+    expect(item.databaseError).toBe('客户字段缺失，无法写入发货单')
+    expect(mocks.apiFetch).toHaveBeenCalledWith(
+      '/api/templates/delete',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ id: 'db:42' }) }),
+    )
+    const receipt = String(deps.addAndSaveMessage.mock.calls.at(-1)?.[0])
+    expect(receipt).toContain('国圣化工.xlsx：失败')
+    expect(receipt).toContain('模板库已自动回滚')
+    expect(receipt).toContain('客户/产品/发货单失败（客户字段缺失，无法写入发货单）')
+  })
+
+  it('reports partial success and both failure reasons when template rollback also fails', async () => {
+    mocks.resolveEmployee.mockReturnValue(EXCEL_FULL_READ_EMPLOYEE_ID)
+    mocks.runEmployee.mockResolvedValue({ summary: '工作簿已读取', output_path: 'outputs/workbook.json' })
+    mocks.readOutputs.mockResolvedValue([
+      { path: 'outputs/workbook.json', kind: 'json', json: { sheets: [{ sheet_name: '送货单', row_count: 1 }] } },
+    ])
+    mocks.mapExcel.mockReturnValue({
+      fields: ['购货单位', '品名', '型号', '数量'],
+      preview_data: { sample_rows: [{ 购货单位: '国圣化工', 品名: '底漆', 型号: 'A1', 数量: 1 }] },
+      sheets: [{ sheet_name: '送货单', fields: ['购货单位', '品名', '型号', '数量'] }],
+    })
+    mocks.apiFetch.mockImplementation(async (url: string) => {
+      if (String(url).includes('/shipment-etl/preview')) {
+        return jsonResponse({
+          success: true,
+          note_count: 1,
+          notes: [{ sheet_name: '送货单', unit_name: '国圣化工', item_count: 1, profile_target: 'shipment' }],
+        })
+      }
+      if (String(url) === '/api/templates/upload') {
+        return jsonResponse({ success: true, template: { id: 'db:43', db_id: 43 } })
+      }
+      if (String(url).includes('/shipment-etl/execute')) {
+        return jsonResponse({ success: false, message: '客户字段缺失，无法写入发货单' }, 400)
+      }
+      if (String(url) === '/api/templates/delete') {
+        return jsonResponse({ success: false, message: '模板回滚服务暂不可用' }, 503)
+      }
+      return jsonResponse({ success: true })
+    })
+
+    const { deps, docking } = createHarness('conversation')
+    await docking.onOfficeDockingFileChange(fileEvent(new File(['xlsx'], '国圣化工.xlsx')))
+    await docking.handleOfficeDockingConversationDecision('按建议处理')
+    await docking.handleOfficeDockingConversationDecision('确认执行')
+
+    const item = docking.officeDockingReviewItems.value[0]
+    expect(item.commitStatus).toBe('partial')
+    expect(item.templateCommitStatus).toBe('committed')
+    expect(item.databaseCommitStatus).toBe('failed')
+    expect(item.rollbackError).toBe('模板回滚服务暂不可用')
+    const receipt = String(deps.addAndSaveMessage.mock.calls.at(-1)?.[0])
+    expect(receipt).toContain('部分成功 1 个')
+    expect(receipt).toContain('模板库成功')
+    expect(receipt).toContain('客户/产品/发货单失败（客户字段缺失，无法写入发货单）')
+    expect(receipt).toContain('模板自动回滚失败（模板回滚服务暂不可用）')
   })
 
   it('supports a template-only batch instruction without writing any business database', async () => {

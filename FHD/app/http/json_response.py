@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from fastapi.encoders import jsonable_encoder
 from starlette.responses import Response
 
 
@@ -23,14 +24,17 @@ class _JsonResponse(Response):
     _json_data: dict[str, Any]
 
     def __init__(self, data: dict[str, Any], status: int = 200) -> None:
-        body = json.dumps(data, ensure_ascii=False)
+        # 与 FastAPI/Starlette 的 JSON 响应保持同一套编码语义，避免数据库
+        # datetime、Decimal、UUID、Path 等合法业务值在响应阶段再次抛错。
+        encoded = jsonable_encoder(data)
+        body = json.dumps(encoded, ensure_ascii=False)
         super().__init__(
             content=body,
             status_code=status,
             media_type="application/json",
         )
         # 绕开 Response 的 __slots__/frozen 约定（若有）。
-        object.__setattr__(self, "_json_data", data)
+        object.__setattr__(self, "_json_data", encoded)
 
     @property
     def mimetype(self) -> str:

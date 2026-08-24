@@ -5,6 +5,12 @@
 
 from __future__ import annotations
 
+import json
+from datetime import date, datetime, timezone
+from decimal import Decimal
+from pathlib import Path
+from uuid import UUID
+
 from starlette.requests import Request
 
 from app.http import error_codes
@@ -130,3 +136,24 @@ class TestJsonResponse:
         resp, status = json_response_tuple({"x": 9}, 202)
         assert status == 202
         assert resp.get_json() == {"x": 9}
+
+    def test_json_response_encodes_common_business_value_types(self):
+        payload = {
+            "created_at": datetime(2026, 8, 24, 15, 25, 30, tzinfo=timezone.utc),
+            "business_date": date(2026, 8, 24),
+            "amount": Decimal("12.50"),
+            "trace_id": UUID("12345678-1234-5678-1234-567812345678"),
+            "file_path": Path("/tmp/delivery.xlsx"),
+        }
+
+        response = json_response(payload)
+        encoded = response.get_json()
+
+        assert encoded == {
+            "created_at": "2026-08-24T15:25:30+00:00",
+            "business_date": "2026-08-24",
+            "amount": 12.5,
+            "trace_id": "12345678-1234-5678-1234-567812345678",
+            "file_path": "/tmp/delivery.xlsx",
+        }
+        assert json.loads(response.body) == encoded

@@ -156,6 +156,24 @@ describe('ChatOfficeDockingReview', () => {
     expect(wrapper.text()).toContain('数据库暂不可用')
   })
 
+  it('distinguishes partial success from an automatically rolled-back target', () => {
+    const partial = mount(ChatOfficeDockingReview, {
+      props: {
+        items: [reviewItem({ commitStatus: 'partial', templateCommitStatus: 'committed', databaseCommitStatus: 'failed' })],
+        processing: false,
+      },
+    })
+    expect(partial.get('.office-docking-review__status').text()).toContain('部分成功，可重试失败项')
+
+    const rolledBack = mount(ChatOfficeDockingReview, {
+      props: {
+        items: [reviewItem({ commitStatus: 'failed', templateCommitStatus: 'rolled_back', databaseCommitStatus: 'failed' })],
+        processing: false,
+      },
+    })
+    expect(rolledBack.text()).toContain('失败后已自动回滚')
+  })
+
   it('shows the structured shipment preview behind the recommendation', () => {
     const wrapper = mount(ChatOfficeDockingReview, {
       props: { items: [reviewItem()], processing: false },

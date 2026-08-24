@@ -173,6 +173,7 @@ const confirmLabel = computed(() => {
 
 function statusText(item: ChatOfficeDockingReviewItem): string {
   if (item.commitStatus === 'committed') return '已处理'
+  if (item.commitStatus === 'partial') return '部分成功，可重试失败项'
   if (item.commitStatus === 'failed') return '处理失败，可重试'
   if (item.commitStatus === 'committing') return '正在执行你的决定'
   if (item.status === 'running') return 'AI 阅读中'
@@ -182,6 +183,7 @@ function statusText(item: ChatOfficeDockingReviewItem): string {
 
 function targetStatusText(status: ChatOfficeDockingReviewItem['commitStatus']): string {
   if (status === 'committed') return '已完成'
+  if (status === 'rolled_back') return '失败后已自动回滚'
   if (status === 'failed') return '失败，可重试'
   if (status === 'committing') return '执行中'
   return '建议执行'
