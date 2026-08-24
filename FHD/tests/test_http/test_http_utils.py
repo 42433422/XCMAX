@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 from uuid import UUID
@@ -139,7 +139,7 @@ class TestJsonResponse:
 
     def test_json_response_encodes_common_business_value_types(self):
         payload = {
-            "created_at": datetime(2026, 8, 24, 15, 25, 30, tzinfo=timezone.utc),
+            "created_at": datetime(2026, 8, 24, 15, 25, 30, tzinfo=UTC),
             "business_date": date(2026, 8, 24),
             "amount": Decimal("12.50"),
             "trace_id": UUID("12345678-1234-5678-1234-567812345678"),

@@ -7,6 +7,7 @@ import json
 import os
 import tempfile
 import zipfile
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 from xml.etree import ElementTree as ET
 
@@ -297,6 +298,22 @@ class TestAnalyzeTemplateWithUpload:
             mock_analyze.return_value = _j({"success": True, "template_type": "excel"})
             result = analyze_template_with_upload(mock_file, "test")
             mock_analyze.assert_called_once()
+
+    def test_upload_is_saved_under_runtime_data_root(self, monkeypatch, tmp_path):
+        runtime_root = tmp_path / "runtime"
+        monkeypatch.setenv("XCAGI_DATA_DIR", str(runtime_root))
+        mock_file = MagicMock()
+        mock_file.filename = "test.xlsx"
+        mock_file.save = MagicMock()
+
+        with patch(
+            "app.services.document_templates.analyzer._analyze_excel_template"
+        ) as mock_analyze:
+            mock_analyze.return_value = _j({"success": True, "template_type": "excel"})
+            analyze_template_with_upload(mock_file, "test")
+
+        saved_path = Path(mock_file.save.call_args.args[0]).resolve()
+        assert saved_path.parent == (runtime_root / "uploads" / "templates").resolve()
 
     def test_docx_file_routes_to_word_analyzer(self, tmp_path):
         mock_file = MagicMock()

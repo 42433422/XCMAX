@@ -14,6 +14,7 @@ from app.services.document_templates.renderer import (
     _extract_excel_grid_preview,
     _extract_structured_excel_preview,
 )
+from app.services.document_templates.storage import get_document_template_upload_dir
 from app.services.document_templates.variables import (
     _get_template_scope_required_terms,
     _validate_required_terms,
@@ -96,13 +97,10 @@ def _analyze_template_with_upload_inner(file, template_name: str, template_scope
             return _j({"success": False, "message": "文件名为空"}, 400)
         file_ext = os.path.splitext(file.filename)[1].lower()
 
-        upload_dir = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)), "uploads", "templates"
-        )
-        os.makedirs(upload_dir, exist_ok=True)
+        upload_dir = get_document_template_upload_dir()
 
         unique_filename = f"{uuid.uuid4().hex}{file_ext}"
-        file_path = os.path.join(upload_dir, unique_filename)
+        file_path = str(upload_dir / unique_filename)
         file.save(file_path)
 
         task_id = uuid.uuid4().hex

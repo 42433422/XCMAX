@@ -39,6 +39,9 @@ def _ensure_template_tables_ready():
 
         init_template_tables()
         ensure_templates_tenant_column()
+        from app.services.document_templates.storage import migrate_legacy_template_uploads
+
+        migrate_legacy_template_uploads()
     except RECOVERABLE_ERRORS as e:
         logger.warning("确保模板表结构失败: %s", e)
 
