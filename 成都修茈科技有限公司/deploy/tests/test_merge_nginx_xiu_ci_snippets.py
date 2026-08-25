@@ -4,6 +4,9 @@ import importlib.util
 from pathlib import Path
 
 SCRIPT = Path(__file__).parents[1] / "scripts" / "merge-nginx-xiu-ci-snippets.py"
+ADMIN_SNIPPET = (
+    Path(__file__).parents[1] / "nginx" / "snippets" / "admin-console-www.inc.conf"
+)
 SPEC = importlib.util.spec_from_file_location("merge_nginx_xiu_ci_snippets", SCRIPT)
 assert SPEC and SPEC.loader
 MODULE = importlib.util.module_from_spec(SPEC)
@@ -62,3 +65,12 @@ def test_merge_is_idempotent() -> None:
     assert twice.count("admin-console-www.inc.conf") == 1
     for include in MODULE.MANAGED_INCLUDES:
         assert twice.count(include) == 1
+
+
+def test_admin_csp_runtime_exception_is_scoped_to_www_admin_spa() -> None:
+    snippet = ADMIN_SNIPPET.read_text(encoding="utf-8")
+
+    assert "location ^~ /admin/" in snippet
+    assert "proxy_hide_header Content-Security-Policy;" in snippet
+    assert "script-src 'self' 'unsafe-inline' 'unsafe-eval'" in snippet
+    assert "location / {\n    return 301 https://xiu-ci.com$request_uri;\n}" in snippet
