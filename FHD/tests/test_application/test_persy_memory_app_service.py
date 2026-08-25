@@ -278,6 +278,8 @@ def test_completed_chat_turn_is_sent_to_vector_and_structured_memory() -> None:
         )
 
     vector_service.ingest_chunks.assert_called_once()
+    assert vector_service.build_chat_turn_chunk.call_args.kwargs["user_id"] == "2:7"
+    assert vector_service.ingest_chunks.call_args.args[0] == "2:7"
     persy_service.capture_conversation_turn.assert_called_once_with(
         access_context=context["_dataset_access_context"],
         user_message="客户北辰科技的负责人是李明",
