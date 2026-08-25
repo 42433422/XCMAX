@@ -406,6 +406,10 @@ def test_macos_installer_reuses_clean_local_electron_distribution() -> None:
     assert "SKIP_DESKTOP_BUILD=1 but desktop/dist/main.js is missing" in installer
     assert "msg.includes('abortedUpload')" in notarize
     assert "msg.includes('deadlineExceeded')" in notarize
+    assert "XCAGI_LOCAL_ACCEPTANCE_BUILD" in notarize
+    assert "XCAGI_LOCAL_ACCEPTANCE_BUILD is forbidden in CI" in notarize
+    assert "XCAGI_LOCAL_ACCEPTANCE_BUILD" in dmg_builder
+    assert "XCAGI_LOCAL_ACCEPTANCE_BUILD is forbidden in CI" in dmg_builder
 
 
 def test_desktop_staging_bundles_visible_office_employee_executors() -> None:
