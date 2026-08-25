@@ -142,6 +142,33 @@ def test_runtime_context_uses_server_verified_tutorial_tenant():
     session_tenant.assert_not_called()
 
 
+def test_runtime_context_injects_only_server_verified_dataset_scope():
+    request = MagicMock()
+    incoming = {
+        "business_context": "kept",
+        "_dataset_access_context_trusted": True,
+        "_dataset_access_context": {"actor_id": "spoofed"},
+    }
+    verified = {
+        "business_context": "kept",
+        "_dataset_access_context_trusted": True,
+        "_dataset_access_context": {
+            "actor_id": "17",
+            "tenant_id": "7",
+            "permissions": ["dataset.read", "dataset.write"],
+        },
+    }
+
+    with patch(
+        "app.fastapi_routes.dataset_access.inject_trusted_dataset_access",
+        return_value=verified,
+    ) as inject:
+        result = ch._runtime_context_with_trusted_dataset_access(request, incoming)
+
+    assert result == verified
+    inject.assert_called_once_with(incoming, request)
+
+
 def test_sales_sse_uses_authenticated_resolved_tenant_even_if_context_conflicts():
     """W1-10 租户隔离：活跃 compat SSE 处理销售闭环句时，真实 process_chat 在
     current_tenant_id() == 认证解析租户 的 tenant_scope 内执行；即使请求体上下文

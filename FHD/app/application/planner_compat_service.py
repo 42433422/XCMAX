@@ -40,6 +40,7 @@ from app.fastapi_routes.xcagi_compat_chat_helpers import (
     _merge_runtime_context_with_message_paths,
     _message_requires_db_read_token,
     _runtime_context_with_authenticated_actor,
+    _runtime_context_with_trusted_dataset_access,
     _xcagi_chat_http_exc,
     _xcagi_chat_timeout_error_payload,
     _xcagi_chat_timeout_seconds,

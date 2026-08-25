@@ -20,6 +20,9 @@ async def execute_compat_chat(
         body.context, body.message
     )
     runtime_context = _facade()._runtime_context_with_authenticated_actor(request, runtime_context)
+    runtime_context = _facade()._runtime_context_with_trusted_dataset_access(
+        request, runtime_context
+    )
     _facade().assert_p2_elevated_claim_or_raise(request)
     tier = _facade().resolve_ai_tier(request)
     runtime_context = _facade().runtime_context_with_tier(runtime_context, tier)
