@@ -170,9 +170,13 @@ jobs:
             }
             Write-Host "OK $sku resource: $p"
           }
-          & "$dir/backend/xcagi-backend.exe" --verify-frozen-critical-runtime
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "::error::Frozen Windows backend critical office/voice runtime probe failed."
+          # GUI-subsystem exe: pwsh `&` 不会等待窗口程序返回，$LASTEXITCODE 不可靠。
+          # 用 Start-Process -Wait -PassThru 取真实退出码，否则探针在 healthy exe 下也会被误判失败。
+          $probe = Start-Process -FilePath "$dir/backend/xcagi-backend.exe" `
+            -ArgumentList "--verify-frozen-critical-runtime" -Wait -PassThru -NoNewWindow
+          Write-Host "Frozen critical runtime probe exit code: $($probe.ExitCode)"
+          if ($probe.ExitCode -ne 0) {
+            Write-Error "::error::Frozen Windows backend critical office/voice runtime probe failed (exit=$($probe.ExitCode))."
             exit 1
           }
       - name: Install, launch, smoke, and uninstall signed Windows package
