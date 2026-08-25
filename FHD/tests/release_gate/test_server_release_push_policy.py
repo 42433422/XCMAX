@@ -34,6 +34,14 @@ def test_server_release_bundles_and_bootstraps_vendored_langgraph() -> None:
     assert "FHD_SERVICE_PYTHON" in apply
 
 
+def test_server_release_archive_strips_macos_extended_attributes() -> None:
+    pack = (FHD_ROOT / "scripts/deploy/fhd-pack-release.sh").read_text(encoding="utf-8")
+
+    assert "tar --no-xattrs" in pack
+    assert "TAR_XATTR_ARGS+=(--no-xattrs)" in pack
+    assert 'COPYFILE_DISABLE=1 tar "${TAR_XATTR_ARGS[@]}"' in pack
+
+
 def test_normal_cvm_release_skips_optional_image_archive() -> None:
     script = (FHD_ROOT / "scripts/deploy/fhd-push-release.sh").read_text(
         encoding="utf-8"

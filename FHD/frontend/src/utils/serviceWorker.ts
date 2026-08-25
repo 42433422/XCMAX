@@ -20,6 +20,11 @@ type SWEventListener = (status: SWStatus) => void
 
 function shouldSkipServiceWorkerRegistration(): boolean {
   if (import.meta.env.DEV) return true
+  // The web management console is mounted below /admin/ on an origin whose
+  // remaining paths intentionally redirect to the public apex site. A root
+  // scoped /sw.js registration would fail behind that redirect and, if later
+  // made reachable, could incorrectly control the whole management origin.
+  if (import.meta.env.VITE_XCMAX_ADMIN_CONSOLE === '1') return true
   if (typeof window === 'undefined') return false
   const host = window.location.hostname
   return host === '127.0.0.1' || host === 'localhost'
