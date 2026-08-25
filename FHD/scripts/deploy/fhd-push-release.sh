@@ -153,7 +153,11 @@ atomic_upload() {
   local local_sz attempt transfer_mode
   local_sz="$(wc -c < "$src" | tr -d '[:space:]')"
   transfer_mode="scp"
+  # macOS ships an older rsync that has --append but not --append-verify.
+  # Select resumable transfer only when the local sender supports the exact
+  # integrity option used below; otherwise use the verified scp path.
   if command -v rsync >/dev/null 2>&1 && \
+      rsync --help 2>&1 | grep -q -- '--append-verify' && \
       "${SSH[@]}" "$REMOTE" "command -v rsync >/dev/null 2>&1"; then
     transfer_mode="rsync"
   fi
