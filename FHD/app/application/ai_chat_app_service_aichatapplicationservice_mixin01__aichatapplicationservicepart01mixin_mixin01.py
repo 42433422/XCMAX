@@ -313,30 +313,39 @@ class __AIChatApplicationServicePart01MixinPart01Mixin:
             assistant_text = str(inner.get("text") or inner.get("message") or "").strip()
         if not assistant_text or sensitive.search(f"{message}\n{assistant_text}"):
             return
-        from app.application.user_memory_vector_app_service import (
-            get_user_memory_vector_ingest_app_service,
-        )
+        session_id = str(context.get("session_id") or context.get("conversation_id") or "")
+        try:
+            from app.application.user_memory_vector_app_service import (
+                get_user_memory_vector_ingest_app_service,
+            )
 
-        service = get_user_memory_vector_ingest_app_service()
-        chunk = service.build_chat_turn_chunk(
-            user_id=normalized_user_id,
-            user_message=message,
-            assistant_message=assistant_text,
-            session_id=str(context.get("session_id") or context.get("conversation_id") or ""),
-            source=str(source or "chat"),
-        )
-        service.ingest_chunks(normalized_user_id, [chunk])
-        access_context = context.get("_dataset_access_context")
-        if trusted_principal and isinstance(access_context, dict):
-            from app.application.persy_memory_app_service import get_persy_memory_app_service
-
-            get_persy_memory_app_service().capture_conversation_turn(
-                access_context=access_context,
+            service = get_user_memory_vector_ingest_app_service()
+            chunk = service.build_chat_turn_chunk(
+                user_id=normalized_user_id,
                 user_message=message,
                 assistant_message=assistant_text,
-                session_id=str(context.get("session_id") or context.get("conversation_id") or ""),
+                session_id=session_id,
                 source=str(source or "chat"),
-                scope="tenant"
-                if str(context.get("persy_memory_scope") or "").strip().lower() == "tenant"
-                else "user",
             )
+            service.ingest_chunks(normalized_user_id, [chunk])
+        except _facade().RECOVERABLE_ERRORS as vector_error:
+            _facade().logger.warning("对话向量记忆写入失败，继续提炼结构化记忆: %s", vector_error)
+        access_context = context.get("_dataset_access_context")
+        if trusted_principal and isinstance(access_context, dict):
+            try:
+                from app.application.persy_memory_app_service import get_persy_memory_app_service
+
+                get_persy_memory_app_service().capture_conversation_turn(
+                    access_context=access_context,
+                    user_message=message,
+                    assistant_message=assistant_text,
+                    session_id=session_id,
+                    source=str(source or "chat"),
+                    scope="tenant"
+                    if str(context.get("persy_memory_scope") or "").strip().lower() == "tenant"
+                    else "user",
+                )
+            except _facade().RECOVERABLE_ERRORS as structured_error:
+                _facade().logger.warning(
+                    "结构化对话记忆提炼失败，不影响向量记忆: %s", structured_error
+                )

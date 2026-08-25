@@ -286,3 +286,39 @@ def test_completed_chat_turn_is_sent_to_vector_and_structured_memory() -> None:
         source="smart-chat",
         scope="tenant",
     )
+
+
+def test_structured_memory_capture_continues_when_vector_write_fails() -> None:
+    vector_service = MagicMock()
+    vector_service.build_chat_turn_chunk.return_value = object()
+    vector_service.ingest_chunks.side_effect = OSError("vector store unavailable")
+    persy_service = MagicMock()
+    context = {
+        "session_id": "chat-10",
+        "_dataset_access_context_trusted": True,
+        "_dataset_access_context": {
+            "actor_id": "7",
+            "tenant_id": "2",
+            "permissions": ["dataset.read", "dataset.write"],
+        },
+    }
+
+    with (
+        patch(
+            "app.application.user_memory_vector_app_service.get_user_memory_vector_ingest_app_service",
+            return_value=vector_service,
+        ),
+        patch(
+            "app.application.persy_memory_app_service.get_persy_memory_app_service",
+            return_value=persy_service,
+        ),
+    ):
+        AIChatApplicationService._persist_recallable_chat_turn(
+            user_id="7",
+            message="我偏好每周一上午沟通",
+            source="smart-chat",
+            context=context,
+            response_data={"success": True, "response": "已记录。", "action": "answer"},
+        )
+
+    persy_service.capture_conversation_turn.assert_called_once()
