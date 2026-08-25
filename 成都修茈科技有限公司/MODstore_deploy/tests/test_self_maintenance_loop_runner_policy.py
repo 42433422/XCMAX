@@ -304,7 +304,14 @@ def test_remote_merge_request_runs_only_after_structured_gate_and_ssot(monkeypat
     ]
     assert risk_calls[0][0] == "self_maintenance_l1_merge"
     assert risk_calls[0][1]["source"] == "self_maintenance_loop.remote_merge_request"
-    assert merge_calls == [{"api_base": "http://127.0.0.1:3001", "task_id": "task-remote"}]
+    assert merge_calls == [
+        {
+            "api_base": "http://127.0.0.1:3001",
+            "task_id": "task-remote",
+            "verified_base_sha": "b" * 40,
+            "verified_target_sha": "a" * 40,
+        }
+    ]
     assert ledger_rows[0]["event"] == "merge_requested"
     assert ledger_rows[0]["run_id"] == "remote-risk-gate"
     assert governance_rows[0]["kind"] == "merge_requested"
@@ -346,7 +353,7 @@ def test_remote_merge_request_is_not_emitted_when_ssot_blocks(monkeypatch):
     assert result["reason"] == "autonomy_guard_blocked"
 
 
-def test_remote_merge_request_defers_unreachable_head_to_para_worker(monkeypatch):
+def test_remote_merge_request_fails_closed_when_reviewed_heads_are_unreachable(monkeypatch):
     monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "https://github.com/example/repo.git")
     monkeypatch.setenv("MODSTORE_PARA_BRANCH", "main")
     monkeypatch.setenv("MODSTORE_PARA_API_BASE", "http://127.0.0.1:3001")
@@ -381,12 +388,11 @@ def test_remote_merge_request_defers_unreachable_head_to_para_worker(monkeypatch
         steps=[],
     )
 
-    assert result["ok"] is True
-    assert result["merge_requested"] is True
+    assert result["ok"] is False
+    assert result["reason"] == "remote_merge_heads_unverified"
     assert result["branch_head_sha"] == ""
-    assert result["head_verification"] == "delegated_to_para_merge_worker"
-    assert merge_calls == [{"api_base": "http://127.0.0.1:3001", "task_id": "task-remote"}]
-    assert ledger_rows[0]["head_verification"] == "delegated_to_para_merge_worker"
+    assert merge_calls == []
+    assert ledger_rows == []
 
 
 def test_local_auto_merge_cleans_ephemeral_workspace_on_return(monkeypatch, tmp_path):

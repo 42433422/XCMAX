@@ -150,7 +150,13 @@ def _mark_para_task_merged(
         return resp.json()
 
 
-def _request_para_task_merge(*, api_base: str, task_id: str) -> _facade().Dict[str, _facade().Any]:
+def _request_para_task_merge(
+    *,
+    api_base: str,
+    task_id: str,
+    verified_base_sha: str,
+    verified_target_sha: str,
+) -> _facade().Dict[str, _facade().Any]:
     """Queue the already-pushed Para workspace only after loop gates pass.
 
     The CVM cannot reach GitHub directly, while the Para worker on the Mac can.
@@ -161,7 +167,17 @@ def _request_para_task_merge(*, api_base: str, task_id: str) -> _facade().Dict[s
         _facade().os.environ.get("MODSTORE_PARA_WORKSPACE_ROOT")
         or "/Users/a4243342/XCMAX-runtime/para-main-agent/workspace"
     ).strip()
+    verified_base_sha = str(verified_base_sha or "").strip().lower()
+    verified_target_sha = str(verified_target_sha or "").strip().lower()
+    if any(
+        not _facade().re.fullmatch(r"[0-9a-f]{40}", sha)
+        for sha in (verified_base_sha, verified_target_sha)
+    ):
+        raise ValueError("verified_merge_sha_invalid")
     workspace_path = str(_facade().Path(workspace_root).expanduser() / task_id)
+    persisted_workspace_path = (
+        f"{workspace_path}::xcmax-merge-binding-v1::" f"{verified_base_sha}::{verified_target_sha}"
+    )
     headers = _facade()._guest_auth_headers(api_base)
     with _facade().httpx.Client(
         timeout=30.0, trust_env=False, verify=_facade()._para_tls_verify()
@@ -169,7 +185,12 @@ def _request_para_task_merge(*, api_base: str, task_id: str) -> _facade().Dict[s
         resp = client.post(
             f"{api_base.rstrip('/')}/api/tasks/{task_id}/request-merge",
             headers=headers,
-            json={"workspace_path": workspace_path, "auto_merge": True},
+            json={
+                "workspace_path": persisted_workspace_path,
+                "auto_merge": True,
+                "verified_base_sha": verified_base_sha,
+                "verified_target_sha": verified_target_sha,
+            },
         )
         resp.raise_for_status()
         payload = resp.json()
@@ -313,6 +334,13 @@ def _auto_merge_low_risk_branch(
             }
         branch_head_sha = _facade()._remote_branch_head(repo_url, branch)
         base_head_sha = _facade()._remote_branch_head(repo_url, base_branch)
+        if not base_head_sha or not branch_head_sha:
+            return {
+                "ok": False,
+                "reason": "remote_merge_heads_unverified",
+                "base_head_sha": base_head_sha or "",
+                "branch_head_sha": branch_head_sha or "",
+            }
         if base_head_sha and branch_head_sha == base_head_sha:
             return {
                 "ok": False,
@@ -320,9 +348,7 @@ def _auto_merge_low_risk_branch(
                 "branch": branch,
                 "branch_head_sha": branch_head_sha,
             }
-        head_verification = (
-            "verified_on_cvm" if branch_head_sha else "delegated_to_para_merge_worker"
-        )
+        head_verification = "verified_on_cvm_and_bound_to_para_worker"
         from modstore_server.autonomy_guard_delegate import evaluate_risk
 
         decision = evaluate_risk(
@@ -337,7 +363,12 @@ def _auto_merge_low_risk_branch(
                 "risk_decision": decision.to_dict(),
             }
         try:
-            request_result = _facade()._request_para_task_merge(api_base=api_base, task_id=task_id)
+            request_result = _facade()._request_para_task_merge(
+                api_base=api_base,
+                task_id=task_id,
+                verified_base_sha=base_head_sha,
+                verified_target_sha=branch_head_sha,
+            )
         except RECOVERABLE_ERRORS as exc:
             return {
                 "ok": False,

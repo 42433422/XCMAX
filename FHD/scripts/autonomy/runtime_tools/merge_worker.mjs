@@ -118,6 +118,7 @@ const MINIMAX_KEYCHAIN_SERVICE = String(
 const TOKEN_TTL_MS = 5 * 60 * 1000; // Para guest 限 15min/30 次，复用 5 分钟避免耗尽
 export const AUTO_PR_LABELS = Object.freeze(['risk:r0']);
 export const INITIAL_PR_LABELS = Object.freeze(['hold-merge']);
+export const MERGE_BINDING_SEPARATOR = '::xcmax-merge-binding-v1::';
 
 // CI 等待策略（写进代码，不做隐式默认）：
 // - 等哪些 check：`gh pr checks` 返回的全部检查，与 bot merge SLA 的三重门禁一致
@@ -158,6 +159,15 @@ let selfUpdateLastCheckedAt = 0;
 
 function log(...args) {
   console.log(new Date().toISOString().slice(11, 19), '[merge-worker]', ...args);
+}
+
+export function taskMergeHeadBinding(task) {
+  const raw = String(task?.workspace_path || '').trim();
+  const [workspacePath, suffix = ''] = raw.split(MERGE_BINDING_SEPARATOR);
+  const match = suffix.match(/^([0-9a-f]{40})::([0-9a-f]{40})$/i);
+  if (suffix && !match) throw new Error('merge-head-binding-envelope-invalid');
+  return { workspacePath, verifiedBaseSha: match?.[1].toLowerCase() || '',
+    verifiedTargetSha: match?.[2].toLowerCase() || '' };
 }
 
 export function gitBlobSha(source) {
@@ -321,6 +331,30 @@ async function gitMaybe(cwd, args) {
   } catch {
     return '';
   }
+}
+
+async function remoteBranchHead({ repoUrl, branch, workspace }) {
+  const ref = `refs/heads/${branch}`;
+  const output = await git(workspace || process.env.HOME || '/tmp',
+    ['ls-remote', '--heads', repoUrl, ref]);
+  const row = output.split(/\r?\n/).find((item) => item.endsWith(`\t${ref}`));
+  const sha = row?.split(/\s+/)[0] || '';
+  return /^[0-9a-f]{40}$/i.test(sha) ? sha.toLowerCase() : '';
+}
+
+export async function verifyRemoteTaskHeads({ task, repoUrl, baseBranch, branches,
+  workspace = '', headResolver = remoteBranchHead }) {
+  const binding = taskMergeHeadBinding(task);
+  if (!binding.verifiedBaseSha && !isSelfMaintenanceCanonicalMainTask(task)) {
+    return { required: false, ...binding };
+  }
+  if (!binding.verifiedBaseSha) throw new Error('merge-head-binding-required');
+  if (baseBranch !== 'main' || branches.length !== 1) throw new Error('merge-head-binding-scope-invalid');
+  const actualBaseSha = await headResolver({ repoUrl, branch: baseBranch, workspace });
+  const actualTargetSha = await headResolver({ repoUrl, branch: branches[0], workspace });
+  if (actualBaseSha !== binding.verifiedBaseSha
+      || actualTargetSha !== binding.verifiedTargetSha) throw new Error('verified-merge-head-mismatch');
+  return { required: true, ...binding, actualBaseSha, actualTargetSha };
 }
 
 async function postJson(token, path, body) {
@@ -1563,7 +1597,11 @@ async function processTask(token, task, state) {
   ) {
     return;
   }
-  const workspace = String(task.workspace_path || '').trim();
+  const rawWorkspace = String(task.workspace_path || '').trim();
+  let workspace = rawWorkspace;
+  try {
+    workspace = taskMergeHeadBinding(task).workspacePath;
+  } catch {}
   const workspaceExists = workspace && existsSync(workspace);
   if (workspace && !workspaceExists) {
     log(`task ${task.id} 注意：workspace_path 已被回收 (${workspace})，改用 GitHub-only 模式`);
@@ -1612,7 +1650,12 @@ async function processTask(token, task, state) {
   }
   log(`task ${task.id} 处理：${branches.length} 个分支 → base=${baseBranch} @ ${workspaceExists ? workspace : 'GitHub-only'}`);
 
+  let mergeHeadVerification = { required: false };
   try {
+    if (isGithub) {
+      mergeHeadVerification = await verifyRemoteTaskHeads({ task, repoUrl, baseBranch, branches,
+        workspace: workspaceExists ? workspace : '' });
+    }
     // 检查是否已有 merged PR（处理 task 之前已 merge 但 state 未记录的情况，
     // 比如手动 merge 后 task 又被重新放入 merge-queue）
     if (isGithub) {
@@ -1676,7 +1719,9 @@ async function processTask(token, task, state) {
 
           // Bring the proposed branch onto the current base before reviewing.
           // A real conflict fails below and is never silently merged.
-          await updatePullRequestBranch(workspaceExists ? workspace : '', prNumber, repoFull);
+          if (!mergeHeadVerification.required) {
+            await updatePullRequestBranch(workspaceExists ? workspace : '', prNumber, repoFull);
+          }
 
           const changedFiles = await changedFilesForPR(
             workspaceExists ? workspace : '',
@@ -1700,6 +1745,8 @@ async function processTask(token, task, state) {
           // AI review
           const review = await aiReviewPR(workspaceExists ? workspace : '', branch, baseBranch, prNumber, repoFull);
           if (review.verdict === 'approve') {
+            mergeHeadVerification = await verifyRemoteTaskHeads({ task, repoUrl, baseBranch,
+              branches: [branch], workspace: workspaceExists ? workspace : '' });
             log(`  ✓ AI review: APPROVE → 启用 auto-merge for PR #${prNumber}`);
             const riskLabelAdded = await addPrLabels(
               workspaceExists ? workspace : '', prNumber, repoFull, AUTO_PR_LABELS,

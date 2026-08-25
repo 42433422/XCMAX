@@ -12,6 +12,7 @@ import {
   CI_WAIT_TIMEOUT_MS,
   INDETERMINATE_REVIEW_RECOVERY_MAX_AGE_MS,
   INITIAL_PR_LABELS,
+  MERGE_BINDING_SEPARATOR,
   TASK_CONCURRENCY,
   botMergeCheckArgs,
   botMergeWatchdogDecision,
@@ -40,7 +41,9 @@ import {
   selectMatchingWorkflowRun,
   selectTaskMergeBase,
   selfUpdateTemporaryPath,
+  taskMergeHeadBinding,
   taskHasRecoverableIndeterminateReviewConflict,
+  verifyRemoteTaskHeads,
 } from './merge_worker.mjs';
 
 test('self-update accepts only the exact GitHub blob for the merge worker source', () => {
@@ -87,6 +90,26 @@ test('self-update syntax-check temporary file preserves the mjs extension', () =
   assert.equal(
     selfUpdateTemporaryPath('/runtime/merge-worker.mjs', 24906),
     '/runtime/merge-worker.mjs.self-update.24906.mjs',
+  );
+});
+
+test('canonical merge fails closed unless both persisted heads still match', async () => {
+  const baseSha = 'b'.repeat(40);
+  const targetSha = 'a'.repeat(40);
+  const task = { description: '=== SELF_MAINTENANCE_CANONICAL_MERGE_BASE:main ===',
+    workspace_path: `/tmp/task-1${MERGE_BINDING_SEPARATOR}${baseSha}::${targetSha}` };
+  assert.equal(taskMergeHeadBinding(task).workspacePath, '/tmp/task-1');
+  const verify = (headResolver) => verifyRemoteTaskHeads({ task,
+    repoUrl: 'https://github.com/example/repo.git', baseBranch: 'main',
+    branches: ['devfleet/codex/sub-1'], headResolver });
+  const result = await verify(async ({ branch }) => (
+    branch === 'main' ? baseSha : targetSha
+  ));
+  assert.deepEqual([result.required, result.verifiedBaseSha, result.verifiedTargetSha],
+    [true, baseSha, targetSha]);
+  await assert.rejects(
+    verify(async ({ branch }) => (branch === 'main' ? baseSha : 'c'.repeat(40))),
+    /verified-merge-head-mismatch/,
   );
 });
 
