@@ -410,6 +410,8 @@ def test_macos_installer_reuses_clean_local_electron_distribution() -> None:
     assert "XCAGI_LOCAL_ACCEPTANCE_BUILD is forbidden in CI" in notarize
     assert "XCAGI_LOCAL_ACCEPTANCE_BUILD" in dmg_builder
     assert "XCAGI_LOCAL_ACCEPTANCE_BUILD is forbidden in CI" in dmg_builder
+    assert 'release/local-acceptance/xcagi-v${VERSION}/${sku}' in installer
+    assert "XCAGI_LOCAL_ACCEPTANCE_BUILD is forbidden in CI" in installer
 
 
 def test_desktop_staging_bundles_visible_office_employee_executors() -> None:

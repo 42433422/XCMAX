@@ -79,6 +79,13 @@ build_one_sku() {
   local label
   label="$(sku_label "$sku")"
   local out_dir="${ROOT}/release/xcagi-v${VERSION}/${sku}"
+  if [ "${XCAGI_LOCAL_ACCEPTANCE_BUILD:-0}" = "1" ]; then
+    if [ -n "${CI:-}" ]; then
+      echo "[err] XCAGI_LOCAL_ACCEPTANCE_BUILD is forbidden in CI" >&2
+      exit 1
+    fi
+    out_dir="${ROOT}/release/local-acceptance/xcagi-v${VERSION}/${sku}"
+  fi
   # Desktop/iCloud FileProvider can continuously re-attach FinderInfo xattrs to
   # an app bundle under the checkout, which makes codesign reject nested
   # helpers. Sign and assemble outside FileProvider, then copy sealed artifacts
