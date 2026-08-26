@@ -2247,6 +2247,23 @@ def test_report_only_review_and_qa_prompt_pin_target_branch(monkeypatch):
     assert "validate_kb_payload" in code
 
 
+def test_report_only_qa_prompt_probes_generic_python3_last(monkeypatch):
+    monkeypatch.setenv(
+        "MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND",
+        "/missing/runtime-python -m pytest focused.py -q",
+    )
+
+    qa = _qa_task_text("run-python3-fallback", "devfleet/codex/sub-python3", {})
+
+    candidates = ["`python3.12`", "`python3.11`", "`python`", "`python3`"]
+    positions = [qa.index(candidate) for candidate in candidates]
+    assert positions == sorted(positions)
+    assert "<candidate> -c 'import sys, pytest; raise SystemExit(sys.version_info < (3, 11))'" in qa
+    assert "select the first exit-0 candidate" in qa
+    assert "do not reject `python3` by executable name" in qa
+    assert "<candidate> -m pytest" in qa
+
+
 def test_focused_test_command_prefers_explicit_command(monkeypatch):
     monkeypatch.setenv(
         "MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND",
