@@ -9,6 +9,7 @@ from modstore_server import (
     retort_clarification_gate,
 )
 from modstore_server import self_maintenance_loop_runner as loop_runner
+from modstore_server import self_maintenance_loop_runner_part07_part01_part01 as report_gate_impl
 from modstore_server import self_maintenance_retort_change_evidence as retort_change_evidence
 from modstore_server.autonomous_risk_gate import (
     _historical_rollback_rate as _historical_rollback_rate_v3,
@@ -2442,6 +2443,63 @@ def test_structured_report_gate_accepts_platform_equivalent_focused_command(
     ]
 
     assert _structured_report_gate(steps)["ok"] is True
+
+
+def test_qa_replay_sandbox_clears_host_access(monkeypatch, tmp_path):
+    workspace = tmp_path / "snapshot"
+    workspace.mkdir()
+    bwrap = tmp_path / "bwrap"
+    bwrap.write_text("", encoding="utf-8")
+    bwrap.chmod(0o700)
+    python_root = tmp_path / "trusted-venv"
+    python = python_root / "bin" / "python"
+    python.parent.mkdir(parents=True)
+    python.write_text("", encoding="utf-8")
+    python.chmod(0o700)
+    (python_root / "pyvenv.cfg").write_text("", encoding="utf-8")
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_BWRAP", str(bwrap))
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "must-not-cross-boundary")
+    calls = []
+
+    def fake_run(args, **kwargs):
+        calls.append((args, kwargs))
+        return "sandbox pass"
+
+    monkeypatch.setattr(loop_runner, "_run_cmd", fake_run)
+
+    report_gate_impl._run_qa_replay_sandboxed(
+        ["python", "-m", "pytest", "focused.py", "-q"],
+        cwd=workspace,
+        workspace=workspace,
+        python_executable=str(python),
+        timeout=30,
+    )
+
+    args, kwargs = calls[0]
+    assert args[0] == str(bwrap)
+    assert {"--unshare-all", "--clearenv"} <= set(args)
+    ro_bind = args.index("--ro-bind")
+    assert args[ro_bind : ro_bind + 3] == [
+        "--ro-bind",
+        str(workspace.resolve()),
+        "/workspace",
+    ]
+    command = args[args.index("--") + 1 :]
+    assert command[:4] == ["/qa-venv/bin/python", "-P", "-m", "pytest"]
+    assert "AWS_SECRET_ACCESS_KEY" not in args
+    assert set(kwargs["env"]) == {"LANG", "LC_ALL", "PATH"}
+    assert not (workspace / ".qa-replay-scratch").exists()
+
+    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_BWRAP")
+    monkeypatch.setattr(loop_runner.shutil, "which", lambda _name: None)
+    with pytest.raises(RuntimeError, match="sandbox unavailable"):
+        report_gate_impl._run_qa_replay_sandboxed(
+            ["python"],
+            cwd=workspace,
+            workspace=workspace,
+            python_executable=str(python),
+            timeout=30,
+        )
 
 
 def test_structured_report_gate_rejects_unrelated_platform_pytest(monkeypatch):

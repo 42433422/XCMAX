@@ -5,6 +5,8 @@
 from __future__ import annotations
 import importlib
 
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
 
 def _facade():
     return importlib.import_module("modstore_server.self_maintenance_loop_runner")
@@ -142,6 +144,119 @@ def _structured_protocol_ok(step_name: str, report_excerpt: str) -> _facade().Tu
     return (True, "")
 
 
+def _run_qa_replay_sandboxed(
+    args: _facade().List[str],
+    *,
+    cwd: _facade().Path,
+    workspace: _facade().Path,
+    python_executable: str,
+    timeout: int,
+) -> str:
+    """Run target-controlled QA code in an empty-environment Bubblewrap sandbox."""
+
+    workspace = workspace.resolve()
+    cwd = cwd.resolve()
+    try:
+        relative_cwd = cwd.relative_to(workspace)
+    except ValueError as exc:
+        raise RuntimeError("quality replay cwd escaped the snapshot") from exc
+    if not args:
+        raise RuntimeError("quality replay command is empty")
+
+    configured_bwrap = _facade().os.environ.get(
+        "MODSTORE_SELF_MAINTENANCE_BWRAP"
+    ) or _facade().shutil.which("bwrap")
+    bwrap_path = _facade().Path(configured_bwrap or "").expanduser()
+    if (
+        not bwrap_path.is_absolute()
+        or not bwrap_path.is_file()
+        or not _facade().os.access(bwrap_path, _facade().os.X_OK)
+    ):
+        raise RuntimeError("quality replay sandbox unavailable: bwrap not found")
+    bwrap = str(bwrap_path.resolve())
+
+    python_path = _facade().Path(python_executable).expanduser()
+    if (
+        not python_path.is_absolute()
+        or not python_path.is_file()
+        or not _facade().os.access(python_path, _facade().os.X_OK)
+    ):
+        raise RuntimeError("quality replay trusted Python is unavailable")
+    python_resolved = python_path.resolve()
+    if workspace == python_resolved or workspace in python_resolved.parents:
+        raise RuntimeError("quality replay Python must not come from the target snapshot")
+    venv_root = python_path.parent.parent
+    if not (venv_root / "pyvenv.cfg").is_file():
+        raise RuntimeError("quality replay Python must come from a trusted virtual environment")
+
+    command = list(args)
+    if _facade().re.fullmatch(r"python(?:\d+(?:\.\d+)*)?", _facade().Path(command[0]).name):
+        command[0] = f"/qa-venv/bin/{python_path.name}"
+        command.insert(1, "-P")
+
+    scratch = workspace / ".qa-replay-scratch"
+    scratch.mkdir(mode=0o700, exist_ok=False)
+    sandbox_cwd = "/workspace"
+    if relative_cwd.parts:
+        sandbox_cwd += f"/{relative_cwd.as_posix()}"
+
+    readonly_paths = [
+        str(path)
+        for candidate in ("/usr", "/bin", "/lib", "/lib64", python_resolved.parent.parent)
+        if (path := _facade().Path(candidate)).exists()
+    ]
+
+    sandbox_args = [
+        bwrap,
+        "--die-with-parent",
+        "--new-session",
+        "--unshare-all",
+        "--cap-drop",
+        "ALL",
+        "--clearenv",
+        "--proc",
+        "/proc",
+        "--dev",
+        "/dev",
+        "--ro-bind",
+        str(workspace),
+        "/workspace",
+        "--ro-bind",
+        str(venv_root),
+        "/qa-venv",
+        "--bind",
+        str(scratch),
+        "/tmp",
+    ]
+    for path in readonly_paths:
+        sandbox_args.extend(["--ro-bind", path, path])
+    for name, value in (
+        ("GIT_CONFIG_GLOBAL", "/dev/null"),
+        ("GIT_CONFIG_NOSYSTEM", "1"),
+        ("GIT_TERMINAL_PROMPT", "0"),
+        ("HOME", "/tmp"),
+        ("LANG", "C.UTF-8"),
+        ("LC_ALL", "C.UTF-8"),
+        ("PATH", "/qa-venv/bin:/usr/local/bin:/usr/bin:/bin"),
+        ("PYTHONDONTWRITEBYTECODE", "1"),
+        ("PYTHONNOUSERSITE", "1"),
+        ("PYTHONPATH", "/workspace/成都修茈科技有限公司/MODstore_deploy:/workspace/FHD"),
+        ("PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1"),
+        ("TMPDIR", "/tmp"),
+    ):
+        sandbox_args.extend(["--setenv", name, value])
+    sandbox_args.extend(["--chdir", sandbox_cwd, "--", *command])
+
+    try:
+        return _facade()._run_cmd(
+            sandbox_args,
+            env={"LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "PATH": "/usr/bin:/bin"},
+            timeout=timeout,
+        )
+    finally:
+        _facade().shutil.rmtree(scratch, ignore_errors=True)
+
+
 def _structured_report_gate(
     steps: _facade().List[_facade().Dict[str, _facade().Any]], branch=None
 ) -> _facade().Dict[str, _facade().Any]:
@@ -249,6 +364,86 @@ def _structured_report_gate(
             values = test_delta.get(key)
             if isinstance(values, list) and values:
                 return {"ok": False, "reason": f"structured_qa_{key}", "qa": qa_json}
+        run_id = str(qa_steps[-1].get("run_id") or "").strip()
+        if branch:
+            if not _facade().re.fullmatch(r"[A-Za-z0-9._-]{1,128}", run_id):
+                return {"ok": False, "reason": "structured_qa_replay_run_id_invalid"}
+            repo_url = _facade().os.environ.get("MODSTORE_PARA_REPO_URL", "").strip()
+            base_branch = _facade().os.environ.get("MODSTORE_PARA_BRANCH", "").strip() or "main"
+            snapshot_path = (
+                _facade()._runtime_dir() / _facade().DEFAULT_MERGE_WORKSPACE_ROOT / f"{run_id}-qa"
+            )
+            try:
+                _facade()._changed_files_for_branch(
+                    repo_url=repo_url,
+                    base_branch=base_branch,
+                    branch=str(branch),
+                    workspace=snapshot_path,
+                )
+                _facade()._run_cmd(
+                    [
+                        "git",
+                        "-c",
+                        "core.hooksPath=/dev/null",
+                        "checkout",
+                        "--detach",
+                        f"origin/{branch}",
+                    ],
+                    snapshot_path,
+                    300,
+                )
+                base_ref = f"origin/{base_branch}"
+                target_ref = f"origin/{branch}"
+                shas = tuple(
+                    line.lower()
+                    for line in _facade()
+                    ._run_cmd(
+                        [
+                            "git",
+                            "rev-parse",
+                            f"{base_ref}^{{commit}}",
+                            f"{target_ref}^{{commit}}",
+                            "HEAD^{commit}",
+                        ],
+                        snapshot_path,
+                        60,
+                    )
+                    .splitlines()
+                )
+                if len(shas) != 3 or any(
+                    not _facade().re.fullmatch(r"[0-9a-f]{40,64}", sha) for sha in shas
+                ):
+                    raise RuntimeError("quality replay returned invalid commit SHAs")
+                if shas[1] != shas[2]:
+                    raise RuntimeError("quality replay snapshot does not match target SHA")
+                modstore = snapshot_path / "成都修茈科技有限公司" / "MODstore_deploy"
+                black, isort = _facade()._diff_quality_commands(
+                    base_ref=base_ref, target_ref=target_ref
+                )
+                python = _facade().shlex.split(focused_command)[0]
+                checks = [
+                    (focused_command, snapshot_path, 1800),
+                    (black, modstore, 600),
+                    (isort, modstore, 600),
+                    (f"{python} scripts/dev/source_governance.py --top 10", snapshot_path, 300),
+                ]
+                for command, cwd, timeout in checks:
+                    _run_qa_replay_sandboxed(
+                        _facade().shlex.split(command),
+                        cwd=cwd,
+                        workspace=snapshot_path,
+                        python_executable=python,
+                        timeout=timeout,
+                    )
+            except RECOVERABLE_ERRORS as exc:
+                return {
+                    "ok": False,
+                    "reason": "structured_qa_verified_replay_failed",
+                    "error": str(exc)[:500],
+                    "qa": qa_json,
+                }
+            finally:
+                _facade()._cleanup_merge_workspace(snapshot_path)
     else:
         qa_json = None
     return {
@@ -318,6 +513,7 @@ def _run_cmd(
     args: _facade().List[str],
     cwd: _facade().Optional[_facade().Path] = None,
     timeout: int = 120,
+    env: _facade().Optional[_facade().Dict[str, str]] = None,
 ) -> str:
     proc = _facade().subprocess.run(
         args,
@@ -326,6 +522,7 @@ def _run_cmd(
         stdout=_facade().subprocess.PIPE,
         stderr=_facade().subprocess.STDOUT,
         timeout=timeout,
+        env=env,
         check=False,
     )
     output = (proc.stdout or "").strip()
