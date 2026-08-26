@@ -265,19 +265,22 @@ def matches_source_governance_command(command: Any) -> bool:
     tokens = _safe_command_tokens(str(command or "").strip())
     if tokens is None:
         return False
-    for segment in _shell_command_segments(tokens):
-        segment = _strip_leading_shell_env_assignments(segment)
-        if len(segment) < 2 or not _is_python_executable(segment[0]):
-            continue
-        script = Path(segment[1])
-        if script.name != "source_governance.py":
-            continue
-        normalized = script.as_posix().rstrip("/")
-        if normalized == "scripts/dev/source_governance.py" or normalized.endswith(
-            "/scripts/dev/source_governance.py"
-        ):
-            return True
-    return False
+    segments = _shell_command_segments(tokens)
+    if len(segments) != 1:
+        return False
+    segment = _strip_leading_shell_env_assignments(segments[0])
+    if len(segment) != 4 or not _is_python_executable(segment[0]):
+        return False
+    script = Path(segment[1])
+    normalized = script.as_posix().rstrip("/")
+    return (
+        script.name == "source_governance.py"
+        and (
+            normalized == "scripts/dev/source_governance.py"
+            or normalized.endswith("/scripts/dev/source_governance.py")
+        )
+        and segment[2:] == ["--top", "10"]
+    )
 
 
 def _reported_check_passed(check: Any, matcher: Any) -> bool:

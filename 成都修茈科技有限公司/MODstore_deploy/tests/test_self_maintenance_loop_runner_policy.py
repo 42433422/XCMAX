@@ -2618,6 +2618,34 @@ def test_quality_command_matchers_require_real_commands_and_scopes():
     assert not matches_source_governance_command(
         "echo python3 scripts/dev/source_governance.py --top 10"
     )
+    assert not matches_source_governance_command(
+        "python3 scripts/dev/source_governance.py --update-baseline --force"
+    )
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        (
+            "python3 scripts/dev/source_governance.py --top 10 && "
+            "python3 scripts/dev/source_governance.py --update-baseline --force"
+        ),
+        (
+            "python3 scripts/dev/source_governance.py --update-baseline --force && "
+            "python3 scripts/dev/source_governance.py --top 10"
+        ),
+        (
+            "python3 scripts/dev/source_governance.py --top 10 || "
+            "python3 scripts/dev/source_governance.py --update-baseline --force"
+        ),
+        (
+            "python3 scripts/dev/source_governance.py --top 10; "
+            "python3 scripts/dev/source_governance.py --update-baseline --force"
+        ),
+    ],
+)
+def test_source_governance_matcher_rejects_additional_executable_segments(command):
+    assert matches_source_governance_command(command) is False
 
 
 @pytest.mark.parametrize(
