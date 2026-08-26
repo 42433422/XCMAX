@@ -147,6 +147,14 @@ def _structured_report_gate(
 ) -> _facade().Dict[str, _facade().Any]:
     review_steps = [step for step in steps if step.get("step") == "review"]
     qa_steps = [step for step in steps if step.get("step") == "qa"]
+    if not review_steps and not qa_steps:
+        return {
+            "evaluated": False,
+            "ok": None,
+            "qa": None,
+            "reason": "structured_reports_not_evaluated",
+            "review": None,
+        }
     if review_steps:
         review_json = _facade()._structured_report_from_step(
             review_steps[-1], _facade().STRUCTURED_REVIEW_MARKER
@@ -252,6 +260,7 @@ def _structured_report_gate(
     else:
         qa_json = None
     return {
+        "evaluated": True,
         "ok": True,
         "qa": qa_json,
         "reason": "structured_reports_passed",

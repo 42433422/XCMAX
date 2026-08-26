@@ -2322,6 +2322,92 @@ def test_structured_report_gate_blocks_missing_or_failed_qa_json(monkeypatch):
     assert _structured_report_gate(failed)["reason"] == "structured_qa_verdict_not_pass"
 
 
+def _stub_post_loop_policy_gates(monkeypatch):
+    monkeypatch.setattr(
+        loop_runner,
+        "_governance_audit_gate",
+        lambda: {"ok": True, "blocking": False, "action": "allow"},
+    )
+    monkeypatch.setattr(
+        loop_runner,
+        "_loop_steps_roster_gate",
+        lambda _steps: {"ok": True, "blocking": False, "action": "allow"},
+    )
+    monkeypatch.setattr(
+        loop_runner,
+        "evolution_metrics_gate",
+        lambda: {"pause": False, "history_count": 0},
+    )
+
+
+@pytest.mark.parametrize(
+    ("branch", "auto_merge", "action", "reason"),
+    [
+        (None, True, "auto_continue", "no_code_branch"),
+        (
+            "devfleet/cursor/deferred-gate",
+            False,
+            "hold_for_automated_remediation",
+            "auto_merge_disabled",
+        ),
+    ],
+)
+def test_non_merge_policy_reports_unevaluated_structured_gate(
+    monkeypatch, branch, auto_merge, action, reason
+):
+    _stub_post_loop_policy_gates(monkeypatch)
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_LOW_RISK", "1" if auto_merge else "0")
+
+    decision = loop_runner._decide_post_loop_policy(
+        branch=branch,
+        gate={"should_run": True, "missing_count": 0, "threshold": 1},
+        para_task_id=None,
+        run_id="deferred-structured-gate",
+        status="completed",
+        steps=[{"ok": True, "step": "code"}],
+    )
+
+    structured = next(
+        item for item in decision["active_gates"]["items"] if item["key"] == "structured"
+    )
+    assert decision["action"] == action
+    assert decision["reason"] == reason
+    assert structured == {
+        "blocking": False,
+        "detail": "QA/review JSON gate not evaluated",
+        "key": "structured",
+        "label": "Structured QA/Review",
+        "ok": None,
+        "reason": "structured_reports_not_evaluated",
+        "status": "deferred",
+    }
+    assert decision["active_gates"]["ok"] is False
+
+
+def test_merge_policy_blocks_unevaluated_structured_gate(monkeypatch):
+    _stub_post_loop_policy_gates(monkeypatch)
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_LOW_RISK", "1")
+
+    decision = loop_runner._decide_post_loop_policy(
+        branch="devfleet/cursor/deferred-gate",
+        gate={"should_run": True, "missing_count": 0, "threshold": 1},
+        para_task_id="task-deferred-gate",
+        run_id="deferred-structured-gate",
+        status="completed",
+        steps=[{"ok": True, "step": "code"}],
+    )
+
+    assert decision["action"] == "hold_for_automated_remediation"
+    assert decision["reason"] == "structured_reports_not_evaluated"
+    assert decision["structured_gate"] == {
+        "evaluated": False,
+        "ok": None,
+        "qa": None,
+        "reason": "structured_reports_not_evaluated",
+        "review": None,
+    }
+
+
 def test_structured_report_gate_classifies_executor_outage_separately(monkeypatch):
     monkeypatch.setenv(
         "MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND",

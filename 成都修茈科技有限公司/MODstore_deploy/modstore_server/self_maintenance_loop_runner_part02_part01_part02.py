@@ -57,7 +57,17 @@ def _policy_active_gates_snapshot(
     structured_gate: _facade().Optional[_facade().Dict[str, _facade().Any]] = None,
 ) -> _facade().Dict[str, _facade().Any]:
     evo = evolution_metrics if isinstance(evolution_metrics, dict) else {}
-    structured = structured_gate if isinstance(structured_gate, dict) else {"ok": True}
+    structured = (
+        structured_gate
+        if isinstance(structured_gate, dict)
+        else {
+            "evaluated": False,
+            "ok": None,
+            "reason": "structured_reports_not_evaluated",
+        }
+    )
+    structured_evaluated = structured.get("evaluated") is not False
+    structured_ok = structured.get("ok") if structured_evaluated else None
     items = [
         {
             "key": "evidence",
@@ -71,11 +81,19 @@ def _policy_active_gates_snapshot(
         {
             "key": "structured",
             "label": "Structured QA/Review",
-            "status": "allow" if structured.get("ok") is not False else "blocked",
-            "ok": structured.get("ok") is not False,
-            "blocking": structured.get("ok") is False,
+            "status": (
+                "deferred"
+                if not structured_evaluated
+                else "allow" if structured_ok is True else "blocked"
+            ),
+            "ok": structured_ok,
+            "blocking": structured_ok is False,
             "reason": structured.get("reason") or "",
-            "detail": "QA/review JSON gate",
+            "detail": (
+                "QA/review JSON gate"
+                if structured_evaluated
+                else "QA/review JSON gate not evaluated"
+            ),
         },
         {
             "key": "report_only",
@@ -116,7 +134,7 @@ def _policy_active_gates_snapshot(
     ]
     blocking_items = [item for item in items if item.get("blocking")]
     return {
-        "ok": not blocking_items,
+        "ok": all(item.get("ok") is True for item in items),
         "blocking_count": len(blocking_items),
         "blocking_keys": [str(item.get("key") or "") for item in blocking_items],
         "items": items,

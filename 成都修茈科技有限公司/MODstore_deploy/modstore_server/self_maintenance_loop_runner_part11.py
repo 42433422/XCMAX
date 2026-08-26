@@ -55,7 +55,7 @@ def _decide_post_loop_policy(
         roster_gate=roster_gate,
         structured_gate=structured_gate,
     )
-    if not structured_gate.get("ok"):
+    if structured_gate.get("ok") is False:
         return _hold_for_remediation(
             structured_gate.get("reason") or "structured_report_gate_failed",
             active_gates=active_gates,
@@ -111,6 +111,15 @@ def _decide_post_loop_policy(
             evolution_gate=evolution_gate,
             governance_gate=governance_gate,
             roster_gate=roster_gate,
+        )
+    if structured_gate.get("ok") is not True:
+        return _hold_for_remediation(
+            structured_gate.get("reason") or "structured_report_gate_not_evaluated",
+            active_gates=active_gates,
+            evolution_gate=evolution_gate,
+            governance_gate=governance_gate,
+            roster_gate=roster_gate,
+            structured_gate=structured_gate,
         )
     merge_result = _facade()._auto_merge_low_risk_branch(
         run_id=run_id, task_id=para_task_id, branch=branch, steps=steps
