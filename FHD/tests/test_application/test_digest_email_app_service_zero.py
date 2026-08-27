@@ -149,7 +149,7 @@ class TestGetDailyDigestArtifactsLocal:
     async def test_calls_with_artifacts_path(self, mock_get: AsyncMock) -> None:
         result = await get_daily_digest_artifacts_local(5)
         call_args = mock_get.call_args
-        assert "/5/artifacts" in call_args[0][0]
+        assert call_args[0][0] == "/api/agent/butler/daily-digests/5/artifacts"
 
 
 class TestListActionItemsLocal:

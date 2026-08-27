@@ -150,12 +150,16 @@ atomic_upload() {
   local src="$1"
   local dest="$2"
   local part="${dest}.part"
-  local local_sz attempt transfer_mode
+  local local_sz attempt transfer_mode rsync_resume_flag
   local_sz="$(wc -c < "$src" | tr -d '[:space:]')"
   transfer_mode="scp"
+  rsync_resume_flag="--append"
   if command -v rsync >/dev/null 2>&1 && \
       "${SSH[@]}" "$REMOTE" "command -v rsync >/dev/null 2>&1"; then
     transfer_mode="rsync"
+    if rsync --help 2>&1 | grep -q -- '--append-verify'; then
+      rsync_resume_flag="--append-verify"
+    fi
   fi
   deploy_emit transfer started "artifact=$(basename "$src") mode=$transfer_mode bytes=$local_sz"
   for attempt in 1 2 3; do
@@ -163,7 +167,7 @@ atomic_upload() {
       # Preserve the remote .part file across interrupted CI runs.  A rerun of
       # the same immutable artifact resumes from the verified prefix instead
       # of retransmitting it from byte zero over the high-latency CVM link.
-      if rsync --archive --partial --append-verify --timeout=180 \
+      if rsync --archive --partial "$rsync_resume_flag" --timeout=180 \
           -e "$RSYNC_SHELL" "$src" "${REMOTE}:${part}"; then
         :
       else

@@ -15,6 +15,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from modstore_server.admin_employee_autonomy_helpers import _require_admin_or_internal
 from modstore_server.api.deps import _require_admin
 from modstore_server.models import User
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
@@ -33,7 +34,7 @@ async def get_action_items(
     kind: Optional[str] = Query(None, description="patch|update"),
     day: Optional[str] = Query(None),
     latest: bool = Query(True, description="未指定 day 时取最新一天"),
-    _: User = Depends(_require_admin),
+    _: object = Depends(_require_admin_or_internal),
 ):
     from modstore_server.digest_action_items import latest_day, list_action_items
 
@@ -60,7 +61,7 @@ async def get_action_items(
 async def get_action_items_stats(
     kind: Optional[str] = Query(None),
     day: Optional[str] = Query(None),
-    _: User = Depends(_require_admin),
+    _: object = Depends(_require_admin_or_internal),
 ):
     from modstore_server.digest_action_items import latest_day, stats
 

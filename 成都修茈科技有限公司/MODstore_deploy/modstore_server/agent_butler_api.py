@@ -36,6 +36,7 @@ from modstore_server.all_hands_report import (
     MAX_ALL_HANDS_EMPLOYEES,
     clamp_all_hands_max_employees,
 )
+from modstore_server.admin_employee_autonomy_helpers import _require_admin_or_internal
 from modstore_server.api.deps import _get_current_user
 from modstore_server.infrastructure.db import get_db
 from modstore_server.llm_billing import (
