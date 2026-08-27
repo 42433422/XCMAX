@@ -325,6 +325,7 @@ async def decide_custom_delivery(
         evidence["acceptance_note"] = body.note.strip()[:4000]
         ticket.decision_status = "approved"
         ticket.status = "processing"
+        decision_event = "custom_delivery_accepted"
     else:
         note = body.note.strip()
         if len(note) < 4:
@@ -345,6 +346,22 @@ async def decide_custom_delivery(
         ticket.decision_status = "pending"
         ticket.status = "processing"
         ticket.closed_at = None
+        decision_event = "custom_delivery_rework_requested"
+    audit(
+        db,
+        event_type=decision_event,
+        session_id=int(ticket.session_id),
+        ticket_id=int(ticket.id),
+        actor=user,
+        actor_type="admin" if bool(getattr(user, "is_admin", False)) else "user",
+        detail={
+            "action": body.action,
+            "note": body.note.strip()[:4000],
+            "source": "admin_delivery_center"
+            if bool(getattr(user, "is_admin", False))
+            else "desktop_private_delivery",
+        },
+    )
     ticket.evidence_json = json_dumps(evidence)
     ticket.updated_at = datetime.now(UTC)
     db.commit()

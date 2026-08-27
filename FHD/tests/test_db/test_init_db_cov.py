@@ -377,6 +377,7 @@ class TestEnsureUserProfileColumns:
         from app.db.init_db import ensure_user_profile_columns
 
         existing_cols = [
+            "market_user_id",
             "tier",
             "industry_id",
             "account_tier",
@@ -396,7 +397,8 @@ class TestEnsureUserProfileColumns:
         ):
             ensure_user_profile_columns(database_url="sqlite:///x")
         conn_mock = eng.begin.return_value.__enter__.return_value
-        assert conn_mock.execute.call_count == 0
+        assert conn_mock.execute.call_count == 1
+        assert "ix_users_market_user_id" in str(conn_mock.execute.call_args.args[0])
 
 
 # ---------------------------------------------------------------------------

@@ -7,6 +7,7 @@ import ServerFunctionsView from './views/ServerFunctionsView.vue'
 import ApprovalHubView from './views/ApprovalHubView.vue'
 import EmployeeAutonomyView from './views/EmployeeAutonomyView.vue'
 import FounderAutonomyView from './views/FounderAutonomyView.vue'
+import DeliveryCenterView from './views/DeliveryCenterView.vue'
 
 /** 管理端运维宿主页（同步 import，避免懒加载期间仍渲染对话页） */
 export const ADMIN_HOST_ROUTE_RECORDS: RouteRecordRaw[] = [
@@ -15,6 +16,12 @@ export const ADMIN_HOST_ROUTE_RECORDS: RouteRecordRaw[] = [
     name: 'xcmax-admin',
     component: XCmaxAdminView,
     meta: { title: '服务器后台总览', requiresAdminAccount: true, hostAdmin: true },
+  },
+  {
+    path: '/delivery-center',
+    name: 'delivery-center',
+    component: DeliveryCenterView,
+    meta: { title: '客户交付中心', requiresAdminAccount: true, hostAdmin: true },
   },
   {
     path: '/founder-autonomy',
