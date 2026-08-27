@@ -24,8 +24,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          # 需要历史以便在 PR 上做 base...HEAD 的 diff
-          fetch-depth: 0
+          # 当前树检查不需要下载全部历史；PR 的 base 提交在下方按 SHA 精确拉取。
+          # 仓库历史较大时 fetch-depth: 0 会耗尽本任务的 5 分钟限额。
+          fetch-depth: 1
 
       - name: Forbidden path check (tracked files)
         # 已经在 git 索引里的禁止路径：这些文件不应存在于仓库中。

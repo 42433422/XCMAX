@@ -18,6 +18,7 @@ from modstore_server.customer_service_api import (
     _schedule_customer_ticket_incident,
     _visible_ticket_or_404,
 )
+from modstore_server.customer_service_delivery_completion import complete_delivery_if_ready
 from modstore_server.customer_service_delivery_models import (
     CustomDeliveryCreateBody,
     CustomDeliveryDecisionBody,
@@ -25,6 +26,10 @@ from modstore_server.customer_service_delivery_models import (
 )
 from modstore_server.customer_service_delivery_models import (
     custom_delivery_brief as _custom_delivery_brief,
+)
+from modstore_server.customer_service_delivery_models import (
+    custom_delivery_commerce_blockers,
+    custom_delivery_crm,
 )
 from modstore_server.customer_service_delivery_models import (
     custom_delivery_evidence as _custom_delivery_evidence,
@@ -103,8 +108,11 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
         runs.append(item)
 
     accepted = str(evidence.get("acceptance_status") or "") == "accepted"
+    commerce_blockers = custom_delivery_commerce_blockers(evidence)
     if str(ticket.status or "") in {"resolved", "closed", "done"}:
         stage, label = "delivered", "已交付并上岗"
+    elif accepted and commerce_blockers:
+        stage, label = "commerce", "商务条件待完成"
     elif accepted:
         stage, label = "delivering", "验收通过，待安装回执"
     elif evidence.get("start_error") and not latest_snapshot:
@@ -148,6 +156,9 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
             "artifacts": artifacts,
             "acceptance_status": str(evidence.get("acceptance_status") or "pending"),
             "install_receipts": evidence.get("install_receipts") or [],
+            "crm": custom_delivery_crm(evidence),
+            "commerce_ready": not commerce_blockers,
+            "commerce_blockers": commerce_blockers,
         },
     }
 
@@ -159,7 +170,7 @@ async def create_custom_delivery(
     user: User = Depends(_get_current_user),
 ):
     evidence: dict[str, Any] = {
-        "schema_version": 1,
+        "schema_version": 2,
         "delivery_managed_by": "custom_delivery",
         "kind": body.kind,
         "title": body.title.strip(),
@@ -169,6 +180,7 @@ async def create_custom_delivery(
         "acceptance_status": "pending",
         "runs": [],
         "install_receipts": [],
+        "crm": custom_delivery_crm({}),
     }
     session = CustomerServiceSession(
         user_id=int(user.id),
@@ -359,8 +371,12 @@ async def download_custom_delivery_artifact(
     evidence = _custom_delivery_evidence(ticket)
     if str(evidence.get("acceptance_status") or "") != "accepted":
         raise HTTPException(409, "请先在生产员工页确认验收")
+    blockers = custom_delivery_commerce_blockers(evidence)
+    if blockers:
+        raise HTTPException(409, f"商务交付条件未完成：{'、'.join(blockers)}")
     payload = await _custom_delivery_payload(ticket)
     artifacts = payload.get("custom_delivery", {}).get("artifacts", [])
+    evidence["delivery_artifacts"] = artifacts
     target = next((r for r in artifacts if r.get("kind") == artifact_kind), None)
     if not target:
         raise HTTPException(404, "定制产物不存在")
@@ -432,6 +448,7 @@ async def record_custom_delivery_install(
         raise HTTPException(409, "定制产物尚未验收")
     payload = await _custom_delivery_payload(ticket)
     artifacts = payload.get("custom_delivery", {}).get("artifacts", [])
+    evidence["delivery_artifacts"] = artifacts
     if not any(
         r.get("kind") == body.artifact_kind and r.get("id") == body.artifact_id for r in artifacts
     ):
@@ -467,13 +484,7 @@ async def record_custom_delivery_install(
             }
         )
     evidence["install_receipts"] = receipts
-    required = {(str(r.get("kind")), str(r.get("id"))) for r in artifacts}
-    installed = {(str(r.get("kind")), str(r.get("id"))) for r in receipts}
-    if required and required.issubset(installed):
-        ticket.status = "resolved"
-        ticket.decision_status = "approved"
-        ticket.closed_at = datetime.now(UTC)
-        evidence["delivered_at"] = ticket.closed_at.isoformat()
+    complete_delivery_if_ready(ticket, evidence)
     ticket.evidence_json = json_dumps(evidence)
     ticket.updated_at = datetime.now(UTC)
     db.commit()

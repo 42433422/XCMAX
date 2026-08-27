@@ -142,8 +142,21 @@ def test_register_desktop_relay_reuses_cached_pairing_on_timeout(monkeypatch, tm
 def test_register_desktop_relay_invalid_base_url_returns_none(monkeypatch, tmp_path):
     from app.services import mobile_relay_desktop_client as relay
 
+    config_file = tmp_path / "mobile_relay_desktop.json"
+    config_file.write_text(
+        json.dumps(
+            {
+                "relay_id": "relay-from-another-base",
+                "desktop_token": "desktop-secret",
+                "pairing_code": "736559",
+                "relay_base_url": "https://xiu-ci.com/fhd-api/",
+                "registered_at": int(time.time()),
+            }
+        ),
+        encoding="utf-8",
+    )
     monkeypatch.setenv("XCAGI_RELAY_BASE_URL", "http://:")
-    monkeypatch.setattr(relay, "_CONFIG_FILE", tmp_path / "mobile_relay_desktop.json")
+    monkeypatch.setattr(relay, "_CONFIG_FILE", config_file)
 
     payload = relay.register_desktop_relay(host="192.168.0.38", port=17500, force_new=True)
 

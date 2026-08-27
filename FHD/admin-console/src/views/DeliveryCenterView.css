@@ -60,7 +60,7 @@
 .delivery-ticket__meta { display: grid; align-content: center; justify-items: end; gap: 3px; color: var(--muted); font-size: 11px; white-space: nowrap; }
 .delivery-ticket__meta span { color: #355878; font-family: ui-monospace,SFMono-Regular,Menlo,monospace; }
 
-.delivery-timeline { display: grid; grid-template-columns: repeat(5,1fr); margin: 0; padding: 16px 20px; list-style: none; background: linear-gradient(90deg,#f9fbfe,#f3f8fd); }
+.delivery-timeline { display: grid; grid-template-columns: repeat(6,1fr); margin: 0; padding: 16px 20px; list-style: none; background: linear-gradient(90deg,#f9fbfe,#f3f8fd); }
 .delivery-timeline li { position: relative; display: flex; align-items: center; gap: 8px; color: #8798aa; }
 .delivery-timeline li:not(:last-child)::after { content: ''; position: absolute; top: 14px; left: 32px; right: 6px; height: 1px; background: #cfdeeb; }
 .delivery-timeline li > span { z-index: 1; display: grid; place-items: center; width: 28px; height: 28px; flex: 0 0 28px; border-radius: 50%; background: #fff; border: 1px solid #ccdae8; }
@@ -132,7 +132,7 @@
   .delivery-hero,.delivery-ticket__head { flex-direction: column; }
   .delivery-stats { grid-template-columns: repeat(2,1fr); }
   .delivery-toolbar { align-items: stretch; flex-direction: column; }
-  .delivery-timeline { overflow-x: auto; grid-template-columns: repeat(5,150px); }
+  .delivery-timeline { overflow-x: auto; grid-template-columns: repeat(6,150px); }
   .delivery-brief { grid-template-columns: 1fr; }
   .delivery-ticket__meta { justify-items: start; }
   .delivery-actions__controls { flex-wrap: wrap; }

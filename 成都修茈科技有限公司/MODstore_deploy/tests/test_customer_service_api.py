@@ -541,6 +541,7 @@ def test_custom_delivery_requires_quality_acceptance_and_install_receipt(client,
     from modstore_server.models_cs import CustomerServiceAuditLog, CustomerServiceTicket
 
     user = _make_user("custom_delivery")
+    admin = _make_user("custom_delivery_admin", admin=True)
     state = {
         "id": "wb-custom-1",
         "intent": "mod",
@@ -634,7 +635,8 @@ def test_custom_delivery_requires_quality_acceptance_and_install_receipt(client,
             json={"action": "accept", "note": "验收通过"},
         )
         assert accepted.status_code == 200, accepted.text
-        assert accepted.json()["custom_delivery"]["stage"] == "delivering"
+        assert accepted.json()["custom_delivery"]["stage"] == "commerce"
+        assert accepted.json()["custom_delivery"]["commerce_ready"] is False
         with sf() as db:
             accepted_audit = (
                 db.query(CustomerServiceAuditLog)
@@ -643,6 +645,38 @@ def test_custom_delivery_requires_quality_acceptance_and_install_receipt(client,
             )
             assert accepted_audit is not None
             assert accepted_audit.actor_user_id == user.id
+
+        app.dependency_overrides[customer_service_api._get_current_user] = lambda: admin
+        crm_updates = [
+            {"section": "assignment", "owner_name": "张交付"},
+            {
+                "section": "quote",
+                "status": "accepted",
+                "number": "QT-PYTEST-001",
+                "amount": 1999,
+            },
+            {
+                "section": "contract",
+                "status": "signed",
+                "number": "CT-PYTEST-001",
+                "reference": "oss://pytest/contract.pdf",
+            },
+            {
+                "section": "payment",
+                "status": "paid",
+                "amount": 1999,
+                "reference": "PAY-PYTEST-001",
+            },
+        ]
+        for crm_payload in crm_updates:
+            updated = client.post(
+                f"/api/customer-service/custom-deliveries/{ticket_id}/crm",
+                json=crm_payload,
+            )
+            assert updated.status_code == 200, updated.text
+        assert updated.json()["custom_delivery"]["commerce_ready"] is True
+        assert updated.json()["custom_delivery"]["stage"] == "delivering"
+        app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
 
         receipt_token = "pytest-download-receipt-token-73"
         with sf() as db:

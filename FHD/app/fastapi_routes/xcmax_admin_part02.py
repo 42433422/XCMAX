@@ -41,16 +41,31 @@ from app.fastapi_routes.xcmax_admin_part02_part01 import (
     admin_list_assignable_mods as admin_list_assignable_mods,
 )
 from app.fastapi_routes.xcmax_admin_part02_part01 import (
+    admin_list_commerce_orders as admin_list_commerce_orders,
+)
+from app.fastapi_routes.xcmax_admin_part02_part01 import (
     admin_list_market_users as admin_list_market_users,
 )
 from app.fastapi_routes.xcmax_admin_part02_part01 import (
     admin_list_orders as admin_list_orders,
 )
 from app.fastapi_routes.xcmax_admin_part02_part01 import (
+    admin_list_pending_commerce_refunds as admin_list_pending_commerce_refunds,
+)
+from app.fastapi_routes.xcmax_admin_part02_part01 import (
+    admin_list_update_install_receipts as admin_list_update_install_receipts,
+)
+from app.fastapi_routes.xcmax_admin_part02_part01 import (
     admin_list_user_mods as admin_list_user_mods,
 )
 from app.fastapi_routes.xcmax_admin_part02_part01 import (
     admin_list_wallets as admin_list_wallets,
+)
+from app.fastapi_routes.xcmax_admin_part02_part01 import (
+    admin_mutate_commerce_order as admin_mutate_commerce_order,
+)
+from app.fastapi_routes.xcmax_admin_part02_part01 import (
+    admin_review_commerce_refund as admin_review_commerce_refund,
 )
 from app.fastapi_routes.xcmax_admin_part02_part01 import (
     admin_set_user_admin as admin_set_user_admin,

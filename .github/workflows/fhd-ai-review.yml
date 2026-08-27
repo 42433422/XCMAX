@@ -51,7 +51,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          # 审查脚本通过 GitHub API 获取 PR diff，不需要下载整个大仓历史。
+          fetch-depth: 1
 
       - name: Set up Python
         uses: actions/setup-python@v5

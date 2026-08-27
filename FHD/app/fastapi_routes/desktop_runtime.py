@@ -57,6 +57,49 @@ class DeploymentSettingsUpdate(BaseModel):
     postgres_url: str | None = None
 
 
+class UpdateInstallationReceiptReport(BaseModel):
+    installation_id: str
+    idempotency_key: str
+    channel: str = "stable"
+    platform: str = ""
+    target_version: str = ""
+    target_build_sha: str = ""
+    installed_version: str = ""
+    installed_build_sha: str = ""
+    status: str
+    error: str = ""
+    source: str = "desktop_ota"
+    reported_at: datetime | None = None
+
+
+@router.post("/update-install-receipts/report")
+async def report_update_install_receipt(body: UpdateInstallationReceiptReport, request: Request):
+    """由 Electron 主进程在更新后稳定启动或回滚后调用。"""
+    if not is_desktop_mode():
+        raise HTTPException(403, "仅桌面运行时可上报安装回执")
+    client_host = str(getattr(getattr(request, "client", None), "host", "") or "")
+    if client_host not in {"127.0.0.1", "::1", "testclient"}:
+        raise HTTPException(403, "安装回执只接受本机调用")
+    if body.status not in {"installed", "failed", "rolled_back"}:
+        raise HTTPException(422, "无效的安装回执状态")
+    from app.fastapi_routes.market_account import (
+        _proxy_json,
+        latest_session_market_token,
+    )
+
+    token = latest_session_market_token()
+    if not token:
+        raise HTTPException(409, "当前桌面会话未绑定市场账号，回执已留在本机等待重试")
+    return await _proxy_json(
+        "POST",
+        "/api/update-installations/receipts",
+        json_body=body.model_dump(mode="json"),
+        authorization=token,
+        timeout=10.0,
+        retries=2,
+    )
+
+
 @router.get("/status")
 def desktop_status(request: Request):
     dirs = ensure_desktop_dirs(os.environ.get("XCAGI_DATA_DIR"))

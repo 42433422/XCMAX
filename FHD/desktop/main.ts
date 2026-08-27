@@ -13,7 +13,8 @@ import {
   checkPendingRollback,
   consumeRollbackApplied,
 } from './rollback'
-import { readLocalBuildSha } from './updater'
+import { readLocalBuildSha, readLocalProductVersion } from './updater'
+import { reportPendingUpdateInstallation } from './update-install-receipts'
 import { AutonomyController } from './autonomy/controller'
 import { DesktopAutonomyAdapter } from './autonomy/desktop-adapter'
 import { backendCrashPolicy } from './autonomy/policies/backend-crash.policy'
@@ -223,6 +224,20 @@ function bootstrap(): void {
           await waitForPostUpdateStartupStability()
           commitRollback()
           writeBackendLog(`[rollback] 后端、业务路由、主界面与观察期就绪，已提交（marker 删除）\n`)
+        }
+        try {
+          const receipt = await reportPendingUpdateInstallation({
+            backendPort: DEFAULT_PORT,
+            installedVersion: readLocalProductVersion(),
+            installedBuildSha: readLocalBuildSha(),
+            rollback: appliedRollback ? { reason: appliedRollback.reason } : null,
+          })
+          if (receipt.reported) {
+            writeBackendLog(`[updater] install receipt ${receipt.status}\n`)
+          }
+        } catch (error) {
+          // 保留 outbox 文件，下次启动重试；不得将“上报失败”当成“安装失败”。
+          writeBackendLog(`[updater] install receipt deferred: ${error instanceof Error ? error.message : error}\n`)
         }
         // 更新日志（What's New）：版本变化时弹一次原生提示（首次运行与测试/E2E 模式跳过）。
         if (!process.env.XCAGI_DESKTOP_TEST && !isE2ERun) {

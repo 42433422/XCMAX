@@ -4,10 +4,12 @@ import com.alipay.api.AlipayApiException;
 import com.alipay.api.AlipayClient;
 import com.alipay.api.AlipayResponse;
 import com.alipay.api.request.AlipayTradePagePayRequest;
+import com.alipay.api.request.AlipayTradeCloseRequest;
 import com.alipay.api.request.AlipayTradePrecreateRequest;
 import com.alipay.api.request.AlipayTradeQueryRequest;
 import com.alipay.api.request.AlipayTradeWapPayRequest;
 import com.alipay.api.response.AlipayTradePagePayResponse;
+import com.alipay.api.response.AlipayTradeCloseResponse;
 import com.alipay.api.response.AlipayTradePrecreateResponse;
 import com.alipay.api.response.AlipayTradeQueryResponse;
 import com.alipay.api.response.AlipayTradeWapPayResponse;
@@ -317,6 +319,25 @@ public class AlipayService {
             }
         } catch (Exception e) {
             putAlipayExecuteError(result, "支付宝PC支付失败", e);
+        }
+        return result;
+    }
+
+    /** 管理端取消/改价前必须先关闭原支付宝交易，防止旧二维码继续付款。 */
+    public Map<String, Object> closeOrder(String outTradeNo) {
+        Map<String, Object> result = new HashMap<>();
+        AlipayTradeCloseRequest request = new AlipayTradeCloseRequest();
+        request.setBizContent(bizContentJson(Map.of("out_trade_no", outTradeNo)));
+        try {
+            AlipayTradeCloseResponse response = alipayClient.execute(request);
+            if (response != null && response.isSuccess()) {
+                result.put("ok", true);
+                return result;
+            }
+            result.put("ok", false);
+            result.put("message", alipayResponseFailureMessage(response));
+        } catch (Exception e) {
+            putAlipayExecuteError(result, "支付宝关单失败", e);
         }
         return result;
     }

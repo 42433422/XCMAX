@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.*;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Pageable;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.SimpleTransactionStatus;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -576,6 +577,208 @@ class OrderServiceTest {
             assertThat(result.get("already_had_token_grant")).isEqualTo(1);
             verify(walletService).grantPlanMembershipTokenAllowance(o1);
             verify(walletService, never()).grantPlanMembershipTokenAllowance(o2);
+        }
+    }
+
+    @Nested
+    class AdminCommerceActions {
+        private User admin() {
+            User admin = new User();
+            admin.setId(99L);
+            admin.setUsername("admin");
+            admin.setPasswordHash("hash");
+            admin.setAdmin(true);
+            return admin;
+        }
+
+        @Test
+        void cancelClosesProviderBeforeChangingLocalStatus() {
+            Order order = buildPendingOrder("OT-ADMIN-CANCEL", "plan", new BigDecimal("100.00"));
+            order.setPayType("alipay_page");
+            when(orderRepository.findByOutTradeNoForUpdate(order.getOutTradeNo()))
+                    .thenReturn(Optional.of(order));
+            when(alipayService.closeOrder(order.getOutTradeNo()))
+                    .thenReturn(Map.of("ok", true));
+            when(orderRepository.save(order)).thenReturn(order);
+
+            Order result = orderService.cancelPendingOrderAsAdmin(
+                    admin(), order.getOutTradeNo(), "客户取消订单");
+
+            assertThat(result.getStatus()).isEqualTo("closed");
+            InOrder sequence = inOrder(alipayService, orderRepository);
+            sequence.verify(alipayService).closeOrder(order.getOutTradeNo());
+            sequence.verify(orderRepository).save(order);
+        }
+
+        @Test
+        void cancelLeavesLocalOrderUntouchedWhenProviderCloseFails() {
+            Order order = buildPendingOrder("OT-ADMIN-SAFE", "plan", new BigDecimal("100.00"));
+            order.setPayType("alipay_page");
+            when(orderRepository.findByOutTradeNoForUpdate(order.getOutTradeNo()))
+                    .thenReturn(Optional.of(order));
+            when(alipayService.closeOrder(order.getOutTradeNo()))
+                    .thenReturn(Map.of("ok", false, "message", "provider down"));
+
+            assertThatThrownBy(() -> orderService.cancelPendingOrderAsAdmin(
+                    admin(), order.getOutTradeNo(), "客户取消订单"))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("本次未改动订单");
+            assertThat(order.getStatus()).isEqualTo("pending");
+            verify(orderRepository, never()).save(order);
+        }
+
+        @Test
+        void repriceReturnsExplicitPartialSuccessWhenReplacementPaymentFails() {
+            Order original = buildPendingOrder("OT-ADMIN-REPRICE", "plan", new BigDecimal("100.00"));
+            original.setPlanId("plan_enterprise");
+            original.setPayType("alipay_page");
+            when(orderRepository.findByOutTradeNoForUpdate(original.getOutTradeNo()))
+                    .thenReturn(Optional.of(original));
+            when(alipayService.closeOrder(original.getOutTradeNo()))
+                    .thenReturn(Map.of("ok", true));
+            when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(alipayService.createPagePay(anyString(), anyString(), eq(new BigDecimal("88.00")), anyString()))
+                    .thenReturn(Map.of("ok", false, "message", "provider down"));
+
+            Map<String, Object> result = orderService.repricePendingOrderAsAdmin(
+                    admin(), original.getOutTradeNo(), new BigDecimal("88.00"),
+                    "合同金额调整", "https://example.test/return");
+
+            assertThat(result.get("ok")).isEqualTo(false);
+            assertThat(result.get("partial_success")).isEqualTo(true);
+            assertThat(original.getStatus()).isEqualTo("closed");
+            assertThat(((Order) result.get("replacement_order")).getStatus()).isEqualTo("failed");
+        }
+
+        @Test
+        void adminListingNormalizesFiltersAndPagination() {
+            User admin = admin();
+            when(orderRepository.findAllByOptionalStatus(eq("paid"), any(Pageable.class)))
+                    .thenReturn(List.of());
+            when(orderRepository.findAllByOptionalStatus(isNull(), any(Pageable.class)))
+                    .thenReturn(List.of());
+            when(orderRepository.countAllByOptionalStatus("paid")).thenReturn(3L);
+            when(orderRepository.countAllByOptionalStatus(null)).thenReturn(4L);
+
+            orderService.findAllForAdmin(admin, " PAID ", 900, -3);
+            orderService.findAllForAdmin(admin, "  ", 0, 10);
+
+            ArgumentCaptor<Pageable> pages = ArgumentCaptor.forClass(Pageable.class);
+            verify(orderRepository).findAllByOptionalStatus(eq("paid"), pages.capture());
+            verify(orderRepository).findAllByOptionalStatus(isNull(), pages.capture());
+            assertThat(pages.getAllValues().get(0).getPageSize()).isEqualTo(500);
+            assertThat(pages.getAllValues().get(0).getPageNumber()).isZero();
+            assertThat(pages.getAllValues().get(1).getPageSize()).isEqualTo(1);
+            assertThat(pages.getAllValues().get(1).getPageNumber()).isEqualTo(10);
+            assertThat(orderService.countAllForAdmin(admin, " PAID ")).isEqualTo(3L);
+            assertThat(orderService.countAllForAdmin(admin, null)).isEqualTo(4L);
+        }
+
+        @Test
+        void adminActionsRejectMissingAuthorityOrderAndInvalidState() {
+            User ordinary = new User();
+            ordinary.setAdmin(false);
+            assertThatThrownBy(() -> orderService.findAllForAdmin(null, null, 10, 0))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessage("需要管理员权限");
+            assertThatThrownBy(() -> orderService.countAllForAdmin(ordinary, null))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessage("需要管理员权限");
+
+            when(orderRepository.findByOutTradeNoForUpdate("missing"))
+                    .thenReturn(Optional.empty());
+            assertThatThrownBy(() -> orderService.cancelPendingOrderAsAdmin(
+                    admin(), "missing", "不存在"))
+                    .hasMessage("订单不存在");
+
+            Order paid = buildPaidOrder("OT-ADMIN-PAID", "plan", new BigDecimal("100.00"));
+            when(orderRepository.findByOutTradeNoForUpdate(paid.getOutTradeNo()))
+                    .thenReturn(Optional.of(paid));
+            assertThatThrownBy(() -> orderService.cancelPendingOrderAsAdmin(
+                    admin(), paid.getOutTradeNo(), "错误取消"))
+                    .hasMessage("只能取消待支付订单");
+        }
+
+        @Test
+        void cancelSupportsUnopenedProviderOrderAndRejectsWechat() {
+            Order localOnly = buildPendingOrder("OT-ADMIN-LOCAL", "plan", new BigDecimal("100.00"));
+            when(orderRepository.findByOutTradeNoForUpdate(localOnly.getOutTradeNo()))
+                    .thenReturn(Optional.of(localOnly));
+            when(orderRepository.save(localOnly)).thenReturn(localOnly);
+            assertThat(orderService.cancelPendingOrderAsAdmin(
+                    admin(), localOnly.getOutTradeNo(), "未拉起支付"))
+                    .extracting(Order::getStatus)
+                    .isEqualTo("closed");
+            verifyNoInteractions(alipayService);
+
+            Order wechat = buildPendingOrder("OT-ADMIN-WECHAT", "plan", new BigDecimal("100.00"));
+            wechat.setPayType("wechat_native");
+            when(orderRepository.findByOutTradeNoForUpdate(wechat.getOutTradeNo()))
+                    .thenReturn(Optional.of(wechat));
+            assertThatThrownBy(() -> orderService.cancelPendingOrderAsAdmin(
+                    admin(), wechat.getOutTradeNo(), "微信订单"))
+                    .hasMessageContaining("微信待支付单需先完成微信支付关单");
+            assertThat(wechat.getStatus()).isEqualTo("pending");
+        }
+
+        @Test
+        void repriceValidatesAmountOrderStateAndDifference() {
+            assertThatThrownBy(() -> orderService.repricePendingOrderAsAdmin(
+                    admin(), "any", null, "改价", "return"))
+                    .hasMessage("新金额必须大于 0");
+            assertThatThrownBy(() -> orderService.repricePendingOrderAsAdmin(
+                    admin(), "any", BigDecimal.ZERO, "改价", "return"))
+                    .hasMessage("新金额必须大于 0");
+
+            when(orderRepository.findByOutTradeNoForUpdate("missing-reprice"))
+                    .thenReturn(Optional.empty());
+            assertThatThrownBy(() -> orderService.repricePendingOrderAsAdmin(
+                    admin(), "missing-reprice", BigDecimal.ONE, "改价", "return"))
+                    .hasMessage("订单不存在");
+
+            Order paid = buildPaidOrder("OT-ADMIN-PAID-REPRICE", "plan", new BigDecimal("100.00"));
+            when(orderRepository.findByOutTradeNoForUpdate(paid.getOutTradeNo()))
+                    .thenReturn(Optional.of(paid));
+            assertThatThrownBy(() -> orderService.repricePendingOrderAsAdmin(
+                    admin(), paid.getOutTradeNo(), new BigDecimal("88.00"), "改价", "return"))
+                    .hasMessageContaining("不允许改价");
+
+            Order same = buildPendingOrder("OT-ADMIN-SAME", "plan", new BigDecimal("100.00"));
+            when(orderRepository.findByOutTradeNoForUpdate(same.getOutTradeNo()))
+                    .thenReturn(Optional.of(same));
+            assertThatThrownBy(() -> orderService.repricePendingOrderAsAdmin(
+                    admin(), same.getOutTradeNo(), new BigDecimal("100.00"), "改价", "return"))
+                    .hasMessage("新金额与原金额相同");
+        }
+
+        @Test
+        void repriceReturnsReplacementPaymentOnSuccess() {
+            Order original = buildPendingOrder("OT-ADMIN-REPRICE-OK", "plan", new BigDecimal("100.00"));
+            original.setPlanId("plan_enterprise");
+            original.setPayType("alipay_page");
+            when(orderRepository.findByOutTradeNoForUpdate(original.getOutTradeNo()))
+                    .thenReturn(Optional.of(original));
+            when(alipayService.closeOrder(original.getOutTradeNo()))
+                    .thenReturn(Map.of("ok", true));
+            when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(alipayService.createPagePay(
+                    anyString(), anyString(), eq(new BigDecimal("88.00")), anyString()))
+                    .thenReturn(Map.of(
+                            "ok", true,
+                            "type", "page",
+                            "redirect_url", "https://pay.example.test/next",
+                            "qr_code", "qr-value"));
+
+            Map<String, Object> result = orderService.repricePendingOrderAsAdmin(
+                    admin(), original.getOutTradeNo(), new BigDecimal("88.00"),
+                    "合同金额调整", "https://example.test/return");
+
+            assertThat(result.get("ok")).isEqualTo(true);
+            assertThat(result.get("status")).isEqualTo("replaced");
+            assertThat(result.get("redirect_url")).isEqualTo("https://pay.example.test/next");
+            assertThat(original.getStatus()).isEqualTo("closed");
+            assertThat(((Order) result.get("replacement_order")).getTotalAmount())
+                    .isEqualByComparingTo("88.00");
         }
     }
 }

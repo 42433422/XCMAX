@@ -167,6 +167,123 @@ public class OrderService {
     }
 
     @Transactional(readOnly = true)
+    public List<Order> findAllForAdmin(User admin, String status, int limit, int offset) {
+        requireAdmin(admin);
+        int pageSize = Math.max(1, Math.min(limit, 500));
+        int page = Math.max(offset, 0) / pageSize;
+        String normalized = status == null || status.isBlank() ? null : status.trim().toLowerCase();
+        return orderRepository.findAllByOptionalStatus(normalized, PageRequest.of(page, pageSize));
+    }
+
+    @Transactional(readOnly = true)
+    public long countAllForAdmin(User admin, String status) {
+        requireAdmin(admin);
+        String normalized = status == null || status.isBlank() ? null : status.trim().toLowerCase();
+        return orderRepository.countAllByOptionalStatus(normalized);
+    }
+
+    @Transactional
+    public Order cancelPendingOrderAsAdmin(User admin, String outTradeNo, String reason) {
+        requireAdmin(admin);
+        Order order = orderRepository.findByOutTradeNoForUpdate(outTradeNo)
+                .orElseThrow(() -> new IllegalArgumentException("订单不存在"));
+        if (!"pending".equals(order.getStatus())) {
+            throw new IllegalArgumentException("只能取消待支付订单");
+        }
+        closeProviderBeforeMutation(order);
+        order.setStatus("closed");
+        log.info("admin cancelled pending order outTradeNo={} adminId={} reason={}", outTradeNo, admin.getId(), reason);
+        return orderRepository.save(order);
+    }
+
+    @Transactional
+    public Map<String, Object> repricePendingOrderAsAdmin(
+            User admin,
+            String outTradeNo,
+            BigDecimal newAmount,
+            String reason,
+            String returnUrl
+    ) {
+        requireAdmin(admin);
+        if (newAmount == null || newAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("新金额必须大于 0");
+        }
+        Order original = orderRepository.findByOutTradeNoForUpdate(outTradeNo)
+                .orElseThrow(() -> new IllegalArgumentException("订单不存在"));
+        if (!"pending".equals(original.getStatus())) {
+            throw new IllegalArgumentException("已支付或终态订单不允许改价，请走退款审核");
+        }
+        if (original.getTotalAmount().compareTo(newAmount) == 0) {
+            throw new IllegalArgumentException("新金额与原金额相同");
+        }
+        closeProviderBeforeMutation(original);
+        String replacementNo = "ADJ" + System.currentTimeMillis() + admin.getId();
+        Order replacement = createOrder(
+                original.getUser(),
+                replacementNo,
+                original.getSubject(),
+                newAmount,
+                original.getOrderKind(),
+                original.getItemId(),
+                original.getPlanId(),
+                "admin-reprice-" + replacementNo
+        );
+        Map<String, Object> pay = alipayService.createPagePay(
+                replacementNo,
+                replacement.getSubject(),
+                newAmount,
+                returnUrl
+        );
+        original.setStatus("closed");
+        orderRepository.save(original);
+        if (!Boolean.TRUE.equals(pay.get("ok"))) {
+            replacement.setStatus("failed");
+            orderRepository.save(replacement);
+            Map<String, Object> failed = new HashMap<>();
+            failed.put("ok", false);
+            failed.put("partial_success", true);
+            failed.put("status", "replacement_failed");
+            failed.put("original_order_no", outTradeNo);
+            failed.put("replacement_order", replacement);
+            failed.put("message", "原支付单已安全关闭，但新金额支付单创建失败：" + pay.get("message"));
+            return failed;
+        }
+        updatePaymentMetadata(
+                replacementNo,
+                String.valueOf(pay.getOrDefault("type", "page")),
+                pay.get("qr_code") == null ? null : String.valueOf(pay.get("qr_code"))
+        );
+        log.info("admin repriced order original={} replacement={} adminId={} reason={}", outTradeNo, replacementNo, admin.getId(), reason);
+        Map<String, Object> result = new HashMap<>();
+        result.put("ok", true);
+        result.put("status", "replaced");
+        result.put("original_order_no", outTradeNo);
+        result.put("replacement_order", replacement);
+        result.put("redirect_url", pay.getOrDefault("redirect_url", ""));
+        result.put("qr_code", pay.getOrDefault("qr_code", ""));
+        return result;
+    }
+
+    private void requireAdmin(User user) {
+        if (user == null || !user.isAdmin()) {
+            throw new IllegalArgumentException("需要管理员权限");
+        }
+    }
+
+    private void closeProviderBeforeMutation(Order order) {
+        String payType = order.getPayType() == null ? "" : order.getPayType().toLowerCase();
+        if (payType.contains("wechat")) {
+            throw new IllegalArgumentException("微信待支付单需先完成微信支付关单，本次未改动订单");
+        }
+        if (!payType.isBlank() || order.getQrCode() != null) {
+            Map<String, Object> closed = alipayService.closeOrder(order.getOutTradeNo());
+            if (!Boolean.TRUE.equals(closed.get("ok"))) {
+                throw new IllegalArgumentException("支付宝关单失败，本次未改动订单：" + closed.get("message"));
+            }
+        }
+    }
+
+    @Transactional(readOnly = true)
     public List<Order> findPaidValueEvidenceSince(
             LocalDateTime since,
             int limit,

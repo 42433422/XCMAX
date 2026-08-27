@@ -447,5 +447,9 @@ from modstore_server.customer_service_delivery_api import (  # noqa: F401
     _custom_delivery_evidence as _custom_delivery_evidence,
     router as custom_delivery_router,
 )
+from modstore_server.customer_service_delivery_crm_api import (
+    router as custom_delivery_crm_router,
+)
 
 router.include_router(custom_delivery_router)
+router.include_router(custom_delivery_crm_router)
