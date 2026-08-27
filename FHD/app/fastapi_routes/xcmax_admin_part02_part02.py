@@ -76,9 +76,7 @@ async def admin_set_user_profile(
         from app.db.session import get_db
 
         with get_db() as db:
-            user_by_market_id = (
-                db.query(User).filter(User.market_user_id == int(user_id)).first()
-            )
+            user_by_market_id = db.query(User).filter(User.market_user_id == int(user_id)).first()
             user_by_username = db.query(User).filter(User.username == username).first()
             user = user_by_market_id or user_by_username
             if (
@@ -210,9 +208,7 @@ async def admin_list_user_profiles(request: _facade().Request):
             }
             for r in rows
         }
-        by_market_user_id = {
-            str(r[0]): data[r[1]] for r in rows if r[0] is not None
-        }
+        by_market_user_id = {str(r[0]): data[r[1]] for r in rows if r[0] is not None}
         return {
             "success": True,
             "data": data,

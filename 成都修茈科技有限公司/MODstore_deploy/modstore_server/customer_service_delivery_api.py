@@ -29,6 +29,7 @@ from modstore_server.customer_service_delivery_models import (
 from modstore_server.customer_service_delivery_models import (
     custom_delivery_evidence as _custom_delivery_evidence,
 )
+from modstore_server.customer_service_delivery_quality import custom_delivery_gate
 from modstore_server.customer_service_orchestrator import (
     audit,
     enqueue_customer_service_event,
@@ -78,32 +79,6 @@ async def _start_custom_delivery_run(
     }
 
 
-def _custom_delivery_gate(snapshot: dict[str, Any]) -> tuple[bool, str]:
-    if str(snapshot.get("status") or "") != "done":
-        return False, str(snapshot.get("error") or "生产尚未完成")
-    artifact = snapshot.get("artifact") if isinstance(snapshot.get("artifact"), dict) else {}
-    intent = str(snapshot.get("intent") or "")
-    if intent == "mod":
-        validation = (
-            artifact.get("validation_summary")
-            if isinstance(artifact.get("validation_summary"), dict)
-            else {}
-        )
-        if not artifact.get("mod_id"):
-            return False, "Mod 生产完成但缺少产物 ID"
-        if validation.get("ok") is not True:
-            return False, "Mod 沙箱或员工可用性门未通过"
-        return True, "Mod 产物和质量门已通过"
-    quality = (
-        snapshot.get("quality_report") if isinstance(snapshot.get("quality_report"), dict) else {}
-    )
-    if not artifact.get("pack_id"):
-        return False, "AI 员工生产完成但缺少员工包 ID"
-    if quality.get("critical_failed") is True or quality.get("runnable") is not True:
-        return False, "AI 员工可运行性或关键质量门未通过"
-    return True, "AI 员工包、沙箱和关键质量门已通过"
-
-
 async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, Any]:
     from modstore_server.workbench_api import get_workbench_session_snapshot
 
@@ -139,7 +114,7 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
     elif str(latest_snapshot.get("status") or "") == "error":
         stage, label = "rework", "生产失败，待返工"
     elif str(latest_snapshot.get("status") or "") == "done":
-        gate_ok, _ = _custom_delivery_gate(latest_snapshot)
+        gate_ok, _ = custom_delivery_gate(latest_snapshot)
         stage, label = (
             ("acceptance", "质量门通过，待您验收") if gate_ok else ("rework", "质量门未通过")
         )
@@ -147,7 +122,7 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
         stage, label = "production", "生产员工制作中"
 
     gate_ok, gate_message = (
-        _custom_delivery_gate(latest_snapshot)
+        custom_delivery_gate(latest_snapshot)
         if latest_snapshot
         else (False, str(evidence.get("start_error") or ""))
     )
@@ -357,9 +332,11 @@ async def decide_custom_delivery(
         detail={
             "action": body.action,
             "note": body.note.strip()[:4000],
-            "source": "admin_delivery_center"
-            if bool(getattr(user, "is_admin", False))
-            else "desktop_private_delivery",
+            "source": (
+                "admin_delivery_center"
+                if bool(getattr(user, "is_admin", False))
+                else "desktop_private_delivery"
+            ),
         },
     )
     ticket.evidence_json = json_dumps(evidence)
