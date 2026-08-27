@@ -8,7 +8,7 @@ SNIP_DST="/etc/nginx/snippets"
 CONF="/etc/nginx/conf.d/xiu-ci.com.conf"
 
 mkdir -p "$SNIP_DST"
-for f in market-static.inc.conf corp-main-styles.inc.conf xcagi-cos-alias.inc.conf marketing-site-static.inc.conf founder-autonomy-admin.inc.conf; do
+for f in market-static.inc.conf corp-main-styles.inc.conf xcagi-cos-alias.inc.conf marketing-site-static.inc.conf founder-autonomy-admin.inc.conf admin-console-www.inc.conf; do
   cp -a "$SNIP_SRC/$f" "$SNIP_DST/$f"
   echo "synced $f"
 done

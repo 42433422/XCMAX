@@ -215,7 +215,11 @@ with open(path, "w", encoding="utf-8") as fh:
     fh.write("\n")
 PY
 
-COPYFILE_DISABLE=1 tar -C "$STAGING" -czf "$TARBALL" .
+TAR_XATTR_ARGS=()
+if tar --no-xattrs -cf /dev/null --files-from /dev/null >/dev/null 2>&1; then
+  TAR_XATTR_ARGS+=(--no-xattrs)
+fi
+COPYFILE_DISABLE=1 tar "${TAR_XATTR_ARGS[@]}" -C "$STAGING" -czf "$TARBALL" .
 python3 "$ARCHIVE_VERIFY" --archive "$TARBALL"
 SHA256="$(python3 - <<'PY' "$TARBALL"
 import hashlib, sys

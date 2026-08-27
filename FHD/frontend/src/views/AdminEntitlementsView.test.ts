@@ -69,6 +69,7 @@ describe('AdminEntitlementsView', () => {
     vi.clearAllMocks()
     mockListUsers.mockResolvedValue({ users: [] })
     mockListAssignableMods.mockResolvedValue({ mods: [] })
+    mockGetUserProfiles.mockResolvedValue({ data: {}, by_market_user_id: {} })
     mockGetUserPrivateDelivery.mockResolvedValue({ data: { projects: [] } })
     mockApiFetch.mockResolvedValue({
       ok: true,
@@ -106,6 +107,33 @@ describe('AdminEntitlementsView', () => {
     await flushPromises()
     const rows = wrapper.findAll('.admin-user-card')
     expect(rows.length).toBe(3)
+  })
+
+  it('merges a renamed customer profile by stable market user id', async () => {
+    mockListUsers.mockResolvedValue({
+      users: [{ id: 72, username: 'renamed-customer', mod_ids: [] }],
+    })
+    mockGetUserProfiles.mockResolvedValue({
+      data: { 'old-customer-name': { tier: 'personal', industry_id: '通用' } },
+      by_market_user_id: {
+        '72': { market_user_id: 72, tier: 'enterprise', industry_id: '制造业' },
+      },
+    })
+    const wrapper = mountComponent()
+    await flushPromises()
+    expect(wrapper.find('.admin-user-card').text()).toContain('企业')
+    expect(wrapper.find('.admin-user-card').text()).toContain('制造业')
+  })
+
+  it('does not expose a fixed default password and can generate a temporary one', async () => {
+    const wrapper = mountComponent()
+    await flushPromises()
+    await wrapper.find('.admin-entitlements-head button').trigger('click')
+    const password = wrapper.find('.admin-password-field input')
+    expect((password.element as HTMLInputElement).value).toBe('')
+    await wrapper.find('.admin-password-field button').trigger('click')
+    expect((password.element as HTMLInputElement).value).toHaveLength(16)
+    expect((password.element as HTMLInputElement).value).not.toBe('XC888888')
   })
 
   it('shows admin/enterprise/normal labels for users', async () => {

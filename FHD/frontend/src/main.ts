@@ -173,6 +173,10 @@ async function bootstrap() {
     app.component(key, component)
   }
 
+  // 等待首个路由守卫（含会话校验与登录重定向）完成后再挂载全局组件。
+  // 否则未登录直达受保护页时，任务中心、教程和 SSE 会抢先请求受保护接口，
+  // 在登录页留下成组 401，并可能短暂渲染不该出现的管理端壳。
+  await router.isReady()
   app.mount('#app')
 
   if (typeof performance !== 'undefined' && performance.mark) {

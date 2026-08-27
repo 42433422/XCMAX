@@ -4,6 +4,7 @@
  */
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import VueI18n from '@intlify/unplugin-vue-i18n/vite'
 import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
@@ -104,6 +105,15 @@ export default defineConfig(() => ({
     createAdminConsoleAtAliasPlugin(hostRoot),
     createWorkflowComponentsAliasPlugin(hostRoot),
     vue(),
+    // 管理端网页使用严格 CSP（不允许 unsafe-eval）。翻译消息必须在构建期
+    // 预编译，否则 vue-i18n 会在登录页通过 new Function 动态编译并白屏。
+    VueI18n({
+      runtimeOnly: true,
+      compositionOnly: true,
+      jitCompilation: false,
+      dropMessageCompiler: true,
+      include: path.resolve(hostRoot, './src/i18n/locales/**/*.json'),
+    }),
     AutoImport({ resolvers: [ElementPlusResolver()], dts: false }),
     Components({ resolvers: [ElementPlusResolver({ importStyle: 'css' })], dts: false }),
   ],

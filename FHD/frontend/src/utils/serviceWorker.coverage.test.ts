@@ -25,6 +25,7 @@ describe('serviceWorker coverage', () => {
   afterEach(() => {
     swManager.destroy()
     vi.restoreAllMocks()
+    vi.unstubAllEnvs()
   })
 
   describe('unregisterStaleServiceWorkers', () => {
@@ -353,6 +354,17 @@ describe('serviceWorker coverage', () => {
       await initServiceWorker()
       // DEV 环境下 register 返回 false，会 warn
       expect(warnSpy).toHaveBeenCalled()
+    })
+
+    it('管理端注销历史 worker 且不注册根路径 worker', async () => {
+      vi.stubEnv('VITE_XCMAX_ADMIN_CONSOLE', '1')
+      const { mockRegistration } = setupServiceWorkerSupport()
+      const registerSpy = vi.spyOn(navigator.serviceWorker, 'register')
+
+      await initServiceWorker()
+
+      expect(registerSpy).not.toHaveBeenCalled()
+      expect(mockRegistration.unregister).toHaveBeenCalled()
     })
   })
 

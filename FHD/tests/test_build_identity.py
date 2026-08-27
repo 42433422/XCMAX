@@ -60,3 +60,18 @@ def test_build_identity_reads_deploy_stamps(monkeypatch, tmp_path) -> None:
 
     assert identity["artifact_sha256"] == "b" * 64
     assert identity["image_digest"] == "sha256:" + "c" * 64
+
+
+def test_build_identity_reads_admin_console_release_identity(monkeypatch, tmp_path) -> None:
+    admin_dist = tmp_path / "templates" / "admin-vue-dist"
+    admin_dist.mkdir(parents=True)
+    (admin_dist / ".release-identity.json").write_text(
+        json.dumps({"git_sha": "e" * 40, "sha256": "f" * 64}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("FHD_DEPLOY_ROOT", str(tmp_path))
+
+    identity = build_identity()
+
+    assert identity["admin_console_git_sha"] == "e" * 40
+    assert identity["admin_console_sha256"] == "f" * 64

@@ -76,11 +76,52 @@ async def admin_set_user_profile(
         from app.db.session import get_db
 
         with get_db() as db:
-            user = db.query(User).filter(User.username == username).first()
+            user_by_market_id = db.query(User).filter(User.market_user_id == int(user_id)).first()
+            user_by_username = db.query(User).filter(User.username == username).first()
+            user = user_by_market_id or user_by_username
+            if (
+                user_by_market_id is not None
+                and user_by_username is not None
+                and user_by_username is not user_by_market_id
+            ):
+                return _facade().JSONResponse(
+                    {
+                        "success": False,
+                        "message": "市场用户 ID 与用户名分别绑定了不同的本地资料，请先合并冲突账号",
+                    },
+                    status_code=409,
+                )
+            bound_market_user_id = (
+                getattr(user_by_username, "market_user_id", None)
+                if user_by_username is not None
+                else None
+            )
+            if (
+                user_by_market_id is None
+                and user_by_username is not None
+                and isinstance(bound_market_user_id, int)
+                and bound_market_user_id != int(user_id)
+            ):
+                return _facade().JSONResponse(
+                    {
+                        "success": False,
+                        "message": "该用户名已经绑定其他市场用户 ID",
+                    },
+                    status_code=409,
+                )
             if user is None:
-                user = User(username=username, password="", role="user")
+                user = User(
+                    username=username,
+                    password="",
+                    role="user",
+                    market_user_id=int(user_id),
+                )
                 db.add(user)
                 db.flush()
+            else:
+                user.market_user_id = int(user_id)
+                # 市场用户 ID 是身份，用户名只是可变资料；同步改名但不创建第二份 profile。
+                user.username = username
             final_tier = (
                 (tier or str(getattr(user, "tier", "") or "") or "personal").strip().lower()
             )
@@ -119,6 +160,7 @@ async def admin_set_user_profile(
                 user.entitled_industries = final_entitled
             db.commit()
             result = {
+                "market_user_id": int(user_id),
                 "username": username,
                 "tier": user.tier,
                 "industry_id": user.industry_id,
@@ -147,6 +189,7 @@ async def admin_list_user_profiles(request: _facade().Request):
 
         with get_db() as db:
             rows = db.query(
+                User.market_user_id,
                 User.username,
                 User.tier,
                 User.industry_id,
@@ -155,16 +198,22 @@ async def admin_list_user_profiles(request: _facade().Request):
                 User.entitled_industries,
             ).all()
         data = {
-            r[0]: {
-                "tier": r[1],
-                "industry_id": r[2],
-                "account_tier": r[3],
-                "budget_range": r[4],
-                "entitled_industries": list(r[5] or []),
+            r[1]: {
+                "market_user_id": r[0],
+                "tier": r[2],
+                "industry_id": r[3],
+                "account_tier": r[4],
+                "budget_range": r[5],
+                "entitled_industries": list(r[6] or []),
             }
             for r in rows
         }
-        return {"success": True, "data": data}
+        by_market_user_id = {str(r[0]): data[r[1]] for r in rows if r[0] is not None}
+        return {
+            "success": True,
+            "data": data,
+            "by_market_user_id": by_market_user_id,
+        }
     except _facade().RECOVERABLE_ERRORS as exc:
         _facade().logger.warning("读取用户 profile 列表失败: %s", exc)
         return _facade().JSONResponse({"success": False, "message": str(exc)}, status_code=500)

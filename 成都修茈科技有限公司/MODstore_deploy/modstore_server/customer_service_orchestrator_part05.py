@@ -233,6 +233,8 @@ def ticket_payload(
         domain = ""
     return {
         "id": row.id,
+        # 管理端必须用稳定的市场用户 ID 把交付工单关联到客户资料。
+        "user_id": row.user_id,
         "session_id": row.session_id,
         "ticket_no": row.ticket_no,
         "title": row.title,
