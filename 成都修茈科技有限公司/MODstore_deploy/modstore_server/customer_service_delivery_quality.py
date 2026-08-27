@@ -8,22 +8,19 @@ from typing import Any
 def custom_delivery_gate(snapshot: dict[str, Any]) -> tuple[bool, str]:
     if str(snapshot.get("status") or "") != "done":
         return False, str(snapshot.get("error") or "生产尚未完成")
-    artifact = snapshot.get("artifact") if isinstance(snapshot.get("artifact"), dict) else {}
+    raw_artifact = snapshot.get("artifact")
+    artifact: dict[str, Any] = raw_artifact if isinstance(raw_artifact, dict) else {}
     intent = str(snapshot.get("intent") or "")
     if intent == "mod":
-        validation = (
-            artifact.get("validation_summary")
-            if isinstance(artifact.get("validation_summary"), dict)
-            else {}
-        )
+        raw_validation = artifact.get("validation_summary")
+        validation: dict[str, Any] = raw_validation if isinstance(raw_validation, dict) else {}
         if not artifact.get("mod_id"):
             return False, "Mod 生产完成但缺少产物 ID"
         if validation.get("ok") is not True:
             return False, "Mod 沙箱或员工可用性门未通过"
         return True, "Mod 产物和质量门已通过"
-    quality = (
-        snapshot.get("quality_report") if isinstance(snapshot.get("quality_report"), dict) else {}
-    )
+    raw_quality = snapshot.get("quality_report")
+    quality: dict[str, Any] = raw_quality if isinstance(raw_quality, dict) else {}
     if not artifact.get("pack_id"):
         return False, "AI 员工生产完成但缺少员工包 ID"
     if quality.get("critical_failed") is True or quality.get("runnable") is not True:
