@@ -372,6 +372,27 @@ class TestInjectDigestApiBase:
 class TestProbeRemoteHealthSync:
     """Tests for _probe_remote_health_sync."""
 
+    def test_prefers_configured_internal_modstore_base(self, monkeypatch):
+        """同机生产部署应通过内部地址探测，避免公网 IP 回环失败。"""
+        monkeypatch.setenv("MODSTORE_LOCAL_BASE_URL", "http://127.0.0.1:9999/")
+        mock_response = MagicMock()
+        mock_response.read.return_value = json.dumps({"git_sha": "exact-sha"}).encode("utf-8")
+        mock_response.__enter__ = MagicMock(return_value=mock_response)
+        mock_response.__exit__ = MagicMock(return_value=False)
+        mock_opener = MagicMock()
+        mock_opener.open.return_value = mock_response
+
+        with patch(
+            "app.fastapi_routes.xcmax_admin.urllib.request.build_opener",
+            return_value=mock_opener,
+        ):
+            result = _probe_remote_health_sync()
+
+        request = mock_opener.open.call_args.args[0]
+        assert request.full_url == "http://127.0.0.1:9999/api/health"
+        assert result["data"]["reachable"] is True
+        assert result["data"]["version"] == "exact-sha"
+
     def test_successful_probe(self):
         """Should return success with latency when remote is reachable."""
         mock_response = MagicMock()
