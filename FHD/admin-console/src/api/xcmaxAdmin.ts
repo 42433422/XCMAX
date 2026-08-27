@@ -53,6 +53,14 @@ export type CustomDeliveryTicket = {
     runs?: CustomDeliveryRun[];
     artifacts?: CustomDeliveryArtifact[];
     install_receipts?: CustomDeliveryInstallReceipt[];
+    crm?: {
+      assignment?: Record<string, unknown>;
+      quote?: Record<string, unknown>;
+      contract?: Record<string, unknown>;
+      payment?: Record<string, unknown>;
+    };
+    commerce_ready?: boolean;
+    commerce_blockers?: string[];
   };
 };
 
@@ -81,6 +89,27 @@ export type DeployCheckData = {
     needs_push?: boolean;
     needs_pack?: boolean;
   };
+};
+
+export type UpdateInstallReceiptSummary = {
+  reported_devices?: number;
+  installed_devices?: number;
+  failed_devices?: number;
+  rolled_back_devices?: number;
+};
+
+export type UpdateInstallReceipt = {
+  id?: number;
+  user_id?: number;
+  installation_id?: string;
+  platform?: string;
+  target_version?: string;
+  target_build_sha?: string;
+  installed_version?: string;
+  installed_build_sha?: string;
+  status?: 'installed' | 'failed' | 'rolled_back' | string;
+  error?: string;
+  reported_at?: string;
 };
 
 export type DeployJobStep = {
@@ -176,6 +205,12 @@ export const xcmaxAdminApi = {
       { action, note },
     );
   },
+  updateCustomDeliveryCrm(ticketId: number, payload: Record<string, unknown>) {
+    return api.post<CustomDeliveryTicket>(
+      `/api/xcmax/market-proxy/customer-service/custom-deliveries/${ticketId}/crm`,
+      payload,
+    );
+  },
   setUserProfile(
     userId: number,
     payload: {
@@ -204,7 +239,37 @@ export const xcmaxAdminApi = {
         by_status?: Record<string, number>;
       };
       source?: string;
-    }>('/api/xcmax/admin/market/orders', params);
+    }>('/api/xcmax/admin/market/commerce/orders', params);
+  },
+  cancelOrder(orderNo: string, reason: string, idempotencyKey: string) {
+    return api.post(`/api/xcmax/admin/market/commerce/orders/${encodeURIComponent(orderNo)}/cancel`, {
+      reason,
+      idempotency_key: idempotencyKey,
+    });
+  },
+  repriceOrder(orderNo: string, newAmount: number, reason: string, idempotencyKey: string) {
+    return api.post(`/api/xcmax/admin/market/commerce/orders/${encodeURIComponent(orderNo)}/reprice`, {
+      new_amount: newAmount,
+      reason,
+      idempotency_key: idempotencyKey,
+    });
+  },
+  requestOrderRefund(orderNo: string, reason: string, idempotencyKey: string) {
+    return api.post(`/api/xcmax/admin/market/commerce/orders/${encodeURIComponent(orderNo)}/refund-request`, {
+      reason,
+      idempotency_key: idempotencyKey,
+    });
+  },
+  listPendingRefunds() {
+    return api.get<{ refunds?: Record<string, unknown>[]; total?: number }>(
+      '/api/xcmax/admin/market/commerce/refunds/pending',
+    );
+  },
+  reviewRefund(refundId: number, action: 'approve' | 'reject', adminNote = '') {
+    return api.post(`/api/xcmax/admin/market/commerce/refunds/${refundId}/review`, {
+      action,
+      admin_note: adminNote,
+    });
   },
   creditWallet(userId: number, payload: { amount: number; description?: string }) {
     return api.post(`/api/xcmax/admin/market/users/${userId}/wallet/credit`, payload);
@@ -229,6 +294,15 @@ export const xcmaxAdminApi = {
       );
     }
     return api.get<{ data?: DeployCheckData; message?: string }>('/api/xcmax/admin/deploy/check');
+  },
+  listUpdateInstallReceipts(targetBuildSha = '') {
+    return api.get<{
+      items?: UpdateInstallReceipt[];
+      summary?: UpdateInstallReceiptSummary;
+    }>('/api/xcmax/admin/deploy/install-receipts', {
+      ...(targetBuildSha ? { target_build_sha: targetBuildSha } : {}),
+      limit: 500,
+    });
   },
   startDeployPush(body: Record<string, unknown>) {
     return api.post<{ data?: DeployJobData; message?: string }>(

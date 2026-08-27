@@ -236,6 +236,98 @@ async def admin_list_orders(request: _facade().Request):
     return await _facade()._market_admin_proxy(request, "GET", f"/api/admin/orders{query}")
 
 
+@_facade().router.get("/admin/market/commerce/orders", response_model=None)
+async def admin_list_commerce_orders(request: _facade().Request):
+    from urllib.parse import urlencode
+
+    params = {
+        key: request.query_params[key]
+        for key in ("status", "limit", "offset")
+        if request.query_params.get(key)
+    }
+    query = f"?{urlencode(params)}" if params else ""
+    return await _facade()._market_admin_proxy(request, "GET", f"/api/admin/commerce/orders{query}")
+
+
+@_facade().router.post("/admin/market/commerce/orders/{order_no}/{action}", response_model=None)
+async def admin_mutate_commerce_order(
+    request: _facade().Request,
+    order_no: str,
+    action: str,
+    payload: dict[str, _facade().Any] = _facade().Body(default_factory=dict),
+):
+    from urllib.parse import quote
+
+    from app.application.session_account_meta import audit_admin_action
+
+    normalized = action.strip().lower()
+    if normalized not in {"cancel", "reprice", "refund-request"}:
+        return _facade().JSONResponse(
+            {"success": False, "message": "订单操作不支持"}, status_code=404
+        )
+    out = await _facade()._market_admin_proxy(
+        request,
+        "POST",
+        f"/api/admin/commerce/orders/{quote(order_no, safe='')}/{normalized}",
+        json_body=payload,
+    )
+    if not isinstance(out, _facade().JSONResponse) or out.status_code < 400:
+        audit_admin_action(
+            request,
+            f"commerce_order_{normalized.replace('-', '_')}",
+            detail=f"order={order_no}; reason={str(payload.get('reason') or '')[:240]}",
+        )
+    return out
+
+
+@_facade().router.get("/admin/market/commerce/refunds/pending", response_model=None)
+async def admin_list_pending_commerce_refunds(request: _facade().Request):
+    return await _facade()._market_admin_proxy(
+        request, "GET", "/api/admin/commerce/refunds/pending"
+    )
+
+
+@_facade().router.post("/admin/market/commerce/refunds/{refund_id}/review", response_model=None)
+async def admin_review_commerce_refund(
+    request: _facade().Request,
+    refund_id: int,
+    payload: dict[str, _facade().Any] = _facade().Body(default_factory=dict),
+):
+    from app.application.session_account_meta import audit_admin_action
+
+    out = await _facade()._market_admin_proxy(
+        request,
+        "POST",
+        f"/api/admin/commerce/refunds/{refund_id}/review",
+        json_body=payload,
+    )
+    if not isinstance(out, _facade().JSONResponse) or out.status_code < 400:
+        audit_admin_action(
+            request,
+            "commerce_refund_review",
+            detail=f"refund={refund_id}; action={str(payload.get('action') or '')}",
+        )
+    return out
+
+
+@_facade().router.get("/admin/deploy/install-receipts", response_model=None)
+async def admin_list_update_install_receipts(request: _facade().Request):
+    """读取客户电脑完成安装或回滚后上报的真实回执。"""
+    from urllib.parse import urlencode
+
+    params = {
+        key: request.query_params[key]
+        for key in ("target_build_sha", "limit")
+        if request.query_params.get(key)
+    }
+    query = f"?{urlencode(params)}" if params else ""
+    return await _facade()._market_admin_proxy(
+        request,
+        "GET",
+        "/api/update-installations/receipts" + query,
+    )
+
+
 @_facade().router.post("/admin/market/users/{user_id}/wallet/credit", response_model=None)
 async def admin_credit_user_wallet(
     request: _facade().Request,

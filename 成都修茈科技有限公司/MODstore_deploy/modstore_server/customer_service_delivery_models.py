@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -30,6 +30,66 @@ class CustomDeliveryInstallReceiptBody(BaseModel):
     installed_version: str = Field(default="", max_length=64)
     host: str = Field(default="XCAGI", max_length=128)
     receipt_token: str = Field(..., min_length=16, max_length=128)
+
+
+class CustomDeliveryCrmUpdateBody(BaseModel):
+    section: Literal["assignment", "quote", "contract", "payment"]
+    status: str = Field(default="", max_length=32)
+    owner_name: str = Field(default="", max_length=128)
+    number: str = Field(default="", max_length=128)
+    amount: float | None = Field(default=None, ge=0)
+    currency: str = Field(default="CNY", max_length=8)
+    reference: str = Field(default="", max_length=512)
+    valid_until: str = Field(default="", max_length=64)
+    note: str = Field(default="", max_length=2000)
+
+
+def custom_delivery_crm(evidence: dict[str, Any]) -> dict[str, Any]:
+    raw_value = evidence.get("crm")
+    raw: dict[str, Any] = raw_value if isinstance(raw_value, dict) else {}
+
+    def _section(name: str) -> dict[str, Any]:
+        value = raw.get(name)
+        return value if isinstance(value, dict) else {}
+
+    assignment = _section("assignment")
+    quote = _section("quote")
+    contract = _section("contract")
+    payment = _section("payment")
+    return {
+        "assignment": {
+            "status": (
+                "assigned" if str(assignment.get("owner_name") or "").strip() else "unassigned"
+            ),
+            **assignment,
+        },
+        "quote": {
+            "status": "draft",
+            **quote,
+        },
+        "contract": {
+            "status": "draft",
+            **contract,
+        },
+        "payment": {
+            "status": "unpaid",
+            **payment,
+        },
+    }
+
+
+def custom_delivery_commerce_blockers(evidence: dict[str, Any]) -> list[str]:
+    crm = custom_delivery_crm(evidence)
+    blockers: list[str] = []
+    if crm["assignment"].get("status") != "assigned":
+        blockers.append("未指派交付负责人")
+    if crm["quote"].get("status") not in {"accepted", "waived"}:
+        blockers.append("报价尚未确认")
+    if crm["contract"].get("status") not in {"signed", "waived"}:
+        blockers.append("合同尚未签署")
+    if crm["payment"].get("status") not in {"paid", "waived"}:
+        blockers.append("款项尚未结清")
+    return blockers
 
 
 def custom_delivery_evidence(ticket: CustomerServiceTicket) -> dict[str, Any]:

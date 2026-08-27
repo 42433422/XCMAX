@@ -233,7 +233,13 @@ def register_desktop_relay(
             )
             resp.raise_for_status()
             payload = resp.json()
-    except (_facade().httpx.HTTPError, _facade().httpx.InvalidURL, ValueError) as exc:
+    except (_facade().httpx.InvalidURL, _facade().httpx.UnsupportedProtocol, ValueError) as exc:
+        # 配置/协议错误不是暂时性网络故障，绝不能借用另一地址留下的
+        # 配对缓存伪装成“注册成功”。这也避免测试或运行期地址切换时
+        # 把上一中继的身份泄漏给当前请求。
+        _facade().logger.warning("mobile relay desktop register rejected invalid request: %s", exc)
+        return None
+    except _facade().httpx.HTTPError as exc:
         _facade().logger.warning("mobile relay desktop register failed: %s", exc)
         cached = _facade().cached_desktop_relay_payload()
         if cached:

@@ -41,7 +41,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          # 保留 HEAD~1 给手动运行；PR/base 与 push/before 在下方精确补取。
+          fetch-depth: 2
 
       - name: Block new temporary scripts
         shell: bash
@@ -59,6 +60,7 @@ jobs:
             if [ -z "${BEFORE_SHA}" ] || [ "${BEFORE_SHA}" = "0000000000000000000000000000000000000000" ]; then
               ADDED_FILES="$(git diff --name-only --diff-filter=A HEAD~1 HEAD 2>/dev/null || true)"
             else
+              git fetch origin "${BEFORE_SHA}" --depth=1 || true
               ADDED_FILES="$(git diff --name-only --diff-filter=A "${BEFORE_SHA}" "${{ github.sha }}" || true)"
             fi
           fi

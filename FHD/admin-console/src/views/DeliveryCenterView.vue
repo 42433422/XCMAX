@@ -141,6 +141,8 @@
           <p v-else class="delivery-artifacts__empty">生产尚未形成可交付产物。</p>
         </section>
 
+        <DeliveryCommercePanel :ticket="ticket" @updated="updateDeliveryTicket" />
+
         <footer class="delivery-actions">
           <div class="delivery-actions__note">
             <i class="fa fa-shield" aria-hidden="true"></i>
@@ -182,6 +184,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import DeliveryCommercePanel from '../components/admin/DeliveryCommercePanel.vue'
 import {
   xcmaxAdminApi,
   type CustomDeliveryArtifact,
@@ -204,6 +207,7 @@ const stageOptions = [
   { value: 'queued', label: '已受理' },
   { value: 'production', label: 'AI 生产中' },
   { value: 'acceptance', label: '待验收' },
+  { value: 'commerce', label: '待商务闭环' },
   { value: 'rework', label: '待返工' },
   { value: 'delivering', label: '待安装回执' },
   { value: 'delivered', label: '已交付' },
@@ -213,6 +217,7 @@ const timelineSteps = [
   { key: 'queued', label: '需求受理', hint: '客户资料入单', icon: 'fa-file-text-o' },
   { key: 'production', label: 'AI 生产', hint: '真实运行与产物', icon: 'fa-cogs' },
   { key: 'acceptance', label: '质量验收', hint: '质量门与确认', icon: 'fa-check-square-o' },
+  { key: 'commerce', label: '商务交付', hint: '报价合同收款', icon: 'fa-file-text' },
   { key: 'delivering', label: '客户安装', hint: '下载并安装', icon: 'fa-download' },
   { key: 'delivered', label: '回执闭环', hint: '安装证据齐全', icon: 'fa-flag-checkered' },
 ]
@@ -237,7 +242,7 @@ const summaryCards = computed(() => {
   return [
     { key: 'all', label: '全部交付', value: tickets.value.length, hint: '真实客户定制工单' },
     { key: 'production', label: '生产进行中', value: count(['queued', 'production']), hint: '等待产物与质量证据' },
-    { key: 'risk', label: '需要处理', value: count(['rework', 'acceptance']), hint: '返工或管理员验收' },
+    { key: 'risk', label: '需要处理', value: count(['rework', 'acceptance', 'commerce']), hint: '返工、验收或商务资料' },
     { key: 'receipt', label: '等待回执', value: count(['delivering']), hint: '客户尚未完成安装' },
     { key: 'done', label: '闭环完成', value: count(['delivered']), hint: '安装回执已经齐全' },
   ]
@@ -307,7 +312,12 @@ function formatDate(value?: string): string {
 }
 
 function stageRank(stage: string): number {
-  return ({ queued: 0, production: 1, rework: 1, acceptance: 2, delivering: 3, delivered: 4 } as Record<string, number>)[stage] ?? 0
+  return ({ queued: 0, production: 1, rework: 1, acceptance: 2, commerce: 3, delivering: 4, delivered: 5 } as Record<string, number>)[stage] ?? 0
+}
+
+function updateDeliveryTicket(updated: CustomDeliveryTicket) {
+  const index = tickets.value.findIndex((row) => row.id === updated.id)
+  if (index >= 0) tickets.value[index] = updated
 }
 
 function timelineClass(ticket: CustomDeliveryTicket, step: string): Record<string, boolean> {

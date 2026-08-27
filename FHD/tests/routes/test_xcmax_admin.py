@@ -509,6 +509,89 @@ class TestAdminListMarketUsers:
         mock_proxy.assert_awaited_once()
 
 
+class TestAdminCommerceRoutes:
+    def test_orders_and_install_receipts_proxy_exact_contracts(self, client: TestClient) -> None:
+        with patch.object(
+            admin_routes,
+            "_market_admin_proxy",
+            new_callable=AsyncMock,
+            return_value={"items": [], "summary": {}},
+        ) as mock_proxy:
+            orders = client.get("/api/xcmax/admin/market/commerce/orders?status=pending&limit=20")
+            receipts = client.get(
+                "/api/xcmax/admin/deploy/install-receipts?target_build_sha=abc123"
+            )
+        assert orders.status_code == 200
+        assert receipts.status_code == 200
+        assert (
+            "/api/admin/commerce/orders?status=pending&limit=20"
+            in mock_proxy.await_args_list[0].args[2]
+        )
+        assert (
+            "/api/update-installations/receipts?target_build_sha=abc123"
+            in mock_proxy.await_args_list[1].args[2]
+        )
+
+    def test_reprice_proxies_payload_and_writes_admin_audit(self, client: TestClient) -> None:
+        payload = {
+            "new_amount": 88,
+            "reason": "合同金额调整",
+            "idempotency_key": "reprice-request-1",
+        }
+        with (
+            patch.object(
+                admin_routes,
+                "_market_admin_proxy",
+                new_callable=AsyncMock,
+                return_value={"ok": True, "status": "replaced"},
+            ) as mock_proxy,
+            patch("app.application.session_account_meta.audit_admin_action") as mock_audit,
+        ):
+            response = client.post(
+                "/api/xcmax/admin/market/commerce/orders/OT-1/reprice",
+                json=payload,
+            )
+        assert response.status_code == 200
+        assert mock_proxy.await_args.kwargs["json_body"] == payload
+        mock_audit.assert_called_once()
+
+    def test_unknown_order_action_is_rejected_without_upstream_call(
+        self, client: TestClient
+    ) -> None:
+        with patch.object(
+            admin_routes,
+            "_market_admin_proxy",
+            new_callable=AsyncMock,
+        ) as mock_proxy:
+            response = client.post(
+                "/api/xcmax/admin/market/commerce/orders/OT-1/delete",
+                json={"reason": "unsafe"},
+            )
+        assert response.status_code == 404
+        mock_proxy.assert_not_awaited()
+
+    def test_failed_order_action_is_not_recorded_as_successful_audit(
+        self, client: TestClient
+    ) -> None:
+        with (
+            patch.object(
+                admin_routes,
+                "_market_admin_proxy",
+                new_callable=AsyncMock,
+                return_value=JSONResponse(
+                    {"success": False, "message": "支付平台关单失败"}, status_code=409
+                ),
+            ),
+            patch("app.application.session_account_meta.audit_admin_action") as mock_audit,
+        ):
+            response = client.post(
+                "/api/xcmax/admin/market/commerce/orders/OT-1/cancel",
+                json={"reason": "客户要求取消", "idempotency_key": "cancel-request-1"},
+            )
+        assert response.status_code == 409
+        mock_audit.assert_not_called()
+
+
 class TestAdminListAssignableMods:
     def test_proxy_called(self, client: TestClient) -> None:
         with patch.object(

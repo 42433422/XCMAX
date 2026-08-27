@@ -75,6 +75,16 @@ public class RefundService {
     }
 
     @Transactional
+    public Refund applyForAdmin(User admin, String orderNo, String reason) {
+        if (admin == null || !admin.isAdmin()) {
+            throw new IllegalArgumentException("需要管理员权限");
+        }
+        Order order = orderRepository.findByOutTradeNo(orderNo)
+                .orElseThrow(() -> new IllegalArgumentException("订单不存在"));
+        return apply(order.getUser(), orderNo, reason);
+    }
+
+    @Transactional
     public Refund review(User admin, Long refundId, String action, String adminNote) {
         if (!admin.isAdmin()) {
             throw new IllegalArgumentException("需要管理员权限");

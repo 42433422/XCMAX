@@ -42,6 +42,12 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     @Query("SELECT COUNT(o) FROM Order o WHERE o.user = ?1 AND o.status = ?2")
     long countByUserAndStatus(User user, String status);
 
+    @Query("SELECT o FROM Order o WHERE (:status IS NULL OR o.status = :status) ORDER BY o.createdAt DESC")
+    List<Order> findAllByOptionalStatus(@Param("status") String status, Pageable pageable);
+
+    @Query("SELECT COUNT(o) FROM Order o WHERE (:status IS NULL OR o.status = :status)")
+    long countAllByOptionalStatus(@Param("status") String status);
+
     /**
      * 用户订单列表：隐藏已「一键清理」的终态单；待支付、已支付、退款中 仍展示。
      */

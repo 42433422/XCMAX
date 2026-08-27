@@ -10,6 +10,7 @@ import {
   parseReleaseMediaFromYaml,
   type ReleaseMediaSlide,
 } from './release-media.js'
+import { discardPendingUpdateInstallReceipt, stageUpdateInstallReceipt } from './update-install-receipts.js'
 
 let updateDownloaded = false
 let downloadedVersion = ''
@@ -535,9 +536,11 @@ export async function installUpdate(
       const identity = downloadedBuildSha ? `${version}+${downloadedBuildSha.slice(0, 12)}` : version
       await beforeInstall(identity)
     }
+    stageUpdateInstallReceipt({ targetVersion: downloadedVersion || 'unknown', targetBuildSha: downloadedBuildSha, channel: process.env.XCAGI_UPDATE_CHANNEL })
     appendUpdaterEvent('install_start', {})
     autoUpdater.quitAndInstall(false, true)
   } catch (error) {
+    discardPendingUpdateInstallReceipt()
     let cleanupError: unknown
     try {
       await onInstallFailed?.()
@@ -578,6 +581,7 @@ export async function verifyMetadataSignatureText(content: string, publicKeyPem:
 
 /** 测试辅助：重置 updateDownloaded 状态。仅用于单测。 */
 export function __resetUpdateDownloadedForTest(): void {
+  discardPendingUpdateInstallReceipt()
   updateDownloaded = false
   downloadedVersion = ''
   downloadedBuildSha = ''
