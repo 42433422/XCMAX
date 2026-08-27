@@ -39,9 +39,7 @@ async def list_action_items(
     if day:
         q.append(f"day={day}")
     query = "?" + "&".join(q) if q else ""
-    return await _facade()._digest_local_or_proxy(
-        request, "GET", f"/api/admin/action-items{query}"
-    )
+    return await _facade()._digest_local_or_proxy(request, "GET", f"/api/admin/action-items{query}")
 
 
 @_facade().router.get("/admin/action-items/stats", response_model=None)
@@ -62,9 +60,7 @@ async def action_items_stats(
     )
 
 
-@_facade().router.post(
-    "/admin/daily-digests/{record_id}/vibe-prep/sessions", response_model=None
-)
+@_facade().router.post("/admin/daily-digests/{record_id}/vibe-prep/sessions", response_model=None)
 async def start_digest_vibe_prep_session(
     request: _facade().Request,
     record_id: int,
@@ -79,9 +75,7 @@ async def start_digest_vibe_prep_session(
     )
 
 
-@_facade().router.post(
-    "/admin/daily-digests/{record_id}/line-execute", response_model=None
-)
+@_facade().router.post("/admin/daily-digests/{record_id}/line-execute", response_model=None)
 async def start_digest_line_execute(
     request: _facade().Request,
     record_id: int,
@@ -89,16 +83,11 @@ async def start_digest_line_execute(
 ):
     """Phase A：消费 P-S（或指定产线）补丁清单并派发员工子任务。"""
     return await _facade()._market_admin_proxy(
-        request,
-        "POST",
-        f"/api/agent/butler/daily-digests/{record_id}/line-execute",
-        json_body=body,
+        request, "POST", f"/api/agent/butler/daily-digests/{record_id}/line-execute", json_body=body
     )
 
 
-@_facade().router.get(
-    "/admin/digest-vibe-prep/sessions/{session_id}", response_model=None
-)
+@_facade().router.get("/admin/digest-vibe-prep/sessions/{session_id}", response_model=None)
 async def get_digest_vibe_prep_session(request: _facade().Request, session_id: str):
     """轮询 Vibe 预备文档生成会话（复用 workbench session 存储）。"""
     sid = "".join(ch for ch in str(session_id or "") if ch.isalnum())[:64]
@@ -106,9 +95,7 @@ async def get_digest_vibe_prep_session(request: _facade().Request, session_id: s
         return _facade().JSONResponse(
             {"success": False, "message": "session_id 必填"}, status_code=400
         )
-    return await _facade()._market_admin_proxy(
-        request, "GET", f"/api/workbench/sessions/{sid}"
-    )
+    return await _facade()._market_admin_proxy(request, "GET", f"/api/workbench/sessions/{sid}")
 
 
 @_facade().router.post("/admin/all-hands-report/sessions", response_model=None)
@@ -122,9 +109,7 @@ async def start_all_hands_report_session(
     )
 
 
-@_facade().router.get(
-    "/admin/all-hands-report/sessions/{session_id}", response_model=None
-)
+@_facade().router.get("/admin/all-hands-report/sessions/{session_id}", response_model=None)
 async def get_all_hands_report_session(request: _facade().Request, session_id: str):
     """轮询服务器员工大会后台会话。"""
     sid = "".join(ch for ch in str(session_id or "") if ch.isalnum())[:64]
@@ -132,28 +117,12 @@ async def get_all_hands_report_session(request: _facade().Request, session_id: s
         return _facade().JSONResponse(
             {"success": False, "message": "session_id 必填"}, status_code=400
         )
-    return await _facade()._market_admin_proxy(
-        request, "GET", f"/api/workbench/sessions/{sid}"
-    )
+    return await _facade()._market_admin_proxy(request, "GET", f"/api/workbench/sessions/{sid}")
 
 
 def _probe_remote_health_sync() -> dict[str, _facade().Any]:
     """同步探测远端 HTTP /api/health；供 asyncio.to_thread 调用，避免阻塞事件循环。"""
-    # 管理端可能与 MODstore 部署在同一台生产机上，而 MODstore 出于安全考虑
-    # 只监听回环地址。此时用服务器公网 IP 回连会被拒绝，页面会错误显示
-    # “远端服务器离线”。优先服从部署时已经配置好的内部 MODstore 地址；
-    # 没有内部地址时再保留桌面端原有的远端主机探测行为。
-    internal_base = str(
-        _facade().os.environ.get("XCMAX_REMOTE_HEALTH_BASE_URL")
-        or _facade().os.environ.get("MODSTORE_INTERNAL_BASE_URL")
-        or _facade().os.environ.get("MODSTORE_LOCAL_BASE_URL")
-        or ""
-    ).strip()
-    remote_url = (
-        f"{internal_base.rstrip('/')}/api/health"
-        if internal_base
-        else f"http://{_facade().REMOTE_HOST}:{_facade().REMOTE_PORT}/api/health"
-    )
+    remote_url = f"http://{_facade().REMOTE_HOST}:{_facade().REMOTE_PORT}/api/health"
     t0 = _facade().time.time()
     try:
         req = _facade().urllib.request.Request(remote_url, method="GET")
@@ -166,9 +135,7 @@ def _probe_remote_health_sync() -> dict[str, _facade().Any]:
             response_ctx = _facade().urllib.request.urlopen(req, timeout=5)
         with response_ctx as resp:
             latency_ms = round((_facade().time.time() - t0) * 1000)
-            body = _facade().json.loads(
-                resp.read(4096).decode("utf-8", errors="replace")
-            )
+            body = _facade().json.loads(resp.read(4096).decode("utf-8", errors="replace"))
             return {
                 "success": True,
                 "data": {
@@ -203,9 +170,7 @@ async def remote_status():
 
 
 @_facade().router.get("/admin/deploy/check", response_model=None)
-async def admin_deploy_check(
-    request: _facade().Request, channel: str = _facade().Query("stable")
-):
+async def admin_deploy_check(request: _facade().Request, channel: str = _facade().Query("stable")):
     """管理端检查本地版本、update 中转站版本、企业端待更新状态。"""
     gate = _facade()._require_market_admin_session(request)
     if gate is not None:
@@ -227,11 +192,7 @@ async def admin_deploy_push(
     if gate is not None:
         return gate
     payload = dict(body or {})
-    channel = (
-        "staging"
-        if str(payload.get("channel") or "").strip() == "staging"
-        else "stable"
-    )
+    channel = "staging" if str(payload.get("channel") or "").strip() == "staging" else "stable"
     options = {
         "include_backend": bool(payload.get("include_backend", True)),
         "include_frontend": bool(payload.get("include_frontend", True)),
@@ -248,9 +209,7 @@ async def admin_deploy_push(
         return {"success": True, "data": job.to_dict()}
     except _facade().RECOVERABLE_ERRORS as exc:
         _facade().logger.warning("admin deploy push failed to start: %s", exc)
-        return _facade().JSONResponse(
-            {"success": False, "message": str(exc)}, status_code=409
-        )
+        return _facade().JSONResponse({"success": False, "message": str(exc)}, status_code=409)
 
 
 @_facade().router.get("/admin/deploy/jobs/{job_id}", response_model=None)
@@ -259,13 +218,9 @@ async def admin_deploy_job(request: _facade().Request, job_id: str):
     gate = _facade()._require_market_admin_session(request)
     if gate is not None:
         return gate
-    normalized_job_id = "".join(
-        ch for ch in str(job_id or "") if ch.isalnum() or ch in "-_"
-    )[:128]
+    normalized_job_id = "".join(ch for ch in str(job_id or "") if ch.isalnum() or ch in "-_")[:128]
     if not normalized_job_id:
-        return _facade().JSONResponse(
-            {"success": False, "message": "job_id 无效"}, status_code=400
-        )
+        return _facade().JSONResponse({"success": False, "message": "job_id 无效"}, status_code=400)
     from app.application.admin_deploy_push import get_deploy_job
 
     job = get_deploy_job(normalized_job_id)
@@ -287,18 +242,11 @@ async def ops_duty_health(request: _facade().Request):
             "success": False,
             "staffing": closure.get("staffing") or {},
         }
-    merged = {
-        **remote,
-        "staffing": closure.get("staffing") or remote.get("staffing") or {},
-    }
+    merged = {**remote, "staffing": closure.get("staffing") or remote.get("staffing") or {}}
     merged["planned_employee_ids"] = closure.get("planned_employee_ids")
     merged["registered_employee_ids"] = closure.get("registered_employee_ids")
-    merged["planned_local_installed_count"] = closure.get(
-        "planned_local_installed_count"
-    )
-    merged["extra_local_employee_pack_ids"] = closure.get(
-        "extra_local_employee_pack_ids"
-    )
+    merged["planned_local_installed_count"] = closure.get("planned_local_installed_count")
+    merged["extra_local_employee_pack_ids"] = closure.get("extra_local_employee_pack_ids")
     return merged
 
 
@@ -315,9 +263,7 @@ async def ops_dispatch(
 
 
 @_facade().router.get("/ops/jobs", response_model=None)
-async def ops_jobs(
-    request: _facade().Request, limit: int = _facade().Query(20, ge=1, le=100)
-):
+async def ops_jobs(request: _facade().Request, limit: int = _facade().Query(20, ge=1, le=100)):
     return await _facade()._market_admin_proxy(
         request, "GET", f"/api/ops/orchestrate/jobs?limit={limit}"
     )
@@ -327,9 +273,5 @@ async def ops_jobs(
 async def ops_job_detail(request: _facade().Request, job_id: str):
     jid = "".join(ch for ch in str(job_id or "") if ch.isalnum() or ch in "-_")[:128]
     if not jid:
-        return _facade().JSONResponse(
-            {"success": False, "message": "job_id 无效"}, status_code=400
-        )
-    return await _facade()._market_admin_proxy(
-        request, "GET", f"/api/ops/orchestrate/jobs/{jid}"
-    )
+        return _facade().JSONResponse({"success": False, "message": "job_id 无效"}, status_code=400)
+    return await _facade()._market_admin_proxy(request, "GET", f"/api/ops/orchestrate/jobs/{jid}")
