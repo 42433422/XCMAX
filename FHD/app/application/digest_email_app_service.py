@@ -55,7 +55,7 @@ async def get_daily_digest_local(record_id: int) -> dict[str, Any]:
 
 async def get_daily_digest_artifacts_local(record_id: int) -> dict[str, Any]:
     return await modstore_get(
-        f"/api/xcmax/admin/daily-digests/{int(record_id)}/artifacts",
+        f"/api/agent/butler/daily-digests/{int(record_id)}/artifacts",
         base_url=modstore_digest_base_url(),
     )
 

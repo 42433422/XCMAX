@@ -184,12 +184,10 @@ def _dd_list_dir(d, exts):
 @_facade().router.get("/daily-digests/{record_id}/artifacts")
 async def butler_daily_digest_artifacts(
     record_id: int,
-    user: _facade().User = _facade().Depends(_facade()._get_current_user),
+    _: object = _facade().Depends(_facade()._require_admin_or_internal),
     db: _facade().Session = _facade().Depends(_facade().get_db),
 ):
     """日更闭环各阶段「结果文件」清单：截图 PNG / PPT / digest HTML / 会议 / Vibe MD / release_train 历史 / 容灾备份。"""
-    if not getattr(user, "is_admin", False):
-        raise _facade().HTTPException(403, "仅管理员可查看阶段结果文件")
     row = db.get(_facade().DailyDigestRecord, record_id)
     if row is None:
         raise _facade().HTTPException(404, "每日摘要记录不存在")

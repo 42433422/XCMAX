@@ -52,7 +52,9 @@ def test_normal_cvm_release_skips_optional_image_archive() -> None:
 def test_cvm_upload_prefers_resumable_rsync_and_retains_partial() -> None:
     script = (FHD_ROOT / "scripts/deploy/fhd-push-release.sh").read_text(encoding="utf-8")
 
-    assert "rsync --archive --partial --append-verify --timeout=180" in script
+    assert 'rsync_resume_flag="--append"' in script
+    assert 'rsync_resume_flag="--append-verify"' in script
+    assert 'rsync --archive --partial "$rsync_resume_flag" --timeout=180' in script
     assert 'transfer_mode="rsync"' in script
     assert "partial retained" in script
     assert "RSYNC_SHELL" in script
