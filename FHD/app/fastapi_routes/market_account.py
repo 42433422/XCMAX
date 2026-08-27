@@ -91,6 +91,9 @@ from app.fastapi_routes.market_account_part01 import (
     clear_session_market_token as clear_session_market_token,
 )
 from app.fastapi_routes.market_account_part01 import (
+    latest_session_id_with_market_token as latest_session_id_with_market_token,
+)
+from app.fastapi_routes.market_account_part01 import (
     latest_session_market_refresh_token as latest_session_market_refresh_token,
 )
 from app.fastapi_routes.market_account_part01 import (

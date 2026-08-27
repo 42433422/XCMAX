@@ -169,6 +169,29 @@ class TestLLMPort:
         ):
             assert port.is_available is True
 
+    def test_availability_reports_background_provider_scope(self):
+        mock_provider = MagicMock()
+        mock_provider.is_configured = True
+        mock_provider.provider_id = "modstore"
+        mock_provider.credential_scope = "desktop_session"
+        port = LLMPort()
+        with patch(
+            "app.infrastructure.llm.providers.registry.get_active_provider",
+            return_value=mock_provider,
+        ) as resolve:
+            status = port.availability(session_id="sess1", user_id="7")
+
+        assert status == {
+            "available": True,
+            "provider_id": "modstore",
+            "credential_scope": "desktop_session",
+        }
+        resolve.assert_called_once_with(
+            profile="neuro",
+            session_id="sess1",
+            user_id="7",
+        )
+
     def test_is_available_false_when_no_provider(self):
         """无 provider 时 is_available=False。"""
         port = LLMPort()
@@ -682,6 +705,8 @@ class TestConsciousLLMHandler:
         assert messages[0]["role"] == "system"  # system prompt
         assert messages[-1]["role"] == "user"  # 用户查询
         assert messages[-1]["content"] == "你好"
+        assert call_args.kwargs["session_id"] == "sess1"
+        assert call_args.kwargs["user_id"] == "u1"
 
     async def test_handle_remembers_after_success(
         self, mock_event, mock_llm_port, mock_working_memory

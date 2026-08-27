@@ -183,6 +183,8 @@ class ConsciousLLMHandler:
             messages,
             temperature=_DEFAULT_TEMPERATURE,
             max_tokens=_DEFAULT_MAX_TOKENS,
+            session_id=session_id,
+            user_id=user_id,
         )
 
         elapsed_ms = (time.perf_counter() - start) * 1000

@@ -32,6 +32,7 @@ class LLMProviderSource:
 
     get_by_id: Callable[[str], Any]
     get_active: Callable[[], Any]
+    get_active_for_context: Callable[[str, str], Any] | None = None
 
 
 _source: LLMProviderSource | None = None
@@ -60,6 +61,8 @@ class LLMPort:
         temperature: float = 0.7,
         max_tokens: int = 2000,
         provider: str | None = None,
+        session_id: str = "",
+        user_id: str = "",
         **kwargs: Any,
     ) -> str | None:
         """调用 LLM 生成回复。
@@ -88,7 +91,7 @@ class LLMPort:
                     p = None
 
             if p is None:
-                p = source.get_active()
+                p = self._active_provider(source, session_id=session_id, user_id=user_id)
 
             if p is None or not p.is_configured:
                 logger.debug("LLMPort: no provider configured")
@@ -115,17 +118,59 @@ class LLMPort:
             logger.debug("LLMPort.chat failed", exc_info=True)
             return None
 
-    @property
-    def is_available(self) -> bool:
-        """是否有可用的 LLM provider（不发起请求，仅检查配置）。"""
+    @staticmethod
+    def _active_provider(
+        source: LLMProviderSource,
+        *,
+        session_id: str = "",
+        user_id: str = "",
+    ) -> Any:
+        if source.get_active_for_context is not None:
+            return source.get_active_for_context(
+                str(session_id or "").strip(),
+                str(user_id or "").strip(),
+            )
+        return source.get_active()
+
+    def availability(self, *, session_id: str = "", user_id: str = "") -> dict[str, Any]:
+        """Return non-secret background-provider readiness metadata."""
         try:
             source = _source
             if source is None:
-                return False
-            p = source.get_active()
-            return p is not None and p.is_configured
+                return {
+                    "available": False,
+                    "provider_id": "",
+                    "credential_scope": "unwired",
+                }
+            provider = self._active_provider(
+                source,
+                session_id=session_id,
+                user_id=user_id,
+            )
+            if provider is None or not provider.is_configured:
+                return {
+                    "available": False,
+                    "provider_id": "",
+                    "credential_scope": "unconfigured",
+                }
+            return {
+                "available": True,
+                "provider_id": str(getattr(provider, "provider_id", "") or ""),
+                "credential_scope": str(
+                    getattr(provider, "credential_scope", "process") or "process"
+                ),
+            }
         except RECOVERABLE_ERRORS:
-            return False
+            return {
+                "available": False,
+                "provider_id": "",
+                "credential_scope": "error",
+            }
+
+    @property
+    def is_available(self) -> bool:
+        """是否有可用的 LLM provider（不发起请求，仅检查配置）。"""
+        return bool(self.availability().get("available"))
 
 
 _port: LLMPort | None = None

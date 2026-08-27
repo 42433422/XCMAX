@@ -143,8 +143,17 @@ class __ModstorePlatformAdapterPart01MixinPart01Mixin:
                 else:
                     _facade().logger.warning("无法获取有效的Session ID")
                 if not auth_token:
-                    fallback_user_id = _user_id_from_session(effective_session_id)
-                    if effective_session_id or fallback_user_id is not None:
+                    fallback_user_id = (
+                        _user_id_from_session(effective_session_id)
+                        if effective_session_id
+                        else None
+                    )
+                    from app.utils.deployment import is_desktop_mode
+
+                    # Only a single-user desktop may use the unscoped newest
+                    # token.  Multi-user servers must resolve the session to a
+                    # concrete owner before falling back.
+                    if fallback_user_id is not None or is_desktop_mode():
                         latest_token = latest_session_market_token(user_id=fallback_user_id)
                         if latest_token:
                             auth_token = latest_token

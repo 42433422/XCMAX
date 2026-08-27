@@ -199,6 +199,36 @@ def latest_session_market_token(user_id: int | None = None) -> str:
     return ""
 
 
+def latest_session_id_with_market_token(user_id: int | None = None) -> str:
+    """Return the newest persisted session that can supply market LLM credentials.
+
+    Background workers do not have an HTTP cookie to identify a session.  The
+    desktop runtime is single-user, so it may resume the newest persisted
+    market-bound session after a restart.  Server callers must pass ``user_id``
+    so credentials never cross user boundaries.
+
+    Only the opaque session id is returned here.  Token access and refresh stay
+    behind ``session_market_token`` / ``resolve_valid_market_access_token``.
+    """
+    try:
+        from app.db.models.user import Session as UserSession
+        from app.db.session import get_db
+
+        with get_db() as db:
+            query = db.query(UserSession).filter(UserSession.market_access_token.isnot(None))
+            if user_id is not None:
+                query = query.filter(UserSession.user_id == user_id)
+            rows = query.order_by(UserSession.created_at.desc()).limit(10).all()
+            for row in rows:
+                sid = str(getattr(row, "session_id", "") or "").strip()
+                token = str(getattr(row, "market_access_token", "") or "").strip()
+                if sid and token:
+                    return sid
+    except _facade().RECOVERABLE_ERRORS:
+        _facade().logger.exception("latest_session_id_with_market_token: DB read failed")
+    return ""
+
+
 def _user_id_from_session(session_id: str) -> int | None:
     """从 session_id 反查 user_id，用于多用户环境下的 market token fallback 隔离。
 

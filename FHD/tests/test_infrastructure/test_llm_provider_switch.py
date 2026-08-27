@@ -19,6 +19,14 @@ def _provider(provider_id: str, configured: bool) -> SimpleNamespace:
     return SimpleNamespace(provider_id=provider_id, is_configured=configured)
 
 
+class _BrokenProvider:
+    provider_id = "openai_sdk"
+
+    @property
+    def is_configured(self) -> bool:
+        raise RuntimeError("missing key")
+
+
 class TestLLMProviderRegistry:
     @pytest.fixture(autouse=True)
     def _disable_instrumentation(self, monkeypatch) -> None:
@@ -67,6 +75,15 @@ class TestLLMProviderRegistry:
             reg._providers[pid] = _provider(pid, configured=False)
         assert reg.resolve() is None
 
+    def test_broken_optional_provider_probe_does_not_abort_routing(self, monkeypatch) -> None:
+        monkeypatch.setenv("LLM_ROUTING_ORDER", "openai_sdk,modstore")
+        reg = LLMProviderRegistry()
+        fallback = _provider("modstore", configured=True)
+        reg._providers["openai_sdk"] = _BrokenProvider()
+        reg._providers["modstore"] = fallback
+
+        assert reg.resolve() is fallback
+
     def test_resolve_picks_first_configured_in_routing_order(self, monkeypatch) -> None:
         # Pin the routing order so the assertion is env-independent.
         monkeypatch.delenv("LLM_PROVIDER", raising=False)
@@ -80,3 +97,43 @@ class TestLLMProviderRegistry:
         out = reg.resolve()
         assert out is not None
         assert out.provider_id == "openai_compatible"
+
+    def test_request_scoped_adapter_is_not_retained_globally(self, monkeypatch) -> None:
+        monkeypatch.setenv("LLM_ROUTING_ORDER", "modstore")
+        reg = LLMProviderRegistry()
+        adapter = SimpleNamespace(is_configured=True)
+        service = SimpleNamespace(modstore_adapter=adapter, llm_adapter=None, api_key="")
+
+        resolved = reg.resolve(conversation_service=service)
+
+        assert resolved is not None
+        assert resolved.provider_id == "modstore"
+        assert reg._providers["modstore"].is_configured is False
+
+
+def test_neuro_profile_uses_contextual_background_provider(monkeypatch) -> None:
+    import app.infrastructure.llm.providers.registry as registry
+
+    monkeypatch.setenv("XCAGI_GENAI_TRACE_ENABLED", "0")
+    monkeypatch.setenv("XCAGI_GUARDRAILS_ENABLED", "0")
+    reg = LLMProviderRegistry()
+    for pid in list(reg._providers):
+        reg._providers[pid] = _provider(pid, configured=False)
+    fallback = _provider("modstore", configured=True)
+    captured: dict[str, object] = {}
+
+    def _background(*, session_id=None, user_id=None):
+        captured.update(session_id=session_id, user_id=user_id)
+        return fallback
+
+    monkeypatch.setattr(registry, "get_llm_registry", lambda: reg)
+    monkeypatch.setattr(registry, "_resolve_background_market_provider", _background)
+
+    resolved = registry.get_active_provider(
+        profile="neuro",
+        session_id="session-a",
+        user_id="17",
+    )
+
+    assert resolved is fallback
+    assert captured == {"session_id": "session-a", "user_id": "17"}

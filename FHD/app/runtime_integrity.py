@@ -108,8 +108,13 @@ def neuro_degraded_reasons(neuro: object) -> list[str]:
     cognition = neuro.get("cognition")
     if isinstance(cognition, dict):
         cognition_state = cognition.get("cognition")
-        if isinstance(cognition_state, dict) and cognition_state.get("llm_port_available") is False:
-            reasons.append("LLM_RUNTIME_UNAVAILABLE")
+        if isinstance(cognition_state, dict):
+            background_available = cognition_state.get(
+                "background_llm_available",
+                cognition_state.get("llm_port_available"),
+            )
+            if background_available is False:
+                reasons.append("LLM_RUNTIME_UNAVAILABLE")
         evolution = cognition.get("evolution")
         if isinstance(evolution, dict) and evolution.get("error"):
             reasons.append("NEURO_EVOLUTION_UNAVAILABLE")

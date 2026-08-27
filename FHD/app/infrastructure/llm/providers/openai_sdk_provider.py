@@ -15,8 +15,12 @@ class OpenAISdkProvider:
     @property
     def is_configured(self) -> bool:
         from app.infrastructure.llm.client import get_llm_client
+        from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-        return get_llm_client() is not None
+        try:
+            return get_llm_client() is not None
+        except RECOVERABLE_ERRORS:
+            return False
 
     async def chat_completion(
         self,

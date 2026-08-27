@@ -49,6 +49,10 @@ class InstrumentedProvider:
     def is_configured(self) -> bool:
         return self._inner.is_configured
 
+    @property
+    def credential_scope(self) -> str:
+        return str(getattr(self._inner, "credential_scope", "process") or "process")
+
     async def chat_completion(
         self,
         messages: list[dict[str, str]],

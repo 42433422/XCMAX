@@ -59,3 +59,19 @@ def test_neuro_llm_and_evolution_unavailable_are_not_reported_healthy():
     )
     assert "LLM_RUNTIME_UNAVAILABLE" in reasons
     assert "NEURO_EVOLUTION_UNAVAILABLE" in reasons
+
+
+def test_background_llm_readiness_takes_precedence_over_legacy_alias():
+    reasons = neuro_degraded_reasons(
+        {
+            "status": "healthy",
+            "running": True,
+            "cognition": {
+                "cognition": {
+                    "background_llm_available": True,
+                    "llm_port_available": False,
+                }
+            },
+        }
+    )
+    assert "LLM_RUNTIME_UNAVAILABLE" not in reasons

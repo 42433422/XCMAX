@@ -97,11 +97,11 @@ class TestFromSessionBranches:
             adapter = ModstorePlatformAdapter.from_session(session_id=None, request=None)
             assert adapter is not None
 
-    def test_session_id_but_no_token_falls_back_to_latest(self):
-        """L244=True, L258=True (no token yet), L260=True: latest_token found."""
+    def test_unknown_server_session_does_not_fall_back_across_users(self):
         mock_mods = MagicMock()
         mock_mods.session_id_from_request.return_value = "sess123"
         mock_mods.session_market_token.return_value = ""  # nothing for session
+        mock_mods._user_id_from_session.return_value = None
         mock_mods.latest_session_market_token.return_value = "latest_tok"
 
         with patch.dict(
@@ -109,6 +109,30 @@ class TestFromSessionBranches:
             {
                 "MODSTORE_AUTH_TOKEN": "",
                 "XCAGI_MARKET_BASE_URL": "http://market.local",
+                "XCAGI_DESKTOP_MODE": "0",
+            },
+            clear=False,
+        ):
+            with patch.dict(
+                "sys.modules",
+                {"app.fastapi_routes.market_account": mock_mods},
+            ):
+                adapter = ModstorePlatformAdapter.from_session(session_id="sess123")
+        assert adapter.auth_token == ""
+        mock_mods.latest_session_market_token.assert_not_called()
+
+    def test_desktop_session_can_fall_back_to_latest(self):
+        mock_mods = MagicMock()
+        mock_mods.session_market_token.return_value = ""
+        mock_mods._user_id_from_session.return_value = None
+        mock_mods.latest_session_market_token.return_value = "latest_tok"
+
+        with patch.dict(
+            os.environ,
+            {
+                "MODSTORE_AUTH_TOKEN": "",
+                "XCAGI_MARKET_BASE_URL": "http://market.local",
+                "XCAGI_DESKTOP_MODE": "1",
             },
             clear=False,
         ):
@@ -118,6 +142,30 @@ class TestFromSessionBranches:
             ):
                 adapter = ModstorePlatformAdapter.from_session(session_id="sess123")
         assert adapter.auth_token == "latest_tok"
+        mock_mods.latest_session_market_token.assert_called_once_with(user_id=None)
+
+    def test_server_session_fallback_is_scoped_to_resolved_user(self):
+        mock_mods = MagicMock()
+        mock_mods.session_market_token.return_value = ""
+        mock_mods._user_id_from_session.return_value = 42
+        mock_mods.latest_session_market_token.return_value = "scoped_tok"
+
+        with patch.dict(
+            os.environ,
+            {
+                "MODSTORE_AUTH_TOKEN": "",
+                "XCAGI_MARKET_BASE_URL": "http://market.local",
+                "XCAGI_DESKTOP_MODE": "0",
+            },
+            clear=False,
+        ):
+            with patch.dict(
+                "sys.modules",
+                {"app.fastapi_routes.market_account": mock_mods},
+            ):
+                adapter = ModstorePlatformAdapter.from_session(session_id="sess123")
+        assert adapter.auth_token == "scoped_tok"
+        mock_mods.latest_session_market_token.assert_called_once_with(user_id=42)
 
     def test_session_id_token_already_found_skips_latest(self):
         """L258=False: auth_token already set from session_market_token → no latest lookup."""

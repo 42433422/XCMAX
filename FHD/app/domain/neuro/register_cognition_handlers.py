@@ -129,8 +129,14 @@ def get_cognition_stats() -> dict[str, Any]:
     try:
         from app.domain.neuro.cognition import get_llm_port
 
+        llm_runtime = get_llm_port().availability()
         stats["cognition"] = {
-            "llm_port_available": get_llm_port().is_available,
+            # Compatibility key consumed by existing health/release checks.
+            "llm_port_available": bool(llm_runtime["available"]),
+            # Explicit name makes the contract clear: this probes the
+            # no-request background path, not a signed-in browser request.
+            "background_llm_available": bool(llm_runtime["available"]),
+            "llm_runtime": llm_runtime,
         }
     except RECOVERABLE_ERRORS:
         stats["cognition"] = {"error": "unavailable"}
