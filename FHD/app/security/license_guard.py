@@ -103,6 +103,13 @@ class LanLicenseGuard:
             await self.app(scope, receive, send)
             return
 
+        # LanCidrGuard has already validated both the configured public-admin
+        # host and a live market-admin session.  Preserve that narrowly scoped
+        # decision instead of demanding a second, unrelated LAN activation key.
+        if bool((scope.get("state") or {}).get("lan_public_admin_session")):
+            await self.app(scope, receive, send)
+            return
+
         if not cfg.is_secret_ready():
             await _send_json(
                 send,

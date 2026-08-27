@@ -75,6 +75,11 @@ class LanConfig:
     cookie_samesite: str
     cookie_domain: str
     static_prefixes: tuple[str, ...] = field(default_factory=tuple)
+    # Public management hosts may cross the LAN boundary only when the request
+    # carries a live market-admin session.  Keeping the host list explicit
+    # prevents an administrator cookie from becoming a blanket bypass on the
+    # customer/ERP origins.
+    public_admin_hosts: tuple[str, ...] = field(default_factory=tuple)
 
     def is_secret_ready(self) -> bool:
         return (
@@ -307,6 +312,9 @@ def get_lan_config() -> LanConfig:
     cookie_secure = _env_bool("LAN_COOKIE_SECURE", default=False)
     cookie_samesite = (os.environ.get("LAN_COOKIE_SAMESITE") or "Lax").strip() or "Lax"
     cookie_domain = (os.environ.get("LAN_COOKIE_DOMAIN") or "").strip()
+    public_admin_hosts = tuple(
+        host.lower().split(":", 1)[0] for host in _env_csv("LAN_PUBLIC_ADMIN_HOSTS") if host.strip()
+    )
 
     return LanConfig(
         enabled=enabled,
@@ -323,6 +331,7 @@ def get_lan_config() -> LanConfig:
         cookie_samesite=cookie_samesite,
         cookie_domain=cookie_domain,
         static_prefixes=tuple(static_prefixes),
+        public_admin_hosts=public_admin_hosts,
     )
 
 

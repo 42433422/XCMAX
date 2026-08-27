@@ -5,11 +5,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.security.lan_cidr_guard import LanCidrGuard
+from app.security.lan_cidr_guard import LanCidrGuard, _authenticated_public_admin, _scope_host
 from app.security.lan_config import LanConfig, lan_guard_path_is_bypassed
+from app.security.license_guard import LanLicenseGuard
 
 
-def _cfg(*, enabled: bool = True) -> LanConfig:
+def _cfg(*, enabled: bool = True, public_admin_hosts: tuple[str, ...] = ()) -> LanConfig:
     return LanConfig(
         enabled=enabled,
         allowed_cidrs=("10.0.0.0/8",),
@@ -25,6 +26,7 @@ def _cfg(*, enabled: bool = True) -> LanConfig:
         cookie_samesite="Lax",
         cookie_domain="",
         static_prefixes=(),
+        public_admin_hosts=public_admin_hosts,
     )
 
 
@@ -69,6 +71,88 @@ async def test_cidr_guard_allows_im_websocket_handshake_path() -> None:
     }
 
     with patch("app.security.lan_cidr_guard.get_lan_config", return_value=_cfg()):
+        await guard(scope, MagicMock(), send)
+
+    app.assert_called_once()
+    send.assert_not_called()
+
+
+def test_scope_host_normalizes_port_and_case() -> None:
+    assert _scope_host({"headers": [(b"host", b"WWW.XIU-CI.COM:443")]}) == "www.xiu-ci.com"
+
+
+def test_public_admin_helper_requires_allowlisted_host_and_live_admin(monkeypatch) -> None:
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/api/xcmax/admin/deploy/check",
+        "headers": [(b"host", b"www.xiu-ci.com"), (b"cookie", b"session_id=s-live")],
+        "client": ("8.8.8.8", 12345),
+    }
+    monkeypatch.setattr(
+        "app.infrastructure.auth.dependencies.session_id_from_request",
+        lambda request: "s-live",
+    )
+    monkeypatch.setattr(
+        "app.infrastructure.auth.dependencies.resolve_session_user",
+        lambda request: MagicMock(is_active=True),
+    )
+    monkeypatch.setattr(
+        "app.application.session_account_meta.load_session_account_meta",
+        lambda sid: {"account_kind": "admin", "market_is_admin": True},
+    )
+
+    assert _authenticated_public_admin(
+        scope,
+        _cfg(public_admin_hosts=("www.xiu-ci.com",)),
+    )
+    assert not _authenticated_public_admin(scope, _cfg(public_admin_hosts=()))
+
+
+@pytest.mark.asyncio
+async def test_cidr_guard_allows_live_admin_only_on_public_admin_host(monkeypatch) -> None:
+    app = AsyncMock()
+    guard = LanCidrGuard(app)
+    send = AsyncMock()
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/api/xcmax/admin/deploy/check",
+        "headers": [(b"host", b"www.xiu-ci.com")],
+        "client": ("8.8.8.8", 12345),
+    }
+    monkeypatch.setattr("app.security.lan_cidr_guard._authenticated_public_admin", lambda *_: True)
+
+    with patch(
+        "app.security.lan_cidr_guard.get_lan_config",
+        return_value=_cfg(public_admin_hosts=("www.xiu-ci.com",)),
+    ):
+        await guard(scope, MagicMock(), send)
+
+    app.assert_called_once()
+    send.assert_not_called()
+    assert scope["state"]["lan_public_admin_session"] is True
+    assert scope["state"]["lan_is_admin"] is True
+
+
+@pytest.mark.asyncio
+async def test_license_guard_honors_cidr_validated_public_admin_session() -> None:
+    app = AsyncMock()
+    guard = LanLicenseGuard(app)
+    send = AsyncMock()
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/api/xcmax/admin/deploy/check",
+        "headers": [(b"host", b"www.xiu-ci.com")],
+        "client": ("8.8.8.8", 12345),
+        "state": {"lan_public_admin_session": True},
+    }
+
+    with patch(
+        "app.security.license_guard.get_lan_config",
+        return_value=_cfg(public_admin_hosts=("www.xiu-ci.com",)),
+    ):
         await guard(scope, MagicMock(), send)
 
     app.assert_called_once()
