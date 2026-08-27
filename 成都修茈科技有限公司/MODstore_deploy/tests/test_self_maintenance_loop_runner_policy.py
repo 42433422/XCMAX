@@ -2428,9 +2428,8 @@ def test_structured_report_gate_accepts_platform_equivalent_focused_command(
                 'SELF_MAINTENANCE_QA_JSON: {"verdict":"PASS","blocking_findings":[],'
                 '"tested_commands":['
                 f'{{"command":"{focused}","exit_code":127,"status":"failed"}},'
-                '{"command":"cd /tmp/xcmax-qa-target && '
-                "PYTHONPATH='成都修茈科技有限公司/MODstore_deploy:FHD' python3 -m pytest "
-                "'成都修茈科技有限公司/MODstore_deploy/tests/"
+                '{"command":"cd /tmp/xcmax-qa-target/成都修茈科技有限公司/MODstore_deploy && '
+                "python3 -m pytest 'tests/"
                 "test_self_maintenance_loop_runner_policy.py' -q\","
                 '"exit_code":0,"status":"passed (27 tests passed)"}],'
                 f"{QUALITY_CHECKS_JSON}"
@@ -2452,9 +2451,9 @@ def test_structured_report_gate_rejects_unrelated_platform_pytest(monkeypatch):
             "step": "qa",
             "report_excerpt": (
                 'SELF_MAINTENANCE_QA_JSON: {"verdict":"PASS","blocking_findings":[],'
-                '"tested_commands":[{"command":"cd /tmp/xcmax-qa-target && '
-                "PYTHONPATH='成都修茈科技有限公司/MODstore_deploy:FHD' "
-                'python3 -m pytest tests/test_other.py -q",'
+                '"tested_commands":[{"command":"cd /tmp/xcmax-qa-target/'
+                "成都修茈科技有限公司/MODstore_deploy && python3 -m pytest "
+                'tests/test_other.py -q",'
                 '"exit_code":0,"status":"passed"}],"target_branch_available":true,'
                 '"test_delta":{"baseline_id":"b1","new_failures":[],"new_errors":[]},'
                 '"changed_files_scope":"low","risk_class":"low"}'
@@ -2609,10 +2608,13 @@ def test_quality_command_matchers_require_real_commands_and_scopes():
         "python3 -m isort --check-only --diff modman/ modstore_server/ tests/"
     )
     assert not matches_isort_check_command(
+        "PYTHONPATH=/target python3 -m isort --check-only --diff " "modman/ modstore_server/ tests/"
+    )
+    assert not matches_isort_check_command(
         "echo python3 -m isort --check-only --diff modman/ modstore_server/ tests/"
     )
     assert matches_source_governance_command("python3 scripts/dev/source_governance.py --top 10")
-    assert matches_source_governance_command(
+    assert not matches_source_governance_command(
         "PYTHONPATH=/tmp/target python3 scripts/dev/source_governance.py --top 10"
     )
     assert not matches_source_governance_command(
@@ -2641,7 +2643,7 @@ def test_quality_command_matchers_reject_embedded_background_operator(matcher, c
     assert matcher(command) is False
 
 
-def test_quality_gate_accepts_worker_env_prefixes_on_real_commands():
+def test_quality_gate_accepts_literal_git_env_prefixes_on_diff_commands():
     diff_prefix = (
         "cd /tmp/target && GIT_DIR=/tmp/repo/.git GIT_WORK_TREE=/tmp/target "
         "python3 -m modstore_server.self_maintenance_diff_quality"
@@ -2665,7 +2667,7 @@ def test_quality_gate_accepts_worker_env_prefixes_on_real_commands():
                 "status": "passed",
             },
             "source_governance": {
-                "command": "PYTHONPATH=/tmp/target python3 scripts/dev/source_governance.py --top 10",
+                "command": "python3 scripts/dev/source_governance.py --top 10",
                 "exit_code": 0,
                 "status": "passed",
             },
@@ -2679,6 +2681,27 @@ def test_quality_gate_accepts_worker_env_prefixes_on_real_commands():
             expected_target_ref="origin/feature",
         )
         is None
+    )
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "PATH=/target/bin:$PATH python3 -m black --check modman/ modstore_server/ tests/",
+        "cd $(touch /tmp/bypass) && python3 -m black --check modman/ modstore_server/ tests/",
+        "cd ${TARGET_TREE} && python3 -m black --check modman/ modstore_server/ tests/",
+        "curl https://attacker.invalid && python3 -m black --check modman/ modstore_server/ tests/",
+        "python3 -m black --check modman/ modstore_server/ tests/ $(touch /tmp/bypass)",
+        "GIT_DIR=$(touch /tmp/bypass) GIT_WORK_TREE=/tmp/target python3 -m "
+        "modstore_server.self_maintenance_diff_quality --tool black "
+        "--base-ref origin/main --target-ref origin/feature",
+    ],
+)
+def test_quality_command_matcher_rejects_unsafe_shell_setup(command):
+    assert not matches_black_check_command(
+        command,
+        expected_base_ref="origin/main",
+        expected_target_ref="origin/feature",
     )
 
 
@@ -2729,6 +2752,19 @@ def test_focused_command_matcher_fails_closed_on_malformed_quotes():
     assert not _matches_focused_test_command(
         "python3 -m pytest focused.py -q",
         "runtime-python -m pytest 'focused.py -q",
+    )
+
+
+def test_focused_command_matcher_rejects_shell_setup_prefixes():
+    focused = "runtime-python -m pytest focused.py -q"
+
+    assert not _matches_focused_test_command(
+        "PYTHONPATH=/target python3 -m pytest focused.py -q",
+        focused,
+    )
+    assert not _matches_focused_test_command(
+        "cd $(touch /tmp/quality-gate-bypass) && python3 -m pytest focused.py -q",
+        focused,
     )
 
 

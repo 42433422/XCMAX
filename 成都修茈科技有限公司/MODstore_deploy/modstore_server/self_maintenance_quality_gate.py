@@ -17,12 +17,21 @@ def _safe_command_tokens(command: str) -> Optional[list[str]]:
         lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|")
         lexer.commenters = ""
         lexer.whitespace_split = True
-        tokens = list(lexer)
+        words = list(lexer)
     except ValueError:
         return None
-    if any(set(token) <= set(";&|") and token != "&&" for token in tokens):
+    if any(set(word) <= set(";&|") and word != "&&" for word in words):
         return None
-    return tokens
+    unsafe_chars = frozenset("$`*?[]{}<>")
+    if any(word.startswith("~") or set(word) & unsafe_chars for word in words):
+        return None
+    if words.count("&&") > 1:
+        return None
+    if "&&" in words:
+        prefix = words[: words.index("&&")]
+        if len(prefix) != 2 or prefix[0] != "cd" or prefix[1].startswith("-"):
+            return None
+    return words
 
 
 def _shell_command_segments(tokens: list[str]) -> list[list[str]]:
@@ -79,15 +88,28 @@ def _is_python_executable(token: str) -> bool:
 
 
 _SHELL_ENV_ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=.*", re.DOTALL)
+_SAFE_DIFF_ENV_NAMES = frozenset({"GIT_DIR", "GIT_WORK_TREE"})
 
 
-def _strip_leading_shell_env_assignments(tokens: list[str]) -> list[str]:
-    """Remove POSIX ``NAME=value`` prefixes before inspecting an executable."""
+def _strip_leading_shell_env_assignments(
+    words: list[str], *, allowed_env_names: frozenset[str] = frozenset()
+) -> list[str]:
+    """Remove only allowlisted, literal environment prefixes."""
 
     index = 0
-    while index < len(tokens) and _SHELL_ENV_ASSIGNMENT.fullmatch(tokens[index]):
+    seen_env_names: set[str] = set()
+    while index < len(words) and _SHELL_ENV_ASSIGNMENT.fullmatch(words[index]):
+        name, value = words[index].split("=", 1)
+        if (
+            name not in allowed_env_names
+            or name in seen_env_names
+            or not value
+            or value.startswith("~")
+        ):
+            return []
+        seen_env_names.add(name)
         index += 1
-    return tokens[index:]
+    return words[index:]
 
 
 def matches_focused_test_command(command: Any, focused_command: str) -> bool:
@@ -153,7 +175,9 @@ def _matches_diff_quality_command(
     if tokens is None:
         return False
     for segment in _shell_command_segments(tokens):
-        segment = _strip_leading_shell_env_assignments(segment)
+        segment = _strip_leading_shell_env_assignments(
+            segment, allowed_env_names=_SAFE_DIFF_ENV_NAMES
+        )
         if (
             len(segment) < 9
             or not _is_python_executable(segment[0])
