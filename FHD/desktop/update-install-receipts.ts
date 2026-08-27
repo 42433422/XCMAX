@@ -11,10 +11,12 @@ export type PendingUpdateInstallReceipt = {
   targetVersion: string
   targetBuildSha: string
   preparedAt: string
+  source?: 'desktop_ota' | 'desktop_inventory'
 }
 
 const INSTALLATION_ID_FILE = 'installation-id'
 const PENDING_RECEIPT_FILE = 'pending-update-install-receipt.json'
+const REPORTED_INSTALLATION_FILE = 'reported-update-installation.json'
 
 function installationIdPath(): string {
   return path.join(app.getPath('userData'), INSTALLATION_ID_FILE)
@@ -22,6 +24,10 @@ function installationIdPath(): string {
 
 function pendingReceiptPath(): string {
   return path.join(app.getPath('userData'), PENDING_RECEIPT_FILE)
+}
+
+function reportedInstallationPath(): string {
+  return path.join(app.getPath('userData'), REPORTED_INSTALLATION_FILE)
 }
 
 export function loadOrCreateInstallationId(): string {
@@ -60,6 +66,7 @@ export function stageUpdateInstallReceipt(input: {
     targetVersion,
     targetBuildSha,
     preparedAt,
+    source: 'desktop_ota',
   }
   fs.writeFileSync(pendingReceiptPath(), JSON.stringify(receipt, null, 2), {
     encoding: 'utf8',
@@ -82,13 +89,70 @@ export function discardPendingUpdateInstallReceipt(): void {
   try { fs.unlinkSync(pendingReceiptPath()) } catch {}
 }
 
+function stageCurrentInstallationReceipt(input: {
+  installedVersion: string
+  installedBuildSha: string
+}): PendingUpdateInstallReceipt | null {
+  const installedVersion = String(input.installedVersion || '').trim()
+  const installedBuildSha = String(input.installedBuildSha || '').trim()
+  if (!installedVersion || !installedBuildSha) return null
+
+  const installationId = loadOrCreateInstallationId()
+  try {
+    const reported = JSON.parse(fs.readFileSync(reportedInstallationPath(), 'utf8')) as {
+      installationId?: string
+      installedVersion?: string
+      installedBuildSha?: string
+    }
+    if (
+      reported.installationId === installationId
+      && reported.installedVersion === installedVersion
+      && reported.installedBuildSha === installedBuildSha
+    ) return null
+  } catch {
+    /* first report or unreadable marker; create a durable outbox below */
+  }
+
+  const receipt: PendingUpdateInstallReceipt = {
+    installationId,
+    idempotencyKey: crypto
+      .createHash('sha256')
+      .update(`desktop_inventory:${installationId}:${installedVersion}:${installedBuildSha}`)
+      .digest('hex'),
+    channel: process.env.XCAGI_UPDATE_CHANNEL === 'staging' ? 'staging' : 'stable',
+    platform: process.platform,
+    targetVersion: installedVersion,
+    targetBuildSha: installedBuildSha,
+    preparedAt: new Date().toISOString(),
+    source: 'desktop_inventory',
+  }
+  fs.writeFileSync(pendingReceiptPath(), JSON.stringify(receipt, null, 2), {
+    encoding: 'utf8',
+    mode: 0o600,
+  })
+  return receipt
+}
+
+function rememberReportedInstallation(input: {
+  installationId: string
+  installedVersion: string
+  installedBuildSha: string
+}): void {
+  fs.writeFileSync(reportedInstallationPath(), JSON.stringify({
+    ...input,
+    reportedAt: new Date().toISOString(),
+  }, null, 2), { encoding: 'utf8', mode: 0o600 })
+}
+
 export async function reportPendingUpdateInstallation(input: {
   backendPort: number
   installedVersion: string
   installedBuildSha: string
   rollback?: { reason?: string } | null
 }): Promise<{ reported: boolean; status?: string; reason?: string }> {
-  const pending = readPendingUpdateInstallReceipt()
+  const pending = readPendingUpdateInstallReceipt() || (
+    input.rollback ? null : stageCurrentInstallationReceipt(input)
+  )
   if (!pending) return { reported: false, reason: 'no_pending_receipt' }
 
   const installedBuildSha = String(input.installedBuildSha || '').trim()
@@ -120,7 +184,7 @@ export async function reportPendingUpdateInstallation(input: {
         installed_build_sha: installedBuildSha,
         status,
         error,
-        source: 'desktop_ota',
+        source: pending.source || 'desktop_ota',
         reported_at: new Date().toISOString(),
       }),
       signal: AbortSignal.timeout(10_000),
@@ -129,6 +193,13 @@ export async function reportPendingUpdateInstallation(input: {
   if (!response.ok) {
     const detail = await response.text().catch(() => '')
     throw new Error(`安装回执上报失败: HTTP ${response.status} ${detail}`.trim())
+  }
+  if (status === 'installed') {
+    rememberReportedInstallation({
+      installationId: pending.installationId,
+      installedVersion,
+      installedBuildSha,
+    })
   }
   discardPendingUpdateInstallReceipt()
   return { reported: true, status }
