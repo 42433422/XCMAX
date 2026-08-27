@@ -122,7 +122,20 @@ async def get_all_hands_report_session(request: _facade().Request, session_id: s
 
 def _probe_remote_health_sync() -> dict[str, _facade().Any]:
     """同步探测远端 HTTP /api/health；供 asyncio.to_thread 调用，避免阻塞事件循环。"""
-    remote_url = f"http://{_facade().REMOTE_HOST}:{_facade().REMOTE_PORT}/api/health"
+    # MODstore may share this production host while only listening on loopback.
+    # Prefer its configured internal address so the dashboard does not report a
+    # false outage when a public-IP hairpin is unavailable.
+    internal_base = str(
+        _facade().os.environ.get("XCMAX_REMOTE_HEALTH_BASE_URL")
+        or _facade().os.environ.get("MODSTORE_INTERNAL_BASE_URL")
+        or _facade().os.environ.get("MODSTORE_LOCAL_BASE_URL")
+        or ""
+    ).strip()
+    remote_url = (
+        f"{internal_base.rstrip('/')}/api/health"
+        if internal_base
+        else f"http://{_facade().REMOTE_HOST}:{_facade().REMOTE_PORT}/api/health"
+    )
     t0 = _facade().time.time()
     try:
         req = _facade().urllib.request.Request(remote_url, method="GET")
