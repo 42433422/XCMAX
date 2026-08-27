@@ -9,6 +9,53 @@ export type MarketAdminUser = {
   company?: string;
 };
 
+export type CustomDeliveryArtifact = {
+  kind: 'module' | 'employee' | string;
+  id: string;
+};
+
+export type CustomDeliveryInstallReceipt = CustomDeliveryArtifact & {
+  version?: string;
+  host?: string;
+  installed_at?: string;
+};
+
+export type CustomDeliveryRun = {
+  attempt?: number;
+  session_id?: string;
+  status?: string;
+  created_at?: string;
+  error?: string;
+  steps?: Array<Record<string, unknown>>;
+  quality_report?: Record<string, unknown> | null;
+  sandbox_report?: Record<string, unknown> | null;
+  artifact?: Record<string, unknown> | null;
+};
+
+export type CustomDeliveryTicket = {
+  id: number;
+  user_id?: number;
+  ticket_no?: string;
+  title?: string;
+  status?: string;
+  priority?: string;
+  created_at?: string;
+  updated_at?: string;
+  custom_delivery?: {
+    kind?: string;
+    requirements?: string;
+    acceptance_criteria?: string;
+    stage?: string;
+    stage_label?: string;
+    gate_ok?: boolean;
+    gate_message?: string;
+    acceptance_status?: string;
+    runs?: CustomDeliveryRun[];
+    artifacts?: CustomDeliveryArtifact[];
+    install_receipts?: CustomDeliveryInstallReceipt[];
+  };
+};
+
 export type DeployCheckData = {
   admin_local: {
     version?: string;
@@ -116,6 +163,18 @@ export const xcmaxAdminApi = {
   },
   getUserProfiles() {
     return api.get('/api/xcmax/admin/users/profiles');
+  },
+  listCustomDeliveries(limit = 100) {
+    return api.get<{ items?: CustomDeliveryTicket[] }>(
+      '/api/xcmax/market-proxy/customer-service/custom-deliveries',
+      { limit },
+    );
+  },
+  decideCustomDelivery(ticketId: number, action: 'accept' | 'rework', note = '') {
+    return api.post<CustomDeliveryTicket>(
+      `/api/xcmax/market-proxy/customer-service/custom-deliveries/${ticketId}/decision`,
+      { action, note },
+    );
   },
   setUserProfile(
     userId: number,

@@ -7,6 +7,7 @@ import type { CoreMenuCatalogItem } from '@/constants/coreMenuCatalog'
 /** 运维顶栏（侧栏置顶，与 6/4 会话一致） */
 export const ADMIN_OPERATOR_MENU_ITEMS: CoreMenuCatalogItem[] = [
   { key: 'xcmax-admin', name: '服务器后台总览', iconClass: 'fa-dashboard' },
+  { key: 'delivery-center', name: '客户交付中心', iconClass: 'fa-truck' },
   { key: 'founder-autonomy', name: '创始人状态', iconClass: 'fa-compass' },
   { key: 'automation-policy', name: '自动化方针', iconClass: 'fa-random' },
   { key: 'server-functions', name: '服务器功能模块', iconClass: 'fa-server' },

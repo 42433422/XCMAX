@@ -921,7 +921,7 @@ class TestAdminListUserProfiles:
         mock_db.__enter__ = MagicMock(return_value=mock_db)
         mock_db.__exit__ = MagicMock(return_value=False)
         mock_db.query.return_value.all.return_value = [
-            ("alice", "enterprise", "行业A", "pro", "medium", ["通用"])
+            (41, "alice", "enterprise", "行业A", "pro", "medium", ["通用"])
         ]
         with (
             _admin_session_ok(),
@@ -931,6 +931,7 @@ class TestAdminListUserProfiles:
         assert resp.status_code == 200
         body = resp.json()
         assert body["success"] is True
+        assert body["by_market_user_id"]["41"]["tier"] == "enterprise"
 
 
 # ---------------------------------------------------------------------------
