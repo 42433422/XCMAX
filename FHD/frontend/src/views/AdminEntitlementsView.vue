@@ -46,7 +46,21 @@
           </label>
           <label class="admin-user-profile__field">
             <span class="admin-user-profile__label">密码</span>
-            <input v-model="newAccount.password" class="admin-user-input" type="text" autocomplete="new-password" placeholder="至少 6 位" />
+            <span class="admin-password-field">
+              <input
+                v-model="newAccount.password"
+                class="admin-user-input"
+                :type="showNewAccountPassword ? 'text' : 'password'"
+                autocomplete="new-password"
+                placeholder="填写或安全生成"
+              />
+              <button type="button" class="btn btn-secondary btn-sm" @click="generateTemporaryPassword">
+                生成
+              </button>
+              <button type="button" class="btn btn-secondary btn-sm" @click="showNewAccountPassword = !showNewAccountPassword">
+                {{ showNewAccountPassword ? '隐藏' : '显示' }}
+              </button>
+            </span>
           </label>
           <label class="admin-user-profile__field">
             <span class="admin-user-profile__label">邮箱</span>
@@ -337,6 +351,7 @@ type AdminUser = {
 }
 
 type LocalProfile = {
+  market_user_id?: number | null
   tier: string
   industry_id: string
   account_tier?: string
@@ -396,8 +411,9 @@ const forcePushingEntitlements = ref(false)
 const walletMap = ref<Map<number, WalletRow>>(new Map())
 const walletLoadError = ref('')
 
-// 用户账号体系（本地持久化，按 username 合并远端用户列表）
+// 用户账号体系（优先按稳定的 market_user_id 合并；username 仅作旧数据兼容）
 const userProfiles = ref<Record<string, LocalProfile>>({})
+const userProfilesByMarketId = ref<Record<string, LocalProfile>>({})
 const profileEditing = ref<{
   tier: string
   industry_id: string
@@ -408,9 +424,10 @@ const profileEditing = ref<{
 const profileSaving = ref(false)
 const createAccountOpen = ref(false)
 const creatingAccount = ref(false)
+const showNewAccountPassword = ref(false)
 const newAccount = ref({
   username: '',
-  password: 'XC888888',
+  password: '',
   email: '',
   tier: 'enterprise',
   industry_id: '通用',
@@ -607,14 +624,19 @@ async function loadUsers() {
   const res = await xcmaxAdminApi.listUsers()
   const data = res as { users?: AdminUser[]; data?: { users?: AdminUser[] } }
   const list = data.users || data.data?.users || []
-  // 合并本地 tier/industry_id（按 username 匹配）
+  // 稳定 ID 优先；旧数据库尚未绑定时才回退 username。
   try {
     const profRes = await xcmaxAdminApi.getUserProfiles()
-    const profBody = profRes as { data?: Record<string, LocalProfile> }
+    const profBody = profRes as {
+      data?: Record<string, LocalProfile>
+      by_market_user_id?: Record<string, LocalProfile>
+    }
     const profiles = profBody.data || {}
+    const profilesByMarketId = profBody.by_market_user_id || {}
     userProfiles.value = profiles
+    userProfilesByMarketId.value = profilesByMarketId
     for (const u of list) {
-      const p = profiles[u.username]
+      const p = profilesByMarketId[String(u.id)] || profiles[u.username]
       if (p) {
         u.tier = p.tier
         u.industry_id = p.industry_id
@@ -667,6 +689,25 @@ function defaultEmailForUsername(username: string): string {
   return normalized.includes('@') ? normalized : `${normalized}@xcagi.local`
 }
 
+function secureRandomIndex(limit: number): number {
+  const values = new Uint32Array(1)
+  window.crypto.getRandomValues(values)
+  return Number(values[0] % limit)
+}
+
+function generateTemporaryPassword() {
+  const pools = ['ABCDEFGHJKLMNPQRSTUVWXYZ', 'abcdefghijkmnopqrstuvwxyz', '23456789', '!@#$%*-_']
+  const all = pools.join('')
+  const chars = pools.map((pool) => pool[secureRandomIndex(pool.length)])
+  while (chars.length < 16) chars.push(all[secureRandomIndex(all.length)])
+  for (let i = chars.length - 1; i > 0; i -= 1) {
+    const j = secureRandomIndex(i + 1)
+    ;[chars[i], chars[j]] = [chars[j], chars[i]]
+  }
+  newAccount.value.password = chars.join('')
+  showNewAccountPassword.value = true
+}
+
 async function applyProfileToUser(user: AdminUser, tier: string, industryId: string) {
   const entitled = industryId ? [industryId] : ['通用']
   await xcmaxAdminApi.setUserProfile(user.id, {
@@ -710,12 +751,13 @@ async function createAccount() {
     await loadWallets()
     newAccount.value = {
       username: '',
-      password: 'XC888888',
+      password: '',
       email: '',
       tier: 'enterprise',
       industry_id: '通用',
       is_enterprise: true,
     }
+    showNewAccountPassword.value = false
     createAccountOpen.value = false
     await appAlert('账号已创建')
   } catch (e) {
@@ -1077,6 +1119,21 @@ onMounted(async () => {
   outline: none;
   border-color: #1e3a5f;
   box-shadow: 0 0 0 3px rgba(30, 58, 95, 0.12);
+}
+
+.admin-password-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.admin-password-field .admin-user-input {
+  min-width: 150px;
+  flex: 1;
+}
+
+.admin-password-field .btn {
+  white-space: nowrap;
 }
 
 /* 卡片网格 */

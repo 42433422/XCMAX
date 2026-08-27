@@ -538,7 +538,7 @@ def test_custom_delivery_requires_quality_acceptance_and_install_receipt(client,
         apply_customer_ticket_incident_progress,
     )
     from modstore_server.models import get_session_factory
-    from modstore_server.models_cs import CustomerServiceTicket
+    from modstore_server.models_cs import CustomerServiceAuditLog, CustomerServiceTicket
 
     user = _make_user("custom_delivery")
     state = {
@@ -583,6 +583,7 @@ def test_custom_delivery_requires_quality_acceptance_and_install_receipt(client,
         )
         assert created.status_code == 200, created.text
         body = created.json()
+        assert body["user_id"] == user.id
         assert body["custom_delivery"]["stage"] == "production"
         ticket_id = int(body["id"])
 
@@ -634,6 +635,14 @@ def test_custom_delivery_requires_quality_acceptance_and_install_receipt(client,
         )
         assert accepted.status_code == 200, accepted.text
         assert accepted.json()["custom_delivery"]["stage"] == "delivering"
+        with sf() as db:
+            accepted_audit = (
+                db.query(CustomerServiceAuditLog)
+                .filter_by(ticket_id=ticket_id, event_type="custom_delivery_accepted")
+                .first()
+            )
+            assert accepted_audit is not None
+            assert accepted_audit.actor_user_id == user.id
 
         receipt_token = "pytest-download-receipt-token-73"
         with sf() as db:

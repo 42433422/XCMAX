@@ -320,6 +320,7 @@ def ensure_user_profile_columns(
         dialect = real_engine.dialect.name
         json_type = "JSONB" if dialect == "postgresql" else "TEXT"
         additions = [
+            ("market_user_id", "INTEGER", None),
             ("tier", "VARCHAR(32)", "'personal'"),
             ("industry_id", "VARCHAR(32)", "'通用'"),
             ("account_tier", "VARCHAR(32)", None),
@@ -345,6 +346,13 @@ def ensure_user_profile_columns(
                     conn.execute(
                         text(f"ALTER TABLE users ADD COLUMN {name} {col_type}{default_clause}")
                     )
+            # NULL 可重复，非空市场用户 ID 必须唯一；账号改名后仍能命中同一客户资料。
+            conn.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_market_user_id "
+                    "ON users (market_user_id)"
+                )
+            )
         _facade().logger.info("users 账号/行业列已补齐")
     except _facade().RECOVERABLE_ERRORS as exc:
         _facade().logger.warning("users 账号/行业列兼容补列失败: %s", exc)

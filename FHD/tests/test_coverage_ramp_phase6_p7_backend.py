@@ -78,6 +78,7 @@ def test_compat_health_returns_ok_status() -> None:
     assert "timestamp" in body["data"]
     assert body["build"] == body["data"]["build"]
     assert set(body["build"]) == {
+        "admin_console_git_sha",
         "admin_console_sha256",
         "artifact_sha256",
         "built_at",

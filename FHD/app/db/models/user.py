@@ -39,6 +39,10 @@ class User(Base):
     totp_secret: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     mfa_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     tenant_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
+    # 修茈市场用户是管理端客户资料的稳定主键。username 允许客户改名，不能作为跨库关联键。
+    market_user_id: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True, unique=True, index=True
+    )
 
     # 用户等级与行业（管理端可编辑，复用 industryPresets 行业 id）
     tier: Mapped[str] = mapped_column(

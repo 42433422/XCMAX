@@ -27,9 +27,9 @@ def _identity_file() -> dict[str, Any]:
 
 def _local_git_sha() -> str:
     root = _release_root()
-    if not (root / ".git").exists():
-        return ""
     try:
+        # FHD 通常是仓库子目录，.git 位于上层 XCMAX。git -C 可以自行向上
+        # 解析工作树；不要因为 FHD/.git 不存在就把运行身份错误地报成空值。
         result = subprocess.run(
             ["git", "-C", str(root), "rev-parse", "HEAD"],
             capture_output=True,
@@ -49,8 +49,18 @@ def _stamp(name: str) -> str:
         return ""
 
 
+def _admin_console_identity() -> dict[str, Any]:
+    path = _release_root() / "templates" / "admin-vue-dist" / ".release-identity.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
 def build_identity() -> dict[str, str]:
     packaged = _identity_file()
+    admin_console = _admin_console_identity()
     git_sha = str(
         os.environ.get("XCAGI_GIT_SHA")
         or os.environ.get("FHD_GIT_SHA")
@@ -76,10 +86,12 @@ def build_identity() -> dict[str, str]:
         os.environ.get("XCAGI_ADMIN_CONSOLE_SHA256")
         or os.environ.get("FHD_ADMIN_CONSOLE_SHA256")
         or packaged.get("admin_console_sha256")
+        or admin_console.get("sha256")
         or ""
     ).strip()
     return {
         "admin_console_sha256": admin_console_sha256,
+        "admin_console_git_sha": str(admin_console.get("git_sha") or "").strip(),
         "artifact_sha256": artifact_sha256,
         "built_at": str(packaged.get("built_at") or ""),
         "git_sha": git_sha,

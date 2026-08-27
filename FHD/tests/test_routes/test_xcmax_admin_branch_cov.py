@@ -480,7 +480,60 @@ class TestAdminSetUserProfileDeep:
         user.account_tier = kwargs.get("account_tier")
         user.budget_range = kwargs.get("budget_range", "")
         user.entitled_industries = kwargs.get("entitled_industries", [])
+        user.market_user_id = kwargs.get("market_user_id")
         return user
+
+    @pytest.mark.asyncio
+    async def test_market_user_id_survives_username_change(self):
+        req = _mock_request()
+        existing = self._make_user(
+            username="old-name",
+            market_user_id=81,
+            tier="enterprise",
+            entitled_industries=["通用"],
+        )
+        mock_db = MagicMock()
+        mock_db.query.return_value.filter.return_value.first.side_effect = [existing, None]
+        mock_get_db = MagicMock()
+        mock_get_db.return_value.__enter__.return_value = mock_db
+        mock_get_db.return_value.__exit__.return_value = False
+        with (
+            _admin_session_ok(),
+            patch("app.db.session.get_db", mock_get_db),
+        ):
+            result = await admin_routes.admin_set_user_profile(
+                req,
+                81,
+                {"username": "new-name", "tier": "enterprise"},
+            )
+        assert result["success"] is True
+        assert result["data"]["market_user_id"] == 81
+        assert existing.username == "new-name"
+
+    @pytest.mark.asyncio
+    async def test_market_user_id_username_conflict_returns_409(self):
+        req = _mock_request()
+        by_id = self._make_user(username="customer-a", market_user_id=82)
+        by_username = self._make_user(username="customer-b", market_user_id=83)
+        mock_db = MagicMock()
+        mock_db.query.return_value.filter.return_value.first.side_effect = [
+            by_id,
+            by_username,
+        ]
+        mock_get_db = MagicMock()
+        mock_get_db.return_value.__enter__.return_value = mock_db
+        mock_get_db.return_value.__exit__.return_value = False
+        with (
+            _admin_session_ok(),
+            patch("app.db.session.get_db", mock_get_db),
+        ):
+            result = await admin_routes.admin_set_user_profile(
+                req,
+                82,
+                {"username": "customer-b"},
+            )
+        assert isinstance(result, JSONResponse)
+        assert result.status_code == 409
 
     @pytest.mark.asyncio
     async def test_new_user_creation(self):

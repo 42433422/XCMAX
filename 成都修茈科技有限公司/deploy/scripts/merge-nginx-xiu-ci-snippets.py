@@ -9,7 +9,6 @@ import re
 import tempfile
 from pathlib import Path
 
-
 MANAGED_INCLUDES = (
     "include /etc/nginx/snippets/marketing-site-static.inc.conf;",
     "include /etc/nginx/snippets/corp-main-styles.inc.conf;",
@@ -17,6 +16,12 @@ MANAGED_INCLUDES = (
     "include /etc/nginx/snippets/market-static.inc.conf;",
     "include /etc/nginx/snippets/founder-autonomy-admin.inc.conf;",
 )
+
+# The apex domain already owns the MODstore compatibility surface under
+# /admin.  Serve the full FHD management console from the canonical www TLS
+# vhost instead, while keeping every other www request redirected to the apex
+# site.  This avoids two different SPAs fighting over the same origin/path.
+WWW_MANAGED_INCLUDES = ("include /etc/nginx/snippets/admin-console-www.inc.conf;",)
 
 MANAGED_LOCATION_HEADERS = (
     "location ~ ^/(styles\\.css|main\\.js|contact-intake\\.js|contact-channels\\.js|visualization\\.js|world-will\\.js|world-will-ticker\\.js|world-will-ticker\\.css)$ {",
@@ -99,14 +104,45 @@ def _server_blocks(lines: list[str]) -> list[tuple[int, int]]:
     return blocks
 
 
+def _server_names(lines: list[str], start: int, end: int) -> set[str]:
+    body = "\n".join(lines[start : end + 1])
+    names: set[str] = set()
+    for match in re.finditer(r"\bserver_name\s+([^;]+);", body):
+        names.update(match.group(1).split())
+    return names
+
+
+def _select_tls_server(
+    lines: list[str], blocks: list[tuple[int, int]], hostname: str
+) -> tuple[int, int]:
+    candidates: list[tuple[bool, bool, int, int]] = []
+    for start, end in blocks:
+        names = _server_names(lines, start, end)
+        if hostname not in names:
+            continue
+        body = "\n".join(lines[start : end + 1])
+        candidates.append(
+            (
+                bool(re.search(r"\blisten\b[^;]*\b443\b", body)),
+                names == {hostname},
+                start,
+                end,
+            )
+        )
+    if not candidates:
+        raise ValueError(f"cannot find nginx server block for {hostname}")
+    tls, _exact, start, end = max(candidates)
+    if not tls:
+        raise ValueError(f"cannot find TLS nginx server block for {hostname}")
+    return start, end
+
+
 def _strip_legacy_blocks(text: str) -> str:
     # Repair the partially deleted assets location left by the former inline
     # updater. Use line structure instead of whitespace-sensitive regex because
     # the production file has passed through several generations of formatters.
     lines = text.splitlines()
-    asset_alias = (
-        "alias /root/成都修茈科技有限公司/MODstore_deploy/market/dist/assets/;"
-    )
+    asset_alias = "alias /root/成都修茈科技有限公司/MODstore_deploy/market/dist/assets/;"
     for alias_index, line in enumerate(lines):
         if asset_alias not in line:
             continue
@@ -187,9 +223,7 @@ def _strip_legacy_blocks(text: str) -> str:
 
 def _is_managed_location(line: str) -> bool:
     header = " ".join(line.strip().split())
-    return header in MANAGED_LOCATION_HEADERS or header.startswith(
-        "location ~ ^/xcagi-v"
-    )
+    return header in MANAGED_LOCATION_HEADERS or header.startswith("location ~ ^/xcagi-v")
 
 
 def _strip_managed_locations(text: str) -> str:
@@ -218,29 +252,48 @@ def _strip_managed_locations(text: str) -> str:
 
 
 def merge_managed_includes(text: str) -> str:
-    """Return an idempotent config with includes in the TLS server block."""
+    """Return an idempotent config with apex and isolated www includes."""
 
     text = _strip_legacy_blocks(text)
     text = _strip_managed_locations(text)
-    managed = set(MANAGED_INCLUDES)
+    managed = {*MANAGED_INCLUDES, *WWW_MANAGED_INCLUDES}
     # A previous deploy inserted these lines beside every marker, including a
     # marker nested in `location`. Remove all managed lines before rebuilding.
     lines = [line for line in text.splitlines() if line.strip() not in managed]
     blocks = _server_blocks(lines)
-    candidates: list[tuple[bool, int, int]] = []
-    for start, end in blocks:
-        body = "\n".join(lines[start : end + 1])
-        if re.search(r"\bserver_name\b[^;]*\bxiu-ci\.com\b", body):
-            candidates.append(
-                (bool(re.search(r"\blisten\b[^;]*\b443\b", body)), start, end)
-            )
-    if not candidates:
-        raise ValueError("cannot find nginx server block for xiu-ci.com")
+    _apex_start, apex_end = _select_tls_server(lines, blocks, "xiu-ci.com")
+    try:
+        www_start, www_end = _select_tls_server(lines, blocks, "www.xiu-ci.com")
+    except ValueError:
+        www_start = www_end = -1
+    if www_start >= 0 and _server_names(lines, www_start, www_end) != {"www.xiu-ci.com"}:
+        # A combined legacy vhost cannot safely host the isolated management
+        # locations without also shadowing the apex MODstore routes.
+        www_start = www_end = -1
 
-    _, _, end = max(candidates)
-    inserted = [f"    {include}" for include in MANAGED_INCLUDES]
-    separator = [] if end > 0 and not lines[end - 1].strip() else [""]
-    lines[end:end] = [*separator, *inserted]
+    # A server-scope return runs before location selection.  Move the redirect
+    # into the managed snippet's fallback `location /` so /admin and /api can
+    # reach FHD on the www-only management origin.
+    redirect = "return 301 https://xiu-ci.com$request_uri;"
+    if www_start >= 0:
+        lines = [
+            line
+            for index, line in enumerate(lines)
+            if not (www_start < index < www_end and line.strip() == redirect)
+        ]
+
+    blocks = _server_blocks(lines)
+    _apex_start, apex_end = _select_tls_server(lines, blocks, "xiu-ci.com")
+    insertions: list[tuple[int, tuple[str, ...]]] = [(apex_end, MANAGED_INCLUDES)]
+    if www_start >= 0:
+        _www_start, www_end = _select_tls_server(lines, blocks, "www.xiu-ci.com")
+        insertions.append((www_end, WWW_MANAGED_INCLUDES))
+    for end, includes in sorted(insertions, reverse=True):
+        while end > 0 and not lines[end - 1].strip():
+            del lines[end - 1]
+            end -= 1
+        inserted = [f"    {include}" for include in includes]
+        lines[end:end] = ["", *inserted]
     return "\n".join(lines).rstrip() + "\n"
 
 
