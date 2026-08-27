@@ -73,4 +73,13 @@ def test_admin_csp_runtime_exception_is_scoped_to_www_admin_spa() -> None:
     assert "location ^~ /admin/" in snippet
     assert "proxy_hide_header Content-Security-Policy;" in snippet
     assert "script-src 'self' 'unsafe-inline' 'unsafe-eval'" in snippet
+    assert "frame-src 'self'" in snippet
     assert "location / {\n    return 301 https://xiu-ci.com$request_uri;\n}" in snippet
+
+
+def test_www_admin_serves_dashboard_without_cross_origin_redirect() -> None:
+    snippet = ADMIN_SNIPPET.read_text(encoding="utf-8")
+
+    assert "location ^~ /xcmax-dashboard/" in snippet
+    assert "alias /root/XCMAX/;" in snippet
+    assert 'add_header X-Frame-Options "SAMEORIGIN" always;' in snippet

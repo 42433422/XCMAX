@@ -12,6 +12,7 @@ import json
 import logging
 from ipaddress import ip_address
 
+from starlette.requests import Request
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.security.lan_config import get_lan_config, lan_guard_path_is_bypassed
@@ -20,6 +21,73 @@ from app.security.license_store import is_ip_explicitly_allowed, touch_allowed_c
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+
+def _scope_host(scope: Scope) -> str:
+    """Return a normalized HTTP host without trusting forwarded headers."""
+
+    for raw_name, raw_value in scope.get("headers") or []:
+        try:
+            name = raw_name.decode("latin-1") if isinstance(raw_name, bytes) else str(raw_name)
+        except RECOVERABLE_ERRORS:
+            continue
+        if name.lower() != "host":
+            continue
+        try:
+            value = raw_value.decode("latin-1") if isinstance(raw_value, bytes) else str(raw_value)
+        except RECOVERABLE_ERRORS:
+            return ""
+        value = value.strip().lower()
+        if value.startswith("["):
+            return value.split("]", 1)[0].lstrip("[")
+        return value.split(":", 1)[0]
+    return ""
+
+
+def _authenticated_public_admin(scope: Scope, cfg) -> bool:
+    """Fail closed unless this is a live market-admin session on an allowlisted host.
+
+    The public management console deliberately shares the FHD API process with
+    LAN-only ERP routes.  A valid administrator session may cross only this
+    network gate; every route's normal authentication/authorization still runs
+    afterwards.
+    """
+
+    host = _scope_host(scope)
+    allowed_hosts = {str(item).strip().lower() for item in cfg.public_admin_hosts if item}
+    if not host or host not in allowed_hosts:
+        return False
+
+    path = str(scope.get("path") or "/")
+    if path.startswith("/fhd-api/"):
+        path = path.removeprefix("/fhd-api") or "/"
+    if not (path.startswith("/api/") or path.startswith("/ws/")):
+        return False
+
+    try:
+        from app.application.session_account_meta import load_session_account_meta
+        from app.infrastructure.auth.dependencies import (
+            resolve_session_user,
+            session_id_from_request,
+        )
+
+        request = Request(scope)
+        session_id = session_id_from_request(request)
+        if not session_id:
+            return False
+        user = resolve_session_user(request)
+        if user is None or not bool(getattr(user, "is_active", True)):
+            return False
+        meta = load_session_account_meta(session_id) or {}
+        return bool(meta.get("account_kind") == "admin" and meta.get("market_is_admin"))
+    except RECOVERABLE_ERRORS:
+        logger.warning(
+            "public admin session validation failed: host=%s path=%s",
+            host,
+            path,
+            exc_info=True,
+        )
+        return False
 
 
 def _ip_in_cidrs(ip: str, cidrs) -> bool:
@@ -92,6 +160,17 @@ class LanCidrGuard:
                 touch_allowed_client(client_ip or "")
             except RECOVERABLE_ERRORS:
                 logger.debug("touch_allowed_client failed for ip=%s", client_ip, exc_info=True)
+            await self.app(scope, receive, send)
+            return
+
+        if _authenticated_public_admin(scope, cfg):
+            scope.setdefault("state", {})
+            try:
+                scope["state"]["lan_public_admin_session"] = True
+                scope["state"]["lan_is_admin"] = True
+                scope["state"]["lan_client_ip"] = client_ip
+            except RECOVERABLE_ERRORS:
+                pass
             await self.app(scope, receive, send)
             return
 
