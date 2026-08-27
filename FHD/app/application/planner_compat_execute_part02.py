@@ -20,6 +20,9 @@ async def execute_compat_chat(
         body.context, body.message
     )
     runtime_context = _facade()._runtime_context_with_authenticated_actor(request, runtime_context)
+    runtime_context = _facade()._runtime_context_with_trusted_dataset_access(
+        request, runtime_context
+    )
     _facade().assert_p2_elevated_claim_or_raise(request)
     tier = _facade().resolve_ai_tier(request)
     runtime_context = _facade().runtime_context_with_tier(runtime_context, tier)
@@ -32,6 +35,15 @@ async def execute_compat_chat(
         request=request,
     )
     if business_payload is not None:
+        from app.application.conversation_memory import persist_recallable_chat_turn
+
+        persist_recallable_chat_turn(
+            user_id=_facade()._resolve_chat_user_id(request, body),
+            message=body.message,
+            source=body.source,
+            context=runtime_context,
+            response_data=business_payload,
+        )
         return business_payload
     try:
         from app.application.kitten_planner_context import (
@@ -48,7 +60,7 @@ async def execute_compat_chat(
 
     slot_payload = try_normal_slot_read_payload(body.message, request=request)
     if isinstance(slot_payload, dict) and slot_payload.get("response"):
-        return _facade()._attach_compat_chat_trace(
+        traced_slot = _facade()._attach_compat_chat_trace(
             slot_payload,
             body,
             message=body.message,
@@ -57,6 +69,16 @@ async def execute_compat_chat(
             if slot_payload.get("agent_tool_dispatch")
             else "compat_chat_slot",
         )
+        from app.application.conversation_memory import persist_recallable_chat_turn
+
+        persist_recallable_chat_turn(
+            user_id=_facade()._resolve_chat_user_id(request, body),
+            message=body.message,
+            source=body.source,
+            context=runtime_context,
+            response_data=traced_slot,
+        )
+        return traced_slot
     ok_read, read_req = _facade()._ensure_chat_db_read_authorized(
         request, message=body.message, provided_token=body.db_read_token
     )
@@ -237,7 +259,7 @@ async def execute_compat_chat(
         raise _facade()._xcagi_chat_http_exc(e) from e
     payload = _facade()._xcagi_compat_reply_payload(reply, kitten_attachments=kitten_extra or None)
     if pre_run is not None:
-        return _facade().finalize_legacy_chat_run(
+        payload = _facade().finalize_legacy_chat_run(
             pre_run.run_id,
             payload,
             message=body.message,
@@ -246,10 +268,21 @@ async def execute_compat_chat(
             source=getattr(body, "source", None),
             channel="compat_chat",
         )
-    return _facade()._attach_compat_chat_trace(
-        payload,
-        body,
+    else:
+        payload = _facade()._attach_compat_chat_trace(
+            payload,
+            body,
+            message=body.message,
+            runtime_context=planner_runtime_context,
+            channel="compat_chat",
+        )
+    from app.application.conversation_memory import persist_recallable_chat_turn
+
+    persist_recallable_chat_turn(
+        user_id=_facade()._resolve_chat_user_id(request, body),
         message=body.message,
-        runtime_context=planner_runtime_context,
-        channel="compat_chat",
+        source=body.source,
+        context=planner_runtime_context,
+        response_data=payload,
     )
+    return payload

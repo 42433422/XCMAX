@@ -28,6 +28,13 @@ function resolveApiKeyPath() {
 
 exports.default = async function afterSign(context) {
   if (context.electronPlatformName !== 'darwin') return
+  if (process.env.XCAGI_LOCAL_ACCEPTANCE_BUILD === '1') {
+    if (process.env.CI) {
+      throw new Error('[notarize] XCAGI_LOCAL_ACCEPTANCE_BUILD is forbidden in CI')
+    }
+    console.log('[notarize] skipped for explicit local acceptance build')
+    return
+  }
 
   // @electron/notarize >= 3 is ESM-only. Keep electron-builder's CommonJS
   // afterSign entrypoint, but load the notarization client dynamically.

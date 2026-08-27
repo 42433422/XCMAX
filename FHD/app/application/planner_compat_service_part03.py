@@ -24,6 +24,9 @@ async def compat_chat_stream_async(
         runtime_context = _facade()._runtime_context_with_authenticated_actor(
             request, runtime_context
         )
+        runtime_context = _facade()._runtime_context_with_trusted_dataset_access(
+            request, runtime_context
+        )
         channel = (
             "compat_chat_stream_agent_tool"
             if slot_payload.get("agent_tool_dispatch")
@@ -37,6 +40,15 @@ async def compat_chat_stream_async(
             source=getattr(body, "source", None),
             channel=channel,
             intent=str((slot_payload.get("data") or {}).get("intent") or "agent_tool"),
+        )
+        from app.application.conversation_memory import persist_recallable_chat_turn
+
+        persist_recallable_chat_turn(
+            user_id=_facade()._resolve_chat_user_id(request, body),
+            message=body.message,
+            source=body.source,
+            context=runtime_context,
+            response_data=traced,
         )
         response_text = str(slot_payload.get("response") or "")
         yield _sse_event_line({"type": "token", "text": response_text})

@@ -154,6 +154,16 @@ def _runtime_context_with_authenticated_actor(
     return context
 
 
+def _runtime_context_with_trusted_dataset_access(
+    request: Request,
+    runtime_context: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Strip client dataset claims and inject the server-verified Persy scope."""
+    from app.fastapi_routes.dataset_access import inject_trusted_dataset_access
+
+    return inject_trusted_dataset_access(runtime_context, request)
+
+
 def _chat_read_token_required_payload(message: str) -> dict[str, Any]:
     _ = message
     return {

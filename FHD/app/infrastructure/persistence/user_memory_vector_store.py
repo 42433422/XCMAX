@@ -8,7 +8,8 @@ from typing import Any
 
 import numpy as np
 from sqlalchemy import create_engine, text
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Engine, make_url
+from sqlalchemy.exc import ArgumentError
 
 from app.application.ports.vector_store import VectorStorePort
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -445,14 +446,30 @@ def get_user_memory_pg_vector_store() -> PgUserMemoryVectorStore:
 
 
 def get_user_memory_vector_store() -> VectorStorePort:
-    """获取用户记忆向量存储实例（带 SQLite fallback）。"""
+    """返回与实际数据库方言兼容的用户记忆向量存储。
+
+    桌面版会把 ``DATABASE_URL`` 和 ``VECTOR_DB_URL`` 都指向 SQLite。过去只看
+    fallback 开关，导致 SQLite URL 被交给 pgvector 并执行 PostgreSQL 的
+    ``CREATE EXTENSION``，跨会话记忆因此静默失效。现在以实际 URL 为准；
+    旧开关仍可用于没有配置 URL 时显式强制使用 SQLite。
+    """
 
     global _user_memory_vector_store_instance
-    use_sqlite_fallback = (
-        os.environ.get("ENABLE_SQLITE_VECTOR_FALLBACK", "0") or "0"
-    ).strip() == "1"
-    if use_sqlite_fallback:
-        if _user_memory_vector_store_instance is None:
-            _user_memory_vector_store_instance = get_user_memory_sqlite_vector_store()
-        return _user_memory_vector_store_instance
-    return get_user_memory_pg_vector_store()
+    force_sqlite = (os.environ.get("ENABLE_SQLITE_VECTOR_FALLBACK", "0") or "0").strip() == "1"
+    configured_url = (
+        os.environ.get("VECTOR_DB_URL") or os.environ.get("DATABASE_URL") or ""
+    ).strip()
+    configured_for_sqlite = False
+    if configured_url:
+        try:
+            configured_for_sqlite = make_url(configured_url).get_backend_name() == "sqlite"
+        except ArgumentError:
+            logger.warning("无法识别用户记忆向量库 URL，将按 PostgreSQL 处理")
+
+    selected = (
+        get_user_memory_sqlite_vector_store()
+        if force_sqlite or configured_for_sqlite
+        else get_user_memory_pg_vector_store()
+    )
+    _user_memory_vector_store_instance = selected
+    return selected

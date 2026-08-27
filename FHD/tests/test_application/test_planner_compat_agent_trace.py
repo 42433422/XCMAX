@@ -371,6 +371,11 @@ async def test_execute_compat_chat_batch_precreates_agent_run_per_message() -> N
 def test_stream_done_result_attaches_agent_run_id() -> None:
     repo = InMemoryAgentRunRepository()
     body = XcagiCompatChatBody(message="hello", user_id="stream-user", source="desktop")
+    trusted_runtime = {
+        "workspace": "demo",
+        "_dataset_access_context_trusted": True,
+        "_dataset_access_context": {"actor_id": "7", "tenant_id": "2"},
+    }
 
     with (
         patch(
@@ -389,8 +394,13 @@ def test_stream_done_result_attaches_agent_run_id() -> None:
         ),
         patch.object(
             stream_helpers,
+            "_runtime_context_with_trusted_dataset_access",
+            return_value=trusted_runtime,
+        ),
+        patch.object(
+            stream_helpers,
             "runtime_context_with_tier",
-            return_value={"workspace": "demo", "ai_tier": "p1"},
+            return_value={**trusted_runtime, "ai_tier": "p1"},
         ),
         patch.object(
             stream_helpers,
@@ -412,6 +422,11 @@ def test_stream_done_result_attaches_agent_run_id() -> None:
             "_xcagi_guarded_planner_stream_events",
             return_value=iter([{"type": "token", "text": "hello"}, {"type": "done"}]),
         ) as mock_stream,
+        patch(
+            "app.application.conversation_memory.recallable_memory_prompt",
+            return_value="【Persy 已确认记忆】\n- 用户偏好蓝色界面",
+        ) as mock_recall,
+        patch("app.application.conversation_memory.persist_recallable_chat_turn") as mock_capture,
     ):
         chunks = list(
             stream_helpers._xcagi_planner_stream_bytes(
@@ -436,6 +451,11 @@ def test_stream_done_result_attaches_agent_run_id() -> None:
     runtime_context = mock_stream.call_args.kwargs["runtime_context"]
     assert runtime_context["run_id"] == run_id
     assert runtime_context["agent_run_id"] == run_id
+    assert "用户偏好蓝色界面" in str(mock_stream.call_args.args[0].system_prompt)
+    mock_recall.assert_called_once()
+    assert mock_recall.call_args.kwargs["context"]["_dataset_access_context_trusted"] is True
+    mock_capture.assert_called_once()
+    assert mock_capture.call_args.kwargs["response_data"]["response"] == "hello"
 
 
 def test_stream_requires_token_event_finalizes_waiting_agent_run() -> None:

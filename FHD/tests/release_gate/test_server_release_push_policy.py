@@ -12,7 +12,9 @@ REPO_ROOT = FHD_ROOT.parent
 
 def test_server_release_bundles_and_bootstraps_vendored_langgraph() -> None:
     pack = (FHD_ROOT / "scripts/deploy/fhd-pack-release.sh").read_text(encoding="utf-8")
-    apply = (FHD_ROOT / "scripts/deploy/fhd-apply-release.sh").read_text(encoding="utf-8")
+    apply = (FHD_ROOT / "scripts/deploy/fhd-apply-release.sh").read_text(
+        encoding="utf-8"
+    )
 
     for package in (
         "xcagi_langgraph_core",
@@ -32,19 +34,35 @@ def test_server_release_bundles_and_bootstraps_vendored_langgraph() -> None:
     assert "FHD_SERVICE_PYTHON" in apply
 
 
+def test_server_release_archive_strips_macos_extended_attributes() -> None:
+    pack = (FHD_ROOT / "scripts/deploy/fhd-pack-release.sh").read_text(encoding="utf-8")
+
+    assert "tar --no-xattrs" in pack
+    assert "TAR_XATTR_ARGS+=(--no-xattrs)" in pack
+    assert 'COPYFILE_DISABLE=1 tar "${TAR_XATTR_ARGS[@]}"' in pack
+
+
 def test_normal_cvm_release_skips_optional_image_archive() -> None:
-    script = (FHD_ROOT / "scripts/deploy/fhd-push-release.sh").read_text(encoding="utf-8")
+    script = (FHD_ROOT / "scripts/deploy/fhd-push-release.sh").read_text(
+        encoding="utf-8"
+    )
 
     assert 'PUSH_IMAGE_TAR="${FHD_PUSH_IMAGE_TAR:-auto}"' in script
     assert '"${DEPLOY_MODE:-tarball}" == "image"' in script
     assert '[[ -f "$IMAGE_TAR" && "$PUSH_IMAGE_TAR" == "1" ]]' in script
-    assert 'deploy_emit push skipped "artifact=fhd-api-image.tar.gz reason=optional"' in script
+    assert (
+        'deploy_emit push skipped "artifact=fhd-api-image.tar.gz reason=optional"'
+        in script
+    )
 
 
 def test_cvm_upload_prefers_resumable_rsync_and_retains_partial() -> None:
-    script = (FHD_ROOT / "scripts/deploy/fhd-push-release.sh").read_text(encoding="utf-8")
+    script = (FHD_ROOT / "scripts/deploy/fhd-push-release.sh").read_text(
+        encoding="utf-8"
+    )
 
     assert "rsync --archive --partial --append-verify --timeout=180" in script
+    assert "rsync --help 2>&1 | grep -q -- '--append-verify'" in script
     assert 'transfer_mode="rsync"' in script
     assert "partial retained" in script
     assert "RSYNC_SHELL" in script
@@ -107,11 +125,18 @@ def test_tarball_push_does_not_scp_optional_image_archive(tmp_path: Path) -> Non
     assert artifact.name in call_log
     assert "fhd-manifest.json" in call_log
     assert "fhd-api-image.tar.gz" not in call_log
+    assert "--append-verify" not in call_log
+    assert any(
+        line.startswith("scp ") and artifact.name in line
+        for line in call_log.splitlines()
+    )
     assert "跳过可选镜像归档" in result.stdout
 
 
 def test_strict_push_applies_and_verifies_exact_sha() -> None:
-    script = (FHD_ROOT / "scripts/deploy/fhd-push-release.sh").read_text(encoding="utf-8")
+    script = (FHD_ROOT / "scripts/deploy/fhd-push-release.sh").read_text(
+        encoding="utf-8"
+    )
 
     assert "FHD_PUSH_APPLY_NOW:-" in script
     assert "FHD_CVM_PUSH_STRICT:-false" in script
@@ -253,7 +278,9 @@ def test_release_identity_verifier_requires_artifact_when_supplied() -> None:
 
 def test_ci_requires_explicit_manual_opt_in_for_image_archive() -> None:
     source = (FHD_ROOT / ".github/workflows/ci-cd.yml").read_text(encoding="utf-8")
-    published = (REPO_ROOT / ".github/workflows/fhd-ci-cd.yml").read_text(encoding="utf-8")
+    published = (REPO_ROOT / ".github/workflows/fhd-ci-cd.yml").read_text(
+        encoding="utf-8"
+    )
 
     for workflow in (source, published):
         assert "Stamp production environment approval into manifest" not in workflow
@@ -278,7 +305,9 @@ def test_ci_requires_explicit_manual_opt_in_for_image_archive() -> None:
 
 
 def test_evolution_dispatch_runs_before_any_checkout_directory_exists() -> None:
-    source = yaml.safe_load((FHD_ROOT / ".github/workflows/ci-cd.yml").read_text(encoding="utf-8"))
+    source = yaml.safe_load(
+        (FHD_ROOT / ".github/workflows/ci-cd.yml").read_text(encoding="utf-8")
+    )
     published = yaml.safe_load(
         (REPO_ROOT / ".github/workflows/fhd-ci-cd.yml").read_text(encoding="utf-8")
     )
@@ -304,23 +333,31 @@ def test_autonomous_ci_workflows_have_no_environment_approval_gate() -> None:
     for path in workflow_paths:
         workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
         for job_name, job in (workflow.get("jobs") or {}).items():
-            assert "environment" not in job, f"{path}:{job_name} still has an approval gate"
+            assert (
+                "environment" not in job
+            ), f"{path}:{job_name} still has an approval gate"
 
 
 def test_autonomy_resume_waits_for_http_ready_after_secret_sync() -> None:
-    workflow = (REPO_ROOT / ".github/workflows/fhd-deploy.yml").read_text(encoding="utf-8")
+    workflow = (REPO_ROOT / ".github/workflows/fhd-deploy.yml").read_text(
+        encoding="utf-8"
+    )
 
-    sync_step = workflow.split("- name: Sync autonomy runtime configuration", 1)[1].split(
-        "- name: SSH rolling restart / apply", 1
-    )[0]
+    sync_step = workflow.split("- name: Sync autonomy runtime configuration", 1)[
+        1
+    ].split("- name: SSH rolling restart / apply", 1)[0]
     assert "systemctl restart fhd-full.service" in sync_step
     assert "for attempt in $(seq 1 30)" in sync_step
-    assert ('curl --noproxy "*" -sf --max-time 5 http://127.0.0.1:5100/api/health') in sync_step
+    assert (
+        'curl --noproxy "*" -sf --max-time 5 http://127.0.0.1:5100/api/health'
+    ) in sync_step
     assert "did not become HTTP-ready after autonomy config sync" in sync_step
 
 
 def test_autonomy_deploy_has_no_human_environment_approval() -> None:
-    deploy = (REPO_ROOT / ".github/workflows/fhd-deploy.yml").read_text(encoding="utf-8")
+    deploy = (REPO_ROOT / ".github/workflows/fhd-deploy.yml").read_text(
+        encoding="utf-8"
+    )
     assert "report-autonomy-failure:" in deploy
     assert "needs: cvm-rolling" in deploy
     assert "needs['cvm-rolling'].result != 'success'" in deploy
@@ -343,9 +380,9 @@ def test_forced_self_maintenance_survives_its_own_service_restart() -> None:
     script = (FHD_ROOT / "scripts/deploy/force_self_maintenance_remote.sh").read_text(
         encoding="utf-8"
     )
-    workflow = (REPO_ROOT / ".github/workflows/fhd-force-self-maintenance.yml").read_text(
-        encoding="utf-8"
-    )
+    workflow = (
+        REPO_ROOT / ".github/workflows/fhd-force-self-maintenance.yml"
+    ).read_text(encoding="utf-8")
 
     inprocess_call = script.index("if run_inprocess_with_live_env; then")
     http_call = script.index("if choose_base_via_http; then")
@@ -369,9 +406,9 @@ def test_forced_self_maintenance_survives_its_own_service_restart() -> None:
 
 
 def test_forced_self_maintenance_does_not_put_secret_or_reason_in_ssh_argv() -> None:
-    workflow = (REPO_ROOT / ".github/workflows/fhd-force-self-maintenance.yml").read_text(
-        encoding="utf-8"
-    )
+    workflow = (
+        REPO_ROOT / ".github/workflows/fhd-force-self-maintenance.yml"
+    ).read_text(encoding="utf-8")
 
     assert 'printf \'%s\' "$LOOP_REASON" > "$LOCAL_REASON_FILE"' in workflow
     assert 'printf \'%s\' "$OPS_TOKEN" > "$LOCAL_TOKEN_FILE"' in workflow

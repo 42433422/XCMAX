@@ -279,64 +279,12 @@ class __AIChatApplicationServicePart01MixinPart01Mixin:
         context: dict[str, _facade().Any],
         response_data: dict[str, _facade().Any],
     ) -> None:
-        if context.get("memory_capture_enabled") is False or not response_data.get("success"):
-            return
-        normalized_user_id = str(user_id or "").strip()
-        if not normalized_user_id:
-            return
-        from app.utils.deployment import is_desktop_mode
+        from app.application.conversation_memory import persist_recallable_chat_turn
 
-        trusted_principal = context.get("_dataset_access_context_trusted") is True
-        if not trusted_principal and (not is_desktop_mode()):
-            return
-        raw_inner = response_data.get("data")
-        inner: dict[str, _facade().Any] = raw_inner if isinstance(raw_inner, dict) else {}
-        action = str(response_data.get("action") or inner.get("action") or "").strip().lower()
-        if action in {
-            "error",
-            "error_fallback",
-            "fallback",
-            "goodbye",
-            "greeting",
-            "help",
-            "requires_token",
-        }:
-            return
-        sensitive = _facade().re.compile(
-            "(?:password|passcode|api[_ -]?key|access[_ -]?token|secret|验证码|密码|密钥)",
-            _facade().re.I,
+        persist_recallable_chat_turn(
+            user_id=user_id,
+            message=message,
+            source=source,
+            context=context,
+            response_data=response_data,
         )
-        assistant_text = str(response_data.get("response") or "").strip()
-        if not assistant_text:
-            if not isinstance(inner, dict):
-                inner = {}
-            assistant_text = str(inner.get("text") or inner.get("message") or "").strip()
-        if not assistant_text or sensitive.search(f"{message}\n{assistant_text}"):
-            return
-        from app.application.user_memory_vector_app_service import (
-            get_user_memory_vector_ingest_app_service,
-        )
-
-        service = get_user_memory_vector_ingest_app_service()
-        chunk = service.build_chat_turn_chunk(
-            user_id=normalized_user_id,
-            user_message=message,
-            assistant_message=assistant_text,
-            session_id=str(context.get("session_id") or context.get("conversation_id") or ""),
-            source=str(source or "chat"),
-        )
-        service.ingest_chunks(normalized_user_id, [chunk])
-        access_context = context.get("_dataset_access_context")
-        if trusted_principal and isinstance(access_context, dict):
-            from app.application.persy_memory_app_service import get_persy_memory_app_service
-
-            get_persy_memory_app_service().capture_conversation_turn(
-                access_context=access_context,
-                user_message=message,
-                assistant_message=assistant_text,
-                session_id=str(context.get("session_id") or context.get("conversation_id") or ""),
-                source=str(source or "chat"),
-                scope="tenant"
-                if str(context.get("persy_memory_scope") or "").strip().lower() == "tenant"
-                else "user",
-            )

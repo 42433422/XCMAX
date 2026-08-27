@@ -63,13 +63,15 @@ class __LLMWorkflowPlannerPart01MixinPart01Mixin:
             )
         try:
             from app.application import get_user_memory_rag_app_service
+            from app.application.conversation_memory import resolve_vector_memory_owner_id
 
+            memory_owner_id = resolve_vector_memory_owner_id(user_id, context)
             rag = get_user_memory_rag_app_service()
-            rag_res = rag.query(user_id=user_id, query_text=message, top_k=3)
+            rag_res = rag.query(user_id=memory_owner_id, query_text=message, top_k=3)
             hits = (rag_res or {}).get("hits") if isinstance(rag_res, dict) else None
             if isinstance(hits, list) and hits:
                 summary = rag.format_for_prompt(
-                    user_id=user_id, query_text=message, hits=hits, max_hits=4
+                    user_id=memory_owner_id, query_text=message, hits=hits, max_hits=4
                 )
                 context["user_memory_rag"] = {"summary": summary}
         except ImportError:
@@ -77,10 +79,12 @@ class __LLMWorkflowPlannerPart01MixinPart01Mixin:
         except _facade().RECOVERABLE_ERRORS as e:
             _facade().logger.warning("用户记忆 RAG 不可用（不阻断主流程）: %s", e)
         try:
+            from app.application.conversation_memory import resolve_memory_owner_id
             from app.services.user_memory_service import get_user_memory_service
 
+            memory_owner_id = resolve_memory_owner_id(user_id, context)
             memory_v2_summary = get_user_memory_service().format_memory_v2_for_prompt(
-                user_id=user_id, max_items=6
+                user_id=memory_owner_id, max_items=6
             )
             if "无已确认记忆" not in memory_v2_summary:
                 context["memory_v2"] = {"summary": memory_v2_summary}

@@ -23,14 +23,32 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         body.context, body.message
     )
     runtime_context = _facade()._runtime_context_with_authenticated_actor(request, runtime_context)
+    runtime_context = _facade()._runtime_context_with_trusted_dataset_access(
+        request, runtime_context
+    )
     runtime_context = _facade().runtime_context_with_tier(runtime_context, ai_tier)
+    from app.application.conversation_memory import (
+        persist_recallable_chat_turn,
+        recallable_memory_prompt,
+    )
+
+    scoped_user_id = str(body.user_id or "default")
+    memory_prompt = recallable_memory_prompt(
+        user_id=scoped_user_id,
+        message=body.message,
+        context=runtime_context,
+    )
+    if memory_prompt:
+        existing_prompt = str(body.system_prompt or "").strip()
+        body.system_prompt = (
+            f"{existing_prompt}\n\n{memory_prompt}" if existing_prompt else memory_prompt
+        )
     from app.application import get_ai_chat_app_service
     from app.application.chat_tool_intent import looks_like_erp_hr_management_intent
     from app.application.normal_chat_dispatch import route_normal_mode_message
     from app.application.workflow.planner import _looks_like_business_db_write
 
     chat_service = get_ai_chat_app_service()
-    scoped_user_id = str(body.user_id or "default")
     has_pending_workflow = scoped_user_id in chat_service._pending_workflows
     _sales_route = route_normal_mode_message(str(body.message or ""))
     sales_closed_loop_route = (
@@ -79,6 +97,13 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         body.message, runtime_context=runtime_context, user_id=body.user_id, request=request
     )
     if business_payload is not None:
+        persist_recallable_chat_turn(
+            user_id=scoped_user_id,
+            message=body.message,
+            source=body.source,
+            context=runtime_context,
+            response_data=business_payload,
+        )
         response_text = str(
             business_payload.get("response") or business_payload.get("message") or ""
         )
@@ -114,6 +139,13 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
             user_id=body.user_id,
             source=body.source,
             channel="compat_chat_stream",
+        )
+        persist_recallable_chat_turn(
+            user_id=scoped_user_id,
+            message=body.message,
+            source=body.source,
+            context=cleared,
+            response_data=payload,
         )
         yield _facade()._sse_event_line({"type": "done", "result": payload})
         return
@@ -288,6 +320,13 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
                 source=body.source,
                 channel="compat_chat_stream",
             )
+        persist_recallable_chat_turn(
+            user_id=scoped_user_id,
+            message=body.message,
+            source=body.source,
+            context=planner_runtime_context,
+            response_data=payload,
+        )
         yield _facade()._sse_event_line({"type": "done", "result": payload})
     except _facade().RECOVERABLE_ERRORS as e:
         exc = _facade()._xcagi_chat_http_exc(e)

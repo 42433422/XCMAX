@@ -60,6 +60,9 @@ def _build_stubs() -> dict:
     helpers_mod._ensure_chat_db_read_authorized = MagicMock(return_value=(True, None))
     helpers_mod._ensure_vector_index_if_needed = MagicMock(return_value=None)
     helpers_mod._merge_runtime_context_with_message_paths = MagicMock(return_value=({}, []))
+    helpers_mod._runtime_context_with_trusted_dataset_access = MagicMock(
+        side_effect=lambda _request, context: context or {}
+    )
     helpers_mod._message_requires_db_read_token = MagicMock(return_value=False)
     helpers_mod._xcagi_chat_http_exc = MagicMock(
         side_effect=lambda e: fastapi.HTTPException(status_code=500, detail=str(e))

@@ -125,17 +125,28 @@ if (-not (Test-Path "node_modules")) {
 }
 npm run build
 if ($LASTEXITCODE -ne 0) { throw "desktop npm run build failed" }
-Assert-TextFileContains `
-  -Path (Join-Path $Root "desktop\dist\main.js") `
-  -Label "Electron main bundle" `
-  -Markers @(
-    "packagedBackendCandidates",
-    "electron-backend.log",
-    "backend', '_internal'",
-    "return 17500",
-    "backendHealthMs",
-    "180_000"
-  )
+# main.ts 已模块化拆分，标记分布在 dist/*.js（desktop-config/backend-process/runtime-state）。
+# 合并全部编译产物后再校验，避免只查 main.js 误报「stale or incomplete」。
+$distBundlePath = Join-Path $Root "desktop\dist\.bundle-markers.tmp.js"
+Get-ChildItem (Join-Path $Root "desktop\dist") -Filter "*.js" -File |
+  Sort-Object Name |
+  ForEach-Object { Get-Content $_.FullName -Raw } |
+  Set-Content -Path $distBundlePath -Encoding UTF8
+try {
+  Assert-TextFileContains `
+    -Path $distBundlePath `
+    -Label "Electron main bundle" `
+    -Markers @(
+      "packagedBackendCandidates",
+      "electron-backend.log",
+      "backend', '_internal'",
+      "return 17500",
+      "backendHealthMs",
+      "180_000"
+    )
+} finally {
+  Remove-Item $distBundlePath -Force -ErrorAction SilentlyContinue
+}
 npm version $ToolchainVersion --no-git-tag-version --allow-same-version
 $ebAppId = $skuAppIds[$ProductSku]
 $ebPublishUrl = $skuUpdateUrls[$ProductSku]

@@ -85,6 +85,26 @@ class TestUserMemoryStore:
         store = UserMemoryStore(storage_type="json")
         assert store.get_memory("user1") is not None
 
+    def test_legacy_bundle_memory_is_migrated_to_runtime_data(self, monkeypatch, tmp_path):
+        runtime_path = tmp_path / "runtime" / "memory_store.json"
+        legacy_path = tmp_path / "bundle" / "memory_store.json"
+        legacy_path.parent.mkdir(parents=True)
+        legacy_path.write_text(
+            json.dumps({"user2": UserMemory(user_id="user2").to_dict()}),
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(user_memory_service, "MEMORY_DIR", str(runtime_path.parent))
+        monkeypatch.setattr(user_memory_service, "JSON_MEMORY_PATH", str(runtime_path))
+        monkeypatch.setattr(user_memory_service, "DEFAULT_JSON_MEMORY_PATH", str(runtime_path))
+        monkeypatch.setattr(user_memory_service, "LEGACY_JSON_MEMORY_PATH", str(legacy_path))
+        UserMemoryStore._instance = None
+
+        store = UserMemoryStore(storage_type="json")
+
+        assert store.get_memory("user2") is not None
+        assert runtime_path.is_file()
+        assert json.loads(runtime_path.read_text(encoding="utf-8"))["user2"]["user_id"] == "user2"
+
     def test_load_corrupt_json_resets_cache(self, monkeypatch, tmp_path):
         """Load branch: file exists but JSON is invalid → cache reset."""
         json_path = str(tmp_path / "memory_store.json")

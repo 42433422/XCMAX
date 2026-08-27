@@ -73,6 +73,15 @@ notarize_dmg() {
   local team_id="${APPLE_TEAM_ID:-${IOS_TEAM_ID:-}}"
   local result_file="$2"
 
+  if [ "${XCAGI_LOCAL_ACCEPTANCE_BUILD:-0}" = "1" ]; then
+    if [ -n "${CI:-}" ]; then
+      echo "[err] XCAGI_LOCAL_ACCEPTANCE_BUILD is forbidden in CI" >&2
+      return 1
+    fi
+    echo "[notarize] skipped for explicit local acceptance build"
+    return 0
+  fi
+
   # In CI, electron-builder's afterSign hook materializes the base64 secret at
   # this path before the DMG is assembled. Discover it when the workflow does
   # not provide APP_STORE_CONNECT_API_KEY_PATH explicitly.
