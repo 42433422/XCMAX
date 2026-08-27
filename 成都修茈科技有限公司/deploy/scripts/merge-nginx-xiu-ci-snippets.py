@@ -142,9 +142,7 @@ def _strip_legacy_blocks(text: str) -> str:
     # updater. Use line structure instead of whitespace-sensitive regex because
     # the production file has passed through several generations of formatters.
     lines = text.splitlines()
-    asset_alias = (
-        "alias /root/成都修茈科技有限公司/MODstore_deploy/market/dist/assets/;"
-    )
+    asset_alias = "alias /root/成都修茈科技有限公司/MODstore_deploy/market/dist/assets/;"
     for alias_index, line in enumerate(lines):
         if asset_alias not in line:
             continue
@@ -225,9 +223,7 @@ def _strip_legacy_blocks(text: str) -> str:
 
 def _is_managed_location(line: str) -> bool:
     header = " ".join(line.strip().split())
-    return header in MANAGED_LOCATION_HEADERS or header.startswith(
-        "location ~ ^/xcagi-v"
-    )
+    return header in MANAGED_LOCATION_HEADERS or header.startswith("location ~ ^/xcagi-v")
 
 
 def _strip_managed_locations(text: str) -> str:
@@ -260,35 +256,44 @@ def merge_managed_includes(text: str) -> str:
 
     text = _strip_legacy_blocks(text)
     text = _strip_managed_locations(text)
-    managed = set((*MANAGED_INCLUDES, *WWW_MANAGED_INCLUDES))
+    managed = {*MANAGED_INCLUDES, *WWW_MANAGED_INCLUDES}
     # A previous deploy inserted these lines beside every marker, including a
     # marker nested in `location`. Remove all managed lines before rebuilding.
     lines = [line for line in text.splitlines() if line.strip() not in managed]
     blocks = _server_blocks(lines)
-    www_start, www_end = _select_tls_server(lines, blocks, "www.xiu-ci.com")
+    _apex_start, apex_end = _select_tls_server(lines, blocks, "xiu-ci.com")
+    try:
+        www_start, www_end = _select_tls_server(lines, blocks, "www.xiu-ci.com")
+    except ValueError:
+        www_start = www_end = -1
+    if www_start >= 0 and _server_names(lines, www_start, www_end) != {"www.xiu-ci.com"}:
+        # A combined legacy vhost cannot safely host the isolated management
+        # locations without also shadowing the apex MODstore routes.
+        www_start = www_end = -1
 
     # A server-scope return runs before location selection.  Move the redirect
     # into the managed snippet's fallback `location /` so /admin and /api can
     # reach FHD on the www-only management origin.
     redirect = "return 301 https://xiu-ci.com$request_uri;"
-    lines = [
-        line
-        for index, line in enumerate(lines)
-        if not (www_start < index < www_end and line.strip() == redirect)
-    ]
+    if www_start >= 0:
+        lines = [
+            line
+            for index, line in enumerate(lines)
+            if not (www_start < index < www_end and line.strip() == redirect)
+        ]
 
     blocks = _server_blocks(lines)
-    _www_start, www_end = _select_tls_server(lines, blocks, "www.xiu-ci.com")
     _apex_start, apex_end = _select_tls_server(lines, blocks, "xiu-ci.com")
-
-    insertions = (
-        (apex_end, MANAGED_INCLUDES),
-        (www_end, WWW_MANAGED_INCLUDES),
-    )
+    insertions: list[tuple[int, tuple[str, ...]]] = [(apex_end, MANAGED_INCLUDES)]
+    if www_start >= 0:
+        _www_start, www_end = _select_tls_server(lines, blocks, "www.xiu-ci.com")
+        insertions.append((www_end, WWW_MANAGED_INCLUDES))
     for end, includes in sorted(insertions, reverse=True):
+        while end > 0 and not lines[end - 1].strip():
+            del lines[end - 1]
+            end -= 1
         inserted = [f"    {include}" for include in includes]
-        separator = [] if end > 0 and not lines[end - 1].strip() else [""]
-        lines[end:end] = [*separator, *inserted]
+        lines[end:end] = ["", *inserted]
     return "\n".join(lines).rstrip() + "\n"
 
 
