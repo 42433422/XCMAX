@@ -22,18 +22,12 @@ def test_action_item_reads_accept_internal_key_but_write_does_not(monkeypatch) -
     client = TestClient(app)
 
     with (
-        patch(
-            "modstore_server.digest_action_items.latest_day", return_value="2026-08-27"
-        ),
+        patch("modstore_server.digest_action_items.latest_day", return_value="2026-08-27"),
         patch("modstore_server.digest_action_items.list_action_items", return_value=[]),
         patch("modstore_server.digest_action_items.stats", return_value={"total": 0}),
     ):
-        listed = client.get(
-            "/api/admin/action-items?kind=patch", headers=_internal_headers()
-        )
-        stats = client.get(
-            "/api/admin/action-items/stats?kind=patch", headers=_internal_headers()
-        )
+        listed = client.get("/api/admin/action-items?kind=patch", headers=_internal_headers())
+        stats = client.get("/api/admin/action-items/stats?kind=patch", headers=_internal_headers())
 
     assert listed.status_code == 200
     assert listed.json()["ok"] is True
@@ -71,9 +65,7 @@ def test_daily_digest_artifacts_accept_internal_key(monkeypatch) -> None:
     with (
         patch("modstore_server.agent_butler_api._dd_list_dir", return_value=[]),
         patch("modstore_server.release_train.snapshot_public", return_value={}),
-        patch(
-            "modstore_server.release_train.list_release_train_history", return_value=[]
-        ),
+        patch("modstore_server.release_train.list_release_train_history", return_value=[]),
         patch("modstore_server.daily_backup_job.list_backups", return_value=[]),
     ):
         response = TestClient(app).get(

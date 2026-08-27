@@ -385,9 +385,7 @@ _INTAKE_USER_ROLES = frozenset(
 _INTAKE_PRIMARY_GOALS = frozenset(
     {"重复录入太累", "经常出错", "太慢跟不上", "系统各干各的", "想先小试点"}
 )
-_INTAKE_DIRECTIONS = frozenset(
-    {"少做表格单据", "流程更顺", "上AI助手", "和现有系统打通"}
-)
+_INTAKE_DIRECTIONS = frozenset({"少做表格单据", "流程更顺", "上AI助手", "和现有系统打通"})
 _INTAKE_TIMELINES = frozenset({"2 周内", "1 个月内", "1–3 个月", "季度内", "先评估"})
 _INTAKE_BUDGETS = frozenset(
     {

@@ -108,10 +108,7 @@ async def butler_daily_digest_records(
     total = db.query(_facade().DailyDigestRecord.id).count()
     return {
         "success": True,
-        "data": [
-            _facade()._daily_digest_record_to_dict(row, include_body=False)
-            for row in rows
-        ],
+        "data": [_facade()._daily_digest_record_to_dict(row, include_body=False) for row in rows],
         "total": total,
     }
 
@@ -139,9 +136,7 @@ def _dd_repo_root():
     from pathlib import Path as _Path
 
     mono = (
-        _os.environ.get("XCMAX_MONOREPO_ROOT")
-        or _os.environ.get("MODSTORE_REPO_ROOT")
-        or ""
+        _os.environ.get("XCMAX_MONOREPO_ROOT") or _os.environ.get("MODSTORE_REPO_ROOT") or ""
     ).strip()
     if mono:
         return _Path(mono).expanduser().resolve()
@@ -214,9 +209,7 @@ async def butler_daily_digest_artifacts(
             }
         )
     except RECOVERABLE_ERRORS as exc:
-        stages.append(
-            {"node": "SW/SS/SA", "label": "三端截图巡检", "error": str(exc)[:200]}
-        )
+        stages.append({"node": "SW/SS/SA", "label": "三端截图巡检", "error": str(exc)[:200]})
     try:
         from modstore_server.daily_digest_surface_ppt import _save_dir as _pp_save_dir
 
@@ -233,9 +226,7 @@ async def butler_daily_digest_artifacts(
             }
         )
     except RECOVERABLE_ERRORS as exc:
-        stages.append(
-            {"node": "PPTX", "label": "三端→PPT 附件", "error": str(exc)[:200]}
-        )
+        stages.append({"node": "PPTX", "label": "三端→PPT 附件", "error": str(exc)[:200]})
     stages.append(
         {
             "node": "M",
