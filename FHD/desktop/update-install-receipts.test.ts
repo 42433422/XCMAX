@@ -67,4 +67,58 @@ describe('update installation receipts', () => {
     })).rejects.toThrow('HTTP 503')
     expect(readPendingUpdateInstallReceipt()).not.toBeNull()
   })
+
+  it('bootstraps the first installed-build receipt when the old updater left no marker', async () => {
+    const bodies: Record<string, unknown>[] = []
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+      bodies.push(JSON.parse(String(init.body)))
+      return new Response('{"ok":true}', { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(reportPendingUpdateInstallation({
+      backendPort: 17600,
+      installedVersion: '1.0.0.1',
+      installedBuildSha: 'first-receipt-build',
+    })).resolves.toEqual({ reported: true, status: 'installed' })
+    await expect(reportPendingUpdateInstallation({
+      backendPort: 17600,
+      installedVersion: '1.0.0.1',
+      installedBuildSha: 'first-receipt-build',
+    })).resolves.toEqual({ reported: false, reason: 'no_pending_receipt' })
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(bodies[0]).toMatchObject({
+      source: 'desktop_inventory',
+      target_version: '1.0.0.1',
+      target_build_sha: 'first-receipt-build',
+      installed_build_sha: 'first-receipt-build',
+      status: 'installed',
+    })
+  })
+
+  it('keeps one deterministic bootstrap outbox for retry', async () => {
+    const idempotencyKeys: string[] = []
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body))
+      idempotencyKeys.push(body.idempotency_key)
+      return new Response(idempotencyKeys.length === 1 ? 'offline' : '{"ok":true}', {
+        status: idempotencyKeys.length === 1 ? 503 : 200,
+      })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const input = {
+      backendPort: 17600,
+      installedVersion: '1.0.0.1',
+      installedBuildSha: 'retry-build',
+    }
+    await expect(reportPendingUpdateInstallation(input)).rejects.toThrow('HTTP 503')
+    expect(readPendingUpdateInstallReceipt()?.source).toBe('desktop_inventory')
+    await expect(reportPendingUpdateInstallation(input)).resolves.toEqual({
+      reported: true,
+      status: 'installed',
+    })
+    expect(idempotencyKeys[0]).toBe(idempotencyKeys[1])
+  })
 })
