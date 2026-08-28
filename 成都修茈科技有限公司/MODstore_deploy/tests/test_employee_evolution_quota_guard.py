@@ -75,6 +75,28 @@ def test_classify_quota_variants():
     assert classify_failure_kind("upstream error", status_code=403) == FAILURE_KIND_QUOTA
     # OpenAI 把额度耗尽放在 429 下返回 —— 配额优先于瞬时，不能当成可重试限流。
     assert classify_failure_kind("Error 429: insufficient_quota") == FAILURE_KIND_QUOTA
+    assert classify_failure_kind("Token Plan 已达到用量上限，请购买积分 code=2056") == (
+        FAILURE_KIND_QUOTA
+    )
+
+
+def test_nested_fallback_quota_outweighs_primary_prompt_failure():
+    from modstore_server.employee_duty_cron_runtime import _result_failure_kind
+
+    result = {
+        "failure_kind": "prompt",
+        "error": "model deepseek-r1-250120 is invalid",
+        "result": {
+            "outputs": [
+                {
+                    "error": "primary model unavailable",
+                    "output": {"error": "Token Plan 已达到用量上限，请购买积分 code=2056"},
+                }
+            ]
+        },
+    }
+
+    assert _result_failure_kind(result) == FAILURE_KIND_QUOTA
 
 
 def test_classify_transient_vs_prompt():

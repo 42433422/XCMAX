@@ -245,6 +245,39 @@ def test_quality_validator_indexes_actual_pack_files(
     assert result["receipt"]["row_count"] == 2
 
 
+def test_employee_pack_curator_receives_real_reviewed_manifest(
+    receipts: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest = {
+        "id": "real-role",
+        "version": "1.2.3",
+        "artifact": "employee_pack",
+        "employee": {"id": "real-role"},
+        "employee_config_v2": {
+            "cognition": {"agent": {"system_prompt": "x" * 80}},
+            "actions": {"handlers": ["agent"]},
+        },
+    }
+    monkeypatch.setattr(
+        "modstore_server.duty_workforce_contracts.workforce_contract_map",
+        lambda: {"real-role": {"risk_level": "low"}},
+    )
+    monkeypatch.setattr(
+        "modstore_server.duty_workforce_contracts.load_reviewed_duty_manifest",
+        lambda employee_id: manifest if employee_id == "real-role" else {},
+    )
+
+    result = resolver.resolve_employee_duty_input("employee-pack-curator", now=NOW)
+
+    assert result is not None
+    assert result["input_data"]["manifest"] == manifest
+    assert result["receipt"]["row_count"] == 1
+    assert result["receipt"]["sources"] == [
+        "reviewed_duty_manifest_ssot",
+        "duty_employee_work_contracts",
+    ]
+
+
 def test_architecture_input_extracts_real_python_dependency_graph(
     receipts: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

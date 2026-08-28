@@ -53,6 +53,7 @@ evolution-metrics = [
     "pandas>=2.0",
     "pytest>=7.4",
     "pytest-cov>=4.1",
+    "pytest-asyncio>=0.23",
 ]
 aliyun-tts = [
     "dashscope>=1.14",

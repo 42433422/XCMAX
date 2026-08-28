@@ -216,7 +216,17 @@ def batch_review_employee_suggestions(
 ) -> Dict[str, Any]:
     ids_raw = body.get("ids") if isinstance(body.get("ids"), list) else []
     action = str(body.get("action") or "").strip().lower()
-    reason = str(body.get("reason") or "").strip()
+    approve_ids = body.get("approve_ids") if isinstance(body.get("approve_ids"), list) else []
+    reject_ids = body.get("reject_ids") if isinstance(body.get("reject_ids"), list) else []
+    if not ids_raw and approve_ids and reject_ids:
+        raise HTTPException(400, "approve_ids/reject_ids 不能同时提交")
+    if not ids_raw and approve_ids:
+        ids_raw = approve_ids
+        action = action or "approve"
+    elif not ids_raw and reject_ids:
+        ids_raw = reject_ids
+        action = action or "reject"
+    reason = str(body.get("reason") or body.get("note") or "").strip()
     dispatch_now = bool(body.get("dispatch_now", True))
     ids: List[int] = []
     for x in ids_raw:

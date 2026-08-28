@@ -24,6 +24,9 @@ _QUOTA_NEEDLES = (
     "额度",  # 额度不足
     "余额不足",
     "欠费",
+    "用量上限",
+    "购买积分",
+    "token plan",
     "quota",
     "insufficient_quota",
     "insufficient quota",
