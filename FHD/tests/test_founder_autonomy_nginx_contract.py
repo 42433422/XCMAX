@@ -45,7 +45,9 @@ def test_www_admin_console_serves_compressed_immutable_assets() -> None:
     founder = (snippets / "founder-autonomy-admin.inc.conf").read_text(encoding="utf-8")
 
     assert "location ^~ /admin/assets/" in www
-    assert "alias /opt/fhd-full/templates/admin-vue-dist/assets/;" in www
+    assert "location ^~ /admin/assets/" in www
+    assert "proxy_pass http://127.0.0.1:5100;" in www
+    assert "alias /opt/fhd-full" not in www
     assert "gzip on;" in www
     assert 'Cache-Control "public, max-age=31536000, immutable"' in www
     assert 'Cache-Control "no-store, no-cache, must-revalidate"' in www
