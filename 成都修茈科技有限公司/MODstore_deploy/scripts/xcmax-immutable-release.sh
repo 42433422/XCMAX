@@ -591,7 +591,11 @@ import json
 import os
 
 payload = json.loads(os.environ["SCHEDULER_RUNTIME_PAYLOAD"])
-assert payload.get("ok") is True
+# This deployment gate owns one authoritative job.  The runtime endpoint's
+# global ok/status is intentionally allowed to be degraded by unrelated jobs;
+# coupling promotion to it would turn a truthful scheduler warning into a
+# release-wide outage even when customer-value reconciliation succeeded.
+assert isinstance(payload.get("jobs"), list)
 jobs = {
     str(item.get("job_id")): item
     for item in payload.get("jobs") or []

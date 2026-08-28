@@ -9,20 +9,24 @@ vi.mock('@/utils/plannerPagePaths', () => ({
 import AIEcosystemView from './AIEcosystemView.vue'
 import { resolvePlannerPageRedirectForRouteName } from '@/utils/plannerPagePaths'
 
-function makeRouter() {
+function makeRouter(includeDeliveryCenter = true) {
+  const routes = [
+    { path: '/', name: 'home', component: { template: '<div />' } },
+    { path: '/brain', name: 'brain', component: { template: '<div />' } },
+    { path: '/mod-store', name: 'mod-store', component: { template: '<div />' } },
+    { path: '/ecosystem', name: 'ecosystem', component: AIEcosystemView },
+  ]
+  if (includeDeliveryCenter) {
+    routes.push({ path: '/delivery-center', name: 'delivery-center', component: { template: '<div />' } })
+  }
   return createRouter({
     history: createMemoryHistory(),
-    routes: [
-      { path: '/', name: 'home', component: { template: '<div />' } },
-      { path: '/brain', name: 'brain', component: { template: '<div />' } },
-      { path: '/mod-store', name: 'mod-store', component: { template: '<div />' } },
-      { path: '/ecosystem', name: 'ecosystem', component: AIEcosystemView },
-    ],
+    routes,
   })
 }
 
-async function mountView() {
-  const router = makeRouter()
+async function mountView(includeDeliveryCenter = true) {
+  const router = makeRouter(includeDeliveryCenter)
   await router.push('/ecosystem')
   await router.isReady()
   const wrapper = mount(AIEcosystemView, {
@@ -81,7 +85,7 @@ describe('AIEcosystemView.vue', () => {
     expect(descs).toHaveLength(4)
     expect(descs[0].text()).toContain('可视化 AI 员工')
     expect(descs[1].text()).toContain('MCP/API')
-    expect(descs[2].text()).toContain('客户私有 Mod')
+    expect(descs[2].text()).toContain('客户交付中心')
     expect(descs[3].text()).toContain('MOD 扩展')
   })
 
@@ -134,8 +138,19 @@ describe('AIEcosystemView.vue', () => {
     }
   })
 
-  it('embeds private delivery panel when production launcher clicked', async () => {
+  it('routes production employees into the admin customer delivery center', async () => {
     const { wrapper, router } = await mountView()
+    const pushSpy = vi.spyOn(router, 'push')
+    await wrapper.find('.app-launcher--production').trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(pushSpy).toHaveBeenCalledWith({
+      name: 'delivery-center',
+      query: { source: 'production-employee' },
+    })
+  })
+
+  it('keeps the private production panel outside the admin console', async () => {
+    const { wrapper, router } = await mountView(false)
     const pushSpy = vi.spyOn(router, 'push')
     await wrapper.find('.app-launcher--production').trigger('click')
     await wrapper.vm.$nextTick()
