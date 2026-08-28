@@ -87,6 +87,12 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     assert '"$RUNTIME_DIR" "$CURRENT_LINK" "$CURRENT_LINK"' in script
     assert "verify_customer_value_reconciler" in script
     assert "customer value reconciler did not prove" in script
+    reconciler_gate = script[
+        script.index("verify_customer_value_reconciler()") : script.index("PREVIOUS_SHA=")
+    ]
+    assert 'assert payload.get("ok") is True' not in reconciler_gate
+    assert 'assert isinstance(payload.get("jobs"), list)' in reconciler_gate
+    assert 'assert job.get("state") == "healthy"' in reconciler_gate
     assert 'RELEASES_TO_KEEP="${XCMAX_RELEASES_TO_KEEP:-4}"' in script
     assert 'prune_releases "$CURRENT_ROOT_BEFORE_BUILD" "$RELEASES_DIR/$TARGET_SHA"' in script
     assert 'prune_releases "$FINAL_ROOT" "$PREVIOUS_ROOT"' in script

@@ -44,7 +44,13 @@ const delivery = {
 describe('DeliveryCenterView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    listUsers.mockResolvedValue({ users: [{ id: 72, username: 'guosheng', company: '国圣化工' }] })
+    listUsers.mockResolvedValue({
+      users: [
+        { id: 72, username: 'guosheng', company: '国圣化工', is_enterprise: true },
+        { id: 81, username: 'standard-co', company: '标准交付企业', is_enterprise: true },
+      ],
+      total: 2,
+    })
     listCustomDeliveries.mockResolvedValue({ items: [structuredClone(delivery)] })
     decideCustomDelivery.mockResolvedValue({ success: true })
     appConfirm.mockResolvedValue(true)
@@ -59,6 +65,37 @@ describe('DeliveryCenterView', () => {
     expect(wrapper.text()).toContain('coating-quality-private')
     expect(wrapper.text()).toContain('0/1 已安装')
     expect(wrapper.text()).toContain('待客户安装回执')
+    expect(wrapper.text()).toContain('企业客户交付台账')
+    expect(wrapper.text()).toContain('标准交付企业')
+    expect(wrapper.text()).toContain('标准企业交付')
+    expect(wrapper.text()).toContain('定制交付')
+    expect(listUsers).toHaveBeenCalledWith(200, 0, true)
+  })
+
+  it('loads every enterprise-user page before rendering the delivery roster', async () => {
+    listCustomDeliveries.mockResolvedValue({ items: [] })
+    listUsers.mockImplementation((_limit: number, offset: number) => {
+      if (offset === 0) {
+        return Promise.resolve({
+          users: [{ id: 101, username: 'enterprise-a', is_enterprise: true }],
+          total: 2,
+        })
+      }
+      return Promise.resolve({
+        users: [{ id: 102, username: 'enterprise-b', is_enterprise: true }],
+        total: 2,
+      })
+    })
+
+    const wrapper = mount(DeliveryCenterView)
+    await flushPromises()
+
+    expect(listUsers).toHaveBeenNthCalledWith(1, 200, 0, true)
+    expect(listUsers).toHaveBeenNthCalledWith(2, 200, 1, true)
+    expect(wrapper.text()).toContain('enterprise-a')
+    expect(wrapper.text()).toContain('enterprise-b')
+    expect(wrapper.text()).toContain('暂无定制交付工单')
+    expect(wrapper.text()).toContain('仍在上方“标准企业交付”台账中')
   })
 
   it('writes an audited acceptance decision through the real delivery endpoint', async () => {

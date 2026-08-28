@@ -22,7 +22,7 @@
             <ProductionEmployeeLauncherIcon />
           </span>
           <span class="app-launcher-name">生产员工</span>
-          <span class="app-launcher-desc">客户私有 Mod、业务模块与 AI 员工的生产、测试、验收和交付</span>
+          <span class="app-launcher-desc">进入客户交付中心，承接企业客户的标准交付与定制生产闭环</span>
         </button>
         <button
           class="app-launcher app-launcher--modstore"
@@ -84,6 +84,10 @@ const goShellPage = (name, query = {}) => {
 }
 
 const enterAnalyzer = (appKey = 'kitten') => {
+  if (appKey === 'production' && router.hasRoute('delivery-center')) {
+    router.push({ name: 'delivery-center', query: { source: 'production-employee' } })
+    return
+  }
   // 'qclaw' 为旧入口键，等价于 'aiopen'（Qclaw龙虾生态已升级为 AIOPEN）
   activeApp.value = appKey === 'qclaw' ? 'aiopen' : appKey
   inAnalyzer.value = true

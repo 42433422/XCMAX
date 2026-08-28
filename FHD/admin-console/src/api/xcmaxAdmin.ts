@@ -172,8 +172,13 @@ export interface AutonomyPendingAction {
 }
 
 export const xcmaxAdminApi = {
-  listUsers() {
-    return api.get('/api/xcmax/admin/market/users');
+  listUsers(limit = 200, offset = 0, isEnterprise?: boolean) {
+    const params: { limit: number; offset: number; is_enterprise?: boolean } = { limit, offset };
+    if (typeof isEnterprise === 'boolean') params.is_enterprise = isEnterprise;
+    return api.get<{ users?: MarketAdminUser[]; total?: number }>(
+      '/api/xcmax/admin/market/users',
+      params,
+    );
   },
   createMarketUser(payload: { username: string; password: string; email: string; verification_code?: string }) {
     return api.post('/api/xcmax/admin/market/users', payload);
