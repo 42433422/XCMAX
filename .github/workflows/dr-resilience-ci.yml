@@ -39,7 +39,7 @@ jobs:
       - name: Parse operational shell scripts
         run: |
           set -euo pipefail
-          bash -n ops/install.sh ops/backup/xcmax_backup.sh ops/dr/*.sh
+          bash -n ops/install.sh ops/backup/xcmax_backup.sh ops/dr/*.sh ops/lib/*.sh
           bash -n FHD/scripts/deploy/fhd-auto-update.sh
 
       - name: ShellCheck DR boundary
@@ -49,6 +49,7 @@ jobs:
             ops/install.sh \
             ops/backup/xcmax_backup.sh \
             ops/dr/*.sh \
+            ops/lib/wal_transfer_frontier.sh \
             FHD/scripts/deploy/fhd-auto-update.sh
 
       - name: Validate Python monitor
@@ -108,6 +109,7 @@ jobs:
           grep -q 'xcmax-dr-storage-retention' ops/dr/xcmax_dr_install.sh
           bash ops/tests/test_bounded_transfer.sh
           bash ops/tests/test_dr_storage_retention.sh
+          bash ops/tests/test_wal_transfer_frontier.sh
           bash ops/tests/test_wal_archive_command.sh
           grep -q 'pg_create_restore_point' ops/dr/xcmax_wal_ship.sh
           grep -q 'pg_create_restore_point' ops/dr/xcmax_wal_ship_pg16.sh
