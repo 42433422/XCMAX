@@ -22,9 +22,7 @@ def _client(tmp_path, monkeypatch, *, authenticated: bool = True) -> TestClient:
 
 
 def test_xcmax_personnel_rejects_unauthenticated_requests(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr(
-        "app.application.desktop_admin_gate.is_desktop_runtime", lambda: False
-    )
+    monkeypatch.setattr("app.application.desktop_admin_gate.is_desktop_runtime", lambda: False)
     client = _client(tmp_path, monkeypatch, authenticated=False)
 
     response = client.get(f"/api/mod/{MOD_ID}/employees")
