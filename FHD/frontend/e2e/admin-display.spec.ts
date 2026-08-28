@@ -167,3 +167,18 @@ test.describe('admin page display regression', () => {
     })
   }
 })
+
+test('admin first paint shows a useful loading shell before JavaScript starts', async ({ browser }) => {
+  const context = await browser.newContext({ javaScriptEnabled: false })
+  const page = await context.newPage()
+  try {
+    await page.goto('/admin/autonomy-approval-hub', { waitUntil: 'domcontentloaded' })
+    const bootstrap = page.locator('.admin-bootstrap')
+    await expect(bootstrap).toBeVisible()
+    await expect(bootstrap).toContainText('XCMAX 管理中心')
+    await expect(bootstrap).toContainText('正在加载管理页面')
+    await expect(bootstrap).toHaveCSS('min-height', `${await page.evaluate(() => window.innerHeight)}px`)
+  } finally {
+    await context.close()
+  }
+})
