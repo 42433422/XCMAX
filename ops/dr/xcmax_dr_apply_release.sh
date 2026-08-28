@@ -118,6 +118,65 @@ prepare_shared_venv() {
   fi
 }
 
+bootstrap_fhd_vendored_langgraph() {
+  local target="$1" service_python="$2"
+  local requirements="$target/requirements-langgraph-runtime.txt"
+  local purelib="" pth_tmp="$STATE/.xcagi_vendored_langgraph.pth.$$"
+  local package_dirs=(
+    "$target/packages/xcagi_langgraph_core"
+    "$target/packages/xcagi_langgraph_checkpoint"
+    "$target/packages/xcagi_langgraph_checkpoint_backends/checkpoint-sqlite"
+    "$target/packages/xcagi_langgraph_checkpoint_backends/checkpoint-postgres"
+    "$target/packages/xcagi_langgraph_prebuilt"
+    "$target/packages/xcagi_langgraph_sdk"
+  )
+
+  [[ -x "$service_python" && -f "$requirements" ]] || {
+    log "ERROR: DR FHD LangGraph 运行依赖或 Python 不可用"
+    return 1
+  }
+  local package_dir
+  for package_dir in "${package_dirs[@]}"; do
+    [[ -f "$package_dir/PROVENANCE.json" ]] || {
+      log "ERROR: DR FHD 缺少受管 LangGraph provenance: $package_dir"
+      return 1
+    }
+  done
+
+  PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_ROOT_USER_ACTION=ignore \
+    "$service_python" -m pip install --quiet --no-cache-dir -r "$requirements"
+  purelib="$(
+    "$service_python" -c \
+      'import sysconfig; print(sysconfig.get_paths()["purelib"])'
+  )"
+  [[ -d "$purelib" ]] || {
+    log "ERROR: DR FHD Python purelib 不存在: $purelib"
+    return 1
+  }
+  "$service_python" - "$pth_tmp" "${package_dirs[@]}" <<'PY'
+import sys
+
+target, *paths = sys.argv[1:]
+line = (
+    "import sys; _xcagi_vendored_paths="
+    + repr(paths)
+    + "; sys.path[:0]=[p for p in _xcagi_vendored_paths if p not in sys.path]\n"
+)
+with open(target, "w", encoding="utf-8") as handle:
+    handle.write(line)
+PY
+  install -m 0644 "$pth_tmp" "$purelib/xcagi_vendored_langgraph.pth"
+  rm -f -- "$pth_tmp"
+  PYTHONPATH="$target" "$service_python" - <<'PY'
+from app.infrastructure.workflow.langgraph_assert import assert_vendored_sources
+
+assert_vendored_sources()
+PY
+  chgrp -R "$APP_GROUP" "$(dirname "$(dirname "$service_python")")"
+  chmod -R g+rX "$(dirname "$(dirname "$service_python")")"
+  log "FHD DR vendored LangGraph 运行依赖已校验"
+}
+
 apply_modstore() {
   local candidate_created_at rc
   [[ -s "$incoming/modstore.MANIFEST.txt" ]] || return 0
@@ -230,6 +289,7 @@ PY
     return 1
   }
   ln -s "$SHARED/fhd-venv" "$target/.venv"
+  bootstrap_fhd_vendored_langgraph "$target" "$target/.venv/bin/python"
   chgrp -R "$APP_GROUP" "$target"
   chmod -R g+rX "$target"
   "$target/.venv/bin/python" -m compileall -q "$target/XCAGI"
