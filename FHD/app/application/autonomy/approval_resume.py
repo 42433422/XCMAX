@@ -6,6 +6,7 @@ import json
 import os
 import threading
 import uuid
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -20,7 +21,7 @@ _LOCK = threading.RLock()
 UTC = timezone.utc  # noqa: UP017 - shared module must import on Python 3.10
 _EXECUTORS: dict[str, Callable[[dict[str, Any]], Any]] = {}
 _ACTION_EXECUTORS: dict[str, Callable[[dict[str, Any]], Any]] = {}
-_TERMINAL_STATES = frozenset({"executed", "rejected", "execution_failed"})
+_TERMINAL_STATES = frozenset({"executed", "rejected", "execution_failed", "superseded"})
 _AWAITING_REVIEW_STATES = frozenset({"pending_approval", "approval_requested"})
 _SENSITIVE_KEYS = frozenset({"token", "secret", "password", "authorization", "api_key"})
 
@@ -99,6 +100,15 @@ def _latest(action_id: str) -> dict[str, Any] | None:
     return None
 
 
+def _latest_actions() -> list[dict[str, Any]]:
+    latest_by_id: dict[str, dict[str, Any]] = {}
+    for item in _read_ledger():
+        action_id = str(item.get("action_id") or "")
+        if action_id:
+            latest_by_id[action_id] = item
+    return list(latest_by_id.values())
+
+
 def get_action_state(action_id: str) -> dict[str, Any] | None:
     latest = _latest(action_id)
     return dict(latest) if latest is not None else None
@@ -132,6 +142,12 @@ def admin_execution_contract(item: dict[str, Any]) -> dict[str, Any]:
             "admin_execution_ready": False,
             "execution_mode": "external_callback",
             "execution_guidance": "该动作已交给外部审批回调，请在对应审批提供方完成处理。",
+        }
+    if executor_name == "github_deploy":
+        return {
+            "admin_execution_ready": False,
+            "execution_mode": "external_dispatch_required",
+            "execution_guidance": "该发布必须由正式发布工作流审批并执行，管理端不能直接放行。",
         }
     if action_id in _ACTION_EXECUTORS or executor_name in _EXECUTORS:
         return {
@@ -167,6 +183,10 @@ def record_pending_action(
         return existing
     if existing and str(existing.get("state") or "") in _TERMINAL_STATES:
         # Idempotent scheduler retries must not resurrect rejected/finished work.
+        return existing
+    if existing and str(existing.get("state") or "") == "approved":
+        # A deferred executor owns this action now. Scheduler retries must not
+        # turn it back into a pending approval.
         return existing
     if executor is not None:
         register_action_executor(action, executor, action_id=action_id)
@@ -328,6 +348,7 @@ def resume_action(
             "state": "approved",
             "approver": actor,
             "approval_id": approval_id,
+            "approved_at": _iso_now(),
         }
     )
     append_autonomy_audit(
@@ -383,6 +404,12 @@ def complete_action(
     if latest is None:
         raise ApprovalStateError(f"approved action not found: {action_id}")
     state = str(latest.get("state") or "")
+    terminal_state = "executed" if success else "execution_failed"
+    if state == terminal_state:
+        # The server-side deploy script and the authenticated workflow callback
+        # both report the same real outcome. Treat the second report as an
+        # idempotent acknowledgement instead of failing a successful workflow.
+        return latest
     if state in _TERMINAL_STATES:
         raise ApprovalStateError(f"action {action_id} is already terminal (state={state})")
     if state != "approved":
@@ -390,8 +417,8 @@ def complete_action(
     actor = str(approver or latest.get("approver") or "").strip()
     if not actor:
         raise ApprovalStateError("approver is required")
-    terminal_state = "executed" if success else "execution_failed"
     safe_outcome = _safe_payload(outcome or {})
+    terminal_at_key = "executed_at" if success else "execution_failed_at"
     row = _append_ledger(
         {
             **latest,
@@ -399,6 +426,7 @@ def complete_action(
             "approver": actor,
             "approval_id": approval_id or str(latest.get("approval_id") or ""),
             "outcome": safe_outcome,
+            terminal_at_key: _iso_now(),
         }
     )
     risk = (latest.get("risk_decision") or {}).get("risk_level") or "BLOCKED"
@@ -418,7 +446,100 @@ def complete_action(
             },
         }
     )
+    if success and str(latest.get("action") or "") == "apply_release_to_cvm":
+        superseded = reconcile_obsolete_release_actions(
+            reference_action_id=action_id,
+            resolved_by="system:release-reconciler",
+        )
+        if superseded:
+            row = {**row, "superseded_count": len(superseded)}
     return row
+
+
+def reconcile_obsolete_release_actions(
+    *,
+    reference_action_id: str = "",
+    resolved_by: str = "system:release-reconciler",
+) -> list[dict[str, Any]]:
+    """Append terminal rows for release approvals made obsolete by a real deploy.
+
+    Only actions older than an observed ``executed`` release are reconciled.
+    Newer pending releases remain visible, and the append-only audit history is
+    preserved.
+    """
+
+    actions = _latest_actions()
+    if reference_action_id:
+        reference = next(
+            (
+                item
+                for item in actions
+                if str(item.get("action_id") or "") == str(reference_action_id)
+            ),
+            None,
+        )
+    else:
+        executed = [
+            item
+            for item in actions
+            if str(item.get("action") or "") == "apply_release_to_cvm"
+            and str(item.get("state") or "") == "executed"
+        ]
+        reference = max(
+            executed,
+            key=lambda item: str(item.get("timestamp") or ""),
+            default=None,
+        )
+    if (
+        reference is None
+        or str(reference.get("action") or "") != "apply_release_to_cvm"
+        or str(reference.get("state") or "") != "executed"
+    ):
+        return []
+
+    reference_id = str(reference.get("action_id") or "")
+    reference_timestamp = str(reference.get("timestamp") or "")
+    actor = str(resolved_by or "system:release-reconciler").strip()
+    candidates = sorted(
+        (
+            item
+            for item in actions
+            if str(item.get("action") or "") == "apply_release_to_cvm"
+            and str(item.get("action_id") or "") != reference_id
+            and str(item.get("state") or "") in {*_AWAITING_REVIEW_STATES, "approved"}
+            and str(item.get("timestamp") or "") <= reference_timestamp
+        ),
+        key=lambda item: str(item.get("timestamp") or ""),
+    )
+    reconciled: list[dict[str, Any]] = []
+    for item in candidates:
+        action_id = str(item.get("action_id") or "")
+        _ACTION_EXECUTORS.pop(action_id, None)
+        row = _append_ledger(
+            {
+                **item,
+                "state": "superseded",
+                "resolved_by": actor,
+                "superseded_by": reference_id,
+                "superseded_at": _iso_now(),
+                "supersession_reason": "a newer release reached the executed state",
+            }
+        )
+        append_autonomy_audit(
+            {
+                "action_id": action_id,
+                "action": "apply_release_to_cvm",
+                "risk_level": (item.get("risk_decision") or {}).get("risk_level") or "HIGH",
+                "decision": "superseded",
+                "approver": actor,
+                "outcome": "will_not_retry",
+                "event_type": "approval",
+                "source": "approval_resume",
+                "metadata": {"superseded_by": reference_id},
+            }
+        )
+        reconciled.append(row)
+    return reconciled
 
 
 def reject_action(
@@ -444,6 +565,7 @@ def reject_action(
             "approver": actor,
             "approval_id": approval_id,
             "rejection_reason": str(reason or "")[:1000],
+            "rejected_at": _iso_now(),
         }
     )
     risk = (latest.get("risk_decision") or {}).get("risk_level") or "BLOCKED"
@@ -464,14 +586,9 @@ def reject_action(
 
 
 def list_pending_actions(*, limit: int = 100) -> list[dict[str, Any]]:
-    latest_by_id: dict[str, dict[str, Any]] = {}
-    for item in _read_ledger():
-        action_id = str(item.get("action_id") or "")
-        if action_id:
-            latest_by_id[action_id] = item
     pending = [
         {**item, **admin_execution_contract(item)}
-        for item in latest_by_id.values()
+        for item in _latest_actions()
         if item.get("state") in _AWAITING_REVIEW_STATES
     ]
     return sorted(pending, key=lambda item: str(item.get("timestamp") or ""), reverse=True)[
@@ -479,14 +596,43 @@ def list_pending_actions(*, limit: int = 100) -> list[dict[str, Any]]:
     ]
 
 
+def approval_center_snapshot(*, pending_limit: int = 100) -> dict[str, Any]:
+    """Return one consistent approval-center snapshot from the append-only ledger."""
+
+    latest = sorted(
+        _latest_actions(),
+        key=lambda item: str(item.get("timestamp") or ""),
+        reverse=True,
+    )
+    pending = [
+        {**item, **admin_execution_contract(item)}
+        for item in latest
+        if str(item.get("state") or "") in _AWAITING_REVIEW_STATES
+    ][: max(1, min(int(pending_limit), 1000))]
+    execution_modes = Counter(str(item.get("execution_mode") or "unknown") for item in pending)
+    states = Counter(str(item.get("state") or "unknown") for item in latest)
+    return {
+        "count": len(pending),
+        "items": pending,
+        "summary": {
+            "states": dict(states),
+            "execution_modes": dict(execution_modes),
+            "actionable": sum(item.get("admin_execution_ready") is True for item in pending),
+            "waiting": len(pending),
+        },
+    }
+
+
 __all__ = [
     "ApprovalStateError",
     "ExecutionNotDispatchableError",
     "admin_execution_contract",
+    "approval_center_snapshot",
     "complete_action",
     "get_action_state",
     "list_pending_actions",
     "mark_approval_requested",
+    "reconcile_obsolete_release_actions",
     "record_pending_action",
     "register_action_executor",
     "reject_action",

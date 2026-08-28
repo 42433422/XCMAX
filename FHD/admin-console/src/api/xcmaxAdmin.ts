@@ -158,6 +158,14 @@ export interface AutonomyPendingAction {
   timestamp?: string;
   approval_id?: string;
   approval_requested_at?: string;
+  approver?: string;
+  approved_at?: string;
+  executed_at?: string;
+  execution_failed_at?: string;
+  rejected_at?: string;
+  superseded_at?: string;
+  superseded_by?: string;
+  outcome?: Record<string, unknown>;
   admin_execution_ready?: boolean;
   execution_mode?: string;
   execution_guidance?: string;
@@ -316,7 +324,17 @@ export const xcmaxAdminApi = {
     );
   },
   fetchPendingAutonomyActions() {
-    return api.get<{ ok: boolean; count: number; items: AutonomyPendingAction[] }>(
+    return api.get<{
+      ok: boolean;
+      count: number;
+      items: AutonomyPendingAction[];
+      summary?: {
+        states?: Record<string, number>;
+        execution_modes?: Record<string, number>;
+        actionable?: number;
+        waiting?: number;
+      };
+    }>(
       '/api/xcmax/admin/autonomy/actions/pending',
     );
   },

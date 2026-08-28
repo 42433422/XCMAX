@@ -47,10 +47,9 @@ async def admin_pending_autonomy_actions(request: _facade().Request):
     gate = _facade()._require_market_admin_session(request)
     if gate is not None:
         return gate
-    from app.application.autonomy.approval_resume import list_pending_actions
+    from app.application.autonomy.approval_resume import approval_center_snapshot
 
-    items = list_pending_actions()
-    return {"ok": True, "count": len(items), "items": items}
+    return {"ok": True, **approval_center_snapshot()}
 
 
 @_facade().router.post("/admin/autonomy/actions/{action_id}/resume", response_model=None)

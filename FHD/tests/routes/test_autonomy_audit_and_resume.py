@@ -223,6 +223,8 @@ def test_admin_pending_resume_reject_use_session_not_webhook(tmp_path, monkeypat
     body = pending.json()
     assert body["ok"] is True
     assert body["count"] >= 2
+    assert body["summary"]["waiting"] >= 2
+    assert body["summary"]["actionable"] == 1
     ids = {item["action_id"] for item in body["items"]}
     assert "admin-pending-1" in ids
     assert "admin-pending-2" in ids
