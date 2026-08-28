@@ -8,12 +8,16 @@ name: pr-hygiene
 #   2. 并发上限：同一 author 超过 5 个 open PR → 打 `blocked-pr-limit` 标签
 #   3. 无人认领：无 assignee 的 open PR → 打 `unclaimed` 标签
 #   4. 删除已合并分支（默认分支与受保护分支除外）
-#   5. 删除机器来源（autonomy/ codex/ devfleet/ ai-impl/ automation/
-#      auto/daily- cursor/ trae/）、30 天无提交且无 open PR 的僵尸分支
+#   5. 删除机器来源僵尸分支（无 open PR 时）：
+#      - devfleet/：24 小时无新提交即删（DevFleet 每个 sub 任务一条分支，
+#        跑完不再推进，24 小时足以确认任务已结束）
+#      - autonomy/ codex/ ai-impl/ automation/ auto/daily- cursor/ trae/：
+#        30 天无提交才删（这些可能承载待评审工作，口径保守）
 #
 # 设计取舍：
 #   - 仅用 runner 自带 `gh` CLI + GITHUB_TOKEN，无第三方依赖。
 #   - 删除前逐项打印日志，便于审计；受保护分支一律跳过。
+#   - 提交日期直接取 branches 列表 API 返回值，不逐分支再查，避免 rate limit。
 # ----------------------------------------------------------------------------
 
 on:
@@ -52,10 +56,13 @@ jobs:
           PR_TTL_DAYS = 21
           MAX_OPEN_PRS_PER_AUTHOR = 5
           ZOMBIE_DAYS = 30
+          # DevFleet 每个 sub 任务都会推一条 devfleet/<agent>/sub-1-<hash> 分支，
+          # 跑完不再推进；24 小时无新提交即可判定任务已结束，直接回收。
+          DEVFLEET_TTL_HOURS = 24
+          DEVFLEET_PREFIX = "devfleet/"
           ZOMBIE_PREFIXES = (
               "autonomy/",
               "codex/",
-              "devfleet/",
               "ai-impl/",
               "automation/",
               "auto/daily-",
@@ -136,14 +143,26 @@ jobs:
                   deleted += 1
                   continue
 
-              # 5) autonomy/codex 僵尸分支（30 天无提交且无 open PR）
-              if name.startswith(ZOMBIE_PREFIXES) and name not in open_heads:
-                  detail = gh_api(f"branches/{encoded}")
-                  if not detail:
-                      continue
-                  last = parse_dt(detail["commit"]["commit"]["committer"]["date"])
-                  if (NOW - last).days >= ZOMBIE_DAYS:
-                      print(f"  delete zombie branch {name} (last commit {(NOW - last).days}d ago)")
+              # 5) 机器来源僵尸分支（无 open PR）
+              if name not in open_heads and (
+                  name.startswith(DEVFLEET_PREFIX) or name.startswith(ZOMBIE_PREFIXES)
+              ):
+                  # 提交日期优先取 branches 列表返回值，缺失才单独查询。
+                  try:
+                      last = parse_dt(b["commit"]["commit"]["committer"]["date"])
+                  except (KeyError, TypeError, ValueError):
+                      detail = gh_api(f"branches/{encoded}")
+                      if not detail:
+                          continue
+                      last = parse_dt(detail["commit"]["commit"]["committer"]["date"])
+                  idle = NOW - last
+                  ttl = (
+                      datetime.timedelta(hours=DEVFLEET_TTL_HOURS)
+                      if name.startswith(DEVFLEET_PREFIX)
+                      else datetime.timedelta(days=ZOMBIE_DAYS)
+                  )
+                  if idle >= ttl:
+                      print(f"  delete zombie branch {name} (idle {idle}, ttl {ttl})")
                       gh_api(f"git/refs/heads/{encoded}", "DELETE")
                       deleted += 1
 
