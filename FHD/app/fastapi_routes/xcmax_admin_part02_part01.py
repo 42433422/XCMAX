@@ -142,8 +142,27 @@ def _collect_employee_pack_modules() -> list[dict[str, _facade().Any]]:
 
 
 @_facade().router.get("/admin/market/users", response_model=None)
-async def admin_list_market_users(request: _facade().Request):
-    return await _facade()._market_admin_proxy(request, "GET", "/api/admin/users")
+async def admin_list_market_users(
+    request: _facade().Request,
+    limit: int = _facade().Query(50, ge=1, le=200),
+    offset: int = _facade().Query(0, ge=0),
+    is_enterprise: bool | None = _facade().Query(None),
+):
+    """List market users without dropping pagination or enterprise filters."""
+    from urllib.parse import urlencode
+
+    requested = request.query_params
+    params: dict[str, str | int] = {}
+    if "limit" in requested:
+        params["limit"] = limit
+    if "offset" in requested:
+        params["offset"] = offset
+    if "is_enterprise" in requested and is_enterprise is not None:
+        params["is_enterprise"] = "true" if is_enterprise else "false"
+    query = f"?{urlencode(params)}" if params else ""
+    return await _facade()._market_admin_proxy(
+        request, "GET", f"/api/admin/users{query}"
+    )
 
 
 @_facade().router.post("/admin/market/users", response_model=None)

@@ -4,7 +4,7 @@
       <div>
         <p class="delivery-eyebrow">CUSTOMER DELIVERY CONTROL</p>
         <h2>客户交付中心</h2>
-        <p>从需求、AI 生产、质量门、客户验收到安装回执，统一查看真实交付状态。</p>
+        <p>所有企业客户统一进入交付中心；标准交付与定制生产分别闭环到安装回执。</p>
       </div>
       <button type="button" class="delivery-refresh" :disabled="loading" @click="loadAll">
         <i class="fa fa-refresh" :class="{ 'fa-spin': loading }" aria-hidden="true"></i>
@@ -20,7 +20,14 @@
       </article>
     </section>
 
-    <section class="delivery-toolbar" aria-label="交付筛选">
+    <EnterpriseDeliveryRoster
+      v-if="!errorMessage && (!loading || enterpriseUsers.length)"
+      :users="enterpriseUsers"
+      :tickets="tickets"
+      @open-custom="focusCustomDeliveries"
+    />
+
+    <section id="delivery-custom-orders" class="delivery-toolbar" aria-label="定制交付工单筛选">
       <label>
         <i class="fa fa-search" aria-hidden="true"></i>
         <input v-model.trim="query" type="search" placeholder="搜索客户、工单号或需求名称" />
@@ -31,7 +38,7 @@
           {{ item.label }}
         </option>
       </select>
-      <span>显示 {{ filteredTickets.length }} / {{ tickets.length }} 项</span>
+      <span>定制工单 {{ filteredTickets.length }} / {{ tickets.length }} 项</span>
     </section>
 
     <div v-if="errorMessage" class="delivery-alert" role="alert">
@@ -43,7 +50,7 @@
       <button type="button" @click="loadAll">重试</button>
     </div>
 
-    <div v-else-if="loading && !tickets.length" class="delivery-empty">
+    <div v-else-if="loading && !tickets.length && !enterpriseUsers.length" class="delivery-empty">
       <i class="fa fa-circle-o-notch fa-spin" aria-hidden="true"></i>
       <strong>正在汇总客户交付证据</strong>
       <span>会同时读取客户身份、生产运行、质量门和安装回执。</span>
@@ -51,8 +58,8 @@
 
     <div v-else-if="!filteredTickets.length" class="delivery-empty">
       <i class="fa fa-inbox" aria-hidden="true"></i>
-      <strong>{{ tickets.length ? '没有符合筛选条件的交付' : '暂无客户定制交付' }}</strong>
-      <span>客户从企业端提交定制模块或 AI 员工需求后，会进入这里。</span>
+      <strong>{{ tickets.length ? '没有符合筛选条件的定制工单' : '暂无定制交付工单' }}</strong>
+      <span>无需定制的企业客户仍在上方“标准企业交付”台账中，不会被漏掉。</span>
     </div>
 
     <section v-else class="delivery-list" aria-label="客户交付列表">
@@ -183,8 +190,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import DeliveryCommercePanel from '../components/admin/DeliveryCommercePanel.vue'
+import EnterpriseDeliveryRoster from '../components/admin/EnterpriseDeliveryRoster.vue'
 import {
   xcmaxAdminApi,
   type CustomDeliveryArtifact,
@@ -192,9 +200,11 @@ import {
   type CustomDeliveryTicket,
   type MarketAdminUser,
 } from '@/api/xcmaxAdmin'
+import { fetchAllEnterpriseUsers } from '../utils/deliveryEnterpriseRoster'
 import { appAlert, appConfirm } from '@/utils/appDialog'
 
 const tickets = ref<CustomDeliveryTicket[]>([])
+const enterpriseUsers = ref<MarketAdminUser[]>([])
 const usersById = ref(new Map<number, MarketAdminUser>())
 const query = ref('')
 const stageFilter = ref('')
@@ -239,21 +249,18 @@ const filteredTickets = computed(() => {
 
 const summaryCards = computed(() => {
   const count = (stages: string[]) => tickets.value.filter((ticket) => stages.includes(stageOf(ticket))).length
+  const enterpriseIds = new Set(enterpriseUsers.value.map((user) => Number(user.id)))
+  const customEnterpriseIds = new Set(
+    tickets.value.map((ticket) => Number(ticket.user_id)).filter((userId) => enterpriseIds.has(userId)),
+  )
   return [
-    { key: 'all', label: '全部交付', value: tickets.value.length, hint: '真实客户定制工单' },
+    { key: 'enterprise', label: '企业客户', value: enterpriseUsers.value.length, hint: '全量进入交付中心' },
+    { key: 'standard', label: '标准企业交付', value: enterpriseUsers.value.length - customEnterpriseIds.size, hint: '无需定制生产线' },
+    { key: 'custom', label: '定制交付客户', value: customEnterpriseIds.size, hint: `${tickets.value.length} 个真实工单` },
     { key: 'production', label: '生产进行中', value: count(['queued', 'production']), hint: '等待产物与质量证据' },
-    { key: 'risk', label: '需要处理', value: count(['rework', 'acceptance', 'commerce']), hint: '返工、验收或商务资料' },
-    { key: 'receipt', label: '等待回执', value: count(['delivering']), hint: '客户尚未完成安装' },
     { key: 'done', label: '闭环完成', value: count(['delivered']), hint: '安装回执已经齐全' },
   ]
 })
-
-function extractUsers(raw: unknown): MarketAdminUser[] {
-  const body = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {}
-  const nested = body.data && typeof body.data === 'object' ? body.data as Record<string, unknown> : {}
-  const rows = Array.isArray(body.users) ? body.users : Array.isArray(nested.users) ? nested.users : []
-  return rows as MarketAdminUser[]
-}
 
 function extractTickets(raw: unknown): CustomDeliveryTicket[] {
   const body = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {}
@@ -266,17 +273,25 @@ async function loadAll() {
   loading.value = true
   errorMessage.value = ''
   try {
-    const [deliveryResult, userResult] = await Promise.all([
+    const [deliveryResult, users] = await Promise.all([
       xcmaxAdminApi.listCustomDeliveries(100),
-      xcmaxAdminApi.listUsers(),
+      fetchAllEnterpriseUsers(),
     ])
     tickets.value = extractTickets(deliveryResult)
-    usersById.value = new Map(extractUsers(userResult).map((user) => [user.id, user]))
+    enterpriseUsers.value = users
+    usersById.value = new Map(users.map((user) => [Number(user.id), user]))
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : String(error)
   } finally {
     loading.value = false
   }
+}
+
+async function focusCustomDeliveries(user: MarketAdminUser) {
+  query.value = String(user.company || user.username || '')
+  stageFilter.value = ''
+  await nextTick()
+  document.getElementById('delivery-custom-orders')?.scrollIntoView({ behavior: 'smooth' })
 }
 
 function stageOf(ticket: CustomDeliveryTicket): string {

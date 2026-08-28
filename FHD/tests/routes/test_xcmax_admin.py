@@ -508,6 +508,21 @@ class TestAdminListMarketUsers:
         assert resp.status_code == 200
         mock_proxy.assert_awaited_once()
 
+    def test_proxy_forwards_enterprise_pagination(self, client: TestClient) -> None:
+        with patch.object(
+            admin_routes,
+            "_market_admin_proxy",
+            new_callable=AsyncMock,
+            return_value={"users": [], "total": 0},
+        ) as mock_proxy:
+            resp = client.get(
+                "/api/xcmax/admin/market/users?limit=200&offset=400&is_enterprise=true"
+            )
+        assert resp.status_code == 200
+        assert mock_proxy.await_args.args[2] == (
+            "/api/admin/users?limit=200&offset=400&is_enterprise=true"
+        )
+
 
 class TestAdminCommerceRoutes:
     def test_orders_and_install_receipts_proxy_exact_contracts(self, client: TestClient) -> None:
