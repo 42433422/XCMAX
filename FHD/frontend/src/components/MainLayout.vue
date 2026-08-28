@@ -35,18 +35,21 @@
             {{ accountUsername }}
           </div>
         </div>
-        <button
-          type="button"
-          class="top-bar-settings-btn"
-          :class="{ active: currentRouteName === 'settings' }"
-          aria-label="系统设置"
-          title="系统设置"
-          data-tutorial-id="top-bar-settings"
-          @click="openSettings"
-        >
-          <i class="fa fa-cog" aria-hidden="true"></i>
-        </button>
-        <TopAssistantFloat />
+        <div class="top-bar-actions">
+          <button
+            type="button"
+            class="top-bar-settings-btn"
+            :class="{ active: currentRouteName === 'settings' }"
+            aria-label="系统设置"
+            title="系统设置"
+            data-tutorial-id="top-bar-settings"
+            @click="openSettings"
+          >
+            <i class="fa fa-cog" aria-hidden="true"></i>
+          </button>
+          <TopAssistantFloat />
+          <GlobalTaskCenter />
+        </div>
       </div>
       <slot></slot>
     </div>
@@ -90,6 +93,7 @@ import VirtualCursor from './VirtualCursor.vue'
 import OnboardingTutorial from './OnboardingTutorial.vue'
 import TutorialTrainingCoach from './tutorial/TutorialTrainingCoach.vue'
 import MobileBottomNav from './MobileBottomNav.vue'
+import GlobalTaskCenter from './task-center/GlobalTaskCenter.vue'
 import { useOnboardingTutorialStore } from '@/stores/onboardingTutorial'
 import { useTutorialStore } from '@/stores/tutorial'
 import { setTutorialBuildContextFactory } from '@/stores/tutorial'
@@ -473,6 +477,11 @@ onBeforeUnmount(() => {
   .main-container :deep(.main-content) {
     padding-bottom: calc(64px + env(safe-area-inset-bottom, 0));
   }
+
+  .sidebar-shell,
+  .sidebar-hover-trigger {
+    display: none;
+  }
 }
 
 .sidebar-shell {
@@ -550,10 +559,29 @@ onBeforeUnmount(() => {
 }
 
 .page-title-wrap {
+  flex: 1 1 auto;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.page-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.top-bar-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+  margin-left: 12px;
+}
+
+.top-bar-actions :deep(.assistant-float-toggle) {
+  margin-left: 0;
 }
 
 .page-kicker {
@@ -601,7 +629,6 @@ onBeforeUnmount(() => {
 }
 
 .top-bar-settings-btn {
-  margin-left: 10px;
   width: 36px;
   height: 36px;
   border: 1px solid rgba(203, 213, 225, 0.85);
@@ -624,5 +651,25 @@ onBeforeUnmount(() => {
   color: #0b72d9;
   border-color: rgba(11, 114, 217, 0.35);
   background: rgba(239, 246, 255, 0.96);
+}
+
+@media (max-width: 768px) {
+  .top-bar-actions {
+    gap: 6px;
+    margin-left: 8px;
+  }
+
+  .top-bar-actions :deep(.assistant-float-toggle span),
+  .top-bar-actions :deep(.task-center-trigger__label) {
+    display: none;
+  }
+
+  .top-bar-actions :deep(.assistant-float-toggle),
+  .top-bar-actions :deep(.task-center-trigger) {
+    min-width: 36px;
+    min-height: 36px;
+    justify-content: center;
+    padding: 6px 8px;
+  }
 }
 </style>

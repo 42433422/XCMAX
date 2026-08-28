@@ -1,9 +1,14 @@
 .approval-hub-view {
   position: relative;
+  width: 100%;
+  min-width: 0;
   padding: 24px 28px 40px;
   max-width: 1400px;
   margin: 0 auto;
   min-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  box-sizing: border-box;
   background: linear-gradient(135deg, #edf5fb 0%, #e7eef6 100%);
 }
 .page-header {
@@ -92,6 +97,13 @@
 @media (max-width: 960px) {
   .hub-grid { grid-template-columns: 1fr; }
   .status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .approval-hub-view { padding: 18px 14px 28px; }
+  .header-actions { width: 100%; flex-wrap: wrap; }
+  .status-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .pending-meta, .audit-meta { flex-wrap: wrap; }
+  .panel { min-height: 360px; }
 }
 .panel {
   background: rgba(255,255,255,0.92);

@@ -369,3 +369,25 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+@media (max-width: 720px) {
+  .im-chat-head {
+    padding: 10px 12px;
+  }
+  .im-system-employee-body {
+    padding: 12px;
+  }
+  .im-system-employee-profile,
+  .im-system-status-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .im-system-call-bubble {
+    max-width: 90%;
+  }
+  .im-compose {
+    padding: 10px 12px;
+  }
+  .im-compose-input {
+    min-width: 0;
+  }
+}

@@ -32,6 +32,10 @@ vi.mock('./TopAssistantFloat.vue', () => ({
   default: { template: '<div class="top-assistant-stub" />' },
 }))
 
+vi.mock('./task-center/GlobalTaskCenter.vue', () => ({
+  default: { template: '<button class="task-center-stub">工作区</button>' },
+}))
+
 vi.mock('./VirtualCursor.vue', () => ({
   default: { template: '<div class="virtual-cursor-stub" />' },
 }))
@@ -280,6 +284,12 @@ describe('MainLayout.vue – component structure', () => {
   it('renders TopAssistantFloat', async () => {
     const { wrapper } = await mountMainLayout()
     expect(wrapper.find('.top-assistant-stub').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('keeps the task center inside top-bar actions', async () => {
+    const { wrapper } = await mountMainLayout()
+    expect(wrapper.find('.top-bar-actions .task-center-stub').exists()).toBe(true)
     wrapper.unmount()
   })
 })

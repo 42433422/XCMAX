@@ -22,6 +22,10 @@ vi.mock('./PaneResizeHandle.vue', () => ({
   default: { template: '<span />' },
 }))
 
+vi.mock('./task-center/GlobalTaskCenter.vue', () => ({
+  default: { template: '<button class="task-center-stub">工作区</button>' },
+}))
+
 describe('MainLayout.vue', () => {
   function createTestRouter() {
     return createRouter({
@@ -55,6 +59,7 @@ describe('MainLayout.vue', () => {
 
     expect(wrapper.find('.sidebar-stub').exists()).toBe(true)
     expect(wrapper.find('.main-container').exists()).toBe(true)
+    expect(wrapper.find('.top-bar-actions .task-center-stub').exists()).toBe(true)
     wrapper.unmount()
   })
 

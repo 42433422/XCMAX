@@ -84,7 +84,7 @@ watch(tutorialScopeKey, (next, previous) => {
 <template>
   <button class="task-center-trigger" type="button" aria-label="打开独立工作区列表" :aria-expanded="drawerOpen" @click="toggleDrawer">
     <span class="task-center-trigger__icon">◈</span>
-    <span>工作区</span>
+    <span class="task-center-trigger__label">工作区</span>
     <strong v-if="approvalCount">{{ approvalCount }}</strong>
     <em v-else-if="unreadCount">{{ unreadCount }}</em>
     <em v-else-if="activeCount">{{ activeCount }}</em>

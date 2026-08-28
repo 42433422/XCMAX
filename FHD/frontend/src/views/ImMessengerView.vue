@@ -575,8 +575,10 @@ onUnmounted(() => {
 .im-messenger {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 64px);
-  max-height: 920px;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  min-height: 0;
   padding: 16px;
   box-sizing: border-box;
 }
@@ -620,5 +622,30 @@ onUnmounted(() => {
   font-size: 12px !important;
   color: var(--xc-color-disabled, #9ca3af);
   line-height: 1.5;
+}
+
+@media (max-width: 720px) {
+  .im-messenger {
+    padding: 10px;
+  }
+
+  .im-body {
+    display: block;
+    overflow-y: auto;
+  }
+
+  .im-body :deep(.im-sidebar) {
+    width: 100%;
+    height: min(360px, 45vh);
+    min-height: 280px;
+    max-height: 360px;
+    border-right: 0;
+    border-bottom: 1px solid var(--xc-color-border, #e6e9ef);
+  }
+
+  .im-chat {
+    width: 100%;
+    min-height: 460px;
+  }
 }
 </style>

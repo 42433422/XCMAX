@@ -235,6 +235,10 @@ vi.mock('./TopAssistantFloat.vue', () => ({
   default: { template: '<div class="top-assistant-stub" />' },
 }))
 
+vi.mock('./task-center/GlobalTaskCenter.vue', () => ({
+  default: { template: '<button class="task-center-stub">工作区</button>' },
+}))
+
 vi.mock('./VirtualCursor.vue', () => ({
   default: { template: '<div class="virtual-cursor-stub" />' },
 }))

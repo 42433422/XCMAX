@@ -767,12 +767,18 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .server-functions-view {
-  min-height: 100vh;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
   overflow-y: auto;
+  box-sizing: border-box;
   background: linear-gradient(135deg, #edf5fb 0%, #e7eef6 100%);
 }
 
 .page-content {
+  width: 100%;
+  box-sizing: border-box;
   padding: 24px 28px;
   max-width: 1400px;
   margin: 0 auto;
