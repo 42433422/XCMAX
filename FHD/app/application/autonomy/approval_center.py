@@ -95,8 +95,7 @@ def reconcile_obsolete_release_actions(
             for item in actions
             if str(item.get("action") or "") == "apply_release_to_cvm"
             and str(item.get("action_id") or "") != reference_id
-            and str(item.get("state") or "")
-            in {*ledger._AWAITING_REVIEW_STATES, "approved"}
+            and str(item.get("state") or "") in {*ledger._AWAITING_REVIEW_STATES, "approved"}
             and str(item.get("timestamp") or "") <= reference_timestamp
         ),
         key=lambda item: str(item.get("timestamp") or ""),
