@@ -1226,7 +1226,7 @@ class TestOpsFounderAutonomy:
                 ),
             ) as proxy,
             patch(
-                "app.application.autonomy.approval_resume.list_pending_actions",
+                "app.application.autonomy.approval_center.list_pending_actions",
                 return_value=[],
             ),
             patch(

@@ -105,6 +105,8 @@ def test_auto_update_trusts_only_ledger_approval_not_env_or_manifest() -> None:
     assert "get_action_state(action_id)" in auto_update
     assert 'approval.get("state") == "approved"' in auto_update
     assert '"approval_source": "autonomy_approval_ledger"' in auto_update
+    assert "complete_action(" in auto_update
+    assert 'success=outcome == "executed"' in auto_update
 
 
 def test_stable_auto_update_accepts_exact_ledger_approval(tmp_path: Path) -> None:

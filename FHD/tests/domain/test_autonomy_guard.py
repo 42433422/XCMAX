@@ -13,9 +13,14 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
+from app.application.autonomy.approval_center import (
+    approval_center_snapshot,
+    list_pending_actions,
+)
 from app.application.autonomy.approval_resume import (
     ApprovalStateError,
     complete_action,
+    get_action_state,
     mark_approval_requested,
     reject_action,
     request_action,
@@ -796,8 +801,69 @@ def test_deferred_workflow_only_marks_executed_after_real_outcome(monkeypatch) -
         outcome={"marker": "created"},
     )
     assert completed["state"] == "executed"
+    assert complete_action("deferred-freeze", success=True, approver="reviewer") == completed
     with pytest.raises(ApprovalStateError, match="already terminal"):
-        complete_action("deferred-freeze", success=True, approver="reviewer")
+        complete_action("deferred-freeze", success=False, approver="reviewer")
+
+
+def test_executed_release_reconciles_obsolete_approval_backlog(monkeypatch) -> None:
+    monkeypatch.setenv("XCAGI_AUTONOMY_MEDIUM_RISK_POLICY", "require_human")
+    reload_autonomy_guard()
+    request_action(
+        "apply_release_to_cvm",
+        action_id="release:" + "1" * 40,
+        executor_name="github_deploy",
+    )
+    request_action(
+        "apply_release_to_cvm",
+        action_id="release:" + "2" * 40,
+        executor_name="github_deploy",
+    )
+    approved_id = "release:" + "2" * 40
+    resume_action(
+        approved_id,
+        approver="reviewer",
+        approval_id="run-old",
+        defer_execution=True,
+    )
+    # A scheduler retry must not resurrect an approved deferred action.
+    _, duplicate = request_action(
+        "apply_release_to_cvm",
+        action_id=approved_id,
+        executor_name="github_deploy",
+    )
+    assert duplicate and duplicate["state"] == "approved"
+
+    current_id = "release:" + "3" * 40
+    request_action(
+        "apply_release_to_cvm",
+        action_id=current_id,
+        executor_name="github_deploy",
+    )
+    resume_action(
+        current_id,
+        approver="reviewer",
+        approval_id="run-current",
+        defer_execution=True,
+    )
+    completed = complete_action(
+        current_id,
+        success=True,
+        approver="reviewer",
+        approval_id="run-current",
+        outcome={"deployment_outcome": "executed"},
+    )
+
+    assert completed["state"] == "executed"
+    assert completed["superseded_count"] == 2
+    assert list_pending_actions() == []
+    assert get_action_state("release:" + "1" * 40)["state"] == "superseded"
+    superseded_approved = get_action_state(approved_id)
+    assert superseded_approved["state"] == "superseded"
+    assert superseded_approved["superseded_by"] == current_id
+    snapshot = approval_center_snapshot()
+    assert snapshot["summary"]["states"] == {"superseded": 2, "executed": 1}
+    assert snapshot["summary"]["waiting"] == 0
 
 
 def test_other_risk_modules_are_delegating_facades() -> None:

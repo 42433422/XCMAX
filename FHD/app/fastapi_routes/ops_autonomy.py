@@ -9,11 +9,11 @@ from typing import Any
 
 from fastapi import APIRouter, Header, HTTPException, Request
 
+from app.application.autonomy.approval_center import list_pending_actions
 from app.application.autonomy.approval_resume import (
     ApprovalStateError,
     complete_action,
     get_action_state,
-    list_pending_actions,
     mark_approval_requested,
     reject_action,
     request_action,

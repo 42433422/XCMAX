@@ -20,7 +20,7 @@ _LOCK = threading.RLock()
 UTC = timezone.utc  # noqa: UP017 - shared module must import on Python 3.10
 _EXECUTORS: dict[str, Callable[[dict[str, Any]], Any]] = {}
 _ACTION_EXECUTORS: dict[str, Callable[[dict[str, Any]], Any]] = {}
-_TERMINAL_STATES = frozenset({"executed", "rejected", "execution_failed"})
+_TERMINAL_STATES = frozenset({"executed", "rejected", "execution_failed", "superseded"})
 _AWAITING_REVIEW_STATES = frozenset({"pending_approval", "approval_requested"})
 _SENSITIVE_KEYS = frozenset({"token", "secret", "password", "authorization", "api_key"})
 
@@ -116,36 +116,6 @@ def register_action_executor(
         _EXECUTORS[str(name)] = executor
 
 
-def admin_execution_contract(item: dict[str, Any]) -> dict[str, Any]:
-    """Describe whether the web approval center can execute a pending action.
-
-    ``approval_requested`` means an external approval provider already owns the
-    continuation.  The web console must not append a bare ``approved`` row and
-    pretend that provider will discover it.
-    """
-
-    action_id = str(item.get("action_id") or "")
-    state = str(item.get("state") or "")
-    executor_name = str(item.get("executor_name") or "")
-    if state == "approval_requested":
-        return {
-            "admin_execution_ready": False,
-            "execution_mode": "external_callback",
-            "execution_guidance": "该动作已交给外部审批回调，请在对应审批提供方完成处理。",
-        }
-    if action_id in _ACTION_EXECUTORS or executor_name in _EXECUTORS:
-        return {
-            "admin_execution_ready": True,
-            "execution_mode": "registered_executor",
-            "execution_guidance": "通过后将立即调用已注册执行器并记录真实结果。",
-        }
-    return {
-        "admin_execution_ready": False,
-        "execution_mode": "executor_unavailable",
-        "execution_guidance": "当前服务没有该动作的执行器，审批不会改变状态。",
-    }
-
-
 def record_pending_action(
     *,
     action: str,
@@ -167,6 +137,10 @@ def record_pending_action(
         return existing
     if existing and str(existing.get("state") or "") in _TERMINAL_STATES:
         # Idempotent scheduler retries must not resurrect rejected/finished work.
+        return existing
+    if existing and str(existing.get("state") or "") == "approved":
+        # A deferred executor owns this action now. Scheduler retries must not
+        # turn it back into a pending approval.
         return existing
     if executor is not None:
         register_action_executor(action, executor, action_id=action_id)
@@ -328,6 +302,7 @@ def resume_action(
             "state": "approved",
             "approver": actor,
             "approval_id": approval_id,
+            "approved_at": _iso_now(),
         }
     )
     append_autonomy_audit(
@@ -383,6 +358,12 @@ def complete_action(
     if latest is None:
         raise ApprovalStateError(f"approved action not found: {action_id}")
     state = str(latest.get("state") or "")
+    terminal_state = "executed" if success else "execution_failed"
+    if state == terminal_state:
+        # The server-side deploy script and the authenticated workflow callback
+        # both report the same real outcome. Treat the second report as an
+        # idempotent acknowledgement instead of failing a successful workflow.
+        return latest
     if state in _TERMINAL_STATES:
         raise ApprovalStateError(f"action {action_id} is already terminal (state={state})")
     if state != "approved":
@@ -390,8 +371,8 @@ def complete_action(
     actor = str(approver or latest.get("approver") or "").strip()
     if not actor:
         raise ApprovalStateError("approver is required")
-    terminal_state = "executed" if success else "execution_failed"
     safe_outcome = _safe_payload(outcome or {})
+    terminal_at_key = "executed_at" if success else "execution_failed_at"
     row = _append_ledger(
         {
             **latest,
@@ -399,6 +380,7 @@ def complete_action(
             "approver": actor,
             "approval_id": approval_id or str(latest.get("approval_id") or ""),
             "outcome": safe_outcome,
+            terminal_at_key: _iso_now(),
         }
     )
     risk = (latest.get("risk_decision") or {}).get("risk_level") or "BLOCKED"
@@ -418,6 +400,17 @@ def complete_action(
             },
         }
     )
+    if success and str(latest.get("action") or "") == "apply_release_to_cvm":
+        from app.application.autonomy.approval_center import (
+            reconcile_obsolete_release_actions,
+        )
+
+        superseded = reconcile_obsolete_release_actions(
+            reference_action_id=action_id,
+            resolved_by="system:release-reconciler",
+        )
+        if superseded:
+            row = {**row, "superseded_count": len(superseded)}
     return row
 
 
@@ -444,6 +437,7 @@ def reject_action(
             "approver": actor,
             "approval_id": approval_id,
             "rejection_reason": str(reason or "")[:1000],
+            "rejected_at": _iso_now(),
         }
     )
     risk = (latest.get("risk_decision") or {}).get("risk_level") or "BLOCKED"
@@ -463,29 +457,11 @@ def reject_action(
     return row
 
 
-def list_pending_actions(*, limit: int = 100) -> list[dict[str, Any]]:
-    latest_by_id: dict[str, dict[str, Any]] = {}
-    for item in _read_ledger():
-        action_id = str(item.get("action_id") or "")
-        if action_id:
-            latest_by_id[action_id] = item
-    pending = [
-        {**item, **admin_execution_contract(item)}
-        for item in latest_by_id.values()
-        if item.get("state") in _AWAITING_REVIEW_STATES
-    ]
-    return sorted(pending, key=lambda item: str(item.get("timestamp") or ""), reverse=True)[
-        : max(1, min(int(limit), 1000))
-    ]
-
-
 __all__ = [
     "ApprovalStateError",
     "ExecutionNotDispatchableError",
-    "admin_execution_contract",
     "complete_action",
     "get_action_state",
-    "list_pending_actions",
     "mark_approval_requested",
     "record_pending_action",
     "register_action_executor",

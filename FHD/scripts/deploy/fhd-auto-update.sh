@@ -132,12 +132,24 @@ audit_production_release_outcome() {
     "$AUTONOMY_PYTHON" - <<'PY' "$release_id" "$outcome"
 import sys
 
+from app.application.autonomy.approval_resume import complete_action, get_action_state
 from app.domain.autonomy.audit_log import append_autonomy_audit
 
 release_id, outcome = sys.argv[1:3]
+action_id = f"release:{release_id}"
+approval = get_action_state(action_id) or {}
+if approval.get("state") == "approved" and str(approval.get("approver") or "").strip():
+    complete_action(
+        action_id,
+        success=outcome == "executed",
+        approver=str(approval["approver"]),
+        approval_id=str(approval.get("approval_id") or ""),
+        outcome={"deployment_outcome": outcome, "execution_mode": "automatic"},
+    )
+    raise SystemExit(0)
 append_autonomy_audit(
     {
-        "action_id": f"release:{release_id}",
+        "action_id": action_id,
         "action": "apply_release_to_cvm",
         "risk_level": "HIGH",
         "decision": outcome,
