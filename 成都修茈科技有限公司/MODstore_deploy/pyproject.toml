@@ -50,7 +50,7 @@ evolution-metrics = [
     # MODstore scheduler imports FHD's production autonomy evaluator, whose
     # operating-metrics module uses pandas.  Keep the runtime extra complete
     # so daily 30/90-day snapshots cannot silently degrade to stale evidence.
-    "pandas>=2.0",
+    "pandas>=3.0.5",
     "pytest>=7.4",
     "pytest-cov>=4.1",
     "pytest-asyncio>=0.23",
