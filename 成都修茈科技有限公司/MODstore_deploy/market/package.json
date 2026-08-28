@@ -44,7 +44,7 @@
     "mermaid": "^11.16.1",
     "pinia": "^3.0.4",
     "vue": "^3.4.21",
-    "vue-router": "^4.3.0"
+    "vue-router": "^5.2.0"
   },
   "overrides": {
     "brace-expansion@^1.0.0": "1.1.18",
