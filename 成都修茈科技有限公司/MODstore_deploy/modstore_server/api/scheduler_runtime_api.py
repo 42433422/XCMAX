@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter
 
 from modstore_server.employee_cron_registration_ledger import (
@@ -90,13 +92,14 @@ def scheduler_runtime(stale_after_seconds: int | None = None) -> dict:
             and str(item.get("job_id") or "") not in policy_held_execution_ids
         )
 
-    summary = runtime.get("summary")
-    if isinstance(summary, dict):
-        summary["policy_held_failures"] = len(policy_held_failed_execution_ids)
-        summary["policy_held_stale"] = len(policy_held_stale_execution_ids)
-        summary["actionable_failing"] = _actionable_count("failing")
-        summary["actionable_stale"] = _actionable_count("stale")
-        summary["actionable_never_run"] = len(registered_ids - observed_registered)
+    summary_value = runtime.get("summary")
+    summary: dict[str, Any] = summary_value if isinstance(summary_value, dict) else {}
+    runtime["summary"] = summary
+    summary["policy_held_failures"] = len(policy_held_failed_execution_ids)
+    summary["policy_held_stale"] = len(policy_held_stale_execution_ids)
+    summary["actionable_failing"] = _actionable_count("failing")
+    summary["actionable_stale"] = _actionable_count("stale")
+    summary["actionable_never_run"] = len(registered_ids - observed_registered)
 
     runtime["employee_duty"] = {
         "registration_observable": bool(registrations),
@@ -138,7 +141,6 @@ def scheduler_runtime(stale_after_seconds: int | None = None) -> dict:
             "reason": "storage_pressure_status_unavailable",
             "error": type(exc).__name__,
         }
-    summary = runtime.get("summary") if isinstance(runtime.get("summary"), dict) else {}
     runtime["ok"] = bool(runtime.get("ok")) and all(
         (
             int(summary.get("actionable_failing") or 0) == 0,
