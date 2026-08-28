@@ -281,6 +281,26 @@ def _quality_input(now: datetime) -> ResolvedDutyInput:
     )
 
 
+def _employee_pack_curator_input(now: datetime) -> ResolvedDutyInput:
+    """Select one real reviewed manifest for deterministic lifecycle auditing."""
+
+    from modstore_server.duty_workforce_contracts import (
+        load_reviewed_duty_manifest,
+        workforce_contract_map,
+    )
+
+    candidates = sorted(workforce_contract_map())
+    if not candidates:
+        raise RuntimeError("reviewed duty workforce is empty")
+    employee_id = candidates[now.date().toordinal() % len(candidates)]
+    manifest = load_reviewed_duty_manifest(employee_id)
+    return ResolvedDutyInput(
+        input_data={"manifest": manifest},
+        sources=("reviewed_duty_manifest_ssot", "duty_employee_work_contracts"),
+        row_count=1,
+    )
+
+
 def _filesystem_input(
     resolver: Callable[[datetime], tuple[dict[str, Any], tuple[str, ...], int, bool]],
     now: datetime,
@@ -418,6 +438,7 @@ _RESOLVERS: dict[str, Callable[[datetime], ResolvedDutyInput]] = {
     "ecosystem-investor-portal-officer": _investor_portal_input,
     "ecosystem-revenue-share-reconciler": _revenue_share_input,
     "employee-interview-assistant": _interview_input,
+    "employee-pack-curator": _employee_pack_curator_input,
     "employee-pack-quality-interviewer": _quality_input,
     "enterprise-adoption-officer": _enterprise_input,
     "legacy-archive-curator": _legacy_archive_input,

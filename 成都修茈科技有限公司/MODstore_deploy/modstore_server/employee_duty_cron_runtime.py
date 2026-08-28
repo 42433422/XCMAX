@@ -15,8 +15,6 @@ def _result_failure_kind(result: dict[str, Any]) -> str:
     """Classify a failed result without returning its potentially sensitive error."""
 
     declared = str(result.get("failure_kind") or "").strip().lower()
-    if declared in _SAFE_FAILURE_KINDS:
-        return declared
 
     candidates: list[object] = [result.get("error")]
     nested = result.get("result") if isinstance(result.get("result"), dict) else {}
@@ -29,10 +27,19 @@ def _result_failure_kind(result: dict[str, Any]) -> str:
 
     from modstore_server.llm_failure_classifier import classify_failure_kind
 
+    kinds = {declared} if declared in _SAFE_FAILURE_KINDS else set()
     for candidate in candidates:
         text = str(candidate or "").strip()
         if text:
-            return classify_failure_kind(text)
+            kind = classify_failure_kind(text)
+            if kind in _SAFE_FAILURE_KINDS:
+                kinds.add(kind)
+    # One execution can contain a failed primary provider and a failed fallback.
+    # Preserve the strongest operational cause instead of trusting the first
+    # nested message (for example: invalid primary model + exhausted fallback).
+    for kind in ("quota", "transient", "prompt"):
+        if kind in kinds:
+            return kind
     return ""
 
 

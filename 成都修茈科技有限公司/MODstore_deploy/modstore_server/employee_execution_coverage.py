@@ -84,6 +84,9 @@ def build_execution_coverage(
     receipts = _roster_receipts(capability_rows, planned)
     burn_in_receipts = _roster_receipts(burn_in_rows, planned)
     production_receipts = _roster_receipts(production_rows, planned)
+    receipt_ids = {item["employee_id"] for item in receipts}
+    burn_in_receipt_ids = {item["employee_id"] for item in burn_in_receipts}
+    production_receipt_ids = {item["employee_id"] for item in production_receipts}
     planned_count = len(planned)
     assigned_required = math.ceil(planned_count * 0.95) if planned_count else 0
     proven_required = math.ceil(planned_count * 0.80) if planned_count else 0
@@ -133,6 +136,10 @@ def build_execution_coverage(
             "burn_in": f"task starts with {_BURN_IN_TASK_PREFIX}",
             "production": "successful roster receipt excluding duty burn-in task markers",
         },
+        "planned_employee_ids": sorted(planned),
+        "unproven_employee_ids": sorted(planned - receipt_ids),
+        "burn_in_unproven_employee_ids": sorted(planned - burn_in_receipt_ids),
+        "production_unproven_employee_ids": sorted(planned - production_receipt_ids),
         "employee_ids": [item["employee_id"] for item in receipts],
         "receipts": receipts,
         "burn_in_employee_ids": [item["employee_id"] for item in burn_in_receipts],

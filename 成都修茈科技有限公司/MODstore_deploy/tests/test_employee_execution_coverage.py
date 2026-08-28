@@ -76,6 +76,13 @@ def test_execution_coverage_counts_only_fresh_successful_roster_receipts(
     assert result["burn_in_employee_ids"] == ["quality-validator"]
     assert result["production_proven_count"] == 1
     assert result["production_employee_ids"] == ["payment-billing-reconciler"]
+    assert len(result["planned_employee_ids"]) == result["planned_count"]
+    assert "quality-validator" not in result["unproven_employee_ids"]
+    assert "payment-billing-reconciler" not in result["unproven_employee_ids"]
+    assert "quality-validator" not in result["burn_in_unproven_employee_ids"]
+    assert "payment-billing-reconciler" in result["burn_in_unproven_employee_ids"]
+    assert "payment-billing-reconciler" not in result["production_unproven_employee_ids"]
+    assert "quality-validator" in result["production_unproven_employee_ids"]
     assert result["assigned_count"] == result["planned_count"] == 55
     assert result["assignment_required_count"] == 53
     assert result["proof_required_count"] == 44

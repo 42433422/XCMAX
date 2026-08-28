@@ -3,7 +3,7 @@
     <div class="page-header">
       <div>
         <h2>员工自治</h2>
-        <p>建议看板 · 问答 · 成绩单 · 批量审批</p>
+        <p>运行自洽 · 履职覆盖 · 建议看板 · 问答 · 成绩单</p>
       </div>
       <div class="header-actions">
         <button class="btn btn-secondary" type="button" :disabled="loading" @click="refresh">
@@ -17,10 +17,76 @@
     <p v-if="error" class="banner-error">{{ error }}</p>
 
     <nav class="tabs">
+      <button type="button" :class="{ active: tab === 'consistency' }" @click="tab = 'consistency'">自洽总览</button>
       <button type="button" :class="{ active: tab === 'suggestions' }" @click="tab = 'suggestions'">建议看板</button>
       <button type="button" :class="{ active: tab === 'questions' }" @click="tab = 'questions'">问答</button>
       <button type="button" :class="{ active: tab === 'scorecard' }" @click="tab = 'scorecard'">成绩单</button>
     </nav>
+
+    <section v-show="tab === 'consistency'" class="consistency-panel">
+      <div class="summary-grid">
+        <article class="metric-card" :class="systemHealthy ? 'healthy' : 'degraded'">
+          <span>系统运行态</span>
+          <strong>{{ systemHealthy ? '健康' : '降级' }}</strong>
+          <small>
+            失败 {{ numberValue(runtimeSummary.actionable_failing) }} · 停摆 {{ numberValue(runtimeSummary.actionable_stale) }}
+          </small>
+        </article>
+        <article class="metric-card" :class="numberValue(runtimeSummary.actionable_never_run) ? 'degraded' : 'healthy'">
+          <span>定时履职</span>
+          <strong>{{ numberValue(employeeDuty.observed_cron_count) }} / {{ numberValue(employeeDuty.registered_cron_count) }}</strong>
+          <small>未运行 {{ numberValue(runtimeSummary.actionable_never_run) }} · 审批保留 {{ numberValue(employeeDuty.approval_required_count) }}</small>
+        </article>
+        <article class="metric-card" :class="coverage.workforce_ready ? 'healthy' : 'degraded'">
+          <span>能力证明</span>
+          <strong>{{ numberValue(coverage.proven_count) }} / {{ numberValue(coverage.planned_count) }}</strong>
+          <small>门槛 {{ numberValue(coverage.proof_required_count) }} · {{ formatPercent(coverage.proof_ratio) }}</small>
+        </article>
+        <article class="metric-card" :class="coverage.production_workforce_ready ? 'healthy' : 'degraded'">
+          <span>生产履职</span>
+          <strong>{{ numberValue(coverage.production_proven_count) }} / {{ numberValue(coverage.planned_count) }}</strong>
+          <small>{{ formatPercent(coverage.production_proof_ratio) }} · {{ platformLlmLabel }}</small>
+        </article>
+      </div>
+
+      <div class="consistency-grid">
+        <article class="card consistency-card">
+          <h3>需处理运行项</h3>
+          <div v-if="issueJobs.length" class="issue-list">
+            <div v-for="job in issueJobs" :key="String(job.job_id)" class="issue-row">
+              <span class="state-tag" :class="String(job.state || '')">{{ job.state || 'unknown' }}</span>
+              <span>{{ job.job_id || '—' }}</span>
+              <code>{{ job.last_error_code || '无安全错误码' }}</code>
+            </div>
+          </div>
+          <div v-else class="empty compact">没有失败或停摆任务</div>
+        </article>
+
+        <article class="card consistency-card">
+          <h3>未履职定时岗位</h3>
+          <div v-if="neverRunEmployeeIds.length" class="employee-tags">
+            <span v-for="employeeId in neverRunEmployeeIds" :key="employeeId">{{ employeeId }}</span>
+          </div>
+          <div v-else class="empty compact">所有已注册定时岗位均有运行回执</div>
+        </article>
+
+        <article class="card consistency-card">
+          <h3>未完成能力证明</h3>
+          <div v-if="unprovenEmployeeIds.length" class="employee-tags">
+            <span v-for="employeeId in unprovenEmployeeIds" :key="employeeId">{{ employeeId }}</span>
+          </div>
+          <div v-else class="empty compact">全部员工均有有效能力回执</div>
+        </article>
+
+        <article class="card consistency-card">
+          <h3>需人工审批岗位</h3>
+          <div v-if="approvalRequiredEmployeeIds.length" class="employee-tags policy">
+            <span v-for="employeeId in approvalRequiredEmployeeIds" :key="employeeId">{{ employeeId }}</span>
+          </div>
+          <div v-else class="empty compact">没有待审批的高风险岗位</div>
+        </article>
+      </div>
+    </section>
 
     <section v-show="tab === 'suggestions'" class="card">
       <table v-if="suggestions.length" class="data-table">
@@ -104,7 +170,7 @@
             <td>{{ row.employee_id || row.name || '—' }}</td>
             <td>{{ row.total_tasks ?? row.task_count ?? '—' }}</td>
             <td>{{ formatRate(row.success_rate) }}</td>
-            <td>{{ row.last_active_at || row.updated_at || '—' }}</td>
+            <td>{{ row.last_run_at || row.last_active_at || row.updated_at || '—' }}</td>
           </tr>
         </tbody>
       </table>
@@ -116,24 +182,22 @@
 <script lang="ts">
 export default { name: 'EmployeeAutonomyView' }
 </script>
-
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { xcmaxEmployeeAutonomyApi } from '@/api/xcmaxEmployeeAutonomy'
 import { appAlert, appPrompt } from '@/utils/appDialog'
-
 const route = useRoute()
-
 type Row = Record<string, any>
-
-const tab = ref<'suggestions' | 'questions' | 'scorecard'>('suggestions')
+const tab = ref<'consistency' | 'suggestions' | 'questions' | 'scorecard'>('consistency')
 const loading = ref(false)
 const acting = ref(false)
 const error = ref('')
 const suggestions = ref<Row[]>([])
 const questions = ref<Row[]>([])
 const scorecard = ref<Row[]>([])
+const runtime = ref<Row>({})
+const coverage = ref<Row>({})
 const selectedIds = ref<Array<string | number>>([])
 const answers = reactive<Record<string, string>>({})
 const structuredAnswers = reactive<Record<string, string>>({})
@@ -145,7 +209,39 @@ const retortStats = computed(() => ({
   open: Number(retortMeta.value.open || 0),
   critical: Number(retortMeta.value.critical || 0),
 }))
+const runtimeSummary = computed<Row>(() => asRecord(runtime.value.summary))
+const employeeDuty = computed<Row>(() => asRecord(runtime.value.employee_duty))
+const employeeDutyDetails = computed<Row>(() => asRecord(runtime.value.employee_duty_details))
+const systemHealthy = computed(() => runtime.value.ok === true && String(runtime.value.status || '') !== 'degraded')
+const neverRunEmployeeIds = computed<string[]>(() => stringList(employeeDutyDetails.value.never_run_employee_ids))
+const approvalRequiredEmployeeIds = computed<string[]>(() => stringList(employeeDutyDetails.value.approval_required_employee_ids))
+const issueJobs = computed<Row[]>(() => {
+  const policyHeld = new Set(approvalRequiredEmployeeIds.value.map((id) => `employee_cron:${id}`))
+  return asList(runtime.value.jobs, ['items', 'rows']).filter(
+    (row) => ['failing', 'stale'].includes(String(row.state || '')) && !policyHeld.has(String(row.job_id || '')),
+  )
+})
+const unprovenEmployeeIds = computed<string[]>(() => stringList(coverage.value.unproven_employee_ids))
+const platformLlmLabel = computed(() => {
+  const llm = asRecord(coverage.value.platform_llm)
+  const provider = String(llm.provider || '').trim()
+  const model = String(llm.model || '').trim()
+  return provider && model ? `${provider}/${model}` : '模型未配置'
+})
 
+function numberValue(value: unknown) {
+  const number = Number(value)
+  return Number.isFinite(number) ? number : 0
+}
+
+function formatPercent(value: unknown) {
+  const number = Number(value)
+  return Number.isFinite(number) ? `${(number * 100).toFixed(1)}%` : '0.0%'
+}
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.map((item) => String(item || '').trim()).filter(Boolean) : []
+}
 function formatRate(value: unknown) {
   if (value == null || value === '') return '—'
   const n = Number(value)
@@ -166,7 +262,6 @@ function structuredQuestions(q: Row): Row[] {
 function answerKey(questionId: string | number, subId: unknown) {
   return `${String(questionId)}::${String(subId || '')}`
 }
-
 function secondsRemaining(q: Row): number | null {
   if (typeof q.seconds_remaining === 'number') {
     const asked = q.asked_at || q.created_at
@@ -232,23 +327,51 @@ function asList(payload: unknown, keys: string[] = ['items', 'suggestions', 'que
   return []
 }
 
+function asRecord(payload: unknown): Row {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return {}
+  const row = payload as Row
+  if (row.data && typeof row.data === 'object' && !Array.isArray(row.data)) {
+    return row.data as Row
+  }
+  return row
+}
 async function refresh() {
   loading.value = true
   error.value = ''
+  const failures: string[] = []
   try {
-    const [sug, qs, sc] = await Promise.all([
+    const [runtimeResult, coverageResult, suggestionsResult, questionsResult, scorecardResult] = await Promise.allSettled([
+      xcmaxEmployeeAutonomyApi.runtime(),
+      xcmaxEmployeeAutonomyApi.executionCoverage({ window_hours: 24, production_window_hours: 720 }),
       xcmaxEmployeeAutonomyApi.listSuggestions({ limit: 50 }),
       xcmaxEmployeeAutonomyApi.listQuestions({ include_history: false }),
       xcmaxEmployeeAutonomyApi.scorecard({ days: 7, top_n: 50 }),
     ])
-    suggestions.value = asList(sug)
-    questions.value = asList(qs)
-    scorecard.value = asList(sc)
-    const meta = (qs && typeof qs === 'object' ? qs : {}) as Record<string, unknown>
-    retortMeta.value = {
-      open: Number(meta.retort_open_count || 0),
-      critical: Number(meta.retort_critical_count || 0),
+
+    if (runtimeResult.status === 'fulfilled') runtime.value = asRecord(runtimeResult.value)
+    else failures.push(`运行态：${errorText(runtimeResult.reason)}`)
+
+    if (coverageResult.status === 'fulfilled') coverage.value = asRecord(coverageResult.value)
+    else failures.push(`履职覆盖：${errorText(coverageResult.reason)}`)
+
+    if (suggestionsResult.status === 'fulfilled') suggestions.value = asList(suggestionsResult.value)
+    else failures.push(`建议：${errorText(suggestionsResult.reason)}`)
+
+    if (questionsResult.status === 'fulfilled') {
+      const questionsPayload = asRecord(questionsResult.value)
+      questions.value = asList(questionsPayload)
+      retortMeta.value = {
+        open: Number(questionsPayload.retort_open_count || 0),
+        critical: Number(questionsPayload.retort_critical_count || 0),
+      }
+    } else {
+      failures.push(`问答：${errorText(questionsResult.reason)}`)
     }
+
+    if (scorecardResult.status === 'fulfilled') scorecard.value = asList(scorecardResult.value)
+    else failures.push(`成绩单：${errorText(scorecardResult.reason)}`)
+
+    error.value = failures.length ? `部分数据刷新失败：${failures.join('；')}` : ''
     nowMs.value = Date.now()
   } catch (e: unknown) {
     error.value = e instanceof Error ? e.message : String(e)
@@ -257,6 +380,9 @@ async function refresh() {
   }
 }
 
+function errorText(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
 async function approveOne(id: string | number) {
   acting.value = true
   try {
@@ -287,7 +413,11 @@ async function batchApprove() {
   if (!selectedIds.value.length) return
   acting.value = true
   try {
-    await xcmaxEmployeeAutonomyApi.batchReview({ approve_ids: [...selectedIds.value] })
+    await xcmaxEmployeeAutonomyApi.batchReview({
+      ids: [...selectedIds.value],
+      action: 'approve',
+      dispatch_now: true,
+    })
     selectedIds.value = []
     await refresh()
   } catch (e: unknown) {
@@ -343,7 +473,7 @@ async function answerOne(qOrId: Row | string | number) {
 
 function applyTabFromRoute() {
   const requested = String(route.query.tab || '')
-  if (requested === 'questions' || requested === 'scorecard' || requested === 'suggestions') {
+  if (requested === 'consistency' || requested === 'questions' || requested === 'scorecard' || requested === 'suggestions') {
     tab.value = requested
   }
 }
@@ -365,109 +495,4 @@ onUnmounted(() => {
   if (tickTimer) clearInterval(tickTimer)
 })
 </script>
-
-<style scoped>
-.employee-autonomy-view {
-  padding: 24px 28px 40px;
-  max-width: 1400px;
-  margin: 0 auto;
-  background: linear-gradient(135deg, #edf5fb 0%, #e7eef6 100%);
-  min-height: 100%;
-}
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-bottom: 16px;
-}
-.page-header h2 { margin: 0 0 4px; font-size: 22px; color: #172033; }
-.page-header p { margin: 0; color: #64748b; font-size: 13px; }
-.header-actions, .ops { display: flex; gap: 8px; align-items: center; }
-.btn {
-  border: 1px solid #d0d7e2;
-  background: #fff;
-  border-radius: 8px;
-  padding: 8px 12px;
-  cursor: pointer;
-  font-size: 13px;
-}
-.btn-primary { background: #1890ff; border-color: #1890ff; color: #fff; }
-.btn:disabled { opacity: 0.6; cursor: not-allowed; }
-.banner-error {
-  background: #fff1f0; color: #cf1322; border: 1px solid #ffa39e;
-  border-radius: 8px; padding: 10px 12px; margin-bottom: 12px;
-}
-.tabs { display: flex; gap: 8px; margin-bottom: 12px; }
-.tabs button {
-  border: 1px solid #d0d7e2; background: #fff; border-radius: 999px;
-  padding: 6px 14px; cursor: pointer;
-}
-.tabs button.active { background: #1890ff; border-color: #1890ff; color: #fff; }
-.card {
-  background: rgba(255,255,255,0.92);
-  border: 1px solid rgba(15,76,129,0.1);
-  border-radius: 16px;
-  padding: 14px;
-  box-shadow: 0 4px 18px rgba(15,76,129,0.07);
-}
-.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.data-table th, .data-table td {
-  text-align: left; padding: 8px 10px; border-bottom: 1px solid #eef2f7;
-}
-.empty { padding: 28px; text-align: center; color: #94a3b8; }
-.link { border: none; background: none; color: #1890ff; cursor: pointer; }
-.link.danger { color: #cf1322; }
-.retort-banner {
-  margin-bottom: 12px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: #fff7e6;
-  border: 1px solid #ffd591;
-  color: #ad6800;
-  font-size: 13px;
-  font-weight: 600;
-}
-.retort-banner.critical {
-  background: #fff1f0;
-  border-color: #ffa39e;
-  color: #cf1322;
-}
-.qa-item { border: 1px solid #eef2f7; border-radius: 10px; padding: 12px; margin-bottom: 10px; }
-.qa-item.urgency-critical { border-color: #ffa39e; background: #fffafa; }
-.qa-item.urgency-soon { border-color: #ffd591; background: #fffdf8; }
-.qa-item.urgency-expired { border-color: #d9d9d9; opacity: 0.85; }
-.qa-q { font-weight: 600; color: #172033; }
-.retort-tag,
-.urgency-tag {
-  display: inline-block;
-  margin-right: 8px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 700;
-}
-.retort-tag {
-  background: #fff7e6;
-  color: #d46b08;
-  border: 1px solid #ffd591;
-}
-.urgency-tag.urgency-critical { background: #fff1f0; color: #cf1322; border: 1px solid #ffa39e; }
-.urgency-tag.urgency-soon { background: #fff7e6; color: #d46b08; border: 1px solid #ffd591; }
-.urgency-tag.urgency-expired { background: #f5f5f5; color: #8c8c8c; border: 1px solid #d9d9d9; }
-.urgency-tag.urgency-normal { background: #e6f4ff; color: #0958d9; border: 1px solid #91caff; }
-.qa-meta { color: #94a3b8; font-size: 12px; margin: 4px 0 8px; }
-.qa-multi { display: grid; gap: 8px; }
-.qa-sub { display: grid; gap: 4px; }
-.qa-sub label { font-size: 12px; color: #475569; font-weight: 600; }
-.qa-sub input,
-.qa-answer input {
-  width: 100%;
-  border: 1px solid #d0d7e2;
-  border-radius: 8px;
-  padding: 8px 10px;
-  box-sizing: border-box;
-}
-.qa-answer { display: flex; gap: 8px; margin-top: 4px; }
-.qa-answer input { flex: 1; }
-</style>
+<style scoped src="../styles/EmployeeAutonomyView.css"></style>

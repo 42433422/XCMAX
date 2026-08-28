@@ -27,6 +27,18 @@ async function empPost<T = Record<string, unknown>>(path: string, body?: Record<
   }
 }
 
+async function runtimeGet<T = Record<string, unknown>>() {
+  try {
+    return await api.get<T>('/api/xcmax/market-proxy/scheduler/runtime')
+  } catch (e: unknown) {
+    const err = e as { status?: number }
+    if (err?.status === 404) {
+      return api.get<T>('/api/scheduler/runtime')
+    }
+    throw e
+  }
+}
+
 export const xcmaxEmployeeAutonomyApi = {
   dashboard() {
     return empGet('/dashboard')
@@ -40,7 +52,12 @@ export const xcmaxEmployeeAutonomyApi = {
   rejectSuggestion(id: string | number, reason?: string) {
     return empPost(`/suggestions/${encodeURIComponent(String(id))}/reject`, { reason })
   },
-  batchReview(payload: { approve_ids?: Array<string | number>; reject_ids?: Array<string | number>; note?: string }) {
+  batchReview(payload: {
+    ids: Array<string | number>
+    action: 'approve' | 'reject'
+    reason?: string
+    dispatch_now?: boolean
+  }) {
     return empPost('/suggestions/batch-review', payload)
   },
   listQuestions(params: Record<string, unknown> = {}) {
@@ -58,6 +75,12 @@ export const xcmaxEmployeeAutonomyApi = {
   },
   scorecard(params: Record<string, unknown> = {}) {
     return empGet('/scorecard', params)
+  },
+  executionCoverage(params: Record<string, unknown> = {}) {
+    return empGet('/execution-coverage', params)
+  },
+  runtime() {
+    return runtimeGet()
   },
   employeeScorecard(employeeId: string, params: Record<string, unknown> = {}) {
     return empGet(`/scorecard/${encodeURIComponent(employeeId)}`, params)

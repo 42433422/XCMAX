@@ -231,7 +231,8 @@ def test_runtime_status_endpoint(client):
     resp = client.get("/api/scheduler/runtime")
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert body["ok"] is True
+    assert isinstance(body["ok"], bool)
+    assert body["status"] == ("healthy" if body["ok"] else "degraded")
     assert isinstance(body["jobs"], list)
     assert {"total", "healthy", "failing", "stale"} <= set(body["summary"])
     assert "stale_after_seconds" in body
@@ -257,6 +258,17 @@ def test_runtime_status_endpoint(client):
         isinstance(duty[name], int)
         for name in set(duty) - {"registration_observable", "failure_code_counts"}
     )
+    assert {
+        "registered_employee_ids",
+        "registration_failing_employee_ids",
+        "approval_required_employee_ids",
+        "observed_employee_ids",
+        "successful_employee_ids",
+        "failing_employee_ids",
+        "stale_employee_ids",
+        "never_run_employee_ids",
+        "unregistered_observed_employee_ids",
+    } == set(body["employee_duty_details"])
 
 
 def test_runtime_status_aggregates_registered_employee_duty(monkeypatch):
@@ -354,6 +366,20 @@ def test_runtime_status_aggregates_registered_employee_duty(monkeypatch):
         "policy_held_stale": 0,
         "actionable_failing": 2,
         "actionable_stale": 0,
+        "actionable_never_run": 1,
+    }
+    assert body["ok"] is False
+    assert body["status"] == "degraded"
+    assert body["employee_duty_details"] == {
+        "registered_employee_ids": ["never-ran", "one", "two"],
+        "registration_failing_employee_ids": ["registration-failed"],
+        "approval_required_employee_ids": ["approval-required"],
+        "observed_employee_ids": ["one", "two"],
+        "successful_employee_ids": ["one"],
+        "failing_employee_ids": ["two"],
+        "stale_employee_ids": [],
+        "never_run_employee_ids": ["never-ran"],
+        "unregistered_observed_employee_ids": ["old-unregistered"],
     }
     assert body["storage_pressure"]["latest"]["status"] == "healthy_no_action"
 
@@ -409,5 +435,44 @@ def test_runtime_status_excludes_policy_held_stale_execution(monkeypatch):
         "policy_held_stale": 1,
         "actionable_failing": 0,
         "actionable_stale": 1,
+        "actionable_never_run": 0,
     }
     assert body["employee_duty"]["policy_held_observed_stale_count"] == 1
+    assert body["ok"] is False
+    assert body["status"] == "degraded"
+
+
+def test_runtime_status_policy_holds_do_not_degrade_health(monkeypatch):
+    import modstore_server.api.scheduler_runtime_api as runtime_api
+
+    monkeypatch.setattr(
+        "modstore_server.storage_pressure_self_heal.get_storage_pressure_status",
+        lambda **_kwargs: {"ok": True, "latest": {"status": "healthy_no_action"}},
+    )
+    monkeypatch.setattr(
+        runtime_api,
+        "get_runtime_status",
+        lambda **_kwargs: {
+            "ok": True,
+            "jobs": [
+                {
+                    "job_id": "employee_cron_registered:approval-required",
+                    "last_status": "deferred",
+                    "state": "deferred",
+                },
+                {
+                    "job_id": "employee_cron:approval-required",
+                    "last_status": "failed",
+                    "state": "failing",
+                },
+            ],
+            "summary": {"total": 2, "healthy": 0, "failing": 1, "stale": 0, "deferred": 1},
+        },
+    )
+
+    body = runtime_api.scheduler_runtime()
+
+    assert body["summary"]["actionable_failing"] == 0
+    assert body["summary"]["policy_held_failures"] == 1
+    assert body["ok"] is True
+    assert body["status"] == "healthy"

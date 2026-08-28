@@ -51,6 +51,11 @@ def scheduler_runtime(stale_after_seconds: int | None = None) -> dict:
         for employee_id in observed_registered
         if str(observed[employee_id].get("last_status") or "") == "failed"
     }
+    stale = {
+        employee_id
+        for employee_id in observed_registered
+        if str(observed[employee_id].get("state") or "") == "stale"
+    }
     failure_code_counts: dict[str, int] = {}
     for employee_id in failing:
         code = str(observed[employee_id].get("last_error_code") or "").strip()
@@ -91,6 +96,7 @@ def scheduler_runtime(stale_after_seconds: int | None = None) -> dict:
         summary["policy_held_stale"] = len(policy_held_stale_execution_ids)
         summary["actionable_failing"] = _actionable_count("failing")
         summary["actionable_stale"] = _actionable_count("stale")
+        summary["actionable_never_run"] = len(registered_ids - observed_registered)
 
     runtime["employee_duty"] = {
         "registration_observable": bool(registrations),
@@ -107,6 +113,19 @@ def scheduler_runtime(stale_after_seconds: int | None = None) -> dict:
         "policy_held_observed_stale_count": len(policy_held_stale_execution_ids),
         "unregistered_observed_count": len(set(observed) - registered_ids - approval_required),
     }
+    runtime["employee_duty_details"] = {
+        "registered_employee_ids": sorted(registered_ids),
+        "registration_failing_employee_ids": sorted(registration_failing),
+        "approval_required_employee_ids": sorted(approval_required),
+        "observed_employee_ids": sorted(observed_registered),
+        "successful_employee_ids": sorted(observed_registered - failing - stale),
+        "failing_employee_ids": sorted(failing),
+        "stale_employee_ids": sorted(stale),
+        "never_run_employee_ids": sorted(registered_ids - observed_registered),
+        "unregistered_observed_employee_ids": sorted(
+            set(observed) - registered_ids - approval_required
+        ),
+    }
     try:
         from modstore_server.storage_pressure_self_heal import (
             get_storage_pressure_status,
@@ -119,4 +138,14 @@ def scheduler_runtime(stale_after_seconds: int | None = None) -> dict:
             "reason": "storage_pressure_status_unavailable",
             "error": type(exc).__name__,
         }
+    summary = runtime.get("summary") if isinstance(runtime.get("summary"), dict) else {}
+    runtime["ok"] = bool(runtime.get("ok")) and all(
+        (
+            int(summary.get("actionable_failing") or 0) == 0,
+            int(summary.get("actionable_stale") or 0) == 0,
+            int(summary.get("actionable_never_run") or 0) == 0,
+            bool((runtime.get("storage_pressure") or {}).get("ok")),
+        )
+    )
+    runtime["status"] = "healthy" if runtime["ok"] else "degraded"
     return runtime
