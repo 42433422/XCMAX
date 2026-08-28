@@ -13,7 +13,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Body, Query
+from fastapi import APIRouter, Body, Query, Request
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +21,13 @@ MOD_ID = "xcmax-personnel"
 TAIYANGNIAO_DB = "taiyangniao_pro.db"
 
 _ALLOWED_COUNT_TABLES = frozenset({"attendance_employees", "attendance_departments"})
+
+
+def _require_personnel_admin(request: Request):
+    """Apply the same authenticated-admin boundary as the management APIs."""
+    from app.fastapi_routes.xcmax_admin_auth import require_market_admin_session
+
+    return require_market_admin_session(request)
 
 
 def _db_path() -> Path:
@@ -66,10 +73,14 @@ def build_xcmax_personnel_router() -> APIRouter:
 
     @router.get("/employees", response_model=None)
     def list_employees(
+        request: Request,
         page: int = Query(1, ge=1),
         page_size: int = Query(50, ge=1, le=500),
         search: str = Query(""),
     ):
+        gate = _require_personnel_admin(request)
+        if gate is not None:
+            return gate
         page, page_size = _safe_page(page, page_size)
         conn = _connect_existing()
         if conn is None:
@@ -118,10 +129,14 @@ def build_xcmax_personnel_router() -> APIRouter:
 
     @router.get("/departments", response_model=None)
     def list_departments(
+        request: Request,
         page: int = Query(1, ge=1),
         page_size: int = Query(50, ge=1, le=500),
         search: str = Query(""),
     ):
+        gate = _require_personnel_admin(request)
+        if gate is not None:
+            return gate
         page, page_size = _safe_page(page, page_size)
         conn = _connect_existing()
         if conn is None:
@@ -164,13 +179,16 @@ def build_xcmax_personnel_router() -> APIRouter:
             conn.close()
 
     @router.post("/employees/sync-remote-yuangon", response_model=None)
-    def sync_remote_yuangon(_body: dict = Body(default_factory=dict)):
+    def sync_remote_yuangon(request: Request, _body: dict = Body(default_factory=dict)):
         """Desktop fallback for the admin console sync button.
 
         In local desktop mode the bundled personnel mirror is already materialized
         in ``taiyangniao_pro.db``.  Return the current mirror counts so the
         operator action completes instead of falling through to a 404.
         """
+        gate = _require_personnel_admin(request)
+        if gate is not None:
+            return gate
         conn = _connect_existing()
         if conn is None:
             return {

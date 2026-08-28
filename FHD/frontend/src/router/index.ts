@@ -445,6 +445,41 @@ router.beforeEach(async (to, _from, next) => {
     return
   }
 
+  // 独立管理端对所有非公开页面先做管理员会话校验。失败时必须闭锁到登录页，
+  // 不能继续渲染企业端对话页；登录后回到 `/` 时直接进入运维总览。
+  if (isAdminConsoleSpa() && !to.meta?.publicAccess) {
+    try {
+      const { useAccountProfileStore } = await import('@/stores/accountProfile')
+      const profile = useAccountProfileStore()
+      if (!profile.loaded) await profile.refreshFromServer()
+      if (!profile.isAdminAccount) {
+        next({
+          name: 'login',
+          query: {
+            redirect: to.path === '/' ? '/xcmax-admin' : to.fullPath,
+            error: '需要管理员账号登录后访问',
+          },
+          replace: true,
+        })
+        return
+      }
+      if (to.name === 'chat' && to.path === '/' && (_from === START_LOCATION || _from.name === 'login')) {
+        next({ name: ADMIN_OPERATOR_HOME_ROUTE, replace: true })
+        return
+      }
+    } catch {
+      next({
+        name: 'login',
+        query: {
+          redirect: to.path === '/' ? '/xcmax-admin' : to.fullPath,
+          error: '管理员会话校验失败，请重新登录',
+        },
+        replace: true,
+      })
+      return
+    }
+  }
+
   if (!isAdminConsoleSpa() && (to.name === 'workflow-visualization' || to.name === 'mod-workflow-visualization')) {
     try {
       const { useAccountProfileStore } = await import('@/stores/accountProfile')
@@ -470,21 +505,6 @@ router.beforeEach(async (to, _from, next) => {
     } catch {
       next({ name: 'workflow-employee-space', replace: true })
       return
-    }
-  }
-
-  // 管理端冷启动落在 `/` 时默认进运维总览；侧栏点「智能对话」时 _from 非 START_LOCATION，须放行
-  if (isAdminConsoleSpa() && to.name === 'chat' && to.path === '/' && _from === START_LOCATION) {
-    try {
-      const { useAccountProfileStore } = await import('@/stores/accountProfile')
-      const profile = useAccountProfileStore()
-      if (!profile.loaded) await profile.refreshFromServer()
-      if (profile.isAdminAccount) {
-        next({ name: ADMIN_OPERATOR_HOME_ROUTE, replace: true })
-        return
-      }
-    } catch {
-      /* ignore */
     }
   }
 

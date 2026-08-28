@@ -220,6 +220,13 @@ def ensure_mod_api_ready(mod_id: str, session_id: str | None = None) -> bool:
     if not _facade()._mod_allowed_for_api_load(mid, session_id):
         _facade().logger.warning("[ModManager] ensure_mod_api_ready: mod %s not allowed", mid)
         return False
+    from app.infrastructure.mods.host_backed_compat import is_host_backed_compat_mod
+
+    if is_host_backed_compat_mod(mid):
+        # This route is registered by legacy_compat at host startup, so there
+        # is no physical MOD directory to load or report as missing.
+        _facade().clear_mod_missing_locally(mid)
+        return True
     mm = _facade().get_mod_manager()
     employee_pack_ready = _facade().ensure_employee_pack_api_ready(
         mm,

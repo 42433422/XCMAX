@@ -39,6 +39,21 @@ def test_nginx_sync_installs_founder_cockpit_snippet() -> None:
     assert "include /etc/nginx/snippets/founder-autonomy-admin.inc.conf;" in merge_script
 
 
+def test_www_admin_console_serves_compressed_immutable_assets() -> None:
+    snippets = REPO_ROOT / "成都修茈科技有限公司" / "deploy" / "nginx" / "snippets"
+    www = (snippets / "admin-console-www.inc.conf").read_text(encoding="utf-8")
+    founder = (snippets / "founder-autonomy-admin.inc.conf").read_text(encoding="utf-8")
+
+    assert "location ^~ /admin/assets/" in www
+    assert "alias /opt/fhd-full/templates/admin-vue-dist/assets/;" in www
+    assert "gzip on;" in www
+    assert 'Cache-Control "public, max-age=31536000, immutable"' in www
+    assert 'Cache-Control "no-store, no-cache, must-revalidate"' in www
+    assert "location = /admin {" in founder
+    assert "location = /admin/ {" in founder
+    assert "https://www.xiu-ci.com/admin/" in founder
+
+
 def test_immutable_release_preserves_public_founder_projection() -> None:
     release_script = (
         REPO_ROOT

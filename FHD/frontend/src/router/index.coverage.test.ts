@@ -430,6 +430,7 @@ describe('router/index 覆盖率补齐', () => {
 
     it('admin console 中 planner bridge 路径重定向到 host 路径', async () => {
       mockIsAdminConsoleSpa.mockReturnValue(true)
+      mockAccountProfileStore.isAdminAccount = true
       await router.push('/mod/xcagi-planner-bridge/chat?foo=bar#hash')
       expect(router.currentRoute.value.path).toBe('/chat')
       expect(router.currentRoute.value.query.foo).toBe('bar')
@@ -437,12 +438,14 @@ describe('router/index 覆盖率补齐', () => {
 
     it('admin console 中 planner bridge 根路径重定向到 /', async () => {
       mockIsAdminConsoleSpa.mockReturnValue(true)
+      mockAccountProfileStore.isAdminAccount = true
       await router.push('/mod/xcagi-planner-bridge/')
-      expect(router.currentRoute.value.path).toBe('/')
+      expect(router.currentRoute.value.name).toBe('admin-home')
     })
 
     it('admin console 中 blocked route name 重定向到 operator home', async () => {
       mockIsAdminConsoleSpa.mockReturnValue(true)
+      mockAccountProfileStore.isAdminAccount = true
       await router.push('/admin/entitlements')
       expect(router.currentRoute.value.name).toBe('admin-home')
     })
@@ -468,7 +471,7 @@ describe('router/index 覆盖率补齐', () => {
       expect(freshRouter.currentRoute.value.name).toBe('admin-home')
     })
 
-    it('admin console 冷启动 chat 非 admin 不重定向', async () => {
+    it('admin console 冷启动 chat 非 admin 闭锁到登录页', async () => {
       mockIsAdminConsoleSpa.mockReturnValue(true)
       mockAccountProfileStore.loaded = false
       mockAccountProfileStore.isAdminAccount = false
@@ -476,10 +479,11 @@ describe('router/index 覆盖率补齐', () => {
       vi.resetModules()
       const { default: freshRouter } = await import('./index')
       await freshRouter.push('/')
-      expect(freshRouter.currentRoute.value.name).toBe('chat')
+      expect(freshRouter.currentRoute.value.name).toBe('login')
+      expect(freshRouter.currentRoute.value.query.redirect).toBe('/xcmax-admin')
     })
 
-    it('admin console 冷启动 profile refresh 异常时忽略', async () => {
+    it('admin console 冷启动 profile refresh 异常时闭锁到登录页', async () => {
       mockIsAdminConsoleSpa.mockReturnValue(true)
       mockAccountProfileStore.loaded = false
       mockAccountProfileStore.refreshFromServer.mockRejectedValue(new Error('network'))
@@ -487,8 +491,8 @@ describe('router/index 覆盖率补齐', () => {
       vi.resetModules()
       const { default: freshRouter } = await import('./index')
       await freshRouter.push('/')
-      // 异常被 catch 忽略，继续到 chat
-      expect(freshRouter.currentRoute.value.name).toBe('chat')
+      expect(freshRouter.currentRoute.value.name).toBe('login')
+      expect(freshRouter.currentRoute.value.query.error).toBe('管理员会话校验失败，请重新登录')
     })
   })
 
@@ -533,6 +537,7 @@ describe('router/index 覆盖率补齐', () => {
 
     it('admin console SPA 中不检查 workflow-visualization', async () => {
       mockIsAdminConsoleSpa.mockReturnValue(true)
+      mockAccountProfileStore.isAdminAccount = true
       mockCanShowCoreMenuKey.mockReturnValue(false)
       await router.push('/workflow-visualization')
       // admin console 中跳过此检查
