@@ -477,11 +477,6 @@ onBeforeUnmount(() => {
   .main-container :deep(.main-content) {
     padding-bottom: calc(64px + env(safe-area-inset-bottom, 0));
   }
-
-  .sidebar-shell,
-  .sidebar-hover-trigger {
-    display: none;
-  }
 }
 
 .sidebar-shell {
@@ -566,24 +561,6 @@ onBeforeUnmount(() => {
   gap: 2px;
 }
 
-.page-title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.top-bar-actions {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 10px;
-  margin-left: 12px;
-}
-
-.top-bar-actions :deep(.assistant-float-toggle) {
-  margin-left: 0;
-}
-
 .page-kicker {
   font-size: 11px;
   line-height: 1;
@@ -653,23 +630,6 @@ onBeforeUnmount(() => {
   background: rgba(239, 246, 255, 0.96);
 }
 
-@media (max-width: 768px) {
-  .top-bar-actions {
-    gap: 6px;
-    margin-left: 8px;
-  }
-
-  .top-bar-actions :deep(.assistant-float-toggle span),
-  .top-bar-actions :deep(.task-center-trigger__label) {
-    display: none;
-  }
-
-  .top-bar-actions :deep(.assistant-float-toggle),
-  .top-bar-actions :deep(.task-center-trigger) {
-    min-width: 36px;
-    min-height: 36px;
-    justify-content: center;
-    padding: 6px 8px;
-  }
-}
 </style>
+
+<style scoped src="./MainLayoutActions.css"></style>

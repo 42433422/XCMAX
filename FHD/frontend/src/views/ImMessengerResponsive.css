@@ -1,0 +1,24 @@
+@media (max-width: 720px) {
+  .im-messenger {
+    padding: 10px;
+  }
+
+  .im-body {
+    display: block;
+    overflow-y: auto;
+  }
+
+  .im-body :deep(.im-sidebar) {
+    width: 100%;
+    height: min(360px, 45vh);
+    min-height: 280px;
+    max-height: 360px;
+    border-right: 0;
+    border-bottom: 1px solid var(--xc-color-border, #e6e9ef);
+  }
+
+  .im-chat {
+    width: 100%;
+    min-height: 460px;
+  }
+}
