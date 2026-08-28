@@ -348,11 +348,11 @@ onBeforeUnmount(stopPolling)
 
 <style scoped>
 .founder-view {
-  display: flex;
-  flex-direction: column;
+  display: flex; flex-direction: column;
+  width: 100%; min-width: 0;
   gap: 20px;
-  min-height: 100%;
-  padding: 28px;
+  min-height: 100%; padding: 28px;
+  overflow-x: hidden; overflow-y: auto; box-sizing: border-box;
   color: #10213d;
   background:
     radial-gradient(circle at 12% -10%, rgba(36, 99, 235, 0.12), transparent 34%),
