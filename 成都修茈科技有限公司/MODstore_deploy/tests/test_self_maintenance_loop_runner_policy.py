@@ -2621,6 +2621,20 @@ def test_quality_command_matchers_require_real_commands_and_scopes():
 
 
 @pytest.mark.parametrize(
+    "command",
+    [
+        "python3 scripts/dev/source_governance.py",
+        "python3 scripts/dev/source_governance.py --help",
+        "python3 scripts/dev/source_governance.py --top 9",
+        "python3 scripts/dev/source_governance.py --top 10 --top 9",
+        "python3 scripts/dev/source_governance.py --top 10 --update-baseline --force",
+    ],
+)
+def test_source_governance_matcher_requires_canonical_read_only_arguments(command):
+    assert matches_source_governance_command(command) is False
+
+
+@pytest.mark.parametrize(
     ("matcher", "command"),
     [
         (

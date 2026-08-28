@@ -276,7 +276,8 @@ def matches_source_governance_command(command: Any) -> bool:
         if normalized == "scripts/dev/source_governance.py" or normalized.endswith(
             "/scripts/dev/source_governance.py"
         ):
-            return True
+            if segment[2:] == ["--top", "10"]:
+                return True
     return False
 
 
