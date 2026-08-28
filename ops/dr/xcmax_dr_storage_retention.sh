@@ -13,6 +13,7 @@ LOCK="${OPS_DR_STORAGE_LOCK:-/run/lock/xcmax-dr-storage-retention.lock}"
 RELEASE_KEEP="${OPS_DR_RUNTIME_RELEASE_KEEP:-4}"
 BASE_KEEP="${OPS_DR_BASE_KEEP:-2}"
 WAL_KEEP_MIN="${OPS_DR_WAL_KEEP_MIN_SEGMENTS:-16}"
+WAL_PREVIOUS_KEEP="${OPS_DR_WAL_PREVIOUS_KEEP:-2}"
 TEST_MODE="${XCMAX_DR_RETENTION_TEST_MODE:-0}"
 
 if [[ "$TEST_MODE" != "1" && "${EUID}" != "0" ]]; then
@@ -25,7 +26,7 @@ if [[ "$DR_ROOT" != "/srv/xcmax-dr" ]]; then
     exit 2
   }
 fi
-for value in "$RELEASE_KEEP" "$BASE_KEEP" "$WAL_KEEP_MIN"; do
+for value in "$RELEASE_KEEP" "$BASE_KEEP" "$WAL_KEEP_MIN" "$WAL_PREVIOUS_KEEP"; do
   [[ "$value" =~ ^[0-9]+$ && "$value" -ge 1 ]] || {
     echo "DR retention values must be positive integers" >&2
     exit 2
@@ -81,6 +82,21 @@ remove_tree() {
   rm -rf -- "$victim"
   removed_dirs=$((removed_dirs + 1))
   removed_bytes=$((removed_bytes + ${size:-0}))
+}
+
+prune_previous_tree() {
+  local root="$DR_ROOT/wal" prefix="$1" index=0 path
+  [[ -d "$root" ]] || return 0
+  while IFS= read -r path; do
+    index=$((index + 1))
+    ((index <= WAL_PREVIOUS_KEEP)) && continue
+    [[ "$path" == "$root/${prefix}.previous-"* ]] || continue
+    remove_tree "$root" "$path"
+  done < <(
+    find "$root" -mindepth 1 -maxdepth 1 -type d \
+      -name "${prefix}.previous-*" -printf '%T@ %p\n' |
+      sort -nr | cut -d' ' -f2-
+  )
 }
 
 prune_release_tree() {
@@ -145,12 +161,99 @@ prune_wal_before_applied_base() {
   )
 }
 
+replay_segment_for_stream() {
+  local stream="$1" container="$2" user="$3" archive=""
+  local override="" replay_info="" timeline="" lsn="" newest="" segment_size=""
+  archive="$INCOMING/$stream/archive"
+  if [[ "$stream" == "wal" ]]; then
+    override="${OPS_DR_WAL_REPLAY_SEGMENT:-}"
+  else
+    override="${OPS_DR_WAL_PG16_REPLAY_SEGMENT:-}"
+  fi
+  if [[ -n "$override" ]]; then
+    [[ "$override" =~ ^[0-9A-F]{24}$ ]] || {
+      echo "invalid replay WAL segment for $stream: $override" >&2
+      return 2
+    }
+    printf '%s\n' "$override"
+    return 0
+  fi
+  [[ "$TEST_MODE" != "1" ]] || return 0
+  docker inspect "$container" >/dev/null 2>&1 || return 0
+  [[ "$(docker inspect -f '{{.State.Running}}' "$container" 2>/dev/null)" == "true" ]] ||
+    return 0
+  replay_info="$(
+    docker exec -u postgres "$container" \
+      psql -U "$user" -d postgres -Atqc \
+      "SELECT timeline_id || '|' || COALESCE(pg_last_wal_replay_lsn()::text, '') FROM pg_control_checkpoint()" \
+      2>/dev/null || true
+  )"
+  timeline="${replay_info%%|*}"
+  lsn="${replay_info#*|}"
+  [[ "$timeline" =~ ^[0-9]+$ && "$lsn" =~ ^[0-9A-F]+/[0-9A-F]+$ ]] || return 0
+  newest="$(
+    find "$archive" -maxdepth 1 -type f \
+      -regextype posix-extended -regex '.*/[0-9A-F]{24}' -printf '%f %p\n' |
+      LC_ALL=C sort | tail -1
+  )"
+  [[ -n "$newest" ]] || return 0
+  segment_size="$(stat -c %s "${newest#* }")"
+  python3 - "$timeline" "$lsn" "$segment_size" <<'PY'
+import sys
+
+timeline = int(sys.argv[1])
+high_hex, low_hex = sys.argv[2].split("/", 1)
+segment_size = int(sys.argv[3])
+if segment_size <= 0 or (1 << 32) % segment_size:
+    raise SystemExit("invalid WAL segment size")
+high = int(high_hex, 16)
+low = int(low_hex, 16)
+print(f"{timeline:08X}{high:08X}{low // segment_size:08X}")
+PY
+}
+
+prune_wal_before_replay() {
+  local stream="$1" replay_segment="$2" archive=""
+  local index=0 path name size
+  archive="$INCOMING/$stream/archive"
+  [[ -d "$archive" && -n "$replay_segment" ]] || return 0
+  [[ "$replay_segment" =~ ^[0-9A-F]{24}$ ]] || return 2
+  while IFS= read -r path; do
+    index=$((index + 1))
+    ((index <= WAL_KEEP_MIN)) && continue
+    name="$(basename "$path")"
+    [[ "$name" < "$replay_segment" ]] || continue
+    size="$(stat -c %s "$path")"
+    rm -f -- "$path"
+    removed_wal=$((removed_wal + 1))
+    removed_bytes=$((removed_bytes + size))
+  done < <(
+    find "$archive" -maxdepth 1 -type f \
+      -regextype posix-extended -regex '.*/[0-9A-F]{24}' \
+      -printf '%f %p\n' | LC_ALL=C sort -r | cut -d' ' -f2-
+  )
+}
+
 prune_release_tree "$INCOMING/runtime-releases"
 prune_release_tree "$RELEASES"
+prune_previous_tree postgres10-data
+prune_previous_tree postgres16-data
 prune_base_tree "$INCOMING/wal/base" "$STATE/wal_base_applied"
 prune_base_tree "$INCOMING/wal-pg16/base" "$STATE/wal_pg16_base_applied"
+wal_replay_segment="$(
+  replay_segment_for_stream wal xcmax-dr-postgres10 postgres
+)"
+pg16_user="$(cat "$STATE/wal_pg16_superuser" 2>/dev/null || true)"
+wal_pg16_replay_segment=""
+if [[ -n "$pg16_user" || "$TEST_MODE" == "1" ]]; then
+  wal_pg16_replay_segment="$(
+    replay_segment_for_stream wal-pg16 xcmax-dr-postgres16-wal "$pg16_user"
+  )"
+fi
+prune_wal_before_replay wal "$wal_replay_segment"
+prune_wal_before_replay wal-pg16 "$wal_pg16_replay_segment"
 prune_wal_before_applied_base wal "$STATE/wal_base_applied"
 prune_wal_before_applied_base wal-pg16 "$STATE/wal_pg16_base_applied"
 
 date -u +%s >"$STATE/storage_retention_last_success"
-log "DR 存储轮转完成: removed_dirs=$removed_dirs removed_wal=$removed_wal removed_bytes=$removed_bytes"
+log "DR 存储轮转完成: removed_dirs=$removed_dirs removed_wal=$removed_wal removed_bytes=$removed_bytes replay_wal=${wal_replay_segment:-none} replay_pg16=${wal_pg16_replay_segment:-none}"

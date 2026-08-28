@@ -31,6 +31,9 @@ TRANSFER_MAX_SECONDS="${OPS_DR_WAL_TRANSFER_MAX_SECONDS:-900}"
 # shellcheck source=../lib/bounded_transfer.sh
 # shellcheck disable=SC1091
 . "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../lib" &>/dev/null && pwd)/bounded_transfer.sh"
+# shellcheck source=../lib/wal_transfer_frontier.sh
+# shellcheck disable=SC1091
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../lib" &>/dev/null && pwd)/wal_transfer_frontier.sh"
 
 [[ -n "$TARGET" && -f "$KEY" ]] || {
   echo "温备 SSH 目标或私钥未配置" >&2
@@ -90,6 +93,12 @@ done
 }
 
 status_tmp="$STATE/.wal-pg16-status.$$"
+segments_tmp="$STATE/.wal-pg16-segments.$$"
+frontier_file="$STATE/wal-pg16-ship-frontier"
+cleanup() {
+  rm -f -- "$status_tmp" "$segments_tmp"
+}
+trap cleanup EXIT
 {
   printf 'shipped_at_epoch=%s\n' "$(date -u +%s)"
   printf 'primary_lsn=%s\n' "$primary_lsn"
@@ -97,12 +106,20 @@ status_tmp="$STATE/.wal-pg16-status.$$"
   printf 'primary_host=%s\n' "$(hostname -f 2>/dev/null || hostname)"
 } >"$status_tmp"
 chmod 0600 "$status_tmp"
+xcmax_prepare_wal_file_list \
+  "$ARCHIVE" "$frontier_file" "$STATE/wal-pg16-status" "$segments_tmp"
+pending_count="$(wc -l <"$segments_tmp" | tr -d ' ')"
+((pending_count >= 1)) || {
+  log "ERROR: latest=$latest_segment 不在待发 WAL 列表"
+  exit 1
+}
 
 ssh_cmd="ssh -i $KEY -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
 (
   flock -w "$TRANSFER_WAIT_SECONDS" 8 || exit 1
   xcmax_run_bounded_transfer "$TRANSFER_MAX_SECONDS" "postgres16-wal" "$LOG" \
     rsync -az --ignore-existing --delay-updates --partial \
+    --files-from="$segments_tmp" \
     -e "$ssh_cmd" \
     "$ARCHIVE/" "${TARGET}:${REMOTE_ROOT}/wal-pg16/archive/"
   xcmax_run_bounded_transfer "$TRANSFER_MAX_SECONDS" "postgres16-wal-status" "$LOG" \
@@ -110,8 +127,11 @@ ssh_cmd="ssh -i $KEY -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChec
     -e "$ssh_cmd" \
     "$status_tmp" "${TARGET}:${REMOTE_ROOT}/wal-pg16/status/current"
 ) 8>"$TRANSFER_LOCK"
+xcmax_commit_wal_frontier "$frontier_file" "$latest_segment"
 mv -f "$status_tmp" "$STATE/wal-pg16-status"
 date -u +%s >"$STATE/wal_pg16_ship_last_success"
+trap - EXIT
+cleanup
 
 # Keep only eight transferred segments in PGDATA so future base backups do not
 # recursively absorb an unbounded archive.
@@ -125,4 +145,4 @@ if ((${#archived_segments[@]} > 8)); then
     rm -f -- "$victim"
   done
 fi
-log "PostgreSQL 16 WAL 推送完成: latest=$latest_segment lsn=$primary_lsn"
+log "PostgreSQL 16 WAL 推送完成: latest=$latest_segment lsn=$primary_lsn pending=$pending_count"
