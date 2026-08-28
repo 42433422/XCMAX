@@ -2465,6 +2465,21 @@ class TestEnsureModApiReady:
         ):
             assert ensure_mod_api_ready("m") is False
 
+    def test_host_backed_compat_route_does_not_require_physical_mod(self) -> None:
+        with (
+            patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
+            patch(
+                "app.infrastructure.mods.mod_manager._mod_allowed_for_api_load",
+                return_value=True,
+            ),
+            patch("app.infrastructure.mods.mod_manager._restore_entitlements_from_session_id"),
+            patch("app.infrastructure.mods.mod_manager.clear_mod_missing_locally") as clear,
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as get_manager,
+        ):
+            assert ensure_mod_api_ready("xcmax-personnel") is True
+            clear.assert_called_once_with("xcmax-personnel")
+            get_manager.assert_not_called()
+
     def test_load_mod_failure_returns_false(self) -> None:
         with (
             patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),

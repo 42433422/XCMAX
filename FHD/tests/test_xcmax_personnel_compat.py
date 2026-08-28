@@ -5,17 +5,30 @@ import sqlite3
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.legacy.routes import xcmax_personnel_compat as compat
 from app.legacy.routes.xcmax_personnel_compat import (
     MOD_ID,
     register_xcmax_personnel_routes,
 )
 
 
-def _client(tmp_path, monkeypatch) -> TestClient:
+def _client(tmp_path, monkeypatch, *, authenticated: bool = True) -> TestClient:
     monkeypatch.setenv("DATABASE_PATH", str(tmp_path))
+    if authenticated:
+        monkeypatch.setattr(compat, "_require_personnel_admin", lambda _request: None)
     app = FastAPI()
     register_xcmax_personnel_routes(app)
     return TestClient(app)
+
+
+def test_xcmax_personnel_rejects_unauthenticated_requests(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("app.application.desktop_admin_gate.is_desktop_runtime", lambda: False)
+    client = _client(tmp_path, monkeypatch, authenticated=False)
+
+    response = client.get(f"/api/mod/{MOD_ID}/employees")
+
+    assert response.status_code == 401
+    assert response.json() == {"success": False, "message": "请先登录"}
 
 
 def _seed_db(tmp_path) -> None:

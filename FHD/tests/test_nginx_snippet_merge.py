@@ -173,3 +173,36 @@ server {
     assert "location ~ ^/(styles\\.css" not in merged
     assert merged.count("market-static.inc.conf") == 1
     assert merged.count("marketing-site-static.inc.conf") == 1
+
+
+def test_merge_moves_admin_root_to_www_without_shadowing_legacy_subroutes() -> None:
+    module = _module()
+    source = """
+server {
+    listen 443 ssl;
+    server_name www.xiu-ci.com;
+    return 301 https://xiu-ci.com$request_uri;
+}
+server {
+    listen 443 ssl;
+    server_name xiu-ci.com;
+    location = /admin {
+        return 302 /admin/;
+    }
+    location = /admin/ {
+        root /legacy-market;
+    }
+    location ^~ /admin/ {
+        proxy_pass http://legacy-modstore;
+    }
+}
+""".lstrip()
+
+    merged = module.merge_managed_includes(source)
+
+    assert "return 302 /admin/;" not in merged
+    assert "root /legacy-market;" not in merged
+    assert "proxy_pass http://legacy-modstore;" in merged
+    assert merged.count("include /etc/nginx/snippets/admin-console-www.inc.conf;") == 1
+    assert "return 301 https://xiu-ci.com$request_uri;" not in merged
+    assert module.merge_managed_includes(merged) == merged

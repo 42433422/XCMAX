@@ -27,6 +27,8 @@ MANAGED_LOCATION_HEADERS = (
     "location ~ ^/(styles\\.css|main\\.js|contact-intake\\.js|contact-channels\\.js|visualization\\.js|world-will\\.js|world-will-ticker\\.js|world-will-ticker\\.css)$ {",
     "location = /admin/founder-autonomy {",
     "location = /admin/founder-autonomy/ {",
+    "location = /admin {",
+    "location = /admin/ {",
     "location ^~ /admin/assets/ {",
     "location = /admin/vite.svg {",
     "location = /api/xcmax/ops/founder-autonomy {",

@@ -233,6 +233,15 @@ vi.mock('../views/KittenFinanceView.vue', () => ({ default: { template: '<div />
 import router from './index'
 
 describe('router/index enhanced', () => {
+  if (!router.hasRoute('admin-home')) {
+    router.addRoute({
+      path: '/test-admin-home',
+      name: 'admin-home',
+      component: { template: '<div>Admin home</div>' },
+      meta: { requiresAdminAccount: true, hostAdmin: true },
+    })
+  }
+
   beforeEach(() => {
     vi.clearAllMocks()
     mockIsAdminConsoleSpa.mockReturnValue(false)
@@ -535,9 +544,32 @@ describe('router/index enhanced', () => {
 
   it('redirects planner bridge mod paths in admin console', async () => {
     mockIsAdminConsoleSpa.mockReturnValue(true)
+    mockAccountProfileStore.isAdminAccount = true
     await router.push('/mod/xcagi-planner-bridge/chat')
     // Should strip the planner bridge prefix
     expect(router.currentRoute.value.path).toBe('/chat')
+  })
+
+  it('fails closed to login when an admin-console page has no admin session', async () => {
+    mockIsAdminConsoleSpa.mockReturnValue(true)
+    mockAccountProfileStore.isAdminAccount = false
+    await router.push('/login')
+
+    await router.push('/settings')
+
+    expect(router.currentRoute.value.name).toBe('login')
+    expect(router.currentRoute.value.query.redirect).toBe('/settings')
+    expect(router.currentRoute.value.query.error).toBe('需要管理员账号登录后访问')
+  })
+
+  it('sends an authenticated admin from login root to the operator home', async () => {
+    mockIsAdminConsoleSpa.mockReturnValue(true)
+    mockAccountProfileStore.isAdminAccount = true
+    await router.push('/login')
+
+    await router.push('/')
+
+    expect(router.currentRoute.value.name).toBe('admin-home')
   })
 
   // ── planner chat home redirect ──────────────────────────
