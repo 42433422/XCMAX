@@ -160,9 +160,7 @@ async def admin_list_market_users(
     if "is_enterprise" in requested and is_enterprise is not None:
         params["is_enterprise"] = "true" if is_enterprise else "false"
     query = f"?{urlencode(params)}" if params else ""
-    return await _facade()._market_admin_proxy(
-        request, "GET", f"/api/admin/users{query}"
-    )
+    return await _facade()._market_admin_proxy(request, "GET", f"/api/admin/users{query}")
 
 
 @_facade().router.post("/admin/market/users", response_model=None)
