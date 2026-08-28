@@ -575,8 +575,10 @@ onUnmounted(() => {
 .im-messenger {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 64px);
-  max-height: 920px;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  min-height: 0;
   padding: 16px;
   box-sizing: border-box;
 }
@@ -621,4 +623,7 @@ onUnmounted(() => {
   color: var(--xc-color-disabled, #9ca3af);
   line-height: 1.5;
 }
+
 </style>
+
+<style scoped src="./ImMessengerResponsive.css"></style>

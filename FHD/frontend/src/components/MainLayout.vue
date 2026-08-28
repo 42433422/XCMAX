@@ -35,18 +35,21 @@
             {{ accountUsername }}
           </div>
         </div>
-        <button
-          type="button"
-          class="top-bar-settings-btn"
-          :class="{ active: currentRouteName === 'settings' }"
-          aria-label="系统设置"
-          title="系统设置"
-          data-tutorial-id="top-bar-settings"
-          @click="openSettings"
-        >
-          <i class="fa fa-cog" aria-hidden="true"></i>
-        </button>
-        <TopAssistantFloat />
+        <div class="top-bar-actions">
+          <button
+            type="button"
+            class="top-bar-settings-btn"
+            :class="{ active: currentRouteName === 'settings' }"
+            aria-label="系统设置"
+            title="系统设置"
+            data-tutorial-id="top-bar-settings"
+            @click="openSettings"
+          >
+            <i class="fa fa-cog" aria-hidden="true"></i>
+          </button>
+          <TopAssistantFloat />
+          <GlobalTaskCenter />
+        </div>
       </div>
       <slot></slot>
     </div>
@@ -90,6 +93,7 @@ import VirtualCursor from './VirtualCursor.vue'
 import OnboardingTutorial from './OnboardingTutorial.vue'
 import TutorialTrainingCoach from './tutorial/TutorialTrainingCoach.vue'
 import MobileBottomNav from './MobileBottomNav.vue'
+import GlobalTaskCenter from './task-center/GlobalTaskCenter.vue'
 import { useOnboardingTutorialStore } from '@/stores/onboardingTutorial'
 import { useTutorialStore } from '@/stores/tutorial'
 import { setTutorialBuildContextFactory } from '@/stores/tutorial'
@@ -550,6 +554,7 @@ onBeforeUnmount(() => {
 }
 
 .page-title-wrap {
+  flex: 1 1 auto;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -601,7 +606,6 @@ onBeforeUnmount(() => {
 }
 
 .top-bar-settings-btn {
-  margin-left: 10px;
   width: 36px;
   height: 36px;
   border: 1px solid rgba(203, 213, 225, 0.85);
@@ -625,4 +629,7 @@ onBeforeUnmount(() => {
   border-color: rgba(11, 114, 217, 0.35);
   background: rgba(239, 246, 255, 0.96);
 }
+
 </style>
+
+<style scoped src="./MainLayoutActions.css"></style>

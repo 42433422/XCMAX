@@ -1,8 +1,5 @@
 .task-center-trigger {
-  position: fixed;
-  top: 62px;
-  right: 18px;
-  z-index: 2100;
+  position: static;
   display: flex;
   align-items: center;
   gap: 7px;
@@ -391,10 +388,6 @@
   transform: translateX(100%);
 }
 @media (max-width: 720px) {
-  .task-center-trigger {
-    top: 54px;
-    right: 10px;
-  }
   .task-center-drawer {
     width: 100vw;
   }

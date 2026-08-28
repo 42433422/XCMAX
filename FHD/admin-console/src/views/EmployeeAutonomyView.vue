@@ -88,7 +88,7 @@
       </div>
     </section>
 
-    <section v-show="tab === 'suggestions'" class="card">
+    <section v-show="tab === 'suggestions'" class="card table-card">
       <table v-if="suggestions.length" class="data-table">
         <thead>
           <tr>
@@ -155,7 +155,7 @@
       <div v-if="!questions.length" class="empty">暂无待答问题</div>
     </section>
 
-    <section v-show="tab === 'scorecard'" class="card">
+    <section v-show="tab === 'scorecard'" class="card table-card">
       <table v-if="scorecard.length" class="data-table">
         <thead>
           <tr>
