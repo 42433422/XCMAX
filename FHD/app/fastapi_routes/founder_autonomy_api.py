@@ -25,7 +25,7 @@ async def _build_and_publish_founder_autonomy(
     require_admin_session: bool,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Build one scorecard from live evidence and atomically publish its projection."""
-    from app.application.autonomy.approval_resume import list_pending_actions
+    from app.application.autonomy.approval_center import list_pending_actions
     from app.application.founder_autonomy_status import (
         build_founder_autonomy_snapshot,
         write_public_founder_autonomy_projection,

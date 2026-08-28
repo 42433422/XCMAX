@@ -47,7 +47,7 @@ async def admin_pending_autonomy_actions(request: _facade().Request):
     gate = _facade()._require_market_admin_session(request)
     if gate is not None:
         return gate
-    from app.application.autonomy.approval_resume import approval_center_snapshot
+    from app.application.autonomy.approval_center import approval_center_snapshot
 
     return {"ok": True, **approval_center_snapshot()}
 
@@ -57,9 +57,9 @@ async def admin_resume_autonomy_action(action_id: str, request: _facade().Reques
     gate = _facade()._require_market_admin_session(request)
     if gate is not None:
         return gate
+    from app.application.autonomy.approval_center import admin_execution_contract
     from app.application.autonomy.approval_resume import (
         ApprovalStateError,
-        admin_execution_contract,
         get_action_state,
         resume_action,
     )
@@ -162,7 +162,7 @@ async def admin_autonomy_overview(request: _facade().Request):
         list_deploy_events,
         operating_metrics_windows,
     )
-    from app.application.autonomy.approval_resume import list_pending_actions
+    from app.application.autonomy.approval_center import list_pending_actions
     from app.application.autonomy.audit_log import list_autonomy_audit, summarize_autonomy_audit
     from app.application.ops_closure_status import build_ops_closure_status
 

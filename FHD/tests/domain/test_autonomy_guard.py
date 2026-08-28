@@ -13,12 +13,14 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
+from app.application.autonomy.approval_center import (
+    approval_center_snapshot,
+    list_pending_actions,
+)
 from app.application.autonomy.approval_resume import (
     ApprovalStateError,
-    approval_center_snapshot,
     complete_action,
     get_action_state,
-    list_pending_actions,
     mark_approval_requested,
     reject_action,
     request_action,
