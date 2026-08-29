@@ -295,14 +295,13 @@ def _focused_test_command() -> str:
             for candidate in candidates
             if candidate and _facade()._python_supports_focused_tests(candidate)
         ),
-        _facade().Path(_facade().sys.executable),
+        None,
     )
     test_path = (
         "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py"
     )
-    return (
-        f"{_facade().shlex.quote(str(test_python))} -m pytest {_facade().shlex.quote(test_path)} -q"
-    )
+    python_command = _facade().shlex.quote(str(test_python)) if test_python else "python3"
+    return f"{python_command} -m pytest {_facade().shlex.quote(test_path)} -q"
 
 
 def _code_task_text(

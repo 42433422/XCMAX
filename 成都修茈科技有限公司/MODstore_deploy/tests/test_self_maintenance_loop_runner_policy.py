@@ -2256,6 +2256,23 @@ def test_focused_test_command_prefers_explicit_command(monkeypatch):
     assert _focused_test_command() == "runtime-python -m pytest focused.py -q"
 
 
+def test_task_prompts_use_remote_python_when_no_local_test_interpreter(monkeypatch):
+    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", raising=False)
+    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_TEST_PYTHON", raising=False)
+    monkeypatch.delenv("MODSTORE_RUNTIME_ROOT", raising=False)
+    monkeypatch.setattr(loop_runner, "_python_supports_focused_tests", lambda _candidate: False)
+
+    focused = (
+        "python3 -m pytest "
+        "'成都修茈科技有限公司/MODstore_deploy/tests/"
+        "test_self_maintenance_loop_runner_policy.py' -q"
+    )
+
+    assert _focused_test_command() == focused
+    assert f"`{focused}`" in _code_task_text("run-remote-fallback", {}, {})
+    assert f"`{focused}`" in _qa_task_text("run-remote-fallback", "topic", {})
+
+
 def test_high_risk_report_detects_standalone_qa_fail():
     steps = [
         {
