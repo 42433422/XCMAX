@@ -76,6 +76,50 @@ async function installAdminDisplayMocks(page: Page) {
       })
       return
     }
+    if (path.endsWith('/api/xcmax/admin/autonomy/actions/pending')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          count: 1,
+          items: [{
+            action_id: 'release:layout-regression',
+            action: 'apply_release_to_cvm',
+            state: 'pending_approval',
+            source: 'layout-regression.cron',
+            execution_mode: 'external_dispatch_required',
+            admin_execution_ready: false,
+            execution_guidance: '该发布必须由正式发布工作流审批并执行。',
+            risk_decision: { risk_level: 'HIGH', decision: 'confirm' },
+          }],
+          summary: {
+            waiting: 1,
+            actionable: 0,
+            states: { executed: 15, superseded: 27 },
+            execution_modes: { external_dispatch_required: 1 },
+          },
+        }),
+      })
+      return
+    }
+    if (path.endsWith('/api/xcmax/admin/autonomy/audit-log')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          items: Array.from({ length: 40 }, (_, index) => ({
+            id: `audit-${index}`,
+            action: index % 2 ? 'employee_execute' : 'apply_release_to_cvm',
+            risk_level: index % 2 ? 'MEDIUM' : 'HIGH',
+            actor: `layout-regression-${index}`,
+            timestamp: '2026-08-29T03:30:00Z',
+          })),
+        }),
+      })
+      return
+    }
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -180,5 +224,49 @@ test('admin first paint shows a useful loading shell before JavaScript starts', 
     await expect(bootstrap).toHaveCSS('min-height', `${await page.evaluate(() => window.innerHeight)}px`)
   } finally {
     await context.close()
+  }
+})
+
+test('approval center keeps its header and status summary above a long audit stream', async ({ page }) => {
+  await installAdminDisplayMocks(page)
+
+  for (const viewport of VIEWPORTS) {
+    await test.step(viewport.name, async () => {
+      await page.setViewportSize(viewport)
+      await page.goto('/admin/autonomy-approval-hub', { waitUntil: 'domcontentloaded' })
+      await page.locator('.app-shell.is-ready').waitFor({ state: 'visible', timeout: 20_000 })
+      await expect(page.locator('.audit-item')).toHaveCount(40)
+
+      const geometry = await page.evaluate(() => {
+        const rect = (selector: string) => {
+          const node = document.querySelector<HTMLElement>(selector)
+          if (!node) throw new Error(`missing ${selector}`)
+          return node.getBoundingClientRect()
+        }
+        const header = rect('.approval-hub-view .page-header')
+        const headerContent = rect('.approval-hub-view .page-header > div:first-child')
+        const status = rect('.approval-hub-view .status-grid')
+        const statusCard = rect('.approval-hub-view .status-card')
+        const hub = rect('.approval-hub-view .hub-grid')
+        return {
+          headerHeight: header.height,
+          headerContentHeight: headerContent.height,
+          statusHeight: status.height,
+          statusCardHeight: statusCard.height,
+          statusBottom: status.bottom,
+          hubTop: hub.top,
+        }
+      })
+
+      expect(geometry.headerHeight, `${viewport.name}: header content must not be flex-shrunk`).toBeGreaterThanOrEqual(
+        geometry.headerContentHeight - 1,
+      )
+      expect(geometry.statusHeight, `${viewport.name}: status cards must not be flex-shrunk`).toBeGreaterThanOrEqual(
+        geometry.statusCardHeight - 1,
+      )
+      expect(geometry.hubTop, `${viewport.name}: lists must start after the status summary`).toBeGreaterThanOrEqual(
+        geometry.statusBottom,
+      )
+    })
   }
 })
