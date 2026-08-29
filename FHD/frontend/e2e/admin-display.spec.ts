@@ -142,6 +142,85 @@ async function installAdminDisplayMocks(page: Page) {
       })
       return
     }
+    if (path.endsWith('/api/xcmax/ops/founder-autonomy')) {
+      const dimensions = Array.from({ length: 7 }, (_, index) => ({
+        id: `dimension-${index + 1}`,
+        label: `自治维度 ${index + 1}`,
+        progress: 70 + index,
+        remaining: 30 - index,
+        status: 'building',
+        status_label: '闭环建设中',
+        target: '保持真实运行、部署和客户价值证据持续闭环。',
+        next_gap: '补齐下一项生产证据并完成回读验证。',
+        passed_gate_count: 4,
+        total_gate_count: 6,
+        evidence: [],
+        gaps: [],
+      }))
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          data: {
+            schema_version: 'founder_autonomy_status.v1',
+            generated_at: '2026-08-29T10:00:00Z',
+            overall_progress: 73,
+            overall_remaining: 27,
+            attention: {
+              human_intervention_rare: false,
+              total: 27,
+              items: [
+                { kind: 'approval', label: '战略/会议待决策', count: 2, route: 'founder-autonomy' },
+                { kind: 'loop', label: '当前仍有开放 Loop', count: 1, route: 'duty-roster-graph' },
+              ],
+            },
+            dimensions,
+            truth_domains: {
+              source: { label: '当前源码能力', available: true },
+              runtime: { label: '本机实际运行', available: true },
+              deployment: { label: '部署派发/验证', available: true },
+              customer: { label: '真实客户付费与价值', available: false },
+            },
+            warnings: [],
+            live_summary: {
+              strategic_council_ready: true,
+              strategic_council_roles: {
+                persy: { status: 'grounded' },
+                para: { status: 'linked' },
+                retort: { status: 'aligned' },
+              },
+              strategic_council_latest: {
+                goal_id: 'goal-layout-regression',
+                loop_run_id: 'loop-layout-regression',
+                para_task_id: 'task-layout-regression',
+              },
+              strategic_council_receipts: 3,
+              retort_clarifications_healthy: true,
+              runtime_fresh: true,
+              latest_event_at: '2026-08-29T09:59:00Z',
+              latest_complete_status: 'success',
+              active_gates_ok: true,
+              governance_ok: true,
+              registered_employees: 52,
+              planned_employees: 55,
+              assigned_employees: 55,
+              proven_employees: 54,
+              burn_in_proven_employees: 47,
+              production_proven_employees: 31,
+              employee_production_workforce_ready: false,
+              shell_employees: 0,
+              platform_llm: { configured: true, provider: 'layout', model: 'regression' },
+              autonomy_audit_authoritative: true,
+              autonomy_audit_count: 171,
+              veto_channel_available: true,
+              deploy_verified: true,
+            },
+          },
+        }),
+      })
+      return
+    }
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -349,6 +428,75 @@ test('delivery center keeps every section in document flow with a long enterpris
         geometry.toolbarBottom,
       )
       expect(geometry.scrollHeight, `${viewport.name}: long delivery content must remain scrollable`).toBeGreaterThan(
+        geometry.clientHeight,
+      )
+    })
+  }
+})
+
+test('founder dashboard keeps every evidence section in document flow', async ({ page }) => {
+  await installAdminDisplayMocks(page)
+
+  for (const viewport of VIEWPORTS) {
+    await test.step(viewport.name, async () => {
+      await page.setViewportSize(viewport)
+      await page.goto('/admin/founder-autonomy', { waitUntil: 'domcontentloaded' })
+      await page.locator('.app-shell.is-ready').waitFor({ state: 'visible', timeout: 20_000 })
+      await expect(page.locator('.dimension-card')).toHaveCount(7)
+
+      const geometry = await page.evaluate(() => {
+        const rect = (selector: string) => {
+          const node = document.querySelector<HTMLElement>(selector)
+          if (!node) throw new Error(`missing ${selector}`)
+          return node.getBoundingClientRect()
+        }
+        const founderNode = document.querySelector<HTMLElement>('.founder-view')
+        if (!founderNode) throw new Error('missing .founder-view')
+        const hero = rect('.founder-hero')
+        const overview = rect('.overview-grid')
+        const quickLinks = rect('.quick-links')
+        const council = rect('.council-panel')
+        const score = rect('.score-section')
+        const scoreHeading = rect('.score-section .section-heading')
+        const dimensions = rect('.dimension-grid')
+        const evidence = rect('.evidence-section')
+        return {
+          heroBottom: hero.bottom,
+          overviewTop: overview.top,
+          overviewBottom: overview.bottom,
+          quickLinksTop: quickLinks.top,
+          quickLinksBottom: quickLinks.bottom,
+          councilTop: council.top,
+          councilBottom: council.bottom,
+          scoreTop: score.top,
+          scoreHeight: score.height,
+          scoreContentHeight: scoreHeading.height + dimensions.height + 14,
+          scoreBottom: score.bottom,
+          evidenceTop: evidence.top,
+          scrollHeight: founderNode.scrollHeight,
+          clientHeight: founderNode.clientHeight,
+        }
+      })
+
+      expect(geometry.overviewTop, `${viewport.name}: overview must start after the hero`).toBeGreaterThanOrEqual(
+        geometry.heroBottom,
+      )
+      expect(geometry.quickLinksTop, `${viewport.name}: control links must start after the overview`).toBeGreaterThanOrEqual(
+        geometry.overviewBottom,
+      )
+      expect(geometry.councilTop, `${viewport.name}: council must start after control links`).toBeGreaterThanOrEqual(
+        geometry.quickLinksBottom,
+      )
+      expect(geometry.scoreTop, `${viewport.name}: scores must start after the council`).toBeGreaterThanOrEqual(
+        geometry.councilBottom,
+      )
+      expect(geometry.scoreHeight, `${viewport.name}: score cards must keep their natural height`).toBeGreaterThanOrEqual(
+        geometry.scoreContentHeight - 1,
+      )
+      expect(geometry.evidenceTop, `${viewport.name}: evidence must start after scores`).toBeGreaterThanOrEqual(
+        geometry.scoreBottom,
+      )
+      expect(geometry.scrollHeight, `${viewport.name}: long founder content must remain scrollable`).toBeGreaterThan(
         geometry.clientHeight,
       )
     })
