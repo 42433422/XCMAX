@@ -248,8 +248,6 @@ def init_db(db_path: Optional[Path] = None):
         for column, ddl_type in (
             ("avatar_path", "VARCHAR(512) DEFAULT ''"),
             ("avatar_version", "INTEGER DEFAULT 0 NOT NULL"),
-            ("first_login_at", "TIMESTAMP"),
-            ("last_login_at", "TIMESTAMP"),
         ):
             try:
                 _add_column_if_missing(engine, "users", column, ddl_type)
@@ -281,11 +279,6 @@ def init_db(db_path: Optional[Path] = None):
         _sqlite_add_column_if_missing(engine, "users", "phone", "TEXT")
     except RECOVERABLE_ERRORS:
         pass
-    for column in ("first_login_at", "last_login_at"):
-        try:
-            _sqlite_add_column_if_missing(engine, "users", column, "DATETIME")
-        except RECOVERABLE_ERRORS:
-            pass
     try:
         _sqlite_add_column_if_missing(
             engine, "catalog_items", "security_level", "TEXT DEFAULT 'personal'"

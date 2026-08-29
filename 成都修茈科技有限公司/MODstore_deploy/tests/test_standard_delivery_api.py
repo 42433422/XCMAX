@@ -10,7 +10,7 @@ from modstore_server.customer_service_delivery_models import (
     custom_delivery_commerce_blockers,
 )
 from modstore_server.db.delivery_commerce import UpdateInstallationReceipt
-from modstore_server.models import Base, Entitlement, User, UserPlan
+from modstore_server.models import Base, Entitlement, PlanTemplate, User, UserPlan
 from modstore_server.standard_delivery_api import build_standard_delivery_rows
 
 
@@ -18,6 +18,11 @@ def _session():
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     return sessionmaker(bind=engine)()
+
+
+def _add_plan(db, plan_id: str) -> None:
+    db.add(PlanTemplate(id=plan_id, name=plan_id, is_active=True))
+    db.flush()
 
 
 def test_standard_delivery_requires_install_and_first_login():
@@ -32,6 +37,7 @@ def test_standard_delivery_requires_install_and_first_login():
         )
         db.add(user)
         db.flush()
+        _add_plan(db, "saas-permanent-growth")
         db.add(
             UserPlan(
                 user_id=user.id,
@@ -92,6 +98,7 @@ def test_trial_accounts_are_not_standard_permanent_deliveries():
         user = User(username="trial", password_hash="unused")
         db.add(user)
         db.flush()
+        _add_plan(db, "saas-trial-30")
         db.add(UserPlan(user_id=user.id, plan_id="saas-trial-30", is_active=True))
         db.commit()
         assert build_standard_delivery_rows(db) == []
