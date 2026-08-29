@@ -63,9 +63,7 @@ def custom_delivery_crm(evidence: dict[str, Any]) -> dict[str, Any]:
     return {
         "assignment": {
             "status": (
-                "assigned"
-                if str(assignment.get("owner_name") or "").strip()
-                else "unassigned"
+                "assigned" if str(assignment.get("owner_name") or "").strip() else "unassigned"
             ),
             **assignment,
         },
@@ -100,9 +98,7 @@ def custom_delivery_commerce_blockers(evidence: dict[str, Any]) -> list[str]:
     if crm["assignment"].get("status") != "assigned":
         blockers.append("未指派交付负责人")
     accepted_quote_statuses = (
-        {"accepted"}
-        if pricing_mode == "post_delivery_addon"
-        else {"accepted", "waived"}
+        {"accepted"} if pricing_mode == "post_delivery_addon" else {"accepted", "waived"}
     )
     if crm["quote"].get("status") not in accepted_quote_statuses:
         blockers.append("报价尚未确认")

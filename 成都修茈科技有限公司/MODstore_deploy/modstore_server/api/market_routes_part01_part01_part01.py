@@ -62,12 +62,8 @@ def _get_optional_user(
 class RegisterDTO(_facade().BaseModel):
     username: str = _facade().Field(..., min_length=2, max_length=64)
     password: str = _facade().Field(..., min_length=6)
-    email: str = _facade().Field(
-        default="", max_length=128, description="选填；填写时必须验证"
-    )
-    verification_code: str = _facade().Field(
-        default="", max_length=16, description="邮箱验证码"
-    )
+    email: str = _facade().Field(default="", max_length=128, description="选填；填写时必须验证")
+    verification_code: str = _facade().Field(default="", max_length=16, description="邮箱验证码")
 
 
 class LoginDTO(_facade().BaseModel):
@@ -304,9 +300,7 @@ def api_send_code(body: SendCodeDTO, background_tasks: _facade().BackgroundTasks
 
 
 @_facade().router.post("/auth/send-register-code", status_code=202)
-def api_send_register_code(
-    body: SendCodeDTO, background_tasks: _facade().BackgroundTasks
-):
+def api_send_register_code(body: SendCodeDTO, background_tasks: _facade().BackgroundTasks):
     """向未注册邮箱发送注册验证码：先 202 落库，再异步 SMTP。"""
     email_norm = _facade()._normalize_email(body.email)
     if not email_norm:
@@ -373,9 +367,7 @@ def api_login_with_code(body: LoginWithCodeDTO):
 
 
 @_facade().router.post("/auth/send-reset-password-code", status_code=202)
-def api_send_reset_password_code(
-    body: SendCodeDTO, background_tasks: _facade().BackgroundTasks
-):
+def api_send_reset_password_code(body: SendCodeDTO, background_tasks: _facade().BackgroundTasks):
     """忘记密码：向已注册邮箱发送验证码（未注册邮箱返回相同提示，不泄露是否存在）。"""
     email_norm = _facade()._normalize_email(body.email)
     if not email_norm:

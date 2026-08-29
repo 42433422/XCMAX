@@ -30,9 +30,7 @@ def _entitlement_plan_id(row: Entitlement) -> str:
         payload = json.loads(str(row.metadata_json or "{}"))
     except (TypeError, ValueError):
         payload = {}
-    return (
-        str(payload.get("plan_id") or "").strip() if isinstance(payload, dict) else ""
-    )
+    return str(payload.get("plan_id") or "").strip() if isinstance(payload, dict) else ""
 
 
 def _permanent_plan_rows(db: Session) -> list[UserPlan]:
@@ -64,9 +62,7 @@ def build_standard_delivery_rows(db: Session) -> list[dict[str, Any]]:
     if not user_ids:
         return []
 
-    users = {
-        int(row.id): row for row in db.query(User).filter(User.id.in_(user_ids)).all()
-    }
+    users = {int(row.id): row for row in db.query(User).filter(User.id.in_(user_ids)).all()}
     entitlements = (
         db.query(Entitlement)
         .filter(
@@ -79,9 +75,7 @@ def build_standard_delivery_rows(db: Session) -> list[dict[str, Any]]:
     )
     entitlement_by_key: dict[tuple[int, str], Entitlement] = {}
     for row in entitlements:
-        entitlement_by_key.setdefault(
-            (int(row.user_id), _entitlement_plan_id(row)), row
-        )
+        entitlement_by_key.setdefault((int(row.user_id), _entitlement_plan_id(row)), row)
 
     receipts = (
         db.query(UpdateInstallationReceipt)
@@ -100,9 +94,7 @@ def build_standard_delivery_rows(db: Session) -> list[dict[str, Any]]:
         latest_receipt_by_user.setdefault(uid, receipt)
         if str(receipt.status or "") == "installed":
             installed_receipt_by_user.setdefault(uid, receipt)
-            installed_devices_by_user.setdefault(uid, set()).add(
-                str(receipt.installation_id or "")
-            )
+            installed_devices_by_user.setdefault(uid, set()).add(str(receipt.installation_id or ""))
 
     result: list[dict[str, Any]] = []
     for plan_row in plan_rows:
@@ -188,9 +180,7 @@ def build_standard_delivery_rows(db: Session) -> list[dict[str, Any]]:
                 "available_installers": ["macOS", "Windows"],
             }
         )
-    return sorted(
-        result, key=lambda row: (row["status"] == "completed", row["started_at"])
-    )
+    return sorted(result, key=lambda row: (row["status"] == "completed", row["started_at"]))
 
 
 @router.get("/standard")
@@ -206,12 +196,8 @@ def list_standard_deliveries(
         "total": len(rows),
         "summary": {
             "purchased_accounts": len(rows),
-            "pending_install": sum(
-                1 for row in rows if row["status"] == "pending_install"
-            ),
-            "pending_first_login": sum(
-                1 for row in rows if row["status"] == "pending_first_login"
-            ),
+            "pending_install": sum(1 for row in rows if row["status"] == "pending_install"),
+            "pending_first_login": sum(1 for row in rows if row["status"] == "pending_first_login"),
             "completed": sum(1 for row in rows if row["status"] == "completed"),
         },
         "ssot": "active_permanent_user_plan",
